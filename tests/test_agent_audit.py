@@ -295,8 +295,9 @@ def test_the_agent_answers_itself_and_the_comparison_models_review_its_answer(st
     assert review["audit"]["process"] == []
     # An answer written in one step: only the final round, no live round.
     assert script.rounds == {"anthropic": ["final"], "openai": ["final"]}
-    # The agent's own search leaves memory open since 2026-11-02 (test_agent_gate).
-    assert loop.searched is True and loop.outside_in_view is False and loop.memory_locked is False
+    # The agent's own search put results in view: a settings change needs the
+    # user's words from here on (memory stays open since 2026-11-02).
+    assert loop.outside_in_view is True
     # A reviewer's session saves what it reads, not a copy of it.
     sessions = [a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] if a.get("kind") == "audit"]
     assert len(sessions) == 2
@@ -1104,11 +1105,11 @@ def test_a_crash_or_the_reaper_leaves_no_reviewer_at_work(store):
         ("anthropic", "completed", None), ("openai", "failed", "run_interrupted"), ("google", "failed", "run_interrupted")]
 
 
-def test_memory_stays_open_while_the_agent_has_not_searched(store):
+def test_nothing_outside_is_in_view_while_the_agent_has_not_searched(store):
     script = Audit(search=False)
     loop = audit_loop(store, script)
     list(loop.run())
-    assert loop.memory_locked is False
+    assert loop.outside_in_view is False
 
 
 def test_every_chat_run_has_reviewers_and_compare_models_but_no_check_text(store):
@@ -1142,11 +1143,13 @@ def test_the_agents_prompt_has_its_writing_reading_and_memory_facts(store, monke
     assert set(reader.arguments.model_json_schema()["properties"]) == {"url"}
     # Since 2026-10-28 the blocks name no comparison at all (no limit, no
     # memory field, no free-mode text): compare_models' description says what
-    # it does. Memory changes pass the reviewers once outside content is in
-    # view instead of coming first.
+    # it does. Since 2026-11-02 no memory change waits for the reviewers, and
+    # the block says what is worth keeping.
     assert "comparison" not in system.lower() and "compare_models" not in system
     assert agent_memory.AUDIT_MEMORY_WRITE_PROMPT in system and "FREE" not in system
-    assert "only after the reviewers let it" in " ".join(system.split()) and "call it first" not in system
+    flat = " ".join(system.split())
+    assert "Worth keeping is what the user tells you about themselves" in flat and "call it first" not in system
+    assert "reviewers let it" not in flat
     # One mode since 2026-10-31: no mode named, no answer check to switch off.
     assert "agent mode with audit" not in system and "answer check" not in system
     assert "Models the user chose review your work" in system and "quotation marks" not in system

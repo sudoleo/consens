@@ -2133,17 +2133,20 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Pflichtfeld `memory` auf `compare_models`/`check_text` (`memory_field`), und
   jede Änderung trug `evidence`, ein wörtliches Zitat aus einer Nutzernachricht
   (`evidence_matches`, `MIN_EVIDENCE_CHARS`; mit Prüfern seit 2026-10-28 ohne).
-  Heute gilt: Sobald in einer Nachricht Fremdinhalt im Blick ist
-  (`outside_in_view`), läuft eine Änderung erst nach der Vorab-Prüfung der
-  Prüfer (`agent_gate.outward` „memory“), ohne Prüfer-Sitzung gar nicht
-  (`memory_locked`, `MEMORY_LOCKED`). Die eigene Websuche des Agenten zählt
-  seit 2026-11-02 nicht mehr dazu (`DelegationLoop.searched`): Sie kam in fast
-  jedem ersten Schritt, und Max' Konto bekam mit Opt-in einen Monat lang keine
-  einzige Erinnerung. Seitdem nennt `_AUDIT_MEMORY_WRITE_RULES` auch, was sich
-  zu merken lohnt (Selbstaussagen und Arbeitsweise über den Auftrag hinaus,
-  auch eine Korrektur oder ein Ja auf ein Angebot für nächstes Mal; nicht,
-  wonach der Nutzer nur fragt): Ohne das sparte der Agent auch ungesperrt
-  jede Erinnerung aus. `evidence_matches` und `user_words`
+  **Seit 2026-11-02 sperrt nichts mehr** (Max): Bis dahin sperrte Fremdinhalt
+  im Blick (eigene Websuche, Seiten, Dateien, Tool-Ergebnisse) Memory für den
+  Rest der Nachricht (`memory_locked`, `MEMORY_LOCKED`), mit Prüfern seit
+  2026-10-28 stattdessen ihre Vorab-Prüfung (`agent_gate.outward` „memory“,
+  `GATE_MEMORY_NOTE`). Der Agent sucht in fast jedem ersten Schritt, und Max'
+  Konto bekam mit Opt-in einen Monat lang keine einzige Erinnerung. Jetzt
+  entscheidet der Agent allein; Rückhalt ist der Hinweis mit Undo unter der
+  Antwort und Settings › Memory. `AUDIT_MEMORY_WRITE_PROMPT` nennt seitdem
+  auch, was sich zu merken lohnt (Selbstaussagen und Arbeitsweise über den
+  Auftrag hinaus, auch eine Korrektur oder ein Ja auf ein Angebot für
+  nächstes Mal; nicht, wonach der Nutzer nur fragt): Ohne das sparte der
+  Agent auch ungesperrt jede Erinnerung aus, und er ist für jede
+  Prüfer-Einstellung gleich. `outside_in_view` bleibt nur für das
+  Einstellungs-Werkzeug (Belegzitat). `evidence_matches` und `user_words`
   bleiben für das Einstellungs-Werkzeug und die Links des Nutzers
   (`agent_read_source.user_urls`); `user_words` schneidet einen per „Ask about
   this“ zitierten Antwortabsatz genau in dem Format ab, das
@@ -2293,7 +2296,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `reasoning_efforts`, `free_default_effort`; `PRO_REASONING_EFFORTS`;
   `pro_only` der Presets; Pro = `is_user_pro` wie im Picker, ohne Admin; in
   Chats mit Google-Daten zusätzlich `restricted_model`; nach Fremdinhalten
-  (`outside_in_view`) oder nach eigener Websuche (`searched`) nur mit
+  (`outside_in_view`, auch nach eigener Websuche) nur mit
   `evidence`-Zitat aus der neuesten Nachricht): ein
   Premium-Modell ohne Pro wird abgelehnt (mit den freien Modellen derselben
   Familie), eine zu hohe Stufe auf die höchste erlaubte begrenzt, eine nicht
@@ -4786,14 +4789,12 @@ Text). Schon gezeigter Text wandert, sobald der Client den Aufruf meldet
 Antwort (`_answered_with_tools`), aber nur, wenn ihre Ergebnisse angenommen sind
 (`_side_results_accepted`), sonst `_retract` und ein weiterer Schritt. Nach
 einem Batch mit einem Ergebnis eines Werkzeugs außerhalb von
-`MEMORY_KEEPING_TOOLS` (seit 2026-10-27 jedes, Fehler eingeschlossen; nur vor
-dem Lauf abgelehnte Aufrufe nicht) gilt Fremdinhalt als im Blick
-(`outside_in_view`, App-Eintrag `memory_locked`; die eigene Websuche seit
-2026-11-02 nicht mehr, sie setzt nur `searched`): Mit Prüfern geht
-`update_memory` dann seit 2026-10-28 durch die Vorab-Prüfung
-(`agent_gate.outward(call, memory_exposed=…)` → „memory“), ohne Prüfer sperrt
-`memory_locked` jede weitere Memory-Änderung der Nachricht
-(`agent_memory.MEMORY_LOCKED`). Ungeprüfte Worker-Ergebnisse halten die Antwort
+`OWN_CONTENT_TOOLS` (seit 2026-10-27 jedes, Fehler eingeschlossen; nur vor
+dem Lauf abgelehnte Aufrufe nicht) und nach eigener Websuche gilt Fremdinhalt
+als im Blick (`outside_in_view`): Eine Einstellungsänderung braucht dann ein
+Belegzitat (`agent_settings`). Bis 2026-11-02 sperrte das auch Memory
+(`memory_locked`, App-Eintrag gleichen Namens; mit Prüfern ihre Vorab-Prüfung
+„memory“), seitdem ändert `update_memory` immer sofort. Ungeprüfte Worker-Ergebnisse halten die Antwort
 zurück (`_retract` plus Aufforderung zu `review_agent`). `_finish_merged`
 fixiert die Antwort (`answer_fixed`: kein Halt eines Prüfers mehr, ein später
 endet mit ihr), gleicht den sichtbaren Text an (`_show_answer`, auch nach
@@ -6264,11 +6265,9 @@ unter `MOCK_LLM`), seit 2026-10-30 auch jeden Turn, der den Arbeitsplatz
 nutzte, in eigenen `ws_*`-Feldern (I6). Messen: `scripts/audit_report.py` (nur lesend, `--days`,
 `--exclude-own`, `--json`) liefert die Tabellen und Ziele Z1–Z8 der
 Spezifikation `docs/agent-audit-readiness-2026-10-29.md` aus Turns, Sitzungen,
-Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Eigene Suchtreffer lassen
-Memory seit 2026-11-02 offen (`searched`); erst ein Werkzeug-Ergebnis bringt
-Fremdinhalt in den Blick (`outside_in_view`): mit Prüfern wartet eine
-Memory-Änderung danach auf die Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne
-Prüfer-Sitzung sperrt `memory_locked`.
+Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Memory
+wartet seit 2026-11-02 weder auf die Prüfer noch sperrt es nach Fremdinhalt
+(vorher `GATE_MEMORY_NOTE` bzw. `memory_locked`).
 Ohne Prüfer läuft eine Nachricht seit 2026-11-01 nur nach der Einstellung des
 Nutzers (unten); Tests, deren Skript nur den Agenten spielt, setzen weiter
 Prüfer ein, die nie starten (`tests/agent_reviewers.py`, Einstellung `always`:
@@ -6298,8 +6297,7 @@ Gate-Runde spät gestarteter Prüfer liest den ganzen Verlauf; passt er nicht
 oder dauert er länger als `GATE_SECONDS`, entscheidet der Nutzer (`unchecked`).
 Ohne Arbeitsplatz (Google-Daten, kein VM-Zugang) prüft dann
 niemand. `off`: niemand. Ohne Prüfer (`AnswerAudit.unreviewed`): kein Halt,
-kein Gate, `memory_locked` sperrt Memory nach Fremdinhalt (wie vor
-2026-10-28), `read_source` öffnet keine selbst gewählten Adressen
+kein Gate (Memory sperrte bis 2026-11-02 nach Fremdinhalt), `read_source` öffnet keine selbst gewählten Adressen
 (`agent_read_source`), `request_domain` geht ohne Gate-Runde an den Nutzer
 (Karte mit `review: "off"`, „Your reviewers are off, so only you decide.“),
 keine Prüferreserve vor dem harten Stopp (`answer_time_left`), kein
@@ -6313,8 +6311,8 @@ Routing-Runde nach bezahlter Arbeit schließt weiter mit einer Antwort
 `compare_models` nennt die Prüfer nur, wo sie folgen. Der Agent erfährt es als Fakt im Systemprompt
 (`prompt_defaults.AGENT_REVIEW_FACTS[setting]` nach
 `AGENT_AUDIT_ANSWER_SECTION`, das den Prüfersatz bis dahin selbst trug; im
-Modus `workspace` ein fester Satz, damit der Cache beim Öffnen hält), im
-Memory-Block (`agent_memory.AUDIT_MEMORY_LOCK_FACTS`) und in der Beschreibung
+Modus `workspace` ein fester Satz, damit der Cache beim Öffnen hält), bis
+2026-11-02 auch im Memory-Block (`AUDIT_MEMORY_LOCK_FACTS`), und in der Beschreibung
 von `update_plan` (`PlanTools(reviewed=…)`). Ändern kann er sie nicht
 (`agent_settings.ELSEWHERE`). Zähler: `agent_audit_metrics` `review_setting`
 (`marks_s` ohne `off`); `scripts/audit_report.py` zählt `off`-Turns weder als
@@ -9411,7 +9409,7 @@ app/services/
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Die Prüfer jedes Agent-Laufs (seit 2026-10-25 als Audit, seit 2026-10-31 der eine Modus für jedes Konto): AGENT_SEARCH_ROUNDS des Agenten; AnswerAudit lässt die gewählten Modelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (toleranter Locator), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; compare_models-Ergebnisse strukturiert (COMPARISON_ENTRY_CHARS, ROUND_TIERS, BRIEF_TOOLS); Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate); seit 2026-10-29 eigene Cancellation je Live-/Gate-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS), Gate-Frist GATE_SECONDS und gate_trace
   agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt; seit 2026-10-30 auch jeder Turn mit Arbeitsplatz (workspace_counters: ws_*, wrap_up)
-  agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer laufen: request_domain (danach entscheidet immer der Nutzer) und update_memory, sobald Fremdinhalt im Blick ist (memory_exposed); Browser-Aktionen und read_source/show_image standen vom 27./28. bis 29.10. darauf (Begründung im Modul-Docstring)
+  agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer laufen: request_domain (danach entscheidet immer der Nutzer; update_memory mit Fremdinhalt im Blick bis 2026-11-02); Browser-Aktionen und read_source/show_image standen vom 27./28. bis 29.10. darauf (Begründung im Modul-Docstring)
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm), seit 2026-10-30 auch mit 2–4 Antworten als Knöpfen (choices → choice, chosen()); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back
   agent_domains.py           Netz der Werkbank pro Chat (seit 2026-10-27): Paketquellen als Standard, request_domain (ein Hostname, nie GitHub/Fly-intern/Sprites) nach Prüfern und Nutzer, Freigaben am Chat (agent_domains, höchstens 20), rules() für die Policy während der Nachricht des Chats
   agent_browser.py           Werkzeug browser (seit 2026-10-27): typisierte Aktionen (open/read/text/find/click auch an x,y/drag mit strokes/type/select/key/scroll/back/forward/tabs/tab/screenshot/upload/download/wait) auf der Browser-VM über workspace_vm/browser/browser.py mit JSON auf stdin; Adressen nur http(s) und öffentlich, seit 2026-10-29 auch http://localhost:<port> als Port der Werkbank (local_port, _tunnel startet agent_tunnel, local_ports in jeder Anfrage), Upload einer Werkbank-Datei für einen Aufruf, Downloads des Browsers (Aktion, download, Nutzer in der Ansicht) seit 2026-10-28 in <Chat-Ordner>/downloads/ (_keep_downloads, bis 25 MB, danach auf der Browser-VM gelöscht), Screenshot als Bild, open bringt seit 2026-10-29 ein kleines JPEG der Seite für ihre Karte im Chat (preview_url, nur in der Aktivität, bounded_activity streicht es zuerst), Ausfall kostet nur dieses Werkzeug (Grund im Log); seit 2026-10-29 weckt _warm beim ersten Aufruf einer Nachricht die Browser-VM und startet Chrome (Helfer-Aktion warm) auf eigenem Backend, während die Werkbank bereit wird; screenshot_after bringt bei Aktionen, die die Seite ändern, das Bild danach im selben Aufruf (PICTURE_AFTER); show legt seit 2026-10-30 den Screenshot unter die Antwort (_show, kind web_image, Herkunft browser); Aktionen in PREVIEW_AFTER bringen alle PREVIEW_SECONDS ein neues Bild für die Seitenkarte, die Aktivität page_title/page_url; look zeigt ask_user den Browser nach der Rückgabe; click/drag an x,y melden seit 2026-10-30, was an ihren Punkten lag und was sich danach änderte (browser.py HIT_JS)

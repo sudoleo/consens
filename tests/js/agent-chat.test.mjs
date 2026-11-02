@@ -2005,12 +2005,10 @@ describe("single-model agent chat", () => {
     expect(host.querySelector(".agent-hold-title").textContent).toBe("Not every reviewer could check this step");
     expect([...host.querySelectorAll(".agent-hold-reason")].map(p => p.textContent)).toEqual([
       "This step runs only with your OK."]);
-    // A memory change says so in words, never as its JSON (C1).
-    handlers.hold.receive({ hold: { ...base, id: "fedcba987654", kind: "unchecked", reviewer: "", reason: "",
-      step: "update_memory: add Max reist mit der Bahn.", step_calls: [
+    // A memory change a reviewer paused on says so in words, never as its JSON (C1).
+    handlers.hold.receive({ hold: { ...base, id: "fedcba987654", kind: "injection", reviewer: "GPT-6 Luna",
+      reason: "Von der Seite.", step: "update_memory: add Max reist mit der Bahn.", step_calls: [
         { tool: "update_memory", action: "add", text: "Max reist mit der Bahn." }] } });
-    expect([...host.querySelectorAll(".agent-hold-reason")].map(p => p.textContent)).toEqual([
-      "The agent wants to remember something about you. That happens only with your OK."]);
     expect(host.querySelector(".agent-hold-evidence-label").firstChild.textContent).toBe("Memory");
     expect(host.querySelector(".agent-hold-evidence-words").textContent).toBe("Remember: “Max reist mit der Bahn.”");
     expect(host.querySelector(".agent-hold-evidence-text")).toBeNull();

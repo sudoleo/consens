@@ -52,7 +52,7 @@ from app.services.llm.agent_client import AgentCompletion, measured_usage, resol
 pytestmark = pytest.mark.tempo
 from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_audit import ANSWER, LookupArgs, earlier_marks, entry_of
-from test_agent_gate import MemoryArgs
+from test_agent_gate import MemoryArgs, stand_in  # noqa: F401  (fixture)
 from test_agent_runs import Database, UID, pending
 from test_chat_history import FakeTransaction
 
@@ -85,8 +85,9 @@ THREE = {"openai": "gpt-5.6-luna", "xiaomi": "mimo-v2.6-pro", "qwen": "qwen3.8-2
 DAILY = {"openai": "gpt-5.6-luna", "anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"}
 SIX = {**THREE, "glm": "glm-5.3-flash", "deepseek": "deepseek-v4.1-flash", "anthropic": "claude-haiku-4-5"}
 STEPS = 40
-# The step that changes memory with the agent's search hits in view: it
-# waits for the reviewers' gate (agent_gate.outward "memory").
+# The step that changes memory: it waits for the reviewers' gate as the
+# stand-in for a call that waits (test_agent_gate.stand_in; memory itself
+# has not waited since 2026-11-02).
 GATE_STEP = 20
 # Every thread a turn starts by name: run, watcher, journal, work log,
 # reviewers and their final requests (agent-review-<provider>[-<kind>]).
@@ -514,7 +515,7 @@ def report(name, values):
 
 @pytest.mark.parametrize("reviewers", [THREE, SIX], ids=["three", "six"])
 def test_forty_workbench_steps_keep_their_tempo_with_three_and_six_reviewers(slow_store, scaled, measured,
-                                                                              reviewers):
+                                                                              stand_in, reviewers):
     """Measured 2026-10-29 on Windows (4 cores), three / six reviewers:
     marks after the last word 0.95-1.02 / 1.02-1.11 s (0.83 s of it the
     hedge's path), the last first final request 0.13 / 0.20-0.25 s after

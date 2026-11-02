@@ -18,6 +18,7 @@ from app.services.llm import agent_client
 from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
 from test_agent_runs import UID, pending, receipt, store, priced  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, Agent, fake_vm, results, vm_loop  # noqa: F401  (fixture)
+from test_agent_gate import stand_in  # noqa: F401  (fixture: update_memory stands in for a call that waits)
 
 
 class Steps(Agent):
@@ -154,7 +155,7 @@ def test_the_limit_fact_names_each_limit():
 
 # --- I9: a gate's entry names its step and its wait -----------------------------------
 
-def test_a_gate_entry_names_its_step_and_its_wait(store):
+def test_a_gate_entry_names_its_step_and_its_wait(store, stand_in):
     from test_agent_gate import gated, go, replies
     script, loop, ran = gated(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
@@ -165,7 +166,7 @@ def test_a_gate_entry_names_its_step_and_its_wait(store):
     assert checked["step"] == "completion:0" and checked["gate_ms"] == json.loads(text)["gate_ms"]
 
 
-def test_a_gate_the_user_decides_keeps_its_step_and_wait_on_the_pause(store):
+def test_a_gate_the_user_decides_keeps_its_step_and_wait_on_the_pause(store, stand_in):
     from test_agent_audit import decide_when_held
     from test_agent_gate import gated, go, halt, replies
     script, loop, ran = gated(store, live={})

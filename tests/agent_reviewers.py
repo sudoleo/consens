@@ -9,8 +9,7 @@ rounds take that script's replies, at moments the test does not control.
 
 ``InertAnswerAudit`` is the real AnswerAudit whose reviewers never start, the
 state "no reviewer could answer": no session follows the log, no gate opens
-before an outward call, memory locks once outside content is in view
-(DelegationLoop.memory_locked), no time is reserved for final rounds, and the
+before an outward call, no time is reserved for final rounds, and the
 review of the fixed answer ends "failed" with ``audit_unavailable`` and no
 marks, as AnswerAudit.run ends it when its reviewers never started. Tests
 about the review itself script the reviewers instead (test_agent_audit.Audit).

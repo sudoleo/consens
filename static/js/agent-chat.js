@@ -1835,14 +1835,9 @@
         : hold.review === "off" ? "Your reviewers are off, so only you decide." : "Not every reviewer could check this request.")];
     }
     // "unchecked": no reviewer paused it, none could answer for it; what the
-    // step would do, in a sentence (C1: before, "It acts outside the
-    // workspace", which a memory change does not). A reviewer that pauses on
-    // it later stands under its name.
-    if (hold.kind === "unchecked" && !listed.length) {
-      return [plain(holdCalls(hold).some(call => call.tool === "update_memory")
-        ? "The agent wants to remember something about you. That happens only with your OK."
-        : "This step runs only with your OK.")];
-    }
+    // step would do, in a sentence. A reviewer that pauses on it later stands
+    // under its name. A memory change waited here until 2026-11-02.
+    if (hold.kind === "unchecked" && !listed.length) return [plain("This step runs only with your OK.")];
     return (listed.length ? listed : [own]).map(said);
   }
   function reasonsKey(hold) {

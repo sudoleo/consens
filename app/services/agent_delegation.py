@@ -90,18 +90,21 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
                               "vm_view_image", "vm_render_office", "update_plan", "browser"})
 # Once a tool's result may have brought outside content into the agent's
 # context (model answers and their sources, pages, emails, calendars, files,
-# a VM's output or the workspace's notes, a worker's report), the message's
-# memory can no longer change (memory_locked): a page could otherwise steer
-# update_memory, whose evidence check only proves that some words of the user
-# are quoted (review 2026-10-14). Since the workspace's security audit
-# (2026-10-27) every result locks, an error too (its text may quote what a
+# a VM's output or the workspace's notes, a worker's report), a settings
+# change needs the user's own words (outside_in_view, agent_settings): a page
+# could otherwise suggest it. Since the workspace's security audit
+# (2026-10-27) every result counts, an error too (its text may quote what a
 # command printed), except a call the app refused before it ran and the
 # results of the tools below, which return only the user's or the app's own
 # content: memory, settings, the agent's own plan and documents, a prepared
-# card's status. A new tool locks until shown otherwise; ask_user too, since
-# it brings the browser's page back with the user's hand-back.
-MEMORY_KEEPING_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
-                                  "update_plan", "create_document", "revise_document", "open_workspace"})
+# card's status. A new tool counts until shown otherwise; ask_user too, since
+# it brings the browser's page back with the user's hand-back. Until
+# 2026-11-02 the same locked memory (memory_locked; with reviewers their gate
+# since 2026-10-28): the agent searches in nearly every first step, and an
+# opted-in account got not a single memory in a month. Max: the agent decides
+# what to keep, the user sees and can undo every change.
+OWN_CONTENT_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
+                               "update_plan", "create_document", "revise_document", "open_workspace"})
 TURN_TIME_LIMIT = ("This response reached its time limit. "
                    "The available results have been saved; send a follow-up message to continue.")
 TURN_STEP_LIMIT = ("This response reached its step limit without finishing. "
@@ -370,8 +373,7 @@ class DelegationLoop(AgentLoop):
         # since 2026-11-01): "always" from the run's start, "workspace" from
         # the agent's first step that reaches for the workspace on
         # (_review_from_here), "off" nobody. Without reviewers no halt, no
-        # gate: memory locks once outside content is in view (memory_locked),
-        # a domain waits for the user alone (_domain_wait).
+        # gate: a domain waits for the user alone (_domain_wait).
         if reviewers not in REVIEW_FACTS:
             raise ValueError("Unknown reviewers setting")
         self.reviewers = reviewers
@@ -466,17 +468,10 @@ class DelegationLoop(AgentLoop):
         self.search_remaining = self.policy.max_searches
         self.closed = threading.Event()
         self.watch_error = None
-        # Set once outside content is in view (_lock_memory): after a batch
-        # with a result of a tool not in MEMORY_KEEPING_TOOLS. Memory then
-        # locks (memory_locked), unless reviewers check each change first
-        # (_memory_reviewed).
+        # Set once outside content is in view: after the step's own web
+        # search or a batch with a result of a tool not in OWN_CONTENT_TOOLS.
+        # A settings change then needs the user's words (agent_settings).
         self.outside_in_view = False
-        # Set after the step's own web search. Until 2026-11-02 it locked
-        # memory too: the agent searches in nearly every first step, and in a
-        # month Max's account, opted in, got not a single memory (Max: the
-        # agent decides what to keep, the search no longer locks it). A
-        # settings change still needs the user's words (agent_settings).
-        self.searched = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
         # Per-turn guards of account mode (see TURN_WRAP_UP_SECONDS); the
@@ -689,7 +684,7 @@ class DelegationLoop(AgentLoop):
         # chat's messages as before, and a memory change re-caches only what follows.
         from app.services.agent_memory import orchestrator_prompt
         if self.comparison is not None:
-            self.messages[0]["content"] += "\n\n" + orchestrator_prompt(self.memory.snapshot, self.reviewers)
+            self.messages[0]["content"] += "\n\n" + orchestrator_prompt(self.memory.snapshot)
             memory_tools = self.memory.tools()
             if memory_tools:
                 self.registry = ToolRegistry([*self.registry.tools.values(), *memory_tools],
@@ -2319,8 +2314,7 @@ class DelegationLoop(AgentLoop):
         from app.services.agent_gate import outward
         # A call past the step's limit never runs (CALL_OVER_LIMIT): nothing to check.
         over_limit = getattr(value, "over_limit_ids", None) or set()
-        calls = [call for call in value.tool_calls
-                 if call["id"] not in over_limit and outward(call, memory_exposed=self.outside_in_view)]
+        calls = [call for call in value.tool_calls if call["id"] not in over_limit and outward(call)]
         return auditor.open_gate(calls, value.step_id) if calls else None
 
     def _gate_wait(self, gate):
@@ -2943,13 +2937,13 @@ class DelegationLoop(AgentLoop):
 
     def _brought_outside_content(self, value, results, unrun=()):
         """Whether a call of this batch returned a result that may hold
-        outside content: any tool but MEMORY_KEEPING_TOOLS, unless the app
+        outside content: any tool but OWN_CONTENT_TOOLS, unless the app
         refused the call before it ran ("refused", whose reason is the
         app's own; a refused call comes again with its decision) or did not
         run it (``unrun``: the batch's own texts, CALL_*)."""
         for call in value.tool_calls:
             if (call["id"] not in results or call["id"] in unrun
-                    or (call.get("function") or {}).get("name") in MEMORY_KEEPING_TOOLS):
+                    or (call.get("function") or {}).get("name") in OWN_CONTENT_TOOLS):
                 continue
             try:
                 content = json.loads(results[call["id"]]["content"])
@@ -2958,26 +2952,6 @@ class DelegationLoop(AgentLoop):
             if not (isinstance(content, dict) and content.get("status") == "refused"):
                 return True
         return False
-
-    def _lock_memory(self, reason, step):
-        """Outside content is in view: memory can change this message only
-        through the reviewers' gate, or not at all without reviewers."""
-        if not self.outside_in_view and self.work_log is not None:
-            self.work_log.app("memory_locked", reason, step=step)
-        self.outside_in_view = True
-
-    def _memory_reviewed(self):
-        """Reviewers follow the work: a memory change with outside content in
-        view waits for them like an outward call (_open_gate), instead of
-        being refused (Max, 2026-10-28)."""
-        auditor = self.comparison.auditor if self.comparison is not None else None
-        return bool(auditor is not None and auditor.sessions)
-
-    @property
-    def memory_locked(self):
-        """Memory refuses every change in this message: outside content is in
-        view and no reviewer checks a change before it runs."""
-        return self.outside_in_view and not self._memory_reviewed()
 
     def _hold_answer(self):
         """Whether a step's text must stay hidden while it streams: a text
@@ -3272,8 +3246,8 @@ class DelegationLoop(AgentLoop):
                     self.messages.append(value.assistant_message())
                     if _searched(value):
                         # The step's own web search: results are in view
-                        # from here on. Memory stays open (self.searched).
-                        self.searched = True
+                        # from here on, also for this step's own calls.
+                        self.outside_in_view = True
                     # A step that wrote its answer and then only saved a
                     # memory or prepared a Watch: the text stands as the answer.
                     answered_with_tools = False
@@ -3360,19 +3334,6 @@ class DelegationLoop(AgentLoop):
                                 stopped = HOLD_STEERED
                                 not_run(call, stopped)
                                 continue
-                            elif name == "update_memory" and self.outside_in_view and self._memory_reviewed() \
-                                    and (gate is None or call["id"] not in gate.call_ids):
-                                # With outside content in view a change runs
-                                # only past the reviewers' gate (_open_gate);
-                                # without reviewers MemoryTools refuses it.
-                                from app.services.agent_memory import MEMORY_LOCKED
-                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
-                                                       "content": json.dumps({"error": MEMORY_LOCKED})}
-                                self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", "update_memory",
-                                                                         "blocked", text=MEMORY_LOCKED,
-                                                                         reason="untrusted_context"))
-                                last_accepted = False
-                                continue
                             if name == ASK_TOOL:
                                 # The user's card (agent_ask.py); the tool then
                                 # returns their answer. A message on it is that
@@ -3421,7 +3382,7 @@ class DelegationLoop(AgentLoop):
                         self._note_progress()
                         yield from self._events()
                         if self._brought_outside_content(value, results, unrun):
-                            self._lock_memory("outside_content", value.step_id)
+                            self.outside_in_view = True
                         if answered_with_tools and not self._side_results_accepted(value, results):
                             # The text may say what a refused tool did not do (a
                             # memory not saved, no Watch card): the next step

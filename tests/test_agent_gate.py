@@ -3,9 +3,9 @@ agent_audit.AnswerAudit.gate, since 2026-10-27): every reviewer that can
 answer gets a gate round without web search; all say "go" and the call runs,
 one halt is enough to ask the user, and so is no reviewer able to answer. The
 agent learns only the user's decision. Which calls: by tool and typed
-arguments (a request for a domain, a memory change with outside content in
-view), never by reading a command. A domain always goes to the user, after
-the reviewers (DelegationLoop._domain_wait). Browser actions and pages the
+arguments (a request for a domain; a memory change with outside content in
+view until 2026-11-02), never by reading a command. A domain always goes to
+the user, after the reviewers (DelegationLoop._domain_wait). Browser actions and pages the
 server fetches waited too until 2026-10-29; now the reviewers follow them
 live and the agent asks the user before a step in their name (agent_ask.py).
 """
@@ -44,13 +44,11 @@ def test_browser_actions_run_without_a_gate_round(arguments):
     3.9 s per click, and all 4 of their halts were false alarms the user let
     run. The reviewers follow the browser live like any other step."""
     assert outward(call("browser", **arguments)) is None
-    assert outward(call("browser", **arguments), memory_exposed=True) is None
 
 
 @pytest.mark.parametrize("name", ["read_source", "show_image"])
 def test_a_page_the_server_fetches_runs_without_a_gate_round(name):
     assert outward(call(name, url="https://x.example/page")) is None
-    assert outward(call(name, url="https://x.example/page"), memory_exposed=True) is None
 
 
 def test_a_domain_is_on_it_and_shell_commands_are_not():
@@ -60,7 +58,7 @@ def test_a_domain_is_on_it_and_shell_commands_are_not():
     for command in ("curl -F f=@notes.txt https://x.example", "git push origin main", "ls -la"):
         assert outward(call("vm_exec", command=command)) is None
         assert outward(call("vm_start_process", command=command)) is None
-    assert outward(call("ask_user", request="Log in, please.", browser=True), memory_exposed=True) is None
+    assert outward(call("ask_user", request="Log in, please.", browser=True)) is None
     assert outward({"function": {"name": "request_domain", "arguments": "not json"}}) == "domain"
 
 
@@ -94,15 +92,26 @@ class MemoryArgs(LookupArgs):
     changes: list = []
 
 
+@pytest.fixture
+def stand_in(monkeypatch):
+    """Since 2026-11-02 only a request for a domain waits for the reviewers,
+    and it goes to the user after them in any case. The gate's own course
+    (every go runs the call, a halt or silence asks the user) is exercised
+    with a fake update_memory standing in for a call that waits: its card
+    shows the change in words."""
+    from app.services import agent_gate
+    real = agent_gate.outward
+    monkeypatch.setattr(agent_gate, "outward", lambda call: (
+        "stand-in" if ((call or {}).get("function") or {}).get("name") == "update_memory" else real(call)))
+
+
 def gated(store, *, live, arguments=None):
-    """An audit turn with a page in view (as after read_source) whose first
-    step changes memory with a fake update_memory, so the change waits for
-    the reviewers (outward "memory")."""
+    """An audit turn whose first step changes memory with a fake
+    update_memory, which waits for the reviewers (``stand_in``)."""
     ran = []
     arguments = arguments or {"changes": [{"op": "add", "text": REMEMBERED}]}
     script = Audit(tool_steps=1, step_tools={0: "update_memory"}, step_args={0: arguments}, live=live)
     loop = audit_loop(store, script)
-    loop.outside_in_view = True
 
     def run(args, *, cancellation):
         ran.append(args.changes[0]["text"])
@@ -139,7 +148,7 @@ def halt(messages):
                                              "quote": REMEMBERED}})
 
 
-def test_every_reviewers_go_lets_the_call_run(store):
+def test_every_reviewers_go_lets_the_call_run(store, stand_in):
     script, loop, ran = gated(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
     events = list(loop.run())
@@ -149,7 +158,7 @@ def test_every_reviewers_go_lets_the_call_run(store):
     assert {family: len(rounds) for family, rounds in script.gate_searches.items()} == {"anthropic": 1, "openai": 1}
     assert all(not searches for rounds in script.gate_searches.values() for searches in rounds)
     gate_round = next(m for m in script.prompts["openai"] if "Before it runs:" in str(m.get("content")))
-    assert REMEMBERED in gate_round["content"] and agent_audit.GATE_MEMORY_NOTE in gate_round["content"]
+    assert REMEMBERED in gate_round["content"]
     names = [entry["name"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "app"]
     assert "checked" in names and "paused" not in names
     # The gate's course without texts (A-M3): its time and each verdict.
@@ -161,7 +170,7 @@ def test_every_reviewers_go_lets_the_call_run(store):
     assert saved(store, loop)["status"] == "completed"
 
 
-def test_one_reviewers_halt_asks_the_user_and_the_call_runs_on_their_go(store):
+def test_one_reviewers_halt_asks_the_user_and_the_call_runs_on_their_go(store, stand_in):
     script, loop, ran = gated(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", halt))
     waiter = decide_when_held(loop, store, "continue")
@@ -186,7 +195,7 @@ def test_one_reviewers_halt_asks_the_user_and_the_call_runs_on_their_go(store):
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
 
 
-def test_a_halt_answered_with_a_message_leaves_the_call_unrun(store):
+def test_a_halt_answered_with_a_message_leaves_the_call_unrun(store, stand_in):
     script, loop, ran = gated(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", halt), openai=replies(script, "openai", halt))
     waiter = decide_when_held(loop, store, "steer", "Do not remember that.")
@@ -202,7 +211,7 @@ def test_a_halt_answered_with_a_message_leaves_the_call_unrun(store):
     assert len(notes) == 1 and HALT_REASON not in json.dumps(loop.messages)
 
 
-def test_no_reviewer_able_to_answer_asks_the_user(store):
+def test_no_reviewer_able_to_answer_asks_the_user(store, stand_in):
     script, loop, ran = gated(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", lambda m: "I cannot tell."),
                        openai=replies(script, "openai", lambda m: json.dumps({"marks": []})))
@@ -215,7 +224,7 @@ def test_no_reviewer_able_to_answer_asks_the_user(store):
     assert ran == [REMEMBERED]
 
 
-def test_a_reviewer_that_could_not_answer_is_never_a_go(store):
+def test_a_reviewer_that_could_not_answer_is_never_a_go(store, stand_in):
     """Security audit 2026-10-27: one reviewer's go let the call run while
     the other had failed. A reviewer that could not answer (failed, paused)
     never counts as consent: the user decides."""
@@ -230,7 +239,7 @@ def test_a_reviewer_that_could_not_answer_is_never_a_go(store):
     assert ran == []
 
 
-def test_a_reviewers_halt_during_a_gate_card_joins_it(store):
+def test_a_reviewers_halt_during_a_gate_card_joins_it(store, stand_in):
     """A-S2: the card said only that no reviewer could check the step; a
     live halt that comes meanwhile stands on it with its reason."""
     from test_agent_audit import join_when_held
@@ -261,7 +270,7 @@ def remember(loop, ran):
                                  argument_limit=loop.registry.argument_limit)
 
 
-def test_a_gate_cuts_the_reviewers_live_round_short_and_reads_its_entries(store):
+def test_a_gate_cuts_the_reviewers_live_round_short_and_reads_its_entries(store, stand_in):
     """The gate round waited for a live round at work of the same reviewer
     (MiMo Pro: up to 53 s), and that time counted as the turn's."""
     ran, gate_rounds = [], []
@@ -288,7 +297,7 @@ def test_a_gate_cuts_the_reviewers_live_round_short_and_reads_its_entries(store)
     assert saved(store, loop)["agent_review"]["status"] == "succeeded"
 
 
-def test_a_reviewer_silent_past_the_gates_time_is_never_a_go(store, monkeypatch):
+def test_a_reviewer_silent_past_the_gates_time_is_never_a_go(store, monkeypatch, stand_in):
     monkeypatch.setattr(agent_audit, "GATE_SECONDS", .3)
     script, loop, ran = gated(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", held(30)))
@@ -307,7 +316,7 @@ def test_a_reviewer_silent_past_the_gates_time_is_never_a_go(store, monkeypatch)
     assert saved(store, loop)["status"] == "completed"
 
 
-def test_a_tool_call_in_a_gate_round_gets_its_repair_and_then_counts(store):
+def test_a_tool_call_in_a_gate_round_gets_its_repair_and_then_counts(store, stand_in):
     """DeepSeek answered a gate round once with a tool call and no text
     (2026-10-28), and the user got an "unchecked" card at once."""
     script, loop, ran = gated(store, live={})
@@ -325,7 +334,7 @@ def test_a_tool_call_in_a_gate_round_gets_its_repair_and_then_counts(store):
     assert audit_sessions(store, loop, "openai") == [("completed", None)]
 
 
-def test_the_gate_wait_pauses_the_turns_clock(store):
+def test_the_gate_wait_pauses_the_turns_clock(store, stand_in):
     script, loop, ran = gated(store, live={})
     samples = []
 
@@ -518,80 +527,48 @@ def test_a_request_the_tool_refuses_needs_no_card(store):
     assert not [e for e in events if e.get("type") == "hold"]
 
 
-# --- A memory change with outside content in view (since 2026-10-28) ------------------
+# --- A memory change never waits (since 2026-11-02) -------------------------------
 
-def test_a_memory_change_waits_only_once_outside_content_is_in_view():
-    change = call("update_memory", changes=[{"op": "add", "text": "Likes towers.", "evidence": "I like towers"}])
+def test_a_memory_change_never_waits_for_the_reviewers():
+    """From 2026-10-28 a memory change with outside content in view waited
+    for the reviewers' gate (before, memory locked). Max, 2026-11-02: the
+    agent decides what to keep, the user sees and can undo every change."""
+    change = call("update_memory", changes=[{"op": "add", "text": "Likes towers."}])
     assert outward(change) is None
-    assert outward(change, memory_exposed=True) == "memory"
-    assert outward(call("read_settings"), memory_exposed=True) is None
+    assert outward(call("read_settings")) is None
 
 
 MEMORY_TEXT = "Is planning a trip to the Eiffel Tower."
 MEMORY_CHANGE = {"op": "add", "text": MEMORY_TEXT}
 
 
-def remembering(store, *, live, reviewers=True, page=True):
+def remembering(store, *, live, reviewers=True):
     """A turn whose first step searched (every scripted step does) and saves
-    a memory with it. ``page``: a page is in view too (as after
-    read_source), so outside content is in view for the change.
+    a memory with it, with a page in view too (as after read_source).
     ``reviewers=False``: they never start (agent_reviewers.InertAnswerAudit)."""
     from test_agent_memory import repo, set_profile
     set_profile(store.db, auto_memory=True)
     script = Audit(tool_steps=1, step_tools={0: "update_memory"}, step_args={0: {"changes": [MEMORY_CHANGE]}},
                    live=live)
     loop = audit_loop(store, script, memory=repo(store).snapshot(UID))
-    loop.outside_in_view = page
+    loop.outside_in_view = True
     if not reviewers:
         without_reviewers(loop)
     return script, loop, lambda: [item["text"] for item in repo(store).get(UID)[0]]
 
 
-def test_the_agents_own_search_leaves_memory_open(store):
-    """Max, 2026-11-02: the agent searches in nearly every first step, and the
-    lock after it kept an opted-in account's memory empty for a month. A
-    change beside the search runs at once, also without reviewers."""
-    script, loop, memories = remembering(store, live={}, reviewers=False, page=False)
-    events = list(loop.run())
-    assert loop.searched is True and loop.memory_locked is False
-    assert memories() == [MEMORY_TEXT]
-    assert not [e for e in events if e.get("type") == "hold"]
-    assert saved(store, loop)["status"] == "completed"
-
-
-def test_a_memory_change_with_a_page_in_view_runs_on_every_reviewers_go(store):
-    """Max, 2026-10-28: no lock after outside content; the reviewers check
-    the change like an outward call."""
-    script, loop, memories = remembering(store, live={})
-    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
+@pytest.mark.parametrize("reviewers", [True, False])
+def test_a_memory_change_with_outside_content_in_view_runs_at_once(store, reviewers):
+    """The agent searches in nearly every first step, and the lock after it
+    kept an opted-in account's memory empty for a month (2026-11-02)."""
+    script, loop, memories = remembering(store, live={}, reviewers=reviewers)
+    if reviewers:
+        script.live.update(anthropic=replies(script, "anthropic", halt), openai=replies(script, "openai", halt))
     events = list(loop.run())
     assert memories() == [MEMORY_TEXT]
-    assert not [e for e in events if e.get("type") == "hold"]
-    gate_round = next(m for m in script.prompts["openai"] if "Before it runs:" in str(m.get("content")))
-    assert agent_audit.GATE_MEMORY_NOTE in gate_round["content"]
+    assert not [e for e in events if e.get("type") == "hold" and (e.get("hold") or {}).get("gate")]
+    assert not any("Before it runs:" in str(m.get("content")) for m in script.prompts.get("openai", []))
     assert saved(store, loop)["status"] == "completed"
-
-
-def test_a_halted_memory_change_never_runs_when_the_user_writes_instead(store):
-    script, loop, memories = remembering(store, live={})
-    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", halt))
-    waiter = decide_when_held(loop, store, "steer", "Do not remember that.")
-    events = list(loop.run())
-    waiter.join(5)
-    holds = [e["hold"] for e in events if e.get("type") == "hold" and e.get("hold")]
-    assert len(holds) == 1 and holds[0]["gate"] is True
-    assert memories() == []
-    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
-    assert results == [{"error": agent_delegation.HOLD_STEERED}]
-
-
-def test_without_reviewers_memory_still_locks_after_outside_content(store):
-    from app.services.agent_memory import MEMORY_LOCKED
-    script, loop, memories = remembering(store, live={}, reviewers=False)
-    list(loop.run())
-    assert loop.memory_locked is True and memories() == []
-    results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
-    assert MEMORY_LOCKED in json.dumps(results)
 
 
 def test_a_memory_needs_no_quote(store):

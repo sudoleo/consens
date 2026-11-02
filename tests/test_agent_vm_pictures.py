@@ -50,8 +50,8 @@ def test_the_agent_sees_its_chart_after_the_results(store, fake_vm, sees):
     text, image = after[-2]["content"]
     assert text == {"type": "text", "text": PICTURE_INTRO.format(path=chart)}
     assert image == {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(PNG).decode()}}
-    # What the agent saw is outside content: memory locks; the reviewers see it is a VM picture.
-    assert loop.memory_locked is True
+    # What the agent saw is outside content; the reviewers see it is a VM picture.
+    assert loop.outside_in_view is True
     entry = next(e for e, t in loop.work_log.entries_after(0) if e["kind"] == "context" and t.startswith("[consens.io: the picture"))
     assert entry["data"] == "vm"
 

@@ -12,19 +12,19 @@ Contracts that are design, not convenience:
 1. **Opt-in, fenced in the write.** Agent writes re-read ``auto_memory`` and
    ``enabled`` in the same transaction as the change. A user who switches it
    off mid-run stops the next write; a finished turn can no longer write.
-2. **Outside content cannot write unseen.** Once pages, files, emails or
-   other tool results are in view in a message (since 2026-11-02 not the
-   agent's own web search: it came in nearly every first step, and memory
-   stayed empty), a change runs only after the
-   reviewers let it (agent_gate.outward "memory"), or not at all without
-   reviewers (DelegationLoop.memory_locked). Until 2026-10-28 every change
-   carried ``evidence``, a verbatim quote of the user's own words (in
-   comparison mode until 2026-10-31): it kept preferences the user never put
-   into words out, and the gate covers what it guarded against.
-   ``evidence_matches`` and ``user_words`` remain for the settings tool
-   (agent_settings.py) and the user's links (agent_read_source.user_urls).
-   Settings > Memory (edit, delete, Undo) is the backstop. Secrets (keys,
-   passwords, card/IBAN numbers) are refused for every origin.
+2. **The user sees every change.** Agent decides what to keep, with search
+   results, pages or files in view or not: each change shows under the
+   answer with Undo, and Settings > Memory (edit, delete, Undo) is the
+   backstop. Until 2026-11-02 outside content in view locked memory for the
+   rest of the message (with reviewers since 2026-10-28 their gate,
+   agent_gate.outward "memory"); the agent searches in nearly every first
+   step, and an opted-in account got not a single memory in a month (Max:
+   remove the lock). Until 2026-10-28 every change carried ``evidence``, a
+   verbatim quote of the user's own words: it kept preferences the user never
+   put into words out. ``evidence_matches`` and ``user_words`` remain for the
+   settings tool (agent_settings.py) and the user's links
+   (agent_read_source.user_urls). Secrets (keys, passwords, card/IBAN
+   numbers) are refused for every origin.
 3. **One document, one read.** A run reads profile and entries in a single
    batched read; no per-entry documents, no cross-request cache of personal
    text. The bounded change log for Undo lives in the same document and is
@@ -701,19 +701,11 @@ def render_memory_block(snapshot: MemorySnapshot, *, with_ids: bool = True) -> s
             + "\n\n".join(parts) + "\nEND OF USER MEMORY.")
 
 
-# The refusal once outside content is in the message's context
-# (DelegationLoop.memory_locked, MEMORY_KEEPING_TOOLS).
-MEMORY_LOCKED = ("Memory cannot change any more in this message: model answers, sources or other outside "
-                 "content are in view. Nothing was saved; do not say that it was.")
-
-
 # Since 2026-10-28 facts, not rules (compare_models carries no memory field,
 # agent_comparison.AuditCompareArgs). The model decides what is worth
-# remembering; the user sees and can undo every change, and with outside
-# content in view a change waits for the reviewers (agent_gate.outward
-# "memory"; without reviewers memory locks, DelegationLoop.memory_locked). No
-# evidence quote any more (Max): it kept preferences the user never put into
-# words out, and the gate covers what it guarded against. Special categories
+# remembering; the user sees and can undo every change (no lock after
+# outside content since 2026-11-02). No evidence quote any more (Max): it
+# kept preferences the user never put into words out. Special categories
 # keep their clause: GDPR art. 9. Until 2026-10-31 comparison mode had its
 # own rules here (MEMORY_*_PROMPT). Since 2026-11-02 one principle of what is
 # worth keeping: with facts alone the agent kept nothing, not even a yes to
@@ -721,25 +713,13 @@ MEMORY_LOCKED = ("Memory cannot change any more in this message: model answers, 
 AUDIT_MEMORY_USE_PROMPT = """Where a memory conflicts with the question or the evidence, the question and the
 evidence decide."""
 
-# The prompt's last sentence by the user's reviewers setting (since
-# 2026-11-01): without reviewers memory locks once outside content is in view
-# (DelegationLoop.memory_locked).
-_AUDIT_MEMORY_WRITE_RULES = """MEMORY UPDATES. The user lets you keep their memory across chats with
+AUDIT_MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user lets you keep their memory across chats with
 update_memory: what you save shapes later answers, and the user sees every
 change and can undo it. Worth keeping is what the user tells you about
 themselves and how they want you to work beyond this task, also in a
 correction or in a yes to your offer for next time; what they merely ask
 about is not. Health, religion, political views and other sensitive details
-only when the user asks you to remember them. Your own web search leaves
-memory open. Once other outside content (pages you open, files, tool results)
-is in view in a message, """
-AUDIT_MEMORY_LOCK_FACTS = {
-    "always": "a change runs only after\nthe reviewers let it.",
-    "workspace": ("a change runs only after\nthe reviewers let it, who review from your first step in the "
-                  "workspace on;\nbefore that, no change runs in that message."),
-    "off": "no change runs in that\nmessage: no reviewer checks it.",
-}
-AUDIT_MEMORY_WRITE_PROMPT = _AUDIT_MEMORY_WRITE_RULES + AUDIT_MEMORY_LOCK_FACTS["always"]
+only when the user asks you to remember them."""
 
 AUDIT_MEMORY_READ_ONLY_PROMPT = """Memory is read-only for you: Agent memory updates are switched off (Settings >
 Memory, "Let Agent update memory")."""
@@ -752,7 +732,7 @@ AUDIT_MEMORY_UNAVAILABLE_PROMPT = """The user's memory could not be loaded for t
 on the app's side); nothing can be saved right now."""
 
 
-def orchestrator_prompt(snapshot: MemorySnapshot, reviewers: str = "always") -> str:
+def orchestrator_prompt(snapshot: MemorySnapshot) -> str:
     """Memory data plus the facts that fit the user's switches."""
     if not snapshot.available:
         # Nothing to save later either in a temporary chat.
@@ -762,7 +742,7 @@ def orchestrator_prompt(snapshot: MemorySnapshot, reviewers: str = "always") -> 
     # The user's memories themselves (block) stay as they are.
     block = render_memory_block(snapshot)
     rules = (AUDIT_MEMORY_TEMPORARY_PROMPT if snapshot.temporary
-             else _AUDIT_MEMORY_WRITE_RULES + AUDIT_MEMORY_LOCK_FACTS[reviewers] if snapshot.writable
+             else AUDIT_MEMORY_WRITE_PROMPT if snapshot.writable
              else AUDIT_MEMORY_READ_ONLY_PROMPT)
     return "\n\n".join(part for part in (block, AUDIT_MEMORY_USE_PROMPT if block else "", rules) if part)
 
@@ -795,8 +775,6 @@ class MemoryTools:
                              "sees every change and can undo it.", AuditUpdateMemoryArgs, self.update_memory)]
 
     def update_memory(self, args, *, cancellation=None):
-        if getattr(self.loop, "memory_locked", False):
-            raise MemoryRefused("untrusted_context", MEMORY_LOCKED)
         return self.apply(args.changes)
 
     def apply(self, changes) -> dict:

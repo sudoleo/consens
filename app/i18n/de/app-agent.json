@@ -1004,7 +1004,6 @@
   "A reviewer paused before a step": "Ein Prüfer hat vor einem Schritt pausiert",
   "Two reviewers paused before a step": "Zwei Prüfer haben vor einem Schritt pausiert",
   "{count} reviewers paused before a step": "{count} Prüfer haben vor einem Schritt pausiert",
-  "The agent wants to remember something about you. That happens only with your OK.": "Der Agent will sich etwas über dich merken. Das passiert nur mit deinem OK.",
   "This step runs only with your OK.": "Dieser Schritt läuft nur mit deinem OK.",
   "Remember: “{text}”": "Merken: „{text}“",
   "Change a memory: “{text}”": "Erinnerung ändern: „{text}“",

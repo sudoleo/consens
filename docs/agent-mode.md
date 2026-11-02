@@ -277,8 +277,9 @@ gelten muss, setzt die App durch (Vorab-Prüfung, geschlossenes Netz, Karten).
 Memory ohne Belegzitat (`AuditMemoryChange`, ein mitgeschicktes Zitat wird
 ignoriert): Das Modell entscheidet, was es sich merkt, auch
 Vorlieben, die der Nutzer nie wörtlich gesagt hat; der Nutzer sieht und löscht
-jede Änderung, mit Fremdinhalt im Blick prüfen die Prüfer (`GATE_MEMORY_NOTE`:
-passt die Änderung zu dem, was der Nutzer sagte), ohne Prüfer sperrt Memory.
+jede Änderung und nimmt sie mit Undo zurück. Fremdinhalt im Blick sperrt
+seit 2026-11-02 nichts mehr (vorher prüften die Prüfer, `GATE_MEMORY_NOTE`,
+ohne Prüfer sperrte Memory).
 Sensible Kategorien nur auf Bitte (DSGVO Art. 9). Der Vergleichsmodus behielt
 bis 2026-10-31 seine Zitatpflicht. Anlass: Terra 6.1 und Opus klagten
 über zu viele Regeln (Terra beschrieb dabei auch Regeln, die schon gestrichen
@@ -346,14 +347,14 @@ Einstellungen, Chatsuche, Dateien, Dokumente, Google, Bilder und Memory gibt es
 in jedem Chat-Lauf im Kontomodus (Watch, Lesen und Bilder nicht in Chats mit
 Google-Daten). Sobald ein Schritt eigene Suchtreffer hat (`_searched`), ist
 Fremdinhalt im Blick (`outside_in_view`, auch für die Aufrufe desselben
-Schritts), wie nach `read_source`: Seiten könnten sonst `update_memory`
-steuern. Seit 2026-10-28 sperrt das Memory dann nicht, solange Prüfer
-mitlaufen: Eine Änderung wartet wie ein Aufruf mit Außenwirkung auf die
-Vorab-Prüfung (`agent_gate.outward` „memory“, Prüferhinweis
-`GATE_MEMORY_NOTE`; alle sagen go, sonst entscheidet der Nutzer auf der Karte).
-Ohne Prüfer bleibt die Sperre (`memory_locked`, siehe „Ohne Prüfer“). Der
-Prompt sagt das als Fakt, nicht mehr „call it first … before you search“ (Max:
-Spielraum statt Mikromanagement). Was bis 2026-10-31 nur zum Vergleichsmodus
+Schritts), wie nach `read_source`: Eine Einstellungsänderung braucht dann ein
+Belegzitat. Memory sperrte das bis 2026-11-02 ebenfalls (ohne Prüfer
+`memory_locked`, mit Prüfern seit 2026-10-28 ihre Vorab-Prüfung
+`agent_gate.outward` „memory“). Weil der Agent in fast jedem ersten Schritt
+sucht, bekam Max' Konto mit Opt-in einen Monat lang keine Erinnerung; seitdem
+ändert `update_memory` immer sofort, und der Prompt nennt, was sich zu merken
+lohnt (nicht mehr „call it first … before you search“, Max: Spielraum statt
+Mikromanagement). Was bis 2026-10-31 nur zum Vergleichsmodus
 gehörte (Vergleichslimit im Prompt, `FREE_PROMPT`, Tiefe, Antwortstart,
 `_consensus_search_handoff`, `_tool_reminder`, das Memory-Feld an den
 Vergleichen, `AGENT_READ_SOURCE_PROMPT` mit `AGENT_READ_SOURCE_REPLACEMENTS`),
@@ -569,7 +570,7 @@ schaltete „Answer check off“ im Audit auch die Prüfer ab: `auditor` war
 `None`, der Prompt sagte es mit `AUDIT_OFF_PROMPT`). Jeder Chat-Lauf hat einen
 `AnswerAudit`; ohne Prüfer ist nur ein Lauf, dessen Prüfer nie starten (keine
 Sitzung folgt dem Protokoll, `auditor.sessions` leer): kein Gate vor einer
-Außenwirkung, Memory sperrt bei Fremdinhalt (`DelegationLoop.memory_locked`),
+Außenwirkung (Memory sperrte bis 2026-11-02 bei Fremdinhalt),
 `read_source` liest keine frei gewählte Seite, keine Zeit für Schlussrunden
 reserviert (`answer_time_left`), kein Überziehen für die Antwort nach einem
 bezahlten Schritt (`_paid_audit`), und die Review der fixierten Antwort endet
@@ -1120,7 +1121,7 @@ Nachricht, die offen beginnt, weckt so nur den Browser; Werkbank und Sperre
 kommen mit ihrem ersten Aufruf. Ein Start, den die Nachricht nie nutzte, gibt
 die Sperre mit ihrem Ende zurück. Die Aktivität zeigt „Arbeitsplatz geöffnet · <Aufgabe>“, die
 Prüfer sehen den Schritt im Arbeitsprotokoll. `open_workspace` bringt keinen
-Fremdinhalt und sperrt Memory nicht (`MEMORY_KEEPING_TOOLS`).
+Fremdinhalt (`OWN_CONTENT_TOOLS`).
 
 **Wo eine Nachricht beginnt** (`routers/agent.py::workspace_closed`): offen,
 wenn die letzte Nachricht des Chats ein Werkzeug des Arbeitsplatzes aufrief
@@ -3536,11 +3537,11 @@ Nutzerzitat an `compare_models` und `check_text` (`memory_field`,
 `MEMORY_WRITE_PROMPT`); bis 2026-10-14 an `answer`, und der Antwortschritt bekam
 die Erinnerungen als eigenen Block (`synthesis_prompt`).
 
-**Memory-Sperre (seit 2026-10-14, umgekehrt 2026-10-27).** Sobald in einer
+**Fremdinhalt im Blick (seit 2026-10-14, umgekehrt 2026-10-27; bis 2026-11-02 die Memory-Sperre).** Sobald in einer
 Nachricht ein Werkzeug ein Ergebnis geliefert hat, ist Fremdinhalt im Blick
 (`outside_in_view`), auch nach einem Fehler, dessen Text Ausgaben zitieren kann.
 Ausgenommen sind nur ein Aufruf, den die App vor dem Lauf abgelehnt hat
-(`status: refused`), und die Werkzeuge in `MEMORY_KEEPING_TOOLS`, die
+(`status: refused`), und die Werkzeuge in `OWN_CONTENT_TOOLS`, die
 nachweislich nur Inhalte des Nutzers oder der App liefern (`update_memory`,
 `read_settings`, `prepare_settings_change`, `prepare_watch`, `update_plan`,
 `create_document`, `revise_document`, `open_workspace`); ein neues Werkzeug
@@ -3548,16 +3549,14 @@ zählt also als Fremdinhalt, bis das Gegenteil belegt ist. Vorher zählte eine
 Liste die sperrenden Werkzeuge auf und übersah `vm_write_file`,
 `vm_share_file`, `github_import` und `prepare_pull_request`, deren erstes
 Ergebnis die Notizen des Arbeitsplatzes trägt (Sicherheitsaudit 2026-10-27).
-Die eigene Websuche zählt mit (`_searched`). Seit 2026-10-28 ist
-`memory_locked` daraus abgeleitet und mit Prüfern falsch: Dann geht
-`update_memory` durch die Vorab-Prüfung (`_open_gate`, `_memory_reviewed`), und
-ein Aufruf, der an ihr vorbeikäme, bekommt `MEMORY_LOCKED`. Ohne Prüfer
-antwortet `update_memory` mit `MEMORY_LOCKED` (Aktivität „blocked“,
-`untrusted_context`). Grund der Sperre (2026-10-14): Seit volle Antworten und
-Seitenauszüge im Kontext eines Schritts mit Werkzeugen stehen, hätte eine
-präparierte Seite sonst eine Erinnerung setzen können. Die Belegpflicht für
-Einstellungen (`agent_settings.prepare`) hängt an `outside_in_view`, ändert
-sich also nicht.
+Die eigene Websuche zählt mit (`_searched`). Daran hängt heute nur die
+Belegpflicht für Einstellungen (`agent_settings.prepare`). Bis 2026-11-02
+sperrte es auch Memory (`memory_locked`, `MEMORY_LOCKED`, Aktivität „blocked“
+mit `untrusted_context`; mit Prüfern seit 2026-10-28 ihre Vorab-Prüfung).
+Grund damals (2026-10-14): Eine präparierte Seite hätte sonst eine Erinnerung
+setzen können. Max hob die Sperre auf, weil sie praktisch jede Nachricht traf
+und Memory bei Opt-in einen Monat leer blieb; Rückhalt ist der Hinweis mit
+Undo unter der Antwort und Settings › Memory.
 
 **Turn-Grenzen.** Erreicht ein Turn sein Zeit- oder Schrittlimit, schreibt der
 Agent die Antwort in einem letzten Schritt: dieselben Tools stehen im Request
@@ -3729,8 +3728,7 @@ aktuelle Chat fehlt (er steht schon im Kontext), ebenso gelöschte Chats und
 **Chats mit Google-Daten**: Deren Inhalt ist nur für ihren Chat freigegeben
 und geroutet (`google_data` am Chat), er wandert nicht in einen anderen. Das
 Ergebnis ist Fremdinhalt wie jedes Werkzeugergebnis (nicht in
-`MEMORY_KEEPING_TOOLS`): Memory sperrt danach oder geht durch die
-Vorab-Prüfung. Kosten: Firestore-Lesungen (bis zu 200 Chat-Dokumente und
+`OWN_CONTENT_TOOLS`): Eine Einstellungsänderung braucht danach ein Belegzitat. Kosten: Firestore-Lesungen (bis zu 200 Chat-Dokumente und
 höchstens 10 erste Fragen je Suche, ein Chat mit seinen Nachrichten je
 Öffnen), kein Modellaufruf. Aktivität: „Searched your chats“ mit dem
 Suchtext, „Read an earlier chat“ mit dem Titel (`agent-activity.js`).

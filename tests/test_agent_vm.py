@@ -385,8 +385,8 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     assert set(turn["agent_vm"].pop("phases")) == {"lease", "rules", "tools", "chat", "checkpoint"}
     assert turn["agent_vm"] == {"provider": "fake", "name": NAME, "checkpoint": "v1", "calls": 3, "commands": 1,
                                 "seconds": 3.0}
-    # Command output is outside content: memory is locked from then on.
-    assert loop.memory_locked is True
+    # Command output is outside content: a settings change needs the user's words.
+    assert loop.outside_in_view is True
     # The message's lease ended with it.
     assert agent_workspace.record(store.db, UID)["lease"] is None
     assert fake_vm.calls[-1] == ("close",)
@@ -805,9 +805,9 @@ def test_an_edit_replaces_exact_text_and_shows_the_changed_lines(store, fake_vm)
     assert result["snippet"].splitlines() == ["     2\tline 2", "     3\tline 3", "     4\tline 4",
                                               "     5\ttotal = a + b", "     6\tprint(total)", "     7\tline 6",
                                               "     8\tline 7", "     9\tline 8"]
-    # The activity names the file; the lines it shows again are file content: memory locks.
+    # The activity names the file; the lines it shows again are file content.
     edit = next(e for e in tool_events(events, "vm_edit_file") if e["status"] == "succeeded")
-    assert edit["path"] == f"{D}/calc.py" and loop.memory_locked is True
+    assert edit["path"] == f"{D}/calc.py" and loop.outside_in_view is True
     entry = next(e for e, _ in loop.work_log.entries_after(0) if e["kind"] == "tool" and e["name"] == "vm_edit_file")
     assert entry["data"] == "vm"
 

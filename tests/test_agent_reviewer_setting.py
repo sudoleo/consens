@@ -61,14 +61,10 @@ def test_without_reviewers_the_answer_stands_unreviewed_and_nobody_follows(store
     assert script.rounds == {} and not loop.comparison.auditor.sessions
     # No "Reviewing the answer…" for an answer nobody reviews.
     assert not any(event.get("type") == "answer_check" for event in events)
-    # The agent knows, in its own words; its own search leaves memory open
-    # (since 2026-11-02), a page or another tool result locks it.
+    # The agent knows, in its own words.
     system = loop.messages[0]["content"]
     assert prompt_defaults.AGENT_REVIEW_FACTS[setting] in system
     assert prompt_defaults.AGENT_REVIEW_FACTS["always"] not in system
-    assert loop.searched is True and loop.memory_locked is False
-    loop.outside_in_view = True
-    assert loop.memory_locked is True
 
 
 def test_in_the_workspace_only_the_reviewers_start_with_its_first_step_and_read_from_the_start(store):
@@ -86,8 +82,6 @@ def test_in_the_workspace_only_the_reviewers_start_with_its_first_step_and_read_
     # The work before the workspace is theirs too; the workspace's own result comes in a later round.
     assert any(entry["kind"] == "tool" and entry.get("name") == "plain" for entry in entries)
     assert not any(entry["kind"] == "tool" and entry.get("name") == "lookup" for entry in entries)
-    # Once they follow, memory waits for them instead of locking.
-    assert loop.memory_locked is False
 
 
 def test_the_answer_check_is_off_also_when_the_run_ends_before_the_review(store):
@@ -114,12 +108,10 @@ def test_an_always_review_without_reviewers_still_fails(store):
 
 
 @pytest.mark.parametrize("setting", ["always", "workspace", "off"])
-def test_memory_and_plan_say_who_checks(setting):
+def test_the_plan_says_who_checks_and_memory_is_the_same_for_every_setting(setting):
+    """Memory said who checks a change until 2026-11-02; no change waits now."""
     writable = MemorySnapshot(available=True, enabled=True, auto=True)
-    rules = agent_memory.orchestrator_prompt(writable, setting)
-    assert rules.endswith(agent_memory.AUDIT_MEMORY_LOCK_FACTS[setting])
-    if setting == "always":
-        assert rules.endswith(agent_memory.AUDIT_MEMORY_WRITE_PROMPT)
+    assert agent_memory.orchestrator_prompt(writable).endswith(agent_memory.AUDIT_MEMORY_WRITE_PROMPT)
     description = PlanTools(reviewed=setting != "off").tools()[0].description
     assert ("the reviewers see" in description) is (setting != "off")
 

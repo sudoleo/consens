@@ -8,8 +8,8 @@ read on demand: nothing of them is in the prompt before the agent asks.
 
 What comes back is the user's earlier work and the models' answers there:
 data, never instructions, and outside content like any tool result
-(DelegationLoop.outside_in_view: memory then locks or waits for the
-reviewers). Chats with Google data stay in their chat: their content was
+(DelegationLoop.outside_in_view: a settings change then needs the user's
+words). Chats with Google data stay in their chat: their content was
 consented to and routed for that chat alone (routers/agent.py
 ``google_data``), so they are neither found nor opened. Neither are temporary
 chats (chat_store.create_chat, since 2026-11-01): they keep nothing beyond

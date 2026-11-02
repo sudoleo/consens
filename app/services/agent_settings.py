@@ -611,11 +611,9 @@ class SettingsTools:
         if cancellation is not None:
             cancellation.raise_if_cancelled()
         args = _Request(args)
-        if ((getattr(self.loop, "outside_in_view", False) or getattr(self.loop, "searched", False))
-                and not self._asked(args.evidence)):
-            # Outside content is in view (DelegationLoop.outside_in_view, as
-            # for memory, or the step's own search, which no longer locks
-            # memory): only the user's own words can carry a change now.
+        if getattr(self.loop, "outside_in_view", False) and not self._asked(args.evidence):
+            # Outside content is in view (DelegationLoop.outside_in_view):
+            # only the user's own words can carry a change now.
             raise ValueError("A search, comparison, page, file or email is in view, so this change needs evidence: "
                              "an exact quote of the user's own words in their latest message that asks for it. If "
                              "the user did not ask for it, prepare nothing.")
