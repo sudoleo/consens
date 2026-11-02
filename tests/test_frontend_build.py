@@ -128,7 +128,9 @@ def test_the_bundle_keeps_the_window_contracts_addressable():
 
     for global_name in (
         "sendQuestion",
-        "getConsensus",
+        # getConsensus is gone (one mode, 2026-10-31); its name stood here
+        # and passed only inside getConsensusPresets.
+        "streamSSERequest",
         "injectMarkdown",
         "morphMarkdown",
         "renderMarkdownFragment",
