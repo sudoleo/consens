@@ -965,6 +965,9 @@
     const activity = new Map((context.metadata.agentActivity || []).map(item => [item.id, { ...item }]));
     for (const item of turn.agent_activity || []) activity.set(item.id, { ...activity.get(item.id), ...item });
     if (activity.size) turn.agent_activity = [...activity.values()];
+    // Waiting messages the run read: also those only the saved turn names (a
+    // turn followed after its live frames were gone), never sent again.
+    for (const item of turn.agent_activity || []) delivered(context, item);
     context.consensus.text = context.consensus.streamText = data.response;
     context.consensus.status = "complete";
     context.consensus.completedTurn = turn;

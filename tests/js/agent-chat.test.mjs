@@ -4178,6 +4178,36 @@ describe("agent turns that outlive their connection", () => {
     dom.window.close();
   });
 
+  // The same, but the run had read two of the waiting messages: its live
+  // frames are gone by then (agent_live keeps an ended run 10 minutes), only
+  // the saved turn's activity says so. Read ones went out again as a new,
+  // paid message (bug hunt 2026-11-02).
+  it("never sends again a waiting message the saved turn of a turn long over had read", async () => {
+    const record = { at: Date.now() - 40 * 60 * 1000, title: "Question", followup: false,
+      queue: [{ text: "Danach bitte kürzer", state: "queued" }, { text: "Schon gelesen", state: "waiting", noteId: "n1" },
+        { text: "Unterwegs gewesen", state: "sending" }],
+      body: { chat_id: CHAT, question: "Question", client_request_id: "req-read", bookmark_id: "b_read", recover_only: false,
+        model_id: CATALOG.default_model_id, reasoning_effort: "default", comparison_models: {}, file_ids: [] } };
+    const { window: w, dom } = bootFollow({
+      before: window => {
+        window.sessionStorage.setItem("agent_pending_runs_owner", JSON.stringify([record]));
+        window.sendQuestion = vi.fn();
+      },
+      pages: [{ known: false }] });
+    const turn = { id: TURN, question: "Question", consensus: "Old answer", status: "completed",
+      completed_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
+      agent_activity: [{ id: "completion:2/note-n1", kind: "progress", from_user: true, text: "Schon gelesen" },
+        { id: "completion:3/note-n2", kind: "progress", from_user: true, text: "Unterwegs gewesen" }] };
+    w.streamSSERequest.mockImplementation(async () => ({ ok: true, status: 200, data: { turn: structuredClone(turn) } }));
+    await selectAgent(w);
+    await vi.waitFor(() => expect(w.App.runRegistry.list().some(run => run.requestIdentity === "req-read")).toBe(true));
+    const run = w.App.runRegistry.list().find(item => item.requestIdentity === "req-read");
+    await vi.waitFor(() => expect(run.status).toBe("succeeded"));
+    await vi.waitFor(() => expect(w.sendQuestion).toHaveBeenCalledTimes(1));
+    expect(w.document.getElementById("questionInput").value).toBe("Danach bitte kürzer");
+    dom.window.close();
+  });
+
   // "Moments ago" counts from the turn's end: a long VM run sent 40 minutes
   // ago that ended just before the reload still takes the screen.
   it("shows the answer of a long turn that ended just before the reload", async () => {
