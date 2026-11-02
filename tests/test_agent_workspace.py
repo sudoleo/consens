@@ -104,7 +104,7 @@ def test_the_vms_tools_are_lf_and_their_versions_follow_their_bytes():
     assert agent_workspace.BROWSER_VERSION == agent_workspace._version("browser")
     assert agent_workspace.VERSION != agent_workspace.BROWSER_VERSION
     # The browser's setup, its helper and the relay name the same marker.
-    marker = "setup-done-1"
+    marker = "setup-done-2"
     assert all(marker in browser[name].decode() for name in ("setup.sh", "browser.py", "relay.py"))
 
 
@@ -1167,8 +1167,34 @@ def test_chrome_starts_with_software_webgl_and_an_old_one_restarts_once():
     assert '[ "$(cat "$dir/chrome-flags" 2>/dev/null)" != "$flags" ]' in restart
     assert "swiftshader" not in restart.split("then", 1)[0].split("flags=", 1)[1].split("\n", 1)[1]
     assert '[ -n "$why" ] && stop_chrome' in restart
-    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index('if ! runs "^x11vnc')]
+    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index("for _ in $(seq 150)")]
     assert 'echo "$flags" >"$dir/chrome-flags"' in start
+
+
+def test_the_screen_is_tigervnc_on_a_unix_socket_only():
+    """Xvfb and x11vnc (polled, one picture per request of the view) showed
+    about 13 whole pictures a second of a scrolling page, Xtigervnc 30 (test
+    Sprite 2026-11-02). Its VNC server stays on a Unix socket of the
+    provider's user; nothing listens on TCP, nothing moves the clipboard."""
+    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
+    start = display[display.index('if ! runs "^Xtigervnc :1 "'):display.index("# The rules that hold")]
+    for flag in ('-rfbunixpath "$dir/vnc.sock" -rfbunixmode 0600 -rfbport -1', "-nolisten tcp",
+                 "-AcceptCutText=0 -SendCutText=0", "-AcceptSetDesktopSize=0", "-FrameRate 30"):
+        assert flag in start, flag
+    assert "x11vnc -display" not in display.split('if ! runs "^Xtigervnc :1 "', 1)[1]
+    # A VM from before makes way, Chrome first; never under the view's --keep,
+    # and no Xtigervnc on the display an old Xvfb still holds.
+    move = display[display.index('old="'):display.index('if ! runs "^Xtigervnc :1 "')]
+    assert '[ "$mode" != "--keep" ]' in move and move.index("stop_chrome") < move.index('pkill -TERM -f -- "$old"')
+    assert '! runs "^Xvfb :1 "' in start.split("\n", 1)[0]
+    # The relay connects where it listens.
+    assert '"~/.consens/browser/vnc.sock"' in (VM_FILES / "browser" / "relay.py").read_text(encoding="utf-8")
+    # Set up before: Chrome stays, TigerVNC comes once (a new marker).
+    setup = (VM_FILES / "browser" / "setup.sh").read_text(encoding="utf-8")
+    assert 'marker="$dir/setup-done-2"' in setup
+    assert "if ! command -v Xtigervnc >/dev/null; then\n  sudo apt-get install -y -qq --no-install-recommends " \
+           "tigervnc-standalone-server" in setup
+    assert "x11vnc" not in setup and "xvfb" not in setup
 
 
 def test_a_chrome_that_no_longer_answers_starts_anew():
@@ -1202,7 +1228,7 @@ def test_a_chrome_that_no_longer_answers_starts_anew():
     stop = display.split("stop_chrome() {", 1)[1].split("\n}", 1)[0]
     assert stop.index("pkill -TERM") < stop.index("pkill -KILL") < stop.rindex('runs "$chrome" || return 0')
     # Earlier starts stay in the log, each with its reason, up to about 1 MB.
-    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index('if ! runs "^x11vnc')]
+    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index("for _ in $(seq 150)")]
     assert 'Chrome starts${why:+, restarted: $why}" >>"$log"' in start and '>>"$log" 2>&1' in start
     assert '-gt 1000000 ] && mv -f "$log" "$log.1"' in start
 

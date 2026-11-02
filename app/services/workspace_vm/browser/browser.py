@@ -73,7 +73,7 @@ import time
 HERE = os.path.dirname(os.path.abspath(__file__))
 HOME = os.path.expanduser("~")
 STATE = os.path.join(HOME, ".consens/browser")
-SETUP_MARKER = os.path.join(STATE, "setup-done-1")
+SETUP_MARKER = os.path.join(STATE, "setup-done-2")
 CONTROL = os.path.join(STATE, "control.json")
 # The last ref given in this browser: refs are never given twice.
 REF_COUNTER = os.path.join(STATE, "ref-count")

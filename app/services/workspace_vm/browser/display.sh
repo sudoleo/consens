@@ -1,16 +1,29 @@
 #!/bin/bash
-# consens.io browser VM: starts the screen (Xvfb), a window manager, Chrome
-# with its lasting profile and the VNC server, each unless it already runs.
+# consens.io browser VM: starts the screen with its VNC server, a window
+# manager and Chrome with its lasting profile, each unless it already runs.
 # They outlive this command and the VM's short pauses; after a long sleep the
 # VM has stopped them and the next call starts them again, sign-ins intact.
 # Every daemon gets its own output and none of this script's descriptors
 # (8>&-): an inherited pipe would keep the caller waiting, an inherited lock
 # would block the next call. CDP listens on 127.0.0.1 only, the VNC server on
-# no network at all: a Unix socket in this folder (vnc.sock), which only the
-# provider's user opens (relay.py). -rfbport 0 alone still left [::]:5900;
-# -rfbportv6 -1 ends that, -noipv6 does nothing in x11vnc 0.9.17, and
-# -localhost took the VM's fdf::1, which /etc/hosts also names localhost
-# (measured on Sprites 2026-10-27).
+# no network at all: a Unix socket in this folder (vnc.sock, mode 0600), which
+# only the provider's user opens (relay.py); -rfbport -1 and -nolisten tcp
+# leave no TCP port (test Sprite 2026-11-02).
+#
+# The screen is TigerVNC's X server since 2026-11-02 (Xtigervnc, one process
+# for screen and VNC). Until then Xvfb drew and x11vnc found the changes by
+# comparing the picture line by line (-noxdamage), and each picture waited
+# for the view's next request. On a test Sprite with a scrolling page about
+# half of what reached the view were half-drawn pictures: 13 whole pictures a
+# second with 30 ms more between the user and the server, 9 with 60 ms.
+# Xtigervnc knows what changed and sends without being asked (continuous
+# updates, which noVNC asks for): 30 a second (-FrameRate 30) at about 5 MB/s
+# after a few seconds of scrolling, also with 30 ms more; 15 to 23 with 60 ms.
+# Without the limit it sent over 120 a second. No clipboard either way (the
+# view's paste types keys) and no resizing by the viewer. A VM from before
+# installs it once (setup.sh) and its Xvfb, x11vnc and openbox make way here,
+# Chrome first (its session keeps the tabs); never under --keep, which must
+# not end a Chrome in use.
 #
 # Since 2026-10-28 it also mends a Chrome that is no longer usable (Max's
 # browser VM, 2026-10-28: a page load and the next connection ran into their
@@ -56,10 +69,20 @@ stop_chrome() {
   pkill -KILL -f -- "$chrome" 2>/dev/null || true
   for _ in $(seq 30); do runs "$chrome" || return 0; sleep 0.1; done
 }
-if ! runs "^Xvfb :1 "; then
-  rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
-  setsid nohup Xvfb :1 -screen 0 1280x800x24 -nolisten tcp >"$dir/xvfb.log" 2>&1 </dev/null 8>&- &
-  for _ in $(seq 50); do [ -e /tmp/.X11-unix/X1 ] && break; sleep 0.1; done
+# The screen of a VM from before 2026-11-02 and the openbox on it.
+old="^(Xvfb :1|x11vnc -display :1) |^openbox( |$)"
+if [ "$mode" != "--keep" ] && runs "^(Xvfb :1|x11vnc -display :1) "; then
+  stop_chrome
+  pkill -TERM -f -- "$old"
+  for _ in $(seq 50); do runs "$old" || break; sleep 0.1; done
+  pkill -KILL -f -- "$old" 2>/dev/null || true
+fi
+if ! runs "^Xtigervnc :1 " && ! runs "^Xvfb :1 "; then
+  rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 "$dir/vnc.sock"
+  setsid nohup Xtigervnc :1 -geometry 1280x800 -depth 24 -rfbunixpath "$dir/vnc.sock" -rfbunixmode 0600 -rfbport -1 \
+    -nolisten tcp -SecurityTypes None -AlwaysShared -AcceptSetDesktopSize=0 -AcceptCutText=0 -SendCutText=0 \
+    -FrameRate 30 -desktop consens >"$dir/xvnc.log" 2>&1 </dev/null 8>&- &
+  for _ in $(seq 50); do [ -e /tmp/.X11-unix/X1 ] && [ -S "$dir/vnc.sock" ] && break; sleep 0.1; done
 fi
 # The rules that hold whoever steers Chrome (harden.sh, since 2026-10-30):
 # Chrome's policy, openbox without menus, an xdg-open that opens nothing.
@@ -106,12 +129,6 @@ if [ -z "$(browser_pid)" ]; then
     --use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader \
     >>"$log" 2>&1 </dev/null 8>&- &
   echo "$flags" >"$dir/chrome-flags"
-fi
-if ! runs "^x11vnc -display :1 "; then
-  rm -f "$dir/vnc.sock"
-  setsid nohup x11vnc -display :1 -unixsock "$dir/vnc.sock" -rfbport 0 -rfbportv6 -1 -shared -forever -nopw \
-    -quiet -noxdamage \
-    >"$dir/vnc.log" 2>&1 </dev/null 8>&- &
 fi
 for _ in $(seq 150); do listens 9222 && [ -S "$dir/vnc.sock" ] && exit 0; sleep 0.1; done
 echo "The browser did not start." >&2

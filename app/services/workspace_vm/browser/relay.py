@@ -39,7 +39,7 @@ import urllib.request
 from urllib.parse import urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-MARKER = os.path.expanduser("~/.consens/browser/setup-done-1")
+MARKER = os.path.expanduser("~/.consens/browser/setup-done-2")
 # The VNC server's Unix socket (display.sh): on no network at all.
 VNC = os.path.expanduser("~/.consens/browser/vnc.sock")
 CHUNK = 65536

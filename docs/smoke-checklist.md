@@ -324,6 +324,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Automatisiert: `test_agent_workspace.py` (provision, Start),
       `test_agent_browser.py` (starting_until), `start-progress.test.mjs`,
       `workspace-view.test.mjs`.
+- [ ] Flüssige Live-Ansicht (2026-11-02, echter Provider, nach dem Deploy mit
+      `--ws-per-message-deflate false` im Render-Startbefehl): Live-Ansicht eines
+      Kontos öffnen, dessen Browser-VM von vorher ist. Einmal „Der Browser wird
+      eingerichtet“ (gut 10 s), danach das Bild mit den Tabs von vorher. Eine lange
+      Seite (z. B. de.wikipedia.org/wiki/Berlin) übernehmen und mit dem Mausrad
+      scrollen: Das Bild läuft flüssig mit, ohne halb gezeichnete Streifen.
+      Übernommen „Müller äöü ß €“ in ein Suchfeld tippen und dasselbe per
+      Einfügen: kommt exakt an. Render-Metrik CPU während des Scrollens unter
+      0,5. Automatisiert: `test_agent_workspace.py`
+      (`test_the_screen_is_tigervnc_on_a_unix_socket_only`).
 - [ ] Arbeitsplatz nach dem Laufzeit-Audit (2026-10-30,
       `docs/agent-workspace-runtime-audit-2026-10-30.md`; Konto mit
       Arbeitsplatz, echter Provider, nur an echter Sprite und echtem

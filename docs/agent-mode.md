@@ -1146,6 +1146,38 @@ bis der Start fertig ist. Die Aktivität zeigt „Arbeitsplatz geöffnet · <Auf
 Prüfer sehen den Schritt im Arbeitsprotokoll. `open_workspace` bringt keinen
 Fremdinhalt (`OWN_CONTENT_TOOLS`).
 
+**Flüssigere Live-Ansicht (seit 2026-11-02):** Max fand die Bildrate zu niedrig.
+Gemessen an Test-Sprites mit einer scrollenden Seite, noVNC im Browser und
+einem lokalen Python-Proxy wie auf Render (die Seite zählt ihre Bilder als
+Bitmuster, die Ansicht liest es aus): x11vnc auf Xvfb (`-noxdamage`, also
+zeilenweises Vergleichen, und ein Bild je Anfrage der Ansicht) brachte etwa 30
+Updates je Sekunde, davon nur rund 15 ganze Bilder, der Rest halb gezeichnet;
+mit 30 ms mehr zwischen Nutzer und Server 13, mit 60 ms 9. Die Strecke selbst
+ist kurz (von Deutschland zur VM 19 ms, ein ganzes Bild 26 ms). TigerVNCs
+X-Server (`Xtigervnc` in `display.sh`, Paket `tigervnc-standalone-server`)
+weiß, was sich ändert, und schickt ohne Anfrage (continuous updates, noVNC
+1.7 fragt sie an): 30 ganze Bilder je Sekunde (`-FrameRate 30`) bei etwa
+5 MB/s, auch mit 30 ms mehr, nach wenigen Sekunden Scrollen (seine
+Staukontrolle tastet sich heran); mit 60 ms 15–23. Ohne die Grenze kamen über
+120 Updates bei 10 MB/s. Eine VM von vorher installiert es einmal nach
+(`setup-done-2`, an einer Test-Sprite mit Umbau und Neustart von Chrome 8 s,
+der Tab blieb), ihr Xvfb, x11vnc und openbox machen Platz, nie unter `--keep`;
+eine neue VM ist wie vorher nach gut 70 s fertig. Einfügen tippt weiter exakt
+(äöü, ß, €, é, Emoji, Ω): TigerVNC nimmt nur das Zeichen, nicht den Tastencode
+(`RawKeyboard` aus), deutsche Tastaturen tippen also, was draufsteht. Wie
+bei x11vnc legt der Server ein Zeichen, das die US-Belegung nicht hat, beim
+ersten Tippen auf eine freie Taste, und Chrome verpasst manchmal genau diesen
+ersten Druck (x11vnc an derselben Probe auch); nach etwa 17 verschiedenen
+solchen Zeichen vergibt TigerVNC Tasten neu (einzelne falsche Zeichen), wo
+x11vnc den Rest verschluckte.
+
+Der Render-Prozess trägt jedes Bild weiter. uvicorn handelt dabei mit dem
+Browser permessage-deflate aus und komprimiert die JPEG-Daten noch einmal:
+am lokalen Proxy 73–97 ms CPU je MB statt 29–38 ohne. Render hat eine halbe
+CPU; der Startbefehl bekommt deshalb `--ws-per-message-deflate false` (gilt
+für Live-Ansicht und Terminal, die einzigen WebSockets). Die Anbieter-Seite
+(Sprites-Exec) komprimiert nicht.
+
 **Wo eine Nachricht beginnt** (`routers/agent.py::workspace_closed`): offen,
 wenn die letzte Nachricht des Chats ein Werkzeug des Arbeitsplatzes aufrief
 (`finish_run` schreibt `agent_workspace_used` bei jeder Nachricht mit VM an den
@@ -1571,13 +1603,15 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
 
 #### Browser-VM (Fund 2)
 
-- **Kein Code des Agenten.** Chrome, Xvfb, openbox, x11vnc und Playwright
+- **Kein Code des Agenten.** Chrome, TigerVNCs X-Server (`Xtigervnc`, seit
+  2026-11-02; vorher Xvfb und x11vnc), openbox und Playwright
   (`workspace_vm/browser/setup.sh`, einmal, ~70 s) laufen als `sprite`; der
   Server ruft dort nur feste Programme mit festen Argumenten auf. Offenes Web
   ohne `*.internal`/`*.flycast` (`BROWSER_RULES`). CDP nur auf 127.0.0.1:9222,
   der VNC-Server auf keinem Netz: nur der Unix-Socket
-  `~/.consens/browser/vnc.sock` im Home des Anbieter-Nutzers (`-unixsock`,
-  `-rfbport 0 -rfbportv6 -1`). Über TCP band x11vnc IPv6-Adressen der VM, wie
+  `~/.consens/browser/vnc.sock` (0600) im Home des Anbieter-Nutzers
+  (`-rfbunixpath`, `-rfbport -1`, X selbst `-nolisten tcp`; an Test-Sprites
+  2026-11-02 kein TCP-Port). x11vnc band über TCP IPv6-Adressen der VM, wie
   auch immer gesagt: `-localhost` nahm `fdf::1`, das `/etc/hosts` ebenfalls
   `localhost` nennt, `-rfbport 0` allein ließ `[::]:5900`, `-noipv6` wirkt in
   0.9.17 nicht (gemessen an Test-Sprites 2026-10-27). Chrome speichert keine
