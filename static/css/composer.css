@@ -97,13 +97,21 @@
   .composer-tools { display: none; }
 }
 
+/* A wrapping row breaks by each item's basis before anything shrinks: with
+   the chip's whole width as basis, a long name ("DeepSeek V4.1 Flash 1017
+   Auto" beside "Reviewers off", field 470px with the sidebar open) put Send
+   on a line of its own (Max 2026-11-02). From 0 the models never break the
+   row; they grow to their own width (max-content) ahead of the tools (100
+   to 1), so a short row cuts the name with an ellipsis and the tools keep
+   their icon. */
 .composer-models {
   order: 4;
   display: flex;
   align-items: center;
   gap: 4px;
-  flex: 0 1 auto;
+  flex: 100 1 0;
   min-width: 0;
+  max-width: max-content;
   /* Takes the free space, so models and Send stand on the right. */
   margin-left: auto;
 }
@@ -372,6 +380,7 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
   .composer-models {
     order: 3;
     flex: 1 1 0;
+    max-width: none;
     margin-left: 0;
   }
   .chat-input-container > .input-actions-container { order: 4; margin-left: 0; }
