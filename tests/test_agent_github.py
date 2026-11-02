@@ -273,8 +273,9 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
 
 
 def test_a_public_repository_comes_in_without_a_connection_or_a_token(store, fake_vm, github):
-    """Since 2026-10-27 the workbench does not reach github.com: a public
-    repository comes through github_import too, without the user's
+    """The workbench reaches github.com only on the user's card (since
+    2026-11-02; closed from 2026-10-27): a public repository comes through
+    github_import too, without the user's
     connection; a private or missing one says how to connect."""
     script = Agent([[("github_import", {"repo": "pub/lib"})], [("github_import", {"repo": "nobody/missing"})]])
     loop = vm_loop(store, script)

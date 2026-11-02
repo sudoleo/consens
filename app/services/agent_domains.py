@@ -13,8 +13,11 @@ What the user allowed holds for the chat (``agent_domains`` on the chat
 document, gone with it): while the chat's message has the workspace, its
 domains are in the workbench's policy (VMSession.ready, applied at once), and
 when the message ends the policy goes back to the registries (VMSession.close).
-Reading the web goes on through web_search and read_source in the backend;
-GitHub only through github_import (github.com stays closed).
+Reading the web goes on through web_search and read_source in the backend.
+GitHub's hosts go the same way since 2026-11-02 (Max: closed even on the
+user's card was "irgendwie dumm" for Claude Code and git in the workspace);
+the app's credentials stay in the backend, so a pull request still goes
+through the card of prepare_pull_request.
 """
 from __future__ import annotations
 
@@ -35,10 +38,8 @@ MAX_DOMAINS = 20
 REASON_CHARS = 300
 _LABEL = r"(?!-)[a-z0-9-]{1,63}(?<!-)"
 DOMAIN = re.compile(rf"^{_LABEL}(?:\.{_LABEL})+$")
-# Never on request: the provider's own network and API, and GitHub, which
-# comes in only through github_import.
-CLOSED = ("internal", "flycast", "sprites.dev", "sprites.app", "fly.dev", "github.com", "githubusercontent.com")
-GITHUB = ("github.com", "githubusercontent.com")
+# Never on request: the provider's own network and API.
+CLOSED = ("internal", "flycast", "sprites.dev", "sprites.app", "fly.dev")
 
 # What the agent reads when the user did not allow it, or wrote instead.
 DOMAIN_DENIED = ("The user did not allow {domain} for this chat. Go on without it, and do not ask for it again "
@@ -67,9 +68,6 @@ def normalize(domain):
     if not DOMAIN.fullmatch(text):
         raise ValueError(f"{domain} is no valid host name.")
     if any(text == closed or text.endswith("." + closed) for closed in CLOSED):
-        if any(text == name or text.endswith("." + name) for name in GITHUB):
-            raise ValueError("GitHub stays closed for the workspace: bring repositories in with github_import "
-                             "(public ones too).")
         raise ValueError(f"{text} cannot be allowed.")
     return text
 

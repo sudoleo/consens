@@ -16,8 +16,7 @@ from test_agent_vm import NAME, Agent, _admin_allowance, fake_vm, vm_loop  # noq
 
 @pytest.mark.parametrize("domain,error", [
     ("*.example.com", "wildcard"), ("https://api.example.com", "scheme"), ("api.example.com:8443", "port"),
-    ("api.example.com/v1", "path"), ("1.2.3.4", "Addresses"), ("localhost", "no valid"), ("github.com", "github_import"),
-    ("raw.githubusercontent.com", "github_import"), ("api.github.com", "github_import"),
+    ("api.example.com/v1", "path"), ("1.2.3.4", "Addresses"), ("localhost", "no valid"),
     ("my-app.internal", "cannot be allowed"), ("x.flycast", "cannot be allowed"), ("api.sprites.dev", "cannot be"),
     ("consens-w-a.sprites.app", "cannot be allowed"), ("-bad.example.com", "no valid")])
 def test_only_one_plain_host_name_can_be_asked_for(domain, error):
@@ -29,6 +28,10 @@ def test_a_host_name_is_taken_as_the_policy_reads_it():
     assert normalize(" API.Example.COM. ") == "api.example.com"
     assert agent_domains.open_already("pypi.org") and agent_domains.open_already("de.archive.ubuntu.com")
     assert not agent_domains.open_already("example.com")
+    # GitHub's hosts on the user's card like any other (since 2026-11-02, Max:
+    # closed even then was "irgendwie dumm" for git and Claude Code there).
+    for host in ("github.com", "api.github.com", "codeload.github.com", "raw.githubusercontent.com"):
+        assert normalize(host) == host and not agent_domains.open_already(host)
     assert agent_domains.rules() == agent_vm.WORKBENCH_RULES
     assert agent_domains.rules(["api.example.com", "pypi.org"]) == [
         *agent_vm.WORKBENCH_RULES, {"domain": "api.example.com", "action": "allow"}]
@@ -148,6 +151,6 @@ def test_a_request_names_its_domain_and_reason():
     assert agent_domains.requested(call) == ("api.example.com", "The API.")
     assert agent_domains.requested({"function": {"name": "request_domain", "arguments": "{}"}}) is None
     assert agent_domains.requested({"function": {"name": "request_domain",
-                                                 "arguments": json.dumps({"domain": "github.com",
-                                                                          "reason": "clone"})}}) is None
+                                                 "arguments": json.dumps({"domain": "api.sprites.dev",
+                                                                          "reason": "manage"})}}) is None
     assert agent_domains.requested({"function": {"name": "browser", "arguments": "{}"}}) is None

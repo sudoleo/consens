@@ -521,7 +521,7 @@ def test_a_domain_the_chat_already_has_needs_no_card(store):
 
 
 def test_a_request_the_tool_refuses_needs_no_card(store):
-    script, loop, ran = asking(store, live={}, domain="github.com")
+    script, loop, ran = asking(store, live={}, domain="api.sprites.dev")
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
     events = list(loop.run())
     assert not [e for e in events if e.get("type") == "hold"]

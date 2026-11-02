@@ -36,8 +36,8 @@ GitHub shows at the next use: the token request fails, the tool says
 Tools (with the VM, GitHubTools): ``github_import`` downloads a commit's
 tarball and unpacks it in the VM as a git repository with one commit, named
 in ``.git/consens-import.json``; a public repository also without a
-connection, then without a token (since 2026-10-27: the workbench does not
-reach github.com, so this is the only way in); ``prepare_pull_request`` takes the list of
+connection, then without a token (the workbench reaches github.com only
+on the user's card, since 2026-11-02, and holds no GitHub credentials); ``prepare_pull_request`` takes the list of
 changed paths from the VM's git (it only limits what goes up), reads each
 file's bytes through the provider's file API and diffs them in the backend
 against the import commit's tree, fetched from GitHub; it saves a proposal

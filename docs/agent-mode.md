@@ -1492,10 +1492,13 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   `ports.ubuntu.com`, `pypi.org`, `files.pythonhosted.org`,
   `registry.npmjs.org` (die Quellen der Sprite sind archive/security, gemessen).
   Restrisiko, von Max akzeptiert: Die npm-Registry nimmt auch Uploads (PUT).
-  github.com bleibt zu (nur `github_import`), ebenso `api.sprites.dev`.
+  `api.sprites.dev` bleibt zu. github.com und die übrigen GitHub-Hosts gibt es
+  seit 2026-11-02 wie jede Domain per Karte (vorher ganz zu, Max: „irgendwie
+  dumm“ für git und Claude Code in der Werkbank); die Schlüssel der GitHub-App
+  bleiben im Backend, ein Pull Request geht weiter nur über die Karte.
 - **`request_domain(domain, reason)`** (`agent_domains.py`): ein Hostname,
-  ohne Schema, Pfad, Port, Wildcard oder IP; nie GitHub, Flys internes Netz
-  oder die Sprites-Adressen. Der Aufruf ist Außenwirkung (`agent_gate`): Die
+  ohne Schema, Pfad, Port, Wildcard oder IP; nie Flys internes Netz oder die
+  Sprites-Adressen. Der Aufruf ist Außenwirkung (`agent_gate`): Die
   Prüfer schätzen ihn in einer Gate-Runde ein (`GATE_DOMAIN_NOTE`: der Nutzer
   entscheidet in jedem Fall), dann **entscheidet immer der Nutzer**
   (`DelegationLoop._domain_wait`, Karte `agent-domain-card`: Domain, Begründung
@@ -2753,9 +2756,10 @@ Schritten ist Einleitung, der Lauf geht weiter; der
 Arbeitsstand der nächsten Nachricht nennt den Stand („update_plan: 3 of 4
 steps done, now: …“).
 
-**GitHub aus der VM (seit 2026-10-26, mehrnutzerfähig).** Seit 2026-10-27
-erreicht die Werkbank github.com nicht (Netz zu); jedes Repository kommt über
-`github_import`, ein öffentliches auch ohne Verbindung und ohne Token
+**GitHub aus der VM (seit 2026-10-26, mehrnutzerfähig).** Die Werkbank
+erreicht github.com nur nach Freigabe per Karte (`request_domain`, seit
+2026-11-02; von 2026-10-27 an ganz zu) und hält nie Schlüssel der App; ein
+Repository kommt über `github_import`, ein öffentliches auch ohne Verbindung und ohne Token
 (`GitHubTools._public`: `GET /repos/{repo}` ohne Anmeldung, nur bei
 `private: false`, dann Tarball über api.github.com; 60 Anfragen je Stunde
 und IP). Private Repos und Pull Requests laufen über eine **öffentliche

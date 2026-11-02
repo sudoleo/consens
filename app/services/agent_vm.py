@@ -63,8 +63,9 @@ SPRITES_API = "https://api.sprites.dev"
 # registries its tools install from and nothing else (since 2026-10-27; from
 # 2026-10-26 it had the open web): what the agent wrote there leaves only
 # through tools the reviewers see and the user decides on. npm's registry
-# also takes uploads (PUT), a known rest risk Max accepted. GitHub stays
-# closed: github_import brings repositories in through the backend.
+# also takes uploads (PUT), a known rest risk Max accepted. GitHub's hosts
+# come like any other domain, on the user's card (agent_domains, since
+# 2026-11-02); github_import brings repositories in through the backend.
 WORKBENCH_DOMAINS = ("archive.ubuntu.com", "*.archive.ubuntu.com", "security.ubuntu.com", "ports.ubuntu.com",
                      "pypi.org", "files.pythonhosted.org", "registry.npmjs.org")
 WORKBENCH_RULES = [{"domain": domain, "action": "allow"} for domain in WORKBENCH_DOMAINS]
