@@ -3331,7 +3331,10 @@ class DelegationLoop(AgentLoop):
                                 last_accepted = False
                                 continue
                             gate = getattr(value, "gate", None)
-                            if name == "request_domain":
+                            # Only where the tool is the account's: a model without it
+                            # (Free, since f4094fe2) that calls it anyway gets "unknown
+                            # tool", never a card whose yes ends there (bug hunt 2026-10-31).
+                            if name == "request_domain" and name in self.registry.tools:
                                 # The user decides every domain (_domain_wait).
                                 decision = yield from self._domain_wait(gate, call)
                                 if decision == "steer":

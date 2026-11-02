@@ -1886,6 +1886,13 @@ def test_without_pro_the_workspace_has_the_browser_but_no_request_domain(store, 
     assert results(loop)[0]["exit_code"] == 0
     pro = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="two")
     assert "request_domain" in pro.registry.tools and prompt_defaults.AGENT_VM_PROMPT in pro.messages[0]["content"]
+    # A model that calls it anyway gets "unknown tool", and the user no
+    # card whose yes would end in it (bug hunt 2026-10-31).
+    asked = vm_loop(store, Agent([[("request_domain", {"domain": "api.example.com", "reason": "Docs"})]]),
+                    domains=False, request_id="three")
+    events = list(asked.run())
+    assert not [event for event in events if event.get("type") == "hold"]
+    assert "error" in results(asked)[0]
 
 
 @pytest.mark.parametrize("tier,limit", [("admin", None), ("pro", 2 * 60 * 60), ("plus", 20 * 60), ("free", 20 * 60)])
