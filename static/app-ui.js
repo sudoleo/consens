@@ -166,7 +166,7 @@ function saveSystemPrompt() {
     // characters) or with a broken character; the editor stays open with the
     // text instead of dropping it.
     if (!window.App.userSettings.accepts("system_prompt", text)) {
-      window.App.showPopup?.("This system prompt can’t be saved: it is too long or contains an invalid character.");
+      window.App.showPopup?.("These instructions can’t be saved: they are too long or contain an invalid character.");
       return;
     }
     window.App.userSettings.set("system_prompt", text);

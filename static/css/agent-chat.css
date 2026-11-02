@@ -1470,9 +1470,18 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-pr-actions:not(:has(> :not([hidden]))) { display: none; }
 .agent-pr-create { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 .agent-pr-card :is(button, a):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
-/* GitHub in Settings (agent-github.js): the connection in words, the actions as quiet links (.text-link). */
-.agent-github-settings > strong { display: block; }
-.agent-github-settings > small { display: block; margin-top: 2px; }
+/* GitHub and the workspace in Settings (agent-github.js, workspace-view.js): title, its
+   sentence and the status each on a line of their own, the actions as quiet links (.text-link). */
+:is(.agent-github-settings, .agent-workspace-settings) > strong {
+  display: block; color: var(--text-color); font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold); line-height: var(--line-height-heading);
+}
+/* Title and sentence as in every other row (.settings-switch-row). */
+:is(.agent-github-settings, .agent-workspace-settings) > small:not([hidden]) {
+  display: block; margin-top: 4px; color: var(--sidebar-text-muted); font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+.agent-workspace-status:empty { display: none; }
 .agent-github-status, .agent-github-repos { margin: 8px 0 0; font-size: var(--font-size-xs); color: var(--ink-2); }
 .agent-github-repos { color: var(--ink-3); font-family: var(--font-mono); overflow-wrap: anywhere; }
 .agent-github-repos[hidden], .agent-github-actions [hidden] { display: none; }

@@ -1825,13 +1825,18 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   genau EINEM sichtbaren `.settings-category[role=tabpanel]`. Sechs
   aufgeklappte Kategorien untereinander waren beim Öffnen eine Wand — man
   musste scrollen, um überhaupt zu wissen, was es gibt.
-  Reihenfolge: **Memory, Model behavior, Runs, Display, Connections, Account**
-  (vorher: Experience, Connections, Model behavior, Account) — sie erzählt „was
-  die Modelle über dich wissen → was du ihnen sagst → wie ein Lauf abläuft →
-  wie das Ergebnis aussieht → Technik → Konto". Die bestehenden Control-IDs
-  bleiben der JavaScript-Vertrag; nur die frühere Sammelkategorie Experience
-  ist in Runs (`#runModeSetting`, seit 2026-09-30 statt `#agentModeSwitch`/
-  `#autoConsensusToggle`) und Display (Theme, `#agreementDisplaySelect`) aufgeteilt.
+  Reihenfolge seit 2026-11-02 (Max: auf den Agenten ausgerichtet): **Agent,
+  Memory, Connections, Display, Account** (vorher Memory, Model behavior, Runs,
+  Agent · Beta, Display, Connections, Account) — sie erzählt „wie der Agent
+  arbeitet → was er über dich weiß → was er erreicht → wie es aussieht →
+  Konto“. Agent (`#agentSettingsSection`, für jedes Konto) hält Modus
+  (`#runModeSetting`), Prüfer, `#detailedProgressSwitch`, die Arbeitsplatz-Zeile
+  und unter dem Gruppentitel „Compare“ (`.settings-group-title`) dessen
+  Anweisungen (`#systemPromptInput`, nur `/chat` nutzt sie); Connections die
+  Gruppen „Agent“ (GitHub, `.workspace-only`) und „Compare“ (eigener
+  OpenRouter-Schlüssel); Display unter „Older answers“ Claim-Zähler und
+  `#agreementDisplaySelect`, die nur ältere Antworten tragen. Die
+  Control-IDs bleiben der JavaScript-Vertrag.
   Die Reiter tragen die Sprache der Sidebar-Listen: flache Zeile, transparent
   im Ruhezustand, mindestens 44 px hoch, Hover und Auswahl sind ein Tint. Seit der
   Button-Stil opt-in ist (`.btn`, 2026-10-02), tragen die Reiter ihn schlicht
@@ -5557,11 +5562,12 @@ ein unveränderter leerer Composer; neuere Texte/Zitate/Anhänge bleiben erhalte
 Nach Dispatch erfolgt keine automatische Rückgabe als ungesendete Nachricht:
 die bestehende reine Recovery bleibt für unklaren Serverstatus zuständig.
 
-Der Reiter „Agent · Beta“ (`#agentSettingsSection`) hält seit 2026-10-31 nur
-den Arbeitsplatz (Zeile samt VM-Zeit des Tages, `#agentVmTime`) und GitHub;
-`workspace-view.js` `syncSettings` (aus `firebase.js` und `agent-chat.js`) gibt
-ihn über `App.settingsTabs.setTabAvailable` nur frei, wenn `agentChat.canUse()`
-gilt und `/user_status` `vm_time` meldet (das Konto hat den Arbeitsplatz). Bis
+Der Reiter „Agent“ (`#agentSettingsSection`, seit 2026-11-02 für jedes Konto
+zuerst, ohne „Beta“) endet mit der Zeile des Arbeitsplatzes (samt VM-Zeit des
+Tages, `#agentVmTime`); `workspace-view.js` `syncSettings` (aus `firebase.js`
+und `agent-chat.js`) zeigt sie nur, wenn `agentChat.canUse()` gilt und
+`/user_status` `vm_time` meldet (das Konto hat den Arbeitsplatz). GitHub steht
+unter Connections. Bis
 2026-10-31 speicherte `agent-preferences.js` dort Antworttiefe, Antwortstart
 (Quorum), Agent freedom (`autonomy`), Answer check (`judges`), „Way of working“
 (`audit`) und Agent VM (`vm`) als Kontoeinstellung `agent_preferences` und

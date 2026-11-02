@@ -84,9 +84,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       (ohne echtes Modell).
 - [ ] Prüfer des Agenten (seit 2026-10-31 der eine Modus jedes Kontos, bis
       dahin „Audit statt Vergleich“ für Admins/Pro; echter Provider, einmal mit
-      einem Free-Konto, sobald der Stand live ist): Settings › Agent · Beta
-      hält nur noch Workspace (mit der VM-Zeit) und GitHub und fehlt Konten
-      ohne Arbeitsplatz; keine Zeilen „Way of working“, „Answer depth“,
+      einem Free-Konto, sobald der Stand live ist): Settings › Agent steht
+      zuerst mit Mode, Reviewers, Detailed progress, Workspace (mit der
+      VM-Zeit, fehlt Konten ohne Arbeitsplatz) und „Compare“; GitHub steht
+      unter Connections; keine Zeilen „Way of working“, „Answer depth“,
       „Answer start“, „Agent freedom“ oder „Answer check“. Eine Frage mit
       Fakten zum Nachprüfen: kein „Compared perspectives“, die Antwort streamt
       sofort nach der eigenen Suche, danach steht die Antwort still, und in
@@ -117,7 +118,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Automatisiert: `test_agent_audit.py`, `audit-marks.test.mjs`,
       `agent-review.test.mjs`, `agent-delegation.test.mjs`.
 - [ ] GitHub (2026-10-26, Admin-Konto, App nach `docs/github-app-setup.md`
-      eingerichtet): Einstellungen → Agent · Beta → GitHub → „Connect GitHub“,
+      eingerichtet): Einstellungen → Connections → GitHub → „Connect GitHub“,
       App auf ein Test-Repo installieren; das Fenster schließt sich,
       „Connected as …“ mit dem Repo. Im Chat mit Agent VM: „Hol <owner/repo>,
       ändere die README, mach einen PR.“ Unter der Antwort die Karte mit Datei

@@ -1700,7 +1700,7 @@ function renderAccountTierDetail(account) {
     const cost = Number(agentUsage.estimated_cost_nano_usd || 0) / 1e9;
     const measuredCost = Number(agentUsage.provider_cost_nano_usd || 0) / 1e9;
     const estimatedCost = Math.max(0, cost - measuredCost);
-    usage.textContent = `Agent Beta · recorded total: $${cost.toFixed(6)} USD `
+    usage.textContent = `Agent · recorded total: $${cost.toFixed(6)} USD `
         + `($${measuredCost.toFixed(6)} provider cost, ~$${estimatedCost.toFixed(6)} estimated) · `
         + `${Number(agentUsage.input_tokens || 0).toLocaleString()} input / `
         + `${Number(agentUsage.output_tokens || 0).toLocaleString()} output tokens · `

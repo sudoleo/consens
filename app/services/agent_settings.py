@@ -555,7 +555,7 @@ class SettingsTools:
                        "saves nothing to memory, cannot be shared and is deleted with its files and its folder in "
                        "the workspace once the user leaves it, at the latest "
                        f"{int(TEMPORARY_CHAT_DELETED_WITHIN.total_seconds() // 3600)} hours after its last message.",
-            "reviewers": "Settings > Runs > Reviewers: Always (the default), Only in the workspace (from the agent's "
+            "reviewers": "Settings > Agent > Reviewers: Always (the default), Only in the workspace (from the agent's "
                          "first step there on) or Off. Without reviewers nobody marks the answer or pauses the work; "
                          "the user's own decisions on cards and the Stop button remain.",
             "sharing": "Publishing is a separate action: Share makes an answer public, readable at its link without "

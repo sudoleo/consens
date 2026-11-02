@@ -1830,7 +1830,7 @@
     const own = { kind: hold.kind, reason: hold.reason, reviewer: hold.reviewer };
     if (hold.domain) {
       if (hold.review === "halt" || listed.length) return (listed.length ? listed : [own]).map(said);
-      // "off": the user's setting has no reviewers here (Settings > Runs).
+      // "off": the user's setting has no reviewers here (Settings > Agent).
       return [plain(hold.review === "go" ? "The reviewers see no problem with it."
         : hold.review === "off" ? "Your reviewers are off, so only you decide." : "Not every reviewer could check this request.")];
     }
@@ -3042,7 +3042,7 @@
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
         timezone: deviceTimezone(),
-        // Who checks this message's work: what the composer showed (Settings > Runs).
+        // Who checks this message's work: what the composer showed (Settings > Agent).
         reviewers: App.words.reviewerSetting(),
       };
       // A reload ends a temporary chat (temporary-chat.js): nothing to follow then.

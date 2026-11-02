@@ -91,7 +91,7 @@ _ENTRIES = (
      "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent")),
     ("agent_review_facts", "Agent: who reviews",
      "Appended right after \"Agent: instructions\", one of three by the user's reviewers setting (Settings > "
-     "Runs, since 2026-11-01): always, only from the agent's first step in the workspace on, or off.",
+     "Agent, since 2026-11-01): always, only from the agent's first step in the workspace on, or off.",
      "prompt_defaults.py:AGENT_REVIEW_FACTS", _review_facts),
     ("agent_temporary_chat", "Agent: temporary chat",
      "Appended after \"Agent: who reviews\" in a temporary chat (since 2026-11-01), which has the tools of "

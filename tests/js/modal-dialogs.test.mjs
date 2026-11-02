@@ -83,7 +83,7 @@ describe("Settings and Help", () => {
     gear.focus();
     gear.click();
     expect(settings.open).toBe(true);
-    expect(document.activeElement).toBe(document.getElementById("settingsTabMemory"));
+    expect(document.activeElement).toBe(document.getElementById("settingsTabAgent"));
     expect(document.activeElement.getAttribute("aria-selected")).toBe("true");
 
     const escape = key(document, document.activeElement, "Escape");
@@ -138,7 +138,7 @@ describe("Settings and Help", () => {
 
     gear.focus();
     gear.click();
-    document.getElementById("settingsTabBehavior").click();
+    document.getElementById("settingsTabConnections").click();
     document.getElementById("closeSystemPromptModal").click();
     expect(sidebar.classList.contains("active")).toBe(true);
     expect(document.activeElement).toBe(gear);

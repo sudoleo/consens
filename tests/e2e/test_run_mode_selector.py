@@ -101,7 +101,8 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         expect(options).to_have_count(2)
         expect(control.locator('[data-value="consensus"]')).to_have_count(0)
         expect(control.locator('[data-value="compare"]')).to_have_attribute("aria-pressed", "true")
-        expect(control.locator('[data-value="agent"]')).to_contain_text("Beta")
+        # No "Beta" badge since 2026-11-02: the Agent is the product.
+        expect(control.locator('[data-value="agent"] .attach-menu-label')).to_have_text("Agent")
         expect(control.locator('[data-value="compare"] .attach-menu-hint')).to_contain_text("side by side")
         menu = page.locator("#attachMenu").bounding_box()
         assert menu["x"] >= 0 and menu["x"] + menu["width"] <= width + 1

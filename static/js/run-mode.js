@@ -1,7 +1,7 @@
 // =====================================================================
 // run-mode.js
 // The one choice of what consens does with the next message:
-//   agent   · Agent (Beta): works in steps with research, files and tools
+//   agent   · Agent: works in steps with research, files and tools
 //   compare · answers side by side
 //
 // Consensus was a third mode until 2026-10-25. The pipeline behind it now
@@ -37,7 +37,8 @@
 
   const COPY = Object.freeze({
     compare: Object.freeze({ label: "Compare", description: "Answers side by side." }),
-    agent: Object.freeze({ label: "Agent", badge: "Beta", description: "Works in steps with research, files and tools." }),
+    // No "Beta" badge since 2026-11-02 (Max): the Agent is the product.
+    agent: Object.freeze({ label: "Agent", description: "Works in steps with research, files and tools." }),
   });
 
   function valid(mode) {

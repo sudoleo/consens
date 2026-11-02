@@ -66,7 +66,7 @@ für den Fluss, der nach der Installation zurückführt).
 
 ## 4. Prüfen
 
-Einstellungen → Agent · Beta → **GitHub** → „Connect GitHub“: Ein Fenster
+Einstellungen → Connections → **GitHub** → „Connect GitHub“: Ein Fenster
 öffnet die Installationsseite der App; Repositories wählen und installieren.
 Das Fenster meldet sich zurück, Einstellungen zeigt „Connected as <login>.“
 und die Repositories. Dann in einem Chat mit Agent VM: „Hol dir

@@ -150,11 +150,14 @@ Modelle mit Namen und Grund), und schreibt die Antwort selbst.
 
 ### Agent-Einstellungen (bis 2026-10-31)
 
-Seit 2026-10-31 hat der Agent keine eigenen Einstellungen mehr. Der Reiter
-Einstellungen → **Agent · Beta** hält nur noch den Arbeitsplatz (mit der
-VM-Zeit des Tages, `#agentVmTime`) und GitHub und steht dort, wo das Konto
-Agent nutzen kann und den Arbeitsplatz hat (`workspace-view.js`
-`syncSettings`, aus `/user_status` `vm_time`). Bis dahin legte die
+Seit 2026-10-31 hat der Agent keine eigenen Einstellungen mehr. Seit
+2026-11-02 (Max: Einstellungen auf den Agenten ausgerichtet, kein „Beta“ mehr)
+steht der Reiter Einstellungen → **Agent** für jedes Konto zuerst: Modus,
+Prüfer, ausführlicher Fortschritt, die Zeile des Arbeitsplatzes (mit der
+VM-Zeit des Tages, `#agentVmTime`; nur wo das Konto Agent nutzen kann und den
+Arbeitsplatz hat, `workspace-view.js` `syncSettings`, aus `/user_status`
+`vm_time`) und darunter „Compare“ mit dessen Anweisungen. GitHub steht unter
+Einstellungen → **Connections**. Bis dahin legte die
 Kontoeinstellung `agent_preferences` (seit 2026-10-12 am Konto, lokal
 `consensio.agentPreferences.v2`, feldweise zusammengeführt über
 `user_settings.FIELDWISE_SETTINGS`) fest, was jede Nachricht mitschickte und der
@@ -947,8 +950,8 @@ seitdem dasselbe wie `all`. In Prod steht seit 2026-10-28 `pro` (Max: Pro haben
 nur er und zwei Freunde): Mit dem Deploy des einen Modus hat dort jedes Konto
 die VM, Free mit 20 Minuten VM-Zeit am Tag. Ohne VM entfallen Arbeitsplatz,
 Live-Ansicht, VM-Restore, VM-Zeit (`/user_status` `vm_time`, Body-Klasse
-`viewer-has-workspace`), der Reiter Agent · Beta und die GitHub-Zeile
-(`.workspace-only`).
+`viewer-has-workspace`), die Arbeitsplatz-Zeile unter Einstellungen → Agent und
+die GitHub-Gruppe unter Connections (`.workspace-only`).
 
 **Was der Agent bekommt.** Seit 2026-10-27 die Werkbank des Arbeitsplatzes
 (Fly.io Sprites, Ubuntu, bash) als eigener Unix-Nutzer `agent` ohne sudo
@@ -2773,8 +2776,8 @@ up“. Die Werkzeuge und der Prompt `AGENT_GITHUB_PROMPT` (Admin „Agent: GitHu
 kommen mit der VM (`vm_allowed`: Admins, mit `AGENT_VM_ACCESS=all` jedes Konto); die Verbindung
 selbst ist für jedes Konto mit Agent gebaut.
 
-*Verbinden* (Einstellungen → Agent · Beta → GitHub, Zeile `#agentGithubSettings`,
-`.workspace-only`, nur sichtbar, wo das Konto die VM hat): wie bei Google ein Popup.
+*Verbinden* (Einstellungen → Connections → GitHub, Zeile `#agentGithubSettings`
+in der Gruppe „Agent“, `.workspace-only`, nur sichtbar, wo das Konto die VM hat): wie bei Google ein Popup.
 `POST /agent/github/connect` legt einen einmaligen `state` an
 (`users/{uid}/github_oauth_states/{sha(state)}`, 10 min) und setzt das
 HttpOnly-Cookie `consens_github_oauth` (Pfad `/agent/github`) mit dem

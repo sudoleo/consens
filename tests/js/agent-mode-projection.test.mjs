@@ -9,7 +9,7 @@ const BODY = `
   <button id="attachTrigger"></button>
   <div id="runModeControl" class="attach-menu-modes"><select id="runModeSelect" hidden>
     <option value="compare">Compare</option></select></div>
-  <select id="runModeSetting"><option value="agent">Agent · Beta</option><option value="compare">Compare</option></select>
+  <select id="runModeSetting"><option value="agent">Agent</option><option value="compare">Compare</option></select>
   <div id="composerTools">
     <p id="composerModeDescription"></p>
   </div>
@@ -94,7 +94,8 @@ describe("agent mode panel projection", () => {
     const rows = [...document.querySelectorAll('#runModeControl .attach-menu-mode')];
     expect(rows.map(row => row.dataset.value)).toEqual(['agent', 'compare']);
     expect(rows.find(row => row.dataset.value === 'compare').getAttribute('aria-pressed')).toBe('true');
-    expect(rows.find(row => row.dataset.value === 'agent').textContent).toContain('Beta');
+    // No "Beta" badge since 2026-11-02: the Agent is the product.
+    expect(rows.find(row => row.dataset.value === 'agent').querySelector('.attach-menu-label').textContent).toBe('Agent');
     expect(document.getElementById('attachTrigger').title).toBe('Mode, files and options');
     rows.find(row => row.dataset.value === 'agent').click();
     expect(window.localStorage.getItem('runMode')).toBe('agent');

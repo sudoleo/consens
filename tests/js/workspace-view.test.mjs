@@ -544,34 +544,33 @@ describe("the workspace view", () => {
       .toBe("The workspace browser is logged out everywhere."));
   });
 
-  // Settings › Agent · Beta holds the workspace's rows (since 2026-10-31,
-  // when its comparison options left): the tab is there for an account with
-  // Agent that has the workspace (/user_status vm_time), and the row says
-  // today's workspace time.
-  it("offers the Agent settings tab with the workspace and says today's workspace time", () => {
+  // Settings › Agent ends with the workspace's row (since 2026-11-02; the
+  // tab is there for everyone): the row is there for an account with Agent
+  // that has the workspace (/user_status vm_time) and says today's
+  // workspace time.
+  it("shows the workspace row in Settings › Agent and says today's workspace time", () => {
     const env = setup({ prepare(window) {
-      window.App.settingsTabs = { setTabAvailable: vi.fn() };
       window.App.agentChat = { canUse: () => true };
     } });
     const { window, document } = env;
+    const row = document.getElementById("agentWorkspaceSettings");
     const line = document.createElement("small"); line.id = "agentVmTime"; line.hidden = true;
-    document.getElementById("agentWorkspaceSettings").append(line);
-    const tab = window.App.settingsTabs.setTabAvailable;
+    row.append(line);
     window.App.workspaceView.syncSettings();
-    expect(tab).toHaveBeenLastCalledWith("agentSettingsSection", false);
+    expect(row.hidden).toBe(true);
     expect(line.hidden).toBe(true);
     window.App.vmTime = { used_seconds: 2520, limit_seconds: 7200 };
     window.App.workspaceView.syncSettings();
-    expect(tab).toHaveBeenLastCalledWith("agentSettingsSection", true);
+    expect(row.hidden).toBe(false);
     expect(line.hidden).toBe(false);
     expect(line.textContent).toBe("Workspace time today: 42 of 120 min");
     window.App.vmTime = { used_seconds: 90, limit_seconds: null };
     window.App.workspaceView.syncSettings();
     expect(line.textContent).toBe("Workspace time today: 2 min, no daily limit");
-    // Without Agent there is no tab, whatever the workspace.
+    // Without Agent there is no row, whatever the workspace.
     window.App.agentChat.canUse = () => false;
     window.App.workspaceView.syncSettings();
-    expect(tab).toHaveBeenLastCalledWith("agentSettingsSection", false);
+    expect(row.hidden).toBe(true);
   });
 });
 

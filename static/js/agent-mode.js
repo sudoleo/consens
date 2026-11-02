@@ -6,7 +6,7 @@
 // this module renders the one selector for it and the tools that apply to
 // the chosen mode. The "agent-mode" names here are historical: they once
 // meant the grouped Consensus run (removed from the browser 2026-10-25),
-// not Agent (Beta).
+// not Agent.
 // Exporte: window.setAgentModeStatus, window.updateAgentModeUI,
 // window.projectAgentModeRun.
 // Abhaengigkeiten: window.App.{modelPrefs, getModelOptionLabel,
@@ -257,7 +257,7 @@
         const copy = window.App.runMode.copy("agent");
         option.value = "agent";
         option.textContent = copy.label;
-        option.dataset.modelBadge = copy.badge;
+        if (copy.badge) option.dataset.modelBadge = copy.badge;
         option.dataset.description = available.agent.enabled ? copy.description : available.agent.reason;
         option.disabled = !available.agent.enabled;
         select.appendChild(option);
@@ -276,7 +276,7 @@
       if (available.agent.visible && !agentOption) {
         const option = document.createElement("option");
         option.value = "agent";
-        option.textContent = "Agent · Beta";
+        option.textContent = window.App.runMode.copy("agent").label;
         setting.appendChild(option);
       } else if (!available.agent.visible && agentOption) agentOption.remove();
       const preference = window.App.runMode.preference();
@@ -422,7 +422,7 @@
   // #composerReviewers in a chat). Both open the reviewers' level of the
   // Agent menu.
   function renderReviewers(reviewing, start, count) {
-    // The account's reviewers setting (Settings > Runs) says whether they
+    // The account's reviewers setting (Settings > Agent) says whether they
     // check at all: "Reviewers off", their marks stepped back (composer.css).
     const setting = window.App.words.reviewerSetting();
     const words = reviewing ? window.App.words.reviewing(count, setting) : "";
@@ -432,7 +432,7 @@
     // Off keeps its two words: "Off" alone beside (+) said nothing (a phone shows no marks).
     const short = !reviewing ? "" : setting === "off" ? "Reviewers off" : count === 1 ? "1 AI" : `${count} AIs`;
     const title = setting === "off"
-      ? "Reviewers are off: nobody checks the agent’s work. Switch them on in Settings › Runs."
+      ? "Reviewers are off: nobody checks the agent’s work. Switch them on in Settings › Agent."
       : setting === "workspace"
         ? "Reviewers follow the agent’s work once it uses its workspace, and pause it when in doubt. Choose them here."
         : "Independent reviewers follow the agent’s work and pause it when in doubt. Choose them here.";
@@ -657,7 +657,7 @@
     window.App.runMode.set(this.value, { source: "settings" });
   });
 
-  // Who checks the Agent's work (account setting reviewers, Settings > Runs).
+  // Who checks the Agent's work (account setting reviewers, Settings > Agent).
   // What a choice gives up stands under it, whole sentences only.
   const REVIEWER_NOTES = {
     workspace: "Answers without the workspace are not reviewed. The reviewers start with the Agent’s first step in its workspace and follow the rest of that message. Uses less of your allowance.",

@@ -380,11 +380,10 @@ def test_settings_are_grouped_without_changing_control_ids():
     template = read("templates/index.html")
 
     for category in (
+        "Agent",
         "Memory",
-        "Model behavior",
-        "Runs",
-        "Display",
         "Connections",
+        "Display",
         "Account",
     ):
         assert f">{category}<" in template
@@ -408,11 +407,10 @@ def test_every_settings_category_is_a_tab_panel_with_a_nav_item():
     template = read("templates/index.html")
 
     panels = (
+        "agentSettingsSection",
         "memorySettingsSection",
-        "behaviorSettingsSection",
-        "runsSettingsSection",
-        "displaySettingsSection",
         "connectionsSettingsSection",
+        "displaySettingsSection",
         "accountSettingsSection",
     )
     for panel_id in panels:
@@ -473,29 +471,48 @@ def test_settings_visibility_is_owned_by_the_tab_controller():
     assert "settingsTabs.reset();" in app_ui
 
 
-def test_memory_is_the_first_settings_category():
-    """Die Reihenfolge ist die Aussage: was die Modelle ueber dich wissen zuerst,
-    Konto zuletzt. Wandert das Gedaechtnis nach unten, ist es wieder eine
-    Nebeneinstellung statt der erklaerten Hauptfunktion."""
+def test_the_agent_is_the_first_settings_category_and_memory_the_second():
+    """Die Reihenfolge ist die Aussage: zuerst, wie der Agent arbeitet (Max,
+    2026-11-02: Einstellungen auf den Agenten ausgerichtet, Runs, Agent · Beta
+    und Model behavior in einem Reiter), dann was er ueber dich weiss, Konto
+    zuletzt. Was nur Compare betrifft, steht unter seinem eigenen Titel."""
     template = read("templates/index.html")
 
-    # Ueber die Heading-IDs, nicht ueber die Beschriftung: ">Runs<" steht auch
-    # im Kontingent-Panel der Sidebar, lange vor den Einstellungen.
+    # Ueber die Heading-IDs, nicht ueber die Beschriftung: ">Agent<" steht
+    # auch anderswo im Template, lange vor den Einstellungen.
     positions = {
         heading: template.index(f'id="{heading}"')
         for heading in (
+            "settingsAgentTitle",
             "settingsMemoryTitle",
-            "settingsBehaviorTitle",
-            "settingsRunsTitle",
-            "settingsDisplayTitle",
             "settingsConnectionsTitle",
+            "settingsDisplayTitle",
             "settingsAccountTitle",
         )
     }
     assert list(positions) == sorted(positions, key=positions.get)
+    for retired in ("behaviorSettingsSection", "runsSettingsSection", "settingsTabRuns", "settingsTabBehavior"):
+        assert retired not in template, retired
 
     body = template.index('class="settings-body"')
-    assert template.index('id="memorySettingsSection"') > body
+    assert template.index('id="agentSettingsSection"') > body
+    agent_tab = template.index('id="settingsTabAgent"')
+    assert "hidden>Agent<" not in template[agent_tab:agent_tab + 300]
+
+    # The Agent is no Beta any more (Max, 2026-11-02).
+    settings = template[template.index('class="settings-layout"'):template.index('id="helpModal"')]
+    assert "Beta" not in settings
+    agent_panel = settings[settings.index('id="agentSettingsSection"'):settings.index('id="memorySettingsSection"')]
+    for control_id in ("runModeSetting", "reviewersSetting", "detailedProgressSwitch", "agentWorkspaceSettings"):
+        assert f'id="{control_id}"' in agent_panel
+    # Compare's own instruction under its title, after the Agent's rows.
+    compare = agent_panel.index('<h4 class="settings-group-title">Compare</h4>')
+    assert agent_panel.index('id="systemPromptInput"') > compare > agent_panel.index('id="agentWorkspaceSettings"')
+    assert "The Agent doesn’t use them." in agent_panel
+    # Connections: GitHub for the Agent, the own key for Compare.
+    connections = settings[settings.index('id="connectionsSettingsSection"'):settings.index('id="displaySettingsSection"')]
+    assert connections.index('id="agentGithubSettings"') < connections.index('id="useOwnKeysSwitch"')
+    assert "the Agent always uses your included allowance" in connections
 
     for control_id in (
         "memoryEnabledSwitch",
@@ -516,7 +533,7 @@ def test_memory_is_the_first_settings_category():
     # sichtbar war sie eine Textwand vor vier Eingabefeldern.
     memory_panel = template[
         template.index('id="memorySettingsSection"') : template.index(
-            'id="behaviorSettingsSection"'
+            'id="connectionsSettingsSection"'
         )
     ]
     assert '<details class="settings-note">' in memory_panel

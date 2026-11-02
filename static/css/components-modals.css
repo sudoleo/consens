@@ -469,6 +469,30 @@
   padding: 18px 20px;
 }
 
+/* A tab's second box carries a quiet title of its own (Settings › Agent ›
+   Compare, Connections › Agent). Without the workspace its group steps
+   aside, and the next title starts right under the tab's heading. */
+.settings-group-title {
+  margin: 28px 0 8px;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-ui);
+}
+
+.settings-category-heading + .settings-group-title,
+body:not(.viewer-has-workspace) .settings-group.workspace-only + .settings-group-title {
+  margin-top: 0;
+}
+
+.settings-layout.is-searching .settings-group-title {
+  display: none;
+}
+
+.settings-layout.is-searching .settings-group:not(.is-search-miss) ~ .settings-group:not(.is-search-miss) {
+  margin-top: 12px;
+}
+
 .settings-group > .settings-section + .settings-section {
   border-top: 1px solid var(--sidebar-border);
 }

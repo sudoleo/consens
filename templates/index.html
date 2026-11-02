@@ -439,7 +439,7 @@
       <p class="hero-greeting"><span>Get a second opinion.</span> <span>And a third.</span></p>
       <!-- In its place while the next chat is temporary (temporary-chat.js). -->
       <p class="hero-greeting hero-greeting-temporary"><span>Temporary chat.</span> <span>Gone when you leave it.</span></p>
-      <!-- Agent Beta: external writes wait for the user's review (agent-chat.js). -->
+      <!-- Agent: external writes wait for the user's review (agent-chat.js). -->
       <div id="agentReviewNotice" class="agent-composer-notice agent-review-notice" hidden>
         <span class="agent-review-notice-dot" aria-hidden="true"></span>
         <span id="agentReviewMessage" role="status" aria-live="polite"></span>
@@ -1067,19 +1067,14 @@
               aria-controls="settingsBody" autocomplete="off" spellcheck="false" enterkeyhint="search">
           </div>
           <div class="settings-nav" role="tablist" aria-label="Settings sections">
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabAgent"
+              data-settings-tab="agentSettingsSection" aria-controls="agentSettingsSection">Agent</button>
             <button type="button" class="settings-nav-item" role="tab" id="settingsTabMemory"
               data-settings-tab="memorySettingsSection" aria-controls="memorySettingsSection">Memory</button>
-            <button type="button" class="settings-nav-item" role="tab" id="settingsTabBehavior"
-              data-settings-tab="behaviorSettingsSection" aria-controls="behaviorSettingsSection">Model behavior</button>
-            <button type="button" class="settings-nav-item" role="tab" id="settingsTabRuns"
-              data-settings-tab="runsSettingsSection" aria-controls="runsSettingsSection">Runs</button>
-            <!-- Nur fuer Konten mit Agent · Beta und Arbeitsplatz; workspace-view.js syncSettings gibt den Reiter frei. -->
-            <button type="button" class="settings-nav-item" role="tab" id="settingsTabAgent"
-              data-settings-tab="agentSettingsSection" aria-controls="agentSettingsSection" hidden>Agent · Beta</button>
-            <button type="button" class="settings-nav-item" role="tab" id="settingsTabDisplay"
-              data-settings-tab="displaySettingsSection" aria-controls="displaySettingsSection">Display</button>
             <button type="button" class="settings-nav-item" role="tab" id="settingsTabConnections"
               data-settings-tab="connectionsSettingsSection" aria-controls="connectionsSettingsSection">Connections</button>
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabDisplay"
+              data-settings-tab="displaySettingsSection" aria-controls="displaySettingsSection">Display</button>
             <!-- Nur fuer eingeloggte Konten; firebase.js gibt den Reiter frei. -->
             <button type="button" class="settings-nav-item" role="tab" id="settingsTabAccount"
               data-settings-tab="accountSettingsSection" aria-controls="accountSettingsSection" hidden>Account</button>
@@ -1089,6 +1084,83 @@
           <div class="settings-body" id="settingsBody">
           <p id="settingsSearchEmpty" class="settings-search-empty" hidden>No setting matches your search.</p>
           <p id="settingsSearchStatus" class="visually-hidden" role="status" aria-live="polite"></p>
+          {#- The Agent first (Max, 2026-11-02: settings aligned to the Agent): how
+              a message runs, who checks it, its workspace; Compare's own
+              instruction below, since the Agent leaves it out (query-send.js). -#}
+          <section id="agentSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="agent läufe runs lauf run nachricht message"
+            aria-labelledby="settingsAgentTitle">
+            <div class="settings-category-heading">
+              <h3 id="settingsAgentTitle">Agent</h3>
+              <p>How consens works on your messages.</p>
+            </div>
+            <div class="settings-group">
+              <div class="settings-section" data-settings-keywords="modus mode vergleich vergleichen compare nebeneinander side by side agent standard default">
+                <label for="runModeSetting" class="settings-switch-row settings-choice-row">
+                  <span>
+                    <strong>Mode</strong>
+                    <small>What consens does with a new message. Agent works in steps with research, files and tools; Compare shows the answers side by side. An open chat keeps its kind; the composer offers the same choice.</small>
+                  </span>
+                  <span class="settings-select">
+                    <select id="runModeSetting">
+                      <option value="agent" selected>Agent</option>
+                      <option value="compare">Compare</option>
+                    </select>
+                  </span>
+                </label>
+              </div>
+              {#- Who checks the Agent's work (account setting reviewers,
+                  agent-mode.js binds it). What a choice gives up stands
+                  under it (#reviewersNote), always in full. -#}
+              <div class="settings-section" data-settings-keywords="prüfer prüfen prüfung reviewers review kontrolle check überprüfung sicherheit safety pausieren pause anhalten stoppen ausschalten abschalten aus off arbeitsplatz workspace kontingent allowance kosten cost">
+                <label for="reviewersSetting" class="settings-switch-row settings-choice-row">
+                  <span>
+                    <strong>Reviewers</strong>
+                    <small id="reviewersHelp">Other AIs follow the Agent’s work, mark doubtful passages in its answers and pause it when a step looks wrong.</small>
+                  </span>
+                  <span class="settings-select">
+                    <select id="reviewersSetting" aria-describedby="reviewersHelp reviewersNote">
+                      <option value="always" selected>Always</option>
+                      <option value="workspace">Only in the workspace</option>
+                      <option value="off">Off</option>
+                    </select>
+                  </span>
+                </label>
+                <p id="reviewersNote" class="settings-reviewers-note" hidden></p>
+              </div>
+              {#- Off unless switched on (account setting detailed_progress):
+                  agent-activity.js shows the Agent's live lines in full
+                  instead of its calm line; app-ui.js binds the switch. -#}
+              <div class="settings-section"
+                data-settings-keywords="fortschritt progress details detailliert ausführlich detailed reasoning denken thinking gedanken thoughts befehle commands terminal konsole console ausgabe output technisch technical entwickler developer agent arbeitet working live ruhig calm">
+                <label for="detailedProgressSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Detailed progress</strong>
+                    <small>While the Agent works, each of its thoughts, commands and their output appears as it comes. Off: one calm line says what the Agent is doing, and the details are a click away.</small>
+                  </span>
+                  <input type="checkbox" id="detailedProgressSwitch">
+                </label>
+              </div>
+
+              <!-- The account's workspace (workspace-view.js): one Linux computer for the Agent and you;
+                   last in its group, so the row hides without leaving a line behind. -->
+              <div class="settings-section workspace-only agent-workspace-settings" id="agentWorkspaceSettings" data-settings-keywords="workspace arbeitsplatz browser chrome vm linux shell terminal code internet web sign in anmelden login cookies zeit time">
+                <strong>Workspace</strong>
+                <small>The Agent and you share one Linux computer across your chats. Open it to watch the Agent’s browser, take it over and log in to sites yourself: the Agent then works there as you, asks before it sends, buys or deletes anything, and never types a password.</small>
+                <small id="agentVmTime" class="agent-vm-time" data-i18n-skip hidden></small>
+              </div>
+            </div>
+
+            <h4 class="settings-group-title">Compare</h4>
+            <div class="settings-group">
+              <div class="settings-section" data-settings-keywords="systemprompt system prompt prompt anweisungen instructions custom instructions vorgabe ton tone stil style vergleich vergleichen compare nebeneinander side by side">
+                <label class="settings-field-label" for="systemPromptInput">Instructions for Compare</label>
+                <p>Sent to every model when you compare answers side by side. The Agent doesn’t use them. Leave empty for the default.</p>
+                <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7" maxlength="12000" placeholder="Your own instructions for Compare answers."></textarea>
+                <button id="saveSystemPromptBtn" class="btn save-prompt-btn">Save instructions</button>
+              </div>
+            </div>
+          </section>
+
           <section id="memorySettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="gedächtnis erinnerung erinnern merken remember personalisierung personalization"
             aria-labelledby="settingsMemoryTitle">
             <div class="settings-category-heading">
@@ -1206,87 +1278,57 @@
             </details>
           </section>
 
-          <section id="behaviorSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="verhalten behavior modell model anweisungen instructions"
-            aria-labelledby="settingsBehaviorTitle">
+          <section id="connectionsSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="verbindungen connections integration konten accounts"
+            aria-labelledby="settingsConnectionsTitle">
             <div class="settings-category-heading">
-              <h3 id="settingsBehaviorTitle">Model behavior</h3>
-              <p>The shared instruction sent to every selected model. It applies to the question; your memory
-                applies to you.</p>
+              <h3 id="settingsConnectionsTitle">Connections</h3>
+              <p>Accounts and keys consens can use for you.</p>
             </div>
-            <div class="settings-group">
-              <div class="settings-section" data-settings-keywords="systemprompt prompt anweisungen instructions custom instructions vorgabe ton tone stil style">
-                <label class="settings-field-label" for="systemPromptInput">System prompt</label>
-                <p>Customize how the models respond. Leave empty to use the default.</p>
-                <textarea id="systemPromptInput" class="systemPromptInputSytle" rows="7" maxlength="12000" placeholder="Use the app default, or enter your own instructions for Compare answers."></textarea>
-                <button id="saveSystemPromptBtn" class="btn save-prompt-btn">Save system prompt</button>
-              </div>
-            </div>
-          </section>
-
-          <section id="runsSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="läufe runs lauf run"
-            aria-labelledby="settingsRunsTitle">
-            <div class="settings-category-heading">
-              <h3 id="settingsRunsTitle">Runs</h3>
-              <p>How consens answers your next message.</p>
-            </div>
-            <div class="settings-group">
-              <div class="settings-section" data-settings-keywords="modus mode vergleich vergleichen compare nebeneinander side by side agent standard default">
-                <label for="runModeSetting" class="settings-switch-row settings-choice-row">
-                  <span>
-                    <strong>Mode</strong>
-                    <small>What consens does with a new message. Agent works in steps with research, files and tools; Compare shows the answers side by side. An open chat keeps its kind; the composer offers the same choice.</small>
-                  </span>
-                  <span class="settings-select">
-                    <select id="runModeSetting">
-                      <option value="agent" selected>Agent · Beta</option>
-                      <option value="compare">Compare</option>
-                    </select>
-                  </span>
-                </label>
-              </div>
-              {#- Who checks the Agent's work (account setting reviewers,
-                  agent-mode.js binds it). What a choice gives up stands
-                  under it (#reviewersNote), always in full. -#}
-              <div class="settings-section" data-settings-keywords="prüfer prüfen prüfung reviewers review kontrolle check überprüfung sicherheit safety pausieren pause anhalten stoppen ausschalten abschalten aus off arbeitsplatz workspace kontingent allowance kosten cost">
-                <label for="reviewersSetting" class="settings-switch-row settings-choice-row">
-                  <span>
-                    <strong>Reviewers</strong>
-                    <small id="reviewersHelp">Other AIs follow the Agent’s work, mark doubtful passages in its answers and pause it when a step looks wrong.</small>
-                  </span>
-                  <span class="settings-select">
-                    <select id="reviewersSetting" aria-describedby="reviewersHelp reviewersNote">
-                      <option value="always" selected>Always</option>
-                      <option value="workspace">Only in the workspace</option>
-                      <option value="off">Off</option>
-                    </select>
-                  </span>
-                </label>
-                <p id="reviewersNote" class="settings-reviewers-note" hidden></p>
-              </div>
-            </div>
-          </section>
-
-          <section id="agentSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="agent beta"
-            aria-labelledby="settingsAgentTitle" hidden>
-            <div class="settings-category-heading">
-              <h3 id="settingsAgentTitle">Agent · Beta</h3>
-              <p>The Agent’s own computer and what it can reach.</p>
-            </div>
-            <div class="settings-group">
-              {#- One way of working for every account since 2026-10-31: the
-                  Agent works, the models you chose review its work and its
-                  answer. The tab shows only where the account has the
-                  workspace (workspace-view.js syncSettings). -#}
-              <!-- The account's workspace (workspace-view.js): one Linux computer for the Agent and you. -->
-              <div class="settings-section workspace-only agent-workspace-settings" id="agentWorkspaceSettings" data-settings-keywords="workspace arbeitsplatz browser chrome vm linux shell terminal code internet web sign in anmelden login cookies zeit time">
-                <strong>Workspace</strong>
-                <small>The Agent and you share one Linux computer across your chats. Open it to watch the Agent’s browser, take it over and log in to sites yourself: the Agent then works there as you, asks before it sends, buys or deletes anything, and never types a password.</small>
-                <small id="agentVmTime" class="agent-vm-time" data-i18n-skip hidden></small>
-              </div>
+            {#- What the Agent reaches through the workspace; without one the
+                group steps aside (.workspace-only, style.css). -#}
+            <h4 class="settings-group-title workspace-only">Agent</h4>
+            <div class="settings-group workspace-only">
               <!-- GitHub for the Agent's workspace (agent-github.js). -->
-              <div class="settings-section workspace-only agent-github-settings" id="agentGithubSettings" data-settings-keywords="github repository repo pull request code git">
+              <div class="settings-section agent-github-settings" id="agentGithubSettings" data-settings-keywords="github repository repo pull request code git">
                 <strong>GitHub</strong>
-                <small>Connect GitHub so the Agent can bring your repositories into its VM and propose pull requests. You choose the repositories when you install the consens.io app on GitHub. Nothing goes to GitHub until you confirm a pull request, and the VM never holds a GitHub key.</small>
+                <small>Connect GitHub so the Agent can bring your repositories into its workspace and propose pull requests. You choose the repositories when you install the consens.io app on GitHub. Nothing goes to GitHub until you confirm a pull request, and the app’s key never reaches the workspace.</small>
+              </div>
+            </div>
+
+            <h4 class="settings-group-title">Compare</h4>
+            <div class="settings-group">
+              <div class="settings-section" data-settings-keywords="api eigene own schlüssel key keys byok openrouter abrechnung billing bezahlen pay kosten cost kontingent allowance">
+                <label for="useOwnKeysSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Use your own API keys</strong>
+                    <small>Compare then runs on your OpenRouter account and is billed there; the Agent always uses your included allowance. Your key stays in this browser.</small>
+                  </span>
+                  <input type="checkbox" id="useOwnKeysSwitch">
+                </label>
+              </div>
+
+              <div class="settings-section" data-settings-keywords="api key schlüssel openrouter token testen test speichern save">
+                <div id="apiSettingsToggle" class="collapse-header" role="button" tabindex="0" aria-controls="apiSettingsArea" aria-expanded="false">
+                  <div>
+                    <h4>OpenRouter API key</h4>
+                    <p>Manage and test your OpenRouter credential.</p>
+                  </div>
+                  <span id="apiArrow" class="arrow" aria-hidden="true">&#9660;</span>
+                </div>
+
+                <div id="apiSettingsArea" class="settings-collapsible-area u-display-none">
+
+              <div class="api-key-group">
+                <label for="openrouterKey">OpenRouter API key <span id="openrouterFeedback" class="feedback"></span></label>
+                <input type="text" id="openrouterKey" placeholder="sk-or-…" autocomplete="off">
+              </div>
+
+              <button id="testAllKeysButton" type="button" class="btn save-keys-btn">
+                Save and test key
+                <span id="apiSpinner" class="spinner u-display-none"></span>
+              </button>
+              <div id="apiKeysStatus" class="api-keys-status" role="status" aria-live="polite" hidden></div>
+                </div>
               </div>
             </div>
           </section>
@@ -1319,34 +1361,6 @@
                 </div>
               </div>
 
-              {#- On unless switched off (account setting letter_animations):
-                  stream-reveal.js and letter-clouds.js read it; app-ui.js
-                  binds the switch. -#}
-              <div class="settings-section"
-                data-settings-keywords="animation animationen bewegung motion effekt effects einblenden fade streaming licht light schrift text typing tippen wolken clouds hintergrund background startbildschirm reduce reduzieren ruhig still">
-                <label for="letterAnimationsSwitch" class="custom-checkbox-label settings-switch-row">
-                  <span>
-                    <strong>Letter animations</strong>
-                    <small>Letters fade in while an answer is written and drift behind the empty start screen. Off: text appears at once.</small>
-                  </span>
-                  <input type="checkbox" id="letterAnimationsSwitch" checked>
-                </label>
-              </div>
-
-              {#- Off unless switched on (account setting detailed_progress):
-                  agent-activity.js shows the Agent's live lines in full
-                  instead of its calm line; app-ui.js binds the switch. -#}
-              <div class="settings-section"
-                data-settings-keywords="fortschritt progress details detailliert ausführlich detailed reasoning denken thinking gedanken thoughts befehle commands terminal konsole console ausgabe output technisch technical entwickler developer agent arbeitet working live ruhig calm">
-                <label for="detailedProgressSwitch" class="custom-checkbox-label settings-switch-row">
-                  <span>
-                    <strong>Detailed progress</strong>
-                    <small>While the Agent works, each of its thoughts, commands and their output appears as it comes. Off: one calm line says what the Agent is doing, and the details are a click away.</small>
-                  </span>
-                  <input type="checkbox" id="detailedProgressSwitch">
-                </label>
-              </div>
-
               {#- The language of this device (cookie consens_lang, docs/i18n.md).
                   The names of the languages stay in their own language. -#}
               {% set chosen_language = request.cookies.get('consens_lang', 'auto') %}
@@ -1363,6 +1377,20 @@
                       <option value="de" lang="de" translate="no"{% if chosen_language == 'de' %} selected{% endif %}>Deutsch</option>
                     </select>
                   </span>
+                </label>
+              </div>
+
+              {#- On unless switched off (account setting letter_animations):
+                  stream-reveal.js and letter-clouds.js read it; app-ui.js
+                  binds the switch. -#}
+              <div class="settings-section"
+                data-settings-keywords="animation animationen bewegung motion effekt effects einblenden fade streaming licht light schrift text typing tippen wolken clouds hintergrund background startbildschirm reduce reduzieren ruhig still">
+                <label for="letterAnimationsSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Letter animations</strong>
+                    <small>Letters fade in while an answer is written and drift behind the empty start screen. Off: text appears at once.</small>
+                  </span>
+                  <input type="checkbox" id="letterAnimationsSwitch" checked>
                 </label>
               </div>
 
@@ -1395,6 +1423,12 @@
                   <input type="checkbox" id="markLinesSwitch">
                 </label>
               </div>
+            </div>
+
+            {#- Answers from before the reviewers (the earlier comparison) carry
+                claim counts and an agreement score; new answers have neither. -#}
+            <h4 class="settings-group-title">Older answers</h4>
+            <div class="settings-group">
               <div class="settings-section" data-settings-keywords="zahlen numbers anzahl count counts zählung behauptungen claims aussagen modelle models unterstützung support">
                 <label for="claimCountsSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>
@@ -1418,49 +1452,6 @@
                     </select>
                   </span>
                 </label>
-              </div>
-            </div>
-          </section>
-
-          <section id="connectionsSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="verbindungen connections integration"
-            aria-labelledby="settingsConnectionsTitle">
-            <div class="settings-category-heading">
-              <h3 id="settingsConnectionsTitle">Connections</h3>
-              <p>Use the included allowance or connect your own OpenRouter API key.</p>
-            </div>
-            <div class="settings-group">
-              <div class="settings-section" data-settings-keywords="api eigene own schlüssel key keys byok openrouter abrechnung billing bezahlen pay kosten cost kontingent allowance">
-                <label for="useOwnKeysSwitch" class="custom-checkbox-label settings-switch-row">
-                  <span>
-                    <strong>Use your own API keys</strong>
-                    <small>Your key is stored in this browser. Requests use your OpenRouter account and are billed by OpenRouter.</small>
-                  </span>
-                  <input type="checkbox" id="useOwnKeysSwitch">
-                </label>
-              </div>
-
-              <div class="settings-section" data-settings-keywords="api key schlüssel openrouter token testen test speichern save">
-                <div id="apiSettingsToggle" class="collapse-header" role="button" tabindex="0" aria-controls="apiSettingsArea" aria-expanded="false">
-                  <div>
-                    <h4>OpenRouter API key</h4>
-                    <p>Manage and test your OpenRouter credential.</p>
-                  </div>
-                  <span id="apiArrow" class="arrow" aria-hidden="true">&#9660;</span>
-                </div>
-
-                <div id="apiSettingsArea" class="settings-collapsible-area u-display-none">
-
-              <div class="api-key-group">
-                <label for="openrouterKey">OpenRouter API key <span id="openrouterFeedback" class="feedback"></span></label>
-                <input type="text" id="openrouterKey" placeholder="sk-or-…" autocomplete="off">
-              </div>
-
-              <button id="testAllKeysButton" type="button" class="btn save-keys-btn">
-                Save and test key
-                <span id="apiSpinner" class="spinner u-display-none"></span>
-              </button>
-              <div id="apiKeysStatus" class="api-keys-status" role="status" aria-live="polite" hidden></div>
-                </div>
               </div>
             </div>
           </section>
@@ -1517,7 +1508,7 @@
                 Agent works on your question: it searches, reads sources and, where it helps, asks the models you
                 chose for their own independent answers. The same models are its reviewers: they follow every step
                 and review the finished answer, unless you limit them to the workspace or turn them off (Settings ›
-                Runs › Reviewers). The models come from OpenAI, Anthropic, Google Gemini, Mistral, Grok, DeepSeek,
+                Agent › Reviewers). The models come from OpenAI, Anthropic, Google Gemini, Mistral, Grok, DeepSeek,
                 Moonshot AI/Kimi, Z.ai/GLM, Meta Muse, Alibaba Qwen and Xiaomi MiMo. While it works, the line above the answer shows each step;
                 open it later to see what was done. Compare (the answers side by side), files and Reasoning are in the (+)
                 menu next to the message box.

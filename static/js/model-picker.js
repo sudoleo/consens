@@ -563,7 +563,7 @@
       // work; while its list loads, the name the first frame painted
       // (app-bootstrap.js).
       displayLabel = select.dataset.catalog === "ready" ? selectedLabel : window.App.firstFrame?.agentModel?.() || selectedLabel;
-      // With the reviewers off (Settings > Runs) nobody cross-checks.
+      // With the reviewers off (Settings > Agent) nobody cross-checks.
       const setting = window.App.words?.reviewerSetting?.();
       const off = setting === "off", workspace = setting === "workspace" && count > 0;
       displayTitle = off ? `${selectedLabel} writes the answer, without reviewers.`

@@ -1310,15 +1310,16 @@
     host.append(status, actions);
     host._workspace = true;
   }
-  // Settings › Agent · Beta holds the workspace's rows (GitHub, this row):
-  // the tab is there for an account with Agent that has the workspace
-  // (/user_status vm_time, firebase.js), and this row says today's workspace
-  // time (agent_vm_time.py) in whole sentences, translated here
-  // (data-i18n-skip). firebase.js calls it when the account's status
+  // Settings › Agent ends with the workspace's row (GitHub is in Settings ›
+  // Connections since 2026-11-02): it is there for an account with Agent
+  // that has the workspace (/user_status vm_time, firebase.js), and says
+  // today's workspace time (agent_vm_time.py) in whole sentences, translated
+  // here (data-i18n-skip). firebase.js calls it when the account's status
   // arrives, agent-chat.js whenever its shell renders.
   function syncSettings() {
     const time = App.vmTime || null;
-    App.settingsTabs?.setTabAvailable?.('agentSettingsSection', App.agentChat?.canUse?.() === true && Boolean(time));
+    const row = document.getElementById('agentWorkspaceSettings');
+    if (row) row.hidden = !(App.agentChat?.canUse?.() === true && Boolean(time));
     const line = document.getElementById('agentVmTime');
     if (!line) return;
     const used = Math.round((Number(time?.used_seconds) || 0) / 60);
