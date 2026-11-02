@@ -43,6 +43,10 @@ from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.agent_calendar import GoogleSelection
 
 router = APIRouter()
+# The highest frame or entry a reader can ask to follow on from: past it,
+# a position is no number a stream gives (islice and Firestore's cursors
+# take nothing above 2**63; JavaScript counts exactly up to 2**53).
+MAX_AFTER = 2 ** 53
 
 
 def require_agent_access(uid):
@@ -844,7 +848,7 @@ def list_agents(request: Request, chat_id: str, turn_id: str):
 @router.get("/agent/chats/{chat_id}/turns/{turn_id}/agents/{agent_id}")
 @limiter.limit("120/minute")
 def agent_details(request: Request, chat_id: str, turn_id: str, agent_id: str,
-                  after: int = Query(0, ge=0), limit: int = Query(25, ge=1, le=50)):
+                  after: int = Query(0, ge=0, le=MAX_AFTER), limit: int = Query(25, ge=1, le=50)):
     return _agent_details(request, chat_id, turn_id, agent_id=agent_id, after=after, limit=limit)
 
 
@@ -864,7 +868,7 @@ def _agent_details(request, chat_id, turn_id, **kwargs):
 @router.get("/agent/chats/{chat_id}/turns/{turn_id}/work-log")
 @limiter.limit("120/minute")
 def agent_work_log(request: Request, chat_id: str, turn_id: str,
-                   after: int = Query(0, ge=0), limit: int = Query(100, ge=1, le=200)):
+                   after: int = Query(0, ge=0, le=MAX_AFTER), limit: int = Query(100, ge=1, le=200)):
     """The turn's work log (agent_work_log.py) in order, after entry
     ``after`` (live: poll with the last ``seq``). Every turn writes one since
     2026-10-31; only its owner reads it (the turn is looked up under the
@@ -897,7 +901,7 @@ def agent_work_log_entry(request: Request, chat_id: str, turn_id: str, seq: int)
 @limiter.limit("120/minute")
 def agent_live_events(request: Request, chat_id: str,
                       request_id: str = Query(..., min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"),
-                      after: int = Query(0, ge=0)):
+                      after: int = Query(0, ge=0, le=MAX_AFTER)):
     """The running stream's frames after ``after``, for networks that buffer SSE.
 
     Process memory only (no Firestore read): ``known: false`` means this

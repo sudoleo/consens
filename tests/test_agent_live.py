@@ -187,6 +187,9 @@ def test_agent_stream_numbers_frames_and_the_live_endpoint_replays_them(api, mon
     assert client.get(f"/agent/chats/{'f' * 32}/live", params={"request_id": "live-1"}, headers=AUTH).json()["known"] is False
     assert client.get("/agent/chats/not-a-chat/live", params={"request_id": "live-1"}, headers=AUTH).status_code == 404
     assert client.get(url, params={"request_id": "bad id!"}, headers=AUTH).status_code == 422
+    # A position past any frame a stream can number is a bad request, never
+    # a 500 with an alarm (islice takes nothing above sys.maxsize).
+    assert client.get(url, params={"request_id": "live-1", "after": 10 ** 20}, headers=AUTH).status_code == 422
     assert client.get(url, params={"request_id": "live-1"}).status_code == 401
     assert len(calls) == 1  # Polling never starts a model call.
 
