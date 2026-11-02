@@ -113,8 +113,10 @@
   const STATES = {
     connecting: 'Connecting to the workspace…',
     slow: 'Starting your workspace. The first start can take a minute.',
-    // How long it takes stands under the bar (startBar).
+    // How long it takes stands under the bar (startBar). waking: the server
+    // wakes the VM (since 2026-11-02, before that only "Connecting…").
     setup: 'Setting up the browser. This happens once.',
+    waking: 'Starting the browser…',
     starting: 'Starting the browser…',
     error: 'The workspace is not reachable right now. Try again in a moment.',
     ended: 'The view closed after an hour. Open it again to go on.',

@@ -159,6 +159,35 @@ describe("the workspace's loading and terminal (2026-10-28)", () => {
     }
   });
 
+  it("counts down while the server wakes the VM, before the relay says anything (2026-11-02)", async () => {
+    // Max's view of a VM that slept: "Starting your workspace…" with a bare
+    // skeleton, because the first estimate came only with the relay.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup({ progress: true });
+      let now = Date.parse("2026-11-02T22:23:30Z");
+      env.window.Date.now = () => now;
+      const socket = await opened(env);
+      const bar = env.document.querySelector("#workspacePane-browser .workspace-view-progress");
+      socket.deliver(JSON.stringify({ state: "connecting", left_seconds: 3600 }));
+      socket.deliver(JSON.stringify({ state: "waking", until: new Date(now + 15_000).toISOString() }));
+      const status = env.document.querySelector(".workspace-view-status");
+      expect(status.textContent).toBe("Starting the browser…");
+      now += 2_000;
+      await vi.advanceTimersByTimeAsync(300);
+      expect(bar.hidden).toBe(false);
+      // 13 s, in steps of five.
+      expect(bar.querySelector(".start-progress-left").textContent).toBe("About 15 seconds left");
+      // The slow start's note is for a view that knows nothing more.
+      await vi.advanceTimersByTimeAsync(7_000);
+      expect(status.textContent).toBe("Starting the browser…");
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      expect(bar.getAttribute("aria-valuenow")).toBe("100");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("opens the user's own terminal on its tab: size in the first message, keys and output as bytes", async () => {
     const env = setup();
     const view = await opened(env);

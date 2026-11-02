@@ -6571,7 +6571,7 @@ Hintergrund ein (`agent_workspace.provision` aus `routers/agent.py`, Notaus
 `AGENT_WORKSPACE_PROVISION=off`); `_bench` wartet auf ein laufendes Setup
 (`agent_workspace.setup_lock`). Wartende Schritte melden `starting_until`
 (`agent_workspace.Start`/`start_until`, Schätzung `START_SECONDS`), die
-Live-Ansicht `until`; `start-progress.js` (`App.startProgress`) zeigt daraus
+Live-Ansicht `until` (auch `waking` während des Weckens, `_waking`); `start-progress.js` (`App.startProgress`) zeigt daraus
 Balken und Restzeit. Das Bild der Live-Ansicht kommt seit 2026-11-02 von TigerVNCs X-Server
 (`display.sh`, continuous updates, 30 Bilder/s statt rund 13 bei x11vnc;
 `docs/agent-mode.md`, „Flüssigere Live-Ansicht“); Render trägt es ohne

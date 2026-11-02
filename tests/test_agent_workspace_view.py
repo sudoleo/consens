@@ -117,6 +117,49 @@ def test_the_views_start_says_about_when_it_ends_and_ends_with_ready(view_api, f
     assert "until" not in messages[0] and "until" not in messages[2]
 
 
+def test_the_view_counts_down_while_the_server_wakes_the_vm(view_api, fake_vm, monkeypatch):
+    """Max, 2026-11-02: a VM that slept took its wake before the relay's
+    first state, and the view showed "Starting your workspace…" without a
+    bar. While opening takes longer than WAKE_FIRST_SECONDS, "waking"
+    carries the estimate, once per new one."""
+    import time as clock
+    from datetime import datetime, timezone
+    opened = workspace_router._open
+
+    def slow_open(uid, seconds, start=None):
+        url = opened(uid, seconds, start)
+        clock.sleep(0.4)
+        return url
+    monkeypatch.setattr(workspace_router, "_open", slow_open)
+    monkeypatch.setattr(workspace_router, "WAKE_FIRST_SECONDS", 0.05)
+    monkeypatch.setattr(workspace_router, "WAKE_LOOK_SECONDS", 0.05)
+    client, _, _, _ = view_api
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        messages = [json.loads(ws.receive_text()) for _ in range(4)]
+        ws.receive_bytes()
+    assert [message["state"] for message in messages] == ["connecting", "waking", "starting", "ready"]
+    left = (datetime.fromisoformat(messages[1]["until"]) - datetime.now(timezone.utc)).total_seconds()
+    assert 55 < left <= agent_workspace.START_SECONDS["setup"]
+    assert messages[2]["until"] == messages[1]["until"]
+
+
+def test_a_view_or_terminal_gone_before_its_first_state_ends_quietly():
+    """A tab closed while it connected (Prod 2026-11-02): the first state
+    found no socket, and the terminal's start ended in an error in the log."""
+    import asyncio
+
+    class Gone:
+        def __init__(self, error):
+            self.error = error
+
+        async def send_text(self, text):
+            raise self.error
+
+    assert asyncio.run(workspace_router._state(Gone(WebSocketDisconnect(1005)), "connecting")) is False
+    assert asyncio.run(workspace_router._state(Gone(RuntimeError("closed")), "connecting")) is False
+
+
 def test_the_view_starts_the_tunnel_again_for_the_agents_app(view_api, fake_vm, monkeypatch):
     """localhost in the view keeps reaching the agent's server after its run
     (agent_tunnel.resume, since 2026-10-29)."""

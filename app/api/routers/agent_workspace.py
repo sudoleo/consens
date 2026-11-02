@@ -16,7 +16,9 @@ view at a time (the newest wins, agent_workspace.claim_view), its time
 counts against the day's VM time (agent_vm_time.py) and never runs past it,
 and opening is rate limited. Its first state ("connecting") names what is
 left of the day's VM time (``left_seconds``, absent without a cap) for the
-panel's head (since 2026-10-30, runtime audit V4).
+panel's head (since 2026-10-30, runtime audit V4). While the server wakes
+the browser VM, "waking" carries about when the browser's start ends
+(``until``, since 2026-11-02), as setup and starting do after it.
 
 How a view or terminal ended goes to the log with its close code, who ended
 it (the browser, the relay, the provider's socket) and the numbers they gave,
@@ -51,7 +53,7 @@ import logging
 import os
 import time
 
-from fastapi import APIRouter, HTTPException, Request, WebSocket
+from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import Field
 
@@ -255,7 +257,36 @@ async def connect_upstream(url):
 
 
 async def _state(websocket, state, **fields):
-    await websocket.send_text(json.dumps({"state": state, **fields}))
+    """Tells the view or terminal a state; False when it is gone already (a
+    tab closed while it connected: until 2026-11-02 an error in the log)."""
+    try:
+        await websocket.send_text(json.dumps({"state": state, **fields}))
+    except (WebSocketDisconnect, RuntimeError):
+        return False
+    return True
+
+
+# While the server wakes the browser VM for the view (_open: its status, a
+# VM that slept, its tools, a new one's setup), the view hears about when
+# the start ends ("waking" with "until"). Until 2026-11-02 the first estimate
+# came with the relay's first state, after the wake, and a view that waited
+# 15 s for a cold VM showed no bar (Max). First after WAKE_FIRST_SECONDS: a
+# VM that is up answers sooner, and the bar shows after 1.2 s anyway.
+WAKE_FIRST_SECONDS = 1.0
+WAKE_LOOK_SECONDS = 0.5
+
+
+async def _waking(websocket, uid, seconds, start):
+    """_open in a thread, telling the view each new estimate while it runs."""
+    opening = asyncio.ensure_future(asyncio.to_thread(_open, uid, seconds, start))
+    told, wait = {}, WAKE_FIRST_SECONDS
+    while not (await asyncio.wait({opening}, timeout=wait))[0]:
+        wait = WAKE_LOOK_SECONDS
+        until = _until(uid)
+        if until and until != told:
+            told = until
+            await _state(websocket, "waking", **until)
+    return opening.result()
 
 
 def _until(uid):
@@ -488,14 +519,16 @@ async def workspace_view(websocket: WebSocket):
     if admitted is None:
         return
     uid, seconds, _, day_left = admitted
-    await _state(websocket, "connecting", **({} if day_left is None else {"left_seconds": day_left}))
+    if not await _state(websocket, "connecting", **({} if day_left is None else {"left_seconds": day_left})):
+        return
     started = time.monotonic()
-    # The browser's start as the view waits for it: the relay's states setup
-    # and starting carry about when it ends ("until", since 2026-11-02),
-    # also that of the account's provisioning when it sets it up right now.
+    # The browser's start as the view waits for it: waking (_waking) and the
+    # relay's states setup and starting carry about when it ends ("until",
+    # since 2026-11-02), also that of the account's provisioning when it sets
+    # it up right now.
     start = agent_workspace.Start(uid, "browser")
     try:
-        url = await asyncio.to_thread(_open, uid, seconds, start)
+        url = await _waking(websocket, uid, seconds, start)
         view_id = await asyncio.to_thread(agent_workspace.claim_view, _store(), uid, seconds)
         upstream = await connect_upstream(url)
     except Exception as exc:
@@ -613,7 +646,8 @@ async def workspace_terminal(websocket: WebSocket):
         return
     uid, seconds, hello, _ = admitted
     size = _size(hello.get("cols"), hello.get("rows")) or (80, 24)
-    await _state(websocket, "connecting")
+    if not await _state(websocket, "connecting"):
+        return
     started = time.monotonic()
     try:
         url = await asyncio.to_thread(_open_terminal, uid, seconds, size)
