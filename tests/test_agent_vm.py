@@ -843,6 +843,30 @@ def test_a_reviewers_halt_ends_the_running_command_as_if_the_user_stopped_it(sto
     assert tools.exec(VmExecArgs(command="ls"), cancellation=cancellation)["exit_code"] == 0
 
 
+def test_a_command_the_users_stop_ends_counts_its_time(store, fake_vm, monkeypatch):
+    """Stop (or the response's time limit) mid vm_exec: the command ran in the
+    VM until then, but its seconds were never booked, up to 300 per stop
+    and past the day's VM time (bug hunt 2026-10-27)."""
+    loop = vm_loop(store, Agent())
+    tools, cancellation = loop.vm_tools, ProviderCancellation()
+    tools.session.clock = fake_vm.clock
+    tools.session.ready(cancellation)
+    plain = _FakeBackend.exec
+
+    def exec(backend, name, command, *, cwd, timeout, on_output, cancellation, agent=True):
+        if command != "make all":
+            return plain(backend, name, command, cwd=cwd, timeout=timeout, on_output=on_output,
+                         cancellation=cancellation, agent=agent)
+        fake_vm.clock.now += 120
+        loop.cancellation.cancel()
+        raise ProviderCancelled("stopped")
+    monkeypatch.setattr(_FakeBackend, "exec", exec)
+    before = tools.session.seconds
+    with pytest.raises(ProviderCancelled):
+        tools.exec(VmExecArgs(command="make all"), cancellation=loop.cancellation)
+    assert tools.session.seconds - before == 120
+
+
 def test_while_the_user_has_the_browser_nothing_of_the_agent_reaches_the_vm(store, fake_vm, monkeypatch):
     """Their takeover in the view (agent_workspace.set_control): a VM call
     waits until they hand back and then runs; a takeover that lasts gives

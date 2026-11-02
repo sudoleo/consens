@@ -1401,10 +1401,15 @@ class VMTools:
             report(output.shown())
             raise
         except ProviderCancelled:
+            seconds = self.session.clock() - started
             if cancellation.cancelled or not command.cancelled:
+                # Stop or the response's time limit: the command ran in the
+                # VM until now, and its time counts (before, a stop booked none).
+                with self.session._lock:
+                    self.session.commands += 1
+                    self.session.seconds += seconds
                 raise
             # Ended by a reviewer's halt: for the agent, the user stopped it.
-            seconds = self.session.clock() - started
             with self.session._lock:
                 self.session.commands += 1
                 self.session.seconds += seconds
