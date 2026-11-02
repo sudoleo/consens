@@ -43,6 +43,16 @@ On a VM of its own nothing of the workbench sees the browser, and the
 agent's server must answer it while the user tries the agent's app
 (agent_tunnel.py). The reviewers follow what the agent does, never what the
 user does.
+
+A new account's workspace (provision, since 2026-11-02): each VM's first
+setup installs Chrome and the rest (about a minute each). A colleague of
+Max's waited for both on her first try ("every normal user is gone then"),
+two minutes after her first message to the agent. So the account's first
+message to the agent makes both VMs in the background, while the user
+still talks to the agent; the first call that needs one waits only for
+what is left (setup_lock, the browser's own setup lock). The time a start
+still takes (START_SECONDS, start_until) is what the chat and the live view
+count down.
 """
 from __future__ import annotations
 
@@ -176,6 +186,76 @@ def _version(kind):
 
 VERSION = _version("workbench")
 BROWSER_VERSION = _version("browser")
+
+
+# How long a start of a VM takes until its first call can run, by what it
+# has to do (seconds, Prod 2026-10-29 to 11-02): a new VM's setup with
+# Chrome (browser 61-63 s, workbench 57 s), the tools after a new version
+# (7 s), a VM waking from cold with Chrome starting (median 15 s after a
+# pause) or from warm (5 s), Chrome's start in the live view. Only what the
+# user is told: the chat's step and the live view count the time left down
+# (start_until); no start waits for them.
+START_SECONDS = {"setup": 65, "update": 10, "cold": 15, "warm": 5, "chrome": 8}
+# A start whose end nobody said is forgotten this long after its estimate.
+START_FORGET_SECONDS = 600
+_starts: dict[tuple, dict] = {}
+_starts_lock = threading.Lock()
+
+
+class Start:
+    """One running start of an account's VM (``kind`` "browser" or
+    "workbench"): ``phase`` says what it does now, ``end`` that it is over.
+    Several may run for one VM (a message and the account's provisioning);
+    start_until says the latest."""
+
+    def __init__(self, uid, kind):
+        self.key = (uid, kind)
+
+    def phase(self, phase):
+        """Runs until about START_SECONDS[phase] from now, never earlier than it said before."""
+        until = _now() + timedelta(seconds=START_SECONDS[phase])
+        with _starts_lock:
+            starts = _starts.setdefault(self.key, {})
+            starts[self] = max(until, starts.get(self, until))
+        return self
+
+    def end(self):
+        with _starts_lock:
+            starts = _starts.get(self.key)
+            if starts is not None:
+                starts.pop(self, None)
+                if not starts:
+                    _starts.pop(self.key, None)
+
+
+def start_until(uid, kinds=("browser", "workbench"), besides=None):
+    """About when the starts of the account's ``kinds`` still running end
+    (the latest), or None when none runs; ``besides``: a Start left out."""
+    now = _now()
+    latest = None
+    with _starts_lock:
+        for kind in kinds:
+            starts = _starts.get((uid, kind)) or {}
+            for start, until in list(starts.items()):
+                if until + timedelta(seconds=START_FORGET_SECONDS) < now:
+                    starts.pop(start, None)
+                elif start is not besides and (latest is None or until > latest):
+                    latest = until
+    return latest
+
+
+# One setup of a workbench at a time in this process (one server instance):
+# the account's provisioning and a message's start (VMSession._bench) never
+# run setup.sh side by side, whose rules for its download the other would
+# undo; the second waits and finds the version there. The browser VM's
+# setup holds a lock of its own on the VM (workspace_vm/browser/setup.sh).
+_setup_locks: dict[str, threading.Lock] = {}
+_setup_locks_lock = threading.Lock()
+
+
+def setup_lock(name):
+    with _setup_locks_lock:
+        return _setup_locks.setdefault(name, threading.Lock())
 
 
 def ref(db, uid):
@@ -422,15 +502,128 @@ def _viewing(uid):
 
 
 def open_workbench(vm, uid, cancellation=None):
-    """The account's workbench for the user's terminal: created with the
-    base network rules where nothing made it yet (on an existing one a
-    running chat's message keeps the rules it set), its tools and the
-    agent's user up to date (prepare); its name."""
+    """The account's workbench for the user's terminal and the account's
+    provisioning: created with the base network rules where nothing made it
+    yet (on an existing one a running chat's message keeps the rules it
+    set), its tools and the agent's user up to date (prepare); its name."""
     name = agent_vm.workspace_name(uid)
-    if not vm.exists(name):
-        vm.ensure(name, agent_vm.WORKBENCH_RULES)
-    prepare(vm, name, cancellation)
+    with setup_lock(name):
+        if not vm.exists(name):
+            vm.ensure(name, agent_vm.WORKBENCH_RULES)
+        prepare(vm, name, cancellation)
     return name
+
+
+# The account's provisioning (module docstring): once per process and account.
+_provisioned: set[str] = set()
+
+
+def provisioning():
+    """AGENT_WORKSPACE_PROVISION=off: no workspace before it is needed (the
+    test suite's default, whose fake VMs count their calls)."""
+    import os
+    return os.getenv("AGENT_WORKSPACE_PROVISION", "").strip().lower() != "off"
+
+
+def provision(store, uid, *, factory=None):
+    """A new account's workspace before it is needed (since 2026-11-02, the
+    module's docstring): both VMs made and set up in the background, the
+    browser's Chrome started once and then told to rest (the helper's warm
+    and rest, as after a message). Only where the account's record names no
+    VM yet, so nothing ever opened one, and the server's safety rules leave
+    the workspace open. Called with the account's messages to the agent
+    that may use the workspace (routers/agent.py); asks the record once per
+    process and account, on a thread of its own, so the message never waits
+    for it. Returns the thread, or None."""
+    if not provisioning() or uid in _provisioned:
+        return None
+    _provisioned.add(uid)
+    thread = threading.Thread(target=_provision_new, args=(store, uid, factory or agent_vm.backend),
+                              name="agent-workspace-provision", daemon=True)
+    thread.start()
+    return thread
+
+
+def _provision_new(store, uid, factory):
+    try:
+        from app.services import workspace_guard
+        if workspace_guard.status(uid).closed:
+            return
+        vm = factory()
+        if vm is None:
+            return
+        provider = vm.provider
+        vm.close()
+        if not _record_new(store, uid, provider):
+            return
+    except Exception as exc:
+        logging.warning("Agent workspace provision not started category=%s", safe_exception(exc))
+        return
+    _provision(uid, factory)
+
+
+def _record_new(store, uid, provider):
+    """Names both VMs on the account's record where it names none yet (the
+    account's deletion finds them from then on, as record_for_view); whether
+    it did."""
+    from app.services import persistence_guard
+    workspace = ref(store.db, uid)
+    made = {}
+
+    def operation(tx):
+        persistence_guard.ensure_account_write_allowed(uid=uid, db=store.db, transaction=tx)
+        current = workspace.get(transaction=tx).to_dict() or {}
+        made["new"] = not current.get("name")
+        if made["new"]:
+            tx.set(workspace, {**current, "provider": provider, "name": agent_vm.workspace_name(uid),
+                               "browser": agent_vm.browser_name(uid),
+                               "created_at": current.get("created_at") or _now().isoformat()})
+    store._transaction(operation)
+    return made["new"]
+
+
+def _provision(uid, factory):
+    """Both VMs side by side, each on a backend of its own; failures are
+    only logged: the first call that needs a VM sets up what is missing."""
+    from app.services import agent_browser
+    from app.services.llm.provider_runtime import ProviderCancellation
+    seconds = {}
+
+    def browser():
+        start, vm, began = Start(uid, "browser").phase("setup"), None, time.monotonic()
+        try:
+            vm = factory()
+            name = open_browser(vm, uid)
+            for action, timeout in (("warm", agent_browser.CALL_SECONDS), ("rest", agent_browser.REST_SECONDS)):
+                agent_browser.helper(vm, name, {"action": action}, timeout, ProviderCancellation())
+            seconds["browser"] = time.monotonic() - began
+        except Exception as exc:
+            logging.warning("Agent workspace provision failed vm=browser category=%s", safe_exception(exc))
+        finally:
+            start.end()
+            if vm is not None:
+                vm.close()
+
+    def workbench():
+        start, vm, began = Start(uid, "workbench").phase("setup"), None, time.monotonic()
+        try:
+            vm = factory()
+            open_workbench(vm, uid)
+            seconds["workbench"] = time.monotonic() - began
+        except Exception as exc:
+            logging.warning("Agent workspace provision failed vm=workbench category=%s", safe_exception(exc))
+        finally:
+            start.end()
+            if vm is not None:
+                vm.close()
+    threads = [threading.Thread(target=target, name=f"agent-workspace-provision-{target.__name__}", daemon=True)
+               for target in (browser, workbench)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    logging.info("Agent workspace provisioned %s", " ".join(f"{kind}={value:.1f}" for kind, value in seconds.items())
+                 or "nothing")
 
 
 def _quiet(stream, chunk):
@@ -473,7 +666,7 @@ class SetupFailed(agent_vm.VMUnavailable):
     (a refusal of the workbench, not a broken connection)."""
 
 
-def prepare(vm, name, cancellation=None, timeout=None):
+def prepare(vm, name, cancellation=None, timeout=None, on_setup=None):
     """The workbench at this VERSION, only when the version there differs
     (else one read): its tools written to the provider's home, the live
     view's gateway service of the layout before removed, and setup.sh run
@@ -482,10 +675,13 @@ def prepare(vm, name, cancellation=None, timeout=None):
     reach CHROME_DOMAIN. Returns whether it wrote them; raises SetupFailed
     when the setup failed, so no command runs with the provider's rights.
     ``timeout``: at most this long for the setup (the time the message has
-    left before its answer, runtime audit 2026-10-30, A5)."""
+    left before its answer, runtime audit 2026-10-30, A5). ``on_setup``:
+    called when the setup is about to run (the start's phase)."""
     from app.services.llm.provider_runtime import ProviderCancellation
     if _current(vm, name, VERSION):
         return False
+    if on_setup is not None:
+        on_setup()
     for file, data in tool_files("workbench").items():
         vm.write_file(name, f"{WORKSPACE_DIR}/{file}", data, agent=False)
     vm.delete_service(name, OLD_GATEWAY_SERVICE)
@@ -515,14 +711,21 @@ def prepare_browser(vm, name):
     return True
 
 
-def open_browser(vm, uid):
+def open_browser(vm, uid, start=None):
     """The account's browser VM, created if needed, with its tools and
     network rules up to date; its name. Until 2026-10-29 every opening set
     its rules anew, a request that waits while the VM wakes: in Prod it once
     ran into its time limit, and the browser was off for the message. The
-    rules only change with a new version, which sets them."""
+    rules only change with a new version, which sets them. ``start`` (a
+    Start) learns what the browser's start has to do: its setup on a VM made
+    just now, else how it wakes (the provider's status, a hint only: a VM
+    that just ran may say "cold" too)."""
     name = agent_vm.browser_name(uid)
-    vm.ensure(name)
+    created = vm.ensure(name)
+    if start is not None:
+        phase = "setup" if created else {"cold": "cold", "warm": "warm"}.get(getattr(vm, "statuses", {}).get(name))
+        if phase:
+            start.phase(phase)
     prepare_browser(vm, name)
     return name
 

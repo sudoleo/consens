@@ -1559,3 +1559,101 @@ def test_a_chats_folder_goes_as_the_agent_and_from_where_it_lay_before(store, fa
     agent_vm.delete_chat_vm("other", "c3", {"name": agent_vm.workspace_name("other"), "workspace": True},
                             factory=fake_vm.backend)
     assert not [call for call in fake_vm.calls if call[0] in {"ensure", "exec", "write"}]
+
+
+# --- A new account's workspace before it is needed (2026-11-02) --------------------
+
+@pytest.fixture
+def provisioning(monkeypatch):
+    """On, as in Prod (the suite's default is off, conftest.py)."""
+    monkeypatch.setenv("AGENT_WORKSPACE_PROVISION", "on")
+    monkeypatch.setattr(agent_workspace, "_provisioned", set())
+
+
+def test_a_new_accounts_first_message_makes_both_vms_in_the_background(store, fake_vm, provisioning):
+    """Prod 2026-11-02: a colleague of Max's signed up, talked to the agent,
+    then waited for the setup of both VMs (57 s for the workbench alone). Now
+    the account's first message makes them in the background: the browser
+    with its Chrome started once and told to rest, the workbench set up
+    under its base rules; the record names both first, so the account's
+    deletion finds them."""
+    thread = agent_workspace.provision(store, UID)
+    thread.join(10)
+    browser, workbench = agent_vm.browser_name(UID), agent_vm.workspace_name(UID)
+    record = agent_workspace.record(store.db, UID)
+    assert record["name"] == workbench and record["browser"] == browser and record["provider"] == "fake"
+    assert fake_vm.warmed == [browser] and fake_vm.rested == [browser] and fake_vm.requests == []
+    assert fake_vm.vms[workbench]["policy"] == agent_vm.WORKBENCH_RULES
+    assert fake_vm.vms[workbench]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
+    assert fake_vm.vms[browser]["files"][agent_workspace.VERSION_PATH] == agent_workspace.BROWSER_VERSION.encode()
+    # Its estimates (what the chat counts down meanwhile) ended with it.
+    assert agent_workspace.start_until(UID) is None
+    # Once per process and account: no second look at the record.
+    calls = len(fake_vm.calls)
+    assert agent_workspace.provision(store, UID) is None and len(fake_vm.calls) == calls
+
+
+def test_an_account_that_had_its_workspace_is_left_as_it_is(store, fake_vm, provisioning, monkeypatch):
+    """A record that names the VMs: a message, the live view or the terminal
+    opened them before. Nothing is made, nothing woken. And off is off."""
+    agent_workspace.ref(store.db, UID).set({"name": agent_vm.workspace_name(UID), "browser": agent_vm.browser_name(UID)})
+    agent_workspace.provision(store, UID).join(10)
+    assert fake_vm.vms == {} and fake_vm.warmed == []
+    monkeypatch.setenv("AGENT_WORKSPACE_PROVISION", "off")
+    assert agent_workspace.provision(store, "another-account") is None
+
+
+def test_a_messages_start_waits_for_the_setup_running_and_runs_none_of_its_own(store, fake_vm):
+    """The account's provisioning holds the workbench's setup (setup_lock):
+    the message's start waits for it, then finds the version there, so
+    setup.sh never runs twice side by side (each would undo the other's
+    rule for Chrome's download)."""
+    import threading
+    from test_agent_vm import SETUP, Agent, vm_loop
+    from app.services.agent_vm_tools import VmExecArgs
+    from app.services.llm.provider_runtime import ProviderCancellation
+    lock = agent_workspace.setup_lock(agent_vm.workspace_name(UID))
+    lock.acquire()
+    stop = ProviderCancellation()
+    done = threading.Event()
+    try:
+        loop = vm_loop(store, Agent())
+
+        def run():
+            loop.vm_tools.exec(VmExecArgs(command="ls"), cancellation=stop)
+            done.set()
+        threading.Thread(target=run, daemon=True).start()
+        assert not done.wait(.6)
+        # The provisioning's setup ends: the workbench is there at this version.
+        backend, name = fake_vm.backend(), agent_vm.workspace_name(UID)
+        backend.ensure(name, agent_vm.WORKBENCH_RULES)
+        agent_workspace.prepare(backend, name)
+    finally:
+        lock.release()
+    try:
+        assert done.wait(5)
+        assert fake_vm.server.count(SETUP) == 1
+    finally:
+        stop.cancel()
+
+
+def test_starts_say_about_when_they_end_and_the_latest_counts():
+    """What the chat and the live view count down (START_SECONDS, measured
+    in Prod): the latest of the account's starts of a VM; a start never says
+    an earlier end than it said before, and its end takes it out."""
+    uid = "starts-account"
+    now = datetime.now(timezone.utc)
+    waking = agent_workspace.Start(uid, "browser").phase("cold")
+    setting_up = agent_workspace.Start(uid, "browser").phase("setup")
+
+    def left(**kwargs):
+        until = agent_workspace.start_until(uid, ("browser",), **kwargs)
+        return None if until is None else (until - now).total_seconds()
+    assert 64 <= left() <= 66
+    assert 14 <= left(besides=setting_up) <= 16
+    assert agent_workspace.start_until(uid, ("workbench",)) is None
+    setting_up.end()
+    waking.phase("warm")
+    assert 14 <= left() <= 16
+    waking.end()
+    assert left() is None

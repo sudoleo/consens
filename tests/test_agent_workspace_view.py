@@ -99,6 +99,24 @@ def test_the_view_signs_in_with_its_first_message_and_carries_vnc_both_ways(view
     assert fake_vm.vms[BROWSER]["files"][agent_workspace.VERSION_PATH] == agent_workspace.BROWSER_VERSION.encode()
 
 
+def test_the_views_start_says_about_when_it_ends_and_ends_with_ready(view_api, fake_vm):
+    """Since 2026-11-02 the view counts the browser's start down over its
+    skeleton (start-progress.js): a VM made just now needs its setup
+    (agent_workspace.START_SECONDS), and the relay's starting carries the
+    estimate. Once ready, the start is over for everyone who waits."""
+    from datetime import datetime, timezone
+    client, _, _, _ = view_api
+    with client.websocket_connect("/agent/workspace/view") as ws:
+        ws.send_text(json.dumps({"id_token": "verified"}))
+        messages = [json.loads(ws.receive_text()) for _ in range(3)]
+        ws.receive_bytes()
+        assert agent_workspace.start_until(UID) is None
+    assert [message["state"] for message in messages] == ["connecting", "starting", "ready"]
+    left = (datetime.fromisoformat(messages[1]["until"]) - datetime.now(timezone.utc)).total_seconds()
+    assert 55 < left <= agent_workspace.START_SECONDS["setup"]
+    assert "until" not in messages[0] and "until" not in messages[2]
+
+
 def test_the_view_starts_the_tunnel_again_for_the_agents_app(view_api, fake_vm, monkeypatch):
     """localhost in the view keeps reaching the agent's server after its run
     (agent_tunnel.resume, since 2026-10-29)."""

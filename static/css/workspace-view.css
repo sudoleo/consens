@@ -443,7 +443,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 }
 
 /* noVNC's own screen element fills the area and scales the picture. */
-.workspace-view-screen:not(.workspace-view-terminal) > div:not(.workspace-view-cover):not(.workspace-view-skeleton) {
+.workspace-view-screen:not(.workspace-view-terminal) > div:not(.workspace-view-cover):not(.workspace-view-skeleton):not(.workspace-view-progress) {
   position: absolute;
   inset: 0;
 }
@@ -506,6 +506,32 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 .workspace-view-skeleton-gap {
   display: block;
   height: 10px;
+}
+
+/* The browser's start counted down over its skeleton (start-progress.js,
+   workspace-view.js startBar): centred on a patch of the skeleton's own
+   tone, so the pulsing lines stay out of the bar's way. Gone with the
+   skeleton. */
+.workspace-view-screen > .workspace-view-progress {
+  position: absolute;
+  z-index: 3;
+  top: 42%;
+  left: 50%;
+  width: min(76%, 300px);
+  padding: 22px 26px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--radius-lg);
+  background: var(--raise);
+  justify-items: center;
+  text-align: center;
+}
+
+.workspace-view-screen:not(.is-loading) > .workspace-view-progress {
+  display: none;
+}
+
+.workspace-view-progress .start-progress-track {
+  width: 100%;
 }
 
 @media (prefers-reduced-motion: no-preference) {

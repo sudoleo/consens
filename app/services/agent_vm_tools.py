@@ -587,6 +587,9 @@ class VMSession:
         # What else ends with the message (the browser's rest, agent_browser).
         self._on_close = []
         self.closer = None
+        # The running tool's report on this thread (VMTools._guarded): a call
+        # that waits for the start says how long it should still take (_wait).
+        self.reporting = threading.local()
 
     # --- Start ------------------------------------------------------------------
 
@@ -599,7 +602,7 @@ class VMSession:
         job = self._job("bench" if bench else "lease", cancellation)
         if job is None:
             return
-        self._wait(job, cancellation)
+        self._wait(job, cancellation, kinds=("workbench",) if bench else ())
         error = job.error
         if error is None:
             self.succeeded()
@@ -635,15 +638,31 @@ class VMSession:
     def _answer_left(self):
         return getattr(self.loop, "answer_time_left", lambda: None)()
 
-    def _wait(self, job, cancellation):
+    def _wait(self, job, cancellation, kinds=()):
         """Until ``job`` is done, at most until a command would no longer fit
-        before the answer (VM_NO_TIME; the job goes on), and never past Stop."""
+        before the answer (VM_NO_TIME; the job goes on), and never past Stop.
+        Meanwhile the waiting call's step says about when the start of the
+        account's ``kinds`` ends (``starting_until``,
+        agent_workspace.start_until), for the chat to count down."""
+        from app.services import agent_workspace
         left = self._answer_left()
         deadline = None if left is None else time.monotonic() + max(0.0, left - MIN_COMMAND_SECONDS)
-        while not job.done.wait(.1):
-            cancellation.raise_if_cancelled()
-            if deadline is not None and time.monotonic() >= deadline:
-                raise ValueError(VM_NO_TIME)
+        report = getattr(self.reporting, "report", None) if kinds else None
+        told = None
+        try:
+            while not job.done.wait(.1):
+                cancellation.raise_if_cancelled()
+                if report is not None:
+                    until = agent_workspace.start_until(self.loop.uid, kinds)
+                    if until is not None and until != told:
+                        told = until
+                        report({"starting_until": until.isoformat()})
+                if deadline is not None and time.monotonic() >= deadline:
+                    raise ValueError(VM_NO_TIME)
+        finally:
+            # The step goes on as itself (a file's write has no start of its own to say).
+            if told is not None:
+                report({"starting_until": None})
 
     def _took(self, phase, since):
         with self._lock:
@@ -747,33 +766,50 @@ class VMSession:
                 raise lease.error
         backend, claim = self.backend, self.claim
         since = time.monotonic()
+        # What the user is told while a call waits for this (_wait), and
+        # the account's provisioning, which this waits for when it sets the
+        # workbench up right now (agent_workspace.setup_lock).
+        start = agent_workspace.Start(self.loop.uid, "workbench")
+        setup = agent_workspace.setup_lock(self.name)
         try:
             self._go_on(cancellation)
-            with self._lock:
-                self.domains = list(dict.fromkeys([*claim.domains, *self.domains]))
-                domains, self._bench_ran, self._policy = list(self.domains), True, None
-            rules = agent_domains.rules(domains)
-            key = agent_workspace.policy_key(rules)
-            if claim.policy == key and not agent_workspace.policy_unsure(self.name):
-                if backend.ensure(self.name):
-                    # Made anew: no rules yet.
-                    backend.set_policy(self.name, rules)
-            else:
-                backend.ensure(self.name, rules)
-            with self._lock:
-                self._policy = key
-            status = getattr(backend, "statuses", {}).get(self.name)
-            if status:
-                self.cold["workbench"] = status == "cold"
-            since = self._took("rules", since)
-            self._go_on(cancellation)
-            # A setup widens the rules for a moment (agent_workspace._open_for_setup):
-            # unknown until it is through.
-            with self._lock:
-                self._policy = None
-            agent_workspace.prepare(backend, self.name, cancellation, timeout=self._answer_left())
-            with self._lock:
-                self._policy = key
+            if not setup.acquire(blocking=False):
+                while not setup.acquire(timeout=.2):
+                    self._go_on(cancellation)
+                # The account's provisioning set the workbench up meanwhile (its own phase in the log).
+                since = self._took("setup_wait", since)
+            try:
+                with self._lock:
+                    self.domains = list(dict.fromkeys([*claim.domains, *self.domains]))
+                    domains, self._bench_ran, self._policy = list(self.domains), True, None
+                rules = agent_domains.rules(domains)
+                key = agent_workspace.policy_key(rules)
+                if claim.policy == key and not agent_workspace.policy_unsure(self.name):
+                    created = backend.ensure(self.name)
+                    if created:
+                        # Made anew: no rules yet.
+                        backend.set_policy(self.name, rules)
+                else:
+                    created = backend.ensure(self.name, rules)
+                with self._lock:
+                    self._policy = key
+                status = getattr(backend, "statuses", {}).get(self.name)
+                if status:
+                    self.cold["workbench"] = status == "cold"
+                if created or status == "cold":
+                    start.phase("setup" if created else "cold")
+                since = self._took("rules", since)
+                self._go_on(cancellation)
+                # A setup widens the rules for a moment (agent_workspace._open_for_setup):
+                # unknown until it is through.
+                with self._lock:
+                    self._policy = None
+                agent_workspace.prepare(backend, self.name, cancellation, timeout=self._answer_left(),
+                                        on_setup=lambda: start.phase("setup" if created else "update"))
+                with self._lock:
+                    self._policy = key
+            finally:
+                setup.release()
             since = self._took("tools", since)
             self._go_on(cancellation)
             opened = agent_workspace.open_chat(backend, self.name, self.loop.chat_id, title=claim.title,
@@ -818,6 +854,8 @@ class VMSession:
         except Exception as exc:
             _unexpected(exc, "start")
             raise _StartFailed(f"bench: {type(exc).__name__}") from None
+        finally:
+            start.end()
 
     def _checkpoint_start(self):
         with self._lock:
@@ -1213,10 +1251,12 @@ class VMTools:
         pass as they are."""
         execute = tool.execute
         loop = self.loop
+        reporting = self.session.reporting
 
         def guarded(args, *, cancellation, **kwargs):
             from app.services.agent_provider_limits import AgentRunInterrupted
             from app.services.llm.provider_runtime import AnalysisBudgetExceeded
+            reporting.report = kwargs.get("report")
             try:
                 return execute(args, cancellation=cancellation, **kwargs)
             except (ProviderCancelled, ValueError, TypeError, AnalysisBudgetExceeded, AgentRunInterrupted):
@@ -1226,6 +1266,8 @@ class VMTools:
                                 safe_exception(exc), log_tag(loop))
                 report_server_exception(exc, where=f"agent_vm.{tool.name}", phase="tool")
                 raise ValueError(TOOL_FAILED) from None
+            finally:
+                reporting.report = None
         return dataclasses.replace(tool, execute=guarded)
 
     def prewarm(self, *, bench=True):

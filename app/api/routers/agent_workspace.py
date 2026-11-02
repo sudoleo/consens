@@ -198,15 +198,16 @@ def _sign_in(token):
     return uid if allowed(uid) else None
 
 
-def _open(uid, seconds):
+def _open(uid, seconds, start=None):
     """The browser VM for the view (created if nothing used it yet, its
     tools up to date): the exec address of its relay on the provider's API,
-    for at most ``seconds`` (the VM ends the relay by itself then)."""
+    for at most ``seconds`` (the VM ends the relay by itself then).
+    ``start`` (agent_workspace.Start) learns what the browser's start has to do."""
     store = _store()
     record = agent_workspace.record_for_view(store, uid, provider="sprites")
     vm = _backend()
     try:
-        name = agent_workspace.open_browser(vm, uid)
+        name = agent_workspace.open_browser(vm, uid, start)
         # The agent's app on localhost goes on working in the view after
         # its run and a restart of the server, with the servers it started
         # since (agent_tunnel.py).
@@ -255,6 +256,13 @@ async def connect_upstream(url):
 
 async def _state(websocket, state, **fields):
     await websocket.send_text(json.dumps({"state": state, **fields}))
+
+
+def _until(uid):
+    """About when the browser's start ends (agent_workspace.start_until), for
+    the view's progress bar (since 2026-11-02): {"until": ISO time} or {}."""
+    until = agent_workspace.start_until(uid, ("browser",))
+    return {"until": until.isoformat()} if until is not None else {}
 
 
 def _time_left(uid):
@@ -482,11 +490,16 @@ async def workspace_view(websocket: WebSocket):
     uid, seconds, _, day_left = admitted
     await _state(websocket, "connecting", **({} if day_left is None else {"left_seconds": day_left}))
     started = time.monotonic()
+    # The browser's start as the view waits for it: the relay's states setup
+    # and starting carry about when it ends ("until", since 2026-11-02),
+    # also that of the account's provisioning when it sets it up right now.
+    start = agent_workspace.Start(uid, "browser")
     try:
-        url = await asyncio.to_thread(_open, uid, seconds)
+        url = await asyncio.to_thread(_open, uid, seconds, start)
         view_id = await asyncio.to_thread(agent_workspace.claim_view, _store(), uid, seconds)
         upstream = await connect_upstream(url)
     except Exception as exc:
+        start.end()
         logging.warning("Agent workspace view unavailable category=%s", safe_exception(exc))
         await _state(websocket, "error")
         await websocket.close(code=1011)
@@ -527,8 +540,16 @@ async def workspace_view(websocket: WebSocket):
                     state = relay_line(uid, line)
                     if state == "error":
                         logging.warning("Agent workspace view relay error")
+                    # The relay's setup may wait for one already running (the
+                    # account's provisioning): that one's estimate stands.
+                    if state == "setup" and agent_workspace.start_until(uid, ("browser",), besides=start) is None:
+                        start.phase("setup")
+                    elif state == "starting":
+                        start.phase("chrome")
+                    elif state in {"ready", "error"}:
+                        start.end()
                     if state in {"setup", "starting", "ready", "error"}:
-                        await _state(websocket, state)
+                        await _state(websocket, state, **(_until(uid) if state in {"setup", "starting"} else {}))
                 # A line longer than any the relay writes is dropped, never kept growing.
                 if len(pending) > STATE_LINE_BYTES:
                     pending = b""
@@ -539,7 +560,10 @@ async def workspace_view(websocket: WebSocket):
         ending.setdefault("by", "upstream")
         ending.setdefault("upstream_code", getattr(upstream, "close_code", None))
 
-    await _carry(websocket, upstream, uid, "view", view_id, seconds, started, to_vm, to_browser, ending, meter)
+    try:
+        await _carry(websocket, upstream, uid, "view", view_id, seconds, started, to_vm, to_browser, ending, meter)
+    finally:
+        start.end()
 
 
 # Who steers the browser, for the safety rules: until when each account's

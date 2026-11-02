@@ -536,7 +536,7 @@ def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypat
     again for another 40 s before it said so. Now it says so at once."""
     opened = []
 
-    def refuse(vm, uid):
+    def refuse(vm, uid, start=None):
         opened.append(uid)
         raise agent_vm.VMUnavailable("read: HTTP 502")
     monkeypatch.setattr(agent_workspace, "open_browser", refuse)
@@ -649,3 +649,39 @@ def test_a_refused_download_names_the_way_a_picture_comes_without_the_browser(st
     with pytest.raises(ValueError) as plain:
         call(browser, action="download", url="https://upload.wikimedia.org/thumb/cafe.jpg/1280px-cafe.jpg")
     assert str(plain.value) == "The download failed: HTTP 429."
+
+
+def test_the_first_call_says_about_when_the_browsers_start_ends_while_it_waits(store, fake_vm, monkeypatch):
+    """Since 2026-11-02 the chat counts a start down (start-progress.js)
+    instead of one word for a minute and more: the waiting call's step
+    carries the latest estimate of the account's starts, a new one when it
+    changes, and none once the browser runs."""
+    import threading
+    monkeypatch.setattr(agent_browser, "WARM_POLL_SECONDS", .05)
+    loop, browser = tools(store)
+    start = agent_workspace.Start(UID, "browser").phase("setup")
+    release = threading.Event()
+
+    class Warming:
+        ok, refused = True, None
+
+        def is_alive(self):
+            return not release.is_set()
+
+        def join(self, seconds=None):
+            release.wait(seconds)
+    browser.warming = Warming()
+    reports = []
+
+    def report(fields):
+        reports.append(fields)
+        if len(reports) == 1:
+            # The provisioning's setup turns out longer: a new estimate.
+            start.phase("setup")
+            threading.Timer(.15, lambda: (start.end(), release.set())).start()
+    browser.call(BrowserArgs(action="read"), cancellation=ProviderCancellation(), report=report)
+    told = [fields["starting_until"] for fields in reports if "starting_until" in fields]
+    assert told[0] and told[-1] is None and len(told) >= 2
+    # The start's estimate before the browser began; then the call's own clock.
+    assert reports.index({"starting_until": None}) < next(index for index, fields in enumerate(reports)
+                                                          if "started_at" in fields)

@@ -67,11 +67,11 @@ class FakeFit {
   fit() { if (this.size) Object.assign(this.term, this.size); }
 }
 
-function setup({ clipboard, prepare } = {}) {
+function setup({ clipboard, prepare, progress } = {}) {
   FakeSocket.last = null;
   FakeRFB.made = [];
   FakeTerminal.made = [];
-  const app = loadScripts(["static/js/workspace-view.js"], {
+  const app = loadScripts([...(progress ? ["static/js/start-progress.js"] : []), "static/js/workspace-view.js"], {
     body: '<button id="composerWorkspaceButton"></button><button id="attachWorkspaceOption"></button>'
       + '<div id="agentWorkspaceSettings"></div>',
     before(window) {
@@ -121,6 +121,38 @@ describe("the workspace's loading and terminal (2026-10-28)", () => {
       const status = env.document.querySelector(".workspace-view-status");
       expect(status.textContent).toBe("Starting your workspace. The first start can take a minute.");
       socket.deliver(JSON.stringify({ state: "ready" }));
+      expect(screen.classList.contains("is-loading")).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("counts the browser's start down over its skeleton and fills the bar once it is ready (2026-11-02)", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup({ progress: true });
+      // The bar's clock (start-progress.js): moved on by hand.
+      let now = Date.parse("2026-11-02T15:37:02Z");
+      env.window.Date.now = () => now;
+      const socket = await opened(env);
+      const screen = env.document.querySelector("#workspacePane-browser");
+      const bar = screen.querySelector(".workspace-view-progress");
+      socket.deliver(JSON.stringify({ state: "connecting" }));
+      // The relay sets the browser up: about when that ends.
+      socket.deliver(JSON.stringify({ state: "setup", until: new Date(now + 65_000).toISOString() }));
+      expect(env.document.querySelector(".workspace-view-status").textContent)
+        .toBe("Setting up the browser. This happens once.");
+      now += 2_000;
+      await vi.advanceTimersByTimeAsync(300);
+      expect(bar.hidden).toBe(false);
+      expect(bar.querySelector(".start-progress-left").textContent).toBe("About a minute left");
+      // Chrome starts: the estimate stands.
+      socket.deliver(JSON.stringify({ state: "starting", until: new Date(now + 63_000).toISOString() }));
+      now += 30_000;
+      await vi.advanceTimersByTimeAsync(300);
+      expect(bar.querySelector(".start-progress-left").textContent).toBe("About 35 seconds left");
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      expect(bar.getAttribute("aria-valuenow")).toBe("100");
       expect(screen.classList.contains("is-loading")).toBe(false);
     } finally {
       vi.useRealTimers();
@@ -191,7 +223,7 @@ describe("the workspace view", () => {
     expect(socket.sent).toEqual([JSON.stringify({ id_token: "token" })]);
     socket.deliver(JSON.stringify({ state: "setup" }));
     const status = env.document.querySelector(".workspace-view-status");
-    expect(status.textContent).toBe("Setting up the browser (once, about a minute)…");
+    expect(status.textContent).toBe("Setting up the browser. This happens once.");
     expect(env.document.body.classList.contains("workspace-view-open")).toBe(true);
     expect(env.workspace.isOpen()).toBe(true);
   });

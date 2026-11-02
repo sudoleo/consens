@@ -1122,7 +1122,27 @@ Browser-VM mit Chrome, Sperre und Werkbank, vorher Tageszeit und Zustand
 geprüft, Stop beendet ihn); der erste Aufruf wartet nur auf den Rest. Eine
 Nachricht, die offen beginnt, weckt so nur den Browser; Werkbank und Sperre
 kommen mit ihrem ersten Aufruf. Ein Start, den die Nachricht nie nutzte, gibt
-die Sperre mit ihrem Ende zurück. Die Aktivität zeigt „Arbeitsplatz geöffnet · <Aufgabe>“, die
+die Sperre mit ihrem Ende zurück.
+
+**Neues Konto, Start mit Restzeit (seit 2026-11-02):** Eine Kollegin von Max
+wartete beim ersten Versuch auf das Einrichten beider VMs (Werkbank allein
+57 s, Browser mit Chrome rund 60 s). Seitdem richtet die erste Nachricht eines
+Kontos an den Agenten, das noch keinen Arbeitsplatz hat (der Datensatz nennt
+keine VM), beide VMs im Hintergrund ein (`agent_workspace.provision`, aus
+`routers/agent.py`, sobald die Nachricht eine VM haben darf): Datensatz zuerst
+(die Kontolöschung findet sie), Browser-VM mit `warm` und `rest`, Werkbank mit
+`open_workbench`, einmal pro Prozess und Konto, Notaus
+`AGENT_WORKSPACE_PROVISION=off` (Standard der Testsuite). Ein Start der
+Nachricht wartet auf ein laufendes Setup der Werkbank, statt ein zweites
+anzustoßen (`agent_workspace.setup_lock`); der Browser hat dafür seine Sperre
+auf der VM. Was ein Start noch braucht, schätzt der Server aus Prod-Werten
+(`START_SECONDS`: Setup 65 s, neue Version 10 s, kalt 15 s, warm 5 s, Chrome in
+der Ansicht 8 s; `Start`, `start_until`): Ein Schritt, der auf den Start wartet,
+meldet `starting_until` (`BrowserTools._await_warm`, `VMSession._wait`), die
+Live-Ansicht `until`. Chat und Live-Ansicht zählen das als schmalen Balken mit
+„Noch etwa 40 Sekunden“ herunter (`start-progress.js`); er erscheint erst nach
+1,2 s, läuft nie rückwärts und steht nach der Schätzung bei „Gleich fertig…“,
+bis der Start fertig ist. Die Aktivität zeigt „Arbeitsplatz geöffnet · <Aufgabe>“, die
 Prüfer sehen den Schritt im Arbeitsprotokoll. `open_workspace` bringt keinen
 Fremdinhalt (`OWN_CONTENT_TOOLS`).
 

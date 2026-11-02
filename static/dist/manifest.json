@@ -1,5 +1,5 @@
 {
-  "sources": "635fc72b60cd",
+  "sources": "ab0359376e71",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -125,6 +125,7 @@
     "static/js/sidebar-quota.js",
     "static/js/sidebar-resize.js",
     "static/js/sources.js",
+    "static/js/start-progress.js",
     "static/js/stream-reveal.js",
     "static/js/tab-status.js",
     "static/js/task-checks.js",
@@ -485,20 +486,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.9681263700ac.js",
+      "src": "/static/dist/app.e1bffe61a347.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.a66610aa9113.css",
+    "app": "/static/dist/app.9049cb442db3.css",
     "landing": "/static/dist/landing.9ae4f1c3bfe5.css",
     "public": "/static/dist/public.ae52e9081654.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "c5471b826f57",
+      "hash": "4858fcabec24",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -571,10 +572,10 @@
     }
   },
   "previous_assets": [
+    "app.a66610aa9113.css",
     "app.182d50ba87ea.css",
-    "app.e47ca5bec854.css",
+    "app.9681263700ac.js",
     "app.fdc021c9828f.js",
-    "app.44d395cedb74.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.59bc9450805f.js",

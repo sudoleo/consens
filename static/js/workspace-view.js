@@ -113,7 +113,8 @@
   const STATES = {
     connecting: 'Connecting to the workspace…',
     slow: 'Starting your workspace. The first start can take a minute.',
-    setup: 'Setting up the browser (once, about a minute)…',
+    // How long it takes stands under the bar (startBar).
+    setup: 'Setting up the browser. This happens once.',
     starting: 'Starting the browser…',
     error: 'The workspace is not reachable right now. Try again in a moment.',
     ended: 'The view closed after an hour. Open it again to go on.',
@@ -459,6 +460,8 @@
       turn, turnSays, turnNote, turnRequest, turnButton, isIdle: false, idle: null, wantControl: false,
       restart, resizer, socket: null, rfb: null, rfbGone: null, RFB: null, holder: 'agent', refresh: null, width: 0,
       tab: 'browser', said: { browser: STATES.connecting, terminal: TERMINAL.connecting }, sayAs: {}, slow: null,
+      // The start's bar (startBar), new with each connection.
+      progress: null,
       // The connection (V2, V4): trying, its tries and timer, why it ended for good, paused while hidden.
       connecting: false, again: false, retries: 0, retry: null, readyAt: 0, final: null, paused: false,
       pausing: null, away: null, dayLeft: null, clock: null, full: false, fieldValue: '',
@@ -500,6 +503,18 @@
   function loading(key, on) {
     if (!view) return;
     (key === 'terminal' ? view.terminal : view.screen).classList.toggle('is-loading', on);
+  }
+  // The start's bar over the skeleton (start-progress.js, since 2026-11-02),
+  // new for each connection: the server's states carry about when the
+  // browser's start ends ("until"), and the bar counts it down until
+  // "ready" fills it.
+  function startBar() {
+    if (!view || !App.startProgress) return;
+    view.progress?.stop();
+    view.progress?.node.remove();
+    view.progress = App.startProgress.create();
+    view.progress.node.classList.add('workspace-view-progress');
+    view.screen.append(view.progress.node);
   }
   // A start that takes long says so once, while it still connects.
   function watchSlow() {
@@ -916,6 +931,7 @@
     const socket = new WebSocket(`${scheme}//${location.host}/agent/workspace/view`);
     view.socket = socket;
     view.connecting = true;
+    startBar();
     socket.binaryType = 'arraybuffer';
     socket.onopen = async () => {
       try {
@@ -930,6 +946,7 @@
       let message = null;
       try { message = JSON.parse(event.data); } catch (error) { return; }
       const state = message?.state;
+      if (message?.until) view.progress?.set(message.until);
       if (state !== 'ready') {
         if (state === 'connecting') {
           setDayLeft(Number(message.left_seconds ?? NaN));
@@ -941,6 +958,7 @@
         return;
       }
       clearTimeout(view.slow);
+      view.progress?.done();
       loading('browser', false);
       view.connecting = false;
       view.again = false;

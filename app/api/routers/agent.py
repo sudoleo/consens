@@ -635,6 +635,11 @@ def run_agent(request: Request, payload: AgentRequest):
                          domains=preferences.vm == "on" and domains_allowed(uid),
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
+        if loop.vm_tools is not None:
+            # A new account's workspace is made while it talks to the agent,
+            # before a call needs it (agent_workspace.provision).
+            from app.services import agent_workspace
+            agent_workspace.provision(store, uid)
         if loop.comparison is not None:
             loop.comparison.auditor.allowance = _read_or_none(reads["allowance"])
         # Every view follows the run through this buffer (POST tail, GET .../live).

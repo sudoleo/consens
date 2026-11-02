@@ -195,6 +195,10 @@
         },
         "static/js/consensus-anchor.js",
         "static/js/consensus-insights.js",
+        {
+          "file": "static/js/start-progress.js",
+          "note": "App.startProgress: the bar and time left while the workspace starts. Before agent-activity.js and workspace-view.js, which build it."
+        },
         "static/js/agent-activity.js",
         "static/js/request-deadline.js",
         {

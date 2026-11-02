@@ -311,6 +311,19 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Browser übernehmen: das Terminal tippt weiter.
       Automatisiert: `test_agent_workspace.py`, `test_agent_workspace_view.py`,
       `workspace-view.test.mjs`.
+- [ ] Neues Konto und Start mit Restzeit (2026-11-02, echter Provider):
+      Neues Konto anlegen, eine beliebige Frage an den Agenten stellen.
+      Render-Log binnen ~2 min: `Agent workspace provisioned browser=… workbench=…`.
+      Danach die Live-Ansicht öffnen: Das Bild kommt in wenigen Sekunden, ohne
+      „Der Browser wird eingerichtet“. Dann „Öffne example.com“: Der erste
+      Browser-Schritt braucht höchstens den Weckstart. Gegenprobe mit einem
+      zweiten neuen Konto, das sofort „Öffne example.com“ schreibt: unter
+      „Der Browser startet…“ steht ein schmaler Balken mit „Noch etwa …“,
+      der nie rückwärts läuft und mit dem Seitenaufruf verschwindet. Die
+      Live-Ansicht zeigt beim Einrichten denselben Balken über dem Skeleton.
+      Automatisiert: `test_agent_workspace.py` (provision, Start),
+      `test_agent_browser.py` (starting_until), `start-progress.test.mjs`,
+      `workspace-view.test.mjs`.
 - [ ] Arbeitsplatz nach dem Laufzeit-Audit (2026-10-30,
       `docs/agent-workspace-runtime-audit-2026-10-30.md`; Konto mit
       Arbeitsplatz, echter Provider, nur an echter Sprite und echtem

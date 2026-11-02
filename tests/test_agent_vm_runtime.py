@@ -427,10 +427,14 @@ def test_a_browser_call_shares_its_time_between_the_start_and_the_helper(store, 
     browser = loop.vm_tools._browser_tools(agent_browser.BrowserTools)
 
     class Warming:
-        ok, refused = True, None
+        ok, refused, alive = True, None, True
+
+        def is_alive(self):
+            return self.alive
 
         def join(self, seconds=None):
             time.sleep(.3)
+            self.alive = False
     timeouts, helper = [], agent_browser.BrowserTools._helper
 
     def recording(self, request, timeout, cancellation, backend=None, counted=True):

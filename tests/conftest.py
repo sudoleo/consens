@@ -48,6 +48,20 @@ def _no_real_telegram_alerts(monkeypatch):
     telegram_notifier.reset_critical_state()
 
 
+@pytest.fixture(autouse=True)
+def _no_workspace_provisioning(monkeypatch):
+    """A new account's first message to the agent makes its workspace in the
+    background (agent_workspace.provision). The suite's fake VMs count their
+    calls, so it runs only where a test turns it on (test_agent_workspace.py).
+    The starts' estimates (agent_workspace.start_until) begin empty and the
+    setup locks new, also after a test whose view, warm-up or start still
+    ran on a thread of its own when it ended (every test's account is UID)."""
+    monkeypatch.setenv("AGENT_WORKSPACE_PROVISION", "off")
+    from app.services import agent_workspace
+    agent_workspace._starts.clear()
+    agent_workspace._setup_locks.clear()
+
+
 @pytest.fixture
 def deepseek_default_agent(monkeypatch):
     """Agent mechanics tests (costs, replay, ordering) were written against

@@ -618,6 +618,7 @@
   const calmBrowser = { read: 'Reading the page…', text: 'Reading the page…', find: 'Reading the page…',
     screenshot: 'Looking at the page…', download: 'Downloading a file…', upload: 'Uploading a file…' };
   function calmStep(item) {
+    if (starting(item)) return item.name === 'browser' ? 'Starting the browser…' : 'Starting the workspace…';
     if (calmTools[item.name]) return calmTools[item.name];
     if (calmFiles[item.name]) {
       const file = String(item.path || '').split(/[\\/]/).filter(Boolean).at(-1) || '';
@@ -922,6 +923,15 @@
   // the field is done: it never gets this far.
   const timedTools = new Set(['vm_exec', 'vm_install_packages', 'browser']);
   const QUIET_MS = 30_000;
+  // A workspace step that waits for the workspace's start says about when
+  // that ends (``starting_until``: agent_browser._await_warm,
+  // VMSession._wait), and a bar under the step counts it down
+  // (start-progress.js, since 2026-11-02: a first start took a minute and
+  // more with one word, and a new user gave up).
+  function starting(item) {
+    return Boolean(item && item.status === 'running' && !item.started_at && item.starting_until
+      && vmTools.has(item.name));
+  }
   function sinceStart(item, now) {
     const server = Date.parse(item.started_at);
     // The server's clock while it agrees with this one, else when it came here.
@@ -1362,6 +1372,15 @@
     App.workspaceView?.agentStep?.(line);
   }
 
+  // The bar under a step that waits for the workspace's start (starting);
+  // its own timer counts on between reports and stops once it is gone.
+  function startView() {
+    const progress = App.startProgress.create();
+    progress.node.classList.add('agent-start-progress');
+    progress.node._progress = progress;
+    return progress.node;
+  }
+
   function userNote(className, text) {
     const p = document.createElement('p');
     p.className = className;
@@ -1642,6 +1661,11 @@
         else if (thought) lines.push({ id: 'calm-thought', kind: 'progress', calm: true, text: pace(view, 'calm-thought', thought, THOUGHT_DWELL_MS) });
       }
     }
+    // The workspace's start, counted down right under the step that waits for it.
+    if (running && !held && !reconnecting && starting(activeTool) && App.startProgress) {
+      const at = lines.findIndex(item => item.id === 'calm-status' || item.id === `vm:${activeTool.id}`);
+      lines = [...lines.slice(0, at + 1), { id: 'start-progress', kind: 'start', item: activeTool }, ...lines.slice(at + 1)];
+    }
     // Like ChatGPT/Claude, the progress lines give way the moment the answer
     // starts: at that point nothing stands below them yet. Kept until the
     // run ended, their collapse pulled the finished answer up under the eye.
@@ -1689,6 +1713,7 @@
         if (!p) {
           p = item.kind === 'vm' ? stepView('agent-vm', item.item) : item.kind === 'hold' ? holdView('agent-hold-step')
             : item.kind === 'user' ? userNote('agent-user-note', item.text)
+            : item.kind === 'start' ? startView()
             : document.createElement(item.kind === 'progress' ? 'p' : 'div');
           view.previewNodes.set(item.id, p);
           if (item.kind === 'review') {
@@ -1703,9 +1728,11 @@
           previewChanged = true;
           if (!view.details.open) reveal(p);
         }
-        if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'user' || item.kind === 'hold') {
+        if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'user' || item.kind === 'hold'
+          || item.kind === 'start') {
           if (item.kind === 'vm') updateVm(p, item.item);
           if (item.kind === 'hold') updateHold(p, item.item);
+          if (item.kind === 'start') p._progress.set(item.item.starting_until);
           place(item, p);
           continue;
         }

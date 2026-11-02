@@ -43,7 +43,9 @@ first call took a median 10 s and up to 99 s, every later one 1.9 s.
 Each call's activity says when the browser itself began (``started_at``,
 after the start of the workspace) and how long the call took
 (``duration_ms``), so the chat tells a starting workspace from a long
-action (runtime audit V3, I4). At the message's end a browser it used is
+action (runtime audit V3, I4); while the first call waits for the
+browser's start, about when that ends (``starting_until``, since
+2026-11-02), which the chat counts down. At the message's end a browser it used is
 told to rest (the helper's action ``rest``): its VM sleeps after two
 minutes instead of ten (K2).
 """
@@ -113,6 +115,8 @@ BROWSER_INTERRUPTED = ("The connection to the browser broke off during this call
 BROWSER_NOT_STARTED = "The browser's computer did not start just now; nothing happened in it."
 # The helper's rest at the message's end (K2): its own short time, never the message's.
 REST_SECONDS = 20
+# How often the first call, waiting for the browser's start, looks for a new estimate of its end.
+WARM_POLL_SECONDS = 0.5
 NO_PICTURES = "Your model cannot look at pictures: read the page with the actions read or text."
 # What can bring the picture of the page after it (screenshot_after, since
 # 2026-10-29): the actions that change the page, and wait. Prod the same
@@ -303,6 +307,24 @@ def required(args):
         raise ValueError("show goes with the action screenshot or with screenshot_after.")
 
 
+def helper(backend, name, request, timeout, cancellation):
+    """browser.py's run for ``request`` (a dict, on stdin) on the browser VM
+    ``name``: its stdout and the command's outcome. A fixed command with the
+    login environment (python3 and Playwright in the provider's user's
+    folders), never a shell of the agent's."""
+    from app.services import agent_workspace
+    out = bytearray()
+
+    def keep(stream, chunk):
+        if stream == "stdout" and len(out) <= ANSWER_BYTES:
+            out.extend(chunk)
+    outcome = backend.run(
+        name, agent_vm.wrapped_command(f"exec python3 {agent_workspace.BROWSER_HELPER}", timeout, False),
+        cwd=agent_vm.SERVER_HOME, timeout=timeout, on_output=keep, cancellation=cancellation,
+        input=json.dumps(request).encode())
+    return bytes(out), outcome
+
+
 def preview_url(value):
     """The helper's preview (base64) as a ``data:`` URL of a JPEG for the
     page's card, or "": anything else, or larger than PREVIEW_BYTES, is no
@@ -385,12 +407,14 @@ class BrowserTools:
 
         def run():
             backend = None
+            # What the user is told while the first call waits (_await_warm).
+            start = agent_workspace.Start(uid, "browser")
             try:
                 backend = session._factory()
                 if backend is None:
                     return
                 try:
-                    agent_workspace.open_browser(backend, uid)
+                    agent_workspace.open_browser(backend, uid, start)
                 except agent_vm.VMUnavailable as exc:
                     thread.refused = exc
                     raise
@@ -403,6 +427,7 @@ class BrowserTools:
                 # Anything else: the call then opens it itself, as before.
                 logging.info("Agent browser warm-up failed category=%s", safe_exception(exc))
             finally:
+                start.end()
                 if backend is not None:
                     try:
                         backend.close()
@@ -412,6 +437,29 @@ class BrowserTools:
         thread.ok, thread.refused = False, None
         thread.start()
         return thread
+
+    def _await_warm(self, warming, deadline, report):
+        """Waits for the warm-up, at most until ``deadline`` (monotonic).
+        Meanwhile the step says about when the browser's start ends
+        (``starting_until``, the latest of the account's starts:
+        agent_workspace.start_until), and the chat counts it down (since
+        2026-11-02; before, it said "Starting the workspace…" for up to a
+        minute and more)."""
+        from app.services import agent_workspace
+        told = None
+        try:
+            while warming.is_alive():
+                until = agent_workspace.start_until(self.vm.loop.uid, ("browser",))
+                if until is not None and until != told:
+                    told = until
+                    report({"starting_until": until.isoformat()})
+                rest = deadline - time.monotonic()
+                if rest <= 0:
+                    return
+                warming.join(min(WARM_POLL_SECONDS, rest))
+        finally:
+            if told is not None:
+                report({"starting_until": None})
 
     def _rest(self):
         """The message ended: the helper shortens the browser VM's wake hold
@@ -440,23 +488,12 @@ class BrowserTools:
         """The helper's answer for ``request`` (a dict) and its seconds, which
         count as VM time unless not ``counted`` (the rest after the message)."""
         session = self.vm.session
-        out = bytearray()
-
-        def keep(stream, chunk):
-            if stream == "stdout" and len(out) <= ANSWER_BYTES:
-                out.extend(chunk)
-        from app.services import agent_workspace
-        # A fixed command with the login environment (python3 and Playwright
-        # in the provider's user's folders); the request goes in on stdin.
-        outcome = (backend or session.backend).run(
-            self.name, agent_vm.wrapped_command(f"exec python3 {agent_workspace.BROWSER_HELPER}", timeout, False),
-            cwd=agent_vm.SERVER_HOME, timeout=timeout, on_output=keep, cancellation=cancellation,
-            input=json.dumps(request).encode())
+        out, outcome = helper(backend or session.backend, self.name, request, timeout, cancellation)
         if counted:
             with session._lock:
                 session.seconds += outcome.seconds
         try:
-            answer = json.loads(bytes(out).decode("utf-8"))
+            answer = json.loads(out.decode("utf-8"))
         except ValueError:
             answer = None
         if not isinstance(answer, dict):
@@ -614,7 +651,7 @@ class BrowserTools:
         try:
             if not self.ready:
                 if warming is not None:
-                    warming.join(max(0.0, deadline - time.monotonic()))
+                    self._await_warm(warming, deadline, report)
                     if warming.refused is not None:
                         raise self._unavailable(warming.refused, BROWSER_NOT_STARTED)
                 if deadline - time.monotonic() < MIN_COMMAND_SECONDS:
