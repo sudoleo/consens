@@ -1162,7 +1162,11 @@ Staukontrolle tastet sich heran); mit 60 ms 15–23. Ohne die Grenze kamen über
 120 Updates bei 10 MB/s. Eine VM von vorher installiert es einmal nach
 (`setup-done-2`, an einer Test-Sprite mit Umbau und Neustart von Chrome 8 s,
 der Tab blieb), ihr Xvfb, x11vnc und openbox machen Platz, nie unter `--keep`;
-eine neue VM ist wie vorher nach gut 70 s fertig. Einfügen tippt weiter exakt
+eine neue VM ist wie vorher nach gut 70 s fertig. Weil der laufende Browser
+einer solchen VM auf diese Installation wartet, wartet apt auf ein anderes apt
+(`DPkg::Lock::Timeout`), beendet eine abgebrochene Installation
+(`dpkg --configure -a`), und ein Update, das an einer Quelle scheitert (etwa
+Googles, die Chromes Paket eingetragen hat), bricht das Setup nicht ab. Einfügen tippt weiter exakt
 (äöü, ß, €, é, Emoji, Ω): TigerVNC nimmt nur das Zeichen, nicht den Tastencode
 (`RawKeyboard` aus), deutsche Tastaturen tippen also, was draufsteht. Wie
 bei x11vnc legt der Server ein Zeichen, das die US-Belegung nicht hat, beim

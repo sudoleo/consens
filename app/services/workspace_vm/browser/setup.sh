@@ -16,17 +16,23 @@ exec 9>"$dir/setup.lock"
 flock 9
 [ -f "$marker" ] && exit 0
 export DEBIAN_FRONTEND=noninteractive
+# A VM set up before has a working browser that waits for this: apt waits
+# for another apt instead of failing, an install a sleep cut off is finished
+# first, and an update that fails for one source (Google's, which Chrome's
+# package added) still counts for the others.
+apt="sudo apt-get -o DPkg::Lock::Timeout=60"
 if ! command -v google-chrome >/dev/null || ! command -v Xtigervnc >/dev/null; then
-  sudo apt-get update -qq
+  sudo dpkg --configure -a || true
+  $apt update -qq || true
 fi
 if ! command -v google-chrome >/dev/null; then
   curl -fsSL --retry 3 -o /tmp/consens-chrome.deb \
     https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-  sudo apt-get install -y -qq /tmp/consens-chrome.deb openbox fonts-noto-core fonts-noto-color-emoji
+  $apt install -y -qq /tmp/consens-chrome.deb openbox fonts-noto-core fonts-noto-color-emoji
   rm -f /tmp/consens-chrome.deb
 fi
 if ! command -v Xtigervnc >/dev/null; then
-  sudo apt-get install -y -qq --no-install-recommends tigervnc-standalone-server
+  $apt install -y -qq --no-install-recommends tigervnc-standalone-server
 fi
 python3 -c "import playwright" 2>/dev/null || pip3 install -q --disable-pip-version-check playwright==1.64.1
 # Chrome's policy (no passwords, cards or addresses; since 2026-10-30 also

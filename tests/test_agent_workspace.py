@@ -1192,9 +1192,16 @@ def test_the_screen_is_tigervnc_on_a_unix_socket_only():
     # Set up before: Chrome stays, TigerVNC comes once (a new marker).
     setup = (VM_FILES / "browser" / "setup.sh").read_text(encoding="utf-8")
     assert 'marker="$dir/setup-done-2"' in setup
-    assert "if ! command -v Xtigervnc >/dev/null; then\n  sudo apt-get install -y -qq --no-install-recommends " \
+    assert "if ! command -v Xtigervnc >/dev/null; then\n  $apt install -y -qq --no-install-recommends " \
            "tigervnc-standalone-server" in setup
     assert "x11vnc" not in setup and "xvfb" not in setup
+    # That VM's browser waits for it: apt waits for another apt, finishes a
+    # cut-off install, and one failing source does not end the setup.
+    assert 'apt="sudo apt-get -o DPkg::Lock::Timeout=60"' in setup
+    assert "sudo dpkg --configure -a || true\n  $apt update -qq || true" in setup
+    # The old screen is gone before Xtigervnc takes its display, also after KILL.
+    move = display[display.index('old="'):display.index('if ! runs "^Xtigervnc :1 "')]
+    assert move.index('pkill -KILL -f -- "$old"') < move.rindex('runs "$old" || break')
 
 
 def test_a_chrome_that_no_longer_answers_starts_anew():

@@ -76,6 +76,7 @@ if [ "$mode" != "--keep" ] && runs "^(Xvfb :1|x11vnc -display :1) "; then
   pkill -TERM -f -- "$old"
   for _ in $(seq 50); do runs "$old" || break; sleep 0.1; done
   pkill -KILL -f -- "$old" 2>/dev/null || true
+  for _ in $(seq 30); do runs "$old" || break; sleep 0.1; done
 fi
 if ! runs "^Xtigervnc :1 " && ! runs "^Xvfb :1 "; then
   rm -f /tmp/.X1-lock /tmp/.X11-unix/X1 "$dir/vnc.sock"
