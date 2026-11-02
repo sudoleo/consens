@@ -754,10 +754,10 @@ def test_lines_are_numbered_as_the_shell_numbers_them(store, fake_vm):
     loop = vm_loop(store, script)
     D = chat_path(loop.chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
-    fake_vm.vms[NAME]["files"][f"{D}/page.py"] = "one\r\ntwo\x0cstill two and two\r\nthree\r\n".encode()
+    fake_vm.vms[NAME]["files"][f"{D}/page.py"] = "one\r\ntwo\x0cstill two\u2028and two\r\nthree\r\n".encode()
     list(loop.run())
     whole, third = results(loop)
-    assert whole["total_lines"] == 3 and whole["content"] == "one\ntwo\x0cstill two and two\nthree\n"
+    assert whole["total_lines"] == 3 and whole["content"] == "one\ntwo\x0cstill two\u2028and two\nthree\n"
     assert third["first_line"] == third["last_line"] == 3 and third["content"] == "three\n"
 
 
