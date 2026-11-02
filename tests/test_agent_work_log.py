@@ -253,7 +253,8 @@ def test_an_audit_turn_logs_what_the_agent_sees_and_does_but_not_its_reviewers(s
     assert (step["actor"], step["step"], body["status"], body["text"]) == ("agent", "completion:0", "succeeded", ANSWER)
     assert body["sources"] == [{"url": "https://www.toureiffel.paris/en", "title": "Official site"}]
     apps = [e["name"] for e in entries if e["kind"] == "app"]
-    assert apps == ["memory_locked", "answer_fixed"]
+    # The agent's own search no longer locks memory (since 2026-11-02).
+    assert apps == ["answer_fixed"]
     # The reviewers (both comparison models) are not the agent's work.
     assert {e["actor"] for e in entries} == {"agent", "app"}
     end = json.loads(entries[-1]["content"])

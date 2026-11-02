@@ -2136,7 +2136,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Heute gilt: Sobald in einer Nachricht Fremdinhalt im Blick ist
   (`outside_in_view`), läuft eine Änderung erst nach der Vorab-Prüfung der
   Prüfer (`agent_gate.outward` „memory“), ohne Prüfer-Sitzung gar nicht
-  (`memory_locked`, `MEMORY_LOCKED`). `evidence_matches` und `user_words`
+  (`memory_locked`, `MEMORY_LOCKED`). Die eigene Websuche des Agenten zählt
+  seit 2026-11-02 nicht mehr dazu (`DelegationLoop.searched`): Sie kam in fast
+  jedem ersten Schritt, und Max' Konto bekam mit Opt-in einen Monat lang keine
+  einzige Erinnerung. Seitdem nennt `_AUDIT_MEMORY_WRITE_RULES` auch, was sich
+  zu merken lohnt (Selbstaussagen und Arbeitsweise über den Auftrag hinaus,
+  auch eine Korrektur oder ein Ja auf ein Angebot für nächstes Mal; nicht,
+  wonach der Nutzer nur fragt): Ohne das sparte der Agent auch ungesperrt
+  jede Erinnerung aus. `evidence_matches` und `user_words`
   bleiben für das Einstellungs-Werkzeug und die Links des Nutzers
   (`agent_read_source.user_urls`); `user_words` schneidet einen per „Ask about
   this“ zitierten Antwortabsatz genau in dem Format ab, das
@@ -2286,7 +2293,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `reasoning_efforts`, `free_default_effort`; `PRO_REASONING_EFFORTS`;
   `pro_only` der Presets; Pro = `is_user_pro` wie im Picker, ohne Admin; in
   Chats mit Google-Daten zusätzlich `restricted_model`; nach Fremdinhalten
-  (`outside_in_view`) nur mit `evidence`-Zitat aus der neuesten Nachricht): ein
+  (`outside_in_view`) oder nach eigener Websuche (`searched`) nur mit
+  `evidence`-Zitat aus der neuesten Nachricht): ein
   Premium-Modell ohne Pro wird abgelehnt (mit den freien Modellen derselben
   Familie), eine zu hohe Stufe auf die höchste erlaubte begrenzt, eine nicht
   angebotene auf die nächstgelegene (Gleichstand: die leichtere), Auto ohne
@@ -4779,8 +4787,9 @@ Antwort (`_answered_with_tools`), aber nur, wenn ihre Ergebnisse angenommen sind
 (`_side_results_accepted`), sonst `_retract` und ein weiterer Schritt. Nach
 einem Batch mit einem Ergebnis eines Werkzeugs außerhalb von
 `MEMORY_KEEPING_TOOLS` (seit 2026-10-27 jedes, Fehler eingeschlossen; nur vor
-dem Lauf abgelehnte Aufrufe nicht) und nach eigener Websuche gilt Fremdinhalt
-als im Blick (`outside_in_view`, App-Eintrag `memory_locked`): Mit Prüfern geht
+dem Lauf abgelehnte Aufrufe nicht) gilt Fremdinhalt als im Blick
+(`outside_in_view`, App-Eintrag `memory_locked`; die eigene Websuche seit
+2026-11-02 nicht mehr, sie setzt nur `searched`): Mit Prüfern geht
 `update_memory` dann seit 2026-10-28 durch die Vorab-Prüfung
 (`agent_gate.outward(call, memory_exposed=…)` → „memory“), ohne Prüfer sperrt
 `memory_locked` jede weitere Memory-Änderung der Nachricht
@@ -6255,9 +6264,11 @@ unter `MOCK_LLM`), seit 2026-10-30 auch jeden Turn, der den Arbeitsplatz
 nutzte, in eigenen `ws_*`-Feldern (I6). Messen: `scripts/audit_report.py` (nur lesend, `--days`,
 `--exclude-own`, `--json`) liefert die Tabellen und Ziele Z1–Z8 der
 Spezifikation `docs/agent-audit-readiness-2026-10-29.md` aus Turns, Sitzungen,
-Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Eigene Suchtreffer bringen Fremdinhalt in den Blick
-(`outside_in_view`): mit Prüfern wartet eine Memory-Änderung danach auf die
-Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne Prüfer-Sitzung sperrt `memory_locked`.
+Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Eigene Suchtreffer lassen
+Memory seit 2026-11-02 offen (`searched`); erst ein Werkzeug-Ergebnis bringt
+Fremdinhalt in den Blick (`outside_in_view`): mit Prüfern wartet eine
+Memory-Änderung danach auf die Vorab-Prüfung (`GATE_MEMORY_NOTE`), ohne
+Prüfer-Sitzung sperrt `memory_locked`.
 Ohne Prüfer läuft eine Nachricht seit 2026-11-01 nur nach der Einstellung des
 Nutzers (unten); Tests, deren Skript nur den Agenten spielt, setzen weiter
 Prüfer ein, die nie starten (`tests/agent_reviewers.py`, Einstellung `always`:

@@ -466,11 +466,17 @@ class DelegationLoop(AgentLoop):
         self.search_remaining = self.policy.max_searches
         self.closed = threading.Event()
         self.watch_error = None
-        # Set once outside content is in view (_lock_memory): after the step's
-        # own web search or a batch with a result of a tool not in
-        # MEMORY_KEEPING_TOOLS. Memory then locks (memory_locked), unless
-        # reviewers check each change first (_memory_reviewed).
+        # Set once outside content is in view (_lock_memory): after a batch
+        # with a result of a tool not in MEMORY_KEEPING_TOOLS. Memory then
+        # locks (memory_locked), unless reviewers check each change first
+        # (_memory_reviewed).
         self.outside_in_view = False
+        # Set after the step's own web search. Until 2026-11-02 it locked
+        # memory too: the agent searches in nearly every first step, and in a
+        # month Max's account, opted in, got not a single memory (Max: the
+        # agent decides what to keep, the search no longer locks it). A
+        # settings change still needs the user's words (agent_settings).
+        self.searched = False
         self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
                                      unlimited=self.policy.account_budget_only)
         # Per-turn guards of account mode (see TURN_WRAP_UP_SECONDS); the
@@ -2311,12 +2317,10 @@ class DelegationLoop(AgentLoop):
         if auditor is None or not auditor.sessions or not getattr(value, "tool_calls", None):
             return None
         from app.services.agent_gate import outward
-        # The step's own search counts already: it came back with the step.
-        exposed = self.outside_in_view or _searched(value)
         # A call past the step's limit never runs (CALL_OVER_LIMIT): nothing to check.
         over_limit = getattr(value, "over_limit_ids", None) or set()
         calls = [call for call in value.tool_calls
-                 if call["id"] not in over_limit and outward(call, memory_exposed=exposed)]
+                 if call["id"] not in over_limit and outward(call, memory_exposed=self.outside_in_view)]
         return auditor.open_gate(calls, value.step_id) if calls else None
 
     def _gate_wait(self, gate):
@@ -3267,10 +3271,9 @@ class DelegationLoop(AgentLoop):
                         break
                     self.messages.append(value.assistant_message())
                     if _searched(value):
-                        # The step's own web search: pages are in view from
-                        # here on, also for this step's own calls, so memory
-                        # locks as after read_source.
-                        self._lock_memory("web_search", value.step_id)
+                        # The step's own web search: results are in view
+                        # from here on. Memory stays open (self.searched).
+                        self.searched = True
                     # A step that wrote its answer and then only saved a
                     # memory or prepared a Watch: the text stands as the answer.
                     answered_with_tools = False

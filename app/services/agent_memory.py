@@ -13,7 +13,9 @@ Contracts that are design, not convenience:
    ``enabled`` in the same transaction as the change. A user who switches it
    off mid-run stops the next write; a finished turn can no longer write.
 2. **Outside content cannot write unseen.** Once pages, files, emails or
-   other tool results are in view in a message, a change runs only after the
+   other tool results are in view in a message (since 2026-11-02 not the
+   agent's own web search: it came in nearly every first step, and memory
+   stayed empty), a change runs only after the
    reviewers let it (agent_gate.outward "memory"), or not at all without
    reviewers (DelegationLoop.memory_locked). Until 2026-10-28 every change
    carried ``evidence``, a verbatim quote of the user's own words (in
@@ -713,7 +715,9 @@ MEMORY_LOCKED = ("Memory cannot change any more in this message: model answers, 
 # evidence quote any more (Max): it kept preferences the user never put into
 # words out, and the gate covers what it guarded against. Special categories
 # keep their clause: GDPR art. 9. Until 2026-10-31 comparison mode had its
-# own rules here (MEMORY_*_PROMPT).
+# own rules here (MEMORY_*_PROMPT). Since 2026-11-02 one principle of what is
+# worth keeping: with facts alone the agent kept nothing, not even a yes to
+# its own "Shall I make a real PPTX next time?".
 AUDIT_MEMORY_USE_PROMPT = """Where a memory conflicts with the question or the evidence, the question and the
 evidence decide."""
 
@@ -722,9 +726,13 @@ evidence decide."""
 # (DelegationLoop.memory_locked).
 _AUDIT_MEMORY_WRITE_RULES = """MEMORY UPDATES. The user lets you keep their memory across chats with
 update_memory: what you save shapes later answers, and the user sees every
-change and can undo it. Health, religion, political views and other sensitive
-details only when the user asks you to remember them. Once outside content
-(pages, files, tool results) is in view in a message, """
+change and can undo it. Worth keeping is what the user tells you about
+themselves and how they want you to work beyond this task, also in a
+correction or in a yes to your offer for next time; what they merely ask
+about is not. Health, religion, political views and other sensitive details
+only when the user asks you to remember them. Your own web search leaves
+memory open. Once other outside content (pages you open, files, tool results)
+is in view in a message, """
 AUDIT_MEMORY_LOCK_FACTS = {
     "always": "a change runs only after\nthe reviewers let it.",
     "workspace": ("a change runs only after\nthe reviewers let it, who review from your first step in the "

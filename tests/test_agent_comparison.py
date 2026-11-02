@@ -1026,8 +1026,8 @@ def test_a_long_reply_after_own_research_is_the_answer(store):
     assert saved["status"] == "completed" and saved["consensus"] == LONG_REPLY == deltas(events)
     assert saved["agent_review"]["mode"] == "audit" and saved["agent_review"]["versions"][-1]["text"] == LONG_REPLY
     assert not any(m["content"].startswith("App rule") for m in loop.messages if m["role"] == "user")
-    # Its own search put pages in view: memory locks without reviewers.
-    assert loop.memory_locked is True
+    # Its own search leaves memory open, also without reviewers (since 2026-11-02).
+    assert loop.searched is True and loop.memory_locked is False
 
 
 def test_a_long_answer_without_a_comparison_is_one_streamed_reviewed_call(store):

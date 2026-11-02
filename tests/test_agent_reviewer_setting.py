@@ -61,11 +61,14 @@ def test_without_reviewers_the_answer_stands_unreviewed_and_nobody_follows(store
     assert script.rounds == {} and not loop.comparison.auditor.sessions
     # No "Reviewing the answer…" for an answer nobody reviews.
     assert not any(event.get("type") == "answer_check" for event in events)
-    # The agent knows, in its own words, and memory locks after its search.
+    # The agent knows, in its own words; its own search leaves memory open
+    # (since 2026-11-02), a page or another tool result locks it.
     system = loop.messages[0]["content"]
     assert prompt_defaults.AGENT_REVIEW_FACTS[setting] in system
     assert prompt_defaults.AGENT_REVIEW_FACTS["always"] not in system
-    assert loop.outside_in_view is True and loop.memory_locked is True
+    assert loop.searched is True and loop.memory_locked is False
+    loop.outside_in_view = True
+    assert loop.memory_locked is True
 
 
 def test_in_the_workspace_only_the_reviewers_start_with_its_first_step_and_read_from_the_start(store):

@@ -295,9 +295,8 @@ def test_the_agent_answers_itself_and_the_comparison_models_review_its_answer(st
     assert review["audit"]["process"] == []
     # An answer written in one step: only the final round, no live round.
     assert script.rounds == {"anthropic": ["final"], "openai": ["final"]}
-    # The agent's own search put pages in view; with reviewers a memory change
-    # waits for their gate instead of being refused (test_agent_gate).
-    assert loop.outside_in_view is True and loop.memory_locked is False
+    # The agent's own search leaves memory open since 2026-11-02 (test_agent_gate).
+    assert loop.searched is True and loop.outside_in_view is False and loop.memory_locked is False
     # A reviewer's session saves what it reads, not a copy of it.
     sessions = [a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] if a.get("kind") == "audit"]
     assert len(sessions) == 2

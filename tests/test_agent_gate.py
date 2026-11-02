@@ -95,13 +95,14 @@ class MemoryArgs(LookupArgs):
 
 
 def gated(store, *, live, arguments=None):
-    """An audit turn whose first step searched (every scripted step does) and
-    then changes memory with a fake update_memory, so the change waits for
+    """An audit turn with a page in view (as after read_source) whose first
+    step changes memory with a fake update_memory, so the change waits for
     the reviewers (outward "memory")."""
     ran = []
     arguments = arguments or {"changes": [{"op": "add", "text": REMEMBERED}]}
     script = Audit(tool_steps=1, step_tools={0: "update_memory"}, step_args={0: arguments}, live=live)
     loop = audit_loop(store, script)
+    loop.outside_in_view = True
 
     def run(args, *, cancellation):
         ran.append(args.changes[0]["text"])
@@ -530,21 +531,35 @@ MEMORY_TEXT = "Is planning a trip to the Eiffel Tower."
 MEMORY_CHANGE = {"op": "add", "text": MEMORY_TEXT}
 
 
-def remembering(store, *, live, reviewers=True):
+def remembering(store, *, live, reviewers=True, page=True):
     """A turn whose first step searched (every scripted step does) and saves
-    a memory with it, so outside content is in view for the change.
+    a memory with it. ``page``: a page is in view too (as after
+    read_source), so outside content is in view for the change.
     ``reviewers=False``: they never start (agent_reviewers.InertAnswerAudit)."""
     from test_agent_memory import repo, set_profile
     set_profile(store.db, auto_memory=True)
     script = Audit(tool_steps=1, step_tools={0: "update_memory"}, step_args={0: {"changes": [MEMORY_CHANGE]}},
                    live=live)
     loop = audit_loop(store, script, memory=repo(store).snapshot(UID))
+    loop.outside_in_view = page
     if not reviewers:
         without_reviewers(loop)
     return script, loop, lambda: [item["text"] for item in repo(store).get(UID)[0]]
 
 
-def test_a_memory_change_after_the_agents_search_runs_on_every_reviewers_go(store):
+def test_the_agents_own_search_leaves_memory_open(store):
+    """Max, 2026-11-02: the agent searches in nearly every first step, and the
+    lock after it kept an opted-in account's memory empty for a month. A
+    change beside the search runs at once, also without reviewers."""
+    script, loop, memories = remembering(store, live={}, reviewers=False, page=False)
+    events = list(loop.run())
+    assert loop.searched is True and loop.memory_locked is False
+    assert memories() == [MEMORY_TEXT]
+    assert not [e for e in events if e.get("type") == "hold"]
+    assert saved(store, loop)["status"] == "completed"
+
+
+def test_a_memory_change_with_a_page_in_view_runs_on_every_reviewers_go(store):
     """Max, 2026-10-28: no lock after outside content; the reviewers check
     the change like an outward call."""
     script, loop, memories = remembering(store, live={})
