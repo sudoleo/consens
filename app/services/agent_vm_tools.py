@@ -1054,7 +1054,10 @@ class VMSession:
             leased = self.leased
             self.leased = False
             callbacks = list(self._on_close)
-        if leased:
+        # A lease that ran out while the message waited (a card, up to 30
+        # minutes) may be another chat's message's now: the rules are that
+        # message's, never set back from here (bug hunt 2026-10-30).
+        if leased and agent_workspace.holds_lease(self.loop.store, self.loop.uid, self.loop.turn_id) is not False:
             policy = self._leave_policy()
             agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id, policy=policy)
         # After the release: it touches this chat's paths alone, and another

@@ -307,6 +307,17 @@ def record(db, uid):
     return ref(db, uid).get().to_dict() or {}
 
 
+def holds_lease(store, uid, turn_id):
+    """Whether the workspace's lease is still this message's: False once
+    another message holds it, None when the record cannot be read."""
+    try:
+        lease = record(store.db, uid).get("lease")
+    except Exception as exc:
+        logging.warning("Agent workspace lease unreadable category=%s", safe_exception(exc))
+        return None
+    return isinstance(lease, dict) and lease.get("turn_id") == turn_id
+
+
 def held_by(db, uid, now=None):
     """The chat whose message holds the workspace now, or None."""
     return _held_by_other(record(db, uid).get("lease"), None, now or _now())

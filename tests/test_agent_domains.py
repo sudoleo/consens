@@ -112,6 +112,36 @@ def test_the_chats_domains_come_with_its_next_message_and_leave_with_it(store, f
     assert claimed[0].domains == ()
 
 
+def test_a_message_whose_lease_went_to_another_chat_leaves_that_chats_rules(store, fake_vm):
+    """A message that waited on a card past its lease (600 s) found, at its
+    end, another chat's message holding the workspace with that chat's
+    domains, and set the base rules over them mid-run (bug hunt 2026-10-30).
+    Only a message that still holds the lease puts the rules back."""
+    from datetime import datetime, timedelta, timezone
+    from app.services import agent_workspace
+    first = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    agent_domains.grant(store, UID, first.chat_id, "api.example.com", "t0")
+    other_rules = agent_domains.rules(["other.example.org"])
+    original = type(fake_vm.backend()).exec
+
+    def taken_over(self, name, command, **kwargs):
+        outcome = original(self, name, command, **kwargs)
+        if command == "ls":
+            # Meanwhile the lease expired and another chat's message claimed it.
+            agent_workspace.ref(store.db, UID).update({"lease": {
+                "chat_id": "c" * 32, "turn_id": "other-turn",
+                "until": datetime.now(timezone.utc) + timedelta(seconds=agent_workspace.LEASE_SECONDS)}})
+            self.vm.vms[name]["policy"] = list(other_rules)
+        return outcome
+    type(fake_vm.backend()).exec = taken_over
+    try:
+        list(first.run())
+    finally:
+        type(fake_vm.backend()).exec = original
+    assert fake_vm.vms[NAME]["policy"] == other_rules
+    assert agent_workspace.record(store.db, UID)["lease"]["turn_id"] == "other-turn"
+
+
 def test_a_request_names_its_domain_and_reason():
     call = {"function": {"name": "request_domain",
                          "arguments": json.dumps({"domain": "API.example.com", "reason": "  The   API. "})}}
