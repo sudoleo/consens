@@ -2580,6 +2580,10 @@
             const unplaced = (Array.isArray(audit.unplaced) ? audit.unplaced : []).filter(valid);
             const markedByBlock = new Map();
             const spots = [];
+            // A mark over several sentences carries its number on each
+            // (agent_audit.place_marks): listed once, and not where one of
+            // its sentences shows it (bug hunt 2026-11-02).
+            const missed = [], placedMarks = new Set();
             claims.forEach(function (claim) {
               const shown = { anchor: claim.anchor, kind: AUDIT_CLASSES[claim.kind] ? claim.kind : "doubtful",
                 dissent: claim.dissent.filter(valid) };
@@ -2588,9 +2592,10 @@
               const result = probe && markSentence(body, claim.anchor, AUDIT_CLASSES[shown.kind],
                 markedByBlock.get(probe.block), claim.anchor_occurrence);
               if (!result) {
-                shown.dissent.forEach(function (item) { unplaced.push(Object.assign({ quote: item.target || claim.anchor }, item)); });
+                shown.dissent.forEach(function (item) { missed.push(Object.assign({ quote: item.target || claim.anchor }, item)); });
                 return;
               }
+              shown.dissent.forEach(function (item) { if (item.mark != null) placedMarks.add(item.mark); });
               result.spans.forEach(function (span) { span.classList.add("is-audit"); });
               const context = { spans: result.spans, navigation: navigation, openInDrawer: openNotes };
               attachPassageControl(result, auditLabel(shown), function () {
@@ -2609,6 +2614,12 @@
               if (targets.length) spots.push({ spans: result.spans, targets: targets });
             });
             spots.forEach(function (entry) { wrapSpots(entry.spans, entry.targets); });
+            missed.forEach(function (item) {
+              if (item.mark == null) { unplaced.push(item); return; }
+              if (placedMarks.has(item.mark)) return;
+              placedMarks.add(item.mark);
+              unplaced.push(item);
+            });
             if (fallbackBox) {
               fallbackBox.replaceChildren();
               fallbackBox.hidden = !unplaced.length;

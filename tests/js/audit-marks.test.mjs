@@ -116,3 +116,20 @@ it("never links a source that is no web address", () => {
   expect(document.querySelector("#claimPopover a.cx-card-source")).toBeNull();
   expect(document.getElementById("consensusClaimsFallback").hidden).toBe(true);
 });
+
+// One mark over several sentences (agent_audit.place_marks: the same mark
+// number on each) the page cannot find on every sentence: the note shows once,
+// on a sentence it marks or else once in the list (bug hunt 2026-11-02).
+it("lists a note over several sentences once, and not at all where one of its sentences shows it", () => {
+  const note = { model: "OpenAI", kind: "doubtful", note: "Both sentences are doubtful.", mark: 7 };
+  const audit = (first, second) => ({ unplaced: [], claims: [first, second].map(anchor =>
+    ({ anchor, kind: "doubtful", audit: true, agree: [], dissent: [{ ...note, target: anchor }] })) });
+  const rows = (first, second) => {
+    const { window, document } = boot(ANSWER);
+    const fallback = document.getElementById("consensusClaimsFallback");
+    window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit(first, second), fallback, []);
+    return [marks(document).length, fallback.querySelectorAll(".claims-fallback-row").length];
+  };
+  expect(rows("The Eiffel Tower is 330 metres tall.", "It opened in 1890 for visitors.")).toEqual([1, 0]);
+  expect(rows("The bridge is 30 metres long.", "It opened in 1890 for visitors.")).toEqual([0, 1]);
+});
