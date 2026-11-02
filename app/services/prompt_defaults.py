@@ -82,7 +82,9 @@ The user opened this chat as a temporary one: it does not appear in their chats,
 # Since 2026-10-28 it says what concerns more than one tool; each tool's own
 # facts stand in its description (the list of VM tools and the browser's
 # actions were here a second time), and the computer has one name, the
-# workspace (the tools said "your VM", a paragraph "the workbench").
+# workspace (the tools said "your VM", a paragraph "the workbench"). The
+# chart fact (2026-11-02, Max): asked for a chart of prices, the agent drew
+# one with # characters in a code block although it had the workspace.
 AGENT_VM_PROMPT = """YOUR WORKSPACE
 
 You and the user share a Linux computer, the workspace (Ubuntu, bash), the same in all of this account's chats; one chat works in it at a time. It runs in the cloud, as does the browser's computer, and the user's own devices are out of your reach. You work there as your own user, without sudo; its clock runs on UTC. A process you start with & in vm_exec can stop whenever the workspace sleeps; one started with vm_start_process keeps running. Python packages install into your home with pip or uv, Node packages with npm in your project, Ubuntu packages with vm_install_packages. The workspace also has a headless Chrome (google-chrome --headless=new) for checks the user need not see, such as a test of your page or a PDF of a local file; Playwright (pip install playwright) drives it with launch(channel="chrome"), since its own browser download does not reach the workspace.
@@ -97,7 +99,7 @@ Four ways reach the web, each with its own reach. Your web search runs inside yo
 
 The browser tool is the browser you share with the user: it runs on a computer of its own, which the user sees and can steer live (in the chat: + then Workspace, or Open on the card of a page you opened), so whatever you look at or do on the web together with the user happens there. It reaches the web, and http://localhost:<port> there is that port of your workspace: what you build for the user to see or use, such as a page, an app or a game, runs on your server (vm_start_process, a port from 1024 up) and opens in this browser for both of you. In the browser you act as the user, signed in as them. A sign-in, a password, a payment or a check for a human is theirs to do: ask_user with browser hands the browser to them, and your work goes on once they hand it back. A step that acts in their name and could harm them or is hard to undo, such as sending, posting, buying or deleting, waits for their yes through ask_user; everyday clicks, such as closing a cookie banner or choosing a page's mode, are yours to make. The user can also take over the browser on their own; your calls then wait until they hand it back.
 
-The user can open the workspace in a terminal of their own, with your rights, but does not follow your commands: a file reaches them with your answer only through vm_share_file, and the app shows it by itself (the workspace has no public address, so a link into it does not work)."""
+The user can open the workspace in a terminal of their own, with your rights, but does not follow your commands: a file reaches them with your answer only through vm_share_file, and the app shows it by itself (the workspace has no public address, so a link into it does not work). A chart or diagram you plot there (for example with matplotlib) reaches them this way as a picture; one drawn in a code block stays text."""
 
 # Without request_domain (routers/agent.py domains_allowed, since 2026-10-30
 # Pro and admins only): the workbench reaches the package registries alone.
@@ -132,7 +134,7 @@ github_import copies a public GitHub repository into your workspace; the backend
 # and asked whether the user meant their own computer, as if it reached that.
 AGENT_WORKSPACE_CLOSED_PROMPT = """YOUR WORKSPACE
 
-You and the user share a Linux computer, the workspace, and a Chrome browser on a computer of its own, signed in as the user. Both run in the cloud; the user's own devices are out of your reach. open_workspace opens both for this message: their tools come with your next step, for commands, files, background processes, websites that need a real browser (sign-ins, forms, clicks) and GitHub repositories, and the message may then run longer. Your web search, read_source and the picture tools work without it."""
+You and the user share a Linux computer, the workspace, and a Chrome browser on a computer of its own, signed in as the user. Both run in the cloud; the user's own devices are out of your reach. open_workspace opens both for this message: their tools come with your next step, for commands, files, charts and diagrams as pictures, background processes, websites that need a real browser (sign-ins, forms, clicks) and GitHub repositories, and the message may then run longer. Your web search, read_source and the picture tools work without it."""
 
 
 ANSWER_SYSTEM_PROMPT = (

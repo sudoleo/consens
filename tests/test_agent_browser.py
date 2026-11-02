@@ -126,6 +126,10 @@ def test_localhost_with_a_port_is_the_workspaces():
     from app.services.prompt_defaults import AGENT_WORKSPACE_CLOSED_PROMPT
     for prompt in (AGENT_VM_PROMPT, AGENT_WORKSPACE_CLOSED_PROMPT):
         assert "the user's own devices are out of your reach" in prompt
+    # A chart of prices came as # characters in a code block (2026-11-02):
+    # with the workspace a chart is a picture.
+    assert "one drawn in a code block stays text" in AGENT_VM_PROMPT and "vm_share_file" in AGENT_VM_PROMPT
+    assert "charts and diagrams as pictures" in AGENT_WORKSPACE_CLOSED_PROMPT
 
 
 def test_public_addresses_open_as_given():
