@@ -371,8 +371,10 @@ WRITE_SCRIPT = ('[ -d "$1" ] && exit 45; mkdir -p -- "$(dirname -- "$1")" 2>/dev
                 'cat > "$1" 2>/dev/null || exit 46; stat -c %s -- "$1"')
 # A folder the agent made read-only (chmod -R a-w, Go's module cache) gets
 # its write bits back first: rm alone failed, and a chat's deletion retried
-# for ever (bug hunt 2026-10-30).
-DELETE_SCRIPT = 'rm -rf -- "$1" 2>/dev/null || { chmod -R u+w -- "$1" 2>/dev/null; rm -rf -- "$1"; }'
+# for ever (bug hunt 2026-10-30). Its read and search bits too (chmod -R 644
+# on a folder): without them neither rm nor chmod gets inside it; chmod -R
+# sets a folder's bits before it goes in (bug hunt 2026-11-02).
+DELETE_SCRIPT = 'rm -rf -- "$1" 2>/dev/null || { chmod -R u+rwX -- "$1" 2>/dev/null; rm -rf -- "$1"; }'
 # Never over something that exists (mv -T -n would still merge into an empty folder).
 MOVE_SCRIPT = ('[ -e "$1" ] || [ -L "$1" ] || exit 44; { [ -e "$2" ] || [ -L "$2" ]; } && exit 47; '
                'mkdir -p -- "$(dirname -- "$2")" && mv -T -- "$1" "$2"')

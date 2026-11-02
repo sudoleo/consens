@@ -1480,6 +1480,30 @@ def test_a_folder_the_agent_made_read_only_is_deleted_too(tmp_path):
     assert done.returncode == 0 and not (tmp_path / "chat").exists()
 
 
+@pytest.mark.parametrize("mode", [0o644, 0o000])
+def test_a_folder_the_agent_closed_to_itself_is_deleted_too(tmp_path, mode):
+    """A folder without its search bit (chmod -R 644 to "fix" a site's
+    rights, chmod -R 000): u+w alone left rm and chmod outside it, and a
+    chat's deletion retried for ever (bug hunt 2026-11-02)."""
+    found = shutil.which("bash")
+    locked = tmp_path / "chat" / "site"
+    (locked / "assets").mkdir(parents=True)
+    (locked / "assets" / "app.css").write_text("body{}")
+    (locked / "assets").chmod(mode)
+    locked.chmod(mode)
+    try:
+        (locked / "probe").write_text("x")
+        enforced = False
+    except PermissionError:
+        enforced = True
+    if not found or not enforced:
+        locked.chmod(0o755)
+        (locked / "assets").chmod(0o755)
+        pytest.skip("no bash, or folders' bits hold nobody back here (Windows, root)")
+    done = subprocess.run([found, "-c", agent_vm.DELETE_SCRIPT, "delete", str(tmp_path / "chat")])
+    assert done.returncode == 0 and not (tmp_path / "chat").exists()
+
+
 def test_the_policy_is_read_as_its_rules_or_not_at_all():
     """get_policy (agent_workspace.prepare restores what it read): the rules
     as set_policy takes them; anything else is the provider failing."""
