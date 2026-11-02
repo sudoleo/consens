@@ -270,8 +270,15 @@ def test_byte_totals_stay_exact_through_drops_and_evictions():
             index = rng.randrange(len(runs))
             buffers.finish(runs[index])
             runs[index] = buffers.open("u", "c", f"n{step}")
+        if step % 97 == 0:
+            # A late reader joins the text kept in pieces (_slice).
+            buffers.frames(run)
         indexed = list(buffers._runs.values())
         assert buffers._total == sum(r.bytes + r.base_bytes for r in indexed) >= 0
+        # Counted as they change, the kept text and sticky frames are what they hold.
+        for kept in indexed:
+            assert kept.base_bytes == len("".join(kept.base_parts).encode("utf-8", "replace")) + sum(
+                len(item.encode("utf-8")) + live_module.FRAME_OVERHEAD_BYTES for _, item in kept.sticky.values())
         assert buffers._total <= 20000 or len(indexed) == 1
 
 

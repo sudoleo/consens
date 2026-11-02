@@ -69,6 +69,11 @@ def _text_effect(event_type, data):
     return None
 
 
+def _held_bytes(text):
+    """What a sticky frame kept for late readers costs."""
+    return len(text.encode("utf-8")) + FRAME_OVERHEAD_BYTES
+
+
 def _finite(value):
     """JSON without NaN/Infinity (invalid for browsers and JSONResponse)."""
     if isinstance(value, float) and not math.isfinite(value):
@@ -109,10 +114,16 @@ class LiveRun:
     # The newest dropped frame and the answer text as it stood after it:
     # what a reader behind the retained window resets to, together with the
     # newest dropped frame of each sticky type ({type: (seq, json text)}).
+    # The text is kept in pieces and joined only for such a reader: one
+    # string grown and measured again with every dropped frame held the
+    # global lock for seconds in a long run (80,000 frames: 12 s, 2026-11-02).
     base_seq: int = 0
-    base_text: str = ""
+    base_parts: list = field(default_factory=list)
     sticky: dict = field(default_factory=dict)
-    # Memory held by base_text and sticky frames (part of the global total).
+    # Memory held by the text and the sticky frames (part of the global
+    # total), counted as they change.
+    base_text_bytes: int = 0
+    sticky_bytes: int = 0
     base_bytes: int = 0
     # Evicted as a whole (global caps): its readers fall back to the saved turn.
     evicted: bool = False
@@ -263,7 +274,10 @@ class AgentLiveBuffers:
         if after < run.base_seq:
             # Frames after the reader's position were dropped.
             frames = sorted((seq, event_type, text) for event_type, (seq, text) in run.sticky.items() if seq > after)
-            reset = {"seq": run.base_seq, "text": run.base_text, "frames": frames}
+            text = "".join(run.base_parts)
+            # Joined once for every later reader too.
+            run.base_parts[:] = [text] if text else []
+            reset = {"seq": run.base_seq, "text": text, "frames": frames}
             after = run.base_seq
         # Sequence numbers in the window have no gaps: index, don't scan.
         start = max(0, after - run.events[0][0] + 1) if run.events else 0
@@ -279,13 +293,18 @@ class AgentLiveBuffers:
         self._total -= size
         run.base_seq = seq
         if effect == "append":
-            run.base_text += json.loads(text)["text"]
+            piece = json.loads(text)["text"]
+            run.base_parts.append(piece)
+            run.base_text_bytes += len(piece.encode("utf-8", "replace"))
         elif effect == "clear":
-            run.base_text = ""
+            run.base_parts, run.base_text_bytes = [], 0
         if event_type in STICKY_TYPES:
+            replaced = run.sticky.get(event_type)
+            if replaced is not None:
+                run.sticky_bytes -= _held_bytes(replaced[1])
             run.sticky[event_type] = (seq, text)
-        held = len(run.base_text.encode("utf-8", "replace")) + sum(
-            len(item.encode("utf-8")) + FRAME_OVERHEAD_BYTES for _, item in run.sticky.values())
+            run.sticky_bytes += _held_bytes(text)
+        held = run.base_text_bytes + run.sticky_bytes
         self._total += held - run.base_bytes
         run.base_bytes = held
 
@@ -313,8 +332,8 @@ class AgentLiveBuffers:
             return
         self._total -= run.bytes + run.base_bytes
         run.events.clear()
-        run.bytes = run.base_bytes = 0
-        run.base_text = ""
+        run.bytes = run.base_bytes = run.base_text_bytes = run.sticky_bytes = 0
+        run.base_parts = []
         run.sticky = {}
         run.evicted = True
 
