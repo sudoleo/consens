@@ -79,7 +79,8 @@
             for Undo. Undo is available for a short time after the change; the copy of your previous Memory is deleted automatically 30 days after the change.
             A content-free record (status, revision numbers and request reference) remains until account deletion so that a repeated request is not applied twice. These records are never used for Watch or Topic runs and are deleted with your account.
             Settings also holds a list of short <em>saved memories</em> that you can add, edit and delete yourself. Only if you switch on
-            &ldquo;Let Agent update memory&rdquo; (off by default) are saved memories changed automatically. With each of your Agent messages, a smaller model from the provider of your Agent model receives your message, your earlier messages in that chat, the end of the previous answer and your Memory (through OpenRouter, section 4) and may add, update or delete saved memories for what you say about yourself. The Agent model you use may also add, update or delete saved memories while it answers. Once content from web pages, files, emails or other tool results is in view in a message, a change by the Agent model waits for the reviewer models of that run: it is saved only if all of them allow it, otherwise you decide on a card; in a message without reviewer models it is not saved.
+            &ldquo;Let Agent update memory&rdquo; (off by default) may the Agent model you use add, update or delete saved memories while it answers.
+            Once content from web pages, files, emails or other tool results is in view in a message, a change waits for the reviewer models of that run: it is saved only if all of them allow it, otherwise you decide on a card; in a message without reviewer models it is not saved.
             Agent is instructed not to keep special-category data unless you explicitly ask it to, and our server rejects text that looks like a
             password, access key, card or bank account number. Each change is shown while Agent works on the answer, and Memory settings list every saved memory for review, editing, deletion and Undo. For Undo we keep a record of
             each change with the previous and the new text for at most 30 days (at most the last 50 changes); the chat in which a change was made
@@ -395,7 +396,7 @@
     </div>
   </main>
 
-  {% set public_footer_note = "Last updated: 2 November 2026" %}
+  {% set public_footer_note = "Last updated: 1 November 2026" %}
   {% include "partials/public_footer.html" %}
 
 </body>

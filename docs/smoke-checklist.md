@@ -60,11 +60,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       aktualisiert die alte Wohnort-Erinnerung statt eine zweite anzulegen.
       Undo unter der Antwort und Settings-Liste (Bearbeiten/Löschen) prüfen.
       Schalter aus → „merk dir …“ wird nur mit Hinweis auf den Schalter
-      beantwortet, nichts gespeichert. Memory-Schreiber (2026-11-02): eine
-      Frage, die sucht, mit einer Selbstaussage („Ich promoviere neben der
-      Arbeit, was gibt es dazu in Hannover?“) → „Memory updated“ unter der
-      Antwort, obwohl die Websuche den Agenten selbst sperrt; im Render-Log
-      kein `memory writer failed`. Im Usage-Panel der zweiten Nachricht
+      beantwortet, nichts gespeichert. Im Usage-Panel der zweiten Nachricht
       eines Claude-Chats sollten `cached_input_tokens` > 0 sein.
 - [ ] Agent-Einstellungen (2026-10-17, echter Provider, Free-Konto auf Auto):
       „Denk ab jetzt maximal gründlich“ → kurze Antwort ohne `compare_models`: Max ist
