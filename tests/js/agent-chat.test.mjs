@@ -1696,12 +1696,18 @@ describe("single-model agent chat", () => {
     turn.className = "thread-history-turn is-agent-turn";
     turn.dataset.turnId = "b".repeat(32);
     const body = d.createElement("div"); body.className = "consensus-answer-body";
-    turn.append(body); d.body.append(turn);
+    const activity = d.createElement("div"); activity.className = "agent-answer-activity";
+    turn.append(activity, body); d.body.append(turn);
     w.App.runRegistry.clearVisible();
     resolve({ ok: true, data: { response: "Answer.", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
       turn: { ...HANDED_TURN, status: "completed", agent_review: { ...handedReview("succeeded"), status: "partial" } } } });
     await vi.waitFor(() => expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body,
       expect.objectContaining({ status: "partial" }), expect.objectContaining({ reveal: true })));
+    // Its activity there follows too (bug hunt 2026-11-02): it kept
+    // "Reviewing the answer…" and a disabled "Read the notes".
+    const [insights, reviewed] = w.App.agentReview.renderActivity.mock.calls.at(-1);
+    expect(activity.contains(insights)).toBe(true);
+    expect(reviewed).toEqual(expect.objectContaining({ status: "partial" }));
     expect(run.consensus.completedTurn.status).toBe("completed");
     dom.window.close();
   });

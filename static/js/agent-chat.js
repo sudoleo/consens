@@ -2812,6 +2812,10 @@
     const node = id && document.querySelector(`.thread-history-turn[data-turn-id="${cssId(id)}"]`);
     const body = node?.querySelector(".consensus-answer-body");
     if (!body) return;
+    // Its activity too, before the row (as thread-history.js): it still said
+    // "Reviewing the answer…" (bug hunt 2026-11-02).
+    const activity = node.querySelector(".agent-answer-activity");
+    if (activity) App.agentActivity?.renderTurn(activity, saved);
     App.agentReview?.render(body, saved.agent_review, { sources: saved.sources, events: saved.agent_activity,
       key: saved.id || id, question: saved.question, reveal: true });
     node.dataset.turnKey = App.followup?.turnKey?.(saved) || node.dataset.turnKey;
