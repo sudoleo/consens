@@ -85,7 +85,7 @@ The user opened this chat as a temporary one: it does not appear in their chats,
 # workspace (the tools said "your VM", a paragraph "the workbench").
 AGENT_VM_PROMPT = """YOUR WORKSPACE
 
-You and the user share a Linux computer, the workspace (Ubuntu, bash), the same in all of this account's chats; one chat works in it at a time. You work there as your own user, without sudo; its clock runs on UTC. A process you start with & in vm_exec can stop whenever the workspace sleeps; one started with vm_start_process keeps running. Python packages install into your home with pip or uv, Node packages with npm in your project, Ubuntu packages with vm_install_packages. The workspace also has a headless Chrome (google-chrome --headless=new) for checks the user need not see, such as a test of your page or a PDF of a local file; Playwright (pip install playwright) drives it with launch(channel="chrome"), since its own browser download does not reach the workspace.
+You and the user share a Linux computer, the workspace (Ubuntu, bash), the same in all of this account's chats; one chat works in it at a time. It runs in the cloud, as does the browser's computer, and the user's own devices are out of your reach. You work there as your own user, without sudo; its clock runs on UTC. A process you start with & in vm_exec can stop whenever the workspace sleeps; one started with vm_start_process keeps running. Python packages install into your home with pip or uv, Node packages with npm in your project, Ubuntu packages with vm_install_packages. The workspace also has a headless Chrome (google-chrome --headless=new) for checks the user need not see, such as a test of your page or a PDF of a local file; Playwright (pip install playwright) drives it with launch(channel="chrome"), since its own browser download does not reach the workspace.
 
 The calls of one step run one after another, in your order, up to four. A pause, ask_user or the user's turn in the browser ends the step's later calls; their results say so.
 
@@ -127,10 +127,12 @@ github_import copies a public GitHub repository into your workspace. The backend
 # them here). Tools invite their use: with all of them from the start, a
 # question search had answered in 30 s turned into five minutes of curl, PIL
 # and cropping in the workspace (Delay Sports, 2026-10-29). Facts only, like
-# the rest of the audit prompt.
+# the rest of the audit prompt. Where both run (since 2026-11-02, in both
+# blocks): asked to run Claude Code "lokal", the agent offered the workspace
+# and asked whether the user meant their own computer, as if it reached that.
 AGENT_WORKSPACE_CLOSED_PROMPT = """YOUR WORKSPACE
 
-You and the user share a Linux computer, the workspace, and a Chrome browser on a computer of its own, signed in as the user. open_workspace opens both for this message: their tools come with your next step, for commands, files, background processes, websites that need a real browser (sign-ins, forms, clicks) and GitHub repositories, and the message may then run longer. Your web search, read_source and the picture tools work without it."""
+You and the user share a Linux computer, the workspace, and a Chrome browser on a computer of its own, signed in as the user. Both run in the cloud; the user's own devices are out of your reach. open_workspace opens both for this message: their tools come with your next step, for commands, files, background processes, websites that need a real browser (sign-ins, forms, clicks) and GitHub repositories, and the message may then run longer. Your web search, read_source and the picture tools work without it."""
 
 
 ANSWER_SYSTEM_PROMPT = (

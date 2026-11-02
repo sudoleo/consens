@@ -121,6 +121,11 @@ def test_localhost_with_a_port_is_the_workspaces():
     assert "clock runs on UTC" in AGENT_VM_PROMPT
     # Checks the user need not see: Playwright with the workbench's Chrome (test Sprite 2026-10-28).
     assert 'launch(channel="chrome")' in AGENT_VM_PROMPT
+    # Where both computers run (2026-11-02): asked for Claude Code "lokal", the
+    # agent asked whether the user meant their own computer, as if it reached that.
+    from app.services.prompt_defaults import AGENT_WORKSPACE_CLOSED_PROMPT
+    for prompt in (AGENT_VM_PROMPT, AGENT_WORKSPACE_CLOSED_PROMPT):
+        assert "the user's own devices are out of your reach" in prompt
 
 
 def test_public_addresses_open_as_given():
