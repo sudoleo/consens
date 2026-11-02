@@ -746,6 +746,21 @@ def test_reading_a_missing_or_long_file(store, fake_vm):
     assert page["total_lines"] == 1000 and page["more"] == "More lines follow: read on with offset=5."
 
 
+def test_lines_are_numbered_as_the_shell_numbers_them(store, fake_vm):
+    """Only \\n ends a line, as for sed -n, grep -n and vm_edit_file's
+    snippet: a form feed or U+2028 inside a line used to start a new one, and
+    every line number after it was off. Windows line endings show as \\n."""
+    script = Agent([[("vm_read_file", {"path": "page.py"})], [("vm_read_file", {"path": "page.py", "offset": 3})]])
+    loop = vm_loop(store, script)
+    D = chat_path(loop.chat_id)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[NAME]["files"][f"{D}/page.py"] = "one\r\ntwo\x0cstill two and two\r\nthree\r\n".encode()
+    list(loop.run())
+    whole, third = results(loop)
+    assert whole["total_lines"] == 3 and whole["content"] == "one\ntwo\x0cstill two and two\nthree\n"
+    assert third["first_line"] == third["last_line"] == 3 and third["content"] == "three\n"
+
+
 def test_an_edit_replaces_exact_text_and_shows_the_changed_lines(store, fake_vm):
     """vm_edit_file (2026-10-26), like Claude Code's Edit: the agent changes a
     file without writing it whole again, and sees the changed lines."""
@@ -925,6 +940,14 @@ def test_an_edit_must_find_its_text_exactly_once_or_replace_all(store, fake_vm):
     assert files[f"{D}/a.txt"] == b"x = 1\r\ny = 1\r\n\xff\xfe raw\r\n"
     done = edit(old_string="= 1", new_string="= 2", replace_all=True)
     assert done["replacements"] == 2 and files[f"{D}/a.txt"] == b"x = 2\r\ny = 2\r\n\xff\xfe raw\r\n"
+    # Lines as vm_read_file shows them (joined by \n) find their text in a
+    # file with Windows line endings, and what replaces it keeps them: before,
+    # every edit over more than one line of such a file was "not found".
+    files[f"{D}/c.py"] = b"def f():\r\n    return 1\r\n\r\nprint(f())\r\n"
+    done = edit(path="c.py", old_string="def f():\n    return 1", new_string="def f():\n    return 2\n# two")
+    assert done["replacements"] == 1
+    assert files[f"{D}/c.py"] == b"def f():\r\n    return 2\r\n# two\r\n\r\nprint(f())\r\n"
+    assert done["snippet"].splitlines()[:3] == ["     1\tdef f():", "     2\t    return 2", "     3\t# two"]
     files[f"{D}/b.bin"] = b"\x00\x01binary"
     assert "binary file" in edit(path="b.bin", old_string="binary", new_string="text")["error"]
     with pytest.raises(ValueError):

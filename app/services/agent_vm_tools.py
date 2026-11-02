@@ -356,13 +356,22 @@ def file_mime(raw, name):
     return guessed if guessed and not guessed.startswith("image/") else "application/octet-stream"
 
 
+def file_lines(raw):
+    """A file's lines as the shell numbers them (sed -n, grep -n): only \\n
+    ends one, never a form feed or U+2028 inside it (str.splitlines did, and
+    every number after it was off), and its last line break starts none. A
+    Windows line ending shows as \\n: vm_edit_file finds such lines with it."""
+    lines = raw.decode("utf-8", "replace").split("\n")
+    if not lines[-1]:
+        lines.pop()
+    return [line[:-1] if line.endswith("\r") else line for line in lines]
+
+
 def edit_snippet(edited, at, new):
     """The first change in ``edited`` (the bytes ``new`` at offset ``at``)
     with EDIT_CONTEXT_LINES around it, numbered like ``cat -n``."""
     first = edited[:at].count(b"\n") + 1
-    lines = edited.decode("utf-8", "replace").split("\n")
-    if len(lines) > 1 and not lines[-1]:
-        lines.pop()  # The file's last line break starts no line.
+    lines = file_lines(edited) or [""]
     start = max(1, first - EDIT_CONTEXT_LINES)
     end = min(len(lines), first + new.count(b"\n") + EDIT_CONTEXT_LINES)
     snippet = "".join(f"{number:>6}\t{lines[number - 1]}\n" for number in range(start, end + 1))
@@ -1469,7 +1478,7 @@ class VMTools:
         if b"\x00" in raw[:8192]:
             return self.session.announce({"path": path, "binary": True, "bytes": len(raw),
                                           "note": "Binary file: inspect it with vm_exec (file, xxd, python)."})
-        lines = raw.decode("utf-8", "replace").splitlines()
+        lines = file_lines(raw)
         if not complete:
             # The last line may be cut; it is read with the rest.
             lines = lines[:-1]
@@ -1541,6 +1550,11 @@ class VMTools:
             raise ValueError(f"{path} is a binary file: change it with vm_exec.")
         old, new = args.old_string.encode("utf-8"), args.new_string.encode("utf-8")
         found = raw.count(old)
+        if not found and b"\r\n" in raw and b"\n" in old and b"\r\n" not in old:
+            # Lines as vm_read_file shows them, in a file with Windows line
+            # endings: found with those, and the new text gets them too.
+            old, new = old.replace(b"\n", b"\r\n"), new.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+            found = raw.count(old)
         if not found:
             raise ValueError(f"old_string was not found in {path}. It must match the file exactly, including "
                              "whitespace and indentation: read the lines again with vm_read_file.")

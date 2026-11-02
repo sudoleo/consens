@@ -957,12 +957,16 @@ Account-Turns, nie in Chats mit Google-Daten, wie `read_source`):
 Standard 60, höchstens `EXEC_TIMEOUT_MAX` = 300; Ergebnis `stdout`, `stderr`,
 `exit_code`, `duration_ms`, `timed_out`, `cwd`), `vm_read_file` (`path`,
 `offset`, `limit` in Zeilen, bis 16.000 Zeichen und 2 MB, eine längere einzelne
-Zeile gekürzt mit `note`, Binärdateien nur als Hinweis), `vm_write_file` (`path`, `content` bis 100.000 Zeichen, legt
+Zeile gekürzt mit `note`, Binärdateien nur als Hinweis; Zeilen zählen wie bei
+`sed -n`/`grep -n` nur an `\n`, ein Windows-Zeilenende erscheint als `\n`, seit
+2026-11-02), `vm_write_file` (`path`, `content` bis 100.000 Zeichen, legt
 Ordner an), seit 2026-10-26 `vm_edit_file` (`path`, `old_string`,
 `new_string`, optional `replace_all`; wie Claude Codes Edit: Der Text muss
 genau einmal vorkommen, sonst sagt der Fehler, wie oft, oder `replace_all`
 ersetzt alle; ersetzt wird auf den Bytes, Zeilenenden und Nicht-UTF-8 bleiben
-unverändert; Dateien über 2 MB und Binärdateien nur per `vm_exec`; das
+unverändert; mehrzeiliger Text mit `\n` findet in einer Datei mit
+Windows-Zeilenenden die Zeilen mit `\r\n`, und der neue Text bekommt sie auch
+(seit 2026-11-02, vorher war jede solche Ersetzung „not found“); Dateien über 2 MB und Binärdateien nur per `vm_exec`; das
 Ergebnis nennt `replacements`, `bytes` und die geänderten Zeilen mit drei
 Zeilen Umgebung wie `cat -n` (`snippet`, `first_line`, `last_line`, höchstens
 2.000 Zeichen), der Prompt empfiehlt es statt die Datei ganz neu zu
