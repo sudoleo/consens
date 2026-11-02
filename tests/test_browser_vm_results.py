@@ -816,6 +816,24 @@ def test_an_action_that_ran_never_fails_because_the_page_cannot_be_read(browser)
     assert len(reads) == 2
 
 
+def test_an_action_that_ran_never_fails_because_its_picture_cannot_be_taken(browser):
+    """The click ran; the picture asked for after it (screenshot_after) hung
+    on a web font that never loads and Chrome gave up after 30 s. Before, the
+    answer said the click failed and the agent clicked again (a send twice);
+    now it says what the click did and that no picture came."""
+    page = Shop(browser)
+
+    def screenshot(type):
+        raise TimeoutError("Timeout 30000ms exceeded.\nCall log:\n  - taking page screenshot\n"
+                           "  - waiting for fonts to load...")
+    page.screenshot = screenshot
+    answer = browser.on_page(type("Context", (), {"pages": [page]})(), page, "click",
+                             {"action": "click", "ref": "e1", "screenshot_after": True}, "", [])
+    assert "png" not in answer
+    assert answer["text"].startswith("Clicked e1.\n")
+    assert answer["text"].endswith("\n(no picture after it: Timeout 30000ms exceeded.)")
+
+
 def test_the_hold_is_one_put_with_its_expiry(monkeypatch):
     browser = load()
     ran = []

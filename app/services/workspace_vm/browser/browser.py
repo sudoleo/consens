@@ -1988,10 +1988,16 @@ def with_preview(page, request, answer):
 def with_picture(page, request, answer):
     """An action's answer, with the picture of the page after it when the
     agent asked for it (screenshot_after, since 2026-10-29): before, every
-    move on a page drawn on a canvas took a call of its own to look."""
+    move on a page drawn on a canvas took a call of its own to look. The
+    action ran: a picture Chrome cannot take (a web font that never loads
+    holds its screenshot 30 s) never fails its answer (the agent would take
+    it again, a send twice)."""
     if not request.get("screenshot_after") or hidden(page):
         return answer
-    line, png = picture(page)
+    try:
+        line, png = picture(page)
+    except Exception as exc:
+        return {**answer, "text": answer["text"] + f"\n(no picture after it: {failure_text(exc, log=False)})"}
     return {**answer, "text": answer["text"] + "\n" + line, "png": png}
 
 
