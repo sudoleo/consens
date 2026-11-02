@@ -368,6 +368,27 @@ describe("the workspace view", () => {
     }
   });
 
+  it("stops refreshing the takeover once another window has the view", async () => {
+    // The old view kept posting holder "user" every 30 s and on every return
+    // of its tab: a hand-back in the new window was overwritten, and the
+    // agent waited for the user for good (bug hunt 2026-10-31).
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const env = setup();
+      const socket = await opened(env);
+      socket.deliver(JSON.stringify({ state: "ready" }));
+      env.document.querySelector(".workspace-view-cover").click();
+      await vi.waitFor(() => expect(controls(env.window)).toEqual(["user"]));
+      socket.closedBy(4409);
+      await vi.advanceTimersByTimeAsync(90_000);
+      env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(controls(env.window)).toEqual(["user"]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("opens the view again in the user's hands after a reload, never for an old or foreign takeover", async () => {
     const env = setup({ prepare: window => window.sessionStorage.setItem("workspace_view_holder",
       JSON.stringify({ uid: "u1", at: Date.now() - 60_000 })) });

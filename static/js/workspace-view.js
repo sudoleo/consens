@@ -771,6 +771,9 @@
     } catch (_) { /* private mode: no return after a reload */ }
   }
   function refreshNow() {
+    // Another window has the view now (4409): its hand-back is the user's
+    // word, never overwritten from here (bug hunt 2026-10-31).
+    if (view?.final === 'replaced') return;
     rememberHolder('user');
     post('/agent/workspace/control', { holder: 'user' }).catch(() => {});
   }
