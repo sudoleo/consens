@@ -244,14 +244,18 @@ class Tunnel:
         elif kind == b"L" and len(payload) == 3:
             port = struct.unpack(">H", payload[:2])[0]
             with self.lock:
+                # Only the answer for a port this side asked for (listen):
+                # one unasked would open any port of the workbench to the
+                # browser VM, the least trusted side (bug hunt 2026-10-30).
+                answer = self.answers.get(port)
+                if answer is None:
+                    return
                 if payload[2:] == b"\x01":
                     self.ports.add(port)
                     self.refused.discard(port)
                 else:
                     self.refused.add(port)
-                answer = self.answers.get(port)
-            if answer is not None:
-                answer.set()
+            answer.set()
         elif kind == b"O" and len(payload) == 2:
             # A connection attempt is no use of the tunnel (a page retrying
             # its server once a second); its data is (_carry).

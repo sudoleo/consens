@@ -367,6 +367,13 @@ def test_the_browser_vm_and_the_workbench_get_only_their_part():
     tunnel.ports.add(4000)
     tunnel._from_browser(b"O", 7, struct.pack(">H", 4444))
     assert tunnel.stream.sent == [agent_tunnel.frame(b"C", 7)] and tunnel.bench.sent == []
+    # A port it says it listens on unasked holds nothing (bug hunt 2026-10-30:
+    # a compromised browser VM reached any workbench port >= 1024 this way).
+    tunnel._from_browser(b"L", 0, struct.pack(">H", 5432) + b"\x01")
+    tunnel._from_browser(b"O", 11, struct.pack(">H", 5432))
+    assert 5432 not in tunnel.ports and tunnel.stream.sent[-1] == agent_tunnel.frame(b"C", 11)
+    assert tunnel.bench.sent == []
+    tunnel.stream.sent.clear()
     tunnel._from_browser(b"O", 8, struct.pack(">H", 4000))
     assert tunnel.bench.sent == [agent_tunnel.frame(b"O", 8, struct.pack(">H", 4000))] and tunnel.open == {8: 4000}
     tunnel.stream.sent.clear()
