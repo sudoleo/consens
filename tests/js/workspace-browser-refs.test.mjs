@@ -157,6 +157,9 @@ describe("workspace browser find", () => {
     expect(found.matches[0].ref).toBe("e1");
     expect(find("a+b (x) [y]").total).toBe(1);
     expect(find("nothing like it")).toEqual({ total: 0, matches: [] });
+    // Only space to it (U+FEFF is \s): nothing found, never an empty
+    // pattern that matched at 0 for ever and hung the page.
+    expect(find("\ufeff \ufeff")).toEqual({ total: 0, matches: [] });
   });
 
   it("shows the page around a place, cut at words", () => {

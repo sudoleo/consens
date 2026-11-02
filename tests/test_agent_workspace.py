@@ -1296,9 +1296,12 @@ def test_text_brings_the_main_content_first():
 def test_find_takes_one_to_200_characters_and_reads_while_the_user_has_the_browser(tmp_path, monkeypatch, capsys):
     browser = load("browser")
     assert browser.find_query({"text": "  total \n price "}) == "total price"
-    for text in ("", "   ", "x" * 201, None):
+    for text in ("", "   ", "x" * 201, None, "\ufeff", " \ufeff\ufeff "):
         with pytest.raises(browser.Refused, match="1 to 200"):
             browser.find_query({"text": text})
+    # A byte order mark is space to the page's search (JavaScript's \s), not
+    # to Python's split: alone it searched for nothing, and the page hung.
+    assert browser.find_query({"text": "\ufefftotal\ufeffprice"}) == "total price"
     started = []
 
     def ensure_browser():

@@ -278,7 +278,7 @@ def required(args):
             "tab": "tab", "find": "text"}.get(args.action)
     if need and not getattr(args, need):
         raise ValueError(f"{args.action} needs {need}.")
-    if args.action == "find" and not 1 <= len(" ".join(args.text.split())) <= FIND_CHARS:
+    if args.action == "find" and not 1 <= len(" ".join(args.text.replace("\ufeff", " ").split())) <= FIND_CHARS:
         raise ValueError(f"find needs text, 1 to {FIND_CHARS} characters.")
     if args.action == "select" and not args.option:
         raise ValueError("select needs option.")

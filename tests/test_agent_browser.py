@@ -164,7 +164,7 @@ def test_find_looks_up_a_text_and_only_reads(store, fake_vm):
     from app.services import agent_gate
     from app.services.agent_compaction import describe
     loop, browser = tools(store)
-    for text in ("", "   ", "x" * 201):
+    for text in ("", "   ", "x" * 201, "\ufeff"):
         with pytest.raises(ValueError, match="find needs text"):
             call(browser, action="find", text=text)
     assert fake_vm.requests == [] and fake_vm.calls == []

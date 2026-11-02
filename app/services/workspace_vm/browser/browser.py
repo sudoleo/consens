@@ -350,6 +350,8 @@ FIND_JS = r"""
     return '';
   };
   const needle = query.replace(/\s+/g, ' ').trim();
+  // An empty pattern matches at 0 for ever: the page hung (U+FEFF is \s).
+  if (!needle) return { total: 0, matches: [] };
   const pattern = new RegExp(needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
   const matches = [];
   let total = 0, part = 0, found;
@@ -1375,8 +1377,9 @@ def page_text(page, offset):
 
 
 def find_query(request):
-    """find's text with its whitespace folded, or Refused."""
-    query = " ".join(str(request.get("text") or "").split())
+    """find's text with its whitespace folded, or Refused. A byte order mark
+    counts as space, as it does to the page's search (FIND_JS)."""
+    query = " ".join(str(request.get("text") or "").replace("\ufeff", " ").split())
     if not 1 <= len(query) <= FIND_CHARS:
         raise Refused(f"find needs text, 1 to {FIND_CHARS} characters.")
     return query
