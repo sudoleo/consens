@@ -486,8 +486,8 @@ const DEMO_AGENT_STEPS = {
 };
 const DEMO_AGENT_STREAM = { wordsPerTick: 3, tickMs: 40 };
 const DEMO_AGENT_NOTES = demoInPageLanguage({
-  plan: "Whether buying pays off depends on how long you stay. I'll calculate both paths year by year in my workspace, then ask the other AIs how they weigh it.",
-  computed: "In my calculation buying pulls ahead in year 9. I'll put it all in a spreadsheet, so you can change any assumption.",
+  plan: "Whether buying pays off depends on how long you stay. I’ll calculate both paths year by year in my workspace, then ask the other AIs how they weigh it.",
+  computed: "In my calculation buying pulls ahead in year 9. I’ll put it all in a spreadsheet, so you can change any assumption.",
   compared: "They split on whether paying off a loan beats investing the difference, so the answer shows when the two paths cross instead of picking a side."
 });
 // The agent's plan in its own words (update_plan); the step it is on is

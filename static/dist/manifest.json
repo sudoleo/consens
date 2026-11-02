@@ -1,5 +1,5 @@
 {
-  "sources": "fe4ad871a0c1",
+  "sources": "935b57dba8d8",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -479,7 +479,7 @@
     },
     {
       "name": "demo",
-      "src": "/static/dist/demo.59bc9450805f.js",
+      "src": "/static/dist/demo.274397f8bb1b.js",
       "module": true,
       "defer": false
     },
@@ -577,8 +577,8 @@
     "app.783cf5f60f6d.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
+    "demo.59bc9450805f.js",
     "demo.6666cf540258.js",
-    "demo.699f525605f0.js",
     "firebase.2ed9f1d94655.js",
     "firebase.06b7be671cd6.js",
     "head.de298a48d822.js",
