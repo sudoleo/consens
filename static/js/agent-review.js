@@ -83,6 +83,8 @@
   // The live run renders evidence only once, from its final review object; an
   // activity card built from the streamed review finds its context by key.
   const contextsByKey = new Map();
+  // The notes' context of a rendered review (auditContext), for its activity card.
+  const auditContexts = new WeakMap();
   function currentCheck(review, comparison, raw) {
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const check = review?.checks?.find(c => c.comparison_id === comparison.id);
@@ -790,14 +792,19 @@
     return panel;
   }
   // The reader context of a reviewed answer: its notes ("Notes") and sources.
+  // Keyed by its turn too: every answer stopped before it was fixed has the
+  // hash of "" (agent_comparison snapshot), and one turn's notes opened
+  // another's (bug hunt 2026-11-02).
   function auditContext(review, evidence = {}, turnSources = []) {
-    const context = { key: `agent-audit:${review.answer_hash}`, question: evidence.question || 'Answer review',
+    const turn = evidence.key ? `${evidence.key}:` : '';
+    const context = { key: `agent-audit:${turn}${review.answer_hash}`, question: evidence.question || 'Answer review',
       answers: [], sections: ['differences', 'sources'], labels: { differences: 'Notes' },
       renderPanel: kind => kind === 'sources' ? sourcePanel(turnSources, readUrls(review)) : auditPanel(review) };
     // One review per answer: the reader offers no other basis to switch to.
     context.contextGroup = () => [context];
     contextsByKey.delete(context.key); contextsByKey.set(context.key, context);
     while (contextsByKey.size > 64) contextsByKey.delete(contextsByKey.keys().next().value);
+    auditContexts.set(review, context);
     return context;
   }
   // The review in the duration disclosure: who reviewed, what came of it, in
@@ -861,7 +868,7 @@
       if (readable) {
         button.addEventListener('click', () => {
           const current = host._activityReview;
-          const context = contextsByKey.get(`agent-audit:${current.answer_hash}`) || auditContext(current);
+          const context = auditContexts.get(current) || auditContext(current);
           App.answerReader?.openContext(context, { section: 'differences', trigger: button });
         });
       } else {
@@ -964,6 +971,7 @@
       // An equal review object (the run's end): the activity's buttons find
       // the same contexts, with the turn's sources.
       if (host._advice) activityContexts.set(review, host._advice);
+      if (host._auditContext) auditContexts.set(review, host._auditContext);
       window.linkifyAgentSources?.(body, turnSources); return;
     }
     host.dataset.signature = signature; host._hasReview = true;
@@ -996,6 +1004,7 @@
     if (status.parentNode !== host) host.append(status);
     if (marks.parentNode !== host || marks.nextSibling !== status) host.insertBefore(marks, status);
     const context = auditContext(review, evidence, turnSources);
+    host._auditContext = context;
     const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
     // The marks of exactly this answer, once the review is done.
     overText(body, raw, () => {

@@ -5861,7 +5861,9 @@ Art, Anmerkung und Quelle, nicht platzierte Anmerkungen stehen in der
 Fallback-Liste („Other notes“). Die Leiste bietet Notes, Answers (nur mit
 `compare_models`, öffnet den ersten Vergleich mit Antworten, `adviceContexts`:
 ein Leser-Kontext je Vergleich unter `agent-evidence:{id}`) und Sources; der
-Leser-Kontext der Prüfung (`agent-audit:<answer_hash>`) hat `sections:
+Leser-Kontext der Prüfung (`agent-audit:<turn>:<answer_hash>`, seit 2026-11-02
+mit Turn: jede vor der fixierten Antwort gestoppte Antwort hat den Hash von "";
+die Aktivitätskarte findet ihn über `auditContexts` am Review-Objekt) hat `sections:
 ['differences', 'sources']` und `labels: {differences: 'Notes'}`:
 `model-answer-reader.js` benennt Abschnittsknopf und Titel nach `labels` (sonst
 Answers/Differences/Sources). Kein Score, keine Unterschiedskarten.

@@ -3,8 +3,8 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 import { marked } from 'marked';
 import DOMPurify from 'dompurify';
 
-function setup() {
-  return loadScripts(["static/js/agent-review.js"], { body: '<section><div id="answer"></div></section>', before(w) {
+function setup({ body = '<section><div id="answer"></div></section>' } = {}) {
+  return loadScripts(["static/js/agent-review.js"], { body, before(w) {
     w.injectMarkdown = vi.fn((el, text) => { el.textContent = text; });
     w.renderStoredConsensusClaims = vi.fn(); w.renderStoredDifferenceCards = vi.fn(); w.renderStoredAuditMarks = vi.fn();
     w.App = { answerReader: { openContext: vi.fn(), refreshContext: vi.fn() } };
@@ -936,9 +936,9 @@ it('offers the answers of the models the agent asked beside the notes, without a
   expect(context.renderPanel('sources').querySelectorAll('li')).toHaveLength(2);
   // The agent panel opens a model's answer under the comparison's key, as in comparison mode.
   expect(w.App.agentReview.contextFor(null, 'c1')).toBe(context);
-  // The notes keep their own context.
+  // The notes keep their own context, under their turn.
   buttons[0].click();
-  expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].key).toBe('agent-audit:audit-hash');
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].key).toBe('agent-audit:t1:audit-hash');
   dom.window.close();
 });
 it('keeps an audit turn stopped before its answer in the audit row, with the answers the agent asked for', () => {
@@ -1198,6 +1198,38 @@ it('offers the notes of a run stopped before it wrote any answer', () => {
   w.App.agentReview.renderActivity(details, stopped, '');
   expect(details.textContent).toContain('Review stopped');
   expect(details.querySelector('.agent-activity-insight-actions button').disabled).toBe(false);
+  dom.window.close();
+});
+// Bug hunt 2026-11-02: every answer stopped before it was fixed has the hash
+// of "" (agent_comparison.snapshot); two such turns in one chat opened each
+// other's notes, and the reader on one turn's notes swapped to the other's.
+it('keeps the notes of two turns stopped before their answers apart', () => {
+  const {window: w, document: d, dom} = setup({ body: '<section><div id="a1"></div></section><section><div id="a2"></div></section>' });
+  const stopped = note => ({ version: 1, mode: 'audit', status: 'cancelled', answer_hash: 'e3b0c442', answer_version: 0,
+    comparisons: [], versions: [], checks: [],
+    audit: { reviewers: [{ provider: 'openai', provider_label: 'OpenAI', model: { label: 'GPT' }, status: 'stopped' }],
+      claims: [], unplaced: [],
+      process: [{ model: 'OpenAI', kind: 'doubtful', note, entry: 3, entry_kind: 'step', mark: 1, live: true }] } });
+  const first = stopped('Note of the first turn.'), second = stopped('Note of the second turn.');
+  const [one, two] = [d.getElementById('a1'), d.getElementById('a2')];
+  one.dataset.markdown = two.dataset.markdown = '';
+  const [activityOne, activityTwo] = [d.createElement('div'), d.createElement('div')];
+  // As thread-history.js builds them: activity, then the row, turn by turn.
+  w.App.agentReview.renderActivity(activityOne, first, '');
+  w.App.agentReview.render(one, first, { key: 't1', question: 'Q1' });
+  w.App.agentReview.renderActivity(activityTwo, second, '');
+  w.App.agentReview.render(two, second, { key: 't2', question: 'Q2' });
+  const opened = () => w.App.answerReader.openContext.mock.calls.at(-1)[0];
+  activityOne.querySelector('.agent-activity-insight-actions button').click();
+  const fromActivity = opened();
+  expect(fromActivity.renderPanel('differences').textContent).toContain('Note of the first turn.');
+  one.parentElement.querySelector('.agent-evidence-link').click();
+  expect(opened()).toBe(fromActivity);
+  // The second turn refreshes its own context, never the first one's.
+  const refreshed = w.App.answerReader.refreshContext.mock.calls.map(([context]) => context)
+    .filter(context => context.renderPanel('differences').textContent.includes('Note of the second turn.'));
+  expect(refreshed.length).toBeGreaterThan(0);
+  expect(refreshed.every(context => context.key !== fromActivity.key)).toBe(true);
   dom.window.close();
 });
 // UX audit B4: a review without a single note says so in the row itself;
