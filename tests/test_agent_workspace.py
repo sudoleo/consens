@@ -1459,6 +1459,27 @@ def test_a_chat_folder_moves_as_the_agent_and_never_over_another(monkeypatch, tm
     assert not (tmp_path / "old").exists()
 
 
+def test_a_folder_the_agent_made_read_only_is_deleted_too(tmp_path):
+    """DELETE_SCRIPT runs as the agent's user: a folder it made read-only
+    (chmod -R a-w, Go's module cache) failed rm -rf, and a chat's deletion
+    retried for ever with the chat left on "deleting" (bug hunt 2026-10-30)."""
+    found = shutil.which("bash")
+    locked = tmp_path / "chat" / "cache"
+    locked.mkdir(parents=True)
+    (locked / "mod.go").write_text("package m")
+    locked.chmod(0o555)
+    try:
+        (locked / "probe").write_text("x")
+        enforced = False
+    except PermissionError:
+        enforced = True
+    if not found or not enforced:
+        locked.chmod(0o755)
+        pytest.skip("no bash, or folders' write bits hold nobody back here (Windows, root)")
+    done = subprocess.run([found, "-c", agent_vm.DELETE_SCRIPT, "delete", str(tmp_path / "chat")])
+    assert done.returncode == 0 and not (tmp_path / "chat").exists()
+
+
 def test_the_policy_is_read_as_its_rules_or_not_at_all():
     """get_policy (agent_workspace.prepare restores what it read): the rules
     as set_policy takes them; anything else is the provider failing."""
