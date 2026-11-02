@@ -194,7 +194,7 @@ def test_concurrent_budget_refresh_recovers_orphaned_receipt_and_saved_usage_onc
         with ThreadPoolExecutor(max_workers=2) as pool:
             results = list(pool.map(lambda _: agent_quota.snapshot(db, uid), range(2)))
         assert all(result['used'] == 454 and result['reserved'] == 0 for result in results)
-        totals = db.collection('users').document(uid).get().to_dict()['agent_usage']
+        totals = agent_quota.usage_totals(db, uid)
         assert totals['measured_calls'] == 2 and totals['unsettled_calls'] == 0
         assert root.get().to_dict()['run_status'] == 'cancelled'
         assert store.receipt_ref(*args, step=f'agent:{aid}:0').get().to_dict()['usage']['source'] == 'saved_agent'
@@ -294,7 +294,7 @@ def test_delegation_budget_journal_and_receipts_are_atomic_in_firestore():
             message={"sender": winner, "recipient": "orchestrator", "kind": "question", "text": "Which period?"})
         assert store.delegation_view(*args, agent_id=winner)["messages"][0]["text"] == "Which period?"
         store.finish_run(*args, completion=completion, status="succeeded", run_token=uid)
-        assert db.collection("users").document(uid).get().to_dict()["agent_usage"]["calls"] == 2
+        assert agent_quota.usage_totals(db, uid)["calls"] == 2
         store.delete_chat(uid, chat)
         assert not list(store._turn_ref(*args).collection("agents").stream())
     finally:
@@ -336,7 +336,10 @@ def test_a_journal_batch_is_one_transaction_with_its_own_refusals_in_firestore(m
         saved = store.agent_ref(uid, chat, turn, ids[0]).get().to_dict()
         assert saved["assignment"] == {"goal": "Answer"} and saved["status"] == "completed"
         again = store.publish_agents(*args, run_token=uid, updates=updates)
-        assert [again[i] for i in (0, 2, 3)] == [first[i] for i in (0, 2, 3)]
+        # A retried id returns the session as the first commit left it (its
+        # event_ids, since 2026-11-01): both updates of ids[0] report its end.
+        assert [again[i] for i in (2, 3)] == [first[i] for i in (2, 3)]
+        assert again[0] == {**first[3], "id": first[0]["id"]}
         root = store.receipt_ref(*args).get().to_dict()
         assert (root["event_seq"], root["agent_count"], root["message_count"]) == (3, 2, 1)
         view = store.delegation_view(*args)
