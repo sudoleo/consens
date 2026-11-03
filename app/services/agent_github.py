@@ -202,14 +202,23 @@ class GitHubApp:
 
     def installation_token(self, installation_id, repo, permissions):
         """A token of ``installation_id`` for ``repo`` alone and
-        ``permissions`` alone; None when the installation is gone."""
+        ``permissions`` alone; None when the installation is gone (404).
+        Until 2026-11-03 a 401, 403 or 422 counted as gone too, and the
+        user's whole connection was forgotten: for a repository taken out
+        of the app's selection (422), a rate limit (403) or the app's own
+        key or clock (401)."""
         try:
             response = self.request("POST", f"/app/installations/{int(installation_id)}/access_tokens",
                                     token=self.app_jwt(),
                                     json={"repositories": [repo.split("/", 1)[1]], "permissions": permissions})
         except GitHubUnavailable as exc:
-            if getattr(exc, "github_status", None) in (401, 403, 404, 422):
+            status = getattr(exc, "github_status", None)
+            if status == 404:
                 return None
+            if status == 422:
+                raise GitHubUnavailable(NO_ACCESS.format(repo=repo), 403) from None
+            if status in (401, 403):
+                raise GitHubUnavailable(UNAVAILABLE, 503) from None
             raise
         return response.json()["token"]
 

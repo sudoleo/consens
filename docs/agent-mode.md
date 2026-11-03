@@ -2864,9 +2864,13 @@ auf GitHub hinzugefügtes Repo braucht „Connect again“.
 dem App-Schlüssel (JWT), für das eine Repository und nur die nötigen Rechte:
 Import `contents: read`, Pull Request `contents` und `pull_requests: write`.
 Die Rechte des Nutzers begrenzen es zusätzlich: Import nur mit Lesezugriff,
-Pull Request nur mit Push-Recht (sonst `NO_ACCESS`/`NO_PUSH`). Lehnt GitHub das
-Token ab (App entfernt), meldet das Werkzeug „no longer connected“, und die
-Installation fällt aus der Verbindung; danach „not connected“. Kein Webhook.
+Pull Request nur mit Push-Recht (sonst `NO_ACCESS`/`NO_PUSH`). Kennt GitHub
+die Installation nicht mehr (404, App entfernt), meldet das Werkzeug „no longer
+connected“, und die Installation fällt aus der Verbindung; danach „not
+connected“. Andere Ablehnungen lassen die Verbindung stehen: 422 (Repository
+nicht mehr in der Auswahl der App) heißt `NO_ACCESS`, 401/403 (Schlüssel oder
+Uhr der App, Rate-Limit, gesperrte Installation) „not reachable right now“;
+bis 2026-11-03 vergaßen auch sie die ganze Installation. Kein Webhook.
 
 *`github_import`* (`repo`, optional `ref`, `dest`) löst `ref` (Standard:
 Default-Branch) zum Commit auf, lädt dessen Tarball (höchstens 50 MB gepackt;

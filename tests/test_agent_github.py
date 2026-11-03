@@ -57,6 +57,8 @@ class FakeGitHub:
 
     def __init__(self):
         self.requests, self.removed, self.installations = [], set(), [9]
+        # Installation id -> the status GitHub answers a token request with.
+        self.refused = {}
         self.tokens = 0
 
     def __call__(self, request):
@@ -85,6 +87,8 @@ class FakeGitHub:
         if method == "POST" and path.startswith("/app/installations/") and path.endswith("/access_tokens"):
             if int(path.split("/")[3]) in self.removed:
                 return httpx.Response(404, json={"message": "Not Found"})
+            if int(path.split("/")[3]) in self.refused:
+                return httpx.Response(self.refused[int(path.split("/")[3])], json={"message": "Refused"})
             self.tokens += 1
             return httpx.Response(201, json={"token": f"ghs_{self.tokens}", "expires_at": "2099-01-01T00:00:00Z"})
         if path == "/repos/maxl/app":
@@ -298,6 +302,20 @@ def test_an_app_removed_on_github_shows_as_not_connected(store, fake_vm, github)
     assert "no longer connected" in removed["error"]
     assert again == {"error": NOT_CONNECTED}
     assert GitHubConnections(store.db).public(UID)["connected"] is False
+
+
+@pytest.mark.parametrize("status, error", [(422, NO_ACCESS.format(repo="maxl/app")),
+                                           (403, agent_github.UNAVAILABLE), (401, agent_github.UNAVAILABLE)])
+def test_a_refused_token_keeps_the_connection(store, fake_vm, github, status, error):
+    """Bug hunt 2026-10-27: a repository taken out of the app's selection
+    (422), a rate limit (403) or the app's own key (401) forgot the user's
+    whole connection, and they read that the app was removed."""
+    connected(store, github)
+    github.refused[9] = status
+    loop = vm_loop(store, Agent([[("github_import", {"repo": "maxl/app"})]]))
+    list(loop.run())
+    assert results(loop) == [{"error": error}]
+    assert GitHubConnections(store.db).public(UID)["connected"] is True
 
 
 def test_import_arguments_are_checked_before_anything_runs(store, fake_vm, github):
