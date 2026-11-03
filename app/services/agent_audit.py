@@ -1618,10 +1618,16 @@ class ReviewerSession:
     def _carry(self):
         """What a new conversation needs after rounds in an earlier one: the
         run's beginning and the reviewer's marks so far (nothing for its
-        first conversation)."""
+        first conversation). The beginning keeps the app's workspace_opened
+        entries read so far: with the workspace on demand only they carry its
+        rules to the reviewers (the brief is older), and until 2026-11-03 a
+        new conversation lost them."""
         if len(self.messages) > 1 or not self.cursor:
             return {"brief": self.audit.brief()}
-        return {"earlier": list(self.live_marks), "opening": opening_entries(self.audit.work_log.entries_after(0)),
+        entries = self.audit.work_log.entries_after(0)
+        opened = [(entry, text) for entry, text in entries if entry.get("kind") == "app"
+                  and entry.get("name") == "workspace_opened" and entry["seq"] <= self.cursor]
+        return {"earlier": list(self.live_marks), "opening": opening_entries(entries) + opened,
                 "brief": self.audit.brief()}
 
     def _fresh(self):

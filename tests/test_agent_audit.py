@@ -641,6 +641,40 @@ def test_the_reviewers_follow_a_long_run_to_its_end_in_new_conversations(store, 
         ("anthropic", 1), ("openai", 0)]
 
 
+def test_a_new_conversation_keeps_the_workspace_rules_read_before(store, monkeypatch):
+    """Bug hunt 2026-11-03: with the workspace on demand the reviewers' brief
+    is written before it opens, and its rules (installing packages is normal
+    work, ~/.secrets is there to be read) reach them only as the app's entry
+    workspace_opened. A new conversation carried the run's beginning and the
+    marks, not that entry: from then on the reviewer held normal workspace
+    steps against the agent."""
+    rules = " ".join(agent_audit.tool_brief(["ask_user", "vm_exec"]))
+
+    def opened(calls):
+        if calls == 1:
+            script.loop.work_log.app("workspace_opened", {"text": rules, "tools": ["ask_user", "vm_exec"]})
+    script = Audit(tool_steps=4, on_lookup=opened)
+    loop = audit_loop(store, script)
+    original = agent_audit.ReviewerSession._round
+
+    def full(self, entries):
+        # The Anthropic reviewer's first conversation is full after round 2,
+        # which read the workspace's entry.
+        if self.provider == "anthropic" and self.live_rounds == 2 and len(self.messages) > 1:
+            self.chars = self.budget
+        return original(self, entries)
+    monkeypatch.setattr(agent_audit.ReviewerSession, "_round", full)
+    list(loop.run())
+    assert saved(store, loop)["agent_review"]["status"] == "succeeded"
+    [carried] = [m for m in script.prompts["anthropic"]
+                 if m["role"] == "user" and "Your earlier rounds no longer fit" in m["content"]]
+    beginning = next(value["entries"] for head, value in round_sections(carried).items() if "beginning" in head)
+    new, _ = round_entries(carried)
+    assert not [e for e in new if e.get("name") == "workspace_opened"]
+    [workspace] = [e for e in beginning if e.get("name") == "workspace_opened"]
+    assert rules in json.dumps(workspace, ensure_ascii=False)
+
+
 def test_a_reviewer_whose_rounds_fit_no_conversation_says_where_it_stopped_following(store, monkeypatch):
     """A-M4 (2026-10-29): following=False left no trace (G4)."""
     monkeypatch.setattr(agent_audit, "session_budget", lambda model: 100)

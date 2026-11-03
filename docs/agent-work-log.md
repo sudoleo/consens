@@ -199,7 +199,8 @@ verbleibenden Platz, liest sie ihre Einträge kürzer (1.500, dann 300 Zeichen,
 eine nicht mehr, geht der Prüfer in einem neuen Gespräch weiter (neue
 Sitzung im Panel, die alte endet „completed“). Dessen erste Runde bringt den
 Anfang des Laufs mit, also alles vor dem ersten Modellschritt (was der Agent
-bekam: Anweisungen, Gespräch, Dateien; `opening_entries`), dazu die
+bekam: Anweisungen, Gespräch, Dateien; `opening_entries`, dazu schon gelesene
+`workspace_opened`-Einträge mit den Regeln des Arbeitsplatzes), dazu die
 bisherigen Befunde des Prüfers (`earlier`) und die neuen Einträge
 (`ReviewerSession._carry`). Im Normalfall bleibt die Schlussrunde im
 laufenden Gespräch und sieht dessen Live-Runden. Passt sie nicht mehr,

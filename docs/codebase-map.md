@@ -6327,7 +6327,9 @@ sie schon diesen Schritt prüfen; sie lesen das Protokoll ab Eintrag 1
 (`ReviewerSession.cursor` 0), also auch die Arbeit davor. Seit der Gegenprüfung
 2026-11-01 schreibt `_open_workspace` in jedem Modus den App-Eintrag
 `workspace_opened` (`agent_audit.tool_brief` der neuen Werkzeuge): Prüfer, die
-schon folgten, lasen die Regeln des Arbeitsplatzes vorher nirgends. Die erste
+schon folgten, lasen die Regeln des Arbeitsplatzes vorher nirgends. Ein neues
+Prüfergespräch (`_carry`) trägt die schon gelesenen `workspace_opened`-Einträge
+seit 2026-11-03 mit dem Anfang des Laufs mit. Die erste
 Gate-Runde spät gestarteter Prüfer liest den ganzen Verlauf; passt er nicht
 oder dauert er länger als `GATE_SECONDS`, entscheidet der Nutzer (`unchecked`).
 Ohne Arbeitsplatz (Google-Daten, kein VM-Zugang) prüft dann
