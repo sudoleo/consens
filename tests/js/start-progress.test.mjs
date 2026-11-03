@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
@@ -122,5 +123,32 @@ describe("the bar where the user waits", () => {
     render();
     expect(preview.querySelector(".agent-start-progress")).toBeNull();
     activity.dispose(host);
+  });
+
+  it("stands flush under a tool's line in the detailed lines, after the mark only under the calm one (2026-11-03)", () => {
+    // Max's screenshot: under "Listing the tabs" the bar stood a mark's
+    // width in, though a tool's line has no mark.
+    const { App, host } = setup(["static/js/user-settings.js", "static/js/start-progress.js",
+      "static/js/agent-activity.js"]);
+    App.userSettings.set("detailed_progress", true);
+    const activity = App.agentActivity;
+    const events = [];
+    activity.receive(events, { version: 1, kind: "tool", id: "completion:1:call_1/tool", name: "browser",
+      action: "tabs", status: "running", starting_until: new Date(NOW + 15_000).toISOString() });
+    activity.render(host, { running: true, status: "running", events });
+    const bar = host.querySelector(".agent-progress .agent-start-progress");
+    expect(bar.previousElementSibling.classList.contains("agent-vm")).toBe(true);
+    expect(bar.previousElementSibling.classList.contains("agent-current-status")).toBe(false);
+    activity.dispose(host);
+    // The indent belongs to the line with the mark alone.
+    const css = readFileSync(new URL("../../static/css/agent-chat.css", import.meta.url), "utf8")
+      .replace(/\/\*[\s\S]*?\*\//g, "");
+    const rules = css.split("}").filter(rule => /\.agent-start-progress\s*\{/.test(rule));
+    expect(rules.map(rule => rule.trim().split("{")[0].trim())).toEqual([
+      ".agent-progress .agent-start-progress",
+      ".agent-progress .agent-current-status + .agent-start-progress",
+    ]);
+    expect(rules[0]).not.toMatch(/padding-left/);
+    expect(rules[1]).toMatch(/padding-left: calc\(\.86em \* 1\.395 \+ \.55em\)/);
   });
 });
