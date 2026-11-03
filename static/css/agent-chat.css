@@ -952,8 +952,11 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-progress .agent-progress-thought { padding-left: calc(.86em * 1.395 + .55em); }
 .agent-progress .agent-current-status + .agent-progress-thought { margin-top: calc(var(--space-1) - var(--trace-gap)); }
 /* The workspace's start counted down (start-progress.js) under the step
-   that waits for it, on the edge of its words like the thought. */
-.agent-progress .agent-start-progress { margin: calc(var(--space-1) - var(--trace-gap)) 0 var(--space-2); padding-left: calc(.86em * 1.395 + .55em); }
+   that waits for it, on the edge of its words: after the mark under the
+   calm status, flush under a tool's line, which has none (until 2026-11-03
+   it stood a mark's width in there too, Max). */
+.agent-progress .agent-start-progress { margin: calc(var(--space-1) - var(--trace-gap)) 0 var(--space-2); }
+.agent-progress .agent-current-status + .agent-start-progress { padding-left: calc(.86em * 1.395 + .55em); }
 .agent-activity-update { color: var(--agent-trace-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); overflow-wrap: anywhere; white-space: pre-line; }
 /* A step's thinking, opened (agent-activity.js updateThought): a heading in
    the trace's ink over its paragraphs in the quiet one, no weight, no rule. */
