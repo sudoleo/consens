@@ -2878,15 +2878,20 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         // führt keinen Thread, aber die Frage gehört trotzdem auf den Schirm.
         if (bookmark.query) {
             window.App?.setThreadQuestion?.(displayQuestion);
-            const questionInput = document.getElementById("questionInput");
-            if (questionInput) {
-                questionInput.value = "";
-                questionInput.dispatchEvent(new Event("input", { bubbles: true }));
-                window.syncDemoChipState?.();
+            // The same chat drawn anew (openBookmark's check of a cached
+            // view found a change) keeps what was typed meanwhile and its
+            // quote; until 2026-11-03 the redraw emptied them.
+            if (!options.keepComposer) {
+                const questionInput = document.getElementById("questionInput");
+                if (questionInput) {
+                    questionInput.value = "";
+                    questionInput.dispatchEvent(new Event("input", { bubbles: true }));
+                    window.syncDemoChipState?.();
+                }
+                // Ein Zitat gehört zu der Antwort, aus der es stammt — auf dem
+                // Schirm steht jetzt eine andere.
+                window.App?.quote?.clear?.();
             }
-            // Ein Zitat gehört zu der Antwort, aus der es stammt — auf dem
-            // Schirm steht jetzt eine andere.
-            window.App?.quote?.clear?.();
             // Falls du eine globale Variable für die letzte Frage hast:
             window.App.state.set("lastQuestion", displayQuestion, "run");
         }
@@ -3254,7 +3259,8 @@ window.openBookmark = async function (bookmarkId) {
         && bookmarkWriteAllowed(requestUid, bookmarkId);
       if (!stillShown) return;
       if (bookmarkViewSignature(fresh) !== bookmarkViewSignature(cached)) {
-        loadSingleBookmarkUI(fresh.bookmark, fresh.turns, { conversationLoadFailed: fresh.conversationLoadFailed, running: fresh.running });
+        loadSingleBookmarkUI(fresh.bookmark, fresh.turns, { conversationLoadFailed: fresh.conversationLoadFailed,
+          running: fresh.running, keepComposer: true });
       }
       rememberBookmarkView(bookmarkId, fresh);
     } catch (error) {

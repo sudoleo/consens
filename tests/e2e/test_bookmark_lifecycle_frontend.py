@@ -382,6 +382,23 @@ def test_choosing_a_chat_answers_at_once_and_loads_detail_and_transcript_togethe
         page.wait_for_timeout(200)
         expect(page.locator('#questionInput')).to_have_value('And what did it cost?')
         expect(page.locator('#agentAnswerBody')).to_contain_text('Answer of the first chat.')
+
+        # Back from another chat to one that changed meanwhile: its check
+        # draws it anew, and what was typed before the check returned stays
+        # (bug hunt 2026-10-22: the redraw emptied it).
+        page.locator('.bookmark[data-id="second"]').click()
+        page.wait_for_timeout(150)
+        release('detail', 'second'); release('conversation', 'second')
+        expect(page.locator('#agentAnswerBody')).to_contain_text('Answer of the second chat.')
+        page.locator('.bookmark[data-id="first"]').click()
+        expect(page.locator('#agentAnswerBody')).to_contain_text('Answer of the first chat.')
+        page.locator('#questionInput').fill('Which one is cheaper?')
+        chats['first']['turn']['consensus'] = 'Answer of the first chat, now longer.'
+        chats['first']['bookmark']['responses']['consensus'] = 'Answer of the first chat, now longer.'
+        page.wait_for_timeout(150)
+        release('detail', 'first'); release('conversation', 'first')
+        expect(page.locator('#agentAnswerBody')).to_contain_text('Answer of the first chat, now longer.')
+        expect(page.locator('#questionInput')).to_have_value('Which one is cheaper?')
         assert not errors
     finally:
         context.close()
