@@ -56,7 +56,10 @@ and billed like any other step.
   (or RUN_SUMMARY_WINDOW_SHARE of a smaller window) despite the stubs above,
   and most of it is the run's own, the agent summarizes its work on this
   message so far; the summary replaces those steps, only its latest step
-  stays when it is small. The summary request repeats the next step's
+  stays when it is small. As Codex keeps the user's messages word for word,
+  the messages the user sent into the run stay ahead of it; as Claude Code
+  puts the plan back after compacting, the app adds the plan and the
+  background processes of the message (run_state). The summary request repeats the next step's
   request with the request at its end (same tools, same tool choice), so it
   reads the cached prefix. A long VM run no longer ends at the window's
   LONG_RUN_CONTEXT_SHARE, and each later step sends a fraction.
@@ -139,7 +142,12 @@ HISTORY_SUMMARY_OPEN = ("[consens.io summary of the earlier messages of this cha
 HISTORY_SUMMARY_PARTIAL = ("[Messages older than the ones this summary covers were no longer available when it was "
                            "written.]")
 RUN_SUMMARY_OPEN = ("[consens.io summary of your work on this message so far, written by you when its context grew "
-                    "long; the steps it covers are no longer shown. A record of your work, not a new request.]")
+                    "long; the steps it covers are no longer shown. A record of your work, not a new request: the "
+                    "work on the question above goes on from here, building on it instead of repeating it.]")
+# What the app adds to a run's summary from its own state (run_state): exact
+# where the summary may not be.
+RUN_STATE_OPEN = "[As the app has it now:]"
+PLAN_MARKS = {"completed": "[x]", "in_progress": "[in progress]", "pending": "[ ]"}
 SUMMARY_CLOSE = "[end of summary]"
 HISTORY_SUMMARY_REQUEST = (
     "App request, not the user's: this chat has grown long. Write a summary of the conversation above that will "
@@ -479,16 +487,32 @@ def is_summary(content):
     return isinstance(content, str) and content.startswith((HISTORY_SUMMARY_OPEN, RUN_SUMMARY_OPEN))
 
 
-def summary_message(text, *, run=False, partial=False):
+def summary_message(text, *, run=False, partial=False, state=""):
     """The message that stands for what a summary covers. ``partial``: the
-    history it summarized had already lost older messages."""
+    history it summarized had already lost older messages. ``state``: what
+    the app adds of a run's own state (run_state)."""
     head = RUN_SUMMARY_OPEN if run else HISTORY_SUMMARY_OPEN
     if partial:
         head += "\n" + HISTORY_SUMMARY_PARTIAL
     body = text.strip()
     if len(body) > SUMMARY_MAX_CHARS:
         body = body[:SUMMARY_MAX_CHARS - 1] + "…"
+    if state:
+        body += "\n\n" + state
     return {"role": "user", "content": f"{head}\n{body}\n{SUMMARY_CLOSE}"}
+
+
+def run_state(plan=(), processes=()):
+    """The run's state as the app has it, for its summary: the plan as the
+    agent last wrote it (update_plan) and the background processes this
+    message started, or "" without either."""
+    lines = [f"- {PLAN_MARKS.get(item.get('status'), '[ ]')} {item.get('content', '')}" for item in plan or ()]
+    if lines:
+        lines.insert(0, "Your plan (update_plan):")
+    if processes:
+        lines.append("Background processes started in this message: " + ", ".join(sorted(processes))
+                     + " (vm_process_output without id lists them and whether they still run).")
+    return "\n".join([RUN_STATE_OPEN, *lines]) if lines else ""
 
 
 def summary_text(value):

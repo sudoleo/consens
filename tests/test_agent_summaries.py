@@ -343,3 +343,65 @@ def test_a_run_is_summarized_before_it_would_end_at_the_window():
     """Before summaries a long run at LONG_RUN_CONTEXT_SHARE of the window
     wrote its answer (TURN_CONTEXT_LIMIT); the summary comes first."""
     assert agent_compaction.RUN_SUMMARY_WINDOW_SHARE < LONG_RUN_CONTEXT_SHARE
+
+
+# --- As Claude Code and Codex keep it (2026-11-03) --------------------------------
+
+def test_the_app_adds_the_plan_and_the_processes_to_a_run_summary():
+    state = agent_compaction.run_state([{"content": "Write the parser", "status": "completed"},
+                                        {"content": "Fix test_unicode", "status": "in_progress"},
+                                        {"content": "Answer", "status": "pending"}], {"p2", "p1"})
+    assert state.splitlines() == [
+        agent_compaction.RUN_STATE_OPEN, "Your plan (update_plan):", "- [x] Write the parser",
+        "- [in progress] Fix test_unicode", "- [ ] Answer",
+        "Background processes started in this message: p1, p2 (vm_process_output without id lists them and "
+        "whether they still run)."]
+    assert agent_compaction.run_state() == ""
+    content = summary_message("notes", run=True, state=state)["content"]
+    assert content.endswith(f"notes\n\n{state}\n{SUMMARY_CLOSE}") and is_summary(content)
+    # The agent goes on from it instead of starting over (Claude Code, Codex).
+    assert "goes on from here" in agent_compaction.RUN_SUMMARY_OPEN
+    assert "instead of repeating it" in agent_compaction.RUN_SUMMARY_OPEN
+
+
+def test_a_history_summary_moves_what_the_run_appended_after_its_question(store):
+    """Whatever stands after the question before the first step (the run's
+    own) moves up with it: the run's start is not the end of the list."""
+    script = Summarizer()
+    loop = history_loop(store, script)
+    loop.messages.append({"role": "user", "content": "[consens.io: an app note of this run]"})
+    list(loop.run())
+    answer = script.seen[1]
+    assert strip_app_context(answer[4]["content"]).endswith("Analyse my data.")
+    assert answer[5]["content"] == "[consens.io: an app note of this run]"
+    assert (loop.turn_start, loop.history_end) == (5, 3)
+
+
+def test_a_run_summary_keeps_the_users_messages_and_the_apps_state(store, fake_vm, monkeypatch):
+    from app.services.agent_delegation import USER_NOTE_OPEN
+    note = {"role": "user", "content": USER_NOTE_OPEN + "\nPlease also add a test for emoji."}
+    plan = [{"content": "Build the parser", "status": "completed"}, {"content": "Test it", "status": "in_progress"}]
+    calls = [[("update_plan", {"items": plan})], *[[("vm_exec", {"command": f"make step{n}"})] for n in range(5)]]
+    script = Summarizer(calls)
+    loop = vm_loop(store, script)
+
+    def due(inputs, context_length, messages, start):
+        commands = sum(1 for m in messages[start:] if m.get("role") == "tool")
+        if commands >= 4 and not loop.run_summaries:
+            # The user wrote into the run after its first steps.
+            messages.insert(start + 2, note)
+            loop.vm_tools.processes.started.add("dev-server-1")
+            return True
+        return False
+    monkeypatch.setattr(agent_compaction, "run_summary_due", due)
+    list(loop.run())
+    request = script.summary_requests()[0]
+    after = script.seen[script.seen.index(request) + 1]
+    start = next(n for n, m in enumerate(after) if strip_app_context(str(m.get("content"))).endswith("Analyse my data."))
+    # The user's message word for word, then the summary with the app's state.
+    assert after[start + 1] == note
+    summary = after[start + 2]["content"]
+    assert summary.startswith(agent_compaction.RUN_SUMMARY_OPEN)
+    assert "- [x] Build the parser" in summary and "- [in progress] Test it" in summary
+    assert "dev-server-1" in summary
+    assert stored(store, loop)["assistant_response"] == ANSWER

@@ -1187,6 +1187,10 @@ class VMTools:
         # sha256: sharing that file previews it without converting it again.
         # The newest RENDERED_KEPT, oldest first.
         self._rendered, self._rendered_lock = {}, threading.Lock()
+        # The background-process tools, once they are offered: the processes
+        # this message started (ProcessTools.started), which a summary of the
+        # run names (DelegationLoop._summarize).
+        self.processes = None
 
     def tools(self):
         from app.services import agent_github, agent_web_images
@@ -1198,6 +1202,8 @@ class VMTools:
         # without the app's configuration the tools say "not set up".
         github = agent_github.GitHubTools(self).tools()
         images = getattr(self.loop, "image_tools", None)
+        if self.processes is None:
+            self.processes = ProcessTools(self)
         return [self._guarded(tool) for tool in [
             ReadOnlyTool("vm_exec", "Run a shell command in your workspace (bash, in this chat's folder by default). "
                          "Returns stdout, stderr (their ends when long), exit code and duration.",
@@ -1225,7 +1231,7 @@ class VMTools:
                             if sees_pictures(self.loop.model) else "."),
                          VmRenderOfficeArgs, self.render_office, activity=self._path_activity, reports=True),
             # Dev servers and long test runs (agent_vm_processes.py).
-            *ProcessTools(self).tools(),
+            *self.processes.tools(),
             # Only for a chat model that takes images.
             *([ReadOnlyTool("vm_view_image", "Look at a picture in your workspace (PNG, JPEG, WebP or GIF up to 5 MB), "
                             "such as a chart you plotted or a screenshot: it follows as an image after the result.",

@@ -4332,8 +4332,13 @@ sagt es („Summarizing …“, `SUMMARY_TEXTS`), das Arbeitsprotokoll vermerkt
   der Lauf selbst, fasst der Agent seine bisherige Arbeit an dieser Nachricht
   zusammen. Die Anfrage ist die des nächsten Schritts plus Bitte am Ende
   (gleiche Werkzeuge, gleiche Tool-Wahl), liest also dessen Cache. Danach sieht
-  der Agent Frage, Zusammenfassung und, wenn höchstens `RUN_KEEP_CHARS` =
-  30.000 groß, seinen letzten Schritt samt Ergebnissen. Das Arbeitsprotokoll
+  der Agent Frage, die Nachrichten, die der Nutzer in den Lauf geschrieben hat,
+  wörtlich (wie Codex Nutzernachrichten behält), die Zusammenfassung samt dem
+  Stand der App (`run_state`: der Plan aus `update_plan` und die in dieser
+  Nachricht gestarteten Hintergrundprozesse, wie Claude Code Plan und laufende
+  Befehle wieder einspielt) und, wenn höchstens `RUN_KEEP_CHARS` = 30.000
+  groß, seinen letzten Schritt samt Ergebnissen. Die Kopfzeile sagt, dass die
+  Arbeit von dort weitergeht, ohne Erledigtes zu wiederholen. Das Arbeitsprotokoll
   der nächsten Nachricht (`work_record`) und die Belege einer Watch kennen
   weiter jeden Aufruf (`own_messages`). So endet ein langer Lauf nicht mehr bei
   80 % des Fensters, und jeder weitere Schritt sendet nur noch einen Bruchteil.

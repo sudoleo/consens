@@ -1109,10 +1109,12 @@ class DelegationLoop(AgentLoop):
         before = agent_compaction.own_chars(self.messages, 1)
         if kind == "history":
             message = agent_compaction.summary_message(text, partial=plan["partial"])
-            kept = self.messages[plan["end"]:]
-            self.messages[1:] = [message, *kept]
-            self.turn_start = len(self.messages)
-            self.history_end = self.turn_start - 2
+            # One message for what it covers: everything after it moves up,
+            # whatever the run already appended after its question.
+            shift = plan["end"] - 2
+            self.messages[1:plan["end"]] = [message]
+            self.turn_start -= shift
+            self.history_end -= shift
             try:
                 self.store.save_history_summary(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
                                                 summary={"content": message["content"], "through": plan["through"],
@@ -1128,14 +1130,21 @@ class DelegationLoop(AgentLoop):
             cut = agent_compaction.run_tail(self.messages, self.turn_start, asked)
             replaced = self.messages[self.turn_start:cut]
             self.summarized.extend(message for message in replaced if message.get("role") in {"assistant", "tool"})
+            # The user's own messages into the run stay word for word, ahead
+            # of the summary that says what came of them (as Codex keeps them).
+            notes = [message for message in replaced if message.get("role") == "user"
+                     and str(message.get("content") or "").startswith(USER_NOTE_OPEN)]
             logged, tail = self.messages[cut:asked], self.messages[cut:]
-            self.messages[self.turn_start:] = [agent_compaction.summary_message(text, run=True), *tail]
+            processes = getattr(getattr(self.vm_tools, "processes", None), "started", None) or ()
+            state = agent_compaction.run_state(self.plan_tools.items if self.plan_tools is not None else (), processes)
+            self.messages[self.turn_start:] = [*notes, agent_compaction.summary_message(text, run=True, state=state),
+                                               *tail]
             self.run_summaries += 1
             self.compacted_to = None
             if self.work_log is not None:
-                # The summary comes next; the kept step is in the log already,
-                # a message the user sent meanwhile not yet.
-                self.work_log.rewound("agent", self.turn_start, seen=logged)
+                # The summary comes next; the user's messages and the kept step
+                # are in the log already, a message the user sent meanwhile not yet.
+                self.work_log.rewound("agent", self.turn_start, seen=[*notes, *logged])
         after = agent_compaction.own_chars(self.messages, 1)
         logging.info("Agent summary kind=%s chars_before=%s chars_after=%s", kind, before, after)
         if self.work_log is not None:
