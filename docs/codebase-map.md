@@ -6515,7 +6515,8 @@ Objektspeichers); Aufräumen stündlich (`cleanup_expired_work_logs`). Lesen:
 `read_work_log`/`work_log_entry` über die beiden `work-log`-Endpunkte (seit
 2026-10-31 der Besitzer des Turns, `require_agent_access`, der Turn wird unter
 seinem Konto gesucht; vorher Pro und Admins mit Audit; Turn eines aktiven
-Chats). Anzeige: `agent-work-log.js`
+Chats; findet die Abfrage alter Turns Sammeldokumente, weil der erste Sammel-Save
+nach dem Lesen des Turns kam, liest sie als Sammeldokumente). Anzeige: `agent-work-log.js`
 (`App.agentWorkLog.render`, `reset` beim Kontowechsel) als letzter Abschnitt
 der Sitzungsliste in der Seitenleiste, `.admin-only` (vom 26. bis 29.10.
 `.audit-only`, also jedem Pro-Konto mit Rohnamen und JSON; UX-Audit F5: die
