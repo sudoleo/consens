@@ -13,7 +13,9 @@ import { describe, expect, it } from "vitest";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SOURCE = readFileSync(path.join(ROOT, "app/services/workspace_vm/browser/browser.py"), "utf8");
-const SNAPSHOT_JS = SOURCE.match(/SNAPSHOT_JS = r"""\n([\s\S]*?)\n"""/)[1];
+// read keeps each element's key (KEY_JS), which browser.py puts into the script.
+const KEY_JS = SOURCE.match(/\nKEY_JS = r"""\n([\s\S]*?)\n"""/)[1];
+const SNAPSHOT_JS = SOURCE.match(/SNAPSHOT_JS = r"""\n([\s\S]*?)\n"""/)[1].replace("%KEY_JS%", KEY_JS);
 const FIND_JS = SOURCE.match(/FIND_JS = r"""\n([\s\S]*?)\n"""/)[1];
 
 // What a browser's own stylesheet says and jsdom leaves out: these are inline.

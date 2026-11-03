@@ -519,19 +519,25 @@ def test_the_programs_refusals_and_the_users_takeover_reach_the_agent(store, fak
 def test_a_failing_browser_vm_costs_only_the_browser(store, fake_vm):
     """A failure costs its call; three in a row the browser for the message
     (runtime audit 2026-10-30, A1: before, the first one did)."""
-    script = Agent([[("browser", {"action": "read"}), ("browser", {"action": "read"})],
-                    [("browser", {"action": "read"}), ("browser", {"action": "read"})],
+    # One browser call per step: a failed one leaves its step's later browser
+    # calls unrun (CALL_AFTER_BROWSER_FAILURE, test_browser_vm_safety.py). A
+    # command between them keeps the steps from counting as three invalid
+    # rounds in a row (TURN_INVALID_LIMIT).
+    script = Agent([[("browser", {"action": "read"})], [("browser", {"action": "read"})],
+                    [("vm_exec", {"command": "ls"})],
+                    [("browser", {"action": "read"})], [("browser", {"action": "read"})],
                     [("vm_exec", {"command": "ls"})]])
     fake_vm.fail.add("run")
     loop = vm_loop(store, script)
     list(loop.run())
-    *browser, command = results(loop)
+    first, second, command, third, fourth, last = results(loop)
     interrupted = {"error": agent_browser.BROWSER_INTERRUPTED}
-    assert browser == [interrupted, interrupted, {"error": BROWSER_UNAVAILABLE}, {"error": BROWSER_UNAVAILABLE}]
+    assert [first, second, third, fourth] == [interrupted, interrupted, {"error": BROWSER_UNAVAILABLE},
+                                              {"error": BROWSER_UNAVAILABLE}]
     # The warm-up and three calls tried it, the fourth never did; the rest at the end tried too (K2).
     runs = [call for call in fake_vm.calls if call[0] == "run"]
     assert len(runs) == 5 and all(call[1] == BROWSER for call in runs)
-    assert command["exit_code"] == 0
+    assert command["exit_code"] == 0 and last["exit_code"] == 0
 
 
 def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypatch):

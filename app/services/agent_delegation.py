@@ -167,6 +167,11 @@ CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile 
                        "may have changed.")
 CALL_AFTER_DENIAL = "Not run: the user did not allow {domain} earlier in this step."
 CALL_AT_LIMIT = "Not run: this message reached its limit."
+# Since 2026-11-03: a step's browser calls build on each other (click a chat,
+# type, Enter). When one fails, the next would act on a page that is not
+# where the step expected it, and type into the wrong chat.
+CALL_AFTER_BROWSER_FAILURE = ("Not run: an earlier browser call of this step failed, so the page may not be where "
+                              "this call expected it. That call's result shows the page as it is now.")
 # The line of facts after each batch of a message with the workspace (_note_progress).
 PROGRESS_OPEN = "[consens.io, written by the app:"
 # The message's limits stand in that line only from this share of them on
@@ -3419,6 +3424,9 @@ class DelegationLoop(AgentLoop):
                         # was interrupted (CALL_AFTER_*). Each such call gets
                         # that as its result, the app's own text (``unrun``).
                         stopped, unrun = None, set()
+                        # A browser call of this step that failed: the step's
+                        # later browser calls do not run (CALL_AFTER_BROWSER_FAILURE).
+                        browser_failed = False
                         over_limit = getattr(value, "over_limit_ids", None) or set()
 
                         def not_run(call, text):
@@ -3433,6 +3441,9 @@ class DelegationLoop(AgentLoop):
                                 continue
                             if stopped is not None:
                                 not_run(call, stopped)
+                                continue
+                            if browser_failed and name == "browser":
+                                not_run(call, CALL_AFTER_BROWSER_FAILURE)
                                 continue
                             # The chat's next message starts with the workspace open.
                             self.workspace_used = self.workspace_used or name in self.workspace_names
@@ -3514,6 +3525,7 @@ class DelegationLoop(AgentLoop):
                             content = json.loads(result["content"])
                             last_accepted = "error" not in content
                             accepted_tool |= last_accepted
+                            browser_failed = browser_failed or (name == "browser" and not last_accepted)
                             if self.comparison and self.comparison.finalized:
                                 # Ignore speculative extra calls in the same batch
                                 # once the review has reached an end state.

@@ -151,12 +151,14 @@ class BrowserArgs(BaseModel):
         "press a key. scroll: direction. download: the file at url (default: the current page's address) with "
         "the user's sign-ins. "
         "back, forward. tabs: list them; tab: bring tab number to the front. screenshot: a picture of the page. "
-        "wait: seconds, also until the user hands the browser back."))
+        "wait: seconds, also until the user hands the browser back; with text, until the page shows that text "
+        "(at most seconds, default 30), such as a sent message or a result."))
     url: str = Field(default="", max_length=4000, description=(
         "open: an http or https address. download: the file's address (empty: the current page's)."))
     ref: str = Field(default="", pattern=r"^(e[0-9]{1,8})?$", description="An element's ref from read.")
     text: str = Field(default="", max_length=TYPE_CHARS, description=(
-        "type: the text (never a password). find: the text to look for (up to 200 characters)."))
+        "type: the text (never a password). find: the text to look for, wait: the text to wait for (up to 200 "
+        "characters)."))
     enter: bool = Field(default=False, description="type: press Enter afterwards.")
     option: str = Field(default="", max_length=500, description="select: the option's label or value.")
     key: Literal[("",) + KEYS] = ""
@@ -319,6 +321,8 @@ def required(args):
         raise ValueError(f"{args.action} needs {need}.")
     if args.action == "find" and not 1 <= len(" ".join(args.text.replace("\ufeff", " ").split())) <= FIND_CHARS:
         raise ValueError(f"find needs text, 1 to {FIND_CHARS} characters.")
+    if args.action == "wait" and args.text and not 1 <= len(" ".join(args.text.replace("\ufeff", " ").split())) <= FIND_CHARS:
+        raise ValueError(f"wait waits for a text of 1 to {FIND_CHARS} characters.")
     if args.action == "select" and not args.option:
         raise ValueError("select needs option.")
     if args.action == "click" and not args.ref and (args.x is None or args.y is None):

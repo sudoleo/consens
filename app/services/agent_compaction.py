@@ -411,8 +411,9 @@ def describe(name, arguments, result):
     elif name == "browser":
         target = next((args[key] for key in ("url", "ref", "key", "file") if isinstance(args.get(key), str)
                        and args[key].strip()), "")
-        # find's text says what it looked for (type's text stays out: it may be a message).
-        if args.get("action") == "find" and isinstance(args.get("text"), str):
+        # find's and wait's text say what it looked or waited for (type's
+        # text stays out: it may be a message).
+        if args.get("action") in {"find", "wait"} and isinstance(args.get("text"), str) and args["text"].strip():
             target = f'"{" ".join(args["text"].split())}"'
         # A place clicked or the strokes dragged (since 2026-10-28), not the points.
         if args.get("action") == "click" and not target and args.get("x") is not None:

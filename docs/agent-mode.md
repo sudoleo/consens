@@ -1837,6 +1837,29 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
     Kopf der Seite vorn. Eine veraltete Ref bringt gleich die ganze Liste
     (`StaleRef`) statt „Call read“. Seiten der eigenen VM: nur ihre Adresse,
     kein Call-Log (es zitiert die Seite).
+  - *Sicherheit und Tempo* (seit 2026-11-03, nach einem WhatsApp-Lauf mit
+    Fehlklick):
+    - *Wiederverwendete Elemente:* `read` legt an jedem gelisteten Element
+      ab, was es von sich sagt (`data-consens-key`, `KEY_JS`: Tag und Name,
+      ohne Getipptes in Feldern). Vor jeder Aktion auf einer Ref vergleicht
+      `located` den Schlüssel; zeigt das Element inzwischen anderes (eine
+      Liste, die ihre Zeilen neu befüllt, wie die Chatliste von WhatsApp),
+      ist die Ref veraltet (`StaleRef`, mit der Seite, wie sie jetzt ist).
+      Vorher erreichte der Klick ohne Fehler einen anderen Chat. Ein Element,
+      dessen Text sich von selbst ändert (neue Vorschau, Zähler), kostet
+      dadurch höchstens einen Schritt mit frischer Liste.
+    - *Aktion auf einem Element:* gibt nach `ACT_MS` = 3 s mit Grund auf
+      (Klick, Tippen, Auswahl; vorher 10 s bzw. 5 s).
+    - *Ein gescheiterter Browser-Aufruf beendet die Browser-Aufrufe seines
+      Schritts* (`CALL_AFTER_BROWSER_FAILURE`, DelegationLoop): Klicken,
+      Tippen, Enter in einem Schritt bauen aufeinander auf; scheitert der
+      Klick, landete der Text sonst im falschen Feld. Andere Werkzeuge des
+      Schritts laufen weiter.
+    - *`wait` mit `text`:* wartet, bis die Seite vorn den Text zeigt (wie
+      `find` gefaltet, Groß/klein egal, ohne Frames), höchstens `seconds`
+      (Vorgabe 30), und sagt nach wie vielen Sekunden; kommt er nicht, ist
+      das eine Antwort, kein Fehler (`wait_for_text`). Statt fester Pausen
+      oder Screenshots zur Kontrolle.
   - *Download* (L5): Die Antwort von `download` ist die Datei: Name, Bytes,
     Content-Type und wohin eine Weiterleitung führte, kein Tab-Zustand
     mehr; eine leere Antwort ist `refused` mit dieser Tatsache, gespeichert

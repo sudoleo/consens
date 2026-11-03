@@ -175,6 +175,36 @@ PREVIEW_WIDTH = 720
 PREVIEW_QUALITY = 50
 PREVIEW_BYTES = 64 * 1024
 PREVIEW_TRIES = ((PREVIEW_WIDTH, PREVIEW_QUALITY), (600, 35), (480, 40))
+# How long a click, a typed text or a choice on an element waits for it to
+# take the action (visible, still, enabled, nothing over it) before it fails
+# with the reason (failure_text). 10 s until 2026-11-03: an element a layer
+# covered or a list hid kept the agent waiting for nothing.
+ACT_MS = 3_000
+
+# What an element says of itself, as read lists it, without what is typed
+# into it (since 2026-11-03). read keeps it on the element
+# (data-consens-key); an action on the element's ref compares it first
+# (located). A list that draws its rows anew, as WhatsApp's chat list does,
+# gives a row's element, ref and all, another row's content: a click on the
+# ref reached another chat without an error. Now that is a stale ref.
+KEY_JS = r"""
+el => {
+  const clean = text => (text || '').replace(/\s+/g, ' ').trim();
+  const typed = el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable ||
+    ['', 'true', 'plaintext-only'].includes(el.getAttribute('contenteditable')) ||
+    (el.tagName === 'INPUT' && !['checkbox', 'radio', 'submit', 'button', 'reset', 'image', 'file', 'range']
+      .includes(el.type));
+  const labelled = (el.getAttribute('aria-labelledby') || '').split(/\s+/).filter(Boolean)
+    .map(id => clean((document.getElementById(id) || {}).innerText)).join(' ');
+  const own = clean(el.getAttribute('aria-label')) || labelled ||
+    (el.labels && el.labels.length ? clean(el.labels[0].innerText) : '') || clean(el.getAttribute('placeholder')) ||
+    clean(el.getAttribute('alt')) || clean(el.getAttribute('title')) || clean(el.getAttribute('name')) || el.id || '';
+  const said = typed ? own : own || clean(el.innerText) || clean(el.getAttribute('href'));
+  return (el.tagName + ' ' + said).slice(0, 300);
+}
+""".strip()
+# The key read kept and the element's key now.
+KEY_CHECK_JS = "el => [el.getAttribute('data-consens-key'), (" + KEY_JS + ")(el)]"
 
 # A ref stays with its element, and a new element takes the next number of
 # the browser (``start``, REF_COUNTER). Until 2026-10-27 every read numbered
@@ -182,6 +212,7 @@ PREVIEW_TRIES = ((PREVIEW_WIDTH, PREVIEW_QUALITY), (600, 35), (480, 40))
 # element without an error; now it names its element or none.
 SNAPSHOT_JS = r"""
 start => {
+  const key = %KEY_JS%;
   const ACT = 'a[href],button,input:not([type=hidden]),select,textarea,summary,[role=button],[role=link],' +
     '[role=checkbox],[role=radio],[role=tab],[role=menuitem],[role=menuitemcheckbox],[role=option],' +
     '[role=switch],[role=combobox],[role=textbox],[role=searchbox],[role=slider],[contenteditable=""],' +
@@ -265,6 +296,8 @@ start => {
       el.setAttribute('data-consens-ref', ref);
     }
     given.add(ref);
+    // What it says now: an action on the ref checks it is still this (located).
+    el.setAttribute('data-consens-key', key(el));
     const kind = role(el);
     let label = name(el) || clean(el.value && el.type !== 'password' ? el.value : '');
     if (!label && el.tagName === 'A') label = clip(clean(el.getAttribute('href')), 60);
@@ -288,7 +321,7 @@ start => {
   if (front.length) front.push('(the page under it:)');
   return {lines: front.length ? ['(over the page:)', ...front, ...lines, ...outside] : lines.concat(outside), count};
 }
-"""
+""".replace("%KEY_JS%", KEY_JS)
 
 # find: what the page shows as one string, its whitespace folded. A text
 # counts where its element is shown; a new block or a line break starts with
@@ -1454,7 +1487,16 @@ def located(page, ref):
     for frame in frames:
         locator = frame.locator(f'[data-consens-ref="{ref}"]')
         if locator.count():
-            return (None if address is None else frame), locator.first
+            target = locator.first
+            try:
+                kept, now = target.evaluate(KEY_CHECK_JS)
+            except Exception:
+                kept = now = None
+            if kept and now != kept:
+                # The page drew other content into the element (KEY_JS).
+                raise StaleRef(f"{ref} shows something else now than when you read it: the page reused its element. "
+                               "The page as it is now:")
+            return (None if address is None else frame), target
     # The page as it is now follows (on_failure): before, only "Call read", one more step.
     raise StaleRef(f"{ref} is not on the page any more (it changed). The page as it is now:")
 
@@ -1707,6 +1749,42 @@ def hidden_text(page):
     return f"URL: {page.url}\n{OWN_COMPUTER}"
 
 
+# wait with text (since 2026-11-03): whether the page in front shows the
+# text, its whitespace folded and in any case, as find looks for it (not in
+# its frames).
+SHOWS_JS = r"""
+query => {
+  const fold = text => (text || '').replace(/\s+/g, ' ').trim().toLowerCase();
+  return fold(document.body ? document.body.innerText : '').includes(fold(query));
+}
+"""
+TEXT_POLL_SECONDS = 0.25
+
+
+def wait_for_text(context, request, query):
+    """wait with text: until the page in front shows ``query``, at most its
+    seconds (default 30), looking every TEXT_POLL_SECONDS. Instead of a fixed
+    wait, or screenshots to see whether a message went out or a page is done.
+    Not finding it is an answer, not a failure: the page as it is follows."""
+    seconds = min(WAIT_MAX, max(1, int(request.get("seconds") or 30)))
+    started = time.time()
+    while True:
+        page = current_page(context)
+        if hidden(page):
+            return {"text": hidden_text(page)}
+        try:
+            found = bool(page.evaluate(SHOWS_JS, query))
+        except Exception:
+            # The page is loading anew: the next look tells.
+            found = False
+        if found or time.time() - started >= seconds:
+            break
+        time.sleep(TEXT_POLL_SECONDS)
+    said = (f'"{query}" is on the page, after {time.time() - started:.1f} s.' if found
+            else f'"{query}" did not appear within {seconds} s.')
+    return with_preview(page, request, with_picture(page, request, {"text": said + "\n" + after_text(page, "wait")}))
+
+
 def own_computer(url, local_ports=()):
     """Whether the page at ``url`` is the browser's own computer or a
     private network (its debugging port, a link or a redirect there): never
@@ -1808,7 +1886,7 @@ def run(request):
         # The server's end of a message (main shortens the hold): no
         # browser to start, no page to look at.
         return {"text": RESTED}
-    query = find_query(request) if action == "find" else ""
+    query = find_query(request) if action == "find" or (action == "wait" and request.get("text")) else ""
     LOCAL_PORTS.clear()
     LOCAL_PORTS.update(port for port in request.get("local_ports") or () if type(port) is int)
     if not KEPT.get("prepared"):
@@ -1896,6 +1974,8 @@ def on_page(context, page, action, request, query, caught):
     if action == "download":
         # The file, never the tab: the request changes no page (fetch).
         return {"text": act(context, page, action, request)}
+    if action == "wait" and query:
+        return wait_for_text(context, request, query)
     if action == "wait":
         seconds = min(WAIT_MAX, max(1, int(request.get("seconds") or 30)))
         deadline, held = time.time() + seconds, user_control()
@@ -2053,7 +2133,7 @@ def act(context, page, action, request, seen=None):
         if request.get("ref"):
             frame, target = located(page, request.get("ref"))
             watch([request.get("ref")], frame)
-            target.click(timeout=10_000)
+            target.click(timeout=ACT_MS)
             return f"Clicked {request.get('ref')}."
         # A place on the page as the screenshot shows it (CSS pixels of the
         # viewport): for what read lists no element of, such as a canvas,
@@ -2076,10 +2156,10 @@ def act(context, page, action, request, seen=None):
                           "with ask_user (browser) to sign in, then go on.")
         watch([ref], frame)
         if target.evaluate("el => el.isContentEditable"):
-            target.click(timeout=10_000)
+            target.click(timeout=ACT_MS)
             page.keyboard.insert_text(text)
         else:
-            target.fill(text, timeout=10_000)
+            target.fill(text, timeout=ACT_MS)
         if request.get("enter"):
             # The field has the focus: Enter through the keyboard, like the
             # action key. Pressed on the element it waited up to 30 s while a
@@ -2091,9 +2171,9 @@ def act(context, page, action, request, seen=None):
         frame, target = located(page, ref)
         watch([ref], frame)
         try:
-            target.select_option(label=choice, timeout=5_000)
+            target.select_option(label=choice, timeout=ACT_MS)
         except Exception:
-            target.select_option(choice, timeout=5_000)
+            target.select_option(choice, timeout=ACT_MS)
         return f"Selected \"{choice}\" in {ref}."
     if action == "upload":
         ref, path = request.get("ref"), str(request.get("file") or "")
