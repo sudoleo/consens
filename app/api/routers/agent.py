@@ -270,8 +270,21 @@ def _temporary(turn):
     return (turn.get("agent_settings") or {}).get("temporary") is True
 
 
+def _quiet_watch_run(turn):
+    """A Watch's scheduled run that found nothing for the user (agent_watches.py):
+    its chat keeps its place in the sidebar."""
+    settings = turn.get("agent_settings") or {}
+    run = turn.get("agent_watch_run") if isinstance(turn.get("agent_watch_run"), dict) else {}
+    return bool(settings.get("watch_run")) and not run.get("finding") and not run.get("done")
+
+
+def _watch_history_chars():
+    from app.services import agent_watches
+    return agent_watches.HISTORY_CHARS
+
+
 def _final(uid, payload, store, turn):
-    bookmark_meta = None if _temporary(turn) else _save_bookmark(uid, payload, store, turn)
+    bookmark_meta = None if _temporary(turn) or _quiet_watch_run(turn) else _save_bookmark(uid, payload, store, turn)
     # Tell the browser whether the next message needs Google consent. The
     # chat marker can be set by a tool during this turn (Gmail evidence).
     settings = turn.get("agent_settings") or {}
@@ -443,7 +456,15 @@ def quota_frames(allowances, *, wait=False):
 @router.post("/agent")
 @limiter.limit("30/minute")
 def run_agent(request: Request, payload: AgentRequest):
-    uid = _chat_uid(request)
+    return start_agent_turn(_chat_uid(request), payload)
+
+
+def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
+    """A message of the account ``uid`` as POST /agent runs it: the turn on
+    its own thread, the response only a tail of its frames. ``watch_run``:
+    a Watch's scheduled run (agent_watches.start_run, since 2026-11-03),
+    with nobody following; it reads only the chat's newest messages, has the
+    run's tools, and its end is noted on the Watch (agent_watches.turn_ended)."""
     require_agent_access(uid)
     store = AgentRunStore(db_firestore)
     turn = None
@@ -494,9 +515,11 @@ def run_agent(request: Request, payload: AgentRequest):
             return JSONResponse({"error": "No saved answer is available for this request.",
                 "code": "answer_unavailable", "recoverable": False}, status_code=404)
         # Only a new turn counts: a browser following a running turn asks
-        # with recover_only (above) and must not use up the send limit.
+        # with recover_only (above) and must not use up the send limit. A
+        # Watch's runs are bounded by their schedule (agent_watches.py).
         try:
-            api_uid_limiter.check(uid, "agent:turn", 20)
+            if watch_run is None:
+                api_uid_limiter.check(uid, "agent:turn", 20)
         except ApiUidRateLimitExceeded as exc:
             raise HTTPException(status_code=429, detail="Too many agent requests. Please wait.",
                                 headers=exc.headers) from None
@@ -600,6 +623,9 @@ def run_agent(request: Request, payload: AgentRequest):
         if signed_in:
             from app.services import agent_workspace
             app_context += "\n" + agent_workspace.sign_ins_note(signed_in)
+        if watch_run:
+            from app.services import agent_watches
+            app_context += "\n" + agent_watches.run_context(watch_run)
         sweep.result()
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
@@ -615,6 +641,7 @@ def run_agent(request: Request, payload: AgentRequest):
                             "agent_preferences": preferences.model_dump(),
                             "reviewers": payload.reviewers,
                             **({"temporary": True} if temporary else {}),
+                            **({"watch_run": watch_run} if watch_run else {}),
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
                             "memory": memory.settings(),
                             "answer_mode": "merged",
@@ -636,7 +663,8 @@ def run_agent(request: Request, payload: AgentRequest):
             _vm_restore_told(store, uid, payload.chat_id)
         chat_sources = []
         messages = store.messages(uid, payload.chat_id, turn, model=model, config=config, sources=chat_sources,
-                                  context=app_context, first_page=_first_history_page(reads["history"]))
+                                  context=app_context, first_page=_first_history_page(reads["history"]),
+                                  history_chars=_watch_history_chars() if watch_run else None)
         cancellation = ProviderCancellation()
         loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
@@ -646,6 +674,7 @@ def run_agent(request: Request, payload: AgentRequest):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
+                         watch_run=watch_run,
                          domains=preferences.vm == "on" and domains_allowed(uid),
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
@@ -814,6 +843,9 @@ def run_agent(request: Request, payload: AgentRequest):
             # Capacity first: whoever sees the run end may start the next.
             lease.release()
             agent_live.finish(live)
+            if watch_run:
+                from app.services import agent_watches
+                agent_watches.turn_ended(uid, payload.chat_id, turn["id"], watch_run)
 
     def interrupt(reason):
         # Shutdown: end with this reason instead of a plain Stop, so the

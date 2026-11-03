@@ -84,35 +84,25 @@ describe("Watch schedules in German", () => {
     expect(weekday.value).toBe("monday");
   });
 
-  it("writes the Agent card's summary and status as German lines", async () => {
+  // Since 2026-11-03 the Agent card starts a Watch that runs the Agent
+  // (agent-watch.js): its schedule, the line around the goal and its state
+  // are German, the task and the goal stay as the model wrote them.
+  it("writes the Agent card's schedule and state as German lines", async () => {
     const { window, document } = boot();
-    window.App.agentWatch.render(document.getElementById("agentAnswerBody"), { key: "run-1", proposal: PROPOSAL });
+    const proposal = { task: "Check whether registration for IRONMAN Hamburg 2027 is open.", goal: "Registration is open",
+      interval: "weekly", run_time: "09:00", run_weekday: "tuesday" };
+    window.App.agentWatch.render(document.getElementById("agentAnswerBody"), { key: "run-1", proposal, chatId: "c", turnId: "t" });
     await settle(window);
     const card = document.querySelector(".agent-watch-card");
-    const tomorrow = new window.Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    expect(card.querySelector(".agent-watch-settings").textContent)
-      .toBe(`Jeden ${WEEKDAYS_DE[tomorrow.getDay()]} um 09:00 · E-Mail · Privat`);
-    window.App.watchUi.receiveWatchList({ watches: [{ id: "w4", status: "active", question: QUESTION,
-      interval: "monthly", run_time: "08:00" }], limits: { plan: "free", active_count: 1, active_limit: 3 } });
+    expect(card.querySelector(".agent-watch-settings").textContent).toMatch(/^Jeden Dienstag um 09:00/);
+    expect(card.querySelector(".agent-watch-question").textContent).toBe(proposal.task);
+    expect(card.querySelector(".agent-watch-goal").textContent).toBe("Fertig, wenn: Registration is open");
+    expect(card.querySelector(".agent-watch-start").textContent).toBe("Watch starten");
+    window.App.agentWatch.render(document.getElementById("agentAnswerBody"), { key: "run-2", chatId: "c", turnId: "t",
+      proposal: { ...proposal, goal: "", interval: "every_6_hours" } });
     await settle(window);
-    expect(card.querySelector(".agent-watch-status").textContent).toBe("Prüft monatlich um 08:00.");
-  });
-
-  // The question and the goal are the reader's or the model's words: "Remove
-  // background noise" read "Entfernen: background noise", and a goal with
-  // "in" or "was" left the whole line English (bug hunt 2026-10-23/24).
-  it("keeps the card's question and goal as written, the words around the goal German", async () => {
-    const { window, document } = boot();
-    const proposal = { question: "Remove background noise", goals: ["GPT-6 is released in Europe"], interval: "weekly" };
-    window.App.agentWatch.render(document.getElementById("agentAnswerBody"), { key: "run-2", proposal });
-    await settle(window);
-    const card = document.querySelector(".agent-watch-card");
-    expect(card.querySelector(".agent-watch-question").textContent).toBe("Remove background noise");
-    expect(card.querySelector(".agent-watch-goal").textContent).toBe("Wartet auf: GPT-6 is released in Europe");
-    window.App.agentWatch.render(document.getElementById("agentAnswerBody"), { key: "run-3", proposal: { ...proposal, goals: [] } });
-    await settle(window);
-    expect(document.querySelector(".agent-watch-goal").textContent).toBe("Jede Änderung der Antwort");
+    expect(document.querySelector(".agent-watch-goal").textContent).toBe("Läuft, bis du sie beendest");
+    expect(document.querySelector(".agent-watch-settings").textContent).toBe("Alle 6 Stunden");
   });
 
   it("keeps the German schedule whole inside the success tip (watch.js renderNudgeSuccess)", async () => {

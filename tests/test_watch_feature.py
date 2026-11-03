@@ -1812,6 +1812,9 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
                 new_callable=AsyncMock, return_value={},
             ),
             patch.object(watch_service, "earliest_next_run_at", return_value=None),
+            # The Watches that run the Agent (agent_watches.py) read the store too.
+            patch.object(watch_scheduler.agent_watches, "run_tick", new_callable=AsyncMock, return_value=0),
+            patch.object(watch_scheduler.agent_watches, "earliest_next_run_at", return_value=None),
             patch.object(
                 watch_scheduler, "next_tick_seconds", wraps=watch_scheduler.next_tick_seconds,
             ) as next_tick,

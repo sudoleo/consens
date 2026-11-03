@@ -1,11 +1,13 @@
-"""Agent prepares a Consensus Watch the user asked for; the user starts it from a card."""
+"""The Agent's Watch tools (agent_watch.py): it prepares a Watch the user
+starts from a card, and in a scheduled run it reports a finding with
+evidence or ends the Watch (since 2026-11-03, a Watch runs the Agent)."""
 import json
 
 import pytest
 
-from app.services import agent_watch, watch_service
+from app.services import agent_watch, agent_watches
 from app.services.agent_comparison import comparison_selection
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_delegation import HOLD_TIMEOUT_SECONDS, DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.chat_store import turn_detail
@@ -18,14 +20,15 @@ from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 
 pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 
-QUESTION = "When will OpenAI release GPT-6 to the public?"
-WATCH = {"question": QUESTION, "goals": ["GPT-6 is officially released", "OpenAI announces a release date"]}
+TASK = "Check on ironman.com whether registration for IRONMAN Hamburg 2027 is open."
+WATCH = {"task": TASK, "goal": "Registration is open", "interval": "daily"}
+PROPOSAL = {"task": TASK, "goal": "Registration is open", "interval": "daily", "run_time": "", "run_weekday": ""}
 
 
 def outlook(**fields):
-    base = {"already_watched": False, "active_count": 0, "active_limit": 3,
-            "limit_reached": False, "daily_allowed": True}
-    return lambda uid, question: {**base, **fields}
+    base = {"already_watched": False, "active_count": 0, "active_limit": 2,
+            "limit_reached": False, "intervals": ["hourly", "every_6_hours", "daily", "weekly"]}
+    return lambda uid, chat_id: {**base, **fields}
 
 
 class WatchScript(Script):
@@ -71,11 +74,13 @@ class WatchScript(Script):
         return self.requests[max(self.requests, key=lambda step: int(step.split(":")[-1]))]
 
 
-def watch_loop(store, script, *, watch_outlook=None, question="Tell me when GPT-6 comes out.",
-               preferences=None, google_data=False, comparisons=True, reviewers=False):
+def watch_loop(store, script, *, watch_outlook=None, question="Tell me when IRONMAN Hamburg registration opens.",
+               preferences=None, google_data=False, comparisons=True, reviewers=False, watch_run=None,
+               temporary=False):
     """A chat turn of the agent; its reviewers never start (agent_reviewers.py)
     unless ``reviewers``, whose rounds Script answers without marks.
-    ``comparisons=False``: a delegation-only run, without the agent's tools."""
+    ``comparisons=False``: a delegation-only run, without the agent's tools.
+    ``watch_run``: a Watch's scheduled run."""
     chat, turn = pending(store, question=question)
     config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -85,7 +90,7 @@ def watch_loop(store, script, *, watch_outlook=None, question="Tell me when GPT-
         delegation_config=config, completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"})
         if comparisons else None,
-        agent_preferences=preferences, google_data=google_data)
+        agent_preferences=preferences, google_data=google_data, watch_run=watch_run, temporary=temporary)
     if loop.watch_tools:
         loop.watch_tools.outlook = watch_outlook or outlook()
     if comparisons and not reviewers:
@@ -96,10 +101,10 @@ def watch_loop(store, script, *, watch_outlook=None, question="Tell me when GPT-
 
 @pytest.fixture
 def no_watch_writes(monkeypatch):
-    """prepare_watch must never create a Watch: only the card does."""
+    """prepare_watch must never start a Watch: only the card does."""
     def refuse(*args, **kwargs):
-        raise AssertionError("prepare_watch created a Watch")
-    monkeypatch.setattr(watch_service, "create_watch", refuse)
+        raise AssertionError("prepare_watch started a Watch")
+    monkeypatch.setattr(agent_watches, "create", refuse)
 
 
 def tool_results(loop, name="call_watch"):
@@ -119,40 +124,52 @@ def test_a_requested_watch_is_prepared_saved_and_handed_to_the_answer(store):
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed"
-    proposal = {"question": QUESTION, "goals": WATCH["goals"], "interval": "weekly"}
     # The card reads the proposal from the completed turn; nothing else carries it.
-    assert saved["agent_watch"] == proposal
+    assert saved["agent_watch"] == PROPOSAL
     result = tool_results(loop)[0]
-    assert result["status"] == "prepared" and "nothing is watched yet" in result["instruction"]
-    # The agent learns what a Watch is once; the tool is offered with compare_models.
+    assert result["status"] == "prepared" and "nothing runs yet" in result["instruction"]
     assert "prepare_watch" in script.tools and "compare_models" in script.tools and "answer" not in script.tools
-    assert agent_watch.AUDIT_PROMPT in script.system
-    # The step that writes the answer knows what the Watch is, and the tool's
-    # result says what to tell the user: it must not claim more.
+    assert "report_finding" not in script.tools and "finish_watch" not in script.tools
+    assert agent_watch.AUDIT_PROMPT in script.system and agent_watch.RUN_PROMPT not in script.system
     writer = script.writer()
     assert agent_watch.AUDIT_PROMPT in writer[0]["content"]
-    assert seen_watch(writer)["status"] == "prepared" and seen_watch(writer)["question"] == QUESTION
+    assert seen_watch(writer)["status"] == "prepared" and seen_watch(writer)["task"] == TASK
     assert "never claim the Watch is active" in seen_watch(writer)["instruction"]
     assert saved["consensus"] == "The first option costs 100."
-    assert saved["agent_review"]["comparisons"], "the current state is still compared, then reviewed"
     assert saved["agent_review"]["mode"] == "audit" and saved["agent_review"]["status"] == "succeeded"
     steps = [event for event in saved["agent_activity"] if event.get("name") == "prepare_watch"]
     assert steps and steps[-1]["status"] == "succeeded"
+    # An ordinary turn waits for the user on a card as before.
+    assert loop.hold_timeout == HOLD_TIMEOUT_SECONDS
 
 
 @pytest.mark.usefixtures("no_watch_writes")
-def test_daily_falls_back_to_weekly_when_the_account_cannot_check_daily(store):
-    script = WatchScript(watch={**WATCH, "interval": "daily"})
-    loop = watch_loop(store, script, watch_outlook=outlook(daily_allowed=False))
+def test_a_weekly_watch_keeps_its_time_and_day_and_a_shorter_one_none(store):
+    script = WatchScript(watch={**WATCH, "interval": "weekly", "run_time": "07:30", "run_weekday": "monday"})
+    loop = watch_loop(store, script)
     list(loop.run())
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]["interval"] == "weekly"
+    proposal = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]
+    assert (proposal["interval"], proposal["run_time"], proposal["run_weekday"]) == ("weekly", "07:30", "monday")
+    script = WatchScript(watch={**WATCH, "interval": "hourly", "run_time": "07:30", "run_weekday": "monday"})
+    loop = watch_loop(store, script)
+    list(loop.run())
+    proposal = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]
+    assert (proposal["interval"], proposal["run_time"], proposal["run_weekday"]) == ("hourly", "", "")
+
+
+@pytest.mark.usefixtures("no_watch_writes")
+def test_an_interval_the_account_lacks_becomes_its_shortest(store):
+    script = WatchScript(watch={**WATCH, "interval": "hourly"})
+    loop = watch_loop(store, script, watch_outlook=outlook(intervals=["daily", "weekly"]))
+    list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]["interval"] == "daily"
     result = tool_results(loop)[0]
-    assert result["interval"] == "weekly" and "Daily checks are not available" in result["note"]
+    assert result["interval"] == "daily" and "not available on this account" in result["note"]
 
 
 @pytest.mark.usefixtures("no_watch_writes")
 @pytest.mark.parametrize("fields,status", [({"already_watched": True}, "already_watched"),
-                                           ({"limit_reached": True, "active_count": 1, "active_limit": 1},
+                                           ({"limit_reached": True, "active_count": 2, "active_limit": 2},
                                             "limit_reached")])
 def test_an_existing_watch_or_a_full_account_is_said_not_offered(store, fields, status):
     script = WatchScript()
@@ -160,24 +177,22 @@ def test_an_existing_watch_or_a_full_account_is_said_not_offered(store, fields, 
     list(loop.run())
     assert tool_results(loop)[0]["status"] == status
     writer = script.writer()
-    # What to tell the user comes with the result the answer is written from.
     assert seen_watch(writer)["status"] == status
     assert seen_watch(writer)["instruction"] == agent_watch.INSTRUCTIONS[status]
-    # The card still shows the question; it reads the live state itself.
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]["question"] == QUESTION
+    # The card still shows the task; it reads the chat's Watches itself.
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]["task"] == TASK
 
 
 @pytest.mark.usefixtures("no_watch_writes")
 def test_a_watch_only_message_ends_with_an_acknowledgement(store):
-    script = WatchScript(direct_reply="I prepared a Watch for this question below.")
-    loop = watch_loop(store, script, question="Can you watch that for me?")
+    script = WatchScript(direct_reply="I prepared a Watch for this below.")
+    loop = watch_loop(store, script, question="Can you keep an eye on that for me?")
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed"
-    assert saved["consensus"] == "I prepared a Watch for this question below."
-    assert saved["agent_watch"]["question"] == QUESTION
+    assert saved["consensus"] == "I prepared a Watch for this below."
+    assert saved["agent_watch"]["task"] == TASK
     assert not (saved.get("agent_review") or {}).get("comparisons")
-    # A short acknowledgement is plain text (no reminder).
     reminders = [m for m in loop.messages if "App rule" in str(m.get("content"))]
     assert reminders == []
 
@@ -216,23 +231,21 @@ def test_starting_an_earlier_watch_prepares_it_again_and_answers_without_a_compa
     loop = watch_loop(store, script, question="Kannst du den Watch bitte für mich starten?")
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["status"] == "completed" and saved["agent_watch"]["question"] == QUESTION
+    assert saved["status"] == "completed" and saved["agent_watch"]["task"] == TASK
     assert not loop.comparison.comparisons
-    # The text of that step stands as the answer: shown, never retracted.
     assert saved["consensus"] == WatchWithReply.REPLY
     assert "".join(e["text"] for e in events if e.get("type") == "delta") == WatchWithReply.REPLY
     assert not any(e.get("clear_response") for e in events)
     assert [step for step, _ in script.calls if step.startswith("completion:")] == ["completion:0"]
-    assert agent_watch.AUDIT_PROMPT in script.system
 
 
-def watch_outage(uid, question):
+def watch_outage(uid, chat_id):
     raise RuntimeError("firestore down")
 
 
 @pytest.mark.usefixtures("no_watch_writes")
 @pytest.mark.parametrize("watch_outlook,reply", [
-    (outlook(already_watched=True), "You already watch this question."),
+    (outlook(already_watched=True), "This chat already has a Watch."),
     (watch_outage, "Watches cannot be prepared right now, sorry."),
 ], ids=["already_watched", "outage"])
 def test_a_reply_next_to_a_watch_that_was_not_prepared_is_written_again(store, watch_outlook, reply):
@@ -251,38 +264,36 @@ def test_a_reply_next_to_a_watch_that_was_not_prepared_is_written_again(store, w
     assert tool_results(loop)[0].get("status") != "prepared"
 
 
-def test_the_watch_block_says_it_is_the_only_way_to_reach_the_user_later():
-    """2026-10-11: GPT-6 Luna read "kannst du mich erinnern, wann der Sieger
-    feststeht?" after a search as a question about the date, prepared nothing,
-    and the answer said consens.io could not notify anyone. Since 2026-10-28
-    the block says what a Watch is, as facts; the tool's result says what to
-    tell the user."""
+def test_the_watch_block_says_what_a_watch_does_as_facts():
+    """Since 2026-11-03 a Watch runs the agent again; the block still says it
+    is the one way to reach the user later (2026-10-11: GPT-6 Luna answered
+    "kannst du mich erinnern …" with "consens.io cannot notify you")."""
     prompt = agent_watch.AUDIT_PROMPT
-    assert "it is consens.io's only way to reach the user later" in prompt
-    assert "emails the user when a source changes the answer" in prompt
+    assert "is consens.io's only way to reach the user later" in prompt
+    assert "runs you again on a schedule in this chat" in prompt
     assert "prepare_watch prepares one as a card below your answer, which only the user starts" in prompt
+    assert "in the user's name" in prompt
     assert "never claim the Watch is active" in agent_watch.INSTRUCTIONS["prepared"]
-    # No recipe and nothing about removed tools or steps.
-    assert "call answer" not in prompt and "answer step" not in prompt and "evidence" not in prompt
-    assert "compare" not in prompt
+    assert "call answer" not in prompt and "compare" not in prompt
 
 
-def test_no_watch_tool_with_google_data_or_without_comparisons(store):
-    script = WatchScript()
-    google = watch_loop(store, script, google_data=True)
+def test_no_watch_tool_with_google_data_in_a_temporary_chat_or_without_comparisons(store):
+    google = watch_loop(store, WatchScript(), google_data=True)
     assert google.watch_tools is None and "prepare_watch" not in google.registry.tools
     assert agent_watch.AUDIT_PROMPT not in google.messages[0]["content"]
+    temporary = watch_loop(store, WatchScript(), temporary=True)
+    assert temporary.watch_tools is None and "prepare_watch" not in temporary.registry.tools
     bounded = watch_loop(store, WatchScript(), comparisons=False)
     assert bounded.watch_tools is None and "prepare_watch" not in bounded.registry.tools
 
 
 @pytest.mark.parametrize("arguments,problem", [
-    ({"question": "GPT-6?"}, "question"),
-    ({"question": "When " + "x" * 200 + "?"}, "question"),
-    ({"question": QUESTION, "goals": ["a", "b", "c", "d"]}, "goals"),
-    ({"question": QUESTION, "goals": ["x" * 121]}, "goals"),
-    ({"question": QUESTION, "interval": "hourly"}, "interval"),
-    ({"question": QUESTION, "visibility": "public"}, "visibility"),
+    ({"task": "Check"}, "task"),
+    ({"task": "Check " + "x" * 500}, "task"),
+    ({"task": TASK, "goal": "x" * 201}, "goal"),
+    ({"task": TASK, "interval": "monthly"}, "interval"),
+    ({"task": TASK, "run_time": "8 am"}, "run_time"),
+    ({"task": TASK, "visibility": "public"}, "visibility"),
 ])
 def test_the_schema_bounds_what_the_model_may_propose(store, arguments, problem):
     loop = watch_loop(store, WatchScript())
@@ -292,24 +303,14 @@ def test_the_schema_bounds_what_the_model_may_propose(store, arguments, problem)
     assert problem in str(error.value)
 
 
-def test_goals_are_clean_distinct_lines():
-    assert agent_watch.normalize_goals([" GPT-6 is  released. ", "gpt-6 is released", "ok", "A date is set"]) == [
-        "GPT-6 is released", "A date is set"]
-
-
 @pytest.mark.usefixtures("no_watch_writes")
 def test_a_finished_turn_takes_no_proposal_and_outages_are_readable_refusals(store):
     loop = watch_loop(store, WatchScript())
-    args = agent_watch.PrepareWatch(question=QUESTION)
-    loop.watch_tools.outlook = lambda uid, question: (_ for _ in ()).throw(RuntimeError("firestore down"))
+    args = agent_watch.PrepareWatch(task=TASK)
+    loop.watch_tools.outlook = watch_outage
     with pytest.raises(ValueError, match="cannot be prepared right now"):
         loop.watch_tools.prepare(args)
     loop.watch_tools.outlook = outlook()
-    original = loop.watch_tools._save
-    loop.watch_tools._save = lambda proposal: (_ for _ in ()).throw(RuntimeError("contention"))
-    with pytest.raises(ValueError, match="could not be prepared right now"):
-        loop.watch_tools.prepare(args)
-    loop.watch_tools._save = original
     store.db.turns(UID, loop.chat_id)[loop.turn_id]["status"] = "completed"
     with pytest.raises(ValueError, match="already finished"):
         loop.watch_tools.prepare(args)
@@ -319,14 +320,68 @@ def test_a_finished_turn_takes_no_proposal_and_outages_are_readable_refusals(sto
 
 @pytest.mark.usefixtures("no_watch_writes")
 def test_the_mock_run_prepares_a_watch_for_browser_tests(store):
-    loop = watch_loop(store, WatchScript(), question="Watch: When will the next iPhone ship?")
-    loop.watch_tools.mock_turn("Watch: When will the next iPhone ship?")
+    loop = watch_loop(store, WatchScript(), question="Watch: Check whether the next iPhone ships.")
+    loop.watch_tools.mock_turn("Watch: Check whether the next iPhone ships.")
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"] == {
-        "question": "When will the next iPhone ship?", "goals": ["It is officially announced"], "interval": "weekly"}
+        "task": "Check whether the next iPhone ships.", "goal": "It is officially announced",
+        "interval": "daily", "run_time": "", "run_weekday": ""}
 
 
-def test_saved_turns_keep_the_proposal():
-    proposal = {"question": QUESTION, "goals": [], "interval": "weekly"}
+def test_saved_turns_keep_the_proposal_and_a_runs_outcome():
+    run = {"finding": {"summary": "Registration is open.", "evidence_url": "https://www.ironman.com/hamburg"}}
     detail = turn_detail("t1", {"execution_mode": "agent", "assistant_response": "Answer.",
-                                "agent_watch": proposal}, {})
-    assert detail["agent_watch"] == proposal
+                                "agent_watch": PROPOSAL, "agent_watch_run": run}, {})
+    assert detail["agent_watch"] == PROPOSAL and detail["agent_watch_run"] == run
+
+
+# --- A scheduled run ---------------------------------------------------------
+
+RUN = {"watch_id": "w" * 32, "scheduled_at": "2026-11-04T07:00:00+00:00", "request_id": "watch.w.1", "goal": ""}
+PAGE = "https://www.ironman.com/im-hamburg"
+
+
+def test_a_scheduled_run_reports_and_ends_and_nobody_waits_for_a_card(store):
+    loop = watch_loop(store, WatchScript(), watch_run=RUN)
+    names = set(loop.registry.tools)
+    assert {"report_finding", "finish_watch"} <= names and "prepare_watch" not in names
+    system = loop.messages[0]["content"]
+    assert agent_watch.RUN_PROMPT in system and agent_watch.AUDIT_PROMPT not in system
+    # The user is away: a card (ask_user, a reviewer's halt) ends at once.
+    assert loop.hold_timeout == 0
+    assert "the user is not here" in agent_watch.RUN_PROMPT and "with a page you opened in this run" in agent_watch.RUN_PROMPT
+
+
+def test_a_finding_needs_a_page_this_run_saw(store):
+    loop = watch_loop(store, WatchScript(), watch_run=RUN)
+    tools = agent_watch.WatchRunTools(loop)
+    args = agent_watch.ReportFinding(summary="Registration is open.", evidence_url=PAGE)
+    # Only in the chat or the model's own text: refused.
+    with pytest.raises(ValueError, match="page you opened or found in this run"):
+        tools.report(args)
+    # A tool result of this message names it.
+    loop.messages.append({"role": "tool", "tool_call_id": "r1", "content": json.dumps({"url": PAGE + "/", "text": "Open"})})
+    assert tools.report(args)["status"] == "reported"
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch_run"]
+    assert saved == {"finding": {"summary": "Registration is open.", "evidence_url": PAGE, "evidence_title": "",
+                                 "needs_user": False}}
+
+
+def test_a_search_result_counts_as_seen_with_its_title_and_finish_ends_the_watch(store):
+    loop = watch_loop(store, WatchScript(), watch_run=RUN)
+    loop.search_sources.append({"url": PAGE, "title": "IRONMAN Hamburg"})
+    tools = agent_watch.WatchRunTools(loop)
+    tools.report(agent_watch.ReportFinding(summary="Registration is open.", evidence_url=PAGE + "#dates", needs_user=True))
+    tools.finish(agent_watch.FinishWatch(reason="Registration opened on November 4."))
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch_run"]
+    assert saved["finding"]["evidence_title"] == "IRONMAN Hamburg" and saved["finding"]["needs_user"] is True
+    assert saved["done"] == {"reason": "Registration opened on November 4."}
+    # Once the turn ended, nothing more is saved on it.
+    store.db.turns(UID, loop.chat_id)[loop.turn_id]["status"] = "completed"
+    with pytest.raises(ValueError, match="already finished"):
+        tools.finish(agent_watch.FinishWatch(reason="Again."))
+
+
+def test_the_run_tools_add_no_outside_content_and_ride_along_an_answer():
+    from app.services.agent_answer_mode import SIDE_TOOLS
+    from app.services.agent_delegation import OWN_CONTENT_TOOLS
+    assert {"report_finding", "finish_watch"} <= SIDE_TOOLS & OWN_CONTENT_TOOLS

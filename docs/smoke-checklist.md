@@ -1068,16 +1068,23 @@ Server.
       klappt die Einstellungen dafür selbst auf und scrollt zum ersten Fehler. Der
       Dialog bleibt auf iPhone-Größen vollständig im sichtbaren Bereich. Private
       Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
-- [ ] Agent: „Sag mir Bescheid, wenn <etwas Kommendes> passiert“ beantwortet den
-      aktuellen Stand und zeigt darunter eine Watch-Karte (Frage, „Waiting for: …“,
-      „Weekly on … · E-mail · Private“). Erst „Start watching“ legt die Watch an
-      (Karte: „Watching“, Sidebar-Zähler steigt); „Adjust“ öffnet den Dialog mit
-      den Zielen des Agenten, das erste gewählt. Eine schon beobachtete Frage
-      zeigt „Watching“/„Watch paused“, ein volles Konto den Limit-Satz und einen
-      gesperrten Start-Knopf. Pausiert man die Watch im Dashboard, zeigt die
-      Karte nach der Rückkehr „Watch paused“. Unter einer abgebrochenen oder
-      fehlgeschlagenen Antwort erscheint keine Karte. In einem Chat mit
-      Gmail/Kalender-Daten schlägt der Agent keine Watch vor.
+- [ ] Agent (seit 2026-11-03 läuft eine Watch den Agenten): „Sag mir Bescheid,
+      wenn <etwas Kommendes> passiert“ beantwortet den aktuellen Stand und
+      zeigt darunter eine Watch-Karte (Auftrag, „Done when: …“, „Daily at
+      08:00“). „Change“ zeigt nur die Intervalle der Stufe (Free: täglich,
+      wöchentlich) und eine Uhrzeit. Erst „Start“ legt die Watch an (Karte:
+      „Watch running“, „next run …“); „End Watch“ beendet sie („Watch ended“).
+      Eine zweite Watch im selben Chat ist gesperrt, ein volles Konto nennt den
+      Limit-Satz. Kein Vorschlag in temporären Chats und in Chats mit
+      Gmail/Kalender-Daten. Unter einer abgebrochenen Antwort keine Karte.
+- [ ] Geplanter Lauf (nur in Prod, der Takt läuft lokal nicht): eine
+      stündliche Watch (Pro/Admin) mit einem Auftrag, der sicher etwas findet;
+      nach dem Lauf steht im Chat „Scheduled Watch run“ über dem Auftrag, die
+      Antwort darunter, und eine Mail „Watch: …“ kommt mit Link zur Seite und
+      zur App, Prüfer-Satz unten. Ein Lauf ohne Befund mailt nichts und rückt
+      den Chat nicht nach oben; Logzeile `Agent watch run ended outcome=quiet`.
+      `finish_watch` beendet die Watch (Mail „Reached: …“, Karte „Watch
+      reached its goal“).
 - [ ] Zielvorschläge laden als zwei Platzhalterzeilen und erscheinen dann als
       Optionen; die erste ist sichtbar ausgewählt, solange man nichts anderes
       gewählt hat. Tippen in „Something else…“ wählt diese Zeile, „Any change to

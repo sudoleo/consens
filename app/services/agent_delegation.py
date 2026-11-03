@@ -104,7 +104,8 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 # opted-in account got not a single memory in a month. Max: the agent decides
 # what to keep, the user sees and can undo every change.
 OWN_CONTENT_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
-                               "update_plan", "create_document", "revise_document", "open_workspace"})
+                               "update_plan", "create_document", "revise_document", "open_workspace",
+                               "report_finding", "finish_watch"})
 TURN_TIME_LIMIT = ("This response reached its time limit. "
                    "The available results have been saved; send a follow-up message to continue.")
 TURN_STEP_LIMIT = ("This response reached its step limit without finishing. "
@@ -360,8 +361,14 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
-                 domains=True, reviewers="always", temporary=False, **kwargs):
+                 domains=True, reviewers="always", temporary=False, watch_run=None, **kwargs):
         super().__init__(**kwargs)
+        # A scheduled run of a Watch (agent_watches.py, since 2026-11-03):
+        # nobody is there to answer a card, so a hold ends at once
+        # (``hold_timeout``) and the run has its own tools (agent_watch.py
+        # WatchRunTools) instead of prepare_watch.
+        self.watch_run = watch_run
+        self.hold_timeout = 0 if watch_run else HOLD_TIMEOUT_SECONDS
         # A temporary chat (routers/agent.py): every tool of the account's
         # chats (since 2026-11-01 evening), and the agent knows what goes
         # with it and what lasts (AGENT_TEMPORARY_CHAT_PROMPT); memory is
@@ -608,14 +615,20 @@ class DelegationLoop(AgentLoop):
                  "consens.io sends and changes nothing in Google."))
         # A Watch the user asks for is prepared, never started (agent_watch.py):
         # only on their own account-mode turns, never with Google data. The
-        # condition holds for a whole chat, so the prompt stays cacheable. In
-        # a temporary chat too: a Watch is the user's own and names no chat.
+        # condition holds for a whole chat, so the prompt stays cacheable.
+        # Since 2026-11-03 a Watch runs the agent in its chat: none in a
+        # temporary chat, and a scheduled run reports instead of preparing.
         if (self.comparison is not None and self.policy.account_budget_only
-                and not google_selection and not google_data):
-            from app.services.agent_watch import AUDIT_PROMPT, WatchTools
-            self.watch_tools = WatchTools(self)
-            self.messages[0]["content"] += "\n\n" + AUDIT_PROMPT
-            self.registry = ToolRegistry([*self.registry.tools.values(), *self.watch_tools.tools()],
+                and not google_selection and not google_data and not temporary):
+            from app.services import agent_watch
+            if watch_run:
+                self.messages[0]["content"] += "\n\n" + agent_watch.RUN_PROMPT
+                tools = agent_watch.WatchRunTools(self).tools()
+            else:
+                self.watch_tools = agent_watch.WatchTools(self)
+                self.messages[0]["content"] += "\n\n" + agent_watch.AUDIT_PROMPT
+                tools = self.watch_tools.tools()
+            self.registry = ToolRegistry([*self.registry.tools.values(), *tools],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
         # A settings change the user asks for is prepared, never written
         # (agent_settings.py): on their own account-mode turns, also with
@@ -2146,7 +2159,7 @@ class DelegationLoop(AgentLoop):
                 joined = self.hold = joined_halt(self.hold, details)
             else:
                 hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
-                        "timeout_seconds": HOLD_TIMEOUT_SECONDS}
+                        "timeout_seconds": self.hold_timeout}
                 self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
                 self.hold_unsaved = False
                 self.condition.notify_all()
@@ -2592,7 +2605,7 @@ class DelegationLoop(AgentLoop):
                     return None
                 if decision is None and handed:
                     decision = handed
-                if decision is None and self.clock() - self.hold_started >= HOLD_TIMEOUT_SECONDS:
+                if decision is None and self.clock() - self.hold_started >= self.hold_timeout:
                     decision = "timeout"
                 if decision is not None:
                     waited = self.clock() - self.hold_started

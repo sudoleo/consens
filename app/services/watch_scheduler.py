@@ -14,7 +14,7 @@ from app.core.entitlements import TIER_FREE
 from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.services.consensus_pipeline import run_consensus_pipeline
 from app.services import (
-    drift_signal, evidence_change, mailer, notification_delivery, notification_outbox, opinion_map,
+    agent_watches, drift_signal, evidence_change, mailer, notification_delivery, notification_outbox, opinion_map,
     share_snapshots, source_links, source_redirects, watch_brief, watch_followers, watch_images,
     watch_probe, watch_service,
 )
@@ -666,6 +666,14 @@ def next_tick_seconds(*, now: datetime | None = None, scanned_at: datetime | Non
     except Exception as exc:
         logging.warning("Next watch due time unavailable category=%s", safe_exception(exc))
         return TICK_SECONDS
+    # A Watch that runs the Agent (agent_watches.py) wakes the loop at its time too.
+    try:
+        agent_due = agent_watches.earliest_next_run_at()
+    except Exception as exc:
+        logging.warning("Next agent watch due time unavailable category=%s", safe_exception(exc))
+        agent_due = None
+    if isinstance(agent_due, datetime) and (not isinstance(due, datetime) or agent_due < due):
+        due = agent_due
     if not isinstance(due, datetime):
         return TICK_SECONDS
     wait = (due - now).total_seconds()
@@ -698,6 +706,8 @@ async def watch_scheduler_loop():
             with correlation_scope(prefix="watch-tick"):
                 try:
                     watches_ran = await run_watch_tick()
+                    # Starts the runs only: each runs on its own thread.
+                    agent_runs = await agent_watches.run_tick()
                     briefs_sent = await run_brief_tick()
                     outbox_counts = await run_notification_outbox_tick()
                 except Exception:
@@ -710,11 +720,12 @@ async def watch_scheduler_loop():
                 record_metric(
                     "scheduler", "consensus-watch",
                     duration_ms=(time.monotonic() - started) * 1000,
-                    processed=int(watches_ran or 0) + int(briefs_sent or 0),
+                    processed=int(watches_ran or 0) + int(agent_runs or 0) + int(briefs_sent or 0),
                 )
             task_succeeded(
                 "consensus-watch-scheduler",
                 watches_ran=watches_ran,
+                agent_watch_runs=agent_runs,
                 briefs_sent=briefs_sent,
                 notifications=outbox_counts,
             )

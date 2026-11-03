@@ -1,8 +1,10 @@
-"""A Watch the Agent prepared, in the built /app: card under the answer, one-click start, Adjust.
+"""A Watch the Agent prepared, in the built /app: card under the answer, Change, Start, End.
 
+Since 2026-11-03 a Watch runs the Agent again in its chat (agent_watches.py).
 Writer-free like the other Phase-4 browser tests: every API response comes
-from the route handlers below. The tool's server rules (proposal only, no
-Google data, status, schema) are covered in tests/test_agent_watch.py.
+from the route handlers below. The server's rules (the task from the saved
+turn, limits, intervals, runs) are covered in tests/test_agent_watch.py and
+tests/test_agent_watches.py.
 """
 import json
 import os
@@ -13,8 +15,8 @@ from playwright.sync_api import expect
 from test_agent_chat_frontend import CATALOG, _choose_mode
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json  # noqa: F401 (fixture)
 
-QUESTION = "When will OpenAI release GPT-6 to the public?"
-GOALS = ["GPT-6 is officially released", "OpenAI announces a release date"]
+TASK = "Check on ironman.com whether registration for IRONMAN Hamburg 2027 is open."
+GOAL = "Registration is open"
 
 
 def _shot(page, name):
@@ -25,36 +27,43 @@ def _shot(page, name):
 
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
-def test_agent_watch_card_starts_the_prepared_watch_and_adjust_opens_the_dialog(browser, phase4_server, width, dark):
+def test_agent_watch_card_starts_the_prepared_watch_and_ends_it(browser, phase4_server, width, dark):
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
-    errors, creates, suggestions = [], [], []
+    errors, creates, stops = [], [], []
     page.on("pageerror", lambda error: errors.append(str(error)))
     chat_id, turn_id = "c" * 32, "1".rjust(32, "0")
-    state = {"watches": [], "limits": {"plan": "free", "active_count": 0, "active_limit": 3}}
-    proposal = {"question": QUESTION, "goals": GOALS, "interval": "weekly"}
+    state = {"watches": []}
+    proposal = {"task": TASK, "goal": GOAL, "interval": "daily", "run_time": "", "run_weekday": ""}
 
     def watches(route):
-        _json(route, {"status": "success", "watches": state["watches"], "limits": state["limits"]})
+        request = route.request
+        if request.method == "POST":
+            body = request.post_data_json
+            creates.append(body)
+            watch = {"id": "w1", "chat_id": chat_id, "turn_id": body["turn_id"], "task": TASK, "goal": GOAL,
+                     "status": "active", "interval": body["interval"], "run_time": body["run_time"],
+                     "run_weekday": body["run_weekday"], "timezone": body["timezone"],
+                     "next_run_at": "2030-01-02T07:00:00+00:00", "runs": 0, "last_run": None, "ended": ""}
+            state["watches"] = [watch]
+            return _json(route, {"watch": watch}, status=201)
+        _json(route, {"watches": state["watches"], "intervals": ["daily", "weekly"],
+                      "active_count": sum(1 for w in state["watches"] if w["status"] == "active"), "active_limit": 2})
 
-    def create(route):
-        body = route.request.post_data_json
-        creates.append(body)
-        watch = {"id": "w1", "status": "active", "question": body["question"], "condition": body["condition"],
-                 "interval": body["interval"], "run_weekday": body["run_weekday"], "run_time": body["run_time"],
-                 "timezone": body["timezone"], "share_path": "/s/watch1", "query_first": True}
-        state["watches"] = [watch]
-        state["limits"] = {**state["limits"], "active_count": 1}
-        _json(route, {"status": "success", "watch": watch})
+    def stop(route):
+        stops.append(route.request.url)
+        state["watches"] = [{**watch, "status": "done", "ended": "user", "next_run_at": None} for watch in state["watches"]]
+        _json(route, {"watch": state["watches"][0]})
 
     def answer(route):
         body = route.request.post_data_json
-        text = "GPT-6 has no announced release date yet. Start the Watch below to hear when it ships."
+        text = "Registration for IRONMAN Hamburg 2027 is not open yet. Start the Watch below and I check every morning."
         turn = {"id": turn_id, "turn_id": turn_id, "question": body["question"], "status": "completed", "position": 1,
                 "mode": "Agent", "execution_mode": "agent", "consensus": text, "differences": "",
                 "differences_data": None, "model_answers": {}, "sources": [], "agent_watch": proposal,
                 "agent_activity": [{"id": "s1:call_watch", "kind": "tool", "name": "prepare_watch", "status": "succeeded"}],
                 "agent_settings": {"model_id": CATALOG["default_model_id"], "label": "DeepSeek V4.1 Flash"}}
-        meta = {"id": body["bookmark_id"], "title": "GPT-6", "query": body["question"], "mode": "Agent", "has_consensus": True}
+        meta = {"id": body["bookmark_id"], "title": "IRONMAN Hamburg", "query": body["question"], "mode": "Agent",
+                "has_consensus": True}
         stream = "event: delta\ndata: " + json.dumps({"text": text}) + "\n\n"
         stream += "event: final\ndata: " + json.dumps({"chat_id": chat_id, "turn_id": turn_id, "response": text,
                                                        "turn": turn, "bookmark_meta": meta}) + "\n\n"
@@ -66,10 +75,12 @@ def test_agent_watch_card_starts_the_prepared_watch_and_adjust_opens_the_dialog(
                                                                  "limit": 500, "deep_limit": 50}))
         page.route("**/usage", lambda route: _json(route, {"tier": "free", "is_pro": False, "remaining": 10,
                                                            "deep_remaining": 1, "total_limit": 500, "deep_total_limit": 50}))
-        page.route("**/api/my/watches", watches)
-        page.route("**/api/watch", create)
-        page.route("**/api/watch/goal-suggestions", lambda route: (suggestions.append(1), _json(route, {"goals": []})))
+        page.route("**/api/my/watches", lambda route: _json(route, {"status": "success", "watches": [],
+                                                                    "limits": {"plan": "free", "active_count": 0, "active_limit": 1}}))
         page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {"configured": False}}))
+        page.route("**/agent/watches?*", watches)
+        page.route("**/agent/watches", watches)
+        page.route("**/agent/watches/w1/stop", stop)
         page.route("**/chats", lambda route: _json(route, {"chat": {"id": chat_id, "execution_mode": "agent"}}))
         page.route("**/agent/models", lambda route: _json(route, CATALOG))
         page.route("**/agent", answer)
@@ -79,16 +90,16 @@ def test_agent_watch_card_starts_the_prepared_watch_and_adjust_opens_the_dialog(
                       "document.body.classList.toggle('dark-mode', dark); }", dark)
 
         _choose_mode(page, "agent")
-        page.locator("#questionInput").fill("Tell me when GPT-6 comes out.")
+        page.locator("#questionInput").fill("Tell me when IRONMAN Hamburg registration opens.")
         page.locator("#sendButton").click()
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
 
         card = page.locator("#agentAnswer .agent-watch-card")
         expect(card).to_be_visible()
         expect(card).to_have_attribute("data-state", "proposal")
-        expect(card.locator(".agent-watch-question")).to_have_text(QUESTION)
-        expect(card.locator(".agent-watch-goal")).to_have_text("Waiting for: " + GOALS[0])
-        expect(card.locator(".agent-watch-settings")).to_contain_text("09:00 · Email · Private")
+        expect(card.locator(".agent-watch-question")).to_have_text(TASK)
+        expect(card.locator(".agent-watch-goal")).to_have_text("Done when: " + GOAL)
+        expect(card.locator(".agent-watch-settings")).to_have_text("Daily at 08:00")
         # The card sits under the answer it is introduced by.
         answer_box = page.locator("#agentAnswerBody").bounding_box()
         card_box = card.bounding_box()
@@ -98,25 +109,27 @@ def test_agent_watch_card_starts_the_prepared_watch_and_adjust_opens_the_dialog(
         expect(page.locator("#watchFeatureNudge")).to_have_count(0)
         _shot(page, f"agent-watch-card-{width}-{'dark' if dark else 'light'}")
 
-        # Adjust: the create dialog, prefilled with the Agent's goals, the
-        # first one chosen, and no second goal suggestion call.
-        card.get_by_role("button", name="Adjust").click()
-        expect(page.locator(".watch-question-preview strong")).to_have_text(QUESTION)
-        expect(page.locator("#watchGoalSuggestions label")).to_have_count(2)
-        expect(page.locator("#watchGoalSuggestions input[type=radio]").first).to_be_checked()
-        assert not suggestions
-        _shot(page, f"agent-watch-adjust-{width}-{'dark' if dark else 'light'}")
-        page.locator("#watchCancelBtn").click()
+        # Change: the account's intervals and a time.
+        card.get_by_role("button", name="Change").click()
+        expect(card.locator(".agent-watch-interval option")).to_have_count(2)
+        card.locator(".agent-watch-time").fill("07:30")
+        card.locator(".agent-watch-time").dispatch_event("change")
+        _shot(page, f"agent-watch-change-{width}-{'dark' if dark else 'light'}")
 
-        card.get_by_role("button", name="Start watching").click()
+        card.get_by_role("button", name="Start Watch").click()
         expect(card).to_have_attribute("data-state", "watching")
-        expect(card.locator(".agent-watch-title")).to_have_text("Watching")
-        expect(card.locator(".agent-watch-status")).to_contain_text("Checks weekly on")
+        expect(card.locator(".agent-watch-title")).to_have_text("Watch running")
+        expect(card.locator(".agent-watch-settings")).to_contain_text("next run")
         assert len(creates) == 1
         created = creates[0]
-        assert created["question"] == QUESTION and created["condition"] == GOALS[0]
-        assert created["visibility"] == "private" and created["interval"] == "weekly" and created["run_time"] == "09:00"
+        assert (created["chat_id"], created["turn_id"]) == (chat_id, turn_id)
+        assert (created["interval"], created["run_time"]) == ("daily", "07:30") and "task" not in created
         _shot(page, f"agent-watch-started-{width}-{'dark' if dark else 'light'}")
+
+        card.get_by_role("button", name="End Watch").click()
+        expect(card).to_have_attribute("data-state", "ended")
+        expect(card.locator(".agent-watch-title")).to_have_text("Watch ended")
+        assert len(stops) == 1
         assert not errors, errors
     finally:
         context.close()

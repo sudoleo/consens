@@ -55,9 +55,12 @@ KIND_WATCH_PAUSED = "watch_paused"
 KIND_WATCH_FOLLOWER = "watch_follower"
 KIND_TOPIC_FOLLOWER = "topic_follower"
 KIND_WATCH_BRIEF = "watch_brief"
+# A Watch that runs the Agent (agent_watches.py): its finding, a question for
+# the user or its goal, one mail per run.
+KIND_AGENT_WATCH = "agent_watch"
 KINDS = {
     KIND_WATCH_ALERT, KIND_WATCH_PAUSED, KIND_WATCH_FOLLOWER,
-    KIND_TOPIC_FOLLOWER, KIND_WATCH_BRIEF,
+    KIND_TOPIC_FOLLOWER, KIND_WATCH_BRIEF, KIND_AGENT_WATCH,
 }
 CHANNEL_EMAIL = "email"
 CHANNEL_TELEGRAM = "telegram"
@@ -267,6 +270,15 @@ def brief_item(uid: str, *, scheduled_at: datetime, baseline: datetime,
             "timezone": _clip(timezone_name, 64),
         },
         now=now, deliver_within=BRIEF_DELIVER_WITHIN,
+    )
+
+
+def agent_watch_item(*, uid: str, watch_id: str, run_id: str, payload: dict, now: datetime) -> dict:
+    """The mail of one Agent Watch run (agent_watches.turn_ended); the run's
+    turn is ``run_id``. A finding a day late is still the finding."""
+    return new_item(
+        kind=KIND_AGENT_WATCH, channel=CHANNEL_EMAIL, resource_id=watch_id,
+        run_id=run_id, recipient_id=uid, uid=uid, payload=payload, now=now,
     )
 
 

@@ -257,7 +257,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         return (all(in_history(turn) for turn in earlier)
                 and (page.get("has_more") or len(earlier) == target["position"] - 1))
 
-    def messages(self, uid, chat_id, target, model=None, config=None, sources=None, context=None, first_page=None):
+    def messages(self, uid, chat_id, target, model=None, config=None, sources=None, context=None, first_page=None,
+                 history_chars=None):
         """The conversation for the target turn. ``sources``, a list, receives
         the saved sources of the earlier turns it includes (read_source may
         open them; agent_read_source, "Sources from the chat itself").
@@ -270,6 +271,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         A chat longer than CONTEXT_CHAR_LIMIT keeps its newest messages
         (history_start) and tells the model so in this message's app context;
         it used to stop every further message with an error instead.
+        ``history_chars`` keeps less: a Watch's scheduled run reads only its
+        chat's newest messages (agent_watches.HISTORY_CHARS).
 
         A turn that worked in its VM is followed by its work record
         (``agent_work_record``, agent_compaction.work_record) as an app
@@ -308,8 +311,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             cursor = page.get("next_cursor") or ""
             if not cursor:
                 break
+        budget = CONTEXT_CHAR_LIMIT - len(system_prompt) - len(target["question"])
         start = history_start([len(question) + len(answer) + len(record) for question, answer, _, record in earlier],
-                              CONTEXT_CHAR_LIMIT - len(system_prompt) - len(target["question"]))
+                              min(budget, history_chars) if history_chars else budget)
         for question, answer, saved, record in earlier[start:]:
             messages.extend([{"role": "user", "content": question},
                              {"role": "assistant", "content": answer}])

@@ -29,4 +29,4 @@ NOTE_CHARS = 8000
 # and calls only these keeps the text as the answer (DelegationLoop.
 # _answered_with_tools); any other tool call makes the text a preamble.
 SIDE_TOOLS = frozenset({"update_memory", "prepare_watch", "prepare_settings_change", "update_plan",
-                        "prepare_pull_request"})
+                        "prepare_pull_request", "report_finding", "finish_watch"})

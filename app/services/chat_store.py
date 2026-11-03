@@ -555,7 +555,7 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         # which would invalidate a completed review even on trailing newlines.
         # Agent output is already bounded at generation/storage time.
         result["assistant_response"] = result["consensus"] = text if isinstance(text, str) else ""
-        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_settings_proposal", "agent_vm", "agent_pull_request"):
+        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_watch_run", "agent_settings_proposal", "agent_vm", "agent_pull_request"):
             if field in source:
                 result[field] = source[field]
         # Its answer stands while its reviewers still work (agent_runs.hand_over):
@@ -1504,8 +1504,11 @@ class ChatStore:
         })
 
     def _purge_chat(self, uid: str, chat_id: str) -> None:
+        from app.services import agent_watches
         from app.services.agent_files import AgentFiles
         from app.services.agent_vm import delete_chat_vm
+        # Its Watch runs in it (agent_watches.py): gone first, so no run starts in a chat that is leaving.
+        agent_watches.delete_for_chat(self.db, uid, chat_id)
         AgentFiles(self.db).cleanup_chat(uid, chat_id)
         # The chat's Agent VM holds its files and the agent's work: deleted
         # first, and a provider failure keeps the deletion job retrying. No

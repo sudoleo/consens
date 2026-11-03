@@ -674,7 +674,7 @@ def test_a_page_read_after_the_comparison_is_in_context_and_reviewed(store, monk
 @pytest.mark.parametrize("compare", [True, False])
 def test_a_watch_is_prepared_and_the_agent_points_to_its_card(store, monkeypatch, compare):
     from app.services import agent_watch, watch_service
-    from test_agent_watch import QUESTION, WATCH, outlook
+    from test_agent_watch import TASK, WATCH, outlook
 
     def refuse(*args, **kwargs):
         raise AssertionError("prepare_watch created a Watch")
@@ -686,7 +686,7 @@ def test_a_watch_is_prepared_and_the_agent_points_to_its_card(store, monkeypatch
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
-    assert saved["agent_watch"]["question"] == QUESTION
+    assert saved["agent_watch"]["task"] == TASK
     system = script.requests[0][0]["content"]
     assert agent_watch.AUDIT_PROMPT in system
     # Reviewed either way; the comparison only where the agent asked for one.

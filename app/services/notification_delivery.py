@@ -352,9 +352,37 @@ async def _deliver_brief(item: dict, db, now: datetime) -> tuple:
     return outcome
 
 
+async def _deliver_agent_watch(item: dict, db) -> tuple:
+    """A finding, a question or the goal of an Agent Watch run
+    (agent_watches.turn_ended). Its chat or account gone: nothing is sent."""
+    from app.services import agent_watches
+    payload = item.get("payload") or {}
+    watch = await asyncio.to_thread(_doc, db, agent_watches.COLLECTION, item.get("resource_id") or "")
+    if not watch:
+        return outbox.SKIPPED, "watch_deleted"
+    if str(watch.get("uid") or "") != str(item.get("uid") or ""):
+        return outbox.SKIPPED, "owner_changed"
+    if not mailer.is_configured():
+        return outbox.SKIPPED, "smtp_not_configured"
+    recipient, blocked = await _verified_email(item["uid"])
+    if blocked:
+        return blocked
+    language = await asyncio.to_thread(account_language.of, item["uid"], db=db)
+    return await _send_mail(mailer.build_agent_watch_message(
+        recipient=recipient, language=language, outcome=payload.get("outcome") or "finding",
+        task=payload.get("task") or "", goal=payload.get("goal") or "",
+        summary=payload.get("summary") or "", evidence_url=payload.get("evidence_url") or "",
+        evidence_title=payload.get("evidence_title") or "", halted=bool(payload.get("halted")),
+        goal_met=bool(payload.get("goal_met")), goal_reason=payload.get("goal_reason") or "",
+        review=payload.get("review") or {}, app_url=SITE_URL + "/app",
+    ))
+
+
 async def attempt(item: dict, *, db, now: datetime) -> tuple:
     kind = item.get("kind")
     channel = item.get("channel")
+    if kind == outbox.KIND_AGENT_WATCH:
+        return await _deliver_agent_watch(item, db)
     if kind in {outbox.KIND_WATCH_ALERT, outbox.KIND_WATCH_PAUSED}:
         if channel == outbox.CHANNEL_TELEGRAM:
             return await asyncio.to_thread(_deliver_watch_telegram_sync, item, db, now)

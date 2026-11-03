@@ -84,6 +84,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         "outbox": 0,
         "tier_audit": 0,
         "workspace": 0,
+        "agent_watches": 0,
     }
 
     monkeypatch.setattr(
@@ -128,6 +129,11 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         service,
         "_delete_orphan_watches",
         lambda uid: calls.__setitem__("watches", calls["watches"] + 1),
+    )
+    monkeypatch.setattr(
+        service,
+        "_delete_agent_watches",
+        lambda uid: calls.__setitem__("agent_watches", calls["agent_watches"] + 1),
     )
     monkeypatch.setattr(
         service,
@@ -181,6 +187,8 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert calls["workspace"] == 1
     assert calls["chats"] == 1
     assert calls["watches"] == 1
+    # Watches that run the Agent (agent_watches.py) carry their task: once too.
+    assert calls["agent_watches"] == 1
     # R09: stored /ask answers are owner data and go with the account.
     assert calls["receipts"] == 1
     assert calls["watch_indexes"] == 1

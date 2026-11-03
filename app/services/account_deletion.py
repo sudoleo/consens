@@ -109,6 +109,8 @@ class FirestoreAccountDeletion:
             ("pending_results", lambda: self._delete_query("pending_results", "owner_uid", uid)),
             ("answer_receipts", lambda: self._delete_query("answer_receipts", "owner_uid", uid)),
             ("orphan_watches", lambda: self._delete_orphan_watches(uid)),
+            # Watches that run the Agent (agent_watches.py) carry their task text.
+            ("agent_watches", lambda: self._delete_agent_watches(uid)),
             ("watch_indexes", lambda: self._delete_watch_indexes(uid)),
             ("watch_brief", lambda: self._db.collection("watch_briefs").document(uid).delete()),
             # Pending notifications carry the owner's question/summary text.
@@ -255,6 +257,10 @@ class FirestoreAccountDeletion:
         for name in ("watch_state", "watch_uniques"):
             for snap in user_ref.collection(name).stream():
                 snap.reference.delete()
+
+    def _delete_agent_watches(self, uid: str) -> None:
+        from app.services import agent_watches
+        agent_watches.delete_for_account(self._db, uid)
 
     def _delete_orphan_watches(self, uid: str) -> None:
         watch_service.delete_watches_for_owner(uid, db=self._db)

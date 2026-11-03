@@ -149,8 +149,10 @@ def test_a_temporary_chat_does_what_any_chat_does_and_keeps_nothing_beyond_itsel
     assert settings["memory"] == {"used": True, "auto": False, "hint": False}
     # What the agent is offered and told.
     names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
-    assert {"compare_models", "search_chats", "prepare_watch", "open_workspace"} <= names
-    assert "update_memory" not in names
+    assert {"compare_models", "search_chats", "open_workspace"} <= names
+    # A Watch runs the agent again in its chat (agent_watches.py): a temporary
+    # chat keeps nothing, so it has none.
+    assert "update_memory" not in names and "prepare_watch" not in names
     system = calls[0]["messages"][0]["content"]
     assert prompt_defaults.AGENT_TEMPORARY_CHAT_PROMPT in system
     assert "SECRET-MEMORY" in system and agent_memory.AUDIT_MEMORY_TEMPORARY_PROMPT in system
@@ -191,20 +193,13 @@ def test_its_memory_is_read_and_never_written():
         agent_memory.AUDIT_MEMORY_UNAVAILABLE_PROMPT)
 
 
-def test_a_temporary_chat_prepares_a_watch_and_searches_the_other_chats(store):
-    """A Watch is the user's own and names no chat: it outlasts the chat it
-    came from untouched. The search finds saved chats, never a temporary one."""
+def test_a_temporary_chat_searches_the_other_chats(store):
+    """The search finds saved chats, never a temporary one."""
     loop = watch_loop(store, Script())
     store._chat_ref(UID, loop.chat_id).update({"temporary": True})
     loop.temporary = True
     bike = earlier(store, "Fahrrad", "Welches Rad?")
     assert [chat["chat_id"] for chat in search(loop, query="fahrrad")["chats"]] == [bike]
-    from app.services.agent_watch import PrepareWatch
-    prepared = loop.watch_tools.prepare(PrepareWatch(question="Tell me when GPT-6 comes out.",
-                                                     goals=["It is officially announced"]))
-    assert prepared["status"] == "prepared"
-    proposal = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_watch"]
-    assert set(proposal) == {"question", "goals", "interval"}
 
 
 def test_it_reads_the_workspaces_notes_and_its_file_tools_leave_them_as_they_are(store, fake_vm):

@@ -676,6 +676,86 @@ def build_condition_message(*, recipient: str, question: str, goal: str, reason:
     return _base_message(recipient, subject, plain, html_body)
 
 
+def _evidence_html(url: str, title: str) -> str:
+    if not str(url or "").startswith(("http://", "https://")):
+        return ""
+    label = _normalized(title)[:160] or _host(url)
+    return (
+        f'<div style="margin:24px 0 0">{_label_html(_t("Seen on"))}'
+        f'<p class="cx-soft" style="margin:4px 0 0;color:{INK_SOFT}">{_link_html(url, label)} '
+        f'<span class="cx-muted" style="color:{MUTED}">· {html.escape(_host(url))}</span></p></div>'
+    )
+
+
+def _review_sentence(review: dict) -> str:
+    """How the reviewers saw the run, one whole sentence per count (docs/i18n.md)."""
+    reviewers = int((review or {}).get("reviewers") or 0)
+    issues = int((review or {}).get("issues") or 0)
+    if not reviewers:
+        return ""
+    if issues == 1:
+        return _t("The reviewers marked one point. It is marked in the chat.")
+    if issues:
+        return _t("The reviewers marked {count} points. They are marked in the chat.", count=issues)
+    if reviewers == 1:
+        return _t("One reviewer checked this run and found nothing to object to.")
+    return _t("{count} reviewers checked this run and found nothing to object to.", count=reviewers)
+
+
+@_localized
+def build_agent_watch_message(*, recipient: str, outcome: str, task: str, goal: str, summary: str,
+                              evidence_url: str, evidence_title: str, halted: bool, goal_met: bool,
+                              goal_reason: str, review: dict, app_url: str) -> EmailMessage:
+    """One Agent Watch run (agent_watches.py) worth telling: what the agent
+    found with the page it saw it on, what it needs from the user (also a
+    reviewer's halt nobody was there to decide), or the goal it waited for."""
+    summary = _normalized(summary)[:600]
+    task = _normalized(task)[:500]
+    goal = _normalized(goal)[:200]
+    if outcome == "needs_you":
+        summary = summary or _t("A reviewer stopped the run before a step. Open the chat to decide.")
+        subject = _t("Your Watch needs you: {summary}", summary=_subject_clip(summary, limit=60))
+        eyebrow, heading, label = _t("Watch · Needs you"), _t("Your Watch needs you"), _t("What it needs")
+    elif outcome == "done" and not summary:
+        summary = _normalized(goal_reason)[:400] or _t("The goal is met.")
+        subject = _t("Reached: {goal}", goal=_subject_clip(goal or task, limit=60))
+        eyebrow, heading, label = _t("Watch · Goal reached"), _t("What you were waiting for happened"), _t("Why")
+    else:
+        subject = _t("Watch: {summary}", summary=_subject_clip(summary, limit=64))
+        eyebrow, heading, label = _t("Watch · Found"), _t("Your Watch found something"), _t("What it found")
+    goal_line = _t("The goal is met, so the Watch has ended.") if goal_met else ""
+    review_line = _review_sentence(review)
+    has_page = str(evidence_url or "").startswith(("http://", "https://"))
+    plain = "\n\n".join(part for part in (
+        _change_block_plain(label, summary),
+        _ascii(f"{_t('Seen on').upper()}\n{evidence_url}") if has_page else "",
+        _goal_plain(goal, goal_line, label=_t("You are waiting for")) if goal else goal_line,
+        review_line,
+        _ascii(f"{_t('Your Watch').upper()}\n{task}") if task else "",
+        _t("Open the page: {url}", url=evidence_url) if has_page else "",
+        _t("Open the chat in consens.io: {url}", url=app_url),
+    ) if part) + "\n"
+    body = (
+        _change_block_html(label, summary)
+        + _evidence_html(evidence_url, evidence_title)
+        + (_goal_html(goal, goal_line, label=_t("You are waiting for")) if goal else
+           (f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">{html.escape(goal_line)}</p>'
+            if goal_line else ""))
+        + (f'<p class="cx-muted" style="margin:16px 0 0;font-size:14px;color:{MUTED}">'
+           f"{html.escape(review_line)}</p>" if review_line else "")
+        + (_question_html(task, "", label=_t("Your Watch")) if task else "")
+        + (_button_html(evidence_url, _t("Open the page")) + _secondary_link_html(app_url, _t("Open the chat in consens.io"))
+           if has_page else _button_html(app_url, _t("Open the chat in consens.io")))
+    )
+    html_body = _shell_html(
+        eyebrow=eyebrow, heading=heading, preheader=_split_lead(summary)[0] or task, body=body,
+        footer=_h("The Watch has ended. Start a new one from any chat with the Agent.") if goal_met or outcome == "done"
+        else _h("This Watch runs the consens.io Agent on a schedule. End it in its chat."),
+        width=640,
+    )
+    return _base_message(recipient, subject, plain, html_body)
+
+
 @_localized
 def build_follow_confirm_message(*, recipient: str, question: str,
                                  confirm_url: str, share_url: str) -> EmailMessage:

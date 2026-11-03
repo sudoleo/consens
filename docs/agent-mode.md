@@ -3739,87 +3739,112 @@ jeder gespeicherte. Der tolerante Zitat-Locator (`_search_form`,
 Zitate der Prüfer (`locate_quote`). Geschichte in der codebase-map, Abschnitt
 „Eingefügten Text prüfen“.
 
-## Watch vorschlagen (seit 2026-10-11)
+## Watch (vorgeschlagen seit 2026-10-11, läuft den Agenten seit 2026-11-03)
 
-Bittet der Nutzer, ihn zu erinnern oder ihm Bescheid zu geben, wenn sich etwas
-ändert oder eintritt („sag mir, wenn GPT-6 erscheint“, „erinnere mich, wann der
-Sieger feststeht“), ruft der Agent `prepare_watch`
-(`app/services/agent_watch.py`) und beantwortet den aktuellen Stand wie
-gewohnt. Der Block `agent_watch.AUDIT_PROMPT` („WATCHES“, seit 2026-10-28 nur
-Fakten) sagt, was eine Watch tut und dass sie der einzige Weg der App ist, den
-Nutzer später zu erreichen; bis 2026-10-31 nannte im Vergleichsmodus
-`agent_watch.ORCHESTRATOR_PROMPT` Erinnern ausdrücklich. Anlass: Am 2026-10-11 las GPT-6 Luna „kannst du
-mich erinnern, wann der Sieger der Ironman-WM feststeht?“ nach einer Websuche
-als Frage nach dem Termin, bereitete keine Watch vor, und die Antwort behauptete,
-consens.io könne niemanden benachrichtigen (Live-Probe mit Suche: alter Prompt
-in einem von drei Läufen ohne Watch, neuer drei von drei mit; „Wann steht der
-Sieger fest?“ und „erinnere mich an die Formel“ bleiben ohne). Das Tool legt
+Eine Watch ist seit 2026-11-03 ein Auftrag mit Zeitplan in einem Agent-Chat
+(`app/services/agent_watches.py`). Zur Zeit startet der Server dort einen
+ganz normalen Agent-Lauf, ohne offenes Fenster; der Agent erledigt den Auftrag
+mit allen Werkzeugen des Chats und entscheidet selbst, wie er nachsieht.
+Event-Hooks gibt es dafür keine: der Takt ersetzt sie (Max: „komplett
+agentisch, nicht deterministisch“). Davor stellte eine Watch eine Frage über
+die Consensus-Pipeline neu; die Watch-Pill, der Hinweis und `/app/watches`
+legen solche weiter an, bis Stufe 2 sie umstellt.
+
+### Vorschlag und Karte
+
+Bittet der Nutzer, ihn zu erinnern, ihm Bescheid zu geben oder etwas
+wiederholt zu tun, ruft der Agent `prepare_watch` (`app/services/agent_watch.py`)
+und beantwortet den aktuellen Stand wie gewohnt. Der Block
+`agent_watch.AUDIT_PROMPT` („WATCHES“, nur Fakten) sagt, dass eine Watch ihn
+nach Zeitplan in diesem Chat erneut laufen lässt, der einzige Weg der App ist,
+den Nutzer später zu erreichen, und dass die Läufe tun, was ihr Auftrag sagt.
+Anlass des Blocks: Am 2026-10-11 antwortete GPT-6 Luna auf „kannst du mich
+erinnern …“, consens.io könne niemanden benachrichtigen. Das Tool legt
 **nichts** an:
 
-- Es prüft eine eigenständig formulierte Frage (8–200 Zeichen: so viel zeigt
-  die Watch-Liste, über die die Karte eine gestartete Watch erkennt), bis zu drei
-  beobachtbare Ziele (je ≤ 120 Zeichen, z. B. „GPT-6 is officially released“)
-  und das Intervall. Daily ohne Berechtigung wird Weekly, mit Hinweis an das
-  Modell.
-- Es fragt lesend `watch_service.creation_outlook`: Ist die Frage schon
-  beobachtet (jede Watch des Kontos mit demselben `question_hash`, jeder
-  Status, auch eine aus einem Consensus), ist ein Slot frei, ist Daily
-  erlaubt? Das Modell erhält `prepared`, `already_watched` oder
-  `limit_reached`.
-- Es speichert genau einen Vorschlag am laufenden Turn
-  (`agent_watch: {question, goals, interval}`; der letzte gewinnt, nur solange
-  der Turn `pending` ist). Ein Speicherfehler wird wie ein Fehler der
-  Vorabprüfung zur lesbaren Ablehnung an das Modell und beendet den Turn nie.
-- Der Agent sieht das Ergebnis von `prepare_watch` in seinem Kontext. Was er
-  dem Nutzer sagt, steht im Ergebnis (`agent_watch.INSTRUCTIONS`: nur
-  vorbereitet, die Karte unter der Antwort startet sie, nie behaupten, die
-  Watch sei aktiv; bei `already_watched` und `limit_reached` den Grund nennen).
-  Bis 2026-10-31 verlangte das im Vergleichsmodus `ORCHESTRATOR_PROMPT`, bis
-  2026-10-14 bekam der getrennte Antwortschritt dafür `prepared_watch` in der
-  Evidenz, `agent_watch.SYNTHESIS_PROMPT` und `AGENT_ANSWER_WATCH_FACT`.
+- Es prüft den Auftrag (8–500 Zeichen, eine Anweisung an sich selbst, die ohne
+  den Rest des Chats steht), ein optionales Ziel („fertig, wenn …“, ≤ 200),
+  das Intervall (`hourly`, `every_6_hours`, `daily`, `weekly`) und für
+  daily/weekly Uhrzeit und Wochentag.
+- Es fragt lesend `agent_watches.outlook`: Hat dieser Chat schon eine Watch,
+  ist ein Platz frei, welche Intervalle hat die Stufe? Ein zu kurzes Intervall
+  wird das kürzeste erlaubte, mit Hinweis an das Modell. Das Modell erhält
+  `prepared`, `already_watched` oder `limit_reached`.
+- Es speichert genau einen Vorschlag am laufenden Turn (`agent_watch`; der
+  letzte gewinnt, nur solange der Turn `pending` ist). Ein Speicherfehler wird
+  zur lesbaren Ablehnung an das Modell und beendet den Turn nie.
+- Was der Agent dem Nutzer sagt, steht im Ergebnis (`agent_watch.INSTRUCTIONS`:
+  nur vorbereitet, die Karte startet sie, nie behaupten, sie laufe).
 
-Die Karte (`static/js/agent-watch.js`) erscheint nur unter einer abgeschlossenen
-Antwort (`status: completed`), die auf sie verweist. Den Vorschlag liest sie aus
-dem gespeicherten Turn, ein eigenes SSE-Event gibt es nicht. Sie zeigt die
-Frage, „Waiting for: <erstes Ziel>“ (ohne Ziel „Any change to the answer“) und
-die Einstellungszeile der Dialog-Defaults.
-
-- **„Start watching“** ruft `POST /api/watch` mit `watchDefaults(interval)` und
-  der Zeitzone des Browsers. Das ist derselbe validierte, rate-limitierte Pfad
-  wie im Erstell-Dialog; was dort nach dem Anlegen passiert, gilt auch hier.
-- **„Adjust“** öffnet den Erstell-Dialog mit allen Zielen, das erste gewählt,
-  ohne zweiten Aufruf für Zielvorschläge.
-- Ob die Frage schon beobachtet wird (auch pausiert oder erledigt) oder kein
-  Slot frei ist, liest die Karte aus `/api/my/watches` (`App.watch.watchedFor`,
-  dieselbe Regel wie `creation_outlook`), nie aus dem gespeicherten Turn. Jede
-  Antwort dieses Endpunkts in der Seite, auch die des Dashboards, läuft durch
-  `watch.js receiveWatchList` und aktualisiert offene Karten.
+Die Karte (`static/js/agent-watch.js`) erscheint nur unter einer
+abgeschlossenen Antwort mit Vorschlag. Sie zeigt den Auftrag, „Done when: …“
+(ohne Ziel „Runs until you end it“) und den Zeitplan. „Change“ öffnet
+Intervall (nur die der Stufe) und Uhrzeit, „Start“ ruft `POST /agent/watches`
+mit Chat, Turn, Zeitplan und der Zeitzone des Browsers; den Auftrag liest der
+Server vom gespeicherten Turn, nie aus der Anfrage. Ob der Chat eine Watch
+hat, was ihr letzter Lauf fand und wann sie wieder läuft, liest die Karte aus
+`GET /agent/watches?chat_id=`; „End Watch“ beendet sie.
 
 **Warum keine direkte Anlage:** Inhalte aus Seiten, Mails oder Dateien dürfen
-keine wiederkehrenden Checks auf dem Plattform-Key starten, keinen Free-Slot
-belegen und keine Mails auslösen. Außerdem kennt der Server die Zeitzone des
-Nutzers nicht.
+keine wiederkehrenden Läufe starten, die im Namen des Nutzers handeln und sein
+Tageskonto verbrauchen. Außerdem kennt der Server die Zeitzone des Nutzers
+nicht.
 
 **Gating:**
-- Das Tool gibt es in jedem Chat-Lauf im Kontomodus ohne Google-Daten
-  (`DelegationLoop(google_data=…)`). Eine Frage aus privater Post
-  soll kein geplanter Check werden.
-- Eine reine „beobachte das“-Nachricht oder „starte die Watch“ zu einer früher
-  vorbereiteten: `prepare_watch` (erneut) und eine kurze Antwort. Die
-  Karte steht nur unter der neuesten Antwort (`agent-watch.js` hängt an
-  `#agentAnswerBody`; der Verlauf zeigt sie nicht, Max: in Ordnung); deshalb
-  soll die Antwort nur auf eine Karte verweisen, wenn `prepare_watch` in dieser
-  Nachricht einen Vorschlag vorbereitet hat (das Ergebnis nennt die Karte nur
-  dann). Live 2026-10-11 hatte die Antwort auf eine verschwundene Karte
-  verwiesen.
-- Ein Turn mit eigenem Vorschlag zeigt den allgemeinen Hinweis
-  „Watch this question“ (`offerWatch`) nicht.
-- Unter `MOCK_LLM` bereitet „Watch: <Frage>“ einen Vorschlag vor (für
-  Browser-Tests).
+- Das Tool gibt es in jedem Chat-Lauf im Kontomodus ohne Google-Daten, nicht in
+  temporären Chats (eine Watch wohnt in ihrem Chat) und nicht in einem
+  geplanten Lauf.
+- Die Watch läuft in dem Chat, in dem sie vorbereitet wurde (Kontext, Dateien
+  im Arbeitsplatz, Google-Freigabe sind dort). Eine Watch je Chat.
+- Grenzen je Stufe (Admin → Limits, `agent_watch_*`): Free 2 Watches, höchstens
+  täglich; Plus 5, alle 6 Stunden; Pro 20, stündlich. Dazu eine Tagesgrenze für
+  den ganzen Server (`agent_watch_max_runs_per_day`).
+- Unter `MOCK_LLM` bereitet „Watch: <Auftrag>“ einen Vorschlag vor.
 
-**Kosten:** Das Tool ruft kein Modell. Die Checks einer gestarteten Watch
-laufen wie bei jeder Watch auf dem Server-Key (global
-`watch_max_runs_per_day`), nicht auf dem Agent-Tageskonto.
+### Ein geplanter Lauf
+
+`watch_scheduler_loop` ruft bei jedem Takt `agent_watches.run_tick` und wacht
+zur nächsten Fälligkeit auf (`next_tick_seconds`). Ein fälliger Lauf wird in
+einer Transaktion genommen (`claim`: nächster Termin gesetzt, `running`
+vermerkt, Tageszähler) und über `routers/agent.start_agent_turn(…, watch_run=…)`
+gestartet: dieselbe Route wie jede Nachricht, auf dem Hintergrund-Thread. Die
+Nachricht im Chat ist der Auftrag; der Verlauf sagt „Scheduled Watch run“
+darüber (`thread-history.js`).
+
+- **Kein Nachholen:** Ein Lauf, der mehr als 2 Stunden hinter seiner Zeit
+  liegt, wird übersprungen. Ein leeres Tageskonto lässt den Lauf scheitern wie
+  jede Nachricht; der nächste versucht es wieder.
+- **Ein beschäftigter Chat** (409), volle Kapazität (503) oder eine
+  Provider-Pause (429): der Lauf kommt in 10 Minuten noch einmal, solange er
+  nicht 2 Stunden zu spät wäre. Ein gelöschter Chat beendet die Watch.
+- Je Konto läuft höchstens ein geplanter Lauf zur Zeit, je Prozess drei.
+- **Weniger Kontext:** Der Lauf liest nur die neuesten
+  `agent_watches.HISTORY_CHARS` Zeichen des Chats, damit der hundertste Lauf
+  so viel kostet wie der erste.
+- **Niemand ist da:** `hold_timeout` ist 0. `ask_user` hört sofort, dass keine
+  Antwort kam; ein Prüfer-Halt beendet den Lauf (`hold_timeout`) und wird dem
+  Nutzer gemailt.
+- **Im Namen des Nutzers:** Was der Auftrag sagt, tut der Lauf ohne Rückfrage
+  (Max, 2026-11-03: „darum gehts ja bei Agenten“); Starten der Watch war die
+  Freigabe. Für alles darüber hinaus meldet er sich mit `needs_user`.
+  Passwort und Zahlung gibt weiter nur der Nutzer ein.
+- **Melden nur mit Beleg:** `report_finding` nimmt nur eine Adresse an, die
+  dieser Lauf gesehen hat (ein Suchtreffer dieser Nachricht oder eine
+  Adresse in einem ihrer Werkzeugergebnisse), nie eine nur aus dem Chat oder
+  dem eigenen Text. `finish_watch` beendet die Watch, wenn ihr Ziel erreicht
+  ist. Beide stehen am Turn (`agent_watch_run`).
+
+Am Ende des Laufs (`agent_watches.turn_ended`, nach den Prüfern) vermerkt die
+Watch den Lauf (`last_run`: `quiet`, `finding`, `needs_you`, `done`, `failed`).
+Ein Befund, eine Rückfrage oder das Ziel geht als eine Mail über die
+Benachrichtigungs-Outbox (`agent_watch`, `mailer.build_agent_watch_message`):
+was gefunden wurde, die Seite dazu, wie die Prüfer den Lauf sahen, Link zur
+Seite und zur App. Ein ruhiger Lauf mailt nichts und rückt den Chat in der
+Seitenleiste nicht nach oben (`routers/agent._quiet_watch_run`).
+
+**Noch offen (Stufe 2/3):** die Watch-Seite listet nur Consensus-Watches;
+ruhige Läufe stehen im Chat noch als eigene Nachricht; Rückfragen per
+Telegram und ein Abmelde-Link in der Mail; die alte Pipeline läuft aus.
 
 ## Frühere Chats durchsuchen (seit 2026-10-28)
 
@@ -4473,7 +4498,7 @@ auf ihren möglicherweise unvollständigen oder ungeprüften Stand. Toolargument
 Antworten und Quellen sind untrusted data, keine Berechtigungen. Strikte Schemas,
 servereigene Modellauflösung und Limits verhindern eine Änderung der Policy
 über Toolergebnisse. Dateien und Share sind weiterhin nicht freigeschaltet; eine
-Watch bereitet der Agent nur vor (Abschnitt „Watch vorschlagen“).
+Watch bereitet der Agent nur vor (Abschnitt „Watch“).
 
 Der feste Produktkontext erklärt allen beteiligten Modellen knapp ihre Rolle in
 consens.io (Agent: `AGENT_AUDIT_ANSWER_SECTION`; Vergleichsmodelle:

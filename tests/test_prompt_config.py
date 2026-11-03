@@ -169,7 +169,8 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     from app.services import agent_comparison
     entries = client.get("/api/admin/prompt-config", headers=AUTH).json()["prompts_readonly"]
     assert [entry["key"] for entry in entries] == [
-        "agent", "agent_review_facts", "agent_temporary_chat", "comparison", "agent_audit_blocks", "audit_reviewer",
+        "agent", "agent_review_facts", "agent_temporary_chat", "comparison", "agent_audit_blocks", "agent_watch_run",
+        "audit_reviewer",
         "agent_vm", "agent_vm_no_domains", "agent_plan",
         "agent_github", "agent_workspace_closed", "answers", "consensus",
         "delegation_orchestrator", "delegation_worker"]

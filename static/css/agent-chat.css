@@ -1413,10 +1413,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-memory-verb { color: var(--ink-2); }
 
 /* ---- A Watch the Agent prepared (agent-watch.js) ----------------------------
-   One raised block under the answer: what would be watched, for what, on
-   which schedule, and the one button that starts it, the other ways as
-   text links (.text-link). Frameless like the shell; the state lives in
-   the words ("Watching", "Watch paused"), not in a colour. */
+   One raised block under the answer: the task the Agent runs again, when it
+   is done, on which schedule, and the one button that starts it, the other
+   ways as text links (.text-link). Frameless like the shell; the state lives
+   in the words ("Watch running", "Watch ended"), not in a colour. */
 .agent-watch-card {
   max-width: 66ch;
   margin: 14px 0 6px;
@@ -1439,6 +1439,16 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-watch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; }
 .agent-watch-start { min-height: 40px; padding: 8px 16px; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); }
 .agent-watch-card button:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* "Change": how often and when, two plain controls in one row. */
+.agent-watch-schedule { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.agent-watch-schedule :is(select, input) {
+  min-height: 36px; padding: 6px 10px; border: 0; border-radius: var(--radius-sm);
+  background: var(--ground); color: var(--ink); font: inherit; font-size: var(--font-size-sm);
+}
+.agent-watch-schedule :is(select, input):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+/* A Watch's scheduled run in the chat (thread-history.js): one quiet line
+   above its task, which the Watch sent, not the user. */
+.thread-watch-run { margin: 0 0 4px; color: var(--ink-3); font-size: var(--font-size-xs); }
 
 /* ---- A pull request the Agent prepared (agent-github.js) ------------------
    The Watch card's block: where it goes (repository, new branch -> base),

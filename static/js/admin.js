@@ -50,6 +50,18 @@ const limitGroups = [
         ]
     },
     {
+        title: 'Agent Watch Limits',
+        fields: [
+            ['agent_watch_free_active_limit', 'Free active Agent Watches'],
+            ['agent_watch_plus_active_limit', 'Plus active Agent Watches'],
+            ['agent_watch_pro_active_limit', 'Pro active Agent Watches'],
+            ['agent_watch_free_min_hours', 'Free shortest interval (hours)'],
+            ['agent_watch_plus_min_hours', 'Plus shortest interval (hours)'],
+            ['agent_watch_pro_min_hours', 'Pro shortest interval (hours)'],
+            ['agent_watch_max_runs_per_day', 'Global Agent Watch runs per day']
+        ]
+    },
+    {
         title: 'Share Index Quality Filter',
         fields: [
             ['share_min_consensus_chars', 'Min consensus characters'],

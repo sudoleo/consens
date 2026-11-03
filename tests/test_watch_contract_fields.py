@@ -119,6 +119,14 @@ def test_watch_page_visibility_changes_in_settings(watch_http):
     assert back.status_code == 200 and stored_share["visibility"] == "public"
     assert stored_share["indexed"] is False  # Google's index stays an admin decision
 
+@pytest.fixture
+def no_agent_watches():
+    """No Watch that runs the Agent (agent_watches.py) is due."""
+    with patch.object(watch_scheduler.agent_watches, "earliest_next_run_at", return_value=None):
+        yield
+
+
+@pytest.mark.usefixtures("no_agent_watches")
 def test_scheduler_wakes_at_the_next_due_check():
     now = datetime(2026, 10, 20, 8, 50, tzinfo=timezone.utc)
     with patch.object(watch_service, "earliest_next_run_at", return_value=now + timedelta(minutes=10)):
@@ -132,6 +140,17 @@ def test_scheduler_wakes_at_the_next_due_check():
         assert watch_scheduler.next_tick_seconds(now=now) == watch_scheduler.TICK_SECONDS
 
 
+def test_a_watch_that_runs_the_agent_wakes_the_scheduler_too():
+    now = datetime(2026, 10, 20, 8, 50, tzinfo=timezone.utc)
+    with patch.object(watch_service, "earliest_next_run_at", return_value=now + timedelta(minutes=20)), \
+            patch.object(watch_scheduler.agent_watches, "earliest_next_run_at", return_value=now + timedelta(minutes=10)):
+        assert watch_scheduler.next_tick_seconds(now=now) == 605
+    with patch.object(watch_service, "earliest_next_run_at", return_value=None), \
+            patch.object(watch_scheduler.agent_watches, "earliest_next_run_at", side_effect=RuntimeError("down")):
+        assert watch_scheduler.next_tick_seconds(now=now) == watch_scheduler.TICK_SECONDS
+
+
+@pytest.mark.usefixtures("no_agent_watches")
 def test_a_watch_that_fell_due_during_a_long_tick_runs_on_the_next_short_one():
     # Zweitprüfung 10: the tick scanned at 08:00 and ran for 20 minutes; a
     # check due at 08:10 was never seen and must not wait until 08:50.

@@ -167,6 +167,15 @@
         return heading;
       };
       question.append(turnHeading("Your message"), questionBubble);
+      // A Watch's scheduled run (agent_watches.py): its task came from the
+      // Watch, not from the user typing it then.
+      if (agentTurn && turnData.agent_settings?.watch_run) {
+        question.classList.add("is-watch-run");
+        const label = document.createElement("p");
+        label.className = "thread-watch-run";
+        label.textContent = "Scheduled Watch run";
+        question.insertBefore(label, questionBubble);
+      }
 
       // Anhaenge bleiben an ihrer Nachricht, auch wenn der Turn in den
       // Verlauf rutscht.

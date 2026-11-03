@@ -74,6 +74,17 @@ DEFAULT_LIMITS = {
     "watch_plus_active_limit": 3,
     "watch_pro_active_limit": 5,
     "watch_max_runs_per_day": 50,
+    # Watches that run the Agent (agent_watches.py, since 2026-11-03): active
+    # ones per tier and the shortest interval in hours (Max: Free 2 daily,
+    # Plus 5 every 6 hours, Pro 20 hourly). Each run books on the account's
+    # own allowance; the runs per day are a safety net for the whole server.
+    "agent_watch_free_active_limit": 2,
+    "agent_watch_plus_active_limit": 5,
+    "agent_watch_pro_active_limit": 20,
+    "agent_watch_free_min_hours": 24,
+    "agent_watch_plus_min_hours": 6,
+    "agent_watch_pro_min_hours": 1,
+    "agent_watch_max_runs_per_day": 300,
     # Daily evidence probes between two full checks (one cheap model with web
     # search each, see app/services/watch_probe.py). 0 switches them off.
     "watch_probe_max_per_day": 100,
@@ -1920,6 +1931,27 @@ def get_watch_active_limit(tier) -> int:
 
 def get_watch_max_runs_per_day() -> int:
     return max(0, int(LIMITS["watch_max_runs_per_day"]))
+
+
+def get_agent_watch_active_limit(tier) -> int:
+    return max(0, _tier_limit(tier, {
+        TIER_FREE: "agent_watch_free_active_limit",
+        TIER_PLUS: "agent_watch_plus_active_limit",
+        TIER_PRO: "agent_watch_pro_active_limit",
+    }))
+
+
+def get_agent_watch_min_hours(tier) -> int:
+    # A missing value falls back to Free's, the longest interval (_tier_limit).
+    return max(1, int(_tier_limit(tier, {
+        TIER_FREE: "agent_watch_free_min_hours",
+        TIER_PLUS: "agent_watch_plus_min_hours",
+        TIER_PRO: "agent_watch_pro_min_hours",
+    })))
+
+
+def get_agent_watch_max_runs_per_day() -> int:
+    return max(0, int(LIMITS["agent_watch_max_runs_per_day"]))
 
 
 def get_watch_probe_max_per_day() -> int:

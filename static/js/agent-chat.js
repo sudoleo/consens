@@ -529,7 +529,8 @@
       });
       App.agentMemory?.nudge(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}` });
       App.agentWatch?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
-        proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_watch : null });
+        proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_watch : null,
+        chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId });
       // A reopened chat's answer has its Watch pill too, with the question of
       // this turn, never one left from the chat shown before (J20).
       App.watch?.answerButton?.(document.getElementById('agentAnswerBody'), {
@@ -916,7 +917,8 @@
       finished: !running && state.completedTurn?.status === 'completed', memory: state.completedTurn?.agent_settings?.memory });
     // A Watch the Agent prepared: its card under the completed answer that points to it.
     App.agentWatch?.render(answerBody, { key: context.runId,
-      proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null });
+      proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null,
+      chatId: context.metadata.chatId, turnId: state.completedTurn?.id || state.completedTurn?.turn_id });
     // The same Watch pill as under a Consensus answer, on every finished
     // answer (watch.js; Apple-Audit J20). It is not the Agent offering one:
     // a prepared Watch has its card instead, and a follow-up opens at its

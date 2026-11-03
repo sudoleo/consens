@@ -37,6 +37,12 @@ def _audit_blocks():
                         agent_memory.AUDIT_MEMORY_WRITE_PROMPT, agent_files.AUDIT_UNTRUSTED))
 
 
+def _watch_run():
+    from app.services import agent_watch
+    return (agent_watch.RUN_PROMPT + "\n\nApp context of the run:\n"
+            + agent_watch.RUN_NOTE.format(goal=" It ends once this goal is met: <goal>."))
+
+
 def _review_facts():
     from app.services.prompt_defaults import AGENT_REVIEW_FACTS
     return "\n\n".join(f"[{setting}] {fact}" for setting, fact in AGENT_REVIEW_FACTS.items())
@@ -110,6 +116,11 @@ _ENTRIES = (
      "block: their descriptions say what they do.",
      "agent_watch.py/agent_settings.py:AUDIT_PROMPT, "
      "agent_memory.py:AUDIT_MEMORY_*, agent_files.py:AUDIT_UNTRUSTED", _audit_blocks),
+    ("agent_watch_run", "Agent: Watch run",
+     "Appended to \"Agent: instructions\" in a Watch's scheduled run (since 2026-11-03), in place of the Watch "
+     "block, with report_finding and finish_watch; the run's message is the Watch's task, its app context says "
+     "what the message is.",
+     "agent_watch.py:RUN_PROMPT, RUN_NOTE", _watch_run),
     ("audit_reviewer", "Agent: reviewers",
      "System prompt of each model the user chose, as a reviewer: it follows the agent's work log in rounds (each "
      "user message holds the new entries as JSON, up to two search rounds each) and reviews the fixed answer in a "
