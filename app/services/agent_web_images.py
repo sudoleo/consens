@@ -306,15 +306,35 @@ async def fetch_found(picture, copy, page, get=None):
 FETCHES_AT_ONCE = 3
 
 
-async def _fetch_all(urls):
+async def _fetch_all(urls, cancellation=None):
     """fetch_picture for each address, FETCHES_AT_ONCE side by side: a result
-    or the exception. Each address has CALL_SECONDS once it starts."""
+    or the exception. Each address has CALL_SECONDS once it starts. Stop
+    (``cancellation``) ends them all at once with ProviderCancelled; until
+    2026-11-03 it waited for the running wave, up to CALL_SECONDS each."""
+    from app.services.llm.provider_runtime import ProviderCancelled
     gate = asyncio.Semaphore(FETCHES_AT_ONCE)
 
     async def one(url):
         async with gate:
             return await asyncio.wait_for(fetch_picture(url), CALL_SECONDS)
-    return await asyncio.gather(*(one(url) for url in urls), return_exceptions=True)
+    work = asyncio.gather(*(one(url) for url in urls), return_exceptions=True)
+    if cancellation is None:
+        return await work
+    loop = asyncio.get_running_loop()
+
+    class Stop:
+        @staticmethod
+        def close():
+            loop.call_soon_threadsafe(work.cancel)
+    unregister = cancellation.register(Stop())
+    try:
+        return await work
+    except asyncio.CancelledError:
+        if cancellation.cancelled:
+            raise ProviderCancelled("find_pictures stopped") from None
+        raise
+    finally:
+        unregister()
 
 
 def _reason(exc):
@@ -414,7 +434,7 @@ class WebImageTools:
             self._fetch(candidate)
         fetch = [url for url in unseen if url in allowed and url not in found]
         cancellation.raise_if_cancelled()
-        fetched = dict(zip(fetch, asyncio.run(_fetch_all(fetch)))) if fetch else {}
+        fetched = dict(zip(fetch, asyncio.run(_fetch_all(fetch, cancellation)))) if fetch else {}
         cancellation.raise_if_cancelled()
         sees = sees_pictures(self.loop.model)
         results = []

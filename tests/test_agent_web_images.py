@@ -109,6 +109,34 @@ def test_find_pictures_fetches_no_more_addresses_at_once_than_the_dns_gate_leave
     assert peak == 3
 
 
+def test_stop_ends_the_fetches_at_once(monkeypatch):
+    """Bug hunt 2026-11-01: Stop or the answer's deadline waited for the
+    running wave of fetches, up to CALL_SECONDS each (60-90 s for six slow
+    sites)."""
+    import threading
+    import time
+    from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
+    ended = []
+
+    async def slow(url, get=None):
+        try:
+            await asyncio.sleep(20)
+        finally:
+            ended.append(url)
+    monkeypatch.setattr(agent_web_images, "fetch_picture", slow)
+    cancellation = ProviderCancellation()
+    threading.Timer(0.2, cancellation.cancel).start()
+    started = time.monotonic()
+    with pytest.raises(ProviderCancelled):
+        asyncio.run(agent_web_images._fetch_all([f"https://slow{n}.example/" for n in range(6)], cancellation))
+    assert time.monotonic() - started < 3
+    # The running ones ended with it; the waiting ones never began.
+    assert len(ended) == agent_web_images.FETCHES_AT_ONCE
+    # Stopped before it began: nothing runs.
+    with pytest.raises(ProviderCancelled):
+        asyncio.run(agent_web_images._fetch_all(["https://slow.example/"], cancellation))
+
+
 def test_the_fetch_takes_extra_headers_but_keeps_its_own(monkeypatch):
     """watch_images._fetch(headers=...): the Referer goes along, the pinned
     Host and the honest User-Agent stay."""
