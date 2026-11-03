@@ -14,6 +14,9 @@
   const decided = new Map();
   let pending = null;
   let settingsLoaded = false;
+  // Counts sign-ins and sign-outs: a connection read for the account before
+  // is never shown for the next one.
+  let accountGeneration = 0;
 
   function uid() { return window.auth?.currentUser?.uid || ''; }
   function node(tag, className, text) {
@@ -81,8 +84,15 @@
   }
   async function loadConnection() {
     if (!settingsView() || !uid()) return;
-    try { showConnection(await request('/agent/github/connection')); settingsLoaded = true; }
-    catch (error) { const view = settingsView(); if (view) view.status.textContent = failed(error); }
+    const generation = accountGeneration;
+    try {
+      const info = await request('/agent/github/connection');
+      if (generation !== accountGeneration) return;
+      showConnection(info); settingsLoaded = true;
+    } catch (error) {
+      const view = settingsView();
+      if (view && generation === accountGeneration) view.status.textContent = failed(error);
+    }
   }
   // Must open the window inside the click (popup blockers).
   function connect() {
@@ -245,6 +255,18 @@
     place(body, view.card);
     sync(view);
   }
+
+  // Another account (or none): until 2026-11-03 Settings went on showing the
+  // previous account's GitHub login and repositories until a reload.
+  window.addEventListener('consensio:auth-state', () => {
+    accountGeneration++;
+    settingsLoaded = false;
+    decided.clear();
+    pending?.popup.close(); pending = null;
+    if (!document.getElementById('agentGithubSettings')?._github) return;
+    showConnection(null);
+    settingsView().status.textContent = '';
+  });
 
   App.agentGithub = { render, loadConnection };
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', watchSettings, { once: true });

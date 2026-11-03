@@ -121,4 +121,32 @@ describe("GitHub in Settings", () => {
     expect(host.querySelector(".agent-github-status").textContent).toBe("GitHub is not set up on this installation yet.");
     expect(host.querySelector(".agent-github-link").hidden).toBe(true);
   });
+
+  it("forgets the previous account's connection when another one signs in", async () => {
+    // Bug hunt 2026-10-27: Settings went on showing the login and up to 12
+    // repositories of the account before, until a reload.
+    const { window, document, github } = setup();
+    // Settings may read it more than once while the page loads.
+    const answers = [];
+    window.fetch = vi.fn(() => new Promise(resolve => answers.push(resolve)));
+    const late = github.loadConnection();
+    await vi.waitFor(() => expect(window.fetch).toHaveBeenCalled());
+    window.auth.currentUser = { uid: "u2", getIdToken: async () => "token2" };
+    window.dispatchEvent(new window.CustomEvent("consensio:auth-state", { detail: {} }));
+    for (const answer of answers) answer(reply({ configured: true, connected: true, login: "maxl", repositories: ["maxl/app"] }));
+    await late;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const host = document.getElementById("agentGithubSettings");
+    expect(host.querySelector(".agent-github-status").textContent).toBe("");
+    expect(host.querySelector(".agent-github-repos").textContent).toBe("");
+
+    window.fetch = vi.fn(async () => reply({ configured: true, connected: true, login: "other",
+      repositories: ["other/site"] }));
+    await github.loadConnection();
+    expect(host.querySelector(".agent-github-status").textContent).toBe("Connected as other.");
+    window.dispatchEvent(new window.CustomEvent("consensio:auth-state", { detail: {} }));
+    expect(host.querySelector(".agent-github-status").textContent).toBe("");
+    expect(host.querySelector(".agent-github-repos").hidden).toBe(true);
+    expect([...host.querySelectorAll(".agent-github-link")].slice(1).every(link => link.hidden)).toBe(true);
+  });
 });

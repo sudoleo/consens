@@ -156,7 +156,9 @@ GitHub for the Agent VM (26.10.2026): `routers/agent_github.py` exposes
 access, reading and disconnecting only the owner) and the pull request card's
 `POST /agent/chats/{chat}/turns/{turn}/pull-request[/discard]`;
 `agent-github.js` (bundle after `agent-watch.js`) renders the Settings row
-`#agentGithubSettings` and the card. Details in `docs/agent-mode.md`
+`#agentGithubSettings` and the card; `consensio:auth-state` empties the row
+and drops a read still on its way, so the next account never sees the
+previous one's login and repositories. Details in `docs/agent-mode.md`
 ("GitHub aus der VM") and `docs/github-app-setup.md`.
 
 The account's workspace live (27.10.2026; since its security audit two VMs per
