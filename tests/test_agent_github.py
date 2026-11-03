@@ -13,6 +13,7 @@ import json
 import shutil
 import subprocess
 import tarfile
+from pathlib import Path
 
 import httpx
 import jwt
@@ -302,6 +303,22 @@ def test_an_app_removed_on_github_shows_as_not_connected(store, fake_vm, github)
     assert "no longer connected" in removed["error"]
     assert again == {"error": NOT_CONNECTED}
     assert GitHubConnections(store.db).public(UID)["connected"] is False
+
+
+def test_the_way_to_connect_again_is_where_settings_show_github(store, fake_vm, github):
+    """Bug hunt 2026-11-03: GitHub moved to Settings › Connections on
+    2026-11-02, but the agent still sent the user to Settings, Agent, GitHub,
+    a place that no longer has it."""
+    template = (Path(__file__).resolve().parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
+    connections = template.split('id="connectionsSettingsSection"', 1)[1].split("</section>", 1)[0]
+    assert 'id="agentGithubSettings"' in connections
+    connected(store, github)
+    github.removed.add(9)
+    loop = vm_loop(store, Agent([[("github_import", {"repo": "maxl/app"})]]))
+    list(loop.run())
+    [removed] = results(loop)
+    for message in (NOT_CONNECTED, NO_ACCESS, removed["error"]):
+        assert "Settings, Connections, GitHub" in message
 
 
 @pytest.mark.parametrize("status, error", [(422, NO_ACCESS.format(repo="maxl/app")),

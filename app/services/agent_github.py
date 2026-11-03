@@ -105,10 +105,10 @@ IMPORT_REF = "refs/consens/import"
 WORKFLOWS = ".github/workflows/"
 
 NOT_SET_UP = "GitHub is not set up on this installation. Say so; the user cannot connect it yet."
-NOT_CONNECTED = ("GitHub is not connected. The user can connect it in Settings, Agent, GitHub, and choose the "
+NOT_CONNECTED = ("GitHub is not connected. The user can connect it in Settings, Connections, GitHub, and choose the "
                  "repositories there.")
 NO_ACCESS = ("consens.io has no access to {repo} for this user. They can add the repository to the GitHub app "
-             "and connect again in Settings, Agent, GitHub.")
+             "and connect again in Settings, Connections, GitHub.")
 NO_PUSH = ("The user may read {repo} but not push to it, so no pull request can come from here. Say so.")
 WORKFLOWS_REFUSED = ("This change touches .github/workflows, which consens.io may not change (the GitHub app has no "
                      "Workflows permission). Leave those files out of the pull request.")
@@ -398,7 +398,7 @@ class GitHubConnections:
         if token is None:
             self.forget(uid, installation)
             raise GitHubUnavailable("GitHub is no longer connected: the app was removed from this repository or "
-                                    "account. The user can connect again in Settings, Agent, GitHub.", 409)
+                                    "account. The user can connect again in Settings, Connections, GitHub.", 409)
         return token, name
 
 
