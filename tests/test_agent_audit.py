@@ -539,6 +539,49 @@ def test_a_final_round_that_hangs_twice_ends_in_time_with_its_live_marks(store, 
     assert audit_sessions(store, loop, "openai") == [("failed", "no_time"), ("failed", "no_time")]
 
 
+def test_a_stopped_final_round_waits_for_its_request_without_spinning(monkeypatch):
+    """Bug hunt 2026-11-03: a final round stopped (Stop, its deadline) before
+    its hedge time starts no hedge, but from then on waited 0 s for a result:
+    until the stopped request had wound down (its settlement, up to
+    FINAL_ROUND_SECONDS) the loop spun on the server's CPU, once per reviewer."""
+    import queue
+    from types import SimpleNamespace
+    monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .2)
+    gets = []
+
+    class Results(queue.Queue):
+        def get(self, *args, **kwargs):
+            gets.append(kwargs.get("timeout"))
+            return super().get(*args, **kwargs)
+    monkeypatch.setattr(agent_audit, "queue", SimpleNamespace(Queue=Results, Empty=queue.Empty))
+
+    def worker_request(worker, model, messages, *, cancellation, **kwargs):
+        while not cancellation.cancelled:
+            time.sleep(.01)
+        # The step's settlement after the stop, past the hedge time.
+        time.sleep(.5)
+        raise ProviderCancelled("stopped")
+    loop = SimpleNamespace(_terminal=lambda *a, **k: None, _state=lambda *a, **k: None,
+                           _publish=lambda *a, **k: None, _hard_stop_left=lambda: None,
+                           policy=SimpleNamespace(result_chars=1000))
+    tools = SimpleNamespace(loop=loop, worker_request=worker_request, lock=threading.RLock())
+    session = agent_audit.ReviewerSession.__new__(agent_audit.ReviewerSession)
+    session.audit = SimpleNamespace(tools=tools, slots=threading.BoundedSemaphore(3), file_ids=[],
+                                    reviewers={"openai": {}}, work_log=None, brief=lambda: None)
+    session.provider, session.tools, session.loop = "openai", tools, loop
+    session.model = SimpleNamespace(model="openai/gpt-spin", label="GPT", settings=lambda: {})
+    session.messages = [{"role": "system", "content": "Review."}]
+    session.cancellation = agent_audit.ReviewCancellation()
+    session.worker = SimpleNamespace(id="w1", state="waiting")
+    session.conversation_key, session.requests, session.hedged = None, [], False
+    threading.Timer(.1, session.cancellation.cancel).start()
+    with pytest.raises(ProviderCancelled):
+        session._final_request("Final round.", set())
+    assert session.hedged is False
+    # A blocking wait asks a handful of times, not hundreds of thousands.
+    assert len(gets) < 10
+
+
 def test_a_failed_live_round_opens_a_new_session_and_its_entries_come_again(store):
     seen = []
 

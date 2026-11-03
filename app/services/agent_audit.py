@@ -1881,8 +1881,11 @@ class ReviewerSession:
                                   threading.BoundedSemaphore(1))
                 running.append(hedge)
                 self.hedged = True
+            # Stopped, no hedge comes any more: wait for the running requests
+            # (until 2026-11-03 it waited 0 s past hedge_at and spun).
+            no_more_hedge = hedge is not None or self.cancellation.cancelled
             try:
-                done = results.get(timeout=max(0., (deadline if hedge is not None else min(hedge_at, deadline))
+                done = results.get(timeout=max(0., (deadline if no_more_hedge else min(hedge_at, deadline))
                                                - time.monotonic()))
             except queue.Empty:
                 continue
