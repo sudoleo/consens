@@ -3031,6 +3031,43 @@ Hinweis an die nächste Nachricht),
 `workspace-view.test.mjs` (Agent-Tab der Einstellungen), `test_user_settings.py` und
 `test_prompt_config.py`.
 
+### Wo der Browser angemeldet ist (seit 2026-11-02)
+
+Max sagte dem Agenten bis dahin „merk dir, dass du bei WhatsApp eingeloggt
+bist“, und das landete in seinem Gedächtnis. Jetzt führt der Agent eine Liste
+am Konto-Dokument (`users/{uid}/chat_state/agent_workspace`, Feld `sign_ins`,
+je `{site, name, since}`, höchstens `SIGN_INS_KEPT` = 20, die neuesten
+bleiben):
+
+- **Eintragen:** Werkzeug `note_sign_in` neben `browser` (nur mit offenem
+  Arbeitsplatz): nach einer gelungenen Anmeldung, wenn er den Browser auf einer
+  Seite angemeldet findet, die fehlt, oder mit `signed_in: false`, wenn er auf
+  einer Seite der Liste abgemeldet ist. `site` ist der Hostname
+  (`agent_browser.sign_in_site`: auch eine Adresse, IDN als Punycode, keine
+  IP, kein localhost), `name` der Name des Nutzers (40 Zeichen). Ein erneuter
+  Eintrag behält den ersten Tag. In temporären Chats bleibt die Liste, wie sie
+  ist (`SIGN_INS_KEPT_NOTE`, wie die Notizen).
+- **Warum nicht aus den Cookies:** Ein Cookie beweist keine Anmeldung
+  (Einwilligungs- und Bot-Schutz-Cookies, `browser.py saved_sign_in` sagt
+  deshalb nur „Cookies saved“). Der Agent sieht auf der Seite, ob er angemeldet
+  ist. Die Shell der Werkbank kommt weiterhin nicht an das Profil.
+- **Weitergeben:** `routers/agent.py` liest den Datensatz zu Beginn jeder
+  Nachricht ohnehin (`workspace_turn`, derselbe Lesezugriff wie für die
+  Rückgabe des Browsers) und hängt `agent_workspace.sign_ins_note` an den
+  Kontext der Frage, auch bei noch geschlossenem Arbeitsplatz: Der Agent weiß
+  vorher, dass WhatsApp da ist, und öffnet ihn dafür.
+- **Zeigen:** Einstellungen → Verbindungen → Agent, Zeile
+  `#agentSignInsSettings` (`agent-sign-ins.js`, `window.App.agentSignIns`):
+  `GET /agent/workspace/sign-ins`, „Entfernen“ über
+  `POST /agent/workspace/sign-ins/remove` `{site}` nimmt die Seite nur von der
+  Liste, der Browser bleibt dort angemeldet. „Überall abmelden“
+  (`reset-browser`) leert die Liste mit (`clear_sign_ins`).
+
+Tests: `tests/test_agent_workspace.py` (Liste), `test_agent_browser.py`
+(Werkzeug, Hostnamen, temporärer Chat), `test_agent_workspace_view.py`
+(Endpunkte, Abmelden), `test_agent_vm.py` (Kontext der Frage),
+`tests/js/agent-sign-ins.test.mjs`.
+
 ### Sicherheitsregeln des Arbeitsplatzes (seit 2026-10-30)
 
 Max am 2026-10-30, als der Arbeitsplatz für alle Konten aufging

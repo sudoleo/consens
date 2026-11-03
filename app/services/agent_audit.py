@@ -350,6 +350,8 @@ BRIEF_TOOLS = (
                 "Sign-ins, passwords and payments are the user's: ask_user hands the browser to them, and a step "
                 "in their name (sending, posting, buying, deleting) waits for their yes through ask_user. "
                 "localhost there is the agent's own workbench, where it serves what it builds for the user."),
+    ("note_sign_in", "note_sign_in keeps the list of sites the browser is logged in to, which the agent reads with "
+                     "every message and the user sees in their settings."),
     ("ask_user", "A key or token the user gave through ask_user lies in ~/.secrets on the workbench: the agent "
                  "reads it there for the command that needs it, which is its purpose."),
     # No quote of the user since 2026-10-28, no gate since 2026-11-02: the

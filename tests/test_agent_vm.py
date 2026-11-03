@@ -1431,6 +1431,24 @@ def test_where_a_message_starts(api, monkeypatch, setting, used, browser, closed
     assert store._chat_ref(UID, chat_id).get().to_dict()["agent_workspace_used"] is False
 
 
+@pytest.mark.parametrize("vm_on", [True, False])
+def test_every_message_says_where_the_browser_is_logged_in(api, monkeypatch, vm_on):
+    """The list the agent keeps (note_sign_in) comes with the question, also
+    while the workspace is still closed: the agent knows WhatsApp is there
+    before it opens anything (since 2026-11-02)."""
+    from app.api.routers import agent
+    client, store, calls = api
+    monkeypatch.setattr(agent, "vm_allowed", lambda uid: vm_on)
+    monkeypatch.setattr(agent_vm, "configured", lambda: True)
+    agent_workspace.note_sign_in(store.db, UID, "web.whatsapp.com", "WhatsApp", True)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "r1", "bookmark_id": "bm1"}
+    assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+    note = agent_workspace.sign_ins_note(agent_workspace.sign_ins(agent_workspace.record(store.db, UID)))
+    assert "WhatsApp (web.whatsapp.com, since " in note
+    assert any(note in str(m["content"]) for m in calls[0]["messages"]) is vm_on
+
+
 # --- Deletion -----------------------------------------------------------------------
 
 def test_deleting_the_chat_deletes_its_folder_and_keeps_the_workspace(store, fake_vm):

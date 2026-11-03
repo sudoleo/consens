@@ -1475,12 +1475,12 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-pr-card :is(button, a):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* GitHub and the workspace in Settings (agent-github.js, workspace-view.js): title, its
    sentence and the status each on a line of their own, the actions as quiet links (.text-link). */
-:is(.agent-github-settings, .agent-workspace-settings) > strong {
+:is(.agent-github-settings, .agent-workspace-settings, .agent-sign-ins-settings) > strong {
   display: block; color: var(--text-color); font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold); line-height: var(--line-height-heading);
 }
 /* Title and sentence as in every other row (.settings-switch-row). */
-:is(.agent-github-settings, .agent-workspace-settings) > small:not([hidden]) {
+:is(.agent-github-settings, .agent-workspace-settings, .agent-sign-ins-settings) > small:not([hidden]) {
   display: block; margin-top: 4px; color: var(--sidebar-text-muted); font-size: var(--font-size-xs);
   line-height: var(--line-height-ui);
 }
@@ -1490,6 +1490,18 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-github-repos[hidden], .agent-github-actions [hidden] { display: none; }
 .agent-github-actions { display: flex; flex-wrap: wrap; gap: 4px 16px; margin-top: 6px; }
 .agent-github-actions .agent-github-link { font-size: var(--font-size-sm); }
+/* Where the workspace's browser is logged in (agent-sign-ins.js): one site a
+   line, its host name and day quieter, Remove as a quiet link at the end. */
+.agent-sign-ins-list { display: grid; gap: 6px; margin: 8px 0 0; padding: 0; list-style: none; }
+.agent-sign-ins-list[hidden] { display: none; }
+.agent-sign-in { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.agent-sign-in-text { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 8px; min-width: 0; }
+.agent-sign-in-name { color: var(--text-color); font-size: var(--font-size-sm); }
+.agent-sign-in-site, .agent-sign-in-since { color: var(--ink-3); font-size: var(--font-size-xs); }
+.agent-sign-in-site { font-family: var(--font-mono); overflow-wrap: anywhere; }
+.agent-sign-in-remove { flex: none; font-size: var(--font-size-sm); }
+.agent-sign-ins-status { margin: 8px 0 0; font-size: var(--font-size-xs); color: var(--ink-2); }
+.agent-sign-ins-status:empty { display: none; }
 
 /* ---- A settings change the Agent prepared (agent-settings.js) -------------
    The Watch card's block: each change as "now → new", the new value in the

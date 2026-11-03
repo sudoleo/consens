@@ -225,6 +225,10 @@
           "note": "App.agentGithub: connecting GitHub in Settings and the pull request card under an Agent answer. Uses App.httpError, App.readJson and App.userError (app-text.js); agent-chat.js renders the card."
         },
         {
+          "file": "static/js/agent-sign-ins.js",
+          "note": "App.agentSignIns: the sites the workspace's browser is logged in to, in Settings → Connections. Uses App.httpError, App.readJson, App.userError and App.format (app-text.js); workspace-view.js reloads it after logging out everywhere."
+        },
+        {
           "file": "static/js/workspace-view.js",
           "note": "App.workspaceView: the account's workspace live (noVNC from static/vendor/novnc, imported when it first opens), takeover, Settings row and the Agent · Beta settings tab (syncSettings, from firebase.js and agent-chat.js). Uses App.confirm, App.t, App.settingsTabs and App.agentChat at runtime; the composer's Workspace button opens it."
         },

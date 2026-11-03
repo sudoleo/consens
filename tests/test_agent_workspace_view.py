@@ -391,6 +391,31 @@ def test_signing_the_browser_out_waits_for_the_agent_and_deletes_its_profile(vie
     assert isinstance(agent_workspace.record(store.db, UID).get("restore_floor"), datetime)
 
 
+def test_settings_list_where_the_browser_is_logged_in_and_take_a_site_off(view_api, fake_vm):
+    """The sites the agent noted (note_sign_in), in Settings → Connections:
+    one can go, and logging out everywhere empties the list."""
+    client, store, _, allowed = view_api
+    assert client.get("/agent/workspace/sign-ins", headers=AUTH).json() == {"sign_ins": []}
+    agent_workspace.note_sign_in(store.db, UID, "web.whatsapp.com", "WhatsApp", True)
+    agent_workspace.note_sign_in(store.db, UID, "github.com", "GitHub", True)
+    listed = client.get("/agent/workspace/sign-ins", headers=AUTH)
+    assert [entry["site"] for entry in listed.json()["sign_ins"]] == ["web.whatsapp.com", "github.com"]
+    assert listed.headers["cache-control"] == "private, no-store"
+    left = client.post("/agent/workspace/sign-ins/remove", json={"site": "web.whatsapp.com"}, headers=AUTH)
+    assert [entry["name"] for entry in left.json()["sign_ins"]] == ["GitHub"]
+    assert client.post("/agent/workspace/sign-ins/remove", json={}, headers=AUTH).status_code == 422
+    # Logged out everywhere: nowhere on the list either.
+    chat, _ = pending(store)
+    agent_workspace.claim(store, UID, chat, "done", provider="fake")
+    agent_workspace.release(store, UID, "done")
+    fake_vm.vms[BROWSER] = {"files": {}, "checkpoints": []}
+    assert client.post("/agent/workspace/reset-browser", headers=AUTH).json() == {"status": "reset"}
+    assert client.get("/agent/workspace/sign-ins", headers=AUTH).json() == {"sign_ins": []}
+    # Only for an account with the workspace.
+    allowed.clear()
+    assert client.get("/agent/workspace/sign-ins", headers=AUTH).status_code == 403
+
+
 # --- Runtime audit 2026-10-30 (V4, I8) ----------------------------------------------------
 
 def test_the_view_names_what_is_left_of_the_days_vm_time(view_api, fake_vm, monkeypatch):

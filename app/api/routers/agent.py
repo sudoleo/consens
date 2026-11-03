@@ -130,21 +130,31 @@ def domains_allowed(uid):
 RECENT_HANDBACK_SECONDS = 600
 
 
-def browser_turn(uid):
-    """The user and the workspace's browser (agent_workspace.control_state):
-    0 while they have it, the seconds since they handed it back when that was
-    within RECENT_HANDBACK_SECONDS, else None (also when it cannot be read)."""
+def browser_turn(record):
+    """The user and the workspace's browser in its ``record``
+    (agent_workspace.control_of): 0 while they have it, the seconds since
+    they handed it back when that was within RECENT_HANDBACK_SECONDS, else
+    None."""
     import time
     from app.services import agent_workspace
-    try:
-        has, returned = agent_workspace.control_state(db_firestore, uid)
-    except Exception as exc:
-        logging.warning("Agent workspace browser state unavailable category=%s", safe_exception(exc))
-        return None
+    has, returned = agent_workspace.control_of(record)
     if has:
         return 0
     ago = time.time() - returned if returned else None
     return ago if ago is not None and 0 <= ago < RECENT_HANDBACK_SECONDS else None
+
+
+def workspace_turn(uid):
+    """The workspace as a message starts, from one read of its record:
+    (browser_turn, the sites its browser is logged in to as the agent noted
+    them, agent_workspace.sign_ins). (None, []) when it cannot be read."""
+    from app.services import agent_workspace
+    try:
+        record = agent_workspace.record(db_firestore, uid)
+    except Exception as exc:
+        logging.warning("Agent workspace browser state unavailable category=%s", safe_exception(exc))
+        return None, []
+    return browser_turn(record), agent_workspace.sign_ins(record)
 
 
 def workspace_closed(chat_data, browser):
@@ -368,7 +378,7 @@ def _turn_reads(uid, payload, store):
         "bookmark": bookmark.get,
         "files": lambda: [public_file(files.get(uid, chat_id, fid)) for fid in payload.file_ids],
         "memory": lambda: _memory_snapshot(uid),
-        "browser": lambda: browser_turn(uid) if vm_allowed(uid) else None,
+        "workspace": lambda: workspace_turn(uid) if vm_allowed(uid) else (None, []),
         # What the reviewers' output shares divide, read before the first
         # step's claim reserves from it (AnswerAudit.output_share).
         "allowance": lambda: agent_quota.remaining_allowance(db_firestore, uid),
@@ -582,10 +592,14 @@ def run_agent(request: Request, payload: AgentRequest):
         restored = (chat_data.get("agent_vm") or {}).get("restored") if preferences.vm == "on" else None
         if isinstance(restored, dict) and not restored.get("told"):
             app_context += "\n" + agent_vm.VM_RESTORED_NOTE
-        # The user works in the workspace's browser or just did (browser_turn).
-        browser = reads["browser"].result() if preferences.vm == "on" else None
+        # The user works in the workspace's browser or just did (browser_turn),
+        # and where it is logged in (since 2026-11-02, agent_workspace.sign_ins).
+        browser, signed_in = reads["workspace"].result() if preferences.vm == "on" else (None, [])
         if browser:
             app_context += "\n" + agent_vm.HANDED_BACK_NOTE.format(minutes=max(1, round(browser / 60)))
+        if signed_in:
+            from app.services import agent_workspace
+            app_context += "\n" + agent_workspace.sign_ins_note(signed_in)
         sweep.result()
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,

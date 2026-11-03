@@ -88,6 +88,33 @@ def test_a_deleted_chat_takes_no_lease(store):
     assert agent_workspace.record(store.db, UID) == {}
 
 
+def test_the_list_of_sign_ins_keeps_the_first_day_and_the_newest_sites(store, monkeypatch):
+    from datetime import date
+    noted = agent_workspace.note_sign_in(store.db, UID, "web.whatsapp.com", "WhatsApp", True, today=date(2026, 11, 2))
+    assert noted == [{"site": "web.whatsapp.com", "name": "WhatsApp", "since": "2026-11-02"}]
+    # Noted again later: the same session's first day, the new name.
+    again = agent_workspace.note_sign_in(store.db, UID, "web.whatsapp.com", "WhatsApp Web", True, today=date(2026, 11, 5))
+    assert again == [{"site": "web.whatsapp.com", "name": "WhatsApp Web", "since": "2026-11-02"}]
+    # A claim keeps the list (it writes the record anew).
+    chat, _ = pending(store)
+    agent_workspace.claim(store, UID, chat, "turn", provider="fake")
+    assert agent_workspace.sign_ins(agent_workspace.record(store.db, UID)) == again
+    assert agent_workspace.sign_ins_note(again) == agent_workspace.SIGN_INS_NOTE.format(
+        sites="WhatsApp Web (web.whatsapp.com, since 2026-11-02)")
+    assert agent_workspace.sign_ins_note([]) == ""
+    assert agent_workspace.note_sign_in(store.db, UID, "web.whatsapp.com", "", False) == []
+    # The newest stay; what is not an entry is skipped.
+    monkeypatch.setattr(agent_workspace, "SIGN_INS_KEPT", 2)
+    for site in ("a.example", "b.example", "c.example"):
+        agent_workspace.note_sign_in(store.db, UID, site, "", True)
+    agent_workspace.ref(store.db, UID).update({"sign_ins": [
+        *agent_workspace.record(store.db, UID)["sign_ins"], "x", {"site": ""}, {"site": "d.example", "name": 3}]})
+    assert [(entry["site"], entry["name"]) for entry in agent_workspace.sign_ins(agent_workspace.record(store.db, UID))] \
+        == [("b.example", "b.example"), ("c.example", "c.example"), ("d.example", "d.example")]
+    agent_workspace.clear_sign_ins(store.db, UID)
+    assert agent_workspace.sign_ins(agent_workspace.record(store.db, UID)) == []
+
+
 # --- Tools in the VMs -----------------------------------------------------------------
 
 def test_the_vms_tools_are_lf_and_their_versions_follow_their_bytes():

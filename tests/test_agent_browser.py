@@ -689,3 +689,49 @@ def test_the_first_call_says_about_when_the_browsers_start_ends_while_it_waits(s
     # The start's estimate before the browser began; then the call's own clock.
     assert reports.index({"starting_until": None}) < next(index for index, fields in enumerate(reports)
                                                           if "started_at" in fields)
+
+
+# --- Where the browser is logged in (note_sign_in, since 2026-11-02) ---------------------
+
+def test_the_agent_notes_where_the_browser_is_logged_in_without_the_browsers_vm(store, fake_vm):
+    """The list on the account's record (agent_workspace.note_sign_in): a
+    host name of the site, the user's name for it; nothing on a VM."""
+    script = Agent([[("note_sign_in", {"site": "https://Web.WhatsApp.com/", "name": " WhatsApp\u200b "})],
+                    [("note_sign_in", {"site": "github.com", "name": "GitHub"})],
+                    [("note_sign_in", {"site": "web.whatsapp.com", "signed_in": False})],
+                    [("note_sign_in", {"site": "127.0.0.1"})]])
+    loop = vm_loop(store, script)
+    events = list(loop.run())
+    assert "note_sign_in" in script.offered[0] and "browser" in script.offered[0]
+    noted, second, removed, refused = results(loop)
+    assert noted == {"status": "noted", "sign_ins": ["WhatsApp (web.whatsapp.com)"]}
+    assert second["sign_ins"] == ["WhatsApp (web.whatsapp.com)", "GitHub (github.com)"]
+    assert removed == {"status": "removed", "sign_ins": ["GitHub (github.com)"]}
+    assert "not an IP address" in refused["error"]
+    assert [entry["site"] for entry in agent_workspace.sign_ins(agent_workspace.record(store.db, UID))] == ["github.com"]
+    assert fake_vm.requests == []
+    shown = [e for e in tool_events(events, "note_sign_in") if e["status"] == "succeeded"]
+    assert [(e["site"], e["signed_in"]) for e in shown] == [("web.whatsapp.com", True), ("github.com", True),
+                                                           ("web.whatsapp.com", False)]
+
+
+@pytest.mark.parametrize("value,site", [("web.whatsapp.com", "web.whatsapp.com"),
+                                        ("https://mail.google.com/mail/u/0/#inbox", "mail.google.com"),
+                                        ("Amazon.DE.", "amazon.de"), ("bücher.de", "xn--bcher-kva.de")])
+def test_a_sign_in_is_kept_by_its_host_name(value, site):
+    assert agent_browser.sign_in_site(value) == site
+
+
+@pytest.mark.parametrize("value", ["localhost", "file:///etc/passwd", "ftp://example.com", "10.0.0.1", "[::1]",
+                                   "exa mple.com", "example"])
+def test_a_sign_in_is_a_site_on_the_web(value):
+    with pytest.raises(ValueError):
+        agent_browser.sign_in_site(value)
+
+
+def test_a_temporary_chat_leaves_the_list_as_it_is(store, fake_vm):
+    loop = vm_loop(store, Agent([[("note_sign_in", {"site": "web.whatsapp.com", "name": "WhatsApp"})]]))
+    loop.temporary = True
+    list(loop.run())
+    assert results(loop)[0] == {"status": "kept", "note": agent_browser.SIGN_INS_KEPT_NOTE}
+    assert agent_workspace.record(store.db, UID).get("sign_ins") is None

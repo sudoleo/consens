@@ -62,6 +62,8 @@
     open_workspace: ['Workspace', 'Opening the workspace…', 'Opened the workspace'],
     // The workspace's browser, a computer of its own (agent_browser.py).
     browser: ['Browser', 'Using the browser…', 'Used the browser'],
+    // Where it is logged in, Settings → Connections (agent-sign-ins.js).
+    note_sign_in: ['Logins', 'Updating the logins…', 'Updated the logins'],
     request_domain: ['Network', 'Asking for access…', 'Got access'],
     // The user's turn (agent_ask.py): the card above the field says what for.
     ask_user: ['Your turn', 'Waiting for you…', 'Asked you'],

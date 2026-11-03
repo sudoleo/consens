@@ -1305,6 +1305,8 @@
     try {
       await post('/agent/workspace/reset-browser');
       status.textContent = 'The workspace browser is logged out everywhere.';
+      // Its list of sites in Settings → Connections is empty now (agent-sign-ins.js).
+      App.agentSignIns?.load(true);
     } catch (error) {
       status.textContent = error.message || 'Try again.';
     }

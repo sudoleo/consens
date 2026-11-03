@@ -1,6 +1,7 @@
 """The account's workspace from the browser (agent_workspace.py,
 workspace-view.js, docs/agent-mode.md "Arbeitsplatz"): the live view of its
-Chrome, the user's takeover and resetting the browser.
+Chrome, the user's takeover, resetting the browser and the list of sites it
+is logged in to (since 2026-11-02, agent-sign-ins.js).
 
 The view is a WebSocket the server carries through to the browser VM
 (agent_vm.browser_name): since the security audit of 2026-10-27 over a
@@ -185,7 +186,33 @@ def reset_workspace_browser(request: Request):
         logging.warning("Agent workspace reset unavailable category=%s", safe_exception(exc))
         return JSONResponse({"error": "The workspace is not reachable right now. Try again.",
                              "code": "vm_unavailable"}, status_code=503)
+    # Logged in nowhere now: the list the agent kept says so too.
+    agent_workspace.clear_sign_ins(db_firestore, uid)
     return JSONResponse({"status": "reset"}, headers=NO_STORE)
+
+
+class SignIn(Strict):
+    site: str = Field(min_length=1, max_length=300)
+
+
+@router.get("/agent/workspace/sign-ins")
+@limiter.limit("30/minute")
+def workspace_sign_ins(request: Request):
+    """Where the workspace's browser is logged in, as the agent noted it
+    (agent_workspace.sign_ins; Settings → Connections, agent-sign-ins.js)."""
+    uid = owner(request)
+    return JSONResponse({"sign_ins": agent_workspace.sign_ins(agent_workspace.record(db_firestore, uid))},
+                        headers=NO_STORE)
+
+
+@router.post("/agent/workspace/sign-ins/remove")
+@limiter.limit("30/minute")
+def remove_workspace_sign_in(request: Request, payload: SignIn):
+    """Takes a site off the list. The browser stays logged in there: the
+    user logs out on the site itself, or everywhere (reset-browser)."""
+    uid = owner(request)
+    entries = agent_workspace.note_sign_in(db_firestore, uid, payload.site, "", False)
+    return JSONResponse({"sign_ins": entries}, headers=NO_STORE)
 
 
 def _sign_in(token):

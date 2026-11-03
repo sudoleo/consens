@@ -67,6 +67,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.core.observability import safe_exception
 from app.services import agent_vm
 from app.services.agent_tools import ReadOnlyTool
+from app.services.agent_workspace import SIGN_IN_NAME_CHARS
 from app.services.agent_vm_tools import log_tag
 from app.services.llm.provider_runtime import ProviderCancelled
 
@@ -174,6 +175,40 @@ class BrowserArgs(BaseModel):
     show: bool = Field(default=False, description=(
         "With screenshot or screenshot_after: also show the user that picture under your answer, as when they ask "
         "to see the page."))
+
+
+class NoteSignInArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    site: str = Field(min_length=3, max_length=300, description=(
+        "The site's host name, such as web.whatsapp.com; its address works too."))
+    name: str = Field(default="", max_length=SIGN_IN_NAME_CHARS, description=(
+        "What the user calls the site, such as WhatsApp."))
+    signed_in: bool = Field(default=True, description=(
+        "False when the browser is logged out of a site the list names."))
+
+
+# note_sign_in in a temporary chat (since 2026-11-02, like the workspace's notes).
+SIGN_INS_KEPT_NOTE = ("This is a temporary chat: the list of sign-ins outlasts it, so it stays as it is. Nothing was "
+                      "noted.")
+
+
+def sign_in_site(value):
+    """The host name of ``value``, an address or a bare host name, as
+    note_sign_in keeps it; ValueError for anything else."""
+    text = " ".join(str(value).split())
+    parts = urlsplit(text if "://" in text else "https://" + text)
+    try:
+        host = (parts.hostname or "").rstrip(".").encode("idna").decode("ascii").lower()
+    except (UnicodeError, ValueError):
+        host = ""
+    if parts.scheme not in {"http", "https"} or "." not in host or len(host) > 253 \
+            or not re.fullmatch(r"[a-z0-9-]+(\.[a-z0-9-]+)+", host):
+        raise ValueError("site is a site's host name, such as web.whatsapp.com.")
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return host
+    raise ValueError("site is a site's host name, such as web.whatsapp.com, not an IP address.")
 
 
 # localhost on the browser is the workbench's, port by port (agent_tunnel.py).
@@ -376,7 +411,34 @@ class BrowserTools:
                        "refused and nothing is saved. A file the page downloads, also one the user downloads there, "
                        "comes into your chat folder's downloads folder. The user sees the page in front on a card in "
                        "the chat, its picture renewed as you work, and opens it live from there.",
-            BrowserArgs, self.call, activity=self._activity, reports=True)]
+            BrowserArgs, self.call, activity=self._activity, reports=True),
+            # Where the browser is logged in (agent_workspace.note_sign_in, since 2026-11-02).
+            ReadOnlyTool(
+                "note_sign_in", "Keep the list of sites the browser is logged in to: after a sign-in worked, when "
+                                "you find it logged in to a site the list lacks, or with signed_in false logged out "
+                                "of one it names. The list comes with every message of the user's chats, and they "
+                                "see it in their settings; the browser's sign-ins go here, not into the memory.",
+                NoteSignInArgs, self.note_sign_in, activity=self._sign_in_activity)]
+
+    def note_sign_in(self, args, *, cancellation):
+        """note_sign_in: the account's list (agent_workspace.note_sign_in),
+        never in a temporary chat."""
+        from app.services import agent_workspace
+        loop = self.vm.loop
+        site = sign_in_site(args.site)
+        if getattr(loop, "temporary", False) is True:
+            return {"status": "kept", "note": SIGN_INS_KEPT_NOTE}
+        name = " ".join("".join(char for char in args.name if char.isprintable()).split())
+        entries = agent_workspace.note_sign_in(loop.store.db, loop.uid, site, name, args.signed_in)
+        return {"status": "noted" if args.signed_in else "removed",
+                "sign_ins": [f"{entry['name']} ({entry['site']})" for entry in entries]}
+
+    def _sign_in_activity(self, args, result):
+        try:
+            site = sign_in_site(args.site)
+        except ValueError:
+            return {}
+        return {"site": site, "signed_in": bool(args.signed_in)}
 
     def prewarm(self, cancellation):
         """The warm-up before the first call (VMTools.prewarm): it takes

@@ -350,6 +350,63 @@ def remember_values(db, uid, field, values, *, keep):
     doc.set({field: [*current, *values][-keep:]}, merge=True)
 
 
+# The sites the browser is logged in to, as the agent noted them
+# (note_sign_in, agent_browser.py; since 2026-11-02): ``sign_ins`` on the
+# record, each {site, name, since}. Cookies cannot say it (consent and
+# bot-protection cookies are cookies too, browser.py saved_sign_in), the
+# agent sees it on the page. Before, Max told the agent "remember you are
+# logged in to WhatsApp", which went into his memory. The list comes with
+# every message (sign_ins_note) and the user sees it in Settings →
+# Connections, where an entry can go; logging out of everything empties it.
+SIGN_INS_KEPT = 20
+SIGN_IN_NAME_CHARS = 40
+SIGN_INS_NOTE = ("The workspace's browser was logged in to these sites when the agent last noted it (note_sign_in); "
+                 "a session can run out, the page shows whether it still holds: {sites}.")
+
+
+def sign_ins(record):
+    """The record's sign-ins, oldest first, valid entries only."""
+    values = record.get("sign_ins")
+    entries = []
+    for entry in values if isinstance(values, list) else ():
+        if not isinstance(entry, dict) or not isinstance(entry.get("site"), str) or not entry["site"]:
+            continue
+        name, since = entry.get("name"), entry.get("since")
+        entries.append({"site": entry["site"], "name": name if isinstance(name, str) and name else entry["site"],
+                        "since": since if isinstance(since, str) else ""})
+    return entries
+
+
+def note_sign_in(db, uid, site, name, signed_in, *, today=None):
+    """Puts ``site`` on the account's list of sign-ins (``signed_in``) or
+    takes it off, and returns the list after. A site noted again keeps the
+    day it was first noted and takes the new name; the newest
+    SIGN_INS_KEPT stay."""
+    doc = ref(db, uid)
+    current = sign_ins(doc.get().to_dict() or {})
+    before = next((entry for entry in current if entry["site"] == site), None)
+    entries = [entry for entry in current if entry["site"] != site]
+    if signed_in:
+        since = (before or {}).get("since") or (today or _now().date()).isoformat()
+        entries.append({"site": site, "name": name or (before or {}).get("name") or site, "since": since})
+    entries = entries[-SIGN_INS_KEPT:]
+    if entries != current:
+        doc.set({"sign_ins": entries}, merge=True)
+    return entries
+
+
+def clear_sign_ins(db, uid):
+    """After the browser logged out of everything (reset_browser)."""
+    ref(db, uid).set({"sign_ins": []}, merge=True)
+
+
+def sign_ins_note(entries):
+    """What a message's context says of ``entries`` (sign_ins), or ""."""
+    sites = "; ".join(f"{entry['name']} ({entry['site']}" + (f", since {entry['since']})" if entry["since"] else ")")
+                      for entry in entries)
+    return SIGN_INS_NOTE.format(sites=sites) if sites else ""
+
+
 def renew(store, uid, turn_id):
     """Moves this message's lease on; False when it is not this message's
     any more (it expired and another chat took the workspace)."""
@@ -914,7 +971,13 @@ def control_state(db, uid, now=None):
     handed it back as a time.time() or 0): the record's ``control``, which
     only the server writes. A takeover the open view stopped refreshing has
     simply run out, without a hand-back."""
-    control = record(db, uid).get("control")
+    return control_of(record(db, uid), now)
+
+
+def control_of(workspace, now=None):
+    """control_state of a record already read (routers/agent.py reads it
+    once at a message's start, for the sign-ins too)."""
+    control = workspace.get("control")
     if not isinstance(control, dict):
         return False, 0.0
 
