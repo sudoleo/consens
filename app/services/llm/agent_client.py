@@ -449,9 +449,12 @@ def _free_default_effort(model, metadata):
 
 
 def free_default_effort(model_id=None):
-    """`_free_default_effort` for a selectable chat model (None if unknown)."""
+    """`_free_default_effort` for a selectable chat model (None if unknown),
+    found as resolve_agent_model finds it: until 2026-11-03 a migrated ID
+    (grok-4.3-no-reasoning) was unknown here, and Auto without Pro ran at
+    the model's own level instead of Medium."""
     models = agent_models()
-    wanted = model_id or models[0][0].selection_id
+    wanted = cfg.canonical_model_id(model_id) if model_id else models[0][0].selection_id
     for model, metadata in models:
         if wanted in (model.selection_id, model.model):
             return _free_default_effort(model, metadata)

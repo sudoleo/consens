@@ -27,6 +27,19 @@ def test_auto_stands_for_medium_only_where_the_model_offers_it_unpinned():
     assert _free_default_effort(AgentModel(model="x/plain", request_config={}), {}) is None
 
 
+def test_a_migrated_model_id_has_the_free_default_of_its_successor(monkeypatch):
+    """Bug hunt 2026-10-31: free_default_effort compared the raw ID, unlike
+    resolve_agent_model, so a saved migrated ID ran Auto at the model's own
+    level for a Free account."""
+    import app.core.config as cfg
+    models = agent_client.agent_models()
+    target = models[0][0].selection_id
+    monkeypatch.setitem(cfg.PROVIDER_MODEL_MIGRATIONS, "test-family", {"legacy-id": target})
+    monkeypatch.setattr(agent_client, "_free_default_effort", lambda model, metadata: f"for {model.selection_id}")
+    assert agent_client.free_default_effort("legacy-id") == f"for {target}"
+    assert agent_client.free_default_effort("unknown-id") is None
+
+
 def test_the_catalog_says_what_auto_becomes_without_pro(api):
     client, _store, _ = api
     models = client.get("/agent/models", headers=AUTH).json()["models"]
