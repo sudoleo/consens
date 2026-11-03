@@ -490,6 +490,8 @@ class DelegationLoop(AgentLoop):
         # step of this turn, the answer and a wrap-up included, uses that lighter level.
         self.routing_lighter = None
         self.identical_calls = {}
+        # The run's own size right after its last compaction (_compact).
+        self.compacted_to = None
         # One catalog for all of them: built once per model of the picker,
         # about 45 times, it was most of a message's work before its first
         # request (until 2026-11-01).
@@ -997,7 +999,7 @@ class DelegationLoop(AgentLoop):
         if not self._long_run():
             return
         from app.services import agent_compaction
-        cut = agent_compaction.compact(self.messages, self.turn_start)
+        cut = agent_compaction.compact(self.messages, self.turn_start, since=self.compacted_to)
         if cut is None:
             return
         for index, message in cut.replacements:
@@ -1006,6 +1008,7 @@ class DelegationLoop(AgentLoop):
         for index, message in agent_compaction.older_pictures(self.messages, self.turn_start,
                                                                shown_max=agent_compaction.PICTURES_KEPT):
             self.messages[index] = message
+        self.compacted_to = agent_compaction.own_chars(self.messages, self.turn_start)
         logging.info("Agent long run compacted results=%s chars_before=%s chars_after=%s",
                      len(cut.replacements), cut.before, cut.after)
         if self.work_log is not None:

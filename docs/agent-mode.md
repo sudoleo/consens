@@ -4199,7 +4199,11 @@ Ergebnisse unter 2.000 Zeichen und andere Werkzeuge (Vergleiche, Dateien)
 bleiben unberührt. Prompt-Cache: Jede Änderung einer älteren Nachricht
 schreibt den Cache ab dort neu, deshalb schneidet die App nur oberhalb der Marke
 und nur, wenn es mindestens `MIN_GAIN_CHARS` = 30.000 Zeichen spart; danach
-bleibt der Präfix stabil, bis das Gespräch wieder an der Marke ist. Nur
+bleibt der Präfix stabil, bis der eigene Teil seit dem Schnitt um
+`REGROW_CHARS` = 90.000 Zeichen gewachsen ist (`DelegationLoop.compacted_to`;
+bis 2026-11-03 nur bis zur Marke: Ein Lauf, dessen Aufrufe und Antworten
+allein über der Marke blieben, schnitt ab etwa Schritt 16 jeden dritten Schritt
+und schrieb den Cache jedes Mal neu). Nur
 Tool-Ergebnisse ändern sich, Anzahl und Reihenfolge der Nachrichten bleiben;
 Assistant-Nachrichten (Reasoning-Signaturen, Tool-Argumente) gehen unverändert
 zurück. Deshalb bleiben große `vm_write_file`-Inhalte in den Argumenten

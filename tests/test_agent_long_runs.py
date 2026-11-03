@@ -209,6 +209,28 @@ def test_compaction_never_cuts_for_a_small_gain_or_twice(monkeypatch):
     assert compact(messages, 2) is None
 
 
+def test_after_a_cut_the_next_waits_until_the_run_has_grown_again(monkeypatch):
+    """Bug hunt 2026-10-26: a run whose own calls and answers stay above the
+    mark after a cut was cut again every third step, each cut a new cache
+    write; the doc says rarely and large."""
+    monkeypatch.setattr(agent_compaction, "COMPACT_ABOVE_CHARS", 30_000)
+    monkeypatch.setattr(agent_compaction, "KEEP_RECENT_CHARS", 10_000)
+    monkeypatch.setattr(agent_compaction, "MIN_GAIN_CHARS", 5_000)
+    monkeypatch.setattr(agent_compaction, "REGROW_CHARS", 40_000)
+    messages = conversation([("vm_exec", exec_result(n, 9_000)) for n in range(6)])
+    cut = compact(messages, 2)
+    for index, message in cut.replacements:
+        messages[index] = message
+    after = agent_compaction.own_chars(messages, 2)
+    # Three more results: enough to cut again, not yet grown by REGROW_CHARS.
+    grown = messages + conversation([("vm_exec", exec_result(n, 9_000)) for n in range(6, 9)])[2:]
+    assert compact(grown, 2) is not None
+    assert compact(grown, 2, since=after) is None
+    grown += conversation([("vm_exec", exec_result(n, 9_000)) for n in range(9, 11)])[2:]
+    assert agent_compaction.own_chars(grown, 2) >= after + 40_000
+    assert compact(grown, 2, since=after) is not None
+
+
 def test_a_compacted_file_read_keeps_where_it_was_and_the_inputs():
     content = json.dumps({"path": "/home/sprite/app.py", "first_line": 1, "last_line": 400, "total_lines": 900,
                           "content": "print()\n" * 400, "input_dir": "/home/sprite/input",
@@ -241,6 +263,9 @@ def test_a_long_run_compacts_old_output_and_the_work_log_says_so(store, fake_vm,
     assert json.loads(first)["stdout"].startswith("step 0\n")
     compactions = [json.loads(text) for entry, text in entries if entry["kind"] == "app" and entry["name"] == "compacted"]
     assert compactions and compactions[0]["tool_call_ids"][0] == "call_0_0"
+    # Once: the run does not grow by REGROW_CHARS after it (until
+    # 2026-11-03 it cut every second step here, each a new cache write).
+    assert len(compactions) == 1
 
 
 def test_a_short_turn_is_never_compacted(store, fake_vm, monkeypatch):

@@ -13,7 +13,10 @@ whole until they add up to KEEP_RECENT_CHARS, the newest batch always.
 Prompt cache: each step's request continues the previous one's prefix, and
 changing an older message rewrites the cached prefix from there on. So a cut
 happens only above the mark and only when it saves at least MIN_GAIN_CHARS;
-afterwards the prefix stays stable until the run has grown back to the mark.
+afterwards the prefix stays stable until the run has grown by REGROW_CHARS
+since the cut. Until 2026-11-03 it waited only for the mark, which a run
+whose calls and answers alone pass it stays above: from about its 16th step
+on it cut every third step and wrote the cache anew each time.
 Only tool results change: assistant messages (their reasoning signatures and
 tool arguments) go back to the provider exactly as it wrote them, and the
 number and order of messages stay the same.
@@ -43,6 +46,7 @@ import re
 COMPACT_ABOVE_CHARS = 150_000
 KEEP_RECENT_CHARS = 40_000
 MIN_GAIN_CHARS = 30_000
+REGROW_CHARS = 90_000
 # A result this short stays as it is: its stub would save next to nothing.
 MIN_RESULT_CHARS = 2_000
 TAIL_CHARS = 600
@@ -203,14 +207,16 @@ def stub(name, content):
     return json.dumps({**kept, "compacted": OUTPUT_CLEARED}, ensure_ascii=False)
 
 
-def compact(messages, start):
+def compact(messages, start, *, since=None):
     """The cut that brings ``messages[start:]`` back down, or None.
 
     ``messages`` is not changed; the caller replaces the messages the cut
-    names. None up to COMPACT_ABOVE_CHARS, and when the cut would save less
-    than MIN_GAIN_CHARS (it would rewrite the cached prefix for little)."""
+    names. None up to COMPACT_ABOVE_CHARS, until the run has grown by
+    REGROW_CHARS since its last cut (``since``: own_chars right after it),
+    and when the cut would save less than MIN_GAIN_CHARS (it would rewrite
+    the cached prefix for little)."""
     before = own_chars(messages, start)
-    if before <= COMPACT_ABOVE_CHARS:
+    if before <= COMPACT_ABOVE_CHARS or (since is not None and before < since + REGROW_CHARS):
         return None
     names, last_assistant = {}, None
     for index in range(start, len(messages)):
