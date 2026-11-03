@@ -1126,6 +1126,10 @@ def test_a_share_without_the_answers_time_or_renders_goes_on_without_a_preview(s
     tools = loop.vm_tools
     monkeypatch.setattr(type(loop), "answer_time_left", lambda self: agent_vm_tools.PREVIEW_MIN_SECONDS - 1)
     assert tools._office_preview(b"slides", "pptx", ProviderCancellation()) is None
+    # Too little for LibreOffice too (agent_office.MIN_SECONDS): not asked.
+    monkeypatch.setattr(type(loop), "answer_time_left",
+                        lambda self: agent_vm_tools.MIN_COMMAND_SECONDS + agent_office.MIN_SECONDS - 1)
+    assert tools._office_preview(b"slides", "pptx", ProviderCancellation()) is None
     monkeypatch.setattr(type(loop), "answer_time_left", lambda self: None)
     assert tools._office_preview(b"slides", "zip", ProviderCancellation()) is None
     # The account's renders of the hour, shared with vm_render_office.
@@ -1135,6 +1139,26 @@ def test_a_share_without_the_answers_time_or_renders_goes_on_without_a_preview(s
             api_uid_limiter.check(UID, "office:render", agent_office.RENDERS_PER_HOUR, window_seconds=3600)
         assert tools._office_preview(b"slides", "pptx", ProviderCancellation()) is None
         assert converted == []
+    finally:
+        api_uid_limiter.reset()
+
+
+def test_a_render_with_too_little_time_left_says_so_and_counts_no_render(store, fake_vm, monkeypatch):
+    """Bug hunt 2026-11-02: LibreOffice got 1 s, the agent read that the file
+    took too long, and the hour's renders counted it."""
+    from app.core.rate_limit import api_uid_limiter
+    from app.services import agent_office
+    monkeypatch.setattr(agent_office, "render", lambda *args, **kwargs: pytest.fail("no conversion"))
+    loop = vm_loop(store, Agent([[("vm_render_office", {"path": "deck.pptx"})]]))
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[loop.vm_tools.session.name]["files"][f"{chat_path(loop.chat_id)}/deck.pptx"] = b"slides"
+    monkeypatch.setattr(type(loop), "answer_time_left", lambda self: agent_office.MIN_SECONDS - 1)
+    api_uid_limiter.reset()
+    try:
+        list(loop.run())
+        assert results(loop) == [{"error": agent_vm_tools.VM_NO_TIME}]
+        for _ in range(agent_office.RENDERS_PER_HOUR):
+            api_uid_limiter.check(UID, "office:render", agent_office.RENDERS_PER_HOUR, window_seconds=3600)
     finally:
         api_uid_limiter.reset()
 

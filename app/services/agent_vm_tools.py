@@ -1688,9 +1688,10 @@ class VMTools:
             raise ValueError(f"No file at {path}.") from None
         if not complete or len(raw) > agent_office.MAX_BYTES:
             raise ValueError(f"{path} is larger than {agent_office.MAX_BYTES // (1024 * 1024)} MB.")
-        # Within the answer's time, like a command (_timeout).
+        # Within the answer's time, like a command (_timeout), and before
+        # the hour's renders count it.
         left = self.loop.answer_time_left()
-        if left is not None and left < MIN_COMMAND_SECONDS:
+        if left is not None and left < max(MIN_COMMAND_SECONDS, agent_office.MIN_SECONDS):
             raise ValueError(VM_NO_TIME)
         # Counted once the converter is asked, not for a typo in the path.
         try:
@@ -1703,7 +1704,9 @@ class VMTools:
             rendered = agent_office.render(raw, extension, cancellation=cancellation, seconds=left)
         except agent_office.OfficeRefused as exc:
             raise ValueError(str(exc)) from None
-        except agent_office.OfficeUnavailable:
+        except agent_office.OfficeUnavailable as exc:
+            if str(exc) == "no time":
+                raise ValueError(VM_NO_TIME) from None
             # The converter's failure, not the workbench's: the VM stays on.
             raise ValueError("The converter is not available right now. Nothing changed in your workspace.") from None
         # For a share of the same file in this message (_office_preview):
@@ -1801,7 +1804,7 @@ class VMTools:
         pdf = self._rendered.get(digest)
         if pdf is None:
             left = self.loop.answer_time_left()
-            if left is not None and left < PREVIEW_MIN_SECONDS:
+            if left is not None and left < max(PREVIEW_MIN_SECONDS, MIN_COMMAND_SECONDS + agent_office.MIN_SECONDS):
                 return None
             try:
                 api_uid_limiter.check(self.loop.uid, "office:render", agent_office.RENDERS_PER_HOUR,

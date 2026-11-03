@@ -60,6 +60,12 @@ SETUP_RETRY_SECONDS = 600
 # and the server waits RUN_SECONDS, so the script ends a slow file itself.
 CONVERT_SECONDS = 90
 RUN_SECONDS = CONVERT_SECONDS + 75
+# LibreOffice gets at least this long: with less of the answer's time left
+# a conversion is not started (OfficeUnavailable "no time"). Until
+# 2026-11-03 it got max(1, ...) seconds, ended after 1 s and was blamed on
+# the file (exit 5, OfficeRefused), and it took one of the hour's renders.
+MIN_CONVERT_SECONDS = 10
+MIN_SECONDS = RUN_SECONDS - CONVERT_SECONDS + MIN_CONVERT_SECONDS
 # A wait for a slot or for the setup looks at Stop this often.
 WAIT_STEP_SECONDS = 1
 # Conversions at once on the one VM (8 cores; LibreOffice takes one or two each).
@@ -192,6 +198,8 @@ def render(data, extension, *, cancellation, backend=None, seconds=None):
         raise OfficeRefused(f"Not an Office file the converter takes: .{extension}")
     if len(data) > MAX_BYTES:
         raise OfficeRefused(f"The file is larger than {MAX_BYTES // (1024 * 1024)} MB.")
+    if seconds is not None and seconds < MIN_SECONDS:
+        raise OfficeUnavailable("no time")
     end = None if seconds is None else time.monotonic() + seconds
 
     def left(most):
@@ -212,8 +220,11 @@ def render(data, extension, *, cancellation, backend=None, seconds=None):
             raise OfficeUnavailable("no provider")
         prepare(backend, cancellation, seconds=None if end is None else end - time.monotonic())
         timeout = left(RUN_SECONDS)
-        outcome = backend.run(NAME, ["sudo", "-n", "/bin/bash", CONVERT, extension,
-                                     str(max(1, min(CONVERT_SECONDS, timeout - (RUN_SECONDS - CONVERT_SECONDS)))),
+        # The wait for a slot or the setup may have taken the time.
+        convert = min(CONVERT_SECONDS, timeout - (RUN_SECONDS - CONVERT_SECONDS))
+        if convert < MIN_CONVERT_SECONDS:
+            raise OfficeUnavailable("no time")
+        outcome = backend.run(NAME, ["sudo", "-n", "/bin/bash", CONVERT, extension, str(convert),
                                      str(OVERVIEW_PAGES)],
                               cwd="/", timeout=timeout, on_output=keep, cancellation=cancellation,
                               input=bytes(data))

@@ -239,6 +239,20 @@ def test_a_conversion_takes_no_longer_than_the_answer_has_left():
     assert warm.timeout == agent_office.RUN_SECONDS and warm.runs[1][1][5] == str(agent_office.CONVERT_SECONDS)
 
 
+def test_too_little_time_is_no_conversion_rather_than_one_second_of_libreoffice():
+    """Bug hunt 2026-11-02: with under ~76 s left LibreOffice got 1 s, ended
+    with exit 5 and the file was blamed (OfficeRefused)."""
+    warm = Converter(marker=agent_office.VERSION.encode() + b"\n")
+    with pytest.raises(agent_office.OfficeUnavailable, match="no time"):
+        agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=warm,
+                            seconds=agent_office.MIN_SECONDS - 1)
+    assert warm.runs == []
+    agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=warm,
+                        seconds=agent_office.MIN_SECONDS + 1)
+    [(_, argv, _)] = warm.runs
+    assert int(argv[5]) >= agent_office.MIN_CONVERT_SECONDS
+
+
 def test_without_a_provider_the_converter_is_unavailable_and_its_own_backend_closes(monkeypatch):
     monkeypatch.setattr(agent_vm, "backend", lambda: None)
     with pytest.raises(agent_office.OfficeUnavailable):
