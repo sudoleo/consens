@@ -1753,3 +1753,35 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .passage-check :is(.passage-check-count, .passage-check-toggle, .passage-check-more) { padding-block: 8px; margin-block: -8px; }
   .passage-check-legend, .passage-check .passage-check-counts { row-gap: 16px; }
 }
+
+/* Runs of a Watch that found nothing, folded into one line (thread-history.js
+   foldQuietRuns); a click shows them, each as the turn it is. */
+.thread-history-turn.is-watch-folded { display: none; }
+.thread-watch-fold { display: flex; justify-content: center; margin: 0 0 var(--space-5); }
+.thread-watch-fold-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+  font: inherit;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+}
+/* The app's one chevron (foundation.css --chevron-mask): down while folded. */
+.thread-watch-fold-button::after {
+  content: "";
+  width: 1em;
+  height: 1em;
+  background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat;
+  mask: var(--chevron-mask) center / contain no-repeat;
+  transition: transform var(--dur-press) var(--ease-standard);
+}
+.thread-watch-fold-button[aria-expanded="true"]::after { transform: rotate(180deg); }
+@media (hover: hover) and (pointer: fine) { .thread-watch-fold-button:hover { background: var(--hover); color: var(--ink); } }
+.thread-watch-fold-button:focus-visible { outline: var(--focus-ring); }

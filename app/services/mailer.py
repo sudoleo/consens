@@ -705,7 +705,8 @@ def _review_sentence(review: dict) -> str:
 @_localized
 def build_agent_watch_message(*, recipient: str, outcome: str, task: str, goal: str, summary: str,
                               evidence_url: str, evidence_title: str, halted: bool, goal_met: bool,
-                              goal_reason: str, review: dict, app_url: str) -> EmailMessage:
+                              goal_reason: str, review: dict, app_url: str,
+                              unsubscribe_url: str = "") -> EmailMessage:
     """One Agent Watch run (agent_watches.py) worth telling: what the agent
     found with the page it saw it on, what it needs from the user (also a
     reviewer's halt nobody was there to decide), or the goal it waited for."""
@@ -734,6 +735,7 @@ def build_agent_watch_message(*, recipient: str, outcome: str, task: str, goal: 
         _ascii(f"{_t('Your Watch').upper()}\n{task}") if task else "",
         _t("Open the page: {url}", url=evidence_url) if has_page else "",
         _t("Open the chat in consens.io: {url}", url=app_url),
+        _t("Stop emails from this Watch: {url}", url=unsubscribe_url) if unsubscribe_url else "",
     ) if part) + "\n"
     body = (
         _change_block_html(label, summary)
@@ -747,13 +749,18 @@ def build_agent_watch_message(*, recipient: str, outcome: str, task: str, goal: 
         + (_button_html(evidence_url, _t("Open the page")) + _secondary_link_html(app_url, _t("Open the chat in consens.io"))
            if has_page else _button_html(app_url, _t("Open the chat in consens.io")))
     )
+    stop = _link_html(unsubscribe_url, _t("Stop emails from this Watch"), muted=True) if unsubscribe_url else ""
+    if goal_met or outcome == "done":
+        footer = _h("The Watch has ended. Start a new one from any chat with the Agent.")
+    elif stop:
+        footer = _h("This Watch runs the consens.io Agent on a schedule. {link}.", link=stop)
+    else:
+        footer = _h("This Watch runs the consens.io Agent on a schedule. End it in its chat.")
     html_body = _shell_html(
         eyebrow=eyebrow, heading=heading, preheader=_split_lead(summary)[0] or task, body=body,
-        footer=_h("The Watch has ended. Start a new one from any chat with the Agent.") if goal_met or outcome == "done"
-        else _h("This Watch runs the consens.io Agent on a schedule. End it in its chat."),
-        width=640,
+        footer=footer, width=640,
     )
-    return _base_message(recipient, subject, plain, html_body)
+    return _base_message(recipient, subject, plain, html_body, unsubscribe_url=unsubscribe_url)
 
 
 @_localized

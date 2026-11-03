@@ -1050,16 +1050,13 @@ class JudgeTests(unittest.TestCase):
 
 class SymbolTests(unittest.TestCase):
     def test_every_symbol_has_a_drawing_and_every_drawing_a_symbol(self):
-        source = open("static/js/watch-dashboard.js", encoding="utf-8").read()
-        block = source.split("const SYMBOL_ICONS = {", 1)[1].split("\n  };", 1)[0]
-        drawn = re.findall(r"^\s{4}(\w+): '", block, flags=re.MULTILINE)
-        self.assertEqual(drawn, list(watch_symbols.SYMBOLS))
+        # Topic pages draw them without script; the app's Watches page shows
+        # an Agent Watch's picture or the eye since 2026-11-03.
+        self.assertEqual(list(watch_symbols.SYMBOL_PATHS), list(watch_symbols.SYMBOLS))
         self.assertIn(watch_symbols.DEFAULT_SYMBOL, watch_symbols.SYMBOLS)
         self.assertEqual(watch_symbols.clean_symbol("nope"), watch_symbols.DEFAULT_SYMBOL)
         self.assertEqual(watch_symbols.clean_symbol("trophy"), "trophy")
-        # Public pages draw the same symbols without script (Topic pages).
-        drawings = dict(re.findall(r"^\s{4}(\w+): '(.*)',?$", block, flags=re.MULTILINE))
-        self.assertEqual(drawings, watch_symbols.SYMBOL_PATHS)
+        self.assertNotIn("SYMBOL_ICONS", open("static/js/watch-dashboard.js", encoding="utf-8").read())
 
 
 class WatchPageTests(unittest.TestCase):

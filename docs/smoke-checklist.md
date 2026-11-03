@@ -1077,6 +1077,27 @@ Server.
       Eine zweite Watch im selben Chat ist gesperrt, ein volles Konto nennt den
       Limit-Satz. Kein Vorschlag in temporären Chats und in Chats mit
       Gmail/Kalender-Daten. Unter einer abgebrochenen Antwort keine Karte.
+- [ ] Watches-Seite (seit dem Abend von 2026-11-03): leer „Nothing watched
+      yet“ mit „New Watch“; das Blatt verlangt einen Satz, bietet nur die
+      Intervalle der Stufe und legt einen eigenen Chat an, dessen erster Lauf
+      gleich kommt (Zeile „Its first run is under way“, danach erscheint der
+      Chat in der Seitenleiste). Ein Befund steht unter „New“ mit Punkt; ein
+      Klick öffnet den Chat und der Punkt verschwindet. „…“: Pause legt die
+      Zeile unter „Paused“, Resume zurück, Email/Telegram als Häkchen, End
+      Watch fragt erst. Unten „Messages“ (Mailadresse, Telegram koppeln) und
+      „Earlier Watches“ mit den archivierten Seiten. Auf dem Handy: kein
+      seitliches Scrollen, „…“ immer sichtbar.
+- [ ] Pille unter der neuesten Agent-Antwort öffnet das Blatt mit der Frage
+      als Auftrag und startet die Watch in diesem Chat; danach steht dort
+      „Watching“ und ein Klick führt zur Watch-Seite. Ältere Antworten und
+      temporäre Chats haben keine Pille; gespeicherte Consensus-Antworten
+      auch nicht.
+- [ ] Archiv: Eine alte öffentliche Watch-Seite zeigt ihren letzten Stand ohne
+      „Follow“; `/app/watches?create=1` öffnet das neue Blatt.
+- [ ] Mail eines Befunds: „Stop emails from this Watch“ fragt auf einer
+      Seite, schaltet nach dem Knopf nur die Mails aus (die Watch läuft
+      weiter); „Open the chat in consens.io“ öffnet nach dem Login genau den
+      Chat. Mit verbundenem Telegram kommt dieselbe Nachricht dort an.
 - [ ] Geplanter Lauf (nur in Prod, der Takt läuft lokal nicht): eine
       stündliche Watch (Pro/Admin) mit einem Auftrag, der sicher etwas findet;
       nach dem Lauf steht im Chat „Scheduled Watch run“ über dem Auftrag, die

@@ -168,13 +168,12 @@
       };
       question.append(turnHeading("Your message"), questionBubble);
       // A Watch's scheduled run (agent_watches.py): its task came from the
-      // Watch, not from the user typing it then.
-      if (agentTurn && turnData.agent_settings?.watch_run) {
-        question.classList.add("is-watch-run");
-        const label = document.createElement("p");
-        label.className = "thread-watch-run";
-        label.textContent = "Scheduled Watch run";
-        question.insertBefore(label, questionBubble);
+      // Watch, not from the user typing it then. A run that found nothing
+      // folds into one line with its quiet neighbours (foldQuietRuns).
+      if (agentTurn) this.markWatchRun(question, turnData);
+      if (agentTurn && this.quietWatchRun(turnData)) {
+        turn.classList.add("is-watch-quiet");
+        turn.dataset.watchRunAt = String(turnData.created_at || turnData.updated_at || "");
       }
 
       // Anhaenge bleiben an ihrer Nachricht, auch wenn der Turn in den
@@ -265,8 +264,10 @@
         // A temporary chat has its Watch pill too (a Watch names no chat),
         // but no share: that keeps a copy for 30 days (temporary-chat.js).
         const finished = turnData.status !== "failed" && Boolean(String(turnData.consensus || "").trim());
+        // Since 2026-11-03 a Watch belongs to the chat (agent_watches.py):
+        // its pill stands under the newest answer only, not under each one.
         window.App.watch?.answerButton?.(answerBody, { question: turnData.question, history: true,
-          eligible: finished, followUp: options.followUp === true });
+          eligible: false, followUp: options.followUp === true });
         // Its Share pill shares this turn's answer; the chat is the one on
         // screen when it is pressed (share-dialog.js).
         window.App.answerShare?.button?.(answerBody, { turnId: turnId || "",
@@ -461,6 +462,77 @@
       };
     },
 
+    // A Watch's run that found nothing (no finding, no end) and finished.
+    quietWatchRun(turnData) {
+      const run = turnData?.agent_watch_run;
+      return Boolean(turnData?.agent_settings?.watch_run) && turnData.status === "completed"
+        && !(run && (run.finding || run.done));
+    },
+
+    // The quiet line above a run's message: the Watch sent it, not the user.
+    // The live question (#threadAsk) gets it too (agent-chat.js).
+    markWatchRun(question, turnData) {
+      if (!question) return;
+      const scheduled = Boolean(turnData?.agent_settings?.watch_run);
+      let label = question.querySelector(":scope > .thread-watch-run");
+      question.classList.toggle("is-watch-run", scheduled);
+      if (!scheduled) {
+        label?.remove();
+        return;
+      }
+      if (!label) {
+        label = document.createElement("p");
+        label.className = "thread-watch-run";
+        question.insertBefore(label, question.querySelector(".thread-ask-bubble"));
+      }
+      label.textContent = "Scheduled Watch run";
+    },
+
+    // Runs of a Watch that found nothing, one after another, fold into one
+    // line ("Checked 4 times · nothing new · last today, 08:00"); a click
+    // shows them. What they found stays as it was, each a turn of its own.
+    foldQuietRuns(history) {
+      history.querySelectorAll(":scope > .thread-watch-fold").forEach(node => node.remove());
+      const open = history._unfoldedRuns || (history._unfoldedRuns = new Set());
+      let group = [];
+      const flush = () => {
+        if (!group.length) return;
+        const key = group[0].dataset.turnKey || "";
+        const expanded = open.has(key);
+        const last = group[group.length - 1].dataset.watchRunAt;
+        const when = last && window.App.format?.relative ? window.App.format.relative(last) : "";
+        const row = document.createElement("div");
+        row.className = "thread-watch-fold";
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "thread-watch-fold-button";
+        button.setAttribute("aria-expanded", String(expanded));
+        button.setAttribute("data-i18n-skip", "");
+        const count = group.length;
+        button.textContent = count === 1
+          ? window.App.t("Checked once · nothing new · {when}", { when })
+          : window.App.t("Checked {count} times · nothing new · last {when}", { count, when });
+        const members = group;
+        members.forEach(node => node.classList.toggle("is-watch-folded", !expanded));
+        button.addEventListener("click", () => {
+          const now = button.getAttribute("aria-expanded") !== "true";
+          if (now) open.add(key);
+          else open.delete(key);
+          button.setAttribute("aria-expanded", String(now));
+          members.forEach(node => node.classList.toggle("is-watch-folded", !now));
+        });
+        row.append(button);
+        group[0].before(row);
+        group = [];
+      };
+      for (const node of history.children) {
+        if (!node.classList?.contains("thread-history-turn")) continue;
+        if (node.classList.contains("is-watch-quiet")) group.push(node);
+        else flush();
+      }
+      flush();
+    },
+
     renderStoredTurn(turnData) {
       return this.renderStoredTurns(turnData ? [turnData] : []);
     },
@@ -497,6 +569,7 @@
       }
       history.hidden = !history.children.length;
       hooks.forEach(attached => attached());
+      this.foldQuietRuns(history);
       return nodes.length;
     },
 

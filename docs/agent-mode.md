@@ -3842,9 +3842,48 @@ was gefunden wurde, die Seite dazu, wie die Prüfer den Lauf sahen, Link zur
 Seite und zur App. Ein ruhiger Lauf mailt nichts und rückt den Chat in der
 Seitenleiste nicht nach oben (`routers/agent._quiet_watch_run`).
 
-**Noch offen (Stufe 2/3):** die Watch-Seite listet nur Consensus-Watches;
-ruhige Läufe stehen im Chat noch als eigene Nachricht; Rückfragen per
-Telegram und ein Abmelde-Link in der Mail; die alte Pipeline läuft aus.
+### Watch-Seite, Pille, Nachrichten (seit dem Abend von 2026-11-03)
+
+Die Consensus-Watches von vorher sind archiviert (`LIMITS
+consensus_watches_archived`, Max: „deaktivieren und archivieren, nur noch
+neue anlegen“): keine Prüfung, kein Morning Brief, keine neue, keine
+fortgesetzte; ihre öffentlichen Seiten bleiben, wie sie zuletzt waren
+(„Archived history“, kein Folgen mehr). Topics laufen weiter.
+
+- **Gespeicherte Consensus-Antworten** haben keine Watch-Pille mehr:
+  `watch-sheet.js` lädt vor `watch.js`, das sie dann gar nicht erst baut.
+- **Watches-Seite** (`watch-dashboard.js`): die Watches des Agenten nach dem,
+  was sie vom Leser wollen (Braucht dich, Neu, Läuft, Pausiert, Beendet
+  eingeklappt), jede eine Zeile mit Bild, Auftrag, letztem Befund und
+  Zeitplan; ein Klick öffnet ihren Chat und gilt als gelesen. „…“: Pause,
+  Fortsetzen, Mail und Telegram an/aus, Beenden. Darunter, wohin die
+  Nachrichten gehen, und die archivierten Watches mit ihren Seiten.
+- **Neue Watch** (`watch-sheet.js`): ein Blatt mit dem Auftrag in eigenen
+  Worten, „Fertig, wenn“, wie oft und wann. Von der Seite legt es einen
+  eigenen Chat an, dessen erster Lauf sofort kommt; von der Pille unter der
+  neuesten Antwort startet es die Watch in diesem Chat. Eine Watch je Chat,
+  deshalb keine Pille unter älteren Antworten und keine in temporären Chats.
+- **Im Chat**: Über einer geplanten Nachricht steht „Scheduled Watch run“;
+  Läufe ohne Befund hintereinander falten sich zu einer Zeile („4×
+  nachgesehen · nichts Neues · zuletzt …“), ein Klick zeigt sie. Öffnen des
+  Chats macht einen Befund gelesen.
+- **Nachrichten**: Mail mit „Stop emails“ (Link und `List-Unsubscribe`
+  One-Click, schaltet nur die Mails dieser Watch aus) und, wo das Konto
+  Telegram verbunden hat, dieselbe Nachricht in Telegram mit Knöpfen zur
+  Seite und zum Chat. Beide verlinken den Chat als `/app?chat=<bookmark>`.
+- **Bild** (Max: „beim ersten Anlegen direkt ein passendes Bild … statt
+  des Auges“): Gleich beim Anlegen nennt ein günstiges Modell in ein paar
+  Wörtern, worum es geht (`consensus_engine.pick_watch_picture_words`, nie
+  etwas Persönliches, die Wörter gehen an Brave), Braves Bildersuche
+  (`picture_search`) liefert das Foto, Braves Kopie zuerst; ohne Treffer die
+  Seiten des Chats, in dem die Watch beginnt (`watch_images.find_image`).
+  Danach sucht jeder Lauf einer Watch ohne Bild in den Seiten, die er
+  geöffnet hat (zuerst der Beleg). Höchstens drei Versuche, sonst bleibt das
+  Auge. Alles auf einem eigenen Thread, nie in Tests oder unter `MOCK_LLM`.
+- **Startseite**: Das Watch-Beispiel (`landing.html#watch`) zeigt eine
+  Agent-Watch mit den Worten von Seite, Blatt, Chat, Mail und Telegram; ein
+  Test hält sie gleich (`test_landing_watch_example_uses_the_live_watch_wording_and_no_scores`).
+  „See a live watch“ entfällt, solange die Consensus-Watches archiviert sind.
 
 ## Frühere Chats durchsuchen (seit 2026-10-28)
 

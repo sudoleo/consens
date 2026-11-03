@@ -2,10 +2,11 @@ import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 /**
- * The Watch pill under every finished Agent answer (Max, Apple-Audit J20,
- * second review 9): the live answer, the turns of the history and a reopened
- * chat each have one, and each carries the question of its own turn, never
- * one left from another turn or chat.
+ * The Watch pill under a finished Agent answer (Max, Apple-Audit J20, second
+ * review 9). Since 2026-11-03 a Watch runs the Agent in its chat
+ * (agent_watches.py): the pill stands under the newest answer only, carries
+ * the question of its own turn and opens the sheet that starts a Watch in
+ * this chat (watch-sheet.js); a chat with a Watch reads "Watching".
  */
 const BODY = `<textarea id="questionInput"></textarea><div id="threadHistory" hidden></div>
   <div id="threadAsk" class="thread-ask" hidden><div class="thread-ask-bubble"><div class="thread-ask-text" id="threadAskText"></div></div></div>
@@ -20,12 +21,13 @@ const CATALOG = { default_model_id: "deepseek/deepseek-v4.1-flash", models: [
   { id: "deepseek/deepseek-v4.1-flash", label: "DeepSeek V4.1 Flash", reasoning_efforts: ["default"], reasoning_available: false }] };
 const CHAT = "a".repeat(32);
 
-function agentApp() {
+function agentApp({ watches = [] } = {}) {
   let answer = 0;
   const app = loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js",
     "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/thread-history.js",
     "static/js/agent-chat.js", "static/js/run-view.js",
-    "static/js/modal-dialog.js", "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js"], {
+    "static/js/modal-dialog.js", "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js",
+    "static/js/watch-sheet.js", "static/js/agent-watch.js"], {
     body: BODY,
     before(window) {
       window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
@@ -43,8 +45,12 @@ function agentApp() {
         },
       };
       window.injectMarkdown = (el, markdown) => { el.textContent = markdown; };
-      window.fetch = vi.fn(async url => ({ ok: true, status: 200, headers: { get: () => null },
-        json: async () => String(url).startsWith("/agent/") ? structuredClone(CATALOG)
+      window.fetch = vi.fn(async (url, options = {}) => ({ ok: true, status: options.method === "POST" && url === "/agent/watches" ? 201 : 200,
+        headers: { get: () => null },
+        json: async () => String(url).startsWith("/agent/watches")
+          ? (options.method === "POST" ? { watch: { id: "w9", chat_id: CHAT, status: "active", ...JSON.parse(options.body) } }
+            : { watches, intervals: ["daily", "weekly"], active_count: watches.length, active_limit: 2 })
+          : String(url).startsWith("/agent/") ? structuredClone(CATALOG)
           : String(url) === "/api/my/watches" ? { watches: [], limits: { plan: "pro", active_count: 0, active_limit: 10 } }
             : String(url) === "/api/watch/goal-suggestions" ? { goals: [] }
               : ({ chat: { id: CHAT } }) }));
@@ -64,11 +70,11 @@ function agentApp() {
 const agentTurn = (id, question, extra = {}) => ({ id: id.repeat(32), turn_id: id.repeat(32), question,
   consensus: `Answer to ${question}`, status: "completed", mode: "Agent", execution_mode: "agent", ...extra });
 
-// What the pill opens: the question step (a follow-up) or the goal step
-// with the question on top.
-function openedQuestion(document) {
-  return document.getElementById("watchQuestion")?.value
-    ?? document.querySelector(".watch-question-preview strong")?.textContent;
+// What the pill opens since 2026-11-03: the sheet that starts a Watch in
+// this chat (watch-sheet.js), its task prefilled with the answer's question.
+function sheetTask(document) {
+  const sheet = document.querySelector(".watch-sheet");
+  return sheet?.open ? sheet.querySelector(".watch-sheet-task").value : null;
 }
 
 async function ask(window, document, question) {
@@ -76,51 +82,54 @@ async function ask(window, document, question) {
   await window.App.agentChat.send();
 }
 
-describe("Watch pill under every Agent answer (J20)", () => {
-  it("keeps each turn's pill with its own question when a follow-up moves it up", async () => {
+async function settle() {
+  for (let i = 0; i < 40; i += 1) await Promise.resolve();
+}
+
+describe("Watch pill under the newest Agent answer (J20, since 2026-11-03 per chat)", () => {
+  it("stands under the newest answer only and starts a Watch in this chat from its question", async () => {
     const { window, document, dom } = agentApp();
     window.App.runMode.set("agent");
     await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
     await ask(window, document, "When will OpenAI release GPT-6?");
-    const first = document.getElementById("agentAnswerWatchButton");
-    expect(first).not.toBeNull();
+    expect(document.getElementById("agentAnswerWatchButton")).not.toBeNull();
     await ask(window, document, "And what about the price of it?");
-    const history = document.getElementById("threadHistory");
-    const pills = [...history.querySelectorAll(".agent-watch-pill")];
-    expect(pills).toEqual([first]);
-    // Only the live answer's pill carries the live ID.
-    expect(first.id).toBe("");
-    expect(document.querySelectorAll("#agentAnswerWatchButton")).toHaveLength(1);
+    // A Watch belongs to the chat: the turn that moved up has no pill.
+    expect(document.querySelectorAll("#threadHistory .agent-watch-pill")).toHaveLength(0);
     const live = document.getElementById("agentAnswerWatchButton");
     expect(document.getElementById("agentAnswer").contains(live)).toBe(true);
-    first.click();
-    expect(openedQuestion(document)).toBe("When will OpenAI release GPT-6?");
     live.click();
-    // A follow-up opens at the question, so it can stand alone.
-    expect(document.getElementById("watchQuestion").value).toBe("And what about the price of it?");
+    await settle();
+    expect(sheetTask(document)).toBe("And what about the price of it?");
+    document.querySelector(".watch-sheet-start").click();
+    await vi.waitFor(() => expect(window.fetch.mock.calls.some(([url, options]) => url === "/agent/watches"
+      && options?.method === "POST")).toBe(true));
+    const [, options] = window.fetch.mock.calls.find(([url, request]) => url === "/agent/watches" && request?.method === "POST");
+    const body = JSON.parse(options.body);
+    expect(body).toMatchObject({ chat_id: CHAT, task: "And what about the price of it?", interval: "daily", run_time: "08:00" });
     dom.window.close();
   });
 
-  it("puts a pill under every Agent turn of a reopened chat's history", async () => {
+  it("puts no pill under the turns of a reopened chat's history", async () => {
     const { window, document, dom } = agentApp();
     await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
     window.App.followup.renderStoredTurns([
       agentTurn("a", "When will OpenAI release GPT-6?"),
-      agentTurn("b", "What will it cost per month?", { agent_watch: { question: "What will it cost per month?" } }),
-      agentTurn("c", "Why did it fail?", { status: "failed", consensus: "", agent_failure: { error: "Stopped." } }),
+      agentTurn("b", "What will it cost per month?"),
     ]);
-    const turns = [...document.querySelectorAll("#threadHistory .thread-history-turn")];
-    expect(turns).toHaveLength(3);
-    const pills = turns.map(turn => turn.querySelector(".agent-watch-pill"));
-    expect(pills[0]).not.toBeNull();
-    // The history shows no prepared-Watch card, so that turn has the pill too.
-    expect(pills[1]).not.toBeNull();
-    expect(pills[2]).toBeNull();
-    expect(pills[0].id).toBe("");
-    pills[0].click();
-    expect(openedQuestion(document)).toBe("When will OpenAI release GPT-6?");
-    pills[1].click();
-    expect(document.getElementById("watchQuestion").value).toBe("What will it cost per month?");
+    expect(document.querySelectorAll("#threadHistory .thread-history-turn")).toHaveLength(2);
+    expect(document.querySelectorAll("#threadHistory .agent-watch-pill")).toHaveLength(0);
+    dom.window.close();
+  });
+
+  it("reads Watching in a chat that has a Watch and opens it on Watches", async () => {
+    const { window, document, dom } = agentApp({ watches: [{ id: "w1", chat_id: CHAT, status: "active", task: "Check it." }] });
+    window.App.runMode.set("agent");
+    await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
+    await ask(window, document, "When will OpenAI release GPT-6?");
+    const pill = document.getElementById("agentAnswerWatchButton");
+    await vi.waitFor(() => expect(pill.classList.contains("is-watching")).toBe(true));
+    expect(pill.textContent).toBe("Watching");
     dom.window.close();
   });
 
@@ -141,7 +150,8 @@ describe("Watch pill under every Agent answer (J20)", () => {
     const pill = document.getElementById("agentAnswerWatchButton");
     expect(pill).not.toBeNull();
     pill.click();
-    expect(openedQuestion(document)).toBe("Is the new iPhone out in Germany?");
+    await settle();
+    expect(sheetTask(document)).toBe("Is the new iPhone out in Germany?");
     // A new chat has no answer, and no pill.
     window.App.runRegistry.clearAll("test-new-chat");
     window.App.runRegistry.clearVisible();

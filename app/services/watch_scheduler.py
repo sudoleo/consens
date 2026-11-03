@@ -20,7 +20,7 @@ from app.services import (
 )
 from app.services.llm import provider_transport
 from app.services.llm.consensus_engine import (
-    pick_watch_visual, query_consensus, query_differences, suggest_watch_goals,
+    pick_watch_picture_words, pick_watch_visual, query_consensus, query_differences, suggest_watch_goals,
 )
 from app.services.llm.mock_llm import mock_llm_enabled
 
@@ -254,6 +254,14 @@ def pick_visual(question: str, condition: str, domains) -> dict:
     return pick_watch_visual(question, condition, domains, watch_symbols.SYMBOLS, keys, engine)
 
 
+def picture_words(task: str, goal: str) -> str:
+    """The few words a picture search finds an Agent Watch's subject by
+    (agent_watches.Pictures); a judge call of the cheap tier, once per Watch."""
+    keys = _developer_keys()
+    engine = _configured_consensus_engine(keys, TIER_FREE) or "OpenAI"
+    return pick_watch_picture_words(task, goal, keys, engine)
+
+
 def notification_kind(watch: dict, outcome: dict) -> str | None:
     """Which owner alert one check earns, given its committed ``outcome``.
 
@@ -422,6 +430,10 @@ async def run_watch_tick() -> int:
     # the worker lease from the live deployment and persist fixture answers as
     # real watch runs. execute_watch itself stays mockable for the test suite.
     if mock_llm_enabled():
+        return 0
+    # Archived since 2026-11-03 (cfg.consensus_watches_archived): no check, no
+    # probe. A Watch now runs the Agent (agent_watches.run_tick).
+    if cfg.consensus_watches_archived():
         return 0
     now = watch_service.utcnow()
     # Nothing due, no lease: taking and giving back the global lease wrote
@@ -613,6 +625,9 @@ async def run_brief_tick() -> int:
     outbox pass retries it (within ``BRIEF_DELIVER_WITHIN``), re-checking the
     Brief subscription before every attempt. At-least-once, not exactly-once.
     """
+    # The Brief summed up the Consensus Watches, archived since 2026-11-03.
+    if cfg.consensus_watches_archived():
+        return 0
     if mock_llm_enabled() or not mailer.is_configured():
         return 0
     now = watch_brief.utcnow()

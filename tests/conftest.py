@@ -49,6 +49,16 @@ def _no_real_telegram_alerts(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _consensus_watches_as_before(monkeypatch):
+    """The Consensus Watches are archived in production since 2026-11-03
+    (cfg.consensus_watches_archived); their pipeline's tests still run it.
+    Tests of the archive turn it on themselves."""
+    from app.core import config as cfg
+
+    monkeypatch.setitem(cfg.LIMITS, "consensus_watches_archived", 0)
+
+
+@pytest.fixture(autouse=True)
 def _no_workspace_provisioning(monkeypatch):
     """A new account's first message to the agent makes its workspace in the
     background (agent_workspace.provision). The suite's fake VMs count their

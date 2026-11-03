@@ -2223,6 +2223,9 @@ def live_watch_path(db=None) -> str:
     moderation clears it); the landing renders without the link rather than
     wait on a failing read.
     """
+    if cfg.consensus_watches_archived():
+        # Archived since 2026-11-03: nothing is checked any more.
+        return ""
     use_cache = db is None
     if use_cache and "path" in _live_watch_cache:
         return _live_watch_cache["path"]

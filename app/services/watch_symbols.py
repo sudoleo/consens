@@ -41,9 +41,9 @@ SYMBOLS = {
 }
 DEFAULT_SYMBOL = "eye"
 
-# The drawings (24x24, stroke), the same strings as SYMBOL_ICONS in
-# static/js/watch-dashboard.js -- public pages render them without script
-# (Topic pages, 2026-10-15). A test keeps both identical.
+# The drawings (24x24, stroke) public pages render without script (Topic
+# pages, 2026-10-15). The app's Watches page drew them too until its Watches
+# ran the Agent (2026-11-03): those show their picture or the eye.
 SYMBOL_PATHS = {
     "briefcase": "<rect x=\"3\" y=\"7\" width=\"18\" height=\"13\" rx=\"2\"/><path d=\"M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7M3 12.5h18\"/>",
     "graduation": "<path d=\"M2 9l10-5 10 5-10 5z\"/><path d=\"M6 11v4.5c0 1.5 2.7 3 6 3s6-1.5 6-3V11M22 9v5\"/>",

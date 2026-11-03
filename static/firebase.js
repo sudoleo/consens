@@ -1765,6 +1765,28 @@ const SIGNED_IN_RETURN = (() => {
   });
 })();
 
+// A Watch's mail or Telegram message links its chat as /app?chat=<bookmark>
+// (notification_delivery._agent_chat_url, since 2026-11-03): once signed
+// in, the chat opens; signed out, the login comes first.
+(function openChatFromLink() {
+  const url = new URL(window.location.href);
+  const bookmarkId = url.searchParams.get("chat") || "";
+  if (!/^[A-Za-z0-9_]{1,100}$/.test(bookmarkId)) return;
+  url.searchParams.delete("chat");
+  window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  let handled = false;
+  onAuthStateChanged(auth, user => {
+    if (handled) return;
+    if (!user) {
+      showAuthModal("login");
+      loginNoticeEl.textContent = "Log in to open this chat.";
+      return;
+    }
+    handled = true;
+    window.openBookmark?.(bookmarkId);
+  });
+})();
+
 // Back from the password-setup e-mail (continueUrl /app?setup=1, see
 // app/services/registration.py): open the login with the address filled in.
 (function resumePasswordSetup() {

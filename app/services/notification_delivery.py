@@ -352,16 +352,33 @@ async def _deliver_brief(item: dict, db, now: datetime) -> tuple:
     return outcome
 
 
-async def _deliver_agent_watch(item: dict, db) -> tuple:
-    """A finding, a question or the goal of an Agent Watch run
-    (agent_watches.turn_ended). Its chat or account gone: nothing is sent."""
-    from app.services import agent_watches
-    payload = item.get("payload") or {}
-    watch = await asyncio.to_thread(_doc, db, agent_watches.COLLECTION, item.get("resource_id") or "")
+def _agent_watch_gate(item: dict, watch: dict | None, field: str):
+    """A terminal (status, reason) when the Watch, its owner or the channel is gone."""
     if not watch:
         return outbox.SKIPPED, "watch_deleted"
     if str(watch.get("uid") or "") != str(item.get("uid") or ""):
         return outbox.SKIPPED, "owner_changed"
+    if watch.get(field) is False:
+        # "Stop emails" in a mail, or the channel switched off on the Watches page.
+        return outbox.SKIPPED, "channel_disabled"
+    return None
+
+
+def _agent_chat_url(payload: dict) -> str:
+    """The run's chat: /app opens it (firebase.js openChatFromLink), after a sign-in if needed."""
+    bookmark = str(payload.get("bookmark_id") or "")
+    return SITE_URL + "/app" + (f"?chat={bookmark}" if bookmark.replace("_", "").isalnum() else "")
+
+
+async def _deliver_agent_watch(item: dict, db) -> tuple:
+    """A finding, a question or the goal of an Agent Watch run
+    (agent_watches.turn_ended), by mail. Its chat or account gone: nothing."""
+    from app.services import agent_watches
+    payload = item.get("payload") or {}
+    watch = await asyncio.to_thread(_doc, db, agent_watches.COLLECTION, item.get("resource_id") or "")
+    gate = _agent_watch_gate(item, watch, "email_enabled")
+    if gate:
+        return gate
     if not mailer.is_configured():
         return outbox.SKIPPED, "smtp_not_configured"
     recipient, blocked = await _verified_email(item["uid"])
@@ -374,14 +391,43 @@ async def _deliver_agent_watch(item: dict, db) -> tuple:
         summary=payload.get("summary") or "", evidence_url=payload.get("evidence_url") or "",
         evidence_title=payload.get("evidence_title") or "", halted=bool(payload.get("halted")),
         goal_met=bool(payload.get("goal_met")), goal_reason=payload.get("goal_reason") or "",
-        review=payload.get("review") or {}, app_url=SITE_URL + "/app",
+        review=payload.get("review") or {}, app_url=_agent_chat_url(payload),
+        unsubscribe_url=SITE_URL + "/agent-watch/unsubscribe?token="
+        + agent_watches.unsubscribe_token(item["resource_id"]),
     ))
+
+
+def _deliver_agent_watch_telegram_sync(item: dict, db) -> tuple:
+    """The same message as a Telegram chat message, where the account linked one."""
+    from app.services import agent_watches
+    payload = item.get("payload") or {}
+    watch = _doc(db, agent_watches.COLLECTION, item.get("resource_id") or "")
+    gate = _agent_watch_gate(item, watch, "telegram_enabled")
+    if gate:
+        return gate
+    connection_ref = db.collection(telegram_watch.CONNECTIONS_COLLECTION).document(item["uid"])
+    snapshot = connection_ref.get()
+    connection = snapshot.to_dict() if snapshot.exists else None
+    if not connection or not connection.get("enabled") or not connection.get("chat_id"):
+        return outbox.SKIPPED, "telegram_not_linked"
+    language = account_language.of(item["uid"], db=db)
+    status = telegram_watch.send_agent_watch_message(
+        connection["chat_id"], payload, chat_url=_agent_chat_url(payload), language=language)
+    outcome = _telegram_outcome(status)
+    if outcome[1] == "telegram_blocked":
+        try:
+            connection_ref.update({"enabled": False, "blocked_at": outbox.utcnow()})
+        except Exception as exc:
+            logging.warning("Telegram connection block marker failed category=%s", safe_exception(exc))
+    return outcome
 
 
 async def attempt(item: dict, *, db, now: datetime) -> tuple:
     kind = item.get("kind")
     channel = item.get("channel")
     if kind == outbox.KIND_AGENT_WATCH:
+        if channel == outbox.CHANNEL_TELEGRAM:
+            return await asyncio.to_thread(_deliver_agent_watch_telegram_sync, item, db)
         return await _deliver_agent_watch(item, db)
     if kind in {outbox.KIND_WATCH_ALERT, outbox.KIND_WATCH_PAUSED}:
         if channel == outbox.CHANNEL_TELEGRAM:

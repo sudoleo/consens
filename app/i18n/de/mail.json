@@ -176,5 +176,8 @@
   "Open the chat in consens.io: {url}": "Chat in consens.io öffnen: {url}",
   "Open the chat in consens.io": "Chat in consens.io öffnen",
   "The Watch has ended. Start a new one from any chat with the Agent.": "Die Watch ist beendet. Eine neue startest du aus jedem Chat mit dem Agenten.",
-  "This Watch runs the consens.io Agent on a schedule. End it in its chat.": "Diese Watch lässt den Agenten von consens.io nach Zeitplan laufen. Beenden kannst du sie in ihrem Chat."
+  "This Watch runs the consens.io Agent on a schedule. End it in its chat.": "Diese Watch lässt den Agenten von consens.io nach Zeitplan laufen. Beenden kannst du sie in ihrem Chat.",
+  "Stop emails from this Watch": "Keine E-Mails mehr von dieser Watch",
+  "This Watch runs the consens.io Agent on a schedule. {link}.": "Diese Watch lässt den Agenten von consens.io nach Zeitplan laufen. {link}.",
+  "Stop emails from this Watch: {url}": "Keine E-Mails mehr von dieser Watch: {url}"
 }

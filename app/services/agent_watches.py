@@ -51,6 +51,7 @@ STATE_COLLECTION = "agent_watch_state"
 DAYS_COLLECTION = "agent_watch_days"
 
 STATUS_ACTIVE = "active"
+STATUS_PAUSED = "paused"
 STATUS_DONE = "done"
 
 TASK_MIN_CHARS = 8
@@ -174,20 +175,29 @@ def next_run(schedule: dict, *, now: datetime, previous: datetime | None = None)
 # --- the user's Watches ----------------------------------------------------
 
 def serialize(watch_id: str, data: dict) -> dict:
-    """What the browser shows of one Watch (agent-watch.js)."""
+    """What the browser shows of one Watch (agent-watch.js, the Watches page)."""
+    from app.services import watch_images
     last = data.get("last_run") if isinstance(data.get("last_run"), dict) else {}
     nxt = data.get("next_run_at")
+    created = data.get("created_at")
     return {
         "id": watch_id, "chat_id": data.get("chat_id") or "", "turn_id": data.get("turn_id") or "",
-        "task": data.get("task") or "",
+        "bookmark_id": data.get("bookmark_id") or "", "task": data.get("task") or "",
         "goal": data.get("goal") or "", "status": data.get("status") or STATUS_DONE,
         "interval": data.get("interval") or "", "run_time": data.get("run_time") or "",
         "run_weekday": data.get("run_weekday") or "", "timezone": data.get("timezone") or "",
         "next_run_at": nxt.isoformat() if isinstance(nxt, datetime) else None,
+        "created_at": created.isoformat() if isinstance(created, datetime) else None,
         "runs": int(data.get("runs") or 0),
         "last_run": {"at": last["at"].isoformat() if isinstance(last.get("at"), datetime) else None,
-                     "outcome": last.get("outcome") or "", "summary": last.get("summary") or ""} if last else None,
+                     "outcome": last.get("outcome") or "", "summary": last.get("summary") or "",
+                     "evidence_url": last.get("evidence_url") or ""} if last else None,
         "ended": data.get("ended") or "",
+        # A finding, a question or the goal the user has not looked at yet (``seen``).
+        "unread": data.get("unread") is True,
+        "email_enabled": data.get("email_enabled") is not False,
+        "telegram_enabled": data.get("telegram_enabled") is not False,
+        "image": watch_images.image_view(watch_id, data),
     }
 
 
@@ -212,27 +222,70 @@ def _bookmark_id(db, uid: str, chat_id: str) -> str:
     return ""
 
 
-def create(uid: str, *, chat_id: str, turn_id: str, tier, timezone_name: str = "",
-           interval: str | None = None, run_time: str | None = None, weekday: str | None = None,
-           db=None, now: datetime | None = None) -> dict:
-    """Start the Watch the agent prepared on ``turn_id`` (its ``agent_watch``)
-    in that chat. The task and the goal come from the saved proposal, never
-    from the request; the schedule may be the user's own."""
+def chat_title(task: str) -> str:
+    """The title of a chat the Watches page opens for a task: its first words."""
+    title = ""
+    for word in _line(task, TASK_MAX_CHARS).split():
+        if len(title) + len(word) + 1 > 60:
+            break
+        title = f"{title} {word}".strip()
+    return title.rstrip(" .,:;") or _line(task, 60)
+
+
+def create(uid: str, *, tier, chat_id: str = "", turn_id: str = "", task: str | None = None,
+           goal: str | None = None, timezone_name: str = "", interval: str | None = None,
+           run_time: str | None = None, weekday: str | None = None, db=None,
+           now: datetime | None = None) -> dict:
+    """Start a Watch in its chat. Three ways in:
+
+    * ``turn_id``: the Watch the agent prepared on that turn (``agent_watch``);
+      its task and goal come from the saved proposal, never from the request.
+    * ``chat_id`` with ``task``: the user's own words (the Watch pill under an
+      answer, the sheet) in that chat.
+    * ``task`` alone: "New Watch" on the Watches page opens a chat of its own;
+      its first run comes at once, and its task is that chat's first message.
+    """
     from app.services.agent_runs import AgentRunStore
     db = _db(db)
     now = now or utcnow()
     store = AgentRunStore(db)
-    bookmark_id = _bookmark_id(db, uid, chat_id)
-    if not bookmark_id:
-        raise AgentWatchError("chat_not_found", "This chat no longer exists.", status=404)
-    chat_ref, turn_ref, slots_ref = store._chat_ref(uid, chat_id), store._turn_ref(uid, chat_id, turn_id), _slots_ref(db, uid)
-    watch_id = secrets.token_hex(16)
+    own = task is not None
+    if own:
+        task = _line(task, TASK_MAX_CHARS + 1)
+        if not TASK_MIN_CHARS <= len(task) <= TASK_MAX_CHARS:
+            raise AgentWatchError("invalid_task", "Say in a sentence what the Agent should do.")
+        goal = _line(goal, GOAL_MAX_CHARS + 1)
+        if len(goal) > GOAL_MAX_CHARS:
+            raise AgentWatchError("invalid_goal", "Keep the goal to one short sentence.")
+    elif not (chat_id and turn_id):
+        raise AgentWatchError("no_proposal", "This answer has no Watch to start.", status=404)
     limit = active_limit(tier)
     allowed = allowed_intervals(tier)
+    if own and not chat_id:
+        # Checked before the chat exists: a refused Watch leaves no empty chat behind.
+        schedule = validate_schedule(interval or "daily", run_time or "", weekday or "", timezone_name)
+        if schedule["interval"] not in allowed:
+            raise AgentWatchError("interval_not_allowed", "Runs this often need a higher plan.", status=403)
+        slots = _slots_ref(db, uid).get()
+        taken = dict((slots.to_dict() or {}).get("active") or {}) if slots.exists else {}
+        if len(taken) >= limit:
+            raise AgentWatchError("limit_reached", "All your Watches are in use. End one first.", status=429)
+        chat_id = store.create_chat(uid, title=chat_title(task), execution_mode="agent")["id"]
+        bookmark_id = "agent_watch_" + secrets.token_hex(8)
+        first_run = now
+    else:
+        bookmark_id = _bookmark_id(db, uid, chat_id)
+        if not bookmark_id:
+            raise AgentWatchError("chat_not_found", "This chat no longer exists.", status=404)
+        first_run = None
+    chat_ref, slots_ref = store._chat_ref(uid, chat_id), _slots_ref(db, uid)
+    turn_ref = store._turn_ref(uid, chat_id, turn_id) if turn_id else None
+    watch_id = secrets.token_hex(16)
 
     def operation(tx):
         persistence_guard.ensure_account_write_allowed(uid=uid, db=db, transaction=tx)
-        chat, turn, slots = chat_ref.get(transaction=tx), turn_ref.get(transaction=tx), slots_ref.get(transaction=tx)
+        chat, slots = chat_ref.get(transaction=tx), slots_ref.get(transaction=tx)
+        turn = turn_ref.get(transaction=tx) if turn_ref is not None else None
         chat_data = (chat.to_dict() or {}) if chat.exists else {}
         if chat_data.get("status") != "active":
             raise AgentWatchError("chat_not_found", "This chat no longer exists.", status=404)
@@ -240,12 +293,16 @@ def create(uid: str, *, chat_id: str, turn_id: str, tier, timezone_name: str = "
             raise AgentWatchError("temporary_chat", "A temporary chat keeps nothing, so it cannot have a Watch.")
         if chat_data.get("google_data"):
             raise AgentWatchError("google_data", "A chat with Google information cannot have a Watch.")
-        proposal = (turn.to_dict() or {}).get("agent_watch") if turn.exists else None
-        proposal = proposal if isinstance(proposal, dict) else {}
-        task = _line(proposal.get("task"), TASK_MAX_CHARS)
-        if len(task) < TASK_MIN_CHARS:
+        if own:
+            proposal = {"task": task, "goal": goal}
+        else:
+            proposal = (turn.to_dict() or {}).get("agent_watch") if turn is not None and turn.exists else None
+            proposal = proposal if isinstance(proposal, dict) else {}
+        watch_task = _line(proposal.get("task"), TASK_MAX_CHARS)
+        if len(watch_task) < TASK_MIN_CHARS:
             raise AgentWatchError("no_proposal", "This answer has no Watch to start.", status=404)
-        schedule = validate_schedule(interval or proposal.get("interval"), proposal.get("run_time") if run_time is None else run_time,
+        schedule = validate_schedule(interval or proposal.get("interval") or "daily",
+                                     proposal.get("run_time") if run_time is None else run_time,
                                      proposal.get("run_weekday") if weekday is None else weekday, timezone_name)
         if schedule["interval"] not in allowed:
             raise AgentWatchError("interval_not_allowed", "Runs this often need a higher plan.", status=403)
@@ -255,15 +312,152 @@ def create(uid: str, *, chat_id: str, turn_id: str, tier, timezone_name: str = "
         if len(active) >= limit:
             raise AgentWatchError("limit_reached", "All your Watches are in use. End one first.", status=429)
         data = {"uid": uid, "chat_id": chat_id, "turn_id": turn_id, "bookmark_id": bookmark_id,
-                "task": task, "goal": _line(proposal.get("goal"), GOAL_MAX_CHARS), **schedule,
-                "status": STATUS_ACTIVE, "next_run_at": next_run(schedule, now=now),
-                "runs": 0, "last_run": None, "running": None, "created_at": now, "updated_at": now}
+                "task": watch_task, "goal": _line(proposal.get("goal"), GOAL_MAX_CHARS), **schedule,
+                "status": STATUS_ACTIVE, "next_run_at": first_run or next_run(schedule, now=now),
+                "runs": 0, "last_run": None, "running": None, "unread": False,
+                "email_enabled": True, "telegram_enabled": True, "created_at": now, "updated_at": now}
         tx.set(_ref(db, watch_id), data)
         tx.set(slots_ref, {"active": {**active, watch_id: chat_id}, "updated_at": now})
         return data
 
     data = watch_service._run_transaction(db, operation)
+    if first_run is not None:
+        from app.services import watch_scheduler
+        # Its first run is due now: the scheduler looks at once.
+        watch_scheduler.wake_watch_scheduler()
+    # Its picture comes with it, not only after a run (Max, 2026-11-03).
+    PICTURES.first(watch_id, data, db=db)
     return serialize(watch_id, data)
+
+
+def _owned(tx, db, uid: str, watch_id: str) -> dict:
+    snapshot = _ref(db, watch_id).get(transaction=tx)
+    data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+    if data.get("uid") != uid:
+        raise AgentWatchError("not_found", "This Watch no longer exists.", status=404)
+    return data
+
+
+def pause(uid: str, watch_id: str, *, db=None, now: datetime | None = None) -> dict:
+    """No runs until it is resumed; its slot is free meanwhile, as a paused Watch's always was."""
+    db = _db(db)
+    now = now or utcnow()
+
+    def operation(tx):
+        data = _owned(tx, db, uid, watch_id)
+        if data.get("status") != STATUS_ACTIVE:
+            return data
+        slots_ref = _slots_ref(db, uid)
+        slots = slots_ref.get(transaction=tx)
+        active = dict((slots.to_dict() or {}).get("active") or {}) if slots.exists else {}
+        active.pop(watch_id, None)
+        patch = {"status": STATUS_PAUSED, "next_run_at": None, "updated_at": now}
+        tx.update(_ref(db, watch_id), patch)
+        tx.set(slots_ref, {"active": active, "updated_at": now})
+        return {**data, **patch}
+
+    return serialize(watch_id, watch_service._run_transaction(db, operation))
+
+
+def resume(uid: str, watch_id: str, *, tier, db=None, now: datetime | None = None) -> dict:
+    """Runs again from its next time, with a free slot, at an interval the tier still has."""
+    db = _db(db)
+    now = now or utcnow()
+    limit = active_limit(tier)
+
+    def operation(tx):
+        data = _owned(tx, db, uid, watch_id)
+        if data.get("status") != STATUS_PAUSED:
+            return data
+        slots_ref = _slots_ref(db, uid)
+        slots = slots_ref.get(transaction=tx)
+        active = dict((slots.to_dict() or {}).get("active") or {}) if slots.exists else {}
+        if data.get("chat_id") in active.values():
+            raise AgentWatchError("already_watched", "This chat already has a Watch.", status=409)
+        if len(active) >= limit:
+            raise AgentWatchError("limit_reached", "All your Watches are in use. End one first.", status=429)
+        interval = fit_interval(data.get("interval") or "daily", tier)
+        schedule = {"interval": interval,
+                    "run_time": (data.get("run_time") or DEFAULT_RUN_TIME) if interval in TIMED else "",
+                    "run_weekday": (data.get("run_weekday") or "") if interval == "weekly" else "",
+                    "timezone": data.get("timezone") or "UTC"}
+        patch = {"status": STATUS_ACTIVE, **schedule, "next_run_at": next_run(schedule, now=now), "updated_at": now}
+        tx.update(_ref(db, watch_id), patch)
+        tx.set(slots_ref, {"active": {**active, watch_id: data.get("chat_id")}, "updated_at": now})
+        return {**data, **patch}
+
+    return serialize(watch_id, watch_service._run_transaction(db, operation))
+
+
+def seen(uid: str, watch_id: str, *, db=None, now: datetime | None = None) -> dict:
+    """The user looked at what its last run found (its chat or its row)."""
+    db = _db(db)
+    now = now or utcnow()
+
+    def operation(tx):
+        data = _owned(tx, db, uid, watch_id)
+        if data.get("unread") is True:
+            tx.update(_ref(db, watch_id), {"unread": False, "seen_at": now})
+            data = {**data, "unread": False}
+        return data
+
+    return serialize(watch_id, watch_service._run_transaction(db, operation))
+
+
+def set_channels(uid: str, watch_id: str, *, email: bool | None = None, telegram: bool | None = None,
+                 db=None, now: datetime | None = None) -> dict:
+    """Where a run that found something tells the user: mail, Telegram, both or neither."""
+    db = _db(db)
+    now = now or utcnow()
+    patch = {key: value for key, value in (("email_enabled", email), ("telegram_enabled", telegram))
+             if isinstance(value, bool)}
+
+    def operation(tx):
+        data = _owned(tx, db, uid, watch_id)
+        if patch:
+            tx.update(_ref(db, watch_id), {**patch, "updated_at": now})
+        return {**data, **patch}
+
+    return serialize(watch_id, watch_service._run_transaction(db, operation))
+
+
+def unsubscribe_token(watch_id: str) -> str:
+    """The mail's "Stop emails" link (List-Unsubscribe): a token of its own kind."""
+    return watch_service.sign_token_payload({"aw": watch_id})
+
+
+def parse_unsubscribe_token(token: str) -> str:
+    try:
+        payload = watch_service.parse_token_payload(token)
+    except watch_service.WatchError as exc:
+        raise AgentWatchError(exc.code, exc.message, status=400) from None
+    watch_id = payload.get("aw")
+    if not isinstance(watch_id, str) or not watch_id.isalnum() or len(watch_id) > 64 or set(payload) - {"aw", "exp"}:
+        raise AgentWatchError("invalid_token", "This link is invalid.", status=400)
+    return watch_id
+
+
+def watch_of(watch_id: str, *, db=None) -> dict | None:
+    snapshot = _ref(_db(db), watch_id).get()
+    return serialize(watch_id, snapshot.to_dict() or {}) if snapshot.exists else None
+
+
+def stop_emails(watch_id: str, *, db=None, now: datetime | None = None) -> dict | None:
+    """The mail link's one action: no more mails from this Watch, which keeps running."""
+    db = _db(db)
+    now = now or utcnow()
+    ref = _ref(db, watch_id)
+
+    def operation(tx):
+        snapshot = ref.get(transaction=tx)
+        if not snapshot.exists:
+            return None
+        data = snapshot.to_dict() or {}
+        tx.update(ref, {"email_enabled": False, "updated_at": now})
+        return {**data, "email_enabled": False}
+
+    data = watch_service._run_transaction(db, operation)
+    return serialize(watch_id, data) if data is not None else None
 
 
 def list_for(uid: str, *, chat_id: str = "", db=None) -> list[dict]:
@@ -273,6 +467,14 @@ def list_for(uid: str, *, chat_id: str = "", db=None) -> list[dict]:
     if chat_id:
         items = [item for item in items if item["chat_id"] == chat_id]
     return sorted(items, key=lambda item: (item["status"] != STATUS_ACTIVE, item["next_run_at"] or ""))
+
+
+def _drop_images(db, watch_ids) -> None:
+    """A Watch's picture goes with it (``watch_images/{id}``, the same store as before)."""
+    from app.services import watch_images
+    for watch_id in watch_ids:
+        db.collection(watch_images.WATCH_IMAGES_COLLECTION).document(watch_id).delete()
+        watch_images.forget(watch_id)
 
 
 def _end(tx, db, watch_id: str, data: dict, *, reason: str, now: datetime) -> None:
@@ -298,7 +500,7 @@ def stop(uid: str, watch_id: str, *, db=None, now: datetime | None = None) -> di
         data = (snapshot.to_dict() or {}) if snapshot.exists else {}
         if data.get("uid") != uid:
             raise AgentWatchError("not_found", "This Watch no longer exists.", status=404)
-        if data.get("status") == STATUS_ACTIVE:
+        if data.get("status") in {STATUS_ACTIVE, STATUS_PAUSED}:
             _end(tx, db, watch_id, data, reason="user", now=now)
             data = {**data, "status": STATUS_DONE, "next_run_at": None, "ended": "user"}
         return data
@@ -325,17 +527,19 @@ def delete_for_chat(db, uid: str, chat_id: str) -> int:
             tx.set(slots_ref, {"active": active, "updated_at": utcnow()})
 
     watch_service._run_transaction(db, operation)
+    _drop_images(db, ids)
     return len(ids)
 
 
 def delete_for_account(db, uid: str) -> int:
     db = _db(db)
-    count = 0
+    ids = []
     for snapshot in db.collection(COLLECTION).where(filter=FieldFilter("uid", "==", uid)).stream():
         snapshot.reference.delete()
-        count += 1
+        ids.append(snapshot.id)
     _slots_ref(db, uid).delete()
-    return count
+    _drop_images(db, ids)
+    return len(ids)
 
 
 # --- the schedule's runs ---------------------------------------------------
@@ -601,8 +805,10 @@ def _outcome(turn: dict) -> tuple[str, dict]:
 def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None,
                now: datetime | None = None) -> str:
     """After a run's turn ended (its producer's last step): the Watch notes
-    the run, ends when the goal is met, and stages the mail of a finding,
-    a question for the user or the goal. Returns the outcome."""
+    the run, ends when the goal is met, marks a finding, a question for the
+    user or the goal unread and stages its messages (mail and Telegram, as
+    the Watch has them on). A Watch without a picture looks for one in the
+    pages of the run (PICTURES). Returns the outcome."""
     from app.services.agent_runs import AgentRunStore
     db = _db(db)
     now = now or utcnow()
@@ -614,6 +820,8 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
         turn = {"status": "failed"}
     outcome, details = _outcome(turn)
     ref = _ref(db, watch_id)
+    tells = outcome in {"finding", "needs_you", "done"}
+    evidence_url = str(details.get("evidence_url") or "")[:URL_MAX_CHARS]
 
     def operation(tx):
         snapshot = ref.get(transaction=tx)
@@ -621,39 +829,238 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
         if data.get("uid") != uid:
             return None
         running = data.get("running") if isinstance(data.get("running"), dict) else {}
-        ends = details.get("done") is not None and data.get("status") == STATUS_ACTIVE
+        ends = details.get("done") is not None and data.get("status") in {STATUS_ACTIVE, STATUS_PAUSED}
         if ends:
             _end(tx, db, watch_id, data, reason="goal", now=now)
         patch = {"last_run": {"at": now, "turn_id": turn_id, "outcome": outcome,
-                              "summary": _line(details.get("summary"), FINDING_MAX_CHARS)},
+                              "summary": _line(details.get("summary"), FINDING_MAX_CHARS),
+                              "evidence_url": evidence_url},
                  "updated_at": now}
+        if tells:
+            patch["unread"] = True
         if running.get("request_id") == watch_run.get("request_id"):
             patch["running"] = None
         tx.update(ref, patch)
-        if outcome in {"finding", "needs_you", "done"}:
-            item = outbox.agent_watch_item(
-                uid=uid, watch_id=watch_id, run_id=turn_id, now=now, payload={
-                    "outcome": outcome, "task": data.get("task") or "", "goal": data.get("goal") or "",
-                    "summary": _line(details.get("summary"), FINDING_MAX_CHARS),
-                    "evidence_url": str(details.get("evidence_url") or "")[:URL_MAX_CHARS],
-                    "evidence_title": _line(details.get("evidence_title"), 240),
-                    "halted": bool(details.get("halted")),
-                    "goal_met": bool(details.get("done")), "goal_reason": _line((details.get("done") or {}).get("reason"), REASON_MAX_CHARS),
-                    "review": _review_line(turn)})
+        if not tells:
+            return data, []
+        payload = {
+            "outcome": outcome, "task": data.get("task") or "", "goal": data.get("goal") or "",
+            "summary": _line(details.get("summary"), FINDING_MAX_CHARS), "evidence_url": evidence_url,
+            "evidence_title": _line(details.get("evidence_title"), 240), "halted": bool(details.get("halted")),
+            "goal_met": bool(details.get("done")),
+            "goal_reason": _line((details.get("done") or {}).get("reason"), REASON_MAX_CHARS),
+            "review": _review_line(turn), "bookmark_id": data.get("bookmark_id") or ""}
+        channels = [channel for channel, field in ((outbox.CHANNEL_EMAIL, "email_enabled"),
+                                                   (outbox.CHANNEL_TELEGRAM, "telegram_enabled"))
+                    if data.get(field) is not False]
+        items = [outbox.agent_watch_item(uid=uid, watch_id=watch_id, run_id=turn_id, now=now,
+                                         payload=payload, channel=channel) for channel in channels]
+        for item in items:
             outbox.stage(tx, db, item)
-            return item["id"]
-        return None
+        return data, [item["id"] for item in items]
 
     try:
-        staged = watch_service._run_transaction(db, operation)
+        result = watch_service._run_transaction(db, operation)
     except Exception as exc:
         logging.warning("Agent watch run end not recorded category=%s", safe_exception(exc))
-        staged = None
+        result = None
     finally:
         _forget(watch_id)
     logging.info("Agent watch run ended outcome=%s", outcome)
+    if result is None:
+        return outcome
+    data, staged = result
     if staged:
         from app.services import watch_scheduler
-        # The mail goes out on the scheduler's next pass, which this wakes.
+        # The messages go out on the scheduler's next pass, which this wakes.
         watch_scheduler.wake_watch_scheduler()
+    if outcome != "failed":
+        sources = [*([{"url": evidence_url, "title": details.get("evidence_title") or ""}] if evidence_url else []),
+                   *(turn.get("sources") or [])]
+        PICTURES.look(watch_id, data, sources, db=db)
     return outcome
+
+
+class Pictures:
+    """A Watch's picture, as a Watch always had one (watch_images.py): a real
+    photo of what it is about, never generated; without one, the page draws
+    the eye. Looked for on a thread of its own:
+
+    * at its start (Max, 2026-11-03: "beim ersten Anlegen direkt ein
+      passendes Bild"): a cheap model names what it is about in a few words
+      (watch_scheduler.picture_words), Brave's image search finds the photo
+      (picture_search); without one, the pages of the chat it starts in;
+    * after a run, while it has none: the pages that run opened, the
+      evidence first.
+
+    MAX_LOOKS looks in all, then the eye stays. Off in tests and under
+    MOCK_LLM (watch_images.background_enabled)."""
+
+    MAX_LOOKS = 3
+    # Brave's first pictures for the words; the rest are rarely better.
+    SUBJECT_RESULTS = 4
+    WORDS_CHARS = 80
+
+    def __init__(self):
+        from concurrent.futures import ThreadPoolExecutor
+        self.pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="agent-watch-picture")
+
+    def wanted(self, data: dict) -> bool:
+        image = data.get("image") if isinstance(data.get("image"), dict) else {}
+        return image.get("status") != "ready" and int(image.get("tries") or 0) < self.MAX_LOOKS
+
+    def look(self, watch_id: str, data: dict, sources, *, db=None) -> bool:
+        from app.services import watch_images
+        if not self.wanted(data) or not watch_images.background_enabled():
+            return False
+        if not [source for source in sources if isinstance(source, dict) and source.get("url")]:
+            return False
+        self.pool.submit(self.find, watch_id, data.get("task") or "", data.get("goal") or "", list(sources), db)
+        return True
+
+    def first(self, watch_id: str, data: dict, *, db=None) -> bool:
+        from app.services import watch_images
+        if not self.wanted(data) or not watch_images.background_enabled():
+            return False
+        self.pool.submit(self.find_first, watch_id, dict(data), db)
+        return True
+
+    def find_first(self, watch_id: str, data: dict, db=None, *, words=None, search=None,
+                   fetch=None) -> str:
+        """The picture at the start: of the subject first, else of the chat's
+        pages. ``words``, ``search`` and ``fetch`` stand in for the model, Brave
+        and the network in tests."""
+        from app.services import watch_images
+        db = _db(db)
+        task, goal = data.get("task") or "", data.get("goal") or ""
+        try:
+            found = self.subject(task, goal, words=words, search=search, fetch=fetch)
+        except Exception as exc:
+            logging.info("Agent watch subject picture failed category=%s", safe_exception(exc))
+            found = None
+        if not found:
+            sources = self.chat_sources(db, data)
+            if sources:
+                try:
+                    found = watch_images.find_image(sources, task, goal, fetch=fetch)
+                except Exception as exc:
+                    logging.info("Agent watch picture search failed category=%s", safe_exception(exc))
+        return self.store(watch_id, found, db=db)
+
+    def subject(self, task: str, goal: str, *, words=None, search=None, fetch=None) -> dict | None:
+        """A photo of what the Watch is about: the words a model names for it,
+        Brave's pictures for those, the first that makes a thumbnail (Brave's
+        copy first: it loads where the original page refuses strangers)."""
+        from urllib.parse import urlsplit
+        from app.services import picture_search, watch_images
+        if search is None:
+            if not picture_search.enabled():
+                return None
+            search = picture_search.search
+        if words is None:
+            from app.services import watch_scheduler
+            words = watch_scheduler.picture_words
+        query = _line(words(task, goal), self.WORDS_CHARS)
+        if not query:
+            return None
+        results = search(query, self.SUBJECT_RESULTS) or []
+        fetch = fetch or watch_images._http_fetch
+
+        async def first():
+            for result in results[:self.SUBJECT_RESULTS]:
+                url = result.get("thumbnail") or result.get("picture")
+                if not url:
+                    continue
+                try:
+                    _url, content, _kind, truncated = await asyncio.wait_for(
+                        fetch(url, "image"), watch_images.FETCH_SECONDS + 1)
+                except Exception as exc:
+                    logging.info("Agent watch picture fetch skipped category=%s", safe_exception(exc))
+                    continue
+                if truncated:
+                    continue
+                thumbnail = await asyncio.to_thread(watch_images.make_thumbnail, content)
+                if thumbnail:
+                    stored, (width, height) = thumbnail
+                    page = str(result.get("page") or "")
+                    return {"content": stored, "content_type": "image/webp", "kind": "item",
+                            "width": int(width), "height": int(height), "source_url": page,
+                            "source_host": (urlsplit(page).hostname or "").lower().removeprefix("www.")}
+            return None
+
+        return asyncio.run(first())
+
+    @staticmethod
+    def chat_sources(db, data: dict) -> list:
+        """The pages of the turn the Watch was prepared on, else of the chat's
+        newest turn (the Watch pill sits under it); a page-made chat has none."""
+        from app.services.agent_runs import AgentRunStore
+        from firebase_admin import firestore
+        store = AgentRunStore(db)
+        uid, chat_id, turn_id = data.get("uid") or "", data.get("chat_id") or "", data.get("turn_id") or ""
+        if not (uid and chat_id):
+            return []
+        try:
+            if turn_id:
+                snapshot = store._turn_ref(uid, chat_id, turn_id).get()
+                turn = (snapshot.to_dict() or {}) if snapshot.exists else {}
+            else:
+                newest = list(store._chat_ref(uid, chat_id).collection("turns")
+                              .order_by("position", direction=firestore.Query.DESCENDING).limit(1).stream())
+                turn = (newest[0].to_dict() or {}) if newest else {}
+        except Exception as exc:
+            logging.info("Agent watch picture sources unread category=%s", safe_exception(exc))
+            return []
+        return [source for source in turn.get("sources") or [] if isinstance(source, dict) and source.get("url")]
+
+    def find(self, watch_id: str, task: str, goal: str, sources, db=None) -> str:
+        from app.services import watch_images
+        db = _db(db)
+        try:
+            found = watch_images.find_image(sources, task, goal)
+        except Exception as exc:
+            logging.info("Agent watch picture search failed category=%s", safe_exception(exc))
+            found = None
+        return self.store(watch_id, found, db=db)
+
+    def store(self, watch_id: str, found: dict | None, *, db, now: datetime | None = None) -> str:
+        """The picture and the Watch's ``image`` in one transaction: a Watch
+        deleted meanwhile gets none, a found picture is never replaced."""
+        import hashlib
+        from app.services import watch_images
+        now = now or utcnow()
+        ref = _ref(db, watch_id)
+        image_ref = db.collection(watch_images.WATCH_IMAGES_COLLECTION).document(watch_id)
+
+        def operation(tx):
+            snapshot = ref.get(transaction=tx)
+            data = (snapshot.to_dict() or {}) if snapshot.exists else {}
+            if not data.get("uid") or not self.wanted(data):
+                return "kept"
+            previous = data.get("image") if isinstance(data.get("image"), dict) else {}
+            tries = int(previous.get("tries") or 0) + 1
+            if not found:
+                tx.update(ref, {"image": {"status": "none", "tries": tries, "last_attempt_at": now}})
+                return "none"
+            token = hashlib.sha256(found["content"]).hexdigest()[:20]
+            tx.set(image_ref, {"owner_uid": data["uid"], "token": token, "content": found["content"],
+                               "content_type": found["content_type"], "width": found["width"],
+                               "height": found["height"], "created_at": now})
+            tx.update(ref, {"image": {
+                "status": "ready", "kind": found.get("kind") if found.get("kind") in {"item", "article", "logo"} else "item",
+                "token": token, "width": found["width"], "height": found["height"],
+                "source_url": str(found.get("source_url") or "")[:2000],
+                "source_host": str(found.get("source_host") or "")[:120], "tries": tries, "picked_at": now}})
+            return "ready"
+
+        try:
+            outcome = watch_service._run_transaction(db, operation)
+        except Exception as exc:
+            logging.info("Agent watch picture not saved category=%s", safe_exception(exc))
+            return "failed"
+        if outcome == "ready":
+            watch_images.forget(watch_id)
+        return outcome
+
+
+PICTURES = Pictures()

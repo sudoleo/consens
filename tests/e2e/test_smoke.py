@@ -1266,221 +1266,78 @@ def test_claim_anchor_with_source_tag_still_marks_its_sentence(app_page):
     expect(app_page.locator("#consensusClaimsFallback")).to_be_hidden()
 
 
-def test_watch_dialog_asks_for_a_goal_and_keeps_defaults_in_one_line(app_page):
-    """Watch-Erstellung: zuerst "What are you waiting for?" als Radioliste mit
-    vorausgewaehltem Vorschlag, darunter EINE Zeile mit sicheren Defaults, die
-    per "Change" aufklappt (Zeitplan, Alerts, Kanaele inkl. Telegram, Seite)."""
-    app_page.route('**/api/my/telegram', lambda route: route.fulfill(
-        json={'telegram': {'configured': True, 'connected': False}}))
-    # A saved Consensus answer on screen, revealed the way firebase.js does
-    # it (the browser runs no Consensus since 2026-10-25). Dieser Test prüft
-    # nur Client-Validierung/Layout und braucht keinen echten
-    # Firestore-persistierten pending_result.
-    app_page.evaluate("""question => {
-      window.exitHeroMode();
-      window.revealConsensusOutput();
-      window.App.setThreadQuestion?.(question);
-      window.App.state.set('lastQuestion', question, 'run');
-      window.App.consensusBodyEl().innerHTML = '<p>Mock consensus for the watch dialog.</p>';
-      window.updateAgentModeUI();
-      window.App.consensusFooter.render();
-      window.App.state.set('lastShareResultId', 'e2e-watch-validation', 'share');
-    }""", QUESTION)
-    expect(app_page.locator("#consensusWatchButton")).to_be_visible(timeout=30000)
-    app_page.set_viewport_size({"width": 390, "height": 844})
-    app_page.click("#consensusWatchButton")
-    app_page.locator("#shareModal").click(position={"x": 2, "y": 2})
-    expect(app_page.locator("#watchConfirmBtn")).to_be_visible()
-    # One name for the dialog wherever it opens (Apple-Audit J18).
-    expect(app_page.locator("#shareModalTitle")).to_have_text("New watch")
+def _agent_watch_routes(page, *, watches, active_count=0, active_limit=2, created=None):
+    """The Watches page's reads (since 2026-11-03 a Watch runs the Agent):
+    the account's Watches, the archive and Telegram, all answered here."""
+    import json as _json
 
-    # Suggestions are options, and the first one is already picked.
-    suggestions = app_page.locator("#watchGoalSuggestions input[type=radio]")
-    expect(suggestions.first).to_be_checked(timeout=10000)
-    expect(app_page.locator("#watchGoalSuggestions label").first).to_have_text(
-        "It is officially announced"
-    )
-    expect(app_page.locator("#watchGoalHint")).to_contain_text("the watch ends")
-    expect(app_page.locator("#watchGoal")).to_have_attribute("maxlength", "500")
-    goal_box = app_page.locator(".watch-goal").bounding_box()
-    settings_box = app_page.locator("#watchAdvancedSettings").bounding_box()
-    assert goal_box is not None and settings_box is not None
-    assert goal_box["y"] < settings_box["y"]
+    def agent_watches(route):
+        if route.request.method == "POST":
+            body = route.request.post_data_json
+            watch = {"id": "new1", "chat_id": "n" * 32, "turn_id": "", "bookmark_id": "agent_watch_new", "task": body["task"],
+                     "goal": body.get("goal") or "", "status": "active", "interval": body["interval"],
+                     "run_time": body.get("run_time") or "", "run_weekday": "", "timezone": body.get("timezone") or "",
+                     "next_run_at": "2026-01-01T00:00:00+00:00", "created_at": "2026-01-01T00:00:00+00:00",
+                     "runs": 0, "last_run": None, "ended": "", "unread": False, "email_enabled": True,
+                     "telegram_enabled": True, "image": None}
+            if created is not None:
+                created.append(body)
+            watches.insert(0, watch)
+            return route.fulfill(status=201, content_type="application/json", body=_json.dumps({"watch": watch}))
+        return route.fulfill(status=200, content_type="application/json", body=_json.dumps({
+            "watches": watches, "intervals": ["daily", "weekly"], "active_count": active_count + len(watches),
+            "active_limit": active_limit}))
 
-    expect(app_page.locator("#watchAdvancedSettings")).not_to_have_attribute("open", "")
-    expect(app_page.locator("#watchVisibility")).to_be_hidden()
-    assert app_page.locator("#watchVisibility").input_value() == "private"
-    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Email · Private")
-    dialog_box = app_page.locator("#shareModal .share-modal-content").bounding_box()
-    assert dialog_box is not None
-    assert dialog_box["y"] >= 0
-    assert dialog_box["y"] + dialog_box["height"] <= 844.5
-
-    app_page.click("#watchAdvancedSettings > summary")
-    expect(app_page.locator("#watchAdvancedSettings")).to_have_attribute("open", "")
-    expect(app_page.locator("#watchSettingsToggle")).to_have_text("Done")
-    expect(app_page.locator("#watchVisibility")).to_be_visible()
-    expect(app_page.locator("#watchTelegramEnabled")).to_be_visible()
-    expect(app_page.locator("#watchTelegramEnabled")).to_be_disabled()
-    expect(app_page.locator("#watchTelegramConnect")).to_be_visible()
-    expect(app_page.locator("#watchRunTime")).to_have_value("09:00")
-    expect(app_page.locator("#watchWeekdayWrap")).to_be_visible()
-    tomorrow_weekday = app_page.evaluate("""() => {
-      const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      return days[tomorrow.getDay()];
-    }""")
-    expect(app_page.locator("#watchWeekday")).to_have_value(tomorrow_weekday)
-    app_page.select_option("#watchWeekday", "friday")
-    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Weekly on Friday at 09:00")
-    app_page.select_option("#watchInterval", "monthly")
-    expect(app_page.locator("#watchWeekdayWrap")).to_be_hidden()
-    app_page.select_option("#watchInterval", "weekly")
-    expect(app_page.locator("#watchWeekdayWrap")).to_be_visible()
-    expect(app_page.locator("#watchWeekday")).to_have_value("friday")
-
-    app_page.select_option("#watchVisibility", "public")
-    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Public")
-
-    app_page.fill("#watchRunTime", "")
-    app_page.click("#watchConfirmBtn")
-    expect(app_page.locator("#watchRunTimeError")).to_have_text(
-        "Choose a run time for the automatic check."
-    )
-    expect(app_page.locator("#watchRunTime")).to_have_attribute("aria-invalid", "true")
-    app_page.fill("#watchRunTime", "09:00")
-
-    # "Only when it resolves" needs a goal to resolve on.
-    app_page.click("#watchGoalNone")
-    expect(app_page.locator("#watchGoalHint")).to_contain_text("whenever a source changes")
-    app_page.select_option("#watchEmailMode", "condition")
-    app_page.click("#watchConfirmBtn")
-    expect(app_page.locator("#watchGoalError")).to_have_text(
-        "Name the goal, or choose a different alert rule."
-    )
-    expect(app_page.locator("#watchGoal")).to_have_attribute("aria-invalid", "true")
-    app_page.fill("#watchGoal", "An official date is announced")
-    expect(app_page.locator("#watchGoalCustomChoice")).to_be_checked()
-    expect(app_page.locator("#watchGoalError")).to_be_hidden()
-    expect(app_page.locator("#watchSettingsSummary")).to_contain_text("Only when it is reached")
-
-    # The custom row answers a click on its padding like the label rows.
-    app_page.click("#watchGoalNone")
-    app_page.locator(".watch-goal-option.is-custom").click(position={"x": 4, "y": 4})
-    expect(app_page.locator("#watchGoalCustomChoice")).to_be_checked()
-    expect(app_page.locator("#watchGoal")).to_be_focused()
+    page.route("**/agent/watches", agent_watches)
+    page.route("**/agent/watches?*", agent_watches)
+    page.route("**/api/my/watches", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body='{"status":"success","watches":[],"limits":{"plan":"free","active_count":0,"active_limit":1},"archived":true}'))
+    page.route("**/api/my/telegram", lambda route: route.fulfill(
+        status=200, content_type="application/json",
+        body='{"status":"success","telegram":{"configured":false,"connected":false}}'))
 
 
-def test_query_first_watch_guides_question_then_configuration(app_page):
-    """Das Watch-Dashboard startet einen Query-first-Flow, ohne vorherigen
-    Consensus, und bewahrt die Frage beim Zuruecknavigieren."""
-    app_page.route(
-        "**/api/my/watches",
-        lambda route: route.fulfill(
-            status=200, content_type="application/json",
-            body='{"status":"success","watches":[],"limits":{"plan":"free","active_count":0,"active_limit":1,"remaining":1,"paused_count":0,"daily_available":false}}',
-        ),
-    )
-    app_page.route(
-        "**/api/my/watch-brief",
-        lambda route: route.fulfill(
-            status=200, content_type="application/json",
-            body='{"status":"success","brief":{}}',
-        ),
-    )
-    app_page.route(
-        "**/api/my/telegram",
-        lambda route: route.fulfill(
-            status=200, content_type="application/json",
-            body='{"status":"success","telegram":{"configured":false,"connected":false}}',
-        ),
-    )
-
+def test_new_watch_sheet_asks_for_a_sentence_then_starts_a_watch_of_its_own(app_page):
+    """Watches page since 2026-11-03: an empty page says what a Watch does,
+    "New Watch" opens the sheet, which asks for a sentence before it sends
+    anything; the started Watch is on the page at once, its first run under
+    way in a chat of its own."""
+    created = []
+    _agent_watch_routes(app_page, watches=[], created=created)
     app_page.click("#viewSwitchWatches")
-    expect(app_page.locator("#watchDashCreate")).to_be_visible()
-    expect(app_page.locator("#watchDashLimit")).to_contain_text("Standard access")
-    expect(app_page.locator("#watchDashLimit")).to_contain_text("0 of 1 active")
-    expect(app_page.locator("#watchDashLimit")).to_contain_text("Paused watches don’t count")
-
-    # An empty page has one heading and one action, the head's; below it, on
-    # the same left edge, only the ways to start (Apple-Audit J24).
-    expect(app_page.locator(".wd-empty")).to_contain_text("Start from an example")
-    expect(app_page.locator(".wd-explainer")).to_contain_text("Why a watch, not a scheduled prompt")
-    expect(app_page.locator(".wd-empty .wd-button")).to_have_count(0)
-    title_x = app_page.locator("#watchDashTitle").bounding_box()["x"]
-    assert abs(app_page.locator(".wd-empty").bounding_box()["x"] - title_x) < 1
-    assert app_page.locator(".wd-example").count() == 3
-
-    app_page.set_viewport_size({"width": 390, "height": 844})
-    title_box = app_page.locator("#watchDashTitle").bounding_box()
-    header_cta_box = app_page.locator("#watchDashCreate").bounding_box()
-    mobile_lead_box = app_page.locator(".wd-head-lead").bounding_box()
-    mobile_empty_box = app_page.locator(".wd-empty").bounding_box()
-    assert title_box is not None and header_cta_box is not None
-    assert mobile_lead_box is not None and mobile_empty_box is not None
-    assert header_cta_box["y"] > title_box["y"]
-    assert header_cta_box["x"] + header_cta_box["width"] <= 378.5
-    assert mobile_empty_box["y"] >= mobile_lead_box["y"] + mobile_lead_box["height"] + 20
+    expect(app_page.locator(".aw-empty-title")).to_have_text("Nothing watched yet")
+    expect(app_page.locator(".aw-channel-title").first).to_have_text("Email")
 
     app_page.click("#watchDashCreate")
-    expect(app_page.locator("#watchQuestion")).to_be_visible()
-    # A free slot is not news: the dialog only speaks about the limit at it.
-    expect(app_page.locator("#watchDialogLimit")).to_be_hidden()
-    expect(app_page.locator("#watchQuestionNext")).to_have_text("Continue")
+    sheet = app_page.locator(".watch-sheet")
+    expect(sheet).to_be_visible()
+    expect(sheet.locator(".watch-sheet-title")).to_have_text("New Watch")
+    expect(sheet.locator(".watch-sheet-task")).to_be_focused()
+    sheet.locator(".watch-sheet-start").click()
+    expect(sheet.locator(".watch-sheet-error")).to_have_text("Say in a sentence what the Agent should do.")
+    assert created == []
 
-    app_page.fill("#watchQuestion", "Short")
-    app_page.click("#watchQuestionNext")
-    expect(app_page.locator("#watchQuestionError")).to_be_visible()
-
-    question = "Has the EU guidance for general-purpose AI models changed?"
-    app_page.fill("#watchQuestion", question)
-    app_page.press("#watchQuestion", "Enter")
-    expect(app_page.locator(".watch-question-preview strong")).to_have_text(question)
-    expect(app_page.locator("#watchSettingsSummary")).to_be_visible()
-    expect(app_page.locator("#watchVisibility")).to_be_hidden()
-    expect(app_page.locator("#watchVisibility")).to_have_value("private")
-    expect(app_page.locator("#watchCancelBtn")).to_have_text("Cancel")
-
-    app_page.click("#watchQuestionEdit")
-    expect(app_page.locator("#watchQuestion")).to_have_value(question)
+    sheet.locator(".watch-sheet-task").fill("Tell me when registration for IRONMAN Hamburg 2027 opens.")
+    sheet.locator(".watch-sheet-goal").fill("Registration is open")
+    sheet.locator(".watch-sheet-interval").select_option("weekly")
+    expect(sheet.locator(".watch-sheet-time")).to_be_visible()
+    sheet.locator(".watch-sheet-start").click()
+    expect(sheet).to_be_hidden()
+    assert created[0]["task"] == "Tell me when registration for IRONMAN Hamburg 2027 opens."
+    assert created[0]["interval"] == "weekly" and "chat_id" not in created[0]
+    row = app_page.locator('.aw-row[data-watch-id="new1"]')
+    expect(row).to_be_visible()
+    expect(row.locator(".aw-line")).to_have_text("Its first run is under way.")
 
 
-def test_watch_limit_is_explained_before_creation(app_page):
-    app_page.route(
-        "**/api/my/watches",
-        lambda route: route.fulfill(
-            status=200, content_type="application/json",
-            body='{"status":"success","watches":[],"limits":{"plan":"free","active_count":1,"active_limit":1,"remaining":0,"paused_count":0,"daily_available":false}}',
-        ),
-    )
-    app_page.route(
-        "**/api/my/watch-brief",
-        lambda route: route.fulfill(
-            status=200, content_type="application/json",
-            body='{"status":"success","brief":{}}',
-        ),
-    )
-    app_page.route(
-        "**/api/my/telegram",
-        lambda route: route.fulfill(
-            status=200, content_type="application/json",
-            body='{"status":"success","telegram":{"configured":false,"connected":false}}',
-        ),
-    )
-
+def test_watch_limit_is_said_in_the_sheet_before_any_typing(app_page):
+    _agent_watch_routes(app_page, watches=[], active_count=2, active_limit=2)
     app_page.click("#viewSwitchWatches")
-    expect(app_page.locator("#watchDashLimit")).to_contain_text("1 of 1 active")
-    expect(app_page.locator("#watchDashLimit")).to_contain_text("All slots in use")
-
+    expect(app_page.locator("#watchDashLimit")).to_have_text("2 of 2 Watches running")
     app_page.click("#watchDashCreate")
-    # No form to fill at the limit: the sentence and the way out (J25).
-    expect(app_page.locator("#watchDialogLimit")).to_contain_text(
-        "Your watch slot is in use"
-    )
-    expect(app_page.locator("#watchDialogLimit")).to_contain_text("About early access")
-    expect(app_page.locator("#watchQuestion")).to_have_count(0)
-    expect(app_page.locator("#watchShowList")).to_be_focused()
+    expect(app_page.locator(".watch-sheet .watch-sheet-error")).to_have_text(
+        "All your Watches are in use. End one first.")
 
 
 def test_exclude_model_toggles_excluded_class(app_page):

@@ -337,117 +337,6 @@ def test_a_status_that_answers_before_the_app_starts_keeps_the_pro_tier(browser,
         context.close()
 
 
-@pytest.mark.parametrize("width", [1280, 1000])
-def test_watch_feature_nudge_never_raises_answer_over_fixed_composer(browser, phase4_server, width):
-    """Regression fuer den ersten Watch-Hinweis am fertigen Consensus-Fuss.
-
-    Der Hinweis muss selbst ueber dem Composer schweben. Die Antwort-Huelle
-    darf dafuer keinen hoeheren Stacking-Level bekommen, sonst uebermalt ihr
-    Text das fixe Eingabefeld, bis der Hinweis geschlossen wird.
-
-    1280 px: der Watch-Knopf steht im Antwort-Fuss direkt ueber dem Composer
-    (der urspruengliche Fehlerfall). Bis 1099 px zieht mobile-header.js ihn in
-    die Kopfzeile. Die Antwort wird ueber den echten Weg aufgedeckt: von Hand
-    gesetzte Klassen liessen `is-hidden` stehen, die Kopfzeile versteckte den
-    Knopf, und der Hinweis blendet sich ohne sichtbaren Anker zu Recht aus.
-    """
-
-    context, page = _real_firebase_page(browser, phase4_server)
-    try:
-        page.set_viewport_size({"width": width, "height": 800})
-        page.evaluate(
-            """() => {
-              localStorage.removeItem("consensio.watchFeatureNudge.dismissed.v1");
-              localStorage.removeItem("consensio.watchFeatureNudge.runs.v1");
-              window.exitHeroMode();
-              window.revealConsensusOutput();
-              document.getElementById("consensusAnswerBody").innerHTML =
-                Array.from({ length: 20 }, (_, index) =>
-                  `<p>Consensus answer line ${index + 1}: enough content to make the thread scroll.</p>`
-                ).join("");
-              // A saved answer draws its footer itself (firebase.js).
-              window.updateAgentModeUI();
-              window.App.consensusFooter.render();
-              window.App.state.set("lastShareResultId", "phase4-nudge-result", "share");
-              // Der Hinweis kommt erst ab der dritten abgeschlossenen Frage.
-              window.App.watch.showFeatureNudge();
-              window.App.watch.showFeatureNudge();
-              window.App.watch.showFeatureNudge();
-            }"""
-        )
-        expect(page.locator("#runProvenance")).to_be_visible()
-        expect(page.locator("#consensusWatchButton")).to_be_visible()
-        expect(page.locator("#watchFeatureNudge")).to_be_visible(timeout=3000)
-        # Der Hinweis gehoert zum Watch-Knopf der Consensus-Antwort, nicht zum
-        # Agent-Anker (#agentWatchAnchor) mit derselben Klasse.
-        expect(page.locator(".watch-feature-anchor:has(#consensusWatchButton)")).to_have_class(
-            re.compile(r"\bhas-feature-nudge\b")
-        )
-        # Beim Lesen laeuft die Antwort unter dem fixen Composer durch. Genau
-        # dort zeigt sich eine angehobene Antwort-Huelle: ihr Text malt dann
-        # ueber dem Eingabefeld. Am Ende des Threads liegt nichts darunter.
-        reading = page.evaluate(
-            """() => {
-              const inputElement = document.querySelector(".input-section");
-              const answerElement = document.getElementById("consensusAnswerBody");
-              const before = answerElement.getBoundingClientRect();
-              window.scrollBy(0, before.top + before.height / 2 - inputElement.getBoundingClientRect().top);
-              const input = inputElement.getBoundingClientRect();
-              const answer = answerElement.getBoundingClientRect();
-              const x = Math.max(input.left, answer.left) + 10;
-              const y = Math.max(input.top, answer.top) + 8;
-              const painted = document.elementFromPoint(x, y);
-              return {
-                answerRunsUnderComposer: answer.top < input.top && answer.bottom > input.top + 8
-                  && answer.left < input.right && answer.right > input.left,
-                composerOwnsPaint: inputElement === painted || inputElement.contains(painted),
-              };
-            }"""
-        )
-        assert reading["answerRunsUnderComposer"] is True
-        assert reading["composerOwnsPaint"] is True
-        page.evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
-        page.wait_for_timeout(100)
-
-        metrics = page.evaluate(
-            """() => {
-              const rect = selector => document.querySelector(selector).getBoundingClientRect();
-              const overlaps = (a, b) =>
-                a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-              const nudge = document.getElementById("watchFeatureNudge");
-              const inputElement = document.querySelector(".input-section");
-              const input = inputElement.getBoundingClientRect();
-              const answer = rect("#consensusAnswerBody");
-              const footer = rect("#runProvenance");
-              const nudgeRect = nudge.getBoundingClientRect();
-              const overlapX = Math.max(input.left, footer.left) + 10;
-              const overlapY = Math.max(input.top, footer.top) + 2;
-              const paintedAtOverlap = document.elementFromPoint(overlapX, overlapY);
-              return {
-                nudgeIsBodyLayer: nudge.parentElement === document.body,
-                sectionRaised: document.querySelector(".consensus-section")
-                  .classList.contains("has-watch-feature-nudge"),
-                answerOverlapsComposer: overlaps(answer, input),
-                footerComposerOverlap: Math.max(0, footer.bottom - input.top),
-                composerOwnsOverlapPaint: inputElement === paintedAtOverlap
-                  || inputElement.contains(paintedAtOverlap),
-                nudgeOverlapsComposer: overlaps(nudgeRect, input),
-                nudgeZ: Number(getComputedStyle(nudge).zIndex),
-                composerZ: Number(getComputedStyle(document.querySelector(".input-section")).zIndex),
-              };
-            }"""
-        )
-        assert metrics["nudgeIsBodyLayer"] is True
-        assert metrics["sectionRaised"] is False
-        assert metrics["answerOverlapsComposer"] is False
-        assert metrics["footerComposerOverlap"] < 20
-        assert metrics["composerOwnsOverlapPaint"] is True
-        assert metrics["nudgeOverlapsComposer"] is False
-        assert metrics["nudgeZ"] > metrics["composerZ"]
-    finally:
-        context.close()
-
-
 def test_account_a_late_bookmark_save_cannot_mutate_account_b(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)
     try:
@@ -585,18 +474,18 @@ def test_logged_out_watch_deep_link_survives_and_late_login_renders(browser, pha
                 "limits": {"plan": "free", "active_count": 0, "active_limit": 1},
             }),
         )
-        page.route("**/api/my/watch-brief", lambda route: _json(route, {"brief": {}}))
         page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {}}))
+        # Since 2026-11-03 the page lists the Agent's Watches (watch-dashboard.js).
+        page.route("**/agent/watches", lambda route: _json(route, {
+            "watches": [], "intervals": ["daily", "weekly"], "active_count": 0, "active_limit": 2}))
 
-        # A guest sees what a watch is, by example, and the way in (J3).
-        expect(page.locator("#watchDashBody")).to_contain_text("What a watch looks like")
-        expect(page.locator(".wd-item.is-example")).to_be_visible()
-        expect(page.locator("#watchDashCreate")).to_have_text("Log in to start watching")
+        # A guest sees what a Watch does and the way in (J3).
+        expect(page.locator(".aw-empty-title")).to_have_text("Let the Agent keep an eye on things")
         assert page.url.endswith("/app/watches")
 
         page.evaluate("() => window.__switchE2EUser('account-b')")
-        expect(page.locator("#watchDashCreate")).to_have_text("New watch", timeout=5000)
-        expect(page.locator("#watchDashBody")).to_contain_text("Start from an example")
+        expect(page.locator(".aw-empty-title")).to_have_text("Nothing watched yet", timeout=5000)
+        expect(page.locator("#watchDashCreate")).to_have_text("New Watch")
         assert page.url.endswith("/app/watches")
     finally:
         context.close()
@@ -1072,109 +961,6 @@ def test_cancel_during_token_resolution_gives_the_question_back_and_creates_no_u
         assert page.evaluate("() => window.App.usageRun?.current?.key || null") is None
         assert page.evaluate("() => window.isQueryRequestRunning()") is False
         expect(page.locator("#questionInput")).to_have_value("What changed since yesterday?")
-    finally:
-        context.close()
-
-
-def test_late_watch_create_cannot_overwrite_newer_share_modal(browser, phase4_server):
-    context, page = _real_firebase_page(browser, phase4_server)
-    try:
-        page.route(
-            "**/api/my/watches",
-            lambda route: _json(route, {
-                "watches": [],
-                "limits": {"plan": "free", "active_count": 0, "active_limit": 5},
-            }),
-        )
-        page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {}}))
-        page.evaluate(
-            """() => {
-              const nativeFetch = window.fetch.bind(window);
-              window.fetch = (input, options = {}) => {
-                if (String(input) === "/api/watch" && options.method === "POST") {
-                  return new Promise(resolve => {
-                    window.__resolveWatchCreate = () => resolve(new Response(JSON.stringify({
-                      watch: {
-                        id: "watch-race", interval: "weekly", run_weekday: "monday",
-                        run_time: "09:00", timezone: "Europe/Berlin", query_first: true,
-                        share_path: "/s/watch-race", visibility: "private",
-                        email_mode: "changes_only", email_enabled: true,
-                        telegram_enabled: false
-                      }
-                    }), { status: 200, headers: { "Content-Type": "application/json" } }));
-                  });
-                }
-                return nativeFetch(input, options);
-              };
-              window.openWatchDialog("create", {
-                question: "Has this policy changed since last week?"
-              });
-            }"""
-        )
-        page.click("#watchConfirmBtn")
-        page.wait_for_function("() => typeof window.__resolveWatchCreate === 'function'")
-
-        page.evaluate("() => window.openShareDialog('confirm')")
-        expect(page.locator("#shareModalTitle")).to_have_text(
-            "Share this answer publicly"
-        )
-        page.evaluate("() => window.__resolveWatchCreate()")
-        page.wait_for_timeout(150)
-
-        expect(page.locator("#shareModalTitle")).to_have_text(
-            "Share this answer publicly"
-        )
-        expect(page.locator("#shareModalBody")).not_to_contain_text(
-            "Your Watch is active"
-        )
-    finally:
-        context.close()
-
-
-def test_watch_create_is_not_sent_after_modal_changes_during_token_wait(
-    browser, phase4_server
-):
-    context, page = _real_firebase_page(browser, phase4_server)
-    try:
-        page.route(
-            "**/api/my/watches",
-            lambda route: _json(route, {
-                "watches": [],
-                "limits": {"plan": "free", "active_count": 0, "active_limit": 5},
-            }),
-        )
-        page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {}}))
-        page.evaluate(
-            """() => window.openWatchDialog("create", {
-              question: "Has this policy changed since last week?"
-            })"""
-        )
-        page.wait_for_selector("#watchConfirmBtn")
-        page.evaluate(
-            """() => {
-              let release;
-              const pending = new Promise(resolve => { release = resolve; });
-              window.auth.currentUser.getIdToken = () => pending;
-              window.__releaseWatchToken = () => release("token-account-a");
-              window.__watchPostSent = false;
-              const nativeFetch = window.fetch.bind(window);
-              window.fetch = (input, options = {}) => {
-                if (String(input) === "/api/watch" && options.method === "POST") {
-                  window.__watchPostSent = true;
-                }
-                return nativeFetch(input, options);
-              };
-            }"""
-        )
-        page.click("#watchConfirmBtn")
-        page.evaluate("() => window.openShareDialog('confirm')")
-        page.evaluate("() => window.__releaseWatchToken()")
-        page.wait_for_timeout(100)
-
-        assert page.evaluate("() => window.__watchPostSent") is False
-        expect(page.locator("#shareModalTitle")).to_have_text(
-            "Share this answer publicly"
-        )
     finally:
         context.close()
 

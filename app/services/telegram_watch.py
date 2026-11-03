@@ -500,6 +500,54 @@ def send_watch_message(chat_id, watch_id: str, kind: str, watch: dict,
     return status
 
 
+def _agent_watch_text(payload: dict, language: str) -> str:
+    """One Agent Watch run as a chat message (agent_watches.turn_ended): the
+    mail's lines in the reader's language, the finding first."""
+    from app.core import i18n
+
+    def say(text, **params):
+        return html.escape(i18n.t(text, language, params or None), quote=False)
+
+    outcome = payload.get("outcome") or "finding"
+    summary = payload.get("summary") or ""
+    if outcome == "needs_you":
+        head = say("Your Watch needs you")
+        summary = summary or i18n.t("A reviewer stopped the run before a step. Open the chat to decide.", language)
+    elif outcome == "done" and not summary:
+        head = say("What you were waiting for happened")
+        summary = payload.get("goal_reason") or i18n.t("The goal is met.", language)
+    else:
+        head = say("Your Watch found something")
+    lines = [f"<b>{head}</b>", _escape(summary, limit=900)]
+    evidence = str(payload.get("evidence_url") or "")
+    if evidence.startswith(("https://", "http://")):
+        host = (re.sub(r"^https?://(www\.)?", "", evidence).split("/", 1)[0]) or evidence
+        lines.append(f"{say('Seen on')}: <a href=\"{html.escape(evidence)}\">{html.escape(host)}</a>")
+    if payload.get("goal_met"):
+        lines.append(say("The goal is met, so the Watch has ended."))
+    if payload.get("task"):
+        lines.append(f"<i>{_escape(payload['task'], limit=300)}</i>")
+    return "\n\n".join(lines)
+
+
+def send_agent_watch_message(chat_id, payload: dict, *, chat_url: str, language: str = "") -> dict:
+    """One attempt to send an Agent Watch run's message (the outbox retries).
+    Link buttons only: the page it saw, its chat; nothing to call back."""
+    from app.core import i18n
+    rows = []
+    evidence = str(payload.get("evidence_url") or "")
+    if evidence.startswith(("https://", "http://")):
+        rows.append([{"text": i18n.t("Open the page", language), "url": evidence}])
+    rows.append([{"text": i18n.t("Open the chat in consens.io", language), "url": chat_url}])
+    keyboard = {"inline_keyboard": rows}
+    text = _agent_watch_text(payload, language)
+    status = telegram_notifier.send_bot_message(chat_id, text, reply_markup=keyboard, parse_mode="HTML")
+    if status.get("http_status") == 400 or status.get("error_code") == 400:
+        logging.warning("Telegram Agent Watch message rejected as HTML; retrying as plain text")
+        status = telegram_notifier.send_bot_message(chat_id, _strip_markup(text), reply_markup=keyboard)
+    return status
+
+
 def send_test(uid: str, db=None) -> dict:
     db = db if db is not None else db_firestore
     snap = db.collection(CONNECTIONS_COLLECTION).document(uid).get()

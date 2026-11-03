@@ -85,6 +85,10 @@ DEFAULT_LIMITS = {
     "agent_watch_plus_min_hours": 6,
     "agent_watch_pro_min_hours": 1,
     "agent_watch_max_runs_per_day": 300,
+    # 1 = the Consensus Watches from before (watch_service.py) are archived
+    # (Max, 2026-11-03): none is made or checked, nothing more is sent, their
+    # pages stay as they last were. New Watches run the Agent.
+    "consensus_watches_archived": 1,
     # Daily evidence probes between two full checks (one cheap model with web
     # search each, see app/services/watch_probe.py). 0 switches them off.
     "watch_probe_max_per_day": 100,
@@ -1948,6 +1952,10 @@ def get_agent_watch_min_hours(tier) -> int:
         TIER_PLUS: "agent_watch_plus_min_hours",
         TIER_PRO: "agent_watch_pro_min_hours",
     })))
+
+
+def consensus_watches_archived() -> bool:
+    return int(LIMITS.get("consensus_watches_archived", 1)) != 0
 
 
 def get_agent_watch_max_runs_per_day() -> int:

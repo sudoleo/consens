@@ -251,7 +251,7 @@ def test_landing_explains_consensus_watch_as_fourth_product_step():
 
     assert 'id="watch"' in landing
     assert "04 · Monitor" in landing
-    assert "Know when the answer changes." in landing
+    assert "Let the Agent keep watch." in landing
     assert 'href="/app/watches"' in landing
     assert 'href="/#watch">Watches</a>' in navigation
 
@@ -267,20 +267,20 @@ def test_landing_watch_example_uses_the_live_watch_wording_and_no_scores():
 
     assert "/100" not in section
     assert "materially" not in section
+    # An Agent Watch since 2026-11-03: the words its page, sheet, chat,
+    # mail and Telegram message use.
     dashboard = read("static/js/watch-dashboard.js")
-    alert_options = read("static/js/watch-fields.js")
+    sheet = read("static/js/watch-sheet.js")
+    chat = read("static/js/thread-history.js")
     mail = read("app/services/mailer.py")
-    watch_page = read("templates/partials/check_page.html")
     telegram = read("app/services/telegram_watch.py")
     for label, source in (
-        ("Moved", dashboard),
-        ("Waiting for", dashboard),
-        ("Not yet", mail),
-        ("The answer changed", watch_page),
-        ("When it moves or is reached", alert_options),
-        ("The answer moved", telegram),
-        ("What changed", telegram),
-        ("New evidence the earlier answer did not have.", telegram),
+        ("New", dashboard),
+        ("Done when", sheet),
+        ("nothing new", chat),
+        ("What it found", mail),
+        ("Your Watch found something", telegram),
+        ("Seen on", telegram),
     ):
         assert label in section, label
         assert label in source, f"{label!r} is no longer live wording"

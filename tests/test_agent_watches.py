@@ -291,9 +291,15 @@ def test_a_finding_is_mailed_with_its_page_and_the_reviewers_counts(store, monke
     review = {"audit": {"reviewers": [{"provider": "a"}, {"provider": "b"}], "issues": []}}
     outcome, watch_id, turn_id = ended_run(store, {"finding": finding}, agent_review=review)
     assert outcome == "finding" and woken
-    [item] = outbox_items(store)
+    # Mail and Telegram; Telegram goes only where the account linked it (notification_delivery).
+    items = outbox_items(store)
+    assert sorted(item["channel"] for item in items) == ["email", "telegram"]
+    item = next(item for item in items if item["channel"] == "email")
     assert item["kind"] == outbox.KIND_AGENT_WATCH and item["resource_id"] == watch_id and item["run_id"] == turn_id
     payload = item["payload"]
+    assert payload["bookmark_id"] == BOOKMARK
+    saved = record(store, watch_id)
+    assert saved["unread"] is True and saved["last_run"]["evidence_url"].endswith("/im-hamburg")
     assert payload["summary"] == "Registration is open." and payload["evidence_url"].endswith("/im-hamburg")
     assert payload["task"] == TASK and payload["review"] == {"reviewers": 2, "issues": 0} and payload["goal_met"] is False
     assert record(store, watch_id)["last_run"]["summary"] == "Registration is open."
@@ -413,3 +419,273 @@ def test_a_scheduled_run_goes_through_the_agent_route_quietly(watch_api, monkeyp
     # Nothing found: the chat keeps its place, the Watch hears of the end.
     assert bookmark.get().to_dict()["turn_id"] == before["turn_id"]
     assert ended and ended[0][:3] == (UID, chat_id, turn["id"]) and ended[0][3] == run
+
+
+# --- the Watches page: own words, a chat of its own, pause, seen, channels ----
+
+def test_the_users_own_task_starts_in_its_chat_and_a_new_chat_runs_at_once(store, monkeypatch):
+    woken = []
+    monkeypatch.setattr("app.services.watch_scheduler.wake_watch_scheduler", lambda: woken.append(1))
+    chat_id, _ = proposed_chat(store, proposal={})
+    own = start(store, chat_id, "", task="  Check the  price of the Garmin 965 on bike-discount.de ", goal="Under 400 €")
+    assert own["task"] == "Check the price of the Garmin 965 on bike-discount.de" and own["goal"] == "Under 400 €"
+    assert own["chat_id"] == chat_id and own["turn_id"] == "" and not woken
+    with pytest.raises(agent_watches.AgentWatchError) as error:
+        start(store, chat_id, "", task="Short")
+    assert error.value.code == "invalid_task"
+    # "New Watch" on the page: a chat of its own, titled by the task, its first run due now.
+    fresh = agent_watches.create(UID, tier="free", task="Tell me when the IRONMAN Hamburg 2027 registration opens.",
+                                 timezone_name="Europe/Berlin", db=store.db, now=NOW)
+    chat = store.db.chats(UID)[fresh["chat_id"]]
+    assert chat["execution_mode"] == "agent" and chat["title"] == "Tell me when the IRONMAN Hamburg 2027 registration opens"
+    assert fresh["next_run_at"] == NOW.isoformat() and fresh["bookmark_id"].startswith("agent_watch_") and woken
+    # Full: no empty chat is left behind.
+    chats = len(store.db.chats(UID))
+    with pytest.raises(agent_watches.AgentWatchError) as error:
+        agent_watches.create(UID, tier="free", task="One more thing to watch for me.", db=store.db, now=NOW)
+    assert error.value.code == "limit_reached" and len(store.db.chats(UID)) == chats
+
+
+def test_pause_frees_the_slot_resume_takes_it_and_end_works_on_a_paused_one(store):
+    first = start(store, *proposed_chat(store))
+    second = start(store, *proposed_chat(store))
+    paused = agent_watches.pause(UID, first["id"], db=store.db, now=NOW)
+    assert paused["status"] == "paused" and paused["next_run_at"] is None
+    assert agent_watches.outlook(UID, first["chat_id"], "free", db=store.db)["active_count"] == 1
+    third = start(store, *proposed_chat(store))
+    with pytest.raises(agent_watches.AgentWatchError) as error:
+        agent_watches.resume(UID, first["id"], tier="free", db=store.db, now=NOW)
+    assert error.value.code == "limit_reached"
+    agent_watches.stop(UID, third["id"], db=store.db, now=NOW)
+    resumed = agent_watches.resume(UID, first["id"], tier="free", db=store.db, now=NOW)
+    assert resumed["status"] == "active" and resumed["next_run_at"]
+    agent_watches.pause(UID, second["id"], db=store.db, now=NOW)
+    assert agent_watches.stop(UID, second["id"], db=store.db, now=NOW)["status"] == "done"
+    with pytest.raises(agent_watches.AgentWatchError):
+        agent_watches.pause("someone-else", first["id"], db=store.db)
+
+
+def test_a_resumed_watch_takes_an_interval_its_tier_still_has(store):
+    watch = start(store, *proposed_chat(store), tier="pro", interval="hourly")
+    agent_watches.pause(UID, watch["id"], db=store.db, now=NOW)
+    resumed = agent_watches.resume(UID, watch["id"], tier="free", db=store.db, now=NOW)
+    assert (resumed["interval"], resumed["run_time"]) == ("daily", "08:00")
+
+
+def test_seen_and_channels_decide_what_the_next_run_sends(store, monkeypatch):
+    monkeypatch.setattr("app.services.watch_scheduler.wake_watch_scheduler", lambda: None)
+    finding = {"summary": "Registration is open.", "evidence_url": "https://www.ironman.com/im-hamburg"}
+    _, watch_id, _ = ended_run(store, {"finding": finding})
+    assert agent_watches.seen(UID, watch_id, db=store.db, now=NOW)["unread"] is False
+    watch = agent_watches.set_channels(UID, watch_id, telegram=False, db=store.db, now=NOW)
+    assert watch["telegram_enabled"] is False and watch["email_enabled"] is True
+    store.db.documents = {path: data for path, data in store.db.documents.items() if path[0] != outbox.OUTBOX_COLLECTION}
+    record(store, watch_id)  # still there
+    store.db.collection(agent_watches.COLLECTION).document(watch_id).update(
+        {"next_run_at": NOW, "running": None, "status": "active"})
+    run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)
+    chat_id = record(store, watch_id)["chat_id"]
+    store._chat_ref(UID, chat_id).update({"agent_lock_until": None})
+    _, turn = pending(store, chat_id=chat_id, request_id=run["request_id"], question=TASK)
+    store.db.turns(UID, chat_id)[turn["id"]].update({"status": "completed", "agent_watch_run": {"finding": finding}})
+    agent_watches.turn_ended(UID, chat_id, turn["id"], {"watch_id": watch_id, "request_id": run["request_id"]},
+                             db=store.db, now=NOW)
+    assert [item["channel"] for item in outbox_items(store)] == ["email"]
+
+
+def test_the_stop_emails_link_is_its_own_kind_and_keeps_the_watch_running(store, monkeypatch):
+    monkeypatch.setenv("WATCH_UNSUBSCRIBE_SECRET", "test-secret")
+    watch = start(store, *proposed_chat(store))
+    token = agent_watches.unsubscribe_token(watch["id"])
+    assert agent_watches.parse_unsubscribe_token(token) == watch["id"]
+    from app.services import watch_service
+    # A Watch link of another kind is no "Stop emails" link, and the other way round.
+    with pytest.raises(agent_watches.AgentWatchError):
+        agent_watches.parse_unsubscribe_token(watch_service.make_unsubscribe_token(watch["id"]))
+    with pytest.raises(watch_service.WatchError):
+        watch_service.parse_unsubscribe_token(token)
+    stopped = agent_watches.stop_emails(watch["id"], db=store.db, now=NOW)
+    assert stopped["email_enabled"] is False and stopped["status"] == "active"
+    assert agent_watches.stop_emails("gone" * 8, db=store.db) is None
+
+
+def test_a_found_picture_is_kept_with_the_watch_and_goes_with_it(store):
+    watch = start(store, *proposed_chat(store))
+    found = {"content": b"\x89PNG-bytes", "content_type": "image/png", "width": 120, "height": 120,
+             "kind": "item", "source_url": "https://www.ironman.com/im-hamburg", "source_host": "ironman.com"}
+    assert agent_watches.PICTURES.store(watch["id"], None, db=store.db, now=NOW) == "none"
+    assert agent_watches.PICTURES.store(watch["id"], found, db=store.db, now=NOW) == "ready"
+    shown = agent_watches.watch_of(watch["id"], db=store.db)["image"]
+    assert shown["url"].startswith(f"/api/watch/{watch['id']}/image/") and shown["kind"] == "item"
+    # Found once, never replaced; and off in tests, so no run looks again.
+    assert agent_watches.PICTURES.store(watch["id"], found, db=store.db, now=NOW) == "kept"
+    assert agent_watches.PICTURES.look(watch["id"], record(store, watch["id"]), [{"url": "https://a.example"}]) is False
+    from app.services import watch_images
+    assert watch_images.load_image(watch["id"], shown["url"].rsplit("/", 1)[1], db=store.db)[1] == "image/png"
+    agent_watches.delete_for_chat(store.db, UID, watch["chat_id"])
+    assert store.db.collection(watch_images.WATCH_IMAGES_COLLECTION).document(watch["id"]).get().exists is False
+
+
+
+def photo_bytes():
+    import io
+    import random
+    from PIL import Image
+    rng = random.Random(7)
+    image = Image.new("RGB", (600, 400))
+    image.putdata([(rng.randrange(256), rng.randrange(256), rng.randrange(256)) for _ in range(600 * 400)])
+    buffer = io.BytesIO()
+    image.save(buffer, "JPEG")
+    return buffer.getvalue()
+
+
+def test_a_new_watch_looks_for_its_picture_at_once(store, monkeypatch):
+    looked = []
+    monkeypatch.setattr(agent_watches.PICTURES, "first", lambda watch_id, data, db=None: looked.append(watch_id))
+    watch = start(store, *proposed_chat(store))
+    assert looked == [watch["id"]]
+
+
+def test_the_first_picture_is_a_photo_of_what_the_watch_is_about(store):
+    watch = start(store, *proposed_chat(store))
+    asked, fetched = [], []
+
+    def words(task, goal):
+        asked.append((task, goal))
+        return "IRONMAN Hamburg"
+
+    def search(query, count):
+        asked.append(query)
+        return [{"thumbnail": "https://imgs.search.brave.com/broken", "page": "https://example.org/a"},
+                {"thumbnail": "https://imgs.search.brave.com/race", "picture": "https://www.ironman.com/race.jpg",
+                 "page": "https://www.ironman.com/im-hamburg"}]
+
+    async def fetch(url, purpose):
+        fetched.append((url, purpose))
+        if url.endswith("broken"):
+            raise ValueError("status_404")
+        return url, photo_bytes(), "image/jpeg", False
+
+    outcome = agent_watches.PICTURES.find_first(watch["id"], record(store, watch["id"]), store.db,
+                                                words=words, search=search, fetch=fetch)
+    assert outcome == "ready"
+    assert asked == [(PROPOSAL["task"], PROPOSAL.get("goal", "")), "IRONMAN Hamburg"]
+    # Brave's copy first; one that does not load is passed over.
+    assert fetched == [("https://imgs.search.brave.com/broken", "image"), ("https://imgs.search.brave.com/race", "image")]
+    image = record(store, watch["id"])["image"]
+    assert image["status"] == "ready" and image["source_host"] == "ironman.com" and image["tries"] == 1
+
+
+def test_without_a_subject_photo_the_first_picture_comes_from_the_chats_pages(store, monkeypatch):
+    chat_id, turn_id = proposed_chat(store)
+    store.db.turns(UID, chat_id)[turn_id]["sources"] = [{"url": "https://www.ironman.com/im-hamburg", "title": "IM"}]
+    watch = start(store, chat_id, turn_id)
+    from app.services import watch_images
+    seen = []
+    monkeypatch.setattr(watch_images, "find_image", lambda sources, task, goal, fetch=None: seen.append(sources))
+    outcome = agent_watches.PICTURES.find_first(watch["id"], record(store, watch["id"]), store.db,
+                                                words=lambda task, goal: "", search=lambda query, count: [])
+    assert seen == [[{"url": "https://www.ironman.com/im-hamburg", "title": "IM"}]]
+    # Nothing found is one look of three; the runs look again.
+    assert outcome == "none" and record(store, watch["id"])["image"]["tries"] == 1
+    # A chat the Watches page opened has no pages yet: its first run brings them.
+    own = agent_watches.create(UID, task="Tell me when the Hamburg marathon 2027 date is announced.",
+                               tier="free", timezone_name="Europe/Berlin", db=store.db, now=NOW)
+    assert agent_watches.PICTURES.chat_sources(store.db, record(store, own["id"])) == []
+
+
+# --- messages: the stop link in the mail, Telegram ------------------------------
+
+def test_the_mail_carries_a_one_click_stop_link():
+    message = mail(unsubscribe_url="https://consens.io/agent-watch/unsubscribe?token=abc")
+    assert message["List-Unsubscribe"] == "<https://consens.io/agent-watch/unsubscribe?token=abc>"
+    assert message["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+    assert "Stop emails from this Watch: https://consens.io/agent-watch/unsubscribe?token=abc" in text_of(message)
+
+
+def test_telegram_gets_the_finding_where_the_account_linked_it(store, monkeypatch):
+    from app.services import notification_delivery as delivery, telegram_watch
+    watch = start(store, *proposed_chat(store))
+    sent = []
+    monkeypatch.setattr(telegram_watch, "send_agent_watch_message",
+                        lambda chat, payload, **kwargs: sent.append((chat, payload, kwargs)) or {"status": "sent"})
+    item = outbox.agent_watch_item(uid=UID, watch_id=watch["id"], run_id="t1", now=NOW, channel=outbox.CHANNEL_TELEGRAM,
+                                   payload={"outcome": "finding", "summary": "Open.", "bookmark_id": BOOKMARK})["data"]
+    assert delivery._deliver_agent_watch_telegram_sync(item, store.db) == (outbox.SKIPPED, "telegram_not_linked")
+    store.db.collection(telegram_watch.CONNECTIONS_COLLECTION).document(UID).set({"enabled": True, "chat_id": 42})
+    assert delivery._deliver_agent_watch_telegram_sync(item, store.db) == (outbox.SENT, "")
+    assert sent[0][0] == 42 and sent[0][2]["chat_url"].endswith(f"/app?chat={BOOKMARK}")
+    agent_watches.set_channels(UID, watch["id"], telegram=False, db=store.db)
+    assert delivery._deliver_agent_watch_telegram_sync(item, store.db) == (outbox.SKIPPED, "channel_disabled")
+
+
+def test_the_telegram_text_is_the_finding_in_the_readers_language():
+    from app.services import telegram_watch
+    text = telegram_watch._agent_watch_text({"outcome": "finding", "summary": "Die Anmeldung ist offen.",
+                                             "evidence_url": "https://www.ironman.com/im-hamburg", "task": TASK}, "de")
+    assert text.startswith("<b>Deine Watch hat etwas gefunden</b>\n\nDie Anmeldung ist offen.")
+    assert 'Gesehen auf: <a href="https://www.ironman.com/im-hamburg">ironman.com</a>' in text
+
+
+# --- the Consensus Watches from before: archived ---------------------------------
+
+def test_the_consensus_watches_are_archived(monkeypatch):
+    from app.services import watch_scheduler
+    monkeypatch.setitem(cfg.LIMITS, "consensus_watches_archived", 1)
+    assert asyncio.run(watch_scheduler.run_watch_tick()) == 0
+    assert asyncio.run(watch_scheduler.run_brief_tick()) == 0
+    from app.api.routers import share
+    meta = share._build_watch_page_meta({"status": "active", "interval": "daily"}, [])
+    assert meta["status"] == "history" and meta["is_active"] is False
+    from app.api.routers import watch
+    with pytest.raises(HTTPException) as error:
+        watch._refuse_archived()
+    assert error.value.status_code == 410 and error.value.error_fields["code"] == "watch_archived"
+
+
+def test_the_routes_pause_resume_mark_seen_and_choose_channels(watch_api):
+    client, store, _ = watch_api
+    chat_id, _ = proposed_chat(store, proposal={})
+    started = client.post("/agent/watches", json={"chat_id": chat_id, "task": "Check the IRONMAN Hamburg page.",
+                                                  "timezone": "Europe/Berlin"}, headers=AUTH)
+    assert started.status_code == 201
+    watch_id = started.json()["watch"]["id"]
+    assert client.post(f"/agent/watches/{watch_id}/pause", headers=AUTH).json()["watch"]["status"] == "paused"
+    assert client.post(f"/agent/watches/{watch_id}/resume", headers=AUTH).json()["watch"]["status"] == "active"
+    assert client.post(f"/agent/watches/{watch_id}/seen", headers=AUTH).json()["watch"]["unread"] is False
+    changed = client.patch(f"/agent/watches/{watch_id}", json={"email_enabled": False}, headers=AUTH).json()["watch"]
+    assert changed["email_enabled"] is False and changed["telegram_enabled"] is True
+    other = {"Authorization": "Bearer someone-else"}
+    assert client.post(f"/agent/watches/{watch_id}/pause", headers=other).status_code == 404
+
+
+def test_the_stop_emails_pages_ask_then_act(watch_api, monkeypatch):
+    monkeypatch.setenv("WATCH_UNSUBSCRIBE_SECRET", "test-secret")
+    client, store, _ = watch_api
+    watch = start(store, *proposed_chat(store))
+    token = agent_watches.unsubscribe_token(watch["id"])
+    asked = client.get(f"/agent-watch/unsubscribe?token={token}")
+    assert asked.status_code == 200 and "Stop emails from this Watch?" in asked.text and TASK in asked.text
+    assert record(store, watch["id"])["email_enabled"] is True
+    done = client.post(f"/agent-watch/unsubscribe?token={token}", data={"List-Unsubscribe": "One-Click"})
+    assert done.status_code == 200 and "Emails stopped" in done.text
+    assert record(store, watch["id"])["email_enabled"] is False
+    assert client.get("/agent-watch/unsubscribe?token=broken").status_code == 400
+
+
+def test_a_watch_pages_first_run_gives_its_new_chat_a_sidebar_entry(watch_api, monkeypatch):
+    from app.api.routers import agent
+    client, store, _ = watch_api
+    monkeypatch.setattr(agent_watches, "turn_ended", lambda *args: None)
+    chat_id = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]["id"]
+    run = {"watch_id": "w" * 32, "scheduled_at": NOW.isoformat(), "request_id": "watch.w.first", "goal": ""}
+
+    @client.app.post("/test-first-run")
+    def first_run():
+        payload = agent.AgentRequest(chat_id=chat_id, client_request_id="watch.w.first", bookmark_id="agent_watch_first",
+                                     question=TASK)
+        return agent.start_agent_turn(UID, payload, watch_run=run)
+
+    assert client.post("/test-first-run", headers=AUTH).status_code == 200
+    bookmark = store.db.collection("users").document(UID).collection("bookmarks").document("agent_watch_first").get()
+    assert bookmark.exists and bookmark.to_dict()["chat_id"] == chat_id

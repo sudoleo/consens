@@ -532,11 +532,17 @@
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_watch : null,
         chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId });
       // A reopened chat's answer has its Watch pill too, with the question of
-      // this turn, never one left from the chat shown before (J20).
+      // this turn, never one left from the chat shown before (J20). Since
+      // 2026-11-03 it starts a Watch in this chat (watch-sheet.js); a
+      // temporary chat keeps nothing, so it has none.
       App.watch?.answerButton?.(document.getElementById('agentAnswerBody'), {
-        question: basis.currentTurn?.question || basis.question,
-        eligible: basis.currentTurn?.status === 'completed' && !basis.currentTurn?.agent_watch,
+        question: basis.currentTurn?.question || basis.question, chatId: basis.chatId,
+        eligible: basis.currentTurn?.status === 'completed' && !basis.currentTurn?.agent_watch && basis.temporary !== true,
         followUp: Boolean(document.querySelector('#threadHistory > .thread-history-turn')) });
+      // Its Watch's finding counts as seen once its chat is open (agent-watch.js);
+      // a scheduled run's message says the Watch sent it (thread-history.js).
+      App.agentWatch?.opened?.(basis.chatId);
+      App.followup?.markWatchRun?.(document.getElementById('threadAsk'), basis.currentTurn);
       // Not in a temporary chat: a share keeps a copy for 30 days.
       App.answerShare?.button?.(document.getElementById('agentAnswerBody'), {
         chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId,
@@ -825,6 +831,17 @@
       const turnId = String(turn.turn_id || turn.id || "").trim();
       if (turnId) node.dataset.turnId = turnId;
       node.dataset.turnKey = App.followup.turnKey(turn);
+      // A Watch belongs to the chat: its pill stays under the newest answer.
+      panel.querySelectorAll(".agent-watch-pill").forEach(pill => {
+        const row = pill.closest(".agent-watch-pill-row");
+        pill.remove();
+        if (row && !row.children.length) row.remove();
+      });
+      // A Watch's quiet run folds with its neighbours, as a rebuilt history's does.
+      if (App.followup.quietWatchRun?.(turn)) {
+        node.classList.add("is-watch-quiet");
+        node.dataset.watchRunAt = String(turn.created_at || turn.updated_at || "");
+      }
       node.append(ask, panel);
       return node;
     },
@@ -916,6 +933,8 @@
     App.agentMemory?.nudge(answerBody, { key: context.runId,
       finished: !running && state.completedTurn?.status === 'completed', memory: state.completedTurn?.agent_settings?.memory });
     // A Watch the Agent prepared: its card under the completed answer that points to it.
+    // The user's own message carries no "Scheduled Watch run" line.
+    App.followup?.markWatchRun?.(document.getElementById('threadAsk'), state.completedTurn || null);
     App.agentWatch?.render(answerBody, { key: context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null,
       chatId: context.metadata.chatId, turnId: state.completedTurn?.id || state.completedTurn?.turn_id });
@@ -923,11 +942,12 @@
     // answer (watch.js; Apple-Audit J20). It is not the Agent offering one:
     // a prepared Watch has its card instead, and a follow-up opens at its
     // question so the watched question stands on its own.
-    // A temporary chat has its Watch pill too: a Watch is the user's own
-    // and names no chat. No share: it keeps a copy for 30 days (the server
-    // refuses it too).
-    App.watch?.answerButton?.(answerBody, { question: context.question,
-      eligible: !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch,
+    // Since 2026-11-03 the pill starts a Watch in this chat (watch-sheet.js):
+    // none in a temporary chat, which keeps nothing; no share there either,
+    // it keeps a copy for 30 days (the server refuses it too).
+    App.watch?.answerButton?.(answerBody, { question: context.question, chatId: context.metadata.chatId,
+      eligible: !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch
+        && context.config.temporary !== true,
       followUp: context.historyTurns.length > 0 });
     // Share beside it, for every finished answer (share-dialog.js).
     App.answerShare?.button?.(answerBody, { chatId: context.metadata.chatId, turnId: state.completedTurn?.id,
@@ -1004,6 +1024,10 @@
   // only one built on sources, because those are what can change. A turn
   // whose Agent already prepared a Watch has its own card (agent-watch.js).
   function offerWatch(context) {
+    // The hint offered a Consensus Watch for the question, archived since
+    // 2026-11-03: the Agent prepares a Watch when one helps, and the pill
+    // starts one.
+    if (App.watchSheet) return;
     if (!registry.isVisible(context.runId) || !registry.isAuthCurrent(context)) return;
     const turn = context.consensus.completedTurn;
     App.watch?.showFeatureNudge?.({

@@ -235,7 +235,10 @@ class AgentRequest(BaseModel):
         return normalize_question(value)
 
 
-def _save_bookmark(uid, payload, store, turn):
+def _save_bookmark(uid, payload, store, turn, *, quiet=False):
+    """The chat's sidebar entry after ``turn``. ``quiet``: a Watch's run that
+    found nothing keeps the entry where it is; only a chat that has none yet
+    (one the Watches page opened, agent_watches.create) gets it."""
     chat = store.get_chat(uid, payload.chat_id)
     if chat["status"] != "active":
         raise ChatNotFound("Chat not found")
@@ -243,6 +246,8 @@ def _save_bookmark(uid, payload, store, turn):
     existing = ref.get()
     if existing.exists and (existing.to_dict() or {}).get("chat_id") != payload.chat_id:
         raise TurnStatusConflict("Bookmark belongs to another conversation")
+    if quiet and existing.exists:
+        return _bookmark_meta(payload.bookmark_id, existing.to_dict())
     if existing.exists and (existing.to_dict() or {}).get("agent_turn_position", 0) > turn["position"]:
         return _bookmark_meta(payload.bookmark_id, existing.to_dict())
     def chat_guard(tx):
@@ -284,7 +289,8 @@ def _watch_history_chars():
 
 
 def _final(uid, payload, store, turn):
-    bookmark_meta = None if _temporary(turn) or _quiet_watch_run(turn) else _save_bookmark(uid, payload, store, turn)
+    bookmark_meta = None if _temporary(turn) else _save_bookmark(uid, payload, store, turn,
+                                                                quiet=_quiet_watch_run(turn))
     # Tell the browser whether the next message needs Google consent. The
     # chat marker can be set by a tool during this turn (Gmail evidence).
     settings = turn.get("agent_settings") or {}
@@ -340,7 +346,9 @@ def _save_interrupted(uid, payload, store, turn_id):
         return None
     if turn["status"] == "failed" and not _temporary(turn):
         try:
-            turn["bookmark_meta"] = _save_bookmark(uid, payload, store, turn)
+            # A Watch's failed run moves nothing in the sidebar either.
+            turn["bookmark_meta"] = _save_bookmark(uid, payload, store, turn,
+                                                   quiet=bool((turn.get("agent_settings") or {}).get("watch_run")))
         except Exception as exc:
             logging.warning("Interrupted Agent bookmark unavailable category=%s", safe_exception(exc))
     return turn

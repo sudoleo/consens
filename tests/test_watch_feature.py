@@ -2254,19 +2254,15 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("watch_awaiting_first_run", share_source)
 
     def test_watch_empty_state_explains_the_difference_to_a_scheduled_prompt(self):
-        """The empty page is where the mental model is set: a Watch waits for
-        something, moves only on evidence and closes when it happens."""
-        # One heading and one action (the page head's), no second hero (J24).
+        """The empty page is where the mental model is set: since 2026-11-03 a
+        Watch runs the Agent on a schedule and speaks only when it finds
+        something. One heading and one action (the page head's), no second
+        hero (J24)."""
         source = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
-        css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
-        self.assertIn("Start from an example", source)
-        self.assertIn("Why a watch, not a scheduled prompt", source)
-        self.assertIn("A scheduled prompt", source)
-        self.assertIn('"wd-example"', source)
-        self.assertIn("goal: example.goal", source)
+        self.assertIn("Nothing watched yet", source)
+        self.assertIn("tells you only when it finds something", source)
         self.assertNotIn("Create your first Watch", source)
-        self.assertNotIn(".wd-empty-actions", css)
-        self.assertIn(".wd-compare", css)
+        self.assertNotIn("Start from an example", source)
 
     def test_watch_setup_is_a_goal_choice_and_one_settings_line(self):
         """Der Dialog war zu verschachtelt: Defaults-Kasten mit Chips, Hinweise,
@@ -2371,13 +2367,11 @@ class WatchFrontendContractTests(unittest.TestCase):
         # One sliding thumb under the active option.
         self.assertIn('class="view-switch-thumb"', html_source)
         self.assertIn('setAttribute("data-active"', js_source)
-        dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
-        # Morning-Brief-Toggle nutzt denselben switch/slider wie das Input-Feld.
-        self.assertIn('class="switch wd-switch"', dashboard)
-        self.assertIn('<span class="slider">', dashboard)
-        self.assertIn("renderDelivery", dashboard)
         bundles = Path("static/js/bundles.json").read_text(encoding="utf-8")
         self.assertLess(bundles.index("static/js/watch.js"), bundles.index("static/js/watch-dashboard.js"))
+        # The sheet comes first: watch.js builds no Consensus Watch pill once
+        # it is there (archived since 2026-11-03).
+        self.assertLess(bundles.index("static/js/watch-sheet.js"), bundles.index("static/js/watch.js"))
         # Der View-Switch ist immer sichtbar (auch ausgeloggt): kein hidden im
         # Markup, firebase.js blendet ihn nicht mehr um.
         self.assertNotIn('id="viewSwitch" class="view-switch" hidden', html_source)
@@ -2415,9 +2409,9 @@ class WatchFrontendContractTests(unittest.TestCase):
     def test_watch_cards_open_their_settings_in_place_and_keep_their_styles(self):
         dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         input_css = Path("static/css/components-input.css").read_text(encoding="utf-8")
-        self.assertIn('"wd-action-toggle"', dashboard)
-        self.assertIn('toggle.setAttribute("aria-expanded"', dashboard)
-        self.assertIn("Watch for something new", dashboard)
+        # A row's settings are its "…" menu since 2026-11-03.
+        self.assertIn("more.setAttribute('aria-haspopup', 'menu')", dashboard)
+        self.assertIn("more.setAttribute('aria-expanded', 'false')", dashboard)
         # No global button rule may repaint any button on the page: the solid
         # look is opt-in via `.btn`, one rule for it and the older primaries
         # such as `.wd-button.is-primary` (Apple-Audit G4).

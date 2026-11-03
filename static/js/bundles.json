@@ -170,12 +170,16 @@
           "note": "App.watchFields: the fields and time wording the New watch dialog (watch.js) and the card settings (watch-dashboard.js) share. Before both."
         },
         {
+          "file": "static/js/watch-sheet.js",
+          "note": "App.watchSheet: the sheet that starts a Watch in the user's own words (the pill, New Watch). Before watch.js, which opens it for every way to start one and, finding it, builds no Watch pill for a saved Consensus answer (its Watches are archived); uses App.modalDialog and App.watchFields, App.watchUi only when opened."
+        },
+        {
           "file": "static/js/watch.js",
           "note": "Needs consensus-actions.js and the share modal. Publishes window.App.watchUi."
         },
         {
           "file": "static/js/watch-dashboard.js",
-          "note": "Renders /app/watches with window.App.watchUi; watch.js calls App.watchDashboard.render at view time."
+          "note": "Renders /app/watches: the Agent's Watches by what they need, their messages, the archive. Uses App.watchUi (api, Telegram); watch.js calls App.watchDashboard.render at view time."
         },
         {
           "file": "static/js/mobile-header.js",

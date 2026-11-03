@@ -56,10 +56,22 @@ def _raise(exc: watch_service.WatchError):
     raise error
 
 
+def _refuse_archived():
+    """The Consensus Watches from before are archived (since 2026-11-03,
+    cfg.consensus_watches_archived): a Watch now runs the Agent
+    (routers/agent_watches.py). Deleting one still works."""
+    if cfg.consensus_watches_archived():
+        error = HTTPException(status_code=410,
+                              detail="Watches now run the Agent. Start one from a chat or on the Watches page.")
+        error.error_fields = {"code": "watch_archived"}
+        raise error
+
+
 @router.post("/api/watch")
 @limiter.limit("5/minute")
 def create_watch(request: Request, data: dict = Body(...)):
     uid = _uid(request, data)
+    _refuse_archived()
     if "visibility" not in data:
         raise HTTPException(status_code=400, detail="Choose whether the watch page is private or public.")
     if data.get("telegram_enabled") is True and not telegram_watch.get_connection(uid).get("connected"):
@@ -105,6 +117,7 @@ GOAL_SUGGESTIONS_PER_HOUR = 20
 def goal_suggestions(request: Request, data: dict = Body(...)):
     """Concrete goals for "What are you waiting for?" in the create flow."""
     uid = _uid(request, data)
+    _refuse_archived()
     question = " ".join(str(data.get("question") or "").split())
     if len(question) < watch_service.WATCH_QUESTION_MIN_CHARS:
         raise HTTPException(status_code=400, detail="Enter a complete question first.")
@@ -152,6 +165,8 @@ def my_watches(request: Request):
                 "resolved_count": resolved_count,
                 "daily_available": cfg.is_watch_daily_allowed(tier),
             },
+            # Since 2026-11-03 these Watches are an archive (_refuse_archived).
+            "archived": cfg.consensus_watches_archived(),
         }
     except Exception as exc:
         logging.error("my_watches failed category=%s", safe_exception(exc))
@@ -163,6 +178,9 @@ def my_watches(request: Request):
 def patch_watch(request: Request, watch_id: str, data: dict = Body(...)):
     uid = _uid(request, data)
     changes = {key: value for key, value in data.items() if key != "id_token"}
+    if changes.get("status") == "active":
+        # Resumed, a Watch from before would run the archived pipeline again.
+        _refuse_archived()
     if changes.get("telegram_enabled") is True and not telegram_watch.get_connection(uid).get("connected"):
         raise HTTPException(status_code=409, detail="Connect Telegram before enabling it for a watch.")
     try:

@@ -260,64 +260,6 @@ def test_j02b_agent_turn_survives_a_reload_and_is_followed_to_its_answer(journey
     assert j.page.evaluate("() => sessionStorage.length === 0 || !Object.keys(sessionStorage).some(k => k.startsWith('agent_pending_runs_'))")
 
 
-def test_j04_app_share_follow_watch_versions_bind_to_saved_native_result(journey):
-    """A saved Agent answer is shared, followed and watched; each Watch
-    version binds to the share (the Watch runs the server's pipeline)."""
-    j = journey
-    j.open()
-    j.page.locator('#attachTrigger').click()
-    j.page.locator('#runModeControl [data-value="agent"]').click()
-    question = 'Watch the Eiffel Tower completion year ' + j.uid
-    j.page.fill('#questionInput', question)
-    j.page.click('#sendButton')
-    j.page.wait_for_function('q => App.runRegistry.list().some(r => r.question === q && r.status === "succeeded")',
-                             arg=question, timeout=180000)
-    j.producer_finished()
-    j.settled()
-    # Use the real app share adapter/dialog, including its prepared saved result.
-    j.page.locator('#agentAnswer .agent-share-pill').click()
-    confirm = j.page.locator('#shareConfirmBtn')
-    expect(confirm).to_have_text('Create public link', timeout=15000)
-    with j.page.expect_response(lambda r: r.url == j.base + '/api/share' and r.request.method == 'POST') as published:
-        confirm.click()
-    assert published.value.ok, published.value.text()
-    share = published.value.json()
-    native = j.control('state')
-    pending = next(iter(native['global_owned']['pending_results'].values()))['data']
-    answer = 'Saved partial answer for ' + j.uid
-    assert pending['owner_uid'] == j.uid and answer in pending['consensus_md']
-    assert native['global_owned']['shares'][share['share_id']]['data']['owner_uid'] == j.uid
-    wid_response = j.request('POST', '/api/watch', {'share_id': share['share_id'],
-        'interval': 'daily', 'visibility': 'public', 'email_enabled': True})
-    assert wid_response.ok, wid_response.text()
-    wid = wid_response.json()['watch']['id']
-    assert j.request('DELETE', '/api/share/' + share['share_id'], {}, uid='journey-'+'f'*32).status == 403
-    j.page.goto(j.base + share['path'])
-    # With a Watch the share renders the Watch page (watch_share.html).
-    expect(j.page.locator('.wp-answer .share-md')).to_contain_text(answer)
-    j.page.locator('#shareFollowForm input[type=email]').fill(j.uid + '@example.invalid')
-    j.page.locator('#shareFollowForm button[type=submit]').click()
-    expect(j.page.locator('#shareFollowDone')).to_contain_text('Check your inbox')
-    mail = j.control('state')['messages'][-1]['text']
-    token = re.search(r'/watch/follow/confirm\?token=([^\s]+)', mail).group(1)
-    # The mail link only asks (mail scanners open every link); its button confirms.
-    j.page.goto(j.base + '/watch/follow/confirm?token=' + token)
-    j.page.get_by_role('button', name='Confirm and follow').click()
-    expect(j.page.locator('h1')).to_have_text("You're following this question")
-    advanced = j.control('watch-run', {'watch_id': wid})
-    version = advanced['run']['run_id']
-    assert version and advanced['share']['latest_watch_run_id'] == version
-    j.page.goto(j.base + share['path'] + '?version=' + version)
-    expect(j.page.locator('.wp-version.is-current')).to_have_text('Shown above')
-    expect(j.page.locator('.wp-answer .share-md')).to_contain_text('Mock consensus')
-    expect(j.page.locator('.wp-answer .share-md')).to_contain_text('Watch revision ' + version)
-    j.page.goto(j.base + share['path'] + '?version=original')
-    expect(j.page.locator('#wpAnswerHeading')).to_have_text('The answer then')
-    expect(j.page.locator('.wp-answer .share-md')).not_to_contain_text('Watch revision ' + version)
-    history = j.control('state')['global_owned']['shares'][share['share_id']]['children']['watch_history']
-    assert version in history and 'Watch revision ' + version in history[version]['data']['consensus_md']
-
-
 def test_j04b_agent_answer_shares_from_under_it_and_from_the_chat_list(journey):
     """An Agent answer (the default since October) gets a public page: the
     Share pill under the answer and Share in the chat menu publish the saved

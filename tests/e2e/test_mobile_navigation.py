@@ -98,9 +98,11 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
         expect(header.locator('#mobileNewRunButton')).to_be_visible()
         expect(header.locator('#mobileNewRunButton')).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
         assert header.locator('#mobileNewRunButton svg').bounding_box()['width']>=20
-        # Share moved into the ... menu; New chat, Watch and the menu stay.
+        # Share moved into the ... menu; New chat and the menu stay. A saved
+        # Consensus answer has no Watch pill since its Watches were archived
+        # (2026-11-03): a Watch runs the Agent in its chat now.
         expect(header.locator('#consensusShareButton')).to_be_hidden()
-        expect(header.locator('#consensusWatchButton')).to_be_visible()
+        expect(header.locator('#consensusWatchButton')).to_have_count(0)
         toggle = header.locator('.consensus-actions-toggle')
         expect(toggle).to_be_visible()
         expect(toggle).to_have_attribute('aria-label', 'Share, copy and cite')
@@ -110,7 +112,8 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
         assert page.evaluate('() => !document.querySelector(".app-mobile-header").contains(document.elementFromPoint(innerWidth / 2 - 30, 28))')
         buttons=header.locator('button:visible').all()
         bounds=[button.bounding_box() for button in buttons]
-        assert len(bounds)==4
+        # Menu, New chat and the answer's actions; no Watch pill (archived).
+        assert len(bounds)==3
         assert all(box['width']>=44 and box['height']>=44 for box in bounds)
         assert all(a['x']+a['width']<=b['x']+.5 for a,b in zip(bounds,bounds[1:]))
         assert bounds[-1]['x']+bounds[-1]['width']<=width
@@ -448,12 +451,6 @@ def test_mobile_actions_keep_dialogs_focus_and_new_chat_behavior(browser, phase4
         expect(page.locator('#shareModal')).to_have_class(re.compile('is-share-dialog'))
         page.keyboard.press('Escape')
         expect(cite).to_be_focused()
-        watch=header.locator('#consensusWatchButton')
-        watch.click()
-        expect(page.locator('#shareModal')).to_be_visible()
-        expect(page.locator('#shareModal')).to_have_class(re.compile('is-watch-dialog'))
-        page.keyboard.press('Escape')
-        expect(watch).to_be_focused()
         cite.click()
         expect(menu).to_be_visible()
         assert menu.bounding_box()['y']>=cite.bounding_box()['y']+cite.bounding_box()['height']

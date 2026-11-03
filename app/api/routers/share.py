@@ -16,7 +16,7 @@ from app.core.security import (
     verify_user_token, extract_id_token, is_user_admin,
     AuthenticationUnavailable, auth_unavailable_error,
 )
-from app.core import i18n, seo_entity
+from app.core import config as cfg, i18n, seo_entity
 from app.core.site import SITE_URL
 from app.services import check_page, og_image, source_links
 from app.services import share_snapshots as snapshots
@@ -104,6 +104,9 @@ def _build_watch_page_meta(meta, history_points):
         return None
     meta = meta or {}
     status = meta.get("status") or "history"
+    if cfg.consensus_watches_archived():
+        # Archived since 2026-11-03: the page stays as it last was, nobody checks it any more.
+        status = "history"
     labels = {
         "active": "Active",
         "paused": "Paused",

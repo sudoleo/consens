@@ -1800,7 +1800,9 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it("offers a temporary chat's answer the Watch pill but no share", async () => {
+  // Since 2026-11-03 a Watch runs the Agent in its chat (agent_watches.py):
+  // a temporary chat keeps nothing, so it has no Watch pill and no share.
+  it("offers a temporary chat's answer neither the Watch pill nor a share", async () => {
     // A Watch names no chat and stays; a share keeps a copy for 30 days.
     const { window, document, dom } = boot({ setup(w) {
       w.App.temporaryChat = { armed: () => true, start: () => "token-1", adopt: () => true, token: () => "token-1",
@@ -1819,7 +1821,7 @@ describe("single-model agent chat", () => {
     const run = window.App.runRegistry.visible();
     window.App.agentChat.project(run);
     expect(window.App.watch.answerButton).toHaveBeenLastCalledWith(expect.anything(),
-      expect.objectContaining({ eligible: true }));
+      expect.objectContaining({ eligible: false }));
     expect(window.App.answerShare.button).toHaveBeenLastCalledWith(expect.anything(),
       expect.objectContaining({ eligible: false }));
     // The finished chat's view (its basis, no run on screen): no share either.

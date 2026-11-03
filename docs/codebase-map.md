@@ -556,8 +556,8 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `users.py` | `/user_status`, `/usage` (kann die Kontoprüfung nicht gelesen werden – `AuthenticationUnavailable` –, antworten beide 503 mit `Retry-After`, nie 401: der Browser fragt dann nach, statt Agent für die Sitzung abzuschalten), `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `POST`/`DELETE /api/my/memory/items` und `POST /api/my/memory/changes/{change_id}/undo` (gespeicherte Einzel-Erinnerungen, siehe §3 „Agent-Memory“), `GET`/`PATCH /api/my/settings` (Kontoeinstellungen, siehe §4 „Kontoeinstellungen“), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; seit 2026-10-16 liest die Liste per Projektions-Query nur `query`, `title`, `title_source`, `mode`, `timestamp`, `pinned`, `pinned_at` und `list_summary` (statt ganzer Dokumente mit allen Antworten, bis 750 kB, Audit C4). Seit 2026-10-22 heftet `PATCH /bookmarks/{id}/pin` (`{pinned: bool}`, strikt) einen Chat oben an: `persistence_guard.write_bookmark` merged `pinned: true` + `pinned_at` (bzw. `false`/`null`), legt nie ein gelöschtes Bookmark neu an (404) und übersteht wie der Name jeden späteren Save; die erste Seite von `GET /bookmarks` (ohne Cursor) bringt zusätzlich `pinned` mit, alle angehefteten Chats (Gleichheitsfilter `pinned == true`, automatischer Einzelfeld-Index, höchstens `MAX_PINNED_BOOKMARKS` = 50, neuester Pin zuerst), damit ein alter angehefteter Chat nicht erst auf Seite fünf kommt; scheitert diese Zusatzabfrage, kommt die Seite ohne sie. `list_summary` (`has_consensus`, `model_count`, `source_count`, `attachment_count`) schreibt `persistence_guard.write_bookmark` bei JEDEM Save neu aus dem zusammengeführten Dokument; ältere Bookmarks ohne gültige Summary liest die Liste weiterhin voll (`get_all`, nur diese Zeilen), bis `scripts/backfill_bookmark_list_summary.py --apply` sie nachträgt. Neue Listenfelder brauchen deshalb einen Eintrag in `_BOOKMARK_LIST_FIELDS`; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Sidebar-Name: `title` ist die erste Frage (`query` die letzte); seit 2026-10-03 benennt `POST /bookmarks/{id}/title` die Unterhaltung einmalig ChatGPT-artig mit 2–6 Wörtern (`app/services/chat_titles.py`: ein strukturierter Call über `query_engine_json` mit dem Chat-Memory-Modell der ersten verfügbaren Familie, Gemini zuerst, auf Betreiberkosten; MOCK_LLM liefert `Topic: …`; höchstens `BOOKMARK_TITLES_PER_HOUR` = 30 Modellaufrufe pro Konto und Stunde, darüber `skipped`). Der Titel landet zuerst auf dem Chat-Dokument (Agent- und Follow-up-Saves kopieren dessen `title`), dann mit `title_source: "generated"` auf dem Bookmark; `persistence_guard.write_bookmark` verwirft in derselben Transaktion jedes spätere `title` ohne `title_source`, damit Modell-/Consensus-Saves desselben Laufs den Namen nicht zurücksetzen. Scheitert der Call, bleibt die Frage der Name (`status: "skipped"`, nie ein Fehler); fehlende Bookmarks werden nicht neu angelegt. Listenmetadaten tragen `title_source`. Auf dieselbe Art sagt seit 2026-10-16 `POST /api/my/starter-questions` die Beispielfragen eines leeren neuen Chats voraus (`app/services/starter_questions.py`): Projektions-Query `select(["title", "query"])` der neuesten 12 Bookmarks (nie die Antworten), ab 3 Chats ein strukturierter Call mit demselben Modell wie die Titel (Namen + letzte Frage als Daten, Datum im Prompt), Rückgabe höchstens drei `{label, question}` (Wiederholungen schon gestellter Fragen, Labels über 40 Zeichen und weniger als zwei brauchbare verworfen); `STARTER_PREDICTIONS_PER_HOUR` = 12 pro Konto und Stunde, geprüft vor dem Read; jedes Scheitern ist `status: "skipped"`. MOCK_LLM liefert `More on …?`. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; seit 2026-10-29 nennt es bei Agent-Chats zusätzlich `running` (`_running_agent_turn`: der neueste `pending`-Turn mit `id`, `question`, `client_request_id`, `position`, `attachments` und den Identitätsfeldern seiner `agent_settings`, sonst `null`), damit ein zweiter Tab oder ein anderes Gerät dem laufenden Turn folgt (`agent-chat.js` `followRunning`, A-B2); der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft; seit 2026-10-16 holt `_page_model_answers` die Modellantworten aller completed Turns der Seite gesammelt per `get_all` über die aus `included_models` bekannten Dokument-IDs, je 100 Dokumente ein Aufruf, Audit C6; pending/failed Turns lesen keine Antworten, nur completed Turns ohne `included_models` behalten die Query pro Turn) und benötigt damit meist 3 SDK-Aufrufe pro Seite statt `2 + N`. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; ein neuer Share-Snapshot eines Bookmarks entsteht ausschließlich aus dessen completed Turn (`_completed_turn_payload`, Abschnitt „Sharing“), weil `POST /bookmark` `query` und `sources` weiterhin überschreiben darf; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 500 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. Die Bookmark-Grenze ist nur Netz unter dem Chat-Limit (`MAX_CHATS_PER_OWNER`, vor dem Lauf): sie greift erst nach dem bezahlten Lauf und liegt deshalb mindestens beim Doppelten (Test). Lehnt sie den Agent-Abschluss ab, meldet `/agent` „Your saved chats are full …“ (Code `bookmark_count_limit`/`bookmark_storage_limit`, `recoverable`, Recover → 409 statt 500); nach dem Freiräumen holt „Recover saved answer“ den Eintrag nach. Die App zeigt die `bookmark_*`-Codes (auch `bookmark_unavailable`) immer, selbst unter einer geprüften Antwort (`agent-chat.js` failureNotice); das Chat-Limit erscheint vor dem Lauf als „Message not sent. You've reached the maximum number of saved chats …“, der Entwurf bleibt im Feld. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}` mit Vorschaukarte `/s/{slug_id}/og.png` (Frage, Agreement, Modell-/Widerspruchszahl, Antwortdatum; für Watches seit 2026-10-20 „Watch · <Kopfzeile der Seite>“ und Modellzahl ohne Score), `/questions` (Watch-Zeilen mit der Kopfzeile ihrer Seite), `sitemap-shares.xml`. |
-| `agent_watches.py` | Watches, die den Agenten laufen lassen (seit 2026-11-03, `app/services/agent_watches.py`): `POST /agent/watches` `{chat_id, turn_id, interval?, run_time?, run_weekday?, timezone}` startet den Vorschlag des Turns (Auftrag und Ziel vom gespeicherten Turn, 201 `{watch}`; Fehler `{error, code}`: `already_watched` 409, `limit_reached` 429, `interval_not_allowed` 403, `temporary_chat`/`google_data` 422, `no_proposal`/`chat_not_found` 404), `GET /agent/watches?chat_id=` (die Watches des Kontos, mit `chat_id` die des Chats, dazu `active_count`, `active_limit`, `intervals` der Stufe), `POST /agent/watches/{id}/stop` (Ende durch den Nutzer). |
-| `watch.py` | Consensus Watch: `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call auf Betreiberkosten, 6/min pro IP und `GOAL_SUGGESTIONS_PER_HOUR` = 20 pro Konto und Stunde, darüber `{"status": "limited", "goals": []}`; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; PATCH auch `requirements` = „Details that matter“ und `reject_match`; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel, neue Details oder `reject_match: true` = „Not what I wanted“, siehe [watch-evidence-model.md](watch-evidence-model.md) „Details und abgelehnte Treffer“), `/api/watch/{id}/image/{token}` (GET ohne Login, 60/min: die gespeicherte Watch-Vorschau aus `watch_images`, nur mit passendem Inhalts-Token, `Cache-Control: private` 30 Tage; siehe §4 „Watch-Bild“), `/api/watch/{id}/image` (DELETE, Owner: Bild entfernen, danach wird nie wieder eins gesucht), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook` (Secret als Bytes verglichen, vor dem Lesen des Bodys; Body höchstens 64 KB, ein kaputtes Update wird quittiert); außerdem öffentliche, HMAC-signierte Mail-Links `/watch/unsubscribe`, `/watch/resume`, `/watch/brief/unsubscribe` und `/watch/follow/confirm|unsubscribe` (GET prüft nur den Token und fragt per Button, erst der POST auf dieselbe URL handelt; Seiten aus `templates/notice.html`, siehe §4 „Links in Mails“). Fehler kommen als `{error, code, …details}` (`WatchError.details`, z. B. `already_watched` mit `watch_id`; `limit_reached` ist die Plan-Grenze, eine Drosselung ist immer `rate_limited`). PATCH nimmt auch `visibility` (`private`/`public`, gleiche Prüfung wie beim Anlegen; ändert Seite und Watch in einer Transaktion, privat heißt raus aus dem Google-Index samt Anfrage; Follower-Mails ruhen, solange die Seite privat ist). `/api/my/watches` liefert je Watch die volle `question` sowie `checking` (Check läuft, Lease aktiv) und `due` (aktiv, `next_run_at` erreicht). |
+| `agent_watches.py` | Watches, die den Agenten laufen lassen (seit 2026-11-03, `app/services/agent_watches.py`): `POST /agent/watches` `{chat_id, turn_id, interval?, run_time?, run_weekday?, timezone}` startet den Vorschlag des Turns (Auftrag und Ziel vom gespeicherten Turn, 201 `{watch}`; Fehler `{error, code}`: `already_watched` 409, `limit_reached` 429, `interval_not_allowed` 403, `temporary_chat`/`google_data` 422, `no_proposal`/`chat_not_found` 404), `GET /agent/watches?chat_id=` (die Watches des Kontos, mit `chat_id` die des Chats, dazu `active_count`, `active_limit`, `intervals` der Stufe), `POST /agent/watches/{id}/stop` (Ende durch den Nutzer). Seit dem Abend von 2026-11-03 auch mit eigenem Auftrag: `{chat_id, task, goal}` in diesem Chat (die Pille unter der Antwort), `{task, goal}` ohne Chat legt einen eigenen Chat an (Titel aus dem Auftrag, erster Lauf sofort, `invalid_task` 422); `POST …/pause`, `POST …/resume` (`limit_reached` 429, ein Intervall, das die Stufe nicht mehr hat, wird ihr kürzestes), `POST …/seen` (der Befund ist gelesen), `PATCH /agent/watches/{id}` `{email_enabled?, telegram_enabled?}`. `GET|POST /agent-watch/unsubscribe?token=` ist der Link „Stop emails“ der Mail (`List-Unsubscribe` One-Click): GET fragt (`notice.html`), POST schaltet nur die Mails der Watch aus, sie läuft weiter. |
+| `watch.py` | Consensus Watch (seit 2026-11-03 archiviert, `cfg.consensus_watches_archived`: `POST /api/watch`, Zielvorschläge und `PATCH status=active` antworten 410 `watch_archived`, Löschen geht; `/api/my/watches` trägt `archived`): `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call auf Betreiberkosten, 6/min pro IP und `GOAL_SUGGESTIONS_PER_HOUR` = 20 pro Konto und Stunde, darüber `{"status": "limited", "goals": []}`; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; PATCH auch `requirements` = „Details that matter“ und `reject_match`; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel, neue Details oder `reject_match: true` = „Not what I wanted“, siehe [watch-evidence-model.md](watch-evidence-model.md) „Details und abgelehnte Treffer“), `/api/watch/{id}/image/{token}` (GET ohne Login, 60/min: die gespeicherte Watch-Vorschau aus `watch_images`, nur mit passendem Inhalts-Token, `Cache-Control: private` 30 Tage; siehe §4 „Watch-Bild“), `/api/watch/{id}/image` (DELETE, Owner: Bild entfernen, danach wird nie wieder eins gesucht), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook` (Secret als Bytes verglichen, vor dem Lesen des Bodys; Body höchstens 64 KB, ein kaputtes Update wird quittiert); außerdem öffentliche, HMAC-signierte Mail-Links `/watch/unsubscribe`, `/watch/resume`, `/watch/brief/unsubscribe` und `/watch/follow/confirm|unsubscribe` (GET prüft nur den Token und fragt per Button, erst der POST auf dieselbe URL handelt; Seiten aus `templates/notice.html`, siehe §4 „Links in Mails“). Fehler kommen als `{error, code, …details}` (`WatchError.details`, z. B. `already_watched` mit `watch_id`; `limit_reached` ist die Plan-Grenze, eine Drosselung ist immer `rate_limited`). PATCH nimmt auch `visibility` (`private`/`public`, gleiche Prüfung wie beim Anlegen; ändert Seite und Watch in einer Transaktion, privat heißt raus aus dem Google-Index samt Anfrage; Follower-Mails ruhen, solange die Seite privat ist). `/api/my/watches` liefert je Watch die volle `question` sowie `checking` (Check läuft, Lease aktiv) und `due` (aktiv, `next_run_at` erreicht). |
 | `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (unbekannter Slug: HTML-404 für Browser, JSON für Skripte; `?version=<run_id>`; seit 2026-10-15 aus denselben Teilen wie die Watch-Seiten gebaut, siehe §4 „Kuratierte Topics“), `/api/topics/{topic_id}/image/{token}` (GET ohne Login, 60/min: das Topic-Bild aus `topic_images`, nur mit passendem Inhalts-Token, öffentlich 30 Tage cachebar), `/topics/{slug}/og.png` (GET ohne Login, 60/min: Vorschaukarte mit Seitentitel, Modellzahl und letzter Prüfung aus `og_image.card_png`; 404 wie die Seite für archivierte, unveröffentlichte und unbekannte Topics; eine Stunde cachebar, steht auch als `image` im Article-JSON-LD), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe` (GET fragt, POST handelt wie bei den Watch-Links); der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy beantwortet Cache-Treffer ohne Limit (eine geteilte Seite braucht ~13 Domains, Apple-Audit I7); nur ein Abruf bei Google zählt, `FAVICON_LOOKUPS_PER_MINUTE` = 60 je IP (prozesslokal über `api_uid_limiter`; dessen Aufräumlauf über 4.096 Schlüssel nutzt das Fenster jedes Schlüssels und läuft höchstens alle 5 s, viele Favicon-Besucher setzen so keine Stundenlimits zurück), darüber kommt der Globus mit `no-store` statt eines 429. Dazu acht parallele Requests, ein eigener Vierer-Executor, zwei Sekunden Upstream-Zeit sowie ein 2.000-Einträge-LRU einschließlich 24-h-Negativcache. Angefragt wird `sz=128`; ein Icon unter `favicons.MIN_ICON_PX` = 64 px gilt als keins (Globus statt eines unscharfen Logos bei 20 px × DPR 3, Apple-Audit I13). Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der frühere Scheduled Publisher (`GET /api/v1/publisher/config`, Header `X-Consensus-Publisher`, `POST /api/v1/shares/{share_id}/watch`) ist seit 2026-10-04 entfernt (siehe §4 „SEO-Puls“). Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
@@ -3296,120 +3296,45 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `body.is-watch-view`, sichtbare Seite, Umschalter auf Watches und das
   Kartenskelett (`App.watchSkeleton()`), bevor überhaupt ein Chat gemalt
   wird; die Limitzeile im Kopf ist von Anfang an reserviert.
-- **`watch-dashboard.js`** — rendert `/app/watches` in `#watchDashBody`
-  (`window.App.watchDashboard.{render, refresh, cardState, renderGuest,
-  renderSkeleton, focusWatch, addCreated, showUndoToast, commitPending,
-  reset}`, Styles mit `wd-`-Präfix in `static/css/components-watch.css`).
-  **Seit 2026-10-20 (D6, J8, J13, J14) wird die Seite einmal pro Besuch
-  gebaut und danach Karte für Karte geändert**: jede Karte ist ein Eintrag
-  (`page.cards`), `updateCard(id, watch)` setzt die Serverantwort ein und
-  baut nur ihren Inhalt, ihre Fußzeile und ihre Aktionen neu — offene
-  Einstellungen bleiben offen, der Fokus bleibt auf seinem Knopf. Ein
-  späteres Laden (`refresh`, Rückkehr in den Tab nach > 60 s, fälliger Check
-  mit Pausen 1/2/5/10 min) gleicht nur ab; neu sortiert wird beim nächsten
-  Besuch. Pause/Resume ändern die Karte am Platz und sagen „Watch paused ·
-  Undo“; Delete faltet die Karte weich weg und schickt den DELETE erst, wenn
-  das Undo (6 s) verstrichen ist (oder beim Verlassen der Seite/des Tabs).
-  `showUndoToast(message, {undo, commit, timeout})` leitet seit 2026-10-20
-  an die gemeinsame Hinweis-Zeile weiter (`App.toast`, `notices.js`): eine
-  zur Zeit, pausiert bei Hover/Fokus, ein Kontowechsel verwirft sie ohne
-  Commit. `commitPending()` lässt das offene Undo geschehen, speichert
-  Getipptes offener Karten und liefert seit 2026-10-21 ein Promise, das
-  erfüllt ist, wenn alles gesendet wurde: `firebase.js` `performLogout`
-  wartet darauf (neben den Chat-Löschungen, zusammen höchstens 3 s), bevor
-  das Token geht. Vorher lief eine gerade gelöschte Watch nach dem Logout
-  weiter. Ändernde Watch-Anfragen (`watchUi.api`, alles außer GET) und das
-  Chat-Löschen (`DELETE /bookmark`) gehen mit `keepalive`, damit ein Undo, das
-  beim Schließen des Tabs abläuft, noch ankommt. Eine Pause, deren Antwort
-  nach einem Delete kommt, zeigt kein eigenes Undo (es hätte das des Deletes
-  beendet). Falten (`collapse`/`expand`): eins pro Knoten (`folds`), ein
-  späteres übernimmt dort, wo das laufende steht, das Ende des älteren landet
-  nie (schnelles Undo ließ die Karte sonst für immer versteckt; dasselbe für
-  die Sektion um die letzte Karte); gefaltet wird in `border-box`, sonst wuchs
-  die Karte im ersten Bild um ihr Padding. Ein fehlgeschlagenes Speichern
-  lässt getipptes Ziel, Uhrzeit und Details im Feld (Auswahlfelder zeigen
-  wieder den gespeicherten Wert); Verlassen des Zielfelds versucht es erneut.
-  Einstellungen klappen über `grid-template-rows` 0fr→1fr in `--dur-layer`
-  auf (geschlossen `inert`). **Speichermodell** (J7, J9, J11): jede Änderung
-  landet sofort und sagt „Saved“ am Feld — Auswahl nach 350 ms (mehrere
-  schnelle Änderungen = ein PATCH), Texte und Uhrzeiten erst beim Verlassen
-  des Feldes oder Enter, nie während des Tippens, Felder werden nie gesperrt;
-  beim Zuklappen wird Getipptes gespeichert. Begründung: die Karte ist die
-  laufende Watch, es gibt keinen Entwurf, und kein zweiter Knopf kann Text
-  zurücklassen. Die Felder sind die des Dialogs (`watch-fields.js`), dazu
-  „Watch page“ (PATCH `visibility`, ignoriert ein älterer Server das Feld,
-  steht der Fehler am Feld) und „Remove picture“ mit Undo statt des × auf dem
-  Bild (J23; das Bild führt wie die Frage zur eigenen Watch-Seite). Sektionen:
-  Watching · Paused (Fehler zuerst) · Reached (J22); pausierte Karten haben
-  „Resume“ neben „Settings“, erreichte einen Fuß mit Delete (J21). Der
-  Kopf bleibt in jedem Zustand gleich (eine Überschrift, „New watch“; am
-  Limit als einfacher Knopf), der Leerzustand zeigt darunter auf derselben
-  Kante nur „Start from an example“ (J24); die Kennzahlenzeile lässt Nullen
-  weg, „Why a watch, not a scheduled prompt“ steht zugeklappt am Seitenende
-  (J29). Zeiten werden alle 30 s neu gelesen (J5). Ein Ladefehler lässt die
-  Liste stehen und zeigt „Try again“ (`.wd-alert`, J6). Eine neue Watch steht
-  nach dem Erfolgsschritt oben in „Watching“ und ist kurz markiert
-  (`addCreated`, J15) – egal ob „Done“, Kreuz, Esc oder Backdrop ihn schließt
-  (`close`-Event des Dialogs, nicht nach einem Logout). Es präsentiert nur das Server-Signal aus
-  `drift_signal` (siehe `docs/watch-evidence-model.md`), leitet nichts selbst ab:
-  `cardState` liefert pro Watch Ton/Label/Satz/Quellen — *Moved* (mit
-  `evidence_sources`), *Re-checking* (`confirming`), *Answer stands* (`held`),
-  *Watching* (`lead` „Last moved …:“ + Satz der letzten Bewegung oder „The
-  answer has held through N checks.“), *Resolved* (Grund + Quellen aus
-  `resolution`), *Paused*, *First check pending*; `quoted` markiert einen Satz
-  des Judges (`change_summary`, `resolution.reason`), der mit
-  `data-i18n-skip` in seiner Sprache bleibt. Aufbau: ruhige Kennzahlenzeile (watching / moved / reached
-  this week / next check, Nullen weggelassen; folgt seit 2026-10-31 den Karten,
-  `syncSummary`, also sofort nach Pausieren, Löschen und Undo), Abschnitte *Watching* (neu
-  angelegte zuerst, dann Moved → Re-checking → Held → Watching → Pending,
-  dann nach nächstem Check) / *Paused* / *Reached*, *Delivery*
-  (Telegram-Verbindung und Morning Brief im `.switch`/`.slider`-Stil des
-  Input-Felds, Brief-Uhrzeit beim Verlassen des Feldes gespeichert) und am
-  Ende das einklappbare „Why a watch, not a scheduled prompt“
-  (`.wd-explainer` mit Vergleichstabelle `.wd-compare`, standardmäßig zu;
-  `consensio.watchExplainer.open.v2` merkt nur, was der Leser selbst
-  umschaltet — v1 speicherte auch das `toggle`-Event des eigenen
-  `open = true` und hielt die Kachel so dauerhaft offen). Jede Karte ist ein
-  Teaser (Max 2026-10-23: „zu viel Input, schreckt ab“) — Status (Zeit als
-  „checked 3 h ago“ bzw. „last check …“; bei „First check pending“ ohne Zeit,
-  die steht im Fuß; „Goal reported, confirming“ nur bei `goal_state`
-  confirming, sonst kein Zielstand: „Not yet“ ist keine Nachricht), Frage
-  (2 Zeilen geklemmt, mobil 3), ein Satz zum Geschehen (`.wd-headline`, 2 bzw.
-  3 Zeilen) und eine Zeile Link-Chips (`.wd-sources`: Favicon + Site, eine je
-  Site, max. drei, Seitentitel als Tooltip; bei einer Bewegung ihre Belege,
-  sonst `watch.key_links`; mobil wischbar statt umbrechend). Ziel, Details
-  (`watch.requirements`), Zeitplan, Kanäle und Verlauf stehen auf der
-  Watch-Seite bzw. in „Settings“. Die Frage ist der Link der Karte: ihr
-  `::after` deckt die ganze Karte ab, Chips, Fuß, Notiz und Einstellungen
-  liegen per `z-index` darüber; Hover tönt die Karte, der Fokusring liegt auf
-  dem `::after`. Pro Karte gibt es keine Versalien-Etiketten; die Fußzeile
-  läuft als Fließtext mit echten Trennpunkten (`.wd-sep`, per geschütztem
-  Leerzeichen an den Teil davor gebunden, damit kein Umbruch eine Zeile mit
-  „·“ beginnt; `.wd-item-main`, `display: flow-root` hält das Bild darin). Oben
-  rechts schwebt immer etwas zum Wiedererkennen (`.wd-image` float, Karte
-  `.has-image`), alle Arten auf derselben Höhe `--wd-anchor` (60 px, mobil
-  44 px), der Text fließt herum.
-  Hat die Watch ein Bild (`watch.image`), ist es eine 3:2-Kachel (`is-item` ganz
-  auf Weiß, im Dunkelmodus mitsamt Foto gedämpft, J31; `is-article` füllend) oder bei `is-logo` die abgerundeten
-  App-Icon-Kacheln ohne Rahmen (Haarlinien-Schatten per `drop-shadow`). Sonst — und sobald ein
-  Bild entfernt wird oder nicht lädt — steht das Symbol der Watch
-  (`watch.symbol`, `.wd-image.is-symbol` > `.wd-symbol`, Strichzeichnung aus
-  `SYMBOL_ICONS`, unbekannte Namen → `eye`). Nur Pfade
-  `/api/watch/{id}/image/{token}` werden gerendert, „Remove picture“ in den
-  Einstellungen ruft nach dem Undo `DELETE /api/watch/{id}/image`. Im Fuß
-  stehen links leise „Next check tomorrow, 09:00“ (nur laufende Watches, dazu
-  „Daily scan found news …“ aus `last_probe`; „nothing new“ und Ausfälle nicht),
-  rechts („Resume“)/(die zwei Wege einer erreichten Watch)/„Settings“. „Settings“
-  klappt in der Karte die Zielliste, „Details that matter“ (PATCH
-  `requirements`, mit „Ruled out: …“ aus `rejected_sources`),
-  How often/Day/Time, Notify me, Send to, Watch page, Google-Listing,
-  Bild und Pause/Delete auf; eine
-  abgeschlossene Watch bietet „Not what I wanted“ (PATCH `status=active`,
-  `reject_match: true`, mit Grund `requirements` = bisherige Details + Grund;
-  Ziel bleibt, der Treffer zählt
-  nie wieder) und „Watch for something new“ (PATCH `status=active` + neues oder
-  leeres Ziel); es ist immer nur das Feld des gewählten Wegs sichtbar. Kein
-  Agreement-Score im Dashboard.
+- **`watch-dashboard.js`** — rendert `/app/watches` in `#watchDashBody`,
+  seit 2026-11-03 die Watches des Agenten (`agent_watches.py`); die Seite
+  der Consensus-Watches davor (Karten am Platz, Undo, Einstellungen je Karte,
+  Morning Brief) ist mit ihnen archiviert. Vertrag für `watch.js`:
+  `window.App.watchDashboard.{render, refresh, renderGuest, renderSkeleton,
+  focusWatch, addCreated, commitPending, reset}` (`commitPending` hat nichts
+  mehr zu tun). Liest `GET /agent/watches`, `GET /api/my/watches` (das Archiv)
+  und `GET /api/my/telegram` (über `App.watchUi.api`). Abschnitte nach dem,
+  was eine Watch vom Leser will: „Needs you“ (ungelesen, letzter Lauf
+  `needs_you`), „New“ (ungelesener Befund oder Ziel), „Running“, „Paused“,
+  „Ended“ eingeklappt. Jede Zeile (`.aw-row`, Styles `aw-` in
+  `components-watch.css`): Bild der Watch (`watch_images.image_view`) oder
+  Auge, Auftrag, eine Zeile Befund oder Stand, Zeitplan · nächster Lauf,
+  rechts die Zeit des letzten Befunds und ein Punkt für Ungelesenes. Ein
+  Klick öffnet den Chat (`window.openBookmark(bookmark_id)`) und meldet
+  `POST …/seen`; vor dem ersten Lauf eines neuen Chats sagt ein Hinweis,
+  dass er gleich erscheint. „…“ (Menü wie in der Seitenleiste,
+  `bookmark-menu`, `App.popover`): Open chat, Pause/Resume, Email und
+  Telegram als Häkchen (`PATCH`), End Watch (`App.confirm`). Darunter
+  „Messages“ (die Mailadresse des Kontos, Telegram koppeln/testen/trennen
+  über `App.watchUi.connectTelegram`) und „Earlier Watches“ (`<details>`,
+  die archivierten Consensus-Watches mit Link auf ihre Seite). Leer: ein
+  Satz und „New Watch“; Gäste: Satz und „Log in“; ein Ladefehler: Grund und
+  „Try again“. `consensio:agent-watches-changed` (Blatt, Karte) und die
+  Rückkehr in den Tab lesen neu.
+- **`watch-sheet.js`** (seit 2026-11-03) — `App.watchSheet.open({chatId,
+  task, trigger, source, onStarted})`: das Blatt (`<dialog class="modal
+  watch-sheet">`, `App.modalDialog`), das eine Watch mit eigenen Worten
+  startet: „What should the Agent do?“, „Done when“ (optional), wie oft
+  (nur die Intervalle der Stufe aus `GET /agent/watches`) und Uhrzeit für
+  täglich/wöchentlich; „Start Watch“ = `POST /agent/watches` mit `task`,
+  `goal`, Zeitplan, Zeitzone und, von der Pille, `chat_id`. Ohne `chat_id`
+  legt der Server einen eigenen Chat an. Prüft einen ganzen Satz, bevor es
+  sendet, nennt ein volles Konto vor dem Tippen. Gast: `watchUi.requireAccount`
+  mit dem Auftrag, nach dem Login öffnet es wieder (`resumePendingWatch`).
+  `watch.js openWatchDialog` leitet jeden Start dorthin (Pille, Kopfknopf,
+  `?create=1`, nach dem Login); der alte Watch-Dialog öffnet nicht mehr.
+  Lädt vor `watch.js` (`bundles.json`): Findet `watch.js` es beim Laden,
+  baut es keine Watch-Pille für gespeicherte Consensus-Antworten.
 - **`user-tier.js`** — Free/Pro-UI, Premium-Modellstatus (`updateUserTierUI`,
   `updatePremiumModelsState`) und Plan-Label im Sidebar-Account-Footer.
 - **`email-verify.js`** (klassisches Head-Skript,
@@ -9488,7 +9413,7 @@ app/services/
   chat_store.py              Firestore-Pfade, Turn-Anlage und -Lesen (Antwortdokumente gespeicherter Consensus-Turns), Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, update_memory ohne Belegzitat (AuditMemoryChange; seit 2026-10-28 im Audit, seit 2026-10-31 überall, evidence_matches/user_words nur noch für Einstellungen und Links), Secret-Prüfung, Undo-Log, Prompt-Fakten AUDIT_MEMORY_*
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompt-Block AUDIT_PROMPT, Hinweise im Toolergebnis (INSTRUCTIONS); startet nie eine Watch. Im geplanten Lauf WatchRunTools: report_finding (nur mit Beleg aus diesem Lauf) und finish_watch, RUN_PROMPT/RUN_NOTE (seit 2026-11-03)
-  agent_watches.py           Watches, die den Agenten laufen lassen (seit 2026-11-03): Limits/Intervalle je Stufe, Zeitplan (next_run, daily/weekly über watch_service), create aus dem gespeicherten Vorschlag, stop, due/claim (verspätet > 2 h = übersprungen, Tagesgrenze), start_run (routers/agent.start_agent_turn mit watch_run; 409/429/503 = in 10 min noch mal), run_tick (aus watch_scheduler_loop, je Konto ein Lauf, höchstens 3 parallel), turn_ended (last_run, Ende beim Ziel, Mail über notification_outbox), Löschen mit Chat/Konto
+  agent_watches.py           Watches, die den Agenten laufen lassen (seit 2026-11-03): Limits/Intervalle je Stufe, Zeitplan (next_run, daily/weekly über watch_service), create aus dem gespeicherten Vorschlag, stop, due/claim (verspätet > 2 h = übersprungen, Tagesgrenze), start_run (routers/agent.start_agent_turn mit watch_run; 409/429/503 = in 10 min noch mal), run_tick (aus watch_scheduler_loop, je Konto ein Lauf, höchstens 3 parallel), turn_ended (last_run, Ende beim Ziel, ungelesen, Mail und Telegram über notification_outbox je nach email_enabled/telegram_enabled), pause/resume/seen/set_channels, Anlegen mit eigenem Auftrag auch in einem eigenen Chat (chat_title), unsubscribe_token/stop_emails (Link „Stop emails“), PICTURES (Bild der Watch: beim Anlegen ein Foto des Gegenstands über watch_scheduler.picture_words → consensus_engine.pick_watch_picture_words und picture_search (Brave), sonst die Seiten des Chats; nach Läufen die Seiten, die sie öffneten, über watch_images.find_image; gespeichert unter watch_images/{id}, eigener Thread, höchstens 3 Versuche), Löschen mit Chat/Konto samt Bild
   agent_chat_search.py       search_chats (seit 2026-10-28): frühere Chats des Kontos nach Titel, Startdatum, letzter Frage finden (mit erster Frage) und einen per chat_id mit Fragen und Antworten lesen; nie der aktuelle Chat, nie Chats mit Google-Daten; Ergebnis ist Fremdinhalt
   agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen (Chatmodell, Reasoning, Vergleichs-Preset der Prüfer, Anzeige; seit 2026-11-01 auch Fakten über consens.io), Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Prompt-Block AUDIT_PROMPT; schreibt nie eine Einstellung (bis 2026-10-31 auch Agent-Vorlieben, Gruppe PREFERENCES)
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS) und SIDE_TOOLS
@@ -10058,13 +9983,19 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
 - `agent_watches/{id}` — Watches, die den Agenten laufen lassen (seit
   2026-11-03, `agent_watches.py`): `uid`, `chat_id`, `turn_id` (der Turn mit
   dem Vorschlag), `bookmark_id`, `task`, `goal`, `interval`, `run_time`,
-  `run_weekday`, `timezone`, `status` (`active|done`, `ended`:
+  `run_weekday`, `timezone`, `status` (`active|paused|done`, `ended`:
   `user|goal|chat_gone`), `next_run_at` (nur aktiv, sonst `null`: die
   Fälligkeitsabfrage ist ein Bereich auf diesem einen Feld, kein
   zusammengesetzter Index), `running` (`request_id`, `started_at`,
   `scheduled_at`; nach 2 h verfallen), `runs`, `last_run` (`at`, `turn_id`,
   `outcome` `quiet|finding|needs_you|done|failed|not_started|chat_gone|already_ran`,
-  `summary`), `last_skipped_at`. `users/{uid}/agent_watch_state/slots`
+  `summary`, `evidence_url`), `last_skipped_at`; seit dem Abend von
+  2026-11-03 `unread` (ein Befund, eine Rückfrage oder das Ziel, die der
+  Nutzer noch nicht gesehen hat; `seen_at`), `email_enabled`,
+  `telegram_enabled` (beide Standard an) und `image` (wie bei den
+  Consensus-Watches: `status`, `token`, `kind`, Maße, Quelle, `tries`; die
+  Bytes unter `watch_images/{id}`). Eine pausierte Watch hat kein
+  `next_run_at` und keinen Platz. `users/{uid}/agent_watch_state/slots`
   (`active`: Watch-ID → Chat-ID) hält Limit und eine Watch je Chat in einer
   Transaktion; `agent_watch_days/{YYYY-MM-DD}` (`runs`) die Tagesgrenze des
   Servers. Gelöscht mit dem Chat (`ChatStore._purge_chat`) und dem Konto
@@ -10099,8 +10030,10 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
 - `notification_outbox/{sha256(kind,resource,run,channel,recipient)}` — dauerhafte
   Benachrichtigungsaufträge für Watch-Owner (Mail/Telegram, inkl. Pause nach drei
   Fehlern), Watch-Seiten-Follower, Topic-Follower, Morning Brief und seit
-  2026-11-03 `agent_watch` (Mail eines Agent-Watch-Laufs: Befund, Rückfrage
-  oder Ziel; `resource_id` = Watch, `run_id` = Turn). Felder:
+  2026-11-03 `agent_watch` (ein Agent-Watch-Lauf: Befund, Rückfrage
+  oder Ziel, als Mail mit „Stop emails“ und als Telegram-Nachricht mit
+  Link-Knöpfen; `resource_id` = Watch, `run_id` = Turn; der Chat-Link ist
+  `/app?chat=<bookmark_id>`, den `firebase.js openChatFromLink` öffnet). Felder:
   `kind`, `channel`, `uid` (Owner, leer bei Topic), `resource_id`, `run_id`,
   `recipient_id` (UID oder Follower-Dokument-ID, keine E-Mail), `payload` (nur
   Frage, Scores, Change-Summary, Richtung; kein Consensus-Volltext),

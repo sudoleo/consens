@@ -112,12 +112,18 @@ def jinja_to_html(source: str, literals: list[str] | None = None) -> str:
     out: list[str] = []
     position = 0
     in_tag = False
+    in_comment = False
     quote = ""
     counter = 0
     for match in _JINJA.finditer(source):
         chunk = source[position:match.start()]
-        for char in chunk:
-            if in_tag:
+        for offset, char in enumerate(chunk, start=position):
+            if in_comment:
+                # An HTML comment is no tag: its apostrophes ("agent's")
+                # open no value that a later tag would land in.
+                if char == ">" and source[offset - 2:offset] == "--":
+                    in_comment = False
+            elif in_tag:
                 if quote:
                     if char == quote:
                         quote = ""
@@ -126,13 +132,18 @@ def jinja_to_html(source: str, literals: list[str] | None = None) -> str:
                 elif char == ">":
                     in_tag = False
             elif char == "<":
-                in_tag = True
+                if source.startswith("<!--", offset):
+                    in_comment = True
+                else:
+                    in_tag = True
         out.append(chunk)
         token = match.group(0)
         position = match.end()
         if token.startswith("{#"):
             continue
         if token.startswith("{%"):
+            if in_comment:
+                continue
             if not in_tag:
                 out.append("<!--j-->")
             elif quote:

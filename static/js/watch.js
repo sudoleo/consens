@@ -889,6 +889,16 @@
       openWatchDashboard();
       return;
     }
+    // Since 2026-11-03 a Watch runs the Agent (agent_watches.py): every way
+    // to start one (the pill, the Watches page, the public page's
+    // invitation, a login that came between) opens its sheet; the dialog of
+    // the Consensus Watches, archived since, opens no more.
+    if (window.App.watchSheet) {
+      closeDialog();
+      window.App.watchSheet.open({ chatId: setup.chatId || "", task: setup.question || "",
+        trigger: setup.trigger, source: setup.source || view });
+      return;
+    }
     const knownQuestion = normalizeWatchQuestion(
       view === "create" ? setup.question : (setup.question || window.lastQuestion));
     if (!requireAccount({ question: knownQuestion, goal: setup.goal }, setup.trigger)) return;
@@ -1979,15 +1989,19 @@
   const answerButtons = new Set();
 
   // Also off the page: a history turn is built before it is inserted.
+  function pillWatch(button) {
+    return button?._chatId ? window.App.agentWatch?.activeFor?.(button._chatId) || null : null;
+  }
+
   function syncWatchPill(button) {
     if (!button) return;
-    const watch = watchedFor(button._watchQuestion?.());
+    const watch = pillWatch(button);
     const watching = Boolean(watch);
     const label = button.querySelector("span");
     const text = watching ? "Watching" : "Watch";
     if (label && label.textContent !== window.App.t(text)) label.textContent = text;
     button.classList.toggle("is-watching", watching);
-    const description = watching ? "You watch this question. Open it on Watches." : "Watch this question for changes";
+    const description = watching ? "This chat has a Watch. Open it on Watches." : "Start a Watch in this chat";
     button.title = description;
     button.setAttribute("aria-label", description);
   }
@@ -2001,7 +2015,7 @@
     button._watchQuestion = question;
     button.addEventListener("click", () => {
       dismissWatchFeatureNudge("opened");
-      const watch = watchedFor(question());
+      const watch = pillWatch(button);
       if (watch) openWatchDashboard({ focus: watch.id });
       else onStart(button);
     });
@@ -2015,6 +2029,9 @@
   }
 
   function initWatchButton() {
+    // A saved Consensus chat is read-only since 2026-10-25, and its Watches
+    // are archived since 2026-11-03: its answer has no Watch pill.
+    if (window.App.watchSheet) return;
     const bar = document.querySelector("#consensusResponse .consensus-copy-inline");
     if (!bar || document.getElementById("consensusWatchButton")) return;
     const button = watchPill("consensusWatchButton",
@@ -2044,7 +2061,8 @@
   // alone. Only the live answer's pill is #agentAnswerWatchButton.
   const LIVE_PILL_ID = "agentAnswerWatchButton";
 
-  function syncAnswerWatchButton(answerBody, { question = "", eligible = false, followUp = false, history = false } = {}) {
+  function syncAnswerWatchButton(answerBody, { question = "", eligible = false, followUp = false, history = false,
+    chatId = "" } = {}) {
     if (!answerBody) return;
     let button = answerBody._watchPill;
     const text = normalizeWatchQuestion(question);
@@ -2065,12 +2083,16 @@
     }
     if (!button) {
       button = watchPill(history ? "" : LIVE_PILL_ID, () => answerBody._watchPill?._question || text,
-        trigger => openWatchDialog("create", { question: button._question, editQuestion: button._followUp, source: "agent_answer", trigger }));
+        trigger => openWatchDialog("create", { question: button._question, chatId: button._chatId,
+          source: "agent_answer", trigger }));
       button.classList.add("agent-watch-pill");
       answerBody._watchPill = button;
     }
     button._question = text;
     button._followUp = followUp;
+    button._chatId = String(chatId || "");
+    // The chat's Watches load once per chat; the pill follows them.
+    if (button._chatId) window.App.agentWatch?.load?.(button._chatId);
     // The evidence row beside the answer, also while a history turn is still
     // built off the page.
     const review = answerBody._agentReview?.parentNode && answerBody._agentReview.parentNode === answerBody.parentNode
@@ -2091,6 +2113,11 @@
     }
     syncWatchPill(button);
   }
+
+  window.addEventListener("consensio:agent-watches-changed", () => answerButtons.forEach(button => {
+    if (button.isConnected) syncWatchPill(button);
+    else answerButtons.delete(button);
+  }));
 
   window.addEventListener("consensio:watches-changed", () => answerButtons.forEach(button => {
     // A history replaced by another chat's takes its pills with it.

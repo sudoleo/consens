@@ -102,12 +102,45 @@
     if (!force && chats.has(chatId)) return Promise.resolve(chats.get(chatId));
     if (loading.has(chatId)) return loading.get(chatId);
     const pending = request(`/agent/watches?chat_id=${encodeURIComponent(chatId)}`)
-      .then(data => { chats.set(chatId, data); shown.forEach(sync); return data; })
+      .then(data => {
+        chats.set(chatId, data);
+        shown.forEach(sync);
+        // The Watch pill under the answer follows (watch.js syncWatchPill).
+        window.dispatchEvent(new CustomEvent('consensio:agent-watches-changed', { detail: { chatId, loaded: true } }));
+        return data;
+      })
       .catch(() => null)
       .finally(() => loading.delete(chatId));
     loading.set(chatId, pending);
     return pending;
   }
+
+  // The chat's running or paused Watch, from its last read (null before it).
+  function activeFor(chatId) {
+    const watches = chats.get(String(chatId || ''))?.watches;
+    return Array.isArray(watches) ? watches.find(watch => ['active', 'paused'].includes(watch.status)) || null : null;
+  }
+
+  // Its chat is open: what its Watch found counts as seen (the Watches page's
+  // "New" and "Needs you" empty out).
+  const seenFor = new Set();
+  function opened(chatId) {
+    if (!chatId || seenFor.has(chatId)) return;
+    seenFor.add(chatId);
+    load(chatId, { force: true }).then(data => {
+      for (const watch of (data?.watches || []).filter(item => item.unread)) {
+        request(`/agent/watches/${encodeURIComponent(watch.id)}/seen`, { method: 'POST' })
+          .then(() => { watch.unread = false; })
+          .catch(() => {});
+      }
+    }).finally(() => setTimeout(() => seenFor.delete(chatId), 30000));
+  }
+
+  // A Watch started elsewhere (the sheet, another card): its chat reads again.
+  window.addEventListener('consensio:agent-watches-changed', event => {
+    const chatId = event.detail?.watch?.chat_id;
+    if (chatId && !event.detail.loaded) load(chatId, { force: true });
+  });
 
   function scheduleControls(view) {
     const row = node('div', 'agent-watch-schedule');
@@ -301,5 +334,5 @@
     load(view.chatId).then(() => { if (shown.has(view)) sync(view); });
   }
 
-  App.agentWatch = { render, load };
+  App.agentWatch = { render, load, activeFor, opened };
 })();

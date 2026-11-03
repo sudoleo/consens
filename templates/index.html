@@ -967,19 +967,20 @@
   <!-- Watches-Seite (/app/watches): scrollt im Dokument rechts der Seitenleiste,
        der Chat tritt solange zur Seite (body.is-watch-view). app-bootstrap.js
        malt sie bei direktem Aufruf ab dem ersten Bild mit Kartenskelett,
-       watch.js hält URL und Umschalter synchron, watch-dashboard.js rendert. -->
+       watch.js hält URL und Umschalter synchron, watch-dashboard.js rendert die
+       Watches des Agenten (seit 2026-11-03), watch-sheet.js legt neue an. -->
   <main id="watchDashboard" class="watch-page" hidden>
     <div class="watch-page-inner">
       <header class="wd-head">
         <div class="wd-head-copy">
           <h1 id="watchDashTitle">Watches</h1>
-          <p class="wd-head-lead">Questions you are waiting on. Checked across AI model families, reported only when the evidence moves.</p>
+          <p class="wd-head-lead">The Agent checks for you on a schedule and tells you only when it finds something.</p>
           <div id="watchDashLimit" class="watch-limit-summary is-compact" aria-live="polite" hidden></div>
         </div>
         <div class="wd-head-actions">
           <button type="button" id="watchDashCreate" class="wd-button is-primary">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-            <span class="wd-button-label">New watch</span>
+            <span class="wd-button-label">New Watch</span>
           </button>
         </div>
       </header>
