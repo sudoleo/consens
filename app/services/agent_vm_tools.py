@@ -1845,7 +1845,12 @@ class VMTools:
     def _exec_activity(self, args, result):
         command = args.command if len(args.command) <= COMMAND_VIEW_CHARS else \
             args.command[:COMMAND_VIEW_CHARS - 1] + "…"
-        cwd = vm_path(args.cwd, self.session.dir) if args.cwd.strip() else self.session.dir
+        # A folder the call itself refuses (a NUL in it) shows as none, like
+        # _path_activity: until 2026-11-03 the event lost its command too.
+        try:
+            cwd = vm_path(args.cwd, self.session.dir) if args.cwd.strip() else self.session.dir
+        except ValueError:
+            cwd = ""
         return {"command": command, "cwd": cwd, **self._outcome(result)}
 
     def _install_activity(self, args, result):

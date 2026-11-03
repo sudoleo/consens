@@ -1143,6 +1143,16 @@ def test_a_share_without_the_answers_time_or_renders_goes_on_without_a_preview(s
         api_uid_limiter.reset()
 
 
+def test_a_command_in_a_refused_folder_still_shows_what_it_ran(store, fake_vm):
+    """Bug hunt 2026-10-26: a cwd with NUL made the activity fields fail, and
+    the event came without its command."""
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls", "cwd": "a\x00b"})]]))
+    events = list(loop.run())
+    assert "NUL" in results(loop)[0]["error"]
+    ended = [e for e in tool_events(events, "vm_exec") if e["status"] != "running"]
+    assert ended and ended[-1]["command"] == "ls" and ended[-1]["cwd"] == ""
+
+
 def test_a_message_keeps_only_its_newest_rendered_pdfs(store, fake_vm, monkeypatch):
     """Bug hunt 2026-11-02: every render of a long run stayed in memory (up
     to 10 MB each) until the message ended."""
