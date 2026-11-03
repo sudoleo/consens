@@ -2732,7 +2732,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   answers die eingeschlossenen Antwortboxen; `firebase.js::loadSingleBookmarkUI`,
   `consensus-insights.js` (nach dem Markieren) und
   `app-init.js::renderEvidenceSources` rufen es. `clear()` blendet den Fuss mit
-  dem Wechsel der Ansicht aus (`run-view.js` ohne Lauf, Compare-Lauf, Clear).
+  dem Wechsel der Ansicht aus (`run-view.js` ohne Lauf, Compare-Lauf, Clear);
+  zeichnet `run-view.js` denselben gespeicherten Chat erneut (Registry-Meta
+  `savedView`, etwa wenn ein Lauf im Hintergrund endet), bleibt der Fuss
+  stehen (bis 2026-11-03 verschwanden dabei Chips, Teilen und Watch).
   Das Verdict bleibt unter der Antwort: Ampelfarbe auf der Agreement-Zahl,
   Headline mit dem schwerwiegendsten Thema, eine Meta-Zeile; Full/Summary/
   Hidden (Settings) beeinflussen ausschließlich das Urteil. Beim Oeffnen fahren

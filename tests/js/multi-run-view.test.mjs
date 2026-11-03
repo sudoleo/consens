@@ -226,6 +226,28 @@ describe("selected RunContext projection", () => {
     expect(window.resetConsensusInsights).toHaveBeenCalledTimes(resets);
     dom.window.close();
   });
+  it("keeps a saved answer's footer when a run ends in the background", () => {
+    // Bug hunt 2026-10-26: renderVisible with the saved chat still on
+    // screen cleared the footer firebase.js drew (chips, share, watch).
+    const { registry, window, dom } = boot();
+    const run = createRunning(registry, "Background");
+    const { clear } = window.App.consensusFooter;
+    registry.showSavedView({ type: "bookmark", bookmarkId: "saved" }, { bookmarkId: "saved" });
+    expect(clear).toHaveBeenCalled();
+    clear.mockClear();
+    registry.setStatus(run.runId, "succeeded");
+    registry.renderVisible();
+    expect(clear).not.toHaveBeenCalled();
+    // Another saved chat or a cleared view still takes it.
+    registry.showSavedView({ type: "bookmark", bookmarkId: "other" }, { bookmarkId: "other" });
+    expect(clear).toHaveBeenCalledTimes(1);
+    registry.clearVisible();
+    expect(clear).toHaveBeenCalledTimes(2);
+    registry.showSavedView({ type: "bookmark", bookmarkId: "other" }, { bookmarkId: "other" });
+    expect(clear).toHaveBeenCalledTimes(3);
+    dom.window.close();
+  });
+
   it("builds a run's row once and changes only its words, so its pulse runs on (Apple audit C7)", () => {
     const { registry, document, dom } = boot();
     const run = createRunning(registry, "Pulse");

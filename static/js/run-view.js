@@ -21,7 +21,15 @@
   }
 
   let projectedRunId = null;
+  // The saved chat the last projection without a run drew (registry
+  // savedView): drawn again, e.g. when a run ends in the background, it
+  // keeps the footer firebase.js drew under its answer.
+  let projectedSavedView = "";
   const modelProjections = new Map();
+
+  function savedViewKey(view) {
+    return view?.bookmarkId ? `${view.type || ""}:${view.bookmarkId}` : "";
+  }
 
   function selectedConfig(context, provider) {
     return (context.config?.providers || []).find(item => item.provider === provider) || null;
@@ -138,20 +146,23 @@
   // re-asserted from the run further down this same pass.
   let projecting = false;
 
-  function project(context) {
+  function project(context, meta) {
     if (projecting) return;
     projecting = true;
     try {
       window.App.chatScroll?.project(context);
-      renderProjection(context);
+      renderProjection(context, meta);
     } finally {
       projecting = false;
       window.App.chatScroll?.changed();
     }
   }
 
-  function renderProjection(context) {
+  function renderProjection(context, meta) {
     window.App.agentChat?.render?.();
+    const saved = context ? "" : savedViewKey(meta?.savedView);
+    const drawnBefore = Boolean(saved) && saved === projectedSavedView;
+    projectedSavedView = saved;
     if (context?.config?.executionMode === "agent") {
       projectedRunId = null;
       modelProjections.clear();
@@ -164,8 +175,10 @@
       window.projectAgentModeRun?.(null);
       // Nothing on screen belongs to a run any more: a saved bookmark, or a
       // cleared view. A run still going in the background reports itself in
-      // its sidebar row. A saved answer draws its own footer (firebase.js).
-      window.App.consensusFooter?.clear?.();
+      // its sidebar row. A saved answer draws its own footer (firebase.js),
+      // which stays when the same saved chat is drawn again: until
+      // 2026-11-03 a run ending in the background took it away.
+      if (!drawnBefore) window.App.consensusFooter?.clear?.();
       window.App.syncSendButtonRunning?.();
       return;
     }
