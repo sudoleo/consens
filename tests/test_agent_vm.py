@@ -1143,6 +1143,25 @@ def test_a_share_without_the_answers_time_or_renders_goes_on_without_a_preview(s
         api_uid_limiter.reset()
 
 
+def test_a_message_keeps_only_its_newest_rendered_pdfs(store, fake_vm, monkeypatch):
+    """Bug hunt 2026-11-02: every render of a long run stayed in memory (up
+    to 10 MB each) until the message ended."""
+    from app.services import agent_office
+    monkeypatch.setattr(agent_office, "render", lambda data, extension, **kwargs: agent_office.Rendered(
+        pdf=b"%PDF-1.7 " + data, overview=b"", pages=1))
+    names = [f"deck{n}.pptx" for n in range(agent_vm_tools.RENDERED_KEPT + 2)]
+    calls = [[("vm_render_office", {"path": name})] for name in names] + [[("vm_render_office", {"path": names[1]})]]
+    loop = vm_loop(store, Agent(calls))
+    loop.vm_tools.session.ready(ProviderCancellation())
+    for name in names:
+        fake_vm.vms[loop.vm_tools.session.name]["files"][f"{chat_path(loop.chat_id)}/{name}"] = name.encode()
+    list(loop.run())
+    assert all("error" not in result for result in results(loop))
+    kept = list(loop.vm_tools._rendered.values())
+    # The newest ones, deck1 again the newest of all.
+    assert kept == [b"%PDF-1.7 " + name.encode() for name in names[-2:] + [names[1]]]
+
+
 def test_a_render_with_too_little_time_left_says_so_and_counts_no_render(store, fake_vm, monkeypatch):
     """Bug hunt 2026-11-02: LibreOffice got 1 s, the agent read that the file
     took too long, and the hour's renders counted it."""

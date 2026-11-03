@@ -113,6 +113,10 @@ SHARE_BYTES = 5 * 1024 * 1024
 # takes the answer's last seconds.
 PREVIEW_BYTES = 10 * 1024 * 1024
 PREVIEW_MIN_SECONDS = 30
+# The newest PDFs of vm_render_office a message keeps for a share of the
+# same file (_rendered). Until 2026-11-03 it kept every one: a long run
+# that renders its deck after each change held up to 10 MB a render.
+RENDERED_KEPT = 3
 # Pictures the chat shows as pictures, known by their bytes only: a name
 # never makes a file an image (agent-workspace.js shows these inline).
 _IMAGE_MAGIC = ((b"\x89PNG\r\n\x1a\n", "image/png"), (b"\xff\xd8\xff", "image/jpeg"),
@@ -1181,7 +1185,8 @@ class VMTools:
         self._pictures, self._pictures_lock = [], threading.Lock()
         # The PDFs vm_render_office made in this message, by the file's
         # sha256: sharing that file previews it without converting it again.
-        self._rendered = {}
+        # The newest RENDERED_KEPT, oldest first.
+        self._rendered, self._rendered_lock = {}, threading.Lock()
 
     def tools(self):
         from app.services import agent_github, agent_web_images
@@ -1712,7 +1717,12 @@ class VMTools:
         # For a share of the same file in this message (_office_preview):
         # only a PDF a preview can use is kept (60 MB each otherwise).
         if rendered.pdf.startswith(b"%PDF-") and len(rendered.pdf) <= PREVIEW_BYTES:
-            self._rendered[hashlib.sha256(raw).hexdigest()] = rendered.pdf
+            digest = hashlib.sha256(raw).hexdigest()
+            with self._rendered_lock:
+                self._rendered.pop(digest, None)
+                self._rendered[digest] = rendered.pdf
+                while len(self._rendered) > RENDERED_KEPT:
+                    self._rendered.pop(next(iter(self._rendered)))
         # deck.pptx -> deck.pptx.pdf: never over a PDF of the same name that
         # is not this file's (the user's own report.pdf beside report.docx,
         # or deck.docx's beside deck.pptx).

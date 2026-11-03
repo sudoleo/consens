@@ -11848,7 +11848,7 @@ PDFs … für Code natürlich auch“. `static/js/file-viewer.js` (`App.fileView
   `agent_office.render`, die Sprite `consens-office`: LibreOffice als Nutzer
   ohne Rechte in einem Ordner nur dieser Umwandlung). Hat der Agent dieselbe
   Datei in der Nachricht schon mit `vm_render_office` gewandelt, nimmt das
-  Teilen dieses PDF (`_rendered`, nach sha256). Es zählt zu den
+  Teilen dieses PDF (`_rendered`, nach sha256, nur die neuesten `RENDERED_KEPT` = 3 einer Nachricht). Es zählt zu den
   `RENDERS_PER_HOUR` des Kontos, kostet keine VM-Zeit und wird nie in den
   letzten `PREVIEW_MIN_SECONDS` der Antwort versucht; die Umwandlung bekommt
   höchstens die Restzeit der Antwort ohne `MIN_COMMAND_SECONDS`
