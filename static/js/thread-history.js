@@ -132,9 +132,7 @@
 
     // One archived turn, built off the page. `attached()` runs what needs the
     // node in the document (its file row, the fold measurement).
-    // `options.followUp`: a turn after the chat's first (its Watch opens at
-    // the question, so the watched question stands on its own).
-    buildHistoryTurn(turnData, options = {}) {
+    buildHistoryTurn(turnData) {
       const turnId = String(turnData.turn_id || "").trim();
       const normalizedQuestion = window.App.normalizeQuestionText?.(turnData.question)
         ?? String(turnData.question).replace(/\s+/g, " ").trim();
@@ -266,8 +264,7 @@
         const finished = turnData.status !== "failed" && Boolean(String(turnData.consensus || "").trim());
         // Since 2026-11-03 a Watch belongs to the chat (agent_watches.py):
         // its pill stands under the newest answer only, not under each one.
-        window.App.watch?.answerButton?.(answerBody, { question: turnData.question, history: true,
-          eligible: false, followUp: options.followUp === true });
+        window.App.watch?.answerButton?.(answerBody, { question: turnData.question, history: true, eligible: false });
         // Its Share pill shares this turn's answer; the chat is the one on
         // screen when it is pressed (share-dialog.js).
         window.App.answerShare?.button?.(answerBody, { turnId: turnId || "",
@@ -555,8 +552,8 @@
       let kept = 0;
       while (kept < shown.length && kept < wanted.length
           && shown[kept].dataset.turnKey === this.turnKey(wanted[kept])) kept += 1;
-      const plan = wanted.slice(kept).map((turnData, index) => options.adopt?.owns?.(turnData)
-        ? { turnData, adopt: true } : { turnData, built: this.buildHistoryTurn(turnData, { followUp: kept + index > 0 }) });
+      const plan = wanted.slice(kept).map(turnData => options.adopt?.owns?.(turnData)
+        ? { turnData, adopt: true } : { turnData, built: this.buildHistoryTurn(turnData) });
       const nodes = plan.map(item => item.adopt ? options.adopt.take(item.turnData) : item.built.node);
       const hooks = plan.filter(item => item.built).map(item => item.built.attached);
       if (kept || !shown.length) {

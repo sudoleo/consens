@@ -123,11 +123,11 @@ describe("Watch times (watch-fields.js)", () => {
   it("writes one schedule, names a foreign time zone as a place and the own one never", () => {
     const { window } = boot({ user: false, path: "/app" });
     const F = window.App.watchFields;
-    const own = F.browserTimezone();
-    expect(F.scheduleLabel({ interval: "weekly", run_weekday: "tuesday", run_time: "09:00", timezone: own }))
+    const own = { own: "Europe/Berlin" };
+    expect(F.scheduleLabel({ interval: "weekly", run_weekday: "tuesday", run_time: "09:00", timezone: "Europe/Berlin" }, own))
       .toBe("Weekly on Tuesday at 09:00");
-    expect(F.scheduleText({ interval: "monthly", run_time: "07:00", timezone: "America/New_York" }, { own: "Europe/Berlin" }))
-      .toBe("monthly at 07:00 (New York time)");
+    expect(F.scheduleLabel({ interval: "monthly", run_time: "07:00", timezone: "America/New_York" }, own))
+      .toBe("Monthly at 07:00 (New York time)");
   });
 });
 
@@ -282,7 +282,7 @@ describe("The sheet that starts a Watch", () => {
 
   it("sends a guest into the sign-in and back to the sheet with the question (J3)", async () => {
     const { window, document } = boot({ user: false, path: "/app" });
-    window.openWatchDialog("create", { question: "Is the new iPhone out in Germany?" });
+    window.App.watchSheet.open({ task: "Is the new iPhone out in Germany?" });
     expect(window.App.openAuthModal).toHaveBeenCalledWith("login", expect.anything(), "watch", expect.anything());
     expect(JSON.parse(window.localStorage.getItem("consensio.watchAfterLogin.v1")).question)
       .toBe("Is the new iPhone out in Germany?");
@@ -295,9 +295,9 @@ describe("The sheet that starts a Watch", () => {
 
   it("says a question waits only when there is one", () => {
     const { window } = boot({ user: false, path: "/app" });
-    window.openWatchDialog("create");
+    window.App.watchSheet.open();
     expect(window.App.openAuthModal.mock.calls.at(-1)[3].lead).toBe("Log in to start watching.");
-    window.openWatchDialog("create", { question: "Is the new iPhone out in Germany?" });
+    window.App.watchSheet.open({ task: "Is the new iPhone out in Germany?" });
     expect(window.App.openAuthModal.mock.calls.at(-1)[3].lead).toBe("Log in to start watching. Your question waits for you.");
   });
 });

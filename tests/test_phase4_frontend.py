@@ -149,18 +149,16 @@ def test_auth_bootstrap_watchdog_precedes_firebase_and_clears_stale_skeletons():
     assert 'window.dispatchEvent(new CustomEvent("consensio:auth-unavailable"))' in watchdog
 
 
-def test_watch_modal_route_and_brief_state_have_deterministic_rollback_contracts():
+def test_watch_page_has_a_deterministic_logout_rollback():
     watch = read("static/js/watch.js")
-    list_branch = section(watch, 'if (view === "list")', "const { modal } = els()")
-    reset = section(watch, "function resetAfterLogout()", "window.openWatchDialog")
+    opening = section(watch, "function openWatchDashboard(", "function firstLook(")
+    reset = section(watch, "function resetAfterLogout()", "window.openWatchDashboard = openWatchDashboard")
 
-    assert "closeDialog();" in list_branch
+    # The Share dialog's link to Watches never leaves the dialog above the page.
+    assert "closeShareDialog();" in opening
     assert "renderWatchLoginHint" in reset
     assert 'replaceState(null, "", APP_PATH)' not in reset
     assert 'window.addEventListener("consensio:auth-state"' in watch
-    # The Morning Brief's switch left the page with the Consensus Watches (2026-11-03).
-    assert "watchModalIntentIsCurrent" in watch
-    assert "window.App.sharedModal.isCurrent(intent)" in watch
 
 
 def test_bookmark_restore_uses_owned_run_state_and_token_wait_is_fenced():

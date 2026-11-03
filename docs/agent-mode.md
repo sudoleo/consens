@@ -3873,8 +3873,10 @@ neue anlegen“): keine Prüfung, kein Morning Brief, keine neue, keine
 fortgesetzte; ihre öffentlichen Seiten bleiben, wie sie zuletzt waren
 („Archived history“, kein Folgen mehr). Topics laufen weiter.
 
-- **Gespeicherte Consensus-Antworten** haben keine Watch-Pille mehr:
-  `watch-sheet.js` lädt vor `watch.js`, das sie dann gar nicht erst baut.
+- **Gespeicherte Consensus-Antworten** haben keine Watch-Pille mehr; der
+  alte Watch-Dialog, der Hinweis nach dem dritten Lauf und die Pille selbst
+  sind aus dem Frontend entfernt. Wer den Schalter zurücknimmt, braucht ein
+  neues Anlegen.
 - **Watches-Seite** (`watch-dashboard.js`): die Watches des Agenten nach dem,
   was sie vom Leser wollen (Braucht dich, Neu, Läuft, Pausiert, Beendet
   eingeklappt), jede eine Zeile mit Bild, Auftrag, letztem Befund und

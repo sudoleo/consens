@@ -47,11 +47,7 @@
   function bindSharedModal(modal) {
     if (!modal || modal.dataset.sharedModalBound === "true") return;
     modal.dataset.sharedModalBound = "true";
-    window.App?.modalDialog?.bind(modal, {
-      // A watch being set up is not dropped by a click beside it.
-      keepOpen: () => modal.classList.contains("is-watch-dialog"),
-      onClose: settleSharedModalClose,
-    });
+    window.App?.modalDialog?.bind(modal, { onClose: settleSharedModalClose });
   }
 
   function staleShareRequest() {
@@ -86,31 +82,15 @@
     };
   }
 
-  function sharedModalSnapshot() {
-    return Object.freeze({ epoch: sharedModalEpoch, mode: sharedModalMode });
-  }
-
-  function sharedModalSnapshotIsCurrent(snapshot) {
-    const { modal } = shareDialogEls();
-    return !!snapshot
-      && snapshot.epoch === sharedModalEpoch
-      && snapshot.mode === sharedModalMode
-      && dialogIsOpen(modal);
-  }
-
   function setSharedModalOpen(isOpen, mode) {
     const { modal, body } = shareDialogEls();
-    if (!modal) return null;
+    if (!modal) return;
     bindSharedModal(modal);
     if (isOpen) {
-      // Every explicit open is a new user intent, including a second Watch or
-      // Share open while the same modal mode is already visible.
+      // Every explicit open is a new user intent, including a second Share
+      // open while the dialog is already visible.
       invalidateSharedModalRequests();
       sharedModalMode = mode || null;
-      // The mode classes stay on after closing: the dialog keeps its shape
-      // while it fades out, and the next open sets them again.
-      modal.classList.toggle("is-watch-dialog", mode === "watch");
-      modal.classList.toggle("is-share-dialog", mode !== "watch");
       if (!dialogIsOpen(modal)) {
         if (window.App?.modalDialog) window.App.modalDialog.open(modal);
         else modal.setAttribute("open", "");
@@ -118,7 +98,7 @@
       requestAnimationFrame(() => {
         if (body) body.scrollTop = 0;
       });
-      return sharedModalSnapshot();
+      return;
     }
     if (dialogIsOpen(modal)) {
       if (window.App?.modalDialog) window.App.modalDialog.close(modal);
@@ -127,7 +107,6 @@
     // close() settled it already (onClose); a dialog that was not open, or
     // an engine without the helper, still ends every request of the view.
     settleSharedModalClose();
-    return sharedModalSnapshot();
   }
 
   function closeShareDialog() {
@@ -135,7 +114,7 @@
   }
 
   // `options.prepare(viewEpoch)` names the answer to share when it is not the
-  // one Share/Watch target by default (lastShareResultId or the opened chat
+  // one Share targets by default (lastShareResultId or the opened chat
   // entry): a Promise of its pending result ID that rejects with the reason
   // it can't be shared.
   function openShareDialog(view, options = {}) {
@@ -239,7 +218,7 @@
     `;
     document.getElementById("shareCancelBtn").addEventListener("click", closeShareDialog);
     document.getElementById("shareListLink").addEventListener("click", renderShareListView);
-    document.getElementById("watchListLink").addEventListener("click", () => window.openWatchDialog?.("list"));
+    document.getElementById("watchListLink").addEventListener("click", () => window.openWatchDashboard?.());
     const confirmBtn = document.getElementById("shareConfirmBtn");
     const errorLine = document.getElementById("shareDialogError");
     // The server's own sentence, in the dialog it belongs to (never a toast
@@ -350,7 +329,7 @@
     document.getElementById("shareOpenLink").href = url;
     document.getElementById("shareCopyUrlBtn").addEventListener("click", () => copyShareUrl(url));
     document.getElementById("shareListLink").addEventListener("click", renderShareListView);
-    document.getElementById("watchListLink").addEventListener("click", () => window.openWatchDialog?.("list"));
+    document.getElementById("watchListLink").addEventListener("click", () => window.openWatchDashboard?.());
   }
 
   async function renderShareListView() {
@@ -550,12 +529,7 @@
   // Global verfügbar machen, damit z.B. das User-Icon-Menü (firebase.js)
   // die Übersicht der geteilten Links direkt öffnen kann.
   window.openShareDialog = openShareDialog;
-  window.App.sharedModal = {
-    open: (mode) => setSharedModalOpen(true, mode),
-    close: closeShareDialog,
-    snapshot: sharedModalSnapshot,
-    isCurrent: sharedModalSnapshotIsCurrent
-  };
+  window.App.sharedModal = { close: closeShareDialog };
 
   (function initShareModal() {
     const modal = document.getElementById("shareModal");

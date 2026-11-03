@@ -320,8 +320,8 @@ def test_hover_is_a_tone_step_not_transparency():
 def test_the_filled_button_is_one_component():
     inputs = strip_comments(read("components-input.css"))
     primaries = (".share-primary-btn", ".btn-pro", ".auth-primary-action", ".memory-edit-submit",
-                 ".watch-nudge-btn", ".post-demo-login-action", ".agent-google-btn.is-primary",
-                 ".wd-button.is-primary", ".wd-action.is-strong", ".run-blocked-btn.is-primary",
+                 ".post-demo-login-action", ".agent-google-btn.is-primary",
+                 ".wd-button.is-primary", ".run-blocked-btn.is-primary",
                  ".verify-banner-btn", ".feedback-login-button", "#feedbackForm .feedback-submit")
     head, material = next((s, b) for s, b in rules(inputs) if s.startswith(".button, .btn, .share-primary-btn"))
     for primary in primaries:
@@ -379,7 +379,7 @@ def test_sources_are_one_component_in_the_app_and_on_public_pages():
         if name == "source-pill.css":
             continue
         for selector, body in rules(text):
-            if re.search(r"\.(src-ref|source-link|src-ref-favicon|source-favicon|cite-favicon|wp-link-icon|share-source-favicon|wd-source-icon)\b(?![-\w])", selector) \
+            if re.search(r"\.(src-ref|source-link|src-ref-favicon|source-favicon|cite-favicon|wp-link-icon|share-source-favicon)\b(?![-\w])", selector) \
                     or 'a[href^="#src-"]' in selector:
                 assert not re.search(r"(?<![-\w])(width|height|border-radius)\s*:", body), (name, selector)
                 assert "--accent" not in body, (name, selector)
@@ -438,7 +438,7 @@ def test_every_text_field_focuses_the_same_way():
         "auth-modal.css": ["#loginModal .auth-form input:focus"],
         "components-modals.css": ['#feedbackForm textarea:focus, #feedbackForm input[type="email"]:focus',
                                   '.settings-body input[type="text"]:focus, .settings-body textarea:focus',
-                                  ".share-url-row input:focus", ".watch-condition-input:focus"],
+                                  ".share-url-row input:focus"],
         "components-memory-edit.css": [".memory-edit-dialog textarea:focus"],
         "public-pages.css": [".hub-toolbar input:focus, .hub-toolbar select:focus"],
         "public-shell.css": [".share-follow-form input:focus, .share-report-form input:focus, .share-report-form textarea:focus"],

@@ -188,7 +188,7 @@ def test_archived_questions_clamp_like_the_active_one():
     assert "-webkit-line-clamp: 8" in clamp_block
     assert ".thread-history-question.is-long .thread-ask-more" in css
 
-    turn = history.split("buildHistoryTurn(turnData, options = {})", 1)[1].split(
+    turn = history.split("buildHistoryTurn(turnData)", 1)[1].split(
         "renderStoredTurn(turnData)", 1
     )[0]
     assert 'questionMore.className = "thread-ask-more"' in turn
@@ -206,7 +206,7 @@ def test_archived_turns_use_the_same_drawer_row_as_a_saved_answer():
     history = read("static/js/thread-history.js")
     css = read("static/css/shell.css")
 
-    turn = history.split("buildHistoryTurn(turnData, options = {})", 1)[1].split(
+    turn = history.split("buildHistoryTurn(turnData)", 1)[1].split(
         "renderStoredTurn(turnData)", 1
     )[0]
     assert "thread-history-details" not in turn

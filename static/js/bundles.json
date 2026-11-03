@@ -167,15 +167,15 @@
         "static/js/consensus-actions.js",
         {
           "file": "static/js/watch-fields.js",
-          "note": "App.watchFields: the fields and time wording the New watch dialog (watch.js) and the card settings (watch-dashboard.js) share. Before both."
+          "note": "App.watchFields: the one wording of a Watch's schedule. Before watch-sheet.js, watch-dashboard.js and agent-watch.js, which use it."
         },
         {
           "file": "static/js/watch-sheet.js",
-          "note": "App.watchSheet: the sheet that starts a Watch in the user's own words (the pill, New Watch). Before watch.js, which opens it for every way to start one and, finding it, builds no Watch pill for a saved Consensus answer (its Watches are archived); uses App.modalDialog and App.watchFields, App.watchUi only when opened."
+          "note": "App.watchSheet: the sheet that starts a Watch in the user's own words (the pill, New Watch, the public page's invitation). watch.js opens it at runtime; uses App.modalDialog and App.watchFields, App.watchUi only when opened."
         },
         {
           "file": "static/js/watch.js",
-          "note": "Needs consensus-actions.js and the share modal. Publishes window.App.watchUi."
+          "note": "The Watches page's route and view switch, the Watch pill under an Agent answer, Telegram pairing. Publishes window.App.watch and window.App.watchUi; opens App.watchSheet at runtime."
         },
         {
           "file": "static/js/watch-dashboard.js",
@@ -183,7 +183,7 @@
         },
         {
           "file": "static/js/mobile-header.js",
-          "note": "Moves the existing Share/Watch/Cite controls and view switch after both action modules have initialized."
+          "note": "Moves the existing Share/Cite controls and the view switch after consensus-actions.js has built them."
         },
         "static/js/user-tier.js",
         "static/js/user-memory.js",
@@ -222,7 +222,7 @@
         "static/js/agent-memory.js",
         {
           "file": "static/js/agent-watch.js",
-          "note": "App.agentWatch: the Watch card under an Agent answer. Uses App.watch and App.watchUi (watch.js) at runtime; agent-chat.js renders it."
+          "note": "App.agentWatch: the Watch card under an Agent answer. Uses App.watchFields; agent-chat.js renders it, the Watch pill (watch.js) reads a chat's Watches from it at runtime."
         },
         {
           "file": "static/js/agent-github.js",

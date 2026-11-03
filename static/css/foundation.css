@@ -352,8 +352,6 @@ html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-she
   .settings-select::after,
   .settings-note > summary::before,
   .model-picker-option-chevron,
-  .wd-explainer > summary::after,
-  .wd-action-toggle::after,
   .aw-disclosure::after,
   .aw-archive-summary::after,
   .thread-watch-fold-button::after,

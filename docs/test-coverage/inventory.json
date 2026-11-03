@@ -4,10 +4,10 @@
   "base_commit": "ffaca3df7c8bbb02d850fb8f31d90107f26e9293",
   "scope": "Current source inventory and runner evidence. Historical coverage remains separately dated; no semantic completeness claim.",
   "totals": {
-    "files": 291,
-    "static_definitions": 3231,
-    "runner_cases": 4425,
-    "source_lines": 78963
+    "files": 290,
+    "static_definitions": 3228,
+    "runner_cases": 4422,
+    "source_lines": 78855
   },
   "support_files": [
     {
@@ -38904,140 +38904,6 @@
             "passed": 5
           },
           "runner_case_count": 5
-        }
-      ]
-    },
-    {
-      "path": "tests/js/watch-feature-nudge.test.mjs",
-      "suite": "frontend",
-      "sha256": "32e5df4878ab232757c5d7ede2c8bde8acb64363f1b8282537bae0ad79463533",
-      "source_lines": 108,
-      "review_status": "reviewed",
-      "areas": [
-        "Composer",
-        "Watch"
-      ],
-      "level": "JavaScript-Modulintegration mit jsdom",
-      "covers": "Hinweis erst bei dritter Frage; nur Hinweis wird an body über Composer angehängt, Antwort erhält keine entsprechende Hochstufung; Positionswerte gesetzt, Schließen entfernt Hinweis und Ankermarkierung.",
-      "limits": "Timer manuell ausgelöst, künstlicher DOM/Geometrie und Fetchdouble; keine tatsächliche Überlagerungs- oder Sichtbarkeitsmessung.",
-      "questions": "Mobile Überdeckung, Wiederholungs-/Kontenpräferenz und Tastaturbedienung zuordnen.",
-      "source_references": [
-        "static/js/watch-state.js",
-        "static/js/watch.js"
-      ],
-      "test_helper_references": [
-        "tests/js/helpers/appWindow.mjs"
-      ],
-      "definition_count": 3,
-      "runner_case_count": 3,
-      "execution": {
-        "passed": 3
-      },
-      "definitions": [
-        {
-          "name": "haelt sich bis zur dritten Frage zurueck",
-          "line": 73,
-          "end_line": 82,
-          "registration": "it",
-          "assertion_evidence": [
-            {
-              "line": 77,
-              "kind": "expect"
-            },
-            {
-              "line": 79,
-              "kind": "expect"
-            },
-            {
-              "line": 81,
-              "kind": "expect"
-            }
-          ]
-        },
-        {
-          "name": "portaliert nur den Hinweis ueber den Composer, nie die Antwort",
-          "line": 84,
-          "end_line": 96,
-          "registration": "it",
-          "assertion_evidence": [
-            {
-              "line": 89,
-              "kind": "expect"
-            },
-            {
-              "line": 90,
-              "kind": "expect"
-            },
-            {
-              "line": 91,
-              "kind": "expect"
-            },
-            {
-              "line": 93,
-              "kind": "expect"
-            },
-            {
-              "line": 94,
-              "kind": "expect"
-            },
-            {
-              "line": 95,
-              "kind": "expect"
-            }
-          ]
-        },
-        {
-          "name": "nimmt die Markierung beim Schliessen wieder zurueck",
-          "line": 98,
-          "end_line": 107,
-          "registration": "it",
-          "assertion_evidence": [
-            {
-              "line": 104,
-              "kind": "expect"
-            },
-            {
-              "line": 105,
-              "kind": "expect"
-            }
-          ]
-        }
-      ],
-      "cases": [
-        {
-          "id": " watch feature nudge haelt sich bis zur dritten Frage zurueck",
-          "status": "passed",
-          "report_ordinal": 1
-        },
-        {
-          "id": " watch feature nudge portaliert nur den Hinweis ueber den Composer, nie die Antwort",
-          "status": "passed",
-          "report_ordinal": 2
-        },
-        {
-          "id": " watch feature nudge nimmt die Markierung beim Schliessen wieder zurueck",
-          "status": "passed",
-          "report_ordinal": 3
-        }
-      ],
-      "historical_execution": {
-        "review_date": "2026-09-26",
-        "base_commit": "145db25bfe029ff7f50cd77595bd6b9e043c1a2f",
-        "execution": {
-          "passed": 3
-        },
-        "runner_case_count": 3
-      },
-      "review_date": "2026-10-02",
-      "description_review_date": "2026-09-26",
-      "execution_history": [
-        {
-          "review_date": "2026-10-02",
-          "source_commit": "2860844af9dcba2087551af1697408e87e5fe928",
-          "execution": {
-            "passed": 3
-          },
-          "runner_case_count": 3
         }
       ]
     },
@@ -130455,6 +130321,15 @@
       },
       "definition_count": 2,
       "reason": "Durch neuen Stepper bzw. evidencebasiertes Watch-Dashboard ersetzt; keine aktuelle Testdatei."
+    },
+    {
+      "path": "tests/js/watch-feature-nudge.test.mjs",
+      "last_review": "2026-10-02",
+      "execution": {
+        "passed": 3
+      },
+      "definition_count": 3,
+      "reason": "Der Hinweis nach dem dritten Lauf ist mit den archivierten Consensus-Watches aus dem Frontend entfernt (2026-11-03); keine aktuelle Testdatei."
     }
   ]
 }

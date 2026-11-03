@@ -95,10 +95,9 @@ def test_public_navigation_is_compact_and_learning_links_live_in_footer():
     assert '<a href="/app" class="button-primary">Ask your own question</a>' in read("templates/share.html")
 
 
-def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract():
+def test_demo_and_dedicated_model_pulse_match_the_product_contract():
     demo = read("static/demo.js")
     misc_css = read("static/css/components-misc.css")
-    watch = read("static/js/watch.js")
     leaderboard = read("static/js/model-pulse.js")
     pulse_page = read("templates/model-pulse.html")
     # The demo plays the Agent's one mode (2026-10-31): the reviewers' notes,
@@ -131,13 +130,6 @@ def test_demo_watch_nudge_and_dedicated_model_pulse_match_the_product_contract()
     # die Demo das Produkt zeigt und nicht nur eine Randnotiz.
     for kind in ("wrong", "doubtful", "incomplete"):
         assert f'kind: "{kind}"' in demo
-    # Das Kreuz ist das eine gezeichnete Schliessen-Kreuz der App (Apple-Audit
-    # G3, foundation.css .close-button), kein Glyph aus einer Ersatzschrift.
-    assert (
-        'class="watch-feature-nudge-close close-button" aria-label="Dismiss new feature tip">'
-        '<svg class="close-icon"' in watch
-    )
-    assert "&#10005;" not in watch
     assert "rows.forEach" in leaderboard
     assert "/api/model-pulse?" in leaderboard
     for name in ('name="period"', 'name="mode"', 'name="with"', 'name="sort"'):
@@ -672,16 +664,14 @@ def test_logout_clears_the_loaded_run_and_aborts_active_streams():
     assert 'window.App.state.set("consensusCitationMeta", null, "consensus")' in app_init
 
 
-def test_watch_change_surfaces_use_tint_without_a_left_rail():
-    """A watch card is a tinted surface; movement is the dot and the label,
-    never a coloured rail down the card's edge."""
+def test_watch_rows_have_no_left_rail():
+    """A Watch row is frameless: its state is the words and one dot, never a
+    coloured rail down its edge."""
     watch = read("static/css/components-watch.css")
-    item_rule = watch.split(".wd-item {", 1)[1].split("}", 1)[0]
+    row_rule = watch.split(".aw-row {", 1)[1].split("}", 1)[0]
     limit_rule = watch.split(".watch-limit-summary.is-compact {", 1)[1].split("}", 1)[0]
 
-    assert "border-left" not in item_rule
-    assert "border-radius: var(--radius-lg)" in item_rule
-    assert "background: var(--raise)" in item_rule
+    assert "border-left" not in row_rule
     assert "background: transparent" in limit_rule
     assert ".watch-dash-stat" not in read("static/css/shell.css")
 

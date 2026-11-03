@@ -52,8 +52,7 @@ function agentApp({ watches = [] } = {}) {
             : { watches, intervals: ["daily", "weekly"], active_count: watches.length, active_limit: 2 })
           : String(url).startsWith("/agent/") ? structuredClone(CATALOG)
           : String(url) === "/api/my/watches" ? { watches: [], limits: { plan: "pro", active_count: 0, active_limit: 10 } }
-            : String(url) === "/api/watch/goal-suggestions" ? { goals: [] }
-              : ({ chat: { id: CHAT } }) }));
+            : ({ chat: { id: CHAT } }) }));
       window.streamSSERequest = vi.fn(async (_url, payload) => {
         const id = String(++answer).repeat(32);
         return { ok: true, data: { response: `Answer ${answer}`, chat_id: CHAT, turn_id: id,

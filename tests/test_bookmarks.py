@@ -886,15 +886,13 @@ def test_bookmark_share_result_rejects_a_different_visible_revision():
     save_pending.assert_not_called()
 
 
-def test_bookmark_frontend_prepares_share_and_watch_result():
+def test_bookmark_frontend_prepares_share_result():
     root = Path(__file__).resolve().parents[1]
     firebase = (root / "static" / "firebase.js").read_text(encoding="utf-8")
     share_dialog = (root / "static" / "js" / "share-dialog.js").read_text(encoding="utf-8")
-    watch = (root / "static" / "js" / "watch.js").read_text(encoding="utf-8")
     assert 'fetch("/bookmark/consensus/share-result"' in firebase
     assert "prepareBookmarkShareResult(bookmark);" in firebase
     assert "resolveCurrentShareResultId" in share_dialog
-    assert "resolveCurrentShareResultId" in watch
 
 
 def test_a_persisted_consensus_bookmark_is_accepted_by_its_meta():

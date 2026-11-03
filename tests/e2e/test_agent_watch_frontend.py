@@ -105,8 +105,6 @@ def test_agent_watch_card_starts_the_prepared_watch_and_ends_it(browser, phase4_
         card_box = card.bounding_box()
         assert answer_box and card_box and card_box["y"] >= answer_box["y"] + answer_box["height"] - 1
         assert card_box["x"] + card_box["width"] <= width + .5
-        # Its own card replaces the generic "Watch this question" hint.
-        expect(page.locator("#watchFeatureNudge")).to_have_count(0)
         _shot(page, f"agent-watch-card-{width}-{'dark' if dark else 'light'}")
 
         # Change: the account's intervals and a time.

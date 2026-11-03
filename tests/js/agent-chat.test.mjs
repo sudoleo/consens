@@ -1807,7 +1807,7 @@ describe("single-model agent chat", () => {
     const { window, document, dom } = boot({ setup(w) {
       w.App.temporaryChat = { armed: () => true, start: () => "token-1", adopt: () => true, token: () => "token-1",
         unanswered: () => false, leave: vi.fn(), arm: vi.fn(), sync: vi.fn(), shown: () => true };
-      w.App.watch = { answerButton: vi.fn(), showFeatureNudge: vi.fn() };
+      w.App.watch = { answerButton: vi.fn() };
       w.App.answerShare = { button: vi.fn() };
     } });
     await selectAgent(window);
@@ -1830,8 +1830,6 @@ describe("single-model agent chat", () => {
     const fromBasis = window.App.answerShare.button.mock.calls.map(([, options]) => options).filter(o => "chatId" in o);
     expect(fromBasis.length).toBeGreaterThan(1);
     expect(fromBasis.filter(options => options.eligible === true)).toEqual([]);
-    // Not offered on its own, though the answer has sources.
-    for (const [options] of window.App.watch.showFeatureNudge.mock.calls) expect(options.eligible).toBe(false);
     dom.window.close();
   });
 

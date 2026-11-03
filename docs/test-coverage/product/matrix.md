@@ -2611,7 +2611,6 @@ Dashboard lädt eigene Metadaten/History und autoritative Limitwerte, Modals erh
 - [tests/e2e/test_mobile_navigation.py](../../../tests/e2e/test_mobile_navigation.py)
 - [tests/e2e/test_phase4_frontend.py](../../../tests/e2e/test_phase4_frontend.py)
 - [tests/js/source-verification-watch.test.mjs](../../../tests/js/source-verification-watch.test.mjs)
-- [tests/js/watch-feature-nudge.test.mjs](../../../tests/js/watch-feature-nudge.test.mjs)
 - [tests/test_phase4_frontend.py](../../../tests/test_phase4_frontend.py)
 
 </details>

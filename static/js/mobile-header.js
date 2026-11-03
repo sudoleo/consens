@@ -1,6 +1,6 @@
 // The mobile header owns the same action nodes as the desktop footer. Keeping
-// the nodes preserves their handlers, Watch state and the Cite menu's anchor.
-// Load after consensus-actions.js and watch.js have created the controls.
+// the nodes preserves their handlers and the Cite menu's anchor.
+// Load after consensus-actions.js has created the controls.
 (function () {
   const header = document.getElementById('mobileConversationActions');
   const sidebarViews = document.getElementById('mobileSidebarViews');

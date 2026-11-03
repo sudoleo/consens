@@ -188,7 +188,7 @@
   // markup's own marks (translate="no", data-i18n-skip) cover the rest.
   // Rendered Markdown marks itself (markdown-stream.js).
   const CONTENT_REGIONS = [
-    ".bookmark > p", ".thread-ask-text", ".watch-question-preview",
+    ".bookmark > p", ".thread-ask-text",
   ];
   const SKIP_SELECTOR = [
     "script", "style", "textarea", "pre", "svg", "math", "noscript", "code", "kbd", "samp", "var",

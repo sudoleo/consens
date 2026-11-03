@@ -170,7 +170,7 @@ describe("i18n.js on a German page", () => {
       "{remaining} slots free": "{remaining} Plätze frei",
       "Standard access": "Standard-Zugang",
     });
-    // The plan line of /app/watches (watch.js renderWatchLimit): the whole
+    // The old plan line of /app/watches: the whole
     // line once matched "{answered} of {length}" and stayed English.
     const line = document.createElement("div");
     line.innerHTML = '<span>Standard access</span> <strong>2 of 20 active</strong> '

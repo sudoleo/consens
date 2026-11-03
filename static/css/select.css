@@ -1,10 +1,10 @@
 /* ==========================================================================
    Native selects — one closed look, one open list
    Every visible <select> outside the custom pickers: the sort and filter
-   menus on /questions and /topics, the report form on shared pages, the watch
-   settings and Settings. Each keeps its own box (border, fill, height) from
-   its component; this file adds the chevron and, where the browser supports
-   a stylable picker (appearance: base-select), an open list made of the same
+   menus on /questions and /topics, the report form on shared pages and
+   Settings. Each keeps its own box (border, fill, height) from its
+   component; this file adds the chevron and, where the browser supports a
+   stylable picker (appearance: base-select), an open list made of the same
    material as the app's menus instead of the operating system's blue list.
    Older browsers keep their native list with the same closed control.
    Loaded last on every page that has such a select, after the component CSS.
@@ -20,8 +20,7 @@
   --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3 5.5l5 5 5-5' fill='none' stroke='%2394979b' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
-:root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select,
-:root select:is(.watch-interval-select, .wd-select) {
+:root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select {
   appearance: none;
   -webkit-appearance: none;
   padding-right: 34px;
@@ -37,18 +36,15 @@
 :root .settings-select::after { display: none; }
 
 @supports (appearance: base-select) {
-  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select,
-  :root select:is(.watch-interval-select, .wd-select) {
+  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select {
     appearance: base-select;
     display: inline-flex;
     align-items: center;
   }
 
-  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select::picker-icon,
-  :root select:is(.watch-interval-select, .wd-select)::picker-icon { display: none; }
+  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select::picker-icon { display: none; }
 
-  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select::picker(select),
-  :root select:is(.watch-interval-select, .wd-select)::picker(select) {
+  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select::picker(select) {
     appearance: base-select;
     min-width: anchor-size(width);
     margin-block: 6px;
@@ -63,22 +59,19 @@
     transition: opacity var(--dur-press) var(--ease-standard), translate var(--dur-press) var(--ease-standard), overlay var(--dur-press) allow-discrete, display var(--dur-press) allow-discrete;
   }
 
-  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select:open::picker(select),
-  :root select:is(.watch-interval-select, .wd-select):open::picker(select) {
+  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select:open::picker(select) {
     opacity: 1;
     translate: 0 0;
   }
 
   @starting-style {
-    :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select:open::picker(select),
-    :root select:is(.watch-interval-select, .wd-select):open::picker(select) {
+    :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select:open::picker(select) {
       opacity: 0;
       translate: 0 -4px;
     }
   }
 
-  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option,
-  :root select:is(.watch-interval-select, .wd-select) option {
+  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option {
     display: flex;
     align-items: center;
     gap: 10px;
@@ -93,26 +86,21 @@
     cursor: pointer;
   }
 
-  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:focus-visible,
-  :root select:is(.watch-interval-select, .wd-select) option:focus-visible {
+  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:focus-visible {
     background: var(--raise, #f5f5f5);
   }
   @media (hover: hover) and (pointer: fine) {
-    :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:hover,
-    :root select:is(.watch-interval-select, .wd-select) option:hover {
+    :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:hover {
       background: var(--raise, #f5f5f5);
     }
   }
 
-  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:checked,
-  :root select:is(.watch-interval-select, .wd-select) option:checked { font-weight: 600; }
+  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:checked { font-weight: 600; }
 
-  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:disabled,
-  :root select:is(.watch-interval-select, .wd-select) option:disabled { color: var(--ink-3, #64676d); cursor: default; }
+  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option:disabled { color: var(--ink-3, #64676d); cursor: default; }
 
   /* The tick sits at the end of the row, like the app's model menus. */
-  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option::checkmark,
-  :root select:is(.watch-interval-select, .wd-select) option::checkmark {
+  :root :is(.hub-toolbar, .topics-toolbar, .share-report-form, .settings-select) select option::checkmark {
     order: 1;
     margin-left: auto;
     color: var(--ink-2, #5c5f66);

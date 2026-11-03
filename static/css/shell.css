@@ -3645,30 +3645,17 @@ body.is-hero .consensus-section::before {
 }
 
 /* --------------------------------------------------------------------------
-   6. Watch dialog surfaces
+   6. Watches page surfaces
 
-   The dashboard itself (components-watch.css, `wd-`) is built on the
-   surface scale from the start; these are the dialog parts that predate it.
+   The page itself (components-watch.css) is built on the surface scale;
+   the plan line in its head draws no rectangle of its own.
    -------------------------------------------------------------------------- */
-.watch-success-card,
 .watch-limit-summary {
   border: 0;
   background: var(--raise);
   box-shadow: none;
   backdrop-filter: none;
   -webkit-backdrop-filter: none;
-}
-
-/* The rest of the watch surfaces: the plan pill and the dialog's limit
-   notice. They were the last things on this page still drawing a rectangle
-   (several of them an accent-tinted one) around content that the tone
-   already separates. */
-.watch-limit-plan,
-.watch-limit-summary.is-dialog {
-  border: 0;
-  background: var(--raise);
-  color: var(--ink-2);
-  box-shadow: none;
 }
 
 .watch-page {
@@ -4293,9 +4280,8 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   /* Popovers anchored to the islands open over the fade beneath them. An
      open sidebar covers the islands, so their popovers leave with them
      (the sidebar shares the header's layer and must not end up beneath). */
-  .consensus-actions-menu,
-  .watch-feature-nudge { z-index: calc(var(--z-header) + 1); }
-  body:has(.sidebar.active) :is(.consensus-actions-menu, .watch-feature-nudge) { visibility: hidden; }
+  .consensus-actions-menu { z-index: calc(var(--z-header) + 1); }
+  body:has(.sidebar.active) .consensus-actions-menu { visibility: hidden; }
 
   .sidebar-pinned { margin-top: 0; }
   .mobile-sidebar-views { display: block; margin-bottom: 8px; }

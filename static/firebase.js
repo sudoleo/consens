@@ -850,9 +850,7 @@ onIdTokenChanged(auth, async (user) => {
       watchedLinksButton.addEventListener("click", e => {
         e.stopPropagation();
         setAccountMenuOpen(false);
-        if (typeof window.openWatchDialog === "function") {
-          window.openWatchDialog("list");
-        }
+        window.openWatchDashboard?.();
       });
     }
 

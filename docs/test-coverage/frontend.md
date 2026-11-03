@@ -2,7 +2,7 @@
 
 Stand: **2026-10-02**, Quellstand `ffaca3df7c8bbb02d850fb8f31d90107f26e9293`. [Methodik und Gesamtbefund](../test-coverage-map.md).
 
-**77 Dateien · 579 statische Testdefinitionen · 705 Runner-Fälle.**
+**76 Dateien · 576 statische Testdefinitionen · 702 Runner-Fälle.**
 
 „Geprüftes Verhalten“ beschreibt die vorhandenen Assertions. Der Laufstatus steht separat: bei Fehlern ist der beschriebene Vertrag nicht als bestanden belegt. Prüfaufträge sind offene Fragen, keine pauschal festgestellten Lücken der gesamten Suite. Aktuelle Befundbewertungen stehen im [Produktabgleich](product/README.md).
 
@@ -86,7 +86,6 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 | [user-memory.test.mjs](#user-memory-test-mjs) | 6 | 6 | 6 bestanden |
 | [vendor-frontend.test.mjs](#vendor-frontend-test-mjs) | 3 | 4 | 4 bestanden |
 | [watch-dashboard-state.test.mjs](#watch-dashboard-state-test-mjs) | 5 | 5 | 5 bestanden |
-| [watch-feature-nudge.test.mjs](#watch-feature-nudge-test-mjs) | 3 | 3 | 3 bestanden |
 
 <a id="account-tier-mark-test-mjs"></a>
 
@@ -2591,34 +2590,5 @@ Die Codeverweise sind direkte Imports oder wörtliche Pfade, keine gemessene Aus
 - [names a pending re-check and a resolved goal](../../tests/js/watch-dashboard-state.test.mjs#L63) (Zeile 63)
 - [falls back to the last move while the answer is steady](../../tests/js/watch-dashboard-state.test.mjs#L76) (Zeile 76)
 - [groups watches and shows the goal with its status](../../tests/js/watch-dashboard-state.test.mjs#L95) (Zeile 95)
-
-</details>
-
-<a id="watch-feature-nudge-test-mjs"></a>
-
-## watch-feature-nudge.test.mjs
-
-**Quelle:** [tests/js/watch-feature-nudge.test.mjs](../../tests/js/watch-feature-nudge.test.mjs) · **Bereiche:** Composer, Watch.
-
-**Ebene:** JavaScript-Modulintegration mit jsdom.
-
-**Lauf:** 3 bestanden.
-
-**Geprüftes Verhalten:** Hinweis erst bei dritter Frage; nur Hinweis wird an body über Composer angehängt, Antwort erhält keine entsprechende Hochstufung; Positionswerte gesetzt, Schließen entfernt Hinweis und Ankermarkierung.
-
-**Grenzen und Doubles:** Timer manuell ausgelöst, künstlicher DOM/Geometrie und Fetchdouble; keine tatsächliche Überlagerungs- oder Sichtbarkeitsmessung.
-
-**Prüfauftrag für den Folgeaudit:** Mobile Überdeckung, Wiederholungs-/Kontenpräferenz und Tastaturbedienung zuordnen.
-
-**Direkte Codeverweise:** [static/js/watch-state.js](../../static/js/watch-state.js), [static/js/watch.js](../../static/js/watch.js).
-
-**Direkte Testhelfer:** [tests/js/helpers/appWindow.mjs](../../tests/js/helpers/appWindow.mjs).
-
-<details>
-<summary>3 Testdefinitionen und ihre Quellstellen</summary>
-
-- [haelt sich bis zur dritten Frage zurueck](../../tests/js/watch-feature-nudge.test.mjs#L73) (Zeile 73)
-- [portaliert nur den Hinweis ueber den Composer, nie die Antwort](../../tests/js/watch-feature-nudge.test.mjs#L84) (Zeile 84)
-- [nimmt die Markierung beim Schliessen wieder zurueck](../../tests/js/watch-feature-nudge.test.mjs#L98) (Zeile 98)
 
 </details>

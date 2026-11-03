@@ -107,7 +107,7 @@ def test_a_placeholder_takes_whole_elements_only(monkeypatch):
     monkeypatch.setitem(i18n._catalogs, "de", ((), current))
     monkeypatch.setitem(i18n._checked, "de", float("inf"))
     i18n._translated_cache.clear()
-    # The plan line of /app/watches (watch.js renderWatchLimit): the whole
+    # The old plan line of /app/watches: the whole
     # line once matched "{answered} of {length}" and stayed English.
     line = ('<div><span>Standard access</span> <strong>2 of 20 active</strong> '
             '<span aria-hidden="true">·</span> <span>18 slots free</span></div>')

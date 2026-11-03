@@ -83,26 +83,23 @@ function dialogs() {
   const resolve = vi.fn(async () => null);
   const harness = loadScripts(
     ["static/js/motion.js", "static/js/modal-dialog.js", "static/js/popover.js", "static/js/notices.js",
-      "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js"],
+      "static/js/share-dialog.js"],
     {
       body: SHELL,
       before(window) {
-        window.App = { watch: {}, showPopup: vi.fn(), trackAppEvent: vi.fn(), openAuthModal: vi.fn() };
+        window.App = { showPopup: vi.fn(), trackAppEvent: vi.fn() };
         window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
         window.auth = { currentUser: { uid: "owner", getIdToken: async () => "token" } };
         window.__consensioAuthState = { known: true, uid: "owner" };
-        window.lastQuestion = "Is the heat pump worth it in an old house?";
         // A reopened saved chat whose preparation the server refuses.
         window.currentBookmarkShareResultContext = { bookmarkId: "saved", versionParts: [] };
         window.resolveCurrentShareResultId = async () => {
           window.currentBookmarkShareResultError = REASON;
           return resolve();
         };
-        window.fetch = vi.fn(async input => ({
+        window.fetch = vi.fn(async () => ({
           ok: true, status: 200, headers: { get: () => null },
-          json: async () => String(input) === "/api/my/watches"
-            ? { watches: [], limits: { plan: "pro", active_count: 0, active_limit: 10 } }
-            : String(input) === "/api/watch/goal-suggestions" ? { goals: [] } : {}
+          json: async () => ({})
         }));
       }
     }
@@ -112,7 +109,7 @@ function dialogs() {
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 
-describe("a refused preparation in the dialogs", () => {
+describe("a refused preparation in the Share dialog", () => {
   it("Share says why and lets the reader try again", async () => {
     const { window, document, resolve } = dialogs();
     window.openShareDialog();
@@ -140,22 +137,5 @@ describe("a refused preparation in the dialogs", () => {
 
     expect(document.getElementById("shareDialogError").textContent).toBe(REASON);
     expect(document.getElementById("shareConfirmBtn").hidden).toBe(true);
-  });
-
-  it("Watch says why and lets the reader try again", async () => {
-    const { window, document, resolve } = dialogs();
-    window.openWatchDialog("confirm");
-    await vi.waitFor(() => expect(document.getElementById("watchDialogError").hidden).toBe(false));
-
-    const button = document.getElementById("watchConfirmBtn");
-    expect(document.getElementById("watchDialogError").textContent).toBe(REASON);
-    expect(button.textContent).toBe("Start watching");
-    expect(button.disabled).toBe(false);
-
-    button.click();
-    await settle();
-    expect(resolve).toHaveBeenCalledTimes(2);
-    expect(document.getElementById("watchDialogError").textContent).toBe(REASON);
-    expect(window.fetch.mock.calls.some(([url, options]) => url === "/api/watch" && options?.method === "POST")).toBe(false);
   });
 });

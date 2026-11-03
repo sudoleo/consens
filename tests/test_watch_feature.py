@@ -2218,38 +2218,19 @@ class WatchFrontendContractTests(unittest.TestCase):
     def test_user_menu_places_watched_after_shared_links(self):
         source = Path("static/firebase.js").read_text(encoding="utf-8")
         self.assertLess(source.index('id="sharedLinksButton"'), source.index('id="watchedLinksButton"'))
-        self.assertIn('window.openWatchDialog("list")', source)
+        self.assertIn("window.openWatchDashboard?.()", source)
 
-    def test_watch_ui_exposes_every_run_email_mode(self):
-        # The dialog and the card settings build their fields from one module
-        # (watch-fields.js, Apple-Audit J7).
-        fields = Path("static/js/watch-fields.js").read_text(encoding="utf-8")
-        watch = Path("static/js/watch.js").read_text(encoding="utf-8")
-        dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
-        source = watch + dashboard
-        self.assertIn('every_run: "After every check"', fields)
-        self.assertIn('condition: "Only when it is reached"', fields)
-        self.assertIn("resolvedOptions().timeZone", fields)
-        self.assertIn('F.visibilitySelect("watchVisibility"', source)
-        self.assertIn('F.timeInput("watchRunTime"', source)
-        self.assertIn('F.weekdaySelect("watchWeekday"', source)
-        self.assertIn("run_weekday", source)
-        self.assertIn('idPrefix ? idPrefix + "TelegramEnabled"', source)
-        self.assertIn('"/api/my/telegram/link"', source)
-        self.assertIn('"telegram_enabled"', source)
-        # Both places ask the same questions under the same names.
-        for label in ("How often", "Notify me", "Send to", "Watch page", "Details that matter"):
-            self.assertIn(f'label: "{label}"', watch)
-            self.assertIn(f'label: "{label}"', dashboard + watch)
-
-    def test_watch_dashboard_supports_query_first_creation(self):
+    def test_every_way_to_start_a_watch_opens_the_sheet(self):
+        """Since 2026-11-03 a Watch runs the Agent: New Watch, the pill under
+        an answer, the public page's invitation (?create=1) and a sign-in in
+        between all open watch-sheet.js."""
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         share_source = Path("templates/watch_share.html").read_text(encoding="utf-8")
-        self.assertIn('renderQuestionStep(setup.question, modalIntent, setup)', source)
-        # A known question (example, chat, Agent proposal) skips straight to the goal.
-        self.assertIn('renderConfirm({ ...setup, question: knownQuestion }, modalIntent)', source)
-        self.assertIn('payload.question = directQuestion', source)
+        self.assertIn("window.App.watchSheet?.open(options)", source)
+        self.assertIn('startWatch({ trigger: event.currentTarget, source: "dashboard" })', source)
+        self.assertIn('startWatch({ task: pending.question || "", source: "after_login" })', source)
+        self.assertIn('url.searchParams.get("create") === "1"', source)
         self.assertIn('id="watchDashCreate"', html_source)
         self.assertIn("watch_awaiting_first_run", share_source)
 
@@ -2263,74 +2244,24 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("tells you only when it finds something", source)
         self.assertNotIn("Create your first Watch", source)
         self.assertNotIn("Start from an example", source)
-
-    def test_watch_setup_is_a_goal_choice_and_one_settings_line(self):
-        """Der Dialog war zu verschachtelt: Defaults-Kasten mit Chips, Hinweise,
-        Kanaele als eigener Block. Jetzt: Frage, "What are you waiting for?" als
-        Radioliste, darunter EINE Zeile mit Zeitplan/Kanal/Sichtbarkeit, die per
-        "Change" aufklappt. Zielvorschlaege waren Chips ueber einem leeren Feld,
-        und man sah nicht, dass man sie anklicken muss — jetzt sind sie
-        Optionen, und die erste ist vorausgewaehlt."""
-        source = Path("static/js/watch.js").read_text(encoding="utf-8")
-        fields = Path("static/js/watch-fields.js").read_text(encoding="utf-8")
-        css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
-        # Ziel vor den Einstellungen, Einstellungen zugeklappt in einer Zeile.
-        self.assertLess(source.index('F.goalList({ prefix: "watchGoal"'),
-                        source.index('advanced.id = "watchAdvancedSettings"'))
-        self.assertIn('advanced.className = "watch-settings"', source)
-        self.assertIn('id="watchSettingsSummary"', source)
-        self.assertLess(
-            source.index('advanced.id = "watchAdvancedSettings"'),
-            source.index('buildChannels({ idPrefix: "watch"'),
-        )
-        # Vorschlaege sind Radio-Optionen mit "Something else" und "Any change".
-        self.assertIn('"/api/watch/goal-suggestions"', source)
-        self.assertIn('name: "watchGoalChoice"', source)
-        self.assertIn('customChoice.id = prefix + "CustomChoice"', fields)
-        self.assertIn('anyChoice.id = prefix + "None"', fields)
-        self.assertIn("Any change to the answer", fields)
-        # "Any change" is picked from the first frame (J16); the first
-        # suggestion takes over while the reader has not chosen.
-        self.assertIn("if (!goalTouched && radios[0]) radios[0].checked = true;", source)
-        self.assertIn("else noneChoice.checked = true;", source)
-        self.assertIn("condition: goal", source)
-        self.assertIn('.watch-goal-option:has(input[type="radio"]:checked)', css)
-        # Weg sind Step-Label, Guidance-Aufklapper und Defaults-Chips.
-        for gone in ("Step 1 of 2", "watch-question-guidance", "watch-setup-chip",
-                     "watch-goal-chip", "watch-config-assurance"):
-            self.assertNotIn(gone, source)
-        self.assertIn('option("private", "Private, only you", { selected: value !== "public" })', fields)
-        # Tomorrow by default; after "Edit" the day chosen before.
-        self.assertIn('F.weekdaySelect("watchWeekday", kept?.run_weekday || browserTomorrowWeekday())', source)
-        dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         # The agreement score is not what a watch reports.
-        self.assertNotIn("/100", dashboard)
+        self.assertNotIn("/100", source)
 
-    def test_watch_dialog_ignores_backdrop_click_and_view_switch_hint_is_finite(self):
+    def test_view_switch_hint_is_finite(self):
         watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")
-        share_source = Path("static/js/share-dialog.js").read_text(encoding="utf-8")
         css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
 
-        # A watch being set up is not dropped by a click beside it.
-        self.assertIn('keepOpen: () => modal.classList.contains("is-watch-dialog")', share_source)
         self.assertIn('consensio.watchViewSwitchHint.seen.v1', watch_source)
         # Two beats of the one tempo that repeats (Apple audit C13).
         self.assertIn('animation: watchSwitchPulse var(--dur-beat) var(--ease-out) 2', css)
         self.assertIn('prefers-reduced-motion: reduce', css)
 
-    def test_watch_limits_are_visible_before_creation_and_on_dashboard(self):
-        source = Path("static/js/watch.js").read_text(encoding="utf-8")
+    def test_watch_limits_are_visible_on_the_page(self):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         self.assertIn('id="watchDashLimit"', html_source)
-        self.assertIn('id="watchDialogLimit"', source)
-        self.assertIn("Paused watches don’t count.", source)
-        self.assertIn("limited during early access", source)
         self.assertIn('id="watchUsageDisplay"', html_source)
-        self.assertIn('action.textContent = "All slots in use"', source)
-        # At the limit the dialog says so before any typing (J25).
-        self.assertIn("function renderLimitStep(modalIntent, { resume = null, reload = false } = {})", source)
 
-    def test_watch_modal_has_one_scroll_area_and_locks_background(self):
+    def test_share_modal_has_one_scroll_area_and_locks_background(self):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         modal_css = Path("static/css/components-modals.css").read_text(encoding="utf-8")
         self.assertIn("max-height: calc(100dvh - 32px)", modal_css)
@@ -2350,9 +2281,6 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("dialog#shareModal[open] { display: flex; }", modal_css)
         self.assertIn('window.App.sharedModal', share_source)
 
-        watch_source = Path("static/js/watch.js").read_text(encoding="utf-8")
-        self.assertIn('window.App.sharedModal.open("watch")', watch_source)
-
     def test_watch_dashboard_is_a_page_with_segmented_view_switch(self):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         self.assertIn('id="viewSwitch"', html_source)
@@ -2369,9 +2297,6 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('setAttribute("data-active"', js_source)
         bundles = Path("static/js/bundles.json").read_text(encoding="utf-8")
         self.assertLess(bundles.index("static/js/watch.js"), bundles.index("static/js/watch-dashboard.js"))
-        # The sheet comes first: watch.js builds no Consensus Watch pill once
-        # it is there (archived since 2026-11-03).
-        self.assertLess(bundles.index("static/js/watch-sheet.js"), bundles.index("static/js/watch.js"))
         # Der View-Switch ist immer sichtbar (auch ausgeloggt): kein hidden im
         # Markup, firebase.js blendet ihn nicht mehr um.
         self.assertNotIn('id="viewSwitch" class="view-switch" hidden', html_source)
@@ -2380,8 +2305,8 @@ class WatchFrontendContractTests(unittest.TestCase):
 
     def test_long_questions_collapse_on_the_page_like_in_the_app(self):
         """Eine lange Frage darf die Seite nicht aufblaehen: drei Zeilen plus
-        Aufklapp-Link auf Share-/Watch-Seiten, zwei Zeilen in der
-        eingeklappten Karte — dieselbe Geste wie #threadAsk in /app."""
+        Aufklapp-Link auf Share-/Watch-Seiten, zwei Zeilen in einer Zeile
+        von /app/watches — dieselbe Geste wie #threadAsk in /app."""
         share_html = Path("templates/share.html").read_text(encoding="utf-8")
         public_css = Path("static/css/public-pages.css").read_text(encoding="utf-8")
         watch_css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
@@ -2402,9 +2327,8 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn(".share-question.is-clamped", public_css)
         self.assertIn("-webkit-line-clamp: 3", public_css)
         self.assertRegex(public_css, r"@media \(scripting: enabled\) \{\s*\.share-question\.is-clamped")
-        self.assertIn(".wd-question a", watch_css)
-        # Die Dashboard-Karte ist ein Teaser: zwei Zeilen, die Seite zeigt alles.
-        self.assertIn("-webkit-line-clamp: 2", watch_css.split(".wd-question a {", 1)[1].split("}", 1)[0])
+        # A row on /app/watches is a teaser: two lines, its chat shows all.
+        self.assertIn("-webkit-line-clamp: 2", watch_css.split(".aw-line {", 1)[1].split("}", 1)[0])
 
     def test_watch_cards_open_their_settings_in_place_and_keep_their_styles(self):
         dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")

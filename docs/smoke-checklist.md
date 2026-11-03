@@ -957,9 +957,7 @@ Server.
       fährt Safaris untere Leiste beim Scrollen ein, ein Tipp auf die
       Statusleiste springt nach oben, die Leisten behalten die Seitenfarbe;
       zurück im Chat steht der Thread an seiner alten Stelle. Im „New
-      watch“-Sheet bleibt mit offener Tastatur (Fragefeld, „Something
-      else…“, Details) „Start watching“ über der Tastatur erreichbar, und
-      kein Schritt lässt das Sheet springen.
+      Watch“-Blatt bleibt mit offener Tastatur „Start Watch“ erreichbar.
 - [ ] Kein Lauf der App sendet `/consensus` oder `/resolve` (beide gibt es
       seit 2026-10-25 nicht mehr, ein Aufruf endet mit 404). Die Demo
       (`?demo=1`) zeigt in Agent einen Agent-Turn, in Compare nur die
@@ -1061,13 +1059,6 @@ Server.
       Startbildschirm klappen nie ein.
 
 ## Consensus Watch
-- [ ] Nach erfolgreichem Consensus erscheint „Watch“ neben Share; der Dialog
-      zeigt die Frage, „What are you waiting for?“ als Optionsliste und darunter
-      eine Einstellungszeile (Default privat, wöchentlich, E-Mail). Ein Klick auf
-      „Start watching“ markiert fehlende Pflichtangaben direkt am jeweiligen Feld,
-      klappt die Einstellungen dafür selbst auf und scrollt zum ersten Fehler. Der
-      Dialog bleibt auf iPhone-Größen vollständig im sichtbaren Bereich. Private
-      Seiten sind in einem fremden oder ausgeloggten Browser nicht lesbar.
 - [ ] Agent (seit 2026-11-03 läuft eine Watch den Agenten): „Sag mir Bescheid,
       wenn <etwas Kommendes> passiert“ beantwortet den aktuellen Stand und
       zeigt darunter eine Watch-Karte (Auftrag, „Done when: …“, „Daily at
@@ -1106,66 +1097,17 @@ Server.
       den Chat nicht nach oben; Logzeile `Agent watch run ended outcome=quiet`.
       `finish_watch` beendet die Watch (Mail „Reached: …“, Karte „Watch
       reached its goal“).
-- [ ] Zielvorschläge laden als zwei Platzhalterzeilen und erscheinen dann als
-      Optionen; die erste ist sichtbar ausgewählt, solange man nichts anderes
-      gewählt hat. Tippen in „Something else…“ wählt diese Zeile, „Any change to
-      the answer“ legt keinen Abschluss fest. „Change“ an der Einstellungszeile
-      klappt Zeitplan, Alerts, Kanäle und Sichtbarkeit auf, die Zeile zeigt jede
-      Änderung sofort.
-- [ ] Lokale Run-Uhrzeit ist bei Erstellung wählbar und zeigt die erkannte Zeitzone;
-      Weekly bietet auch Free-Nutzern einen Wochentag-Picker und startet standardmäßig
-      am morgigen Wochentag statt erst nach einer vollen Woche. „Watched“ erlaubt eine
-      spätere Änderung von Tag und Uhrzeit. `next_run_at` entspricht dem gewählten
-      lokalen Wochentag und der Uhrzeit (mit bis zu 30 Minuten Scheduler-Toleranz),
-      auch über einen Sommer-/Winterzeitwechsel hinweg.
-- [ ] Free: Daily ist als Pro markiert/gesperrt und das aktive Limit öffnet den
-      bestehenden Pro-Teaser. Dashboard und Create-Dialog zeigen vorher den
-      autoritativen Plan, „aktiv von Limit“ und freie Plätze; pausierte Watches
-      sind ausdrücklich als nicht mitgezählt erklärt. Bei 1/1 (Free) bzw. 5/5
-      (Pro) ist die Erstellung bereits vor dem Request gesperrt. Pro: Daily und
-      bis zu fünf aktive Watches funktionieren.
-- [ ] Das Watch-Dashboard ist eine eigene Seite `/app/watches`: erreichbar über
-      den schwebenden View-Switch „Chat/Consensus | Watches“ (gleitender Thumb,
-      beide Segmente mit Icon; Agent-Modus beschriftet das erste Segment „Chat“)
-      und „Watched“ im Nutzericon-Menü; Browser-Back/Forward und Deep-Link/Reload
-      auf `/app/watches` funktionieren (vor dem Login erscheint ein Hinweis statt
-      Daten). Logout lässt URL und Hinweis stehen; ein später Login rendert ohne
-      Reload das Dashboard. „Watched“ aus einem Share-Dialog schließt das Modal vor
-      dem Ansichtswechsel. Ohne Watch zeigt die Seite „Tell us what you are waiting
-      for.“, drei Beispielkarten (Frage + Ziel, öffnen den Dialog vorbefüllt) und die
-      offene Erklärung „Why a Watch, not a scheduled prompt“ samt Vergleichstabelle.
-      Mit Watches: Kennzahlenzeile (watching / moved / resolved this week / next
-      check), eingeklappte Erklärung, Abschnitte Watching / Resolved / Paused und
-      Delivery. Karten sind Teaser: Status mit Zeit (Moved, Re-checking, Answer
-      stands, Watching, Resolved, Paused; „Goal reported, confirming“ nur bei
-      gemeldetem Ziel), Frage (2 Zeilen, mobil 3), ein Satz zum Geschehen (2 bzw.
-      3 Zeilen, Judge-Text unübersetzt), eine Zeile Link-Chips (Favicon + Site,
-      eine je Site, Titel als Tooltip) und unten links nur der nächste Check (+
-      „Daily scan found news“); kein Ziel, keine Details, keine Check-Leiste,
-      **kein** Agreement-Score. Ein Klick irgendwo auf die Karte öffnet die
-      Watch-Seite; Chips, „Settings“ und Knöpfe reagieren selbst. Auf 375 px
-      wischen die Chips in einer Zeile. „Settings“ klappt Ziel, Intervall/Tag/Uhrzeit,
-      Alerts, Kanäle, Google-Listing, Pause/Resume und Delete in der Karte auf.
-      Eine abgeschlossene Watch bietet „Watch for something new“; dasselbe Ziel
-      wird abgelehnt, ein neues oder leeres Ziel reaktiviert sie. ESC führt zurück.
-      Light/Dark und Mobile ohne Overflow.
-- [ ] Create-Dialog: nach der Frage steht „What are you waiting for?“ ganz oben;
-      Zielvorschläge laden als Chips (Platzhalter während des Ladens, Klick füllt
-      bzw. leert das Feld, Ausfall blendet sie nur aus). „Only when it resolves“
-      ohne Ziel zeigt den Fehler am Zielfeld. „Back“ behält Frage und Ziel.
+- [ ] Die Watches-Seite `/app/watches` ist erreichbar über den schwebenden
+      View-Switch „Chat | Watches“ (gleitender Thumb, beide Segmente mit
+      Icon) und „Watched“ im Nutzericon-Menü; Browser-Back/Forward und
+      Deep-Link/Reload auf `/app/watches` funktionieren (vor dem Login
+      erscheint ein Hinweis statt Daten). Logout lässt URL und Hinweis stehen;
+      ein später Login rendert ohne Reload die Seite. „Watches“ aus dem
+      Share-Dialog schließt das Modal vor dem Ansichtswechsel. Light/Dark und
+      Mobile ohne Overflow.
 - [ ] Der Watches-Schalter pulsiert als neuer, unbestätigter Einstieg nur zweimal
       dezent, stoppt nach dem ersten Öffnen dauerhaft und ist bei reduzierter Bewegung
-      still. Er konkurriert nicht mit dem resultatspezifischen Watch-Hinweis.
-- [ ] Morning Brief (Karte im Dashboard): Toggle aktiviert die tägliche
-      Digest-Mail mit Uhrzeit (Browser-Zeitzone) und Modus „Every morning“ /
-      „Only when something changed“; Einstellungen überleben ein erneutes
-      Öffnen. Schlägt PATCH für Uhrzeit oder Modus fehl, springen die Controls
-      auf den letzten serverbestätigten Wert zurück. Mit Test-SMTP: Brief-Mail listet alle Watches mit Ziel,
-      Bewegungen und Abschlüssen (kein Score); der Abmelde-Link deaktiviert nur den Brief, nicht
-      die Watch-Mails.
-- [ ] Ohne Watch ist der Morning-Brief-Toggle deaktiviert und erklärt „Create a
-      watch first“; ein direkter Aktivierungs-Request wird abgelehnt. Nach dem
-      Löschen der letzten Watch ist ein zuvor aktiver Brief ausgeschaltet.
+      still.
 - [ ] Watch-Seite (`/s/…` mit Watch) auf 375 px und Desktop, Light/Dark:
       oben nur Frage und eine Zustandszeile („Unchanged since …“ / „Changed on …“
       mit Satz und Belegen / „Waiting for the first check“), darunter die
@@ -1180,14 +1122,10 @@ Server.
       Modellnummer) zeigt nach ihrem ersten Check ein Foto des Produkts ganz auf
       Weiß; eine Themen-Watch (z. B. EU AI Act) das Vorschaubild eines passenden
       Quellartikels, kachelfüllend. Es lädt von `/api/watch/…/image/…` (nicht von
-      der Quelle) und verlinkt auf die Quellseite. Dashboard: Bild oben rechts,
-      Text fließt herum, die Karte wird nicht höher; im Fuß links nur der nächste
-      Check, rechts „Settings“ (Zeitplan, Seite und Kanäle stehen dort). 375 px:
-      Bild klein, die Frage bis 3 Zeilen; auf der Watch-Seite steht das Bild
-      neben der Kicker-Zeile, die Frage bleibt voll breit. Eine Frage ohne
-      passende Quelle hat kein Bild. Das × im Dashboard (Hover, auf Touch immer
-      sichtbar) entfernt das Bild dauerhaft, auch nach dem nächsten Check.
-      `og:image` und JSON-LD der Seite enthalten das Bild nie.
+      der Quelle) und verlinkt auf die Quellseite. Auf der Watch-Seite steht
+      das Bild neben der Kicker-Zeile, die Frage bleibt voll breit; auf
+      `/app/watches` ist es das Bild der Zeile. Eine Frage ohne passende Quelle
+      hat kein Bild. `og:image` und JSON-LD der Seite enthalten das Bild nie.
 - [ ] Fehlende SMTP-Konfiguration blockiert Watch-Läufe nicht. Mit Test-SMTP:
       ein Check mit `moved` sendet genau eine Multipart-Mail „Moved: …“ als
       Änderungsprotokoll (What changed → Why mit Quellen → What held → Waiting
@@ -1207,15 +1145,12 @@ Server.
       „Re-checking“, der nächste Lauf ist rund 20 Minuten später fällig.
       Persistierte Ereignisse: `watch.checked`, `watch.changed`,
       `watch.confirming`, `watch.condition_met`, `watch.run_failed`.
-- [ ] Tages-Scan: eine weekly/monthly-Watch zeigt im Dashboard „Daily scan:
-      nothing new (…)“; findet der Scan eine neue Quelle, ist der volle Check
-      sofort fällig. Admin-Limit „Evidence probes per day“ = 0 schaltet ihn ab.
 - [ ] Mit gesetztem `TELEGRAM_BOT_TOKEN`, `TELEGRAM_BOT_USERNAME` und
       `TELEGRAM_WEBHOOK_SECRET`: „Connect Telegram“ öffnet den Bot, `/start`
-      verbindet ausschließlich den eingeloggten Account und das Dashboard zeigt
-      danach Identität, „Send test“ und „Disconnect“. Abgelaufene oder erneut
+      verbindet ausschließlich den eingeloggten Account und „Messages“ auf
+      `/app/watches` zeigt danach Identität, „Send test“ und „Disconnect“. Abgelaufene oder erneut
       verwendete Deep-Links werden abgelehnt.
-- [ ] Telegram lässt sich beim Erstellen und je Watch an-/abschalten; mindestens
+- [ ] Telegram lässt sich je Watch („…“) an-/abschalten; mindestens
       E-Mail oder Telegram bleibt aktiv. Ein materieller Change erzeugt genau
       eine Telegram-Nachricht als Änderungsprotokoll (mit Quellen-Links, ohne Score) und Buttons. „Mute 24h“
       unterdrückt weitere Telegram-Alerts, „Pause“ verlangt eine zweite

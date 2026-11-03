@@ -22,12 +22,10 @@
 .btn-pro,
 .auth-primary-action,
 .memory-edit-submit,
-.watch-nudge-btn,
 .post-demo-login-action,
 .agent-google-btn.is-primary,
 .agent-answer-error-actions button:first-child,
 .wd-button.is-primary,
-.wd-action.is-strong,
 .run-blocked-btn.is-primary,
 .verify-banner-btn,
 .auth-top-signup,
@@ -63,8 +61,8 @@
      surface is a 32 px ::before in a 44 px target (shell.css) - in a narrow
      desktop window the hover filled the whole target. */
   :is(.button, .btn, .share-primary-btn, .btn-pro, .auth-primary-action, .memory-edit-submit,
-    .watch-nudge-btn, .post-demo-login-action, .agent-google-btn.is-primary,
-    .agent-answer-error-actions button:first-child, .wd-button.is-primary, .wd-action.is-strong,
+    .post-demo-login-action, .agent-google-btn.is-primary,
+    .agent-answer-error-actions button:first-child, .wd-button.is-primary,
     .run-blocked-btn.is-primary, .verify-banner-btn, .auth-top-signup, .feedback-login-button):hover:not(:disabled),
   #feedbackForm .feedback-submit:hover:not(:disabled) {
     background: var(--button-bg-hover);
@@ -74,8 +72,8 @@
 
 @media (pointer: coarse) {
   :is(.button, .btn, .share-primary-btn, .btn-pro, .auth-primary-action, .memory-edit-submit,
-    .watch-nudge-btn, .post-demo-login-action, .agent-google-btn.is-primary,
-    .agent-answer-error-actions button:first-child, .wd-button.is-primary, .wd-action.is-strong,
+    .post-demo-login-action, .agent-google-btn.is-primary,
+    .agent-answer-error-actions button:first-child, .wd-button.is-primary,
     .run-blocked-btn.is-primary, .verify-banner-btn, .auth-top-signup, .feedback-login-button,
     #feedbackForm .feedback-submit) {
     min-height: 44px;

@@ -6729,7 +6729,6 @@
         "tests/e2e/test_mobile_navigation.py",
         "tests/e2e/test_phase4_frontend.py",
         "tests/js/source-verification-watch.test.mjs",
-        "tests/js/watch-feature-nudge.test.mjs",
         "tests/test_phase4_frontend.py"
       ],
       "boundary": "JS teils ausgeschnittene Funktionen, Browser-APIs ersetzt; zentrale Create/Update/Delete-Verkabelung nicht Ende-zu-Ende belegt.",

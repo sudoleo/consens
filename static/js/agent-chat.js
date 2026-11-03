@@ -537,8 +537,7 @@
       // temporary chat keeps nothing, so it has none.
       App.watch?.answerButton?.(document.getElementById('agentAnswerBody'), {
         question: basis.currentTurn?.question || basis.question, chatId: basis.chatId,
-        eligible: basis.currentTurn?.status === 'completed' && !basis.currentTurn?.agent_watch && basis.temporary !== true,
-        followUp: Boolean(document.querySelector('#threadHistory > .thread-history-turn')) });
+        eligible: basis.currentTurn?.status === 'completed' && !basis.currentTurn?.agent_watch && basis.temporary !== true });
       // Its Watch's finding counts as seen once its chat is open (agent-watch.js);
       // a scheduled run's message says the Watch sent it (thread-history.js).
       App.agentWatch?.opened?.(basis.chatId);
@@ -938,17 +937,14 @@
     App.agentWatch?.render(answerBody, { key: context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null,
       chatId: context.metadata.chatId, turnId: state.completedTurn?.id || state.completedTurn?.turn_id });
-    // The same Watch pill as under a Consensus answer, on every finished
-    // answer (watch.js; Apple-Audit J20). It is not the Agent offering one:
-    // a prepared Watch has its card instead, and a follow-up opens at its
-    // question so the watched question stands on its own.
-    // Since 2026-11-03 the pill starts a Watch in this chat (watch-sheet.js):
-    // none in a temporary chat, which keeps nothing; no share there either,
-    // it keeps a copy for 30 days (the server refuses it too).
+    // The Watch pill on every finished answer (watch.js; Apple-Audit J20).
+    // It is not the Agent offering one: a prepared Watch has its card
+    // instead. The pill starts a Watch in this chat (watch-sheet.js): none
+    // in a temporary chat, which keeps nothing; no share there either, it
+    // keeps a copy for 30 days (the server refuses it too).
     App.watch?.answerButton?.(answerBody, { question: context.question, chatId: context.metadata.chatId,
       eligible: !running && state.completedTurn?.status === 'completed' && !state.completedTurn?.agent_watch
-        && context.config.temporary !== true,
-      followUp: context.historyTurns.length > 0 });
+        && context.config.temporary !== true });
     // Share beside it, for every finished answer (share-dialog.js).
     App.answerShare?.button?.(answerBody, { chatId: context.metadata.chatId, turnId: state.completedTurn?.id,
       eligible: context.config.temporary !== true && !running && state.completedTurn?.status === 'completed'
@@ -1017,26 +1013,6 @@
       context.metadata.lateReview = null;
       reviewArrived(context, late.review, late.turn);
     }
-  }
-  // Besides its Watch pill, a finished answer may offer to keep itself
-  // current (watch.js owns the card, the counter and "dismissed"). Only a
-  // first message qualifies, because a watch re-asks the bare question, and
-  // only one built on sources, because those are what can change. A turn
-  // whose Agent already prepared a Watch has its own card (agent-watch.js).
-  function offerWatch(context) {
-    // The hint offered a Consensus Watch for the question, archived since
-    // 2026-11-03: the Agent prepares a Watch when one helps, and the pill
-    // starts one.
-    if (App.watchSheet) return;
-    if (!registry.isVisible(context.runId) || !registry.isAuthCurrent(context)) return;
-    const turn = context.consensus.completedTurn;
-    App.watch?.showFeatureNudge?.({
-      eligible: turn?.status !== "failed" && context.historyTurns.length === 0 && !turn?.agent_watch
-        // Not in a temporary chat: its Watch only on the user's own wish (the pill, the Agent's card).
-        && Array.isArray(turn?.sources) && turn.sources.length > 0 && context.config.temporary !== true,
-      question: context.question,
-      anchor: document.getElementById("agentWatchAnchor"),
-    });
   }
   async function recoverAnswer(context) {
     if (!context || !registry.isAuthCurrent(context) || !['failed', 'canceled'].includes(context.status)
@@ -2490,7 +2466,7 @@
     try {
       const result = await follow(context, body, signal, { post: false });
       if (!registry.isAuthCurrent(context) || signal.aborted) return;
-      adopt(context, result, { offer: !record.followup });
+      adopt(context, result);
       // The resumed view shows only this message; a follow-up's chat opens
       // whole once its answer is saved (with a basis it stands whole already).
       if (record.followup && !basis && registry.isVisible(context.runId)) window.openBookmark?.(body.bookmark_id);
@@ -2856,7 +2832,7 @@
   }
   // The end the server reported (terminal frame, polled frame or saved
   // turn): adopt the answer, or throw its failure for failRun.
-  function adopt(context, result, { offer = true } = {}) {
+  function adopt(context, result) {
     receiveBudget(result.data?.token_budget, context.auth.uid);
     context.metadata.terminalBudget = Boolean(result.data?.token_budget);
     const recoverable = result.data?.recoverable ?? result.data?.detail?.recoverable;
@@ -2880,7 +2856,6 @@
     }
     acceptAnswer(context, result.data);
     App.trackAnswer?.(context, "ok");
-    if (offer) offerWatch(context);
   }
   // The words of a failed run: a refusal's own sentence, otherwise what
   // happened in plain words (offline, unreachable, too slow), never the
