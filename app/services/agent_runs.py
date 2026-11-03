@@ -56,7 +56,7 @@ REQUEST_TIMES = ("request_started_at", "first_token_at", "stream_ended_at")
 # What the conversation needs of an earlier turn (messages): not its
 # activity, review or work log, which take up to about a megabyte.
 HISTORY_FIELDS = ("status", "question", "assistant_response", "consensus", "app_context",
-                  "agent_work_record", "sources", "agent_answer_fixed_at")
+                  "agent_work_record", "sources", "agent_answer_fixed_at", "agent_history_summary")
 
 
 def in_history(turn):
@@ -258,7 +258,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 and (page.get("has_more") or len(earlier) == target["position"] - 1))
 
     def messages(self, uid, chat_id, target, model=None, config=None, sources=None, context=None, first_page=None,
-                 history_chars=None):
+                 history_chars=None, summary=None):
         """The conversation for the target turn. ``sources``, a list, receives
         the saved sources of the earlier turns it includes (read_source may
         open them; agent_read_source, "Sources from the chat itself").
@@ -277,11 +277,24 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         A turn that worked in its VM is followed by its work record
         (``agent_work_record``, agent_compaction.work_record) as an app
         message, exactly as saved: what the agent did there, which question
-        and answer alone do not say."""
+        and answer alone do not say.
+
+        The newest saved summary of the history (``agent_history_summary``
+        of an earlier turn, agent_compaction "Summaries") stands for the
+        messages it covers, exactly as saved; their sources stay openable.
+        ``summary``, a dict, receives the plan of the next one once the
+        history since passes HISTORY_SUMMARY_ABOVE_CHARS (DelegationLoop
+        writes it in its first step): ``end``, the index where the messages
+        that stay word for word begin, ``through``, the position of the last
+        message it covers, ``turns`` and ``partial``. A Watch's scheduled run
+        (``history_chars``) neither reads nor plans one."""
+        from app.services import agent_compaction
         config = config or prompt_config.get_config()
         system_prompt = config["prompts"]["agent"]
         messages = [{"role": "system", "content": system_prompt}]
         earlier = []
+        # The newest saved summary of the history and its turn's position.
+        saved_summary, summary_at = None, -1
         cursor = ""
         while True:
             # Agent answers live on the turn itself. Do not issue an empty
@@ -306,21 +319,48 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     answer = ("[This previous turn did not finish successfully. The saved response below may be incomplete or unreviewed.]\n\n" + answer
                               if answer else FAILED_TURN_RESUME if isinstance(record, str) and record
                               else "[This previous turn did not finish successfully. No assistant answer was saved.]")
-                earlier.append((question, answer, turn.get("sources") or [],
+                earlier.append((turn["position"], question, answer, turn.get("sources") or [],
                                 record if isinstance(record, str) else ""))
+                found = turn.get("agent_history_summary")
+                if (isinstance(found, dict) and agent_compaction.is_summary(found.get("content"))
+                        and type(found.get("through")) is int and turn["position"] > summary_at):
+                    saved_summary, summary_at = found, turn["position"]
             cursor = page.get("next_cursor") or ""
             if not cursor:
                 break
+        if history_chars:
+            saved_summary = None
         budget = CONTEXT_CHAR_LIMIT - len(system_prompt) - len(target["question"])
-        start = history_start([len(question) + len(answer) + len(record) for question, answer, _, record in earlier],
-                              min(budget, history_chars) if history_chars else budget)
-        for question, answer, saved, record in earlier[start:]:
+        if saved_summary is not None:
+            budget -= len(saved_summary["content"])
+            messages.append({"role": "user", "content": saved_summary["content"]})
+            covered = [item for item in earlier if item[0] <= saved_summary["through"]]
+            earlier = [item for item in earlier if item[0] > saved_summary["through"]]
+            if sources is not None:
+                # Covered by the summary, their sources stay openable (read_source).
+                for item in covered:
+                    sources.extend(source for source in item[3] if isinstance(source, dict))
+        sizes = [len(question) + len(answer) + len(record) for _, question, answer, _, record in earlier]
+        start = history_start(sizes, min(budget, history_chars) if history_chars else budget)
+        starts = []
+        for _, question, answer, saved, record in earlier[start:]:
+            starts.append(len(messages))
             messages.extend([{"role": "user", "content": question},
                              {"role": "assistant", "content": answer}])
             if record:
                 messages.append({"role": "user", "content": record})
             if sources is not None:
                 sources.extend(source for source in saved if isinstance(source, dict))
+        replayed = sizes[start:]
+        held = sum(replayed) + (len(saved_summary["content"]) if saved_summary is not None else 0)
+        if summary is not None and not history_chars and held > agent_compaction.HISTORY_SUMMARY_ABOVE_CHARS:
+            keep = agent_compaction.history_keep(replayed)
+            if keep < len(replayed):
+                summary.update({
+                    "end": starts[len(replayed) - keep], "through": earlier[start:][len(replayed) - keep - 1][0],
+                    "turns": len(replayed) - keep,
+                    "partial": bool(start) or (saved_summary is not None
+                                               and agent_compaction.HISTORY_SUMMARY_PARTIAL in saved_summary["content"])})
         context = context or get_agent_turn_context(model, config)
         if start:
             # The newest message's context changes every message anyway, so
@@ -575,6 +615,25 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             leases = dict((active.to_dict() or {}).get("leases") or {})
             if leases.pop(root_ref.id, None) is not None:
                 tx.set(active_ref, {"leases": leases})
+            return True
+
+        return self._agent_transaction(uid, operation)
+
+    def save_history_summary(self, uid, chat_id, turn_id, *, run_token, summary):
+        """The summary of the chat's history this turn's first step wrote
+        (DelegationLoop._summarize): saved on the turn right away, so later
+        messages start with it (messages) also when this one fails. False
+        when the run no longer holds the turn."""
+        root_ref, turn_ref = self.receipt_ref(uid, chat_id, turn_id), self._turn_ref(uid, chat_id, turn_id)
+
+        def operation(tx):
+            tombstone, root, turn = self._read_all(tx, (persistence_guard.deletion_ref(self.db, uid), root_ref, turn_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
+            data = root.to_dict() or {}
+            if (not run_token or data.get("run_token") != run_token or data.get("run_status") != "running"
+                    or not turn.exists or (turn.to_dict() or {}).get("status") != "pending"):
+                return False
+            tx.update(turn_ref, {"agent_history_summary": summary})
             return True
 
         return self._agent_transaction(uid, operation)

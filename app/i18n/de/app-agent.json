@@ -207,6 +207,8 @@
   "The model ended without writing an answer.": "Das Modell hat aufgehört, ohne eine Antwort zu schreiben.",
   "The model's provider is busy right now. Trying again in a few seconds.": "Der Anbieter des Modells ist gerade ausgelastet. Neuer Versuch in ein paar Sekunden.",
   "The model's reply broke off. Trying this step once more.": "Die Antwort des Modells brach ab. Dieser Schritt läuft noch einmal.",
+  "Summarizing the earlier messages of this long chat to keep its context small.": "Fasst die früheren Nachrichten dieses langen Chats zusammen, damit der Kontext klein bleibt.",
+  "Summarizing the work so far to keep the context small.": "Fasst die bisherige Arbeit zusammen, damit der Kontext klein bleibt.",
   "The model used its whole output allowance on reasoning before writing. Writing the answer again with lighter reasoning.": "Das Modell hat seine ganze Ausgabe fürs Nachdenken verbraucht, bevor es schrieb. Es schreibt die Antwort noch einmal mit weniger Denkaufwand.",
   "The model used its whole output allowance on reasoning before choosing its next step. Trying again with lighter reasoning.": "Das Modell hat seine ganze Ausgabe fürs Nachdenken verbraucht, bevor es seinen nächsten Schritt wählte. Neuer Versuch mit weniger Denkaufwand.",
   "Choose another model": "Anderes Modell wählen",

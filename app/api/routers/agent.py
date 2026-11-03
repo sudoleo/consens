@@ -662,9 +662,12 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         if isinstance(restored, dict) and not restored.get("told"):
             _vm_restore_told(store, uid, payload.chat_id)
         chat_sources = []
+        # A long history is summarized in the run's first step (agent_compaction "Summaries").
+        history_summary = {}
         messages = store.messages(uid, payload.chat_id, turn, model=model, config=config, sources=chat_sources,
                                   context=app_context, first_page=_first_history_page(reads["history"]),
-                                  history_chars=_watch_history_chars() if watch_run else None)
+                                  history_chars=_watch_history_chars() if watch_run else None,
+                                  summary=history_summary)
         cancellation = ProviderCancellation()
         loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
@@ -674,7 +677,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
-                         watch_run=watch_run,
+                         watch_run=watch_run, history_summary=history_summary or None,
                          domains=preferences.vm == "on" and domains_allowed(uid),
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)

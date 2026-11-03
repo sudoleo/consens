@@ -1738,6 +1738,14 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   sich nicht; bei 1440px liegen Chat und Composer links neben dem Leser.
 - [ ] Den gespeicherten letzten Turn und ältere Turns öffnen: gleiche Karten,
   Markdown-Antworten und Modell-Icons; Accountwechsel schließt den Leser.
+- [ ] Zusammenfassung (seit 2026-11-03, nur Prod mit echtem Modell): in einem
+  Chat mit mehr als 60.000 Zeichen Verlauf zeigt die nächste Nachricht zuerst
+  „Fasst die früheren Nachrichten dieses langen Chats zusammen …“, antwortet
+  dann normal und kennt auf Nachfrage Inhalte der ersten Nachrichten. Die
+  Nachricht danach zeigt die Zeile nicht noch einmal; im Arbeitsprotokoll stehen
+  `summary`/`summarized`. Ein langer Arbeitsplatz-Lauf zeigt „Fasst die
+  bisherige Arbeit zusammen …“ und arbeitet danach weiter, ohne Befehle zu
+  wiederholen.
 
 ## Chat-Scrollen (beide Modi)
 

@@ -231,7 +231,7 @@ class WatchRunTools:
         for source in loop.search_sources:
             if isinstance(source, dict) and _bare(source.get("url")) == wanted:
                 return {"url": str(source.get("url")), "title": _line(source.get("title"))[:240]}
-        for message in loop.messages[loop.turn_start:]:
+        for message in loop.own_messages():
             if message.get("role") == "tool" and wanted in _content_text(message.get("content")):
                 return {"url": url, "title": ""}
         return None

@@ -77,6 +77,9 @@ RATE_LIMIT_RETRY_MIN_TURN_SECONDS = 60
 # minimum of turn time; the broken attempt is settled with what it used.
 PASSING_RETRY_SECONDS = 2
 PASSING_RETRY_TEXT = "The model's reply broke off. Trying this step once more."
+# The line a summary step shows (_summarize, agent_compaction "Summaries").
+SUMMARY_TEXTS = {"history": "Summarizing the earlier messages of this long chat to keep its context small.",
+                 "run": "Summarizing the work so far to keep the context small."}
 # Pace of the reasoning excerpts a step that may answer shows while it thinks.
 THINKING_UPDATE_SECONDS = 3
 # Polling has no arguments that change; repeating it is waiting, not looping.
@@ -361,7 +364,8 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
-                 domains=True, reviewers="always", temporary=False, watch_run=None, **kwargs):
+                 domains=True, reviewers="always", temporary=False, watch_run=None, history_summary=None,
+                 **kwargs):
         super().__init__(**kwargs)
         # A scheduled run of a Watch (agent_watches.py, since 2026-11-03):
         # nobody is there to answer a card, so a hold ends at once
@@ -404,12 +408,13 @@ class DelegationLoop(AgentLoop):
         # app context block is not the user's text.
         # The work records of earlier VM turns are the app's, not the user's
         # (agent_compaction.is_work_record): VM output must never pass for
-        # the user's words, links or addresses.
-        from app.services.agent_compaction import is_work_record
+        # the user's words, links or addresses. Neither is a summary of the
+        # chat's history (agent_compaction.is_summary), the agent's own text.
+        from app.services.agent_compaction import is_summary, is_work_record
         from app.services.agent_runs import strip_app_context
         self.answer_conversation = [{"role": message["role"], "content": strip_app_context(message["content"])}
                                     for message in self.messages if message["role"] in {"user", "assistant"}
-                                    and not is_work_record(message["content"])]
+                                    and not is_work_record(message["content"]) and not is_summary(message["content"])]
         # Everything up to this message's question; later steps only append.
         self.turn_start = len(self.messages)
         from app.services.agent_memory import MemorySnapshot, MemoryTools
@@ -499,6 +504,15 @@ class DelegationLoop(AgentLoop):
         self.identical_calls = {}
         # The run's own size right after its last compaction (_compact).
         self.compacted_to = None
+        # The summary of the chat's history its first step writes, planned by
+        # AgentRunStore.messages (``summary``), or None; the run's own steps are
+        # summarized once they fill too much (_summarize, agent_compaction).
+        self.history_summary = history_summary
+        self.run_summaries = 0
+        self.run_summary_failed = False
+        # The run's own messages a summary replaced: its work record and
+        # evidence still know them (own_messages).
+        self.summarized = []
         # One catalog for all of them: built once per model of the picker,
         # about 45 times, it was most of a message's work before its first
         # request (until 2026-11-01).
@@ -1027,6 +1041,107 @@ class DelegationLoop(AgentLoop):
         if self.work_log is not None:
             self.work_log.app("compacted", cut.summary())
 
+    def own_messages(self):
+        """The run's own messages since this message's question, also those a
+        summary replaced (_summarize): its work record and the evidence a
+        Watch run reports with still know every call."""
+        return [*self.summarized, *self.messages[self.turn_start:]]
+
+    def _summary_due(self):
+        """"history" while the chat's history waits for its summary (first
+        step only), "run" once the run's own steps fill the next request
+        (agent_compaction.run_summary_due), else None. Only in account mode
+        with comparison tools (every chat run): there a step's text never
+        streams as the answer."""
+        if not (self.merged and self.policy.account_budget_only) or self.mock_answer is not None:
+            return None
+        if self.history_summary is not None:
+            return "history"
+        if self.run_summary_failed:
+            return None
+        from app.services import agent_compaction
+        from app.services.agent_tokens import input_estimate
+        model = self.routing_lighter or self.model
+        inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
+        return "run" if agent_compaction.run_summary_due(inputs, model.context_length, self.messages,
+                                                         self.turn_start) else None
+
+    def _summarize(self, index, steps, search):
+        """Compaction as Claude Code and Codex do it (agent_compaction.py,
+        "Summaries"): the chat model writes a summary in step ``index``, which
+        then replaces the chat's older history or the run's earlier steps.
+        Returns the index of the agent's next step (``index`` itself when no
+        summary was claimed). A summary that does not work out changes
+        nothing; a run's is not tried again in this message."""
+        kind = self._summary_due()
+        if kind is None:
+            return index
+        from app.services import agent_compaction
+        plan, self.history_summary = self.history_summary, None
+        if kind == "history":
+            # Only what it replaces: the history up to the messages that stay.
+            request, args = self.messages[:plan["end"]], {"searches_enabled": False, "allow_tools": False}
+        else:
+            # The next step's request with the summary request at its end
+            # (same tools and tool choice): it reads that step's cached prefix.
+            request, args = self.messages, search
+        asked = len(self.messages)
+        step = f"completion:{index}"
+        yield self.activity({"step_id": step, "id": "summary", "kind": "progress",
+                             "text": SUMMARY_TEXTS[kind]})
+        if self.work_log is not None:
+            self.work_log.app("summary", {"kind": kind, **({"turns": plan["turns"]} if plan else {})}, step=step)
+        try:
+            value = yield from self._answer_attempt(self._routing_model(), request, index, steps,
+                                                    registry=self.registry, summary=kind, **args)
+        except AgentTokenBudgetExceeded as exc:
+            # Refused before its claim: the agent's step takes the free index.
+            self.run_summary_failed = self.run_summary_failed or kind == "run"
+            free = getattr(exc, "unclaimed_step", None)
+            logging.info("Agent summary refused by the allowance kind=%s", kind)
+            return int(free.split(":")[1]) if isinstance(free, str) else index
+        text = agent_compaction.summary_text(value)
+        if text is None:
+            self.run_summary_failed = self.run_summary_failed or kind == "run"
+            logging.warning("Agent summary unusable kind=%s finish_reason=%s chars=%s tool_calls=%s", kind,
+                            value.finish_reason, len(value.text or ""), len(value.tool_calls or []))
+            return next(steps)
+        before = agent_compaction.own_chars(self.messages, 1)
+        if kind == "history":
+            message = agent_compaction.summary_message(text, partial=plan["partial"])
+            kept = self.messages[plan["end"]:]
+            self.messages[1:] = [message, *kept]
+            self.turn_start = len(self.messages)
+            self.history_end = self.turn_start - 2
+            try:
+                self.store.save_history_summary(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
+                                                summary={"content": message["content"], "through": plan["through"],
+                                                         "turns": plan["turns"]})
+            except Exception as exc:
+                # This message goes on with it; the next one summarizes again.
+                logging.warning("Agent history summary not saved category=%s", safe_exception(exc))
+            if self.work_log is not None:
+                # The summary step logged only what it replaced: the summary,
+                # the kept messages and the question come next.
+                self.work_log.rewound("agent", 1)
+        else:
+            cut = agent_compaction.run_tail(self.messages, self.turn_start, asked)
+            replaced = self.messages[self.turn_start:cut]
+            self.summarized.extend(message for message in replaced if message.get("role") in {"assistant", "tool"})
+            logged, tail = self.messages[cut:asked], self.messages[cut:]
+            self.messages[self.turn_start:] = [agent_compaction.summary_message(text, run=True), *tail]
+            self.run_summaries += 1
+            self.compacted_to = None
+            if self.work_log is not None:
+                # The summary comes next; the kept step is in the log already,
+                # a message the user sent meanwhile not yet.
+                self.work_log.rewound("agent", self.turn_start, seen=logged)
+        after = agent_compaction.own_chars(self.messages, 1)
+        logging.info("Agent summary kind=%s chars_before=%s chars_after=%s", kind, before, after)
+        if self.work_log is not None:
+            self.work_log.app("summarized", {"kind": kind, "chars_before": before, "chars_after": after}, step=step)
+        return next(steps)
+
     def _identical_call(self, call):
         """No-progress guard: the same tool with the same arguments.
 
@@ -1288,7 +1403,7 @@ class DelegationLoop(AgentLoop):
         turn had them, and a refusal must not throw the paid research away."""
         auditor = self.comparison.auditor if self.comparison is not None else None
         return bool(auditor is not None and (auditor.sessions or auditor.unreviewed)
-                    and any(message.get("role") == "assistant" for message in self.messages[self.turn_start:]))
+                    and any(message.get("role") == "assistant" for message in self.own_messages()))
 
     def _final_review(self, worker):
         """Whether ``worker`` is a reviewer at its final round (the answer is
@@ -1533,7 +1648,7 @@ class DelegationLoop(AgentLoop):
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
               search_rounds=1, retry_rate_limit=False, retry_passing=False, retry_empty=False, check_cooldown=True,
               server_tools=(), completion=None, answer_candidate=False, hold=False,
-              allow_tools=True, answer_output=0):
+              allow_tools=True, answer_output=0, summary=None):
         """One claimed, metered model call.
 
         ``answer_candidate``: a step of a turn with comparison tools
@@ -1560,7 +1675,11 @@ class DelegationLoop(AgentLoop):
         ``answer_output``: the output limit of a step that may write the
         answer, above ``model``'s routing allowance. The step is admitted
         like a routing step; the answer on top may overdraw the allowance
-        (_admit_chat_step)."""
+        (_admit_chat_step).
+
+        ``summary`` ("history" or "run"): a summary step (_summarize). Its
+        request ends with the app's summary request, the history's has no
+        file block, and nothing it calls opens a gate or starts reviewers."""
         self._check(cancellation)
         # The caller's conversation, before this step adds its file block or
         # notes (work log: what is the conversation, what only this request).
@@ -1599,7 +1718,7 @@ class DelegationLoop(AgentLoop):
             searches = (search_rounds if self.policy.account_budget_only else max(0, min(search_rounds, self.search_remaining))) if searches_enabled else 0
             if not self.policy.account_budget_only:
                 self.search_remaining -= searches
-        if self.file_context:
+        if self.file_context and summary != "history":
             ids = getattr(worker, "file_ids", []) if worker else self.file_context.selection()
             # The main model's file block follows this message's question, not
             # the newest tool result: the same bytes at the same place in every
@@ -1610,6 +1729,10 @@ class DelegationLoop(AgentLoop):
             messages = self.file_context.messages(messages, model, file_ids=ids, query=str(question)[-500:], anchor=anchor)
         if note:
             messages = with_step_note(messages, note)
+        if summary:
+            from app.services import agent_compaction
+            messages = with_step_note(messages, agent_compaction.HISTORY_SUMMARY_REQUEST if summary == "history"
+                                      else agent_compaction.RUN_SUMMARY_REQUEST)
         tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
         reservation = None
         try:
@@ -1855,7 +1978,7 @@ class DelegationLoop(AgentLoop):
                         self.reviewer_charge += agent_quota.measured_charge(value.usage) or 0
                 self._settle_step(step, value, status)
                 log_actor = self._log_actor(step, worker)
-                if log_actor == "agent" and status == "succeeded":
+                if log_actor == "agent" and status == "succeeded" and not summary:
                     self._review_from_here(value)
                 if log_actor:
                     # Outward calls of the agent's step wait for the
@@ -1863,7 +1986,7 @@ class DelegationLoop(AgentLoop):
                     # entry, so no reviewer reads it in an ordinary round first.
                     # Not for a step a halt broke off: its calls never run.
                     gate = (self._open_gate(value) if log_actor == "agent" and status == "succeeded"
-                            and getattr(value, "halted", None) is None else None)
+                            and getattr(value, "halted", None) is None and not summary else None)
                     entry = None
                     try:
                         # What the step thought, wrote, called and found, also
@@ -3035,7 +3158,7 @@ class DelegationLoop(AgentLoop):
         self._release_workspace()
         if self._long_run():
             from app.services.agent_compaction import work_record
-            self.completion.work_record = work_record(self.messages, self.turn_start)
+            self.completion.work_record = work_record(self.own_messages(), 0)
         try:
             handed = self.store.hand_over(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
                                           completion=self.completion)
@@ -3207,6 +3330,8 @@ class DelegationLoop(AgentLoop):
                     self._check()
                     # Before the limits: they measure what the next step sends.
                     self._compact()
+                    index = yield from self._summarize(index, steps, {"searches_enabled": True,
+                                                                      "search_rounds": search_rounds})
                     limit = self._turn_limit()
                     if limit:
                         # The wrap-up takes this unused step index: model
@@ -3515,7 +3640,7 @@ class DelegationLoop(AgentLoop):
                 # off or was stopped, so that "Retry" goes on from its work
                 # instead of starting over ("" without a single call).
                 from app.services.agent_compaction import work_record
-                self.completion.work_record = work_record(self.messages, self.turn_start)
+                self.completion.work_record = work_record(self.own_messages(), 0)
             if self.work_log is not None:
                 # The log's last entry, saved before finish_run: a write after
                 # it finds the turn no longer pending (save_work_log).

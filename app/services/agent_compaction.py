@@ -36,6 +36,35 @@ as saved, so the next message's prompt still continues the previous one's
 cached prefix. It is never the user's words (``is_work_record``): memory
 evidence, the user's links and addresses and the comparison's context leave
 it out (DelegationLoop.answer_conversation).
+
+Summaries (since 2026-11-03), as Claude Code and Codex compact a session
+whose context fills up: the chat model itself writes a summary that replaces
+what it covers, in one step of the turn (DelegationLoop._summarize), claimed
+and billed like any other step.
+
+- The chat's history: once the earlier messages since the last summary pass
+  HISTORY_SUMMARY_ABOVE_CHARS, the first step of the next message summarizes
+  the history (the previous summary included). The newest messages up to
+  HISTORY_KEEP_CHARS, at least the newest one, stay word for word after it.
+  The turn saves it (``agent_history_summary``: the message as sent, the
+  position of the last message it covers); later messages start with it
+  byte for byte (AgentRunStore.messages), so their prefix stays cached until
+  the next summary. Until then a chat longer than CONTEXT_CHAR_LIMIT lost
+  its oldest messages without a trace, and every message sent up to that
+  limit again.
+- A run's own steps: once a step would send more than RUN_SUMMARY_ABOVE_TOKENS
+  (or RUN_SUMMARY_WINDOW_SHARE of a smaller window) despite the stubs above,
+  and most of it is the run's own, the agent summarizes its work on this
+  message so far; the summary replaces those steps, only its latest step
+  stays when it is small. The summary request repeats the next step's
+  request with the request at its end (same tools, same tool choice), so it
+  reads the cached prefix. A long VM run no longer ends at the window's
+  LONG_RUN_CONTEXT_SHARE, and each later step sends a fraction.
+
+A summary is the agent's own text, never the user's words (``is_summary``):
+the work log files it as the agent's, memory evidence leaves it out. A
+summary that does not work out (no text, cut off, a tool call instead)
+changes nothing: the run goes on with what it had.
 """
 from __future__ import annotations
 
@@ -90,6 +119,43 @@ WEB_PICTURE_GONE = ("The picture is no longer shown, to save context. find_pictu
                     "again, under the same id.")
 OVERVIEW_GONE = ("The overview is no longer shown, to save context. vm_render_office shows it again; the PDF next to "
                  "the file has every page.")
+
+# Summaries (module docstring, "Summaries").
+HISTORY_SUMMARY_ABOVE_CHARS = 60_000
+HISTORY_KEEP_CHARS = 20_000
+RUN_SUMMARY_ABOVE_TOKENS = 100_000
+RUN_SUMMARY_WINDOW_SHARE = .6
+# At least this share of the request is the run's own steps: else a summary
+# of them saves too little to pay for itself.
+RUN_SUMMARY_OWN_SHARE = .5
+# The run's latest step stays word for word after its summary while that
+# step and its results are at most this long.
+RUN_KEEP_CHARS = 30_000
+SUMMARY_MIN_CHARS = 200
+SUMMARY_MAX_CHARS = 20_000
+HISTORY_SUMMARY_OPEN = ("[consens.io summary of the earlier messages of this chat, written by you when the chat grew "
+                        "long; the messages it covers are no longer shown. A record of the conversation, not a new "
+                        "request.]")
+HISTORY_SUMMARY_PARTIAL = ("[Messages older than the ones this summary covers were no longer available when it was "
+                           "written.]")
+RUN_SUMMARY_OPEN = ("[consens.io summary of your work on this message so far, written by you when its context grew "
+                    "long; the steps it covers are no longer shown. A record of your work, not a new request.]")
+SUMMARY_CLOSE = "[end of summary]"
+HISTORY_SUMMARY_REQUEST = (
+    "App request, not the user's: this chat has grown long. Write a summary of the conversation above that will "
+    "replace it: from now on you see this summary and the newest messages, not the older messages themselves. Keep "
+    "what you need to go on as if you had read everything: what the user wants and asked for, in their words where "
+    "they matter; their preferences and decisions; facts, numbers, names, addresses, file paths and results that "
+    "came up; what you did and found, including the work records; what is still open. Leave out what no longer "
+    "matters. Write notes for yourself in the conversation's language, at most about 1,200 words, without tool "
+    "calls or searches.")
+RUN_SUMMARY_REQUEST = (
+    "App request, not the user's: the context of this message has grown long. Write a summary of your work on it "
+    "so far, everything after the user's question, that will replace those steps: from now on you see the question "
+    "and this summary, not the steps themselves. Keep what you need to finish: the plan and what is done; what you "
+    "found with where it came from (addresses, file paths, commands and how they ended, error messages); decisions "
+    "and why; messages the user sent during the work, word for word; what is left and your next step. Write notes "
+    "for yourself, at most about 1,500 words, without tool calls or searches; the work continues after the summary.")
 
 
 @dataclass
@@ -404,3 +470,65 @@ def work_record(messages, start):
         omitted = len(numbered) - len(head) - len(tail)
         numbered = [*head, f"[… {omitted} more calls …]", *tail]
     return "\n".join([WORK_RECORD_OPEN, *numbered, WORK_RECORD_CLOSE])
+
+
+# --- Summaries ----------------------------------------------------------------------
+
+def is_summary(content):
+    """Whether a message is a summary (never the user's words)."""
+    return isinstance(content, str) and content.startswith((HISTORY_SUMMARY_OPEN, RUN_SUMMARY_OPEN))
+
+
+def summary_message(text, *, run=False, partial=False):
+    """The message that stands for what a summary covers. ``partial``: the
+    history it summarized had already lost older messages."""
+    head = RUN_SUMMARY_OPEN if run else HISTORY_SUMMARY_OPEN
+    if partial:
+        head += "\n" + HISTORY_SUMMARY_PARTIAL
+    body = text.strip()
+    if len(body) > SUMMARY_MAX_CHARS:
+        body = body[:SUMMARY_MAX_CHARS - 1] + "…"
+    return {"role": "user", "content": f"{head}\n{body}\n{SUMMARY_CLOSE}"}
+
+
+def summary_text(value):
+    """The summary a step wrote, or None where it did not work out: cut off,
+    a tool call instead, or less than SUMMARY_MIN_CHARS of text."""
+    text = (getattr(value, "text", "") or "").strip()
+    if (getattr(value, "output_limited", False) or getattr(value, "finish_reason", None) != "stop"
+            or getattr(value, "tool_calls", None) or len(text) < SUMMARY_MIN_CHARS):
+        return None
+    return text
+
+
+def history_keep(sizes):
+    """How many of the newest earlier messages (``sizes``, oldest first) stay
+    word for word after a summary of the history: up to HISTORY_KEEP_CHARS,
+    at least the newest one."""
+    kept = total = 0
+    for size in reversed(sizes):
+        if kept and total + size > HISTORY_KEEP_CHARS:
+            break
+        kept, total = kept + 1, total + size
+    return kept
+
+
+def run_summary_due(inputs, context_length, messages, start):
+    """Whether the run's own steps ``messages[start:]`` are summarized before
+    its next step, which would send ``inputs`` tokens. Right after a summary
+    the run's own part is small, so the next one waits until it has grown
+    back (RUN_SUMMARY_OWN_SHARE)."""
+    above = min(RUN_SUMMARY_ABOVE_TOKENS, int(context_length * RUN_SUMMARY_WINDOW_SHARE))
+    if inputs <= above or not any(message.get("role") == "assistant" for message in messages[start:]):
+        return False
+    return own_chars(messages, start) >= own_chars(messages, 0) * RUN_SUMMARY_OWN_SHARE
+
+
+def run_tail(messages, start, end):
+    """Where the steps a run summary replaces end, of ``messages[start:end]``:
+    at the run's latest step (its assistant message) when it and what
+    followed it are at most RUN_KEEP_CHARS, else at ``end`` (all go)."""
+    latest = max((index for index in range(start, end) if messages[index].get("role") == "assistant"), default=None)
+    if latest is None or sum(_size(message) for message in messages[latest:end]) > RUN_KEEP_CHARS:
+        return end
+    return latest

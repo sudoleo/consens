@@ -4272,6 +4272,39 @@ zurück. Deshalb bleiben große `vm_write_file`-Inhalte in den Argumenten
 stehen. Das Arbeitsprotokoll behält die vollen Ergebnisse und vermerkt den
 Schnitt (`app`-Eintrag `compacted`).
 
+**Zusammenfassungen** (seit 2026-11-03, `agent_compaction.py` „Summaries“,
+`DelegationLoop._summarize` vor jedem Schritt nach `_compact`), wie Claude Code
+und Codex eine volle Sitzung kompaktieren: Das Chatmodell schreibt in einem
+eigenen Schritt eine Zusammenfassung, die ersetzt, was sie abdeckt. Der
+Schritt ist geclaimt und abgerechnet wie jeder andere, seine Zeile im Verlauf
+sagt es („Summarizing …“, `SUMMARY_TEXTS`), das Arbeitsprotokoll vermerkt
+`summary` und `summarized` (Zeichen vorher/nachher).
+
+- *Verlauf des Chats:* Übersteigt der Verlauf seit der letzten
+  Zusammenfassung `HISTORY_SUMMARY_ABOVE_CHARS` = 60.000 Zeichen, fasst der
+  erste Schritt der nächsten Nachricht ihn zusammen (die vorige
+  Zusammenfassung eingeschlossen, ohne Werkzeuge und ohne Dateiblock). Die
+  neuesten Nachrichten bis `HISTORY_KEEP_CHARS` = 20.000, mindestens die
+  letzte, bleiben wörtlich. Gespeichert am Turn als `agent_history_summary`;
+  spätere Nachrichten beginnen byte-gleich damit.
+- *Schritte eines Laufs:* Würde der nächste Schritt mehr als
+  `RUN_SUMMARY_ABOVE_TOKENS` = 100.000 Token senden (bei kleinerem Fenster
+  `RUN_SUMMARY_WINDOW_SHARE` = 60 % davon) und ist mindestens die Hälfte davon
+  der Lauf selbst, fasst der Agent seine bisherige Arbeit an dieser Nachricht
+  zusammen. Die Anfrage ist die des nächsten Schritts plus Bitte am Ende
+  (gleiche Werkzeuge, gleiche Tool-Wahl), liest also dessen Cache. Danach sieht
+  der Agent Frage, Zusammenfassung und, wenn höchstens `RUN_KEEP_CHARS` =
+  30.000 groß, seinen letzten Schritt samt Ergebnissen. Das Arbeitsprotokoll
+  der nächsten Nachricht (`work_record`) und die Belege einer Watch kennen
+  weiter jeden Aufruf (`own_messages`). So endet ein langer Lauf nicht mehr bei
+  80 % des Fensters, und jeder weitere Schritt sendet nur noch einen Bruchteil.
+
+Eine Zusammenfassung ist nie Nutzertext (`is_summary`: kein Memory-Beleg,
+im Arbeitsprotokoll Daten des Agenten). Was nicht klappt (kein Text, zu kurz,
+abgeschnitten, ein Tool-Aufruf statt Text), ändert nichts; die eines Laufs
+wird in dieser Nachricht nicht noch einmal versucht. Ein Aufruf darin läuft
+nie und öffnet kein Prüfer-Tor.
+
 Die gespeicherte Aktivität eines Turns bekommt den Platz, den der Rest des
 Turn-Dokuments (1 MiB) übrig lässt, abzüglich 64 kB Reserve, höchstens
 `ACTIVITY_MAX_BYTES` = 600.000 Byte UTF-8-JSON (`agent_runs.activity_budget`,

@@ -162,11 +162,12 @@ def context_data(actor, index, own_from, message, text):
     words: the app adds its hints, and workers report to the agent. A
     worker's user-role messages are the agent's (its assignment and later
     messages)."""
-    from app.services.agent_compaction import PICTURE_OPEN, is_work_record
+    from app.services.agent_compaction import PICTURE_OPEN, is_summary, is_work_record
     role = message.get("role")
     if role in {"system", "tool"}:
         return "app"
-    if role == "assistant" or actor != "agent":
+    if role == "assistant" or actor != "agent" or is_summary(text):
+        # A summary of the chat or of the run is the agent's own text.
         return "agent"
     if is_work_record(text) or text.startswith(PICTURE_OPEN):
         # The app's record of VM output, a picture of the VM; a picture of
@@ -310,6 +311,15 @@ class WorkLog:
         except Exception as exc:
             logging.warning("Agent work log context dropped category=%s", safe_exception(exc))
             self.incomplete = True
+
+    def rewound(self, actor, start, *, seen=()):
+        """The actor's conversation was rewritten from ``start`` on (a
+        summary, DelegationLoop._summarize), against ``context``'s rule that
+        it only grows: the log goes on from there. ``seen``: messages now
+        past ``start`` that are in the log already."""
+        with self._condition:
+            self._cursors[actor] = min(self._cursors.get(actor, 0), start)
+            self._logged.setdefault(actor, set()).update(id(message) for message in seen)
 
     def step(self, actor, step, model, value, status):
         """A finished (or failed, or stopped) model step: what it thought,
