@@ -1,5 +1,5 @@
 {
-  "sources": "ec323bf8c6e9",
+  "sources": "2bc29275c2e3",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -474,7 +474,7 @@
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.2de61ce6c658.js",
+      "src": "/static/dist/firebase.354200a69393.js",
       "module": true,
       "defer": false
     },
@@ -486,7 +486,7 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.ded4c89a3135.js",
+      "src": "/static/dist/app.ed948abbf19a.js",
       "module": false,
       "defer": true
     }
@@ -574,14 +574,14 @@
   "previous_assets": [
     "app.9049cb442db3.css",
     "app.a66610aa9113.css",
+    "app.ded4c89a3135.js",
     "app.75caf1284c21.js",
-    "app.e1bffe61a347.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.59bc9450805f.js",
     "demo.6666cf540258.js",
+    "firebase.2de61ce6c658.js",
     "firebase.2ed9f1d94655.js",
-    "firebase.06b7be671cd6.js",
     "head.bdf7276dc96c.js",
     "head.a8dde6da124c.js",
     "landing.7f44b94a3bc5.css",
