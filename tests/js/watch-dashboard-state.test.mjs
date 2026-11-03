@@ -472,6 +472,8 @@ describe("details and wrong matches", () => {
     const patch = calls.find(call => call[0] === "PATCH");
     expect(patch[1]).toBe("/api/watch/w1");
     expect(patch[2]).toMatchObject({ requirements: "Only new, from a shop. No private sellers." });
+    // The save ends (card redrawn, "Saved") before the window closes.
+    await vi.waitFor(() => expect(window.document.querySelector(".is-saving")).toBeNull());
   });
 
   it("reopens a wrong match with the same goal and what was wrong", async () => {
@@ -515,6 +517,7 @@ describe("details and wrong matches", () => {
       status: "active", reject_match: true, requirements: "No private sellers, only shops."
     });
     expect(patch[2]).not.toHaveProperty("condition");
+    await vi.waitFor(() => expect(window.document.body.textContent).toContain("Watching again."));
   });
 
   it("saves the goal picked after typing another one, not the typed one", async () => {
@@ -577,6 +580,10 @@ describe("details and wrong matches", () => {
       card.querySelector(".wd-goal-input.is-reject").value = text;
       [...card.querySelectorAll(".wd-button")].find(button => button.textContent === "Keep watching").click();
       await vi.waitFor(() => expect(calls.some(call => call[0] === "PATCH")).toBe(true));
+      // The click goes on after the PATCH (the card redraws): it ends here,
+      // not after its window closed with the test, which under load ended
+      // the run in an unhandled rejection (bug hunt 2026-11-02).
+      await vi.waitFor(() => expect(window.document.body.textContent).toContain("Watching again."));
       return calls.find(call => call[0] === "PATCH")[2];
     }
 
