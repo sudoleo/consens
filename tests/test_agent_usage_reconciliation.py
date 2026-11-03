@@ -5,7 +5,7 @@ completely, not charged completely), later reconciled exactly once against the
 provider's measurement. Calls that provably never started stay free.
 """
 from concurrent.futures import ThreadPoolExecutor
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -118,6 +118,10 @@ def test_parallel_reconciliation_passes_apply_the_measurement_once(store):
     assert sum(r["measured"] for r in results) == 1
     budget = agent_quota.snapshot(store.db, UID)
     assert budget["used"] == 130 and budget["estimated"] == 0
+    # The ledger no longer counts it as waiting for its measurement.
+    ledger = agent_quota.quota_ref(store.db, UID, agent_quota.period_key(
+        agent_quota.agent_budget_config.get_config(store.db))).get().to_dict()
+    assert ledger["estimates_pending"] == 0
 
 
 def test_unavailable_measurement_keeps_the_estimate_and_stops_after_bounded_attempts(store):
@@ -221,4 +225,49 @@ def test_a_settled_empty_yesterday_is_not_read_on_every_snapshot(store, monkeypa
     agent_quota.snapshot(store.db, UID)
     # Today's ledger is read again; the closed, empty yesterday is not.
     assert len(reads) - first == first - 1
+    agent_quota._quiet_until.clear()
+
+
+def test_only_estimates_that_can_still_be_measured_have_snapshots_look_for_it(store, monkeypatch):
+    """Bug hunt 2026-11-02: an estimate kept as final (no generation id, or
+    no measurement after MAX_ATTEMPTS) stayed in ``estimated`` for good, and
+    every snapshot of the day (the 60-s poll of an open chat) scheduled a
+    reconciliation pass: a Firestore query a minute, all day."""
+    scheduled = []
+    monkeypatch.setattr(reconciliation, "schedule", lambda db, uid: scheduled.append(uid) or True)
+    unknown_call(store, generation_id="")
+    agent_quota.snapshot(store.db, UID)
+    assert agent_quota.snapshot(store.db, UID)["estimated"] == 250
+    assert scheduled == []
+
+    _loop, args = unknown_call(store, generation_id="gen-2")
+    agent_quota.snapshot(store.db, UID)
+    assert scheduled == [UID]
+    for _ in range(reconciliation.MAX_ATTEMPTS):
+        reconciliation.reconcile_pending(store.db, UID, fetch_usage=lambda _gid: None)
+    assert store.receipt_ref(*args).get().to_dict()["quota_reconcile"] == "final"
+    assert agent_quota.snapshot(store.db, UID)["estimated"] == 500
+    assert scheduled == [UID]
+
+
+def test_a_final_estimate_yesterday_is_not_read_on_every_snapshot(store, monkeypatch):
+    reads = []
+    real = agent_quota.quota_ref
+
+    def counting(db, uid, day):
+        reads.append(day)
+        return real(db, uid, day)
+
+    config = agent_quota.agent_budget_config.get_config(store.db)
+    today = agent_quota.period_key(config)
+    day = datetime.strptime(today.split("_")[0], "%Y-%m-%d")
+    yesterday = (day - timedelta(days=1)).strftime("%Y-%m-%d") + today[len(today.split("_")[0]):]
+    real(store.db, UID, yesterday).set({"estimated": 250, "estimates_pending": 0})
+    monkeypatch.setattr(agent_quota, "PREVIOUS_DAY_GRACE", timedelta(0))
+    monkeypatch.setattr(agent_quota, "quota_ref", counting)
+    agent_quota._quiet_until.clear()
+    agent_quota.snapshot(store.db, UID)
+    reads.clear()
+    agent_quota.snapshot(store.db, UID)
+    assert yesterday not in reads
     agent_quota._quiet_until.clear()

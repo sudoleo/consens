@@ -123,7 +123,7 @@ def snapshot(db, uid, *, tier=None):
     data = quota_ref(db, uid, day).get().to_dict() or {}
     if data.get('unknown', 0) > data.get('unknown_released', 0):
         data = store.repair_quota_period(uid, day)
-    if data.get('estimated', 0) > 0 or _previous_day_has_estimates(db, uid, day):
+    if awaits_measurement(data) or _previous_day_has_estimates(db, uid, day):
         # Provider usage lookups run off the request thread; a later snapshot
         # shows the measured result. This read never waits or fails for it.
         # Yesterday is checked too, so a call estimated just before midnight
@@ -174,7 +174,7 @@ def _previous_day_has_estimates(db, uid, day):
     if settled and _quiet(quiet_key):
         return False
     try:
-        pending = (quota_ref(db, uid, previous).get().to_dict() or {}).get('estimated', 0) > 0
+        pending = awaits_measurement(quota_ref(db, uid, previous).get().to_dict())
     except Exception:
         return False
     if settled and not pending:
@@ -361,11 +361,14 @@ def reserve(data, amount, *, limit=None, overdraft=False):
     return data
 
 
-def settle(data, reserved, usage):
-    """Swap a call's reservation for its charge (measured_charge)."""
+def settle(data, reserved, usage, *, measurable=False):
+    """Swap a call's reservation for its charge (measured_charge).
+    ``measurable``: an estimate charged instead can still be measured later
+    (the call has a provider generation id, agent_usage_reconciliation)."""
     data = normalize(data)
     actual = measured_charge(usage)
     data['reserved'] = max(0, data.get('reserved', 0) - reserved)
+    data.setdefault("estimates_pending", 0)
     if actual is not None:
         data["used"] = data.get("used", 0) + actual
     else:
@@ -374,7 +377,29 @@ def settle(data, reserved, usage):
         data["unknown"] = data.get("unknown", 0) + reserved
         data['unknown_released'] = data.get('unknown_released', 0) + reserved
         data["estimated"] = data.get("estimated", 0) + unknown_estimate(reserved, usage)
+        if measurable:
+            data["estimates_pending"] += 1
     data["revision"] = data.get("revision", 0) + 1
+    return data
+
+
+# How many of a ledger's estimates still wait for their measurement, apart
+# from the amount: an estimate that can never be measured stays charged for
+# good, and until 2026-11-03 its ``estimated`` amount alone had snapshot()
+# look for a measurement all day (a query a minute while a chat was open, and
+# yesterday's ledger read on every snapshot of the next day).
+def awaits_measurement(data):
+    data = data or {}
+    if "estimates_pending" in data:
+        return data["estimates_pending"] > 0
+    # A ledger no call has settled into since then only knows the amount.
+    return data.get("estimated", 0) > 0
+
+
+def estimate_closed(data):
+    """One of the ledger's estimates no longer waits: measured, or kept as final."""
+    data = dict(data or {})
+    data["estimates_pending"] = max(0, data.get("estimates_pending", 0) - 1)
     return data
 
 
@@ -432,7 +457,7 @@ def usage_totals(db, uid, legacy=None):
 
 def reconcile(data, estimate, actual):
     """Replace one charged estimate with the measured charge. Callers fence once."""
-    data = normalize(data)
+    data = estimate_closed(normalize(data))
     data["estimated"] = max(0, data.get("estimated", 0) - estimate)
     data["used"] = data.get("used", 0) + actual
     data["reconciled"] = data.get("reconciled", 0) + 1

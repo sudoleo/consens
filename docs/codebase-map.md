@@ -6023,11 +6023,16 @@ steht im eigenen Ledger-Feld `estimated`, strikt getrennt von gemessenem
 `used`, und zählt gegen `remaining`; die API liefert `estimated` mit. Der Beleg
 erhält `quota_estimate` und `quota_reconcile=pending` (mit Provider-
 `generation_id`) bzw. `final` (ohne). `agent_usage_reconciliation.py` fragt
-OpenRouter `GET /generation?id=…` im Hintergrund ab (angestoßen vom Budgetabruf
-bei `estimated > 0`, je UID höchstens einmal pro Minute, in Unit/E2E/Mock aus)
-und ersetzt die Schätzung transaktional durch die gemessenen Tokens; der
-Belegstatus `pending → measured|final` ist der Exactly-once-Zaun. Nach sechs
-Versuchen oder 24 Stunden bleibt die Schätzung endgültig. Nachweislich nie
+OpenRouter `GET /generation?id=…` im Hintergrund ab (angestoßen vom Budgetabruf,
+solange im heutigen oder gestrigen Ledger `estimates_pending > 0` steht, je UID
+höchstens einmal pro Minute, in Unit/E2E/Mock aus) und ersetzt die Schätzung
+transaktional durch die gemessenen Tokens; der Belegstatus
+`pending → measured|final` ist der Exactly-once-Zaun und zählt
+`estimates_pending` im selben Schritt herunter. Nach sechs Versuchen oder
+24 Stunden bleibt die Schätzung endgültig. Bis 2026-11-03 löste `estimated > 0`
+aus: Eine endgültige Schätzung ließ jeden Budgetabruf des Tages (und am Folgetag
+das gestrige Ledger) weiter suchen, rund eine Firestore-Abfrage pro Minute bei
+offenem Chat; Ledger ohne das Feld folgen noch der alten Regel. Nachweislich nie
 gestartete Calls (`not_started`, `provider_rejection`, `not_dispatched`) bleiben
 freie Nullmessungen; `not_dispatched` heißt: der Request kam nie beim Provider an
 (Verbindungsaufbau gescheitert oder Abbruch vor dem Senden, siehe

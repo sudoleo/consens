@@ -141,10 +141,15 @@ def _apply(db, uid, receipt_ref, *, actual, now, retry=False) -> bool:
             return False
         estimate = int(receipt.get("quota_estimate") or 0)
         day = receipt.get("quota_day")
-        daily_ref = agent_quota.quota_ref(db, uid, day) if day and actual is not None else None
+        attempts = int(receipt.get("quota_reconcile_attempts") or 0) + 1
+        closes = not retry or attempts >= MAX_ATTEMPTS
+        # The estimate leaves the ledger's count of those still waiting
+        # (agent_quota.awaits_measurement) when the receipt leaves PENDING.
+        daily_ref = agent_quota.quota_ref(db, uid, day) if day and closes else None
         daily = (daily_ref.get(transaction=tx).to_dict() or {}) if daily_ref else None
+        if daily and actual is None:
+            tx.update(daily_ref, {"estimates_pending": agent_quota.estimate_closed(daily)["estimates_pending"]})
         if retry:
-            attempts = int(receipt.get("quota_reconcile_attempts") or 0) + 1
             tx.update(receipt_ref, {"quota_reconcile_attempts": attempts,
                                     **({"quota_reconcile": FINAL} if attempts >= MAX_ATTEMPTS else {})})
             return False

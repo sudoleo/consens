@@ -458,7 +458,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             estimate = None
             if daily_ref:
                 tx.set(daily_ref, agent_quota.count_settlement(
-                    agent_quota.settle(daily, receipt_data["quota_reserved"], usage), usage))
+                    agent_quota.settle(daily, receipt_data["quota_reserved"], usage,
+                                       measurable=bool(completion.generation_id)), usage))
                 estimate = agent_quota.unknown_estimate(receipt_data["quota_reserved"], usage)
             elif user.exists:
                 ledger = agent_quota.count_settlement({"agent_usage": (user.to_dict() or {}).get("agent_usage")}, usage)
