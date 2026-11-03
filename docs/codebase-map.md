@@ -307,7 +307,8 @@ pending grants. `markdown-stream.js` renders model answers without auto-loading
 remote resources (no remote images/media/style), closing markup exfiltration:
 an image source must be `data:image/…` or resolve, by the browser's own URL
 parser, to the page's origin; SVG `image`/`feImage` and MathML `mglyph` are
-forbidden tags. See `docs/google-integrations-setup.md` for required
+forbidden tags, and an SVG attribute with a `url(...)` that is not `#id` (fill,
+mask, filter, clip-path, markers) is dropped (since 2026-11-03). See `docs/google-integrations-setup.md` for required
 secrets, indexes, approved model routing, Google verification and live-test limits.
 
 Agent documents (27.09.2026): `agent_documents.py` registers `create_document`,

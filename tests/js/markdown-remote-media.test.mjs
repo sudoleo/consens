@@ -70,6 +70,18 @@ describe("untrusted model markup cannot load remote resources on render", () => 
     expect(output.querySelector('img[src="/static/own.png"]')).not.toBeNull();
   });
 
+  // Bug hunt 2026-10-24: DOMPurify keeps SVG's url(...) references.
+  it("drops SVG paint, mask and filter references outside the answer, keeps its own", () => {
+    const output = render([
+      '<svg><rect fill="url(https://evil.example/fill.svg#p)" stroke="url(#own)"></rect></svg>',
+      `<svg><circle mask="url('//evil.example/mask.svg#m')" filter='url( "https://evil.example/f" )'></circle></svg>`,
+      '<svg><path clip-path="url(#clip)" marker-end="url(\\68 ttps://evil.example/m)"></path></svg>',
+    ].join("\n\n"));
+    expect(output.innerHTML).not.toContain("evil.example");
+    expect(output.querySelector('rect[stroke="url(#own)"]')).not.toBeNull();
+    expect(output.querySelector('path[clip-path="url(#clip)"]')).not.toBeNull();
+  });
+
   it("blocks a remote image before its node reaches the page document", () => {
     const { window, document } = boot();
     const adopt = document.adoptNode.bind(document);

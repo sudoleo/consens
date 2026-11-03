@@ -70,6 +70,15 @@ function neutralizeRemoteMedia(root) {
       el.removeAttribute("style");
     }
   });
+  // SVG's fill, stroke, mask, filter, clip-path and markers take url(...):
+  // one that points outside the answer (not "#id") goes, like a remote
+  // image (bug hunt 2026-10-24; until 2026-11-03 only the CSP held it).
+  root.querySelectorAll("svg, svg *").forEach(el => {
+    for (const { name, value } of [...el.attributes]) {
+      if (/url\(/i.test(value) && [...value.matchAll(/url\(\s*['"]?\s*([^)'"]*)/gi)]
+        .some(match => !match[1].trim().startsWith("#"))) el.removeAttribute(name);
+    }
+  });
 }
 
 function plainTextFragment(text) {
