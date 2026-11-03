@@ -915,6 +915,7 @@
   "Send after this response": "Nach dieser Antwort senden",
   "Your waiting message is back in the field, before your new text.": "Deine wartende Nachricht steht wieder im Feld, vor deinem neuen Text.",
   "Your waiting message is back in the field: the response ended before it could take it.": "Deine wartende Nachricht steht wieder im Feld: Die Antwort endete, bevor sie sie lesen konnte.",
+  "Your waiting message was not sent: you logged out before the response ended.": "Deine wartende Nachricht wurde nicht gesendet: Du hast dich abgemeldet, bevor die Antwort fertig war.",
   "Sends after this response": "Geht nach dieser Antwort raus",
   "Read before the next step": "Wird vor dem nächsten Schritt gelesen",
   "Remove waiting message": "Wartende Nachricht entfernen",

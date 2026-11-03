@@ -1536,13 +1536,21 @@
   }
   // The response is over: what it did not read goes out now, or back into
   // the field when it stopped or failed.
-  function flushQueue(context) {
+  function flushQueue(context, reason = "") {
     const queue = queueOf(context).splice(0);
     persistQueue(context);
     renderQueue();
     // An open pause ends with the response too.
     renderHold();
     if (!queue.length || !registry.isAuthCurrent(context)) return;
+    // A logout empties the field for whoever uses this browser next
+    // (resetLoadedRunAfterLogout): said, never put back there. Until
+    // 2026-11-03 it went into the field, with a popup saying so, and was
+    // gone a moment later.
+    if (reason === "logout") {
+      App.showPopup?.("Your waiting message was not sent: you logged out before the response ended.");
+      return;
+    }
     const text = queue.map(item => item.text).join("\n\n");
     const input = window.document?.getElementById("questionInput");
     if (!input) return;
@@ -2296,7 +2304,7 @@
     if (reason === "user" && context.metadata.requestSent) stopOnServer(context);
     else forgetPending(context);
     restoreUnsentDraft(context);
-    flushQueue(context);
+    flushQueue(context, reason);
   }
   // After a reload: follow this tab's turns that were still running. Also
   // when the mode switch stands on Compare (A-B2): a turn that may wait for

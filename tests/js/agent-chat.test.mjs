@@ -1627,6 +1627,30 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it("does not put a waiting message back into the field when the user logs out", async () => {
+    // Bug hunt 2026-10-27: the logout's cancel wrote it into the field with
+    // "back in the field", and the logout emptied the field right after.
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
+    document.body.append(queue);
+    window.streamSSERequest = vi.fn(() => new Promise(() => {}));
+    window.App.showPopup = vi.fn();
+    const input = document.getElementById("questionInput");
+    input.value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalled());
+    input.value = "Also compare the prices";
+    await window.App.agentChat.steer();
+    expect(input.value).toBe("");
+    window.App.runRegistry.cancelAll("logout");
+    expect(input.value).toBe("");
+    expect(window.App.showPopup).toHaveBeenCalledWith(
+      "Your waiting message was not sent: you logged out before the response ended.");
+    expect(queue.hidden).toBe(true);
+    dom.window.close();
+  });
+
   // The hand-over (2026-11-01): once the answer is fixed the server frees
   // the chat; the page takes the answer as done and the review follows.
   const HANDED_TURN = { id: "b".repeat(32), question: "Question", consensus: "Answer.", mode: "Agent",
