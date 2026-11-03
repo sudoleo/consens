@@ -21,7 +21,7 @@ from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 
 from app.api.routers import agent_github as github_router
-from app.services import agent_github, agent_vm, prompt_defaults
+from app.services import agent_github, agent_vm, agent_vm_tools, prompt_defaults
 from app.services.agent_github import (NO_ACCESS, NO_PUSH, NOT_CONNECTED, NOT_SET_UP, WORKFLOWS_REFUSED, GitHubApp,
                                        GitHubConnections, GithubImportArgs, PullRequests, blob_sha, changes_command,
                                        parse_changes, unpack_command)
@@ -315,6 +315,33 @@ def test_a_refused_token_keeps_the_connection(store, fake_vm, github, status, er
     loop = vm_loop(store, Agent([[("github_import", {"repo": "maxl/app"})]]))
     list(loop.run())
     assert results(loop) == [{"error": error}]
+    assert GitHubConnections(store.db).public(UID)["connected"] is True
+
+
+def test_an_unexpected_answer_or_key_fails_the_tool_not_the_turn(store, fake_vm, github, monkeypatch):
+    """Bug hunt 2026-10-26: GitHub calls do not go through VMTools._provider,
+    and an answer without the expected field (KeyError) or an invalid app key
+    (InvalidKeyError) is no ValueError. VMTools._guarded (since 2026-10-30)
+    makes it the call's error, reported to the operator, never the turn's."""
+    connected(store, github)
+    real = FakeGitHub.__call__
+
+    def tokenless(self, request):
+        if request.url.path.endswith("/access_tokens"):
+            return httpx.Response(201, json={"expires_at": "2099-01-01T00:00:00Z"})
+        return real(self, request)
+    monkeypatch.setattr(FakeGitHub, "__call__", tokenless)
+    loop = vm_loop(store, Agent([[("github_import", {"repo": "maxl/app"})]]))
+    list(loop.run())
+    assert results(loop) == [{"error": agent_vm_tools.TOOL_FAILED}]
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+    monkeypatch.setattr(FakeGitHub, "__call__", real)
+    monkeypatch.setenv("GITHUB_APP_PRIVATE_KEY", "not a key")
+    loop = vm_loop(store, Agent([[("github_import", {"repo": "maxl/app"})]]), request_id="key")
+    list(loop.run())
+    assert results(loop) == [{"error": agent_vm_tools.TOOL_FAILED}]
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
     assert GitHubConnections(store.db).public(UID)["connected"] is True
 
 
