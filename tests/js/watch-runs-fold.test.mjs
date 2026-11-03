@@ -42,6 +42,10 @@ describe("A Watch's runs in its chat", () => {
     // The finding and the user's own message stay; the runs say the Watch sent them.
     expect(turns[0].querySelector(".thread-watch-run")).toBeNull();
     expect(turns[3].querySelector(".thread-watch-run").textContent).toBe("Scheduled Watch run");
+    // A screen reader hears it by the message's heading, the label once.
+    expect(turns[3].querySelector("h2.visually-hidden").textContent).toBe("Scheduled Watch run");
+    expect(turns[3].querySelector(".thread-watch-run").getAttribute("aria-hidden")).toBe("true");
+    expect(turns[0].querySelector("h2.visually-hidden").textContent).toBe("Your message");
     folds[0].click();
     expect(folds[0].getAttribute("aria-expanded")).toBe("true");
     expect(turns[1].classList.contains("is-watch-folded")).toBe(false);

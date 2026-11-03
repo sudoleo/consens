@@ -29,7 +29,12 @@
     ['paused', 'Paused'],
   ];
 
-  const page = { token: 0, data: null, archive: [], telegram: null, focus: '', menu: null, showEnded: false };
+  const page = { token: 0, data: null, archive: [], telegram: null, focus: '', menu: null, showEnded: false,
+    archiveOpen: false, follow: null, followTries: 0 };
+  // A Watch the page started runs at once; the page looks again until its
+  // first run is there (seconds), then stops (FOLLOW_MAX looks).
+  const FOLLOW_DELAYS = [15000, 30000, 60000, 120000];
+  const FOLLOW_MAX = 12;
 
   function el(tag, className, text) {
     const element = document.createElement(tag);
@@ -76,6 +81,8 @@
     if (watch.status === 'done') {
       if (watch.ended === 'goal') return summary || App.t('It reached its goal.');
       if (watch.ended === 'chat_gone') return App.t('Its chat was deleted.');
+      if (watch.ended === 'google_data') return App.t('Its chat now holds Google information, so it no longer runs on a schedule.');
+      if (watch.ended === 'cannot_run') return App.t('It could not start in its chat any more and has ended.');
       return summary || App.t('Ended.');
     }
     if (last?.outcome === 'needs_you') return summary || App.t('A reviewer stopped a run. Open the chat to decide.');
@@ -186,7 +193,11 @@
     const list = el('ul', 'aw-list');
     list.hidden = !page.showEnded;
     if (page.showEnded) watches.forEach(watch => list.append(row(watch)));
-    toggle.addEventListener('click', () => { page.showEnded = !page.showEnded; draw(); });
+    toggle.addEventListener('click', () => {
+      page.showEnded = !page.showEnded;
+      page.refocus = { selector: '.aw-disclosure' };
+      draw();
+    });
     box.append(toggle, list);
     return box;
   }
@@ -196,6 +207,9 @@
   function archiveSection() {
     const watches = page.archive;
     const box = el('details', 'aw-archive');
+    // Open stays open across a redraw (an action, back on the tab).
+    box.open = page.archiveOpen;
+    box.addEventListener('toggle', () => { page.archiveOpen = box.open; });
     const summary = el('summary', 'aw-archive-summary');
     summary.append(el('span', '', App.t('Earlier Watches')), el('span', 'aw-archive-count', String(watches.length)));
     const note = el('p', 'aw-archive-note',
@@ -317,8 +331,32 @@
       return;
     }
     limit.hidden = false;
-    limit.replaceChildren(el('span', 'aw-limit', App.t('{count} of {limit} Watches running',
-      { count: info.active_count, limit: info.active_limit })));
+    const text = App.t('{count} of {limit} Watches running', { count: info.active_count, limit: info.active_limit });
+    // aria-live: said again only when it changed.
+    if (limit.textContent !== text) limit.replaceChildren(el('span', 'aw-limit', text));
+    App.agentWatch?.showQuota?.(info);
+  }
+
+  // Where focus was before a redraw: the same control of the same Watch
+  // after it (a row moves between sections when it pauses or ends).
+  function focusedPlace() {
+    const active = document.activeElement;
+    const host = body();
+    if (!active || !host?.contains(active)) return null;
+    const row = active.closest('.aw-row');
+    if (row) return { id: row.dataset.watchId, selector: active.classList.contains('aw-more') ? '.aw-more' : '.aw-open' };
+    if (active.classList.contains('aw-disclosure')) return { selector: '.aw-disclosure' };
+    if (active.classList.contains('aw-archive-summary')) return { selector: '.aw-archive-summary' };
+    return null;
+  }
+
+  function restoreFocus(place) {
+    if (!place) return;
+    const host = body();
+    const scope = place.id ? [...(host?.querySelectorAll('.aw-row') || [])].find(row => row.dataset.watchId === place.id) : host;
+    const target = scope?.querySelector(place.selector)
+      || (place.id ? host?.querySelector('.aw-disclosure') : null);
+    target?.focus({ preventScroll: true });
   }
 
   function emptyState() {
@@ -337,6 +375,8 @@
   function draw() {
     const host = body();
     if (!host || !page.data) return;
+    const place = focusedPlace() || page.refocus;
+    page.refocus = null;
     closeMenu();
     const watches = Array.isArray(page.data.watches) ? page.data.watches : [];
     const groups = { needs: [], new: [], running: [], paused: [], ended: [] };
@@ -359,6 +399,26 @@
     host.removeAttribute('aria-busy');
     syncHead();
     if (page.focus) focusWatch(page.focus);
+    else restoreFocus(place);
+    followFirstRuns();
+  }
+
+  function followFirstRuns() {
+    clearTimeout(page.follow);
+    page.follow = null;
+    const pending = (page.data?.watches || []).some(firstRunPending);
+    if (!pending) {
+      page.followTries = 0;
+      return;
+    }
+    if (page.followTries >= FOLLOW_MAX) return;
+    page.follow = setTimeout(() => {
+      page.follow = null;
+      page.followTries += 1;
+      if (!page.data || document.visibilityState !== 'visible'
+        || document.getElementById('watchDashboard')?.hidden !== false) return;
+      load().then(fresh => { if (fresh) draw(); }).catch(() => {});
+    }, FOLLOW_DELAYS[Math.min(page.followTries, FOLLOW_DELAYS.length - 1)]);
   }
 
   async function load() {
@@ -451,19 +511,28 @@
   }
 
   async function act(watch, path, options = {}) {
+    // Focus goes back to the row's "…" after the redraw.
+    page.refocus = { id: watch.id, selector: '.aw-more' };
     try {
       const result = await ui().api(options.method || 'POST', `/agent/watches/${encodeURIComponent(watch.id)}${path}`, options.body || {});
       replace(result.watch);
-      window.dispatchEvent(new CustomEvent('consensio:agent-watches-changed', { detail: { watch: result.watch } }));
+      // The page drew it already; cards and pills follow the event.
+      window.dispatchEvent(new CustomEvent('consensio:agent-watches-changed', { detail: { watch: result.watch, page: true } }));
       return result.watch;
     } catch (error) {
+      page.refocus = null;
       App.toast?.({ message: App.userError(error, { fallback: 'Try again.' }) });
       return null;
     }
   }
 
   function openChat(watch) {
-    if (watch.unread) act(watch, '/seen');
+    if (watch.unread) {
+      // Seen at once here; the chat marks it on the server too (agentWatch.opened).
+      watch.unread = false;
+      ui().api('POST', `/agent/watches/${encodeURIComponent(watch.id)}/seen`, {}).catch(() => {});
+      draw();
+    }
     if (firstRunPending(watch) || !watch.bookmark_id) {
       App.toast?.({ message: App.t('Its first run is under way. Its chat appears in a moment.') });
       return;
@@ -522,7 +591,24 @@
     menu.classList.toggle('opens-up', !below);
     button.setAttribute('aria-expanded', 'true');
     button.closest('.aw-row')?.classList.add('has-menu');
-    page.menu = { menu, button };
+    const outside = event => {
+      if (!menu.contains(event.target) && !button.contains(event.target)) closeMenu();
+    };
+    const escape = event => {
+      if (event.key === 'Escape' && !menu.contains(event.target)) closeMenu({ focus: true });
+    };
+    const away = () => closeMenu();
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', escape);
+    window.addEventListener('resize', away);
+    window.addEventListener('scroll', away, true);
+    const off = () => {
+      document.removeEventListener('pointerdown', outside, true);
+      document.removeEventListener('keydown', escape);
+      window.removeEventListener('resize', away);
+      window.removeEventListener('scroll', away, true);
+    };
+    page.menu = { menu, button, off };
     const items = [...menu.querySelectorAll('.bookmark-menu-item')];
     const focusItem = index => items[(index + items.length) % items.length]?.focus({ preventScroll: true });
     menu.addEventListener('keydown', event => {
@@ -554,8 +640,9 @@
 
   function closeMenu({ focus = false } = {}) {
     if (!page.menu) return;
-    const { menu, button } = page.menu;
+    const { menu, button, off } = page.menu;
     page.menu = null;
+    off?.();
     if (App.popover) {
       App.popover.leave(menu, () => {
         App.popover.unregister(menu);
@@ -577,13 +664,17 @@
     page.archive = [];
     page.telegram = null;
     page.showEnded = false;
+    page.archiveOpen = false;
+    clearTimeout(page.follow);
+    page.follow = null;
+    page.followTries = 0;
     closeMenu();
   }
 
   // A Watch started on the sheet, changed on a card or in another tab: the
   // open page shows it at once; back on the tab, it reads again.
   window.addEventListener('consensio:agent-watches-changed', event => {
-    if (!page.data || event.detail?.loaded) return;
+    if (!page.data || event.detail?.loaded || event.detail?.page) return;
     if (event.detail?.watch) replace(event.detail.watch);
   });
   document.addEventListener('visibilitychange', () => {

@@ -9331,7 +9331,7 @@ app/services/
   chat_store.py              Firestore-Pfade, Turn-Anlage und -Lesen (Antwortdokumente gespeicherter Consensus-Turns), Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, update_memory ohne Belegzitat (AuditMemoryChange; seit 2026-10-28 im Audit, seit 2026-10-31 überall, evidence_matches/user_words nur noch für Einstellungen und Links), Secret-Prüfung, Undo-Log, Prompt-Fakten AUDIT_MEMORY_*
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompt-Block AUDIT_PROMPT, Hinweise im Toolergebnis (INSTRUCTIONS); startet nie eine Watch. Im geplanten Lauf WatchRunTools: report_finding (nur mit Beleg aus diesem Lauf) und finish_watch, RUN_PROMPT/RUN_NOTE (seit 2026-11-03)
-  agent_watches.py           Watches, die den Agenten laufen lassen (seit 2026-11-03): Limits/Intervalle je Stufe, Zeitplan (next_run, daily/weekly über watch_service), create aus dem gespeicherten Vorschlag, stop, due/claim (verspätet > 2 h = übersprungen, Tagesgrenze), start_run (routers/agent.start_agent_turn mit watch_run; 409/429/503 = in 10 min noch mal), run_tick (aus watch_scheduler_loop, je Konto ein Lauf, höchstens 3 parallel), turn_ended (last_run, Ende beim Ziel, ungelesen, Mail und Telegram über notification_outbox je nach email_enabled/telegram_enabled), pause/resume/seen/set_channels, Anlegen mit eigenem Auftrag auch in einem eigenen Chat (chat_title), unsubscribe_token/stop_emails (Link „Stop emails“), PICTURES (Bild der Watch: beim Anlegen ein Foto des Gegenstands über watch_scheduler.picture_words → consensus_engine.pick_watch_picture_words und picture_search (Brave), sonst die Seiten des Chats; nach Läufen die Seiten, die sie öffneten, über watch_images.find_image; gespeichert unter watch_images/{id}, eigener Thread, höchstens 3 Versuche), Löschen mit Chat/Konto samt Bild
+  agent_watches.py           Watches, die den Agenten laufen lassen (seit 2026-11-03): Limits/Intervalle je Stufe, Zeitplan (next_run, daily/weekly über watch_service), create aus dem gespeicherten Vorschlag, stop, due/claim (verspätet > 2 h = übersprungen, Tagesgrenzen für Server und Konto, ein Intervall, das die Stufe nicht mehr erlaubt, wird beim Lauf angepasst), start_run (routers/agent.start_agent_turn mit watch_run; 409/429/503 = in 10 min noch mal als derselbe Lauf (`retry_of`, zählt nicht, verschiebt nichts), 404 = Chat weg, 403/422 = Watch endet mit `google_data`/`cannot_run`), run_tick (aus watch_scheduler_loop, je Konto ein Lauf, höchstens 3 parallel, liest bis zu 100 fällige; jedes Laufende weckt den Takt, wartende Läufe sonst nach BLOCKED_RECHECK = 5 min), turn_ended (last_run, Ende beim Ziel, ungelesen, Mail und Telegram über notification_outbox je nach email_enabled/telegram_enabled), pause/resume/seen/set_channels, Anlegen mit eigenem Auftrag auch in einem eigenen Chat (chat_title), unsubscribe_token/stop_emails (Link „Stop emails“), PICTURES (Bild der Watch: beim Anlegen ein Foto des Gegenstands über watch_scheduler.picture_words → consensus_engine.pick_watch_picture_words und picture_search (Brave), sonst die Seiten des Chats; nach Läufen die Seiten, die sie öffneten, über watch_images.find_image; gespeichert unter watch_images/{id}, eigener Thread, höchstens 3 Versuche), Löschen mit Chat/Konto samt Bild
   agent_chat_search.py       search_chats (seit 2026-10-28): frühere Chats des Kontos nach Titel, Startdatum, letzter Frage finden (mit erster Frage) und einen per chat_id mit Fragen und Antworten lesen; nie der aktuelle Chat, nie Chats mit Google-Daten; Ergebnis ist Fremdinhalt
   agent_settings.py          read_settings + prepare_settings_change: aktuelle Einstellungen/Wahl des Kontos lesen (Chatmodell, Reasoning, Vergleichs-Preset der Prüfer, Anzeige; seit 2026-11-01 auch Fakten über consens.io), Vorschlag am Turn (agent_settings_proposal) nach Stufe/Modell geprüft, Prompt-Block AUDIT_PROMPT; schreibt nie eine Einstellung (bis 2026-10-31 auch Agent-Vorlieben, Gruppe PREFERENCES)
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS) und SIDE_TOOLS
@@ -9915,8 +9915,11 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   Bytes unter `watch_images/{id}`). Eine pausierte Watch hat kein
   `next_run_at` und keinen Platz. `users/{uid}/agent_watch_state/slots`
   (`active`: Watch-ID → Chat-ID) hält Limit und eine Watch je Chat in einer
-  Transaktion; `agent_watch_days/{YYYY-MM-DD}` (`runs`) die Tagesgrenze des
-  Servers. Gelöscht mit dem Chat (`ChatStore._purge_chat`) und dem Konto
+  Transaktion; `agent_watch_days/{YYYY-MM-DD}` (`runs`, `accounts`: UID →
+  Läufe) die Tagesgrenzen des Servers und jedes Kontos. `retry_of` ist die
+  ursprüngliche Zeit eines Laufs, der wegen eines belegten Chats gleich noch
+  einmal kommt; `ended` auch `google_data`/`cannot_run` (der Lauf konnte im
+  Chat nicht mehr starten). Gelöscht mit dem Chat (`ChatStore._purge_chat`) und dem Konto
   (Bereich `agent_watches`).
 - `watch_images/{watch_id}` — die Vorschau einer Watch (seit 2026-10-11): `content`
   (WebP, Kante ≤ 320 px, ≤ 120 kB), `content_type`, `token` (sha256-Präfix des
@@ -9951,7 +9954,9 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   2026-11-03 `agent_watch` (ein Agent-Watch-Lauf: Befund, Rückfrage
   oder Ziel, als Mail mit „Stop emails“ und als Telegram-Nachricht mit
   Link-Knöpfen; `resource_id` = Watch, `run_id` = Turn; der Chat-Link ist
-  `/app?chat=<bookmark_id>`, den `firebase.js openChatFromLink` öffnet). Felder:
+  `/app?chat=<bookmark_id>`, den `firebase.js openChatFromLink` öffnet; er
+  wartet zehn Minuten in `sessionStorage` `consensio:open-chat`, damit ein
+  Google-Login per Weiterleitung auf dem Handy ihn nicht verliert). Felder:
   `kind`, `channel`, `uid` (Owner, leer bei Topic), `resource_id`, `run_id`,
   `recipient_id` (UID oder Follower-Dokument-ID, keine E-Mail), `payload` (nur
   Frage, Scores, Change-Summary, Richtung; kein Consensus-Volltext),

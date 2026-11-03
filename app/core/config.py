@@ -84,7 +84,11 @@ DEFAULT_LIMITS = {
     "agent_watch_free_min_hours": 24,
     "agent_watch_plus_min_hours": 6,
     "agent_watch_pro_min_hours": 1,
-    "agent_watch_max_runs_per_day": 300,
+    # Runs a day: the server's runaway guard and each account's share of it,
+    # so one account's Watches never stop everyone else's (Pro at most 20
+    # hourly = 480).
+    "agent_watch_max_runs_per_day": 3000,
+    "agent_watch_max_runs_per_account_day": 500,
     # 1 = the Consensus Watches from before (watch_service.py) are archived
     # (Max, 2026-11-03): none is made or checked, nothing more is sent, their
     # pages stay as they last were. New Watches run the Agent.
@@ -1960,6 +1964,10 @@ def consensus_watches_archived() -> bool:
 
 def get_agent_watch_max_runs_per_day() -> int:
     return max(0, int(LIMITS["agent_watch_max_runs_per_day"]))
+
+
+def get_agent_watch_max_runs_per_account_day() -> int:
+    return max(0, int(LIMITS["agent_watch_max_runs_per_account_day"]))
 
 
 def get_watch_probe_max_per_day() -> int:

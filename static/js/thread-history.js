@@ -473,6 +473,9 @@
       const scheduled = Boolean(turnData?.agent_settings?.watch_run);
       let label = question.querySelector(":scope > .thread-watch-run");
       question.classList.toggle("is-watch-run", scheduled);
+      // Screen readers hear it by its heading ("Your message" otherwise).
+      const heading = question.querySelector(":scope > h2.visually-hidden");
+      if (heading) heading.textContent = window.App.t(scheduled ? "Scheduled Watch run" : "Your message");
       if (!scheduled) {
         label?.remove();
         return;
@@ -480,6 +483,7 @@
       if (!label) {
         label = document.createElement("p");
         label.className = "thread-watch-run";
+        label.setAttribute("aria-hidden", "true");
         question.insertBefore(label, question.querySelector(".thread-ask-bubble"));
       }
       label.textContent = "Scheduled Watch run";

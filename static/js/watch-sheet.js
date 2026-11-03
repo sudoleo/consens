@@ -67,12 +67,13 @@
     const task = node('textarea', 'watch-sheet-task');
     task.rows = 3;
     task.maxLength = TASK_MAX;
-    task.placeholder = 'Check whether registration for IRONMAN Hamburg 2027 is open.';
+    // The fields hold the user's words (skip); their examples are ours.
+    task.placeholder = App.t('Check whether registration for IRONMAN Hamburg 2027 is open.');
     task.setAttribute('data-i18n-skip', '');
     const goal = node('input', 'watch-sheet-goal');
     goal.type = 'text';
     goal.maxLength = GOAL_MAX;
-    goal.placeholder = 'Registration is open';
+    goal.placeholder = App.t('Registration is open');
     goal.setAttribute('data-i18n-skip', '');
     const interval = node('select', 'watch-sheet-interval');
     const time = node('input', 'watch-sheet-time');
@@ -99,7 +100,9 @@
       often, error, actions);
     dialog.append(content);
     document.body.append(dialog);
-    App.modalDialog?.bind(dialog, { onClose: () => { current = null; } });
+    // While it starts, the sheet stays: closed then, the Watch would start unseen.
+    App.modalDialog?.bind(dialog, { onClose: () => { current = null; }, keepOpen: () => start.disabled });
+    dialog.addEventListener('cancel', event => { if (start.disabled) event.preventDefault(); });
     cancel.addEventListener('click', () => close());
     interval.addEventListener('change', () => { time.hidden = !TIMED.has(interval.value); });
     content.addEventListener('submit', event => { event.preventDefault(); submit(); });

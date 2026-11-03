@@ -67,6 +67,15 @@ def _refuse_archived():
         raise error
 
 
+def _archived_page(request: Request):
+    """The resume link of an archived Consensus Watch (_refuse_archived)."""
+    return notice_page(
+        request, status_code=410, eyebrow=_WATCH_EYEBROW, heading="This Watch is archived",
+        message="Watches now run the Agent. Start one from a chat or on the Watches page.",
+        links=[WATCHES_LINK],
+    )
+
+
 @router.post("/api/watch")
 @limiter.limit("5/minute")
 def create_watch(request: Request, data: dict = Body(...)):
@@ -601,6 +610,8 @@ def resume_page(request: Request, token: str = ""):
         watch_id = watch_service.parse_resume_token(token)
     except watch_service.WatchError as exc:
         return _link_error(request, exc)
+    if cfg.consensus_watches_archived():
+        return _archived_page(request)
     view, error = _view_or_error(request, watch_id)
     if error:
         return error
@@ -618,6 +629,8 @@ def resume_page(request: Request, token: str = ""):
 @router.post("/watch/resume", response_class=HTMLResponse)
 @limiter.limit("20/minute")
 def resume(request: Request, token: str = ""):
+    if cfg.consensus_watches_archived():
+        return _archived_page(request)
     try:
         result = watch_service.resume_from_token(token, get_user_tier)
     except watch_service.WatchError as exc:

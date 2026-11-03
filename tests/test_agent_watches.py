@@ -70,6 +70,16 @@ def test_daily_runs_at_its_local_time_and_the_short_ones_by_the_hour():
     assert agent_watches.next_run(hourly, now=NOW) == NOW + timedelta(hours=1)
     # From a run that was due long ago: the next slot after now, not a backlog.
     assert agent_watches.next_run(hourly, now=NOW, previous=NOW - timedelta(hours=5, minutes=30)) == NOW + timedelta(minutes=30)
+    # A new Watch comes at the next such time, today while it is still ahead,
+    # not one interval after now (review 2026-11-03).
+    morning = datetime(2026, 11, 3, 6, 0, tzinfo=timezone.utc)
+    assert agent_watches.next_run(schedule, now=morning) == datetime(2026, 11, 3, 7, 0, tzinfo=timezone.utc)
+    weekly = agent_watches.validate_schedule("weekly", "08:00", "", "Europe/Berlin")
+    assert agent_watches.next_run(weekly, now=morning) == datetime(2026, 11, 3, 7, 0, tzinfo=timezone.utc)
+    assert agent_watches.next_run(weekly, now=NOW) == datetime(2026, 11, 4, 7, 0, tzinfo=timezone.utc)
+    # After a run, the interval as before.
+    assert agent_watches.next_run(weekly, now=datetime(2026, 11, 3, 7, 1, tzinfo=timezone.utc),
+                                  previous=datetime(2026, 11, 3, 7, 0, tzinfo=timezone.utc)) == datetime(2026, 11, 10, 7, 0, tzinfo=timezone.utc)
     with pytest.raises(agent_watches.AgentWatchError) as error:
         agent_watches.validate_schedule("monthly")
     assert error.value.code == "invalid_interval"
@@ -187,6 +197,24 @@ def test_the_server_cap_holds_runs_back(store, monkeypatch):
     assert agent_watches.claim(second, now=NOW, db=store.db) == (None, "budget")
 
 
+def test_one_accounts_watches_never_use_up_everyone_elses_runs(store, monkeypatch):
+    monkeypatch.setitem(cfg.LIMITS, "agent_watch_max_runs_per_account_day", 1)
+    first = due_watch(store, next_run_at=NOW)
+    second = due_watch(store, next_run_at=NOW)
+    assert agent_watches.claim(first, now=NOW, db=store.db)[1] == ""
+    assert agent_watches.claim(second, now=NOW, db=store.db) == (None, "account_budget")
+    store.db.collection(agent_watches.COLLECTION).document(second).update({"uid": "someone-else"})
+    assert agent_watches.claim(second, now=NOW, db=store.db)[1] == ""
+
+
+def test_a_plan_that_no_longer_allows_the_interval_runs_it_at_one_it_does(store):
+    watch_id = due_watch(store, next_run_at=NOW, interval="hourly", run_time="", run_weekday="")
+    run, reason = agent_watches.claim(watch_id, now=NOW, db=store.db, tier="free")
+    saved = record(store, watch_id)
+    assert reason == "" and run["interval"] == "daily" and saved["interval"] == "daily"
+    assert saved["run_time"] == "08:00" and saved["next_run_at"] == datetime(2026, 11, 4, 7, 0, tzinfo=timezone.utc)
+
+
 class Router:
     """agent.start_agent_turn as the scheduler calls it."""
 
@@ -207,6 +235,8 @@ def router(monkeypatch):
         fake = Router(result)
         monkeypatch.setattr(agent_router, "start_agent_turn", fake)
         return fake
+    # The plan comes from the account (security.get_user_tier, real Firestore).
+    monkeypatch.setattr(agent_watches, "_tier_of", lambda uid: None)
     agent_watches._running.clear()
     yield install
     agent_watches._running.clear()
@@ -250,6 +280,61 @@ def test_a_busy_chat_tries_again_soon_and_a_deleted_one_ends_the_watch(store, ro
     assert agent_watches.start_run(run, db=store.db, now=NOW) is False
 
 
+def test_a_busy_run_keeps_its_time_its_count_and_its_end(store, router):
+    """Review 2026-11-03: each retry counted as a run and as its own late
+    start, so retries never ended, and an hourly Watch moved 10 min a time."""
+    watch_id = due_watch(store, next_run_at=NOW, interval="hourly", run_time="", run_weekday="")
+    router(HTTPException(status_code=409, detail="Turn state conflict"))
+    at = NOW
+    for _ in range(10):
+        run, reason = agent_watches.claim(watch_id, now=at, db=store.db)
+        assert reason == "" and run["scheduled_at"] == NOW
+        agent_watches.start_run({**run, "claimed_at": at}, db=store.db, now=at)
+        saved = record(store, watch_id)
+        if saved["next_run_at"] == NOW + timedelta(hours=1):
+            break
+        assert saved["retry_of"] == NOW and saved["next_run_at"] == at + agent_watches.BUSY_RETRY
+        at = saved["next_run_at"]
+    # The next hourly run comes first: no further retry, the schedule unmoved.
+    saved = record(store, watch_id)
+    assert saved["next_run_at"] == NOW + timedelta(hours=1) and saved.get("retry_of") is None
+    assert saved["runs"] == 0
+    day = store.db.collection(agent_watches.DAYS_COLLECTION).document(NOW.date().isoformat()).get().to_dict()
+    assert day["runs"] == 0 and day["accounts"][UID] == 0
+    # A retry past the lateness of its first time is skipped like that time.
+    store.db.collection(agent_watches.COLLECTION).document(watch_id).update(
+        {"next_run_at": NOW + timedelta(minutes=50), "retry_of": NOW - timedelta(hours=2)})
+    assert agent_watches.claim(watch_id, now=NOW + timedelta(minutes=50), db=store.db) == (None, "late")
+    assert record(store, watch_id)["next_run_at"] == NOW + timedelta(hours=1)
+
+
+def test_a_chat_that_took_in_google_information_ends_its_watch_and_says_so(store, router):
+    watch_id = due_watch(store, next_run_at=NOW)
+    run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)
+    store._chat_ref(UID, run["chat_id"]).update({"google_data": True})
+    router(HTTPException(status_code=422, detail="This chat contains Google information."))
+    assert agent_watches.start_run(run, db=store.db, now=NOW) is False
+    saved = record(store, watch_id)
+    assert saved["status"] == "done" and saved["ended"] == "google_data" and saved["unread"] is True
+    slots = store.db.collection("users").document(UID).collection("agent_watch_state").document("slots").get()
+    assert watch_id not in (slots.to_dict() or {}).get("active", {})
+    # Another refusal that would only repeat ends it too.
+    other = due_watch(store, next_run_at=NOW)
+    run, _ = agent_watches.claim(other, now=NOW, db=store.db)
+    router(HTTPException(status_code=403, detail="Not available"))
+    agent_watches.start_run(run, db=store.db, now=NOW)
+    assert record(store, other)["ended"] == "cannot_run"
+
+
+def test_a_failing_start_never_takes_the_tick_down(store, router, monkeypatch):
+    monkeypatch.setattr("app.services.llm.mock_llm.mock_llm_enabled", lambda: False)
+    due_watch(store, next_run_at=NOW - timedelta(minutes=1))
+    router(HTTPException(status_code=409, detail="busy"))
+    monkeypatch.setattr(agent_watches, "_retry_soon", lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("down")))
+    assert asyncio.run(agent_watches.run_tick(now=NOW, db=store.db)) == 0
+    assert not agent_watches._busy_accounts()
+
+
 def test_the_tick_starts_due_runs_one_per_account(store, router, monkeypatch):
     monkeypatch.setattr("app.services.llm.mock_llm.mock_llm_enabled", lambda: False)
     first = due_watch(store, next_run_at=NOW - timedelta(minutes=1))
@@ -281,6 +366,23 @@ def test_a_quiet_run_is_noted_and_mails_nothing(store, monkeypatch):
     saved = record(store, watch_id)
     assert saved["running"] is None and saved["last_run"]["outcome"] == "quiet" and saved["last_run"]["turn_id"] == turn_id
     assert saved["status"] == "active" and watch_id not in agent_watches._running
+
+
+def test_a_watch_paused_or_ended_while_its_run_went_on_sends_nothing(store, monkeypatch):
+    monkeypatch.setattr("app.services.watch_scheduler.wake_watch_scheduler", lambda: None)
+    finding = {"summary": "Registration is open.", "evidence_url": "https://www.ironman.com/im-hamburg",
+               "needs_user": False}
+    original = agent_watches.turn_ended
+
+    def pause_first(uid, chat_id, turn_id, watch_run, **kwargs):
+        agent_watches.pause(uid, watch_run["watch_id"], db=store.db, now=NOW)
+        return original(uid, chat_id, turn_id, watch_run, **kwargs)
+
+    monkeypatch.setattr(agent_watches, "turn_ended", pause_first)
+    outcome, watch_id, _turn = ended_run(store, {"finding": finding})
+    assert outcome == "finding" and outbox_items(store) == []
+    # The finding still waits in the chat and on the page.
+    assert record(store, watch_id)["unread"] is True and record(store, watch_id)["status"] == "paused"
 
 
 def test_a_finding_is_mailed_with_its_page_and_the_reviewers_counts(store, monkeypatch):
@@ -630,10 +732,18 @@ def test_the_telegram_text_is_the_finding_in_the_readers_language():
 # --- the Consensus Watches from before: archived ---------------------------------
 
 def test_the_consensus_watches_are_archived(monkeypatch):
-    from app.services import watch_scheduler
+    from app.services import watch_scheduler, watch_service
     monkeypatch.setitem(cfg.LIMITS, "consensus_watches_archived", 1)
     assert asyncio.run(watch_scheduler.run_watch_tick()) == 0
     assert asyncio.run(watch_scheduler.run_brief_tick()) == 0
+    # Their last times stay in the past for good: the loop sleeps until the
+    # next Agent Watch, not half an hour (review 2026-11-03).
+    monkeypatch.setattr(watch_service, "earliest_next_run_at", lambda: NOW - timedelta(days=3))
+    monkeypatch.setattr(agent_watches, "earliest_next_run_at", lambda: NOW + timedelta(minutes=5))
+    assert watch_scheduler.next_tick_seconds(now=NOW) == 305
+    # A due one waiting for room is looked at again within minutes.
+    monkeypatch.setattr(agent_watches, "earliest_next_run_at", lambda: NOW - timedelta(minutes=1))
+    assert watch_scheduler.next_tick_seconds(now=NOW) == agent_watches.BLOCKED_RECHECK.total_seconds()
     from app.api.routers import share
     meta = share._build_watch_page_meta({"status": "active", "interval": "daily"}, [])
     assert meta["status"] == "history" and meta["is_active"] is False
@@ -641,6 +751,57 @@ def test_the_consensus_watches_are_archived(monkeypatch):
     with pytest.raises(HTTPException) as error:
         watch._refuse_archived()
     assert error.value.status_code == 410 and error.value.error_fields["code"] == "watch_archived"
+
+
+def test_a_wake_from_another_thread_reaches_the_scheduler(monkeypatch):
+    import threading
+    from app.services import watch_scheduler
+
+    async def scenario():
+        event = asyncio.Event()
+        monkeypatch.setattr(watch_scheduler, "_scheduler_wake_event", event)
+        monkeypatch.setattr(watch_scheduler, "_scheduler_loop", asyncio.get_running_loop())
+        threading.Thread(target=watch_scheduler.wake_watch_scheduler).start()
+        await asyncio.wait_for(event.wait(), 2)
+        return True
+
+    assert asyncio.run(scenario())
+
+
+def test_a_page_watch_refused_late_leaves_no_empty_chat(store, monkeypatch):
+    from app.services import watch_service
+    monkeypatch.setattr("app.services.watch_scheduler.wake_watch_scheduler", lambda: None)
+    created = []
+    original = store.__class__.create_chat
+
+    def remember(self, *args, **kwargs):
+        chat = original(self, *args, **kwargs)
+        created.append(chat["id"])
+        return chat
+
+    monkeypatch.setattr("app.services.agent_runs.AgentRunStore.create_chat", remember)
+
+    def refuse(db, operation):
+        raise agent_watches.AgentWatchError("limit_reached", "All your Watches are in use.", status=429)
+
+    monkeypatch.setattr(watch_service, "_run_transaction", refuse)
+    with pytest.raises(agent_watches.AgentWatchError):
+        agent_watches.create(UID, task="Tell me when the Hamburg marathon 2027 date is announced.",
+                             tier="free", timezone_name="Europe/Berlin", db=store.db, now=NOW)
+    assert created and (store._chat_ref(UID, created[0]).get().to_dict() or {}).get("status") != "active"
+
+
+def test_an_archived_watchs_resume_link_says_so(watch_api, monkeypatch):
+    client, _store, _calls = watch_api
+    from app.api.routers import watch as watch_routes
+    client.app.include_router(watch_routes.router)
+    monkeypatch.setitem(cfg.LIMITS, "consensus_watches_archived", 1)
+    monkeypatch.setenv("WATCH_UNSUBSCRIBE_SECRET", "test-secret")
+    from app.services import watch_service
+    token = watch_service.make_resume_token("w" * 32)
+    for method in ("get", "post"):
+        response = getattr(client, method)(f"/watch/resume?token={token}")
+        assert response.status_code == 410 and "This Watch is archived" in response.text
 
 
 def test_the_routes_pause_resume_mark_seen_and_choose_channels(watch_api):

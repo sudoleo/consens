@@ -3820,8 +3820,11 @@ nicht.
 - Die Watch läuft in dem Chat, in dem sie vorbereitet wurde (Kontext, Dateien
   im Arbeitsplatz, Google-Freigabe sind dort). Eine Watch je Chat.
 - Grenzen je Stufe (Admin → Limits, `agent_watch_*`): Free 2 Watches, höchstens
-  täglich; Plus 5, alle 6 Stunden; Pro 20, stündlich. Dazu eine Tagesgrenze für
-  den ganzen Server (`agent_watch_max_runs_per_day`).
+  täglich; Plus 5, alle 6 Stunden; Pro 20, stündlich. Dazu Tagesgrenzen für den
+  ganzen Server (`agent_watch_max_runs_per_day`, 3000) und jedes Konto
+  (`agent_watch_max_runs_per_account_day`, 500), damit ein Konto nie die Läufe
+  aller anderen aufbraucht. Ein Intervall, das die Stufe nicht mehr erlaubt,
+  läuft ab dem nächsten Lauf im kürzesten erlaubten.
 - Unter `MOCK_LLM` bereitet „Watch: <Auftrag>“ einen Vorschlag vor.
 
 ### Ein geplanter Lauf
@@ -3833,6 +3836,19 @@ vermerkt, Tageszähler) und über `routers/agent.start_agent_turn(…, watch_run
 gestartet: dieselbe Route wie jede Nachricht, auf dem Hintergrund-Thread. Die
 Nachricht im Chat ist der Auftrag; der Verlauf sagt „Scheduled Watch run“
 darüber (`thread-history.js`).
+
+Geprüft am Abend von 2026-11-03 (Review vor dem Deploy):
+- Der erste tägliche oder wöchentliche Lauf kommt zur nächsten passenden Zeit,
+  heute, wenn sie noch kommt (`next_run` ohne Vorgänger).
+- Ein belegter Chat (409/429/503) holt denselben Lauf in 10 min nach
+  (`retry_of`): er zählt für kein Limit, verspätet sich ab seiner ersten Zeit
+  und verschiebt den Zeitplan nicht. 403/422 beenden die Watch mit Grund
+  (`google_data`, `cannot_run`), ungelesen, die Seite sagt warum.
+- Der Takt schläft nicht mehr an archivierten Consensus-Watches fest; jedes
+  Laufende weckt ihn (threadsicher über `call_soon_threadsafe`), wartende
+  fällige Läufe sieht er spätestens nach 5 min wieder.
+- Pausiert oder beendet der Nutzer eine Watch, während ihr Lauf noch geht,
+  folgt keine Nachricht; das Ziel meldet sich trotzdem.
 
 - **Kein Nachholen:** Ein Lauf, der mehr als 2 Stunden hinter seiner Zeit
   liegt, wird übersprungen. Ein leeres Tageskonto lässt den Lauf scheitern wie

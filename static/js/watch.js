@@ -108,7 +108,10 @@
   function receiveWatchList(data) {
     const watches = Array.isArray(data?.watches) ? data.watches : [];
     watchState.setLimits(normalizeWatchLimits(data?.limits, watches));
-    renderSidebarWatchQuota(watchState.limits);
+    // Archived, they count for nothing: the Agent's Watches write the line.
+    // On the Watches page, the page writes it from its own read.
+    if (!data?.archived) renderSidebarWatchQuota(watchState.limits);
+    else if (!onWatchPagePath()) window.App.agentWatch?.refreshQuota?.();
     window.dispatchEvent(new CustomEvent("consensio:watches-changed"));
     return watchState.limits;
   }

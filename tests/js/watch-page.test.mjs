@@ -54,7 +54,7 @@ function boot({ watches = [], archive = [], user = true, path = "/app/watches", 
   const harness = loadScripts(
     [...(german ? GERMAN_SCRIPTS : []), "static/js/motion.js", "static/js/modal-dialog.js", "static/js/popover.js",
       "static/js/notices.js", "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js",
-      "static/js/watch.js", "static/js/watch-sheet.js", "static/js/watch-dashboard.js"],
+      "static/js/watch-sheet.js", "static/js/watch.js", "static/js/agent-watch.js", "static/js/watch-dashboard.js"],
     {
       body: SHELL,
       before(window) {
@@ -200,6 +200,63 @@ describe("The Agent's Watches by what they want from the reader", () => {
     expect(window.App.confirm).toHaveBeenCalledWith(expect.objectContaining({ title: "End this Watch?", danger: true }));
   });
 
+  it("closes the menu from outside, keeps focus on the row after an action and the archive open (review 2026-11-03)", async () => {
+    const { window, document } = boot({ watches: [watch()], archive: [
+      { id: "old1", question: "When does GPT-6 ship?", share_path: "/s/gpt-6" }] });
+    await window.App.watchDashboard.render();
+    const more = () => document.querySelector('.aw-row[data-watch-id="w1"] .aw-more');
+    more().click();
+    expect(document.querySelector(".aw-menu")).not.toBeNull();
+    document.querySelector(".aw-section-title").dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
+    expect(more().getAttribute("aria-expanded")).toBe("false");
+    more().click();
+    window.dispatchEvent(new window.Event("scroll"));
+    expect(more().getAttribute("aria-expanded")).toBe("false");
+    document.querySelector(".aw-archive").open = true;
+    document.querySelector(".aw-archive").dispatchEvent(new window.Event("toggle"));
+    more().click();
+    document.querySelector('.aw-menu [data-action="pause"]').click();
+    await vi.waitFor(() => expect(titles(document)).toContain("Paused"));
+    // The row moved to Paused; its "…" has the focus again, the archive is still open.
+    expect(document.activeElement).toBe(more());
+    expect(document.querySelector(".aw-archive").open).toBe(true);
+  });
+
+  it("looks again until a new Watch's first run is there", async () => {
+    vi.useFakeTimers();
+    try {
+      const { window, document, server } = boot({ watches: [watch({ last_run: null, runs: 0, next_run_at: new Date().toISOString() })] });
+      await window.App.watchDashboard.render();
+      document.getElementById("watchDashboard").hidden = false;
+      const reads = () => server.calls.filter(([method, url]) => method === "GET" && url === "/agent/watches").length;
+      const before = reads();
+      server.watches[0].last_run = { at: new Date().toISOString(), outcome: "finding", summary: "Open now." };
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(reads()).toBe(before + 1);
+      await vi.waitFor(() => expect(document.querySelector(".aw-line").textContent).toBe("Open now."));
+      // Its first run is there: no more looks.
+      await vi.advanceTimersByTimeAsync(300000);
+      expect(reads()).toBe(before + 1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("says why a Watch that could not run any more has ended", async () => {
+    const { window, document } = boot({ watches: [watch({ id: "g", status: "done", ended: "google_data", unread: true,
+      last_run: { at: EARLIER, outcome: "google_data", summary: "" } })] });
+    await window.App.watchDashboard.render();
+    expect(document.querySelector('.aw-row[data-watch-id="g"] .aw-line').textContent)
+      .toBe("Its chat now holds Google information, so it no longer runs on a schedule.");
+  });
+
+  it("counts the Agent's Watches in the plan line, not the archived ones", async () => {
+    const { window, document } = boot({ watches: [watch(), watch({ id: "w2" })], limit: 2 });
+    document.body.insertAdjacentHTML("beforeend", '<span id="watchUsageDisplay">Watches: <strong>…</strong></span>');
+    await window.App.watchDashboard.render();
+    expect(document.querySelector("#watchUsageDisplay strong").textContent).toBe("2 / 2");
+  });
+
   it("shows where the messages go and pairs Telegram from the page", async () => {
     const { window, document, server } = boot({ watches: [watch()] });
     await window.App.watchDashboard.render();
@@ -268,6 +325,19 @@ describe("The sheet that starts a Watch", () => {
     expect(body.chat_id).toBeUndefined();
     await vi.waitFor(() => expect(document.querySelector('.aw-row[data-watch-id="new1"]')).not.toBeNull());
     expect(sheet.hasAttribute("open")).toBe(false);
+  });
+
+  it("stays open while it starts, and its examples speak German on a German page", async () => {
+    const { window, document } = boot({ german: true });
+    await window.App.watchDashboard.render();
+    window.App.watchSheet.open({});
+    await settleGerman(window);
+    const sheet = document.querySelector(".watch-sheet");
+    expect(sheet.querySelector(".watch-sheet-goal").placeholder).toBe("Die Anmeldung ist offen");
+    sheet.querySelector(".watch-sheet-start").disabled = true;
+    const cancel = new window.Event("cancel", { cancelable: true });
+    sheet.dispatchEvent(cancel);
+    expect(cancel.defaultPrevented).toBe(true);
   });
 
   it("asks for a sentence before it sends anything", async () => {

@@ -36,7 +36,12 @@ function boot({ watches = [], intervals = ["daily", "weekly"], active_count = 0,
           return reply(201, { watch });
         }
         if (url === "/agent/watches/w1/stop") {
+          if (server.refuse) return reply(503, { detail: "The server is busy. Try again in a moment." });
           server.watches = server.watches.map(watch => ({ ...watch, status: "done", ended: "user", next_run_at: null }));
+          return reply(200, { watch: server.watches[0] });
+        }
+        if (url === "/agent/watches/w1/resume") {
+          server.watches = server.watches.map(watch => ({ ...watch, status: "active", next_run_at: "2026-11-04T07:00:00+00:00" }));
           return reply(200, { watch: server.watches[0] });
         }
         if (url.startsWith("/agent/watches?chat_id=")) {
@@ -125,6 +130,30 @@ describe("Agent Watch card", () => {
     expect(card().dataset.state).toBe("ended");
     expect(text(".agent-watch-title")).toBe("Watch ended");
     expect(card().querySelector(".agent-watch-end").hidden).toBe(true);
+  });
+
+  it("shows a paused Watch as paused, resumes it, and keeps a refused end in view (review 2026-11-03)", async () => {
+    const paused = { id: "w1", chat_id: CHAT, turn_id: "t1", task: TASK, goal: "Registration is open", status: "paused",
+      interval: "daily", run_time: "08:00", run_weekday: "", timezone: "", next_run_at: null,
+      last_run: { at: "2026-11-03T07:00:00+00:00", outcome: "quiet", summary: "" } };
+    const { server, render, card, text } = boot({ watches: [paused] });
+    render({ proposal: PROPOSAL });
+    await settle();
+    expect(card().dataset.state).toBe("paused");
+    expect(text(".agent-watch-title")).toBe("Watch paused");
+    expect(text(".agent-watch-status")).toBe("Paused. It runs again once you resume it.");
+    expect(card().querySelector(".agent-watch-resume").hidden).toBe(false);
+    expect(card().querySelector(".agent-watch-end").hidden).toBe(false);
+    card().querySelector(".agent-watch-resume").click();
+    await settle();
+    expect(server.calls.some(call => call.url === "/agent/watches/w1/resume" && call.method === "POST")).toBe(true);
+    expect(card().dataset.state).toBe("watching");
+    // A run's line no longer hides why the end did not go through.
+    server.refuse = true;
+    card().querySelector(".agent-watch-end").click();
+    await settle();
+    expect(card().dataset.state).toBe("watching");
+    expect(text(".agent-watch-status")).toBe("The server is busy. Try again in a moment.");
   });
 
   it("does not offer a second Watch in a chat that has one, or past the account's limit", async () => {

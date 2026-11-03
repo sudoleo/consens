@@ -34,6 +34,7 @@ WATCH_LEASE_HEARTBEAT_SECONDS = 5 * 60
 # between watches so a long tick keeps it, and stop when it was taken over.
 WORKER_LEASE_RENEW_SECONDS = 5 * 60
 _scheduler_wake_event: asyncio.Event | None = None
+_scheduler_loop: asyncio.AbstractEventLoop | None = None
 # Preserve the established Watch engine preference. Topic/API use the shared
 # canonical display order, while Watch historically preferred Gemini before
 # Anthropic when both earlier engines failed.
@@ -676,17 +677,26 @@ def next_tick_seconds(*, now: datetime | None = None, scanned_at: datetime | Non
     and still due (its lease is held elsewhere, the daily budget is spent)
     waits for the normal rhythm instead of a busy loop."""
     now = now or datetime.now(timezone.utc)
-    try:
-        due = watch_service.earliest_next_run_at()
-    except Exception as exc:
-        logging.warning("Next watch due time unavailable category=%s", safe_exception(exc))
-        return TICK_SECONDS
+    due = None
+    # Archived (cfg.consensus_watches_archived), the Consensus Watches keep
+    # their last next_run_at, in the past for good: it would hold the loop at
+    # TICK_SECONDS.
+    if not cfg.consensus_watches_archived():
+        try:
+            due = watch_service.earliest_next_run_at()
+        except Exception as exc:
+            logging.warning("Next watch due time unavailable category=%s", safe_exception(exc))
+            return TICK_SECONDS
     # A Watch that runs the Agent (agent_watches.py) wakes the loop at its time too.
     try:
         agent_due = agent_watches.earliest_next_run_at()
     except Exception as exc:
         logging.warning("Next agent watch due time unavailable category=%s", safe_exception(exc))
         agent_due = None
+    if isinstance(agent_due, datetime) and agent_due <= now:
+        # Due and waiting for room (one run per account, MAX_PARALLEL_RUNS):
+        # a run's end wakes the loop, this is the fallback.
+        return float(max(MIN_TICK_SECONDS, min(TICK_SECONDS, agent_watches.BLOCKED_RECHECK.total_seconds())))
     if isinstance(agent_due, datetime) and (not isinstance(due, datetime) or agent_due < due):
         due = agent_due
     if not isinstance(due, datetime):
@@ -701,14 +711,30 @@ def next_tick_seconds(*, now: datetime | None = None, scanned_at: datetime | Non
 
 
 def wake_watch_scheduler():
-    """Wake the in-process scheduler so newly queued work starts promptly."""
-    if _scheduler_wake_event is not None:
-        _scheduler_wake_event.set()
+    """Wake the in-process scheduler so newly queued work starts promptly.
+    From any thread (a request's worker, an Agent run): asyncio.Event.set
+    off its loop would not wake the waiting loop."""
+    event, loop = _scheduler_wake_event, _scheduler_loop
+    if event is None:
+        return
+    try:
+        running = asyncio.get_running_loop()
+    except RuntimeError:
+        running = None
+    if loop is None or running is loop:
+        event.set()
+        return
+    try:
+        loop.call_soon_threadsafe(event.set)
+    except RuntimeError:
+        # The loop has closed (shutdown): nothing left to wake.
+        pass
 
 
 async def watch_scheduler_loop():
-    global _scheduler_wake_event
+    global _scheduler_wake_event, _scheduler_loop
     wake_event = asyncio.Event()
+    _scheduler_loop = asyncio.get_running_loop()
     _scheduler_wake_event = wake_event
     try:
         while True:
@@ -754,3 +780,4 @@ async def watch_scheduler_loop():
     finally:
         if _scheduler_wake_event is wake_event:
             _scheduler_wake_event = None
+            _scheduler_loop = None

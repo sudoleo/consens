@@ -1767,20 +1767,39 @@ const SIGNED_IN_RETURN = (() => {
 // (notification_delivery._agent_chat_url, since 2026-11-03): once signed
 // in, the chat opens; signed out, the login comes first.
 (function openChatFromLink() {
+  // A Google login on a phone leaves through a redirect and comes back to a
+  // bare /app: the chat waits in this tab for ten minutes.
+  const KEY = "consensio:open-chat";
+  const valid = value => /^[A-Za-z0-9_]{1,100}$/.test(value || "");
   const url = new URL(window.location.href);
-  const bookmarkId = url.searchParams.get("chat") || "";
-  if (!/^[A-Za-z0-9_]{1,100}$/.test(bookmarkId)) return;
-  url.searchParams.delete("chat");
-  window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  const fromLink = url.searchParams.get("chat") || "";
+  if (url.searchParams.has("chat")) {
+    url.searchParams.delete("chat");
+    window.history.replaceState(window.history.state, "", url.pathname + url.search + url.hash);
+  }
+  let bookmarkId = "";
+  if (valid(fromLink)) {
+    bookmarkId = fromLink;
+    try { sessionStorage.setItem(KEY, JSON.stringify({ id: fromLink, at: Date.now() })); } catch (_) { /* private mode */ }
+  } else {
+    try {
+      const kept = JSON.parse(sessionStorage.getItem(KEY) || "null");
+      if (kept && valid(kept.id) && Date.now() - Number(kept.at) < 10 * 60 * 1000) bookmarkId = kept.id;
+      else sessionStorage.removeItem(KEY);
+    } catch (_) { /* nothing kept */ }
+  }
+  if (!bookmarkId) return;
   let handled = false;
   onAuthStateChanged(auth, user => {
     if (handled) return;
     if (!user) {
+      if (!fromLink) return;
       showAuthModal("login");
       loginNoticeEl.textContent = "Log in to open this chat.";
       return;
     }
     handled = true;
+    try { sessionStorage.removeItem(KEY); } catch (_) { /* private mode */ }
     window.openBookmark?.(bookmarkId);
   });
 })();

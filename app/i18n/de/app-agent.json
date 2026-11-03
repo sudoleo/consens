@@ -1252,5 +1252,8 @@
   "Log in to open this chat.": "Melde dich an, um diesen Chat zu öffnen.",
   "Paused. It runs again once you resume it.": "Pausiert. Sie läuft wieder, sobald du sie fortsetzt.",
   "Reached its goal": "Ziel erreicht",
-  "Ended": "Beendet"
+  "Ended": "Beendet",
+  "Open chat": "Chat öffnen",
+  "Its chat now holds Google information, so it no longer runs on a schedule.": "Ihr Chat enthält jetzt Google-Daten, deshalb läuft sie nicht mehr nach Zeitplan.",
+  "It could not start in its chat any more and has ended.": "Sie konnte in ihrem Chat nicht mehr starten und ist beendet."
 }

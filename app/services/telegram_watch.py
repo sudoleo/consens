@@ -690,6 +690,11 @@ def _handle_callback(callback: dict, db) -> None:
             if editable:
                 _edit_markup(message, links + [_action_row(watch_id, paused=False)])
         elif action == "wr":
+            from app.core import config as cfg
+            if cfg.consensus_watches_archived():
+                # Archived since 2026-11-03: a Watch now runs the Agent.
+                _answer_callback(callback_id, "This Watch is archived")
+                return
             _ref, watch = watch_service._owned_watch(uid, watch_id, db)
             if watch.get("status") != "active":
                 watch_service.update_watch(uid, watch_id, {"status": "active"}, get_user_tier(uid), db=db)

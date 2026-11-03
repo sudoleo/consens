@@ -77,6 +77,12 @@ DEFAULT_RUN_TIME = "08:00"
 LATE_AFTER = timedelta(hours=2)
 # The chat had a turn running: the run tries again this much later.
 BUSY_RETRY = timedelta(minutes=10)
+# Due runs that wait for room (their account's run, MAX_PARALLEL_RUNS) are
+# looked at again after this at the latest; a run's end wakes the loop sooner.
+BLOCKED_RECHECK = timedelta(minutes=5)
+# Due Watches one tick reads: enough that one account's many Watches at the
+# same time do not hide everyone else's (one run per account at a time).
+DUE_BATCH = 100
 # A run whose end was never recorded (the process died) blocks no later run after this.
 RUN_STALE_AFTER = timedelta(hours=2)
 # Runs one process starts side by side, and never two of one account (its
@@ -159,11 +165,19 @@ def validate_schedule(interval, run_time="", weekday="", timezone_name="") -> di
 
 
 def next_run(schedule: dict, *, now: datetime, previous: datetime | None = None) -> datetime:
-    """The next run after ``now``, from the one scheduled before (``previous``)."""
+    """The next run after ``now``, from the one scheduled before (``previous``).
+    Without one (a new or resumed Watch), a daily or weekly Watch comes at
+    the next such local time, today when it is still ahead:
+    watch_service.next_scheduled_run counts from a run that just happened."""
     interval = schedule["interval"]
     if interval in TIMED:
+        weekday = schedule.get("run_weekday") or ""
+        if previous is None and not weekday:
+            return watch_service.next_scheduled_run(
+                "daily", schedule["run_time"], schedule["timezone"], "", now=now,
+                previous_scheduled=now - timedelta(days=1))
         return watch_service.next_scheduled_run(
-            interval, schedule["run_time"], schedule["timezone"], schedule.get("run_weekday") or "",
+            interval, schedule["run_time"], schedule["timezone"], weekday,
             now=now, previous_scheduled=previous)
     step = INTERVALS[interval]
     candidate = (previous or now) + step
@@ -320,7 +334,16 @@ def create(uid: str, *, tier, chat_id: str = "", turn_id: str = "", task: str | 
         tx.set(slots_ref, {"active": {**active, watch_id: chat_id}, "updated_at": now})
         return data
 
-    data = watch_service._run_transaction(db, operation)
+    try:
+        data = watch_service._run_transaction(db, operation)
+    except Exception:
+        if first_run is not None:
+            # The chat was opened for this Watch alone: a refusal leaves none behind.
+            try:
+                store.delete_chat(uid, chat_id)
+            except Exception as exc:
+                logging.warning("Agent watch chat not removed category=%s", safe_exception(exc))
+        raise
     if first_run is not None:
         from app.services import watch_scheduler
         # Its first run is due now: the scheduler looks at once.
@@ -553,7 +576,7 @@ def _stream(query):
         return query.stream()
 
 
-def due(*, now: datetime | None = None, db=None, max_items: int = 20) -> list[tuple[str, str]]:
+def due(*, now: datetime | None = None, db=None, max_items: int = DUE_BATCH) -> list[tuple[str, str]]:
     """(watch id, uid) of the Watches whose time has come, the oldest first."""
     db = _db(db)
     now = now or utcnow()
@@ -573,38 +596,60 @@ def earliest_next_run_at(*, db=None) -> datetime | None:
     return None
 
 
-def claim(watch_id: str, *, now: datetime | None = None, db=None) -> tuple[dict | None, str]:
+def _day_ref(db, now: datetime):
+    return db.collection(DAYS_COLLECTION).document(now.date().isoformat())
+
+
+def claim(watch_id: str, *, now: datetime | None = None, db=None, tier=None) -> tuple[dict | None, str]:
     """Takes one due run: the Watch moves on to its next time and notes the
-    run as running, under the server's daily cap. Returns (run, "") or
-    (None, reason): "not_due", "running", "late" (skipped), "budget"."""
+    run as running, under the daily caps (the server's, the account's).
+    Returns (run, "") or (None, reason): "not_due", "running", "late"
+    (skipped), "budget" (the server's cap), "account_budget".
+
+    A retry (``retry_of``, _retry_soon) is the run of its first time: late
+    and the following time count from that, so retries end and never shift
+    the schedule. ``tier``: a Watch whose interval the account's plan no
+    longer allows runs at the shortest one it does from here on."""
     db = _db(db)
     now = now or utcnow()
     ref = _ref(db, watch_id)
-    day_ref = db.collection(DAYS_COLLECTION).document(now.date().isoformat())
-    cap = cfg.get_agent_watch_max_runs_per_day()
+    day_ref = _day_ref(db, now)
+    cap, account_cap = cfg.get_agent_watch_max_runs_per_day(), cfg.get_agent_watch_max_runs_per_account_day()
 
     def operation(tx):
         snapshot, day = ref.get(transaction=tx), day_ref.get(transaction=tx)
         data = (snapshot.to_dict() or {}) if snapshot.exists else {}
-        scheduled = data.get("next_run_at")
-        if data.get("status") != STATUS_ACTIVE or not isinstance(scheduled, datetime) or scheduled > now:
+        attempt = data.get("next_run_at")
+        if data.get("status") != STATUS_ACTIVE or not isinstance(attempt, datetime) or attempt > now:
             return None, "not_due"
         running = data.get("running") if isinstance(data.get("running"), dict) else None
         if running and isinstance(running.get("started_at"), datetime) and now - running["started_at"] < RUN_STALE_AFTER:
             return None, "running"
-        following = next_run(data, now=now, previous=scheduled)
+        scheduled = data.get("retry_of") if isinstance(data.get("retry_of"), datetime) else attempt
+        schedule = {key: data.get(key) for key in ("interval", "run_time", "run_weekday", "timezone")}
+        if tier is not None and schedule["interval"] not in allowed_intervals(tier):
+            schedule = validate_schedule(fit_interval(schedule["interval"], tier), schedule["run_time"],
+                                         schedule["run_weekday"], schedule["timezone"])
+        following = next_run(schedule, now=now, previous=scheduled)
         if now - scheduled > LATE_AFTER:
-            tx.update(ref, {"next_run_at": following, "last_skipped_at": now, "updated_at": now})
+            tx.update(ref, {**schedule, "next_run_at": following, "retry_of": None, "last_skipped_at": now,
+                            "updated_at": now})
             return None, "late"
-        runs_today = int((day.to_dict() or {}).get("runs") or 0) if day.exists else 0
+        uid = str(data.get("uid") or "")
+        day_data = (day.to_dict() or {}) if day.exists else {}
+        accounts = dict(day_data.get("accounts") or {})
+        runs_today, account_runs = int(day_data.get("runs") or 0), int(accounts.get(uid) or 0)
         if runs_today >= cap:
             return None, "budget"
-        request_id = f"watch.{watch_id[:16]}.{int(scheduled.timestamp())}"
-        tx.update(ref, {"next_run_at": following, "running": {"request_id": request_id, "started_at": now,
-                                                              "scheduled_at": scheduled},
+        if account_runs >= account_cap:
+            return None, "account_budget"
+        # Each attempt its own request: a refused one may have left its turn.
+        request_id = f"watch.{watch_id[:16]}.{int(attempt.timestamp())}"
+        tx.update(ref, {**schedule, "next_run_at": following, "retry_of": None,
+                        "running": {"request_id": request_id, "started_at": now, "scheduled_at": scheduled},
                         "runs": int(data.get("runs") or 0) + 1, "updated_at": now})
-        tx.set(day_ref, {"runs": runs_today + 1, "updated_at": now})
-        return {**data, "id": watch_id, "request_id": request_id, "scheduled_at": scheduled}, ""
+        tx.set(day_ref, {"runs": runs_today + 1, "accounts": {**accounts, uid: account_runs + 1}, "updated_at": now})
+        return {**data, **schedule, "id": watch_id, "request_id": request_id, "scheduled_at": scheduled}, ""
 
     return watch_service._run_transaction(db, operation)
 
@@ -633,28 +678,47 @@ def _reviewers(uid: str, db) -> str:
 
 
 def _retry_soon(watch_id: str, run: dict, *, db, now: datetime) -> None:
-    """The chat was busy: the run comes again shortly, within its lateness."""
+    """The chat was busy: the run comes again shortly, within the lateness
+    of its first time (``retry_of``). A run that did not start counts for
+    no cap and no run."""
     scheduled = run.get("scheduled_at")
     retry = now + BUSY_RETRY
     ref = _ref(db, watch_id)
+    day_ref = _day_ref(db, run.get("claimed_at") if isinstance(run.get("claimed_at"), datetime) else now)
 
     def operation(tx):
-        snapshot = ref.get(transaction=tx)
+        snapshot, day = ref.get(transaction=tx), day_ref.get(transaction=tx)
         data = (snapshot.to_dict() or {}) if snapshot.exists else {}
-        if data.get("status") != STATUS_ACTIVE:
+        if data.get("uid") and day.exists:
+            day_data = day.to_dict() or {}
+            accounts = dict(day_data.get("accounts") or {})
+            uid = data["uid"]
+            accounts[uid] = max(0, int(accounts.get(uid) or 0) - 1)
+            tx.set(day_ref, {"runs": max(0, int(day_data.get("runs") or 0) - 1), "accounts": accounts,
+                             "updated_at": now})
+        if not data:
             return
-        patch = {"running": None, "updated_at": now}
-        if isinstance(scheduled, datetime) and retry - scheduled <= LATE_AFTER:
-            # The schedule's next time stays where it was when it comes first.
-            following = data.get("next_run_at")
-            patch["next_run_at"] = min(following, retry) if isinstance(following, datetime) else retry
+        patch = {"running": None, "runs": max(0, int(data.get("runs") or 0) - 1), "updated_at": now}
+        following = data.get("next_run_at")
+        if (data.get("status") == STATUS_ACTIVE and isinstance(scheduled, datetime)
+                and retry - scheduled <= LATE_AFTER
+                and not (isinstance(following, datetime) and following <= retry)):
+            # Before the schedule's next time: the same run once more.
+            patch["next_run_at"], patch["retry_of"] = retry, scheduled
         tx.update(ref, patch)
 
     watch_service._run_transaction(db, operation)
 
 
+# Refusals that end the Watch: its chat is gone, or it can no longer run
+# there (a chat that took in Google information, a refusal that would only
+# repeat). The page says which (watch-dashboard.js lineOf).
+_ENDING = frozenset({"chat_gone", "google_data", "cannot_run"})
+
+
 def _not_started(watch_id: str, outcome: str, *, db, now: datetime) -> None:
-    """The run did not start; a Watch whose chat is gone ends with it."""
+    """The run did not start; a Watch that cannot run any more ends, unread,
+    so its page shows why."""
     ref = _ref(db, watch_id)
 
     def operation(tx):
@@ -662,10 +726,12 @@ def _not_started(watch_id: str, outcome: str, *, db, now: datetime) -> None:
         if not snapshot.exists:
             return
         data = snapshot.to_dict() or {}
-        if outcome == "chat_gone" and data.get("status") == STATUS_ACTIVE:
-            _end(tx, db, watch_id, data, reason="chat_gone", now=now)
-        tx.update(ref, {"running": None, "updated_at": now,
-                        "last_run": {"at": now, "turn_id": "", "outcome": outcome, "summary": ""}})
+        patch = {"running": None, "updated_at": now,
+                 "last_run": {"at": now, "turn_id": "", "outcome": outcome, "summary": ""}}
+        if outcome in _ENDING and data.get("status") in {STATUS_ACTIVE, STATUS_PAUSED}:
+            _end(tx, db, watch_id, data, reason=outcome, now=now)
+            patch["unread"] = outcome != "chat_gone"
+        tx.update(ref, patch)
 
     watch_service._run_transaction(db, operation)
 
@@ -679,8 +745,21 @@ def _refused(watch_id: str, run: dict, status: int, *, db, now: datetime) -> Non
     logging.info("Agent watch run not started status=%s", status)
     if status in _TRANSIENT:
         _retry_soon(watch_id, run, db=db, now=now)
+    elif status == 404:
+        _not_started(watch_id, "chat_gone", db=db, now=now)
+    elif status in {403, 422}:
+        _not_started(watch_id, "google_data" if _chat_has_google_data(run, db) else "cannot_run", db=db, now=now)
     else:
-        _not_started(watch_id, "chat_gone" if status == 404 else "not_started", db=db, now=now)
+        _not_started(watch_id, "not_started", db=db, now=now)
+
+
+def _chat_has_google_data(run: dict, db) -> bool:
+    from app.services.agent_runs import AgentRunStore
+    try:
+        chat = AgentRunStore(db)._chat_ref(run["uid"], run["chat_id"]).get()
+        return bool(chat.exists and (chat.to_dict() or {}).get("google_data"))
+    except Exception:
+        return False
 
 
 def start_run(run: dict, *, db=None, now: datetime | None = None) -> bool:
@@ -761,17 +840,35 @@ async def run_tick(*, now: datetime | None = None, db=None) -> int:
         if uid in _busy_accounts():
             continue
         try:
-            run, reason = await asyncio.to_thread(claim, watch_id, now=clock(), db=db)
+            tier = await asyncio.to_thread(_tier_of, uid)
+            run, reason = await asyncio.to_thread(claim, watch_id, now=clock(), db=db, tier=tier)
         except Exception as exc:
             logging.warning("Agent watch claim failed category=%s", safe_exception(exc))
             continue
         if reason == "budget":
             logging.warning("Agent watch runs per day reached")
             break
+        if reason == "account_budget":
+            logging.warning("Agent watch runs per account and day reached")
+            continue
         if run is None:
             continue
-        started += int(await asyncio.to_thread(start_run, run, db=db, now=clock()))
+        try:
+            started += int(await asyncio.to_thread(start_run, {**run, "claimed_at": clock()}, db=db, now=clock()))
+        except Exception as exc:
+            # A failure noting a refusal never takes the scheduler loop down.
+            _forget(watch_id)
+            logging.warning("Agent watch start failed category=%s", safe_exception(exc))
     return started
+
+
+def _tier_of(uid: str):
+    from app.core.security import get_user_tier
+    try:
+        return get_user_tier(uid)
+    except Exception as exc:
+        logging.info("Agent watch tier unreadable category=%s", safe_exception(exc))
+        return None
 
 
 # --- a run's end -----------------------------------------------------------
@@ -830,6 +927,10 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
             return None
         running = data.get("running") if isinstance(data.get("running"), dict) else {}
         ends = details.get("done") is not None and data.get("status") in {STATUS_ACTIVE, STATUS_PAUSED}
+        # Paused or ended by the user while this run went on: its finding
+        # waits in the chat, no message follows; reaching the goal still tells.
+        withdrawn = not ends and (data.get("status") == STATUS_PAUSED
+                                  or (data.get("status") == STATUS_DONE and data.get("ended") == "user"))
         if ends:
             _end(tx, db, watch_id, data, reason="goal", now=now)
         patch = {"last_run": {"at": now, "turn_id": turn_id, "outcome": outcome,
@@ -841,7 +942,7 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
         if running.get("request_id") == watch_run.get("request_id"):
             patch["running"] = None
         tx.update(ref, patch)
-        if not tells:
+        if not tells or withdrawn:
             return data, []
         payload = {
             "outcome": outcome, "task": data.get("task") or "", "goal": data.get("goal") or "",
@@ -869,11 +970,11 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
     logging.info("Agent watch run ended outcome=%s", outcome)
     if result is None:
         return outcome
-    data, staged = result
-    if staged:
-        from app.services import watch_scheduler
-        # The messages go out on the scheduler's next pass, which this wakes.
-        watch_scheduler.wake_watch_scheduler()
+    data, _staged = result
+    from app.services import watch_scheduler
+    # The messages go out on the scheduler's next pass, which this wakes; a
+    # run that waited for this one's room starts there too.
+    watch_scheduler.wake_watch_scheduler()
     if outcome != "failed":
         sources = [*([{"url": evidence_url, "title": details.get("evidence_title") or ""}] if evidence_url else []),
                    *(turn.get("sources") or [])]
