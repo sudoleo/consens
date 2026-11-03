@@ -489,6 +489,20 @@ def test_the_reader_takes_chunks_and_single_entries_alike(api, store):
     assert store.work_log_entry(UID, chat_old, old["id"], 3)["content"] == "o3"
 
 
+def test_a_reader_that_saw_the_turn_before_its_first_chunk_unfolds_it(store, monkeypatch):
+    """Bug hunt 2026-11-02: the turn read without work_log_chunks, the chunks
+    saved before the query ran: a chunk came back as one entry."""
+    chat_id, turn = pending(store)
+    log = store._turn_ref(UID, chat_id, turn["id"]).collection("work_log")
+    log.document("000001").set({"seq": 1, "last_seq": 3, "entries": [
+        {"seq": seq, "kind": "app", "content": f"c{seq}"} for seq in (1, 2, 3)]})
+    log.document("000004").set({"seq": 4, "last_seq": 4, "entries": [{"seq": 4, "kind": "app", "content": "c4"}]})
+    data = store.read_work_log(UID, chat_id, turn["id"], after=0, limit=3)
+    assert [e["seq"] for e in data["entries"]] == [1, 2, 3] and data["has_more"] is True
+    assert all("entries" not in e for e in data["entries"])
+    assert [e["seq"] for e in store.read_work_log(UID, chat_id, turn["id"], after=2)["entries"]] == [3, 4]
+
+
 def test_a_chunks_stored_content_goes_with_the_chat(store, monkeypatch):
     objects = Objects()
     monkeypatch.setattr(agent_work_log, "_objects", lambda: objects)

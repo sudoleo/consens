@@ -402,7 +402,17 @@ class AgentSessionStore:
         turn = self._work_log_turn(uid, chat_id, turn_id)
         log = self._turn_ref(uid, chat_id, turn_id).collection("work_log")
         entries = []
-        if turn.get("work_log_chunks"):
+        chunked = bool(turn.get("work_log_chunks"))
+        if not chunked:
+            query = log.order_by("seq").start_after({"seq": after}).limit(limit + 1)
+            entries = [snapshot.to_dict() or {} for snapshot in query.stream()]
+            # A reader that saw the turn just before its first chunked save
+            # finds chunks here: it reads them as chunks. Until 2026-11-03 a
+            # chunk came back as one entry, and the next read after its seq
+            # skipped the entries in it.
+            chunked = any(isinstance(entry.get("entries"), list) for entry in entries)
+        if chunked:
+            entries = []
             cursor = after
             while len(entries) <= limit:
                 page = log.order_by("last_seq").start_after({"last_seq": cursor}).limit(WORK_LOG_PAGE_CHUNKS)
@@ -412,9 +422,6 @@ class AgentSessionStore:
                 if len(documents) < WORK_LOG_PAGE_CHUNKS:
                     break
                 cursor = documents[-1].get("last_seq")
-        else:
-            query = log.order_by("seq").start_after({"seq": after}).limit(limit + 1)
-            entries = [snapshot.to_dict() for snapshot in query.stream()]
         return {"entries": entries[:limit], "has_more": len(entries) > limit,
                 "incomplete": bool(turn.get("work_log_incomplete")), "status": turn.get("status")}
 
