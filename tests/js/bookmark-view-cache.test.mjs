@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 
+import { JSDOM } from "jsdom";
 import { describe, expect, it, vi } from "vitest";
 
 import { ROOT } from "./helpers/appWindow.mjs";
@@ -108,5 +109,50 @@ describe("a renamed chat (bug hunt 2026-11-04)", () => {
     // Its row clicked again: the chat on screen stays as it is (keepComposer).
     await open("a");
     expect(drawn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a chat deleted while it still loads (bug hunt 2026-11-04)", () => {
+  it("does not open under Chat deleted, and Undo opens it again", async () => {
+    const dom = new JSDOM(`<div id="bookmarksContainer"><div class="bookmark" data-id="y"></div></div><div class="container"></div>`);
+    const { document } = dom.window;
+    const notices = [];
+    const clearVisible = vi.fn();
+    const win = { App: { chatScroll: {}, watch: {}, runRegistry: { findByBookmarkId: () => null, clearVisible, visible: () => null },
+      undoNotice: { show: notice => { notices.push(notice); return notice; } } } };
+    const drawn = vi.fn();
+    const pending = [];
+    const loadBookmarkView = vi.fn(() => new Promise(resolve => pending.push(resolve)));
+    const deleteBookmark = vi.fn();
+    Function("window", "document", "auth", "authState", "bookmarkWriteAllowed", "syncActiveBookmark",
+      "isCurrentAuthenticatedUser", "hideChatOpening", "showChatOpening", "loadSingleBookmarkUI",
+      "bookmarkViewCache", "BOOKMARK_VIEW_CACHE_SIZE", "bookmarkDetailCache", "activeBookmarkId",
+      "trackAppEvent", "loadBookmarkView", "openedBookmarkId", "bookmarkViewEpoch", "console",
+      "undoableBookmarkDeletes", "collapseBookmarkRow", "expandBookmarkRow", "BOOKMARK_UNDO_MS", "deleteBookmark",
+      `${slice("function rememberBookmarkView(", "window.loadAllBookmarkMetadata")}
+      ${slice("function leaveDeletedChat(", "// Settles every deletion")}
+      window.deleteBookmarkWithUndo = deleteBookmarkWithUndo;`)(
+      win, document, { currentUser: { uid: "owner" } }, { generation: 1 }, () => true, () => {},
+      // The chat on screen before stays the selected one until the new one is drawn.
+      () => true, () => {}, () => ({}), drawn, new Map(), 10, new Map(), () => "x",
+      () => {}, loadBookmarkView, null, 0, { warn() {}, error() {} },
+      new Map(), () => {}, () => {}, 5000, deleteBookmark);
+    const row = document.querySelector(".bookmark");
+
+    const opening = win.openBookmark("y");
+    expect(row.classList.contains("is-loading")).toBe(true);
+    win.deleteBookmarkWithUndo("y");
+    // Left like an open chat: the view goes back to the start.
+    expect(clearVisible).toHaveBeenCalledTimes(1);
+    expect(document.body.classList.contains("is-hero")).toBe(true);
+    pending[0](full);
+    await opening;
+    expect(drawn).not.toHaveBeenCalled();
+
+    notices[0].onAction();
+    expect(loadBookmarkView).toHaveBeenCalledTimes(2);
+    pending[1](full);
+    await vi.waitFor(() => expect(drawn).toHaveBeenCalledTimes(1));
+    expect(deleteBookmark).not.toHaveBeenCalled();
   });
 });

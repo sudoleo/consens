@@ -3859,10 +3859,18 @@ function deleteBookmarkWithUndo(bookmarkId, { keyboard = false } = {}) {
   if (!auth.currentUser || !bookmarkId || undoableBookmarkDeletes.has(bookmarkId)) return;
   if (!window.App?.undoNotice?.show) { deleteBookmark(bookmarkId); return; }
   const rows = [...document.querySelectorAll(`#bookmarksContainer .bookmark[data-id="${bookmarkId}"]`)];
-  const wasOpen = activeBookmarkId() === bookmarkId;
+  // A chat still loading (its row clicked a moment ago) is the one on screen
+  // too: its load is dropped, so it never opens under "Chat deleted · Undo"
+  // and empties the view once the deletion is sent (bug hunt 2026-11-04).
+  const loading = rows.some(row => row.classList.contains("is-loading"));
+  const wasOpen = loading || activeBookmarkId() === bookmarkId;
   const entry = { promise: null };
   undoableBookmarkDeletes.set(bookmarkId, entry);
   rows.forEach(collapseBookmarkRow);
+  if (loading) {
+    bookmarkViewEpoch += 1;
+    hideChatOpening();
+  }
   if (wasOpen) leaveDeletedChat();
   window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
   entry.notice = window.App.undoNotice.show({
