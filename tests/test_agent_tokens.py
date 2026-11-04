@@ -47,3 +47,26 @@ def test_concurrent_cold_estimates_build_one_encoding_and_cache_can_be_cleared(m
         assert len(built) == 2
     finally:
         agent_tokens.encoding.cache_clear()
+
+
+def test_a_runs_memo_counts_each_message_once_and_lets_unused_ones_go(monkeypatch):
+    """A run sends its whole conversation with every step; every estimate of
+    it (summary, long-run limit, admission) used to tokenize all of it again."""
+    counted = []
+    original = agent_tokens._part_tokens
+    monkeypatch.setattr(agent_tokens, "_part_tokens", lambda part: counted.append(part) or original(part))
+    memo = agent_tokens.TokenMemo()
+    messages = [{"role": "system", "content": "Answer."}, {"role": "user", "content": "Build it. " * 200}]
+    tools = [{"type": "function", "function": {"name": "vm_exec", "parameters": {}}}]
+    first = agent_tokens.input_estimate(messages, tools, memo=memo)
+    assert len(counted) == 3 and first == agent_tokens.input_estimate(messages, tools)
+    counted.clear()
+    messages.append({"role": "assistant", "content": "Done."})
+    for _ in range(3):
+        agent_tokens.input_estimate(messages, tools, memo=memo)
+    assert counted == [messages[-1]]
+    # A message no estimate asked for in the last KEEP estimates is let go.
+    old = messages.pop(1)
+    for _ in range(2 * agent_tokens.TokenMemo.KEEP):
+        agent_tokens.input_estimate(messages, tools, memo=memo)
+    assert all(entry[0] is not old for entry in memo._counts.values())

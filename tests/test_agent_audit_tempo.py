@@ -187,7 +187,7 @@ def counted_tokens(monkeypatch):
     busy for every other thread of the process."""
     from app.services import agent_tokens
 
-    def estimate(messages, tools=(), request_config=None):
+    def estimate(messages, tools=(), request_config=None, memo=None):
         payload = [messages, tools, (request_config or {}).get("response_format")]
         chars = len(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str))
         return (chars // 3 * 5 + 3) // 4 + 256 + 16 * len(messages)

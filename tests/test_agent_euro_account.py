@@ -100,34 +100,50 @@ def test_the_euro_ledger_is_apart_from_the_token_ledger(store, monkeypatch):
     assert snapshot["unit"] == "micro_eur" and snapshot["reserved"] == 400
 
 
-def test_a_reservation_shrinks_its_output_to_what_the_rest_pays():
+def test_a_reservation_is_what_the_call_is_expected_to_cost():
+    """Not the worst case: the input once, the prefix the session's last call
+    held in the cache at the cache-read price, the output and the search
+    rounds its kind of call measured on that model so far."""
+    from decimal import Decimal
+    from app.services.agent_costs import OUTPUT_START_TOKENS, SEARCH_ROUND_TOKENS, search_cost_nanos
     costs = RunCosts(AgentPolicy(account_budget_only=True))
-    model = replace(DEAR, max_output_tokens=8_000, context_length=200_000)
-    messages = [{"role": "user", "content": "Which option?"}]
-    full = costs.estimate(model, messages)[1]
-    assert costs.output_within(model, messages, (), full) == 8_000
-    smallest = costs.estimate(replace(model, max_output_tokens=1), messages)[1]
-    assert costs.output_within(model, messages, (), smallest - 1) == 0
-    half = (full + smallest) // 2
-    output = costs.output_within(model, messages, (), half)
-    assert 0 < output < 8_000
-    assert costs.estimate(replace(model, max_output_tokens=output), messages)[1] <= half
-    assert costs.estimate(replace(model, max_output_tokens=output + 2), messages)[1] > half
+    model = replace(DEAR, max_output_tokens=65_536, context_length=1_000_000)
+    messages = [{"role": "user", "content": "Which option? " * 2_000}]
+    inputs = costs.inputs(messages)
+    tokens, cost = costs.estimate(model, messages, session="agent")
+    # Fresh input at the cache-write price (dearer here), the output's start value.
+    assert tokens == inputs + OUTPUT_START_TOKENS
+    assert cost == int((inputs * Decimal("18.75") + OUTPUT_START_TOKENS * 75) * 1000)
+    # With search: the expected rounds' results and fees, one round to begin with.
+    searching = costs.estimate(model, messages, native_searches=5, session="agent")
+    assert searching[0] == tokens + SEARCH_ROUND_TOKENS
+    assert searching[1] == cost + int(SEARCH_ROUND_TOKENS * Decimal("18.75") * 1000) + search_cost_nanos(model)
+    # The session's call measured its cache and a short output, and searched twice.
+    usage = measured_usage({"prompt_tokens": inputs, "completion_tokens": 1_000,
+                            "prompt_tokens_details": {"cached_tokens": 0, "cache_write_tokens": inputs - 100},
+                            "server_tool_use_details": {"web_search_requests": 2}}, model)
+    costs.reconcile((tokens, cost), usage, model=model, session="agent", searches=5)
+    after = costs.estimate(model, messages, native_searches=5, session="agent")
+    cached, fresh = inputs - 100, 100 + 2 * SEARCH_ROUND_TOKENS
+    assert after[1] == int((cached * Decimal("1.5") + fresh * Decimal("18.75") + 1_000 * 75) * 1000) \
+        + 2 * search_cost_nanos(model)
+    # Far below the worst case, and the output limit sent stays the model's own.
+    assert after[1] * 20 < worst_case_nanos(model, inputs * 6 + 5 * 32_000 * 6, 65_536 * 6)
+    # Another session reads nothing from that cache.
+    assert costs.estimate(model, messages, session="reviewer")[1] > costs.estimate(model, messages, session="agent")[1]
 
 
-def test_a_cheaper_comparison_model_gets_more_output_for_its_share(store, monkeypatch):
+def test_every_comparison_model_gets_the_same_output_whatever_is_left(store, monkeypatch):
     from app.core import config as cfg
     from app.services.agent_comparison import CHARS_PER_TOKEN, REVIEW_ANSWER_CHARS
     from test_agent_comparison import Script, make_loop as comparison_loop
     loop = comparison_loop(store, Script())
-    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: 200_000)
     monkeypatch.setattr(cfg, "MAX_TOKENS", 500)
     shares = loop.comparison._output_shares({"cheap": PRICED, "dear": DEAR})
-    # 60 % of 0.20 EUR for two answers is 0.06 EUR ($0.069) each: 920 output
-    # tokens at $75 per million, 138,000 at $0.50, which the saved review
-    # caps at its share of characters.
-    assert shares["dear"] == 920
-    assert shares["cheap"] == REVIEW_ANSWER_CHARS // 2 // CHARS_PER_TOKEN
+    for left in (0, 10, 5_000_000):
+        monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid, **kwargs: left)
+        assert loop.comparison._output_shares({"cheap": PRICED, "dear": DEAR}) == shares
+    assert shares == {"cheap": REVIEW_ANSWER_CHARS // 2 // CHARS_PER_TOKEN, "dear": REVIEW_ANSWER_CHARS // 2 // CHARS_PER_TOKEN}
 
 
 def test_worst_case_prices_every_input_at_the_dearest_input_price():

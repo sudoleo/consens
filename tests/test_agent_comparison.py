@@ -195,7 +195,7 @@ def test_fixed_answer_cannot_be_reopened_by_a_second_review_or_late_comparison(s
     from app.services.agent_comparison import AuditAnswerArgs, AuditCompareArgs
     script = Script()
     loop = make_loop(store, script)
-    loop.policy = replace(loop.policy, account_budget_only=account_budget_only)
+    loop.policy = loop.costs.policy = replace(loop.policy, account_budget_only=account_budget_only)
     events = list(loop.run())
     saved = saved_turn(store, loop)
     assert saved['consensus'] == 'The first option costs 100.'
@@ -324,11 +324,11 @@ def _search(kwargs):
     return next((t["parameters"] for t in kwargs.get("tools") or [] if t.get("type") == "openrouter:web_search"), None)
 
 
-# "full" answers may search three rounds, "quick" answers once, whatever the
-# account's remaining budget: their search is booked, not reserved. The
-# agent's own search is optional: a tight budget shrinks it.
+# "full" answers may search three rounds, "quick" answers once, and the
+# agent every one of its rounds in every step, whatever the account's
+# remaining budget: the allowance decides only whether a call starts.
 @pytest.mark.parametrize("depth,limit,rounds,own", [("quick", 10_000_000, 1, 5), ("full", 10_000_000, 3, 5),
-                                                    ("full", 300_000, 3, 3), ("full", 100_000, 3, 1)])
+                                                    ("full", 300_000, 3, 5), ("full", 100_000, 3, 5)])
 def test_every_model_searches_with_one_configuration(store, depth, limit, rounds, own):
     from app.services.agent_audit import AGENT_SEARCH_ROUNDS, LIVE_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS
     from app.services.llm.engines import web_search_tool
@@ -370,12 +370,11 @@ def test_every_model_searches_with_one_configuration(store, depth, limit, rounds
     told = "use web search once" if rounds == 1 else f"up to {rounds} search rounds"
     assert all("Current date:" in prompt and told in prompt for *_, prompt in comparisons.values())
     assert all("hints, never a requirement" in prompt for *_, prompt in comparisons.values())
-    # The agent researches in every step, up to AGENT_SEARCH_ROUNDS each; its
-    # reservation includes the routing reasoning headroom for every round.
+    # The agent researches in every step with the same AGENT_SEARCH_ROUNDS.
     [(_, _, searched, tool, _)] = [row for row in seen if row[0] == "agent"]
-    assert own <= AGENT_SEARCH_ROUNDS and searched == own and tool == expected("anthropic", own)
+    assert own == AGENT_SEARCH_ROUNDS and searched == own and tool == expected("anthropic", own)
     [(_, _, searched, tool, _)] = [row for row in seen if row[0] == "answer"]
-    assert searched >= 1 and tool == expected("anthropic", searched)
+    assert searched == own and tool == expected("anthropic", own)
     # The reviewers search the same way, however tight the budget: live
     # rounds briefly, the final round of each reviewer fully.
     assert {(model, searched) for _, model, searched, *_ in reviews} >= {
@@ -432,82 +431,59 @@ def test_overdraft_admits_a_reservation_beyond_the_limit_only_when_asked():
     with pytest.raises(AgentTokenBudgetExceeded):
         reserve({"used": 900}, 200, limit=1000)
     assert reserve({"used": 900}, 200, limit=1000, overdraft=True)["reserved"] == 200
-    # A merged step: only the answer on top of its routing allowance may lie beyond.
-    assert reserve({"used": 900}, 200, limit=1000, overdraft=150)["reserved"] == 200
     with pytest.raises(AgentTokenBudgetExceeded) as refused:
-        reserve({"used": 900}, 200, limit=1000, overdraft=50)
-    assert (refused.value.required, refused.value.remaining) == (150, 100)
+        reserve({"used": 900}, 200, limit=1000)
+    assert (refused.value.required, refused.value.remaining) == (200, 100)
 
 
-def test_a_merged_step_reserves_its_answer_once_not_per_search_round():
-    from app.services.agent_costs import RunCosts
-    costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
-    messages = [{"role": "user", "content": "Q"}]
-    routing = resolve_agent_model("claude-haiku-4-5")
-    answer = routing.max_output_tokens + 40_000
-    for searches in (0, 1, 3):
-        plain = costs.estimate(routing, messages, native_searches=searches)
-        merged = costs.estimate(routing, messages, native_searches=searches, answer_output=answer)
-        assert merged[0] - plain[0] == 40_000 and merged[1] > plain[1]
-    # The context window still has to hold the whole answer.
-    with pytest.raises(AnalysisBudgetExceeded, match="context limit"):
-        costs.estimate(routing, messages, answer_output=routing.context_length)
-
-
-def test_search_steps_down_by_rounds_and_reserves_one_bound_per_round():
-    from app.services.agent_delegation import smaller_search
+def test_a_bounded_run_reserves_the_worst_case_of_every_search_round():
+    """A bounded run's budget is a hard limit: every round may send the whole
+    input again and add SEARCH_INPUT_TOKENS (a small window caps it)."""
     from app.services.agent_costs import RunCosts, SEARCH_INPUT_TOKENS
-    assert [smaller_search(n) for n in (5, 3, 2, 1)] == [3, 1, 1, 0]
-    costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
+    costs = RunCosts(AgentPolicy.from_config({**defaults(), "enabled": True}))
     messages = [{"role": "user", "content": "Q"}]
     estimate = lambda model, n: costs.estimate(model, messages, native_searches=n)[0]
     native, exa = resolve_agent_model("claude-haiku-4-5"), metered_model("deepseek-v4.1-flash")
     for model in (native, exa):
         none, one, three = estimate(model, 0), estimate(model, 1), estimate(model, 3)
         assert none < one < three
-        # Same bound for every family: one round adds at most its search input
-        # (in its continuation) plus one more output segment.
-        assert one - 2 * none <= SEARCH_INPUT_TOKENS
-        # Comparison answers reserve no search tokens: settlement books them.
-        assert costs.estimate(model, messages, native_searches=3, soft_search=True)[0] == none
-    # Never the whole context window; a small window caps the search input instead.
-    assert estimate(native, 1) < native.context_length // 2
+        assert one - 2 * none <= 2 * SEARCH_INPUT_TOKENS
     small = replace(native, context_length=20_000, max_output_tokens=4_000)
     assert estimate(small, 1) <= 2 * small.context_length
+    with pytest.raises(AnalysisBudgetExceeded, match="context limit"):
+        costs.estimate(replace(native, max_output_tokens=native.context_length), messages)
 
 
-# Every step may write the answer, and a bounded run reserves that whole
-# allowance (about 73k tokens here; with one search round about 210k): 100k
-# admit the step only without its search.
-@pytest.mark.parametrize("remaining,succeeds,context_room", [(100_000, True, None), (100, False, None), (100_000, False, 0)])
-def test_search_reservation_can_fall_back_without_extra_paid_claim(store, remaining, succeeds, context_room):
+def test_an_account_step_reserves_its_expected_search_not_one_bound_per_round():
+    from app.services.agent_costs import RunCosts, SEARCH_ROUND_TOKENS, search_cost_nanos
+    costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
+    messages = [{"role": "user", "content": "Q"}]
+    model = resolve_agent_model("claude-haiku-4-5")
+    none, one, five = (costs.estimate(model, messages, native_searches=n) for n in (0, 1, 5))
+    # One round expected until the run measured how many its kind of call uses.
+    assert one == five and one[0] - none[0] == SEARCH_ROUND_TOKENS
+    assert one[1] - none[1] > search_cost_nanos(model)
+    # The context window stays a hard limit.
+    with pytest.raises(AnalysisBudgetExceeded, match="context limit"):
+        costs.estimate(replace(model, context_length=10), messages)
+
+
+@pytest.mark.parametrize("remaining", [100, 100_000])
+def test_a_bounded_step_that_does_not_fit_is_refused_never_sent_without_search(store, remaining):
     calls = []
     class Completion(AgentCompletion):
         def stream(self, *, model, messages, **kwargs):
             calls.append(kwargs)
-            assert "Web search is unavailable" in messages[0]["content"]
-            assert kwargs["native_searches"] == 0
-            self.text, self.finish_reason = "Answer from existing evidence.", "stop"
-            self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20}, model)
-            yield {"type": "delta", "text": self.text}
+            yield from ()
     loop = make_loop(store, Script())
     loop.factory = Completion
     loop.search_remaining = 1
-    if context_room is not None:
-        loop.policy = replace(loop.policy, context_chars=len(json.dumps(loop.messages, ensure_ascii=False)) + context_room)
     ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     ref.set({"used": 250000 - remaining})
-    if succeeds:
-        events = list(loop.run())
-        assert len(calls) == 1 and loop.costs.calls == 1
-        assert any(e.get("name") == "web_search" and e.get("status") == "blocked" for e in events)
-        assert ref.get().to_dict()["used"] == 250000 - remaining + 70
-        assert ref.get().to_dict()["reserved"] == 0
-    else:
-        with pytest.raises(AnalysisBudgetExceeded, match="context limit" if context_room is not None else "reservation"):
-            list(loop.run())
-        assert calls == [] and loop.costs.calls == 0 and loop.costs.tokens == 0
-        assert ref.get().to_dict() == {"used": 250000 - remaining}
+    with pytest.raises(agent_quota.AgentTokenBudgetExceeded):
+        list(loop.run())
+    assert calls == [] and loop.costs.calls == 0 and loop.costs.tokens == 0
+    assert ref.get().to_dict() == {"used": 250000 - remaining}
     assert loop.search_remaining == 1
 
 

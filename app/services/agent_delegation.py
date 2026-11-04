@@ -16,13 +16,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app.core import config as cfg
 from app.core.observability import provider_diagnostic, safe_exception
 from app.core.openrouter_contract import provider_session_id
 from app.services import agent_secrets
 from app.services.agent_ask import TOOL as ASK_TOOL
-from app.services.agent_budget_config import micro_eur, nano_usd
-from app.services.agent_costs import aggregate_usage, worst_case_nanos
+from app.services.agent_budget_config import micro_eur
+from app.services.agent_costs import aggregate_usage
 from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
@@ -122,6 +121,8 @@ TURN_INVALID_LIMIT = ("The model repeated invalid tool requests without progress
 # the answer, and before its conversation fills this share of the model's
 # window (DelegationLoop._long_run_limit).
 LONG_RUN_CONTEXT_SHARE = .8
+# The agent's own steps as one session of RunCosts (its cached prefix).
+AGENT_SESSION = "agent"
 TURN_ALLOWANCE_LIMIT = ("This response ended because today's token allowance is nearly used up. "
                         "The available results have been saved.")
 TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
@@ -201,11 +202,6 @@ def _transient_store_error(error):
     transient = (Aborted, DeadlineExceeded, InternalServerError, ServiceUnavailable)
     # Firestore wraps exhausted transaction conflicts in ValueError.
     return isinstance(error, transient) or isinstance(error.__cause__, transient)
-
-
-def smaller_search(searches):
-    """Next search tier down: many rounds -> three -> one -> none."""
-    return 3 if searches > 3 else 1 if searches > 1 else 0
 
 
 def with_step_note(messages, note):
@@ -514,7 +510,9 @@ class DelegationLoop(AgentLoop):
         # summarized once they fill too much (_summarize, agent_compaction).
         self.history_summary = history_summary
         self.run_summaries = 0
-        self.run_summary_failed = False
+        # After a run summary that did not work out: the input tokens the
+        # next request must reach before another is tried (_summary_due).
+        self.run_summary_retry_at = None
         # The run's own messages a summary replaced: its work record and
         # evidence still know them (own_messages).
         self.summarized = []
@@ -870,6 +868,7 @@ class DelegationLoop(AgentLoop):
         for tool in self.registry.tools.values():
             tools.extend(self._workspace_tool_list() if tool.name == OPEN_WORKSPACE else [tool])
         self.registry = ToolRegistry(tools, argument_limit=max(self.registry.argument_limit, 24_000))
+        self.costs.rewritten(AGENT_SESSION)
         self.workspace_closed, self.workspace_opened = False, True
         logging.info("Agent workspace opened step=%s", self.routing_steps)
         if self.work_log is not None:
@@ -946,23 +945,23 @@ class DelegationLoop(AgentLoop):
         fills LONG_RUN_CONTEXT_SHARE of the model's window, instead of
         failing at the next admission without one."""
         from app.services import agent_quota
-        from app.services.agent_tokens import input_estimate
-        model = self.routing_lighter or self.model
-        answer = answer_output_limit(model)
-        inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
-        if inputs + answer > model.context_length * LONG_RUN_CONTEXT_SHARE:
+        model = self._routing_model()
+        tools = [*self.registry.schemas, *self._search_tools(model)]
+        inputs = self.costs.inputs(self.messages, tools, model.request_config)
+        if inputs + model.max_output_tokens > model.context_length * LONG_RUN_CONTEXT_SHARE:
             return TURN_CONTEXT_LIMIT
         try:
-            remaining = agent_quota.remaining_allowance(self.store.db, self.uid)
+            # What is left as the sidebar shows it: the reservations of calls
+            # still running (reviewers' rounds) are no spending yet.
+            left, _ = agent_quota.shown_allowance(self.store.db, self.uid)
         except Exception as exc:
             # The next admission reads the ledger again and refuses then.
             logging.warning("Agent long run allowance unavailable category=%s", safe_exception(exc))
             return None
-        # One more step and the answer as their admissions reserve them
-        # (micro-euros, agent_quota): the whole conversation twice at the
-        # dearest input price.
-        steps = micro_eur(worst_case_nanos(model, 2 * inputs, routing_output_limit(model) + answer))
-        if remaining < steps + 2 * self._reviewer_step_charge():
+        # One more step and the answer, at what their admission expects them to cost.
+        step = self.costs.estimate(model, self.messages, tools, native_searches=self._step_searches(),
+                                   session=AGENT_SESSION)[1]
+        if left < 2 * micro_eur(step) + 2 * self._reviewer_step_charge():
             return TURN_ALLOWANCE_LIMIT
         return None
 
@@ -1027,6 +1026,7 @@ class DelegationLoop(AgentLoop):
                                                                shown_max=agent_compaction.PICTURES_KEPT):
             self.messages[index] = message
         self.compacted_to = agent_compaction.own_chars(self.messages, self.turn_start)
+        self.costs.rewritten(AGENT_SESSION)
         logging.info("Agent long run compacted results=%s chars_before=%s chars_after=%s",
                      len(cut.replacements), cut.before, cut.after)
         if self.work_log is not None:
@@ -1048,12 +1048,12 @@ class DelegationLoop(AgentLoop):
             return None
         if self.history_summary is not None:
             return "history"
-        if self.run_summary_failed:
-            return None
         from app.services import agent_compaction
-        from app.services.agent_tokens import input_estimate
-        model = self.routing_lighter or self.model
-        inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
+        model = self._routing_model()
+        inputs = self.costs.inputs(self.messages, [*self.registry.schemas, *self._search_tools(model)],
+                                   model.request_config)
+        if self.run_summary_retry_at is not None and inputs < self.run_summary_retry_at:
+            return None
         return "run" if agent_compaction.run_summary_due(inputs, model.context_length, self.messages,
                                                          self.turn_start) else None
 
@@ -1062,20 +1062,20 @@ class DelegationLoop(AgentLoop):
         "Summaries"): the chat model writes a summary in step ``index``, which
         then replaces the chat's older history or the run's earlier steps.
         Returns the index of the agent's next step (``index`` itself when no
-        summary was claimed). A summary that does not work out changes
-        nothing; a run's is not tried again in this message."""
+        summary was claimed). Its request has the tools and the tool choice
+        of the agent's steps, so it reads their cached prefix; a call it
+        makes is not run (``allow_tools``). A summary that does not work out
+        changes nothing and is tried again once the conversation has grown
+        (_summary_failed)."""
         kind = self._summary_due()
         if kind is None:
             return index
         from app.services import agent_compaction
         plan, self.history_summary = self.history_summary, None
-        if kind == "history":
-            # Only what it replaces: the history up to the messages that stay.
-            request, args = self.messages[:plan["end"]], {"searches_enabled": False, "allow_tools": False}
-        else:
-            # The next step's request with the summary request at its end
-            # (same tools and tool choice): it reads that step's cached prefix.
-            request, args = self.messages, search
+        # Only what it replaces: the history up to the messages that stay;
+        # else the next step's request, with the summary request at its end.
+        request = self.messages[:plan["end"]] if kind == "history" else self.messages
+        args = {**search, "allow_tools": False}
         asked = len(self.messages)
         step = f"completion:{index}"
         yield self.activity({"step_id": step, "id": "summary", "kind": "progress",
@@ -1087,15 +1087,16 @@ class DelegationLoop(AgentLoop):
                                                     registry=self.registry, summary=kind, **args)
         except AgentTokenBudgetExceeded as exc:
             # Refused before its claim: the agent's step takes the free index.
-            self.run_summary_failed = self.run_summary_failed or kind == "run"
+            if kind == "run":
+                self._summary_failed(kind, plan)
             free = getattr(exc, "unclaimed_step", None)
             logging.info("Agent summary refused by the allowance kind=%s", kind)
             return int(free.split(":")[1]) if isinstance(free, str) else index
         text = agent_compaction.summary_text(value)
         if text is None:
-            self.run_summary_failed = self.run_summary_failed or kind == "run"
-            logging.warning("Agent summary unusable kind=%s finish_reason=%s chars=%s tool_calls=%s", kind,
-                            value.finish_reason, len(value.text or ""), len(value.tool_calls or []))
+            self._summary_failed(kind, plan)
+            logging.warning("Agent summary unusable kind=%s finish_reason=%s chars=%s skipped_calls=%s", kind,
+                            value.finish_reason, len(value.text or ""), getattr(value, "skipped_tool_parts", 0))
             return next(steps)
         before = agent_compaction.own_chars(self.messages, 1)
         if kind == "history":
@@ -1136,11 +1137,31 @@ class DelegationLoop(AgentLoop):
                 # The summary comes next; the user's messages and the kept step
                 # are in the log already, a message the user sent meanwhile not yet.
                 self.work_log.rewound("agent", self.turn_start, seen=[*notes, *logged])
+        self.costs.rewritten(AGENT_SESSION)
         after = agent_compaction.own_chars(self.messages, 1)
         logging.info("Agent summary kind=%s chars_before=%s chars_after=%s", kind, before, after)
         if self.work_log is not None:
             self.work_log.app("summarized", {"kind": kind, "chars_before": before, "chars_after": after}, step=step)
         return next(steps)
+
+    def _summary_failed(self, kind, plan):
+        """Back off after a summary that did not work out: a run's is tried
+        again once the next request has grown by RUN_SUMMARY_RETRY_TOKENS, the
+        history's once the chat's history has grown by
+        HISTORY_SUMMARY_RETRY_CHARS (the turn keeps the mark,
+        AgentRunStore.messages), instead of in every step or message."""
+        from app.services import agent_compaction
+        if kind == "run":
+            model = self._routing_model()
+            inputs = self.costs.inputs(self.messages, [*self.registry.schemas, *self._search_tools(model)],
+                                       model.request_config)
+            self.run_summary_retry_at = inputs + agent_compaction.RUN_SUMMARY_RETRY_TOKENS
+            return
+        try:
+            self.store.save_history_summary(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
+                                            failed={"held": plan.get("held", 0)})
+        except Exception as exc:
+            logging.warning("Agent history summary failure not saved category=%s", safe_exception(exc))
 
     def _identical_call(self, call):
         """No-progress guard: the same tool with the same arguments.
@@ -1561,141 +1582,87 @@ class DelegationLoop(AgentLoop):
         entry = (log_actor, value.step_id, call, message, started_at, duration_ms) if log_actor else None
         return message, entry
 
-    def _admit_chat_step(self, model, messages, step, registry, cancellation, searches, claim_policy, worker,
-                         clamp_floor=None, server_tools=(), answer_output=0, closing=False):
-        """Retry admission, never generation. All successful claims stay atomic.
+    def _admit(self, model, messages, step, tools, cancellation, searches, claim_policy, worker, *, closing=False):
+        """Claim one call at what it is expected to cost (RunCosts.estimate);
+        returns its reservation and whether the claim took.
 
-        Contention is backpressure, not exhaustion. Wait for active receipts,
-        then shrink optional search step by step (fewer rounds, then none) and
-        fit the actual provider output cap if needed.
-        With ``clamp_floor`` (parallel comparison answers and reviewers'
-        rounds), a call whose output still fits at that size starts now with
-        the smaller allowance instead of queueing behind its siblings.
-        Searching helpers do not reserve their search (``soft_search``): every
-        answer of a comparison keeps its full rounds, whatever order the
-        siblings are admitted in; settlement books the measured search tokens.
-        Only a context window too small for the search shrinks it.
-        Once this message holds paid work (comparison answers, or a step of
-        the agent that reviewers followed), the ``closing`` step (the answer
-        written without tools, _merged_wrap_up) and the reviewers' final
-        rounds may overdraw the daily allowance: paid work always reaches an
-        answer and its review, and the next message is refused instead (see
-        agent_quota.reserve). A routing step is admitted only within the
-        allowance; refused, it leaves its step to the closing one (run).
-        A step that may write the answer (``answer_output``) is admitted like
-        a routing step, with ``model``'s routing allowance per segment. The
-        answer it may write on top (one segment up to ``answer_output``) is
-        reserved too but may lie beyond the allowance, so a direct answer is
-        not cut short near the daily limit and research is not lost earlier.
-        """
-        from app.services.agent_tokens import input_estimate, minimum_output
-        soft = bool(worker and getattr(worker, "kind", None) in SEARCHING_KINDS)
-        # Only once this message holds paid work: a started comparison whose
-        # answers found no allowance has nothing to finish (review 2026-10-14:
-        # near the daily limit a long first step left the comparison without
-        # answers, and the overdraft then paid an unchecked turn). And only
-        # for what finishes it: until 2026-10-28 every further routing step
-        # overdrew too, never refused before turn_steps (audit).
+        The allowance decides only whether a call starts: the request is the
+        same whatever is left (search rounds, output limit, tools), or none
+        goes out. Calls still running hold part of the allowance for the
+        moment: a call that fits once they settled waits for them
+        (backpressure, not exhaustion). Once this message holds paid work
+        (comparison answers, or a step of the agent that reviewers followed),
+        the ``closing`` step (the answer written from what the run has,
+        _merged_wrap_up) and the reviewers' final rounds may overdraw the
+        allowance: paid work always reaches an answer and its review, and
+        the next message is refused instead (agent_quota.reserve). Any other
+        refusal raises AgentTokenBudgetExceeded: a routing step refused after
+        paid work leaves its index to the closing step (run), a comparison
+        answer or a page read fails on its own."""
         overdraft = (closing and (self._paid_comparison() or self._paid_audit()) if worker is None
                      else self._final_review(worker))
-        search_limited, waiting = False, False
-        delay, recovered_at = .1, time.monotonic()
+        session, kind = self._meter_keys(worker)
+        waiting, delay, recovered_at = False, .1, time.monotonic()
         while True:
             self._check(cancellation)
-            tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
-            if not searches:
-                room = model.context_length - input_estimate(messages, tools, model.request_config)
-                if room < minimum_output(model):
-                    raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
-                model = replace(model, max_output_tokens=min(model.max_output_tokens, room))
-                answer_output = min(answer_output, room)
-            reservation = None
-            # Searches whose tokens this admission reserves.
-            reserved = 0 if soft else searches
-            # A merged step's answer above its routing allowance: reserved, not
-            # admitted (its cost in micro-euros, agent_quota.reserve).
-            extra = max(0, answer_output - model.max_output_tokens)
-            beyond = True if overdraft else micro_eur(worst_case_nanos(model, 0, extra)) if extra else 0
+            reservation = self.costs.reserve(model, messages, tools, native_searches=searches, session=session,
+                                             kind=kind)
             try:
-                reservation = self.costs.reserve(model, messages, tools, native_searches=searches, soft_search=soft,
-                                                 answer_output=answer_output)
-                request = replace(model, max_output_tokens=model.max_output_tokens + extra)
-                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, request, step=step,
+                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
                     run_token=self.run_token, policy=claim_policy, reservation=reservation,
-                    **({"overdraft": beyond} if beyond else {}))
-                return request, messages, tools, searches, reservation, claimed, search_limited
+                    **({"overdraft": True} if overdraft else {}))
+                return reservation, claimed
             except BaseException as exc:
-                if reservation is not None:
-                    self.costs.release(reservation)
-                if isinstance(exc, AgentTokenBudgetExceeded):
-                    # The ledger's amounts are micro-euros: the smallest
-                    # reservation of this call, its page reads and searches
-                    # included, and the output that fits what is left.
-                    search = {"native_searches": searches, "soft_search": soft}
-                    minimum = micro_eur(self.costs.estimate(replace(model, max_output_tokens=minimum_output(model)),
-                                                            messages, tools, **search)[1])
-                    if exc.reserved and not (clamp_floor and reserved) and (
-                            (not reserved and minimum <= exc.remaining + exc.reserved)
-                            or (reserved and exc.required <= exc.remaining + exc.reserved)):
-                        if clamp_floor and not reserved:
-                            output = self.costs.output_within(model, messages, tools, nano_usd(exc.remaining), **search)
-                            if output >= max(clamp_floor, minimum_output(model)):
-                                model = replace(model, max_output_tokens=output)
-                                continue
-                        if not waiting:
-                            waiting = True
-                            if worker:
-                                self._state(worker, "waiting")
-                            else:
-                                yield self.status(step, "allowance", status="waiting",
-                                    text="Waiting for active model calls to finish and release their unused allowance.")
-                        # A failed settlement must not strand sibling waiters.
-                        with self.condition:
-                            unsettled = list(self.unsettled.items())
-                        for pending_step, (value, status) in unsettled:
-                            self._settle_step(pending_step, value, status)
-                        if time.monotonic() - recovered_at >= 3:
-                            self.store.recover_allowance(self.uid)
-                            recovered_at = time.monotonic()
-                        with self.condition:
-                            self.condition.wait(delay)
-                        delay = min(3, delay * 2)
-                        if not worker:
-                            yield from self._events()
-                        continue
-                    if not reserved:
-                        output = self.costs.output_within(model, messages, tools, nano_usd(exc.remaining),
-                                                          native_searches=searches, soft_search=soft)
-                        # Nothing smaller to try (a page read's reservation does
-                        # not shrink with its output): the same request again
-                        # would only spin on the ledger.
-                        if output < minimum_output(model) or output >= model.max_output_tokens:
-                            raise
-                        model = replace(model, max_output_tokens=output)
-                        continue
-                elif not isinstance(exc, AnalysisBudgetExceeded) or not searches:
+                self.costs.release(reservation)
+                if not (isinstance(exc, AgentTokenBudgetExceeded) and exc.reserved
+                        and exc.required <= exc.remaining + exc.reserved):
                     raise
-                # The optional search does not fit: try a smaller one first.
-                searches = smaller_search(searches)
-                if searches:
-                    continue
-                search_limited = True
-                messages = with_step_note(messages,
-                    "Web search is unavailable for this step within the available token/context allowance. "
-                    "Use existing evidence, state uncertainty, and do not imply new web research.")
+            if not waiting:
+                waiting = True
+                if worker:
+                    self._state(worker, "waiting")
+                else:
+                    yield self.status(step, "allowance", status="waiting",
+                        text="Waiting for active model calls to finish and release their unused allowance.")
+            # A failed settlement must not strand sibling waiters.
+            with self.condition:
+                unsettled = list(self.unsettled.items())
+            for pending_step, (value, status) in unsettled:
+                self._settle_step(pending_step, value, status)
+            if time.monotonic() - recovered_at >= 3:
+                self.store.recover_allowance(self.uid)
+                recovered_at = time.monotonic()
+            with self.condition:
+                self.condition.wait(delay)
+            delay = min(3, delay * 2)
+            if not worker:
+                yield from self._events()
+
+    @staticmethod
+    def _meter_keys(worker):
+        """The session and the kind of a call, as RunCosts learns from them:
+        the agent's own steps, or the worker's conversation and kind."""
+        if worker is None:
+            return AGENT_SESSION, "agent"
+        return getattr(worker, "session_key", "") or worker.id, getattr(worker, "kind", None) or "worker"
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
               search_rounds=1, retry_rate_limit=False, retry_passing=False, retry_empty=False, check_cooldown=True,
               server_tools=(), completion=None, answer_candidate=False, hold=False,
-              allow_tools=True, answer_output=0, summary=None):
+              allow_tools=True, closing=False, tool_choice="auto", summary=None):
         """One claimed, metered model call.
 
         ``answer_candidate``: a step of a turn with comparison tools
         (agent_answer_mode) whose text may turn out to be the answer. Its text streams once it is
         ANSWER_HOLD_CHARS long and no tool call has started (``hold``: not at
         all); ``value.published`` is what the user has seen, and the
-        loop settles it (_show_answer, _retract). ``allow_tools=False`` keeps
-        the turn's tools in the request (prompt cache) with tool_choice none.
+        loop settles it (_show_answer, _retract). ``allow_tools=False``: a
+        step that may only write. Its request is every step's (tools, search,
+        tool choice), so it reads their cached prefix; the client drops the
+        calls it makes (AgentCompletion.stream). ``closing``: the step that
+        writes the answer from what the run has (_merged_wrap_up), admitted
+        beyond the allowance after paid work (_admit). ``tool_choice="none"``
+        only for its one retry after a reply of calls alone.
 
         ``retry_rate_limit``: a free 429 (_free_rate_limit) returns the settled
         step with ``value.rate_limited`` instead of raising, so the caller can
@@ -1711,11 +1678,6 @@ class DelegationLoop(AgentLoop):
         the reservation counts), ``completion`` replaces the loop's factory
         (agent_read_source.PageFetch, worker_completion).
 
-        ``answer_output``: the output limit of a step that may write the
-        answer, above ``model``'s routing allowance. The step is admitted
-        like a routing step; the answer on top may overdraw the allowance
-        (_admit_chat_step).
-
         ``summary`` ("history" or "run"): a summary step (_summarize). Its
         request ends with the app's summary request, the history's has no
         file block, and nothing it calls opens a gate or starts reviewers."""
@@ -1723,14 +1685,7 @@ class DelegationLoop(AgentLoop):
         # The caller's conversation, before this step adds its file block or
         # notes (work log: what is the conversation, what only this request).
         conversation = messages
-        if answer_output and not self.policy.account_budget_only:
-            # Bounded runs keep their hard limits whole: no overdraft.
-            model, answer_output = replace(model, max_output_tokens=max(model.max_output_tokens, answer_output)), 0
-        # Google data can join the chat during the turn (a Gmail import), so
-        # every step reads the chat again; the agent's first step starts with
-        # what the route read a moment ago, before any step could add some.
-        if (self.google_data if step == "completion:0" and worker is None and self.google_data is not None
-                else (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data")):
+        if self._holds_google_data():
             from app.services.google_connections import restricted_model, GoogleError
             if not self.google_data_consent:
                 raise GoogleError("Enable Google model-sharing consent for this chat before continuing.", 403)
@@ -1773,13 +1728,17 @@ class DelegationLoop(AgentLoop):
             messages = with_step_note(messages, agent_compaction.HISTORY_SUMMARY_REQUEST if summary == "history"
                                       else agent_compaction.RUN_SUMMARY_REQUEST)
         tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
+        session, kind = self._meter_keys(worker)
         reservation = None
         try:
-            if not self.policy.account_budget_only:
+            if self.policy.account_budget_only:
+                model = self.costs.fit(model, messages, tools)
+            else:
                 reservation = self.costs.reserve(model, messages, tools, native_searches=searches)
         except Exception:
-            with self.condition:
-                self.search_remaining += searches
+            if not self.policy.account_budget_only:
+                with self.condition:
+                    self.search_remaining += searches
             raise
         claimed = False
         provider_attempted = False
@@ -1812,42 +1771,20 @@ class DelegationLoop(AgentLoop):
         # never the turn, a worker's step or a reviewer's round.
         halt = ProviderCancellation() if worker is None else None
         status = "failed"
-        search_limited = False
         try:
             claim_policy = {**self.policy.snapshot(), "worker_models": [m.snapshot() for m in self.models.values()]}
             try:
                 if self.policy.account_budget_only:
-                    clamp_floor = cfg.MAX_TOKENS if getattr(worker, "kind", None) in SEARCHING_KINDS else None
-                    model, messages, tools, searches, reservation, claimed, search_limited = yield from self._admit_chat_step(
-                        model, messages, step, registry, cancellation, searches, claim_policy, worker, clamp_floor,
-                        server_tools=server_tools, answer_output=answer_output, closing=not allow_tools)
+                    reservation, claimed = yield from self._admit(model, messages, step, tools, cancellation, searches,
+                                                                  claim_policy, worker, closing=closing)
                 else:
                     claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
                         run_token=self.run_token, policy=claim_policy, reservation=reservation)
             except AgentTokenBudgetExceeded as exc:
-                if self.policy.account_budget_only or not searches:
-                    # Refused before its claim: the step stays free for the
-                    # closing step (_closing_index).
-                    exc.unclaimed_step = step
-                    raise
-                # Admission failed before any paid request. Keep all hard
-                # bounds, but allow a response from the evidence already held.
-                self.costs.release(reservation)
-                reservation = None
-                with self.condition:
-                    self.search_remaining += searches
-                searches = 0
-                tools = [*registry.schemas, *server_tools]
-                messages = [*messages]
-                messages[0] = {**messages[0], "content": messages[0]["content"] +
-                    "\nWeb search is unavailable for this step because its token reservation exceeds the remaining daily allowance. "
-                    "Use existing evidence, state any uncertainty, and do not imply new web research."}
-                if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
-                    raise AnalysisBudgetExceeded("Agent session context limit reached")
-                reservation = self.costs.reserve(model, messages, tools)
-                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
-                    run_token=self.run_token, policy=claim_policy, reservation=reservation)
-                search_limited = True
+                # Refused before its claim: the step stays free for the
+                # closing step (_closing_index).
+                exc.unclaimed_step = step
+                raise
             if not claimed:
                 raise ValueError("This model step has already started")
             self.claimed = True
@@ -1858,9 +1795,6 @@ class DelegationLoop(AgentLoop):
             if not worker:
                 if step == "completion:0":
                     yield {"type": "started", "chat_id": self.chat_id, "turn_id": self.turn_id, "delegation": True}
-                if search_limited:
-                    yield self.tool_event(step + ":web_search", "web_search", "blocked",
-                        text="Web search was skipped for this step: available tokens do not cover the search and its follow-up response. Continuing with existing sources.")
                 yield self.status(step, "started", status="working", settings=model.settings(),
                                   clear_response=step != "completion:0" and not self.comparison)
             log_actor = self._log_actor(step, worker)
@@ -1878,7 +1812,7 @@ class DelegationLoop(AgentLoop):
                 provider_attempted = True
                 streaming = self._halt_scope(halt)
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
-                                      native_searches=searches, allow_tool_calls=allow_tools,
+                                      native_searches=searches, allow_tool_calls=allow_tools, tool_choice=tool_choice,
                                       session_id=None if worker else self.provider_session)
                 try:
                     for event in source:
@@ -2010,7 +1944,8 @@ class DelegationLoop(AgentLoop):
                     value.record_unstarted(model)
                 if worker:
                     self._stream_progress(worker, stream_progress, value.usage, streaming=False, force=True)
-                self.costs.reconcile(reservation, value.usage)
+                self.costs.reconcile(reservation, value.usage, model=model, session=session, kind=kind,
+                                     searches=searches)
                 if worker:
                     worker.usages.append(value.usage)
                 with self.condition:
@@ -2291,6 +2226,8 @@ class DelegationLoop(AgentLoop):
                 self._check()
                 if self.claimed:
                     root = self.store.check_delegation(self.uid, self.chat_id, self.turn_id, self.run_token)
+                    if (root or {}).get("chat_google_data"):
+                        self.mark_google_data()
                     self._receive_notes(root)
                     self._receive_hold(root)
                 last_verified = time.monotonic()
@@ -2503,9 +2440,6 @@ class DelegationLoop(AgentLoop):
                 return
         logging.info("Agent reviewers start with the workspace step=%s",
                      getattr(value, "step_id", None) or "open_workspace")
-        # The allowance the route read before the first step is spent
-        # by now: their shares read it afresh (AnswerAudit.output_share).
-        auditor.allowance = None
         auditor.follow(self.work_log)
 
     def _open_gate(self, value):
@@ -2805,17 +2739,49 @@ class DelegationLoop(AgentLoop):
         return bool(notes)
 
     def _routing_model(self):
-        """The chat model for a routing step: reasoning headroom on top of
-        its text allowance (routing_output_limit), at the lighter level once
-        a routing step of this turn reasoned through its allowance. With
-        comparison tools every step may write the answer: _orchestrate adds
-        the answer allowance (_answer_output)."""
+        """The chat model for its next step, at the lighter level once a
+        routing step of this turn reasoned through its allowance. Its output
+        limit: reasoning headroom on top of the text allowance
+        (routing_output_limit); with comparison tools, where every step may
+        write the answer, the answer's (answer_output_limit). The same for
+        every step of the message and every account."""
         model = self.routing_lighter or self.model
-        return replace(model, max_output_tokens=routing_output_limit(model))
+        limit = routing_output_limit(model)
+        if self.merged:
+            limit = max(limit, answer_output_limit(model))
+        return replace(model, max_output_tokens=limit)
 
-    def _answer_output(self):
-        """Output limit of a step that may write the answer."""
-        return answer_output_limit(self.routing_lighter or self.model)
+    def _search_rounds(self):
+        """Search rounds of every step of the agent in this message: the same
+        for every account and every step, whatever the allowance (a changed
+        search tool rewrites the provider's cached prefix)."""
+        from app.services.agent_audit import AGENT_SEARCH_ROUNDS
+        return AGENT_SEARCH_ROUNDS if self.merged else 1
+
+    def _step_searches(self):
+        """The search rounds a step of the agent sends: none with Google data."""
+        return 0 if self._holds_google_data() else self._search_rounds()
+
+    def _search_tools(self, model):
+        return search_tools(model, self._step_searches())
+
+    def _holds_google_data(self):
+        """Whether this run's requests may carry Google data (Google model
+        rules: restricted_model, no web search). Its content has it when the
+        chat held it as the message started (the route read it, ``google_data``)
+        or once a tool of this run brought some in (mark_google_data, on the
+        Gmail import); nothing else adds Google data to what the run sends.
+        A mark another message set meanwhile reaches the run with the
+        watcher's next look at the chat (_watch)."""
+        if self.google_data is None:
+            chat = self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}
+            self.google_data = bool(chat.get("google_data"))
+        return self.google_data
+
+    def mark_google_data(self):
+        """Google data joined the chat in this run (agent_gmail.record): every
+        call from now on follows the Google rules."""
+        self.google_data = True
 
     def _answer_attempt(self, model, messages, index, steps, registry, *, rate_limit=True, **step_args):
         """One step of the chat model, with one retry.
@@ -2952,8 +2918,7 @@ class DelegationLoop(AgentLoop):
         if not self.merged:
             return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
                                                     rate_limit=False, **search))
-        args = {**search, "answer_candidate": True, "hold": self._hold_answer(),
-                "answer_output": self._answer_output()}
+        args = {**search, "answer_candidate": True, "hold": self._hold_answer()}
         return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
                                                 rate_limit=bool(self.comparison.comparisons), **args))
 
@@ -3199,9 +3164,10 @@ class DelegationLoop(AgentLoop):
         return self._workers_ready()
 
     def _merged_wrap_up(self, reason, steps, value):
-        """A per-turn limit in a merged turn: one last step of the agent, its
-        tools listed but not callable (tool_choice none, prompt cache kept),
-        writes the answer from what it has."""
+        """A per-turn limit in a merged turn: one last step of the agent
+        writes the answer from what it has. Its request is every step's
+        (tools, search and tool choice: it reads their cached prefix, at the
+        message's largest request); a call it makes is not run."""
         comparison = self.comparison
         if not self._can_wrap_up():
             raise AnalysisBudgetExceeded(reason)
@@ -3218,10 +3184,10 @@ class DelegationLoop(AgentLoop):
             if index is None:
                 raise AnalysisBudgetExceeded("Agent orchestration call limit reached before writing the answer")
             # The level this turn switched to after a thought-only step, if any.
-            model = self.routing_lighter or self.model
-            model = replace(model, max_output_tokens=answer_output_limit(model))
-            args = {"answer_candidate": True, "allow_tools": False, "searches_enabled": False}
-            value = yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry, **args)
+            model = self._routing_model()
+            args = {"answer_candidate": True, "allow_tools": False, "closing": True, "searches_enabled": True,
+                    "search_rounds": self._search_rounds()}
+            value = yield from self._closing_attempt(model, index, steps, args)
             if _thought_only(value):
                 lighter = lighter_reasoning(model)
                 index = next(steps, None) if lighter else None
@@ -3230,8 +3196,7 @@ class DelegationLoop(AgentLoop):
                 yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",
                                      "text": "The model used its whole output allowance on reasoning before writing. "
                                              "Writing the answer again with lighter reasoning."})
-                value = yield from self._answer_attempt(lighter, self.messages, index, steps, registry=self.registry,
-                                                        **args)
+                value = yield from self._closing_attempt(lighter, index, steps, args)
                 if _thought_only(value):
                     raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
             if value.finish_reason in {"length", "max_tokens"}:
@@ -3253,6 +3218,20 @@ class DelegationLoop(AgentLoop):
             return
         yield from self._finish_review(value)
         self.completion.text, self.completion.finish_reason = comparison.text, "stop"
+
+    def _closing_attempt(self, model, index, steps, args):
+        """The closing step. A reply of calls alone, which a writing step
+        does not run, gets one more attempt that may not call (tool choice
+        "none"): that request differs from the others, but only this once."""
+        value = yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry, **args)
+        if value.text.strip() or not getattr(value, "skipped_tool_parts", 0) or value.tool_calls:
+            return value
+        index = next(steps, None)
+        if index is None:
+            return value
+        logging.warning("Agent closing step called tools only; writing again without tools model=%s", model.model)
+        return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
+                                                **{**args, "tool_choice": "none"}))
 
     def _limit_fact(self, reason):
         """What the wrap-up step reads of ``reason``: the limit, and whether
@@ -3310,8 +3289,7 @@ class DelegationLoop(AgentLoop):
                     if self.settings_tools:
                         self.settings_tools.mock_turn(self.answer_conversation[-1]["content"])
                 steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
-                from app.services.agent_audit import AGENT_SEARCH_ROUNDS
-                search_rounds = AGENT_SEARCH_ROUNDS if self.merged else 1
+                search_rounds = self._search_rounds()
                 value = None
                 for index in steps:
                     # A reviewer's halt waits for the user here (request_hold).

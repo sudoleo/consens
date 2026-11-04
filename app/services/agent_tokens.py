@@ -67,9 +67,8 @@ def _clear_encoding_cache():
 encoding.cache_clear = _clear_encoding_cache
 
 
-def input_estimate(messages, tools=(), request_config=None):
-    # Include signed reasoning, tool arguments/results and structured-output
-    # schemas. No prompt-text cache: private conversations must not be retained.
+def _part_tokens(part):
+    """(text tokens, visual tokens) of one message, tool or schema."""
     visual_tokens = 0
     def without_binary(value):
         nonlocal visual_tokens
@@ -81,8 +80,58 @@ def input_estimate(messages, tools=(), request_config=None):
             visual_tokens += _data_url_tokens(value)
             return "[private visual input]"
         return value
-    payload = [without_binary(messages), tools, (request_config or {}).get("response_format")]
-    count = len(encoding().encode_ordinary(json.dumps(payload, ensure_ascii=False, separators=(",", ":"))))
+    text = json.dumps(without_binary(part), ensure_ascii=False, separators=(",", ":"))
+    return len(encoding().encode_ordinary(text)), visual_tokens
+
+
+class TokenMemo:
+    """Counts per message and tool object for one run. A run sends its whole
+    conversation with every step and only appends to it (a changed message
+    is a new object), so each part is tokenized once instead of once per
+    estimate. It holds the parts it counted, so an id is never reused while
+    its count is kept; a part no estimate asked for in the last KEEP
+    estimates (a compacted or summarized message) is let go."""
+
+    KEEP = 256
+
+    def __init__(self):
+        self._counts = {}
+        self._estimates = 0
+        self._lock = threading.Lock()
+
+    def begin(self):
+        """One more estimate; now and then drop what the last KEEP did not use."""
+        with self._lock:
+            self._estimates += 1
+            if self._estimates % self.KEEP == 0:
+                stale = self._estimates - self.KEEP
+                self._counts = {key: entry for key, entry in self._counts.items() if entry[2] > stale}
+
+    def count(self, part):
+        key = id(part)
+        with self._lock:
+            known = self._counts.get(key)
+            if known is not None and known[0] is part:
+                known[2] = self._estimates
+                return known[1]
+        counted = _part_tokens(part)
+        with self._lock:
+            self._counts[key] = [part, counted, self._estimates]
+        return counted
+
+
+def input_estimate(messages, tools=(), request_config=None, *, memo=None):
+    # Include signed reasoning, tool arguments/results and structured-output
+    # schemas. Only a run's own memo keeps counts (TokenMemo), never a
+    # process-wide cache: private conversations must not be retained.
+    response_format = (request_config or {}).get("response_format")
+    parts = [*messages, *tools, *([response_format] if response_format is not None else [])]
+    if memo is not None:
+        memo.begin()
+    count = visual_tokens = 0
+    for part in parts:
+        tokens, visual = memo.count(part) if memo is not None else _part_tokens(part)
+        count, visual_tokens = count + tokens, visual_tokens + visual
     return (count * 5 + 3) // 4 + 256 + 16 * len(messages) + visual_tokens
 
 

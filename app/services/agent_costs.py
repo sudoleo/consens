@@ -20,7 +20,8 @@ def token_cost_nanos(model, prompt, completion, cached, written=0):
 
 def worst_case_nanos(model, inputs, outputs):
     """The most ``inputs`` and ``outputs`` tokens can cost: every input token at
-    the dearest of fresh, cached and cache-written input (a reservation)."""
+    the dearest of fresh, cached and cache-written input (a bounded run's
+    reservation)."""
     price = max(Decimal(model.input_usd_per_million), Decimal(model.cache_read_usd_per_million),
                 Decimal(model.cache_write_usd_per_million or model.input_usd_per_million))
     return int(((inputs * price + outputs * Decimal(model.output_usd_per_million)) * 1000
@@ -40,12 +41,18 @@ def provider_cost_nanos(raw):
     return None
 
 
-# Input one search round may add, reserved for every model alike. Measured
-# 2026-10-01 per round: OpenAI's own search up to ~11k tokens, Exa (5 x 2,000
-# characters) ~2.5k, Anthropic ~2k, Google grounding ~0 (billed per request).
-# About three times the largest observation. A soft bound: settlement charges
-# the actual usage, so a rare larger round can exceed the daily allowance a little.
+# Input one search round may add at most, a bounded run's reservation.
+# Measured 2026-10-01 per round: OpenAI's own search up to ~11k tokens, Exa
+# (5 x 2,000 characters) ~2.5k, Anthropic ~2k, Google grounding ~0 (billed
+# per request). About three times the largest observation.
 SEARCH_INPUT_TOKENS = 32_000
+# What a round is expected to add to an account-mode call, about the mean of
+# those families.
+SEARCH_ROUND_TOKENS = 6_000
+# Output a call is expected to write until its run has measured calls of its
+# kind on its model: about one routing step with reasoning (prod 2026-10-07,
+# Sonnet 5.5: 3,808 and 3,998 tokens).
+OUTPUT_START_TOKENS = 4_096
 
 
 def search_cost_nanos(model):
@@ -79,14 +86,61 @@ def input_bound(messages, tools=()):
     return len(json.dumps([messages, tools], ensure_ascii=False).encode("utf-8")) + 1024
 
 
+def _nanos(value):
+    return int((value * 1000).quantize(Decimal("1"), rounding=ROUND_CEILING))
+
+
+def _mean(values):
+    return -(-sum(values) // len(values))
+
+
 class RunCosts:
+    """What one run's calls are expected to cost, and what they cost.
+
+    Account mode (every chat turn): a call is admitted at what it is
+    expected to cost (``estimate``), and settlement books what it cost. The
+    expectation learns from the run's own receipts (``reconcile``): the
+    prompt prefix the provider held in its cache after the session's last
+    call is priced as a cache read, the output and the search rounds are the
+    means its kind of call measured on that model so far. A call that costs
+    more than expected may leave the account a little below zero; the next
+    admission then fails. Bounded runs keep their worst case: their hard
+    budget is a limit, not an expectation."""
+
     def __init__(self, policy):
+        from app.services.agent_tokens import TokenMemo
         self.policy = policy
         self.tokens = 0
         self.cost = 0
         self.calls = 0
         self.usages = []
+        self.memo = TokenMemo()
+        # session -> input tokens its last measured call read from or wrote to the cache.
+        self._cached = {}
+        # (kind, model) -> measured output tokens and search rounds.
+        self._outputs, self._rounds = {}, {}
         self._lock = threading.RLock()
+
+    def inputs(self, messages, tools=(), request_config=None):
+        """Estimated input tokens of a request (agent_tokens.input_estimate),
+        each message counted once per run."""
+        from app.services.agent_tokens import input_estimate
+        return input_estimate(messages, tools, request_config, memo=self.memo)
+
+    def fit(self, model, messages, tools=()):
+        """``model`` with its output limit within the context window the
+        input leaves. The window is a hard limit whatever the allowance."""
+        from app.services.agent_tokens import minimum_output
+        room = model.context_length - self.inputs(messages, tools, model.request_config)
+        if room < minimum_output(model):
+            raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
+        return model if room >= model.max_output_tokens else replace(model, max_output_tokens=room)
+
+    def rewritten(self, session):
+        """The session's conversation changed before its end (a summary, a
+        compaction, new tools): its next call finds no cached prefix."""
+        with self._lock:
+            self._cached.pop(session, None)
 
     def release(self, reservation):
         """Roll back admission only when no durable provider claim was made."""
@@ -95,89 +149,79 @@ class RunCosts:
             self.cost -= reservation[1]
             self.calls -= 1
 
-    def reserve(self, model, messages, tools=(), *, native_searches=0, soft_search=False, answer_output=0):
+    def reserve(self, model, messages, tools=(), *, native_searches=0, session=None, kind="agent"):
         with self._lock:
-            return self._reserve(model, messages, tools, native_searches=native_searches, soft_search=soft_search,
-                                 answer_output=answer_output)
+            tokens, cost = self.estimate(model, messages, tools, native_searches=native_searches, session=session,
+                                         kind=kind)
+            if not self.policy.account_budget_only and (
+                    self.calls >= self.policy.max_calls or self.tokens + tokens > self.policy.max_tokens
+                    or self.cost + cost > self.policy.max_cost_nano_usd):
+                raise AnalysisBudgetExceeded("The agent's token or simulated cost budget was reached.")
+            self.tokens += tokens
+            self.cost += cost
+            self.calls += 1
+            return tokens, cost
 
-    def _reserve(self, model, messages, tools=(), *, native_searches=0, soft_search=False, answer_output=0):
-        tokens, cost = self.estimate(model, messages, tools, native_searches=native_searches, soft_search=soft_search,
-                                     answer_output=answer_output)
-        if not self.policy.account_budget_only and (self.calls >= self.policy.max_calls or self.tokens + tokens > self.policy.max_tokens
-                or self.cost + cost > self.policy.max_cost_nano_usd):
-            raise AnalysisBudgetExceeded("The agent's token or simulated cost budget was reached.")
-        self.tokens += tokens
-        self.cost += cost
-        self.calls += 1
-        return tokens, cost
+    def estimate(self, model, messages, tools=(), *, native_searches=0, session=None, kind="agent"):
+        """Tokens and cost (nano-USD) of one call: expected in account mode,
+        the worst case in a bounded run. ``session``: the conversation the
+        call continues (the agent's steps, a reviewer's rounds); ``kind``:
+        what sort of call it is, for the measured means."""
+        if not self.policy.account_budget_only:
+            return self._worst_case(model, messages, tools, native_searches)
+        from app.services.agent_tokens import minimum_output
+        inputs = self.inputs(messages, tools, model.request_config)
+        if inputs + minimum_output(model) > model.context_length:
+            raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
+        with self._lock:
+            cached = min(inputs, self._cached.get(session, 0)) if session is not None else 0
+            outputs, searched = self._outputs.get((kind, model.model)), self._rounds.get((kind, model.model))
+        output = min(model.max_output_tokens, _mean(outputs) if outputs else OUTPUT_START_TOKENS)
+        rounds = min(native_searches, _mean(searched) if searched else 1) if native_searches else 0
+        pages, fetched = fetch_bounds(tools)
+        added = rounds * SEARCH_ROUND_TOKENS + fetched
+        # Fresh input at what writing it to the cache costs where that is dearer (Anthropic).
+        fresh = max(Decimal(model.input_usd_per_million), Decimal(model.cache_write_usd_per_million or 0))
+        cost = _nanos(cached * Decimal(model.cache_read_usd_per_million) + (inputs - cached + added) * fresh
+                      + output * Decimal(model.output_usd_per_million))
+        cost += rounds * search_cost_nanos(model) + pages * FETCH_COST_NANOS
+        return inputs + added + output, cost
 
-    def estimate(self, model, messages, tools=(), *, native_searches=0, soft_search=False, answer_output=0):
-        """Worst-case tokens and cost of one call.
-
-        ``soft_search`` (comparison answers): the search must still fit the
-        context window, but its tokens are not reserved; settlement books them
-        as measured. Otherwise a worst-case bound for several rounds and six
-        parallel answers exceeds a whole daily allowance.
-
-        ``answer_output`` (a step that may write the answer): the
-        call's output limit, above ``model.max_output_tokens`` (the routing
-        allowance). The answer is written once, so one segment reserves it
-        and every further search continuation the routing allowance."""
-        from app.services.agent_tokens import input_estimate
-        extra = max(0, answer_output - model.max_output_tokens)
-        inputs = (input_estimate(messages, tools, model.request_config) if self.policy.account_budget_only
-                  else input_bound(messages, tools))
-        initial_inputs = inputs
-        if inputs + model.max_output_tokens + extra > model.context_length:
+    def _worst_case(self, model, messages, tools, native_searches):
+        inputs = input_bound(messages, tools)
+        if inputs + model.max_output_tokens > model.context_length:
             raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
         pages, fetched = fetch_bounds(tools)
         if native_searches or pages:
             # A provider can never add more than the window still holds.
-            room = model.context_length - model.max_output_tokens - extra - inputs
+            room = model.context_length - model.max_output_tokens - inputs
             if room <= 0:
                 raise AnalysisBudgetExceeded("The selected model's search context limit was reached.")
-            if soft_search and not pages:
-                tokens, cost = self.estimate(model, messages, tools, answer_output=answer_output)
-                return tokens, cost + native_searches * (search_cost_nanos(model) or 10_000_000)
             inputs += min(native_searches * SEARCH_INPUT_TOKENS + fetched, room)
-        # Account conservatively for native model continuations hidden behind
-        # the provider API. Do not advertise max_results as a native input cap.
+        # Every native continuation behind the provider API may send it all again.
         segments = native_searches + pages + 1
-        total_inputs = inputs * segments
-        if self.policy.account_budget_only and (native_searches or pages):
-            # Search results do not exist in the pre-search generation. Each
-            # result enters only its subsequent continuations.
-            total_inputs = initial_inputs * segments + (inputs - initial_inputs) * segments // 2
-        outputs = model.max_output_tokens * segments + extra
-        tokens = total_inputs + outputs
+        total_inputs, outputs = inputs * segments, model.max_output_tokens * segments
         cost = worst_case_nanos(model, total_inputs, outputs)
         if native_searches:
-            cost += native_searches * (search_cost_nanos(model) or 10_000_000)
-        return tokens, cost + pages * FETCH_COST_NANOS
+            cost += native_searches * search_cost_nanos(model)
+        return total_inputs + outputs, cost + pages * FETCH_COST_NANOS
 
-    def output_within(self, model, messages, tools, nanos, *, native_searches=0, soft_search=False):
-        """The largest output allowance whose worst-case cost (estimate) fits
-        ``nanos``, at most ``model.max_output_tokens``; 0 when not even one
-        output token fits. The estimate is linear in the output allowance, so
-        two estimates find it (the daily account counts money, agent_quota)."""
-        search = {"native_searches": native_searches, "soft_search": soft_search}
-        high = self.estimate(model, messages, tools, **search)[1]
-        if nanos >= high or model.max_output_tokens <= 1:
-            return model.max_output_tokens if nanos >= high else 0
-        low = self.estimate(replace(model, max_output_tokens=1), messages, tools, **search)[1]
-        if nanos < low:
-            return 0
-        if high <= low:
-            return model.max_output_tokens
-        return min(model.max_output_tokens, 1 + (nanos - low) * (model.max_output_tokens - 1) // (high - low))
-
-    def reconcile(self, reservation, usage):
+    def reconcile(self, reservation, usage, *, model=None, session=None, kind="agent", searches=0):
         with self._lock:
             self.usages.append(usage)
             tokens, cost = remaining_reservation(reservation, usage)
             self.tokens += tokens - reservation[0]
             self.cost += cost - reservation[1]
-        # Missing usage keeps the full reservation. Never guess a zero cost.
+            # Missing usage keeps the full reservation. Never guess a zero cost.
+            # Nor learn from a call that never reached the model (no input).
+            if model is None or not usage or not usage.get("complete", True) or not usage.get("input_tokens"):
+                return
+            if session is not None:
+                self._cached[session] = (usage.get("cached_input_tokens") or 0) + (usage.get("cache_write_tokens") or 0)
+            if usage.get("output_tokens") is not None:
+                self._outputs.setdefault((kind, model.model), []).append(usage["output_tokens"])
+            if searches and type(usage.get("web_search_requests")) is int:
+                self._rounds.setdefault((kind, model.model), []).append(min(searches, usage["web_search_requests"]))
 
     def check(self):
         if not self.policy.account_budget_only and (self.tokens > self.policy.max_tokens or self.cost > self.policy.max_cost_nano_usd):
