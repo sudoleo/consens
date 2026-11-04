@@ -20,9 +20,9 @@ from app.core.openrouter_contract import provider_session_id
 from app.services import agent_secrets
 from app.services.agent_ask import TOOL as ASK_TOOL
 from app.services.agent_budget_config import micro_eur
-from app.services.agent_costs import aggregate_usage
+from app.services.agent_costs import RunCosts, aggregate_usage
 from app.services.agent_quota import AgentTokenBudgetExceeded
-from app.services.agent_loop import AgentLoop
+from app.services.agent_policy import AgentPolicy
 from app.services.agent_progress import ReasoningProgress, StreamProgress
 from app.services.agent_provider_limits import (
     TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelEmptyAnswer, ModelOutputLimit, agent_failure,
@@ -32,7 +32,7 @@ from app.services.agent_tools import CallOrder, ReadOnlyTool, ToolRegistry, give
 from app.services.agent_comparison import SEARCHING_KINDS
 from app.services.prompt_defaults import AGENT_REVIEW_FACTS as REVIEW_FACTS
 from app.services.llm.agent_client import (
-    answer_output_limit, lighter_reasoning, reasoning_active, routing_output_limit,
+    AgentCompletion, answer_output_limit, lighter_reasoning, reasoning_active, routing_output_limit,
 )
 from app.services.llm import agent_model_metadata
 from app.services.llm.provider_runtime import (
@@ -323,12 +323,36 @@ class Worker:
     session_key: str = ""
 
 
-class DelegationLoop(AgentLoop):
-    def __init__(self, *, comparison_models, cooldowns=None, file_context=None, google_selection=None, google_data_consent=False,
+class DelegationLoop:
+    def __init__(self, *, store, uid, chat_id, turn_id, model, messages, api_key,
+                 cancellation, policy=None, registry=None, completion_factory=AgentCompletion, mock_answer=None,
+                 comparison_models, cooldowns=None, file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
-                 reviewers="always", temporary=False, watch_run=None, history_summary=None,
-                 **kwargs):
-        super().__init__(**kwargs)
+                 reviewers="always", temporary=False, watch_run=None, history_summary=None):
+        self.store, self.uid, self.chat_id, self.turn_id = store, uid, chat_id, turn_id
+        self.model, self.messages, self.api_key = model, list(messages), api_key
+        self.cancellation = cancellation
+        self.policy = policy or AgentPolicy()
+        self.registry = registry or ToolRegistry()
+        self.factory, self.mock_answer = completion_factory, mock_answer
+        self.completion = AgentCompletion()
+        self.completion.step_id = "run"
+        self.run_token = uuid4().hex
+        # The chat model's steps stay on one endpoint, where their prefix is
+        # cached. Comparison answers keep the fastest endpoint: they share
+        # no prefix with each other.
+        self.provider_session = provider_session_id(uid, chat_id)
+        # The chat's last earlier message (system prompt, history, then this
+        # message's question): the chat model's steps mark it as a cache point,
+        # so the next message reads the history (agent_client.with_cache_points).
+        self.history_end = len(self.messages) - 2
+        self.claimed = False
+        self.costs = RunCosts()
+        self.seen_calls = set()
+        self.progress = {}
+        # Calls of one step and the reviewers send activity from threads of
+        # their own: the trace and its step_id change together.
+        self.activity_lock = threading.RLock()
         # A scheduled run of a Watch (agent_watches.py, since 2026-11-03):
         # nobody is there to answer a card, so a hold ends at once
         # (``hold_timeout``) and the run has its own tools (agent_watch.py
@@ -636,6 +660,35 @@ class DelegationLoop(AgentLoop):
         # the app. Saved once the run owns the turn (its first claimed step).
         from app.services.agent_work_log import WorkLog
         self.work_log = WorkLog(self.store, self.uid, self.chat_id, self.turn_id, ready=lambda: self.claimed)
+
+    def activity(self, event):
+        """One bounded trace, with identities stable across all model steps.
+        A key the user saved for the agent is masked (agent_secrets.scrub)."""
+        if not event:
+            return None
+        event = dict(agent_secrets.scrub(self.uid, event))
+        step = event.pop("step_id", "run")
+        event_id, kind = event.pop("id"), event.pop("kind")
+        for key in ("version", "type"):
+            event.pop(key, None)
+        with self.activity_lock:
+            if kind == "reasoning":
+                progress = self.progress.setdefault(step, ReasoningProgress())
+                compact = progress.update({"kind": kind, "id": event_id, **event})
+                if not compact:
+                    return None
+                event = compact
+                event_id = "reasoning-summary"
+            self.completion.step_id = step
+            return self.completion.event(kind, f"{step}/{event_id}", **event)
+
+    def status(self, step, event_id, **data):
+        return self.activity({"step_id": step, "id": event_id, "kind": "status", **data})
+
+    def tool_event(self, step, name, status, **data):
+        if "sources" in data:
+            data["sources"] = data["sources"][:self.policy.result_sources]
+        return self.activity({"step_id": step, "id": "tool", "kind": "tool", "name": name, "status": status, **data})
 
     def _log_actor(self, step, worker=None):
         """Who a model step or tool result is in the work log: the agent, or
