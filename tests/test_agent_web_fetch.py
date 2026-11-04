@@ -569,6 +569,31 @@ def test_reads_stop_at_the_message_and_step_limits(store, monkeypatch, enabled):
     assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
 
 
+def test_the_step_limit_refuses_the_last_read_in_call_order_whoever_arrives_first(store, monkeypatch, enabled):
+    """The reads of a step run at the same time (DelegationLoop._call_groups):
+    the first one reaches the limit last here, and the limit still refuses
+    the step's last read, as if they had run one after another."""
+    import threading
+    import time
+    fake_fetch(monkeypatch)
+    urls = [f"https://example.org/page-{i}" for i in range(READS_PER_STEP + 1)]
+    loop = chat_loop(store, Plan(steps=[[compare()], [read_call(u) for u in urls]], cited=urls))
+    check = loop._check
+
+    def late_first(cancellation=None):
+        if threading.current_thread().name == "agent-call-call_1_0":
+            time.sleep(.3)
+        return check(cancellation)
+    loop._check = late_first
+    list(loop.run())
+    outcome = [r["reason"] if r["status"] == "refused" else r["status"] for r in results(loop)]
+    assert outcome[:READS_PER_STEP] == ["completed"] * READS_PER_STEP
+    assert outcome[READS_PER_STEP].startswith(f"At most {READS_PER_STEP} sources per step")
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    reads = saved["agent_review"]["read_sources"]
+    assert [read["url"] for read in reads] == urls[:READS_PER_STEP] and [read["id"] for read in reads] == [1, 2, 3, 4, 5]
+
+
 def test_a_failed_fetch_is_saved_as_failed_not_as_content(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch, status="incomplete", error="HTTP 404: Page not found")
     plan = Plan()

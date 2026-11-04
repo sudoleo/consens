@@ -80,7 +80,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.observability import safe_exception
 from app.services import picture_search, watch_images
-from app.services.agent_tools import ReadOnlyTool
+from app.services.agent_tools import ReadOnlyTool, call_order
 
 # Per message; a picture shown twice stays one file.
 IMAGES_PER_MESSAGE = 6
@@ -393,7 +393,8 @@ class WebImageTools:
                 "search_pictures", f"Search the web for pictures with Brave's image search: up to {FOUND_PER_SEARCH} "
                                    "come back, each with an id, its page, the page's title and its size; the user "
                                    "sees none of them. find_pictures with a picture's address shows it to you.",
-                SearchPicturesArgs, self.search, activity=self._search_activity, concurrent=True))
+                SearchPicturesArgs, self.search, activity=self._search_activity, concurrent=True,
+                ordered=True))
         tools.append(ReadOnlyTool(
             "show_image", f"Show the user a picture from {found}, by its id: the app puts it into your answer "
                           "where you write ![what it shows](picture:<id>) on a line of its own, else under the "
@@ -503,7 +504,7 @@ class WebImageTools:
 
     def search(self, args, *, cancellation):
         query = " ".join(args.query.split())
-        with self.lock:
+        with call_order(cancellation), self.lock:
             if self.searches >= SEARCHES_PER_MESSAGE:
                 raise ValueError(f"No more than {SEARCHES_PER_MESSAGE} picture searches per message.")
             self.searches += 1
