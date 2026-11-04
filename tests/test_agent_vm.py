@@ -708,6 +708,17 @@ def test_installing_never_removes_a_package(store, fake_vm):
     assert command.endswith("-- g++ python3.12-venv")
 
 
+def test_an_install_cut_off_before_is_finished_before_the_next_one(store, fake_vm):
+    """An install its time limit or Stop ended mid-dpkg leaves dpkg half
+    done, and every later apt-get refuses until dpkg --configure -a ran,
+    which the agent cannot run without sudo (as the browser and office VMs'
+    setups do it for themselves)."""
+    loop = vm_loop(store, Agent([[("vm_install_packages", {"packages": ["jq"]})]]))
+    list(loop.run())
+    [command] = [c for c in fake_vm.server if "apt-get install" in c]
+    assert command.index("dpkg --configure -a") < command.index("apt-get install")
+
+
 def test_the_same_command_may_run_again(store, fake_vm):
     """The identical-call guard stops a loop without progress; a VM command's
     result depends on the VM's state (tests again after an edit)."""

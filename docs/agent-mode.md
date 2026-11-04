@@ -1008,7 +1008,8 @@ ungefiltert. Seit 2026-10-27 außerdem `vm_install_packages` (`packages`:
 1–30 apt-Paketnamen, jeder gegen `^[a-z0-9][a-z0-9+.-]{0,99}(?<!-)$` geprüft
 (nie mit `-` am Ende: `apt-get install sudo-` entfernt sudo, seit 2026-11-04) und
 quotiert hinter `--`): Der Agent hat kein sudo, der Server installiert als
-root (`apt-get update` nur, wenn die Listen älter als ein Tag sind), bis
+root (erst `dpkg --configure -a`, das eine abgebrochene Installation beendet,
+seit 2026-11-04; `apt-get update` nur, wenn die Listen älter als ein Tag sind), bis
 300 s, zählt zur VM-Zeit. Python-Pakete installiert er mit pip (fällt von
 selbst auf `~/.local` zurück, gemessen) oder uv, Node-Pakete mit npm im
 Projekt (`nvm` verträgt kein eigenes `prefix`, `npx` für Werkzeuge). Dazu

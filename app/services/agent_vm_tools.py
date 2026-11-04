@@ -200,8 +200,11 @@ VM_USER_HAS_BROWSER = ("The user has taken over the workspace's browser and stil
 PACKAGE = r"^[a-z0-9][a-z0-9+.-]{0,99}(?<!-)$"
 MAX_PACKAGES = 30
 INSTALL_TIMEOUT = 300
-# The package lists are fetched again when older than a day.
-INSTALL_COMMAND = ("find /var/lib/apt/lists -maxdepth 1 -name '*_Packages*' -mmin -1440 2>/dev/null | grep -q . || "
+# An install its time limit or Stop cut off leaves dpkg half done, and every
+# later apt-get would refuse until it is finished; the agent has no sudo to
+# finish it. The package lists are fetched again when older than a day.
+INSTALL_COMMAND = ("sudo -n env DEBIAN_FRONTEND=noninteractive dpkg --configure -a </dev/null >/dev/null 2>&1; "
+                   "find /var/lib/apt/lists -maxdepth 1 -name '*_Packages*' -mmin -1440 2>/dev/null | grep -q . || "
                    "sudo -n apt-get update -qq; sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -q -- {}")
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
