@@ -97,8 +97,9 @@ def test_agent_memory_opt_in_note_undo_and_settings_list(browser, phase4_server,
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); "
                       "document.body.classList.toggle('dark-mode', dark); }", dark)
 
-        # Opt in: the switch saves only itself.
+        # Opt in: the switch saves only itself. Settings open on the Agent tab.
         page.evaluate("() => document.getElementById('editSystemPromptBtn').click()")
+        page.locator("#settingsTabMemory").click()
         auto = page.locator("#memoryAutoSwitch")
         expect(auto).not_to_be_checked()
         expect(page.locator("#memoryItemsEmpty")).to_be_visible()
@@ -118,6 +119,7 @@ def test_agent_memory_opt_in_note_undo_and_settings_list(browser, phase4_server,
 
         page.evaluate("() => document.getElementById('editSystemPromptBtn').click()")
         expect(page.locator("#systemPromptModal")).to_be_visible()
+        page.locator("#settingsTabMemory").click()
         expect(page.locator("#memoryItemsList")).to_contain_text("I prefer metric units.")
         page.locator("#memoryItemInput").fill("Works night shifts.")
         page.locator("#memoryItemAddBtn").click()
