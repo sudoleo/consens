@@ -1,5 +1,5 @@
 {
-  "sources": "67c0b4dfa221",
+  "sources": "1ddeded29b87",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -489,20 +489,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.df42c643ff0e.js",
+      "src": "/static/dist/app.e7bae95f003d.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.1695e079a18c.css",
-    "landing": "/static/dist/landing.01136ac4d100.css",
-    "public": "/static/dist/public.316995500775.css"
+    "app": "/static/dist/app.b795743f3ab2.css",
+    "landing": "/static/dist/landing.a98e2a7caaea.css",
+    "public": "/static/dist/public.d061e20dc6d4.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "b03cb88aa639",
+      "hash": "4d46caa807b7",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -546,7 +546,7 @@
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "0360bbbc3b9d",
+      "hash": "d813edbf0496",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -562,7 +562,7 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "0943ca4a29c0",
+      "hash": "4be3439c3f2f",
       "inputs": [
         "static/css/foundation.css",
         "static/css/public-nav.css",
@@ -575,10 +575,10 @@
     }
   },
   "previous_assets": [
-    "app.d4169c03fb6f.css",
-    "app.f613a90094e3.css",
-    "app.a01fda8f8350.js",
-    "app.41cc14a445ff.js",
+    "app.ce547b88469e.css",
+    "app.1695e079a18c.css",
+    "app.badb20ea7436.js",
+    "app.df42c643ff0e.js",
     "auth.ec6e4e8d116c.js",
     "auth.1e4fda715b6f.js",
     "demo.59bc9450805f.js",
@@ -587,9 +587,9 @@
     "firebase.e58d545b6ecc.js",
     "head.88ae8c459d6e.js",
     "head.68a66c7f57d8.js",
+    "landing.01136ac4d100.css",
     "landing.c415c812c684.css",
-    "landing.50c448ce20f0.css",
-    "public.a0ebcdfef131.css",
-    "public.ae52e9081654.css"
+    "public.316995500775.css",
+    "public.a0ebcdfef131.css"
   ]
 }

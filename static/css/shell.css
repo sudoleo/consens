@@ -3644,19 +3644,6 @@ body.is-hero .consensus-section::before {
   display: none;
 }
 
-/* --------------------------------------------------------------------------
-   6. Watches page surfaces
-
-   The page itself (components-watch.css) is built on the surface scale;
-   the plan line in its head draws no rectangle of its own.
-   -------------------------------------------------------------------------- */
-.watch-limit-summary {
-  border: 0;
-  background: var(--raise);
-  box-shadow: none;
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-}
 
 .watch-page {
   background: var(--ground);

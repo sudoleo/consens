@@ -394,6 +394,42 @@ describe("One Watch's panel (instead of the … menu)", () => {
       .toBe("Weekly on Friday at 09:30"));
   });
 
+  it("keeps what is typed in its editors when the page draws again, and gives focus back to its row (review 2026-11-04)", async () => {
+    const { window, document } = boot({ watches: [watch({ goal: "" })] });
+    await window.App.watchDashboard.render();
+    document.querySelector(".aw-open").click();
+    const panel = detail(document);
+    panel.querySelector('.wd-setting[data-key="goal"] .wd-pill').click();
+    type(window, panel.querySelector("#wdGoalInput"), "It is open");
+    // Back on the tab: the page reads again and draws.
+    document.dispatchEvent(new window.Event("visibilitychange"));
+    await window.App.watchDashboard.render();
+    expect(panel.querySelector("#wdGoalInput").value).toBe("It is open");
+    // A switch draws the rows again; closing the panel still lands on the Watch's row.
+    panel.querySelector('.wd-setting[data-key="email"] .wd-switch').click();
+    await vi.waitFor(() => expect(panel.querySelector('.wd-setting[data-key="email"] .wd-switch').getAttribute("aria-checked")).toBe("false"));
+    expect(panel.querySelector("#wdGoalInput").value).toBe("It is open");
+    window.App.modalDialog.close(panel);
+    expect(document.activeElement).toBe(document.querySelector('.aw-row[data-watch-id="w1"] .aw-open'));
+  });
+
+  it("sends one change per switch at a time and edits a weekly Watch on the day it runs", async () => {
+    const monday = new Date();
+    monday.setDate(monday.getDate() + ((8 - monday.getDay()) % 7 || 7));
+    monday.setHours(9, 0, 0, 0);
+    const { window, document, server } = boot({ watches: [watch({ interval: "weekly", run_weekday: "", run_time: "09:00",
+      next_run_at: monday.toISOString(), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone })] });
+    await window.App.watchDashboard.render();
+    document.querySelector(".aw-open").click();
+    const panel = detail(document);
+    const email = panel.querySelector('.wd-setting[data-key="email"] .wd-switch');
+    email.click();
+    email.click();
+    await vi.waitFor(() => expect(server.calls.filter(([method]) => method === "PATCH")).toHaveLength(1));
+    panel.querySelector('.wd-setting[data-key="schedule"] .wd-pill').click();
+    expect(panel.querySelector('.wc-day[aria-checked="true"]').dataset.weekday).toBe("monday");
+  });
+
   it("opens from the pill's Watching for the chat's Watch", async () => {
     const { window, document } = boot({ watches: [watch()] });
     await window.App.watchDashboard.render();
@@ -468,6 +504,18 @@ describe("The field that starts a Watch (watch-composer.js)", () => {
     expect(document.activeElement).toBe(form.querySelector(".wc-when"));
   });
 
+  it("closes How often when the focus leaves it", async () => {
+    const { window, document } = boot({ watches: [watch()] });
+    await window.App.watchDashboard.render();
+    const form = field(document);
+    form.querySelector(".wc-task").focus();
+    form.querySelector(".wc-when").click();
+    expect(form.querySelector(".wc-popover").hidden).toBe(false);
+    document.querySelector(".aw-open").focus();
+    await settle();
+    expect(form.querySelector(".wc-popover").hidden).toBe(true);
+  });
+
   it("asks for a sentence before it sends anything, and says a full plan at once", async () => {
     const { window, document, server } = boot({ watches: [watch(), watch({ id: "w2" })], limit: 2 });
     await window.App.watchDashboard.render();
@@ -531,6 +579,20 @@ describe("The pill's sheet (watch-sheet.js)", () => {
     release();
     await vi.waitFor(() => expect(sheet.hasAttribute("open")).toBe(false));
     expect(posted(server)).toMatchObject({ chat_id: "a".repeat(32), task: "And what about the price of it?" });
+  });
+
+  it("reads the account's slots again each time it opens (review 2026-11-04)", async () => {
+    const { window, document, server } = boot({ path: "/app", watches: [watch()], limit: 1 });
+    const chat = "a".repeat(32);
+    window.App.watchSheet.open({ chatId: chat, task: "And what about the price of it?" });
+    await vi.waitFor(() => expect(document.querySelector(".watch-sheet .wc-error").textContent)
+      .toBe("All your Watches are in use. End one first."));
+    window.App.watchSheet.close();
+    server.watches[0].status = "done";
+    window.App.watchSheet.open({ chatId: chat, task: "And what about the price of it?" });
+    await vi.waitFor(() => expect(server.calls.filter(([method, url]) => method === "GET" && url.startsWith("/agent/watches?")).length).toBe(2));
+    await settle();
+    expect(document.querySelector(".watch-sheet .wc-error").hidden).toBe(true);
   });
 
   it("sends a guest into the sign-in and back to the sheet with the question (J3)", async () => {

@@ -235,6 +235,10 @@ def _look(outcome: str, at: datetime, summary="") -> dict:
 
 def _with_look(data: dict, look: dict) -> list[dict]:
     kept = [item for item in (data.get("looks") or []) if isinstance(item, dict) and isinstance(item.get("at"), datetime)]
+    last = data.get("last_run") if isinstance(data.get("last_run"), dict) else {}
+    if "looks" not in data and isinstance(last.get("at"), datetime) and last.get("outcome"):
+        # A Watch from before ``looks``: its last run stays its first look.
+        kept = [_look(last["outcome"], last["at"], last.get("summary") or "")]
     return [*kept, look][-LOOKS_KEPT:]
 
 

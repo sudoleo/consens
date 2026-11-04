@@ -21,6 +21,7 @@
 
   function build(chatId, source) {
     if (sheet?.dialog.isConnected && sheet.chatId === chatId && sheet.source === source) return sheet;
+    sheet?.composer.destroy();
     sheet?.dialog.remove();
     const dialog = node('dialog', 'modal watch-sheet');
     dialog.setAttribute('aria-labelledby', 'watchSheetTitle');
@@ -67,6 +68,8 @@
     current = { chatId: chat, source, onStarted };
     sheet.composer.reset();
     sheet.composer.setTask(task);
+    // The slots and intervals as they are now (a Watch ended since the last time).
+    sheet.composer.load();
     if (App.modalDialog) App.modalDialog.open(sheet.dialog, { focus: sheet.dialog.querySelector('.wc-task'), opener: trigger });
     else sheet.dialog.setAttribute('open', '');
     sheet.composer.focus();

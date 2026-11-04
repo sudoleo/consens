@@ -329,7 +329,8 @@
     popover.append(picker.element);
     const box = node('div', 'wc-box');
     box.append(field, bar);
-    form.append(box, preview, error, popover);
+    // The popover right after the field: in a sheet it opens in place there.
+    form.append(box, popover, preview, error);
 
     // --- size and state ---------------------------------------------------
 
@@ -458,6 +459,13 @@
     }
 
     App.popover?.register?.(popover, { close: () => closePopover() });
+    // Tab out of it (or of its chip) and it closes, as a menu does.
+    const leave = () => setTimeout(() => {
+      const active = document.activeElement;
+      if (state.popover && !popover.contains(active) && active !== when) closePopover();
+    }, 0);
+    popover.addEventListener('focusout', leave);
+    when.addEventListener('focusout', leave);
     when.addEventListener('click', () => (state.popover ? closePopover({ focus: true }) : openPopover()));
     popover.addEventListener('keydown', event => {
       if (event.key === 'Escape') {
@@ -598,8 +606,11 @@
       sync();
     }
 
-    function reset() {
+    // `reload`: the account's intervals and slots are read again at the next
+    // focus (a sheet opened again, a Watch started or ended in between).
+    function reset({ reload = true } = {}) {
       closePopover();
+      if (reload) state.loaded = false;
       task.value = '';
       goal.value = '';
       state.editingGoal = false;
@@ -620,6 +631,12 @@
       isEmpty,
       isBusy: () => state.busy,
       refresh: sync,
+      load: loadOptions,
+      destroy() {
+        closePopover();
+        App.popover?.unregister?.(popover);
+        form.remove();
+      },
       task: () => line(task.value),
     };
   }

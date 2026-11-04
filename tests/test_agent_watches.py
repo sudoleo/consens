@@ -463,6 +463,18 @@ def test_each_run_is_kept_as_a_look_for_the_pulse_with_what_it_found(store, monk
     assert kept[0]["at"] == NOW - timedelta(days=29)
 
 
+def test_a_watch_from_before_the_looks_keeps_its_last_run_as_its_first_look(store):
+    watch = start(store, *proposed_chat(store))
+    ref = store.db.collection(agent_watches.COLLECTION).document(watch["id"])
+    earlier = NOW - timedelta(days=1)
+    data = record(store, watch["id"])
+    data.pop("looks", None)
+    ref.set({**data, "last_run": {"at": earlier, "outcome": "finding", "summary": "Open."}})
+    agent_watches._not_started(watch["id"], "not_started", db=store.db, now=NOW)
+    assert [(look["outcome"], look["at"]) for look in record(store, watch["id"])["looks"]] == [
+        ("finding", earlier), ("not_started", NOW)]
+
+
 def test_a_watch_from_before_the_looks_shows_its_last_run_and_one_running_says_so(store):
     watch = start(store, *proposed_chat(store))
     data = record(store, watch["id"])

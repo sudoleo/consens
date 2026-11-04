@@ -352,8 +352,6 @@ html:has(:is(dialog:modal, .sidebar.active, body.agent-sidebar-sheet, .claim-she
   .settings-select::after,
   .settings-note > summary::before,
   .model-picker-option-chevron,
-  .aw-disclosure::after,
-  .aw-archive-summary::after,
   .thread-watch-fold-button::after,
   .chat-input-container :is(.composer-lead, .composer-models) .model-picker-display::after,
   .chat-input-container .attach-menu .attach-menu-item[aria-haspopup] .attach-menu-value::after,

@@ -586,8 +586,9 @@
     document.body.classList.add("is-watch-view");
     setViewSwitchState(true);
     if (!body.childElementCount) window.App.watchDashboard?.renderSkeleton?.();
-    // /app/watches?create=1 (the public watch page's invitation): the sheet
-    // opens once the session is known; a guest is asked to sign in first.
+    // /app/watches?create=1 (the public watch page's invitation): once the
+    // session is known the page's field takes the focus; a guest signs in
+    // when they start the Watch.
     const url = new URL(window.location.href);
     const wantsCreate = url.searchParams.get("create") === "1";
     if (wantsCreate) {

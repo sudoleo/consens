@@ -565,6 +565,9 @@ body.is-view-settle.is-watch-view .watch-page {
   box-shadow: 0 0 0 1px var(--line-soft), var(--lift);
 }
 .wc-popover[hidden] { display: none; }
+/* In a sheet the dialog scrolls and would cut a floating popover off: there
+   it opens in place under the field and the sheet grows with it. */
+.wc.is-sheet .wc-popover { position: static; width: auto; margin-top: 12px; box-shadow: 0 0 0 1px var(--line-soft); }
 .wc-picker-caption { margin: 2px 4px 10px; color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 .wc-segments {
   display: grid;

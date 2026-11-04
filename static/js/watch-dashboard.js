@@ -588,7 +588,13 @@
   function openNotifications(opener) {
     if (!page.notify?.dialog.isConnected) {
       page.notify = sheet('wd-notify', App.t('Notifications'));
-      App.modalDialog?.bind(page.notify.dialog, {});
+      App.modalDialog?.bind(page.notify.dialog, { onClose: () => {
+        const active = document.activeElement;
+        if (active && active !== document.body && !page.notify.dialog.contains(active)) return;
+        // Its opener may have been drawn again (Telegram connected): the same control.
+        const panel = page.detail?.sheet.dialog.open ? page.detail.sheet.main.querySelector('[data-focus-key="telegram"]') : null;
+        (panel || body()?.querySelector('.aw-foot-change'))?.focus({ preventScroll: true });
+      } });
     }
     fillNotifications();
     App.modalDialog?.open(page.notify.dialog, { opener, focus: page.notify.close });
@@ -616,11 +622,19 @@
     if (!watchById(id)) return;
     if (!page.detail?.sheet.dialog.isConnected) {
       const parts = sheet('wd-detail', '');
-      App.modalDialog?.bind(parts.dialog, { onClose: () => { if (page.detail) page.detail.id = ''; } });
-      page.detail = { sheet: parts, id: '', editing: '' };
+      App.modalDialog?.bind(parts.dialog, { onClose: () => {
+        const closed = page.detail?.id || '';
+        if (page.detail) Object.assign(page.detail, { id: '', editing: '', draft: null });
+        // The row it came from was drawn again meanwhile (a switch, a poll):
+        // focus goes to the same Watch's row or card, never to the page.
+        const active = document.activeElement;
+        if (closed && (!active || active === document.body || parts.dialog.contains(active))) restoreFocus({ id: closed });
+      } });
+      page.detail = { sheet: parts, id: '', editing: '', draft: null };
     }
     page.detail.id = id;
     page.detail.editing = '';
+    page.detail.draft = null;
     renderDetail();
     App.modalDialog?.open(page.detail.sheet.dialog, { opener, focus: page.detail.sheet.close });
   }
@@ -725,7 +739,12 @@
     control.setAttribute('aria-checked', String(Boolean(checked)));
     control.setAttribute('aria-labelledby', name.id);
     control.append(el('span', 'wd-switch-knob'));
-    control.addEventListener('click', () => onFlip(!checked));
+    control.addEventListener('click', async () => {
+      // One change at a time: a second click waits for the first.
+      if (control.getAttribute('aria-busy') === 'true') return;
+      control.setAttribute('aria-busy', 'true');
+      try { await onFlip(control.getAttribute('aria-checked') !== 'true'); } finally { control.removeAttribute('aria-busy'); }
+    });
     rowBox.append(copy, control);
     return rowBox;
   }
@@ -741,12 +760,18 @@
     input.id = 'wdGoalInput';
     input.type = 'text';
     input.maxLength = 200;
-    input.value = watch.goal || '';
+    // What is typed survives a redraw of the panel (a poll, back on the tab).
+    input.value = page.detail.draft?.goal ?? (watch.goal || '');
     input.placeholder = App.t('registration is open');
     input.setAttribute('data-i18n-skip', '');
     input.setAttribute('autocomplete', 'off');
+    input.addEventListener('input', () => { page.detail.draft = { ...page.detail.draft, goal: input.value }; });
     const actions = el('div', 'wd-edit-actions');
-    const cancel = button('text-link', App.t('Cancel'), () => { page.detail.editing = ''; renderDetail({ focus: 'goal' }); });
+    const cancel = button('text-link', App.t('Cancel'), () => {
+      page.detail.editing = '';
+      page.detail.draft = null;
+      renderDetail({ focus: 'goal' });
+    });
     const save = el('button', 'wd-button is-primary', App.t('Save'));
     save.type = 'submit';
     actions.append(cancel, save);
@@ -758,6 +783,7 @@
       save.disabled = false;
       if (changed) {
         page.detail.editing = '';
+        page.detail.draft = null;
         renderDetail({ focus: 'goal' });
       }
     });
@@ -776,16 +802,32 @@
     return rowBox;
   }
 
+  // The schedule as it runs: a weekly Watch without its own day (one the
+  // Agent prepared) runs on the weekday of its next run, in its time zone.
+  function scheduleNow(watch) {
+    if (watch.interval !== 'weekly' || watch.run_weekday || !watch.next_run_at) return watch;
+    try {
+      const day = new Date(watch.next_run_at).toLocaleDateString('en-US', { weekday: 'long', timeZone: watch.timezone || 'UTC' });
+      return { ...watch, run_weekday: day.toLowerCase() };
+    } catch (_) {
+      return watch;
+    }
+  }
+
   function scheduleEditor(watch) {
     const rowBox = el('div', 'wd-setting is-editing');
     rowBox.dataset.key = 'schedule';
-    let next = null;
-    const picker = App.watchComposer.schedulePicker({ schedule: watch, allowed: page.data?.intervals || ['daily', 'weekly'],
-      onChange(value) { next = value; } });
+    const picker = App.watchComposer.schedulePicker({ schedule: page.detail.draft?.schedule || scheduleNow(watch),
+      allowed: page.data?.intervals || ['daily', 'weekly'],
+      onChange(value) { page.detail.draft = { ...page.detail.draft, schedule: value }; } });
     const actions = el('div', 'wd-edit-actions');
-    const cancel = button('text-link', App.t('Cancel'), () => { page.detail.editing = ''; renderDetail({ focus: 'schedule' }); });
+    const cancel = button('text-link', App.t('Cancel'), () => {
+      page.detail.editing = '';
+      page.detail.draft = null;
+      renderDetail({ focus: 'schedule' });
+    });
     const save = button('wd-button is-primary', App.t('Save'), async () => {
-      const value = next || picker.value();
+      const value = picker.value();
       save.disabled = true;
       const changed = await act(watch, '', { method: 'PATCH', body: { interval: value.interval, run_time: value.run_time,
         run_weekday: value.run_weekday, timezone: (() => {
@@ -794,6 +836,7 @@
       save.disabled = false;
       if (changed) {
         page.detail.editing = '';
+        page.detail.draft = null;
         renderDetail({ focus: 'schedule' });
       }
     });
@@ -995,7 +1038,8 @@
     }
     if (page.focus) focusWatch(page.focus.id, { open: page.focus.open });
     else if (!typed) restoreFocus(place);
-    if (page.detail?.id && page.detail.sheet.dialog.open) renderDetail();
+    // An editor in the panel keeps what is typed: the panel follows once it is closed.
+    if (page.detail?.id && page.detail.sheet.dialog.open && !page.detail.editing) renderDetail();
     followFirstRuns();
   }
 
@@ -1121,6 +1165,8 @@
 
   function replace(watch) {
     if (!page.data || !watch) return;
+    // A read already on its way knows less than this answer: it is dropped.
+    page.token += 1;
     const list = page.data.watches || (page.data.watches = []);
     const index = list.findIndex(item => item.id === watch.id);
     if (index >= 0) list[index] = watch;
@@ -1182,7 +1228,7 @@
     page.followTries = 0;
     closeDetail();
     if (page.notify?.dialog.open) App.modalDialog?.close(page.notify.dialog);
-    page.composer?.reset();
+    page.composer?.reset({ reload: true });
   }
 
   // A Watch started here or on a sheet, changed on a card or in another tab:
