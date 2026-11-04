@@ -25,10 +25,13 @@ user, to the browser VM for that call only. A screenshot comes to the agent as a
 The reviewers follow every action live; from 2026-10-27 to 2026-10-29 those
 that act outside (open, click, Enter, upload) waited for them first
 (agent_gate.py). What is the user's to do or to allow goes to them through
-ask_user (agent_ask.py). The calls share the workspace's lease
-and VM time with the VM tools (VMTools._start). A provider failure costs the
-call it happened in; MAX_FAILURES in a row turn the browser off for the rest
-of the message (since 2026-10-30; before, the first did, runtime audit A1).
+ask_user (agent_ask.py). The calls share the workspace's lease with the VM
+tools (VMTools._start). The seconds the helper runs for an action count as VM
+time (agent_vm_time.py); its warm-up and its rest at the message's end do not,
+and once today's VM time is used up the browser goes on without counting
+more (VMSession.spend). A provider failure costs the call it happened in;
+MAX_FAILURES in a row turn the browser off for the rest of the message
+(runtime audit A1).
 
 The first call of a message wakes the browser VM and starts Chrome on a
 backend of its own (_warm, since 2026-10-29), begun already when the agent
@@ -114,6 +117,9 @@ BROWSER_UNAVAILABLE = ("The workspace's browser is not available right now. Cont
 BROWSER_INTERRUPTED = ("The connection to the browser broke off during this call, so whether the action happened "
                        "is unknown; the page shows what it did.")
 BROWSER_NOT_STARTED = "The browser's computer did not start just now; nothing happened in it."
+# upload of a file that is or holds a key the user gave (agent_secrets.py).
+UPLOAD_KEY_REFUSED = ("That file is or holds the user's key {name} (~/.secrets): keys never go into a page. Upload "
+                      "a file without it; where a site needs the key, the user enters it there themselves.")
 # The helper's rest at the message's end (K2): its own short time, never the message's.
 REST_SECONDS = 20
 # How often the first call, waiting for the browser's start, looks for a new estimate of its end.
@@ -488,7 +494,7 @@ class BrowserTools:
                 status = getattr(backend, "statuses", {}).get(self.name)
                 if status:
                     session.cold["browser"] = status == "cold"
-                self._helper({"action": "warm"}, CALL_SECONDS, cancellation, backend=backend)
+                self._helper({"action": "warm"}, CALL_SECONDS, cancellation, backend=backend, counted=False)
             except Exception as exc:
                 # Anything else: the call then opens it itself, as before.
                 logging.info("Agent browser warm-up failed category=%s", safe_exception(exc))
@@ -552,12 +558,12 @@ class BrowserTools:
 
     def _helper(self, request, timeout, cancellation, backend=None, counted=True):
         """The helper's answer for ``request`` (a dict) and its seconds, which
-        count as VM time unless not ``counted`` (the rest after the message)."""
+        count as VM time unless not ``counted``: the server's own warm-up and
+        rest, never the agent's actions."""
         session = self.vm.session
         out, outcome = helper(backend or session.backend, self.name, request, timeout, cancellation)
         if counted:
-            with session._lock:
-                session.seconds += outcome.seconds
+            session.spend(outcome.seconds)
         try:
             answer = json.loads(out.decode("utf-8"))
         except ValueError:
@@ -638,9 +644,15 @@ class BrowserTools:
         return ValueError(text)
 
     def _upload(self, path, cancellation):
-        """The workbench's file at ``path`` on the browser VM, for this call."""
-        from app.services import agent_workspace
+        """The workbench's file at ``path`` on the browser VM, for this call:
+        never one of the user's keys (agent_secrets.py), by its folder or by
+        what the file holds (a copy, a link, a .env with a key in it)."""
+        from app.services import agent_secrets, agent_workspace
         session = self.vm.session
+        # vm_path keeps a leading "//" (POSIX normpath): one slash here.
+        named = posixpath.normpath("/" + path.lstrip("/"))
+        if named == agent_secrets.DIR or named.startswith(agent_secrets.DIR + "/"):
+            raise ValueError(UPLOAD_KEY_REFUSED.format(name=posixpath.basename(named)))
         try:
             raw, complete = self.vm._provider("read", lambda: session.backend.read_file(
                 session.name, path, limit=UPLOAD_BYTES + 1), idempotent=True)
@@ -648,6 +660,9 @@ class BrowserTools:
             raise ValueError(f"No file at {path}.") from None
         if not complete or len(raw) > UPLOAD_BYTES:
             raise ValueError(f"{path} is larger than {UPLOAD_BYTES // (1024 * 1024)} MB.")
+        key = agent_secrets.holds(self.vm.loop.uid, raw)
+        if key is not None:
+            raise ValueError(UPLOAD_KEY_REFUSED.format(name=key))
         name = re.sub(r"[^\w.\- ]", "_", posixpath.basename(path)).strip(". ")[:120] or "file"
         target = f"{agent_workspace.BROWSER_UPLOADS}/{name}"
         session.backend.write_file(self.name, target, raw, agent=False)
@@ -696,9 +711,8 @@ class BrowserTools:
         if not self.ready:
             warming, self.warming = self.warming or self._warm(cancellation), None
         # The lease is all the browser needs; the workbench only what reaches
-        # it: a localhost address (its port) and an upload (its file). Its
-        # actions are steps of the agent's model, not VM time: the browser
-        # goes on once today's is used up (since 2026-10-31).
+        # it: a localhost address (its port) and an upload (its file). It goes
+        # on once today's VM time is used up (_helper counts no more then).
         self.vm._start(cancellation, bench=port is not None or args.action == "upload", change=False,
                        spends=False)
         prepared = time.monotonic()
@@ -781,7 +795,8 @@ class BrowserTools:
         from app.services import workspace_guard
         workspace_guard.note_browser_call(self.vm.loop.uid, action=args.action, asked_url=request.get("url", ""),
                                           page_url=seen.group(1) if seen else "", answer=answer)
-        report({"page": text[:VIEW_CHARS]})
+        from app.services import agent_secrets
+        report({"page": agent_secrets.mask(self.vm.loop.uid, text)[:VIEW_CHARS]})
         if status in {"refused", "setup", "failed"}:
             if (args.action == "download" and text.startswith("The download failed: HTTP")
                     and getattr(self.vm.loop, "image_tools", None) is not None):

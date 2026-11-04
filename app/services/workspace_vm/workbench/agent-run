@@ -2,27 +2,151 @@
 # consens.io workbench: one command of the agent (agent_vm.agent_argv,
 # docs/agent-mode.md "Arbeitsplatz"). Started as root by the provider's user
 # (sudo -n), never by the agent, whose user cannot open this folder:
-#   agent-run [--terminal] <seconds> <folder> <program> [args...]
-# --terminal: the user's own terminal (routers/agent_workspace.py, since
-# 2026-10-28) with the same rights and a terminal type for its programs.
+#   agent-run [--terminal | --output <bytes>] <seconds> <folder> <program> [args...]
+# --terminal: the user's own terminal (routers/agent_workspace.py) with the
+# same rights and a terminal type for its programs.
+# --output: a command of the agent's (vm_exec, a background process), with
+# 2 and 5 below; stdout and stderr each pass on their first <bytes> (0: all)
+# as they come and then only their last $keep bytes, at the end. The
+# server's own fixed steps (files, keys, the tunnel) go without.
 # 1. enters a mount namespace of its own without the provider's management
 #    socket (/.sprite/api.sock: checkpoints, services, the VM's lifetime),
 #    its checkpoints and its logs; the runtimes in /.sprite/bin stay;
-# 2. becomes the agent's user with no way back to root (setpriv
+# 2. puts the command into a cgroup of its own, where the VM has cgroup v2;
+# 3. becomes the agent's user with no way back to root (setpriv
 #    --no-new-privs: no sudo, no setuid program) in a clean environment;
-# 3. goes to the folder and runs the program under coreutils timeout.
-# Until 2026-10-29 it also joined a cgroup that a takeover of the browser
-# froze (pause.py; agent_workspace.py "Takeover" says why no more).
+# 4. goes to the folder and runs the program under coreutils timeout;
+# 5. once the program ended, ends what it left running: its cgroup, which
+#    setsid and nohup do not leave, and its process group (all there is
+#    without a cgroup). The call ends with the program, not when the last
+#    process holding its output ends. A watcher in the cgroup ends it too if
+#    this script or sudo is killed (Stop, vm_stop_process).
 # Exit 125: the namespace could not be made, so nothing ran.
 set -u
 user=agent
 home=/home/agent
 term=dumb
+keep=65536
+
+# Where cgroup v2 is mounted, into $root.
+cgroup_root() {
+  local _ dir type rest
+  root=""
+  while read -r _ dir type rest; do
+    if [ "$type" = cgroup2 ]; then
+      root=$dir
+      return 0
+    fi
+  done < /proc/self/mounts
+  return 1
+}
+
+# A process's start time (field 22 of its stat) into $since; empty when
+# it is gone, also when it only waits for its parent to look (a zombie).
+started_at() {
+  local stat
+  since=""
+  read -r stat 2> /dev/null < "/proc/$1/stat" || return 1
+  stat=${stat##*) }
+  # shellcheck disable=SC2086
+  set -- $stat
+  [ "$1" != Z ] || return 1
+  since=${20}
+}
+
+# Whether the process $1 that started at $2 still runs (not one that took
+# its pid since).
+lives() {
+  started_at "$1" && [ "$since" = "$2" ]
+}
+
+# Whether the cgroup $2 says "populated $1".
+populated() {
+  local key value
+  while read -r key value; do
+    [ "$key" = populated ] && [ "$value" = "$1" ] && return 0
+  done 2> /dev/null < "$2/cgroup.events"
+  return 1
+}
+
+# Kills everything in the cgroup $1, then removes it.
+end_group() {
+  local group=$1 pids _ tries
+  if [ -e "$group/cgroup.kill" ]; then
+    echo 1 > "$group/cgroup.kill" 2> /dev/null
+  else
+    [ -e "$group/cgroup.freeze" ] && echo 1 > "$group/cgroup.freeze" 2> /dev/null
+    for _ in 1 2 3 4 5; do
+      pids=$(cat "$group/cgroup.procs" 2> /dev/null)
+      [ -n "$pids" ] || break
+      # shellcheck disable=SC2086
+      kill -KILL $pids 2> /dev/null
+      sleep 0.1
+    done
+    [ -e "$group/cgroup.freeze" ] && echo 0 > "$group/cgroup.freeze" 2> /dev/null
+  fi
+  for ((tries = 0; tries < 400; tries++)); do
+    populated 0 "$group" && break
+    ((tries < 200)) || sleep 0.02
+  done
+  rmdir "$group" 2> /dev/null
+}
+
+# The cgroups of commands whose agent-run is gone (named <pid>-<start>).
+sweep() {
+  local group name
+  for group in "$1"/*/; do
+    [ -d "$group" ] || continue
+    group=${group%/}
+    name=${group##*/}
+    lives "${name%%-*}" "${name#*-}" && continue
+    end_group "$group"
+  done
+}
+
+# The processes in the cgroup $1 that are not root's (the watcher), into $left.
+count_left() {
+  local pid key uid _
+  left=0
+  while read -r pid; do
+    while read -r key uid _; do
+      if [ "$key" = Uid: ]; then
+        [ "$uid" = 0 ] || left=$((left + 1))
+        break
+      fi
+    done 2> /dev/null < "/proc/$pid/status"
+  done 2> /dev/null < "$1/cgroup.procs"
+}
+
+# stdin to stdout: the first $1 bytes as they come (head without stdbuf
+# would hold them until its buffer is full), then the last $keep.
+limit() {
+  if command -v stdbuf > /dev/null; then
+    stdbuf -o0 head -c "$1" || exit 0
+  else
+    head -c "$1" || exit 0
+  fi
+  exec tail -c "$keep"
+}
+
+if [ "${1:-}" = "--watch" ]; then
+  # In the command's cgroup ($4) for its agent-run and sudo above it
+  # ($2, $3: pid:start; empty when it could not be read).
+  exec {pause}<> <(:)
+  while lives "${2%:*}" "${2#*:}" && { [ -z "$3" ] || lives "${3%:*}" "${3#*:}"; }; do
+    read -r -t 1 -u "$pause" _
+  done
+  # Out of the cgroup it ends (into the hierarchy's root, $5).
+  echo $$ > "$5/cgroup.procs" 2> /dev/null
+  end_group "$4"
+  exit 0
+fi
 
 if [ "${1:-}" = "--inside" ]; then
   shift
-  term=$1
-  shift
+  mode=$1
+  output=$2
+  shift 2
   # Only in a namespace of its own: here the mounts would hide the socket
   # from the provider's own programs as well.
   if [ "$(readlink /proc/self/ns/mnt)" = "$(readlink /proc/1/ns/mnt)" ]; then
@@ -39,19 +163,117 @@ if [ "${1:-}" = "--inside" ]; then
     fi
   done
   umask 022
-  exec setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs --inh-caps=-all -- \
-    /usr/bin/env -i HOME="$home" USER="$user" LOGNAME="$user" SHELL=/bin/bash LANG=C.UTF-8 TERM="$term" \
-    PATH="$home/.local/bin:/.sprite/bin:/usr/local/bin:/usr/bin:/bin" \
-    /bin/bash -c 'cd -- "$1" 2>/dev/null || { echo "No such folder: $1" >&2; exit 1; }
+  [ "$mode" = terminal ] && term=xterm-256color
+  run() {
+    exec setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs --inh-caps=-all -- \
+      /usr/bin/env -i HOME="$home" USER="$user" LOGNAME="$user" SHELL=/bin/bash LANG=C.UTF-8 TERM="$term" \
+      PATH="$home/.local/bin:/.sprite/bin:/usr/local/bin:/usr/bin:/bin" \
+      /bin/bash -c 'cd -- "$1" 2>/dev/null || { echo "No such folder: $1" >&2; exit 1; }
 seconds=$2; shift 2; exec timeout --kill-after=5 "$seconds" "$@"' agent-run "$folder" "$seconds" "$@"
+  }
+  [ "$output" = - ] && run "$@"
+
+  child=""
+  stop=""
+  forward() {
+    stop=$1
+    [ -n "$child" ] && kill "-$1" "$child" 2> /dev/null
+  }
+  trap 'forward TERM' TERM
+  trap 'forward INT' INT
+  trap 'forward HUP' HUP
+
+  group=""
+  if cgroup_root && mkdir -p "$root/consens-run" 2> /dev/null && [ -e "$root/consens-run/cgroup.procs" ] \
+      && started_at $$; then
+    me="$$:$since"
+    group="$root/consens-run/$$-$since"
+    parent=""
+    started_at "$PPID" && parent="$PPID:$since"
+    sweep "$root/consens-run"
+    mkdir "$group" 2> /dev/null || group=""
+  fi
+
+  # The command's output through limit; the second one holds no end of
+  # the first one's pipe.
+  limited=""
+  exec 7>&1 8>&2
+  if [ "$output" -gt 0 ]; then
+    exec 7> >(limit "$output" 2> /dev/null)
+    out=$!
+    exec 8> >(exec 7>&-; limit "$output" >&2 2> /dev/null)
+    err=$!
+    limited=1
+  fi
+
+  if [ -n "$stop" ]; then
+    [ -n "$group" ] && rmdir "$group" 2> /dev/null
+    exit 143
+  fi
+  # stdin as given (an asynchronous command would get /dev/null). The
+  # watcher starts in the cgroup already: moving a process is slow.
+  (
+    if [ -n "$group" ] && echo "$BASHPID" > "$group/cgroup.procs" 2> /dev/null; then
+      setsid /bin/bash "$0" --watch "$me" "$parent" "$group" "$root" < /dev/null > /dev/null 2>&1 &
+    fi
+    run "$@"
+  ) <&0 >&7 2>&8 7>&- 8>&- &
+  child=$!
+  exec 7>&- 8>&-
+  [ -n "$stop" ] && kill "-$stop" "$child" 2> /dev/null
+
+  while :; do
+    wait "$child"
+    status=$?
+    # A forwarded signal ends the wait, not the command.
+    if [ "$status" -gt 128 ] && kill -0 "$child" 2> /dev/null; then
+      continue
+    fi
+    break
+  done
+
+  # Its process group as well: all there is without a cgroup, or when the
+  # command could not join it.
+  left=0
+  [ -n "$group" ] && count_left "$group"
+  grouped=$(pgrep -g "$child" 2> /dev/null | wc -l)
+  [ "$grouped" -gt 0 ] && kill -KILL -- "-$child" 2> /dev/null
+  [ -n "$group" ] && end_group "$group"
+  [ "$left" -gt 0 ] || left=$grouped
+  if [ -n "$limited" ]; then
+    # Their pipes end with the last process that writes to them; one that
+    # left no cgroup to end it would hold them open.
+    for ((tries = 0; tries < 150; tries++)); do
+      started_at "$out" || started_at "$err" || break
+      sleep 0.02
+    done
+    for pid in "$out" "$err"; do
+      started_at "$pid" || continue
+      pkill -KILL -P "$pid" 2> /dev/null
+      kill -KILL "$pid" 2> /dev/null
+    done
+  fi
+  if [ "$left" -gt 0 ]; then
+    if [ "$left" = 1 ]; then what="1 process"; else what="$left processes"; fi
+    printf '\n[consens.io] Ended with the command: %s it left running in the background.\n' "$what" >&2
+  fi
+  exit "$status"
 fi
 
+mode=command
+output=-
 if [ "${1:-}" = "--terminal" ]; then
   shift
-  term=xterm-256color
+  mode=terminal
+elif [ "${1:-}" = "--output" ]; then
+  output=${2:-}
+  shift 2 2> /dev/null || shift
+  case "$output" in
+    "" | *[!0-9]*) output=x ;;
+  esac
 fi
-if [ "$#" -lt 3 ] || [ "$(id -u)" != 0 ] || ! id -u "$user" >/dev/null 2>&1; then
-  echo "agent-run: usage: sudo agent-run [--terminal] <seconds> <folder> <program> [args...]" >&2
+if [ "$output" = x ] || [ "$#" -lt 3 ] || [ "$(id -u)" != 0 ] || ! id -u "$user" > /dev/null 2>&1; then
+  echo "agent-run: usage: sudo agent-run [--terminal | --output <bytes>] <seconds> <folder> <program> [args...]" >&2
   exit 125
 fi
-exec unshare --mount --propagation private -- /bin/bash "$0" --inside "$term" "$@"
+exec unshare --mount --propagation private -- /bin/bash "$0" --inside "$mode" "$output" "$@"

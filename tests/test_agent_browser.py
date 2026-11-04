@@ -17,6 +17,8 @@ from test_agent_vm import chat_path, NAME, Agent, _admin_allowance, fake_vm, res
 
 BROWSER = agent_vm.browser_name(UID)
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
+# The real start before the first call; the shared fixture turns it off.
+PREWARM = agent_vm_tools.VMTools.prewarm
 
 
 @pytest.fixture(autouse=True)
@@ -36,17 +38,44 @@ def call(browser, **arguments):
 
 
 def test_the_browser_goes_on_once_the_days_vm_time_is_used_up(store, fake_vm, monkeypatch):
-    """Its actions are steps of the agent's model, not VM time: until
-    2026-10-31 a used-up day (a dev server's reserve, the user watching the
-    view) turned the browser off with the commands."""
+    """A used-up day (a dev server's reserve, the user watching the view)
+    no longer turns the browser off with the commands, and what it then
+    runs never drives the account past its limit."""
     from app.services import agent_vm_time
     monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
-    agent_vm_time.charge(store, UID, 100)
-    loop = vm_loop(store, Agent([[("browser", {"action": "read"})], [("vm_exec", {"command": "ls"})]]))
+    agent_vm_time.charge(store, UID, 99.8)
+    loop = vm_loop(store, Agent([[("browser", {"action": "read"})], [("browser", {"action": "text"})],
+                                 [("vm_exec", {"command": "ls"})]]))
     list(loop.run())
-    read, refused = results(loop)
-    assert read["action"] == "read" and read["page"].startswith('Page: "Example"')
+    read, text, refused = results(loop)
+    assert read["action"] == "read" and read["page"].startswith('Page: "Example"') and text["action"] == "text"
     assert refused == {"error": agent_vm_tools.VM_DAY_LIMIT}
+    # Two actions of .5 s each with .2 s left: the day ends at its limit.
+    assert agent_vm_time.used(store.db, UID) == pytest.approx(100)
+
+
+def test_the_browsers_warm_up_is_no_vm_time(store, fake_vm, monkeypatch):
+    """The server starts the browser before the agent needs it, at every
+    message of a chat that used the workspace last (VMTools.prewarm), with
+    Chrome's start of 5 to 65 s: the user's wish, not the account's time."""
+    from app.services import agent_vm_time
+    monkeypatch.setattr(agent_vm_tools.VMTools, "prewarm", PREWARM)
+
+    def warmed(loop):
+        loop.vm_tools.prewarm(bench=False).join(5)
+        loop.vm_tools.browser_tools.warming.join(5)
+    loop = vm_loop(store, Agent([[("browser", {"action": "read"})]]))
+    warmed(loop)
+    assert BROWSER in fake_vm.warmed and loop.vm_tools.session.seconds == 0
+    list(loop.run())
+    # The action alone counts, its .5 s.
+    assert loop.vm_tools.session.seconds == pytest.approx(.5)
+    assert agent_vm_time.used(store.db, UID) == pytest.approx(.5)
+    # A message that only warmed the browser charges nothing.
+    idle = vm_loop(store, Agent(), request_id="idle")
+    warmed(idle)
+    idle.vm_tools.session.close()
+    assert len(fake_vm.warmed) > 1 and agent_vm_time.used(store.db, UID) == pytest.approx(.5)
 
 
 def test_the_agent_uses_the_browser_through_typed_actions_on_its_own_vm(store, fake_vm):
@@ -77,8 +106,8 @@ def test_the_agent_uses_the_browser_through_typed_actions_on_its_own_vm(store, f
     # The activity keeps what the page said, as the browser merges a call's updates.
     saved = [e for e in store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_activity"] if e.get("name") == "browser"]
     assert saved[0]["page"].startswith('Page: "Example"') and saved[0]["status"] == "succeeded"
-    # Its time counts as VM time.
-    assert loop.vm_tools.session.seconds >= 1.5
+    # Its actions' time counts as VM time, its warm-up's not.
+    assert loop.vm_tools.session.seconds == pytest.approx(1.5)
     entry = next(e for e, _ in loop.work_log.entries_after(0) if e["kind"] == "tool" and e["name"] == "browser")
     assert entry["data"] == "web"
 
@@ -209,6 +238,31 @@ def test_an_upload_copies_one_file_of_the_workbench_for_that_call(store, fake_vm
     assert target not in fake_vm.vms[BROWSER]["files"]
     with pytest.raises(ValueError, match="No file at"):
         call(browser, action="upload", ref="e3", file="missing.pdf")
+
+
+def test_an_upload_never_sends_a_key_the_user_gave(store, fake_vm, monkeypatch):
+    """upload reads any file of the workbench and puts it into any form:
+    never one of ~/.secrets, nor a file that holds a saved key (a copy, a
+    link to one, an .env), and nothing of it reaches the browser VM."""
+    from app.services import agent_secrets
+    monkeypatch.setattr(agent_secrets, "_seen", {})
+    key = "sk-proj-0123456789abcdef"
+    agent_secrets.remember(UID, key, "OPENAI_API_KEY")
+    loop, browser = tools(store)
+    folder = chat_path(loop.chat_id)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    files = fake_vm.vms[NAME]["files"]
+    files[agent_secrets.path("OPENAI_API_KEY")] = key.encode()
+    files[f"{folder}/app/.env"] = f"PORT=3000\nOPENAI_API_KEY={key}\n".encode()
+    for file in ("~/.secrets/OPENAI_API_KEY", "//home/agent/.secrets/OPENAI_API_KEY", "../../.secrets/OPENAI_API_KEY",
+                 "app/.env"):
+        with pytest.raises(ValueError, match="holds the user's key OPENAI_API_KEY"):
+            call(browser, action="upload", ref="e3", file=file)
+    assert fake_vm.requests == [] and not [path for _, path in fake_vm.server_files
+                                          if path.startswith(agent_workspace.BROWSER_UPLOADS)]
+    # Any other file goes as before.
+    files[f"{folder}/app/README.md"] = b"PORT=3000\n"
+    assert call(browser, action="upload", ref="e3", file="app/README.md")["action"] == "upload"
 
 
 def downloaded(fake_vm, *files):
