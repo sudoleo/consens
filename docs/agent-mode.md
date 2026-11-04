@@ -997,11 +997,23 @@ cachebar bleibt. Ausgaben an das Modell behalten je Strom das Ende
 (`MODEL_STREAM_CHARS` = 12.000), die Kürzung steht als
 `[… N earlier bytes of stdout omitted …]` im Text; Farbcodes fallen weg, von
 einer per `\r` überschriebenen Zeile (Fortschrittsbalken) bleibt der letzte
-Stand. Ein Befehl läuft nie länger als sein Limit und nie länger, als die
-Antwort noch Zeit lässt (`answer_time_left`; unter `MIN_COMMAND_SECONDS` = 15
-startet er nicht, „Not enough time…“). Die Grenze setzt die VM selbst
-(`agent-run` startet den Befehl unter `timeout --kill-after=5`), sie gilt also
-auch ohne Verbindung. Die Login-Umgebung (PATH mit `/.sprite/bin` und
+Stand. Gespeicherte Keys sind vor jeder Kürzung maskiert (siehe „Ein Key, den
+der Agent braucht“). Die VM selbst schickt je Strom höchstens die ersten
+`agent_vm.OUTPUT_BYTES` (8 MiB) sofort und danach nur die letzten 64 KiB am
+Ende (`agent-run --output`): `yes` streamte vorher 300 s lang alles durch den
+einen uvicorn-Prozess; das Ergebnis sagt dann `OUTPUT_CUT_NOTE`. Ein Befehl
+läuft nie länger als sein Limit und nie länger, als die Antwort noch Zeit
+lässt (`answer_time_left`; unter `MIN_COMMAND_SECONDS` = 15 startet er nicht,
+„Not enough time…“). Die Grenze setzt die VM selbst (`agent-run` startet den
+Befehl unter `timeout --kill-after=5`), sie gilt also auch ohne Verbindung.
+Was ein Befehl im Hintergrund laufen lässt (`&`, auch mit `setsid` oder
+`nohup`), endet mit ihm, und mit ihm endet der Aufruf: `agent-run` steckt
+jeden Befehl in eine eigene cgroup und beendet sie, sobald das Programm
+endet (unten). Vorher hielt ein `cmd &` den Exec offen, bis das volle Limit
+ablief und als `timed_out` las, und mit `setsid`/`nohup` gestartete Kinder
+überlebten Limit, Stop, `vm_stop_process` und das Löschen des Chats, ohne
+VM-Zeit. Das Ergebnis sagt es ruhig (`BACKGROUND_ENDED_NOTE`: Server gehören
+zu `vm_start_process`, im Vordergrund ihres Befehls). Die Login-Umgebung (PATH mit `/.sprite/bin` und
 `~/.local/bin`) lädt still vorweg (`SHELL_PRELUDE`): Die `.bashrc` der Sprite
 warnt sonst in jedem Befehl über `bind`; die Ausgabe des Befehls selbst bleibt
 ungefiltert. Seit 2026-10-27 außerdem `vm_install_packages` (`packages`:
@@ -1010,7 +1022,9 @@ ungefiltert. Seit 2026-10-27 außerdem `vm_install_packages` (`packages`:
 quotiert hinter `--`): Der Agent hat kein sudo, der Server installiert als
 root (erst `dpkg --configure -a`, das eine abgebrochene Installation beendet,
 seit 2026-11-04; `apt-get update` nur, wenn die Listen älter als ein Tag sind), bis
-300 s, zählt zur VM-Zeit. Python-Pakete installiert er mit pip (fällt von
+300 s, zählt zur VM-Zeit; ihre Dienste starten nicht (`/usr/sbin/policy-rc.d`
+mit `exit 101`, von `setup.sh` gelegt: sie liefen sonst als root außerhalb
+der Befehle und Grenzen des Agenten). Python-Pakete installiert er mit pip (fällt von
 selbst auf `~/.local` zurück, gemessen) oder uv, Node-Pakete mit npm im
 Projekt (`nvm` verträgt kein eigenes `prefix`, `npx` für Werkzeuge). Dazu
 `browser` (siehe „Arbeitsplatz“) und `request_domain` (siehe „Netz der
@@ -1450,10 +1464,13 @@ mit den Mitteln des Rechners nicht:
   2026-10-30 verlängert ein eigener Thread sie alle `LEASE_KEEP_SECONDS`
   (4 min), auch während die Nachricht auf den Nutzer wartet (`ask_user`,
   Übernahme, Halt; vorher nur ein VM-Aufruf, A2); das
-  Nachrichtenende gibt sie frei, ein abgestürzter Lauf blockiert höchstens bis
-  zu ihrem Ablauf. Ein Restore geht auch dann nicht, wenn die Sperre abgelaufen
-  ist, der Chat der Sperre aber noch eine Antwort laufen hat (seine Run-Sperre
-  `agent_lock_until`, `agent_workspace.in_use`). Ein anderer Chat bekommt in der Zeit `VM_BUSY` und
+  Nachrichtenende gibt sie frei. Ein abgestürzter Lauf blockiert bis zu ihrem
+  Ablauf, aber nur, solange die Run-Sperre seines Chats (`agent_lock_until`,
+  die der laufende Lauf weiterschiebt) noch gilt: `claim` übernimmt die
+  Sperre eines Chats ohne laufende Antwort (`agent_workspace._runs`), sonst
+  bekam jeder andere Chat bis zu 10 Minuten `VM_BUSY`. Ein Restore geht auch
+  dann nicht, wenn die Sperre abgelaufen ist, der Chat der Sperre aber noch
+  eine Antwort laufen hat (`agent_workspace.in_use`). Ein anderer Chat bekommt in der Zeit `VM_BUSY` und
   antwortet ohne VM. Dieselbe Chat-Folge (eine Nachricht zur Zeit) übernimmt
   ihre eigene Sperre. Das Werkzeug `browser` nutzt dieselbe Sperre.
 - **Ordner pro Chat.** `/home/agent/chats/<chat>`: Befehle starten dort,
@@ -1501,17 +1518,44 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
 - **`agent-run`** (`workspace_vm/workbench/agent-run`, `agent_vm.agent_argv`):
   Jeder Befehl des Agenten (`vm_exec`, Hintergrundprozesse, Entpacken eines
   Imports, Liste der Änderungen für einen PR) läuft als
-  `sudo -n /bin/bash agent-run <Sekunden> <Ordner> <argv…>`. Der Wrapper (root)
-  tritt der cgroup `consens-agent` bei, ruft sich in einem eigenen
-  Mount-Namespace auf (`unshare --mount --propagation private`; im Namespace
-  des Anbieters verweigert er, sonst fehlte der Socket auch dem Anbieter),
-  blendet dort `/.sprite/api.sock` aus (Bind von `/dev/null`) und legt leere,
+  `sudo -n /bin/bash agent-run --output <Bytes> <Sekunden> <Ordner> <argv…>`,
+  die festen Schritte des Servers (Dateien, Keys, Tunnel) ohne `--output`.
+  Der Wrapper (root) ruft sich in einem eigenen Mount-Namespace auf
+  (`unshare --mount --propagation private`; im Namespace des Anbieters
+  verweigert er, sonst fehlte der Socket auch dem Anbieter), blendet dort
+  `/.sprite/api.sock` aus (Bind von `/dev/null`) und legt leere,
   schreibgeschützte tmpfs über `/.sprite/checkpoints` und `/.sprite/logs`;
   `/.sprite/bin` mit den Laufzeiten bleibt. Danach `setpriv --reuid=agent
   --regid=agent --init-groups --no-new-privs --inh-caps=-all` mit leerer
   Umgebung (`env -i`, HOME, PATH), `cd` in den Ordner und `timeout
   --kill-after=5`. Exit 125 heißt: Der Namespace kam nicht zustande, nichts
-  lief.
+  lief. Mit `--output` bleibt der Wrapper als Aufseher stehen: Der Befehl
+  kommt vor dem Wechsel des Nutzers in eine eigene cgroup v2
+  (`<cgroup2-Wurzel>/consens-run/<pid>-<Start>`, die Wurzel aus
+  `/proc/self/mounts`), die er als Agent nicht verlassen kann, auch nicht mit
+  `setsid`, `nohup` oder Doppel-Fork. Endet das Programm (auch an seinem
+  Limit), zählt der Aufseher, was noch in der cgroup läuft, beendet es
+  (`cgroup.kill`, ohne das Einfrieren und KILL je Prozess), entfernt die
+  cgroup und schreibt bei Resten auf stderr „[consens.io] Ended with the
+  command: N processes it left running in the background.“
+  (`agent_vm.BACKGROUND_ENDED`); der Exit-Code bleibt der des Programms.
+  TERM, INT und HUP gibt er an `timeout` weiter (Stop, `vm_stop_process`
+  über sudo). Ein Wächter (root, eigene Sitzung, in der cgroup des Befehls
+  gestartet, weil das Verschieben eines Prozesses Millisekunden kostet)
+  beendet die cgroup, sobald der Aufseher oder dessen sudo nicht mehr lebt
+  (geprüft mit Startzeit, also nie ein Prozess, der die PID übernahm), etwa
+  wenn der Anbieter die Exec-Sitzung beim Stop tötet; der nächste Befehl
+  räumt cgroups weg, deren Aufseher fehlt. `--output N` lässt je Strom die
+  ersten N Bytes sofort durch (`stdbuf -o0 head -c`, sonst puffert `head`)
+  und dann nur die letzten 64 KiB (`tail -c`); `--output 0` (Hintergrundprozesse,
+  deren `output.log` wachsen soll) lässt alles durch. Ohne cgroup v2 auf der VM
+  endet nur die Prozessgruppe des Befehls (`&`, nicht `setsid`), der Aufruf
+  aber trotzdem kurz nach dem Programm (die Leitungen enden nach höchstens
+  3 s). Kosten gemessen in einem Linux-Container (Kernel 6.18, 2 Kerne): rund
+  25 ms mehr je Befehl (Verschieben in die cgroup, Wächter, Leitungen); die
+  Fälle selbst laufen dort als root in `tests/test_agent_vm_run.py`. Auf
+  einer Sprite ungeprüft (kein Token); die cgroup v2 mit `cgroup.freeze` gab
+  es dort, als `agent-run` bis 2026-10-29 der cgroup `consens-agent` beitrat.
 - **Dateien des Agenten nie über die Datei-API.** Die Datei-API schreibt als
   `sprite`; ein Pfad des Agenten erreichte damit `/home/sprite`, auch den
   Wrapper selbst (ein `vm_write_file` darauf wäre root gewesen). Deshalb
@@ -1667,9 +1711,13 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
 - **Hintergrundprozesse.** Der Aufseher (`RUNNER`) gehört dem Server: Er liegt
   in `/home/sprite/.consens/processes/<id>`, läuft als `sprite` und hält die
   Sprite über `api.sock` wach; nur der Befehl selbst läuft über `launch.sh`
-  (`exec sudo -n /bin/bash agent-run …`) als Agent. Stopp: TERM an `sudo`, das
-  ihn an `timeout` weitergibt; nach 10 s KILL an die ganze Sitzung des
-  Aufsehers als root (`pkill -s`). Seit 2026-11-01 nennt die Datei `chat`
+  (`exec sudo -n /bin/bash agent-run --output 0 …`) als Agent; was er im
+  Hintergrund lässt, endet mit ihm. Stopp: TERM an `sudo`, das ihn über
+  `agent-run` an `timeout` weitergibt; nach 10 s KILL an die ganze Sitzung des
+  Aufsehers als root (`pkill -s`). Beides nur, solange die Sitzung noch die des
+  Aufsehers ist (`/proc/<sid>/cmdline` nennt sein `run.sh`): Nach einem
+  Kaltstart oder Restore gehören die gespeicherten PIDs womöglich fremden
+  Prozessen; ein verlorener Prozess endet dann sofort statt nach 10 s. Seit 2026-11-01 nennt die Datei `chat`
   im Prozessordner den startenden Chat: Mit dem Chat gehen seine Prozesse
   (`delete_for_chat` in `agent_vm.delete_chat_vm`: ein laufender mit
   demselben Stopp, die nicht verbrauchte VM-Zeit von heute zurück, dann der
@@ -2117,14 +2165,18 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   Ports, die der Tunnel hält (`local_ports` in jeder Anfrage). `upload` liest eine Datei der Werkbank als
   Agent (bis 15 MB), legt sie für diesen einen Aufruf in
   `~/.consens/browser/uploads` der Browser-VM und löscht sie danach; der Helfer
-  nimmt nur Dateien aus diesem Ordner. `screenshot` kommt als Bild zum Agenten
+  nimmt nur Dateien aus diesem Ordner. Nie eine aus `~/.secrets` und nie eine,
+  deren Bytes einen gespeicherten Key enthalten (eine Kopie, ein Link darauf,
+  eine `.env`; `agent_secrets.holds`, `UPLOAD_KEY_REFUSED`): Schutz gegen ein
+  Formular, das einen Key mitnimmt, nicht gegen einen umkodierten. `screenshot` kommt als Bild zum Agenten
   (wie `vm_view_image`, nur für Bildmodelle). Die Prüfer folgen jeder Aktion
   live; bis 2026-10-29 warteten `open`, `click`, `upload`, `key Enter`,
   `key Space` und `type` mit `enter` vorher auf sie (Vorab-Prüfung).
   Die Einrichtung läuft synchron im ersten Aufruf (bis 100 s): Im Hintergrund
   fror sie mit der schlafenden Sprite ein (gesehen 2026-10-27). Fällt die
-  Browser-VM aus, ist nur `browser` für die Nachricht aus. Die Zeit zählt als
-  VM-Zeit.
+  Browser-VM aus, ist nur `browser` für die Nachricht aus. Die Zeit, die der
+  Helfer für eine Aktion läuft, zählt als VM-Zeit (siehe „VM-Zeit pro Tag“),
+  das Vorwärmen nicht.
 - **Ein Chrome, der nicht mehr antwortet, heilt sich (seit 2026-10-28).**
   Anlass, Max' Browser-VM am 2026-10-28 (Chat „Bester HSG-Spieler“, Live-Ansicht
   offen): `open` auf linktr.ee lief in `Page.goto: Timeout 30000ms`, der
@@ -2415,12 +2467,22 @@ mit `audit_access`). Die
   Modell und dem Protokoll in `DelegationLoop`, jede Aktivität in
   `AgentLoop.activity`; ab 8 Zeichen): Die Maske sagt, wo der Key liegt und
   dass die Datei stimmt, damit der Agent sie nicht für einen Platzhalter hält
-  und neu fragt. Nach einem Neustart des Servers ist nichts mehr im Speicher:
-  Jeder VM-Start einer Nachricht liest die Keys, die `Claim.secrets` nennt,
-  als Agenten-Nutzer wieder ein (`agent_secrets.load`, `VMSession.ready`,
-  eine Ausführung, nur wenn es Keys gibt; ein gelöschter fehlt einfach), und
-  das erste VM-Ergebnis nennt dem Agenten die Namen (`workspace_keys`, auch
-  in späteren Chats; der VM-Prompt sagt, wo sie liegen). Die Datei bleibt auf
+  und neu fragt. `scrub` trifft nur ganze Werte; was gekürzt wird, maskiert
+  deshalb vorher `agent_secrets.mask` (die Enden der Ströme für Modell und
+  Ansicht in `agent_vm_tools.tail`, die Ausgabe eines Hintergrundprozesses,
+  eine lange Zeile in `vm_read_file`, der Ausschnitt von `vm_edit_file`, die
+  Seite in der Aktivität des Browsers), sonst blieb ein Key an der
+  Schnittstelle teilweise sichtbar. Beginnt der Text schon mitten in einer
+  längeren Ausgabe (die behaltenen 64 KiB) oder endet er, während der Befehl
+  noch läuft, maskiert `mask` dort auch ein angeschnittenes Stück eines Keys
+  ab `EDGE_CHARS` = 4 Zeichen. Nach einem Neustart des Servers ist nichts mehr
+  im Speicher: Jeder Start der Werkbank in einer Nachricht liest die Keys, die
+  `Claim.secrets` nennt, als Agenten-Nutzer wieder ein (mit Ordner und
+  Notizen in einem Befehl, `agent_workspace.open_chat`; ein gelöschter fehlt
+  einfach), und das erste VM-Ergebnis nennt dem Agenten die Namen
+  (`workspace_keys`, auch in späteren Chats; der VM-Prompt sagt, wo sie
+  liegen). Der Browser lädt keine Datei hoch, die einen Key enthält (siehe
+  „Arbeitsplatz“, `upload`). Die Datei bleibt auf
   der Werkbank, bis der Nutzer sie löscht (Terminal), wie eine `.env` seines
   Rechners.
 - **Der Agent wartet, solange der Nutzer übernommen hat** (Fund 3). Zwei
@@ -2775,10 +2837,10 @@ Policy wie in einer laufenden Nachricht: `WORKBENCH_RULES` plus
 - **Sandbox:** ohne `--no-sandbox`. In der Sonde liefen die Renderer in einem
   eigenen User- und PID-Namespace mit `Seccomp: 2`; `unshare --user
   --map-root-user` gelingt dem Agenten (`user.max_user_namespaces` 63951).
-- **Nebenbefund, nicht behoben:** Ein Hintergrundprozess, in der Sonde als
-  Agent mit `setsid nohup … &` in einem Exec gestartet, hielt diesen Exec
-  offen, bis sein Zeitlimit (170 s) ablief; der Server lief danach weiter.
-  Dev-Server gehören ohnehin zu `vm_start_process`, so sagt es der Prompt.
+- **Nebenbefund:** Ein Hintergrundprozess, in der Sonde als Agent mit
+  `setsid nohup … &` in einem Exec gestartet, hielt diesen Exec offen, bis
+  sein Zeitlimit (170 s) ablief; der Server lief danach weiter. Behoben durch
+  die cgroup je Befehl in `agent-run` (oben).
 
 **Arbeitsstand über Nachrichten (seit 2026-10-26).** Frühere Nachrichten
 erreichen den Agenten sonst nur als Frage und Antwort. Ein Turn, in dem die VM
@@ -2821,7 +2883,12 @@ Pro `PRO_DAILY_SECONDS` = 2 Stunden, jedes andere Konto seit 2026-10-30
 Sicherheitsaudit 2026-10-27 zählt jeder Befehl, den der Server für die Arbeit
 des Agenten in der VM ausführt (`VMTools._exec`): auch das Warten in
 `vm_process_output` (gedeckelt auf den Rest), das Entpacken von
-`github_import` und die offene Live-Ansicht. Endet ein Hintergrundprozess vor
+`github_import` und die offene Live-Ansicht. Die Aktionen des Browsers zählen
+mit der Zeit, die sein Helfer für sie läuft; das Vorwärmen (die Aktion
+`warm`, `BrowserTools._warm`, bei `open_workspace` und bei jeder Nachricht
+eines Chats, dessen letzte den Arbeitsplatz nutzte, mit Chromes Start von
+5 bis 65 s) und das `rest` am Nachrichtenende zählen nicht
+(`_helper(counted=False)`, ausdrücklicher Wunsch des Nutzers). Endet ein Hintergrundprozess vor
 seinem Zeitlimit, kommt seit 2026-10-30 die ungenutzte Zeit zurück (K5,
 `agent_vm_time.refund`, siehe „Hintergrundprozesse“). Ein Befehl läuft nie
 über den Rest (`VMTools._timeout`); stoppt ihn das, sagt sein Ergebnis das
@@ -2832,8 +2899,10 @@ Standardlimit (30 min) einem Konto ohne Pro alle 20 Minuten, und sein Agent
 konnte ihn danach weder lesen noch stoppen. Ist nichts mehr übrig, bekommt
 der Agent für Befehle, Installationen und neue Prozesse `VM_DAY_LIMIT`
 (`VMTools._start` mit `spends`); Dateien, Ausgabe und Stopp eines Prozesses
-und der Browser laufen weiter, sie zählen nicht (vorher sperrte das Limit den
-ganzen Arbeitsplatz). Liegt der Rest unter `DAY_NOTE_SECONDS` (30 min),
+und der Browser laufen weiter (vorher sperrte das Limit den ganzen
+Arbeitsplatz). Dateien zählen nichts; was Ausgabe, Stopp und Browser noch in
+der VM laufen, zählt nur bis zum Limit (`VMSession.spend`, wie jede gezählte
+Zeit): Der Browser trieb `used` sonst über das Limit. Liegt der Rest unter `DAY_NOTE_SECONDS` (30 min),
 nennt ihn das erste Ergebnis einer Nachricht (`vm_time_left_today`,
 `VMSession.announce`), damit der Agent seine Befehle danach plant. Die
 Aktivität sagt bei einer Ablehnung „Skipped · workspace time for today used
@@ -2925,13 +2994,17 @@ zur Rechenzeit des Anbieters (laut OpenRouter `generation_time` teils 45 ms),
 bis die Bilder aus der Sicht fielen; danach 2,9 s.
 
 **Hintergrundprozesse (seit 2026-10-26).** Ein mit `&` in `vm_exec`
-gestarteter Prozess endet, sobald die Sprite pausiert (nach wenigen Sekunden
-Leerlauf, also zwischen zwei Schritten des Agenten). Für Dev-Server und lange
-Tests gibt es deshalb `vm_start_process` (`command`, `cwd`, `max_seconds`
+gestarteter Prozess endet mit seinem Befehl (`agent-run`, siehe oben); vorher
+lief er bis zur Pause der Sprite (nach wenigen Sekunden Leerlauf, also
+zwischen zwei Schritten des Agenten) und hielt den Aufruf offen. Für
+Dev-Server und lange Tests gibt es deshalb `vm_start_process` (`command`, `cwd`, `max_seconds`
 Standard 1.800, höchstens 3.600), `vm_process_output` (`id`, optional
 `wait_seconds` bis 60, begrenzt durch `answer_time_left`; ohne `id` die Liste)
 und `vm_stop_process` (`id`; TERM an `timeout`, das die ganze Prozessgruppe
-beendet, nach 10 s KILL) in `agent_vm_processes.py`. Je Prozess liegt in
+beendet, `agent-run` den Rest der cgroup, nach 10 s KILL) in
+`agent_vm_processes.py`. Legt der Befehl selbst seinen Server mit `&` in den
+Hintergrund, endet beides sofort, und das Ergebnis sagt es
+(`FOREGROUND_NOTE`: im Vordergrund des Befehls laufen lassen). Je Prozess liegt in
 `~/.consens/processes/<id>` ein Aufseher-Skript (`RUNNER`): Es startet den
 Befehl unter `timeout --kill-after=5 <max_seconds>` mit der Login-Umgebung,
 schreibt die gemeinsame Ausgabe nach `output.log`, hält die Sprite über die

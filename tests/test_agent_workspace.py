@@ -60,6 +60,25 @@ def test_one_chats_message_at_a_time_and_a_lease_ends_or_expires(store):
     agent_workspace.claim(store, UID, first, "turn-5", provider="fake")
 
 
+def test_a_lease_whose_chat_runs_no_response_any_more_blocks_nobody(store):
+    """A server that died with its response left the lease for up to
+    LEASE_SECONDS; its run lock runs out within minutes, and then the
+    workspace is free for the next chat, as for a restore (in_use)."""
+    first, _ = pending(store)
+    second, _ = pending(store, request_id="second")
+    agent_workspace.claim(store, UID, first, "turn-1", provider="fake")
+    with pytest.raises(agent_workspace.WorkspaceBusy):
+        agent_workspace.claim(store, UID, second, "turn-2", provider="fake")
+    store._chat_ref(UID, first).update({"agent_lock_until": datetime.now(timezone.utc) - timedelta(seconds=1)})
+    agent_workspace.claim(store, UID, second, "turn-2", provider="fake")
+    assert agent_workspace.held_by(store.db, UID) == second
+    assert agent_workspace.renew(store, UID, "turn-1") is False
+    # A chat gone with its run counts the same.
+    store._chat_ref(UID, second).delete()
+    agent_workspace.claim(store, UID, first, "turn-3", provider="fake")
+    assert agent_workspace.held_by(store.db, UID) == first
+
+
 def test_a_restore_is_told_once_to_every_chat_that_used_the_workspace_before(store):
     first, _ = pending(store)
     second, _ = pending(store, request_id="second")
@@ -153,8 +172,18 @@ def test_the_agent_runs_as_its_own_user_without_the_providers_socket():
     assert "user=agent" in run and f"home={agent_vm.HOME}" in run
     assert agent_vm.agent_argv(["ls"], 30, "/home/agent/x") == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "30",
                                                                 "/home/agent/x", "ls"]
+    # A command of the agent's own (--output) in a cgroup of its own, what
+    # it leaves ended with it, its output bounded (test_agent_vm_run.py
+    # runs it); the server's fixed steps as before.
+    assert "--output" in run and 'echo 1 > "$group/cgroup.kill"' in run and '[ "$output" = - ] && run "$@"' in run
+    assert agent_vm.agent_argv(["ls"], 30, "/home/agent/x", output=0)[4:6] == ["--output", "0"]
+    for count, what in ((1, "1 process"), (3, "3 processes")):
+        said = run.split("printf '", 1)[1].split("'", 1)[0].replace("\\n", "\n") % what
+        assert agent_vm.BACKGROUND_ENDED.search(said)
     setup = agent_workspace.tool_files()["setup.sh"].decode()
     assert f"--uid {agent_vm.AGENT_UID}" in setup.replace('"$uid"', str(agent_vm.AGENT_UID))
+    # A package installed for the agent starts no service as root.
+    assert "printf '#!/bin/sh\\nexit 101\\n' > /usr/sbin/policy-rc.d" in setup
     assert 'gpasswd -d "$user" sudo' in setup and 'chmod 750 "$legacy"' in setup and 'chmod 700 "$home"' in setup
     assert 'install -d -o root -g root -m 0755 "$state"' in setup
     assert 'install -d -o "$user" -g "$user" -m 1777 "$tmp"' in setup and "tmp=$state/agent-tmp" in setup
@@ -438,12 +467,13 @@ def test_the_workbench_no_longer_freezes_at_a_takeover():
     while the user had the browser. Since the browser has a VM of its own,
     nothing of the workbench sees it, and the agent's dev server must answer
     the browser meanwhile (agent_tunnel.py): setup.sh ends a pause still
-    running and thaws what it froze; agent-run joins no cgroup any more."""
+    running and thaws what it froze; agent-run joins neither of its cgroups
+    any more (only one of its own per command, test_agent_vm_run.py)."""
     setup = (agent_workspace._FILES / "workbench" / "setup.sh").read_text()
     assert 'pkill -KILL -f "$legacy/.consens/workspace/pause.py"' in setup
     assert 'echo 0 > "$group/cgroup.freeze"' in setup and 'pkill -CONT -u "$user"' in setup
     run = (agent_workspace._FILES / "workbench" / "agent-run").read_text()
-    assert "cgroup.procs" not in run
+    assert "consens-agent" not in run and "consens-user" not in run
     assert not hasattr(agent_workspace, "PAUSE_COMMAND") and not hasattr(agent_workspace, "CONTROL_PATH")
 
 

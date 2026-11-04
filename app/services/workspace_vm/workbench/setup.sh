@@ -34,6 +34,11 @@ mkdir -p "$home"
 chown "$user:$user" "$home"
 chmod 700 "$home"
 chmod 750 "$legacy"
+# Packages installed for the agent (vm_install_packages, as root) start no
+# service: it would run as root, outside the agent's commands and their
+# limits. invoke-rc.d and deb-systemd-invoke ask this first; 101 refuses.
+printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+chmod 755 /usr/sbin/policy-rc.d
 
 # The agent's /tmp: root's folder above it, so the agent cannot swap it.
 install -d -o root -g root -m 0755 "$state"

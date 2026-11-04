@@ -111,8 +111,8 @@ class _FakeBackend(VMBackend):
 
     def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
         """The browser VM's helper (agent_browser.py) runs this way, and the
-        keys the user gives the agent (agent_secrets.py): saved to and read
-        from the workbench's files, as the agent's user. The chat's folder,
+        keys the user gives the agent (agent_secrets.py): saved to the
+        workbench's files, as the agent's user. The chat's folder,
         marker, keys and notes in one command (agent_workspace.open_chat)
         are its parts as calls of their own: the move, the marker's write,
         the notes' read."""
@@ -120,15 +120,10 @@ class _FakeBackend(VMBackend):
             return self._chat(name, argv, input, on_output)
         self._call("run", name, argv[-1])
         from app.services import agent_secrets
-        if agent_secrets.SAVE_SCRIPT in argv or agent_secrets.LOAD_SCRIPT in argv:
+        if agent_secrets.SAVE_SCRIPT in argv:
             assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN]
             files = self.vm.vms.setdefault(name, {"files": {}, "checkpoints": []})["files"]
-            if agent_secrets.SAVE_SCRIPT in argv:
-                files[agent_secrets.path(argv[-1])] = input
-            else:
-                names = argv[argv.index(agent_secrets.LOAD_SCRIPT) + 2:]
-                on_output("stdout", b"".join(name.encode() + b"\0" + files[agent_secrets.path(name)] + b"\0"
-                                             for name in names if agent_secrets.path(name) in files))
+            files[agent_secrets.path(argv[-1])] = input
             return ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
         request = json.loads(input or b"{}")
         if request.get("action") == "warm":
@@ -503,6 +498,8 @@ def test_one_chat_at_a_time_another_chat_works_on_without_the_vm(store, fake_vm)
     list(holder.run())
     agent_workspace.ref(store.db, UID).update({"lease": {
         "chat_id": holder.chat_id, "turn_id": "running", "until": datetime.now(timezone.utc) + timedelta(minutes=5)}})
+    # Its response still runs (its run lock).
+    store._chat_ref(UID, holder.chat_id).update({"agent_lock_until": datetime.now(timezone.utc) + timedelta(minutes=2)})
     fake_vm.calls.clear()
     other = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]]),
                     request_id="busy")
@@ -521,6 +518,14 @@ def test_one_chat_at_a_time_another_chat_works_on_without_the_vm(store, fake_vm)
     later = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=other.chat_id, request_id="later")
     list(later.run())
     assert results(later)[0]["exit_code"] == 0
+    # Nor does one in its time whose chat runs no response any more (its
+    # server died with it): the run lock ran out before the lease did.
+    agent_workspace.ref(store.db, UID).update({"lease": {
+        "chat_id": holder.chat_id, "turn_id": "crashed", "until": datetime.now(timezone.utc) + timedelta(minutes=8)}})
+    store._chat_ref(UID, holder.chat_id).update({"agent_lock_until": datetime.now(timezone.utc) - timedelta(seconds=1)})
+    after = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=other.chat_id, request_id="after")
+    list(after.run())
+    assert results(after)[0]["exit_code"] == 0
 
 
 def test_a_long_message_keeps_its_lease_and_loses_it_only_to_expiry(store, fake_vm):
@@ -763,6 +768,111 @@ def test_long_output_keeps_its_end_and_says_what_was_cut():
     raw = b"\x1b[32m10%\r50%\r100%\x1b[0m\ndone\r\n"
     shown, cut = tail(raw, len(raw), VIEW_CHARS)
     assert shown == "100%\ndone\n" and cut == 0
+
+
+def test_a_command_that_left_processes_in_the_background_hears_where_they_belong(store, fake_vm):
+    """`cmd &` held the call until its time limit, setsid and nohup children
+    outlived it uncounted. agent-run now ends them with the command and says
+    so on stderr (agent_vm.BACKGROUND_ENDED); the agent hears it calmly, with
+    the tool for a server."""
+    ended = b"\n[consens.io] Ended with the command: 2 processes it left running in the background.\n"
+    fake_vm.commands["npm run dev &"] = ([("stdout", b"started\n"), ("stderr", ended)], 0, .3)
+    fake_vm.commands["sleep 999"] = ([("stdout", b"started\n"), ("stderr", ended)], None, 61.0)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "npm run dev &"})], [("vm_exec", {"command": "sleep 999"})]]))
+    list(loop.run())
+    left, cut = results(loop)
+    assert left["exit_code"] == 0 and left["timed_out"] is False and "2 processes it left" in left["stderr"]
+    assert left["note"] == agent_vm_tools.BACKGROUND_ENDED_NOTE and "vm_start_process" in left["note"]
+    # Both, when its limit ended it.
+    assert cut["note"] == f"The command was stopped after its time limit of 60 seconds. {agent_vm_tools.BACKGROUND_ENDED_NOTE}"
+    fake_vm.commands["ls"] = ([("stdout", b"a\n")], 0, .1)
+    plain = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="plain")
+    list(plain.run())
+    assert "note" not in results(plain)[0]
+
+
+def test_output_past_what_the_vm_sends_says_its_middle_is_missing(store, fake_vm, monkeypatch):
+    """`yes` for 300 s streamed everything through the server; agent-run
+    passes on OUTPUT_BYTES of each stream as it comes, then only its end."""
+    monkeypatch.setattr(agent_vm, "OUTPUT_BYTES", 2 * 1024 * 1024)
+    fake_vm.commands["yes"] = ([("stdout", b"y\n" * (1024 * 1024 + 10))], None, 61.0)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "yes"})]]))
+    list(loop.run())
+    [result] = results(loop)
+    assert result["note"] == ("The command was stopped after its time limit of 60 seconds. "
+                              + agent_vm_tools.OUTPUT_CUT_NOTE.format(stream="stdout", mb=2))
+    assert "first 2 MB of each stream" in result["note"]
+
+
+KEY = "sk-proj-" + "0123456789abcdef" * 3
+KEY_MASK = "[secret ~/.secrets/OPENAI_API_KEY, hidden from you]"
+
+
+@pytest.fixture
+def a_key(monkeypatch):
+    from app.services import agent_secrets
+    monkeypatch.setattr(agent_secrets, "_seen", {})
+    agent_secrets.remember(UID, KEY, "OPENAI_API_KEY")
+    return KEY
+
+
+def pieces(text, key=KEY, size=4):
+    """The parts of ``key`` of ``size`` characters that ``text`` shows."""
+    return [key[at:at + size] for at in range(len(key) - size + 1) if key[at:at + size] in text]
+
+
+def test_a_key_is_masked_before_its_output_is_cut(a_key):
+    """The model reads each stream's last 12,000 characters, the view its
+    last 2,000: agent_secrets.scrub came after the cut and matched only
+    whole values, so a key across the cut stayed partly visible."""
+    raw = b"a" * 50_000 + KEY.encode() + b"b" * (MODEL_STREAM_CHARS - 20)
+    assert pieces(model_text(raw, len(raw), "stdout"))
+    text = model_text(raw, len(raw), "stdout", UID)
+    assert not pieces(text) and text.endswith("b" * 100)
+    view = raw[:-(MODEL_STREAM_CHARS - 20)] + b"c" * (VIEW_CHARS - 10)
+    shown, _ = tail(view, len(view), VIEW_CHARS, UID)
+    assert not pieces(shown) and shown.endswith("c" * 100)
+    # The end kept of a longer output (64 KiB) may start inside a key.
+    rest = KEY[20:].encode() + b"\nrest\n"
+    shown, _ = tail(rest, len(rest) + 100_000, VIEW_CHARS, UID)
+    assert shown == KEY_MASK + "\nrest\n"
+    # While the command runs, its last chunk may end inside one.
+    shown, _ = tail(b"key: " + KEY[:12].encode(), 17, VIEW_CHARS, UID, running=True)
+    assert shown == "key: " + KEY_MASK
+    # Its whole end, as the command ended, is never mistaken for one.
+    assert tail(b"key: " + KEY[:12].encode(), 17, VIEW_CHARS, UID)[0] == "key: " + KEY[:12]
+
+
+def test_a_key_in_a_commands_output_reaches_neither_model_nor_view(store, fake_vm, a_key):
+    raw = b"a" * 50_000 + KEY.encode() + b"b" * (MODEL_STREAM_CHARS - 20)
+    fake_vm.commands["env"] = ([("stdout", raw[:50_010]), ("stdout", raw[50_010:])], 0, .3)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "env"})]]))
+    events = list(loop.run())
+    [result] = results(loop)
+    assert not pieces(result["stdout"])
+    outputs = [e["output"] for e in tool_events(events, "vm_exec") if "output" in e]
+    assert outputs and not any(pieces(output) for output in outputs)
+    # Its first chunk ends inside the key, as the view shows it while it runs.
+    output = agent_vm_tools._Output(UID)
+    output.add("stdout", raw[:50_010])
+    assert output.shown()["output"].endswith("a" + KEY_MASK)
+
+
+def test_a_key_in_a_long_line_or_an_edit_is_masked_before_the_cut(store, fake_vm, a_key):
+    line = "a" * (agent_vm_tools.READ_CHARS - 10) + KEY + "\n"
+    snippet = "x = 1\n" + "b" * (agent_vm_tools.EDIT_SNIPPET_CHARS - 30) + KEY + "\n"
+    script = Agent([[("vm_read_file", {"path": "env.json"})],
+                    [("vm_edit_file", {"path": "conf.py", "old_string": "x = 1", "new_string": "x = 2"})]])
+    loop = vm_loop(store, script)
+    D = chat_path(loop.chat_id)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[NAME]["files"][f"{D}/env.json"] = line.encode()
+    fake_vm.vms[NAME]["files"][f"{D}/conf.py"] = snippet.encode()
+    list(loop.run())
+    read, edited = results(loop)
+    # Cut inside the mask now, never inside the key.
+    assert read["content"].endswith("a[secret ~/\n") and not pieces(read["content"])
+    assert edited["replacements"] == 1 and not pieces(edited["snippet"])
 
 
 def test_a_timed_out_command_says_so(store, fake_vm):
@@ -1251,7 +1361,8 @@ def test_the_days_vm_time_caps_commands_and_is_charged_when_the_message_ends(sto
     assert refused == {"error": agent_vm_tools.VM_DAY_LIMIT}
     assert written["bytes"] == 2 and read["content"] == "a\n"
     # Nothing is left: the first result says so.
-    assert written["vm_time_left_today"] == {"minutes": 0, "counts": "commands, installations and background processes"}
+    assert written["vm_time_left_today"] == {"minutes": 0, "counts": "commands, installations, background processes "
+                                                                     "and the browser's actions"}
     assert loop.completion.text == ANSWER
 
 
@@ -1761,8 +1872,10 @@ def test_sprites_exec_streams_the_frames_and_never_sends_the_token_to_the_vm():
     # the folder and keeps the VM-side limit; with the login environment
     # loaded silently (the Sprites .bashrc warned about bind in every
     # command, live 2026-10-25); no environment from the backend, the token
-    # only in the header.
-    assert query.get_list("cmd") == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "60", "/home/agent/app", "bash",
+    # only in the header. Of its output at most OUTPUT_BYTES a stream as it
+    # comes, and what it leaves in the background ends with it (--output).
+    assert query.get_list("cmd") == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "--output",
+                                     str(agent_vm.OUTPUT_BYTES), "60", "/home/agent/app", "bash",
                                      "-c", agent_vm.SHELL_PRELUDE, "bash", "make && echo 'done'"]
     assert query["dir"] == "/" and query["stdin"] == "false" and "env" not in query
     assert token == "secret-token" and "secret-token" not in url
