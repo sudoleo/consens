@@ -254,7 +254,7 @@
     const id = 'wc' + (++serial);
     const options = { mode: 'inline', chatId: '', source: '', onStarted: null, onSettle: null, ...config };
     const state = { schedule: normalizeSchedule(config.schedule), goal: '', editingGoal: false, busy: false,
-      intervals: null, limitReached: false, loaded: false, popover: false };
+      intervals: null, limitReached: false, loaded: false, popover: false, errorKind: '' };
 
     const form = node('form', 'wc');
     form.noValidate = true;
@@ -391,10 +391,17 @@
       grow();
     }
 
-    function showError(message) {
+    // `kind` 'limit': the refusal of a full plan, which goes by itself once
+    // a slot is free again (never told apart by its words).
+    function showError(message, kind = '') {
       error.textContent = message;
       error.hidden = !message;
+      state.errorKind = message ? kind : '';
       sync();
+    }
+
+    function showLimit() {
+      showError(App.t('All your Watches are in use. End one first.'), 'limit');
     }
 
     // --- the account's intervals ------------------------------------------
@@ -407,7 +414,10 @@
         state.schedule = picker.value();
       }
       if (typeof limitReached === 'boolean') state.limitReached = limitReached;
-      sync();
+      // A Watch ended meanwhile: "All your Watches are in use" no longer holds
+      // (review 2026-11-04), and the slim field may close again.
+      if (!state.limitReached && state.errorKind === 'limit') showError('');
+      else sync();
     }
 
     let loading = null;
@@ -417,9 +427,7 @@
       loading = request(path).then(data => {
         setOptions({ intervals: Array.isArray(data.intervals) ? data.intervals : [],
           limitReached: Number(data.active_count) >= Number(data.active_limit) });
-        if (state.limitReached && form.contains(document.activeElement)) {
-          showError(App.t('All your Watches are in use. End one first.'));
-        }
+        if (state.limitReached && form.contains(document.activeElement)) showLimit();
       }).catch(() => {}).finally(() => { loading = null; });
       return loading;
     }
@@ -529,13 +537,13 @@
     form.addEventListener('focusin', () => {
       loadOptions();
       sync();
-      if (state.limitReached) showError(App.t('All your Watches are in use. End one first.'));
+      if (state.limitReached) showLimit();
     });
     form.addEventListener('focusout', () => {
       // After the focus has moved: still inside (a chip, the popover) keeps it open.
       setTimeout(() => {
         if (!form.contains(document.activeElement) && !state.popover) {
-          if (state.limitReached && isEmpty()) showError('');
+          if (state.errorKind === 'limit' && isEmpty()) showError('');
           sync();
           options.onSettle?.();
         }
@@ -607,14 +615,20 @@
     }
 
     // `reload`: the account's intervals and slots are read again at the next
-    // focus (a sheet opened again, a Watch started or ended in between).
+    // focus (a sheet opened again, a Watch started or ended in between);
+    // until then no full plan is assumed, so the old answer cannot refuse
+    // before the new one is there (review 2026-11-04).
     function reset({ reload = true } = {}) {
       closePopover();
-      if (reload) state.loaded = false;
+      if (reload) {
+        state.loaded = false;
+        state.limitReached = false;
+      }
       task.value = '';
       goal.value = '';
       state.editingGoal = false;
       error.hidden = true;
+      state.errorKind = '';
       grow();
       sync();
     }

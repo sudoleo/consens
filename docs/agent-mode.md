@@ -4048,7 +4048,11 @@ fortgesetzte; ihre öffentlichen Seiten bleiben, wie sie zuletzt waren
   (die letzten 14 Blicke als Punkte, ein Ring für den nächsten). Eine Zeile
   öffnet ihr Panel statt eines „…“-Menüs: die letzten 30 Blicke, was sie
   fanden, Ziel und Zeitplan (beide änderbar, `PATCH`), Mail und Telegram,
-  Open chat, Pause, End. Unten eine Zeile, wohin Funde gehen („Change“
+  Open chat, Pause, End. Ein neuer Zeitplan zählt ab jetzt; einer, der
+  unverändert gespeichert wird, verschiebt nichts (kein nächster Lauf eine
+  Stunde später, kein verworfener Nachholversuch), und die Uhrzeit bleibt in
+  der Zeitzone der Watch, auch von einem Gerät in einer anderen aus (Review
+  2026-11-04). Unten eine Zeile, wohin Funde gehen („Change“
   öffnet Notifications), die beendeten und die archivierten Watches.
 - **Neue Watch** (`watch-composer.js`): der Auftrag in eigenen Worten, zwei
   Chips darunter: wie oft (ein Popover mit den Intervallen der Stufe,

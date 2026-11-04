@@ -233,23 +233,31 @@ def _look(outcome: str, at: datetime, summary="") -> dict:
     return look
 
 
+def _legacy_look(data: dict) -> list[dict]:
+    """A Watch from before ``looks`` (2026-11-04): its last run as its one
+    look. A run that had run already is no look of its own (_not_started),
+    so it is none here either (review 2026-11-04)."""
+    last = data.get("last_run") if isinstance(data.get("last_run"), dict) else {}
+    if not isinstance(last.get("at"), datetime) or not last.get("outcome") or last.get("outcome") == "already_ran":
+        return []
+    return [_look(last["outcome"], last["at"], last.get("summary") or "")]
+
+
 def _with_look(data: dict, look: dict) -> list[dict]:
     kept = [item for item in (data.get("looks") or []) if isinstance(item, dict) and isinstance(item.get("at"), datetime)]
-    last = data.get("last_run") if isinstance(data.get("last_run"), dict) else {}
-    if "looks" not in data and isinstance(last.get("at"), datetime) and last.get("outcome"):
+    if "looks" not in data:
         # A Watch from before ``looks``: its last run stays its first look.
-        kept = [_look(last["outcome"], last["at"], last.get("summary") or "")]
+        kept = _legacy_look(data)
     return [*kept, look][-LOOKS_KEPT:]
 
 
 def _looks_view(data: dict) -> list[dict]:
     """Its runs, oldest first. A Watch from before ``looks`` (2026-11-04)
-    shows its last run alone."""
+    shows its last run alone (``runs`` says it had more: the page then
+    calls it its last look, not its first)."""
     looks = [item for item in (data.get("looks") or []) if isinstance(item, dict) and isinstance(item.get("at"), datetime)]
     if not looks:
-        last = data.get("last_run") if isinstance(data.get("last_run"), dict) else {}
-        if isinstance(last.get("at"), datetime) and last.get("outcome"):
-            looks = [_look(last["outcome"], last["at"], last.get("summary") or "")]
+        looks = _legacy_look(data)
     return [{"at": item["at"].isoformat(), "outcome": str(item.get("outcome") or ""),
              "summary": str(item.get("summary") or "")} for item in looks[-LOOKS_KEPT:]]
 
@@ -487,8 +495,11 @@ def update(uid: str, watch_id: str, *, tier=None, email: bool | None = None, tel
            now: datetime | None = None) -> dict:
     """What the user changes on a Watch's page (PATCH): its channels, its
     goal ("" runs it until they end it) and how often it runs. A new
-    schedule counts from now; a paused Watch keeps it for its resume. An
-    ended Watch keeps what it had."""
+    schedule counts from now; one saved as it stands keeps its next run and
+    a pending retry (review 2026-11-04). A paused Watch keeps a new one for
+    its resume; an ended Watch keeps what it had. ``tier`` decides the
+    interval; without one the lowest plan's (allowed_intervals(None), Free)
+    does, never more."""
     db = _db(db)
     now = now or utcnow()
     channels = {key: value for key, value in (("email_enabled", email), ("telegram_enabled", telegram))
@@ -512,11 +523,15 @@ def update(uid: str, watch_id: str, *, tier=None, email: bool | None = None, tel
                 wanted, data.get("run_time") if run_time is None else run_time,
                 ((data.get("run_weekday") if weekday is None else weekday) or "") if wanted == "weekly" else "",
                 data.get("timezone") if timezone_name is None else timezone_name)
-            if tier is not None and schedule["interval"] not in allowed_intervals(tier):
-                raise AgentWatchError("interval_not_allowed", "Runs this often need a higher plan.", status=403)
-            patch.update(schedule)
-            if data.get("status") == STATUS_ACTIVE:
-                patch.update({"next_run_at": next_run(schedule, now=now), "retry_of": None})
+            stored = {key: str(data.get(key) or "") for key in schedule}
+            # Saved as it stands (the panel's Save without a change): nothing
+            # moves, an hourly Watch's next run is not pushed out by an hour.
+            if schedule != stored:
+                if schedule["interval"] not in allowed_intervals(tier):
+                    raise AgentWatchError("interval_not_allowed", "Runs this often need a higher plan.", status=403)
+                patch.update(schedule)
+                if data.get("status") == STATUS_ACTIVE:
+                    patch.update({"next_run_at": next_run(schedule, now=now), "retry_of": None})
         if patch:
             tx.update(_ref(db, watch_id), {**patch, "updated_at": now})
         return {**data, **patch}

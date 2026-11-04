@@ -430,6 +430,67 @@ describe("One Watch's panel (instead of the … menu)", () => {
     expect(panel.querySelector('.wc-day[aria-checked="true"]').dataset.weekday).toBe("monday");
   });
 
+  it("keeps a Watch's own time zone when its schedule is saved from elsewhere (review 2026-11-04)", async () => {
+    const { window, document, server } = boot({ watches: [watch({ timezone: "Asia/Tokyo" }),
+      watch({ id: "w2", timezone: "" })] });
+    await window.App.watchDashboard.render();
+    const save = async id => {
+      document.querySelector(`.aw-row[data-watch-id="${id}"] .aw-open`).click();
+      const panel = detail(document);
+      panel.querySelector('.wd-setting[data-key="schedule"] .wd-pill').click();
+      [...panel.querySelectorAll('.wd-setting[data-key="schedule"] button')].find(button => button.textContent === "Save").click();
+      await vi.waitFor(() => expect(server.calls.some(([method, url]) => method === "PATCH" && url === `/agent/watches/${id}`)).toBe(true));
+      window.App.modalDialog.close(panel);
+      return server.calls.filter(([method, url]) => method === "PATCH" && url === `/agent/watches/${id}`).at(-1)[2];
+    };
+    expect(await save("w1")).toMatchObject({ interval: "daily", run_time: "08:00", timezone: "Asia/Tokyo" });
+    // One without a zone of its own takes the reader's.
+    expect((await save("w2")).timezone).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC");
+  });
+
+  it("gives the focus to the Ended drawer, not the page, once an ended Watch's panel closes (review 2026-11-04)", async () => {
+    const { window, document, server } = boot({ watches: [watch(), watch({ id: "w2", task: "Another running task." })] });
+    await window.App.watchDashboard.render();
+    document.querySelector('.aw-row[data-watch-id="w1"] .aw-open').click();
+    const panel = detail(document);
+    [...panel.querySelectorAll(".wd-detail-more button")].find(button => button.textContent === "End Watch").click();
+    await vi.waitFor(() => expect(server.calls).toContainEqual(["POST", "/agent/watches/w1/stop", {}]));
+    await vi.waitFor(() => expect(panel.querySelector(".wd-settings")).toBeNull());
+    window.App.modalDialog.close(panel);
+    expect(document.activeElement).toBe(document.querySelector('.aw-foot-link[data-key="ended"]'));
+    // A Watch gone with its chat while its panel is open: the page's field
+    // (no Watch runs any more), never the page itself.
+    document.querySelector('.aw-row[data-watch-id="w2"] .aw-open').click();
+    server.watches.splice(server.watches.findIndex(item => item.id === "w2"), 1);
+    await window.App.watchDashboard.render();
+    expect(detail(document).open).toBe(false);
+    expect(document.activeElement).toBe(document.querySelector("#watchDashBody .wc-task"));
+  });
+
+  it("calls the one look of a Watch from before the looks its last, not its first (review 2026-11-04)", async () => {
+    const { window, document } = boot({ watches: [
+      watch({ id: "old", runs: 9, looks: [], last_run: { at: EARLIER, outcome: "quiet", summary: "" } }),
+      watch({ id: "new", runs: 1, looks: looks("q") }),
+      watch({ id: "dup", runs: 4, looks: [], last_run: { at: EARLIER, outcome: "already_ran", summary: "" } }),
+    ] });
+    await window.App.watchDashboard.render();
+    const said = id => document.querySelector(`.aw-row[data-watch-id="${id}"] .aw-pulse .visually-hidden`).textContent;
+    expect(said("old")).toBe("Its last look found nothing new.");
+    expect(said("new")).toBe("Its first look found nothing new.");
+    // A run that had run already is no look, and never a ring that did not finish.
+    expect(said("dup")).toBe("No looks yet.");
+    expect(document.querySelectorAll('.aw-row[data-watch-id="dup"] .aw-dot:not(.is-next)')).toHaveLength(0);
+    document.querySelector('.aw-row[data-watch-id="old"] .aw-open').click();
+    expect(detail(document).querySelector(".wd-activity-title").textContent).toBe("Its last look");
+    window.App.modalDialog.close(detail(document));
+    document.querySelector('.aw-row[data-watch-id="new"] .aw-open').click();
+    expect(detail(document).querySelector(".wd-activity-title").textContent).toBe("Its first look");
+    window.App.modalDialog.close(detail(document));
+    document.querySelector('.aw-row[data-watch-id="dup"] .aw-open').click();
+    expect(detail(document).querySelector(".wd-finds")).toBeNull();
+    expect(detail(document).querySelector(".wd-activity-empty").textContent).toMatch(/^Next look /);
+  });
+
   it("opens from the pill's Watching for the chat's Watch", async () => {
     const { window, document } = boot({ watches: [watch()] });
     await window.App.watchDashboard.render();
@@ -529,6 +590,41 @@ describe("The field that starts a Watch (watch-composer.js)", () => {
     expect(posted(server)).toBeUndefined();
   });
 
+  it("drops the full plan's refusal once a Watch ends and a slot is free (review 2026-11-04)", async () => {
+    const { window, document, server } = boot({ watches: [watch(), watch({ id: "w2" }), watch({ id: "w3" })], limit: 3 });
+    await window.App.watchDashboard.render();
+    const form = field(document);
+    const task = form.querySelector(".wc-task");
+    const error = form.querySelector(".wc-error");
+    // Ended in another tab while the field holds the refusal: it goes at once.
+    task.focus();
+    await settle();
+    expect(error.hidden).toBe(false);
+    window.dispatchEvent(new window.CustomEvent("consensio:agent-watches-changed",
+      { detail: { watch: { ...server.watches[2], status: "done", ended: "user", next_run_at: null } } }));
+    expect(error.hidden).toBe(true);
+    // Empty and left, the slim field closes again.
+    document.querySelector('.aw-row[data-watch-id="w1"] .aw-open').focus();
+    await settle();
+    expect(form.classList.contains("is-collapsed")).toBe(true);
+    // Full again, with a few words typed (they keep the refusal when the field is left):
+    // ending one in its panel takes the refusal away too.
+    window.App.watchDashboard.addCreated(watch({ id: "w4" }));
+    task.focus();
+    await settle();
+    type(window, task, "Short");
+    expect(error.hidden).toBe(false);
+    const open = document.querySelector('.aw-row[data-watch-id="w2"] .aw-open');
+    open.focus();
+    open.click();
+    await settle();
+    expect(error.hidden).toBe(false);
+    const panel = detail(document);
+    [...panel.querySelectorAll(".wd-detail-more button")].find(button => button.textContent === "End Watch").click();
+    await vi.waitFor(() => expect(server.calls).toContainEqual(["POST", "/agent/watches/w2/stop", {}]));
+    await vi.waitFor(() => expect(error.hidden).toBe(true));
+  });
+
   it("speaks German on a German page and leaves what is typed as it is", async () => {
     const { window, document } = boot({ german: true });
     await window.App.watchDashboard.render();
@@ -593,6 +689,32 @@ describe("The pill's sheet (watch-sheet.js)", () => {
     await vi.waitFor(() => expect(server.calls.filter(([method, url]) => method === "GET" && url.startsWith("/agent/watches?")).length).toBe(2));
     await settle();
     expect(document.querySelector(".watch-sheet .wc-error").hidden).toBe(true);
+  });
+
+  it("never says a full plan from its last opening before the slots are read again (review 2026-11-04)", async () => {
+    const { window, document, server } = boot({ path: "/app", watches: [watch()], limit: 1 });
+    const chat = "a".repeat(32);
+    const outside = document.createElement("button");
+    document.body.append(outside);
+    window.App.watchSheet.open({ chatId: chat, task: "And what about the price of it?" });
+    const error = () => document.querySelector(".watch-sheet .wc-error");
+    await vi.waitFor(() => expect(error().hidden).toBe(false));
+    window.App.watchSheet.close();
+    // In a browser the focus leaves the closed sheet: the next opening focuses the field anew.
+    outside.focus();
+    server.watches[0].status = "done";
+    let release;
+    const fetch = window.fetch;
+    window.fetch = vi.fn((url, options) => (String(url).startsWith("/agent/watches?")
+      ? new Promise(resolve => { release = () => resolve(fetch(url, options)); }) : fetch(url, options)));
+    window.App.watchSheet.open({ chatId: chat, task: "And what about the price of it?" });
+    await settle();
+    expect(document.activeElement).toBe(document.querySelector(".watch-sheet .wc-task"));
+    expect(error().hidden).toBe(true);
+    release();
+    await settle();
+    await settle();
+    expect(error().hidden).toBe(true);
   });
 
   it("sends a guest into the sign-in and back to the sheet with the question (J3)", async () => {

@@ -160,19 +160,28 @@
 
   function looksOf(watch) {
     const looks = Array.isArray(watch.looks) ? watch.looks.filter(look => look && look.at) : [];
-    if (looks.length || !watch.last_run?.at || !watch.last_run.outcome) return looks;
-    return [{ at: watch.last_run.at, outcome: watch.last_run.outcome, summary: watch.last_run.summary || '' }];
+    const last = watch.last_run;
+    // A run that had run already is no look of its own (agent_watches.py _legacy_look).
+    if (looks.length || !last?.at || !last.outcome || last.outcome === 'already_ran') return looks;
+    return [{ at: last.at, outcome: last.outcome, summary: last.summary || '' }];
+  }
+
+  // One look and no run before it: its first. A Watch from before the looks
+  // (2026-11-04) shows only its last run, and `runs` says there were more.
+  function onlyFirst(watch, looks) {
+    return looks.length === 1 && !(Number(watch.runs) > 1);
   }
 
   // What the dots say, for a screen reader.
-  function pulseSaid(looks) {
+  function pulseSaid(looks, { first = true } = {}) {
     if (!looks.length) return App.t('No looks yet.');
     const found = looks.filter(look => kindOf(look.outcome) === 'found').length;
     const needs = looks.filter(look => kindOf(look.outcome) === 'needs').length;
     const missed = looks.filter(look => kindOf(look.outcome) === 'missed').length;
     const n = looks.length;
     const parts = [];
-    if (n === 1) parts.push(App.t(found ? 'Its first look found something.' : 'Its first look found nothing new.'));
+    if (n === 1 && first) parts.push(App.t(found ? 'Its first look found something.' : 'Its first look found nothing new.'));
+    else if (n === 1) parts.push(App.t(found ? 'Its last look found something.' : 'Its last look found nothing new.'));
     else if (!found) parts.push(App.t('Nothing found in the last {n} looks.', { n }));
     else parts.push(App.t(found === 1 ? 'Found something once in the last {n} looks.'
       : 'Found something {found} times in the last {n} looks.', { n, found }));
@@ -300,8 +309,9 @@
     meta.hidden = !meta.textContent;
     text.append(data('span', 'aw-title', watch.task), line, meta);
     const pulse = el('span', 'aw-pulse');
-    const looks = looksOf(watch).slice(-PULSE);
-    const said = el('span', 'visually-hidden', pulseSaid(looks));
+    const all = looksOf(watch);
+    const looks = all.slice(-PULSE);
+    const said = el('span', 'visually-hidden', pulseSaid(looks, { first: onlyFirst(watch, all) }));
     said.setAttribute('data-i18n-skip', '');
     const next = el('span', 'aw-next' + (looking(watch) ? ' is-now' : ''), nextOf(watch));
     next.setAttribute('data-i18n-skip', '');
@@ -666,8 +676,10 @@
     const looks = looksOf(watch);
     const box = el('section', 'wd-activity');
     const head = el('div', 'wd-activity-head');
+    const first = onlyFirst(watch, looks);
     const title = el('h3', 'wd-activity-title', looks.length
-      ? App.t(looks.length === 1 ? 'Its first look' : 'Last {n} looks', { n: looks.length }) : App.t('No looks yet'));
+      ? App.t(looks.length > 1 ? 'Last {n} looks' : first ? 'Its first look' : 'Its last look', { n: looks.length })
+      : App.t('No looks yet'));
     head.append(title);
     const found = looks.filter(look => kindOf(look.outcome) === 'found').length;
     if (looks.length) {
@@ -676,12 +688,15 @@
     }
     box.append(head);
     if (!looks.length) {
-      box.append(el('p', 'wd-activity-empty', watch.status === 'active' && watch.next_run_at
-        ? App.t('Its first look is {when}.', { when: App.format.upcoming(watch.next_run_at) })
-        : App.t('Nothing has run yet.')));
+      // One that ran before its looks were kept is not waiting for its first.
+      const ran = Number(watch.runs) > 0;
+      const when = watch.status === 'active' && watch.next_run_at ? App.format.upcoming(watch.next_run_at) : '';
+      const text = when ? App.t(ran ? 'Next look {when}' : 'Its first look is {when}.', { when })
+        : ran ? '' : App.t('Nothing has run yet.');
+      if (text) box.append(el('p', 'wd-activity-empty', text));
       return box;
     }
-    const said = el('span', 'visually-hidden', pulseSaid(looks));
+    const said = el('span', 'visually-hidden', pulseSaid(looks, { first }));
     said.setAttribute('data-i18n-skip', '');
     const strip = dots(looks, { next: watch.status === 'active', now: looking(watch) });
     strip.classList.add('is-large');
@@ -829,8 +844,10 @@
     const save = button('wd-button is-primary', App.t('Save'), async () => {
       const value = picker.value();
       save.disabled = true;
+      // Its time stays in its own time zone ("Daily at 08:00 (Berlin time)"),
+      // edited from anywhere; the reader's only for a Watch that has none.
       const changed = await act(watch, '', { method: 'PATCH', body: { interval: value.interval, run_time: value.run_time,
-        run_weekday: value.run_weekday, timezone: (() => {
+        run_weekday: value.run_weekday, timezone: watch.timezone || (() => {
           try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch (_) { return 'UTC'; }
         })() } });
       save.disabled = false;
@@ -987,8 +1004,22 @@
     const host = body();
     const target = place.id
       ? host?.querySelector(`.aw-row[data-watch-id="${cssId(place.id)}"] .aw-open, .aw-card[data-watch-id="${cssId(place.id)}"]`)
+        || nearest(place.id)
       : host?.querySelector(place.selector);
     target?.focus({ preventScroll: true });
+  }
+
+  // The Watch's own row is gone (ended into the closed "Ended" drawer, or
+  // deleted with its chat): the nearest place that is there, never the page
+  // itself (review 2026-11-04). The drawer's toggle for an ended one, else
+  // the first Watch, else the field that starts one.
+  function nearest(id) {
+    const host = body();
+    if (!host) return null;
+    const watch = watchById(id);
+    const ended = watch && stateOf(watch) === 'ended' ? host.querySelector('.aw-foot-link[data-key="ended"]') : null;
+    return ended || host.querySelector('.aw-row .aw-open, .aw-card')
+      || (page.composer?.element.isConnected ? page.composer.element.querySelector('.wc-task') : null);
   }
 
   function draw() {

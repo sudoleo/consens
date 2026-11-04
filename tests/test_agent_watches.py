@@ -475,6 +475,20 @@ def test_a_watch_from_before_the_looks_keeps_its_last_run_as_its_first_look(stor
         ("finding", earlier), ("not_started", NOW)]
 
 
+def test_a_legacy_run_that_had_run_already_is_no_look(store):
+    """A run that had run already is no look of its own, and a Watch from
+    before the looks whose last run was one has none from it (review 2026-11-04)."""
+    watch = start(store, *proposed_chat(store))
+    ref = store.db.collection(agent_watches.COLLECTION).document(watch["id"])
+    data = record(store, watch["id"])
+    data.pop("looks", None)
+    data = {**data, "runs": 7, "last_run": {"at": NOW - timedelta(days=1), "outcome": "already_ran", "summary": ""}}
+    assert agent_watches.serialize(watch["id"], data)["looks"] == []
+    ref.set(data)
+    agent_watches._not_started(watch["id"], "not_started", db=store.db, now=NOW)
+    assert [(look["outcome"], look["at"]) for look in record(store, watch["id"])["looks"]] == [("not_started", NOW)]
+
+
 def test_a_watch_from_before_the_looks_shows_its_last_run_and_one_running_says_so(store):
     watch = start(store, *proposed_chat(store))
     data = record(store, watch["id"])
@@ -527,6 +541,45 @@ def test_a_paused_watch_keeps_a_new_schedule_for_its_resume_and_an_ended_one_kee
     assert error.value.code == "ended" and error.value.status == 409
     # Its channels still change: the mail link's "Stop emails" works on any.
     assert agent_watches.update(UID, watch["id"], email=False, db=store.db, now=NOW)["email_enabled"] is False
+
+
+def test_a_schedule_saved_as_it_stands_moves_nothing(store):
+    """The panel's Save without a change (review 2026-11-04): the next run
+    and a pending retry stay; a 6-hourly Watch is not pushed out by 6 hours."""
+    watch = start(store, *proposed_chat(store), tier="plus", interval="every_6_hours")
+    ref = store.db.collection(agent_watches.COLLECTION).document(watch["id"])
+    soon, first = NOW + timedelta(minutes=5), NOW - timedelta(minutes=5)
+    ref.update({"next_run_at": soon, "retry_of": first})
+    same = agent_watches.update(UID, watch["id"], tier="plus", interval="every_6_hours", run_time="", weekday="",
+                                timezone_name="Europe/Berlin", db=store.db, now=NOW)
+    assert same["next_run_at"] == soon.isoformat()
+    assert (record(store, watch["id"])["next_run_at"], record(store, watch["id"])["retry_of"]) == (soon, first)
+    # A daily one at the same time in the same zone, as the panel sends it.
+    daily = start(store, *proposed_chat(store))
+    ref = store.db.collection(agent_watches.COLLECTION).document(daily["id"])
+    ref.update({"next_run_at": soon, "retry_of": first})
+    agent_watches.update(UID, daily["id"], tier="free", interval="daily", run_time="08:00", weekday="",
+                         timezone_name="Europe/Berlin", db=store.db, now=NOW)
+    assert (record(store, daily["id"])["next_run_at"], record(store, daily["id"])["retry_of"]) == (soon, first)
+    # Another zone is another time: that one counts from now.
+    moved = agent_watches.update(UID, daily["id"], tier="free", interval="daily", run_time="08:00", weekday="",
+                                 timezone_name="America/New_York", db=store.db, now=NOW)
+    assert moved["timezone"] == "America/New_York"
+    # 12:00 UTC is 07:00 in New York: its 08:00 is still ahead today, 13:00 UTC.
+    assert moved["next_run_at"] == datetime(2026, 11, 3, 13, 0, tzinfo=timezone.utc).isoformat()
+    assert record(store, daily["id"])["retry_of"] is None
+
+
+def test_a_new_schedule_without_a_plan_gets_the_lowest_plans_intervals(store):
+    """update() fails closed (review 2026-11-04): a reschedule without a tier
+    is held to Free's intervals, never the account's best."""
+    watch = start(store, *proposed_chat(store), tier="pro", interval="hourly")
+    with pytest.raises(agent_watches.AgentWatchError) as error:
+        agent_watches.update(UID, watch["id"], interval="every_6_hours", db=store.db, now=NOW)
+    assert error.value.code == "interval_not_allowed" and error.value.status == 403
+    assert agent_watches.update(UID, watch["id"], interval="weekly", db=store.db, now=NOW)["interval"] == "weekly"
+    # The goal and the channels need no plan.
+    assert agent_watches.update(UID, watch["id"], goal="It is open", email=False, db=store.db, now=NOW)["goal"] == "It is open"
 
 
 # --- the mail -------------------------------------------------------------------
