@@ -536,6 +536,13 @@ class BrowserTools:
                 except Exception:
                     pass
 
+    def _step(self):
+        """The agent's step as a mark, the same for all its calls ("" outside a turn)."""
+        loop = self.vm.loop
+        turn = re.sub(r"[^A-Za-z0-9_-]", "", str(getattr(loop, "turn_id", "") or ""))[:60]
+        steps = getattr(loop, "routing_steps", None)
+        return f"{turn}.{steps}" if turn and isinstance(steps, int) else ""
+
     def _helper(self, request, timeout, cancellation, backend=None, counted=True):
         """The helper's answer for ``request`` (a dict) and its seconds, which
         count as VM time unless not ``counted`` (the rest after the message)."""
@@ -604,6 +611,12 @@ class BrowserTools:
             raise ValueError(BROWSER_UNAVAILABLE)
         required(args)
         request = {"action": args.action}
+        # The agent's step this call is part of: within it, an action on a ref
+        # is checked against the element as the agent last saw it, before the
+        # step (browser.py KEY_CHECK_JS, bug hunt 2026-11-04).
+        step = self._step()
+        if step:
+            request["step"] = step
         if args.action == "open":
             request.update(url=check_url(args.url), new_tab=args.new_tab)
         if args.action == "download" and args.url.strip():

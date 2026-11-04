@@ -207,15 +207,33 @@ el => {
   return (el.tagName + ' ' + said).slice(0, 300);
 }
 """.strip()
-# The key read kept and the element's key now.
-KEY_CHECK_JS = "el => [el.getAttribute('data-consens-key'), (" + KEY_JS + ")(el)]"
+# The key read kept and the element's key now. Within one step of the agent
+# (the request's ``step``, since 2026-11-04) the snapshots after its earlier
+# calls note what an element says now apart (data-consens-next, with the step
+# in data-consens-step), and its key stays as the agent last saw it, before
+# this step: the step's results come back to it all at once. Until then the
+# snapshot after "type e40 ... enter" rewrote the key of a chat row the send
+# had moved, and the same step's "click e17" reached another chat without a
+# StaleRef (bug hunt 2026-11-04). A request without a step: the key of the
+# last snapshot, as before.
+KEY_CHECK_JS = r"""
+(el, step) => {
+  const at = el.getAttribute('data-consens-step');
+  const kept = step && at !== null && at !== step ? el.getAttribute('data-consens-next')
+    : el.getAttribute('data-consens-key');
+  return [kept, (%KEY_JS%)(el)];
+}
+""".strip().replace("%KEY_JS%", KEY_JS)
 
 # A ref stays with its element, and a new element takes the next number of
 # the browser (``start``, REF_COUNTER). Until 2026-10-27 every read numbered
 # the page from e1 again, so a ref from an older read could name another
 # element without an error; now it names its element or none.
 SNAPSHOT_JS = r"""
-start => {
+arg => {
+  // A number (the next ref's start), or {start, step} within a step of the agent (KEY_CHECK_JS).
+  const start = typeof arg === 'number' ? arg : arg.start;
+  const step = typeof arg === 'number' ? null : arg.step || null;
   const key = %KEY_JS%;
   const ACT = 'a[href],button,input:not([type=hidden]),select,textarea,summary,[role=button],[role=link],' +
     '[role=checkbox],[role=radio],[role=tab],[role=menuitem],[role=menuitemcheckbox],[role=option],' +
@@ -301,7 +319,17 @@ start => {
     }
     given.add(ref);
     // What it says now: an action on the ref checks it is still this (located).
-    el.setAttribute('data-consens-key', key(el));
+    if (step) {
+      // Within a step its key stays as the agent saw it before; what it says
+      // now becomes its key at its first snapshot in a later step.
+      const at = el.getAttribute('data-consens-step');
+      if (at !== null && at !== step) el.setAttribute('data-consens-key', el.getAttribute('data-consens-next') || '');
+      el.setAttribute('data-consens-next', key(el));
+      el.setAttribute('data-consens-step', step);
+    } else {
+      el.setAttribute('data-consens-key', key(el));
+      el.removeAttribute('data-consens-step');
+    }
     const kind = role(el);
     let label = name(el) || clean(el.value && el.type !== 'password' ? el.value : '');
     if (!label && el.tagName === 'A') label = clip(clean(el.getAttribute('href')), 60);
@@ -985,7 +1013,7 @@ def page_lines(page, frames="front"):
             start = int(handle.read().strip() or 0)
     except (OSError, ValueError):
         start = 0
-    result = page.evaluate(SNAPSHOT_JS, start)
+    result = page.evaluate(SNAPSHOT_JS, snapshot_arg(start))
     lines, count = result["lines"], result["count"]
     if frames != "none":
         allowed = None if frames == "all" else front_frames(lines)
@@ -1106,7 +1134,7 @@ def with_frames(frame, lines, count, depth=1, budget=None, allowed=None, refs=No
             continue
         budget[0] -= 1
         try:
-            inner = child.evaluate(SNAPSHOT_JS, count)
+            inner = child.evaluate(SNAPSHOT_JS, snapshot_arg(count))
         except Exception:
             out.append(f"frame {src} (its content could not be read)")
             continue
@@ -1493,7 +1521,7 @@ def located(page, ref):
         if locator.count():
             target = locator.first
             try:
-                kept, now = target.evaluate(KEY_CHECK_JS)
+                kept, now = target.evaluate(KEY_CHECK_JS, STEP)
             except Exception:
                 kept = now = None
             if kept and now != kept:
@@ -2344,8 +2372,22 @@ def scrolled(direction, moved):
     return f"Scrolled {way}: {where}."
 
 
+# The step of the agent the current request belongs to (its ``step``), or
+# None: see KEY_CHECK_JS. One request at a time, here and in the resident helper.
+STEP = None
+STEP_TEXT = re.compile(r"[A-Za-z0-9._:-]{1,80}")
+
+
+def snapshot_arg(start):
+    """SNAPSHOT_JS's argument: the next ref's start, with the request's step."""
+    return {"start": start, "step": STEP} if STEP else start
+
+
 def answer_for(request):
     """The answer to one request, from run, with the finished downloads."""
+    global STEP
+    step = request.get("step") if isinstance(request, dict) else None
+    STEP = step if isinstance(step, str) and STEP_TEXT.fullmatch(step) else None
     try:
         if not isinstance(request, dict):
             raise Refused("The request is no JSON object.")

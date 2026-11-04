@@ -58,6 +58,8 @@ class FakeVM:
         self.vms, self.calls, self.commands, self.fail = {}, [], {}, set()
         self.server, self.server_files = [], []
         self.requests, self.warmed, self.rested = [], [], []
+        # The agent's step of each request, apart: requests compare as they were.
+        self.steps = []
         self.browser = lambda request: {"status": "ok", "text": 'Page: "Example"\nURL: https://example.com/\n'
                                                                 '[e1] link "More information"'}
         self.clock = clock or Clock()
@@ -146,6 +148,7 @@ class _FakeBackend(VMBackend):
             self.vm.rested.append(name)
             on_output("stdout", b'{"status": "ok", "text": "Resting."}')
             return ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
+        self.vm.steps.append(request.pop("step", None))
         self.vm.requests.append(request)
         answer = self.vm.browser(request)
         self.vm.clock.now += .5

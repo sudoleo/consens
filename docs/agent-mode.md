@@ -2075,7 +2075,16 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
       ist die Ref veraltet (`StaleRef`, mit der Seite, wie sie jetzt ist).
       Vorher erreichte der Klick ohne Fehler einen anderen Chat. Ein Element,
       dessen Text sich von selbst ändert (neue Vorschau, Zähler), kostet
-      dadurch höchstens einen Schritt mit frischer Liste.
+      dadurch höchstens einen Schritt mit frischer Liste. Seit 2026-11-04
+      gilt der Schlüssel, wie der Agent das Element vor seinem Schritt sah:
+      Jeder Browser-Aufruf trägt die Marke seines Schritts (`step`,
+      `<turn>.<routing_steps>`, `AgentBrowser._step`), und die Lesungen nach
+      den früheren Aufrufen desselben Schritts legen das Neue nur daneben ab
+      (`data-consens-next`/`data-consens-step`, Schlüssel ab dem nächsten
+      Schritt; `KEY_CHECK_JS`). Vorher schrieb das Lesen nach
+      `type … enter` den Schlüssel einer Zeile neu, die das Senden verschoben
+      hatte, und `click e17` im selben Schritt traf ohne `StaleRef` einen
+      anderen Chat.
     - *Aktion auf einem Element:* gibt nach `ACT_MS` = 3 s mit Grund auf
       (Klick, Tippen, Auswahl; vorher 10 s bzw. 5 s).
     - *Ein gescheiterter Browser-Aufruf beendet die Browser-Aufrufe seines

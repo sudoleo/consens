@@ -23,7 +23,7 @@ class Element:
     """An element as located finds it: the key read kept and the key now."""
 
     def __init__(self, kept, now, fails=False):
-        self.kept, self.now, self.fails, self.calls = kept, now, fails, []
+        self.kept, self.now, self.fails, self.calls, self.steps = kept, now, fails, [], []
 
     def evaluate(self, script, arg=None):
         if self.fails:
@@ -31,6 +31,7 @@ class Element:
         if script == "el => el.isContentEditable":
             return False
         if "data-consens-key" in script:
+            self.steps.append(arg)
             return [self.kept, self.now]
         if "IS_SECRET" in script or "password" in script:
             return False
@@ -76,6 +77,39 @@ def test_a_ref_whose_element_the_page_filled_anew_is_stale(browser):
     # The check runs the key read used (one source for both).
     assert browser.KEY_JS in browser.KEY_CHECK_JS and "%KEY_JS%" not in browser.SNAPSHOT_JS
     assert browser.KEY_JS in browser.SNAPSHOT_JS
+
+
+def test_a_ref_is_checked_as_the_agent_saw_it_before_its_step(browser, monkeypatch):
+    """[type e40 Hallo enter, click e17] in one step: the snapshot after the
+    type noted the row the send had moved as it is now, and the click reached
+    another chat (bug hunt 2026-11-04). The request's step goes to the check
+    and to every snapshot (KEY_CHECK_JS, SNAPSHOT_JS; the page scripts in
+    tests/js/workspace-browser-keys.test.mjs)."""
+    monkeypatch.setattr(browser, "run", lambda request: {"text": "ok"})
+    monkeypatch.setattr(browser, "finished_downloads", lambda: [])
+    browser.answer_for({"action": "read", "step": "a1b2.3"})
+    assert browser.STEP == "a1b2.3"
+    element = Element("DIV Anna Weber", "DIV Anna Weber")
+    browser.located(page_with(element), "e17")
+    assert element.steps == ["a1b2.3"]
+    assert browser.snapshot_arg(5) == {"start": 5, "step": "a1b2.3"}
+    # A request without a step, or with one that is no mark, as before.
+    for request in ({"action": "read"}, {"action": "read", "step": "a b"}, {"action": "read", "step": 3}):
+        browser.answer_for(request)
+        assert browser.STEP is None and browser.snapshot_arg(5) == 5
+
+
+def test_the_calls_of_one_step_carry_one_mark_and_the_next_step_another(store, fake_vm):
+    fake_vm.browser = lambda request: {"status": "ok", "text": 'Page: "WhatsApp"\nURL: https://web.whatsapp.com/'}
+    script = Agent([[("browser", {"action": "type", "ref": "e40", "text": "Hallo", "enter": True}),
+                     ("browser", {"action": "click", "ref": "e17"})],
+                    [("browser", {"action": "read"})]])
+    loop = vm_loop(store, script)
+    list(loop.run())
+    steps = [step for step, request in zip(fake_vm.steps, fake_vm.requests)
+             if request.get("action") in {"type", "click", "read"}]
+    assert len(steps) == 3 and steps[0] == steps[1] != steps[2]
+    assert all(step.startswith(loop.turn_id + ".") for step in steps)
 
 
 def test_an_action_on_a_stale_ref_never_reaches_the_element(browser):
