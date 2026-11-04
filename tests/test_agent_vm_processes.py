@@ -59,7 +59,9 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     assert files[f"{directory}/run.sh"].decode() == RUNNER
     launch = files[f"{directory}/launch.sh"].decode()
     assert launch == launch_script("npm run dev", chat_path(loop.chat_id) + "/app", 1800)
-    assert shlex.split(launch)[1:7] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "1800",
+    # What it leaves running in the background ends with it; its output
+    # goes to output.log whole (--output 0).
+    assert shlex.split(launch)[1:9] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "--output", "0", "1800",
                                         chat_path(loop.chat_id) + "/app"]
     assert files[f"{directory}/command"] == b"npm run dev"
     # Its chat: the process goes with it (delete_for_chat, since 2026-11-01).
@@ -197,6 +199,27 @@ def test_a_process_the_vm_stopped_is_said_to_be_lost():
         parse_status("something else")
 
 
+def test_a_processs_output_hides_a_key_cut_at_its_start_and_names_what_ended_with_it(monkeypatch):
+    """status_command reads the log's last 12,000 bytes, which may start
+    inside a key (agent_secrets.mask); a command that put its server in the
+    background with & ended at once, and the agent hears how it stays."""
+    from types import SimpleNamespace
+    from app.services import agent_secrets
+    monkeypatch.setattr(agent_secrets, "_seen", {})
+    key = "sk-proj-" + "0123456789abcdef" * 3
+    agent_secrets.remember(UID, key, "OPENAI_API_KEY")
+    tools = agent_vm_processes.ProcessTools(SimpleNamespace(loop=SimpleNamespace(uid=UID)))
+    output = key[20:] + "\nListening\n"
+    result = tools._result(PID, f"consens-process running 50000\n{output}")
+    masked = "[secret ~/.secrets/OPENAI_API_KEY, hidden from you]"
+    assert result["output"].endswith(masked + "\nListening\n") and key[20:30] not in result["output"]
+    assert result["_view"] == masked + "\nListening\n"
+    ended = "started\n\n[consens.io] Ended with the command: 1 process it left running in the background.\n"
+    result = tools._result(PID, f"consens-process 0 {len(ended)}\n{ended}", {"note": "It runs in the background."})
+    assert result["note"] == "It runs in the background. " + agent_vm_processes.FOREGROUND_NOTE
+    assert "note" not in tools._result(PID, "consens-process running 3\nok\n")
+
+
 # --- The scripts in a real bash ----------------------------------------------------
 
 def bash():
@@ -271,10 +294,36 @@ def test_the_supervisor_stops_a_process_and_counts_the_running_ones(shell, tmp_p
         code, text = run(stop_command(directory, "consens-x"))
         state, _, _ = parse_status(text)
         assert code == 0 and state == "stopped"
+        if sys.platform != "win32":
+            # Its supervisor's session still was its run.sh: the TERM went out.
+            pid = int(Path(directory, "pid").read_text())
+            with pytest.raises(ProcessLookupError):
+                os.kill(pid, 0)
     code, text = run(status_command(directories[0]))
     assert parse_status(text)[0] == "stopped"
     listed = run(list_command(root=root))[1].splitlines()
     assert sorted(line.split("\t")[1] for line in listed) == ["lost", "stopped", "stopped", "stopped"]
+
+
+def test_a_stop_never_signals_a_process_that_took_a_lost_ones_pid(shell, tmp_path):
+    """After a cold start or a restore the recorded pids may be another
+    process's: TERM and KILL, as root, go only to the supervisor's session
+    while its run.sh still runs, and a lost process ends at once instead of
+    after the grace."""
+    run, root = shell
+    directory = prepare(root, "33333331", "sleep 30", tmp_path.as_posix())
+    stranger = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"])
+    try:
+        for name in ("pid", "sid"):
+            Path(directory, name).write_text(str(stranger.pid), newline="\n")
+        began = time.monotonic()
+        code, text = run(stop_command(directory, "consens-x"))
+        assert code == 0 and parse_status(text)[0] == "stopped"
+        assert time.monotonic() - began < agent_vm_processes.STOP_GRACE_SECONDS / 2
+        assert stranger.poll() is None
+    finally:
+        stranger.kill()
+        stranger.wait()
 
 
 def test_a_chats_processes_are_found_by_its_chat_file(shell, tmp_path):

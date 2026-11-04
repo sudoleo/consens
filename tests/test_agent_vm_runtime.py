@@ -280,7 +280,7 @@ def test_the_chats_folder_notes_and_keys_come_in_one_command(store, fake_vm):
     first = results(loop)[0]
     assert first["workspace_notes"]["text"] == "# notes\n" and first["workspace_keys"]["names"] == ["OPENAI_API_KEY"]
     assert agent_secrets.scrub(UID, "key sk-test-123456789") == "key [secret ~/.secrets/OPENAI_API_KEY, hidden from you]"
-    # The agent's own commands only: no separate read of the keys (agent_secrets.LOAD_SCRIPT).
+    # The agent's own commands only: no separate read of the keys (open_chat reads them).
     assert not [call for call in fake_vm.calls if call[0] == "run" and call[1] == NAME]
 
 

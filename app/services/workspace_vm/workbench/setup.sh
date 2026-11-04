@@ -27,6 +27,11 @@ mkdir -p "$home"
 chown "$user:$user" "$home"
 chmod 700 "$home"
 chmod 750 "$legacy"
+# Packages installed for the agent (vm_install_packages, as root) start no
+# service: it would run as root, outside the agent's commands and their
+# limits. invoke-rc.d and deb-systemd-invoke ask this first; 101 refuses.
+printf '#!/bin/sh\nexit 101\n' > /usr/sbin/policy-rc.d
+chmod 755 /usr/sbin/policy-rc.d
 
 # The browser that ran here before 2026-10-27 (as the provider's user; the
 # agent's headless Chrome goes on) and its live view's gateway.

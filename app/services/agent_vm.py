@@ -111,6 +111,14 @@ STDIN_CHUNK = 256 * 1024
 TERMINAL_AFTER_DISCONNECT = "5s"
 # Exit codes of ``timeout``: the limit passed (TERM), or KILL after the grace.
 TIMEOUT_EXIT_CODES = frozenset({124, 137})
+# Per stream, what a command of the agent sends through the server as it
+# comes; the VM keeps only the last 64 KiB of the rest (agent-run --output),
+# which is what the server keeps of a stream anyway (agent_vm_tools.CAPTURE_BYTES).
+OUTPUT_BYTES = 8 * 1024 * 1024
+# What agent-run says on stderr when it ended processes a command left
+# running in the background (with & or nohup).
+BACKGROUND_ENDED = re.compile(r"\[consens\.io\] Ended with the command: (\d+) process(?:es)? it left running in "
+                              r"the background\.")
 # Ending a session in the VM on Stop or a deploy's interrupt: the VM-side
 # limit ends the command anyway, so this never holds the message's end long
 # (until 2026-10-30 it had REQUEST_SECONDS, A6).
@@ -267,10 +275,11 @@ class VMBackend:
     def exec(self, name, command, *, cwd, timeout, on_output: Callable[[str, bytes], None], cancellation,
              agent=True):
         """Run ``command`` with bash in ``cwd`` for at most ``timeout`` seconds
-        (wrapped_command). ``on_output(stream, chunk)`` gets stdout/stderr as
-        they arrive."""
-        return self.run(name, wrapped_command(command, timeout, agent, cwd=cwd), cwd="/" if agent else cwd,
-                        timeout=timeout, on_output=on_output, cancellation=cancellation)
+        (wrapped_command; the agent's with at most OUTPUT_BYTES of each
+        stream as it comes). ``on_output(stream, chunk)`` gets stdout/stderr
+        as they arrive."""
+        return self.run(name, wrapped_command(command, timeout, agent, cwd=cwd, output=OUTPUT_BYTES),
+                        cwd="/" if agent else cwd, timeout=timeout, on_output=on_output, cancellation=cancellation)
 
     def exec_url(self, name, argv, *, cwd, stdin, tty=None):
         """The exec WebSocket's address for ``argv`` (the live view's relay,
@@ -333,16 +342,24 @@ SHELL_PRELUDE = ('for __profile in /etc/profile "$HOME/.profile"; do [ -r "$__pr
                  'done >/dev/null 2>&1; __command=$1; set --; eval "$__command"')
 
 
-def agent_argv(argv, timeout, cwd=HOME):
+def agent_argv(argv, timeout, cwd=HOME, *, output=None):
     """``argv`` as the agent on the workbench: the provider's user starts
     AGENT_RUN as root (sudo), which hides the management socket and the
     checkpoints in a mount namespace of its own, becomes the agent's user
     with no way back (setpriv --no-new-privs), goes to ``cwd`` and runs
-    ``argv`` under coreutils ``timeout`` (workspace_vm/workbench/agent-run).
-    So a command never outlives its limit, also when the backend's
-    connection is gone, and nothing of it, nor anything it starts, has more
-    rights than that user."""
-    return ["sudo", "-n", "/bin/bash", AGENT_RUN, str(int(timeout)), cwd, *argv]
+    ``argv`` under coreutils ``timeout`` (workspace_vm/workbench/agent-run),
+    also when the backend's connection is gone. Nothing of it, nor anything
+    it starts, has more rights than that user.
+
+    ``output`` (bytes, 0 for no limit): a command of the agent's own. It
+    runs in a cgroup of its own, and what it leaves running in the
+    background (also with setsid or nohup) ends with it, as does the call:
+    background services belong to vm_start_process. Each stream passes on
+    its first ``output`` bytes, then only its end. Without a cgroup v2 on
+    the VM only its process group ends. None: the server's own fixed steps
+    (files, keys, the tunnel), as they are."""
+    options = [] if output is None else ["--output", str(int(output))]
+    return ["sudo", "-n", "/bin/bash", AGENT_RUN, *options, str(int(timeout)), cwd, *argv]
 
 
 def terminal_argv(timeout):
@@ -352,13 +369,13 @@ def terminal_argv(timeout):
     return ["sudo", "-n", "/bin/bash", AGENT_RUN, "--terminal", str(int(timeout)), HOME, "bash", "-l"]
 
 
-def wrapped_command(command, timeout, agent=True, *, cwd=HOME):
+def wrapped_command(command, timeout, agent=True, *, cwd=HOME, output=0):
     """The argv the VM runs for a shell command: bash with the login
-    environment (SHELL_PRELUDE), the agent's through agent_argv, the
-    server's own as the provider's user under ``timeout``."""
+    environment (SHELL_PRELUDE), the agent's through agent_argv (``output``
+    as there), the server's own as the provider's user under ``timeout``."""
     shell = ["bash", "-c", SHELL_PRELUDE, "bash", command]
     if agent:
-        return agent_argv(shell, timeout, cwd)
+        return agent_argv(shell, timeout, cwd, output=output)
     return ["timeout", f"--kill-after={KILL_GRACE_SECONDS}", str(int(timeout)), *shell]
 
 
