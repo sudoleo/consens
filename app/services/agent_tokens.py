@@ -1,9 +1,7 @@
-"""Offline admission estimates. Only provider usage is charged to the ledger.
+"""Offline admission estimates; only provider usage is charged to the ledger.
 
-cl100k is a common baseline, not every provider's tokenizer. The 25% margin and
-protocol allowance accommodate differences without treating every byte as a token.
-The bundled vocabulary makes cold starts independent of network/cache state.
-"""
+cl100k is a common baseline, not every provider's tokenizer: the 25% margin and protocol allowance
+cover the differences. The bundled vocabulary makes cold starts independent of network and cache."""
 import base64
 from functools import lru_cache
 import gzip
@@ -16,9 +14,8 @@ import threading
 import tiktoken
 
 
-# Conservative visual allowance for a native PDF. Scanned pages cost roughly
-# 1.5k to 3k input tokens with the providers PDFs are routed to; the cap keeps a
-# malformed page count from reserving more than a large model can hold.
+# Scanned pages cost about 1.5k to 3k input tokens; the cap keeps a malformed page count from
+# reserving more than a large model holds.
 PDF_TOKENS_PER_PAGE = 3_000
 PDF_MAX_VISUAL_TOKENS = 200_000
 IMAGE_VISUAL_TOKENS = 16_000
@@ -53,8 +50,7 @@ def _cached_encoding():
 
 
 def encoding():
-    # lru_cache alone permits concurrent cold misses to build this vocabulary
-    # repeatedly. Serialize the cache lookup as well as its initialization.
+    # lru_cache alone lets concurrent cold misses build the vocabulary repeatedly.
     with _encoding_lock:
         return _cached_encoding()
 
@@ -85,12 +81,9 @@ def _part_tokens(part):
 
 
 class TokenMemo:
-    """Counts per message and tool object for one run. A run sends its whole
-    conversation with every step and only appends to it (a changed message
-    is a new object), so each part is tokenized once instead of once per
-    estimate. It holds the parts it counted, so an id is never reused while
-    its count is kept; a part no estimate asked for in the last KEEP
-    estimates (a compacted or summarized message) is let go."""
+    """Counts per message and tool object for one run, which only appends to its conversation, so
+    each part is tokenized once. Holding the parts keeps their ids from being reused; a part no
+    estimate asked for in the last KEEP estimates is let go."""
 
     KEEP = 256
 
@@ -121,9 +114,8 @@ class TokenMemo:
 
 
 def input_estimate(messages, tools=(), request_config=None, *, memo=None):
-    # Include signed reasoning, tool arguments/results and structured-output
-    # schemas. Only a run's own memo keeps counts (TokenMemo), never a
-    # process-wide cache: private conversations must not be retained.
+    # Only a run's own memo keeps counts, never a process-wide cache: private conversations must not
+    # be retained.
     response_format = (request_config or {}).get("response_format")
     parts = [*messages, *tools, *([response_format] if response_format is not None else [])]
     if memo is not None:

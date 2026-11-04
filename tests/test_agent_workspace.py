@@ -1745,15 +1745,13 @@ def test_the_accounts_deletion_deletes_its_vm_and_the_browser_vm_of_before_by_th
     assert agent_workspace.record(store.db, UID) == {}
 
 
-def test_a_chats_folder_goes_as_the_agent_and_from_where_it_lay_before(store, fake_vm):
+def test_a_chats_folder_goes_as_the_agent(store, fake_vm):
     name = agent_vm.workspace_name(UID)
-    fake_vm.vms[name] = {"files": {"/home/agent/chats/c1/a.txt": b"a", "/home/sprite/chats/c1/old.txt": b"o"},
-                         "checkpoints": []}
+    fake_vm.vms[name] = {"files": {"/home/agent/chats/c1/a.txt": b"a"}, "checkpoints": []}
     agent_vm.delete_chat_vm(UID, "c1", {"name": name, "workspace": True}, factory=fake_vm.backend)
     assert fake_vm.vms[name]["files"] == {**{path: data for path, data in fake_vm.vms[name]["files"].items()
                                              if path.startswith("/home/sprite/.consens/")}}
-    # The legacy folder through the server, the agent's through its user.
-    assert ("delete", "/home/sprite/chats/c1") in fake_vm.server_files
+    # Through the agent's user, never the server's.
     assert ("delete", "/home/agent/chats/c1") not in fake_vm.server_files
     # A workbench that is gone is not made again for it.
     fake_vm.calls.clear()

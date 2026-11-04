@@ -11,11 +11,11 @@ from app.services import agent_compaction
 from app.services.agent_compaction import (HISTORY_SUMMARY_OPEN, HISTORY_SUMMARY_PARTIAL, HISTORY_SUMMARY_REQUEST,
                                            RUN_SUMMARY_OPEN, RUN_SUMMARY_REQUEST, SUMMARY_CLOSE, history_keep,
                                            is_summary, run_summary_due, run_tail, summary_message, summary_text)
-from app.services.agent_delegation import LONG_RUN_CONTEXT_SHARE, SUMMARY_TEXTS, DelegationLoop
+from app.services.agent_loop import LONG_RUN_CONTEXT_SHARE, SUMMARY_TEXTS, AgentLoop
 from app.services.agent_runs import strip_app_context
 from app.services.agent_work_log import context_data
-from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
-from test_agent_runs import UID, _answered, pending, receipt, store  # noqa: F401  (fixture)
+from app.services.llm.agent_client import AgentCompletion, measured_usage
+from test_agent_runs import UID, _answered, answered, pending, receipt, store  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, _admin_allowance, fake_vm, vm_loop  # noqa: F401  (fixtures)
 
 SUMMARY = "The user builds a parser in /home/sprite/parser; tests pass except test_unicode. " * 5
@@ -200,8 +200,7 @@ def test_the_summarized_turns_keep_their_sources_openable(store):
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     _, turn = pending(store, chat_id=chat_id, request_id="r0", question="Question r0")
     value = receipt()
-    store.claim(UID, chat_id, turn["id"], AgentModel())
-    store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
+    answered(store, chat_id, turn["id"], value)
     store._turn_ref(UID, chat_id, turn["id"]).update(
         {"sources": [{"url": "https://example.com/old", "title": "Old"}]})
     _summarized(store, chat_id, "r1", 1)
@@ -307,10 +306,10 @@ def test_a_partial_history_says_so_in_its_summary(store):
 def test_memory_evidence_never_takes_a_summary_for_the_users_words(store):
     loop = vm_loop(store, Summarizer(), vm="off")
     summary = summary_message(SUMMARY)
-    fresh = DelegationLoop(store=store, uid=UID, chat_id=loop.chat_id, turn_id=loop.turn_id, model=loop.model,
+    fresh = AgentLoop(store=store, uid=UID, chat_id=loop.chat_id, turn_id=loop.turn_id, model=loop.model,
                            messages=[loop.messages[0], summary, {"role": "user", "content": "Go on."}],
                            api_key="test", cancellation=loop.cancellation, policy=loop.policy,
-                           delegation_config=loop.config, completion_factory=Summarizer().factory,
+                           completion_factory=Summarizer().factory,
                            comparison_models=None)
     assert [m["content"] for m in fresh.answer_conversation] == ["Go on."]
 
@@ -437,7 +436,7 @@ def test_a_history_summary_moves_what_the_run_appended_after_its_question(store)
 
 
 def test_a_run_summary_keeps_the_users_messages_and_the_apps_state(store, fake_vm, monkeypatch):
-    from app.services.agent_delegation import USER_NOTE_OPEN
+    from app.services.agent_loop import USER_NOTE_OPEN
     note = {"role": "user", "content": USER_NOTE_OPEN + "\nPlease also add a test for emoji."}
     plan = [{"content": "Build the parser", "status": "completed"}, {"content": "Test it", "status": "in_progress"}]
     calls = [[("update_plan", {"items": plan})], *[[("vm_exec", {"command": f"make step{n}"})] for n in range(5)]]

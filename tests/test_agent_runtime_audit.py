@@ -13,10 +13,10 @@ import re
 from pydantic import BaseModel, ConfigDict
 import pytest
 
-from app.services import agent_delegation
+from app.services import agent_loop
 from app.services.llm import agent_client
 from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
-from test_agent_runs import UID, pending, receipt, store, priced  # noqa: F401  (fixture)
+from test_agent_runs import UID, claim, pending, receipt, store, priced  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, Agent, fake_vm, results, vm_loop  # noqa: F401  (fixture)
 
 
@@ -74,7 +74,7 @@ def test_a_streamed_step_keeps_its_request_times_and_the_receipt_saves_them(stor
     assert started <= first <= ended
     # The receipt keeps them beside created_at and settled_at (AgentRunStore.settle).
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
+    claim(store, chat_id, turn["id"])
     value = receipt()
     value.request_started_at, value.first_token_at, value.stream_ended_at = started, first, ended
     store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
@@ -84,7 +84,7 @@ def test_a_streamed_step_keeps_its_request_times_and_the_receipt_saves_them(stor
 
 def test_a_step_without_a_stream_saves_no_request_times(store):
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
+    claim(store, chat_id, turn["id"])
     store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
     saved = store.receipt_ref(UID, chat_id, turn["id"]).get().to_dict()
     assert not {"request_started_at", "first_token_at", "stream_ended_at"} & set(saved)
@@ -145,10 +145,10 @@ def test_a_turn_that_ends_by_itself_has_no_wrap_up(store, fake_vm):
 
 def test_the_limit_fact_names_each_limit():
     loop = type("Loop", (), {"_turn_seconds": lambda self: 7200, "_turn_steps": lambda self: 200})()
-    fact = agent_delegation.DelegationLoop._limit_fact
-    assert fact(loop, agent_delegation.TURN_TIME_LIMIT)[0] == "It reached its time limit (120 minutes per message)."
-    assert "allowance" in fact(loop, agent_delegation.TURN_ALLOWANCE_LIMIT)[1]
-    for reason in agent_delegation.WRAP_UP_REASONS:
+    fact = agent_loop.AgentLoop._limit_fact
+    assert fact(loop, agent_loop.TURN_TIME_LIMIT)[0] == "It reached its time limit (120 minutes per message)."
+    assert "allowance" in fact(loop, agent_loop.TURN_ALLOWANCE_LIMIT)[1]
+    for reason in agent_loop.WRAP_UP_REASONS:
         text, then = fact(loop, reason)
         assert text and then
 
@@ -257,14 +257,14 @@ def test_every_step_asks_for_several_calls_from_the_first_request_on(store, fake
 
 def test_the_calls_of_a_step_run_in_order_and_one_past_the_limit_gets_a_result(store, fake_vm):
     from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION, AGENT_VM_PROMPT
-    commands = [f"echo {n}" for n in range(agent_delegation.TOOL_CALLS_PER_STEP + 1)]
+    commands = [f"echo {n}" for n in range(agent_loop.TOOL_CALLS_PER_STEP + 1)]
     script = Steps([[("vm_exec", {"command": command}) for command in commands]])
     loop = vm_loop(store, script)
     list(loop.run())
     found = tool_results(loop)
-    last = agent_delegation.TOOL_CALLS_PER_STEP
+    last = agent_loop.TOOL_CALLS_PER_STEP
     assert [found[f"call_0_{n}"].get("exit_code") for n in range(last)] == [0] * last
-    assert found[f"call_0_{last}"] == {"error": agent_delegation.CALL_OVER_LIMIT}
+    assert found[f"call_0_{last}"] == {"error": agent_loop.CALL_OVER_LIMIT}
     # Commands change the workspace: one after the other, in the step's order.
     executed = [call[2] for call in fake_vm.calls if call[0] == "exec" and call[2] in commands]
     assert executed == commands[:last]
@@ -332,8 +332,8 @@ HALT = {"reviewer": "Claude Haiku 4.5", "provider": "anthropic", "kind": "harm",
         "entry": 1}
 
 
-@pytest.mark.parametrize("decision, expected", [("continue", agent_delegation.CALL_AFTER_PAUSE),
-                                                ("steer", agent_delegation.HOLD_STEERED)])
+@pytest.mark.parametrize("decision, expected", [("continue", agent_loop.CALL_AFTER_PAUSE),
+                                                ("steer", agent_loop.HOLD_STEERED)])
 def test_a_halt_between_calls_ends_the_steps_later_calls(store, fake_vm, decision, expected):
     from test_agent_audit import decide_when_held
     loop = probing(store, [[("probe", {}), ("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})]],
@@ -376,7 +376,7 @@ def test_asking_the_user_ends_the_steps_later_calls(store, fake_vm):
     waiter.join(5)
     found = tool_results(loop)
     assert found["call_0_0"] == agent_ask.ANSWERS[("confirm", "continue")]
-    assert found["call_0_1"] == {"error": agent_delegation.CALL_AFTER_ASK}
+    assert found["call_0_1"] == {"error": agent_loop.CALL_AFTER_ASK}
     assert not ran(fake_vm, "rm notes.txt") and every_call_answered(loop)
 
 
@@ -400,7 +400,7 @@ def test_the_users_turn_in_the_browser_ends_the_steps_later_calls(store, fake_vm
     list(loop.run())
     found = tool_results(loop)
     assert found["call_0_0"]["exit_code"] == 0
-    assert found["call_0_1"] == found["call_0_2"] == {"error": agent_delegation.CALL_AFTER_TAKEOVER}
+    assert found["call_0_1"] == found["call_0_2"] == {"error": agent_loop.CALL_AFTER_TAKEOVER}
     assert not ran(fake_vm, "pwd") and every_call_answered(loop)
 
 
@@ -429,12 +429,12 @@ def test_each_batch_ends_with_the_step_and_how_long_the_user_has_waited(store, f
     assert loop.messages[-1]["content"] == ("[consens.io, written by the app: step 160 of at most 200; the user has "
                                             "been waiting 97 minutes for your answer, of at most 120 minutes for "
                                             "this message.]")
-    assert [agent_delegation._waited(s) for s in (0.2, 45, 61, 150)] == [
+    assert [agent_loop._waited(s) for s in (0.2, 45, 61, 150)] == [
         "1 second", "45 seconds", "1 minute", "2 minutes"]
     # A message without the workspace has no such line.
     script = Steps([[("no_such_tool", {})]])
     list(vm_loop(store, script, request_id="two", vm="off").run())
-    assert not any(str(m.get("content")).startswith(agent_delegation.PROGRESS_OPEN)
+    assert not any(str(m.get("content")).startswith(agent_loop.PROGRESS_OPEN)
                    for request in script.requests for m in request)
 
 
@@ -514,7 +514,7 @@ def _settled_step(guess):
     """A delegated step claimed and settled; ``guess``: whether the
     settlement may read the expected ledger day with the rest."""
     from app.services import agent_quota
-    from test_agent_delegation import make_loop
+    from test_agent_sessions import make_loop
     store, trips = _counting_store()
     if not guess:
         store._expected_daily = lambda uid: None
@@ -522,7 +522,7 @@ def _settled_step(guess):
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     del trips[:]
-    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    store.settle(*args, completion=receipt(), status="succeeded")
     saved = store.receipt_ref(*args).get().to_dict()
     day = agent_quota.quota_ref(store.db, UID, saved["quota_day"])
     ledger = {key: value for key, value in store.db.documents[day.path].items() if not key.endswith("_at")}
@@ -545,7 +545,7 @@ def test_a_step_claimed_on_another_ledger_day_reads_its_own(monkeypatch):
     from app.services import agent_quota
     from app.services.agent_runs import AgentRunStore
     store, trips = _counting_store()
-    from test_agent_delegation import make_loop
+    from test_agent_sessions import make_loop
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
@@ -554,7 +554,7 @@ def test_a_step_claimed_on_another_ledger_day_reads_its_own(monkeypatch):
     monkeypatch.setattr(AgentRunStore, "_expected_daily",
                         lambda self, uid: agent_quota.quota_ref(store.db, uid, "1999-12-31"))
     del trips[:]
-    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    store.settle(*args, completion=receipt(), status="succeeded")
     assert [kind for kind, _ in trips] == ["get_all", "get"]
     assert store.receipt_ref(*args).get().to_dict()["status"] == "succeeded"
 

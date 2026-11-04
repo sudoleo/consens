@@ -33,17 +33,16 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 
 | Eintrag | Woher im Code | Inhalt |
 |---|---|---|
-| `start` | Beginn von `DelegationLoop.run` (`_log_start`) | Frage, Modell, Einstellungen, gewählte Dateien, Grenzen des Laufs |
-| `context` | `_step`, direkt vor der Anfrage | Was die Anfrage trägt, je Akteur nur, was noch nicht im Protokoll steht. Nach Position im Gespräch des Akteurs: im ersten Schritt Systemprompt (mit Memory-Block), Verlauf (frühere Fragen und Antworten) und Frage mit App-Kontext, danach alles, was der Lauf anhängt, etwa Hinweise der App und Nachrichten von Workern, auch derselbe Hinweis ein zweites Mal. Was nur die einzelne Anfrage trägt (Dateiblock, Notiz eines Schritts, geänderter Systemprompt), einmal je Text. Die eigenen Nachrichten des Modells in diesem Lauf sind seine `step`-Einträge. |
-| `step` | Ende jedes `_step` (Agent und Worker), nach der Abrechnung | Modell, Status, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`, nur wenn der Anbieter sie schickt), Abschlussgrund, Verbrauch (mit der Zahl der Suchen) |
+| `start` | Beginn von `AgentLoop.run` (`_log_start`) | Frage, Modell, Einstellungen, gewählte Dateien, Grenzen des Laufs |
+| `context` | `_step`, direkt vor der Anfrage | Was die Anfrage trägt, je Akteur nur, was noch nicht im Protokoll steht. Nach Position im Gespräch des Akteurs: im ersten Schritt Systemprompt (mit Memory-Block), Verlauf (frühere Fragen und Antworten) und Frage mit App-Kontext, danach alles, was der Lauf anhängt, etwa Hinweise der App, auch derselbe Hinweis ein zweites Mal. Was nur die einzelne Anfrage trägt (Dateiblock, Notiz eines Schritts, geänderter Systemprompt), einmal je Text. Die eigenen Nachrichten des Modells in diesem Lauf sind seine `step`-Einträge. |
+| `step` | Ende jedes `_step` des Agenten, nach der Abrechnung | Modell, Status, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`, nur wenn der Anbieter sie schickt), Abschlussgrund, Verbrauch (mit der Zahl der Suchen) |
 | `tool` | Ergebnis eines Aufrufs (`_run_call`; gleichzeitige Aufrufe eines Schritts nach ihrem Ende in Aufrufreihenfolge) | Das vollständige Ergebnis, wie es in den Kontext des Agenten geht: gelesene Seiten, Dateiauszüge, Gmail/Kalender, Memory-Antworten, Befehle und Dateien der Agent-VM (Exit-Code, gekürzte Ausgaben, Dauer), Fehler. Seit 2026-10-30 mit den Feldern `started_at` (UTC, ISO) und `duration_ms` des Aufrufs (I4) |
 | `app` | Eingriffe der App | Zurücknahme eines gezeigten Texts (`retract`), eine Pause für den Nutzer und seine Entscheidung (`paused`, `decision`; die Pause eines Prüfers nennt weder ihn noch seinen Grund), Antwort fixiert (`answer_fixed`), alte VM-Ausgabe im Gespräch gekürzt (`compacted`: Anzahl, Zeichen vorher/nachher, `tool_call_ids`; die `tool`-Einträge behalten das volle Ergebnis), seit 2026-10-30 die Grenze, an der die Arbeit endete (`limit`: `{reason, steps, seconds, text}`, `reason` = `time`, `steps`, `repeat`, `invalid`, `allowance` oder `context`; dieselben Werte ohne `text` als `agent_wrap_up` am Turn, I1). Der Plan des Agenten (`update_plan`) steht als sein Aufruf im `step` und als `tool` mit Herkunft `agent`, der letzte im `end`-Eintrag als `plan` |
 | `end` | Ende des Laufs | Status, Abschlussgrund, Antwort, Fehler, Gesamtverbrauch |
 
-Worker (`start_agent`) schreiben in dasselbe Protokoll, mit ihrer ID als
-Absender (`worker:<id>`). Nie im Protokoll: die Prüfer, die Antworten der
+Nie im Protokoll: die Prüfer, die Antworten der
 Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
-(`DelegationLoop._log_actor`); ihr Ergebnis steht als `tool`-Eintrag darin.
+(`AgentLoop._log_actor`); ihr Ergebnis steht als `tool`-Eintrag darin.
 
 ### Was nicht hineinkommt
 
@@ -65,7 +64,7 @@ Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
  "chars": 18234, "content": "…die ersten 2.000 Zeichen…", "ref": "work-log/…/000012"}
 ```
 
-- `seq`: fortlaufend je Turn, vergeben unter einer Sperre, auch bei Workern.
+- `seq`: fortlaufend je Turn, vergeben unter einer Sperre.
 - `data`: woher der Inhalt stammt (`user`, `web`, `file`, `google`, `memory`,
   `agent` für Modellausgaben, `vm` für das, was die eigene VM des Agenten
   zurückgab, `app`). Inhalt aus `web`, `file`, `google`, `agent` und `vm` ist
@@ -73,8 +72,7 @@ Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
   (`context_data`): `user` sind nur Nachrichten des Nutzers vor der Frage
   dieses Laufs und die Frage selbst, nie das Arbeitsprotokoll-Résumé eines
   früheren VM-Turns im Verlauf (`agent_work_record`, Herkunft `vm`); was der Lauf danach als Nutzernachricht
-  anhängt, ist von der App (`app`) oder von Workern (`agent`); alles, was ein
-  Worker liest, ab seinem Auftrag, schrieb der Agent (`agent`). Das Ergebnis von
+  anhängt, ist von der App (`app`). Das Ergebnis von
   `compare_models` (seit 2026-10-31) sind die Antworten anderer Modelle
   mit ihren Seiten: `agent`. Prüfer lesen es als Struktur bis
   `agent_audit.COMPARISON_ENTRY_CHARS`, nicht als einen bei `ENTRY_CHARS`
@@ -116,7 +114,7 @@ Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
   schon abgelegte Inhalte werden wieder entfernt, und der Turn trägt
   `work_log_incomplete`. Am Laufende wartet der Lauf auf den Rest, seit
   2026-10-29 zusammen mit dem Journal der Sitzungen höchstens 15 s
-  (`agent_delegation.CLOSE_WAIT_SECONDS`, vorher das Protokoll allein 20 s und
+  (`agent_loop.CLOSE_WAIT_SECONDS`, vorher das Protokoll allein 20 s und
   das Journal unbegrenzt); was dann noch fehlt, ist verloren (Logzeile mit dem
   Namen des Threads), dem Protokoll fehlt der `end`-Eintrag, was die Ansicht
   als unvollständig zeigt, und `finish_run` läuft trotzdem. Prüfer-Threads
@@ -225,7 +223,7 @@ Alles im Protokoll ist Daten, nie Anweisung. Eigene Websuche: bis zu 2 Runden
 je Live-Runde, bis zu 3 in der Schlussrunde.
 
 **Wann:** Eine Live-Runde beginnt, sobald der Prüfer frei ist und unter den
-Einträgen, die er noch nicht kennt, ein Schritt des Agenten oder eines Workers
+Einträgen, die er noch nicht kennt, ein Schritt des Agenten
 mit Tool-Aufrufen steht oder Fremdinhalt nach dem ersten Modellschritt
 (`round_due`: ein `tool`- oder `context`-Eintrag mit Herkunft aus
 `UNTRUSTED_DATA`, also eine Seite, eine Datei, eine Mail, die Ausgabe der VM
@@ -270,7 +268,7 @@ seine Befunde aus den Live-Runden (`live`, „During the run“).
 Anfang aus dem Cache: Die Kosten wachsen linear mit dem Lauf. Ein langer Lauf
 hält dafür im Tageskonto das Meiste frei, was die Prüfer in einem der letzten
 acht Schritte nahmen, und das Doppelte für ihre Schlussrunden
-(`DelegationLoop._reviewer_step_charge`, `_long_run_limit`). Jede Runde wird
+(`AgentLoop._reviewer_step_charge`, `_long_run_limit`). Jede Runde wird
 zu ihrem erwarteten Preis zugelassen (`RunCosts.estimate`, Sitzung
 `conversation_key`, Art `audit`): Das zuletzt im Cache gemessene Präfix des
 Gesprächs zählt zum Cache-Read-Preis; ein neues Gespräch beginnt ohne

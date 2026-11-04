@@ -1,48 +1,26 @@
-"""The agent's own Linux VM (docs/agent-mode.md, "Agent VM", "Arbeitsplatz").
+"""The agent's own Linux VM, one per account: the workspace (agent_workspace.py, docs/agent-mode.md
+"Agent VM").
 
-One per account since 2026-11-04, the workspace (agent_workspace.py,
-workspace_name): the agent's commands and files, shared by the account's
-chats one at a time, each in its own folder (chat_dir), and the Chrome its
-user watches and steers live and the agent uses through the ``browser`` tool
-(agent_browser.py). From 2026-10-27 to 2026-11-04 the browser had a VM of its
-own (old_browser_name), deleted when the account's workspace first starts
-after the move (agent_workspace.retire_old_browser). Before 2026-10-27 each
-chat had a VM of its own (vm_name); chats that still record one keep it
-until they are deleted.
+It holds the agent's commands and files, shared by the account's chats one at a time, each in its
+own folder (chat_dir), and the Chrome its user watches and steers live. A browser VM of the two-VM
+layout (old_browser_name) is deleted when the workspace first starts again; chats that still record
+a VM of their own (vm_name) keep it until they are deleted.
 
-A small interface (``VMBackend``) with one implementation on Fly.io Sprites
-(``SpritesBackend``). Everything that knows the provider lives in this file:
-moving to another one (E2B) replaces ``SpritesBackend`` and ``backend()``,
-nothing else. The tools the agent calls, the per-message session and the
-activity events are in agent_vm_tools.py.
+Everything that knows the provider (Fly.io Sprites) lives in ``SpritesBackend`` and ``backend()``;
+another provider replaces those, nothing else.
 
-The agent has no access to what it must not have, by the VM's own means
-rather than rules on its commands (security audit 2026-10-27, Max
-2026-11-04: Unix users and file modes instead of bridges between two VMs).
-Every command of the agent, and every file its tools read or write, runs as
-its own Unix user without sudo (AGENT_USER), in a mount namespace without
-the provider's management socket and checkpoints and with a /tmp of its own
-(workspace_vm/workbench/agent-run, started as root by ``agent_argv``). The
-provider's exec and file APIs run as ``sprite``, which may sudo: only the
-server's own steps use them directly, in SERVER_HOME, which the agent's user
-cannot open. So does the browser: Chrome, its screen and its profile with
-the user's sign-ins run as ``sprite``, its protocol on a socket in that home
-(workspace_vm/browser/cdp.py), its screen behind a cookie there. The VM
-reaches the open web (RULES), like the browser always did: one policy per
-VM, and the agent's commands share it since the move (Max's decision).
+The agent has no access to what it must not have by the VM's own means, Unix users and file modes,
+rather than rules on its commands: every command and file operation runs as its own user without
+sudo (AGENT_USER), in a mount namespace without the provider's management socket and checkpoints and
+with a /tmp of its own (agent_argv). The provider's exec and file APIs run as ``sprite``, which may
+sudo: only the server's own steps use them, in SERVER_HOME, which the agent's user cannot open. So
+does the browser: Chrome, its screen and its profile run as ``sprite``, its protocol on a socket in
+that home. The VM never holds a secret: SPRITES_TOKEN goes only into this module's requests to
+SPRITES_API, and no command gets an environment variable from the backend.
 
-The VMs never hold a secret: the provider token (SPRITES_TOKEN) goes only
-into the headers of this module's requests to SPRITES_API, never to a VM's
-own address, and no command gets an environment variable from the backend.
-
-Sprites API (https://docs.fly.io/sprites/api): REST over HTTPS for the
-sprite, its files, network policy and checkpoints; commands over the exec
-WebSocket, whose binary frames carry stdin (0x00, its end 0x04) to the VM and
-stdout (0x01), stderr (0x02) and the exit code (0x03) back. The plain HTTP
-exec streams the same frames without lengths and relies on HTTP chunk
-boundaries surviving every proxy (Sprites' own JS SDK warns about it), so
-commands use the WebSocket.
-"""
+Commands use the exec WebSocket (binary frames: stdin 0x00, its end 0x04; stdout 0x01, stderr 0x02,
+exit code 0x03): the plain HTTP exec relies on chunk boundaries surviving every proxy, which
+Sprites' own SDK warns about."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -62,85 +40,64 @@ import httpx
 from app.core.observability import safe_exception
 
 SPRITES_API = "https://api.sprites.dev"
-# The policy is DNS-based, per sprite, and applies at once (measured on a
-# Sprite 2026-10-27: a closed domain gets REFUSED, raw IPs are closed under an
-# allowlist, nothing inside can change it). The workspace reaches the open web
-# like any browser, Fly.io's private network (*.internal, *.flycast) not.
-# From 2026-10-27 to 2026-11-04 these were the browser VM's rules, and the
-# workbench reached only the package registries and the domains the user
-# allowed for a chat (request_domain): with the browser on the workbench one
-# policy holds for both (Max, 2026-11-04: "offenes Netz").
+# The policy is DNS-based, per sprite, and applies at once; nothing inside can change it, and raw
+# IPs are closed under an allowlist. One policy holds for the whole VM, the agent's commands and the
+# browser: the open web, without Fly.io's private network.
 RULES = [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"},
          {"domain": "*", "action": "allow"}]
-# The agent's Unix user on the workbench (created by workspace_vm/workbench/
-# setup.sh) and its home, where its chats' folders, notes and repositories are.
+# The agent's Unix user and its home, where chats' folders, notes and repositories are.
 AGENT_USER = "agent"
 AGENT_UID = 1500
 HOME = "/home/agent"
-# The provider's own user (exec and file API), with sudo; the agent cannot open its home.
+# The provider's own user, with sudo; the agent cannot open its home.
 SERVER_HOME = "/home/sprite"
 TOOLS_DIR = SERVER_HOME + "/.consens/workspace"
 AGENT_RUN = TOOLS_DIR + "/agent-run"
-# Seconds between the command's own time limit (the VM-side ``timeout``)
-# and its forced end, and how much longer the backend waits for the exit
-# frame before it kills the session itself.
+# Seconds between the command's own time limit and its forced end, and how much longer the backend
+# waits for the exit frame before it kills the session itself.
 KILL_GRACE_SECONDS = 5
 EXIT_WAIT_SECONDS = 15
 REQUEST_SECONDS = 30
-# What may wake a sleeping VM (its network rules, a file of the provider's
-# user): its first call after a while answers once the VM is up. Measured in
-# Prod 2026-10-28/29: a first browser call of a message took up to 99 s, and
-# a policy request ran into REQUEST_SECONDS (the browser was off for the
-# message, the live view did not open).
+# A sleeping VM's first call answers once it is up: a first browser call took up to 99 s, and a
+# policy request ran into REQUEST_SECONDS.
 WAKE_SECONDS = 90
-# A sprite pauses within seconds of its last work and goes cold later. A
-# command after more than this long without contact (the user answered a
-# card for 15 minutes) first wakes it with a REST request, which waits
-# WAKE_SECONDS, instead of meeting the sleep in the exec handshake, which
-# gave up after WS_OPEN_SECONDS (runtime audit 2026-10-30, A4).
+# A sprite pauses within seconds of its last work and goes cold later. After this long without
+# contact a command first wakes it with a REST request that waits WAKE_SECONDS, instead of meeting
+# the sleep in the exec handshake (WS_OPEN_SECONDS).
 WAKE_AFTER_SECONDS = 5 * 60
 CHECKPOINT_SECONDS = 120
 WS_OPEN_SECONDS = 20
 WS_MAX_FRAME = 10 * 1024 * 1024
 HANDSHAKE_RETRY_SECONDS = 1.0
-# Bytes per stdin frame (0x00 + data); the stdin's end is 0x04.
 STDIN_CHUNK = 256 * 1024
-# How long the user's terminal goes on once its socket is gone (the
-# provider's max_run_after_disconnect): a reload finds a new shell.
+# How long the user's terminal goes on once its socket is gone: a reload finds a new shell.
 TERMINAL_AFTER_DISCONNECT = "5s"
 # Exit codes of ``timeout``: the limit passed (TERM), or KILL after the grace.
 TIMEOUT_EXIT_CODES = frozenset({124, 137})
-# Per stream, what a command of the agent sends through the server as it
-# comes; the VM keeps only the last 64 KiB of the rest (agent-run --output),
-# which is what the server keeps of a stream anyway (agent_vm_tools.CAPTURE_BYTES).
+# Per stream, what a command sends through the server as it comes; the VM keeps only the last 64 KiB
+# of the rest, which is what the server keeps anyway.
 OUTPUT_BYTES = 8 * 1024 * 1024
-# What agent-run says on stderr when it ended processes a command left
-# running in the background (with & or nohup).
+# What agent-run says on stderr when it ended processes a command left in the background.
 BACKGROUND_ENDED = re.compile(r"\[consens\.io\] Ended with the command: (\d+) process(?:es)? it left running in "
                               r"the background\.")
-# Ending a session in the VM on Stop or a deploy's interrupt: the VM-side
-# limit ends the command anyway, so this never holds the message's end long
-# (until 2026-10-30 it had REQUEST_SECONDS, A6).
+# Ending a session on Stop or a deploy's interrupt: the VM-side limit ends the command anyway, so
+# this never holds the message's end long.
 KILL_SECONDS = 5
 
 
 class VMUnavailable(Exception):
-    """The provider cannot be reached or refused the request. The message
-    names the operation and the kind of failure, never data, for logs and
-    the turn's ``agent_vm.unavailable_reason``; the agent and the user get
-    agent_vm_tools' own words."""
+    """The provider cannot be reached or refused the request. The message names the operation and
+    the kind of failure, never data; the agent and the user get agent_vm_tools' own words."""
 
 
 def _unavailable(reason):
-    """VMUnavailable for ``reason``, logged where it arises (runtime audit
-    2026-10-30, I2: several places raised it without a log line)."""
+    """VMUnavailable for ``reason``, logged where it arises."""
     logging.warning("Agent VM unavailable reason=%s", reason)
     return VMUnavailable(reason)
 
 
-# When the server last reached each VM (time.monotonic), across the
-# backends of all messages in this process: the exec WebSocket's handshake
-# is no place to wait for a VM's wake (WAKE_AFTER_SECONDS).
+# When the server last reached each VM, across all messages in this process: the exec handshake is
+# no place to wait for a wake.
 _contact: dict[str, float] = {}
 _contact_lock = threading.Lock()
 
@@ -151,9 +108,8 @@ def _touch(name):
 
 
 def _asleep(name):
-    """Whether ``name`` was reached before, but not within WAKE_AFTER_SECONDS.
-    Never reached in this process: its first contact is a REST request of
-    the session's start anyway (agent_workspace.prepare reads the version)."""
+    """Whether ``name`` was reached before, but not within WAKE_AFTER_SECONDS. Never reached in this
+    process: the session's start makes a REST request first anyway."""
     with _contact_lock:
         last = _contact.get(name)
     return last is not None and time.monotonic() - last > WAKE_AFTER_SECONDS
@@ -164,42 +120,36 @@ class VMFileMissing(FileNotFoundError):
 
 
 class VMFileRefused(PermissionError):
-    """The agent's user may not read or write there, or it is a folder; the
-    message names the path and is for the agent."""
+    """The agent's user may not read or write there, or it is a folder; the message is for the
+    agent."""
 
 
 @dataclass(frozen=True)
 class ExecOutcome:
-    """How a command ended. ``exit_code`` is None when it never reported one
-    (killed after its time limit); its output went to ``on_output``."""
+    """How a command ended; ``exit_code`` is None when it never reported one (killed after its
+    limit)."""
     exit_code: Optional[int]
     timed_out: bool
     seconds: float
 
 
 def vm_name(uid, chat_id):
-    """The name of a chat's own VM (before 2026-10-27): only to delete it
-    with its chat."""
+    """The name of a chat's own VM from the per-chat layout: only to delete it with its chat."""
     return "consens-" + hashlib.sha256(f"{uid}:{chat_id}".encode("utf-8")).hexdigest()[:32]
 
 
 def workspace_name(uid):
-    """The account's workbench VM: stable, so every chat and the account's
-    deletion find the same VM, and free of the account id."""
+    """The account's workspace VM: stable, so every chat and the account's deletion find it, and
+    free of the account id."""
     return "consens-w-" + hashlib.sha256(f"workspace:{uid}".encode("utf-8")).hexdigest()[:32]
 
 
 def old_browser_name(uid):
-    """The account's browser VM from 2026-10-27 to 2026-11-04: only to delete
-    it (agent_workspace.retire_old_browser, the account's deletion)."""
+    """A browser VM of the two-VM layout: only to delete it."""
     return "consens-b-" + hashlib.sha256(f"browser:{uid}".encode("utf-8")).hexdigest()[:32]
 
 
 CHATS_DIR = HOME + "/chats"
-# Where the chats' folders were before the agent had a user of its own
-# (moved by workspace_vm/workbench/setup.sh).
-LEGACY_CHATS_DIR = SERVER_HOME + "/chats"
-
 
 FOLDER_TITLE_CHARS = 40
 FOLDER_ID_CHARS = 6
@@ -207,10 +157,9 @@ _GERMAN_LETTERS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"}
 
 
 def chat_folder(title, chat_id):
-    """The name of a chat's folder since 2026-10-28: its title as words and
-    the start of its id, ``promotion-neben-dem-beruf-3f9a1c`` (``chat-…``
-    while it has no title yet). The id part keeps two chats of one title
-    apart; the folder follows a new title (agent_workspace.open_chat)."""
+    """A chat's folder name: its title as words and the start of its id
+    (``promotion-neben-dem-beruf-3f9a1c``, ``chat-…`` without a title). The id part keeps two chats
+    of one title apart."""
     chat_dir(chat_id)
     text = unicodedata.normalize("NFKD", str(title or "").lower().translate(_GERMAN_LETTERS))
     words = re.sub(r"[^a-z0-9]+", "-", text.encode("ascii", "ignore").decode()).strip("-")
@@ -222,10 +171,8 @@ def chat_folder(title, chat_id):
 
 
 def chat_dir(chat_id, folder=None):
-    """A chat's own folder in the workspace: where its commands start and its
-    attachments land, deleted with the chat. ``folder``: its name as the
-    chat records it (chat_folder); without one the folder of a chat from
-    before 2026-10-28, named by its id."""
+    """A chat's own folder: where its commands start and its attachments land, deleted with the
+    chat. Without ``folder`` the id-named folder of an older chat."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(chat_id or "")):
         raise ValueError("chat id")
     if folder is not None:
@@ -236,74 +183,57 @@ def chat_dir(chat_id, folder=None):
 
 
 class VMBackend:
-    """What the agent's VM tools need from a provider. Every method raises
-    VMUnavailable when the provider fails; ``close`` ends the backend's
-    connections (one backend per message). ``agent`` (exec and the file
-    methods): as the agent's user (agent_argv), the default; only the
-    server's own steps pass False, in SERVER_HOME (its tools, the browser)."""
+    """What the agent's VM tools need from a provider. Every method raises VMUnavailable when the
+    provider fails; one backend per message. ``agent`` (exec and file methods): as the agent's user
+    (the default); only the server's own steps pass False."""
 
     provider = ""
 
     def exists(self, name):
-        """Whether the VM exists (a deletion never creates one)."""
         raise NotImplementedError
 
     def ensure(self, name, rules=None):
-        """Create the VM if it does not exist yet and apply the network
-        ``rules`` (RULES); None leaves them as they are (a new version of
-        the tools sets them, agent_workspace.prepare). True when it was
-        created."""
+        """Create the VM if it does not exist yet and apply the network ``rules`` (None leaves them
+        as they are). True when it was created."""
         raise NotImplementedError
 
     def set_policy(self, name, rules):
-        """Replace the VM's network rules; they apply at once."""
         raise NotImplementedError
 
     def get_policy(self, name):
-        """The VM's network rules now, as set_policy takes them (a list of
-        ``{"domain", "action"}``); empty where none were ever set (open)."""
+        """The VM's network rules as set_policy takes them; empty where none were ever set (open)."""
         raise NotImplementedError
 
     def run(self, name, argv, *, cwd, timeout, on_output: Callable[[str, bytes], None], cancellation, input=None):
-        """Run ``argv`` as given (no shell around it), wait at most
-        ``timeout`` seconds plus the grace for its end. ``input``: bytes for
-        its stdin, which then ends. Returns ExecOutcome; raises
-        ProviderCancelled on Stop (the command is then ended as well)."""
+        """Run ``argv`` without a shell, waiting at most ``timeout`` plus the grace; ``input`` goes
+        to stdin. Raises ProviderCancelled on Stop, ending the command too."""
         raise NotImplementedError
 
     def exec(self, name, command, *, cwd, timeout, on_output: Callable[[str, bytes], None], cancellation,
              agent=True):
-        """Run ``command`` with bash in ``cwd`` for at most ``timeout`` seconds
-        (wrapped_command; the agent's with at most OUTPUT_BYTES of each
-        stream as it comes). ``on_output(stream, chunk)`` gets stdout/stderr
-        as they arrive."""
+        """Run ``command`` with bash in ``cwd`` for at most ``timeout`` seconds; ``on_output(stream,
+        chunk)`` gets output as it arrives."""
         return self.run(name, wrapped_command(command, timeout, agent, cwd=cwd, output=OUTPUT_BYTES),
                         cwd="/" if agent else cwd, timeout=timeout, on_output=on_output, cancellation=cancellation)
 
     def exec_url(self, name, argv, *, cwd, stdin, tty=None):
-        """The exec WebSocket's address for ``argv`` (the live view's relay,
-        the user's terminal with ``tty`` = (cols, rows))."""
+        """The exec WebSocket's address for ``argv`` (``tty`` = (cols, rows) for a terminal)."""
         raise NotImplementedError
 
     def open_stream(self, name, argv, *, cwd):
-        """A command that keeps running with its stdin open: an object with
-        ``send(bytes)`` for stdin,
-        ``recv(timeout)`` for stdout's next bytes (b"" when nothing came, None
-        once it ended) and ``close()``."""
+        """A command that keeps running with its stdin open: ``send(bytes)``, ``recv(timeout)`` (b""
+        when nothing came, None once it ended) and ``close()``."""
         raise NotImplementedError
 
     def read_file(self, name, path, *, limit, agent=True):
-        """``(bytes, complete)``: at most ``limit`` bytes of the file;
-        ``complete`` is False when it is longer. VMFileMissing if absent,
-        VMFileRefused where the agent's user may not read."""
+        """``(bytes, complete)``: at most ``limit`` bytes. VMFileMissing if absent, VMFileRefused
+        where the agent's user may not read."""
         raise NotImplementedError
 
     def write_file(self, name, path, data, *, agent=True):
-        """Write ``data`` (creating parent folders); returns its size."""
         raise NotImplementedError
 
     def checkpoint(self, name, comment):
-        """Snapshot the VM's disk; returns the checkpoint's id."""
         raise NotImplementedError
 
     def restore(self, name, checkpoint):
@@ -311,7 +241,7 @@ class VMBackend:
         raise NotImplementedError
 
     def delete(self, name):
-        """Delete the VM and its disk; a VM that is already gone is fine."""
+        """Delete the VM and its disk; already gone is fine."""
         raise NotImplementedError
 
     def delete_path(self, name, path, *, agent=True):
@@ -319,78 +249,62 @@ class VMBackend:
         raise NotImplementedError
 
     def move_path(self, name, source, target):
-        """Rename a file or folder as the agent's user (a chat's folder after
-        a new title): "moved", "missing" (no ``source``, nothing to do) or
-        "taken" (``target`` exists and stays untouched)."""
+        """Rename as the agent's user: "moved", "missing" or "taken" (``target`` exists and stays
+        untouched)."""
         raise NotImplementedError
 
     def delete_service(self, name, service):
-        """Remove a service of the VM (the live view's gateway before
-        2026-10-27); gone is fine."""
+        """Remove a service of the VM; gone is fine."""
         raise NotImplementedError
 
     def close(self):
         pass
 
 
-# A login shell's environment (PATH with the image's and the user's tools,
-# language settings) without its startup noise: the profile files run
-# silently (the Sprites .bashrc warns about ``bind`` in every non-interactive
-# shell), then the command runs as written, without positional parameters.
+# A login shell's environment without its startup noise (the Sprites .bashrc warns about ``bind`` in
+# every non-interactive shell), then the command as written, without positional parameters.
 SHELL_PRELUDE = ('for __profile in /etc/profile "$HOME/.profile"; do [ -r "$__profile" ] && . "$__profile"; '
                  'done >/dev/null 2>&1; __command=$1; set --; eval "$__command"')
 
 
 def agent_argv(argv, timeout, cwd=HOME, *, output=None):
-    """``argv`` as the agent on the workbench: the provider's user starts
-    AGENT_RUN as root (sudo), which hides the management socket and the
-    checkpoints in a mount namespace of its own, becomes the agent's user
-    with no way back (setpriv --no-new-privs), goes to ``cwd`` and runs
-    ``argv`` under coreutils ``timeout`` (workspace_vm/workbench/agent-run),
-    also when the backend's connection is gone. Nothing of it, nor anything
-    it starts, has more rights than that user.
+    """``argv`` as the agent: AGENT_RUN starts as root, hides the management socket and checkpoints
+    in its own mount namespace with a /tmp of its own, becomes the agent's user with no way back
+    (no-new-privs) and runs ``argv`` in ``cwd`` under ``timeout``, also when the backend's
+    connection is gone.
 
-    ``output`` (bytes, 0 for no limit): a command of the agent's own. It
-    runs in a cgroup of its own, and what it leaves running in the
-    background (also with setsid or nohup) ends with it, as does the call:
-    background services belong to vm_start_process. Each stream passes on
-    its first ``output`` bytes, then only its end. Without a cgroup v2 on
-    the VM only its process group ends. None: the server's own fixed steps
-    (files, keys, the tunnel), as they are."""
+    ``output`` (bytes, 0 for no limit): a command of the agent's own, in a cgroup of its own, so
+    what it leaves in the background ends with it (background services belong to vm_start_process);
+    each stream passes its first ``output`` bytes, then only its end. None: the server's own fixed
+    steps."""
     options = [] if output is None else ["--output", str(int(output))]
     return ["sudo", "-n", "/bin/bash", AGENT_RUN, *options, str(int(timeout)), cwd, *argv]
 
 
 def terminal_argv(timeout):
-    """The user's own terminal on the workbench (routers/agent_workspace.py,
-    since 2026-10-28): a login shell through AGENT_RUN --terminal, with the
-    agent's rights and nothing more, in the agent's home, under ``timeout``."""
+    """The user's own terminal in the workspace: a login shell through AGENT_RUN --terminal with the
+    agent's rights, in its home, under ``timeout``."""
     return ["sudo", "-n", "/bin/bash", AGENT_RUN, "--terminal", str(int(timeout)), HOME, "bash", "-l"]
 
 
 def wrapped_command(command, timeout, agent=True, *, cwd=HOME, output=0):
-    """The argv the VM runs for a shell command: bash with the login
-    environment (SHELL_PRELUDE), the agent's through agent_argv (``output``
-    as there), the server's own as the provider's user under ``timeout``."""
+    """The argv for a shell command: bash with the login environment, the agent's through
+    agent_argv, the server's own as the provider's user under ``timeout``."""
     shell = ["bash", "-c", SHELL_PRELUDE, "bash", command]
     if agent:
         return agent_argv(shell, timeout, cwd, output=output)
     return ["timeout", f"--kill-after={KILL_GRACE_SECONDS}", str(int(timeout)), *shell]
 
 
-# The agent's file operations, as its user (agent_argv) with the path as an
-# argument, never in the command's text: 44 no such file, 45 a folder, 46
-# not allowed. The provider's file API runs as its own user, which may sudo,
-# so it never touches a path the agent named.
+# The agent's file operations run as its user with the path as an argument, never in the command's
+# text (44 missing, 45 a folder, 46 not allowed): the provider's file API may sudo, so it never
+# touches a path the agent named.
 READ_SCRIPT = ('[ -e "$1" ] || exit 44; [ -d "$1" ] && exit 45; [ -r "$1" ] || exit 46; '
                'exec head -c "$2" -- "$1"')
 WRITE_SCRIPT = ('[ -d "$1" ] && exit 45; mkdir -p -- "$(dirname -- "$1")" 2>/dev/null || exit 46; '
                 'cat > "$1" 2>/dev/null || exit 46; stat -c %s -- "$1"')
-# A folder the agent made read-only (chmod -R a-w, Go's module cache) gets
-# its write bits back first: rm alone failed, and a chat's deletion retried
-# for ever (bug hunt 2026-10-30). Its read and search bits too (chmod -R 644
-# on a folder): without them neither rm nor chmod gets inside it; chmod -R
-# sets a folder's bits before it goes in (bug hunt 2026-11-02).
+# A folder the agent made read-only gets its bits back first, or rm failed and a chat's deletion
+# retried for ever; chmod -R sets a folder's bits before it goes in.
 DELETE_SCRIPT = 'rm -rf -- "$1" 2>/dev/null || { chmod -R u+rwX -- "$1" 2>/dev/null; rm -rf -- "$1"; }'
 # Never over something that exists (mv -T -n would still merge into an empty folder).
 MOVE_SCRIPT = ('[ -e "$1" ] || [ -L "$1" ] || exit 44; { [ -e "$2" ] || [ -L "$2" ]; } && exit 47; '
@@ -408,10 +322,8 @@ def _file_error(code, path):
     return None
 
 
-# Closing without waiting for the server's close frame (above) makes the
-# library's reader log "unexpected internal error" with a trace for a socket
-# that ended as intended (seen on a Sprite 2026-10-27); this module logs the
-# failures that matter itself.
+# Closing without waiting for the close frame makes the library log "unexpected internal error" for
+# a socket that ended as intended; this module logs the failures that matter itself.
 _SOCKET_LOG = logging.getLogger("app.agent_vm.exec_socket")
 _SOCKET_LOG.setLevel(logging.CRITICAL)
 
@@ -426,16 +338,13 @@ class SpritesBackend(VMBackend):
                                   timeout=REQUEST_SECONDS, transport=transport)
         self._connect = connect
         self._clock = clock
-        # Each VM's runtime status as the last GET of it said ("cold",
-        # "warm", "running"; the API's Sprite.status): whether a message met
-        # it cold (VMSession.summary, runtime audit 2026-10-30, I5).
+        # Each VM's runtime status as the last GET said ("cold", "warm", "running"): whether a
+        # message met it cold.
         self.statuses = {}
 
-    # --- REST -----------------------------------------------------------------
 
     def _request(self, operation, method, path, *, missing_ok=False, **kwargs):
-        """One REST call; any 2xx is success (the API answers 200, 201 or
-        204 depending on the operation, the policy for instance with 204)."""
+        """One REST call; any 2xx is success (200, 201 or 204 by operation)."""
         try:
             response = self._http.request(method, path, **kwargs)
         except httpx.HTTPError as exc:
@@ -483,7 +392,7 @@ class SpritesBackend(VMBackend):
         _touch(name)
 
     def get_policy(self, name):
-        # {"rules": [...]}, [] on a sprite whose policy was never set (measured 2026-10-28).
+        # [] on a sprite whose policy was never set.
         response = self._request("policy", "GET", self._sprite(name) + "/policy/network")
         try:
             rules = response.json().get("rules")
@@ -495,7 +404,6 @@ class SpritesBackend(VMBackend):
         return rules
 
     def _collect(self, name, argv, *, limit, input=None, timeout=FILE_SECONDS):
-        """``(exit_code, stdout)`` of a short command, at most ``limit`` bytes kept."""
         from app.services.llm.provider_runtime import ProviderCancellation
         out = bytearray()
 
@@ -559,8 +467,8 @@ class SpritesBackend(VMBackend):
             return len(data)
 
     def checkpoint(self, name, comment):
-        # Creation streams its progress as NDJSON; its last line is "complete"
-        # or "error". The id comes from the list, found by this comment.
+        # Creation streams NDJSON; its last line is "complete" or "error". The id comes from the
+        # list, found by this comment.
         try:
             with self._http.stream("POST", self._sprite(name) + "/checkpoint", json={"comment": comment},
                                    timeout=CHECKPOINT_SECONDS) as response:
@@ -582,8 +490,7 @@ class SpritesBackend(VMBackend):
             raise VMUnavailable("checkpoint: no connection") from None
         if not done:
             raise _unavailable("checkpoint: no completion")
-        # The completion names the id only in its text ("Checkpoint v8
-        # created", OpenAPI 2026-10-30), so the list says it.
+        # The completion names the id only in its text, so the list says it.
         listed = self._request("checkpoints", "GET", self._sprite(name) + "/checkpoints").json()
         found = [item for item in listed if isinstance(item, dict) and item.get("comment") == comment]
         if not found:
@@ -591,7 +498,7 @@ class SpritesBackend(VMBackend):
         return str(max(found, key=lambda item: str(item.get("create_time") or ""))["id"])
 
     def restore(self, name, checkpoint):
-        # Streams its progress as NDJSON like a checkpoint; "complete" or "error" ends it.
+        # Streams NDJSON like a checkpoint; "complete" or "error" ends it.
         path = f"{self._sprite(name)}/checkpoints/{quote(str(checkpoint), safe='')}/restore"
         try:
             with self._http.stream("POST", path, timeout=CHECKPOINT_SECONDS) as response:
@@ -641,7 +548,6 @@ class SpritesBackend(VMBackend):
     def close(self):
         self._http.close()
 
-    # --- Commands -------------------------------------------------------------
 
     def _open(self, url):
         if self._connect is not None:
@@ -649,25 +555,21 @@ class SpritesBackend(VMBackend):
         import socket
         from websockets.sync.client import connect
         ws = connect(url, additional_headers={"Authorization": f"Bearer {self._token}"},
-                     # The server keeps the socket open for seconds after the
-                     # exit frame; waiting for its close frame would add that
-                     # to every command (the Sprites SDKs do not wait either).
+                     # The server keeps the socket open for seconds after the exit frame; waiting
+                     # for its close frame would add that to every command.
                      open_timeout=WS_OPEN_SECONDS, ping_interval=15, ping_timeout=45, close_timeout=0,
                      max_size=WS_MAX_FRAME, logger=_SOCKET_LOG)
         try:
-            # Small frames go at once (a request through the tunnel, a key
-            # press), not after the last one's acknowledgement (Nagle).
+            # Small frames (a key press) go at once, not after the last one's acknowledgement.
             ws.socket.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         except (AttributeError, OSError):
             pass
         return ws
 
     def exec_url(self, name, argv, *, cwd, stdin, tty=None):
-        """The exec WebSocket's address on SPRITES_API, the only place the
-        token goes (the live view and the terminal use it too,
-        routers/agent_workspace.py). ``tty``: (cols, rows) for a terminal,
-        whose frames are raw bytes both ways and which ends
-        TERMINAL_AFTER_DISCONNECT after its socket is gone."""
+        """The exec WebSocket's address on SPRITES_API, the only place the token goes. ``tty``:
+        (cols, rows) for a terminal, raw bytes both ways, ending TERMINAL_AFTER_DISCONNECT after its
+        socket is gone."""
         params = [*(("cmd", arg) for arg in argv), ("path", argv[0]), ("dir", cwd),
                   ("stdin", "true" if stdin else "false")]
         if tty is not None:
@@ -677,12 +579,9 @@ class SpritesBackend(VMBackend):
         return "wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/exec?" + urlencode(params)
 
     def _connect_exec(self, url, operation="exec"):
-        """The exec socket; a handshake that broke off (a sprite waking from
-        its sleep, seen 2026-10-27) is tried once more. A handshake that ran
-        out of time is not: the command is in the request, and whether the
-        provider starts it before its answer is not known, so a second try
-        might run it twice (runtime audit 2026-10-30, A4). The wake before
-        it (_wake) keeps that case rare."""
+        """The exec socket; a handshake that broke off (a sprite waking) is tried once more. One
+        that ran out of time is not: the command is in the request, and a second try might run it
+        twice. _wake keeps that case rare."""
         from websockets.exceptions import InvalidHandshake, InvalidStatus
         for attempt in (1, 2):
             try:
@@ -703,10 +602,8 @@ class SpritesBackend(VMBackend):
                 time.sleep(HANDSHAKE_RETRY_SECONDS)
 
     def _wake(self, name):
-        """A VM not reached for WAKE_AFTER_SECONDS is woken by a REST request
-        that waits WAKE_SECONDS (a listing of its root, which the VM itself
-        answers), before a command's handshake meets its sleep. Best effort:
-        what it cannot do the handshake still tries."""
+        """A VM not reached for WAKE_AFTER_SECONDS is woken by a REST request that waits
+        WAKE_SECONDS before a command's handshake meets its sleep. Best effort."""
         if not _asleep(name):
             return
         try:
@@ -722,8 +619,7 @@ class SpritesBackend(VMBackend):
         self._wake(name)
         cancellation.raise_if_cancelled()
         ws = self._connect_exec(url)
-        # The command's time runs from the open socket: a handshake that
-        # waited for the VM never eats its limit (runtime audit 2026-10-30, A4).
+        # From the open socket: a handshake that waited for the VM never eats the limit.
         started = self._clock()
         _touch(name)
         # Stop closes the socket at once; the loop below then ends the command.
@@ -804,8 +700,7 @@ class SpritesBackend(VMBackend):
 
 
 class _ExecStream:
-    """A running command's stdin and stdout over the exec WebSocket
-    (open_stream): frames 0x00 in, 0x01 out; the exit ends it."""
+    """A running command's stdin and stdout over the exec WebSocket."""
 
     def __init__(self, ws):
         self.ws = ws
@@ -835,8 +730,7 @@ class _ExecStream:
         return bytes(message[1:]) if message[0] == 1 else None
 
     def close(self):
-        """Never waits for a send that hangs (a stalled connection): its
-        socket goes under it instead."""
+        """Never waits for a send that hangs: its socket goes under it instead."""
         if self._send_lock.acquire(blocking=False):
             try:
                 self.ws.send(b"\x04")
@@ -865,23 +759,14 @@ def configured():
 
 
 def open_to_all():
-    """AGENT_VM_ACCESS=all: the VM and its browser for every account (since
-    2026-10-31, with the one Agent mode), held in check by the token account
-    (every browser action is a step of the agent's model) and the day's VM
-    time (agent_vm_time.daily_limit). "pro", its value before (Pro accounts
-    and, with the retired AGENT_AUDIT_ACCESS=all, every account), means the
-    same. Otherwise, the default since the workspace's security audit of
-    2026-10-27, only admins get it (routers/agent.py vm_allowed); everyone
-    else's messages run without a VM."""
+    """AGENT_VM_ACCESS=all ("pro" means the same): the VM and its browser for every account, held in
+    check by the token account and the day's VM time. Otherwise only admins get it."""
     return os.getenv("AGENT_VM_ACCESS", "").strip().lower() in {"all", "pro"}
 
 
 def on_demand():
-    """The workspace on demand (docs/agent-mode.md "Arbeitsplatz auf Abruf"),
-    since 2026-10-29 for every account with the VM (vm_allowed): a message
-    starts without the workspace's tools until the agent opens it
-    (DelegationLoop._open_workspace). AGENT_WORKSPACE_ON_DEMAND=off, the
-    emergency off, gives them from the start again."""
+    """The workspace on demand: a message starts without its tools until the agent opens it.
+    AGENT_WORKSPACE_ON_DEMAND=off gives them from the start."""
     return os.getenv("AGENT_WORKSPACE_ON_DEMAND", "").strip().lower() != "off"
 
 
@@ -891,21 +776,17 @@ def backend():
     return SpritesBackend(token) if token else None
 
 
-# What the next message is told after the user restored the VM (the turn's
-# app context, routers/agent.py run_agent).
 VM_RESTORED_NOTE = ("Before this message the user restored your VM to how it was before an earlier message: "
                     "whatever later commands changed there is gone, background processes included. Check the files "
                     "before you rely on them.")
-# The user handed the workspace's browser back shortly before this message
-# (routers/agent.py browser_turn): its page is theirs, not what you last saw.
+# The workspace's page is the user's, not what the agent last saw.
 HANDED_BACK_NOTE = ("The user worked in the workspace's browser themselves and handed it back to you {minutes} min "
                     "ago: what it shows may have changed since you last looked.")
 
 
 def restore_workspace(uid, checkpoint, *, factory=None):
-    """Return the account's workspace to ``checkpoint``, one of its own
-    (agent_workspace.restorable decides which may go back). Raises
-    VMUnavailable when there is no provider or it fails."""
+    """Return the account's workspace to ``checkpoint`` (agent_workspace.restorable decides which
+    may). Raises VMUnavailable without or on failure of the provider."""
     vm = (factory or backend)()
     if vm is None:
         raise _unavailable("restore: no provider configured")
@@ -916,17 +797,10 @@ def restore_workspace(uid, checkpoint, *, factory=None):
 
 
 def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
-    """What a chat recorded (chat field ``agent_vm``) goes with the chat: its
-    folder in the account's workbench with the background processes it
-    started there (since 2026-11-01, agent_vm_processes.delete_for_chat),
-    and the chat's own VM from before 2026-10-27. That one's name comes from the chat (vm_name), never from
-    the record: a chat that moved to the workspace lost it there, and its VM
-    stayed (security audit 2026-10-27). The folder goes as the agent's user
-    (its tools brought up to date first, agent_workspace.prepare) and from
-    where it was before the agent had a user of its own (LEGACY_CHATS_DIR).
-    Gone already is fine. Raises when the provider fails or is not
-    configured: the chat's deletion job then retries
-    (chat_store.run_chat_deletion), so none of the chat's files outlives it."""
+    """What a chat recorded goes with it: its folder in the workspace with the background processes
+    it started, and its own VM from the per-chat layout. That VM's name comes from the chat, never
+    from the record, which a chat that moved to the workspace lost. Raises when the provider fails,
+    so the deletion job retries and none of the chat's files outlives it."""
     if not isinstance(record, dict) or not record.get("name"):
         return
     name = record["name"]
@@ -941,31 +815,26 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
         if name == workspace_name(uid) and vm.exists(name):
             from app.services import agent_vm_processes, agent_workspace
             agent_workspace.prepare(vm, name)
-            # Its processes first: they run in its folder. ``store``: the VM
-            # time they did not use comes back (agent_vm_time.refund).
+            # Its processes first: they run in its folder. ``store``: the VM time they did not use
+            # comes back.
             refund = None
             if store is not None:
                 from app.services import agent_vm_time
                 refund = lambda seconds, day: agent_vm_time.refund(store, uid, seconds, day)  # noqa: E731
             agent_vm_processes.delete_for_chat(vm, name, chat_id, refund=refund)
-            # The folder by the name the chat recorded (since 2026-10-28), and
-            # by its id, as before and while a rename has not happened yet.
+            # By the name the chat recorded, and by its id while a rename has not happened yet.
             folder = record.get("folder")
             if isinstance(folder, str) and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", folder):
                 vm.delete_path(name, chat_dir(chat_id, folder))
             vm.delete_path(name, chat_dir(chat_id))
-            vm.delete_path(name, f"{LEGACY_CHATS_DIR}/{chat_dir(chat_id).rsplit('/', 1)[1]}", agent=False)
         vm.delete(vm_name(uid, chat_id))
     finally:
         vm.close()
 
 
 def delete_workspace(uid, *, factory=None):
-    """Delete the account's workspace with its account (agent_workspace.py):
-    every chat's folder and the browser with its sign-ins, and the browser VM
-    of 2026-10-27 to 2026-11-04 where it is still there. By the names that
-    follow from the account, so a record already gone never hides them; gone
-    already is fine."""
+    """Delete the account's workspace with its account, and an old browser VM where it is still
+    there, by the names that follow from the account, so a record already gone never hides them."""
     vm = (factory or backend)()
     if vm is None:
         raise VMUnavailable("delete: no provider configured")

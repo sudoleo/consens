@@ -1,32 +1,15 @@
-"""How the Agent writes its answer: as the last message of its own tool loop.
-
-The agent writes the answer itself, as plain text in a step without tool
-calls; a direct answer is one call. The agent keeps everything it did in
-this message in its context (tool results, pages read, comparison answers,
-its own decisions), so the answer needs no separate facts about the app or
-the turn. docs/agent-mode.md, "Die Antwort schreibt der Agent selbst",
-describes the flow.
-
-Until 2026-10-14 the orchestrator ended its steering with an ``answer`` tool
-and a fresh, tool-free answer step of the same model wrote the answer from an
-evidence message, reading the conversation and every comparison answer a
-second time without prompt cache (git tag agent-separate-answer-last).
-"""
+"""Constants of the agent writing its own answer: plain text in a step without tool calls (docs/agent-mode.md,
+"Die Antwort schreibt der Agent selbst")."""
 from __future__ import annotations
 
-# A step's text streams only once it is this long and no tool call has
-# started: a short preamble before a tool call ("I'll look this up.") never
-# shows. Greetings and other short answers appear at once when the step ends.
+# A step's text streams once it is this long and no tool call has started, so a short preamble before a call
+# never shows.
 ANSWER_HOLD_CHARS = 300
 
-# Text a step wrote alongside a tool call stays visible in the timeline as a
-# progress note of at most this many characters, its lines kept. Since
-# 2026-10-28 the whole text, also one too short to have streamed, moved there
-# once the call starts (Max: in the trace, not cut to one line of 400).
+# Text written alongside a tool call stays in the timeline as a progress note of at most this many characters.
 NOTE_CHARS = 8000
 
-# Tools that change nothing an answer rests on. A step that shows its answer
-# and calls only these keeps the text as the answer (DelegationLoop.
-# _answered_with_tools); any other tool call makes the text a preamble.
+# A step that shows its answer and calls only these keeps its text as the answer
+# (AgentLoop._answered_with_tools).
 SIDE_TOOLS = frozenset({"update_memory", "prepare_watch", "prepare_settings_change", "update_plan",
                         "prepare_pull_request", "report_finding", "finish_watch"})

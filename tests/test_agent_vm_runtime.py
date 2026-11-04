@@ -296,7 +296,7 @@ def test_a_message_whose_end_broke_off_lets_the_lease_run_out(store, fake_vm, mo
     # The run's end closes the session late in its cleanup; when a step before
     # it raised (a receipt of a chat deleted meanwhile), the keeper renewed
     # the lease for up to LEASE_KEEP_MAX_SECONDS and every other chat of the
-    # account got VM_BUSY. The run's end (DelegationLoop.closed) stops it.
+    # account got VM_BUSY. The run's end (AgentLoop.closed) stops it.
     monkeypatch.setattr(agent_vm_tools, "LEASE_KEEP_SECONDS", .05)
     keepers = []
 

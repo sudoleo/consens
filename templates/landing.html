@@ -449,25 +449,21 @@
           </li>
         </ol>
 
-        <!-- Until 2026-10-31 three more questions with their agreement
-             scores stood here. There is no score any more; what the
-             reviewers do besides marking the answer is this: they can stop
-             a step before it runs (agent_gate.py, the card above the field
-             in /app, agent-chat.js holdCard). An illustration in the
-             words of that card. -->
+        <!-- Besides marking the answer, the reviewers can pause the work
+             (agent-chat.js holdCard): an illustration in that card's words. -->
         <div class="lp-examples lp-reveal">
-          <p class="lp-examples-title">Before a risky step</p>
+          <p class="lp-examples-title">When a step looks risky</p>
           <div class="lp-pause">
             <div class="lp-pause-card">
               <span class="lp-pause-glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></span>
               <div class="lp-pause-body">
-                <p class="lp-pause-title">A reviewer paused before a step</p>
+                <p class="lp-pause-title">A reviewer paused the work</p>
                 <p class="lp-pause-reason"><strong>Possible damage:</strong> This cancels both contracts, but you asked about the internet contract only. <span class="lp-pause-by">Claude</span></p>
-                <p class="lp-pause-step"><span>The step that has not run yet</span> Clicks “Cancel both contracts”</p>
-                <span class="lp-pause-btn">Let it run</span>
+                <p class="lp-pause-step"><span>The agent’s step</span> Clicks “Cancel both contracts”</p>
+                <span class="lp-pause-btn">Let it continue</span>
               </div>
             </div>
-            <p class="lp-pause-note">The step runs only if you let it. Until then the agent waits, and you can stop the run instead.</p>
+            <p class="lp-pause-note">The work goes on only once you let it. Until then the agent waits, and you can stop the run instead.</p>
           </div>
         </div>
       </div>

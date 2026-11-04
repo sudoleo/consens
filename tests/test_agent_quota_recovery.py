@@ -8,7 +8,7 @@ from app.services import agent_quota
 from app.services.agent_costs import aggregate_usage
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from test_agent_runs import UID, store, receipt, totals, priced
-from test_agent_delegation import make_loop
+from test_agent_sessions import make_loop
 
 
 def test_refresh_migrates_terminal_unknown_holds_but_preserves_live_reservations(store):
@@ -33,7 +33,7 @@ def test_terminal_unknown_usage_releases_admission_without_inventing_zero_usage(
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
-    store.settle(*args, completion=receipt(measured=False), status='failed', final=False)
+    store.settle(*args, completion=receipt(measured=False), status='failed')
     budget = agent_quota.snapshot(store.db, UID)
     assert budget['used'] == budget['reserved'] == 0
     # R07 bounded uncertainty: the reservation is released, but a bounded
@@ -43,7 +43,7 @@ def test_terminal_unknown_usage_releases_admission_without_inventing_zero_usage(
     assert store.receipt_ref(*args).get().to_dict()['usage'] is None
     assert totals(store)['unmetered_calls'] == 1
     before = dict(budget)
-    assert not store.settle(*args, completion=receipt(), status='succeeded', final=False)
+    assert not store.settle(*args, completion=receipt(), status='succeeded')
     assert agent_quota.snapshot(store.db, UID)['revision'] == before['revision']
 
 
@@ -51,7 +51,7 @@ def test_reload_reaps_lost_lease_map_and_recovers_exact_saved_single_call_usage(
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
-    store.settle(*args, completion=receipt(), status='succeeded', final=False)
+    store.settle(*args, completion=receipt(), status='succeeded')
     saved_usage = measured_usage({'prompt_tokens':155, 'completion_tokens':284, 'cost':.000460410}, loop.model)
     for aid, usage in [('a'*32, aggregate_usage([saved_usage])), ('b'*32, None)]:
         store.publish_agent(*args, run_token=loop.run_token, agent_id=aid,
@@ -93,7 +93,7 @@ def test_a_lost_call_is_estimated_from_what_its_run_measured(store):
     measured = AgentCompletion()
     measured.text, measured.finish_reason = "ok", "stop"
     measured.usage = measured_usage({'prompt_tokens': 50_000, 'completion_tokens': 2_000, 'cost': .023}, loop.model)
-    store.settle(*args, completion=measured, status='succeeded', final=False)
+    store.settle(*args, completion=measured, status='succeeded')
     charged = agent_quota.measured_charge(measured.usage)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), step='completion:1',
                 reservation=(100, priced(100)))
@@ -142,7 +142,7 @@ def test_recovery_never_guesses_an_individual_receipt_from_ambiguous_saved_usage
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
-    store.settle(*args, completion=receipt(), status='succeeded', final=False)
+    store.settle(*args, completion=receipt(), status='succeeded')
     before = totals(store)
     aid = 'a' * 32
     usage = aggregate_usage([measured_usage({'prompt_tokens':155, 'completion_tokens':284}, loop.model)])
@@ -159,7 +159,7 @@ def test_recovery_never_guesses_an_individual_receipt_from_ambiguous_saved_usage
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(),
                 step=f'agent:{aid}:0', reservation=(500, priced(500)))
     if case == 'multiple_steps':
-        store.settle(*args, completion=receipt(), status='succeeded', step=f'agent:{aid}:0', final=False)
+        store.settle(*args, completion=receipt(), status='succeeded', step=f'agent:{aid}:0')
         before = totals(store)
         store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(),
                     step=f'agent:{aid}:1', reservation=(500, priced(500)))

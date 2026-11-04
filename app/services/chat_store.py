@@ -1447,7 +1447,7 @@ class ChatStore:
         # removes its files and workspace folder: a chat deleted in the
         # sidebar (DELETE /bookmark), a temporary chat left mid-answer
         # (DELETE /chats). A run in another process sees the chat's status at
-        # its watcher's next look (agent_delegation.WATCH_SECONDS).
+        # its watcher's next look (agent_loop.WATCH_SECONDS).
         try:
             from app.services.agent_background import agent_background
             agent_background.stop_chat(uid, chat_id)

@@ -840,7 +840,7 @@ SERVER_RAISED = {"app/services/agent_sessions.py": {"TurnStatusConflict", "Notes
 # Services whose progress lines reach the activity as they are: the "text"
 # of a dict with "kind": "progress" (UX audit 2026-10-29 I6: "The reviewers
 # check this request before you decide." stood in English in a German run).
-SERVER_ACTIVITY = {"app/services/agent_delegation.py"}
+SERVER_ACTIVITY = {"app/services/agent_loop.py"}
 
 
 def server_keys(relative: str) -> list[Found]:

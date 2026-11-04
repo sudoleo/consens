@@ -5,7 +5,7 @@ comparisons, and a long run's reserve counts what the reviewers take."""
 import pytest
 
 from app.services import agent_budget_config, agent_quota
-from app.services.agent_delegation import AGENT_SESSION, TURN_ALLOWANCE_LIMIT
+from app.services.agent_loop import AGENT_SESSION, TURN_ALLOWANCE_LIMIT
 from test_agent_audit import ANSWER, Audit, audit_loop, saved
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 

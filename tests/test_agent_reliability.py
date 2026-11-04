@@ -159,7 +159,7 @@ def test_loop_initialization_failure_unlocks_chat_and_releases_capacity(api, mon
     monkeypatch.setattr(agent, "agent_capacity", capacity)
     def fail(**kwargs):
         raise ValueError("Unavailable worker configuration")
-    monkeypatch.setattr(agent, "DelegationLoop", fail)
+    monkeypatch.setattr(agent, "AgentLoop", fail)
     chat = store.create_chat(UID, execution_mode="agent")["id"]
     result = client.post('/agent', headers=AUTH, json={"chat_id": chat, "question": "Hi",
         "client_request_id": "init", "bookmark_id": "initialization"})
@@ -204,9 +204,11 @@ def test_comparison_checkpoints_finished_answer_while_peer_is_still_running(stor
 @pytest.mark.parametrize("heartbeat", [True, False])
 def test_real_provider_socket_stall_releases_receipt_and_preserves_partial_text(store, monkeypatch, heartbeat):
     closed, requests = [], []
+    # Long enough to show while it streams (ANSWER_HOLD_CHARS): the step is not tried again.
+    partial = "Partial answer. " * 25
     class Body(httpx.AsyncByteStream):
         async def __aiter__(self):
-            yield b'data: {"choices":[{"delta":{"content":"Partial answer"}}]}\n\n'
+            yield ("data: " + json.dumps({"choices": [{"delta": {"content": partial}}]}) + "\n\n").encode()
             while True:
                 await asyncio.sleep(.015)
                 if heartbeat:
@@ -225,7 +227,7 @@ def test_real_provider_socket_stall_releases_receipt_and_preserves_partial_text(
         list(loop.run())
     assert len(requests) == 1 and closed
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["consensus"] == "Partial answer" and saved["agent_failure"]["code"] == "provider_timeout"
+    assert saved["consensus"] == partial and saved["agent_failure"]["code"] == "provider_timeout"
     assert agent_quota.snapshot(store.db, UID)["reserved"] == 0
 
 

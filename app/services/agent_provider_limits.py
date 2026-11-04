@@ -25,9 +25,8 @@ class ProviderCooldowns:
         self.entries = OrderedDict()
 
     def key(self, model, api_key):
-        # The route is part of the key: a chat with Google data runs the same
-        # model only on zero-retention endpoints, so its 429 says nothing about
-        # the fastest route every other chat takes (openrouter_contract).
+        # The route is part of the key: a chat with Google data runs the model only on
+        # zero-retention endpoints, so its 429 says nothing about every other chat's route.
         provider = (getattr(model, "request_config", None) or {}).get("provider") or {}
         return sha256(api_key.encode()).digest(), model.model, json.dumps(provider, sort_keys=True)
 
@@ -55,37 +54,27 @@ provider_cooldowns = ProviderCooldowns()
 
 
 class ModelOutputLimit(RuntimeError):
-    """The model used its whole output allowance before any usable answer.
-
-    A turn that ends this way says what to do instead (TURN_OUTPUT_LIMIT); a
-    comparison answer keeps the plain cause (COMPARISON_FAILURES)."""
+    """The model used its whole output allowance before any usable answer."""
     def __init__(self, message=None):
         super().__init__(message or "This model used its whole output allowance before it finished an answer.")
 
 
 class ModelEmptyAnswer(ModelOutputLimit):
-    """The model reasoned (and maybe searched), then stopped without a word.
-
-    Unlike a real output limit this is chance: gpt-oss-120b did it once in
-    thirteen identical comparison calls (2026-10-15). A comparison answer
-    tries once more (AgentComparison.call); everything else treats it as an
-    output limit."""
+    """The model reasoned, then stopped without a word. Unlike an output limit this is chance, so a
+    comparison answer tries once more; everything else treats it as an output limit."""
     def __init__(self, message=None):
         super().__init__(message or "The model ended without writing an answer.")
 
 
 class ModelDeclined(RuntimeError):
-    """The provider's own safety filter stopped the answer before a word.
-
-    Sending the same message again meets the same filter (2026-10-28: Claude
-    on Vertex stopped every attempt of one chat at once, 0 tokens), so no
-    retry; another chat model may well answer it."""
+    """The provider's safety filter stopped the answer before a word. The same message meets the
+    same filter, so no retry; another model may answer it."""
     def __init__(self, message=None):
         super().__init__(message or "This chat model declined to answer this request. Another chat model may answer it.")
 
 
-# The chat model reasoned through its allowance, also on its lighter retry:
-# the user can change the reasoning level, the app cannot do more by itself.
+# Reasoned through its allowance also on the lighter retry: only the user can change the reasoning
+# level.
 TURN_OUTPUT_LIMIT = ("The chat model used its whole output allowance on reasoning before it could finish. "
                      "Choose a lower reasoning level or another chat model and send the message again.")
 
@@ -104,8 +93,7 @@ def agent_failure(error):
     from app.services.google_connections import GoogleError
     from app.services.llm.provider_runtime import AnalysisBudgetExceeded
     import httpx
-    # Our own messages, written for the user: sending the same message again
-    # would fail the same way, so none of them says "try again".
+    # Sending the same message again would fail the same way, so none of these says "try again".
     if isinstance(error, ConversationTooLong):
         return {"code": "conversation_too_long", "error": str(error)}
     if isinstance(error, FileUnavailable):
@@ -146,7 +134,6 @@ def provider_failure(error):
     if status in {401, 402, 403}:
         return {"code": "provider_access", "error": "The model provider declined the request. This needs a check of the provider settings on our side."}
     if status in {400, 413, 422}:
-        # The request itself was refused (too large, an unsupported file or
-        # parameter): the same request again fails the same way.
+        # The request itself was refused (too large, an unsupported file or parameter).
         return {"code": "provider_rejected", "error": "The model provider rejected this request. Try another chat model, or start a new chat if this one is long or has large files."}
     return {"code": "provider_error", "error": "The model provider could not finish this request. Trying again in a moment usually works."}

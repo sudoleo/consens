@@ -103,7 +103,7 @@ def capture(loop):
         captured["wrap_up"] = wrap_up.get("reason")
     vm_tools = getattr(loop, "vm_tools", None)
     if vm_tools is not None:
-        # The workspace on demand (DelegationLoop._open_workspace): how often
+        # The workspace on demand (AgentLoop._open_workspace): how often
         # the agent opens it, stays without it, or has it from the start.
         captured["workspace"] = ("opened" if loop.workspace_opened else "closed" if loop.workspace_closed
                                  else "open")

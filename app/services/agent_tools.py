@@ -1,9 +1,7 @@
-"""Explicit read-only client tools and shared OpenRouter search configuration.
+"""Explicit client tools and the shared OpenRouter search configuration.
 
-No custom search service: search executes in the selected model's request.
-The direct loop's registry is empty by default. Delegation supplies its own
-server-owned registry; tools require a strict argument model and bounded executor.
-"""
+Search executes in the selected model's request, no custom search service. Every tool needs a strict
+argument model and a bounded executor."""
 import contextlib
 import contextvars
 from dataclasses import dataclass
@@ -20,8 +18,7 @@ from app.services.llm.engines import web_search_tool
 
 
 def configured_model(model):
-    # Reuse product routing. Extra Agent-only pinning/require_parameters
-    # excluded working Anthropic endpoints (HTTP 404).
+    # Reuse product routing: extra pinning excluded working Anthropic endpoints (HTTP 404).
     return model
 
 
@@ -30,35 +27,23 @@ def search_family(model):
                  if model.model.startswith(p.openrouter_prefix.rstrip("/") + "/")), "")
 
 
-# Exa results per search round. They bound what a round can add to the
-# input; the publishers' own search may ignore them.
+# They bound what a round adds to the input; the publishers' own search may ignore them.
 SEARCH_RESULTS, SEARCH_RESULT_CHARACTERS = 5, 2000
 
 
 def search_tools(model, searches):
-    """The one search configuration for every model, as in Consensus.
-
-    Engine "auto" lets OpenRouter choose: the publisher's own search where one
-    exists (Google grounding, OpenAI, Anthropic), Exa otherwise. The only
-    exception, Grok on Exa, lives in engines.web_search_tool. See
-    docs/agent-mode.md, "Websuche".
-    """
+    """The one search configuration for every model, as in Consensus: engine "auto" lets OpenRouter
+    choose the publisher's own search where one exists, Exa otherwise (Grok on Exa in
+    engines.web_search_tool)."""
     return [web_search_tool(search_family(model), max_uses=searches, max_results=SEARCH_RESULTS,
                             max_total_results=SEARCH_RESULTS * searches,
                             max_characters=SEARCH_RESULT_CHARACTERS)] if searches else []
 
 
 def argument_schema(arguments):
-    """The argument model's JSON schema with every $ref written out in place.
-
-    Pydantic puts nested models under $defs. DeepSeek V4.1 Flash never saw
-    them: it called create_document three times with guessed section fields
-    ("blocks", "content", "text") until the turn ended (2026-11-01), and
-    needed three attempts at prepare_settings_change before. A flat schema
-    shows every provider the whole structure.
-
-    Built once per model and handed out as a copy: every message builds its
-    tools (about 50 schemas) before its first request."""
+    """The argument model's JSON schema with every $ref written out in place: some providers never
+    resolve $defs and guessed nested fields until the turn ended. Built once per model and handed
+    out as a copy, since every message builds about 50 schemas."""
     return json.loads(_flat_schema(arguments))
 
 
@@ -84,12 +69,8 @@ def _flat_schema(arguments):
 
 
 def argument_shape(node):
-    """A flat schema in one line, optional fields with "?":
-    {title: string, sections: [{heading: string, paragraphs?: [string]}]}.
-
-    For a tool description: with the flat schema, DeepSeek V4.1 Flash still
-    guessed the document's fields on its first call (2026-11-01), and a
-    description reaches the model with every provider."""
+    """A flat schema in one line, optional fields with "?", for a tool description: that reaches the
+    model with every provider, and even the flat schema left a model guessing on its first call."""
     options = [option for option in node.get("anyOf", [node]) if option.get("type") != "null"]
     if len(options) != 1:
         return " | ".join(argument_shape(option) for option in options)
@@ -106,12 +87,10 @@ def argument_shape(node):
 
 
 def _option(node, key):
-    """The anyOf option of an optional field that carries ``key``."""
     return next((option for option in node.get("anyOf", ()) if key in option), node)
 
 
 def _allowed_fields(schema, path):
-    """The fields the object at ``path`` takes, for an unknown-field refusal."""
     node = schema
     for part in path:
         node = (_option(node, "items").get("items") if isinstance(part, int)
@@ -129,21 +108,15 @@ class ReadOnlyTool:
     execute: Callable
     # Optional per-tool cap on raw JSON arguments; defaults to the registry's.
     argument_limit: Optional[int] = None
-    # Optional activity(arguments, result) -> extra fields of the tool's trace
-    # event (result is None while it runs), e.g. the host read_source opens.
+    # activity(arguments, result) -> extra trace fields (result None while it runs).
     activity: Optional[Callable] = None
-    # The tool reports while it runs: execute(..., report=fields) updates its
-    # running trace event with ``fields`` (a VM command's output so far).
+    # The tool reports while it runs: execute(..., report=fields) updates its trace event.
     reports: bool = False
-    # The tool only reads, and its call needs nothing that another call of
-    # the same step changes or asks the user: neighbouring calls of such
-    # tools run at the same time (DelegationLoop._call_groups). Its execute
-    # must be thread-safe.
+    # The tool only reads and needs nothing another call of its step changes or asks: neighbouring
+    # such calls run at the same time. Its execute must be thread-safe.
     concurrent: bool = False
-    # With ``concurrent``: what the tool counts or keeps in order (a limit
-    # per step or message, the message's first result) happens inside
-    # call_order, which the calls of a group pass in call order. A call of a
-    # tool without it gives up its place as it starts.
+    # With ``concurrent``: what the tool counts or keeps in order happens inside call_order. A call
+    # of a tool without it gives up its place as it starts.
     ordered: bool = False
 
     def schema(self):
@@ -155,21 +128,19 @@ class ReadOnlyTool:
                 "parameters": argument_schema(self.arguments)}}
 
 
-# The place of the running call in its group (DelegationLoop._execute_together):
-# (CallOrder, index), None outside a group.
+# The running call's place in its group: (CallOrder, index), None outside one.
 _CALL_TURN = contextvars.ContextVar("agent_call_turn", default=None)
 
 
 class CallOrder:
-    """The places of one group's calls: a call passes call_order once every
-    earlier call of the group has passed it or given up its place."""
+    """The places of one group's calls: a call passes call_order once every earlier call passed it
+    or gave up its place."""
 
     def __init__(self, count):
         self._condition = threading.Condition()
         self._given = [False] * count
 
     def enter(self, index):
-        """The running thread's call takes place ``index`` (in its own context)."""
         _CALL_TURN.set((self, index))
 
     def give(self, index):
@@ -186,7 +157,6 @@ class CallOrder:
 
 
 def give_turn():
-    """The running call gives up its place in its group, if it has one."""
     turn = _CALL_TURN.get()
     if turn is not None:
         turn[0].give(turn[1])
@@ -194,8 +164,7 @@ def give_turn():
 
 @contextlib.contextmanager
 def call_order(cancellation=None):
-    """Inside, the calls of a group come one after another in call order,
-    as if the whole group ran so: whichever thread arrives first, a limit
+    """Inside, the calls of a group come in call order whichever thread arrives first, so a limit
     refuses the later call. Outside a group it waits for nothing."""
     turn = _CALL_TURN.get()
     if turn is None:
@@ -210,11 +179,9 @@ def call_order(cancellation=None):
 
 
 def _decode_stringified(arguments, value, unique):
-    """Claude sometimes sends an array or object argument as its JSON text
-    ("memory": "[]"). Strict validation rejected the whole call, and the model
-    repeated it until the turn ended (2026-10-07). A string that decodes to
-    the declared container type is taken as that container; anything else is
-    left for validation to reject."""
+    """Claude sometimes sends an array or object argument as its JSON text; strict validation
+    rejected the call and the model repeated it until the turn ended. A string that decodes to the
+    declared container type is taken as it; anything else is left for validation."""
     properties = argument_schema(arguments).get("properties", {})
     decoded = dict(value)
     for key, item in value.items():
@@ -233,18 +200,16 @@ def _decode_stringified(arguments, value, unique):
     return decoded
 
 
-# A bound against a runaway registry, far below the providers' own limits
-# (OpenAI and Gemini take 128). An admin's largest message (workers, files,
-# Memory, VM with GitHub and pictures) offers 27 tools; 20 failed every
-# message of such a chat (2026-10-26, tests/test_agent_vm.py).
+# A bound against a runaway registry, far below the providers' own (128). An admin's largest message
+# offers 27 tools.
 MAX_TOOLS = 40
 
 
 class ToolRegistry:
     def __init__(self, tools=(), *, argument_limit=2048):
         self.default_argument_limit = argument_limit
-        # The streaming client needs the largest cap any tool accepts; each
-        # tool is still validated against its own limit below.
+        # The streaming client needs the largest cap any tool accepts; each tool is validated
+        # against its own.
         self.argument_limit = max([argument_limit, *(t.argument_limit or 0 for t in tools)])
         self.tools = {tool.name: tool for tool in tools}
         if len(self.tools) != len(tools) or len(tools) > MAX_TOOLS:
@@ -252,9 +217,8 @@ class ToolRegistry:
         self.schemas = [tool.schema() for tool in tools]
 
     def validate(self, call):
-        # Every refusal names what to change: the model reads only this text,
-        # and a bare "not authorized" let Claude repeat the same call until
-        # the turn ended (2026-10-09).
+        # Every refusal names what to change: the model reads only this text, and a bare "not
+        # authorized" made it repeat the call until the turn ended.
         function = call.get("function") or {}
         tool = self.tools.get(function.get("name"))
         raw = function.get("arguments")
@@ -265,7 +229,7 @@ class ToolRegistry:
         if not isinstance(raw, str) or len(raw) > limit:
             raise ValueError(f"Tool is not authorized: {tool.name} arguments must be one JSON object "
                              f"of at most {limit} characters.")
-        # Reject duplicate JSON keys, rather than silently accepting the last.
+        # Reject duplicate JSON keys rather than silently accepting the last.
         def unique(pairs):
             value = {}
             for key, item in pairs:
@@ -274,8 +238,7 @@ class ToolRegistry:
                 value[key] = item
             return value
         try:
-            # A call without arguments may stream none at all; that is an
-            # empty object (read_settings takes no arguments).
+            # A call without arguments may stream none at all.
             value = json.loads(raw if raw.strip() else "{}", object_pairs_hook=unique)
         except json.JSONDecodeError as exc:
             raise ValueError(f"{tool.name} arguments are not valid JSON ({exc.msg}); send one JSON object.") from exc
@@ -284,16 +247,10 @@ class ToolRegistry:
         try:
             arguments = tool.arguments.model_validate(value)
         except ValidationError as exc:
-            # Field and message only: pydantic's default text repeats the
-            # input and a docs URL per error, and the 500-character cut
-            # dropped every error after the second. An unknown field also
-            # names the fields its object takes: "Extra inputs are not
-            # permitted" alone left DeepSeek guessing (2026-11-01). The same
-            # mistake in every list item is one problem ("and 9 more like
-            # it"): ten slides with "bullets" filled the cut before the
-            # document's own fields came up. The refusal ends with the whole
-            # argument form: "changes: Input should be a valid list" alone
-            # left DeepSeek guessing update_memory's changes (2026-11-02).
+            # Field and message only (pydantic's text repeats the input and a docs URL per error,
+            # and the cut dropped later errors). An unknown field names the fields its object takes,
+            # the same mistake in every list item is one problem, and the refusal ends with the
+            # whole argument form: models otherwise kept guessing.
             schema, problems, alike, named = argument_schema(tool.arguments), [], {}, set()
             for error in exc.errors(include_url=False, include_input=False):
                 place = tuple(None if isinstance(part, int) else part for part in error["loc"])
@@ -317,11 +274,8 @@ class ToolRegistry:
         return tool, arguments
 
     def _unknown_notes(self):
-        """What an unknown tool's refusal adds, true of this registry: which
-        tool opens web pages (read_source's own description says which ones:
-        any public page), and that the workspace's
-        tools come with open_workspace while it is closed (audit L7: a direct
-        call of browser did not say so)."""
+        """What an unknown tool's refusal adds: which tool opens web pages, and that the workspace's
+        tools come with open_workspace while it is closed."""
         notes = []
         if "read_source" in self.tools:
             notes.append("Of these, read_source opens web pages.")

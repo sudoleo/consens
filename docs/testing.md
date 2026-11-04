@@ -35,12 +35,11 @@ lokal braucht, startet mit `LOCAL_BACKGROUND_JOBS=1` (wirkt nicht zusammen mit
 
 ## Gemeinsamer Einstieg unter Windows
 
-Delegation: `tests/test_agent_delegation.py` prüft Kommunikation, Abbruch,
-Budgets und Wiederherstellung ohne bezahlte Aufrufe;
-`tests/e2e/test_agent_transactions.py` atomare Schritte im Firestore-Emulator;
-`tests/e2e/test_agent_delegation_frontend.py` die gebaute Desktop-/Mobilansicht.
-Optionale kostenpflichtige Provider-Probes und Qualitäts-/Kostenvergleiche stehen
-in [agent-delegation.md](agent-delegation.md); sie sind kein Teil normaler Tests.
+Sitzungen des Agenten (Vergleichsantworten, Prüfer, Seitenabrufe):
+`tests/test_agent_sessions.py` prüft Journal, Ansichten und Wiederherstellung
+ohne bezahlte Aufrufe; `tests/e2e/test_agent_transactions.py` atomare Schritte
+im Firestore-Emulator; `tests/e2e/test_agent_delegation_frontend.py` die
+gebaute Desktop-/Mobilansicht.
 
 PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 
@@ -377,7 +376,7 @@ Zusätzlich: aktualisierte Kontingente bei SSE-Fehlern/Disconnect, veraltete und
 fremde Snapshots sowie Tool-Nennungen gegenüber bestätigten Aufrufen.
 Agentenleiste: `agent-delegation.test.mjs` prüft gemessene Tokenzahlen (ohne
 Doppelzählung), sofortige Prüfer- und gespeicherte Judge-Details ohne weitere Requests und Skeleton/
-Cache für Worker. `test_agent_delegation_frontend.py` prüft diese Abläufe mit
+Cache für Sitzungsdetails. `test_agent_delegation_frontend.py` prüft diese Abläufe mit
 gedrosseltem Detailabruf, sanfter Öffnung und Reduced Motion auf Desktop/Mobil.
 `test_agent_progress.py` prüft außerdem den gedrosselten Unicode-Zeichenzähler,
 gemeldete Token-Snapshots, unveränderte Abrechnung und fehlende zusätzliche
@@ -426,8 +425,8 @@ Mobil: hochgestellte Zahlen, Quellenvorschau per Tastatur, Quellenliste,
 unveränderter Markdown und dieselben Verweise im archivierten Verlauf.
 
 Agent Beta: Backend-Verträge in `tests/test_agent_runs.py` und
-`tests/test_agent_loop.py` (gemeinsame Websuche aller angebotenen Modelle, Schrittbudgets, Tool-Schemas, Abbruch
-und Teilabrechnung) sowie `tests/test_agent_search.py` (Provider-Gesamtkosten,
+`tests/test_agent_loop.py` (Lauf einer Nachricht mit Antwort im Werkzeuglauf, Prompt-Cache-Punkte,
+Stream- und Usage-Verarbeitung, Tool-Schemas) sowie `tests/test_agent_search.py` (Provider-Gesamtkosten,
 Cache-Writes, geteilte Usage-Chunks, HTTP-/SSE-429 und Wartefristen). Browser-State in
 `tests/js/agent-chat.test.mjs`. Der isolierte Layout-/Bookmark-Browserlauf
 `tests/e2e/test_agent_chat_frontend.py` nutzt dieselben vollständig gemockten

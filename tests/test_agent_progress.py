@@ -237,7 +237,7 @@ def test_a_reasoning_line_the_journal_leaves_out_stays_with_the_end_record(store
     writes (_journal_write). CI 2026-11-01 caught a comparison answer that
     ended between the journal taking its line and writing it, and kept no
     line at all: its end record now carries the latest one."""
-    from app.services.agent_delegation import Worker
+    from app.services.agent_loop import Worker
     loop = make_loop(store, Script())
     submitted = []
     loop.journal.submit = lambda worker, patch, message=None, **kwargs: submitted.append(patch)
@@ -292,7 +292,8 @@ def test_a_call_with_a_progress_argument_is_refused_without_a_progress_line(stor
     for index, name in enumerate(("compare_models", "check_text")):
         args = {"status_update": "Comparing.", "question": "Q", "context": ""}
         call = {"id": str(index), "function": {"name": name, "arguments": json.dumps(args)}}
-        result = loop._execute(loop.registry, value, loop.cancellation, call)
+        result, entry = loop._run_call(loop.registry, value, loop.cancellation, call)
+        loop._log_call(entry)
         assert "error" in json.loads(result["content"])
     assert not any(e["kind"] == "progress" for e in loop.completion.activity)
     assert loop.comparison.comparisons == []
@@ -355,7 +356,7 @@ def test_live_usage_replaces_step_snapshots_without_extra_receipts_or_transcript
 
 def test_worker_rework_adds_settled_usage_once_and_coalesces_without_filling_event_queue(store):
     import queue
-    from app.services.agent_delegation import Worker
+    from app.services.agent_loop import Worker
     loop = make_loop(store, Script())
     worker = Worker("a" * 32, loop.model, [], session_seq=1, stream_chars=120,
                     usages=[{"input_tokens": 50, "output_tokens": 20}, None])

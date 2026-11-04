@@ -1,76 +1,34 @@
-"""The account's workspace (since 2026-10-27, docs/agent-mode.md "Workspace"):
-one Linux VM for all of an account's chats and its user, like a colleague's
-computer with its browser (agent_vm.workspace_name). The agent works there
-as a user of its own (agent_vm_tools.py); Chrome runs there as the
-provider's user, which the user watches and steers live
-(routers/agent_workspace.py, workspace-view.js) and the agent uses through
-the ``browser`` tool (agent_browser.py). localhost in that browser is the
-agent's own servers, no tunnel between them.
+"""The account's workspace (docs/agent-mode.md "Workspace"): one Linux VM for all of an account's
+chats and its user, like a colleague's computer with its browser.
 
-From 2026-10-27 to 2026-11-04 the browser had a VM of its own and the
-workbench reached only the package registries (security audit 2026-10-27,
-Max's option A). Every feature between them needed a bridge (a localhost
-tunnel, uploads and downloads copied from VM to VM, warm-ups of two VMs),
-each bridge a rule of its own, and the agent still sent a key of
-~/.secrets through the browser's upload (Max, 2026-11-04: "Sudo ist um
-einiges sicherer als eine von uns implementierte Sicherheitslayer"). Since
-then one VM, and what the agent must not reach it cannot reach by the
-computer's own means: Unix users and file modes. Chrome's protocol is a
-socket in the provider's home (workspace_vm/browser/cdp.py, no TCP port),
-its screen asks for a cookie from there and starts only on its own socket
-(display.sh), and the agent's commands have a /tmp of their own
-(agent-run). The network is open for the whole VM, as it was for the
-browser (agent_vm.RULES, Max's decision). What a key the user gave the agent
-can do, the agent can do with it: that holds on any computer.
+The agent works there as a user of its own (agent_vm_tools.py). Chrome runs there as the provider's
+user; the user watches and steers it live and the agent uses it through the ``browser`` tool.
+localhost in that browser is the agent's own servers. What the agent must not reach it cannot reach
+by the computer's own means, Unix users and file modes, rather than bridges between machines, each
+of which needed rules of its own: Chrome's protocol is a socket in the provider's home
+(workspace_vm/browser/cdp.py, no TCP port), its screen asks for a cookie from there, and the agent's
+commands have a /tmp of their own (agent-run). The network is open for the whole VM
+(agent_vm.RULES). What a key the user gave the agent can do, the agent can do with it: that holds on
+any computer.
 
-Record and lease: ``users/{uid}/chat_state/agent_workspace`` names the VM
-before the provider creates it, so the account's deletion always finds it,
-and leases the workspace to one chat's message at a time (``lease``: chat,
-turn, until). A lease ends with its message (release), by itself
-LEASE_SECONDS after its last VM call, or once its chat runs no response any
-more (its run lock ran out: the server died with it), so a run that died
-never blocks the workspace for long. The user's live view takes no lease: it is their computer. A
-record that still names the browser VM of before (``browser``) has it
-deleted at the workspace's next start (retire_old_browser): the sign-ins are
-made again once.
+``users/{uid}/chat_state/agent_workspace`` names the VM before the provider creates it, so the
+account's deletion always finds it, and leases the workspace to one chat's message at a time. A
+lease ends with its message, LEASE_SECONDS after its last VM call, or once its chat's run lock ran
+out, so a run that died never blocks the workspace for long. The user's live view takes no lease: it
+is their computer. A record that still names a browser VM of the two-VM layout has it deleted at the
+next start (retire_old_browser).
 
-Tools in the VM (workspace_vm/): ``agent-run``, which every command and file
-operation of the agent goes through, and setup.sh (the agent's user, its
-/tmp, the moves from the layouts before); ``browser.py``, the one program
-the browser tool calls, with cdp.py, the browser's installation, start and
-rules and the live view's relay. They are written again whenever their
-VERSION changed (prepare), at a message's first call or when the view or
-terminal opens.
+Each chat's folder names its chat in CHAT_MARKER, so a chat finds another's files; NOTES_PATH is the
+agent's own notebook across chats, whose beginning comes with each message's first VM result as
+data.
 
-Folders and notes (like Claude Code's memory): each chat's folder names its
-chat in CHAT_MARKER (title, start, id), so a chat finds another's files; and
-NOTES_PATH is the agent's own notebook of the workspace across chats (what is
-where, what is in progress, a project's conventions). Its beginning comes with
-the first VM result of every message (open_chat), as data; the user's memory
-(agent_memory.py) stays what the user said about themselves.
+Takeover: while the user has the browser (``control``, refreshed by the open view) the server holds
+the agent's calls and browser.py refuses to act. What runs of the agent goes on: it reaches neither
+the screen nor Chrome, and the agent's server must answer the browser while the user tries the
+agent's app.
 
-Takeover: the account's record says the user has the browser until a time
-the open view keeps moving on (CONTROL_SECONDS, ``control``), and so does
-``control.json`` next to the browser. While it holds, the agent waits: the
-server holds its calls (user_has_browser, VMSession.wait_for_user) and
-browser.py refuses to act. What already runs of the agent goes on: from
-2026-10-27 to 2026-10-29 pause.py froze it, from the time the browser lived
-on the workbench without users of its own, where the agent's processes could
-have watched the user type. Now they reach neither the screen nor Chrome,
-and the agent's server must answer the browser while the user tries the
-agent's app. The reviewers follow what the agent does, never what the user
-does.
-
-A new account's workspace (provision, since 2026-11-02): its first setup
-installs Chrome, its screen and the rest (about a minute). A colleague of
-Max's waited for it on her first try ("every normal user is gone then"),
-two minutes after her first message to the agent. So the account's first
-message to the agent makes the VM in the background, while the user still
-talks to the agent; the first call that needs it waits only for what is
-left (setup_lock, the browser's own installation lock). The time a start
-still takes (START_SECONDS, start_until) is what the chat and the live view
-count down.
-"""
+A new account's first message to the agent provisions the VM in the background (about a minute), so
+the first call that needs it waits only for what is left."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -89,45 +47,35 @@ from app.services import agent_vm
 HOME = agent_vm.HOME
 WORKSPACE_DOC = "agent_workspace"
 LEASE_SECONDS = 600
-# A lease is moved on when a VM call finds less than this left.
 LEASE_RENEW_SECONDS = LEASE_SECONDS - 120
-# The server's own files, in the provider's home, which the agent's user
-# cannot open.
+# The server's own files, in the provider's home, which the agent's user cannot open.
 WORKSPACE_DIR = agent_vm.TOOLS_DIR
 VERSION_PATH = WORKSPACE_DIR + "/version"
 BROWSER_STATE = agent_vm.SERVER_HOME + "/.consens/browser"
 BROWSER_CONTROL = BROWSER_STATE + "/control.json"
 BROWSER_PROFILE = BROWSER_STATE + "/profile"
 BROWSER_UPLOADS = BROWSER_STATE + "/uploads"
-# What the browser downloaded, until agent_browser copies it into the chat's
-# folder (workspace_vm/browser/browser.py DOWNLOADS).
+# What the browser downloaded, until agent_browser copies it into the chat's folder.
 BROWSER_DOWNLOADS = BROWSER_STATE + "/downloads"
 BROWSER_HELPER = WORKSPACE_DIR + "/browser.py"
 BROWSER_RELAY = WORKSPACE_DIR + "/relay.py"
 NOTES_PATH = HOME + "/NOTES.md"
-# What of the notes comes with a message's first VM result; the rest the agent
-# reads itself.
+# What of the notes comes with a message's first VM result; the rest the agent reads itself.
 NOTES_CHARS = 6000
-# The live view's gateway service before 2026-10-27, removed by prepare.
+# The live view's former gateway service, removed by prepare.
 OLD_GATEWAY_SERVICE = "view"
-# How long a takeover holds without the view refreshing it (it does every
-# CONTROL_REFRESH_SECONDS while the user has the browser).
+# How long a takeover holds without the view refreshing it.
 CONTROL_SECONDS = 90
 CONTROL_REFRESH_SECONDS = 30
-# The tools of the VM, by their folder in workspace_vm/: the agent's side
-# (agent-run, setup.sh) and the browser's (browser.py and cdp.py, its
-# installation, start and rules: harden.sh with policy.json and openbox's two
-# files hold whoever steers Chrome, since 2026-10-30, workspace_guard.py; the
-# live view's relay). One folder on the VM since 2026-11-04: the browser's
-# setup.sh is install.sh since then.
+# The VM's tools by their folder in workspace_vm/: the agent's side and the browser's (harden.sh
+# with policy.json and openbox's two files hold whoever steers Chrome, workspace_guard.py).
 TOOL_FILES = {"workbench": ("agent-run", "setup.sh"),
               "browser": ("browser.py", "cdp.py", "display.sh", "harden.sh", "install.sh", "openbox-menu.xml",
                           "openbox-rc.xml", "policy.json", "relay.py")}
 SETUP_SECONDS = 180
 _FILES = Path(__file__).with_name("workspace_vm")
 
-# What the agent reads when another chat has the workspace; the activity
-# says it calmly (agent-activity.js, outcome "busy").
+# The activity says it calmly.
 VM_BUSY = ("Your workspace is in use by another chat of this account right now (one chat at a time). Continue "
            "without it for this message and tell the user it is free again once the other chat's response is done.")
 RESTORED_NOTE = ("The user restored the workspace to how it was before an earlier message since this chat last used "
@@ -144,11 +92,9 @@ class Claim:
     restored: bool
     title: str = ""
     started: str = ""
-    # The name of the chat's folder as the chat records it (open_chat),
-    # empty before its first message since 2026-10-28.
+    # The chat's folder as the chat records it, empty before its first message.
     folder: str = ""
-    # Since 2026-10-29: the names of the keys the user gave the agent
-    # (agent_secrets.py), kept on the account's record across restarts.
+    # The names of the keys the user gave the agent, kept on the record across restarts.
     secrets: tuple = ()
 
 
@@ -162,7 +108,7 @@ def _version():
     digest = hashlib.sha256(b"workspace\0" + agent_vm.AGENT_USER.encode() + b"\0")
     for name, data in sorted(tool_files().items()):
         digest.update(name.encode() + b"\0" + data + b"\0")
-    # Its network rules come with a new version (prepare).
+    # Its network rules come with a new version.
     digest.update(json.dumps(agent_vm.RULES, sort_keys=True).encode())
     return digest.hexdigest()[:16]
 
@@ -170,13 +116,9 @@ def _version():
 VERSION = _version()
 
 
-# How long a start of a VM takes until its first call can run, by what it
-# has to do (seconds, Prod 2026-10-29 to 11-02): a new VM's setup with
-# Chrome (browser 61-63 s, workbench 57 s), the tools after a new version
-# (7 s), a VM waking from cold with Chrome starting (median 15 s after a
-# pause) or from warm (5 s), Chrome's start in the live view. Only what the
-# user is told: the chat's step and the live view count the time left down
-# (start_until); no start waits for them.
+# Seconds until a VM start's first call can run, by what it has to do (measured): a new VM's setup
+# with Chrome, the tools after a new version, waking cold or warm, Chrome's start. Only what the
+# user is told to count down; no start waits for them.
 START_SECONDS = {"setup": 65, "update": 10, "cold": 15, "warm": 5, "chrome": 8}
 # A start whose end nobody said is forgotten this long after its estimate.
 START_FORGET_SECONDS = 600
@@ -185,10 +127,8 @@ _starts_lock = threading.Lock()
 
 
 class Start:
-    """One running start of an account's VM (``kind`` "browser" or
-    "workbench"): ``phase`` says what it does now, ``end`` that it is over.
-    Several may run for one VM (a message and the account's provisioning);
-    start_until says the latest."""
+    """One running start of an account's VM (``kind`` "browser" or "workbench"). Several may run for
+    one VM; start_until says the latest."""
 
     def __init__(self, uid, kind):
         self.key = (uid, kind)
@@ -211,8 +151,7 @@ class Start:
 
 
 def start_until(uid, kinds=("browser", "workbench"), besides=None):
-    """About when the starts of the account's ``kinds`` still running end
-    (the latest), or None when none runs; ``besides``: a Start left out."""
+    """About when the starts of ``kinds`` still running end, or None; ``besides``: a Start left out."""
     now = _now()
     latest = None
     with _starts_lock:
@@ -226,11 +165,9 @@ def start_until(uid, kinds=("browser", "workbench"), besides=None):
     return latest
 
 
-# One setup of a workspace at a time in this process (one server instance):
-# the account's provisioning, a message's start (VMSession._bench), the
-# browser's warm-up and the view never run setup.sh side by side; the second
-# waits and finds the version there. The browser's installation holds a lock
-# of its own on the VM (workspace_vm/browser/install.sh).
+# One setup at a time in this process: the provisioning, a message's start, the browser's warm-up
+# and the view never run setup.sh side by side; the second finds the version there. The browser's
+# installation locks on the VM.
 _setup_locks: dict[str, threading.Lock] = {}
 _setup_locks_lock = threading.Lock()
 
@@ -249,8 +186,8 @@ def _now():
 
 
 def _held_by_other(lease, chat_id, now):
-    """The chat of a live lease that is not ``chat_id``'s, else None. One
-    chat runs one message at a time, so its own lease is never a conflict."""
+    """The chat of a live lease that is not ``chat_id``'s, else None: one chat runs one message at a
+    time."""
     if not isinstance(lease, dict):
         return None
     until = lease.get("until")
@@ -260,22 +197,18 @@ def _held_by_other(lease, chat_id, now):
 
 
 def _runs(store, uid, chat_id, now, transaction=None):
-    """Whether ``chat_id`` still runs a response: its run lock
-    (``agent_lock_until``), which the running response keeps moving on and
-    which runs out within minutes of a server that died with it."""
+    """Whether ``chat_id`` still runs a response: its run lock, which runs out within minutes of a
+    server that died with it."""
     chat = store._chat_ref(uid, chat_id).get(transaction=transaction).to_dict() or {}
     lock = chat.get("agent_lock_until")
     return isinstance(lock, datetime) and lock > now
 
 
 def claim(store, uid, chat_id, turn_id, *, provider):
-    """In one transaction: the account may write, the chat is still active,
-    the account's workspace is recorded on the account and the chat (before
-    the provider creates it) and leased to this message. Raises
-    WorkspaceBusy when another chat's message holds it, as long as that chat
-    still runs its response (_runs). Returns a Claim: whether the workspace
-    was restored since this chat last used it, the chat's title and start
-    for its folder (open_chat) and the names of the account's keys."""
+    """In one transaction: the account may write, the chat is active, the VM is recorded on the
+    account and the chat before the provider creates it, and the workspace is leased to this
+    message. Raises WorkspaceBusy while another chat's message holds it and still runs. Returns a
+    Claim."""
     from app.services import persistence_guard
     from app.services.chat_store import ChatNotFound
     name = agent_vm.workspace_name(uid)
@@ -293,7 +226,7 @@ def claim(store, uid, chat_id, turn_id, *, provider):
         if holder and _runs(store, uid, holder, now, transaction=tx):
             raise WorkspaceBusy()
         used = (chat_data.get("agent_vm") or {}) if isinstance(chat_data.get("agent_vm"), dict) else {}
-        # Restores of the workspace so far, and how many this chat was told of.
+        # Restores so far, and how many this chat was told of.
         restores = int(record.get("restores") or 0)
         outcome["restored"] = bool(used.get("workspace")) and restores > int(used.get("restores_seen") or 0)
         started = chat_data.get("created_at")
@@ -319,28 +252,21 @@ def claim(store, uid, chat_id, turn_id, *, provider):
 
 
 def listed(record, field, kind):
-    """A list field of the record, its entries of ``kind`` only."""
     values = record.get(field)
     return tuple(value for value in values if type(value) is kind) if isinstance(values, list) else ()
 
 
 def remember_values(db, uid, field, values, *, keep):
-    """Adds ``values`` to the list ``field`` of the account's record, the
-    newest last and at most ``keep`` (agent_secrets' names): the record
-    outlives a restart of the server, the process's memory does not."""
+    """Adds ``values`` to the list ``field`` of the account's record, newest last, at most ``keep``:
+    the record outlives a server restart, the process's memory does not."""
     doc = ref(db, uid)
     current = [value for value in ((doc.get().to_dict() or {}).get(field) or []) if value not in values]
     doc.set({field: [*current, *values][-keep:]}, merge=True)
 
 
-# The sites the browser is logged in to, as the agent noted them
-# (note_sign_in, agent_browser.py; since 2026-11-02): ``sign_ins`` on the
-# record, each {site, name, since}. Cookies cannot say it (consent and
-# bot-protection cookies are cookies too, browser.py saved_sign_in), the
-# agent sees it on the page. Before, Max told the agent "remember you are
-# logged in to WhatsApp", which went into his memory. The list comes with
-# every message (sign_ins_note) and the user sees it in Settings →
-# Connections, where an entry can go; logging out of everything empties it.
+# The sites the browser is logged in to as the agent noted them, each {site, name, since}. Cookies
+# cannot say it (consent and bot-protection cookies are cookies too), the agent sees it on the page.
+# The list comes with every message, and the user sees and edits it in Settings.
 SIGN_INS_KEPT = 20
 SIGN_IN_NAME_CHARS = 40
 SIGN_INS_NOTE = ("The workspace's browser was logged in to these sites when the agent last noted it (note_sign_in); "
@@ -348,7 +274,6 @@ SIGN_INS_NOTE = ("The workspace's browser was logged in to these sites when the 
 
 
 def sign_ins(record):
-    """The record's sign-ins, oldest first, valid entries only."""
     values = record.get("sign_ins")
     entries = []
     for entry in values if isinstance(values, list) else ():
@@ -361,10 +286,8 @@ def sign_ins(record):
 
 
 def note_sign_in(db, uid, site, name, signed_in, *, today=None):
-    """Puts ``site`` on the account's list of sign-ins (``signed_in``) or
-    takes it off, and returns the list after. A site noted again keeps the
-    day it was first noted and takes the new name; the newest
-    SIGN_INS_KEPT stay."""
+    """Puts ``site`` on the account's sign-ins or takes it off; returns the list. A site noted again
+    keeps its first day and takes the new name."""
     doc = ref(db, uid)
     current = sign_ins(doc.get().to_dict() or {})
     before = next((entry for entry in current if entry["site"] == site), None)
@@ -384,15 +307,14 @@ def clear_sign_ins(db, uid):
 
 
 def sign_ins_note(entries):
-    """What a message's context says of ``entries`` (sign_ins), or ""."""
+    """What a message's context says of ``entries``, or ""."""
     sites = "; ".join(f"{entry['name']} ({entry['site']}" + (f", since {entry['since']})" if entry["since"] else ")")
                       for entry in entries)
     return SIGN_INS_NOTE.format(sites=sites) if sites else ""
 
 
 def renew(store, uid, turn_id):
-    """Moves this message's lease on; False when it is not this message's
-    any more (it expired and another chat took the workspace)."""
+    """Moves this message's lease on; False when another chat took the workspace."""
     workspace = ref(store.db, uid)
     held = {}
 
@@ -425,8 +347,7 @@ def record(db, uid):
 
 
 def holds_lease(store, uid, turn_id):
-    """Whether the workspace's lease is still this message's: False once
-    another message holds it, None when the record cannot be read."""
+    """Whether the lease is still this message's; None when the record cannot be read."""
     try:
         lease = record(store.db, uid).get("lease")
     except Exception as exc:
@@ -436,16 +357,12 @@ def holds_lease(store, uid, turn_id):
 
 
 def held_by(db, uid, now=None):
-    """The chat whose message holds the workspace now, or None."""
     return _held_by_other(record(db, uid).get("lease"), None, now or _now())
 
 
 def in_use(store, uid, now=None):
-    """Whether a chat's message may be using the workspace now: its lease
-    holds, or the chat named by the lease, also one past its time, still
-    runs a response (its run lock, ``agent_lock_until``, which the running
-    response keeps moving on). A restore never goes under a running agent,
-    also when its lease ran out (runtime audit 2026-10-30, A2)."""
+    """Whether a chat's message may be using the workspace now: its lease holds, or the lease's
+    chat, also one past its time, still runs a response. A restore never goes under a running agent."""
     now = now or _now()
     lease = record(store.db, uid).get("lease")
     if _held_by_other(lease, None, now):
@@ -460,8 +377,7 @@ def in_use(store, uid, now=None):
 
 
 def mark_restored(store, uid):
-    """The workspace went back to a checkpoint: every chat's next message
-    that uses it is told (claim)."""
+    """The workspace went back to a checkpoint: every chat's next message that uses it is told."""
     workspace = ref(store.db, uid)
 
     def operation(tx):
@@ -473,9 +389,8 @@ def mark_restored(store, uid):
 
 
 def record_for_view(store, uid, *, provider):
-    """The view may open the workspace before any chat used it: the VM
-    recorded on the account (no lease) before the provider creates it.
-    Returns the record as it was."""
+    """The VM recorded on the account (no lease) before the view makes one; returns the record as it
+    was."""
     from app.services import persistence_guard
     workspace = ref(store.db, uid)
     seen = {}
@@ -491,18 +406,14 @@ def record_for_view(store, uid, *, provider):
     return seen.get("record") or {}
 
 
-# The live view (routers/agent_workspace.py): one per account, the newest
-# wins, and an older one ends within VIEW_CHECK_SECONDS once it sees that
-# (security audit 2026-10-27; before, any number stayed open for an hour
-# each). An open view keeps the VM awake: its time counts as VM time.
+# One live view per account: the newest wins and an older one ends within VIEW_CHECK_SECONDS. An
+# open view keeps the VM awake, so its time counts.
 VIEW_CHECK_SECONDS = 30
 
 
 def claim_view(store, uid, seconds, kind="view"):
-    """This view is the account's one from now on (record_for_view made the
-    record): its id, which the view checks (holds_view). ``kind``: "view"
-    for the browser's live view, "terminal" for the user's terminal; each
-    kind has one at a time."""
+    """This view is the account's one of its ``kind`` ("view" or "terminal") from now on; returns
+    its id."""
     view_id = secrets.token_hex(8)
     workspace = ref(store.db, uid)
 
@@ -514,21 +425,16 @@ def claim_view(store, uid, seconds, kind="view"):
 
 
 def holds_view(db, uid, view_id, kind="view"):
-    """Whether ``view_id`` is still the account's view of that kind (no newer
-    one took over). The open view asks every VIEW_CHECK_SECONDS."""
+    """Whether ``view_id`` is still the account's view of that kind; the open view asks every
+    VIEW_CHECK_SECONDS."""
     return (record(db, uid).get(kind) or {}).get("id") == view_id
 
 
 def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=None):
-    """The account's VM for whatever needs it (a message's start, the
-    browser's warm-up, the view, the terminal, the provisioning): created
-    with the network rules where nothing made it yet, its tools and the
-    agent's user up to date (prepare), under the setup lock; its name.
-    ``start`` (a Start) learns what the start has to do: the setup of a VM
-    made just now, else how it wakes (the provider's status, a hint only: a
-    VM that just ran may say "cold" too). ``db``: the browser VM of before
-    goes once the workspace is ready (retire_old_browser). ``timeout``: at
-    most this long for a setup (prepare)."""
+    """The account's VM for whatever needs it, created with the network rules where nothing made it
+    yet, tools and the agent's user up to date (prepare), under the setup lock; its name. ``start``
+    learns what the start has to do (the provider's status is a hint only). ``db``: an old browser
+    VM goes once the workspace is ready. ``timeout``: at most this long for a setup."""
     name = agent_vm.workspace_name(uid)
     lock = setup_lock(name)
     while not lock.acquire(timeout=.2):
@@ -550,17 +456,14 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     return name
 
 
-# Accounts whose browser VM of before is gone (or never was), in this process.
+# Accounts whose old browser VM is gone (or never was), in this process.
 _retired: set[str] = set()
 
 
 def retire_old_browser(db, uid, vm):
-    """The browser VM of 2026-10-27 to 2026-11-04 goes once the account's
-    workspace runs (Max: the sign-ins are made again once): deleted by its
-    name, then the record forgets it, and the list of sign-ins with it
-    (sign_ins), since none of them holds on the new browser. Only where the
-    record still names it; a failure leaves it for the next start (the
-    account's deletion takes it in any case, agent_vm.delete_workspace)."""
+    """A browser VM of the two-VM layout goes once the account's workspace runs: deleted by name,
+    then the record forgets it and the sign-ins with it, since none holds on the new browser. Only
+    where the record still names it; a failure leaves it for the next start."""
     if uid in _retired:
         return
     try:
@@ -573,28 +476,21 @@ def retire_old_browser(db, uid, vm):
         logging.warning("Agent workspace old browser VM not deleted category=%s", safe_exception(exc))
 
 
-# The account's provisioning (module docstring): once per process and account.
+# Once per process and account.
 _provisioned: set[str] = set()
 
 
 def provisioning():
-    """AGENT_WORKSPACE_PROVISION=off: no workspace before it is needed (the
-    test suite's default, whose fake VMs count their calls)."""
+    """AGENT_WORKSPACE_PROVISION=off: no workspace before it is needed (the test suite's default)."""
     import os
     return os.getenv("AGENT_WORKSPACE_PROVISION", "").strip().lower() != "off"
 
 
 def provision(store, uid, *, factory=None):
-    """A new account's workspace before it is needed (since 2026-11-02, the
-    module's docstring): the VM made and set up in the background, the
-    browser's Chrome started once and then told to rest (the helper's warm
-    and rest, as after a message). Only a VM that is not there: where the
-    account's record names none yet nothing ever opened one, else it may be
-    gone (deleted by hand). And only while the server's safety rules leave
-    the workspace open. Called with the account's messages to the agent that
-    may use the workspace (routers/agent.py); asks the record once per
-    process and account, on a thread of its own, so the message never waits
-    for it. Returns the thread, or None."""
+    """A new account's workspace before it is needed: the VM made and set up in the background,
+    Chrome started once and told to rest. Only where none is there, and only while workspace_guard
+    leaves the workspace open; asks the record once per process and account, on a thread, so the
+    message never waits. Returns the thread, or None."""
     if not provisioning() or uid in _provisioned:
         return None
     _provisioned.add(uid)
@@ -626,9 +522,7 @@ def _provision_new(store, uid, factory):
 
 
 def _record_new(store, uid, provider):
-    """Names the VM on the account's record where it names none yet (the
-    account's deletion finds it from then on, as record_for_view); whether
-    it did."""
+    """Names the VM on the record where it names none yet; whether it did."""
     from app.services import persistence_guard
     workspace = ref(store.db, uid)
     made = {}
@@ -645,9 +539,8 @@ def _record_new(store, uid, provider):
 
 
 def _provision(uid, factory, db=None):
-    """The VM set up and its browser started once, then told to rest;
-    failures are only logged: the first call that needs it sets up what is
-    missing."""
+    """The VM set up and its browser started once, then told to rest; failures are only logged, the
+    first call that needs it sets up what is missing."""
     from app.services import agent_browser
     from app.services.llm.provider_runtime import ProviderCancellation
     start, vm, began = Start(uid, "browser").phase("setup"), None, time.monotonic()
@@ -678,22 +571,14 @@ def _current(vm, name, version):
 
 
 class SetupFailed(agent_vm.VMUnavailable):
-    """setup.sh did not succeed: no command of the agent may run there
-    (a refusal of the workbench, not a broken connection)."""
+    """setup.sh did not succeed: no command of the agent may run there."""
 
 
 def prepare(vm, name, cancellation=None, timeout=None, on_setup=None):
-    """The VM at this VERSION, only when the version there differs (else
-    one read): its network rules (agent_vm.RULES, the open web since
-    2026-11-04), its tools written to the provider's home, the live view's
-    gateway service of the layout before removed, and setup.sh run as root
-    (the agent's user and its /tmp, the tools every workspace has; once, the
-    moves from the layouts before). Returns whether it wrote them; raises
-    SetupFailed when the setup failed, so no command runs with the
-    provider's rights. ``timeout``: at most this long for the setup (the
-    time the message has left before its answer, runtime audit 2026-10-30,
-    A5). ``on_setup``: called when the setup is about to run (the start's
-    phase)."""
+    """The VM at this VERSION, only when the version there differs: network rules, tools, the old
+    gateway service removed, setup.sh run as root. Returns whether it wrote them; raises SetupFailed
+    so no command runs with the provider's rights. ``timeout``: the message's time left before its
+    answer. ``on_setup``: called when the setup is about to run."""
     from app.services.llm.provider_runtime import ProviderCancellation
     if _current(vm, name, VERSION):
         return False
@@ -715,17 +600,14 @@ def prepare(vm, name, cancellation=None, timeout=None, on_setup=None):
     return True
 
 
-# Makes the chat's folder (as the agent's user, with the folders the file
-# needs), where commands start, and names its chat there. Since 2026-10-28
-# the folder is named after the chat's title (agent_vm.chat_folder), so
-# `ls ~/chats` already says which is which; .consens-chat adds title, start
-# and id.
+# The chat's folder is named after its title, so `ls ~/chats` says which is which; .consens-chat
+# adds title, start and id.
 CHAT_MARKER = ".consens-chat"
 TITLE_CHARS = 200
 
 
-# A temporary chat's folder and marker name no title (since 2026-11-01):
-# the workspace is every chat's, and its title is the user's question.
+# A temporary chat's folder and marker name no title: the workspace is every chat's, and its title
+# is the user's question.
 TEMPORARY_FOLDER_TITLE = "temporary"
 TEMPORARY_MARKER = ("This folder holds the files of a temporary chat; it is deleted when the user leaves that "
                     "chat, and other chats leave it alone.")
@@ -738,16 +620,12 @@ def chat_marker(chat_id, title="", started="", *, temporary=False):
 
 
 def wanted_folder(chat_id, title="", *, temporary=False):
-    """The folder's name that the chat's title asks for (agent_vm.chat_folder)."""
     return agent_vm.chat_folder(TEMPORARY_FOLDER_TITLE if temporary else title, chat_id)
 
 
 def record_folder(store, uid, chat_id, folder):
-    """The chat names its folder (chat field ``agent_vm.folder``): its
-    deletion finds it there (agent_vm.delete_chat_vm), the next message
-    renames from there. Written after the move, so a failed move never
-    leaves the chat pointing at a folder that does not exist; a failed
-    write only means the next message moves nothing and writes it again."""
+    """The chat names its folder (``agent_vm.folder``), where its deletion finds it. Written after
+    the move, so a failed move never leaves the chat pointing at a missing folder."""
     chat = store._chat_ref(uid, chat_id)
 
     def operation(tx):
@@ -761,13 +639,9 @@ def record_folder(store, uid, chat_id, folder):
         logging.warning("Agent chat folder not recorded category=%s", safe_exception(exc))
 
 
-# A message's chat on the workbench in one command (since 2026-10-30, runtime
-# audit T6; before, four: the move, the marker, the notes and the keys, one
-# round trip each), as the agent's user like each of them was: the chat's
-# folder follows its title ($1 the folder now, $2 the one its title wants;
-# "taken" keeps it where it is), its marker comes on stdin, then the keys
-# the account gave ($5...: "key " name NUL value NUL) and last the notes'
-# beginning ($3, at most $4 bytes, to the end).
+# A message's chat in the workspace in one command as the agent's user: the folder follows its title
+# ($1 now, $2 wanted; "taken" keeps it), its marker comes on stdin, then the account's keys ($5...:
+# "key " name NUL value NUL) and the notes' beginning ($3, at most $4 bytes).
 CHAT_SCRIPT = (
     'old=$1; new=$2; notes=$3; limit=$4; shift 4; dir=$old; state=same; '
     'if [ "$new" != "$old" ]; then '
@@ -793,8 +667,7 @@ class ChatOpened:
 
 
 def parse_chat(raw):
-    """``(state, keys, notes)`` of CHAT_SCRIPT's output: the folder's
-    state, ``(name, value)`` pairs and the notes' bytes (None: no notes)."""
+    """``(state, keys, notes)`` of CHAT_SCRIPT's output (notes None: none)."""
     head, _, rest = raw.partition(b"\n")
     if not head.startswith(b"folder "):
         raise agent_vm.VMUnavailable("chat: unreadable")
@@ -810,17 +683,14 @@ def parse_chat(raw):
     raise agent_vm.VMUnavailable("chat: unreadable")
 
 
-# A temporary chat reads the notes and leaves them as they are (since
-# 2026-11-01 evening): they outlast it (agent_vm_tools.VMTools._notes_kept).
+# A temporary chat only reads the notes: they outlast it.
 NOTES_TEMPORARY = "This temporary chat leaves the notes as they are: they outlast it."
 NOTES_NONE_TEMPORARY = "No notes yet, and this temporary chat starts none: they would outlast it."
 
 
 def notes_for_agent(raw, *, temporary=False):
-    """The beginning of the workspace's notes for the agent (``raw``, None:
-    there are none), or that there are none yet: ``{"path", "text", "more"}``.
-    Data, never instructions (AGENT_VM_PROMPT). ``temporary``: for a
-    temporary chat, which only reads them."""
+    """The beginning of the workspace's notes for the agent, or that there are none yet: ``{"path",
+    "text", "more"}``. Data, never instructions."""
     if raw is None:
         return {"path": NOTES_PATH, "text": "",
                 "note": NOTES_NONE_TEMPORARY if temporary else "No notes yet: start them when something lasting comes up."}
@@ -835,13 +705,9 @@ def notes_for_agent(raw, *, temporary=False):
 
 
 def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), cancellation=None, temporary=False):
-    """At a message's first workbench call: the chat's folder follows its
-    title (``folder``: the name the chat recorded, empty for a folder named
-    by its id from before 2026-10-28, which moves too) with its marker
-    rewritten, the account's keys read again for masking (agent_secrets.scrub)
-    and the notes' beginning (notes_for_agent), in one command. Returns
-    ChatOpened: the folder's name now, the old one when the new name is
-    taken or the move failed."""
+    """At a message's first call of the agent's side, in one command: the chat's folder follows its
+    title with its marker rewritten, the account's keys read again for masking, and the notes'
+    beginning. Returns ChatOpened (the old name when the new one is taken or the move failed)."""
     from app.services import agent_secrets
     from app.services.llm.provider_runtime import ProviderCancellation
     wanted = wanted_folder(chat_id, title, temporary=temporary)
@@ -868,17 +734,14 @@ def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), ca
 
 
 def control_payload(holder, *, now=None):
-    """control.json: the user's takeover with its expiry, or the agent's turn."""
     until = (now or time.time()) + CONTROL_SECONDS if holder == "user" else 0
     return json.dumps({"holder": holder, "until": until}).encode()
 
 
 def set_control(db, uid, vm, holder):
-    """The user takes the browser over (again at every refresh of the view)
-    or hands it back. Taking over closes the server's way first (the record),
-    then the browser's (control.json there); handing back opens them in the
-    other order. Handing back notes when (``returned_at``): a run waiting for
-    it sees a hand-back even between two of its looks (control_state)."""
+    """The user takes the browser over (again at every refresh of the view) or hands it back. Taking
+    over closes the server's way first, then the browser's; handing back opens them in the other
+    order and notes ``returned_at``, so a waiting run sees it even between two looks."""
     now = time.time()
     control = {"holder": holder, "until": now + CONTROL_SECONDS if holder == "user" else 0,
                **({"returned_at": now} if holder == "agent" else {})}
@@ -895,16 +758,14 @@ def set_control(db, uid, vm, holder):
 
 
 def control_state(db, uid, now=None):
-    """(whether the user has the workspace's browser now, when they last
-    handed it back as a time.time() or 0): the record's ``control``, which
-    only the server writes. A takeover the open view stopped refreshing has
-    simply run out, without a hand-back."""
+    """(whether the user has the browser now, when they last handed it back or 0), from the record's
+    ``control``, which only the server writes. A takeover the view stopped refreshing has run out
+    without a hand-back."""
     return control_of(record(db, uid), now)
 
 
 def control_of(workspace, now=None):
-    """control_state of a record already read (routers/agent.py reads it
-    once at a message's start, for the sign-ins too)."""
+    """control_state of a record already read."""
     control = workspace.get("control")
     if not isinstance(control, dict):
         return False, 0.0
@@ -917,11 +778,9 @@ def control_of(workspace, now=None):
     return control.get("holder") == "user" and number("until") > (now or time.time()), number("returned_at")
 
 
-# user_has_browser's answer for a moment: a call into the workspace asks
-# twice right after another (the run's takeover check, then the session's
-# wait), one read of the account's record each (runtime audit 2026-10-30,
-# T6). A takeover in this process (set_control) forgets it at once; on the
-# browser VM itself browser.py refuses to act while the user has it.
+# A workspace call asks twice right after another (the run's check, then the session's wait), one
+# record read each. A takeover in this process forgets it at once; on the VM browser.py refuses to
+# act anyway.
 CONTROL_CACHE_SECONDS = 1.0
 _control_seen: dict = {}
 _control_lock = threading.Lock()
@@ -934,8 +793,7 @@ def _forget_control(uid):
 
 
 def user_has_browser(db, uid, now=None, fresh=False):
-    """Whether the user has the workspace's browser now (control_state);
-    ``fresh``: read now, as a wait for their hand-back does."""
+    """Whether the user has the browser now; ``fresh``: read now."""
     if now is not None or fresh:
         return control_state(db, uid, now)[0]
     key, moment = (id(db), uid), time.monotonic()
@@ -952,11 +810,9 @@ def user_has_browser(db, uid, now=None, fresh=False):
 
 
 def reset_browser(vm, uid, cancellation):
-    """Ends the browser and deletes its profile: every sign-in, cookie and
-    open tab. The next use starts a fresh one. A workspace that was never
-    made has nothing to sign out of. As the provider's user, whose
-    processes alone it ends (cdp.py names the profile too, and goes with
-    Chrome)."""
+    """Ends the browser and deletes its profile: every sign-in, cookie and open tab. As the
+    provider's user, whose processes alone it ends. A workspace never made has nothing to sign out
+    of."""
     name = agent_vm.workspace_name(uid)
     if not vm.exists(name):
         return
@@ -966,13 +822,9 @@ def reset_browser(vm, uid, cancellation):
 
 
 def delete_for_account(db, uid, *, factory=None):
-    """With the account (account_deletion.py): the workspace's VM (and the
-    browser VM of before) by the names that follow from the account, then
-    its record. Before 2026-10-27 a missing record ended this, and a later
-    area of the deletion removed the record after one failed provider call:
-    the VM stayed for good. Only a server without a provider skips an
-    account without a record (it never made one there). The safety rules'
-    guard and trail go with it (workspace_guard.py, since 2026-10-30)."""
+    """With the account: the VM (and an old browser VM) by the names that follow from the account,
+    then its record and the guard's trail. Only a server without a provider skips an account without
+    a record: a missing record must never leave a VM behind."""
     from app.services import workspace_guard
     workspace = ref(db, uid)
     if agent_vm.configured() or factory is not None or workspace.get().exists:
@@ -981,20 +833,16 @@ def delete_for_account(db, uid, *, factory=None):
     workspace_guard.delete_for_account(db, uid)
 
 
-# A message's checkpoint of the workspace (VMSession.ready; since 2026-11-04
-# it holds the browser's profile too) may bring the workspace back for
-# this long, and only after the last time something left it for good
-# (``restore_floor``): signing the browser out everywhere or deleting a
-# chat. An older checkpoint would bring the sign-ins or the chat's folder
-# back (security audit 2026-10-27). The provider keeps the checkpoints; only
-# their use ends here.
+# A checkpoint (holding the browser's profile too) may bring the workspace back for this long, and
+# only after the last time something left it for good (``restore_floor``: a sign-out everywhere, a
+# deleted chat), or it would bring those back. The provider keeps the checkpoints; only their use
+# ends here.
 RESTORE_DAYS = 14
 
 
 def restorable(record, turn_vm, now=None):
-    """Whether ``turn_vm`` (a turn's ``agent_vm``) names a checkpoint of this
-    account's workspace that may still bring it back: taken in the workspace
-    (its name), within RESTORE_DAYS and after the record's restore_floor."""
+    """Whether ``turn_vm`` names a checkpoint of this account's workspace that may still bring it
+    back."""
     now = now or _now()
     if not isinstance(turn_vm, dict) or not turn_vm.get("checkpoint"):
         return False
@@ -1014,22 +862,16 @@ def restorable(record, turn_vm, now=None):
                    for gap in record.get("restore_gaps") or ())
 
 
-# A temporary chat's messages take no checkpoint (VMSession.ready), but
-# other chats' messages may while it lives, its folder in them: only those
-# may not bring it back (restore_gaps, since 2026-11-01). A floor at each
-# deletion would end restore for the account's whole past, and temporary
-# chats are deleted whenever the user leaves one. A gap ends this much
-# after the deletion, for a checkpoint still being taken then.
+# A temporary chat takes no checkpoint, but other chats' messages may while it lives, its folder in
+# them: only those may not bring it back. A floor at each deletion would end restore for the
+# account's whole past. A gap ends this much after the deletion, for a checkpoint still being taken.
 RESTORE_GAPS = 100
 GAP_GRACE = timedelta(seconds=agent_vm.CHECKPOINT_SECONDS + 10)
 
 
 def close_restore_gap(store, uid, since):
-    """A temporary chat's folder left the workspace: no checkpoint taken
-    from ``since`` (when the chat first claimed the workspace, its record's
-    ``created_at``) to now may bring it back (restorable). Gaps past
-    RESTORE_DAYS go; beyond RESTORE_GAPS, or without a readable ``since``,
-    the floor rises instead (raise_restore_floor)."""
+    """A temporary chat's folder left the workspace: no checkpoint from ``since`` to now may bring
+    it back. Old gaps go; beyond RESTORE_GAPS or without ``since`` the floor rises instead."""
     try:
         start = datetime.fromisoformat(str(since or ""))
     except ValueError:
@@ -1055,10 +897,8 @@ def close_restore_gap(store, uid, since):
 
 
 def raise_restore_floor(store, uid):
-    """Something left the workspace for good (a sign-out everywhere, a
-    chat's folder): no checkpoint from before may bring it back
-    (restorable). An account without a record (deleted meanwhile) is left
-    alone."""
+    """Something left the workspace for good: no checkpoint from before may bring it back. An
+    account without a record is left alone."""
     workspace = ref(store.db, uid)
 
     def operation(tx):

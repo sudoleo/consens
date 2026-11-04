@@ -8,7 +8,7 @@ from app.services import agent_runs
 from app.services.llm import base, consensus_engine
 from app.services.llm.agent_client import AgentModel, resolve_agent_model
 from app.services.llm.engines import build_provider_payload
-from test_agent_runs import UID, pending, receipt, store
+from test_agent_runs import UID, answered, pending, receipt, store
 
 
 @pytest.fixture
@@ -53,8 +53,7 @@ def test_agent_followup_refreshes_clock_and_model_without_rewriting_history(stor
     assert "Selected model for this response: Claude Sonnet 5.5" in first_messages[-1]["content"]
     answer = receipt()
     answer.text = "Today is September 15."
-    assert store.claim(UID, chat_id, first["id"], model)
-    store.settle(UID, chat_id, first["id"], completion=answer, status="succeeded")
+    assert answered(store, chat_id, first["id"], answer, model=model)
 
     # The process and chat stay open while Berlin crosses midnight; UTC has not.
     clock.instant = datetime(2026, 9, 15, 22, 1, tzinfo=timezone.utc)

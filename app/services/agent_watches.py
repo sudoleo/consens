@@ -14,7 +14,7 @@ the sidebar (routers/agent.py _final).
 What the task says, the agent may do in the user's name: starting the Watch
 from its card is that permission (Max, 2026-11-03). The user is away during
 a run, so a card that would wait for them (ask_user, a reviewer's halt)
-ends at once (DelegationLoop.hold_timeout); a halt is mailed.
+ends at once (AgentLoop.hold_timeout); a halt is mailed.
 
 The agent prepares a Watch (agent_watch.py prepare_watch, the card under its
 answer); only the user starts it (POST /agent/watches), in the chat where

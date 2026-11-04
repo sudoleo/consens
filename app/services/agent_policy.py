@@ -1,71 +1,31 @@
-"""Server-owned capabilities and shared limits, frozen once per Agent turn."""
-from dataclasses import asdict, dataclass, replace
-from typing import Optional
+"""Server-owned limits of an Agent turn, frozen once per turn."""
+from dataclasses import asdict, dataclass
 
 
 @dataclass(frozen=True)
 class AgentPolicy:
-    version: str = "agent-search-2026-09-15-v2"
-    max_calls: int = 3
-    max_tools: int = 2
-    seconds: int = 180
-    max_tokens: int = 4_000_000
-    max_cost_nano_usd: int = 1_000_000_000  # simulated $1, not a provider invoice cap
+    version: str = "agent-account-budget-2026-11-04-v5"
+    # A run with agent sessions (comparison answers, reviewers): the run's
+    # root receipt, its reaper and the browser's session panel look for it.
+    delegation: bool = True
     result_chars: int = 8_000
     result_sources: int = 5
-    delegation: bool = False
-    max_agents: int = 4
-    max_parallel: int = 2
-    max_messages: int = 64
-    context_chars: int = 48_000
     message_chars: int = 4000
-    worker_calls: int = 8
-    max_searches: int = 2
-    account_budget_only: bool = False
-    # Soft per-turn guards of account mode (None = not applied). The token
-    # ledger stays the spending limit; these only stop a turn that loops
-    # without progress before it burns the whole daily account.
-    turn_comparisons: Optional[int] = None
-    turn_steps: Optional[int] = None
-    turn_seconds: Optional[int] = None
-    turn_identical_calls: Optional[int] = None
+    # The daily token ledger is the spending limit. These only stop a turn
+    # that loops without progress before it burns the whole allowance.
+    turn_comparisons: int = 4
+    turn_steps: int = 24
+    turn_seconds: int = 900
+    turn_identical_calls: int = 2
     # A turn that works in the agent's VM (agent_vm_tools.py) is a long run
     # from its first VM call on: these replace turn_steps and turn_seconds.
-    vm_turn_steps: Optional[int] = None
-    vm_turn_seconds: Optional[int] = None
-
-    @classmethod
-    def for_chat(cls, config):
-        # Chat has one spending limit: the atomic, account-wide token ledger.
-        # Keep the bounded policy for legacy callers and the Consensus pipeline.
-        # Per turn: at most four comparisons, 24 orchestrator routing steps,
-        # 15 minutes until the wrap-up, and an identical tool call twice. A
-        # turn working in its VM gets 200 steps and two hours; the ledger and
-        # the model's context window end it earlier (DelegationLoop._long_run_limit).
-        return replace(cls.from_config({**config, "enabled": True}),
-                       account_budget_only=True, context_chars=120_000,
-                       turn_comparisons=4, turn_steps=24, turn_seconds=900, turn_identical_calls=2,
-                       vm_turn_steps=200, vm_turn_seconds=7200,
-                       version="agent-account-budget-2026-10-26-v4")
-
-    @classmethod
-    def from_config(cls, config):
-        return cls(**{key: value for key, value in config.items() if key in cls.__dataclass_fields__},
-                   delegation=config["enabled"], version="agent-delegation-2026-09-16-v1")
+    # The ledger and the model's context window end it earlier
+    # (AgentLoop._long_run_limit).
+    vm_turn_steps: int = 200
+    vm_turn_seconds: int = 7200
 
     def snapshot(self):
-        data = asdict(self)
-        if not self.account_budget_only:
-            # Bounded runs have their own hard limits; their snapshot (also
-            # the "Shared run limits" prompt line) stays as before.
-            for key in ("turn_comparisons", "turn_steps", "turn_seconds", "turn_identical_calls",
-                        "vm_turn_steps", "vm_turn_seconds"):
-                data.pop(key)
-        if self.account_budget_only:
-            for key in ("seconds", "max_calls", "max_tools", "max_tokens", "max_cost_nano_usd",
-                        "worker_calls", "max_searches", "max_messages", "context_chars"):
-                data[key] = None
-        return data
+        return asdict(self)
 
 
 def tools_for_model(model):
@@ -73,19 +33,3 @@ def tools_for_model(model):
     # OpenRouter handles both native search and the Exa fallback, including
     # the provider's internal reasoning/tool-continuation protocol.
     return ("web_search",)
-
-
-def supports_client_tools(model):
-    # Replaying signed/complete reasoning is a separate provider capability.
-    # Never strip it and then silently continue a thinking model's tool call.
-    reasoning = model.request_config.get("reasoning", {})
-    return (model.model == "anthropic/claude-haiku-4.5"
-            and not reasoning.get("enabled") and not reasoning.get("max_tokens")
-            and reasoning.get("effort", "none") == "none")
-
-
-def supports_delegation(model):
-    from app.services.llm.agent_client import _CATALOG
-    capability = _CATALOG["models"].get(model.model, {}).get("delegation", {})
-    return (capability.get("protocol") == "openrouter-reasoning-v1"
-            and model.reasoning_effort in capability.get("tested_efforts", []))

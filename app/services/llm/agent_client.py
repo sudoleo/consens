@@ -29,11 +29,8 @@ from app.services.llm.streaming import _sse_pairs
 
 @dataclass(frozen=True)
 class AgentModel:
-    # The Agent's default chat model, open to every tier as "Early access"
-    # (agent_model_options). Since 2026-10-07 Claude Sonnet 5.5: in a blind
-    # test of 20 questions it was ranked first most often and surfaced twice
-    # as many contradictions as GPT-6 Luna (before: GPT-6 Luna since
-    # 2026-10-04, DeepSeek V4.1 Flash before that).
+    # Claude Sonnet 5.5: in a blind test of 20 questions it ranked first most often and surfaced
+    # twice as many contradictions as GPT-6 Luna.
     model: str = "anthropic/claude-sonnet-5.5"
     label: str = "Claude Sonnet 5.5"
     max_output_tokens: int = 4096
@@ -61,12 +58,8 @@ class AgentModel:
 
 
 def agent_model_label() -> str:
-    """The default agent model's display name, without the price catalog.
-
-    The app's first frame names the model the agent really runs on by
-    default (pages.py, data-agent-default-label), so a showcase name can
-    never drift from the deployment. Same naming rule as agent_model(), no
-    network access."""
+    """The default agent model's display name without the price catalog, so the app's first frame
+    names the model it really runs on."""
     defaults = AgentModel()
     model_id = os.environ.get("AGENT_MODEL", defaults.model).strip()
     entry = next((entry for entry in cfg.MODEL_CONFIGS.values() if entry.api_model == model_id), None)
@@ -102,8 +95,8 @@ def agent_model(*, _metadata=None) -> AgentModel:
         if not price.is_finite() or price < 0 or price > 1000:
             raise ValueError("Invalid agent price")
     values["max_output_tokens"] = min(values["max_output_tokens"], metadata["top_provider"].get("max_completion_tokens") or values["max_output_tokens"])
-    # The registry ID, like every other model in the picker: the default is
-    # listed once and premium/access checks see the ID they know.
+    # The registry ID, like every other model in the picker: premium and access checks see the ID
+    # they know.
     return AgentModel(**values, selection_id=entry.internal_id if entry else values["model"], context_length=metadata["context_length"],
                       web_search_usd_per_request=defaults.web_search_usd_per_request,
                       request_config=dict(entry.request_config or {}) if entry else {})
@@ -115,63 +108,45 @@ def default_agent_model_id() -> str:
 
 
 _CATALOG = agent_model_metadata.BASELINE
-# The answer the user reads has no product length cap: it may use the chat
-# model's own completion limit (bounded here and by its context window).
-ANSWER_OUTPUT_CEILING = 32_768  # about 130 kB of text; the saved turn is limited
+# The answer has no product length cap: it may use the chat model's own completion limit.
+ANSWER_OUTPUT_CEILING = 32_768  # about 130 kB of text
 ANSWER_OUTPUT_FALLBACK = 32_768
-# Reasoning counts against the same completion allowance. Adaptive thinking
-# (Claude) ignores effort and explicit thinking budgets alike and can spend the
-# whole allowance before writing a word (2026-10-07: Sonnet 5.5 at "max" used
-# all 32,768 tokens; at "high" all 8,000 in a probe). So a reasoning step
-# that may write the answer gets this much room on top of its text allowance.
+# Reasoning counts against the same allowance, and adaptive thinking (Claude) ignores effort and
+# thinking budgets alike: Sonnet 5.5 at "max" used all 32,768 tokens before writing a word. So a
+# step that may write the answer gets this much on top.
 ANSWER_REASONING_HEADROOM = 32_768
-# Routing steps (plan, phrase the comparison, call a tool) have the same
-# problem on a smaller scale: in prod (2026-10-07) both Sonnet 5.5 "max" runs
-# used 3,808 and 3,998 of AGENT_MAX_OUTPUT_TOKENS (4,096) in their first step,
-# thinking and tool call together. Three times the text allowance on top
-# (16,384 in all by default) gives that thinking about four times its room,
-# while a routing reservation (multiplied per search round) stays well below
-# the answer allowance of 65,536.
+# Routing steps had the same problem: Sonnet 5.5 "max" used about 3,900 of 4,096 tokens in its first
+# step. Three times the text allowance on top gives thinking about four times its room while a
+# routing reservation stays well below the answer's.
 ROUTING_REASONING_HEADROOM = 12_288
-# Reasoning for the one retry after a thought-only step, in this order. "low"
-# comes first on purpose, not the lightest level: live 2026-10-08 a forced
-# retry of Sonnet 5.5 at "low" answered in 15 s with the answer's quality
-# intact. "minimal"/"none" only where a model offers nothing in between.
+# Reasoning for the one retry after a thought-only step, in this order. "low" first, not the
+# lightest: a forced Sonnet 5.5 retry at "low" answered in 15 s with the answer's quality intact.
 RETRY_EFFORTS = ("low", "minimal", "none")
-# Characters of visible reasoning one step keeps in its stored activity.
-# Beyond that, deltas still stream for live progress but are not stored.
+# Visible reasoning one step stores; beyond it deltas still stream live.
 REASONING_STORAGE_CHARS = 32_000
-# Visible text one model call may keep (the saved turn and review are bounded).
-# Longer output is cut here and finishes as "length", like a token limit, so a
-# long answer is kept as truncated instead of failing the whole step.
+# Longer output is cut and finishes as "length", so a long answer is kept truncated instead of
+# failing the step.
 TEXT_STORAGE_CHARS = 100_000
-# Distinct cited URLs one model call keeps. A comparison answer may search up
-# to three rounds of five results; five sources cut off the evidence of a
-# thorough answer before the synthesis saw it (2026-10-10).
+# Five sources cut off the evidence of a thorough comparison answer (three search rounds of five
+# results).
 ANSWER_SOURCES_MAX = 10
-# Source text OpenRouter attaches to a URL citation (``url_citation.content``):
-# Exa highlights up to the requested 2000 characters, other engines measured
-# up to ~4000. Kept in memory for the source excerpts only, never stored or
-# streamed (see agent_source_evidence).
+# Source text attached to a URL citation (Exa up to 2000, other engines up to about 4000). In memory
+# for the source excerpts only, never stored or streamed.
 CITATION_CONTENT_CHARS = 4000
-# Citation records per call; providers repeat cumulative annotation snapshots.
+# Per call; providers repeat cumulative annotation snapshots.
 CITATIONS_MAX = 40
-# Stream indices a tool call fragment may name (AgentCompletion._tool_delta):
-# a response numbers the provider's own calls (web searches) too, so the
-# agent's call may come after them. A step keeps tool_call_limit calls.
+# A response numbers the provider's own calls (web searches) too, so the agent's call may come after
+# them.
 TOOL_INDEX_BOUND = 64
-# The fields of a streamed chunk this client reads or knows to ignore. Any
-# other field of a step that searched without a URL citation is logged by
-# name (AgentCompletion._note_shapes).
+# Any other field of a step that searched without a URL citation is logged by name.
 _KNOWN_CHUNK_FIELDS = frozenset({"id", "object", "created", "model", "provider", "choices", "usage",
                                  "system_fingerprint", "service_tier", "error"})
-# Provider end reasons of a safety filter (Anthropic "refusal", Gemini "SAFETY").
 DECLINED_NATIVE_REASONS = frozenset({"refusal", "content_filter", "safety", "prohibited_content"})
 
 
 class AgentStreamIncomplete(RuntimeError):
-    """The stream ended without an answer or a completed tool call. Its log
-    detail (safe_diagnostic) says how it ended, never what it said."""
+    """The stream ended without an answer or a completed tool call; its log detail never says what
+    it said."""
     def __init__(self, diagnostic):
         super().__init__("Agent stream ended without a completed answer")
         self.safe_diagnostic = diagnostic
@@ -180,15 +155,10 @@ class AgentStreamIncomplete(RuntimeError):
 _KNOWN_CHOICE_FIELDS = frozenset({"index", "delta", "finish_reason", "native_finish_reason", "logprobs", "message"})
 _KNOWN_DELTA_FIELDS = frozenset({"role", "content", "reasoning", "reasoning_content", "reasoning_details",
                                  "tool_calls", "annotations", "refusal"})
-# OpenAI's own citation marks, private-use characters in the text: U+E200
-# opens, U+E202 separates, U+E201 closes, as in [E200]cite[E202]turn2search0
-# [E201] or [E200]cite[E202]https://...[E201]; sometimes URLs only and without
-# the closing mark (it then ends at the next whitespace). GPT-6 Luna wrote them
-# into 5 of 13 merged Agent answers on 2026-10-14 (shown as "citeturn2search0")
-# instead of links, and dropping them dropped the answer's sources. While
-# streaming (AgentCompletion._visible) a mark's URLs become markdown links,
-# like the links the agent writes; other references and stray mark
-# characters go.
+# OpenAI's own citation marks, private-use characters in the text
+# ([E200]cite[E202]turn2search0[E201] or with URLs, sometimes without the closing mark). GPT-6 Luna
+# wrote them instead of links, and dropping them dropped the answer's sources: a mark's URLs become
+# markdown links, other references and stray characters go.
 CITE_OPEN, CITE_CLOSE, CITE_SEP = chr(0xE200), chr(0xE201), chr(0xE202)
 CITE_MARK = re.compile(CITE_OPEN + r"[^\s" + CITE_CLOSE + "]*" + CITE_CLOSE + "?|[" + CITE_CLOSE + "-" + chr(0xE2FF) + "]")
 # A mark split across chunks waits this long for its end; longer is no mark.
@@ -196,8 +166,7 @@ CITE_HOLD_CHARS = 8192
 
 
 def _cite_links(mark):
-    """Markdown links for the URLs of one citation mark (CITE_MARK), joined
-    like the agent's own links; nothing for references without a URL."""
+    """Markdown links for the URLs of one citation mark; nothing for references without a URL."""
     links = []
     for ref in mark.strip(CITE_OPEN + CITE_CLOSE).split(CITE_SEP):
         try:
@@ -222,11 +191,8 @@ def _metadata(model):
 
 
 def reasoning_active(model, metadata=None):
-    """Whether a request of this model really reasons (and needs headroom).
-
-    Off when the catalog knows no reasoning, the effort is "none", the
-    registry switches it off (Kimi K2.6: ``enabled: false``), or the model
-    reasons only on request and none is made."""
+    """Whether a request of this model really reasons (and needs headroom): not without catalog
+    reasoning, at "none", switched off by the registry, or for a model that reasons only on request."""
     metadata = _metadata(model) if metadata is None else metadata
     catalog = metadata.get("reasoning")
     if not catalog:
@@ -240,7 +206,6 @@ def reasoning_active(model, metadata=None):
 
 
 def answer_output_limit(model):
-    """Completion allowance of a chat model step that may write the answer."""
     metadata = _metadata(model)
     limit = int((metadata.get("top_provider") or {}).get("max_completion_tokens") or ANSWER_OUTPUT_FALLBACK)
     allowance = ANSWER_OUTPUT_CEILING
@@ -250,11 +215,8 @@ def answer_output_limit(model):
 
 
 def routing_output_limit(model):
-    """Completion allowance of an orchestrator routing step.
-
-    The configured text allowance (AGENT_MAX_OUTPUT_TOKENS), plus
-    ROUTING_REASONING_HEADROOM while the model reasons, bounded by the
-    model's own completion limit."""
+    """The routing step's text allowance plus ROUTING_REASONING_HEADROOM while the model reasons,
+    within its own completion limit."""
     metadata = _metadata(model)
     if not reasoning_active(model, metadata):
         return model.max_output_tokens
@@ -264,12 +226,8 @@ def routing_output_limit(model):
 
 
 def lighter_reasoning(model):
-    """The model at a lighter reasoning level, or None when none is lighter.
-
-    For the single retry after a step that only reasoned: the comparison
-    answers are already paid for, so the user still gets an answer.
-    RETRY_EFFORTS tries "low" first, then "minimal" and "none"; a level at or
-    above the current one is never a retry."""
+    """The model at a lighter reasoning level for the one retry after a step that only reasoned, or
+    None when none is lighter."""
     metadata = _metadata(model)
     if not metadata.get("reasoning"):
         return None
@@ -282,10 +240,8 @@ def lighter_reasoning(model):
         return None
     return _resolve_effort(model, metadata, effort)
 _EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh", "max")
-# The levels, lightest first (agent_settings.py steps through them).
 REASONING_LEVELS = _EFFORTS
-# What a request or a saved account setting may name: "default" (the model's
-# own) or one of the levels above.
+# "default" (the model's own) or one of the levels.
 REASONING_EFFORT_PATTERN = rf"^(default|{'|'.join(_EFFORTS)})$"
 
 
@@ -294,7 +250,6 @@ def _choices(model, metadata):
     efforts = reasoning.get("supported_efforts", [])
     if efforts is None:
         efforts = _EFFORTS
-    # These registry entries explicitly name a no-reasoning variant.
     fixed = model.selection_id.endswith(("-no-reasoning", "-non-reasoning"))
     allowed = [x for x in _EFFORTS if x in efforts and not (x == "none" and reasoning.get("mandatory"))]
     return ["default", *(allowed if not fixed else [])]
@@ -307,7 +262,7 @@ def _ordered_entries():
 
 
 def agent_models(*, _metadata=None):
-    """Use the DB-backed admin model lists and order, without a second allowlist."""
+    """The DB-backed admin model lists and order, without a second allowlist."""
     catalog = _metadata if _metadata is not None else agent_model_metadata.snapshot()
     default = agent_model(_metadata=catalog)
     result = [(default, catalog[default.model])]
@@ -339,7 +294,7 @@ def _provider_options(model):
 
 
 def agent_model_options():
-    from app.services.agent_policy import tools_for_model, supports_delegation
+    from app.services.agent_policy import tools_for_model
     catalog = agent_model_metadata.snapshot()
     options = [
         {"id": model.selection_id, "label": model.label, **_provider_options(model),
@@ -350,19 +305,16 @@ def agent_model_options():
          "reasoning_available": bool(metadata.get("reasoning")),
          # What Auto becomes without Pro (null: the model's own default).
          "free_default_effort": _free_default_effort(model, metadata),
-         "delegation_by_effort": {effort: supports_delegation(_resolve_effort(model, metadata, effort))
-                                  for effort in _choices(model, metadata)},
          "tools_by_effort": {effort: list(tools_for_model(model))
                              for effort in _choices(model, metadata)}}
         for model, metadata in agent_models(_metadata=catalog)
     ]
     available = {item['id']: item for item in options}
     default = options[0]
-    # The default chat model is free for every tier even when it is a premium
-    # model elsewhere (as a comparison model it stays Pro): "Early access".
+    # Free for every tier even where it is premium elsewhere ("Early access").
     default.update(premium=False, early_access=True)
-    # An invalid or temporarily unresolved admin entry stays visible, with a
-    # reason, instead of silently disappearing or inheriting made-up prices.
+    # An invalid admin entry stays visible with a reason instead of disappearing or inheriting
+    # made-up prices.
     models = [default]
     for entry in _ordered_entries():
         if entry.internal_id == default['id']:
@@ -373,9 +325,8 @@ def agent_model_options():
             'available': False, 'premium': entry.internal_id in cfg.PREMIUM_MODELS, 'unavailable_reason': 'Model information unavailable · check the model ID or retry later',
             'reasoning_efforts': ['default'], 'reasoning_available': False,
         })
-    # Saved selections may carry a migrated ID (grok-4.3-no-reasoning). The
-    # browser maps them like resolve_agent_model does instead of treating the
-    # user's choice as gone and resetting it to the default.
+    # Saved selections may carry a migrated ID: the browser maps them like resolve_agent_model
+    # instead of resetting the user's choice.
     ids = {model['id'] for model in models}
     aliases = {legacy: target for migrations in cfg.PROVIDER_MODEL_MIGRATIONS.values()
                for legacy, target in migrations.items() if target in ids and legacy not in ids}
@@ -383,7 +334,6 @@ def agent_model_options():
 
 
 def metered_model(model_id, *, max_tokens=2048):
-    """Resolve any existing answer/judge model through the shared registry."""
     entry = cfg.get_model_config(model_id)
     if entry is None:
         raise ValueError("Unknown comparison or judge model")
@@ -402,9 +352,8 @@ def metered_model(model_id, *, max_tokens=2048):
 
 
 def resolve_agent_model(model_id=None, reasoning_effort="default", *, models=None):
-    """``models``: agent_models() as the caller already holds it."""
     models = agent_models() if models is None else models
-    # A saved chat model may carry a migrated ID (grok-4.3-no-reasoning).
+    # A saved chat model may carry a migrated ID.
     wanted = cfg.canonical_model_id(model_id) if model_id else models[0][0].selection_id
     for model, metadata in models:
         # Older clients may still send the default by its OpenRouter ID.
@@ -417,9 +366,8 @@ def resolve_agent_model(model_id=None, reasoning_effort="default", *, models=Non
 
 
 def with_reasoning_summary(model, _metadata=None):
-    """OpenAI reasons by default but streams only encrypted blocks unless a
-    summary is requested. Asking for it adds no reasoning; it makes the
-    reasoning that happens anyway readable (same rule as _resolve_effort)."""
+    """OpenAI streams only encrypted reasoning unless a summary is requested: asking adds no
+    reasoning, it makes it readable."""
     metadata = (_metadata if _metadata is not None else agent_model_metadata.snapshot()).get(model.model) or {}
     reasoning = dict((model.request_config or {}).get("reasoning") or {})
     if (not model.model.startswith("openai/") or not metadata.get("reasoning")
@@ -428,20 +376,16 @@ def with_reasoning_summary(model, _metadata=None):
     return replace(model, request_config={**(model.request_config or {}), "reasoning": {**reasoning, "summary": "auto"}})
 
 
-# "Auto" sends no level, so the model reasons at its own default, which is
-# "high" for some (Claude Sonnet 5.5) - a Pro level. Without Pro, Auto means
-# this level wherever the model offers it (Max, 2026-10-08).
+# "Auto" sends no level, and some models' own default is a Pro level ("high" for Claude Sonnet 5.5):
+# without Pro, Auto means this level.
 FREE_DEFAULT_REASONING = "medium"
-# The expensive levels are Pro (Max, 2026-10-07): they multiply thinking tokens.
+# The expensive levels are Pro: they multiply thinking tokens.
 PRO_REASONING_EFFORTS = frozenset({"high", "xhigh", "max"})
 
 
 def _free_default_effort(model, metadata):
-    """The level Auto stands for without Pro, or None to keep the model default.
-
-    A registry entry that pins a low setting (Kimi off, GLM low) keeps it:
-    Auto is the only way to use it. A pinned Pro level (Grok 4.3 "high")
-    becomes Medium like an unpinned default."""
+    """The level Auto stands for without Pro, or None to keep the model default. A pinned low
+    setting stays (Auto is the only way to use it); a pinned Pro level becomes Medium."""
     pinned = (model.request_config or {}).get("reasoning") or {}
     if pinned and pinned.get("effort") not in PRO_REASONING_EFFORTS:
         return None
@@ -449,10 +393,8 @@ def _free_default_effort(model, metadata):
 
 
 def free_default_effort(model_id=None):
-    """`_free_default_effort` for a selectable chat model (None if unknown),
-    found as resolve_agent_model finds it: until 2026-11-03 a migrated ID
-    (grok-4.3-no-reasoning) was unknown here, and Auto without Pro ran at
-    the model's own level instead of Medium."""
+    """`_free_default_effort` for a selectable chat model, found like resolve_agent_model finds it
+    (migrated IDs included), None if unknown."""
     models = agent_models()
     wanted = cfg.canonical_model_id(model_id) if model_id else models[0][0].selection_id
     for model, metadata in models:
@@ -481,12 +423,8 @@ SERVER_TOOL_USAGE_FIELDS = ("server_tool_use_details", "server_tool_use")
 
 
 def reported_searches(raw: dict):
-    """The web searches a usage object reports, unvalidated, or None.
-
-    OpenRouter reports them in ``server_tool_use_details`` (live 2026-10-10);
-    ``server_tool_use`` is the earlier shape. Only ``web_search_requests``
-    counts searches: ``tool_calls_executed`` counts every server tool, web_fetch
-    and failed attempts included."""
+    """The web searches a usage object reports, unvalidated, or None. Only ``web_search_requests``
+    counts: ``tool_calls_executed`` counts every server tool and failed attempts."""
     for field in SERVER_TOOL_USAGE_FIELDS:
         value = raw.get(field)
         if isinstance(value, dict) and "web_search_requests" in value:
@@ -495,7 +433,7 @@ def reported_searches(raw: dict):
 
 
 def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) -> dict | None:
-    """Missing counts are unknown, never estimated or silently set to zero."""
+    """Missing counts are unknown, never estimated or set to zero."""
     if not isinstance(raw, dict):
         return None
     prompt = raw.get("prompt_tokens", raw.get("input_tokens"))
@@ -524,8 +462,7 @@ def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) ->
             cost_complete = searches_known and (searches == 0 or price is not None)
             if searches_known and price is not None:
                 cost += searches * price
-    # Integer nanodollars avoid cumulative float/rounding drift. Reasoning is
-    # already included in completion_tokens and must not be charged twice.
+    # Integer nanodollars avoid float drift. Reasoning is already in completion_tokens.
     return {
         "input_tokens": prompt if tokens_known else None, "output_tokens": completion if tokens_known else None,
         "cached_input_tokens": cached if tokens_known else None, "cache_write_tokens": written if tokens_known else None,
@@ -539,30 +476,19 @@ def measured_usage(raw: object, model: AgentModel, *, searches_enabled=False) ->
 
 
 _READABLE_FIELDS = {"text": "reasoning.text", "summary": "reasoning.summary"}
-# Providers that sign their thinking reject replayed thought text without a
-# signature. Gemini never signs reasoning.text (its reasoning.encrypted block
-# carries the thought signature), so its text is shown live but not replayed.
+# Providers that sign their thinking reject replayed thought text without a signature. Gemini signs
+# only its encrypted block, so its text is shown live but not replayed.
 _SIGNED_TEXT_FORMATS = {"google-gemini-v1", "anthropic-claude-v1"}
 
 
 def prompt_cache_control(model):
     """Explicit prompt caching where a provider needs it.
 
-    OpenAI, DeepSeek, Gemini, Grok, Moonshot and Z.AI cache prefixes on their
-    own. Anthropic (and Qwen) only cache behind a ``cache_control`` marker;
-    OpenRouter's top-level form places the breakpoint on the last cacheable
-    block and moves it along as a turn's steps grow. Every Agent step re-sends
-    the system prompt, memory and history, so later steps read them from
-    cache (about a tenth of the input price) instead of paying full price
-    each time, as long as they reach the same endpoint (the chat model's
-    steps carry a session, openrouter_contract.provider_session_id). The
-    chat's next message reads them through breakpoints of their own
-    (with_cache_points). The default five-minute lifetime matches chat pacing.
-
-    Writing costs a quarter more than plain input: a request no later one
-    continues (AgentCompletion.one_off: a judge) skips the marker unless its
-    own search rounds re-read the prompt (AgentCompletion.stream).
-    """
+    Anthropic (and Qwen) cache only behind ``cache_control``; the others cache prefixes on their
+    own. Every step re-sends system prompt, memory and history, so later steps read them at about a
+    tenth of the price as long as they reach the same endpoint. Writing costs a quarter more than
+    plain input, so a request nothing continues (a judge) skips the marker unless its own search
+    rounds re-read the prompt."""
     name = str(getattr(model, "model", "") or "")
     if name.startswith(("anthropic/", "qwen/")):
         return {"type": "ephemeral"}
@@ -570,33 +496,18 @@ def prompt_cache_control(model):
 
 
 def with_cache_points(messages, cache, history_end=None):
-    """``messages`` with ``cache`` on the system prompt and on the chat's last
-    earlier message (``history_end``, AgentLoop.history_end) as breakpoints
-    of their own, or None when neither can carry one.
+    """``messages`` with ``cache`` on the system prompt and on the chat's last earlier message
+    (``history_end``) as breakpoints of their own, or None when neither can carry one.
 
-    The top-level marker sits on the last block. A turn's next step
-    continues that prefix, the chat's next message does not: where the step
-    had its tool calls, the message has the answer, and its question's app
-    context changes every time. So it found no point an earlier message had
-    written and paid the write for its whole prompt again (2026-10-22,
-    Sonnet as chat model: none of 20 first steps read the cache, follow-ups
-    a minute apart included; GPT-6 Luna, which sets its own breakpoints,
-    read 98 % on the next message). The system prompt stays the same across
-    a chat's messages (memory closes it, DelegationLoop) and the history
-    only grows, so the next message within the cache lifetime reads both.
-    A token is written once, whichever breakpoint covers it: the extra
-    points cost nothing on a miss. With the top-level one, three of the
-    four breakpoints a request may have.
+    The top-level marker sits on the last block, which the chat's next message does not continue
+    (the step's tool calls become an answer, the app context changes): without these points it paid
+    the write for its whole prompt again. A token is written once whichever breakpoint covers it, so
+    the extra points cost nothing on a miss.
 
-    Live probe 2026-10-23 (Sonnet 5.5 on Vertex): with OpenRouter's search
-    tool in the request only its last breakpoint is cached, these points
-    create nothing, with or without the top-level field; without the tool
-    the next message read the system prompt. Agent steps carry the tool, so
-    the next message reads through the history instead: it repeats each
-    question exactly as sent (AgentRunStore.messages, the turn's
-    ``app_context``) and so starts with the previous message's first prompt.
-    These points stay for requests without the tool (chats with Google data).
-    """
+    With OpenRouter's search tool in the request only the last breakpoint is cached (measured on
+    Vertex): agent steps carry the tool, so their next message reads through the history instead,
+    which repeats each question exactly as sent. These points serve requests without the tool (chats
+    with Google data)."""
     points = [0] if messages and messages[0].get("role") == "system" else []
     if type(history_end) is int and 0 < history_end < len(messages) - 1:
         points.append(history_end)
@@ -609,18 +520,15 @@ def with_cache_points(messages, cache, history_end=None):
     return marked if any(marked[index] is not messages[index] for index in points) else None
 
 
-# Set once a provider refused a request for its explicit cache points and
-# took it without them (_sse_lines): this process sends none after that.
+# Set once a provider refused a request for its explicit cache points: this process sends none after
+# that.
 _CACHE_POINTS_REFUSED = False
 
 
 def _sse_lines(open_lines, payload, fallback=None):
-    """The provider's stream for ``payload``. Refused outright (HTTP 400
-    before any line), the same request goes once more as ``fallback``:
-    ``payload`` without its explicit cache points (with_cache_points). When
-    that one goes through, the points were the cause and this process stops
-    sending them. A refused request is not billed: the step loses one round
-    trip, never its answer."""
+    """The provider's stream for ``payload``. Refused outright (HTTP 400 before any line), it goes
+    once more as ``fallback`` without explicit cache points; when that goes through, this process
+    stops sending them. A refused request is not billed."""
     global _CACHE_POINTS_REFUSED
     lines = open_lines(payload)
     try:
@@ -645,7 +553,6 @@ def _sse_lines(open_lines, payload, fallback=None):
 
 
 def _continues(last, detail):
-    """Whether a streamed fragment extends the previous reasoning block."""
     kind = detail["type"]
     if kind != last.get("type") or kind not in _READABLE_FIELDS.values():
         return False
@@ -662,7 +569,7 @@ def _replayable(detail):
 
 
 class AgentCompletion:
-    """Mutable receipt survives cancellation/errors after any streamed event."""
+    """Mutable receipt that survives cancellation and errors after any streamed event."""
     def __init__(self):
         self.text = ""
         self.usage = None
@@ -674,25 +581,23 @@ class AgentCompletion:
         self.step_id = "completion:0"
         self.tool_calls = []
         self.sources = []
-        # Per citation: the cited URL, its source text and where the answer
-        # cites it. Transient evidence for the source excerpts (see _annotations).
+        # Per citation: URL, source text and where the answer cites it; transient evidence for the
+        # source excerpts.
         self.citations = []
         self._citation_keys = set()
-        # Distinct pages a step that searched kept (sources and citations),
-        # None for a step without a search (_record_missing_citations).
+        # Distinct pages a step that searched kept, None for a step without a search.
         self.search_hits = None
-        # Field names of a searching step's chunks (_note_shapes).
         self._shapes = set()
-        # Text length when the first search results arrived (see _drop_presearch_text).
+        # Text length when the first search results arrived (_drop_presearch_text).
         self._results_at = None
-        # Citation marks (CITE_MARK): an unfinished one held back, the
-        # provider's text length so far and what was removed where in it.
+        # Citation marks: an unfinished one held back, the provider's text length so far and what
+        # was removed where.
         self._mark = ""
         self._raw_chars = 0
         self._removed = []
         self._tool_parts = {}
-        # The stream index the last call fragment named (a fragment without
-        # one continues it) and the fragments that named no call of ours.
+        # The stream index the last call fragment named, and the fragments that named no call of
+        # ours.
         self._tool_last = None
         self.skipped_tool_parts = 0
         self._raw_usage = {}
@@ -701,42 +606,28 @@ class AgentCompletion:
         self.tool_call_limit = 1
         self._reasoning_parts = []
         self._reasoning_text = ""
-        # Set when the step ended as ModelOutputLimit (see _output_limited).
         self.output_limited = False
-        # The provider's own end reason and whether it sent a refusal (_declined).
         self.native_finish_reason = ""
         self.refusal = False
-        # A helper call's own OpenRouter session, and whether no later request
-        # re-sends its prompt (DelegationLoop.worker_completion, see stream).
+        # A helper call's own OpenRouter session, and whether no later request re-sends its prompt.
         self.session_id = None
         self.one_off = False
-        # The chat model's steps: index of the chat's last earlier message,
-        # a cache point of its own (with_cache_points, AgentLoop.history_end).
+        # Index of the chat's last earlier message, a cache point of its own (with_cache_points).
         self.history_end = None
-        # When the request left, its first streamed token (text, reasoning
-        # or a tool call) arrived and its stream ended, in UTC (since
-        # 2026-10-30, audit I7): the receipt keeps them (AgentRunStore.settle),
-        # so the time between claim and settlement splits into ours before
-        # the request, the provider's and ours after it (T3).
+        # When the request left, its first token arrived and its stream ended (UTC), kept on the
+        # receipt: claim to settlement splits into ours, the provider's and ours again.
         self.request_started_at = self.first_token_at = self.stream_ended_at = None
-        # Several calls per step: every step of the agent asks for them
-        # (DelegationLoop._step); off, the request asks for one call.
+        # Several calls per step; off, the request asks for one call.
         self.parallel_tool_calls = False
-        # Calls past tool_call_limit stay in tool_calls, without arguments,
-        # their ids in over_limit_ids, so that each gets a result instead of
-        # vanishing from the conversation (DelegationLoop.run). Off, they are
-        # skipped.
+        # Calls past tool_call_limit stay without arguments, ids in over_limit_ids, so each gets a
+        # result instead of vanishing from the conversation.
         self.keep_over_limit = False
         self._over_limit = set()
         self.over_limit_ids = set()
 
     def _output_limited(self):
-        """The step ended without a usable answer or tool call after reasoning.
-
-        At the token limit: nothing written, or a tool call cut off before it
-        completed. A model that reasoned and then ended without any text or
-        tool call (``stop`` or no finish reason at all) counts the same way:
-        the same request would end the same way again."""
+        """The step ended without a usable answer or tool call after reasoning: nothing written, a
+        call cut off, or no text after reasoning. The same request would end the same way again."""
         if self.finish_reason == "tool_calls":
             return False
         if self.finish_reason in {"length", "max_tokens"}:
@@ -747,8 +638,8 @@ class AgentCompletion:
                 and not self._tool_parts and not self.text.strip())
 
     def _declined(self):
-        """The provider's safety filter ended the step: OpenRouter's
-        content_filter, the provider's own refusal reason or a refusal text."""
+        """The provider's safety filter ended the step: content_filter, its own refusal reason or a
+        refusal text."""
         return (self.refusal or self.finish_reason == "content_filter"
                 or self.native_finish_reason.lower() in DECLINED_NATIVE_REASONS)
 
@@ -761,10 +652,9 @@ class AgentCompletion:
                 f"output_tokens={(self.usage or {}).get('output_tokens')}")
 
     def record_rejection(self, error, model):
-        # An HTTP admission rejection never opened an SSE generation, and a
-        # request that never connected (or was stopped before dispatch) never
-        # reached the provider. Timeouts, 5xx and errors inside an accepted
-        # stream can still have incurred usage.
+        # A rejected admission never opened a generation and an unconnected or undispatched request
+        # never reached the provider; timeouts, 5xx and errors inside an accepted stream can still
+        # have incurred usage.
         if (self.usage is not None or self.generation_id or self.text
                 or self.reasoning_chars or self._tool_parts):
             return
@@ -795,14 +685,10 @@ class AgentCompletion:
         return message
 
     def _preserve_reasoning(self, delta):
-        """Rebuild provider reasoning blocks from streamed fragments.
-
-        Mirrors OpenRouter's own SDK: readable text/summary fragments extend
-        the previous block of the same kind; opaque ``reasoning.encrypted``
-        blocks (Gemini thought signatures, OpenAI encrypted reasoning) are
-        discrete and kept byte for byte, never joined. ``index`` alone is not
-        an identity: Gemini sends text and its signature both at index 0.
-        """
+        """Rebuild provider reasoning blocks from streamed fragments, as OpenRouter's SDK does:
+        readable fragments extend the previous block of their kind, encrypted blocks are kept byte
+        for byte, never joined. ``index`` alone is no identity: Gemini sends text and signature both
+        at index 0."""
         for detail in delta.get("reasoning_details") or []:
             if not isinstance(detail, dict) or not isinstance(detail.get("type"), str):
                 continue  # Provider noise must not end an otherwise valid step.
@@ -861,25 +747,17 @@ class AgentCompletion:
                     yield event
             unstored = rest if event else text
             if unstored:
-                # Past the stored bound the model keeps thinking, at "max"
-                # for minutes: live progress still sees every delta, nothing
-                # more is stored (``transient``, never in ``self.activity``).
+                # Past the stored bound the model keeps thinking for minutes: live progress sees
+                # every delta, nothing more is stored.
                 yield {"type": "activity", "version": 1, "step_id": self.step_id, "kind": "reasoning",
                        "id": event_id, "format": form, "text": unstored, "append": True, "transient": True}
 
     def _tool_delta(self, raw):
-        """Collect the call fragments of one chunk. No fragment fails the
-        step: one that names no call of ours is skipped, a field past its
-        limit keeps one character more, so the registry refuses that call
-        with its limit and the model reads why (ToolRegistry.validate).
-
-        A stream numbers every call of a response, the provider's own tool
-        calls inside it included (its web search): after four searches the
-        agent's next call arrived as index 5 and failed the whole turn, which
-        read as "The model provider could not finish this request"
-        (2026-10-27, DeepSeek V4.1 Flash in audit mode, twice). Any index
-        below TOOL_INDEX_BOUND names a call; a step keeps at most
-        ``tool_call_limit`` of them, in stream order."""
+        """Collect the call fragments of one chunk; no fragment fails the step. One that names no
+        call of ours is skipped; a field past its limit keeps one character more, so the registry
+        refuses it with its limit and the model reads why. Any index below TOOL_INDEX_BOUND names a
+        call: the provider's own searches count in the numbering, and after four of them the agent's
+        call arrived as index 5."""
         if not isinstance(raw, list):
             self.skipped_tool_parts += 1
             return
@@ -920,10 +798,8 @@ class AgentCompletion:
                     output[key] += fragment[:room]
 
     def _completed_tool_calls(self):
-        """The step's calls in stream order, each with an id a provider takes
-        back (letters, digits, _ and -): an id with other characters, too
-        long or missing no longer fails the step; its tool result names it the
-        same way, so call and result still match."""
+        """The step's calls in stream order, each with an id a provider takes back: an id with other
+        characters, too long or missing is renamed, the same way in its tool result."""
         calls, seen = [], set()
         self.over_limit_ids = set()
         for number, index in enumerate(sorted(self._tool_parts)):
@@ -933,7 +809,7 @@ class AgentCompletion:
                 ident = f"call_{number}_{uuid.uuid4().hex[:12]}"
             seen.add(ident)
             if index in self._over_limit:
-                # Not run (keep_over_limit): an empty object, valid for every provider.
+                # Not run: an empty object, valid for every provider.
                 self.over_limit_ids.add(ident)
                 call = {**call, "function": {**call["function"], "arguments": "{}"}}
             calls.append({**call, "id": ident})
@@ -968,12 +844,9 @@ class AgentCompletion:
                 self._citation(url, value)
 
     def _visible(self, chunk, *, final=False):
-        """``chunk`` of the provider's text with citation marks (CITE_MARK)
-        turned into links of their URLs (_cite_links).
-
-        A mark still open at its end (no closing mark, no whitespace yet)
-        waits for the next chunk; ``final`` releases what is held. Replaced
-        spans are kept in provider positions for the citation offsets."""
+        """``chunk`` with citation marks turned into links. A mark still open at its end waits for
+        the next chunk; ``final`` releases what is held. Replaced spans are kept in provider
+        positions for the citation offsets."""
         text = self._mark + chunk
         start = self._raw_chars - len(self._mark)
         self._raw_chars += len(chunk)
@@ -995,8 +868,8 @@ class AgentCompletion:
         return "".join(parts)
 
     def _shown_index(self, index):
-        """A provider text position in the shown text: replaced citation
-        marks no longer count, the links that replaced them do."""
+        """A provider text position in the shown text: replaced marks no longer count, their links
+        do."""
         shown = index
         for at, length, added in self._removed:
             if index >= at + length:
@@ -1006,12 +879,9 @@ class AgentCompletion:
         return shown
 
     def _citation(self, url, value):
-        """Keep where the answer cites ``url`` and the source text sent with it.
-
-        Offsets index the final answer text; some native-search adapters send
-        0/0. The text length seen so far is the fallback anchor, as in the
-        Consensus stream (streaming._stream_openrouter_chat_completion).
-        Provider offsets count removed citation marks (_visible): moved."""
+        """Keep where the answer cites ``url`` and its source text. Some adapters send 0/0 offsets:
+        the text length so far is the fallback anchor. Provider offsets count removed citation marks
+        and are moved."""
         def offset(name):
             number = value.get(name)
             return self._shown_index(number) if type(number) is int and number >= 0 else None
@@ -1025,16 +895,10 @@ class AgentCompletion:
                                "start_index": key[1], "end_index": key[2], "fallback_end_index": len(self.text)})
 
     def _drop_presearch_text(self, model):
-        """Drop what the model wrote before its first search results arrived.
-
-        Claude announces its server-side search ("Ich suche nach ...",
-        2026-10-10) and OpenRouter joins that text to the answer, where it
-        opened the comparison answer, its card and the evidence of synthesis
-        and judges. Live deltas already showed it; text and citation offsets
-        are moved together (see citations.presearch_end). Text the user
-        already saw as the agent's answer stays (``published``, set by
-        DelegationLoop._candidate_delta): cutting it lost the opening of an
-        answer that searched midway (review 2026-10-14)."""
+        """Drop what the model wrote before its first search results: Claude announces its
+        server-side search and OpenRouter joins that text to the answer. Text and citation offsets
+        move together. Text the user already saw as the answer stays (``published``), or an answer
+        that searched midway lost its opening."""
         if getattr(self, "published", ""):
             self._results_at = None
             return
@@ -1046,20 +910,16 @@ class AgentCompletion:
             record_metric("presearch_text", model.model, processed=cut)
 
     def _record_search_overrun(self, model, limit):
-        """Count searches beyond the requested limit, per model.
-
-        OpenRouter does not enforce ``max_uses``/``max_tool_calls`` for every
-        search: at a limit of 1, Claude Haiku 4.5 searched 2-3 times and Gemini
-        3.5 Flash-Lite 3 times (2026-10-10). Those searches ran and are paid;
-        usage books the real count. An overrun never fails the answer."""
+        """Count searches beyond the requested limit, per model: OpenRouter does not enforce
+        ``max_uses`` for every search (Claude Haiku 4.5 searched 2-3 times at a limit of 1). They
+        ran and are paid; usage books the real count."""
         count = (self.usage or {}).get("web_search_requests")
         if limit and type(count) is int and count > limit:
             record_metric("search_overrun", model.model, processed=count - limit)
 
     def _note_shapes(self, data, choice, delta):
-        """Field names of a chunk beyond the known ones, and the kinds of its
-        annotations: where a provider's search hits arrive when they are not
-        URL citations (_record_missing_citations). Names only, never values."""
+        """Field names of a chunk beyond the known ones and its annotation kinds: where a provider's
+        hits arrive when they are not URL citations. Names only, never values."""
         shapes = self._shapes
         if len(shapes) >= 40:
             return
@@ -1072,14 +932,10 @@ class AgentCompletion:
                     shapes.add(f"{where}.annotation:{str(annotation.get('type'))[:40]}:{','.join(sorted(annotation)[:8])}")
 
     def _record_missing_citations(self, model):
-        """A step that searched but kept no hit (GPT-6 Luna in every logged
-        step since at least 2026-10-23): its sources, the source excerpts and
-        the reviewers' log have nothing of the search (agent_audit.review_entry
-        says it searched). Logged with the chunk shapes seen, to find where
-        the hits went; never fails the step. Every step that searched counts
-        as ``search_step`` and keeps ``search_hits`` for its receipt
-        (agent_runs.settle), so the share without hits per model can be read
-        (spec A-M9, scripts/audit_report.py)."""
+        """A step that searched but kept no hit (GPT-6 Luna in every logged step) has nothing of the
+        search for its sources or reviewers: logged with the chunk shapes seen, never failing the
+        step. Every searching step counts as ``search_step`` with its ``search_hits`` for the
+        receipt."""
         count = (self.usage or {}).get("web_search_requests")
         if type(count) is int and count > 0:
             self.search_hits = len({source.get("url") for source in self.sources}
@@ -1092,18 +948,11 @@ class AgentCompletion:
 
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
                native_searches=0, allow_tool_calls=False, prompt_cache=True, session_id=None, tool_choice=None):
-        """``session_id`` keeps the request on the endpoint of the chat's
-        earlier steps (openrouter_contract.provider_session_id); without one,
-        a helper call keeps its own (``self.session_id``). The adapter owns
-        it: a ``session_id`` in the registry config never reaches the body.
-
-        ``allow_tool_calls=False``: the step may only write; calls it makes
-        are dropped. ``tool_choice`` overrides the choice that follows from
-        it ("none" without search). The Agent's steps send "auto" in every
-        step of a message, also where they may only write: Anthropic's
-        cached prefix includes tool_choice. With an explicit "auto", a reply
-        of dropped calls alone ends as ``tool_calls`` without text
-        (``skipped_tool_parts``) instead of failing, for the caller's retry."""
+        """``session_id`` keeps the request on the endpoint of the chat's earlier steps; without one
+        a helper keeps its own. ``allow_tool_calls=False``: the step may only write and its calls
+        are dropped. The agent's steps send tool_choice "auto" in every step, since Anthropic's
+        cached prefix includes it; with it, a reply of dropped calls alone ends as ``tool_calls``
+        without text for the caller's retry."""
         session_id = session_id or self.session_id
         payload = {
             "model": model.model, "messages": messages,
@@ -1113,19 +962,17 @@ class AgentCompletion:
         payload.update({k: v for k, v in model.request_config.items() if k != "provider" and not k.startswith("_agent_")})
         payload.update(model=model.model, messages=messages, max_tokens=model.max_output_tokens,
                        stream=True, stream_options={"include_usage": True})
-        # Fastest endpoint without prompt collection; the registry may pin a
-        # host (Kimi), a chat with Google data adds zero data retention
-        # (google_connections.restricted_model).
+        # Fastest endpoint without prompt collection; the registry may pin a host, a chat with
+        # Google data adds zero data retention.
         payload["provider"] = provider_routing(model.request_config.get("provider"))
-        # All execution-affecting fields are owned by this adapter, never model
-        # arguments, user settings or arbitrary registry configuration.
+        # Execution fields are owned by this adapter, never model arguments, user settings or
+        # registry configuration.
         for field in ("tools", "tool_choice", "plugins", "parallel_tool_calls", "max_tool_calls", "stop_server_tools_when",
                       "session_id"):
             payload.pop(field, None)
         headers = openrouter_headers(api_key)
         if session_id:
-            # OpenRouter reads the header like the body field; a header can
-            # never make a request invalid.
+            # A header can never make a request invalid.
             headers["x-session-id"] = session_id
         if any(isinstance(m.get("content"), list) and any(b.get("type") == "file" for b in m["content"]) for m in messages):
             payload["plugins"] = [{"id": "file-parser", "pdf": {"engine": "native"}}]
@@ -1133,18 +980,12 @@ class AgentCompletion:
             payload["tools"] = tools
             if any(tool.get("type") == "function" for tool in tools):
                 payload["tool_choice"] = tool_choice or ("auto" if allow_tool_calls or native_searches else "none")
-                # Part of Anthropic's tool_choice: a change rewrites the cached
-                # messages, so the agent's steps send the same value in every
-                # request (DelegationLoop._step).
+                # Part of Anthropic's tool_choice: a change rewrites the cached messages.
                 payload["parallel_tool_calls"] = bool(self.parallel_tool_calls)
         if native_searches:
             payload["max_tool_calls"] = native_searches
-        # Cached for the requests that read the prompt again: the chat model's
-        # next steps and message, a worker's next step or retry, and the search
-        # rounds inside this request (2026-10-21: 21 of 49 Claude comparison
-        # answers, one request each, read from the cache; scripts/
-        # cache_hit_rate.py). A one-off call without search, a judge, would
-        # only pay the write.
+        # Cached for requests that read the prompt again: next steps and messages, retries and this
+        # request's own search rounds. A one-off call without search would only pay the write.
         cache = prompt_cache_control(model) if prompt_cache and (native_searches or not self.one_off) else None
         fallback = None
         if cache:
@@ -1170,10 +1011,9 @@ class AgentCompletion:
                         break
                     data = json.loads(encoded)
                     if not isinstance(data, dict):
-                        # Not an event of this protocol: nothing in it to read.
                         continue
-                    # Comments, repeated counters and empty deltas prove only
-                    # that the socket is alive. They cannot renew admission forever.
+                    # Comments, repeated counters and empty deltas only prove the socket is alive;
+                    # they cannot renew admission forever.
                     if any(any((choice.get("delta") or {}).get(key) for key in
                                ("content", "reasoning", "reasoning_content", "reasoning_details", "tool_calls"))
                            or (choice.get("finish_reason") and not self.finish_reason)
@@ -1216,8 +1056,8 @@ class AgentCompletion:
                                      "pricing_version": model.pricing_version, "source": "provider",
                                      "billing_mode": "simulation", "currency": "USD"}
                     if usage is not None:
-                        # Cumulative telemetry before the terminal choice is a
-                        # lower bound, not a final receipt after a disconnect.
+                        # Cumulative telemetry before the terminal choice is a lower bound, not a
+                        # final receipt.
                         final_tokens = (bool(self._final_usage_fields & {"prompt_tokens", "input_tokens"})
                                         and bool(self._final_usage_fields & {"completion_tokens", "output_tokens"}))
                         if not final_tokens:
@@ -1242,20 +1082,20 @@ class AgentCompletion:
                                 calling = bool(self._tool_parts)
                                 self._tool_delta(delta["tool_calls"])
                                 if self._tool_parts and not calling:
-                                    # Text before it is no answer: the loop
-                                    # moves it into the timeline (_move_preamble).
+                                    # Text before it is no answer: the loop moves it into the
+                                    # timeline.
                                     yield self.event("status", "tool_call", status="working")
                             else:
-                                # A step that may only write and calls anyway:
-                                # the call is not run; its text stands.
+                                # A step that may only write and calls anyway: the call is not run,
+                                # its text stands.
                                 self.skipped_tool_parts += 1
                         yield from self.reasoning_events(delta)
                         chunk = delta.get("content")
                         if isinstance(chunk, str) and chunk:
                             chunk = self._visible(chunk)
                         if isinstance(chunk, str) and chunk and len(self.text) >= TEXT_STORAGE_CHARS:
-                            # Beyond the storage limit: keep reading so usage and
-                            # cost still arrive, but end the answer as truncated.
+                            # Beyond the storage limit: keep reading for usage and cost, but end the
+                            # answer as truncated.
                             text_capped = True
                         elif isinstance(chunk, str) and chunk:
                             if not self.text:
@@ -1264,8 +1104,8 @@ class AgentCompletion:
                                 chunk, text_capped = chunk[:TEXT_STORAGE_CHARS - len(self.text)], True
                             self.text += chunk
                             yield {"type": "delta", "text": chunk}
-                        # After the text of the same chunk: a citation's stream
-                        # position includes the claim it arrived with.
+                        # After the text of the same chunk: a citation's position includes the claim
+                        # it arrived with.
                         self._annotations(delta.get("annotations"), before)
                         self._annotations((choice.get("message") or {}).get("annotations"), before)
                         if native_searches:
@@ -1276,9 +1116,8 @@ class AgentCompletion:
                             self.native_finish_reason = choice["native_finish_reason"][:40]
                         if choice.get("finish_reason"):
                             self.finish_reason = str(choice["finish_reason"])
-                # A mark still held at the end ends with the stream: its URLs
-                # become links (Luna writes URL-only marks without a closing
-                # mark), other references go.
+                # A mark still held ends with the stream (Luna writes URL-only marks without a
+                # closing mark).
                 rest = self._visible("", final=True)
                 if rest and not text_capped:
                     self.text += rest
@@ -1287,15 +1126,14 @@ class AgentCompletion:
                 if text_capped and self.finish_reason == "stop":
                     self.finish_reason = "length"
                 if allow_tool_calls and self._tool_parts and self.finish_reason in {"tool_calls", "stop", "function_call"}:
-                    # Calls that ended with "stop" are calls too (some
-                    # providers say so instead of "tool_calls").
+                    # Some providers end calls with "stop" instead of "tool_calls".
                     self.finish_reason = "tool_calls"
                     self.tool_calls = self._completed_tool_calls()
                     if self.over_limit_ids:
                         logging.info("Agent calls past the step's limit model=%s step=%s count=%s limit=%s",
                                      model.model, self.step_id, len(self.over_limit_ids), self.tool_call_limit)
                 elif not allow_tool_calls and self.finish_reason == "tool_calls" and self.text.strip():
-                    # A call it may not make (see above): its text is the answer.
+                    # A call it may not make: its text is the answer.
                     self.finish_reason = "stop"
                 calls_only = (tool_choice == "auto" and not allow_tool_calls and self.skipped_tool_parts
                               and not self.text.strip())
@@ -1307,11 +1145,9 @@ class AgentCompletion:
                 if not self.tool_calls and not self.text.strip() and self._declined():
                     raise ModelDeclined()
                 if not self.tool_calls and self._output_limited():
-                    # The whole allowance went into reasoning, or into reasoning
-                    # and a tool call cut in half. Not a provider fault: the
-                    # same request would end the same way again. A stop
-                    # without a word after reasoning is chance instead
-                    # (ModelEmptyAnswer): a comparison answer tries once more.
+                    # The whole allowance went into reasoning, or reasoning and a cut call: the same
+                    # request would end the same way. A stop without a word after reasoning is
+                    # chance instead (ModelEmptyAnswer).
                     self.output_limited = True
                     raise (ModelOutputLimit() if self.finish_reason in {"length", "max_tokens"}
                            else ModelEmptyAnswer())

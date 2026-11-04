@@ -24,12 +24,6 @@
     // The comparison models review the answer (judge_answer and check_text:
     // the comparison mode, turns saved before 2026-10-31).
     audit_answer: ['Answer review', 'Reviewing the answer…', 'Reviewed the answer'],
-    start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
-    wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
-    send_agent: ['Follow up', 'Following up with a model…', 'Followed up with a model'],
-    review_agent: ['Review a model', 'Reviewing a model response…', 'Reviewed a model response'],
-    stop_agent: ['Stop a model', 'Stopping a model…', 'Stopped a model'],
-    report_to_orchestrator: ['Report to the main model', 'Reporting to the main model…', 'Reported to the main model'],
     read_file: ['Read files', 'Reading your files…', 'Read your files'],
     read_document: ['Open document', 'Opening the document…', 'Opened the document'],
     create_document: ['Create document', 'Writing the document…', 'Created a document'],
@@ -58,7 +52,7 @@
     vm_save_picture: ['Picture', 'Saving a picture…', 'Saved a picture'],
     vm_render_office: ['PDF', 'Making a PDF…', 'Made a PDF'],
     vm_install_packages: ['Install', 'Installing packages…', 'Installed packages'],
-    // The workspace on demand (DelegationLoop._open_workspace): what for (workspaceSummary).
+    // The workspace on demand (AgentLoop._open_workspace): what for (workspaceSummary).
     open_workspace: ['Workspace', 'Opening the workspace…', 'Opened the workspace'],
     // The workspace's browser, a computer of its own (agent_browser.py).
     browser: ['Browser', 'Using the browser…', 'Used the browser'],
@@ -70,7 +64,7 @@
   };
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
-  // Checks the app runs once the answer is written (DelegationLoop._finish_review).
+  // Checks the app runs once the answer is written (AgentLoop._finish_review).
   const answerChecks = new Set(['judge_answer', 'audit_answer']);
   const toolName = name => tools[name]?.[0] || 'Tool';
   // "Searched the web · 3 sources: skat.dk, virk.dk, borger.dk" says what the
@@ -1325,7 +1319,7 @@
     node._state.textContent = `${App.t(holdKinds[item.halt] || 'Needs your decision')} · ${App.t((domain ? domainStates : holdStates)[state])}`;
   }
 
-  // A step's thinking line (agent_delegation `completion:N/thinking`).
+  // A step's thinking line (agent_loop `completion:N/thinking`).
   const isThought = item => item.kind === 'progress' && /\/thinking$/.test(String(item.id || ''));
   // What a step thought, in its opened history (ReasoningProgress.sections,
   // UX audit A2): each heading over its paragraphs, as ChatGPT and Claude

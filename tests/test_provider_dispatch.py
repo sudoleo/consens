@@ -26,8 +26,8 @@ from app.services.llm.provider_runtime import (
     bind_analysis_budget,
     bind_provider_cancellation,
 )
-from test_agent_delegation import make_loop
-from test_agent_loop import loop_for, packet, transport
+from test_agent_sessions import make_loop
+from test_agent_loop import packet, transport
 from test_agent_runs import UID, store  # noqa: F401  (pytest fixture)
 
 PAYLOAD = {"model": "m", "messages": [{"role": "user", "content": "hello"}], "max_tokens": 1000}
@@ -288,14 +288,6 @@ def _assert_free_receipt(store, loop):  # noqa: F811
     assert saved["usage"]["source"] == "not_dispatched"
 
 
-def test_agent_loop_step_that_never_connected_is_free(store, monkeypatch):  # noqa: F811
-    transport(monkeypatch, [[httpx.ConnectError("name resolution failed")]])
-    loop = loop_for(store)
-    with pytest.raises(httpx.ConnectError):
-        list(loop.run())
-    _assert_free_receipt(store, loop)
-
-
 def test_delegation_step_that_never_connected_is_free(store, monkeypatch):  # noqa: F811
     # The step that never connected runs once more (since 2026-10-27); both are free.
     transport(monkeypatch, [[httpx.ConnectTimeout("connect")], [httpx.ConnectTimeout("connect")]])
@@ -314,7 +306,8 @@ def test_delegation_step_cancelled_before_dispatch_is_free(store, monkeypatch): 
 
 
 def test_delegation_step_cut_after_streaming_stays_estimated(store, monkeypatch):  # noqa: F811
-    transport(monkeypatch, [[packet({"content": "Partial"}), httpx.ReadError("cut")]])
+    # Cut before the user saw a word, the step runs once more (_passing_failure).
+    transport(monkeypatch, [[packet({"content": "Partial"}), httpx.ReadError("cut")]] * 2)
     loop = make_loop(store)
     with pytest.raises(httpx.ReadError):
         list(loop.run())

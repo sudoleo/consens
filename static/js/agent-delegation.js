@@ -3,8 +3,7 @@
   "use strict";
   const App = window.App = window.App || {};
   const views = new Map();
-  const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
-    rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
+  const labels = { waiting: "Waiting", working: "Working", completed: "Completed", failed: "Failed", stopped: "Stopped" };
   // Judge calls of the comparison mode's answer check (turns saved before
   // 2026-10-31) are plumbing: retries and backup models are routine and say
   // nothing about the answer. The panel shows them as ONE row, "Answer
@@ -122,7 +121,7 @@
     if (agent.kind === "audit" && agent.status === "failed") return "No review";
     return labels[agent.status] || "Waiting";
   }
-  const activeStates = new Set(["waiting", "working", "question", "rework"]);
+  const activeStates = new Set(["waiting", "working"]);
   let owner = "", current = null, sidebar = null, inline = null, timer = null, returnFocus = null, scrim = null;
   let ownerUser = null, ownerGeneration;
   const uid = () => window.auth?.currentUser?.uid || "";
@@ -659,7 +658,7 @@
     if (agent.progress_text) {
       row.body.append(node("h3", "", "Reasoning highlights"), node("p", "agent-session-progress", agent.progress_text));
     }
-    for (const [key, label] of Object.entries({ goal: "Goal", context: "Context", constraints: "Constraints", expected_output: "Expected result", acceptance_criteria: "Checks" })) {
+    for (const [key, label] of Object.entries({ goal: "Goal", context: "Context" })) {
       if (!detail.assignment?.[key]) continue;
       // A comparison answer's goal only repeats its row title.
       if (agent.kind === "comparison" && key === "goal") continue;
@@ -937,7 +936,7 @@
       // entry ("No review · 8 Sek." stayed half English, 2026-10-26).
       setText(row.state, `${App.t(stateLabel(agent))} · ${agent.duration_incomplete ? '≥ ' : ''}${App.format.duration(elapsed(view, agent))}`);
       setTitle(row.state, agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.');
-      const pending = view.running && ['waiting', 'working', 'rework'].includes(agent.status);
+      const pending = view.running && ['waiting', 'working'].includes(agent.status);
       const progress = pending ? view.progress.get(agent.progressId || agent.id) : null;
       const loading = pending && progress?.streaming !== false;
       const usage = measured(progress?.usage) ? progress.usage : agent.usage;

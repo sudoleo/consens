@@ -1,17 +1,16 @@
 """Budget-pressure regressions through real admission/receipts, without paid APIs."""
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
+import json
 import threading
 
 import pytest
 
 from app.services import agent_quota
-from app.services.agent_costs import input_bound
 from app.services.agent_tokens import input_estimate
-from app.services.agent_policy import AgentPolicy
 from app.services.agent_tools import ToolRegistry
 from app.services.llm.agent_client import AgentCompletion, measured_usage
-from app.services.llm.provider_runtime import AnalysisBudget, AnalysisBudgetExceeded, ProviderCancelled
+from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancelled
 from test_agent_runs import UID, store, totals, priced
 from test_agent_continuation import chat_loop
 from test_agent_comparison import Script, make_loop
@@ -45,14 +44,16 @@ def root(loop):
     assert loop.store.claim(*args, loop.model, policy=loop.policy.snapshot(), run_token=loop.run_token, reservation=(1, priced(1)))
     value = AgentCompletion()
     value.usage = measured_usage({"prompt_tokens": 0, "completion_tokens": 0}, loop.model)
-    loop.store.settle(*args, completion=value, status="succeeded", final=False)
+    loop.store.settle(*args, completion=value, status="succeeded")
     loop.claimed = True
 
 
-def expected(loop, searches=1):
+def expected(loop, searches=None):
     """What the loop's first step is expected to cost, in micro-euros."""
+    from app.services.agent_audit import AGENT_SEARCH_ROUNDS
     from app.services.agent_budget_config import micro_eur
-    from app.services.agent_delegation import AGENT_SESSION
+    searches = AGENT_SEARCH_ROUNDS if searches is None else searches
+    from app.services.agent_loop import AGENT_SESSION
     from app.services.agent_tools import search_tools
     model = loop._routing_model()
     tools = [*loop.registry.schemas, *search_tools(model, searches)]
@@ -73,7 +74,7 @@ def test_a_screenshot_sized_prompt_reserves_its_expected_cost_with_its_search(st
     ref = quota(store, amount)
     list(loop.run())
     # Exactly what it is expected to cost fits: the whole step, its search included.
-    assert len(observed) == 1 and observed[0]["native_searches"] == 1 and held == [amount]
+    assert len(observed) == 1 and observed[0]["native_searches"] == loop._search_rounds() and held == [amount]
     assert observed[0]["model"].max_output_tokens == loop._routing_model().max_output_tokens
     assert ref.get().to_dict()["reserved"] == 0
     assert ref.get().to_dict()["used"] == 250000 - amount + 150
@@ -102,7 +103,8 @@ def test_offline_counting_accepts_unicode_and_special_token_literals(text, monke
     encoding.cache_clear()
     messages = [{"role": "user", "content": text * 100}]
     count = input_estimate(messages)
-    assert 256 < count < input_bound(messages) + 512
+    # Below the message's UTF-8 bytes plus protocol overhead.
+    assert 256 < count < len(json.dumps(messages, ensure_ascii=False).encode("utf-8")) + 1536
     assert input_estimate(messages, request_config={"response_format": {"schema": text * 500}}) > count
 
 
@@ -127,8 +129,7 @@ def test_parallel_comparison_waits_for_receipt_instead_of_failing_or_shrinking(s
                 assert finish.wait(5)
             yield from super().stream(**kwargs)
     loop = make_loop(store, Script())
-    loop.policy = AgentPolicy.for_chat(loop.config)
-    loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Slow
+    loop.factory = Slow
     root(loop)
     model = next(iter(loop.comparison.models.values()))
     messages = [{"role": "system", "content": "Answer"}, {"role": "user", "content": "Which option?"}]
@@ -249,8 +250,7 @@ def test_a_reply_after_the_steps_own_search_stands_and_every_step_may_research(s
     # the suite's 250,000 test micro-euros.
     agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": 5_000_000})
     loop = make_loop(store, script)
-    loop.policy = AgentPolicy.for_chat(loop.config)
-    loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Researched
+    loop.factory = Researched
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert root_calls == [AGENT_SEARCH_ROUNDS]
@@ -271,8 +271,7 @@ def test_parallel_comparison_answers_start_together_with_the_same_search_and_out
                 assert finish.wait(5)
             yield from super().stream(**kwargs)
     loop = make_loop(store, Script())
-    loop.policy = AgentPolicy.for_chat(loop.config)
-    loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Slow
+    loop.factory = Slow
     root(loop)
     model = next(iter(loop.comparison.models.values()))
     messages = [{"role": "system", "content": "Answer"}, {"role": "user", "content": "Which option?"}]
@@ -303,7 +302,7 @@ def test_parallel_comparison_answers_start_together_with_the_same_search_and_out
 
 
 def test_google_chat_tells_the_model_that_web_search_is_unavailable(store):
-    from app.services.agent_delegation import GOOGLE_NO_SEARCH
+    from app.services.agent_loop import GOOGLE_NO_SEARCH
     observed = []
     class Capture(Completion):
         def stream(self, **kwargs):

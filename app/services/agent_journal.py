@@ -1,31 +1,13 @@
-"""The run's agent-session journal, written on one thread (since 2026-10-21).
+"""The run's agent-session journal, written on one thread.
 
-Every status of every model call of a run (waiting, working, the live
-reasoning line, completed, its result) is saved by ``publish_agents`` in a
-Firestore transaction. Until 2026-10-21 the calling thread wrote it itself,
-holding the run's lock: a comparison answer stopped reading its stream for
-every line it saved, and every other call waited behind it. With six
-comparison models, two Differences passes, Coverage windows and their hedges
-the transactions queued up faster than Firestore (0.4-1 s each) could take
-them; in prod a request left 77 s after the decision and finished judge
-answers were cancelled after 90 s (docs/agent-mode.md "Wartezeit im Server").
-
-Now a call hands its status to this journal and goes on. One writer thread
-saves them in order per session:
-
-- Everything due when the writer is free goes into one transaction (since
-  2026-10-22): six answers starting together are one write, not six writes
-  in a row, each ahead of a model call's receipt behind the account lock.
-- A caller that needs the saved event (a new session must exist before its
-  receipt is claimed, a worker's message carries its event id) waits; its
-  session goes first when a batch is full.
-- Statuses of the same session that are still waiting merge into one update
-  (``completed`` and the result become one).
-- A live reasoning line replaces the line still waiting; lines are written at
-  most every ``progress_gap`` seconds across the whole run (all sessions'
-  lines together), so they never fill the database queue ahead of a model
-  call's receipt.
-"""
+Every status of every model call of a run is saved by ``publish_agents`` in a Firestore transaction.
+Written by the calling thread under the run's lock, a comparison answer stopped reading its stream
+for every saved line and the transactions queued up faster than Firestore took them, until finished
+answers were cancelled. So a call hands its status here and goes on; one writer saves them in order
+per session: everything due goes into one transaction, a caller that needs the saved event waits and
+goes first, waiting statuses of one session merge, and live reasoning lines replace the waiting one
+and are written at most every ``progress_gap`` across the run, so they never queue ahead of a call's
+receipt."""
 from __future__ import annotations
 
 import logging
@@ -34,20 +16,19 @@ import time
 from collections import deque
 from uuid import uuid4
 
-# Updates per transaction: a few documents each, far below Firestore's 500
-# writes per commit, and a batch never waits for a full one.
+# A few documents per update, far below Firestore's 500 writes per commit; a batch never waits to be
+# full.
 BATCH_LIMIT = 32
 
 
 class JournalJob:
-    """One session update: ``patch`` for the session, optional ``message``."""
 
     __slots__ = ("worker", "patch", "message", "progress", "urgent", "started", "order", "key", "event", "error",
                  "done")
 
     def __init__(self, worker, patch, message, *, progress, urgent, order):
         self.worker, self.patch, self.message = worker, patch, message
-        # The saved event's id: a retried write finds its own first commit.
+        # A retried write finds its own first commit by this id.
         self.key = uuid4().hex
         self.progress, self.urgent, self.order = progress, urgent, order
         self.started = False
@@ -55,7 +36,6 @@ class JournalJob:
         self.done = threading.Event()
 
     def absorb(self, patch, message):
-        """A newer update of the same session, still unwritten: one write."""
         self.patch = {**self.patch, **patch}
         if message is not None:
             self.message = message
@@ -68,13 +48,9 @@ class JournalJob:
 
 
 class AgentJournal:
-    """Saves session updates in order per session, on one writer thread.
-
-    ``write(jobs)`` saves jobs of different sessions together and returns one
-    entry per job, its event or the exception that refused it alone; an
-    exception it raises refuses them all. It runs on the writer thread,
-    never under a caller's lock. ``failed(job, exc)`` hears about a job
-    nobody waited for that could not be saved."""
+    """Saves session updates in order per session, on one writer thread. ``write(jobs)`` returns per
+    job its event or the exception that refused it alone; one it raises refuses them all.
+    ``failed(job, exc)`` hears about a job nobody waited for that could not be saved."""
 
     def __init__(self, write, *, failed, progress_gap, clock=time.monotonic):
         self._write, self._failed = write, failed
@@ -87,12 +63,12 @@ class AgentJournal:
         self._closing = False
 
     def submit(self, worker, patch, message=None, *, wait, progress=False):
-        """Queue an update of ``worker``'s session. ``wait``: return the saved
-        event (or raise its error) once written; otherwise return at once."""
+        """Queue an update of ``worker``'s session; with ``wait`` return the saved event (or raise
+        its error) once written."""
         with self._condition:
             if self._closing:
-                # The run has ended (a straggler thread reporting late): the
-                # turn is being finalized and accepts no session updates.
+                # The run has ended (a straggler reporting late): the turn accepts no session
+                # updates.
                 if wait:
                     raise RuntimeError("The run's journal is closed")
                 return None
@@ -114,8 +90,7 @@ class AgentJournal:
                 job = JournalJob(worker, patch, message, progress=progress, urgent=False, order=self._order)
                 queue.append(job)
             if wait:
-                # Everything this session queued before goes first, so all of
-                # it is urgent now.
+                # Everything this session queued before goes first, so all of it is urgent now.
                 for queued in queue:
                     queued.urgent = True
             self._start()
@@ -123,10 +98,8 @@ class AgentJournal:
         return job.result() if wait else job
 
     def close(self, timeout=None):
-        """Write everything still queued, lines included, and stop; wait at
-        most ``timeout`` seconds (since 2026-10-29, A-R3: a hung write held
-        the run's end until its lease expired). What is not written by then
-        is written later or lost, and the run ends anyway."""
+        """Write everything still queued and stop, waiting at most ``timeout``: a hung write must
+        not hold the run's end until its lease expires."""
         with self._condition:
             self._closing = True
             self._condition.notify_all()
@@ -142,8 +115,7 @@ class AgentJournal:
             self._thread.start()
 
     def _next(self):
-        """The jobs to write together next (the head of each session's queue
-        that is due) and, without any, how long to wait."""
+        """The heads of each session's queue that are due and, without any, how long to wait."""
         heads = [queue[0] for queue in self._queues.values()]
         if not heads:
             return [], None

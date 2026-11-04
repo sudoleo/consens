@@ -9,8 +9,8 @@ import threading
 
 import pytest
 
-from app.services import agent_delegation
-from app.services.agent_delegation import NOTES_UNREAD, USER_NOTE_OPEN
+from app.services import agent_loop
+from app.services.agent_loop import NOTES_UNREAD, USER_NOTE_OPEN
 from app.services.agent_sessions import USER_NOTES_MAX
 from app.services.chat_store import TurnStatusConflict, _idempotent_turn_id
 from app.services.llm.agent_client import AgentCompletion, measured_usage
@@ -107,7 +107,7 @@ def test_the_agent_reads_the_message_before_its_next_step(store, fake_vm):
     # After the first step's results and the app's line of facts about the
     # message (audit L3), before the second step: once.
     assert second[-1] == notes[0] and second[-3]["role"] == "tool"
-    assert second[-2]["content"].startswith(agent_delegation.PROGRESS_OPEN)
+    assert second[-2]["content"].startswith(agent_loop.PROGRESS_OPEN)
     shown = [e for e in events if e.get("type") == "activity" and e.get("from_user")]
     assert len(shown) == 1 and shown[0]["text"] == "Run the tests too."
     # The work log: the user's own words.

@@ -168,7 +168,7 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         expect(page.locator('#lpNoteTax')).to_have_attribute('open', '')
         expect(page.locator('#lpNoteTax')).to_contain_text('Saxony has charged 5.5% since January 2023.')
         expect(page.locator('#lpNoteTax')).to_contain_text('Claude · Wrong')
-        expect(page.locator('.lp-pause-title')).to_have_text('A reviewer paused before a step')
+        expect(page.locator('.lp-pause-title')).to_have_text('A reviewer paused the work')
         output = Path('test-results/landing-one-mode')
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}'

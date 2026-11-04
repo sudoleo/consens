@@ -73,11 +73,6 @@ def _workspace_closed():
     return AGENT_WORKSPACE_CLOSED_PROMPT
 
 
-def _delegation(name):
-    from app.services import agent_delegation_config
-    return agent_delegation_config.PROMPTS[name]
-
-
 # (key, label, used_for, source, text factory) in display order.
 _ENTRIES = (
     ("agent", "Agent: instructions",
@@ -138,7 +133,7 @@ _ENTRIES = (
     ("agent_workspace_closed", "Agent: workspace on demand",
      "In place of \"Agent: Linux VM\", \"Agent: plan\" and \"Agent: GitHub\" while a message has not opened the "
      "workspace (AGENT_WORKSPACE_ON_DEMAND): only open_workspace is offered, and opening puts those three blocks "
-     "and their tools here (DelegationLoop._open_workspace).",
+     "and their tools here (AgentLoop._open_workspace).",
      "prompt_defaults.py:AGENT_WORKSPACE_CLOSED_PROMPT", _workspace_closed),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "
@@ -148,14 +143,6 @@ _ENTRIES = (
      "Instructions for combining the model responses into the Consensus answer; question, answers, "
      "sources and date context are added at request time.",
      "prompt_defaults.py:CONSENSUS_SYSTEM_PROMPT", lambda: _defaults("consensus")),
-    ("delegation_orchestrator", "Delegation: orchestrator",
-     "Appended to the Agent instructions only when delegation is enabled in the settings AND the selected "
-     "model supports it (off by default).",
-     "agent_delegation_config.py:ORCHESTRATOR_PROMPT", lambda: _delegation("orchestrator_prompt")),
-    ("delegation_worker", "Delegation: worker",
-     "System prompt of a delegated worker session; only used when delegation is enabled AND the model "
-     "supports it (off by default).",
-     "agent_delegation_config.py:WORKER_PROMPT", lambda: _delegation("worker_prompt")),
 )
 
 

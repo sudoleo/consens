@@ -266,15 +266,15 @@ describe("Agent sidebar", () => {
   });
   it('shows loading independently for each model and hides it for terminal or paused sessions', () => {
     const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[],status:'running'})}));
-    const states = ['waiting', 'working', 'rework', 'completed', 'failed', 'stopped', 'question', 'review'];
+    const states = ['waiting', 'working', 'completed', 'failed', 'stopped'];
     states.forEach((status, i) => receive(w, agent(1, status, i.toString(16).repeat(32))));
     w.App.agentDelegation.project({chatId,turnId,running:true});
     const labels = [...d.querySelectorAll('.agent-session-tokens')];
     expect(labels).toHaveLength(states.length);
     const loading = () => labels.map(label => label.classList.contains('is-loading'));
-    expect(loading()).toEqual([true, true, true, false, false, false, false, false]);
+    expect(loading()).toEqual([true, true, false, false, false]);
     receive(w, agent(2, 'completed', '1'.repeat(32)));
-    expect(loading()).toEqual([true, false, true, false, false, false, false, false]);
+    expect(loading()).toEqual([true, false, false, false, false]);
     dom.window.close();
   });
   it('uses SSE updates without polling, repairs quiet streams, and never revives a completed run', async () => {
@@ -384,11 +384,11 @@ describe("Agent sidebar", () => {
     receive(w, agent());
     expect(d.activeElement).toBe(focused);
     d.querySelector(".agent-sidebar-close").click();
-    receive(w, agent(2, "question")); receive(w, agent(1));
+    receive(w, agent(2, "completed")); receive(w, agent(1));
     // It slides out first (Apple audit C5).
     await new Promise(resolve => setTimeout(resolve, 260));
     expect(d.getElementById("agentSidebar").hidden).toBe(true);
-    expect(d.querySelector(".agent-session").dataset.status).toBe("question");
+    expect(d.querySelector(".agent-session").dataset.status).toBe("completed");
     expect(d.querySelectorAll(".agent-session")).toHaveLength(1);
     w.App.agentDelegation.project(null);
     w.App.agentDelegation.project({ chatId, turnId });

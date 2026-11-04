@@ -1,4 +1,4 @@
-"""Bounded Agent turns in the existing chat storage (every signed-in account)."""
+"""Agent turns in the existing chat storage (every signed-in account)."""
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
@@ -25,8 +25,8 @@ from app.services.agent_memory import FirestoreAgentMemoryRepository, MemorySnap
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
 from app.services.agent_sessions import HoldActionRefused, NotesFull
-from app.services.agent_policy import AgentPolicy, supports_delegation
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_policy import AgentPolicy
+from app.services.agent_loop import AgentLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
 from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
@@ -43,22 +43,14 @@ from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.agent_calendar import GoogleSelection
 
 router = APIRouter()
-# The highest frame or entry a reader can ask to follow on from: past it,
-# a position is no number a stream gives (islice and Firestore's cursors
-# take nothing above 2**63; JavaScript counts exactly up to 2**53).
+# Past this a position is no number a stream gives: JavaScript counts exactly up to 2**53.
 MAX_AFTER = 2 ** 53
 
 
 def require_agent_access(uid):
-    """Agent is open to every signed-in account since 2026-10-02.
-
-    The daily token account (agent_quota) limits it per tier; what stays Pro
-    are the premium models (require_model_access) and, from Plus, uploads.
-    The tier is still read here (cached) although it no longer decides
-    access: every Agent route reads it again for the token account, and an
-    unavailable tier service must answer 503 up front, before any write,
-    rather than fail later inside a route.
-    """
+    """Agent is open to every signed-in account; the daily token account limits it per tier. The
+    tier is read here although it no longer decides access, so an unavailable tier service answers
+    503 up front, before any write."""
     if not uid:
         raise HTTPException(status_code=401, detail="Log in to use Agent.")
     try:
@@ -79,9 +71,8 @@ def _premium_allowed(uid):
 
 
 def require_model_access(uid, model_ids):
-    """Premium models stay Pro in Agent exactly as in Compare and Consensus.
-    Checks the current form of a migrated ID, the model the run uses
-    (comparison_selection): kimi-k3 runs as Kimi K3.1 Pro since 2026-10-25."""
+    """Premium models stay Pro in Agent as in Compare and Consensus, checked on the model the run
+    uses (a migrated ID's current form)."""
     model_ids = [cfg.canonical_model_id(model_id) for model_id in model_ids if model_id]
     premium = [model_id for model_id in model_ids if model_id and model_id in cfg.PREMIUM_MODELS]
     if premium and not _premium_allowed(uid):
@@ -89,9 +80,8 @@ def require_model_access(uid, model_ids):
         raise HTTPException(status_code=403, detail=f"{labels} is available on Pro. Choose another model.")
 
 
-# The expensive reasoning levels are Pro (Max, 2026-10-07): they multiply the
-# chat model's thinking tokens. Without Pro, Auto runs as Medium where the
-# model offers it (agent_client.free_default_effort, below in run_agent).
+# The expensive reasoning levels are Pro: they multiply the chat model's thinking tokens. Without
+# Pro, Auto runs as Medium (free_default_effort).
 
 
 def require_reasoning_access(uid, reasoning_effort):
@@ -99,12 +89,8 @@ def require_reasoning_access(uid, reasoning_effort):
         raise HTTPException(status_code=403, detail="High reasoning levels are available on Pro. Choose Auto or a lower level.")
 
 
-# One mode for every account since 2026-10-31 (agent_audit.py): the agent
-# answers itself, the user's comparison models follow its work and review its
-# answer, and it may ask them its question (compare_models). Its workspace,
-# the account's Linux VM (workspace, live view, restore), only for admins
-# since the workspace's security audit of 2026-10-27; AGENT_VM_ACCESS=all
-# gives it to every account (agent_vm.open_to_all).
+# The account's Linux VM (workspace, live view, restore) only for admins unless AGENT_VM_ACCESS=all
+# (agent_vm.open_to_all).
 def vm_allowed(uid):
     if agent_vm.open_to_all():
         return True
@@ -116,17 +102,13 @@ def vm_allowed(uid):
         ) from None
 
 
-# The user handed the workspace's browser back this recently: they just
-# worked in it (the hand-back button sends "Done in the browser.",
-# agent-chat.js continueAfterHandback).
+# The user handed the browser back this recently: they just worked in it.
 RECENT_HANDBACK_SECONDS = 600
 
 
 def browser_turn(record):
-    """The user and the workspace's browser in its ``record``
-    (agent_workspace.control_of): 0 while they have it, the seconds since
-    they handed it back when that was within RECENT_HANDBACK_SECONDS, else
-    None."""
+    """0 while the user has the workspace's browser, the seconds since they handed it back within
+    RECENT_HANDBACK_SECONDS, else None."""
     import time
     from app.services import agent_workspace
     has, returned = agent_workspace.control_of(record)
@@ -137,9 +119,8 @@ def browser_turn(record):
 
 
 def workspace_turn(uid):
-    """The workspace as a message starts, from one read of its record:
-    (browser_turn, the sites its browser is logged in to as the agent noted
-    them, agent_workspace.sign_ins). (None, []) when it cannot be read."""
+    """(browser_turn, the browser's noted sign-ins) from one read of the record; (None, []) when it
+    cannot be read."""
     from app.services import agent_workspace
     try:
         record = agent_workspace.record(db_firestore, uid)
@@ -150,21 +131,15 @@ def workspace_turn(uid):
 
 
 def workspace_closed(chat_data, browser):
-    """Whether this message starts without the workspace's tools, only with
-    open_workspace (agent_vm.on_demand, DelegationLoop._open_workspace).
-    It starts with them where the chat's last message used the workspace
-    (finish_run: agent_workspace_used) or the user has its browser or just
-    handed it back (``browser``, browser_turn): the work goes on there. With
-    the browser's state unknown it starts closed: the agent can open it."""
+    """Whether this message starts with only open_workspace. It starts with the tools where the
+    chat's last message used the workspace or the user has or just handed back the browser; with the
+    browser's state unknown it starts closed."""
     return agent_vm.on_demand() and not chat_data.get("agent_workspace_used") and browser is None
 
 
 def _memory_snapshot(uid):
-    """The user's memory for one turn: one batched read, fail-open.
-
-    Read per turn and never cached across requests: a memory the user deleted
-    a moment ago must not reach the next prompt.
-    """
+    """The user's memory for one turn, fail-open. Never cached across requests: a memory deleted a
+    moment ago must not reach the next prompt."""
     try:
         tier = get_user_tier(uid)
     except TierStatusUnavailable:
@@ -184,24 +159,17 @@ class AgentRequest(BaseModel):
     model_id: str | None = Field(default=None, min_length=1, max_length=160)
     reasoning_effort: str = Field(default="default", pattern=REASONING_EFFORT_PATTERN)
     comparison_models: dict[str, str] | None = Field(default=None, max_length=9)
-    # Ignored since the contradiction source check was removed (2026-10-15);
-    # pages still open from before keep sending it.
+    # Ignored: pages still open from before the source check's removal keep sending it.
     check_sources: bool = False
     file_ids: list[str] = Field(default_factory=list, max_length=5)
     google_selection: GoogleSelection | None = None
     google_data_consent: bool = False
-    # Ignored since the Agent has one mode (2026-10-31): the route sets what
-    # a message runs with (AgentPreferences). Pages still open from before
-    # keep sending depth, quorum, autonomy, judges, audit and vm.
+    # Ignored: the route sets what a message runs with. Older pages keep sending it.
     agent_preferences: dict | None = None
-    # Who checks this message's work (account setting ``reviewers``,
-    # user_settings.py): the value the composer showed, sent with it. Pages
-    # from before 2026-11-01 send none: the reviewers follow, as they did.
-    # Kept with the turn (agent_settings.reviewers), no part of the request's
-    # identity: a turn recovers after the setting changed.
+    # The composer's value of the account setting ``reviewers``, kept with the turn but no part of
+    # the request's identity, so a turn recovers after the setting changed.
     reviewers: Literal["always", "workspace", "off"] = "always"
-    # The browser's IANA zone (Intl): the date in the message's app context.
-    # A name the server does not know counts as none (the app's zone).
+    # The browser's IANA zone for the message's date; an unknown name counts as none.
     timezone: str | None = Field(default=None, max_length=64)
 
     @field_validator("timezone")
@@ -228,9 +196,8 @@ class AgentRequest(BaseModel):
 
 
 def _save_bookmark(uid, payload, store, turn, *, quiet=False):
-    """The chat's sidebar entry after ``turn``. ``quiet``: a Watch's run that
-    found nothing keeps the entry where it is; only a chat that has none yet
-    (one the Watches page opened, agent_watches.create) gets it."""
+    """The chat's sidebar entry after ``turn``. ``quiet``: a Watch's run that found nothing keeps
+    the entry where it is."""
     chat = store.get_chat(uid, payload.chat_id)
     if chat["status"] != "active":
         raise ChatNotFound("Chat not found")
@@ -262,14 +229,12 @@ def _save_bookmark(uid, payload, store, turn, *, quiet=False):
 
 
 def _temporary(turn):
-    """The turn belongs to a temporary chat (chat_store.create_chat): it has
-    no sidebar entry, so none is written for it."""
+    """A temporary chat's turn: no sidebar entry is written for it."""
     return (turn.get("agent_settings") or {}).get("temporary") is True
 
 
 def _quiet_watch_run(turn):
-    """A Watch's scheduled run that found nothing for the user (agent_watches.py):
-    its chat keeps its place in the sidebar."""
+    """A Watch's scheduled run that found nothing: its chat keeps its place in the sidebar."""
     settings = turn.get("agent_settings") or {}
     run = turn.get("agent_watch_run") if isinstance(turn.get("agent_watch_run"), dict) else {}
     return bool(settings.get("watch_run")) and not run.get("finding") and not run.get("done")
@@ -283,8 +248,8 @@ def _watch_history_chars():
 def _final(uid, payload, store, turn):
     bookmark_meta = None if _temporary(turn) else _save_bookmark(uid, payload, store, turn,
                                                                 quiet=_quiet_watch_run(turn))
-    # Tell the browser whether the next message needs Google consent. The
-    # chat marker can be set by a tool during this turn (Gmail evidence).
+    # Whether the next message needs Google consent; a tool may set the chat's marker during this
+    # turn.
     settings = turn.get("agent_settings") or {}
     google_data = bool(settings.get("google_data"))
     google_consent = google_data and settings.get("google_data_consent") is True
@@ -302,15 +267,14 @@ def _final(uid, payload, store, turn):
     try:
         final["token_budget"] = agent_quota.snapshot(store.db, uid)
     except Exception as exc:
-        # Answer and chat entry are saved; without it the browser asks for the allowance itself.
+        # Without it the browser asks for the allowance itself.
         logging.warning("Agent allowance unavailable category=%s", safe_exception(exc))
     return final
 
 
 def _handover_frame(uid, payload, store, event):
-    """The ``handover`` frame: the turn as the final frame names it, its
-    answer fixed and its review still running, and the chat entry saved. None
-    when it cannot be read or saved; the final frame follows anyway."""
+    """The ``handover`` frame: the answer fixed, its review still running, the chat entry saved.
+    None when that fails; the final frame follows anyway."""
     try:
         return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, event["turn_id"]))
     except Exception as exc:
@@ -319,11 +283,8 @@ def _handover_frame(uid, payload, store, event):
 
 
 def _bookmark_limit_failure(exc):
-    """The answer is saved in the chat, but the sidebar entry hit a storage cap.
-
-    Freeing space and recovering adds the entry; an answer too large for any
-    entry cannot be recovered that way.
-    """
+    """The answer is saved, but the sidebar entry hit a storage cap; freeing space and recovering
+    adds it, unless the answer is too large for any entry."""
     if exc.code == "bookmark_too_large":
         return {"error": "This answer is too large to keep in your chats.", "code": exc.code, "recoverable": False}
     return {"error": "Your saved chats are full. Delete an old chat, then recover this answer.",
@@ -365,22 +326,15 @@ def available_agent_budget(request: Request):
                         headers={"Cache-Control": "private, no-store"})
 
 
-# Reads a new message needs before its turn exists, side by side
-# (_turn_reads). Until 2026-11-01 they ran one after another: with the turn's
-# creation, its history and the first step's admission about 25 Firestore
-# round trips lay between Send and the first model request, 2-3 s in prod
-# before a model saw the question.
+# Reads a new message needs before its turn exists, side by side: one after another, about 25
+# Firestore round trips cost 2-3 s before a model saw the question.
 _TURN_READS = ThreadPoolExecutor(max_workers=24, thread_name_prefix="agent-turn-read")
 
 
 def _turn_reads(uid, payload, store):
-    """Futures of what run_agent reads for a new message, all started at
-    once. Each is taken where its read used to stand, so a failing read
-    still fails the request at the same point. Only reads: the one write
-    among them, the reaper of runs whose lease expired (recover_allowance),
-    runs on any allowance read too (agent_quota.snapshot). The sweep of
-    abandoned turns, which may fail a turn, waits for the checks
-    (sweep_after)."""
+    """Futures of what run_agent reads for a new message, all started at once and each taken where
+    its read belongs, so a failing read fails the request at the same point. The sweep of abandoned
+    turns, which may fail a turn, waits for the checks (sweep_after)."""
     from app.services.agent_files import AgentFiles, public_file
     files = AgentFiles(db_firestore)
     chat_id = payload.chat_id
@@ -392,9 +346,7 @@ def _turn_reads(uid, payload, store):
         "files": lambda: [public_file(files.get(uid, chat_id, fid)) for fid in payload.file_ids],
         "memory": lambda: _memory_snapshot(uid),
         "workspace": lambda: workspace_turn(uid) if vm_allowed(uid) else (None, []),
-        # Before the turn exists: messages checks that it still holds
-        # (AgentRunStore.history_current). Both are used only after the
-        # turn's creation found the chat live.
+        # Used only after the turn's creation found the chat live.
         "history": lambda: store.history_page(uid, chat_id, checked=True),
         "catalog": lambda: files.list(uid, chat_id, checked=True),
     }
@@ -402,10 +354,8 @@ def _turn_reads(uid, payload, store):
 
 
 def sweep_after(store, uid, chat_id, recover):
-    """The sweep of abandoned turns for a message that passed every check:
-    after the reaper (``recover``, which ends an expired run as it should
-    end) and beside the rest of the route's work. Until 2026-11-01 it stood
-    in create_turn."""
+    """The sweep of abandoned turns for a message that passed every check, after the reaper and
+    beside the route's work."""
     def sweep():
         try:
             recover.result()
@@ -417,8 +367,7 @@ def sweep_after(store, uid, chat_id, recover):
 
 
 def _first_history_page(read):
-    """The history page read beside the turn's creation, None when that read
-    failed: messages then reads it itself."""
+    """The history page read beside the turn's creation, None when that failed."""
     try:
         return read.result()
     except Exception as exc:
@@ -426,15 +375,14 @@ def _first_history_page(read):
         return None
 
 
-# Reads of the account's allowance for the browser's quota frames. Until
-# 2026-11-01 the stream read it in between: the first step's request waited
-# three round trips for it after "started", every later step after its usage.
+# The allowance for the browser's quota frames, read beside the run so no step's request waits for
+# it.
 _ALLOWANCE_READS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-allowance")
 
 
 def quota_frames(allowances, *, wait=False):
-    """The quota frames of the reads in ``allowances`` that are done (all of
-    them with ``wait``), oldest first; an unreadable allowance is left out."""
+    """The quota frames of the reads that are done (all with ``wait``), oldest first; unreadable
+    ones left out."""
     while allowances and (wait or allowances[0].done()):
         try:
             yield {"token_budget": allowances.pop(0).result()}
@@ -449,21 +397,18 @@ def run_agent(request: Request, payload: AgentRequest):
 
 
 def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
-    """A message of the account ``uid`` as POST /agent runs it: the turn on
-    its own thread, the response only a tail of its frames. ``watch_run``:
-    a Watch's scheduled run (agent_watches.start_run, since 2026-11-03),
-    with nobody following; it reads only the chat's newest messages, has the
-    run's tools, and its end is noted on the Watch (agent_watches.turn_ended)."""
+    """A message as POST /agent runs it: the turn on its own thread, the response only a tail of its
+    frames. ``watch_run``: a Watch's scheduled run with nobody following, noted on the Watch at its
+    end."""
     require_agent_access(uid)
     store = AgentRunStore(db_firestore)
     turn = None
     lease = None
     try:
-        # A new message starts all its reads at once; a request that only
-        # recovers a saved answer reads its turn alone.
+        # A request that only recovers a saved answer reads its turn alone.
         reads = None if payload.recover_only else _turn_reads(uid, payload, store)
-        # Read before applying today's configuration: old requests remain
-        # replayable after a model/price/key change without another paid call.
+        # Read before applying today's configuration: old requests stay replayable after a model,
+        # price or key change without another paid call.
         chat_data, existing = (reads["turn"].result() if reads else store.chat_and_turn(
             uid, payload.chat_id, _idempotent_turn_id(payload.chat_id, payload.client_request_id)))
         if existing:
@@ -482,13 +427,11 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                 raise TurnStatusConflict("Request identity conflicts with different agent settings")
             if existing.get("agent_settings", {}).get("comparison_selection") != payload.comparison_models:
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
-            # The turn's agent_preferences are the server's (below), not the
-            # request's: no part of its identity, so a turn from before
-            # 2026-10-31 or from before the account's VM access changed
-            # still recovers.
+            # The turn's agent_preferences are the server's, no part of its identity, so an older
+            # turn still recovers.
             if payload.recover_only and existing["status"] == "pending":
-                # A lost producer has no live SSE/poller to close its lease.
-                # Reap only expired runs; this never starts a paid step.
+                # A lost producer has no live stream to close its lease; only expired runs are
+                # reaped, never a paid step started.
                 store.reap_delegation(uid, payload.chat_id, existing["id"])
                 existing = store.get_turn(uid, payload.chat_id, existing["id"])
             if existing["status"] == "completed":
@@ -503,9 +446,8 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         if payload.recover_only:
             return JSONResponse({"error": "No saved answer is available for this request.",
                 "code": "answer_unavailable", "recoverable": False}, status_code=404)
-        # Only a new turn counts: a browser following a running turn asks
-        # with recover_only (above) and must not use up the send limit. A
-        # Watch's runs are bounded by their schedule (agent_watches.py).
+        # Only a new turn counts: a browser following a running turn must not use up the send limit.
+        # Watches are bounded by their schedule.
         try:
             if watch_run is None:
                 api_uid_limiter.check(uid, "agent:turn", 20)
@@ -520,28 +462,19 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         try:
             effort = payload.reasoning_effort
             if effort == "default" and not _premium_allowed(uid):
-                # Auto without Pro: Medium instead of the model's own default
-                # (Sonnet's is "high", a Pro level). The request identity and
-                # the saved selection keep what the browser sent.
+                # The request identity and the saved selection keep what the browser sent.
                 effort = free_default_effort(payload.model_id) or effort
             model = configured_model(resolve_agent_model(payload.model_id, effort))
         except ValueError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from None
-        # None means the preset default, which is never a premium model. The
-        # default chat model is open to every tier ("Early access"); the same
-        # model as a comparison model still needs Pro.
+        # None means the preset default, open to every tier; the same model as a comparison model
+        # still needs Pro.
         chat_model = [] if model.selection_id == default_agent_model_id() else [model.selection_id]
         require_model_access(uid, [*chat_model, *(payload.comparison_models or {}).values()])
         require_reasoning_access(uid, payload.reasoning_effort)
-        # A temporary chat (since 2026-11-01, chat_store.create_chat) does
-        # what any chat of the account does and keeps nothing beyond
-        # itself (since 2026-11-01 evening, Max): no sidebar entry
-        # (_final), memory read but never written (MemorySnapshot), no
-        # share; its folder and processes in the workspace go with it
-        # (agent_vm.delete_chat_vm).
+        # A temporary chat keeps nothing beyond itself: no sidebar entry, memory read but never
+        # written, no share; its workspace folder and processes go with it.
         temporary = chat_data.get("temporary") is True
-        # What the message runs with: the one mode, with the account's
-        # workspace where it has one.
         preferences = AgentPreferences(vm="on" if vm_allowed(uid) else "off")
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
@@ -562,8 +495,8 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             from app.services.google_connections import user_allowed
             if not user_allowed(uid):
                 raise HTTPException(403, "Google is not available for this account yet.")
-        # Google data enters a chat through a Gmail/Calendar selection or a file
-        # picked from Google Drive; once there, the chat keeps the Google rules.
+        # Google data enters through a Gmail or Calendar selection or a Drive file; once there, the
+        # chat keeps the Google rules.
         drive_files = any(meta.get("kind") == "drive_file" for meta in file_meta)
         google_data = bool(payload.google_selection or drive_files or chat_data.get("google_data"))
         if google_data:
@@ -573,8 +506,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             model = restricted_model(model)
             def mark_google(tx):
                 files.guard(uid, payload.chat_id, tx)
-                # The consent covers this chat from now on (the browser offers
-                # it once per chat); every request still has to carry it.
+                # The consent covers this chat from now on; every request still has to carry it.
                 tx.update(store._chat_ref(uid, payload.chat_id), {"google_data": True, "google_consent": True})
             store._transaction(mark_google)
         if payload.google_selection:
@@ -586,26 +518,18 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                 raise HTTPException(403, "Authorize Gmail for the selected account first.")
         lease = agent_capacity.acquire()
         config = prompt_config.get_config()
-        delegation_config = config["delegation"]
-        # Comparisons always use the shared bounded loop; worker delegation
-        # retains its separately configured model/protocol feature gate.
-        delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
-        policy = AgentPolicy.for_chat(delegation_config)
+        policy = AgentPolicy()
         comparisons = comparison_selection(payload.comparison_models)
-        # Read beside the others; a temporary chat reads it and writes nothing.
+        # A temporary chat reads it and writes nothing.
         memory = reads["memory"].result()
         if temporary:
             memory = dataclasses.replace(memory, temporary=True)
-        # One context for the question: the turn keeps it, so the next
-        # message repeats this question byte for byte (prompt cache).
+        # The turn keeps it, so the next message repeats this question byte for byte (prompt cache).
         app_context = get_agent_turn_context(model, config, payload.timezone)
-        # The user restored the VM since the last message (restore_agent_vm):
-        # this message's context says so, once.
+        # The user restored the VM since the last message: this message's context says so, once.
         restored = (chat_data.get("agent_vm") or {}).get("restored") if preferences.vm == "on" else None
         if isinstance(restored, dict) and not restored.get("told"):
             app_context += "\n" + agent_vm.VM_RESTORED_NOTE
-        # The user works in the workspace's browser or just did (browser_turn),
-        # and where it is logged in (since 2026-11-02, agent_workspace.sign_ins).
         browser, signed_in = reads["workspace"].result() if preferences.vm == "on" else (None, [])
         if browser:
             app_context += "\n" + agent_vm.HANDED_BACK_NOTE.format(minutes=max(1, round(browser / 60)))
@@ -621,7 +545,6 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             selected_models=[model.model], consensus_model=model.model,
             client_request_id=payload.client_request_id, execution_mode="agent", attachments=file_meta,
             agent_settings={**model.settings(), "policy": policy.snapshot(), "config_revision": config["revision"],
-                            "delegation_config": delegation_config,
                             "file_ids": payload.file_ids,
                             "google_selection": payload.google_selection.model_dump() if payload.google_selection else None,
                             "google_data_consent": payload.google_data_consent,
@@ -641,9 +564,8 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             lease.release()
             return _final(uid, payload, store, store.get_turn(uid, payload.chat_id, turn["id"]))
         if turn.get("chat_google_data") and not google_data:
-            # The chat gained Google data after the route first read it (a
-            # turn in another tab imported mail before it ended): its rules
-            # hold for this message too, as the turn's creation saw the chat.
+            # The chat gained Google data after the route first read it (another tab's turn imported
+            # mail): its rules hold here too.
             if not payload.google_data_consent:
                 raise HTTPException(422, "This chat contains Google information. Review and enable Google model-sharing consent before sending.")
             from app.services.google_connections import restricted_model
@@ -651,30 +573,29 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         if isinstance(restored, dict) and not restored.get("told"):
             _vm_restore_told(store, uid, payload.chat_id)
         chat_sources = []
-        # A long history is summarized in the run's first step (agent_compaction "Summaries").
+        # A long history is summarized in the run's first step.
         history_summary = {}
         messages = store.messages(uid, payload.chat_id, turn, model=model, config=config, sources=chat_sources,
                                   context=app_context, first_page=_first_history_page(reads["history"]),
                                   history_chars=_watch_history_chars() if watch_run else None,
                                   summary=history_summary)
         cancellation = ProviderCancellation()
-        loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
+        loop = AgentLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
                          completion_factory=AgentCompletion, policy=policy, file_context=file_context,
                          google_selection=payload.google_selection,
                          google_data_consent=payload.google_data_consent, google_data=google_data,
-                         delegation_config=delegation_config, cooldowns=provider_cooldowns,
+                         cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
                          watch_run=watch_run, history_summary=history_summary or None,
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         if loop.vm_tools is not None:
-            # A new account's workspace is made while it talks to the agent,
-            # before a call needs it (agent_workspace.provision).
+            # A new account's workspace is made while it talks to the agent.
             from app.services import agent_workspace
             agent_workspace.provision(store, uid)
-        # Every view follows the run through this buffer (POST tail, GET .../live).
+        # Every view follows the run through this buffer.
         live, live_owned = agent_live.acquire(uid, payload.chat_id, payload.client_request_id)
     except Exception as exc:
         try:
@@ -698,8 +619,8 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         _raise_store_error(exc, operation="prepare agent turn", uid=uid)
 
     def pack(event_type, data):
-        # One sequence per run: the SSE id line and the live replay share it,
-        # so the browser can drop frames it already applied from a poll.
+        # One sequence per run for the SSE id and the live replay, so the browser drops frames it
+        # already applied from a poll.
         seq, text = agent_live.record(live, event_type, data)
         return f"id: {seq}\nevent: {event_type}\ndata: {text}\n\n"
 
@@ -708,20 +629,19 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         status = "failed"
         error = "The agent response could not be completed. Please try a new message."
         failure = {}
-        # The allowance after a step started or settled, read beside the run
-        # and sent with the next frame once read (quota_frames).
+        # The allowance after a step, sent with the next frame once read.
         allowances = []
         try:
-            # Give the browser a durable identity while admission is still
-            # waiting, so Stop/status do not depend on a paid call starting.
+            # A durable identity while admission is still waiting, so Stop and status do not depend
+            # on a paid call starting.
             yield pack("accepted", {"chat_id": payload.chat_id, "turn_id": turn["id"]})
             source = loop.run()
             closing = False
             try:
                 for event in source:
                     if event and event["type"] == "handover":
-                        # The answer stands and the chat is free (agent_runs.hand_over):
-                        # the browser takes it like a final answer, its review follows.
+                        # The answer stands and the chat is free: the browser takes it like a final
+                        # answer, its review follows.
                         handed = _handover_frame(uid, payload, store, event)
                         if handed:
                             yield pack("handover", handed)
@@ -742,14 +662,14 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                 except Exception as exc:
                     if not closing:
                         raise
-                    # An account tombstone can refuse settlement during close.
-                    # Preserve GeneratorExit: yielding an error frame now would
-                    # violate the generator protocol and strand the producer.
+                    # An account tombstone can refuse settlement during close. Preserve
+                    # GeneratorExit: an error frame now would violate the generator protocol and
+                    # strand the producer.
                     logging.warning("Agent stream cleanup unavailable category=%s", safe_exception(exc))
             status = "succeeded"
         except GeneratorExit:
-            # The producer itself closed the stream (never a client: the run
-            # is not tied to a connection). No frame may follow.
+            # The producer itself closed the stream (the run is not tied to a connection). No frame
+            # may follow.
             status = "cancelled"
             if not loop.claimed:
                 store.release_unclaimed(uid, payload.chat_id, turn["id"], failure={
@@ -757,14 +677,12 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             _save_interrupted(uid, payload, store, turn["id"])
             raise
         except ProviderCancelled:
-            # Stop: the loop has settled and saved (an unclaimed turn as
-            # "cancelled"); tell every view still following the run (another
-            # tab, a reconnecting browser).
+            # Stop: the loop has settled and saved; tell every view still following the run.
             status = "cancelled"
             error = "This response was stopped."
             failure = {"code": "cancelled"}
             if (getattr(completion, "failure", None) or {}).get("code") == "hold_timeout":
-                # A pause nobody decided (DelegationLoop._hold_wait): said so.
+                # A pause nobody decided: said so.
                 error, failure = completion.failure["error"], {"code": "hold_timeout"}
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
             failure = agent_failure(exc)
@@ -780,8 +698,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             logging.warning("Agent completion failed category=%s model=%s code=%s retry_after=%s detail=%s where=%s",
                             safe_exception(exc), model.model, failure["code"], failure.get("retry_after"),
                             provider_diagnostic(exc), safe_traceback(exc))
-            # Providerfehler landen hier regulaer; gemeldet wird nur ein
-            # Programmierfehler (error_context.is_unexpected_exception).
+            # Provider errors land here routinely; only a programming error is reported.
             report_server_exception(exc, where="agent.turn_stream")
         if status != "succeeded":
             for event in loop._events():
@@ -791,8 +708,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                 pending = interrupted["status"] == "pending"
                 failure["recoverable"] = True
                 failure["recovery_state"] = "running" if pending else "saved"
-                # A temporary chat's answer has no sidebar entry, but is saved
-                # with its turn all the same (_temporary): the page shows it.
+                # A temporary chat's answer has no sidebar entry but is saved with its turn.
                 if interrupted.get("bookmark_meta") or _temporary(interrupted):
                     saved = dict(interrupted)
                     bookmark_meta = saved.pop("bookmark_meta", None)
@@ -821,8 +737,8 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                                  "code": "bookmark_unavailable", "recoverable": True, "recovery_state": "saved"})
 
     def produce():
-        # The whole run, on its own thread: every frame goes into the live
-        # buffer, nothing waits for a reader.
+        # The whole run on its own thread: every frame goes into the live buffer, nothing waits for
+        # a reader.
         try:
             if not lease.start():
                 return
@@ -837,17 +753,15 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                 agent_watches.turn_ended(uid, payload.chat_id, turn["id"], watch_run)
 
     if not live_owned:
-        # Another request of this identity made the buffer and starts the run
-        # of this same turn. Never this one: its start could come first, and
-        # the maker's duplicate refusal then discarded the buffer this run
-        # fed (bug hunt 2026-11-01). Its buffer and turn stay untouched.
+        # Another request of this identity made the buffer and starts this turn's run. Never this
+        # one: its start could come first, and the maker's duplicate refusal would discard the
+        # buffer it fed.
         lease.release()
         return JSONResponse({"error": "This request is still running.", "code": "request_running",
                              "recoverable": True, "recovery_state": "running"}, status_code=409)
 
     def interrupt(reason):
-        # Shutdown: end with this reason instead of a plain Stop, so the
-        # saved turn says why it is incomplete.
+        # Shutdown: the saved turn says why it is incomplete instead of a plain Stop.
         loop.watch_error = reason
         cancellation.cancel()
 
@@ -856,8 +770,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                                turn_id=turn["id"], target=produce, cancel=cancellation.cancel, interrupt=interrupt,
                                loop=loop)
     except AgentRunDuplicate as exc:
-        # Two identical requests at once: the first one runs this turn; its
-        # buffer and saved state stay untouched.
+        # Two identical requests at once: the first one runs this turn.
         lease.release()
         agent_live.discard(live)
         return JSONResponse({"error": str(exc), "code": "request_running", "recoverable": True,
@@ -914,11 +827,8 @@ def _agent_details(request, chat_id, turn_id, **kwargs):
 @limiter.limit("120/minute")
 def agent_work_log(request: Request, chat_id: str, turn_id: str,
                    after: int = Query(0, ge=0, le=MAX_AFTER), limit: int = Query(100, ge=1, le=200)):
-    """The turn's work log (agent_work_log.py) in order, after entry
-    ``after`` (live: poll with the last ``seq``). Every turn writes one since
-    2026-10-31; only its owner reads it (the turn is looked up under the
-    caller's account). Long contents come shortened (``ref``); the entry
-    endpoint below returns one whole."""
+    """The turn's work log after entry ``after``, only for its owner. Long contents come shortened
+    (``ref``); the entry endpoint returns one whole."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     try:
@@ -947,13 +857,9 @@ def agent_work_log_entry(request: Request, chat_id: str, turn_id: str, seq: int)
 def agent_live_events(request: Request, chat_id: str,
                       request_id: str = Query(..., min_length=1, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"),
                       after: int = Query(0, ge=0, le=MAX_AFTER)):
-    """The running stream's frames after ``after``, for networks that buffer SSE.
-
-    Process memory only (no Firestore read): ``known: false`` means this
-    process holds no stream for uid + chat + request, e.g. another worker,
-    a restart or an expired buffer. The buffer is keyed by the caller's uid,
-    so another account can never address it.
-    """
+    """The running stream's frames after ``after``, for networks that buffer SSE. Process memory
+    only: ``known: false`` means this process holds no such stream. Keyed by the caller's uid, so
+    another account can never address it."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id):
@@ -968,8 +874,7 @@ def stop_agent_run(request: Request, chat_id: str, turn_id: str):
     uid = _chat_uid(request)
     require_agent_access(uid)
     try:
-        # This process runs it: cancel at once. Otherwise (or as well) the
-        # saved flag stops it wherever it runs, at the watcher's next look.
+        # This process runs it: cancel at once. The saved flag stops it wherever it runs.
         agent_background.stop(uid, chat_id, turn_id=turn_id)
         AgentRunStore(db_firestore).stop_delegation(uid, chat_id, turn_id)
         return JSONResponse({"status": "stopping"}, headers={"Cache-Control": "private, no-store"})
@@ -980,11 +885,8 @@ def stop_agent_run(request: Request, chat_id: str, turn_id: str):
 @router.post("/agent/chats/{chat_id}/turns/{turn_id}/share-result")
 @limiter.limit("10/minute")
 def prepare_agent_share(request: Request, chat_id: str, turn_id: str):
-    """The pending share result of one finished Agent answer (Share under it).
-
-    Any answer of the chat, not only its latest; ``POST /api/share`` then
-    publishes it like a Consensus result. Sharing needs no Agent quota.
-    """
+    """The pending share result of one finished Agent answer (any of the chat's); POST /api/share
+    publishes it. Sharing needs no Agent quota."""
     uid = _chat_uid(request)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[0-9a-f]{32}", turn_id):
         raise HTTPException(status_code=404, detail="This chat no longer exists.")
@@ -1007,8 +909,8 @@ def _vm_restore_told(store, uid, chat_id):
 
 
 def _refuse_closed_workspace(uid):
-    """403 while the server's safety rules have closed the account's
-    workspace (workspace_guard.py): nothing wakes or writes its VMs then."""
+    """403 while workspace_guard has closed the account's workspace: nothing wakes or writes its VMs
+    then."""
     from app.services import workspace_guard
     guard = workspace_guard.status(uid)
     if guard.closed:
@@ -1018,9 +920,8 @@ def _refuse_closed_workspace(uid):
 @router.post("/agent/chats/{chat_id}/turns/{turn_id}/vm-restore")
 @limiter.limit("10/minute")
 def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
-    """Return the chat's VM to the checkpoint taken before this message
-    (VMSession.ready; accounts with the VM, vm_allowed). Never while a response
-    runs in the chat; the next message is told (VM_RESTORED_NOTE)."""
+    """Return the workspace to the checkpoint taken before this message. Never while a response runs
+    in the chat; the next message is told."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not vm_allowed(uid):
@@ -1043,13 +944,13 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
     lock = chat.get("agent_lock_until")
     from app.services import agent_workspace
     workspace = agent_workspace.record(db_firestore, uid)
-    # Only a checkpoint of this account's workspace, recent and taken after
-    # the last sign-out everywhere or chat deletion (security audit 2026-10-27).
+    # Only a recent checkpoint of this account's workspace taken after the last sign-out everywhere
+    # or chat deletion.
     if not agent_workspace.restorable(workspace, turn.get("agent_vm")):
         return JSONResponse({"error": "The workspace can no longer go back to before this message.", "code": "expired"},
                             status_code=409)
-    # The workspace is the account's: no chat's message may be using it, also
-    # not one whose lease ran out while its response still runs (in_use).
+    # No chat's message may be using the workspace, also not one whose lease ran out while its
+    # response runs.
     if turn.get("status") == "pending" or (isinstance(lock, datetime) and lock > datetime.now(timezone.utc)) or \
             agent_workspace.in_use(store, uid):
         return JSONResponse({"error": "Wait until the response is done, then restore the workspace.", "code": "running"},
@@ -1085,9 +986,8 @@ class AgentNoteRequest(BaseModel):
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/notes")
 @limiter.limit("30/minute")
 def add_agent_note(request: Request, chat_id: str, request_id: str, payload: AgentNoteRequest):
-    """A message into the running response, by the browser's request identity
-    (Enter while it runs, agent-chat.js addNote; since 2026-10-26, with Agent
-    VM). The run takes it before its next step (DelegationLoop._take_notes)."""
+    """A message into the running response by the browser's request identity; the run takes it
+    before its next step."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
@@ -1121,12 +1021,9 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
 
 
 def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text="", choice=None):
-    """The user's decision on the run's open hold: saved on its root
-    (decide_hold) and, when this process runs it, handed to the run at once
-    (DelegationLoop.receive), not with its watcher's next look, which still
-    reads the same. A hold whose save failed is known only to its run
-    (DelegationLoop.unsaved_hold): the run takes the decision itself, so a
-    pause stays decidable. Raises as decide_hold when neither knows it open."""
+    """The user's decision on the open hold, saved on the run's root and handed at once to a run in
+    this process. A hold whose save failed is known only to its run, which takes the decision
+    itself. Raises as decide_hold when neither knows it open."""
     loop = agent_background.run_loop(uid, chat_id, request_id)
     try:
         saved = store.decide_hold(uid, chat_id, turn_id, hold_id, action, text, choice)
@@ -1143,10 +1040,8 @@ def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text
 class AgentHoldDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^[0-9a-f]{12}$")
-    # "deny": not allowed, for the agent's own question (agent_ask.py; until
-    # 2026-11-04 also a domain it asked for); on any other hold 422 (deniable).
-    # "choose": one of the answers of the agent's choice card, by its index
-    # in ``choice`` (since 2026-10-30); 422 elsewhere (check_answer).
+    # "deny": for the agent's own question, 422 elsewhere. "choose": an answer of the agent's
+    # choice card by its index in ``choice``.
     action: Literal["continue", "stop", "steer", "deny", "choose"]
     text: str = Field(default="", max_length=4000)
     choice: Optional[int] = Field(default=None, ge=0, le=9)
@@ -1155,11 +1050,9 @@ class AgentHoldDecision(BaseModel):
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/hold")
 @limiter.limit("30/minute")
 def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: AgentHoldDecision):
-    """The user's decision when a reviewer paused the response (agent_audit.py
-    halt, DelegationLoop.request_hold; since 2026-10-26): let it go on, stop
-    it, or go on with a message to the agent. The agent learns only of the
-    message, as one the user wrote while it worked. On the agent's own
-    question (agent_ask.py) "continue" allows its step and "deny" does not."""
+    """The user's decision on a paused response: go on, stop, or go on with a message to the agent,
+    which learns only of the message. On the agent's own question "continue" allows its step and
+    "deny" does not."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
@@ -1182,7 +1075,7 @@ def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: 
             # Nothing decided: the card stays for another answer.
             return JSONResponse({"error": str(exc), "code": "notes_full"}, status_code=409)
         except HoldActionRefused as exc:
-            # "deny" on a pause it is no answer to (agent_sessions.deniable).
+            # "deny" on a pause it is no answer to.
             return JSONResponse({"error": str(exc), "code": "invalid_action"}, status_code=422)
         except TurnStatusConflict as exc:
             return JSONResponse({"error": str(exc), "code": "hold_over"}, status_code=409)
@@ -1204,10 +1097,8 @@ class AgentSecret(BaseModel):
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/secret")
 @limiter.limit("10/minute")
 def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: AgentSecret):
-    """The key the agent asked for (ask_user with secret, agent_secrets.py;
-    since 2026-10-29): written to the account's workbench as the agent's
-    user, then the card is answered. The key goes into no turn, log or
-    model's context: the agent hears the file's path."""
+    """The key the agent asked for, written into the workspace as the agent's user before the card is
+    answered. It goes into no turn, log or model context: the agent hears the file's path."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
@@ -1226,7 +1117,7 @@ def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: 
             return JSONResponse({"error": "This response is no longer running.", "code": "not_running"}, status_code=409)
         hold = store.open_hold(uid, chat_id, turn_id)
         if not hold:
-            # Its save failed: only the run of this process knows it (_decide_hold).
+            # Its save failed: only this process's run knows it.
             loop = agent_background.run_loop(uid, chat_id, request_id)
             hold = loop.unsaved_hold() if loop is not None else None
         name = str((hold or {}).get("secret") or "")
@@ -1259,12 +1150,8 @@ def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: 
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/stop")
 @limiter.limit("30/minute")
 def stop_agent_request(request: Request, chat_id: str, request_id: str):
-    """Stop a message by the browser's request identity (the Stop button).
-
-    A run no longer ends when its connection does, so Stop is explicit. It
-    works before the browser knows the turn id, and a Stop that overtakes
-    its own POST keeps that request from starting.
-    """
+    """Stop a message by the browser's request identity. Works before the browser knows the turn id,
+    and a Stop that overtakes its own POST keeps it from starting."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):

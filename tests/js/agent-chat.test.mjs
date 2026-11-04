@@ -1097,7 +1097,7 @@ describe("single-model agent chat", () => {
       w.App.agentActivity.render(host, {running:true, events:[event]});
       return [...host.querySelectorAll('.agent-progress-step')].map(p => p.textContent)[0];
     };
-    // The workspace on demand (DelegationLoop._open_workspace, 2026-10-29).
+    // The workspace on demand (AgentLoop._open_workspace, 2026-10-29).
     const opened = {id:'w', kind:'tool', name:'open_workspace', status:'succeeded', task:'Build the game and start it'};
     expect(step(opened)).toBe('Opened the workspace · Build the game and start it');
     expect(step({...opened, task:''})).toBe('Opened the workspace');

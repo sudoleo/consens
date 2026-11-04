@@ -306,8 +306,6 @@ def test_the_tools_are_offered_on_account_turns_also_with_google_data(store):
     assert agent_settings.AUDIT_PROMPT in loop.messages[0]["content"]
     google = settings_loop(store, google_data=True)
     assert {"read_settings", "prepare_settings_change"} <= set(google.registry.tools)
-    bounded = watch_loop(store, Script(), comparisons=False)
-    assert bounded.settings_tools is None and "read_settings" not in bounded.registry.tools
 
 
 def test_read_settings_says_what_is_set_the_defaults_and_the_choices_of_the_account(store):
@@ -505,7 +503,7 @@ def test_a_settings_only_message_ends_with_the_reply_and_a_saved_proposal(store)
 
 def test_a_reply_next_to_an_adjusted_change_is_written_again(store):
     """The first reply did not know that Max is Pro: the next step writes it
-    with the result in view (DelegationLoop._side_results_accepted)."""
+    with the result in view (AgentLoop._side_results_accepted)."""
     script = SettingsScript(changes(reasoning="max"), reply="Switched to Max.")
     loop = settings_loop(store, script=script, effort="low", question="Denk ab jetzt maximal gründlich.")
     list(loop.run())
@@ -699,4 +697,3 @@ def test_the_allowance_the_agent_names_is_the_rings_not_less_what_running_calls_
     agent_quota.quota_ref(store.db, "ring-user", agent_quota.period_key(config)).set(
         {"used": 100, "estimated": 50, "reserved": 10_000})
     assert agent_quota.shown_allowance(store.db, "ring-user", tier="free") == (limit - 150, limit)
-    assert agent_quota.remaining_allowance(store.db, "ring-user", tier="free") == limit - 150 - 10_000

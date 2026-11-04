@@ -1,35 +1,18 @@
-"""UTC-day allowance in micro-euros (agent_budget_config.MICRO_EUR). Every
-call is charged what it cost: the provider's dollar cost of the call (cache,
-reasoning and web search included), else its catalog price, converted at
-agent_budget_config.NANO_USD_PER_MICRO_EUR (measured_charge). Until
-2026-10-31 the account counted tokens, cache reads and audit reviewers at
-weights that stood in for their cost.
+"""UTC-day allowance in micro-euros, shared by Agent and the Consensus pipeline in one ledger
+document per account and period; the limit comes from the tier. Every call is charged what it cost:
+the provider's dollar cost (cache, reasoning and search included), else its catalog price
+(measured_charge).
 
-One ledger document per account and period serves Agent and the Consensus
-pipeline alike; the limit comes from the account tier (agent_budget_config).
-Agent reserves what a call is expected to cost before it starts
-(agent_costs.RunCosts.estimate) and settles with measured usage. The pipeline
-is admitted per run against the expected cost of a typical run, holds that
-estimate while the run is young (``pipeline_holds``) and books the measured
-cost of every finished operation afterwards. A run may therefore push the
-account slightly below zero; the next admission then fails. The overdraft is
-bounded because only runs with enough remaining budget are admitted and every
-admitted run holds its estimate against concurrent admissions.
+Agent reserves a call's expected cost before it starts and settles with measured usage. The pipeline
+is admitted per run against a typical run's cost, holds that estimate while young and books every
+finished operation. A run may push the account slightly below zero and the next admission then
+fails; the overdraft stays bounded because only runs with enough budget are admitted and each holds
+its estimate against concurrent admissions. A paid receipt is settled once.
 
-Reservations protect active calls only. A paid receipt is settled once;
-retries cannot release or charge it again.
-
-Bounded uncertainty (owner decision for R07): a started call whose final usage
-is missing is neither fully released nor fully charged. Its reservation is
-released and a bounded estimate is charged instead: the measured provisional
-lower bound, but at least ``UNKNOWN_ESTIMATE_FRACTION`` of the reservation
-and, for a run that lost its process, what such a call of the run measured.
-Estimates live in their own ``estimated`` bucket, strictly separate from
-the measured ``used`` amount, and count against ``remaining``. When the
-provider later reports the generation's real cost, reconciliation swaps the
-estimate for it exactly once. Calls that provably never started are
-settled as a measured zero and release everything. There is no day-long lock.
-"""
+A started call whose final usage is missing is neither fully released nor fully charged: a bounded
+estimate is charged in its own ``estimated`` bucket, counted against ``remaining``, until the
+provider's real cost replaces it exactly once. Calls that provably never started settle as a
+measured zero."""
 import math
 import threading
 import time
@@ -40,8 +23,8 @@ from app.services import agent_budget_config
 
 
 class AgentTokenBudgetExceeded(AnalysisBudgetExceeded):
-    """``remaining``, ``required`` and ``reserved`` in micro-euros. The codes
-    keep their names from the token account (browser and API contract)."""
+    """``remaining``, ``required`` and ``reserved`` in micro-euros. The codes keep their
+    token-account names (browser and API contract)."""
 
     def __init__(self, remaining, required, *, reserved=0):
         self.remaining, self.required = remaining, required
@@ -53,9 +36,8 @@ class AgentTokenBudgetExceeded(AnalysisBudgetExceeded):
         super().__init__(message)
 
 
-# Serialize short bookkeeping transactions per account inside each process.
-# Agent and pipeline write the same ledger document; Firestore still fences
-# concurrent processes, providers stay fully parallel.
+# Serialize short bookkeeping transactions per account inside each process; Firestore still fences
+# concurrent processes.
 _ACCOUNT_WRITES = tuple(threading.RLock() for _ in range(128))
 
 
@@ -74,22 +56,16 @@ def _admin_role(uid):
 
 
 def account_tier(uid, tier=None):
-    """Ledger tier of an account: admin role first, then the stored tier.
-
-    Routes that already resolved the tier pass it in. Both reads share the
-    cached user document and raise TierStatusUnavailable on storage errors;
-    callers map that to 503 instead of using another tier's limit.
-    """
+    """Ledger tier of an account: admin role first, then the stored tier. Raises
+    TierStatusUnavailable on storage errors, which callers map to 503 instead of using another
+    tier's limit."""
     tier = _stored_tier(uid) if tier is None else tier
     return agent_budget_config.tier_key(tier, admin=_admin_role(uid))
 
 
-# Read throttles for snapshot(), which runs on every allowance poll and on
-# every usage event of an Agent run. Both extra reads mostly find nothing:
-# an owner with no running delegation is asked again after RECOVERY_QUIET_S,
-# and a yesterday without estimates stays without them once the new day is
-# PREVIOUS_DAY_GRACE old (a call reserved before midnight may still book its
-# estimate there shortly after it).
+# snapshot() runs on every allowance poll and usage event, and both extra reads mostly find nothing:
+# an owner without running runs is asked again after RECOVERY_QUIET_S, and yesterday is no longer
+# read for estimates after PREVIOUS_DAY_GRACE.
 RECOVERY_QUIET_S = 120
 PREVIOUS_DAY_QUIET_S = 600
 PREVIOUS_DAY_GRACE = timedelta(hours=2)
@@ -117,8 +93,7 @@ def snapshot(db, uid, *, tier=None):
     recovery_key = ("recovery", id(db), uid)
     if not _quiet(recovery_key) and not store.recover_allowance(uid):
         _mark_quiet(recovery_key, RECOVERY_QUIET_S)
-    # Timestamp the read's start so a slower HTTP response cannot overwrite a
-    # newer terminal snapshot in the browser.
+    # So a slower HTTP response cannot overwrite a newer snapshot in the browser.
     observed_at = time.time_ns() // 1_000_000
     config = agent_budget_config.get_config(db)
     day = period_key(config)
@@ -126,10 +101,8 @@ def snapshot(db, uid, *, tier=None):
     if data.get('unknown', 0) > data.get('unknown_released', 0):
         data = store.repair_quota_period(uid, day)
     if awaits_measurement(data) or _previous_day_has_estimates(db, uid, day):
-        # Provider usage lookups run off the request thread; a later snapshot
-        # shows the measured result. This read never waits or fails for it.
-        # Yesterday is checked too, so a call estimated just before midnight
-        # is still measured instead of silently becoming final.
+        # Provider usage lookups run off the request thread; a later snapshot shows the result.
+        # Yesterday too, so a call estimated just before midnight is still measured.
         from app.services import agent_usage_reconciliation
         agent_usage_reconciliation.schedule(db, uid)
     tier = account_tier(uid) if tier is None else agent_budget_config.tier_key(tier)
@@ -145,18 +118,9 @@ def public_snapshot(data, period, config, tier, *, now=None, limit=None):
             "tier": tier, "run_estimates": agent_budget_config.run_estimates_for(config, tier)}
 
 
-def remaining_allowance(db, uid, *, tier=None):
-    """Plain read of today's unreserved allowance (micro-euros), without snapshot repairs."""
-    config = agent_budget_config.get_config(db)
-    tier = account_tier(uid) if tier is None else tier
-    data = quota_ref(db, uid, period_key(config)).get().to_dict() or {}
-    return _remaining(data, agent_budget_config.limit_for(config, tier))
-
-
 def shown_allowance(db, uid, *, tier=None):
-    """``(left, limit)`` of today's allowance as the sidebar ring shows it
-    (token-budget.js view): the limit less what was spent, not less what
-    running calls hold for the moment (remaining_allowance)."""
+    """``(left, limit)`` as the sidebar ring shows it: the limit less what was spent, not less what
+    running calls hold."""
     config = agent_budget_config.get_config(db)
     tier = account_tier(uid) if tier is None else tier
     data = quota_ref(db, uid, period_key(config)).get().to_dict() or {}
@@ -193,15 +157,13 @@ def day_key():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-# The unit of the period's ledger. Ledgers of the token account (until
-# 2026-10-31) have no suffix: a call reserved in tokens before the switch
-# settles into its own token ledger, never into the euro one.
+# Token-account ledgers have no suffix: a call reserved in tokens settles into its own ledger, never
+# into the euro one.
 LEDGER_UNIT = "_eur"
 
 
 def period_key(config):
-    # Receipts retain this key, so calls started before a reset settle into the
-    # old ledger without consuming or releasing the freshly reset allowance.
+    # Receipts retain this key, so calls started before a reset settle into the old ledger.
     return day_key() + ("_" + config['reset_epoch'] if config.get('reset_epoch') else "") + LEDGER_UNIT
 
 
@@ -209,14 +171,12 @@ def quota_ref(db, uid, day):
     return db.collection("users").document(uid).collection("chat_state").document("agent_tokens_" + day)
 
 
-# Share of an unknown call's reservation that is charged as an estimate.
 UNKNOWN_ESTIMATE_FRACTION = 0.5
 
 
 def measured_charge(usage):
-    """What a measured call takes from the account in micro-euros, or None
-    when its cost is not final: the provider's cost of the call, else its
-    catalog price (agent_client.measured_usage), whatever kind of call it was."""
+    """What a measured call takes from the account in micro-euros, or None when its cost is not
+    final."""
     if not usage or usage.get("provisional") or not usage.get("cost_complete", usage.get("complete", True)):
         return None
     cost = usage.get("estimated_cost_nano_usd")
@@ -230,22 +190,17 @@ def provisional_lower_bound(usage):
 
 
 def unknown_estimate(reserved, usage, *, expected=0):
-    """Bounded charge for a started call without a final cost, else None.
-    ``reserved`` is the ledger's reservation of the call; ``expected`` what
-    such a call of its run measured (a run that lost its process,
-    AgentSessionStore.reap_delegation)."""
+    """Bounded charge for a started call without a final cost, else None: the lower bound, at least
+    UNKNOWN_ESTIMATE_FRACTION of ``reserved``, and ``expected`` for a run that lost its process."""
     if measured_charge(usage) is not None:
         return None
     floor = math.ceil(max(0, reserved) * UNKNOWN_ESTIMATE_FRACTION)
     return max(provisional_lower_bound(usage), floor, max(0, int(expected or 0)))
 
 
-# A pipeline run holds its expected cost against concurrent admissions for at
-# most this long; measured bookings shrink the hold, expiry drops the rest.
-# The admission lapses with it: a run's first operation after the window is
-# admitted against the account again (usage_repository), so a run cannot bank
-# its admission for the hours of its execution window. At most
-# MAX_PIPELINE_HOLDS runs per account are therefore admitted and unchecked.
+# A pipeline run holds its expected cost at most this long; measured bookings shrink the hold. The
+# admission lapses with it, so a run cannot bank its admission for hours, and at most
+# MAX_PIPELINE_HOLDS runs per account are admitted and unchecked.
 PIPELINE_HOLD_SECONDS = 10 * 60
 MAX_PIPELINE_HOLDS = 32
 
@@ -280,10 +235,8 @@ def _remaining(data, limit, now=None):
 
 
 def admit_run(data, run_id, estimate, *, limit, now=None, readmission=False):
-    """Admit one pipeline run if the remaining budget covers its expected cost.
-
-    ``readmission`` admits an existing run whose admission lapsed; it is
-    counted apart from new runs."""
+    """Admit one pipeline run if the remaining budget covers its expected cost; ``readmission`` (a
+    lapsed admission) is counted apart."""
     data = normalize(data)
     now = _now(now)
     holds = active_holds(data, now)
@@ -334,12 +287,8 @@ def release_run(data, run_id, *, now=None):
 
 
 def normalize(data):
-    """Release legacy terminal holds, exactly once, without touching live holds.
-
-    `unknown` was only incremented when a receipt became terminal. The cumulative
-    marker also handles an old server settling another receipt during rollout.
-    These are reservation bounds, never invented measured/billed token counts.
-    """
+    """Release legacy terminal holds exactly once without touching live holds. These are reservation
+    bounds, never invented measured counts."""
     data = dict(data or {})
     pending = max(0, data.get('unknown', 0) - data.get('unknown_released', 0))
     if pending:
@@ -350,9 +299,8 @@ def normalize(data):
 
 
 def reserve(data, amount, *, limit=None, overdraft=False):
-    """Hold ``amount`` for an active call. ``overdraft`` admits it even
-    beyond the limit (finishing an Agent message that holds paid work); the
-    next admission then fails, as after an overdrawn pipeline run."""
+    """Hold ``amount`` for an active call. ``overdraft`` admits it beyond the limit (finishing an
+    Agent message with paid work); the next admission then fails."""
     data = normalize(data)
     remaining = _remaining(data, daily_limit() if limit is None else limit)
     if not overdraft and amount > remaining:
@@ -363,10 +311,8 @@ def reserve(data, amount, *, limit=None, overdraft=False):
 
 
 def settle(data, reserved, usage, *, measurable=False, expected=0):
-    """Swap a call's reservation for its charge (measured_charge).
-    ``measurable``: an estimate charged instead can still be measured later
-    (the call has a provider generation id, agent_usage_reconciliation);
-    ``expected`` as for unknown_estimate."""
+    """Swap a call's reservation for its charge. ``measurable``: an estimate charged instead can
+    still be measured later; ``expected`` as for unknown_estimate."""
     data = normalize(data)
     actual = measured_charge(usage)
     data['reserved'] = max(0, data.get('reserved', 0) - reserved)
@@ -374,8 +320,8 @@ def settle(data, reserved, usage, *, measurable=False, expected=0):
     if actual is not None:
         data["used"] = data.get("used", 0) + actual
     else:
-        # The reservation bound stays auditable as `unknown` and is released;
-        # a bounded estimate is charged until reconciliation replaces it.
+        # The reservation bound stays auditable as `unknown`; a bounded estimate is charged until
+        # reconciliation replaces it.
         data["unknown"] = data.get("unknown", 0) + reserved
         data['unknown_released'] = data.get('unknown_released', 0) + reserved
         data["estimated"] = data.get("estimated", 0) + unknown_estimate(reserved, usage, expected=expected)
@@ -385,11 +331,8 @@ def settle(data, reserved, usage, *, measurable=False, expected=0):
     return data
 
 
-# How many of a ledger's estimates still wait for their measurement, apart
-# from the amount: an estimate that can never be measured stays charged for
-# good, and until 2026-11-03 its ``estimated`` amount alone had snapshot()
-# look for a measurement all day (a query a minute while a chat was open, and
-# yesterday's ledger read on every snapshot of the next day).
+# How many estimates still wait for their measurement: one that can never be measured stays charged
+# for good, and the amount alone kept snapshot() looking all day.
 def awaits_measurement(data):
     data = data or {}
     if "estimates_pending" in data:
@@ -405,17 +348,14 @@ def estimate_closed(data):
     return data
 
 
-# What the account's model calls took in all (the admin's account lookup),
-# counted in the day's ledger that a claim and a settlement write anyway.
-# Until 2026-11-01 the user document carried these counters: two more writes
-# and reads of the account's busiest document per model call, about a fifth
-# of all Firestore writes of an Agent message.
+# What the account's model calls took in all (the admin's lookup), counted in the ledger that claims
+# and settlements write anyway: on the user document it cost two more writes per call.
 USAGE_SUMS = ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens", "reasoning_tokens",
               "estimated_cost_nano_usd")
 
 
 def count_claim(data):
-    """A call claimed against ``data`` (a day's ledger): counted, unsettled."""
+    """A call claimed against a day's ledger: counted, unsettled."""
     totals = dict(data.get("agent_usage") or {})
     totals["calls"] = totals.get("calls", 0) + 1
     totals["unsettled_calls"] = totals.get("unsettled_calls", 0) + 1
@@ -424,7 +364,6 @@ def count_claim(data):
 
 
 def count_settlement(data, usage):
-    """The settled call's measurement in the ledger's sums (count_claim)."""
     totals = dict(data.get("agent_usage") or {})
     totals["unsettled_calls"] = max(0, totals.get("unsettled_calls", 0) - 1)
     key = "measured_calls" if usage is not None and usage.get("input_tokens") is not None else "unmetered_calls"
@@ -442,10 +381,8 @@ def count_settlement(data, usage):
 
 
 def usage_totals(db, uid, legacy=None):
-    """The account's sums over all its day ledgers (count_claim and
-    count_settlement), added to ``legacy``: what the user document counted
-    until 2026-11-01. Reads every ledger of the account: for the admin's
-    lookup only, never on a message's path."""
+    """The account's sums over all its day ledgers, added to ``legacy`` (the user document's former
+    counters). Reads every ledger: for the admin's lookup only."""
     totals = {key: value for key, value in (legacy or {}).items() if type(value) in (int, float)}
     ledgers = db.collection("users").document(uid).collection("chat_state").stream()
     for snapshot in ledgers:
@@ -470,8 +407,8 @@ def reconcile(data, estimate, actual):
 def public(data, day=None, *, limit=None, now=None):
     data = normalize(data)
     limit = daily_limit() if limit is None else limit
-    # `estimated` is everything charged without a final measurement (both
-    # modes), `reserved` everything held for running work (both modes).
+    # `estimated`: charged without a final measurement; `reserved`: held for running work (both
+    # modes).
     return {"day": day or day_key(), "unit": "micro_eur", "revision": data.get("revision", 0), "limit": limit,
             "used": data.get("used", 0),
             "reserved": data.get("reserved", 0) + held_amount(data, now), "unknown": data.get("unknown", 0),

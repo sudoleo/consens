@@ -6,55 +6,56 @@ import pytest
 
 from app.api.routers import agent
 from app.services.agent_runtime import AgentCapacity, AgentCapacityExceeded
-from app.services.llm.agent_client import AgentModel
-from test_agent_runs import UID, AUTH, api, store, pending, receipt, totals
+from test_agent_runs import RUN_TOKEN, UID, AUTH, api, claim, store, pending, receipt, totals
 
 
 def test_owner_limit_is_atomic_across_different_chats(store):
     turns = [pending(store, request_id=f"run-{i}") for i in range(12)]
     gate = threading.Barrier(len(turns))
 
-    def claim(item):
+    def claim_one(item):
         # The timeout only turns a stuck thread into a failure instead of a
         # hang; 3 s broke the barrier on a loaded machine (full suite next to
         # browser runs, 2026-10-21) before all twelve threads had started.
         gate.wait(timeout=30)
         chat_id, turn = item
         try:
-            store.claim(UID, chat_id, turn["id"], AgentModel())
+            claim(store, chat_id, turn["id"])
             return item
         except AgentCapacityExceeded:
             return None
 
     with ThreadPoolExecutor(max_workers=len(turns)) as pool:
-        winners = [item for item in pool.map(claim, turns) if item]
+        winners = [item for item in pool.map(claim_one, turns) if item]
     assert len(winners) == 2
     assert totals(store)["calls"] == 2
     assert len(store.active_ref(UID).get().to_dict()["leases"]) == 2
     # A different user has independent admission; there is no global DB lock document.
     other_chat, other_turn = pending(store, uid="another-owner")
-    assert store.claim("another-owner", other_chat, other_turn["id"], AgentModel())
+    assert claim(store, other_chat, other_turn["id"], uid="another-owner")
     chat_id, turn = winners[0]
     store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
+    store.finish_run(UID, chat_id, turn["id"], completion=receipt(), status="succeeded", run_token=RUN_TOKEN)
     replacement = next(item for item in turns if item not in winners)
-    assert store.claim(UID, replacement[0], replacement[1]["id"], AgentModel())
+    assert claim(store, replacement[0], replacement[1]["id"])
     # Old settlement retries must not free the replacement's slot.
     assert not store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
+    assert not store.finish_run(UID, chat_id, turn["id"], completion=receipt(), status="succeeded", run_token=RUN_TOKEN)
     assert len(store.active_ref(UID).get().to_dict()["leases"]) == 2
 
 
 def test_crashed_owner_lease_expires_without_retrying_the_paid_receipt(store):
     old = [pending(store, request_id=f"old-{i}") for i in range(2)]
     for chat_id, turn in old:
-        store.claim(UID, chat_id, turn["id"], AgentModel())
+        claim(store, chat_id, turn["id"])
     expired = datetime.now(timezone.utc) - timedelta(seconds=1)
     active = store.active_ref(UID)
     store.db.documents[active.path]["leases"] = {key: expired for key in active.get().to_dict()["leases"]}
     chat_id, turn = pending(store, request_id="fresh")
-    assert store.claim(UID, chat_id, turn["id"], AgentModel())
+    assert claim(store, chat_id, turn["id"])
     assert len(active.get().to_dict()["leases"]) == 1
     for chat_id, turn in old:
-        assert not store.claim(UID, chat_id, turn["id"], AgentModel())
+        assert not claim(store, chat_id, turn["id"])
     assert totals(store)["unsettled_calls"] == 3
 
 
@@ -99,7 +100,7 @@ def test_owner_capacity_failure_unlocks_unclaimed_turn_and_does_not_call_model(a
     client, store, calls = api
     for i in range(2):
         chat_id, turn = pending(store, request_id=f"running-{i}")
-        store.claim(UID, chat_id, turn["id"], AgentModel())
+        claim(store, chat_id, turn["id"])
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "busy", "bookmark_id": "bm1"}
     response = client.post("/agent", json=payload, headers=AUTH)

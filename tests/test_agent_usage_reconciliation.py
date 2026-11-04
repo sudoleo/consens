@@ -13,7 +13,7 @@ from app.services import agent_quota, agent_usage_reconciliation as reconciliati
 from app.services.agent_budget_config import NANO_USD_PER_MICRO_EUR as EUR
 from app.services.llm.agent_client import AgentCompletion
 from test_agent_runs import UID, store, receipt, totals, priced
-from test_agent_delegation import make_loop
+from test_agent_sessions import make_loop
 
 
 def unknown_call(store, *, reservation=500, generation_id="gen-1", step="completion:0", loop=None):
@@ -24,7 +24,7 @@ def unknown_call(store, *, reservation=500, generation_id="gen-1", step="complet
                 step=step, reservation=(reservation, reservation * EUR))
     value = receipt(measured=False)
     value.generation_id = generation_id
-    store.settle(*args, completion=value, status="failed", step=step, final=False)
+    store.settle(*args, completion=value, status="failed", step=step)
     return loop, args
 
 
@@ -59,7 +59,7 @@ def test_provably_unstarted_calls_are_still_released_completely(store):
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     value = AgentCompletion()
     value.record_unstarted(loop.model)
-    store.settle(*args, completion=value, status="cancelled", final=False)
+    store.settle(*args, completion=value, status="cancelled")
     budget = agent_quota.snapshot(store.db, UID)
     assert budget["estimated"] == budget["used"] == budget["reserved"] == 0
     assert budget["remaining"] == budget["limit"]
@@ -86,7 +86,7 @@ def test_reconciliation_replaces_the_estimate_exactly_once(store):
 
     # Repeated passes and a late settlement retry never charge twice.
     assert reconciliation.reconcile_pending(store.db, UID, fetch_usage=fetch)["measured"] == 0
-    assert not store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    assert not store.settle(*args, completion=receipt(), status="succeeded")
     assert agent_quota.snapshot(store.db, UID)["used"] == 130
     assert lookups == ["gen-1"]
 

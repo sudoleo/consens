@@ -192,7 +192,7 @@ def test_a_new_conversation_is_priced_without_the_old_ones_cache():
     from app.services.agent_costs import RunCosts
     provider = Provider()
     session, log = reviewer(provider)
-    costs = session.loop.costs = RunCosts(SimpleNamespace(account_budget_only=True))
+    costs = session.loop.costs = RunCosts()
     forgotten = []
     costs.rewritten = lambda key: (forgotten.append(key), RunCosts.rewritten(costs, key))
     opening(log)
@@ -256,11 +256,11 @@ def test_a_reviewer_reads_no_other_reviewers_finding_in_the_log(store):
 
 def test_the_reviewers_charge_per_step_follows_its_recent_steps(store):
     from test_agent_audit import Audit, audit_loop
-    from app.services import agent_delegation
+    from app.services import agent_loop
     loop = audit_loop(store, Audit())
     for step, charge in enumerate([10, 10, 10, 10, 80, 20, 20]):
         loop.routing_steps = step
         loop.reviewer_charges[step] = charge
     assert loop._reviewer_step_charge() == 80
-    loop.routing_steps = 4 + agent_delegation.REVIEWER_CHARGE_STEPS + 1
+    loop.routing_steps = 4 + agent_loop.REVIEWER_CHARGE_STEPS + 1
     assert loop._reviewer_step_charge() == 20

@@ -23,10 +23,9 @@ import time
 import pytest
 
 from app.core import config as cfg
-from app.services import agent_delegation
+from app.services import agent_loop
 from app.services.agent_comparison import comparison_selection
-from app.services.agent_delegation import DelegationLoop
-from app.services.agent_delegation_config import defaults
+from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_runs import AgentRunStore
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
@@ -139,7 +138,7 @@ class Timeline:
 def slow_store(monkeypatch):
     # A model's live reasoning line every 3 s in production, about five
     # transactions of single reads; the same ratio here.
-    monkeypatch.setattr(agent_delegation, "THINKING_UPDATE_SECONDS", 40 * ROUND_TRIP)
+    monkeypatch.setattr(agent_loop, "THINKING_UPDATE_SECONDS", 40 * ROUND_TRIP)
     return AgentRunStore(SlowDatabase())
 
 
@@ -152,13 +151,12 @@ assert len(SIX_FAMILIES) == cfg.MAX_RUN_FAMILIES
 def run_turn(store):
     timeline = Timeline()
     chat, turn = pending(store)
-    config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
-    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."},
                   {"role": "user", "content": "What should I pack for a marathon training camp?"}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
-        delegation_config=config, completion_factory=timeline.factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=timeline.factory,
         # The most a run asks (Custom, MAX_RUN_FAMILIES): six families answer in
         # parallel. High Quality had six until 2026-11-01, now three.
         comparison_models=comparison_selection(SIX_FAMILIES))
@@ -217,5 +215,5 @@ def test_the_live_reasoning_lines_are_saved_without_queueing_up(slow_store, monk
     answers = [s for s in sessions if s.get("kind") == "comparison"]
     assert len(answers) == 6 and all(s["status"] == "completed" for s in answers)
     assert all(s.get("progress_text", "").startswith("Checking source") for s in answers)
-    gap = agent_delegation.THINKING_UPDATE_SECONDS / 2
+    gap = agent_loop.THINKING_UPDATE_SECONDS / 2
     assert lines and all(later - earlier >= gap * .9 for earlier, later in zip(lines, lines[1:]))

@@ -9,26 +9,30 @@ import httpx
 import pytest
 
 from app.services import agent_sessions, agent_quota
-from app.services.agent_delegation import DelegationLoop
-from app.services.agent_delegation_config import defaults
+from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import AgentRunInterrupted
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import AnalysisBudget, AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled
 from test_agent_runs import UID, AUTH, api, pending, store, totals, priced
 from test_agent_comparison import Script, make_loop as comparison_loop
+from agent_reviewers import without_reviewers
+from app.services.agent_comparison import comparison_selection
 
 
 def chat_loop(store, factory):
     chat, turn = pending(store)
-    # Persisted old admin values must not silently impose chat cutoffs.
-    config = {**defaults(), "max_calls": 1, "max_tools": 1, "seconds": 1,
-              "max_tokens": 1, "max_cost_nano_usd": 1, "worker_calls": 1, "max_searches": 0}
     model = resolve_agent_model("claude-haiku-4-5")
-    return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"], model=model,
+    return without_reviewers(AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"], model=model,
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Work through the task."}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=factory)
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=factory,
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"})))
+
+
+def search_call(index):
+    return [{"id": f"search-{index}", "type": "function", "function": {
+        "name": "search_chats", "arguments": json.dumps({"query": f"step {index}"})}}]
 
 
 def clock(monkeypatch):
@@ -57,11 +61,9 @@ def test_all_turn_steps_and_eighteen_minutes_complete_with_live_lease(store, mon
             # $0.000138 is 120 micro-euros of the account.
             self.usage = measured_usage({"prompt_tokens": 100, "completion_tokens": 20, "cost": .000138}, model)
             index = int(self.step_id.split(":")[-1])
-            # The old admin max_calls=1 does not apply; the turn's own step
-            # cap (24) does, and identical polling is not a repeated request.
+            # The turn's own step cap (24) applies, no run budget.
             if index < loop.policy.turn_steps - 1:
-                self.tool_calls = [{"id": f"wait-{index}", "type": "function", "function": {
-                    "name": "wait_agents", "arguments": '{"seconds":0}'}}]
+                self.tool_calls = search_call(index)
                 self.finish_reason = "tool_calls"
             else:
                 self.text, self.finish_reason = "Finished after many rounds.", "stop"
@@ -76,8 +78,8 @@ def test_all_turn_steps_and_eighteen_minutes_complete_with_live_lease(store, mon
     # tests/test_agent_turn_limits.py).
     assert timer.stamp - started == timedelta(minutes=18)
     assert root["step_states"]["completion:23"] == "succeeded"
-    assert root["policy"]["seconds"] is None and root["policy"]["max_calls"] is None
-    assert loop.tools_used == 23 and loop.budget.calls == 24
+    assert "seconds" not in root["policy"] and "max_calls" not in root["policy"]
+    assert loop.budget.calls == 24
     assert totals(store)["unsettled_calls"] == 0
     assert all(searches)  # Search remains available after the old two-search cap.
     quota = agent_quota.snapshot(store.db, UID)
@@ -91,7 +93,7 @@ def test_daily_budget_still_stops_before_any_additional_paid_step_and_saves_reas
             # suite's 250,000 micro-euros). The next step must not be
             # dispatched, even with no per-run caps.
             self.usage = measured_usage({"prompt_tokens": 249990, "completion_tokens": 10, "cost": .2875}, model)
-            self.tool_calls = [{"id": "wait", "type": "function", "function": {"name": "wait_agents", "arguments": '{"seconds":0}'}}]
+            self.tool_calls = search_call(0)
             self.finish_reason = "tool_calls"
             yield from ()
     loop = chat_loop(store, Completion)
@@ -136,9 +138,11 @@ def test_lease_renewal_keeps_all_fences_in_sync_but_never_revives_a_stopped_run(
 
 
 def test_mid_answer_provider_timeout_preserves_text_and_safe_reason_in_history(store):
+    # Long enough to show while it streams (ANSWER_HOLD_CHARS): no retry then.
+    shown = "Already available result. " * 20
     class Completion(AgentCompletion):
         def stream(self, *, model, **kwargs):
-            self.text = "Already available result."
+            self.text = shown
             self.usage = measured_usage({"prompt_tokens": 20, "completion_tokens": 10}, model)
             yield {"type": "delta", "text": self.text}
             raise httpx.ReadTimeout("private provider body must not be saved")
@@ -146,7 +150,7 @@ def test_mid_answer_provider_timeout_preserves_text_and_safe_reason_in_history(s
     with pytest.raises(httpx.ReadTimeout):
         list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["consensus"] == "Already available result."
+    assert saved["consensus"] == shown
     assert saved["agent_failure"]["code"] == "provider_timeout"
     assert "private provider" not in json.dumps(saved, default=str)
 
@@ -154,9 +158,6 @@ def test_mid_answer_provider_timeout_preserves_text_and_safe_reason_in_history(s
 def test_many_comparisons_use_actual_call_reservations_without_a_fixed_hold(store):
     script = Script(compares=4)  # The per-turn maximum.
     loop = comparison_loop(store, script)
-    loop.policy = AgentPolicy.for_chat(loop.config)
-    loop.costs.policy = loop.policy
-    loop.budget = AnalysisBudget(unlimited=True)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and len(saved["agent_review"]["comparisons"]) == 4
@@ -167,11 +168,10 @@ def test_many_comparisons_use_actual_call_reservations_without_a_fixed_hold(stor
     assert "review_hold" not in root and agent_quota.snapshot(store.db, UID)["reserved"] == 0
 
 
-def test_consensus_and_legacy_analysis_budgets_remain_bounded():
+def test_consensus_analysis_budgets_remain_bounded():
     budget = AnalysisBudget(seconds=0, max_calls=1)
     with pytest.raises(AnalysisBudgetExceeded, match="deadline"):
         budget.check()
-    assert not AgentPolicy.from_config(defaults()).account_budget_only
 
 
 def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_the_answer(store):
@@ -200,9 +200,6 @@ def test_account_budget_does_not_allow_more_comparisons_or_revisions_after_the_a
             self.finish_reason = "stop"
     loop = comparison_loop(store, script)
     loop.factory = Completion
-    loop.policy = AgentPolicy.for_chat(loop.config)
-    loop.costs.policy = loop.policy
-    loop.budget = AnalysisBudget(unlimited=True)
     list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     review = saved["agent_review"]
@@ -222,10 +219,10 @@ def test_brief_database_outage_does_not_cancel_a_healthy_producer(store, monkeyp
         checks.append(args)
         if len(checks) == 1:
             raise ServiceUnavailable("temporary")
-    from app.services import agent_delegation
+    from app.services import agent_loop
     class CloseAfterTwoChecks:
         def wait(self, seconds):
-            assert seconds == agent_delegation.WATCH_SECONDS
+            assert seconds == agent_loop.WATCH_SECONDS
             return len(checks) == 2
     monkeypatch.setattr(store, "check_delegation", check)
     loop.closed = CloseAfterTwoChecks()
@@ -297,7 +294,7 @@ def test_recovery_reaps_expired_producer_and_restores_checkpoint_without_paid_re
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
     value = AgentCompletion()
     value.usage = measured_usage({"prompt_tokens": 20, "completion_tokens": 10}, loop.model)
-    store.settle(*args, completion=value, status="succeeded", final=False)
+    store.settle(*args, completion=value, status="succeeded")
     store.save_review(*args, loop.run_token, {"status": "running", "comparisons": [], "versions": []}, "Checkpointed answer.")
     payload = {"chat_id": loop.chat_id, "question": "Question one", "client_request_id": "one",
                "bookmark_id": "expired_answer", "recover_only": True}

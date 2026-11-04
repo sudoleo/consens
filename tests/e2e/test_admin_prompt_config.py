@@ -5,7 +5,6 @@ from pathlib import Path
 import pytest
 from playwright.sync_api import expect
 
-from app.services import agent_delegation_config
 from app.services.prompt_catalog import prompt_catalog
 from app.services.prompt_config import _snapshot, editable
 from test_phase4_frontend import (
@@ -34,8 +33,7 @@ def test_configuration_tab_shows_prompts_read_only_and_saves_settings(browser, p
         assert route.request.headers.get("authorization") == "Bearer token-admin"
         if route.request.method == "GET":
             return _json(route, {"config": state["saved"], "defaults": defaults,
-                                 "prompts_readonly": catalog, "cache_seconds": 30,
-                                 "delegation_limits": agent_delegation_config.LIMITS})
+                                 "prompts_readonly": catalog, "cache_seconds": 30})
         payload = route.request.post_data_json
         writes.append(deepcopy(payload))
         if payload["revision"] != state["saved"]["revision"]:
@@ -71,35 +69,16 @@ def test_configuration_tab_shows_prompts_read_only_and_saves_settings(browser, p
             'prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT')
         assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth')
 
-        page.locator('#delegationConfig').evaluate('(element) => { element.closest("details").open = true; }')
-        expect(page.locator('#delegation-max_parallel')).to_be_visible()
-        for key in ('seconds', 'max_calls', 'max_searches', 'max_cost_nano_usd'):
-            expect(page.locator(f'#delegation-{key}')).to_be_hidden()
-            expect(page.locator(f'label[for="delegation-{key}"]')).to_be_hidden()
-        for key in ('orchestrator_prompt', 'worker_prompt'):
-            expect(page.locator(f'#delegation-{key}')).to_have_count(0)
-        expect(page.locator('#delegationConfig > p')).to_contain_text('daily allowance in euros')
-
-        # Native validation must open the collapsed delegation section rather
-        # than silently rejecting submission before our submit handler runs.
-        page.locator('#delegationConfig').evaluate('(element) => { element.closest("details").open = false; }')
-        page.locator('#delegation-max_parallel').evaluate(
-            '(element) => { element.value = "99"; element.dispatchEvent(new Event("input", {bubbles: true})); }')
-        page.locator('#savePromptConfigBtn').click()
-        expect(page.locator('#delegation-max_parallel')).to_be_visible()
-        assert writes == []
-        page.locator('#delegation-max_parallel').fill('3')
+        expect(page.locator('#delegationConfig')).to_have_count(0)
 
         zone.fill('UTC')
         expect(page.locator('#promptConfigDirty')).to_be_visible()
         page.locator('#savePromptConfigBtn').click()
         expect(page.locator('#promptConfigStatus')).to_contain_text('Saved.')
         assert writes[-1]["revision"] == 0
-        assert set(writes[-1]["config"]) == {"reference_timezone", "delegation"}
-        assert writes[-1]["config"]["delegation"] == {**defaults["delegation"], "max_parallel": 3}
+        assert writes[-1]["config"] == {"reference_timezone": "UTC"}
         page.reload(wait_until="domcontentloaded")
         expect(zone).to_have_value('UTC')
-        expect(page.locator('#delegation-max_parallel')).to_have_value('3')
         expect(page.locator('#promptConfigMeta')).to_contain_text('Revision 1')
 
         # A second session wins; a stale browser must keep its draft on 409.

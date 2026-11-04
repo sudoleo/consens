@@ -6,12 +6,11 @@ import pytest
 from app.core import config as cfg
 from app.services import agent_quota
 from app.services.agent_costs import RunCosts
-from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import ProviderCooldowns
 from app.services.llm.agent_client import AgentCompletion, measured_usage, metered_model
 from app.services.llm.engines import _ProviderHTTPStatusError, _ProviderResponseError
 from test_agent_runs import UID, store, priced
-from test_agent_delegation import make_loop
+from test_agent_sessions import make_loop
 from test_agent_loop import packet, transport
 
 
@@ -47,12 +46,14 @@ def test_explicit_http_rejection_releases_paid_claim_once(store, code):
     assert budget['remaining'] == budget['limit']
     saved = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
     assert saved['usage']['source'] == 'provider_rejection'
-    assert not store.settle(UID, loop.chat_id, loop.turn_id, completion=AgentCompletion(), status='failed', final=False)
+    assert not store.settle(UID, loop.chat_id, loop.turn_id, completion=AgentCompletion(), status='failed')
     assert agent_quota.snapshot(store.db, UID)['revision'] == budget['revision']
 
 
 @pytest.mark.parametrize('error', [_ProviderHTTPStatusError(408), _ProviderHTTPStatusError(500),
                                   _ProviderHTTPStatusError(503), _ProviderResponseError({'code': 429}), TimeoutError()])
+
+
 def test_ambiguous_errors_never_invent_free_usage(error):
     value = AgentCompletion()
     value.record_rejection(error, metered_model('claude-haiku-4-5'))
@@ -74,7 +75,8 @@ def test_stop_after_admission_but_before_provider_releases_all_tokens(store, mon
 
 
 def test_intermediate_usage_is_lower_bound_after_interrupted_generation(store, monkeypatch):
-    transport(monkeypatch, [[packet({'content': 'Partial'}, usage={'prompt_tokens': 100, 'completion_tokens': 0}),
+    # Shown while it streams (ANSWER_HOLD_CHARS): the step is not tried again.
+    transport(monkeypatch, [[packet({'content': 'Partial ' * 50}, usage={'prompt_tokens': 100, 'completion_tokens': 0}),
                             TimeoutError()]])
     loop = make_loop(store)
     with pytest.raises(TimeoutError):
@@ -99,7 +101,7 @@ def test_final_usage_replaces_cumulative_values_and_releases_reservation(store, 
 def test_token_receipt_is_complete_without_search_price():
     model = metered_model('claude-haiku-4-5')
     usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 20}, model, searches_enabled=True)
-    costs = RunCosts(AgentPolicy())
+    costs = RunCosts()
     reservation = costs.reserve(model, [])
     costs.reconcile(reservation, usage)
     assert costs.tokens == usage['input_tokens'] + usage['output_tokens'] == 120
@@ -170,7 +172,7 @@ def test_a_reviewers_call_counts_what_it_cost_like_a_comparison_answer(store):
         assert reserved == 3001
         value = AgentCompletion()
         value.usage, value.finish_reason = dict(usage), 'stop'
-        store.settle(*args, completion=value, status='succeeded', step=f'agent:{aid}:0', final=False)
+        store.settle(*args, completion=value, status='succeeded', step=f'agent:{aid}:0')
     receipts = {aid: store.receipt_ref(*args, f'agent:{aid}:0').get().to_dict() for aid in (reviewer, answer)}
     assert receipts[answer]['quota_charged'] == 500 and receipts[answer]['session_kind'] == 'comparison'
     assert receipts[reviewer]['quota_charged'] == 500 and receipts[reviewer]['session_kind'] == 'audit'

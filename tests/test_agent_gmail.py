@@ -87,7 +87,7 @@ def test_search_and_complete_thread_pagination_keep_context_bounded(gmail):
     assert continuation['messages'][0]['body_offset']==6000 and continuation['messages'][0]['next_body_offset'] is None
     evidence=list(tool.files.chats._chat_ref('owner',tool.loop.chat_id).collection('google_evidence').stream())
     assert len(evidence)==8 and all('body' not in s.to_dict() for s in evidence)
-    # The run's later calls follow the Google rules (DelegationLoop.mark_google_data).
+    # The run's later calls follow the Google rules (AgentLoop.mark_google_data).
     assert tool.loop.google_data is True
 
 
@@ -208,8 +208,7 @@ def test_offers_comparison_documents_and_gmail_draft_through_real_agent_loop(gma
     """The cross-PR user journey runs real tools, storage, the agent's answer and its review."""
     import io,json
     from pypdf import PdfReader
-    from app.services.agent_delegation import DelegationLoop
-    from app.services.agent_delegation_config import defaults
+    from app.services.agent_loop import AgentLoop
     from app.services.agent_documents import ReadDocument
     from app.services.agent_comparison import answer_hash,comparison_selection
     from app.services.agent_policy import AgentPolicy
@@ -246,11 +245,10 @@ def test_offers_comparison_documents_and_gmail_draft_through_real_agent_loop(gma
                 self.finish_reason='tool_calls'
                 return
             yield from super().stream(**kwargs)
-    config={**defaults(),'enabled':False,'max_searches':0,'context_chars':120_000}
     cid=google.list(UID)[0]['id']
-    loop=DelegationLoop(store=store,uid=UID,chat_id=chat,turn_id=turn['id'],model=resolve_agent_model('claude-haiku-4-5'),
+    loop=AgentLoop(store=store,uid=UID,chat_id=chat,turn_id=turn['id'],model=resolve_agent_model('claude-haiku-4-5'),
         messages=[{'role':'system','content':'Complete the task.'},{'role':'user','content':'Compare these offers, create a decision brief and prepare an email with both document formats.'}],
-        api_key='test',cancellation=ProviderCancellation(),policy=AgentPolicy.from_config({**config,'enabled':True}),delegation_config=config,completion_factory=Workflow,
+        api_key='test',cancellation=ProviderCancellation(),policy=AgentPolicy(),completion_factory=Workflow,
         comparison_models=comparison_selection({'anthropic':'claude-haiku-4-5','openai':'gpt-5.4-mini'}),file_context=FileContext(files,UID,chat,[source['id']]),
         google_selection=GoogleSelection(connection_id=cid,calendar=True,calendar_ids=['primary'],gmail=True,consent=True),google_data_consent=True)
     script.loop=without_reviewers(loop)

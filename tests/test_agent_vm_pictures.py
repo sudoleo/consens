@@ -11,7 +11,7 @@ import json
 
 import pytest
 
-from app.services import agent_compaction, agent_delegation, agent_vm, agent_vm_tools
+from app.services import agent_compaction, agent_loop, agent_vm, agent_vm_tools
 from app.services.agent_compaction import PICTURE_GONE, older_pictures, own_chars
 from app.services.agent_vm_tools import PICTURE_INTRO, picture_message
 from app.services.llm.provider_runtime import ProviderCancellation
@@ -46,7 +46,7 @@ def test_the_agent_sees_its_chart_after_the_results(store, fake_vm, sees):
     # picture, then the line of facts about the message (audit L3).
     after = script.seen[1]
     assert [m["role"] for m in after[-4:]] == ["tool", "tool", "user", "user"]
-    assert after[-1]["content"].startswith(agent_delegation.PROGRESS_OPEN)
+    assert after[-1]["content"].startswith(agent_loop.PROGRESS_OPEN)
     text, image = after[-2]["content"]
     assert text == {"type": "text", "text": PICTURE_INTRO.format(path=chart)}
     assert image == {"type": "image_url", "image_url": {"url": "data:image/png;base64," + base64.b64encode(PNG).decode()}}

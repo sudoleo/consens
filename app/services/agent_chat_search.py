@@ -8,7 +8,7 @@ read on demand: nothing of them is in the prompt before the agent asks.
 
 What comes back is the user's earlier work and the models' answers there:
 data, never instructions, and outside content like any tool result
-(DelegationLoop.outside_in_view: a settings change then needs the user's
+(AgentLoop.outside_in_view: a settings change then needs the user's
 words). Chats with Google data stay in their chat: their content was
 consented to and routed for that chat alone (routers/agent.py
 ``google_data``), so they are neither found nor opened. Neither are temporary
@@ -58,7 +58,7 @@ def _clip(text, limit):
 
 
 class ChatSearch:
-    """The tool of one message (DelegationLoop)."""
+    """The tool of one message (AgentLoop)."""
 
     def __init__(self, loop):
         self.loop = loop
