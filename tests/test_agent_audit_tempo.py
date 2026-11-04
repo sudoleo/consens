@@ -663,13 +663,19 @@ def test_a_long_workbench_run_takes_each_reviewer_through_new_conversations_a_pa
     monkeypatch.setattr(agent_audit.ReviewerSession, "_fresh", counted_fresh)
     monkeypatch.setattr(agent_audit.ReviewerSession, "_round", forced_round)
 
-    def live(messages, number):
-        if number in FAILING:
-            return RuntimeError("provider down")
-        return {"marks": [{"entry": entry_of(messages, "step"), "kind": "doubtful", "note": f"Round {number}."}]
-                if number % 10 == 0 else []}
-    script = Turn(THREE, steps=LONG_STEPS, output=MODEL_STREAM_CHARS, live={family: live for family in THREE},
-                  timed=False)
+    marked = defaultdict(int)
+
+    def reviewer(family):
+        def live(messages, number):
+            if number in FAILING:
+                return RuntimeError("provider down")
+            if number % 10:
+                return {"marks": []}
+            marked[family] += 1
+            return {"marks": [{"entry": entry_of(messages, "step"), "kind": "doubtful", "note": f"Round {number}."}]}
+        return live
+    script = Turn(THREE, steps=LONG_STEPS, output=MODEL_STREAM_CHARS,
+                  live={family: reviewer(family) for family in THREE}, timed=False)
     # The agent on a 1M window, as the workbench's models in Prod: on Haiku's
     # 200k this run ends near step 190 despite the compaction (TURN_CONTEXT_LIMIT).
     loop = tempo_loop(store, script, model="deepseek-v4.1-flash")
@@ -711,7 +717,9 @@ def test_a_long_workbench_run_takes_each_reviewer_through_new_conversations_a_pa
         # The final round came, in a new conversation with its marks so far.
         final = script.messages[family][-1]
         assert final.startswith("Final round.") and earlier_marks({"content": final}) == session.live_marks
-        assert len(session.live_marks) >= 10
+        # How many rounds there are depends on the machine's pace; every
+        # mark a round returned is carried, however many that were.
+        assert len(session.live_marks) == marked[family] >= 3
     # The work log holds every entry whole: the commands' output, each step.
     assert chars > LONG_STEPS * 2 * MODEL_STREAM_CHARS
     assert alive == []
