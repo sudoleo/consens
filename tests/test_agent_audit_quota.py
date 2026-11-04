@@ -5,9 +5,7 @@ comparisons, and a long run's reserve counts what the reviewers take."""
 import pytest
 
 from app.services import agent_budget_config, agent_quota
-from app.services.agent_delegation import TURN_ALLOWANCE_LIMIT
-from app.services.agent_tokens import input_estimate
-from app.services.llm.agent_client import answer_output_limit, routing_output_limit
+from app.services.agent_delegation import AGENT_SESSION, TURN_ALLOWANCE_LIMIT
 from test_agent_audit import ANSWER, Audit, audit_loop, saved
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 
@@ -57,12 +55,18 @@ def test_without_a_paid_step_a_refused_first_step_ends_the_audit_turn(store):
 
 def test_a_long_runs_reserve_counts_what_the_reviewers_took(store, monkeypatch):
     loop = audit_loop(store, Audit())
-    model = loop.model
-    inputs = input_estimate(loop.messages, loop.registry.schemas, model.request_config)
-    room = 2 * inputs + routing_output_limit(model) + answer_output_limit(model) + 1_000
-    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: room)
+    model = loop._routing_model()
+    tools = [*loop.registry.schemas, *loop._search_tools(model)]
+    # One more step and the answer, at what their admission expects.
+    step = agent_budget_config.micro_eur(loop.costs.estimate(
+        model, loop.messages, tools, native_searches=loop._step_searches(), session=AGENT_SESSION)[1])
+    room = 2 * step + 1_000
+    monkeypatch.setattr(agent_quota, "shown_allowance", lambda db, uid: (room, 5_000_000))
     assert loop._long_run_limit() is None
-    # 10,000 over four steps: the next step's live rounds and the final
-    # rounds need about 2,500 each, more than the 1,000 left over.
-    loop.reviewer_charge, loop.routing_steps = 10_000, 4
+    # The most a recent step's rounds took stands for the next step's, and
+    # the final rounds take about twice that: 3 x 400 over the 1,000 left.
+    loop.routing_steps = 4
+    loop.reviewer_charges = {1: 100, 3: 400, 4: 50}
     assert loop._long_run_limit() == TURN_ALLOWANCE_LIMIT
+    loop.reviewer_charges = {1: 100, 3: 300, 4: 50}
+    assert loop._long_run_limit() is None

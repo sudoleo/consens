@@ -4,10 +4,13 @@ No custom search service: search executes in the selected model's request.
 The direct loop's registry is empty by default. Delegation supplies its own
 server-owned registry; tools require a strict argument model and bounded executor.
 """
+import contextlib
+import contextvars
 from dataclasses import dataclass
 import functools
 import json
 import re
+import threading
 from typing import Callable, Optional
 
 from pydantic import BaseModel, ValidationError
@@ -28,7 +31,7 @@ def search_family(model):
 
 
 # Exa results per search round. They bound what a round can add to the
-# input (SEARCH_INPUT_TOKENS); the publishers' own search may ignore them.
+# input; the publishers' own search may ignore them.
 SEARCH_RESULTS, SEARCH_RESULT_CHARACTERS = 5, 2000
 
 
@@ -132,6 +135,16 @@ class ReadOnlyTool:
     # The tool reports while it runs: execute(..., report=fields) updates its
     # running trace event with ``fields`` (a VM command's output so far).
     reports: bool = False
+    # The tool only reads, and its call needs nothing that another call of
+    # the same step changes or asks the user: neighbouring calls of such
+    # tools run at the same time (DelegationLoop._call_groups). Its execute
+    # must be thread-safe.
+    concurrent: bool = False
+    # With ``concurrent``: what the tool counts or keeps in order (a limit
+    # per step or message, the message's first result) happens inside
+    # call_order, which the calls of a group pass in call order. A call of a
+    # tool without it gives up its place as it starts.
+    ordered: bool = False
 
     def schema(self):
         if (not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.name)
@@ -140,6 +153,60 @@ class ReadOnlyTool:
             raise ValueError("Tools require strict server-owned argument schemas")
         return {"type": "function", "function": {"name": self.name, "description": self.description,
                 "parameters": argument_schema(self.arguments)}}
+
+
+# The place of the running call in its group (DelegationLoop._execute_together):
+# (CallOrder, index), None outside a group.
+_CALL_TURN = contextvars.ContextVar("agent_call_turn", default=None)
+
+
+class CallOrder:
+    """The places of one group's calls: a call passes call_order once every
+    earlier call of the group has passed it or given up its place."""
+
+    def __init__(self, count):
+        self._condition = threading.Condition()
+        self._given = [False] * count
+
+    def enter(self, index):
+        """The running thread's call takes place ``index`` (in its own context)."""
+        _CALL_TURN.set((self, index))
+
+    def give(self, index):
+        with self._condition:
+            self._given[index] = True
+            self._condition.notify_all()
+
+    def wait(self, index, cancellation=None):
+        with self._condition:
+            while not all(self._given[:index]):
+                if cancellation is not None:
+                    cancellation.raise_if_cancelled()
+                self._condition.wait(.1)
+
+
+def give_turn():
+    """The running call gives up its place in its group, if it has one."""
+    turn = _CALL_TURN.get()
+    if turn is not None:
+        turn[0].give(turn[1])
+
+
+@contextlib.contextmanager
+def call_order(cancellation=None):
+    """Inside, the calls of a group come one after another in call order,
+    as if the whole group ran so: whichever thread arrives first, a limit
+    refuses the later call. Outside a group it waits for nothing."""
+    turn = _CALL_TURN.get()
+    if turn is None:
+        yield
+        return
+    order, index = turn
+    order.wait(index, cancellation)
+    try:
+        yield
+    finally:
+        order.give(index)
 
 
 def _decode_stringified(arguments, value, unique):

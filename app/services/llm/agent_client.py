@@ -719,13 +719,13 @@ class AgentCompletion:
         # so the time between claim and settlement splits into ours before
         # the request, the provider's and ours after it (T3).
         self.request_started_at = self.first_token_at = self.stream_ended_at = None
-        # Several calls per step (DelegationLoop._parallel_calls: while the
-        # workspace is open, audit T2); off, the request asks for one call.
+        # Several calls per step: every step of the agent asks for them
+        # (DelegationLoop._step); off, the request asks for one call.
         self.parallel_tool_calls = False
         # Calls past tool_call_limit stay in tool_calls, without arguments,
         # their ids in over_limit_ids, so that each gets a result instead of
-        # vanishing from the conversation (DelegationLoop, T2). Off, they are
-        # skipped as before.
+        # vanishing from the conversation (DelegationLoop.run). Off, they are
+        # skipped.
         self.keep_over_limit = False
         self._over_limit = set()
         self.over_limit_ids = set()
@@ -1091,11 +1091,19 @@ class AgentCompletion:
                             model.model, count, ";".join(sorted(self._shapes))[:1500])
 
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
-               native_searches=0, allow_tool_calls=False, prompt_cache=True, session_id=None):
+               native_searches=0, allow_tool_calls=False, prompt_cache=True, session_id=None, tool_choice=None):
         """``session_id`` keeps the request on the endpoint of the chat's
         earlier steps (openrouter_contract.provider_session_id); without one,
         a helper call keeps its own (``self.session_id``). The adapter owns
-        it: a ``session_id`` in the registry config never reaches the body."""
+        it: a ``session_id`` in the registry config never reaches the body.
+
+        ``allow_tool_calls=False``: the step may only write; calls it makes
+        are dropped. ``tool_choice`` overrides the choice that follows from
+        it ("none" without search). The Agent's steps send "auto" in every
+        step of a message, also where they may only write: Anthropic's
+        cached prefix includes tool_choice. With an explicit "auto", a reply
+        of dropped calls alone ends as ``tool_calls`` without text
+        (``skipped_tool_parts``) instead of failing, for the caller's retry."""
         session_id = session_id or self.session_id
         payload = {
             "model": model.model, "messages": messages,
@@ -1124,10 +1132,10 @@ class AgentCompletion:
         if tools:
             payload["tools"] = tools
             if any(tool.get("type") == "function" for tool in tools):
-                payload["tool_choice"] = "auto" if allow_tool_calls or native_searches else "none"
-                # Off unless the loop asks (DelegationLoop._parallel_calls). It
-                # is part of Anthropic's tool_choice: a change rewrites the
-                # cached messages, so it changes only with open_workspace.
+                payload["tool_choice"] = tool_choice or ("auto" if allow_tool_calls or native_searches else "none")
+                # Part of Anthropic's tool_choice: a change rewrites the cached
+                # messages, so the agent's steps send the same value in every
+                # request (DelegationLoop._step).
                 payload["parallel_tool_calls"] = bool(self.parallel_tool_calls)
         if native_searches:
             payload["max_tool_calls"] = native_searches
@@ -1238,8 +1246,8 @@ class AgentCompletion:
                                     # moves it into the timeline (_move_preamble).
                                     yield self.event("status", "tool_call", status="working")
                             else:
-                                # A step that may only write (tool_choice none) and
-                                # calls anyway: the call is not run; its text stands.
+                                # A step that may only write and calls anyway:
+                                # the call is not run; its text stands.
                                 self.skipped_tool_parts += 1
                         yield from self.reasoning_events(delta)
                         chunk = delta.get("content")
@@ -1287,8 +1295,12 @@ class AgentCompletion:
                         logging.info("Agent calls past the step's limit model=%s step=%s count=%s limit=%s",
                                      model.model, self.step_id, len(self.over_limit_ids), self.tool_call_limit)
                 elif not allow_tool_calls and self.finish_reason == "tool_calls" and self.text.strip():
-                    # A call it was not offered (see above): its text is the answer.
+                    # A call it may not make (see above): its text is the answer.
                     self.finish_reason = "stop"
+                calls_only = (tool_choice == "auto" and not allow_tool_calls and self.skipped_tool_parts
+                              and not self.text.strip())
+                if calls_only:
+                    self.finish_reason = "tool_calls"
                 if self.skipped_tool_parts:
                     logging.warning("Agent tool call fragments skipped model=%s step=%s count=%s kept=%s",
                                     model.model, self.step_id, self.skipped_tool_parts, len(self.tool_calls or []))
@@ -1303,8 +1315,8 @@ class AgentCompletion:
                     self.output_limited = True
                     raise (ModelOutputLimit() if self.finish_reason in {"length", "max_tokens"}
                            else ModelEmptyAnswer())
-                if not self.tool_calls and (self._tool_parts or self.finish_reason not in {"stop", "length"}
-                                            or not self.text.strip()):
+                if not self.tool_calls and not calls_only and (
+                        self._tool_parts or self.finish_reason not in {"stop", "length"} or not self.text.strip()):
                     raise AgentStreamIncomplete(self._end_diagnostic())
             finally:
                 lines.close()

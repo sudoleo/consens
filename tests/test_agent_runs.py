@@ -83,14 +83,6 @@ def priced(amount):
     return amount * NANO_USD_PER_MICRO_EUR
 
 
-def allowance(model, inputs, outputs=0):
-    """The micro-euros the account holds for ``inputs`` and ``outputs``
-    tokens of ``model`` at their reservation's worst-case price."""
-    from app.services.agent_budget_config import micro_eur
-    from app.services.agent_costs import worst_case_nanos
-    return micro_eur(worst_case_nanos(model, inputs, outputs))
-
-
 def test_usage_uses_reported_tokens_and_does_not_double_count_reasoning():
     usage = receipt().usage
     assert usage["input_tokens"] == 1000

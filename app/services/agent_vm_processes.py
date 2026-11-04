@@ -1,13 +1,13 @@
 """Background processes in the agent's VM: a dev server, a long test run
 (vm_start_process, vm_process_output, vm_stop_process; since 2026-10-26).
 
-A process started with ``&`` in vm_exec stops when the VM pauses, which it
-does after a few idle seconds, so between two of the agent's steps. A
-background process here runs under a small supervisor script in the VM
-(RUNNER) that holds the VM awake through the Sprites Tasks API on
-``/.sprite/api.sock`` while the process lives: a hold of HOLD_EXPIRE,
-refreshed every HEARTBEAT_SECONDS, released when the process ends. A crashed
-supervisor's hold expires by itself.
+A process started with ``&`` in vm_exec ends with its command (agent-run,
+agent_vm.agent_argv). A background process here runs under a small
+supervisor script in the VM (RUNNER) that holds the VM awake through the
+Sprites Tasks API on ``/.sprite/api.sock`` while the process lives (else the
+VM pauses after a few idle seconds, so between two of the agent's steps): a
+hold of HOLD_EXPIRE, refreshed every HEARTBEAT_SECONDS, released when the
+process ends. A crashed supervisor's hold expires by itself.
 
 Since the security audit of 2026-10-27 the supervisor is the server's: it
 runs as the provider's user, its files lie in the provider's home, which the
@@ -97,6 +97,10 @@ api -X DELETE "http://sprite/v1/tasks/$task"
 
 PROCESSES_NOTE = ("It runs in the background: read its output with vm_process_output and end it with "
                   "vm_stop_process; it ends by itself after max_seconds.")
+# Its command left processes in the background (agent_vm.BACKGROUND_ENDED).
+FOREGROUND_NOTE = ("Its command left processes running in the background (with & or nohup), and they were ended "
+                   "when it ended: run the server in the foreground of the command, then it runs as long as the "
+                   "process.")
 
 
 class VmStartProcessArgs(BaseModel):
@@ -130,7 +134,8 @@ def process_dir(process_id):
 def launch_script(command, cwd, seconds):
     """``launch.sh``: the command as the agent's user in ``cwd``, with the
     login environment and under its time limit (agent_vm.wrapped_command),
-    as one line of quoted words."""
+    as one line of quoted words. What it leaves running ends with it, its
+    output goes to output.log whole."""
     argv = agent_vm.wrapped_command(command, seconds, True, cwd=cwd)
     return "exec " + " ".join(shlex.quote(arg) for arg in argv) + "\n"
 
@@ -167,18 +172,26 @@ def start_command(directory, task, *, wait=2, root=PROCESSES_DIR):
 
 
 def stop_command(directory, task):
-    """TERM to the command (sudo hands it on to coreutils ``timeout``, which
-    ends the command's process group); after STOP_GRACE_SECONDS KILL to
-    everything in the supervisor's session, as root where there is sudo:
-    the command runs as the agent's user."""
+    """TERM to the command (sudo hands it on to agent-run and that to
+    coreutils ``timeout``, which ends the command's process group, and
+    agent-run what it left); after STOP_GRACE_SECONDS KILL to everything in
+    the supervisor's session, as root where there is sudo: the command runs
+    as the agent's user. Signals go only while the session is still this
+    process's supervisor (its run.sh): after a cold start or a restore its
+    pids may belong to other processes. Its child's pid cannot be another's
+    while the supervisor lives, which waits for it."""
     d = shlex.quote(directory)
     return (f"dir={d}; [ -d \"$dir\" ] || exit 5; pid=$(cat \"$dir/pid\" 2>/dev/null); "
-            "sid=$(cat \"$dir/sid\" 2>/dev/null); "
+            "sid=$(cat \"$dir/sid\" 2>/dev/null); ours=; "
+            "case \"$sid\" in ''|*[!0-9]*) ;; *) tr '\\0' '\\n' 2>/dev/null < \"/proc/$sid/cmdline\" "
+            "| grep -qxF -- \"$dir/run.sh\" && ours=1;; esac; "
+            "case \"$pid\" in ''|*[!0-9]*) pid=;; esac; [ -n \"$ours\" ] || pid=; "
             "[ -f \"$dir/exit_code\" ] || { : > \"$dir/stopped\"; [ -n \"$pid\" ] && kill -TERM \"$pid\" 2>/dev/null; }; "
-            f"for _ in $(seq {STOP_GRACE_SECONDS}); do [ -f \"$dir/exit_code\" ] && break; sleep 1; done; "
-            "if [ ! -f \"$dir/exit_code\" ]; then [ -n \"$pid\" ] && kill -KILL \"$pid\" 2>/dev/null; "
-            "if [ -n \"$sid\" ]; then sudo -n pkill -KILL -s \"$sid\" 2>/dev/null || pkill -KILL -s \"$sid\" "
-            "2>/dev/null; fi; date +%s > \"$dir/ended\"; echo 137 > \"$dir/exit_code\"; "
+            "if [ -n \"$ours\" ]; then "
+            f"for _ in $(seq {STOP_GRACE_SECONDS}); do [ -f \"$dir/exit_code\" ] && break; sleep 1; done; fi; "
+            "if [ ! -f \"$dir/exit_code\" ]; then if [ -n \"$ours\" ]; then [ -n \"$pid\" ] && kill -KILL \"$pid\" 2>/dev/null; "
+            "sudo -n pkill -KILL -s \"$sid\" 2>/dev/null || pkill -KILL -s \"$sid\" 2>/dev/null; fi; "
+            "date +%s > \"$dir/ended\"; echo 137 > \"$dir/exit_code\"; "
             "curl -s --max-time 5 --unix-socket /.sprite/api.sock -X DELETE "
             f"http://sprite/v1/tasks/{shlex.quote(task)} >/dev/null 2>&1; fi; " + status_command(directory))
 
@@ -337,16 +350,25 @@ class ProcessTools:
             agent_vm_time.refund(self.vm.loop.store, self.vm.loop.uid, unused, day)
 
     def _result(self, process_id, text, extra=None):
+        from app.services import agent_secrets
         from app.services.agent_vm_tools import clean, model_text
         state, size, output = parse_status(text)
         raw = output.encode("utf-8")
+        uid = self.vm.loop.uid
         result = {"id": process_id, "status": state if state in {"running", "lost", "stopped"} else "exited",
-                  "output": model_text(raw, max(size, len(raw)), "output")}
+                  "output": model_text(raw, max(size, len(raw)), "output", uid)}
         if isinstance(state, int):
             result["exit_code"] = state
+        extra = dict(extra or {})
+        notes = [extra.pop("note")] if extra.get("note") else []
         if state == "lost":
-            result["note"] = "The process is gone without an exit code: the VM stopped it. Start it again."
-        return {**result, **(extra or {}), "_view": clean(output)[-2000:]}
+            notes.append("The process is gone without an exit code: the VM stopped it. Start it again.")
+        elif state != "running" and agent_vm.BACKGROUND_ENDED.search(output[-400:]):
+            notes.append(FOREGROUND_NOTE)
+        if notes:
+            result["note"] = " ".join(notes)
+        view = agent_secrets.mask(uid, clean(output), cut_start=size > len(raw), cut_end=state == "running")
+        return {**result, **extra, "_view": view[-2000:]}
 
     def start(self, args, *, cancellation, report=None):
         from app.services.agent_vm_tools import vm_path

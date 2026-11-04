@@ -389,6 +389,19 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       workspace time for today used up“ abgelehnt, der Browser und das Lesen
       von Dateien laufen weiter. Automatisiert: `test_agent_vm_processes.py`,
       `test_agent_vm.py`, `test_agent_browser.py`, `workspace-view.test.mjs`.
+- [ ] Befehle der Werkbank und ihre Reste (agent-run mit cgroup, echte
+      Sprite, nur dort prüfbar): „Führ `python3 -m http.server 8130 &` aus“ →
+      der Schritt endet in Sekunden mit Exit 0 und dem Hinweis auf
+      `vm_start_process`, `ps -u agent` danach zeigt keinen `http.server`.
+      Dasselbe mit `setsid nohup sleep 600 &`. Den Befehl
+      `setsid sleep 600 & sleep 120` mit Stop abbrechen: Nach wenigen Sekunden
+      läuft keiner der beiden mehr (`ps -u agent`), unter
+      `/sys/fs/cgroup/consens-run/` bleibt nichts. `yes` mit 10 s Limit: der
+      Schritt endet nach 10 s mit dem Hinweis, dass die VM die Mitte
+      weglässt, ohne dass der Server hängt. Ein Paket mit Dienst installieren
+      (`vm_install_packages` mit `redis-server`): `ps -ef | grep redis` zeigt
+      keinen laufenden Server. Automatisiert: `test_agent_vm_run.py` (als root
+      in einem Linux-Container), `test_agent_vm.py`.
 - [ ] Sicherheitsregeln des Arbeitsplatzes (2026-10-30, `docs/agent-mode.md`
       „Sicherheitsregeln des Arbeitsplatzes“; echte Sprite, ein NICHT-Admin-Konto
       für das Schließen, Admins werden nur gemeldet):
@@ -1437,6 +1450,12 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
 - [ ] Reviewers *Only in the workspace*: eine reine Chatfrage endet mit „Not
   reviewed · no work in the workspace“; eine Aufgabe, für die der Agent den
   Arbeitsplatz öffnet, bekommt ab diesem Schritt Prüferzeilen und am Ende Notes.
+- [ ] Mehrere Aufrufe je Schritt (`ReadOnlyTool.concurrent`): eine Frage, die
+  drei Seiten braucht, mit Claude (signiertes Reasoning), GPT und Gemini. Die
+  Aktivität zeigt die Lesungen eines Schritts gleichzeitig laufend, jede in
+  ihrer eigenen Zeile, der Schritt dauert etwa so lange wie die längste; die
+  nächste Anfrage lehnt kein Anbieter ab. Stop während der Lesungen beendet
+  alle, und keine Zeile bleibt laufend stehen.
 - [ ] Temporärer Chat: auf einem neuen Agent-Chat oben rechts die gestrichelte
   Sprechblase klicken → gedrückt, Begrüßung „Temporary chat. Gone when you
   leave it.“, Platzhalter „Ask in a temporary chat“, die Feldkante wird weich

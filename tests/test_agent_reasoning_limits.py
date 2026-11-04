@@ -451,7 +451,7 @@ def test_waiting_for_every_model_stops_when_only_the_answer_time_is_left(store):
     turn = saved(store, loop)
     comparison = turn["agent_review"]["comparisons"][0]
     assert turn["status"] == "completed" and reviewed(turn["agent_review"], turn["consensus"])
-    assert sorted(comparison["synthesis_providers"]) == ["anthropic", "openai"]
+    assert sorted(a["provider"] for a in comparison["answers"] if not a.get("late")) == ["anthropic", "openai"]
     assert "second option is cheaper" not in script.answer_context
     # Only the answer's time is left: one last step writes it without tools.
     assert script.answer_kwargs["allow_tool_calls"] is False

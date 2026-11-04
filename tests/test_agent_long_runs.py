@@ -118,7 +118,7 @@ def test_a_long_run_at_its_step_limit_writes_the_answer_from_its_own_work(store,
 
 def test_a_long_run_ends_with_its_answer_before_the_allowance_runs_out(store, fake_vm, monkeypatch):
     left = [10_000_000]
-    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: left[0])
+    monkeypatch.setattr(agent_quota, "shown_allowance", lambda db, uid: (left[0], 10_000_000))
     script = LongAgent([[("vm_exec", {"command": f"make step{n}"})] for n in range(10)])
     loop = vm_loop(store, script)
     original = loop._turn_limit
@@ -135,6 +135,22 @@ def test_a_long_run_ends_with_its_answer_before_the_allowance_runs_out(store, fa
     assert loop._long_run_limit() == TURN_ALLOWANCE_LIMIT
 
 
+def test_reservations_of_running_calls_do_not_end_a_long_run_early(store, fake_vm):
+    """The reviewers' rounds hold their reservations while they run: what a
+    long run may still spend is the limit less what was spent, as the
+    sidebar shows it (agent_quota.shown_allowance), not less those holds."""
+    loop = vm_loop(store, LongAgent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    limit = agent_quota.snapshot(store.db, UID)["limit"]
+    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
+    ref.set({"used": limit // 2, "reserved": limit // 2})
+    assert agent_quota.remaining_allowance(store.db, UID) == 0
+    assert loop._long_run_limit() is None
+    # Spent, it ends the run with its answer.
+    ref.set({"used": limit, "reserved": 0})
+    assert loop._long_run_limit() == TURN_ALLOWANCE_LIMIT
+
+
 def test_a_long_run_ends_with_its_answer_before_the_context_window_is_full(store, fake_vm):
     script = LongAgent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]])
     loop = vm_loop(store, script)
@@ -145,9 +161,10 @@ def test_a_long_run_ends_with_its_answer_before_the_context_window_is_full(store
 
 
 def test_a_short_turn_never_reads_the_allowance_between_steps(store, fake_vm, monkeypatch):
-    def unexpected(db, uid):
+    def unexpected(db, uid, **kwargs):
         raise AssertionError("read the allowance")
     monkeypatch.setattr(agent_quota, "remaining_allowance", unexpected)
+    monkeypatch.setattr(agent_quota, "shown_allowance", unexpected)
     loop = vm_loop(store, LongAgent([]))
     list(loop.run())
     assert saved(store, loop)["status"] == "completed"

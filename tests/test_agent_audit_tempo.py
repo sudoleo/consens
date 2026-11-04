@@ -1,19 +1,18 @@
 """Tempo, long runs and load of the reviewers (spec A-L1 to A-L3, 2026-10-29).
 
 In Prod (25.-29.10., docs/agent-audit-readiness-2026-10-29.md section 2) the
-marks stood a median 10 s after the answer's last word (p90 35 s, max 74 s)
-and the gate waited p90 9.6 s; three reviewers, long workbench runs and
-several audit turns at once never ran there. These tests play such turns
+marks stood a median 10 s after the answer's last word (p90 35 s, max 74 s);
+three reviewers, long workbench runs and several audit turns at once never
+ran there. These tests play such turns
 without a model call: scripted reviewers with the latencies measured then,
 scaled by SCALE, on a database whose every round trip takes ROUND_TRIP, and
 measure what the server adds to the models' own time:
 
-- A-L1: 40 workbench steps with three and with six reviewers, one gated
-  step, a reviewer still in a live round when the answer is fixed and one
-  whose final request hangs (the hedge answers); a turn whose final
-  requests all hang ends at FINAL_ROUND_SECONDS. Per request the server's
-  share, the marks after the last word, the gate's wait, and no thread of
-  the turn alive after it.
+- A-L1: 40 workbench steps with three and with six reviewers, a reviewer
+  still in a live round when the answer is fixed and one whose final
+  request hangs (the hedge answers); a turn whose final requests all hang
+  ends at FINAL_ROUND_SECONDS. Per request the server's share, the marks
+  after the last word, and no thread of the turn alive after it.
 - A-L2: a workbench run of 200 steps with the longest command output there
   is that takes every reviewer into a new conversation, a failure pause and
   out of following; the final round still comes with its earlier marks, and
@@ -52,7 +51,6 @@ from app.services.llm.agent_client import AgentCompletion, measured_usage, resol
 pytestmark = pytest.mark.tempo
 from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_audit import ANSWER, LookupArgs, earlier_marks, entry_of
-from test_agent_gate import MemoryArgs, stand_in  # noqa: F401  (fixture)
 from test_agent_runs import Database, UID, pending
 from test_chat_history import FakeTransaction
 
@@ -85,10 +83,6 @@ THREE = {"openai": "gpt-5.6-luna", "xiaomi": "mimo-v2.6-pro", "qwen": "qwen3.8-2
 DAILY = {"openai": "gpt-5.6-luna", "anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"}
 SIX = {**THREE, "glm": "glm-5.3-flash", "deepseek": "deepseek-v4.1-flash", "anthropic": "claude-haiku-4-5"}
 STEPS = 40
-# The step that changes memory: it waits for the reviewers' gate as the
-# stand-in for a call that waits (test_agent_gate.stand_in; memory itself
-# has not waited since 2026-11-02).
-GATE_STEP = 20
 # Every thread a turn starts by name: run, watcher, journal, work log,
 # reviewers and their final requests (agent-review-<provider>[-<kind>]).
 TURN_THREADS = "agent-"
@@ -117,8 +111,8 @@ def _one_lock_per_account(monkeypatch):
 @pytest.fixture
 def scaled(monkeypatch):
     """The audit's own times on the same scale; no hedge history from other tests."""
-    for name in ("FINAL_HEDGE_SECONDS", "FINAL_HEDGE_MIN_SECONDS", "FINAL_ROUND_SECONDS", "GATE_SECONDS",
-                 "FAILURE_PAUSE_SECONDS"):
+    # SETTLE_SECONDS stays at the suite's .05 s (conftest): Prod's 2 s on this scale.
+    for name in ("FINAL_HEDGE_SECONDS", "FINAL_HEDGE_MIN_SECONDS", "FINAL_ROUND_SECONDS", "FAILURE_PAUSE_SECONDS"):
         monkeypatch.setattr(agent_audit, name, prod(getattr(agent_audit, name)))
     monkeypatch.setattr(agent_audit, "_final_seconds", {})
     monkeypatch.setattr(agent_delegation, "THINKING_UPDATE_SECONDS", prod(agent_delegation.THINKING_UPDATE_SECONDS))
@@ -187,7 +181,7 @@ def counted_tokens(monkeypatch):
     busy for every other thread of the process."""
     from app.services import agent_tokens
 
-    def estimate(messages, tools=(), request_config=None):
+    def estimate(messages, tools=(), request_config=None, memo=None):
         payload = [messages, tools, (request_config or {}).get("response_format")]
         chars = len(json.dumps(payload, ensure_ascii=False, separators=(",", ":"), default=str))
         return (chars // 3 * 5 + 3) // 4 + 256 + 16 * len(messages)
@@ -209,10 +203,9 @@ def reasoning(step_id, i):
 class Turn:
     """A scripted turn: the agent's first ``steps`` steps run a
     workbench command each (``vm_exec``, ``output`` characters on stdout and
-    on stderr), the step ``gate_step`` changes memory instead, then it writes
-    ANSWER. A reviewer answers a live round after its median (every fifth
-    after its p90), a gate round after its live median, its final round
-    after its median. ``long_live``: a reviewer whose live rounds from the
+    on stderr), then it writes ANSWER. A reviewer answers a live round after
+    its median (every fifth after its p90), its final round after its
+    median. ``long_live``: a reviewer whose live rounds from the
     agent's third-last step on run until they are stopped (MiMo Pro took up
     to 53 s); ``hang``: reviewers whose first final request hangs until it is
     stopped (the hedge answers); ``stuck``: whose every final request hangs.
@@ -221,9 +214,9 @@ class Turn:
     ``compare_step``: the step that asks the models instead (compare_models);
     each answers after its ADVICE median."""
 
-    def __init__(self, reviewers, *, uid=UID, steps=STEPS, gate_step=None, long_live=None, hang=(), stuck=(),
+    def __init__(self, reviewers, *, uid=UID, steps=STEPS, long_live=None, hang=(), stuck=(),
                  output=200, live=None, timed=True, compare_step=None):
-        self.reviewers, self.uid, self.steps, self.gate_step = dict(reviewers), uid, steps, gate_step
+        self.reviewers, self.uid, self.steps = dict(reviewers), uid, steps
         self.compare_step, self.advised = compare_step, []
         self.long_live, self.hang, self.stuck = long_live, set(hang), set(stuck)
         self.output, self.live, self.timed = output, dict(live or {}), timed
@@ -299,9 +292,7 @@ class Turn:
                 # The agent's own search found a page: outside content is in view.
                 value.sources = [{"url": "https://www.toureiffel.paris/en", "title": "Official site"}]
                 value._results_at = 0
-            if index == self.gate_step:
-                name, args = "update_memory", {"changes": [{"op": "add", "text": "Builds a site in the workspace."}]}
-            elif index == self.compare_step:
+            if index == self.compare_step:
                 name, args = "compare_models", {"question": "How tall is the Eiffel Tower?"}
             else:
                 name, args = "vm_exec", {"command": f"make step-{index}"}
@@ -321,7 +312,7 @@ class Turn:
 
     def reviewer(self, value, family, messages):
         last = messages[-1]["content"]
-        kind = "final" if last.startswith("Final round.") else "gate" if "Before it runs:" in last else "live"
+        kind = "final" if last.startswith("Final round.") else "live"
         with self.lock:
             self.calls[family][kind] += 1
             number = self.calls[family][kind]
@@ -348,8 +339,6 @@ class Turn:
         if kind == "final":
             reply = {"marks": [{"quote": "Tickets to the top cost 14 euros", "kind": "doubtful",
                                 "note": f"{family} doubts the price."}]}
-        elif kind == "gate":
-            reply = {"marks": [], "gate": "go"}
         elif family in self.live:
             reply = self.live[family](messages, number)
             if isinstance(reply, BaseException):
@@ -367,17 +356,13 @@ class CommandArgs(LookupArgs):
 
 
 def tools(script):
-    """The turn's workbench command and memory change, both scripted."""
+    """The turn's workbench command, scripted."""
     def command(args, *, cancellation):
         if script.timed:
             time.sleep(TOOL)
         return {"exit_code": 0, "stdout": ("ok " * script.output)[:script.output],
                 "stderr": ("warn " * script.output)[:script.output], "seconds": 1.0}
-
-    def remember(args, *, cancellation):
-        return {"status": "saved"}
-    return [ReadOnlyTool("vm_exec", "Run a command in the workspace.", CommandArgs, command),
-            ReadOnlyTool("update_memory", "Remember.", MemoryArgs, remember)]
+    return [ReadOnlyTool("vm_exec", "Run a command in the workspace.", CommandArgs, command)]
 
 
 def tempo_loop(store, script, *, model="claude-haiku-4-5"):
@@ -479,14 +464,12 @@ def alive_after(before):
 
 def summary(script):
     """The turn's measurements in test seconds (pytest -s prints them)."""
-    rounds = [server for kind, server, _ in script.requests if kind in {"live", "gate", "repair"}]
+    rounds = [server for kind, server, _ in script.requests if kind in {"live", "repair"}]
     finals = [server for kind, server, _ in script.requests if kind in {"final", "hedge"}]
     spans = sorted(script.agent_spans)
     # From one of the agent's steps to its next request, without the command in between.
     steps = [later[1] - earlier[2] - (TOOL if script.timed and earlier[0] < script.steps else 0)
              for earlier, later in zip(spans, spans[1:])]
-    checked = [json.loads(text) for entry, text in script.loop.work_log.entries_after(0)
-               if entry.get("name") == "checked"]
     return {"marks after the last word": script.marked - script.fixed,
             "first final requests after fixing": max(started[0] for started in script.final_started.values())
             - script.fixed,
@@ -494,7 +477,6 @@ def summary(script):
                                       "rounds": len(rounds)},
             "server per final request": {"median": statistics.median(finals), "max": max(finals)},
             "server per agent step": {"median": statistics.median(steps), "max": max(steps), "sum": sum(steps)},
-            "gate wait": checked[0]["gate_ms"] / 1000 if checked else None,
             "turn": script.ended - script.started}
 
 
@@ -515,16 +497,16 @@ def report(name, values):
 
 @pytest.mark.parametrize("reviewers", [THREE, SIX], ids=["three", "six"])
 def test_forty_workbench_steps_keep_their_tempo_with_three_and_six_reviewers(slow_store, scaled, measured,
-                                                                              stand_in, reviewers):
+                                                                              reviewers):
     """Measured 2026-10-29 on Windows (4 cores), three / six reviewers:
     marks after the last word 0.95-1.02 / 1.02-1.11 s (0.83 s of it the
     hedge's path), the last first final request 0.13 / 0.20-0.25 s after
     fixing, server per live round median 32-47 / 63-79 ms (max 0.24 s), per
-    agent step 38-53 / 69-100 ms (37 ms without reviewers), gate 0.19-0.27 s,
-    turn 6.2-7.0 / 7.3-9.0 s for 3.1 s of the models' and commands' own
-    time, the account lock held about 60 / 85 % of it."""
-    script = Turn(reviewers, gate_step=GATE_STEP, long_live="xiaomi", hang={"openai"})
-    loop = tempo_loop(slow_store, script)
+    agent step 38-53 / 69-100 ms (37 ms without reviewers), turn 6.2-7.0 /
+    7.3-9.0 s for 3.1 s of the models' and commands' own time, the account
+    lock held about 60 / 85 % of it."""
+    script = Turn(reviewers, long_live="xiaomi", hang={"openai"})
+    tempo_loop(slow_store, script)
     watch_marks(slow_store, [script])
     before = set(threading.enumerate())
     turn = play(slow_store, script)
@@ -558,12 +540,6 @@ def test_forty_workbench_steps_keep_their_tempo_with_three_and_six_reviewers(slo
     assert critical <= values["marks after the last word"] < critical + 1 < agent_audit.FINAL_ROUND_SECONDS
     assert len({claim["anchor"] for claim in review["audit"]["claims"]}) == 1
     assert len(review["audit"]["claims"][0]["dissent"]) == len(reviewers)
-
-    # The gate: every reviewer said go within GATE_SECONDS (a late one
-    # would have asked the user, and play() fails on any pause).
-    [checked] = [json.loads(text) for entry, text in loop.work_log.entries_after(0) if entry.get("name") == "checked"]
-    assert [verdict["verdict"] for verdict in checked["verdicts"]] == ["go"] * len(reviewers)
-    assert values["gate wait"] < agent_audit.GATE_SECONDS
 
     # Nothing of the turn runs on: reviewers, their final requests (the
     # overtaken one too), journal, work log, watcher.
@@ -641,8 +617,8 @@ def test_three_advisers_beside_three_reviewers_keep_their_tempo(slow_store, scal
 
 LONG_STEPS = 199
 # A reviewer's conversation (session_budget): small, so that live rounds
-# fill it often, and its final round still fits with the run's beginning,
-# its marks and the rest of the log, read short.
+# fill it often, and its final round still fits with its carry and the rest
+# of the log, read short.
 LONG_BUDGET = 60_000
 # The live requests of each reviewer that fail: two in a row, a pause.
 FAILING = (20, 21)
@@ -687,13 +663,19 @@ def test_a_long_workbench_run_takes_each_reviewer_through_new_conversations_a_pa
     monkeypatch.setattr(agent_audit.ReviewerSession, "_fresh", counted_fresh)
     monkeypatch.setattr(agent_audit.ReviewerSession, "_round", forced_round)
 
-    def live(messages, number):
-        if number in FAILING:
-            return RuntimeError("provider down")
-        return {"marks": [{"entry": entry_of(messages, "step"), "kind": "doubtful", "note": f"Round {number}."}]
-                if number % 10 == 0 else []}
-    script = Turn(THREE, steps=LONG_STEPS, output=MODEL_STREAM_CHARS, live={family: live for family in THREE},
-                  timed=False)
+    marked = defaultdict(int)
+
+    def reviewer(family):
+        def live(messages, number):
+            if number in FAILING:
+                return RuntimeError("provider down")
+            if number % 10:
+                return {"marks": []}
+            marked[family] += 1
+            return {"marks": [{"entry": entry_of(messages, "step"), "kind": "doubtful", "note": f"Round {number}."}]}
+        return live
+    script = Turn(THREE, steps=LONG_STEPS, output=MODEL_STREAM_CHARS,
+                  live={family: reviewer(family) for family in THREE}, timed=False)
     # The agent on a 1M window, as the workbench's models in Prod: on Haiku's
     # 200k this run ends near step 190 despite the compaction (TURN_CONTEXT_LIMIT).
     loop = tempo_loop(store, script, model="deepseek-v4.1-flash")
@@ -735,7 +717,9 @@ def test_a_long_workbench_run_takes_each_reviewer_through_new_conversations_a_pa
         # The final round came, in a new conversation with its marks so far.
         final = script.messages[family][-1]
         assert final.startswith("Final round.") and earlier_marks({"content": final}) == session.live_marks
-        assert len(session.live_marks) >= 10
+        # How many rounds there are depends on the machine's pace; every
+        # mark a round returned is carried, however many that were.
+        assert len(session.live_marks) == marked[family] >= 3
     # The work log holds every entry whole: the commands' output, each step.
     assert chars > LONG_STEPS * 2 * MODEL_STREAM_CHARS
     assert alive == []

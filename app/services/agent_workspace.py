@@ -26,9 +26,10 @@ can do, the agent can do with it: that holds on any computer.
 Record and lease: ``users/{uid}/chat_state/agent_workspace`` names the VM
 before the provider creates it, so the account's deletion always finds it,
 and leases the workspace to one chat's message at a time (``lease``: chat,
-turn, until). A lease ends with its message (release) or by itself
-LEASE_SECONDS after its last VM call, so a run that died never blocks the
-workspace. The user's live view takes no lease: it is their computer. A
+turn, until). A lease ends with its message (release), by itself
+LEASE_SECONDS after its last VM call, or once its chat runs no response any
+more (its run lock ran out: the server died with it), so a run that died
+never blocks the workspace for long. The user's live view takes no lease: it is their computer. A
 record that still names the browser VM of before (``browser``) has it
 deleted at the workspace's next start (retire_old_browser): the sign-ins are
 made again once.
@@ -258,14 +259,23 @@ def _held_by_other(lease, chat_id, now):
     return lease.get("chat_id")
 
 
+def _runs(store, uid, chat_id, now, transaction=None):
+    """Whether ``chat_id`` still runs a response: its run lock
+    (``agent_lock_until``), which the running response keeps moving on and
+    which runs out within minutes of a server that died with it."""
+    chat = store._chat_ref(uid, chat_id).get(transaction=transaction).to_dict() or {}
+    lock = chat.get("agent_lock_until")
+    return isinstance(lock, datetime) and lock > now
+
+
 def claim(store, uid, chat_id, turn_id, *, provider):
     """In one transaction: the account may write, the chat is still active,
     the account's workspace is recorded on the account and the chat (before
     the provider creates it) and leased to this message. Raises
-    WorkspaceBusy when another chat's message holds it. Returns a Claim:
-    whether the workspace was restored since this chat last used it, the
-    chat's title and start for its folder (open_chat) and the names of the
-    account's keys."""
+    WorkspaceBusy when another chat's message holds it, as long as that chat
+    still runs its response (_runs). Returns a Claim: whether the workspace
+    was restored since this chat last used it, the chat's title and start
+    for its folder (open_chat) and the names of the account's keys."""
     from app.services import persistence_guard
     from app.services.chat_store import ChatNotFound
     name = agent_vm.workspace_name(uid)
@@ -279,7 +289,8 @@ def claim(store, uid, chat_id, turn_id, *, provider):
             raise ChatNotFound("Chat not found")
         record = workspace.get(transaction=tx).to_dict() or {}
         now = _now()
-        if _held_by_other(record.get("lease"), chat_id, now):
+        holder = _held_by_other(record.get("lease"), chat_id, now)
+        if holder and _runs(store, uid, holder, now, transaction=tx):
             raise WorkspaceBusy()
         used = (chat_data.get("agent_vm") or {}) if isinstance(chat_data.get("agent_vm"), dict) else {}
         # Restores of the workspace so far, and how many this chat was told of.
@@ -442,12 +453,10 @@ def in_use(store, uid, now=None):
     if not isinstance(lease, dict) or not lease.get("chat_id"):
         return False
     try:
-        chat = store._chat_ref(uid, lease["chat_id"]).get().to_dict() or {}
+        return _runs(store, uid, lease["chat_id"], now)
     except Exception as exc:
         logging.warning("Agent workspace lease chat unreadable category=%s", safe_exception(exc))
         return True
-    lock = chat.get("agent_lock_until")
-    return isinstance(lock, datetime) and lock > now
 
 
 def mark_restored(store, uid):
@@ -757,8 +766,8 @@ def record_folder(store, uid, chat_id, folder):
 # round trip each), as the agent's user like each of them was: the chat's
 # folder follows its title ($1 the folder now, $2 the one its title wants;
 # "taken" keeps it where it is), its marker comes on stdin, then the keys
-# the account gave ($5...: name NUL value NUL, as agent_secrets.LOAD_SCRIPT)
-# and last the notes' beginning ($3, at most $4 bytes, to the end).
+# the account gave ($5...: "key " name NUL value NUL) and last the notes'
+# beginning ($3, at most $4 bytes, to the end).
 CHAT_SCRIPT = (
     'old=$1; new=$2; notes=$3; limit=$4; shift 4; dir=$old; state=same; '
     'if [ "$new" != "$old" ]; then '
@@ -829,10 +838,10 @@ def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), ca
     """At a message's first workbench call: the chat's folder follows its
     title (``folder``: the name the chat recorded, empty for a folder named
     by its id from before 2026-10-28, which moves too) with its marker
-    rewritten, the account's keys read again for masking (as
-    agent_secrets.load) and the notes' beginning (notes_for_agent), in one
-    command. Returns ChatOpened: the folder's name now, the old one when the
-    new name is taken or the move failed."""
+    rewritten, the account's keys read again for masking (agent_secrets.scrub)
+    and the notes' beginning (notes_for_agent), in one command. Returns
+    ChatOpened: the folder's name now, the old one when the new name is
+    taken or the move failed."""
     from app.services import agent_secrets
     from app.services.llm.provider_runtime import ProviderCancellation
     wanted = wanted_folder(chat_id, title, temporary=temporary)

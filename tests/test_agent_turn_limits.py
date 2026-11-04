@@ -122,8 +122,9 @@ def test_step_cap_answers_from_existing_comparisons(store):
     # Three steering steps, then one step writes the answer; no fourth steering step.
     assert len(routing_steps(script)) == 4
     assert [steering(kwargs) for kwargs in requests] == [True, True, True, False]
-    # The last step keeps the tools listed (prompt cache) but cannot call them.
-    assert requests[-1]["tools"] and requests[-1]["native_searches"] == 0
+    # The last step sends what every step sends (prompt cache); its calls do not run.
+    assert requests[-1]["tools"] == requests[0]["tools"] and requests[-1]["allow_tool_calls"] is False
+    assert requests[-1]["native_searches"] == requests[0]["native_searches"]
     assert requests[-1]["messages"][-1]["content"].startswith("App rule: this message has reached its limit.")
 
 

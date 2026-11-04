@@ -94,6 +94,10 @@ class Merged(Script):
                     # Refused before any output: free (record_rejection).
                     raise _ProviderHTTPStatusError(429, retry_after=1)
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
+                if step.get("calls_only"):
+                    # A writing step that only called: the client drops the calls.
+                    self.skipped_tool_parts, self.finish_reason = 1, "tool_calls"
+                    return
                 if step.get("sources"):
                     self.sources = list(step["sources"])
                     self._results_at = 0
@@ -250,7 +254,8 @@ def test_the_step_that_reads_the_answers_writes_the_reviewed_answer(store):
     review_call = next(i for i, e in enumerate(events) if e.get("kind") == "tool" and e.get("name") == "audit_answer")
     assert max(i for i, e in enumerate(events) if e.get("type") == "delta") < review_call
     assert not retractions(events)
-    assert all(c.get("synthesis_providers") == ["anthropic", "openai"] for c in review["comparisons"])
+    assert all(sorted(a["provider"] for a in c["answers"] if not a.get("late")) == ["anthropic", "openai"]
+               for c in review["comparisons"])
     assert loop.completion.text == ANSWER
 
 
@@ -371,16 +376,14 @@ def test_an_answer_cut_at_its_limit_is_kept_unreviewed(store, text):
     assert not any(e.get("kind") == "tool" and e.get("name") == "audit_answer" for e in events)
 
 
-def test_every_step_may_write_a_whole_answer_but_is_admitted_like_a_routing_step(store):
-    from app.services.llm.agent_client import answer_output_limit, routing_output_limit
+def test_every_step_may_write_a_whole_answer(store):
+    from app.services.llm.agent_client import answer_output_limit
     script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}])
     loop = merged_loop(store, script)
     list(loop.run())
-    # Every request may write the answer...
+    # Every request may write the answer, admitted at what it is expected to cost.
     assert script.limits == {0: answer_output_limit(loop.model), 1: answer_output_limit(loop.model)}
-    # ...but admission and further search segments use the routing allowance.
-    assert loop._routing_model().max_output_tokens == routing_output_limit(loop.model)
-    assert loop._answer_output() == answer_output_limit(loop.model)
+    assert loop._routing_model().max_output_tokens == answer_output_limit(loop.model)
 
 
 def free_account(store, monkeypatch, remaining):
@@ -408,9 +411,10 @@ def test_a_free_account_keeps_its_research_after_a_first_message(store, monkeypa
     assert ref.get().to_dict()["reserved"] == 0
 
 
-def test_near_the_limit_a_direct_answer_keeps_its_whole_allowance(store, monkeypatch):
-    """Admitted like a routing step, the answer on top may overdraw; the
-    search still yields."""
+def test_near_the_limit_a_direct_answer_keeps_its_whole_allowance_and_search(store, monkeypatch):
+    """What is left covers what the step is expected to cost: it runs whole,
+    with every search round and the answer's whole output limit."""
+    from app.services.agent_audit import AGENT_SEARCH_ROUNDS
     from app.services.llm.agent_client import answer_output_limit
     ref = free_account(store, monkeypatch, 30_000)
     used = ref.get().to_dict()["used"]
@@ -419,8 +423,8 @@ def test_near_the_limit_a_direct_answer_keeps_its_whole_allowance(store, monkeyp
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
-    assert script.kwargs[0]["native_searches"] == 0
-    assert any(e.get("name") == "web_search" and e.get("status") == "blocked" for e in events)
+    assert script.kwargs[0]["native_searches"] == AGENT_SEARCH_ROUNDS
+    assert not any(e.get("name") == "web_search" and e.get("status") == "blocked" for e in events)
     assert script.limits[0] == answer_output_limit(loop.model) > 30_000
     ledger = ref.get().to_dict()
     # The answer's provider cost, $0.0001, is 87 micro-euros (rounded up).
@@ -436,11 +440,28 @@ def test_a_turn_limit_lets_the_agent_write_without_tools(store, monkeypatch):
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["consensus"] == ANSWER
     last = max(script.kwargs)
-    # Same tools listed (prompt cache), none callable, no search.
-    assert script.kwargs[last]["allow_tool_calls"] is False and script.kwargs[last]["tools"]
-    assert script.kwargs[last]["native_searches"] == 0
+    # The request of every step (prompt cache): same tools, search and tool
+    # choice; a call it makes is not run.
+    assert script.kwargs[last]["allow_tool_calls"] is False
+    for key in ("tools", "native_searches", "tool_choice"):
+        assert script.kwargs[last][key] == script.kwargs[0][key]
+    assert script.kwargs[last]["tool_choice"] == "auto" and script.kwargs[last]["native_searches"] > 0
     assert script.requests[last][-1]["content"].startswith("App rule: this message has reached its limit.")
     assert reviewed(saved["agent_review"], ANSWER) and deltas(events) == ANSWER
+
+
+def test_a_closing_step_that_only_calls_writes_once_more_without_tools(store):
+    """The closing step's request is every step's (tool choice "auto"); a
+    reply of calls alone, which it does not run, gets one more attempt that
+    may not call."""
+    script = Merged([{"tools": [COMPARE]}, {"tools": [COMPARE]}, {"calls_only": True}, {"text": ANSWER}])
+    loop = merged_loop(store, script)
+    loop.policy = replace(loop.policy, turn_steps=2)
+    list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved["consensus"] == ANSWER
+    assert [script.kwargs[index]["tool_choice"] for index in range(4)] == ["auto", "auto", "auto", "none"]
+    assert script.kwargs[2]["tools"] == script.kwargs[0]["tools"]
 
 
 def test_after_paid_comparisons_a_refused_routing_step_closes_the_turn(store, monkeypatch):

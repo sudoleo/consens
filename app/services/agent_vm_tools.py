@@ -61,7 +61,8 @@ the agent runs as its own user without sudo (agent_vm.agent_argv), so its
 tools reach only what that user may; a path it may not use is the agent's
 error, never the VM's failure. System packages come through
 vm_install_packages: typed apt package names that the server installs as
-root. The browser runs on the same VM as the provider's user
+root, whose services do not start (policy-rc.d, workspace_vm/workbench/
+setup.sh). The browser runs on the same VM as the provider's user
 (agent_browser.py), out of the agent's user's reach, and the VM reaches the
 open web (agent_vm.RULES; until 2026-11-04 the browser had a VM of its own
 and the agent's side reached only the package registries and the domains
@@ -84,7 +85,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.observability import safe_exception
 from app.services import agent_vm
-from app.services.agent_tools import ReadOnlyTool
+from app.services.agent_tools import ReadOnlyTool, call_order
 from app.services.error_alerts import report_server_exception
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 
@@ -182,6 +183,13 @@ VM_DAY_LIMIT = ("The VM time of this account for today is used up: commands, ins
 # there (VMTools.exec, install): until 2026-10-31 it read like its own limit.
 VM_DAY_CUT = ("The {what} was stopped after {seconds} seconds, when the VM time of this account for today ran "
               "out: commands run again tomorrow (the day starts at midnight UTC).")
+# A command that left processes running in the background (with & or
+# nohup): agent-run ended them with it (agent_vm.BACKGROUND_ENDED).
+BACKGROUND_ENDED_NOTE = ("It left processes running in the background (with & or nohup), and they were ended with "
+                         "it: a vm_exec call ends with its command. Start a server or anything else that should keep "
+                         "running with vm_start_process, in the foreground of its command.")
+OUTPUT_CUT_NOTE = ("Its {stream} was larger than {mb} MB: the VM passes on a command's first {mb} MB of each stream "
+                   "and then only its end, so the middle is missing. Write long output into a file instead.")
 # vm_write_file or vm_edit_file on the workspace's notes in a temporary chat
 # (VMTools._notes_kept, since 2026-11-01 evening).
 NOTES_KEPT = ("This is a temporary chat: the workspace's notes outlast it, so it leaves them as they are. Nothing "
@@ -334,11 +342,18 @@ def clean(text):
     return "\n".join(line.rsplit("\r", 1)[-1] for line in text.split("\n"))
 
 
-def tail(raw, total, limit):
+def tail(raw, total, limit, uid=None, *, running=False):
     """``(text, omitted)``: the end of ``raw`` as at most ``limit`` cleaned
-    characters, and how many earlier bytes of the ``total`` are left out."""
+    characters, and how many earlier bytes of the ``total`` are left out.
+    The account's keys (``uid``) are masked before the cut, so none is left
+    half visible (agent_secrets.mask), also at the start of ``raw`` when it
+    is the end of a longer output, and at its end while the command still
+    runs (``running``: more is to come)."""
     text = clean(raw.decode("utf-8", "replace")).lstrip("�")
     omitted = max(0, total - len(raw))
+    if uid is not None:
+        from app.services import agent_secrets
+        text = agent_secrets.mask(uid, text, cut_start=omitted > 0, cut_end=running)
     if len(text) > limit:
         cut = len(text) - limit
         omitted += len(text[:cut].encode("utf-8"))
@@ -346,8 +361,8 @@ def tail(raw, total, limit):
     return text, omitted
 
 
-def model_text(raw, total, stream):
-    text, omitted = tail(raw, total, MODEL_STREAM_CHARS)
+def model_text(raw, total, stream, uid=None):
+    text, omitted = tail(raw, total, MODEL_STREAM_CHARS, uid)
     return f"[… {omitted:,} earlier bytes of {stream} omitted …]\n{text}" if omitted else text
 
 
@@ -376,14 +391,18 @@ def file_lines(raw):
     return [line[:-1] if line.endswith("\r") else line for line in lines]
 
 
-def edit_snippet(edited, at, new):
+def edit_snippet(edited, at, new, mask=None):
     """The first change in ``edited`` (the bytes ``new`` at offset ``at``)
-    with EDIT_CONTEXT_LINES around it, numbered like ``cat -n``."""
+    with EDIT_CONTEXT_LINES around it, numbered like ``cat -n``; ``mask``
+    (agent_secrets.mask) goes over its lines before the snippet is cut."""
     first = edited[:at].count(b"\n") + 1
     lines = file_lines(edited) or [""]
     start = max(1, first - EDIT_CONTEXT_LINES)
     end = min(len(lines), first + new.count(b"\n") + EDIT_CONTEXT_LINES)
-    snippet = "".join(f"{number:>6}\t{lines[number - 1]}\n" for number in range(start, end + 1))
+    shown = lines[start - 1:end]
+    if mask is not None:
+        shown = [mask(line) for line in shown]
+    snippet = "".join(f"{number:>6}\t{line}\n" for number, line in enumerate(shown, start))
     if len(snippet) > EDIT_SNIPPET_CHARS:
         snippet = snippet[:EDIT_SNIPPET_CHARS - 1] + "…"
     return {"snippet": snippet, "first_line": start, "last_line": end}
@@ -468,9 +487,11 @@ def _safe_name(name, used):
 
 class _Output:
     """One command's output while it runs: each stream's end for the model,
-    both in arrival order for the view."""
+    both in arrival order for the view, the keys of the account ``uid``
+    masked in both (tail)."""
 
-    def __init__(self):
+    def __init__(self, uid=None):
+        self.uid = uid
         self.streams = {"stdout": bytearray(), "stderr": bytearray()}
         self.sizes = {"stdout": 0, "stderr": 0}
         self.view, self.view_size = bytearray(), 0
@@ -484,12 +505,25 @@ class _Output:
         del self.view[:-VIEW_BYTES]
         self.view_size += len(chunk)
 
-    def shown(self):
-        text, omitted = tail(bytes(self.view), self.view_size, VIEW_CHARS)
+    def shown(self, running=True):
+        text, omitted = tail(bytes(self.view), self.view_size, VIEW_CHARS, self.uid, running=running)
         return {"output": text, "output_truncated": bool(omitted)}
 
     def for_model(self, stream):
-        return model_text(bytes(self.streams[stream]), self.sizes[stream], stream)
+        return model_text(bytes(self.streams[stream]), self.sizes[stream], stream, self.uid)
+
+    def notes(self):
+        """What the result says of how the VM passed the output on: processes
+        the command left in the background that agent-run ended, a stream
+        larger than the VM sends whole (agent_vm.OUTPUT_BYTES)."""
+        notes = []
+        end = bytes(self.streams["stderr"][-400:]).decode("utf-8", "replace")
+        if agent_vm.BACKGROUND_ENDED.search(end):
+            notes.append(BACKGROUND_ENDED_NOTE)
+        for stream in ("stdout", "stderr"):
+            if self.sizes[stream] > agent_vm.OUTPUT_BYTES:
+                notes.append(OUTPUT_CUT_NOTE.format(stream=stream, mb=agent_vm.OUTPUT_BYTES // (1024 * 1024)))
+        return notes
 
 
 class _Job:
@@ -982,7 +1016,8 @@ class VMSession:
         left = self.left()
         if left is not None and left < DAY_NOTE_SECONDS:
             extra["vm_time_left_today"] = {"minutes": max(0, int(left // 60)),
-                                           "counts": "commands, installations and background processes"}
+                                           "counts": "commands, installations, background processes and the "
+                                                     "browser's actions"}
         return {**result, **extra}
 
     def summary(self):
@@ -1020,6 +1055,18 @@ class VMSession:
                 self._day = (None, 0.0)
         limit, before = self._day
         return None if limit is None else limit - before - self.seconds - self.reserved
+
+    def spend(self, seconds):
+        """Counts ``seconds`` of VM time, never past what is left today:
+        what still runs once the day's time is used up (the browser, a
+        process's output and stop, a command's last seconds) does not drive
+        the account over its limit."""
+        self.left()
+        with self._lock:
+            limit, before = self._day
+            if limit is not None:
+                seconds = min(seconds, max(0.0, limit - before - self.seconds - self.reserved))
+            self.seconds += max(0.0, seconds)
 
     def on_close(self, callback):
         """``callback()`` runs once the message ends, after its lease is
@@ -1147,7 +1194,7 @@ class VMTools:
                          "For Python packages use pip or uv yourself, for Node npm in your project.",
                          VmInstallPackagesArgs, self.install, activity=self._install_activity, reports=True),
             ReadOnlyTool("vm_read_file", "Read a text file in your workspace by lines.", VmReadFileArgs, self.read,
-                         activity=self._path_activity, reports=True),
+                         activity=self._path_activity, reports=True, concurrent=True, ordered=True),
             ReadOnlyTool("vm_write_file", "Write a text file in your workspace (creates folders, replaces the file).",
                          VmWriteFileArgs, self.write, argument_limit=TOOL_ARGUMENT_CHARS,
                          activity=self._path_activity, reports=True),
@@ -1170,7 +1217,8 @@ class VMTools:
             # Only for a chat model that takes images.
             *([ReadOnlyTool("vm_view_image", "Look at a picture in your workspace (PNG, JPEG, WebP or GIF up to 5 MB), "
                             "such as a chart you plotted or a screenshot: it follows as an image after the result.",
-                            VmViewImageArgs, self.view, activity=self._path_activity, reports=True)]
+                            VmViewImageArgs, self.view, activity=self._path_activity, reports=True,
+                            concurrent=True, ordered=True)]
               if sees_pictures(self.loop.model) else []),
             # Pictures of the web by their id, where the picture tools are (agent_web_images.py).
             *([ReadOnlyTool("vm_save_picture", "Put a picture from "
@@ -1265,11 +1313,12 @@ class VMTools:
         while the server's safety rules have closed the workspace
         (workspace_guard.py): every tool of the workspace starts here.
         ``spends``: the call runs a command, which counts as VM time
-        (agent_vm_time.py), and is refused once today's is used up. Files,
-        a background process's output and stop and the browser count
-        nothing and go on (since 2026-10-31: before, a background process
-        that reserved the rest of a Free account's 20 minutes left its own
-        agent unable to read or stop it)."""
+        (agent_vm_time.py), and is refused once today's is used up. Files
+        count nothing; a background process's output and stop and the
+        browser count what they run in the VM but go on once today's time
+        is used up, never counting past it (VMSession.spend): a background
+        process that reserved the rest of a Free account's 20 minutes would
+        otherwise leave its own agent unable to read or stop it."""
         from app.services import workspace_guard
         guard = workspace_guard.status(self.loop.uid)
         if guard.closed:
@@ -1325,8 +1374,7 @@ class VMTools:
         outcome = self._provider("exec", lambda: self.session.backend.exec(
             self.session.name, command, cwd=cwd, timeout=timeout, on_output=on_output, cancellation=cancellation,
             agent=agent), idempotent=idempotent)
-        with self.session._lock:
-            self.session.seconds += outcome.seconds
+        self.session.spend(outcome.seconds)
         return outcome
 
     def _timeout(self, requested):
@@ -1359,7 +1407,7 @@ class VMTools:
         # Today's VM time as the command starts: whether it set the limit.
         day = self.session.left()
         cwd = vm_path(args.cwd, self.session.dir) if args.cwd.strip() else self.session.dir
-        output = _Output()
+        output = _Output(self.loop.uid)
         reported = [self.session.clock()]
         # Its own stop, part of the run's: a halt ends only this command.
         command = ProviderCancellation()
@@ -1384,25 +1432,22 @@ class VMTools:
                 self.session.name, args.command, cwd=cwd, timeout=timeout, on_output=on_output,
                 cancellation=command))
         except (_VMOff, _Interrupted):
-            report(output.shown())
+            report(output.shown(running=False))
             raise
         except ProviderCancelled:
             seconds = self.session.clock() - started
-            if cancellation.cancelled or not command.cancelled:
-                # Stop or the response's time limit: the command ran in the
-                # VM until now, and its time counts (before, a stop booked none).
-                with self.session._lock:
-                    self.session.commands += 1
-                    self.session.seconds += seconds
-                raise
-            # Ended by a reviewer's halt: for the agent, the user stopped it.
             with self.session._lock:
                 self.session.commands += 1
-                self.session.seconds += seconds
+            # The command ran in the VM until now, and its time counts.
+            self.session.spend(seconds)
+            if cancellation.cancelled or not command.cancelled:
+                # Stop or the response's time limit.
+                raise
+            # Ended by a reviewer's halt: for the agent, the user stopped it.
             result = {"exit_code": None, "stopped": True, "duration_ms": int(seconds * 1000), "cwd": cwd,
                       "stdout": output.for_model("stdout"), "stderr": output.for_model("stderr"),
                       "note": "The user stopped this command before it finished."}
-            report({**output.shown(), "stopped": True, "duration_ms": result["duration_ms"]})
+            report({**output.shown(running=False), "stopped": True, "duration_ms": result["duration_ms"]})
             return self.session.announce(result)
         finally:
             unregister()
@@ -1411,15 +1456,18 @@ class VMTools:
                     self._running = None
         with self.session._lock:
             self.session.commands += 1
-            self.session.seconds += outcome.seconds
+        self.session.spend(outcome.seconds)
         result = {"exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
                   "duration_ms": int(outcome.seconds * 1000), "cwd": cwd,
                   "stdout": output.for_model("stdout"), "stderr": output.for_model("stderr")}
+        notes = output.notes()
         if outcome.timed_out:
-            result["note"] = (VM_DAY_CUT.format(what="command", seconds=timeout)
-                              if day is not None and timeout >= int(day)
-                              else f"The command was stopped after its time limit of {timeout} seconds.")
-        report({**output.shown(), "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
+            notes.insert(0, VM_DAY_CUT.format(what="command", seconds=timeout)
+                         if day is not None and timeout >= int(day)
+                         else f"The command was stopped after its time limit of {timeout} seconds.")
+        if notes:
+            result["note"] = " ".join(notes)
+        report({**output.shown(running=False), "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
                 "duration_ms": result["duration_ms"]})
         return self.session.announce(result)
 
@@ -1438,7 +1486,7 @@ class VMTools:
         self._start(cancellation)
         timeout = self._timeout(INSTALL_TIMEOUT)
         day = self.session.left()
-        output = _Output()
+        output = _Output(self.loop.uid)
         reported = [self.session.clock()]
 
         def on_output(stream, chunk):
@@ -1460,7 +1508,7 @@ class VMTools:
             result["note"] = (VM_DAY_CUT.format(what="installation", seconds=timeout)
                               if day is not None and timeout >= int(day)
                               else f"The installation was stopped after {timeout} seconds.")
-        report({**output.shown(), "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
+        report({**output.shown(running=False), "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
                 "duration_ms": result["duration_ms"]})
         return self.session.announce(result)
 
@@ -1475,13 +1523,17 @@ class VMTools:
             raise ValueError(f"No file at {path}.") from None
         report({"bytes": len(raw)})
         if b"\x00" in raw[:8192]:
-            return self.session.announce({"path": path, "binary": True, "bytes": len(raw),
-                                          "note": "Binary file: inspect it with vm_exec (file, xxd, python)."})
+            return self._announce_in_order({"path": path, "binary": True, "bytes": len(raw),
+                                            "note": "Binary file: inspect it with vm_exec (file, xxd, python)."},
+                                           cancellation)
         lines = file_lines(raw)
         if not complete:
             # The last line may be cut; it is read with the rest.
             lines = lines[:-1]
-        chosen = lines[args.offset - 1:args.offset - 1 + args.limit]
+        from app.services import agent_secrets
+        # Masked before a long line is cut (agent_secrets.mask).
+        chosen = [agent_secrets.mask(self.loop.uid, line)
+                  for line in lines[args.offset - 1:args.offset - 1 + args.limit]]
         text, shown = "", 0
         for line in chosen:
             if len(text) + len(line) + 1 > READ_CHARS:
@@ -1506,7 +1558,13 @@ class VMTools:
         elif not complete:
             result["more"] = (f"The file is larger than {READ_BYTES // (1024 * 1024)} MB: read its further lines "
                               "with vm_exec (sed -n, tail).")
-        return self.session.announce(result)
+        return self._announce_in_order(result, cancellation)
+
+    def _announce_in_order(self, result, cancellation):
+        """session.announce for a read that may run beside others of its step:
+        the first in the step's call order names the folder (call_order)."""
+        with call_order(cancellation):
+            return self.session.announce(result)
 
     def _notes_kept(self, path):
         """A temporary chat reads the workspace's notes and leaves them as
@@ -1565,8 +1623,10 @@ class VMTools:
         size = self._provider("edit", lambda: self.session.backend.write_file(self.session.name, path, edited))
         replaced = found if args.replace_all else 1
         report({"bytes": size, "replacements": replaced})
+        from app.services import agent_secrets
         return self.session.announce({"path": path, "replacements": replaced, "bytes": size,
-                                      **edit_snippet(edited, at, new)})
+                                      **edit_snippet(edited, at, new,
+                                                     lambda line: agent_secrets.mask(self.loop.uid, line))})
 
     def view(self, args, *, cancellation, report=None):
         report = report or (lambda fields: None)
@@ -1585,10 +1645,12 @@ class VMTools:
         if mime is None:
             raise ValueError(f"{path} is no PNG, JPEG, WebP or GIF picture. Convert it first (for example with "
                              "matplotlib's savefig or ImageMagick).")
-        with self._pictures_lock:
-            self._pictures.append((path, mime, raw))
-        return self.session.announce({"path": path, "mime": mime, "bytes": len(raw),
-                                      "note": "The picture follows as an image after these results."})
+        # The pictures follow the results in the step's call order.
+        with call_order(cancellation):
+            with self._pictures_lock:
+                self._pictures.append((path, mime, raw))
+            return self.session.announce({"path": path, "mime": mime, "bytes": len(raw),
+                                          "note": "The picture follows as an image after these results."})
 
     def save_picture(self, args, *, cancellation, report=None):
         """A picture find_pictures or search_pictures found, written into the

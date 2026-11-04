@@ -2,7 +2,7 @@
 
 Only for the agent: a source a comparison answer cited, a result of its own
 search, a source of an earlier message, a link the user wrote, or, while
-reviewers follow the work, any public page (test_agent_gate.py). Bounded,
+reviewers follow the work, any public page (test_agent_outward_calls.py). Bounded,
 metered, given to the agent only as the read_source tool result (it writes
 the answer itself, agent_answer_mode), kept with the review, and never for
 comparison models, reviewers or Google-data chats. On unless
@@ -365,7 +365,7 @@ def test_reads_a_source_of_an_earlier_message_and_without_reviewers_no_link_from
     Saved sources of earlier messages count now. A link that stands only in an
     earlier answer's text does not: an injected page could have put it there
     with chat content in it (review 2026-10-11). Since 2026-10-28 such a page
-    is read while reviewers follow the read live (test_agent_gate.py); without
+    is read while reviewers follow the read live (test_agent_outward_calls.py); without
     them it stays unread."""
     calls = fake_fetch(monkeypatch)
     earlier = "https://www.tri247.com/live-kona"
@@ -569,6 +569,31 @@ def test_reads_stop_at_the_message_and_step_limits(store, monkeypatch, enabled):
     assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
 
 
+def test_the_step_limit_refuses_the_last_read_in_call_order_whoever_arrives_first(store, monkeypatch, enabled):
+    """The reads of a step run at the same time (DelegationLoop._call_groups):
+    the first one reaches the limit last here, and the limit still refuses
+    the step's last read, as if they had run one after another."""
+    import threading
+    import time
+    fake_fetch(monkeypatch)
+    urls = [f"https://example.org/page-{i}" for i in range(READS_PER_STEP + 1)]
+    loop = chat_loop(store, Plan(steps=[[compare()], [read_call(u) for u in urls]], cited=urls))
+    check = loop._check
+
+    def late_first(cancellation=None):
+        if threading.current_thread().name == "agent-call-call_1_0":
+            time.sleep(.3)
+        return check(cancellation)
+    loop._check = late_first
+    list(loop.run())
+    outcome = [r["reason"] if r["status"] == "refused" else r["status"] for r in results(loop)]
+    assert outcome[:READS_PER_STEP] == ["completed"] * READS_PER_STEP
+    assert outcome[READS_PER_STEP].startswith(f"At most {READS_PER_STEP} sources per step")
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    reads = saved["agent_review"]["read_sources"]
+    assert [read["url"] for read in reads] == urls[:READS_PER_STEP] and [read["id"] for read in reads] == [1, 2, 3, 4, 5]
+
+
 def test_a_failed_fetch_is_saved_as_failed_not_as_content(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch, status="incomplete", error="HTTP 404: Page not found")
     plan = Plan()
@@ -661,8 +686,8 @@ def test_a_stop_during_a_read_stops_the_turn(store, monkeypatch, enabled):
 
 
 def test_admission_gives_up_when_a_page_read_cannot_fit(store, monkeypatch, enabled):
-    """The read's tokens do not shrink with its output allowance: a short
-    allowance must refuse the read at once, not retry the same claim forever."""
+    """A short allowance refuses the read at once, never retries the same
+    claim forever."""
     from dataclasses import replace
     from types import SimpleNamespace
     from app.services.agent_quota import AgentTokenBudgetExceeded
@@ -678,8 +703,9 @@ def test_admission_gives_up_when_a_page_read_cannot_fit(store, monkeypatch, enab
     monkeypatch.setattr(loop.store, "claim", claim)
     model = replace(resolve_agent_model("claude-haiku-4-5"), max_output_tokens=agent_read_source.FETCH_OUTPUT_TOKENS)
     tool = web_fetch_tool(max_uses=1, max_content_tokens=READ_CONTENT_TOKENS, allowed_domains=["example.org"])
-    admission = loop._admit_chat_step(model, [{"role": "user", "content": "Read " + CITED}], "agent:x:0", ToolRegistry(),
-                                      loop.cancellation, 0, {}, SimpleNamespace(kind="source"), None, server_tools=[tool])
+    admission = loop._admit(model, [{"role": "user", "content": "Read " + CITED}], "agent:x:0",
+                            [*ToolRegistry().schemas, tool], loop.cancellation, 0, {},
+                            SimpleNamespace(kind="source", id="x"))
     with pytest.raises(AgentTokenBudgetExceeded):
         while True:
             next(admission)
@@ -714,14 +740,14 @@ def test_gemini_grounding_redirects_are_read_as_the_page_they_point_to(store, mo
     redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AbC123"
     monkeypatch.setattr(agent_read_source, "resolve_redirect", lambda url: CITED if url == redirect else url)
     calls = fake_fetch(monkeypatch)
-    loop, events, saved = run(store, Plan(steps=[[compare()], [read_call(redirect), read_call(redirect)]],
+    loop, events, saved = run(store, Plan(steps=[[compare()], [read_call(redirect)], [read_call(redirect)]],
                                           cited=(redirect,)))
     assert calls[0]["tools"][0]["parameters"]["allowed_domains"] == ["example.org"]
     [record] = saved["agent_review"]["read_sources"]
     assert record["url"] == CITED and record["cited_url"] == redirect and record["host"] == "example.org"
     running, done, *_ = tool_events(events)
     assert "host" not in running and done["host"] == "example.org"
-    # The redirect it was cited by counts as read too.
+    # The redirect it was cited by counts as read too, in a later step.
     assert results(loop)[1]["status"] == "already_read" and len(calls) == 1
 
 

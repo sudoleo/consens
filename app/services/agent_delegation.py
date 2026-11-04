@@ -16,13 +16,12 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from app.core import config as cfg
 from app.core.observability import provider_diagnostic, safe_exception
 from app.core.openrouter_contract import provider_session_id
 from app.services import agent_secrets
 from app.services.agent_ask import TOOL as ASK_TOOL
-from app.services.agent_budget_config import micro_eur, nano_usd
-from app.services.agent_costs import aggregate_usage, worst_case_nanos
+from app.services.agent_budget_config import micro_eur
+from app.services.agent_costs import aggregate_usage
 from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
@@ -31,7 +30,7 @@ from app.services.agent_provider_limits import (
     TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelEmptyAnswer, ModelOutputLimit, agent_failure,
     provider_cooldowns,
 )
-from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
+from app.services.agent_tools import CallOrder, ReadOnlyTool, ToolRegistry, give_turn, search_tools
 from app.services.agent_comparison import SEARCHING_KINDS
 from app.services.prompt_defaults import AGENT_REVIEW_FACTS as REVIEW_FACTS
 from app.services.llm.agent_client import (
@@ -101,11 +100,9 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 # results of the tools below, which return only the user's or the app's own
 # content: memory, settings, the agent's own plan and documents, a prepared
 # card's status. A new tool counts until shown otherwise; ask_user too, since
-# it brings the browser's page back with the user's hand-back. Until
-# 2026-11-02 the same locked memory (memory_locked; with reviewers their gate
-# since 2026-10-28): the agent searches in nearly every first step, and an
-# opted-in account got not a single memory in a month. Max: the agent decides
-# what to keep, the user sees and can undo every change.
+# it brings the browser's page back with the user's hand-back. Memory does
+# not lock on it: the agent decides what to keep, the user sees and can undo
+# every change.
 OWN_CONTENT_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
                                "update_plan", "create_document", "revise_document", "open_workspace",
                                "report_finding", "finish_watch"})
@@ -122,6 +119,14 @@ TURN_INVALID_LIMIT = ("The model repeated invalid tool requests without progress
 # the answer, and before its conversation fills this share of the model's
 # window (DelegationLoop._long_run_limit).
 LONG_RUN_CONTEXT_SHARE = .8
+# The agent's own steps as one session of RunCosts (its cached prefix).
+AGENT_SESSION = "agent"
+# What the reviewers take for one agent step is the most they took in one of
+# its last REVIEWER_CHARGE_STEPS (_reviewer_step_charge); their final rounds
+# cost about FINAL_ROUND_CHARGE times that (the answer, the evidence of its
+# sources and a search round more).
+REVIEWER_CHARGE_STEPS = 8
+FINAL_ROUND_CHARGE = 2
 TURN_ALLOWANCE_LIMIT = ("This response ended because today's token allowance is nearly used up. "
                         "The available results have been saved.")
 TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
@@ -138,6 +143,9 @@ USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the
 # why (HOLD_TIMEOUT_STOPPED, failure code hold_timeout). It never goes on by
 # itself.
 HOLD_TIMEOUT_SECONDS = 30 * 60
+# request_hold's answer to a reviewer's halt on an entry whose card the user
+# already decided: no second card (AnswerAudit.halt keeps it as a mark).
+HOLD_DECIDED = "decided"
 HOLD_TIMEOUT_STOPPED = "Stopped after 30 minutes without your decision."
 # Holds a turn keeps in agent_holds (_end_hold); later ones are not kept.
 HOLDS_KEPT = 20
@@ -154,13 +162,18 @@ WATCH_PAUSED_SECONDS = 10
 # run, so the agent reads the message first. All the agent learns: a pause of
 # the user.
 HOLD_STEERED = "Not run: the user paused your work and wrote to you. Read their message first."
-# The calls of one step run one after another, at most this many (T2). What
-# a call that does not run reads instead, by why (the batch in run()): every
-# call of a step gets exactly one result, or the provider refuses the next
-# request. A pause, the user's own card or their turn in the browser ends the
-# step's later calls: they were planned before.
-TOOL_CALLS_PER_STEP = 4
+# The calls of one step run in their order; neighbouring calls of tools that
+# only read run at the same time (ReadOnlyTool.concurrent, _call_groups). The
+# limit is no pace: a step that reads five sources and three files at once is
+# ordinary work, and SOTA harnesses set no small cap. It bounds a runaway
+# step, its threads and the results one request carries. What a call that
+# does not run reads instead, by why (the batch in run()): every call of a
+# step gets exactly one result, or the provider refuses the next request. A
+# pause, the user's own card or their turn in the browser ends the step's
+# later calls: they were planned before.
+TOOL_CALLS_PER_STEP = 16
 CALL_OVER_LIMIT = f"Not run: a step runs at most {TOOL_CALLS_PER_STEP} calls."
+CALL_REPEATED = "Not run: this step made the same call before; its result is above."
 CALL_AFTER_PAUSE = "Not run: the work was paused before this call; the user let it go on with your next step."
 CALL_AFTER_ASK = "Not run: this step asked the user first. Their answer is in the ask_user result above."
 CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile and has handed it back. The page "
@@ -196,11 +209,6 @@ def _transient_store_error(error):
     transient = (Aborted, DeadlineExceeded, InternalServerError, ServiceUnavailable)
     # Firestore wraps exhausted transaction conflicts in ValueError.
     return isinstance(error, transient) or isinstance(error.__cause__, transient)
-
-
-def smaller_search(searches):
-    """Next search tier down: many rounds -> three -> one -> none."""
-    return 3 if searches > 3 else 1 if searches > 1 else 0
 
 
 def with_step_note(messages, note):
@@ -275,11 +283,10 @@ def _waited(seconds):
 
 def joined_halt(hold, details):
     """``hold`` with a reviewer's halt (``details``) that came while it was
-    open (request_hold): every reason in ``reasons`` with its reviewer, as
-    AnswerAudit.gate_hold lists several, and the reviewers' names together.
-    A card without a reason of its own (not every reviewer could check, a
-    domain the reviewers let) takes the halt's. ``revision`` counts the
-    joins, so the card is drawn again (agent-chat.js renderHold)."""
+    open (request_hold): every reason in ``reasons`` with its reviewer, and
+    the reviewers' names together. A card without a reason of its own (a
+    domain) takes the halt's. ``revision`` counts the joins, so the card is
+    drawn again (agent-chat.js renderHold)."""
     own = [{"reviewer": hold["reviewer"], "kind": hold["kind"], "reason": hold["reason"]}] if hold.get("reason") else []
     reasons = [*(hold.get("reasons") or own),
                {"reviewer": details["reviewer"], "kind": details["kind"], "reason": details["reason"]}]
@@ -387,8 +394,7 @@ class DelegationLoop(AgentLoop):
         # Who checks this message's work (account setting ``reviewers``,
         # since 2026-11-01): "always" from the run's start, "workspace" from
         # the agent's first step that reaches for the workspace on
-        # (_review_from_here), "off" nobody. Without reviewers no halt, no
-        # gate.
+        # (_review_from_here), "off" nobody. Without reviewers no halt.
         if reviewers not in REVIEW_FACTS:
             raise ValueError("Unknown reviewers setting")
         self.reviewers = reviewers
@@ -464,6 +470,10 @@ class DelegationLoop(AgentLoop):
         # A reviewer's halt that came while the user's own card was open
         # (agent_ask.py): it opens once that card is answered.
         self.queued_hold = None
+        # The log entries the reviewers' halts named: on the open card, on
+        # the queued one, and on cards the user decided (request_hold): one
+        # card per entry.
+        self.hold_entries, self.queued_entries, self.decided_entries = set(), set(), set()
         self.hold_started = 0.0
         # The open hold could not be saved (_save_hold): its decision comes
         # in this process only (decide_unsaved).
@@ -490,14 +500,12 @@ class DelegationLoop(AgentLoop):
         # clock is injectable for tests.
         self.clock = time.monotonic
         self.turn_started = self.clock()
-        # The time the run waited for the reviewers' gate rounds (_gate_wait,
-        # _domain_wait), the wait at hand since ``gate_started``: it pauses
-        # the turn's clock like a halt (A-T3).
-        self.gate_paused, self.gate_started = 0.0, None
         self.routing_steps = 0
-        # What the reviewers' calls took from the allowance so far, in
-        # micro-euros (agent_quota.measured_charge): _long_run_limit's estimate.
+        # What the reviewers' calls took from the allowance, in micro-euros
+        # (agent_quota.measured_charge): in all, and by the agent's step they
+        # came in (_reviewer_step_charge).
         self.reviewer_charge = 0
+        self.reviewer_charges = {}
         # Set once a routing step reasoned through its allowance: every later
         # step of this turn, the answer and a wrap-up included, uses that lighter level.
         self.routing_lighter = None
@@ -509,7 +517,9 @@ class DelegationLoop(AgentLoop):
         # summarized once they fill too much (_summarize, agent_compaction).
         self.history_summary = history_summary
         self.run_summaries = 0
-        self.run_summary_failed = False
+        # After a run summary that did not work out: the input tokens the
+        # next request must reach before another is tried (_summary_due).
+        self.run_summary_retry_at = None
         # The run's own messages a summary replaced: its work record and
         # evidence still know them (own_messages).
         self.summarized = []
@@ -784,12 +794,7 @@ class DelegationLoop(AgentLoop):
         on a reviewer's halt (request_hold)."""
         now = self.clock()
         paused = self.paused_seconds + (now - self.hold_started if self.hold is not None else 0.0)
-        return now - self.turn_started - paused - self._gate_pause(now)
-
-    def _gate_pause(self, now):
-        """Seconds the run waited for gate rounds, the wait at hand included."""
-        started = self.gate_started
-        return self.gate_paused + (now - started if started is not None else 0.0)
+        return now - self.turn_started - paused
 
     def _long_run(self):
         """Whether this turn works in its VM: from the VM's first start in
@@ -865,29 +870,20 @@ class DelegationLoop(AgentLoop):
         for tool in self.registry.tools.values():
             tools.extend(self._workspace_tool_list() if tool.name == OPEN_WORKSPACE else [tool])
         self.registry = ToolRegistry(tools, argument_limit=max(self.registry.argument_limit, 24_000))
+        self.costs.rewritten(AGENT_SESSION)
         self.workspace_closed, self.workspace_opened = False, True
         logging.info("Agent workspace opened step=%s", self.routing_steps)
         if self.work_log is not None:
             # The reviewers' brief was written from the tools the run started
-            # with: the workspace's rules (installing packages is normal work,
-            # a step in the user's name waits for their yes) reach reviewers
-            # who already follow as an entry of the app.
-            from app.services.agent_audit import tool_brief
+            # with: the workspace's facts and tools reach reviewers who
+            # already follow as an entry of the app.
+            from app.services.agent_audit import tool_brief, workspace_brief
             added = sorted(set(self.registry.tools) - before)
-            self.work_log.app("workspace_opened", {"text": " ".join(tool_brief(added)), "tools": added})
+            self.work_log.app("workspace_opened", {"text": workspace_brief(added),
+                                                   "tools": tool_brief(self.registry, added)})
         if self.reviewers == "workspace":
             # Its reviewers start now, their brief written from these tools.
             self._review_from_here(None)
-
-    def _parallel_calls(self):
-        """Whether the agent's steps ask for several calls at once: while
-        its workspace is open (audit T2: plan and action, write and run,
-        three form fields were a step each, with the whole context every
-        time). The switch comes with open_workspace, whose tools rewrite the
-        prompt cache once anyway: Anthropic's tool_choice carries it, and a
-        change of it rewrites the cached messages. The workspace never
-        closes within a message, so it never switches back."""
-        return self.vm_tools is not None and not self.workspace_closed
 
     def _turn_seconds(self):
         if self.policy.vm_turn_seconds and self._long_run():
@@ -951,32 +947,45 @@ class DelegationLoop(AgentLoop):
         fills LONG_RUN_CONTEXT_SHARE of the model's window, instead of
         failing at the next admission without one."""
         from app.services import agent_quota
-        from app.services.agent_tokens import input_estimate
-        model = self.routing_lighter or self.model
-        answer = answer_output_limit(model)
-        inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
-        if inputs + answer > model.context_length * LONG_RUN_CONTEXT_SHARE:
+        model = self._routing_model()
+        tools = [*self.registry.schemas, *self._search_tools(model)]
+        inputs = self.costs.inputs(self.messages, tools, model.request_config)
+        if inputs + model.max_output_tokens > model.context_length * LONG_RUN_CONTEXT_SHARE:
             return TURN_CONTEXT_LIMIT
         try:
-            remaining = agent_quota.remaining_allowance(self.store.db, self.uid)
+            # What is left as the sidebar shows it: the reservations of calls
+            # still running (reviewers' rounds) are no spending yet.
+            left, _ = agent_quota.shown_allowance(self.store.db, self.uid)
         except Exception as exc:
             # The next admission reads the ledger again and refuses then.
             logging.warning("Agent long run allowance unavailable category=%s", safe_exception(exc))
             return None
-        # One more step and the answer as their admissions reserve them
-        # (micro-euros, agent_quota): the whole conversation twice at the
-        # dearest input price.
-        steps = micro_eur(worst_case_nanos(model, 2 * inputs, routing_output_limit(model) + answer))
-        if remaining < steps + 2 * self._reviewer_step_charge():
+        # One more step and the answer, at what their admission expects them
+        # to cost; the reviewers' rounds on that step and their final rounds.
+        step = self.costs.estimate(model, self.messages, tools, native_searches=self._step_searches(),
+                                   session=AGENT_SESSION)[1]
+        if left < 2 * micro_eur(step) + (1 + FINAL_ROUND_CHARGE) * self._reviewer_step_charge():
             return TURN_ALLOWANCE_LIMIT
         return None
 
     def _reviewer_step_charge(self):
-        """What the reviewers take per agent step, from their charge in this
-        turn so far (0 without reviewers): the next step's live rounds and the
-        final rounds each need about that much (_long_run_limit)."""
+        """What the reviewers take for one agent step (0 without them): the
+        most they took during one of the last REVIEWER_CHARGE_STEPS steps.
+        Each of their requests is bounded (agent_audit segment_cap), so a
+        recent step stands for the next, where the average of the whole run
+        lags behind conversations that grow towards their cap."""
         with self.condition:
-            return self.reviewer_charge // max(1, self.routing_steps)
+            first = max(0, self.routing_steps - REVIEWER_CHARGE_STEPS)
+            return max((self.reviewer_charges.get(step, 0) for step in range(first, self.routing_steps + 1)),
+                       default=0)
+
+    def _count_reviewer_charge(self, usage):
+        """A reviewer's request took ``usage`` from the allowance, during the
+        agent's step at hand (under the run's condition)."""
+        from app.services import agent_quota
+        charge = agent_quota.measured_charge(usage) or 0
+        self.reviewer_charge += charge
+        self.reviewer_charges[self.routing_steps] = self.reviewer_charges.get(self.routing_steps, 0) + charge
 
     def _show_pictures(self):
         """The pictures vm_view_image read, the browser's screenshots and
@@ -1032,6 +1041,7 @@ class DelegationLoop(AgentLoop):
                                                                shown_max=agent_compaction.PICTURES_KEPT):
             self.messages[index] = message
         self.compacted_to = agent_compaction.own_chars(self.messages, self.turn_start)
+        self.costs.rewritten(AGENT_SESSION)
         logging.info("Agent long run compacted results=%s chars_before=%s chars_after=%s",
                      len(cut.replacements), cut.before, cut.after)
         if self.work_log is not None:
@@ -1053,12 +1063,12 @@ class DelegationLoop(AgentLoop):
             return None
         if self.history_summary is not None:
             return "history"
-        if self.run_summary_failed:
-            return None
         from app.services import agent_compaction
-        from app.services.agent_tokens import input_estimate
-        model = self.routing_lighter or self.model
-        inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
+        model = self._routing_model()
+        inputs = self.costs.inputs(self.messages, [*self.registry.schemas, *self._search_tools(model)],
+                                   model.request_config)
+        if self.run_summary_retry_at is not None and inputs < self.run_summary_retry_at:
+            return None
         return "run" if agent_compaction.run_summary_due(inputs, model.context_length, self.messages,
                                                          self.turn_start) else None
 
@@ -1067,20 +1077,20 @@ class DelegationLoop(AgentLoop):
         "Summaries"): the chat model writes a summary in step ``index``, which
         then replaces the chat's older history or the run's earlier steps.
         Returns the index of the agent's next step (``index`` itself when no
-        summary was claimed). A summary that does not work out changes
-        nothing; a run's is not tried again in this message."""
+        summary was claimed). Its request has the tools and the tool choice
+        of the agent's steps, so it reads their cached prefix; a call it
+        makes is not run (``allow_tools``). A summary that does not work out
+        changes nothing and is tried again once the conversation has grown
+        (_summary_failed)."""
         kind = self._summary_due()
         if kind is None:
             return index
         from app.services import agent_compaction
         plan, self.history_summary = self.history_summary, None
-        if kind == "history":
-            # Only what it replaces: the history up to the messages that stay.
-            request, args = self.messages[:plan["end"]], {"searches_enabled": False, "allow_tools": False}
-        else:
-            # The next step's request with the summary request at its end
-            # (same tools and tool choice): it reads that step's cached prefix.
-            request, args = self.messages, search
+        # Only what it replaces: the history up to the messages that stay;
+        # else the next step's request, with the summary request at its end.
+        request = self.messages[:plan["end"]] if kind == "history" else self.messages
+        args = {**search, "allow_tools": False}
         asked = len(self.messages)
         step = f"completion:{index}"
         yield self.activity({"step_id": step, "id": "summary", "kind": "progress",
@@ -1092,15 +1102,16 @@ class DelegationLoop(AgentLoop):
                                                     registry=self.registry, summary=kind, **args)
         except AgentTokenBudgetExceeded as exc:
             # Refused before its claim: the agent's step takes the free index.
-            self.run_summary_failed = self.run_summary_failed or kind == "run"
+            if kind == "run":
+                self._summary_failed(kind, plan)
             free = getattr(exc, "unclaimed_step", None)
             logging.info("Agent summary refused by the allowance kind=%s", kind)
             return int(free.split(":")[1]) if isinstance(free, str) else index
         text = agent_compaction.summary_text(value)
         if text is None:
-            self.run_summary_failed = self.run_summary_failed or kind == "run"
-            logging.warning("Agent summary unusable kind=%s finish_reason=%s chars=%s tool_calls=%s", kind,
-                            value.finish_reason, len(value.text or ""), len(value.tool_calls or []))
+            self._summary_failed(kind, plan)
+            logging.warning("Agent summary unusable kind=%s finish_reason=%s chars=%s skipped_calls=%s", kind,
+                            value.finish_reason, len(value.text or ""), getattr(value, "skipped_tool_parts", 0))
             return next(steps)
         before = agent_compaction.own_chars(self.messages, 1)
         if kind == "history":
@@ -1141,11 +1152,31 @@ class DelegationLoop(AgentLoop):
                 # The summary comes next; the user's messages and the kept step
                 # are in the log already, a message the user sent meanwhile not yet.
                 self.work_log.rewound("agent", self.turn_start, seen=[*notes, *logged])
+        self.costs.rewritten(AGENT_SESSION)
         after = agent_compaction.own_chars(self.messages, 1)
         logging.info("Agent summary kind=%s chars_before=%s chars_after=%s", kind, before, after)
         if self.work_log is not None:
             self.work_log.app("summarized", {"kind": kind, "chars_before": before, "chars_after": after}, step=step)
         return next(steps)
+
+    def _summary_failed(self, kind, plan):
+        """Back off after a summary that did not work out: a run's is tried
+        again once the next request has grown by RUN_SUMMARY_RETRY_TOKENS, the
+        history's once the chat's history has grown by
+        HISTORY_SUMMARY_RETRY_CHARS (the turn keeps the mark,
+        AgentRunStore.messages), instead of in every step or message."""
+        from app.services import agent_compaction
+        if kind == "run":
+            model = self._routing_model()
+            inputs = self.costs.inputs(self.messages, [*self.registry.schemas, *self._search_tools(model)],
+                                       model.request_config)
+            self.run_summary_retry_at = inputs + agent_compaction.RUN_SUMMARY_RETRY_TOKENS
+            return
+        try:
+            self.store.save_history_summary(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
+                                            failed={"held": plan.get("held", 0)})
+        except Exception as exc:
+            logging.warning("Agent history summary failure not saved category=%s", safe_exception(exc))
 
     def _identical_call(self, call):
         """No-progress guard: the same tool with the same arguments.
@@ -1155,19 +1186,42 @@ class DelegationLoop(AgentLoop):
         refused with a tool error, and one more ends the turn.
         """
         limit = self.policy.turn_identical_calls if self.policy.account_budget_only else None
-        function = call.get("function") or {}
-        name = function.get("name")
-        if not limit or name in REPEATABLE_TOOLS:
+        if not limit or (call.get("function") or {}).get("name") in REPEATABLE_TOOLS:
             return None
-        try:
-            args = json.loads(function.get("arguments") or "{}")
-        except (TypeError, ValueError):
+        key = self._call_key(call)
+        if key is None:
             return None  # Invalid JSON is the invalid-tool guard's case.
-        key = f"{name}\0{json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
         seen = self.identical_calls[key] = self.identical_calls.get(key, 0) + 1
         if seen <= limit:
             return None
         return "refuse" if seen == limit + 1 else "stop"
+
+    def _call_groups(self, calls, over_limit):
+        """The step's calls in order as groups of ``(position, call)``:
+        neighbouring calls of tools that only read (ReadOnlyTool.concurrent)
+        form one group, which runs at the same time; every other call is a
+        group of its own, after the group before it."""
+        groups, together = [], False
+        for position, call in enumerate(calls):
+            tool = self.registry.tools.get((call.get("function") or {}).get("name"))
+            concurrent = tool is not None and tool.concurrent and call["id"] not in over_limit
+            if concurrent and together:
+                groups[-1].append((position, call))
+            else:
+                groups.append([(position, call)])
+            together = concurrent
+        return groups
+
+    @staticmethod
+    def _call_key(call):
+        """The call's tool and arguments as normalized JSON, or None for
+        arguments that are not JSON."""
+        function = call.get("function") or {}
+        try:
+            args = json.loads(function.get("arguments") or "{}")
+        except (TypeError, ValueError):
+            return None
+        return f"{function.get('name')}\0{json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
 
     def _publish(self, worker, *, patch=None, text=None, kind="message", sender="orchestrator", recipient=None,
                  wait=True, progress=False):
@@ -1450,11 +1504,25 @@ class DelegationLoop(AgentLoop):
 
     def _execute(self, registry, value, cancellation, call=None):
         call = call or value.tool_calls[0]
+        message, entry = self._run_call(registry, value, cancellation, call)
+        self._log_call(entry)
+        return message
+
+    def _log_call(self, entry):
+        """A call's work log entry, as _run_call returned it (None: none)."""
+        if entry is not None:
+            actor, step, call, message, started_at, duration_ms = entry
+            self.work_log.tool(actor, step, call, message, started_at=started_at, duration_ms=duration_ms)
+
+    def _run_call(self, registry, value, cancellation, call):
+        """One call of ``value``: its result message and its work log entry,
+        which the caller writes (_log_call). Calls of one step may run on
+        threads of their own at the same time (_execute_together)."""
         identity = (value.step_id, call["id"])
-        if identity in self.seen_calls:
-            raise ValueError("Duplicate tool call")
-        self.seen_calls.add(identity)
         with self.condition:
+            if identity in self.seen_calls:
+                raise ValueError("Duplicate tool call")
+            self.seen_calls.add(identity)
             self.tools_used += 1
             if not self.policy.account_budget_only and self.tools_used > self.policy.max_tools:
                 raise AnalysisBudgetExceeded("Shared tool limit reached")
@@ -1492,6 +1560,9 @@ class DelegationLoop(AgentLoop):
                 pass
         try:
             tool, args = registry.validate(call)
+            if not tool.ordered:
+                # Nothing it counts waits for the group's order (call_order).
+                give_turn()
             self._check(cancellation)
             publish("running")
             result = (tool.execute(args, cancellation=cancellation, report=report) if tool.reports
@@ -1516,152 +1587,97 @@ class DelegationLoop(AgentLoop):
         message = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
         # The app's own calls (the review of the fixed answer) are not the agent's work.
         duration_ms = int((time.monotonic() - began) * 1000)
-        if first_in_workspace is not None and self.first_workspace_call is None:
-            self.first_workspace_call = {
-                "kind": "browser" if (call.get("function") or {}).get("name") == "browser" else "vm",
-                "ms": duration_ms, "after_s": round(max(0.0, first_in_workspace), 1), "failed": status != "succeeded"
-                or (isinstance(result, dict) and "error" in result)}
+        with self.condition:
+            if first_in_workspace is not None and self.first_workspace_call is None:
+                self.first_workspace_call = {
+                    "kind": "browser" if (call.get("function") or {}).get("name") == "browser" else "vm",
+                    "ms": duration_ms, "after_s": round(max(0.0, first_in_workspace), 1),
+                    "failed": status != "succeeded" or (isinstance(result, dict) and "error" in result)}
         log_actor = self._log_actor(value.step_id) if registry is not self.app_registry else None
-        if log_actor:
-            self.work_log.tool(log_actor, value.step_id, call, message, started_at=started_at,
-                               duration_ms=duration_ms)
-        return message
+        entry = (log_actor, value.step_id, call, message, started_at, duration_ms) if log_actor else None
+        return message, entry
 
-    def _admit_chat_step(self, model, messages, step, registry, cancellation, searches, claim_policy, worker,
-                         clamp_floor=None, server_tools=(), answer_output=0, closing=False):
-        """Retry admission, never generation. All successful claims stay atomic.
+    def _admit(self, model, messages, step, tools, cancellation, searches, claim_policy, worker, *, closing=False):
+        """Claim one call at what it is expected to cost (RunCosts.estimate);
+        returns its reservation and whether the claim took.
 
-        Contention is backpressure, not exhaustion. Wait for active receipts,
-        then shrink optional search step by step (fewer rounds, then none) and
-        fit the actual provider output cap if needed.
-        With ``clamp_floor`` (parallel comparison answers and reviewers'
-        rounds), a call whose output still fits at that size starts now with
-        the smaller allowance instead of queueing behind its siblings.
-        Searching helpers do not reserve their search (``soft_search``): every
-        answer of a comparison keeps its full rounds, whatever order the
-        siblings are admitted in; settlement books the measured search tokens.
-        Only a context window too small for the search shrinks it.
-        Once this message holds paid work (comparison answers, or a step of
-        the agent that reviewers followed), the ``closing`` step (the answer
-        written without tools, _merged_wrap_up) and the reviewers' final
-        rounds may overdraw the daily allowance: paid work always reaches an
-        answer and its review, and the next message is refused instead (see
-        agent_quota.reserve). A routing step is admitted only within the
-        allowance; refused, it leaves its step to the closing one (run).
-        A step that may write the answer (``answer_output``) is admitted like
-        a routing step, with ``model``'s routing allowance per segment. The
-        answer it may write on top (one segment up to ``answer_output``) is
-        reserved too but may lie beyond the allowance, so a direct answer is
-        not cut short near the daily limit and research is not lost earlier.
-        """
-        from app.services.agent_tokens import input_estimate, minimum_output
-        soft = bool(worker and getattr(worker, "kind", None) in SEARCHING_KINDS)
-        # Only once this message holds paid work: a started comparison whose
-        # answers found no allowance has nothing to finish (review 2026-10-14:
-        # near the daily limit a long first step left the comparison without
-        # answers, and the overdraft then paid an unchecked turn). And only
-        # for what finishes it: until 2026-10-28 every further routing step
-        # overdrew too, never refused before turn_steps (audit).
+        The allowance decides only whether a call starts: the request is the
+        same whatever is left (search rounds, output limit, tools), or none
+        goes out. Calls still running hold part of the allowance for the
+        moment: a call that fits once they settled waits for them
+        (backpressure, not exhaustion). Once this message holds paid work
+        (comparison answers, or a step of the agent that reviewers followed),
+        the ``closing`` step (the answer written from what the run has,
+        _merged_wrap_up) and the reviewers' final rounds may overdraw the
+        allowance: paid work always reaches an answer and its review, and
+        the next message is refused instead (agent_quota.reserve). Any other
+        refusal raises AgentTokenBudgetExceeded: a routing step refused after
+        paid work leaves its index to the closing step (run), a comparison
+        answer or a page read fails on its own."""
         overdraft = (closing and (self._paid_comparison() or self._paid_audit()) if worker is None
                      else self._final_review(worker))
-        search_limited, waiting = False, False
-        delay, recovered_at = .1, time.monotonic()
+        session, kind = self._meter_keys(worker)
+        waiting, delay, recovered_at = False, .1, time.monotonic()
         while True:
             self._check(cancellation)
-            tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
-            if not searches:
-                room = model.context_length - input_estimate(messages, tools, model.request_config)
-                if room < minimum_output(model):
-                    raise AnalysisBudgetExceeded("The selected model's context limit was reached.")
-                model = replace(model, max_output_tokens=min(model.max_output_tokens, room))
-                answer_output = min(answer_output, room)
-            reservation = None
-            # Searches whose tokens this admission reserves.
-            reserved = 0 if soft else searches
-            # A merged step's answer above its routing allowance: reserved, not
-            # admitted (its cost in micro-euros, agent_quota.reserve).
-            extra = max(0, answer_output - model.max_output_tokens)
-            beyond = True if overdraft else micro_eur(worst_case_nanos(model, 0, extra)) if extra else 0
+            reservation = self.costs.reserve(model, messages, tools, native_searches=searches, session=session,
+                                             kind=kind)
             try:
-                reservation = self.costs.reserve(model, messages, tools, native_searches=searches, soft_search=soft,
-                                                 answer_output=answer_output)
-                request = replace(model, max_output_tokens=model.max_output_tokens + extra)
-                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, request, step=step,
+                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
                     run_token=self.run_token, policy=claim_policy, reservation=reservation,
-                    **({"overdraft": beyond} if beyond else {}))
-                return request, messages, tools, searches, reservation, claimed, search_limited
+                    **({"overdraft": True} if overdraft else {}))
+                return reservation, claimed
             except BaseException as exc:
-                if reservation is not None:
-                    self.costs.release(reservation)
-                if isinstance(exc, AgentTokenBudgetExceeded):
-                    # The ledger's amounts are micro-euros: the smallest
-                    # reservation of this call, its page reads and searches
-                    # included, and the output that fits what is left.
-                    search = {"native_searches": searches, "soft_search": soft}
-                    minimum = micro_eur(self.costs.estimate(replace(model, max_output_tokens=minimum_output(model)),
-                                                            messages, tools, **search)[1])
-                    if exc.reserved and not (clamp_floor and reserved) and (
-                            (not reserved and minimum <= exc.remaining + exc.reserved)
-                            or (reserved and exc.required <= exc.remaining + exc.reserved)):
-                        if clamp_floor and not reserved:
-                            output = self.costs.output_within(model, messages, tools, nano_usd(exc.remaining), **search)
-                            if output >= max(clamp_floor, minimum_output(model)):
-                                model = replace(model, max_output_tokens=output)
-                                continue
-                        if not waiting:
-                            waiting = True
-                            if worker:
-                                self._state(worker, "waiting")
-                            else:
-                                yield self.status(step, "allowance", status="waiting",
-                                    text="Waiting for active model calls to finish and release their unused allowance.")
-                        # A failed settlement must not strand sibling waiters.
-                        with self.condition:
-                            unsettled = list(self.unsettled.items())
-                        for pending_step, (value, status) in unsettled:
-                            self._settle_step(pending_step, value, status)
-                        if time.monotonic() - recovered_at >= 3:
-                            self.store.recover_allowance(self.uid)
-                            recovered_at = time.monotonic()
-                        with self.condition:
-                            self.condition.wait(delay)
-                        delay = min(3, delay * 2)
-                        if not worker:
-                            yield from self._events()
-                        continue
-                    if not reserved:
-                        output = self.costs.output_within(model, messages, tools, nano_usd(exc.remaining),
-                                                          native_searches=searches, soft_search=soft)
-                        # Nothing smaller to try (a page read's reservation does
-                        # not shrink with its output): the same request again
-                        # would only spin on the ledger.
-                        if output < minimum_output(model) or output >= model.max_output_tokens:
-                            raise
-                        model = replace(model, max_output_tokens=output)
-                        continue
-                elif not isinstance(exc, AnalysisBudgetExceeded) or not searches:
+                self.costs.release(reservation)
+                if not (isinstance(exc, AgentTokenBudgetExceeded) and exc.reserved
+                        and exc.required <= exc.remaining + exc.reserved):
                     raise
-                # The optional search does not fit: try a smaller one first.
-                searches = smaller_search(searches)
-                if searches:
-                    continue
-                search_limited = True
-                messages = with_step_note(messages,
-                    "Web search is unavailable for this step within the available token/context allowance. "
-                    "Use existing evidence, state uncertainty, and do not imply new web research.")
+            if not waiting:
+                waiting = True
+                if worker:
+                    self._state(worker, "waiting")
+                else:
+                    yield self.status(step, "allowance", status="waiting",
+                        text="Waiting for active model calls to finish and release their unused allowance.")
+            # A failed settlement must not strand sibling waiters.
+            with self.condition:
+                unsettled = list(self.unsettled.items())
+            for pending_step, (value, status) in unsettled:
+                self._settle_step(pending_step, value, status)
+            if time.monotonic() - recovered_at >= 3:
+                self.store.recover_allowance(self.uid)
+                recovered_at = time.monotonic()
+            with self.condition:
+                self.condition.wait(delay)
+            delay = min(3, delay * 2)
+            if not worker:
+                yield from self._events()
+
+    @staticmethod
+    def _meter_keys(worker):
+        """The session and the kind of a call, as RunCosts learns from them:
+        the agent's own steps, or the worker's conversation and kind."""
+        if worker is None:
+            return AGENT_SESSION, "agent"
+        return getattr(worker, "session_key", "") or worker.id, getattr(worker, "kind", None) or "worker"
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
               search_rounds=1, retry_rate_limit=False, retry_passing=False, retry_empty=False, check_cooldown=True,
               server_tools=(), completion=None, answer_candidate=False, hold=False,
-              allow_tools=True, answer_output=0, summary=None):
+              allow_tools=True, closing=False, tool_choice="auto", summary=None):
         """One claimed, metered model call.
 
         ``answer_candidate``: a step of a turn with comparison tools
         (agent_answer_mode) whose text may turn out to be the answer. Its text streams once it is
         ANSWER_HOLD_CHARS long and no tool call has started (``hold``: not at
         all); ``value.published`` is what the user has seen, and the
-        loop settles it (_show_answer, _retract). ``allow_tools=False`` keeps
-        the turn's tools in the request (prompt cache) with tool_choice none.
+        loop settles it (_show_answer, _retract). ``allow_tools=False``: a
+        step that may only write. Its request is every step's (tools, search,
+        tool choice), so it reads their cached prefix; the client drops the
+        calls it makes (AgentCompletion.stream). ``closing``: the step that
+        writes the answer from what the run has (_merged_wrap_up), admitted
+        beyond the allowance after paid work (_admit). ``tool_choice="none"``
+        only for its one retry after a reply of calls alone.
 
         ``retry_rate_limit``: a free 429 (_free_rate_limit) returns the settled
         step with ``value.rate_limited`` instead of raising, so the caller can
@@ -1677,26 +1693,14 @@ class DelegationLoop(AgentLoop):
         the reservation counts), ``completion`` replaces the loop's factory
         (agent_read_source.PageFetch, worker_completion).
 
-        ``answer_output``: the output limit of a step that may write the
-        answer, above ``model``'s routing allowance. The step is admitted
-        like a routing step; the answer on top may overdraw the allowance
-        (_admit_chat_step).
-
         ``summary`` ("history" or "run"): a summary step (_summarize). Its
         request ends with the app's summary request, the history's has no
-        file block, and nothing it calls opens a gate or starts reviewers."""
+        file block, and nothing it calls starts reviewers."""
         self._check(cancellation)
         # The caller's conversation, before this step adds its file block or
         # notes (work log: what is the conversation, what only this request).
         conversation = messages
-        if answer_output and not self.policy.account_budget_only:
-            # Bounded runs keep their hard limits whole: no overdraft.
-            model, answer_output = replace(model, max_output_tokens=max(model.max_output_tokens, answer_output)), 0
-        # Google data can join the chat during the turn (a Gmail import), so
-        # every step reads the chat again; the agent's first step starts with
-        # what the route read a moment ago, before any step could add some.
-        if (self.google_data if step == "completion:0" and worker is None and self.google_data is not None
-                else (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data")):
+        if self._holds_google_data():
             from app.services.google_connections import restricted_model, GoogleError
             if not self.google_data_consent:
                 raise GoogleError("Enable Google model-sharing consent for this chat before continuing.", 403)
@@ -1739,13 +1743,17 @@ class DelegationLoop(AgentLoop):
             messages = with_step_note(messages, agent_compaction.HISTORY_SUMMARY_REQUEST if summary == "history"
                                       else agent_compaction.RUN_SUMMARY_REQUEST)
         tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
+        session, kind = self._meter_keys(worker)
         reservation = None
         try:
-            if not self.policy.account_budget_only:
+            if self.policy.account_budget_only:
+                model = self.costs.fit(model, messages, tools)
+            else:
                 reservation = self.costs.reserve(model, messages, tools, native_searches=searches)
         except Exception:
-            with self.condition:
-                self.search_remaining += searches
+            if not self.policy.account_budget_only:
+                with self.condition:
+                    self.search_remaining += searches
             raise
         claimed = False
         provider_attempted = False
@@ -1758,9 +1766,12 @@ class DelegationLoop(AgentLoop):
         value.published = ""
         value.tool_call_limit = TOOL_CALLS_PER_STEP
         if worker is None:
-            # The agent's own steps: several calls while the workspace is
-            # open, and a call past the limit gets its result (T2).
-            value.parallel_tool_calls, value.keep_over_limit = self._parallel_calls(), True
+            # The agent's own steps ask for several calls, in every request
+            # of the message alike: Anthropic's tool_choice carries the flag,
+            # and a change of it rewrites the cached messages. A call past
+            # the limit gets its result. Workers keep one call a step: their
+            # only tool reports to the orchestrator.
+            value.parallel_tool_calls, value.keep_over_limit = True, True
         # A comparison answer's line is quoted live in the chat while the main
         # model waits (agent-activity.js highlight): it keeps updating, paced,
         # instead of freezing after the first few sentences.
@@ -1775,42 +1786,20 @@ class DelegationLoop(AgentLoop):
         # never the turn, a worker's step or a reviewer's round.
         halt = ProviderCancellation() if worker is None else None
         status = "failed"
-        search_limited = False
         try:
             claim_policy = {**self.policy.snapshot(), "worker_models": [m.snapshot() for m in self.models.values()]}
             try:
                 if self.policy.account_budget_only:
-                    clamp_floor = cfg.MAX_TOKENS if getattr(worker, "kind", None) in SEARCHING_KINDS else None
-                    model, messages, tools, searches, reservation, claimed, search_limited = yield from self._admit_chat_step(
-                        model, messages, step, registry, cancellation, searches, claim_policy, worker, clamp_floor,
-                        server_tools=server_tools, answer_output=answer_output, closing=not allow_tools)
+                    reservation, claimed = yield from self._admit(model, messages, step, tools, cancellation, searches,
+                                                                  claim_policy, worker, closing=closing)
                 else:
                     claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
                         run_token=self.run_token, policy=claim_policy, reservation=reservation)
             except AgentTokenBudgetExceeded as exc:
-                if self.policy.account_budget_only or not searches:
-                    # Refused before its claim: the step stays free for the
-                    # closing step (_closing_index).
-                    exc.unclaimed_step = step
-                    raise
-                # Admission failed before any paid request. Keep all hard
-                # bounds, but allow a response from the evidence already held.
-                self.costs.release(reservation)
-                reservation = None
-                with self.condition:
-                    self.search_remaining += searches
-                searches = 0
-                tools = [*registry.schemas, *server_tools]
-                messages = [*messages]
-                messages[0] = {**messages[0], "content": messages[0]["content"] +
-                    "\nWeb search is unavailable for this step because its token reservation exceeds the remaining daily allowance. "
-                    "Use existing evidence, state any uncertainty, and do not imply new web research."}
-                if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
-                    raise AnalysisBudgetExceeded("Agent session context limit reached")
-                reservation = self.costs.reserve(model, messages, tools)
-                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
-                    run_token=self.run_token, policy=claim_policy, reservation=reservation)
-                search_limited = True
+                # Refused before its claim: the step stays free for the
+                # closing step (_closing_index).
+                exc.unclaimed_step = step
+                raise
             if not claimed:
                 raise ValueError("This model step has already started")
             self.claimed = True
@@ -1821,9 +1810,6 @@ class DelegationLoop(AgentLoop):
             if not worker:
                 if step == "completion:0":
                     yield {"type": "started", "chat_id": self.chat_id, "turn_id": self.turn_id, "delegation": True}
-                if search_limited:
-                    yield self.tool_event(step + ":web_search", "web_search", "blocked",
-                        text="Web search was skipped for this step: available tokens do not cover the search and its follow-up response. Continuing with existing sources.")
                 yield self.status(step, "started", status="working", settings=model.settings(),
                                   clear_response=step != "completion:0" and not self.comparison)
             log_actor = self._log_actor(step, worker)
@@ -1841,7 +1827,7 @@ class DelegationLoop(AgentLoop):
                 provider_attempted = True
                 streaming = self._halt_scope(halt)
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
-                                      native_searches=searches, allow_tool_calls=allow_tools,
+                                      native_searches=searches, allow_tool_calls=allow_tools, tool_choice=tool_choice,
                                       session_id=None if worker else self.provider_session)
                 try:
                     for event in source:
@@ -1973,34 +1959,22 @@ class DelegationLoop(AgentLoop):
                     value.record_unstarted(model)
                 if worker:
                     self._stream_progress(worker, stream_progress, value.usage, streaming=False, force=True)
-                self.costs.reconcile(reservation, value.usage)
+                self.costs.reconcile(reservation, value.usage, model=model, session=session, kind=kind,
+                                     searches=searches)
                 if worker:
                     worker.usages.append(value.usage)
                 with self.condition:
                     self.unsettled[step] = (value, status)
                     if getattr(worker, "kind", None) == "audit":
-                        from app.services import agent_quota
-                        self.reviewer_charge += agent_quota.measured_charge(value.usage) or 0
+                        self._count_reviewer_charge(value.usage)
                 self._settle_step(step, value, status)
                 log_actor = self._log_actor(step, worker)
                 if log_actor == "agent" and status == "succeeded" and not summary:
                     self._review_from_here(value)
                 if log_actor:
-                    # Outward calls of the agent's step wait for the
-                    # reviewers (agent_gate): the gate opens before the
-                    # entry, so no reviewer reads it in an ordinary round first.
-                    # Not for a step a halt broke off: its calls never run.
-                    gate = (self._open_gate(value) if log_actor == "agent" and status == "succeeded"
-                            and getattr(value, "halted", None) is None and not summary else None)
-                    entry = None
-                    try:
-                        # What the step thought, wrote, called and found, also
-                        # when it failed or was stopped.
-                        entry = self.work_log.step(log_actor, step, model, value, log_status or status)
-                    finally:
-                        if gate is not None:
-                            self.comparison.auditor.ready_gate(gate, entry)
-                            value.gate = gate
+                    # What the step thought, wrote, called and found, also
+                    # when it failed or was stopped.
+                    self.work_log.step(log_actor, step, model, value, log_status or status)
             elif reservation is not None:
                 self.costs.release(reservation)
             count = (value.usage or {}).get("web_search_requests")
@@ -2197,29 +2171,52 @@ class DelegationLoop(AgentLoop):
 
     def _execute_stream(self, value, call, registry=None):
         """Keep SSE live while a tool fans out or waits for the reviewers."""
+        [response] = yield from self._execute_together(value, [call], registry)
+        return response
+
+    def _execute_together(self, value, calls, registry=None):
+        """Runs ``calls`` at the same time, each on a thread of its own, while
+        SSE stays live, and returns their results in call order. What a
+        tool counts it counts in call order (agent_tools.call_order). Their
+        work log entries follow in that order once all have ended, as the
+        agent reads them. The first error in call order is raised once every
+        call has ended; a closed stream stops them all, as Stop does."""
         from contextvars import copy_context
-        result = queue.Queue(maxsize=1)
         registry = registry or self.registry
-        def work():
+        outcomes = [None] * len(calls)
+        order = CallOrder(len(calls))
+
+        def work(index, call):
+            order.enter(index)
             try:
-                result.put((self._execute(registry, value, self.cancellation, call), None))
+                outcomes[index] = (self._run_call(registry, value, self.cancellation, call), None)
             except BaseException as exc:
-                result.put((None, exc))
-        worker = threading.Thread(target=copy_context().run, args=(work,), daemon=True)
-        worker.start()
+                outcomes[index] = (None, exc)
+            finally:
+                give_turn()
+        threads = [threading.Thread(target=copy_context().run, args=(work, index, call), daemon=True,
+                                    name=f"agent-call-{call['id']}"[:80])
+                   for index, call in enumerate(calls)]
+        for thread in threads:
+            thread.start()
         try:
-            while worker.is_alive():
-                yield from self._events()
-                worker.join(.1)
+            for thread in threads:
+                while thread.is_alive():
+                    yield from self._events()
+                    thread.join(.1)
             yield from self._events()
-            response, error = result.get()
-            if error:
-                raise error
-            return response
         finally:
-            if worker.is_alive():
+            if any(thread.is_alive() for thread in threads):
                 self.cancellation.cancel()
-                worker.join()
+                for thread in threads:
+                    thread.join()
+            for done, _ in filter(None, outcomes):
+                if done is not None:
+                    self._log_call(done[1])
+        for _, error in outcomes:
+            if error is not None:
+                raise error
+        return [done[0] for done, _ in outcomes]
 
     def _watch(self):
         from google.api_core.exceptions import DeadlineExceeded, InternalServerError, ServiceUnavailable
@@ -2231,6 +2228,8 @@ class DelegationLoop(AgentLoop):
                 self._check()
                 if self.claimed:
                     root = self.store.check_delegation(self.uid, self.chat_id, self.turn_id, self.run_token)
+                    if (root or {}).get("chat_google_data"):
+                        self.mark_google_data()
                     self._receive_notes(root)
                     self._receive_hold(root)
                 last_verified = time.monotonic()
@@ -2261,45 +2260,51 @@ class DelegationLoop(AgentLoop):
         one too, between calls, so no VM command runs then; a reviewer's halt
         that comes while it is open waits until it is answered. A reviewer's
         halt while another hold is open joins that card (joined_halt), and
-        counts as shown: True as well. The app's own cards (``gate``,
-        ``ask``) wait for the open one: False. ``step``: the agent's step
-        the card is about, for its ``paused`` entry (a reviewer's halt: the
-        step of the entry it names)."""
+        counts as shown: True as well. One card per entry: a reviewer's halt
+        on an entry whose card the user decided opens none (HOLD_DECIDED).
+        The app's own cards (``domain``, ``ask``) wait for the open one:
+        False. ``step``: the agent's step the card is about, for its
+        ``paused`` entry (a reviewer's halt: the step of the entry it names)."""
         from uuid import uuid4
         joined = None
+        entry = details.get("entry")
+        halted = bool(details.get("reviewer")) and not details.get("ask") and not details.get("domain")
         with self.condition:
             if self.closed.is_set() or self.cancellation.cancelled:
                 return False
             if self.answer_fixed and not details.get("ask"):
                 # The answer stands (_finish_merged); its marks say the rest.
                 return False
+            if halted and (entry in self.decided_entries
+                           or (entry in self.hold_entries and self.hold_decision is not None)):
+                return HOLD_DECIDED
             if self.hold is not None:
-                if details.get("gate") or details.get("ask"):
+                if details.get("domain") or details.get("ask"):
                     return False
                 if self.hold.get("ask") or self.hold_decision is not None:
                     # Opens once the user's own card is answered, or the
                     # card they just decided is over (_hold_wait); a second
                     # halt meanwhile joins the first.
                     self.queued_hold = details if self.queued_hold is None else joined_halt(self.queued_hold, details)
+                    self.queued_entries.add(entry)
                     return True
-                # Before 2026-10-29 the second halt was lost, its reason
-                # neither on the card nor in the log.
                 joined = self.hold = joined_halt(self.hold, details)
+                self.hold_entries.add(entry)
             else:
                 hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
                         "timeout_seconds": self.hold_timeout}
                 self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
                 self.hold_unsaved = False
+                self.hold_entries = {entry} if halted else set()
                 self.condition.notify_all()
         if joined is not None:
-            self._show_joined(joined, details)
+            self._show_joined(joined)
             return True
         if self.vm_tools is not None and not details.get("ask"):
             self.vm_tools.interrupt()
         if not details.get("ask"):
             # The agent's step that streams now breaks off (_step): its
-            # searches and calls wait for the user too. Since 2026-10-29;
-            # before, it ran to its end, up to five search rounds included.
+            # searches and calls wait for the user too.
             with self.condition:
                 streaming = self.step_halt
             if streaming is not None:
@@ -2312,19 +2317,16 @@ class DelegationLoop(AgentLoop):
         self._send({"type": "hold", "hold": hold}, "hold")
         self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                   **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
-                                  **({"gate": True} if hold.get("gate") else {}),
                                   **({"domain": hold["domain"]} if hold.get("domain") else {}),
                                   **({"ask": hold["ask"], "request": hold.get("request", "")}
                                      if hold.get("ask") else {}),
                                   **({"choices": hold["choices"]} if hold.get("choices") else {}),
                                   "halt": hold["kind"], "state": "waiting"}), f"hold-{hold['id']}")
         if self.work_log is not None:
-            before = " before its calls ran" if details.get("gate") else ""
             asked = details.get("ask")
-            # The step and, for a gate, its wait as fields of the entry (I9).
-            fields = {"step": step or self._entry_step(details.get("entry"))}
-            if details.get("gate") and details.get("gate_ms") is not None:
-                fields["gate_ms"] = details["gate_ms"]
+            domain = details.get("domain")
+            # A reviewer's halt says neither who nor why: every reviewer
+            # reads the log, and none sees what another found.
             self.work_log.app("paused", (
                 "The user has the browser: the agent waits until they hand it back." if asked == "takeover" else
                 f"The agent asks the user to act in the browser: {details.get('request', '')}" if asked == "browser"
@@ -2333,12 +2335,9 @@ class DelegationLoop(AgentLoop):
                 else f"The agent asks the user to choose: {details.get('request', '')} "
                      f"({' / '.join(details.get('choices') or [])})" if asked == "choice"
                 else f"The agent asks the user before a step: {details.get('request', '')}" if asked else
-                f"The agent asks to reach {details['domain']} (entry {details['entry']}): the user decides."
-                if details.get("domain") else
-                f"{details['reviewer']} paused the work for the user{before} ({details['kind']}, "
-                f"entry {details['entry']}): {details['reason']}" if details.get("reviewer") else
-                f"No reviewer could check entry {details['entry']} before its calls ran: the user decides."),
-                **fields)
+                f"The agent asks to reach {domain}" + (f" (entry {entry})" if entry else "") + ": the user decides."
+                if domain else "The work was paused for the user's decision."),
+                step=step or self._entry_step(entry))
         return True
 
     def _entry_step(self, seq):
@@ -2352,11 +2351,11 @@ class DelegationLoop(AgentLoop):
             return None
         return found[0][0].get("step") if found and found[0][0].get("seq") == seq else None
 
-    def _show_joined(self, hold, details):
-        """The open card with a reviewer's halt that joined it: saved, sent
-        again (the same id, a new ``revision`` redraws it) and in the log
-        with the new reason. Nothing runs meanwhile: the open hold holds it.
-        Saved or not, its id is the one the root knows (or not) already."""
+    def _show_joined(self, hold):
+        """The open card with a reviewer's halt that joined it: saved and
+        sent again (the same id, a new ``revision`` redraws it). Nothing runs
+        meanwhile: the open hold holds it. Saved or not, its id is the one
+        the root knows (or not) already."""
         if self._save_hold(hold):
             with self.condition:
                 # The root knows it now: decisions go through it again.
@@ -2365,10 +2364,6 @@ class DelegationLoop(AgentLoop):
         self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                   "reviewer": hold["reviewer"], "reasons": hold.get("reasons") or []}),
                    f"hold-{hold['id']}")
-        if self.work_log is not None:
-            self.work_log.app("paused", f"{details['reviewer']} also paused the work for the user "
-                                        f"({details['kind']}, entry {details['entry']}): {details['reason']}",
-                              step=self._entry_step(details.get("entry")))
 
     def _save_hold(self, hold):
         """The open hold on the run's root (set_hold), where the decision
@@ -2427,11 +2422,10 @@ class DelegationLoop(AgentLoop):
         workspace opened (_open_workspace calls this with ``value`` None,
         after its tools took their place, so the reviewers' brief has its
         rules), or, where the message had it open from the start, with the
-        agent's first step that calls one of its tools, before that step's
-        gate opens (_open_gate), so they check its outward calls too. Not for
-        ask_user alone: a question to the user does not work in the
-        workspace. They read the log from its start: the message's work
-        before is theirs as well."""
+        agent's first step that calls one of its tools, so they read that
+        step in their first round. Not for ask_user alone: a question to the
+        user does not work in the workspace. They read the log from its
+        start: the message's work before is theirs as well."""
         if self.reviewers != "workspace" or self.work_log is None or self.comparison is None:
             return
         auditor = self.comparison.auditor
@@ -2443,82 +2437,7 @@ class DelegationLoop(AgentLoop):
                 return
         logging.info("Agent reviewers start with the workspace step=%s",
                      getattr(value, "step_id", None) or "open_workspace")
-        # The allowance the route read before the first step is spent
-        # by now: their shares read it afresh (AnswerAudit.output_share).
-        auditor.allowance = None
         auditor.follow(self.work_log)
-
-    def _open_gate(self, value):
-        """The gate for this agent step's calls that act outside the
-        workspace (agent_gate.outward), when reviewers follow the work
-        (agent_audit.AnswerAudit.open_gate); else None."""
-        auditor = self.comparison.auditor if self.comparison is not None else None
-        if auditor is None or not auditor.sessions or not getattr(value, "tool_calls", None):
-            return None
-        from app.services.agent_gate import outward
-        # A call past the step's limit never runs (CALL_OVER_LIMIT), nor one
-        # of a tool the account lacks ("unknown tool", bug hunt 2026-11-03):
-        # nothing to check. No tool waits here since 2026-11-04 (agent_gate).
-        over_limit = getattr(value, "over_limit_ids", None) or set()
-        calls = [call for call in value.tool_calls if call["id"] not in over_limit and outward(call)
-                 and (call.get("function") or {}).get("name") in self.registry.tools]
-        return auditor.open_gate(calls, value.step_id) if calls else None
-
-    def _gate_wait(self, gate):
-        """An outward call waits for the reviewers' verdicts on its step. All
-        say "go": it runs. One halt is enough, and so is no reviewer able to
-        answer: the user decides on the card (request_hold, ``gate``). The
-        agent learns only the user's decision: "continue" runs the call, a
-        message ("steer") leaves it unrun, Stop ends the response. Once per
-        step: the decision covers the step's outward calls, no others."""
-        if gate.decision is not None:
-            return gate.decision
-        auditor = self.comparison.auditor
-        announced = False
-        # The wait pauses the turn's clock (_gate_pause); each reviewer has
-        # GATE_SECONDS for its verdict (gate_result).
-        self.gate_started = self.clock()
-        try:
-            while True:
-                result = auditor.gate_result(gate)
-                if result is not None:
-                    break
-                if not announced:
-                    announced = True
-                    yield self.activity({"step_id": "gate", "id": f"gate-{gate.id}", "kind": "progress",
-                                         "text": "The reviewers check this step before it runs."})
-                auditor.gate_wait(.2)
-                if self.watch_error:
-                    raise self.watch_error
-                self.cancellation.raise_if_cancelled()
-                yield from self._events()
-        finally:
-            self.gate_paused += self.clock() - self.gate_started
-            self.gate_started = None
-        verdict, halts = result
-        if verdict == "go":
-            gate.decision = "continue"
-            if self.work_log is not None:
-                # The gate's step and wait as fields of the entry, as
-                # scripts/audit_report.py and agent_audit_metrics read them
-                # (I9: until 2026-10-30 neither was there).
-                trace = auditor.gate_trace(gate)
-                self.work_log.app("checked", {"text": f"The reviewers let the calls of entry {gate.entry} run.",
-                                              **trace}, step=gate.step, gate_ms=trace.get("gate_ms"))
-            return gate.decision
-        details = auditor.gate_hold(gate, halts)
-        while True:
-            # A reviewer's ordinary halt may be open: it comes first.
-            decision = yield from self._hold_wait()
-            self.cancellation.raise_if_cancelled()
-            if decision == "steer" or self.closed.is_set():
-                gate.decision = "steer"
-                return gate.decision
-            if self.request_hold(details, step=gate.step):
-                break
-        # Only the user's "continue" runs the calls.
-        gate.decision = "continue" if (yield from self._hold_wait()) == "continue" else "steer"
-        return gate.decision
 
     def _receive_hold(self, root):
         """The user's decision on the open hold, from the run's root (the watcher)."""
@@ -2633,7 +2552,7 @@ class DelegationLoop(AgentLoop):
         a choice card. The turn keeps what it was and how it ended, never its
         reasons nor that answer (``holds``, agent_holds)."""
         if len(self.holds) < HOLDS_KEPT:
-            self.holds.append({"kind": hold.get("kind"), "gate": bool(hold.get("gate")), "ask": hold.get("ask"),
+            self.holds.append({"kind": hold.get("kind"), "ask": hold.get("ask"),
                                "domain": hold.get("domain"), "reviewer": hold.get("reviewer") or None,
                                "decision": decision, "seconds": round(max(seconds, 0.0), 1)})
         try:
@@ -2668,6 +2587,8 @@ class DelegationLoop(AgentLoop):
                     self.paused_seconds += waited
                     choice, self.hold_choice = self.hold_choice, None
                     self.hold = self.hold_decision = None
+                    self.decided_entries |= self.hold_entries
+                    self.hold_entries = set()
                     break
                 self.condition.wait(.2)
             if self.watch_error:
@@ -2707,9 +2628,11 @@ class DelegationLoop(AgentLoop):
         yield from self._events()
         with self.condition:
             queued, self.queued_hold = self.queued_hold, None
-        if queued is not None and decision != "stop":
+            entries, self.queued_entries = self.queued_entries, set()
+        if queued is not None and decision != "stop" and self.request_hold(queued) is True:
             # The reviewer's halt that came meanwhile: before the next call.
-            self.request_hold(queued)
+            with self.condition:
+                self.hold_entries |= entries
         if decision == "stop" or (decision == "timeout" and not asked):
             if decision == "timeout":
                 # Said as such, not as a plain stop.
@@ -2745,17 +2668,49 @@ class DelegationLoop(AgentLoop):
         return bool(notes)
 
     def _routing_model(self):
-        """The chat model for a routing step: reasoning headroom on top of
-        its text allowance (routing_output_limit), at the lighter level once
-        a routing step of this turn reasoned through its allowance. With
-        comparison tools every step may write the answer: _orchestrate adds
-        the answer allowance (_answer_output)."""
+        """The chat model for its next step, at the lighter level once a
+        routing step of this turn reasoned through its allowance. Its output
+        limit: reasoning headroom on top of the text allowance
+        (routing_output_limit); with comparison tools, where every step may
+        write the answer, the answer's (answer_output_limit). The same for
+        every step of the message and every account."""
         model = self.routing_lighter or self.model
-        return replace(model, max_output_tokens=routing_output_limit(model))
+        limit = routing_output_limit(model)
+        if self.merged:
+            limit = max(limit, answer_output_limit(model))
+        return replace(model, max_output_tokens=limit)
 
-    def _answer_output(self):
-        """Output limit of a step that may write the answer."""
-        return answer_output_limit(self.routing_lighter or self.model)
+    def _search_rounds(self):
+        """Search rounds of every step of the agent in this message: the same
+        for every account and every step, whatever the allowance (a changed
+        search tool rewrites the provider's cached prefix)."""
+        from app.services.agent_audit import AGENT_SEARCH_ROUNDS
+        return AGENT_SEARCH_ROUNDS if self.merged else 1
+
+    def _step_searches(self):
+        """The search rounds a step of the agent sends: none with Google data."""
+        return 0 if self._holds_google_data() else self._search_rounds()
+
+    def _search_tools(self, model):
+        return search_tools(model, self._step_searches())
+
+    def _holds_google_data(self):
+        """Whether this run's requests may carry Google data (Google model
+        rules: restricted_model, no web search). Its content has it when the
+        chat held it as the message started (the route read it, ``google_data``)
+        or once a tool of this run brought some in (mark_google_data, on the
+        Gmail import); nothing else adds Google data to what the run sends.
+        A mark another message set meanwhile reaches the run with the
+        watcher's next look at the chat (_watch)."""
+        if self.google_data is None:
+            chat = self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}
+            self.google_data = bool(chat.get("google_data"))
+        return self.google_data
+
+    def mark_google_data(self):
+        """Google data joined the chat in this run (agent_gmail.record): every
+        call from now on follows the Google rules."""
+        self.google_data = True
 
     def _answer_attempt(self, model, messages, index, steps, registry, *, rate_limit=True, **step_args):
         """One step of the chat model, with one retry.
@@ -2892,8 +2847,7 @@ class DelegationLoop(AgentLoop):
         if not self.merged:
             return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
                                                     rate_limit=False, **search))
-        args = {**search, "answer_candidate": True, "hold": self._hold_answer(),
-                "answer_output": self._answer_output()}
+        args = {**search, "answer_candidate": True, "hold": self._hold_answer()}
         return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
                                                 rate_limit=bool(self.comparison.comparisons), **args))
 
@@ -3049,8 +3003,7 @@ class DelegationLoop(AgentLoop):
         with self.condition:
             # The answer stands from here on: no reviewer's halt any more
             # (request_hold), and one that came after the last look ends
-            # with it. Before 2026-10-29 its card stood until the turn's end,
-            # doing nothing, and the turn's clock stood still.
+            # with it.
             self.answer_fixed = True
             late = self.hold if self.hold is not None and not self.hold.get("ask") else None
             if late is not None:
@@ -3066,7 +3019,10 @@ class DelegationLoop(AgentLoop):
             from app.services.agent_comparison import answer_hash
             self.work_log.app("answer_fixed", {"hash": answer_hash(value.text), "chars": len(value.text)},
                               step=value.step_id)
-        comparison.freeze_for_synthesis()
+        if not comparison.text and not comparison.finalized:
+            # The reviewers' final rounds start now, ahead of the saves below.
+            comparison.auditor.begin(value.text)
+        comparison.freeze_answers()
         comparison.capture(value.text)
         yield from self._hand_over()
         yield from self._finish_review(value)
@@ -3139,9 +3095,10 @@ class DelegationLoop(AgentLoop):
         return self._workers_ready()
 
     def _merged_wrap_up(self, reason, steps, value):
-        """A per-turn limit in a merged turn: one last step of the agent, its
-        tools listed but not callable (tool_choice none, prompt cache kept),
-        writes the answer from what it has."""
+        """A per-turn limit in a merged turn: one last step of the agent
+        writes the answer from what it has. Its request is every step's
+        (tools, search and tool choice: it reads their cached prefix, at the
+        message's largest request); a call it makes is not run."""
         comparison = self.comparison
         if not self._can_wrap_up():
             raise AnalysisBudgetExceeded(reason)
@@ -3158,10 +3115,10 @@ class DelegationLoop(AgentLoop):
             if index is None:
                 raise AnalysisBudgetExceeded("Agent orchestration call limit reached before writing the answer")
             # The level this turn switched to after a thought-only step, if any.
-            model = self.routing_lighter or self.model
-            model = replace(model, max_output_tokens=answer_output_limit(model))
-            args = {"answer_candidate": True, "allow_tools": False, "searches_enabled": False}
-            value = yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry, **args)
+            model = self._routing_model()
+            args = {"answer_candidate": True, "allow_tools": False, "closing": True, "searches_enabled": True,
+                    "search_rounds": self._search_rounds()}
+            value = yield from self._closing_attempt(model, index, steps, args)
             if _thought_only(value):
                 lighter = lighter_reasoning(model)
                 index = next(steps, None) if lighter else None
@@ -3170,8 +3127,7 @@ class DelegationLoop(AgentLoop):
                 yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",
                                      "text": "The model used its whole output allowance on reasoning before writing. "
                                              "Writing the answer again with lighter reasoning."})
-                value = yield from self._answer_attempt(lighter, self.messages, index, steps, registry=self.registry,
-                                                        **args)
+                value = yield from self._closing_attempt(lighter, index, steps, args)
                 if _thought_only(value):
                     raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
             if value.finish_reason in {"length", "max_tokens"}:
@@ -3193,6 +3149,20 @@ class DelegationLoop(AgentLoop):
             return
         yield from self._finish_review(value)
         self.completion.text, self.completion.finish_reason = comparison.text, "stop"
+
+    def _closing_attempt(self, model, index, steps, args):
+        """The closing step. A reply of calls alone, which a writing step
+        does not run, gets one more attempt that may not call (tool choice
+        "none"): that request differs from the others, but only this once."""
+        value = yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry, **args)
+        if value.text.strip() or not getattr(value, "skipped_tool_parts", 0) or value.tool_calls:
+            return value
+        index = next(steps, None)
+        if index is None:
+            return value
+        logging.warning("Agent closing step called tools only; writing again without tools model=%s", model.model)
+        return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
+                                                **{**args, "tool_choice": "none"}))
 
     def _limit_fact(self, reason):
         """What the wrap-up step reads of ``reason``: the limit, and whether
@@ -3250,8 +3220,7 @@ class DelegationLoop(AgentLoop):
                     if self.settings_tools:
                         self.settings_tools.mock_turn(self.answer_conversation[-1]["content"])
                 steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
-                from app.services.agent_audit import AGENT_SEARCH_ROUNDS
-                search_rounds = AGENT_SEARCH_ROUNDS if self.merged else 1
+                search_rounds = self._search_rounds()
                 value = None
                 for index in steps:
                     # A reviewer's halt waits for the user here (request_hold).
@@ -3331,12 +3300,12 @@ class DelegationLoop(AgentLoop):
                             yield from self._keep_cut_answer(value)
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     if value.tool_calls:
-                        accepted_tool = last_accepted = False
+                        accepted_tool = False
                         limit = None
                         results = {}
-                        # Why the step's later calls do not run (T2): the
-                        # user wrote to the agent (HOLD_STEERED), or the step
-                        # was interrupted (CALL_AFTER_*). Each such call gets
+                        # Why the step's later calls do not run: the user
+                        # wrote to the agent (HOLD_STEERED), or the step was
+                        # interrupted (CALL_AFTER_*). Each such call gets
                         # that as its result, the app's own text (``unrun``).
                         stopped, unrun = None, set()
                         # A browser call of this step that failed: the step's
@@ -3349,78 +3318,99 @@ class DelegationLoop(AgentLoop):
                             results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
                                                    "content": json.dumps({"error": text})}
 
-                        for position, call in enumerate(value.tool_calls):
-                            name = (call.get("function") or {}).get("name")
-                            if call["id"] in over_limit:
-                                not_run(call, CALL_OVER_LIMIT)
+                        # One group after the other; the calls of a group
+                        # run at the same time (_call_groups), any other call
+                        # on its own with its waits for the user.
+                        for group in self._call_groups(value.tool_calls, over_limit):
+                            if limit:
+                                break
+                            waiting = []
+                            for position, call in group:
+                                name = (call.get("function") or {}).get("name")
+                                if call["id"] in over_limit:
+                                    not_run(call, CALL_OVER_LIMIT)
+                                elif stopped is not None:
+                                    not_run(call, stopped)
+                                elif browser_failed and name == "browser":
+                                    not_run(call, CALL_AFTER_BROWSER_FAILURE)
+                                else:
+                                    # The chat's next message starts with the workspace open.
+                                    self.workspace_used = self.workspace_used or name in self.workspace_names
+                                    waiting.append((position, call))
+                            if not waiting:
                                 continue
-                            if stopped is not None:
-                                not_run(call, stopped)
-                                continue
-                            if browser_failed and name == "browser":
-                                not_run(call, CALL_AFTER_BROWSER_FAILURE)
-                                continue
-                            # The chat's next message starts with the workspace open.
-                            self.workspace_used = self.workspace_used or name in self.workspace_names
-                            # Between the calls of a batch too: after a halt
-                            # the next call waits for the user. Once the user
-                            # wrote to the agent, the rest of the batch waits
-                            # for the agent's next step instead; so does a
-                            # pause that came after a call of this step ran.
+                            position = waiting[0][0]
+                            # Before every group too: after a halt it waits
+                            # for the user. Once the user wrote to the agent,
+                            # the rest of the batch waits for the agent's next
+                            # step instead; so does a pause that came after a
+                            # call of this step ran.
                             paused = yield from self._hold_wait()
                             if paused == "steer" or (paused is not None and position):
                                 stopped = HOLD_STEERED if paused == "steer" else CALL_AFTER_PAUSE
-                                not_run(call, stopped)
+                                for _, call in waiting:
+                                    not_run(call, stopped)
                                 continue
-                            repeat = self._identical_call(call)
-                            if repeat == "stop":
-                                limit = TURN_REPEAT_LIMIT
-                                break
-                            if repeat == "refuse":
-                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
-                                    "error": f"This identical {name} call already ran {self.policy.turn_identical_calls} "
-                                             "times in this message and is not run again. Its results are above: use them "
-                                             "and continue with a different step. Repeating it ends the response."})}
-                                last_accepted = False
+                            run, keys = [], set()
+                            for _, call in waiting:
+                                name = (call.get("function") or {}).get("name")
+                                repeat = self._identical_call(call)
+                                if repeat == "stop":
+                                    limit = TURN_REPEAT_LIMIT
+                                    break
+                                if repeat == "refuse":
+                                    results[call["id"]] = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
+                                        "error": f"This identical {name} call already ran {self.policy.turn_identical_calls} "
+                                                 "times in this message and is not run again. Its results are above: use them "
+                                                 "and continue with a different step. Repeating it ends the response."})}
+                                    continue
+                                key = self._call_key(call)
+                                if key is not None and key in keys:
+                                    # Run once: both would read the same.
+                                    not_run(call, CALL_REPEATED)
+                                    continue
+                                keys.add(key)
+                                run.append(call)
+                            if not run:
                                 continue
-                            gate = getattr(value, "gate", None)
-                            if gate is not None and call["id"] in gate.call_ids \
-                                    and (yield from self._gate_wait(gate)) == "steer":
-                                # Not run: the user wrote to the agent instead.
-                                stopped = HOLD_STEERED
-                                not_run(call, stopped)
-                                continue
+                            call = run[0]
+                            name = (call.get("function") or {}).get("name")
                             if name == ASK_TOOL:
                                 # The user's card (agent_ask.py); the tool then
                                 # returns their answer. A message on it is that
                                 # answer: the rest of the batch waits, and so it
-                                # does after any answer (T2).
+                                # does after any answer.
                                 asked = yield from self._ask_wait(call)
                                 if asked != "run":
                                     # "run": arguments the tool refuses, no card.
                                     stopped = HOLD_STEERED if asked == "steer" else CALL_AFTER_ASK
-                            elif name in self.workspace_tools:
+                            elif any((c.get("function") or {}).get("name") in self.workspace_tools for c in run):
                                 taken = yield from self._takeover_wait()
                                 if taken in {"steer", "timeout"}:
                                     # Not run: nothing of the agent's reached the
                                     # workspace while the user had the browser.
                                     from app.services.agent_ask import TAKEOVER_TIMEOUT
                                     stopped = HOLD_STEERED if taken == "steer" else TAKEOVER_TIMEOUT
-                                    not_run(call, stopped)
-                                    last_accepted = False
+                                    for call in run:
+                                        not_run(call, stopped)
                                     continue
                                 if taken is not None and position:
                                     # The user had the browser after a call of
                                     # this step ran: the page is theirs now.
                                     stopped = CALL_AFTER_TAKEOVER
-                                    not_run(call, stopped)
+                                    for call in run:
+                                        not_run(call, stopped)
                                     continue
-                            result = yield from self._execute_stream(value, call)
-                            results[call["id"]] = result
-                            content = json.loads(result["content"])
-                            last_accepted = "error" not in content
-                            accepted_tool |= last_accepted
-                            browser_failed = browser_failed or (name == "browser" and not last_accepted)
+                            if len(run) > 1:
+                                done = yield from self._execute_together(value, run)
+                            else:
+                                done = [(yield from self._execute_stream(value, call))]
+                            for call, result in zip(run, done):
+                                results[call["id"]] = result
+                                accepted = "error" not in json.loads(result["content"])
+                                accepted_tool |= accepted
+                                browser_failed = browser_failed or (
+                                    (call.get("function") or {}).get("name") == "browser" and not accepted)
                             if self.comparison and self.comparison.finalized:
                                 # Ignore speculative extra calls in the same batch
                                 # once the review has reached an end state.

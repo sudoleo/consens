@@ -35,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.openrouter_contract import OPENROUTER_BASE_URL, openrouter_headers
 from app.services.agent_costs import FETCH_COST_NANOS
-from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+from app.services.agent_tools import ReadOnlyTool, ToolRegistry, call_order
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from app.services.llm.engines import _ProviderResponseError, web_fetch_tool
 from app.services.llm.provider_runtime import (AnalysisBudget, AnalysisBudgetExceeded, ProviderCancellation,
@@ -120,10 +120,9 @@ LABEL_EARLIER = "an earlier message's sources"
 # every step (the provider's own): the agent does not call it, so "your
 # search" read as a search it never made (2026-10-28).
 LABEL_SEARCH = "a web search result of this message"
-# Since 2026-10-28 any public page, which the reviewers follow live (until
-# 2026-10-29 one the message did not hold waited for them first,
-# agent_gate.py). The provider's search of GPT-6 Luna and GPT-6.1 Terra sends
-# no hits to the app, so they could read nothing they found.
+# Any public page, which the reviewers follow live. The provider's search of
+# GPT-6 Luna and GPT-6.1 Terra sends no hits to the app, so they could read
+# nothing they found.
 LABEL_CHOSEN = "a page you chose"
 
 
@@ -353,7 +352,7 @@ class SourceReader:
             "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins, scripts "
             f"or clicks; a read takes about 10 to 30 seconds. At most {READS_PER_MESSAGE} per message.")
         self.tool = ReadOnlyTool("read_source", description, AuditReadSourceArgs, self.read,
-                                 activity=self.activity)
+                                 activity=self.activity, concurrent=True, ordered=True)
 
     # --- What may be read -------------------------------------------------
     def cited(self):
@@ -448,7 +447,8 @@ class SourceReader:
         answer."""
         loop = self.loop
         loop._check(cancellation)
-        with self.lock:
+        # The limits per step and message take the step's reads in call order.
+        with call_order(cancellation), self.lock:
             try:
                 self._refuse(args)
                 budget = self._time_budget()
@@ -459,13 +459,17 @@ class SourceReader:
                                      "message's web search, a source the models you asked cite (compare_models), "
                                      "a source of an earlier message of this chat or one the user wrote, copied "
                                      "exactly.")
-                tried = next((r for r in self.reads if r["status"] in {"completed", "failed"}
+                tried = next((r for r in self.reads if r["status"] in {"completed", "failed", "running"}
                               and key in {url_key(r["url"]), url_key(r.get("cited_url"))}), None)
                 if tried is not None and tried["status"] == "failed":
                     raise ValueError("This source was already tried in this message and could not be read. Do not "
                                      "try it again; continue with what you have.")
             except ValueError as exc:
                 return {"status": "refused", "reason": str(exc)[:500]}
+            if tried is not None and tried["status"] == "running":
+                # Another call of this step reads it at the same time.
+                return {"status": "already_read", "url": tried["url"],
+                        "note": "Another call of this step reads this source; its text is in that call's result."}
             if tried is not None:
                 return {"status": "already_read", "url": tried["url"],
                         "note": "You already read this source in this message; its text is in that earlier result."}

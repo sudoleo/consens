@@ -6,7 +6,7 @@ counts every chat turn of the agent once at its end (until 2026-10-31 only
 those in audit mode, then one of two): by status and review status, by
 number of reviewers and the user's reviewers setting (``review_setting``,
 since 2026-11-01), in histogram buckets of its times (total, until the
-answer was fixed, marks after the last word, each gate's wait, each
+answer was fixed, marks after the last word, each
 reviewer's final round by model, the reviewers' backlog when the answer was
 fixed), its halts by kind and decision, its failures by code, and with the
 VM whether it had the workspace from the start, opened it or stayed without
@@ -17,9 +17,9 @@ The run's thread only copies what it holds in memory (``capture``: the times
 of the work log's entries, the holds of its activity). A daemon thread reads
 the saved turn once and writes one merge of Firestore increments
 (``record``), so the counters are never on the critical path; errors are
-logged, never raised. Fields that later packages add (a reviewer's
-``final_ms`` and ``backlog``, the turn's ``agent_holds``, a gate entry's
-``gate_ms``) are read when present; without them their bucket stays empty.
+logged, never raised. Fields an older turn may lack (a reviewer's
+``final_ms`` and ``backlog``, the turn's ``agent_holds``) are read when
+present; without them their bucket stays empty.
 ``scripts/audit_report.py`` reads the documents back.
 
 Since 2026-10-30 (audit I6) every turn that used the workspace counts there
@@ -32,7 +32,6 @@ Every turn that ended its work at a limit counts its reason (``wrap_up``, I1).
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import re
@@ -42,8 +41,8 @@ from datetime import datetime, timezone
 from app.core.observability import safe_exception
 
 COLLECTION = "ops_metrics"
-# Upper bounds in seconds (Z1: marks p90 <= 20 s, max <= 60 s; Z5: gate p90
-# <= 10 s, never over 20 s); the last bucket is "over7200".
+# Upper bounds in seconds (Z1: marks p90 <= 20 s, max <= 60 s); the last
+# bucket is "over7200".
 SECOND_BOUNDS = (2, 5, 10, 15, 20, 30, 45, 60, 90, 120, 300, 600, 1800, 3600, 7200)
 # Unread log entries of a reviewer when the answer was fixed.
 COUNT_BOUNDS = (0, 1, 2, 3, 5, 10, 20)
@@ -86,30 +85,16 @@ def _seconds(start, end):
     return (end - start).total_seconds()
 
 
-def _gate_ms(entry, text):
-    """A gate entry's wait when it carries one (as a field or in its JSON)."""
-    value = entry.get("gate_ms")
-    if value is None and entry.get("format") == "json":
-        try:
-            value = (json.loads(text) or {}).get("gate_ms")
-        except (ValueError, AttributeError):
-            value = None
-    return value if isinstance(value, (int, float)) and not isinstance(value, bool) and value >= 0 else None
-
-
 def capture(loop):
     """What the counters need from the run's memory: no text, no account."""
     entries = []
     if loop.work_log is not None:
-        for entry, text in loop.work_log.entries_after(0):
+        for entry, _ in loop.work_log.entries_after(0):
             if entry.get("kind") == "step" and entry.get("actor") == "agent":
                 entries.append({"at": entry.get("at"), "actor": "agent", "kind": "step"})
-            elif entry.get("kind") == "app" and entry.get("name") in {"answer_fixed", "checked", "paused"}:
-                kept = {"at": entry.get("at"), "actor": "app", "kind": "app", "name": entry["name"]}
-                if entry["name"] != "answer_fixed":
-                    kept["gate_ms"] = _gate_ms(entry, text)
-                entries.append(kept)
-    holds = [{key: item.get(key) for key in ("halt", "gate", "ask", "domain", "state")}
+            elif entry.get("kind") == "app" and entry.get("name") == "answer_fixed":
+                entries.append({"at": entry.get("at"), "actor": "app", "kind": "app", "name": entry["name"]})
+    holds = [{key: item.get(key) for key in ("halt", "ask", "domain", "state")}
              for item in loop.completion.activity or [] if item.get("kind") == "hold"]
     captured = {"entries": entries, "holds": holds, "reviewers": len(loop.comparison.auditor.reviewers),
                 "review_setting": loop.comparison.auditor.setting, "ended_at": datetime.now(timezone.utc)}
@@ -154,8 +139,7 @@ def _hold_kind(hold):
         return f"ask_{hold['ask']}"
     if hold.get("domain"):
         return "domain"
-    kind = hold.get("kind") or hold.get("halt")
-    return f"gate_{kind}" if hold.get("gate") else kind
+    return hold.get("kind") or hold.get("halt")
 
 
 def workspace_counters(turn, captured, counters):
@@ -224,19 +208,6 @@ def turn_counters(turn, captured):
         if (marks is not None and review.get("mode") == "audit" and review.get("status") != "off"
                 and status == "completed"):
             _add(counters, "marks_s", bucket(marks))
-    step_at = None
-    for entry in entries:
-        if entry.get("kind") == "step" and entry.get("actor") == "agent":
-            step_at = entry.get("at")
-        elif entry.get("kind") == "app" and entry.get("name") in {"checked", "paused"}:
-            wait = entry.get("gate_ms")
-            if wait is not None:
-                _add(counters, "gate_s", bucket(wait / 1000))
-            elif entry.get("name") == "checked":
-                # Every "checked" is a gate's go: its wait since the step's entry.
-                wait = _seconds(step_at, entry.get("at"))
-                if wait is not None:
-                    _add(counters, "gate_s", bucket(wait))
     for reviewer in reviewers:
         model = label((reviewer.get("model") or {}).get("model") if isinstance(reviewer.get("model"), dict)
                       else reviewer.get("model"))

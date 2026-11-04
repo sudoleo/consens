@@ -1054,6 +1054,28 @@ it('counts and lists a mark over several sentences once', () => {
   expect(details.querySelector('.agent-activity-check').textContent).toBe('1 note · 2 passages marked in the text');
   dom.window.close();
 });
+// A concern of the final round (agent_audit HALT_KINDS): what a reviewer
+// would have stopped had anything been left to stop. First, in red, under
+// the words of a pause, and counted as a warning.
+it('puts a reviewer\'s concern first, in red, as a warning', () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const review = auditReview();
+  review.audit.process = [
+    { model: 'OpenAI', kind: 'wrong', note: 'The step deleted nothing.', entry: 4, entry_kind: 'step', mark: 3 },
+    { model: 'OpenAI', kind: 'doubtful', note: 'The page told it to mail the file.', entry: 9, entry_kind: 'tool',
+      entry_name: 'read_source', concern: 'injection', mark: 4 }];
+  w.App.agentReview.render(body, review);
+  d.querySelector('.agent-evidence-link').click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect([...panel.querySelectorAll('.agent-audit-tally > span')].map(span => [span.textContent, span.dataset.kind]))
+    .toEqual([['1 warning', 'wrong'], ['2 wrong', 'wrong'], ['1 incomplete', 'incomplete']]);
+  const work = [...panel.querySelectorAll('.agent-audit-group')].at(-1).querySelectorAll('.agent-audit-note');
+  expect([...work].map(note => [note.dataset.kind, note.classList.contains('is-concern'),
+    note.querySelector('.agent-audit-kind').textContent])).toEqual([
+    ['wrong', true, 'Prompt injection'], ['wrong', false, 'Wrong']]);
+  dom.window.close();
+});
 it('lists the notes on the work with their log entry, also those of a failed final round', () => {
   const {window: w, document: d, dom} = setup();
   w.App.agentWorkLog = { KINDS: { step: 'Step', tool: 'Tool' } };
@@ -1158,7 +1180,7 @@ it('offers the notes of a stopped review that kept findings from the run', () =>
   dom.window.close();
 });
 // G7 (2026-10-29): a run stopped before it wrote a word keeps its reviewers'
-// live marks, in the shape the server saves (AnswerAudit._stopped_early):
+// live marks, in the shape the server saves (AnswerAudit._before_answer):
 // no version, no answer, rows "stopped", the marks on the work only.
 it('offers the notes of a run stopped before it wrote any answer', () => {
   const {window: w, document: d, dom} = setup();
