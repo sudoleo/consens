@@ -171,8 +171,10 @@ _CLIENT_REQUEST_ID_RE = re.compile(
 )
 _CURSOR_VERSION = 2
 _MAX_FIRESTORE_INTEGER = 9_223_372_036_854_775_807
+# 1 to 9 digits: a Firestore timestamp's rfc3339() drops trailing zeros
+# (…20.12345Z); parse_cursor_timestamp's round trip keeps it canonical.
 _CURSOR_TIMESTAMP_RE = re.compile(
-    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.(?:\d{6}|\d{9})Z"
+    r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{1,9}Z"
 )
 _T = TypeVar("_T")
 

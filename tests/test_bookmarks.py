@@ -1168,6 +1168,31 @@ def test_bookmark_pages_split_equal_timestamps_without_losing_a_row():
     assert _ids(first) + _ids(second) == ["b4", "b3", "b2", "b1"]
 
 
+@pytest.mark.parametrize("micros", [222220, 100000, 0])
+def test_the_next_page_starts_after_a_firestore_timestamp_ending_in_zero(micros):
+    """Firestore hands timestamps back as DatetimeWithNanoseconds, whose
+    rfc3339() drops trailing zeros (…20.22222Z). Until 2026-11-04 a cursor
+    accepted only 6 or 9 digits, so about every tenth page boundary answered
+    "Load more" and the chat search with 400 for good."""
+    from google.api_core.datetime_helpers import DatetimeWithNanoseconds
+    from google.protobuf import timestamp_pb2
+
+    def stored(seconds, micro):
+        return DatetimeWithNanoseconds.from_timestamp_pb(
+            timestamp_pb2.Timestamp(seconds=seconds, nanos=micro * 1000))
+
+    database = FakeChatDatabase()
+    for index, bookmark_id in enumerate(("b1", "b2", "b3", "b4")):
+        # b2 is the first page's last row: its microseconds end in zero.
+        database.documents[("users", "uid-1", "bookmarks", bookmark_id)] = {
+            "query": bookmark_id, "timestamp": stored(1_793_000_000 - index, micros if bookmark_id == "b2" else 123456),
+        }
+    first = _list_bookmarks(database, "/bookmarks?limit=2")
+    second = _list_bookmarks(database, "/bookmarks?limit=2&cursor=" + first.json()["next_cursor"])
+
+    assert _ids(first) + _ids(second) == ["b1", "b2", "b3", "b4"]
+
+
 def _pin(database, bookmark_id, pinned, *, uid="uid-1"):
     limiter._storage.reset()
     app = FastAPI()
