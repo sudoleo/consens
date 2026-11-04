@@ -2159,9 +2159,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`evidence_matches`, `MIN_EVIDENCE_CHARS`; mit Prüfern seit 2026-10-28 ohne).
   **Seit 2026-11-02 sperrt nichts mehr** (Max): Bis dahin sperrte Fremdinhalt
   im Blick (eigene Websuche, Seiten, Dateien, Tool-Ergebnisse) Memory für den
-  Rest der Nachricht (`memory_locked`, `MEMORY_LOCKED`), mit Prüfern seit
-  2026-10-28 stattdessen ihre Vorab-Prüfung (`agent_gate.outward` „memory“,
-  `GATE_MEMORY_NOTE`). Der Agent sucht in fast jedem ersten Schritt, und Max'
+  Rest der Nachricht (`memory_locked`, `MEMORY_LOCKED`). Der Agent sucht in fast jedem ersten Schritt, und Max'
   Konto bekam mit Opt-in einen Monat lang keine einzige Erinnerung. Jetzt
   entscheidet der Agent allein; Rückhalt ist der Hinweis mit Undo unter der
   Antwort und Settings › Memory. `AUDIT_MEMORY_WRITE_PROMPT` nennt seitdem
@@ -4624,12 +4622,13 @@ erreicht, lehnt `compare` ab, ohne etwas Bezahltes zu starten.
 Consensus-Modus unverändert nutzt) und führt `pending_models`, `failed_models`
 und `late`; eine von mehreren Antworten ist seit 2026-10-31 ein Teilvergleich
 (`partial`), kein Fehlschlag. `_freeze` hält beim Ergebnis fest, was der Agent
-las (`synthesis_providers`), `finish_comparisons` stoppt vor der Prüfung
-verbliebene Nachzügler (`late_cutoff`) und fixiert `basis_hash`; `close`
-beendet sie am Laufende (`stopped`). Was ein gestopptes oder mitten im Stream
+las (`ComparisonTools._read`, nur im Speicher; später gekommene Antworten
+tragen `late`), `finish_comparisons` stoppt nach dem Start der Schlussrunden
+verbliebene Nachzügler (`late_cutoff`, wartet höchstens
+`STRAGGLER_STOP_SECONDS`); `close` beendet sie am Laufende (`stopped`). Was ein gestopptes oder mitten im Stream
 ausgefallenes Modell bis dahin geschrieben hat (`Worker.partial_text` aus
 `_step`), bleibt als `failed_models[].partial_text` erhalten: nur für den
-Leser, nie in `answers`/`basis_hash` oder dem Tool-Ergebnis an den Agenten.
+Leser, nie in `answers` oder dem Tool-Ergebnis an den Agenten.
 Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und
 `partial: true`. Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst
 diese Teiltexte weg, dann der Text gelesener Seiten, dann Zitate und lange
@@ -4997,7 +4996,7 @@ Budget-/Tarifsnapshot und Status (ein agent:-Beleg seit 2026-10-29 mit der Art
 seiner Sitzung, `session_kind`, die das Löschen des Chats übersteht). Ein beanspruchter
 Provider-Schritt wird auch nach einem Prozessabsturz nie erneut ausgeführt.
 Belege von Prüfer-Aufrufen tragen seit 2026-10-29 `round`
-(`live`, `gate`, `final`, `repair`, `hedge`; `settle` aus
+(`live`, `final`, `repair`, `hedge`; `settle` aus
 `completion.review_round`, gesetzt über `worker_completion(review_round=…)`).
 Größenvertrag des Root-Belegs je Turn (R29): `step_states`, `step_usage` und
 `reservations` enthalten alle laufenden Schritte, aber höchstens
@@ -6122,26 +6121,41 @@ erste Frame (`app-bootstrap.js`) zeichnet Chip und Worte nach (`App.firstFrame`)
 Ab dem Start des Laufs folgt jeder Prüfer dem Arbeitsprotokoll
 (`run` ruft `auditor.follow(work_log)`; `ReviewerSession` je Prüfer, eigener
 Thread, eine Sitzung Art `audit`, Runden über
-`ComparisonTools.worker_request` mit eigener Websuche): eine Live-Runde je
-neuem Schritt mit Tool-Aufrufen (`work_goes_on`, `round_message`; Schritte
-nur mit `QUIET_TOOLS` wie `update_plan` oder `vm_read_file` gehen seit
-2026-10-27 mit der nächsten Runde mit, spätestens beim dritten in Folge; seit
-2026-10-30 ebenso `browser` mit `read`/`text`/`find`/`tabs`/`screenshot`,
-`quiet_call`),
-Befunde mit `entry`, ohne Rundengrenze über den ganzen Lauf. Die
-Anweisungen des Agenten lesen die Prüfer als Kurzfassung mit seinen
-Werkzeugen und dem vollen Memory (`instructions_brief`, `AnswerAudit.brief`,
-an seinem ersten `system`-Eintrag; das Protokoll behält den ganzen Text),
-die fixierte Antwort steht in der Schlussrunde nur einmal
-(`ANSWER_IN_STEP`). Ist das Gespräch eines
-Prüfers voll, geht er in einem neuen weiter, mit dem Anfang des Laufs und
-seinen bisherigen Befunden (`ReviewerSession._carry`, `opening_entries`).
-Nach der Antwort fixiert `capture` die Version, `_finish_review`
-ruft das App-Tool `audit_answer`, und `AnswerAudit.run` setzt `final_answer`
-(eine laufende Live-Runde bricht seit 2026-10-29 ab, `cut_round`/`RoundCut`,
-ihre Sitzung endet `round_cut` und reicht die OpenRouter-Sitzung weiter):
-Jeder Prüfer gibt in der Schlussrunde (Rest des Protokolls und die Antwort)
-seine vollständige Liste. `place_marks` legt ihre Zitate je Satz als Claims
+`ComparisonTools.worker_request` mit eigener Websuche): eine Live-Runde,
+sobald ein Schritt des Agenten oder eines Workers Werkzeuge aufruft oder nach
+dem ersten Schritt Fremdinhalt ins Protokoll kommt (`round_due`, Herkunft in
+`UNTRUSTED_DATA`); Ergebnisse, die binnen `SETTLE_SECONDS` (2 s) zu ihrem
+Schritt kommen, gehen mit derselben Runde (`results_pending`), und was
+inzwischen kam, ebenso. Befunde mit `entry`, ohne Rundengrenze über den
+ganzen Lauf. Die Anweisungen des Agenten lesen die Prüfer als Kurzfassung
+(`instructions_brief`, `AnswerAudit.brief`, an seinem ersten
+`system`-Eintrag; das Protokoll behält den ganzen Text): `BRIEF_HEAD`, mit
+Werkzeugen des Arbeitsplatzes `BRIEF_WORKSPACE`, die Werkzeuge des Laufs mit
+ihren eigenen Beschreibungen (`tool_brief`, die einzige Kopie) und das volle
+Memory; die fixierte Antwort steht in der Schlussrunde nur einmal
+(`ANSWER_IN_STEP`). Das Gespräch eines Prüfers wächst nur durch Anhängen (der
+Prompt-Cache liest seinen Anfang) bis `segment_cap` (`SEGMENT_CHARS` =
+90.000 Zeichen, höchstens `LIVE_SHARE` von `session_budget`); dann geht er
+in einem neuen weiter, das mit dem Übertrag beginnt (`ReviewerSession._carry`,
+`carry_sections`: der Anfang des Laufs mit Kurzfassung, Start-Eintrag und
+Frage ganz, die Nachrichten des Nutzers in den Lauf, die App-Einträge
+`paused`/`decision`/`limit`, eine Zeile je gelesenem Eintrag
+(`carried_lines`: neuere ganz, ältere nackt, die ältesten gezählt) und die
+eigenen Marken und Halts, jeder Teil begrenzt). Jede Anfrage bleibt so
+beschränkt, die Kosten eines Laufs wachsen linear
+(`tests/test_agent_audit_segments.py`: 200 Schritte, keine Anfrage über der
+Schranke). Antworten der Prüfer gehen als Text ins Gespräch, ohne Reasoning.
+Eine gescheiterte Runde verliert weder Gespräch noch OpenRouter-Sitzung
+(`conversation_key`); erst nach `MAX_ROUND_FAILURES` in Folge wechselt sie
+den Endpunkt.
+Mit der fixierten Antwort startet `AnswerAudit.begin` die Schlussrunden
+(aus `_finish_merged` vor `capture`, Übergabe und dem Speichern von
+„running“, sonst aus `audit_answer`; eine laufende Live-Runde bricht ab,
+`cut_round`/`RoundCut`, ihre Sitzung endet `round_cut`); `AnswerAudit.run`
+wartet auf sie. Jeder Prüfer gibt in der Schlussrunde (Rest des Protokolls,
+was es außerhalb des laufenden Gesprächs über die Quellen hält, die die
+Antwort zitiert, `cited_evidence`, und die Antwort; passt das nicht mehr ins
+Gespräch, in einem neuen mit Übertrag) seine vollständige Liste. `place_marks` legt ihre Zitate je Satz als Claims
 ab und Befunde mit Eintrag in `process` (`review.mode = "audit"`,
 `review.audit.reviewers/claims/unplaced/process/issues`, je Prüfer seit
 2026-10-29 `fresh`, `pauses`, `unfollowed_at_seq`, `backlog`
@@ -6154,10 +6168,12 @@ dann noch, gelten seine Live-Befunde (`live`). Seit 2026-10-29 läuft jede
 Anfrage der Schlussrunde als `FinalRequest` auf eigenem Thread
 (`_final_request`): nach `final_hedge_seconds` ein Hedge auf neuer Sitzung
 (`_open(own=True)`, Beleg `hedge`), die erste brauchbare Antwort gewinnt, die
-andere endet `superseded` (`agent-delegation.js` `reviewerRows` lässt sie
-nicht für den Prüfer sprechen); `FINAL_ROUND_SECONDS` begrenzt alles
+andere endet `superseded`, auch eine, die scheiterte, während die andere noch
+lief (`agent-delegation.js` `reviewerRows` lässt sie nicht für den Prüfer
+sprechen); erst ohne Sieger enden sie `failed`; `FINAL_ROUND_SECONDS` begrenzt alles
 (`ReviewCancellation.overtime`, `no_time`). Runden passen in den Platz des Prüfergesprächs
-(`session_budget` aus dem Kontextfenster, `fitted_round`, `_fit` je Eintrag);
+(`fitted_round`, `_fit` je Eintrag; im neuen Gespräch notfalls weniger
+Einträge, der Rest kommt mit der nächsten Runde, `_compose`);
 `review_entry` lässt den Verbrauch weg, nennt aber die Suchen eines Schritts
 (`searches`, seit 2026-10-27): GPT-6 Lunas Suchen kommen ohne Treffer an, und
 der Prüfer hielt den Schritt sonst für unrecherchiert (`AgentCompletion`
@@ -6167,22 +6183,18 @@ Suchschritt als `search_step`, und sein Beleg trägt `search_hits`, die Zahl
 der behaltenen Seiten, damit `scripts/audit_report.py` den Anteil ohne Treffer
 je Modell zeigt, A-M9);
 `_step` trägt 429 von Prüfer-Schritten nicht in `provider_cooldowns` ein.
-Gate-Runden haben seit 2026-10-29 Vorrang und eine Frist (`ready_gate` ruft
-`cut_round` für jeden gefragten Prüfer, `GATE_SECONDS` in `gate_result`,
-`REPAIR_NOTE` für eine unlesbare Gate-Antwort in `_request(gate=…)`), und
-`_gate_wait`/`_domain_wait` halten die Turn-Uhr an (`_gate_pause`);
-`gate_trace` (Zeit und Urteile je Prüfer ohne Texte) steht im `checked`-Eintrag
-und am Hold einer Gate- oder Domain-Karte.
 Kein Judge läuft. Ein Fehler kostet nur
 Markierungen: Frist (`REVIEW_TIME_MARGIN` vor dem harten Stopp, der Agent hört
-`REVIEW_RESERVE_SECONDS` früher auf), unlesbare Prüfung, Speicherbudget
+`REVIEW_RESERVE_SECONDS` früher auf: Schlussrunde, Join, Rand und Speichern,
+125 s), unlesbare Prüfung, Speicherbudget
 (`_checkpoint` kürzt erst per `agent_audit.trim_marks`); der Turn endet
 trotzdem `completed`, auch nach einem Stop während der Prüfung
 (`_finish_review` fängt ihn ab, seit 2026-10-29 auch `watch_error`; die
 Review endet `cancelled` mit den Live-Befunden, `_live_findings`). Ein Stopp
-vor der fixierten Antwort behält sie seit 2026-10-29 ebenso
-(`AnswerAudit._stopped_early` aus `close`: Review `cancelled` ohne Version,
-Befunde nur in `process`, nur wenn es welche gibt). Gescheiterte
+oder Fehler vor der fixierten Antwort behält sie ebenso
+(`AnswerAudit._before_answer` aus `close`: Review `cancelled`, nach einem
+Fehler `failed` mit `run_failed`, ohne Version, Befunde nur in `process`, nur
+wenn es welche gibt). Gescheiterte
 Speicherungen holt `AnswerAudit.close` nach. Eine Prüferantwort, die kam, aber
 nicht taugte, steht seit 2026-10-26 als eine Logzeile ohne Inhalt im Server-Log
 („Agent reviewer reply unusable“: `reply_shape` mit `shape` empty/cut/no_json/
@@ -6205,8 +6217,7 @@ nutzte, in eigenen `ws_*`-Feldern (I6). Messen: `scripts/audit_report.py` (nur l
 `--exclude-own`, `--json`) liefert die Tabellen und Ziele Z1–Z8 der
 Spezifikation `docs/agent-audit-readiness-2026-10-29.md` aus Turns, Sitzungen,
 Arbeitsprotokoll (nur Zeiten und Arten), Belegen und diesen Zählern. Memory
-wartet seit 2026-11-02 weder auf die Prüfer noch sperrt es nach Fremdinhalt
-(vorher `GATE_MEMORY_NOTE` bzw. `memory_locked`).
+wartet auf niemanden und sperrt nach Fremdinhalt nichts.
 Ohne Prüfer läuft eine Nachricht seit 2026-11-01 nur nach der Einstellung des
 Nutzers (unten); Tests, deren Skript nur den Agenten spielt, setzen weiter
 Prüfer ein, die nie starten (`tests/agent_reviewers.py`, Einstellung `always`:
@@ -6226,21 +6237,16 @@ Tausch der Werkzeuge, damit ihre Kurzfassung `instructions_brief` seine Regeln
 enthält; ein abgelehntes `open_workspace` startet nichts), oder, wo die
 Nachricht ihn schon offen hatte, in `_step` mit dem ersten Schritt, der ein
 Werkzeug des Arbeitsplatzes (`workspace_names` ohne `ask_user`: eine Frage an
-den Nutzer arbeitet nicht dort) aufruft, vor dessen Gate (`_open_gate`), sodass
-sie schon diesen Schritt prüfen; sie lesen das Protokoll ab Eintrag 1
+den Nutzer arbeitet nicht dort) aufruft, sodass sie schon diesen Schritt
+prüfen; sie lesen das Protokoll ab Eintrag 1
 (`ReviewerSession.cursor` 0), also auch die Arbeit davor. Seit der Gegenprüfung
 2026-11-01 schreibt `_open_workspace` in jedem Modus den App-Eintrag
-`workspace_opened` (`agent_audit.tool_brief` der neuen Werkzeuge): Prüfer, die
+`workspace_opened` (`BRIEF_WORKSPACE` und `tool_brief` der neuen Werkzeuge): Prüfer, die
 schon folgten, lasen die Regeln des Arbeitsplatzes vorher nirgends. Ein neues
 Prüfergespräch (`_carry`) trägt die schon gelesenen `workspace_opened`-Einträge
-seit 2026-11-03 mit dem Anfang des Laufs mit. Die erste
-Gate-Runde spät gestarteter Prüfer liest den ganzen Verlauf; passt er nicht
-oder dauert er länger als `GATE_SECONDS`, entscheidet der Nutzer (`unchecked`).
-Ohne Arbeitsplatz (Google-Daten, kein VM-Zugang) prüft dann
+seit 2026-11-03 mit dem Anfang des Laufs mit. Ohne Arbeitsplatz (Google-Daten, kein VM-Zugang) prüft dann
 niemand. `off`: niemand. Ohne Prüfer (`AnswerAudit.unreviewed`): kein Halt,
-kein Gate (Memory sperrte bis 2026-11-02 nach Fremdinhalt), `read_source` öffnet keine selbst gewählten Adressen
-(`agent_read_source`), `request_domain` ging bis 2026-11-04 ohne Gate-Runde an
-den Nutzer (Karte mit `review: "off"`),
+`read_source` öffnet keine selbst gewählten Adressen (`agent_read_source`),
 keine Prüferreserve vor dem harten Stopp (`answer_time_left`), kein
 `answer_check`-Frame, kein Schritt `audit_answer` in der Aktivität
 (`_finish_review` ruft `ComparisonTools.audit` direkt), und die Prüfung endet
@@ -6292,8 +6298,9 @@ Text. Die Prüfer lesen das Ergebnis als Eintrag `tool`/`compare_models` mit
 ein Text bei 12.000 Zeichen abgeschnitten: nur die erste Antwort); passt die
 Runde nicht, geben die übrigen Einträge zuerst nach (`ROUND_TIERS` in
 `fitted_round`, `review_entry(compared_limit=…)`), dann die Auszüge der Seiten,
-zuletzt die Antworten. Das Werkzeug kennen sie aus `BRIEF_TOOLS` (verschwiegene
-Widersprüche der Antworten = unvollständig). Stopp vor der Antwort nach einem
+zuletzt die Antworten. Das Werkzeug kennen sie aus seiner Beschreibung in der
+Kurzfassung; der Prüfer-Prompt sagt, dass verschwiegene Widersprüche der
+Antworten die Antwort unvollständig machen. Stopp vor der Antwort nach einem
 Vergleich: `AnswerAudit.close` setzt die Prüfer auf `stopped`. Shares von Turns
 mit Prüfern zeigen keine Vergleiche (`share_snapshots._agent_share_basis`),
 sondern die Anmerkungen der Prüfer (siehe „Sharing“ → „Anmerkungen der Prüfer“).
@@ -6309,9 +6316,19 @@ Eine Live-Runde darf `halt` setzen (`HALT_KINDS`: safety, harm, off_goal,
 injection; `parse_halt`, `halt_step` für die Karte), seit 2026-10-30 auch
 ohne `marks` daneben (`parse_review` nimmt den gültigen Halt als Runde ohne
 Befunde). `AnswerAudit.halt` (je
-Prüfer und Eintrag einmal, gezählt erst, wenn der Lauf ihn nahm; nicht nach
-`final_answer`, `request_hold` schon ab `answer_fixed` nicht mehr) ruft `DelegationLoop.request_hold` (seit 2026-10-29 kommt ein
-Halt bei offener Karte auf diese, `joined_halt`, `revision`): `VMTools.interrupt` beendet den laufenden
+Prüfer und Eintrag einmal; nicht nach `final_answer`, `request_hold` schon ab
+`answer_fixed` nicht mehr) zählt nur mit Beleg: steht das Zitat nicht im
+genannten Eintrag (`quote_found`), bleibt der Halt eine Marke
+(`ReviewerSession.keep_as_mark`). Sonst ruft es `DelegationLoop.request_hold`
+(ein Halt bei offener Karte kommt auf diese, `joined_halt`, `revision`; je
+Eintrag höchstens eine Karte: nach der Entscheidung des Nutzers antwortet
+`request_hold` `HOLD_DECIDED`, der Halt bleibt Marke; `hold_entries`,
+`queued_entries`, `decided_entries`). Das Protokoll sagt nur `paused` „The
+work was paused for the user's decision.“, nie wer oder warum: jeder Prüfer
+liest es. In der Schlussrunde wird ein Halt oder eine Marke mit `concern`
+(einer der `HALT_KINDS`) zum Bedenken, das zuerst und rot steht („1 warning“,
+`agent-review.js`, `consensus-insights.js`, `agent-delegation.js`
+`noteKinds`). Weiter: `VMTools.interrupt` beendet den laufenden
 Befehl als Nutzer-Stop, `step_halt` den streamenden Agentenschritt
 (`_halt_scope`; nach der Entscheidung neu, `_past_halts`), `store.set_hold` schreibt `hold` an den Lauf-Root,
 SSE-Frame `hold` (sticky; bei voller Queue in `live_progress`, `_send`) und Aktivität `kind: "hold"`. `_hold_wait` hält vor
@@ -6349,30 +6366,13 @@ Elementnamen aus dem letzten `read`, `element_names`; Zitat des Prüfers
 und faltet nie, ohne eigene Statuszeile darunter, seit 2026-10-29, UX-Audit C9),
 `tab-status.js` („Paused“).
 
-**Vorab-Prüfung** (seit 2026-10-27, Details `docs/agent-mode.md`
-„Vorab-Prüfung“): `agent_gate.outward` erkennt nach Werkzeug und typisierten
-Argumenten die Aufrufe, die vorher auf die Prüfer warten: von 2026-10-29 an
-`request_domain` und `update_memory`, sobald Fremdinhalt im Blick ist
-(`memory_exposed`, bis 2026-11-02); seit 2026-11-04 (offenes Netz, kein
-`request_domain`) keiner mehr, die Maschinerie bleibt. Browser-Aktionen (`open`, `click`, `upload`, Enter/Space,
-`type` mit `enter`) und `read_source`/`show_image` mit unbekannter Adresse
-(`WEB_READS`, `GATE_WEB_NOTE`, `_known_url`, entfernt) warteten vom 27./28. bis
-29.10.: Median 3,9 s je Klick, vier Halts, alle Fehlalarm (Max: „nicht SOTA“);
-seitdem folgen die Prüfer ihnen live, und den Schritt im Namen des Nutzers
-legt der Agent ihm mit `ask_user` vor (siehe unten). `DelegationLoop._step` öffnet
-dafür vor dem Protokolleintrag `AnswerAudit.open_gate` (`Gate`), danach
-`ready_gate(entry)` (`WorkLog.step` gibt die Nummer zurück); jeder antwortfähige
-Prüfer macht eine Gate-Runde ohne Websuche (`ReviewerSession._gate_round`,
-`GATE_NOTE`, `parse_gate`). Die Batch-Schleife ruft vor so einem Aufruf
-`_gate_wait`: jeder Prüfer des Laufs go → läuft; ein Halt oder ein Prüfer ohne
-Antwort, ausgefallen oder pausiert (`GATE_UNCHECKED`, seit 2026-10-27 nie ein Go) →
-`request_hold` mit `gate: true` (`gate_hold`, mehrere Gründe in `reasons`),
-`continue` lässt laufen, `steer` nicht (`HOLD_STEERED`). Karte in
-`agent-chat.js` (`holdCard`: „Let it run“, „The step that has not run yet“,
-Art `unchecked`), Aktivität `agent-activity.js` („Paused before a step ran“).
-`request_domain` wartete bis 2026-11-04 in `_domain_wait` auf dieselbe
-Gate-Runde und dann immer auf den Nutzer (Halt mit `domain`, Karte
-`domainCard` in `agent-chat.js`, die für alte Läufe bleibt).
+**Kein Warten vor einem Aufruf** (Details `docs/agent-mode.md` „Kein Warten
+vor einem Aufruf“): Jeder Aufruf läuft sofort, die Prüfer folgen live. Was dem
+Nutzer gehört, geht an ihn: ein Schritt in seinem Namen über `ask_user`
+(unten). Bis 2026-11-04 wartete `request_domain` auf Gate-Runden der Prüfer
+(`agent_gate.py`, entfernt) und dann auf den Nutzer; das offene Netz des
+Arbeitsplatzes nahm es weg. Die Karte `domainCard` in `agent-chat.js` bleibt
+für alte Läufe.
 
 **Der Agent fragt den Nutzer** (`ask_user`, `agent_ask.py`, seit 2026-10-29,
 mit dem Arbeitsplatz; Details `docs/agent-mode.md` „Arbeitsplatz“): Die
@@ -9379,9 +9379,8 @@ app/services/
   agent_answer_mode.py       Der Agent schreibt die Antwort selbst als letzte Nachricht seiner Tool-Schleife (seit 2026-10-14, kein Schalter): Konstanten für die Streaming-Sperre (ANSWER_HOLD_CHARS), Notiz (NOTE_CHARS) und SIDE_TOOLS
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
-  agent_audit.py             Die Prüfer jedes Agent-Laufs (seit 2026-10-25 als Audit, seit 2026-10-31 der eine Modus für jedes Konto): AGENT_SEARCH_ROUNDS des Agenten; AnswerAudit lässt die gewählten Modelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (toleranter Locator), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; compare_models-Ergebnisse strukturiert (COMPARISON_ENTRY_CHARS, ROUND_TIERS, BRIEF_TOOLS); Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate); seit 2026-10-29 eigene Cancellation je Live-/Gate-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS), Gate-Frist GATE_SECONDS und gate_trace
+  agent_audit.py             Die Prüfer jedes Agent-Laufs: AGENT_SEARCH_ROUNDS des Agenten; AnswerAudit lässt die gewählten Modelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer; round_due/results_pending: Runde bei handelndem Schritt oder Fremdinhalt, SETTLE_SECONDS; Gespräch nur angehängt bis segment_cap, dann neu mit Übertrag, _carry/carry_sections/carried_lines) und die fixierte Antwort in einer Schlussrunde prüfen (begin, cited_evidence), je mit eigener Websuche (review_system_prompt, parse_round: quote/entry/kind/note/source/concern, wrong ohne http(s)-Quelle = doubtful, Halt nur mit Beleg quote_found), place_marks findet die Zitate (toleranter Locator), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; Kurzfassung mit den Beschreibungen der Werkzeuge (instructions_brief, tool_brief); compare_models-Ergebnisse strukturiert (COMPARISON_ENTRY_CHARS, ROUND_TIERS); Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); eigene Cancellation je Live-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS)
   agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt; seit 2026-10-30 auch jeder Turn mit Arbeitsplatz (workspace_counters: ws_*, wrap_up)
-  agent_gate.py              Vorab-Prüfung (2026-10-27 bis 2026-11-04): outward erkannte nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer liefen (zuletzt request_domain; update_memory mit Fremdinhalt im Blick bis 2026-11-02); seit dem offenen Netz des Arbeitsplatzes keiner mehr, das Gate selbst (agent_audit.open_gate, DelegationLoop._gate_wait) bleibt
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm), seit 2026-10-30 auch mit 2–4 Antworten als Knöpfen (choices → choice, chosen()); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back
   agent_browser.py           Werkzeug browser (seit 2026-10-27): typisierte Aktionen (open/read/text/find/click auch an x,y/drag mit strokes/type/select/key/scroll/back/forward/tabs/tab/screenshot/upload/download/wait) im Arbeitsplatz (seit 2026-11-04 derselbe Rechner, vorher die Browser-VM) über workspace_vm/browser/browser.py mit JSON auf stdin als Nutzer des Anbieters; Adressen nur http(s) und öffentlich, seit 2026-10-29 auch http://localhost:<port>, der Server des Agenten (local_port; bis 2026-11-04 über agent_tunnel), Upload einer Datei, die der Nutzer des Agenten lesen darf, für einen Aufruf, Downloads des Browsers (Aktion, download, Nutzer in der Ansicht) seit 2026-10-28 in <Chat-Ordner>/downloads/ (_keep_downloads, bis 25 MB, danach im Ordner des Browsers gelöscht), Screenshot als Bild, open bringt seit 2026-10-29 ein kleines JPEG der Seite für ihre Karte im Chat (preview_url, nur in der Aktivität, bounded_activity streicht es zuerst), Ausfall kostet nur dieses Werkzeug (Grund im Log); seit 2026-10-29 weckt _warm beim ersten Aufruf einer Nachricht die VM (agent_workspace.open_workspace) und startet Chrome (Helfer-Aktion warm) auf eigenem Backend, während die Sperre genommen wird; screenshot_after bringt bei Aktionen, die die Seite ändern, das Bild danach im selben Aufruf (PICTURE_AFTER); show legt seit 2026-10-30 den Screenshot unter die Antwort (_show, kind web_image, Herkunft browser); Aktionen in PREVIEW_AFTER bringen alle PREVIEW_SECONDS ein neues Bild für die Seitenkarte, die Aktivität page_title/page_url; look zeigt ask_user den Browser nach der Rückgabe; click/drag an x,y melden seit 2026-10-30, was an ihren Punkten lag und was sich danach änderte (browser.py HIT_JS); seit 2026-11-03 ist eine Ref veraltet, wenn ihr Element inzwischen anderes zeigt (browser.py KEY_JS/data-consens-key, located), Aktionen auf Elementen geben nach ACT_MS = 3 s mit Grund auf, wait mit text wartet bis die Seite den Text zeigt (wait_for_text), und ein gescheiterter Browser-Aufruf lässt die späteren Browser-Aufrufe seines Schritts ungelaufen (agent_delegation CALL_AFTER_BROWSER_FAILURE); seit 2026-11-02 note_sign_in (Liste, wo der Browser angemeldet ist, sign_in_site: Hostname, nie in temporären Chats)
   agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (exists/ensure(rules=None: nur anlegen)/set_policy/get_policy/run mit stdin/exec/exec_url/read_file/write_file/delete_path/move_path, die Dateien mit agent=True als Agenten-Nutzer, delete_service/checkpoint/restore/delete) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets, Handshake einmal wiederholt); RULES (offenes Web ohne Fly-intern, seit 2026-11-04 für die ganze VM; vorher WORKBENCH_RULES mit Paketquellen für die Werkbank), WAKE_SECONDS (90 s für Aufrufe, die eine schlafende VM wecken können: Regeln setzen, Datei des Anbieter-Nutzers lesen), agent_argv/wrapped_command (Agenten-Befehle über agent-run; mit output, den Befehlen des Agenten selbst, in einer eigenen cgroup, deren Reste mit dem Befehl enden, und je Strom höchstens OUTPUT_BYTES sofort, BACKGROUND_ENDED), workspace_name je Konto (old_browser_name nur zum Löschen der Browser-VM von 2026-10-27 bis 2026-11-04), chat_dir/chat_folder je Chat (Ordnername aus Titel + ID-Anfang, seit 2026-10-28; vm_name nur noch für alte Chat-VMs), delete_chat_vm (Hintergrundprozesse des Chats über agent_vm_processes.delete_for_chat, Chat-Ordner unter gemerktem Namen und ID als Agent und am alten Ort, alte VM über vm_name), delete_workspace (die VM und die alte Browser-VM) und restore_workspace; ein Anbieterwechsel betrifft nur diese Datei
@@ -9395,8 +9394,8 @@ app/services/
   agent_plan.py              update_plan (seit 2026-10-26, mit der VM): Plan des Agenten als Checkliste wie Claude Codes Todo-Liste, ganze Liste je Aufruf, höchstens ein Schritt in_progress; Tool-Event mit items (agent-activity.js heftet den neuesten Plan über die Live-Zeilen), letzter Plan im end-Eintrag des Arbeitsprotokolls, Prüfer halten ihn gegen die Arbeit
   agent_github.py            GitHub für die VM über eine öffentliche GitHub-App, die jeder Nutzer selbst installiert (seit 2026-10-26; GITHUB_APP_ID/_PRIVATE_KEY/_CLIENT_ID/_CLIENT_SECRET/_SLUG): GitHubConnections (Popup-Verbindung mit state + Cookie, Prüfung über GET /user/installations mit dem sofort widerrufenen Nutzer-Token, users/{uid}/github_connections), Installations-Token je Vorgang für ein Repo, github_import (öffentliche Repos auch ohne App), prepare_pull_request (seit 2026-10-29 nur angeboten, wenn die App eingerichtet ist; sonst auch AGENT_GITHUB_IMPORT_PROMPT statt AGENT_GITHUB_PROMPT; Vorschlag am Turn agent_pull_request; seit 2026-10-27 Diff im Backend aus den Bytes der Datei-API gegen Tree und Blobs des Import-Commits von GitHub, die VM nennt nur die Pfade) und PullRequests.confirm (Dateien gegen die Vorschau geprüft, Blobs/Tree/Commit/neuer Branch/PR)
   agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Zusammenfassungen (seit 2026-11-03, wie Claude Code/Codex): HISTORY_SUMMARY_*/history_keep für den Chatverlauf, run_summary_due/run_tail für die eigenen Schritte eines Laufs (über min(100k Token, 60 % Fenster), solange der Lauf selbst mindestens die Hälfte ausmacht; Nutzernachrichten des Laufs bleiben wörtlich davor, run_state hängt Plan und gestartete Hintergrundprozesse an), summary_message/summary_text/is_summary (nie Nutzertext, im Arbeitsprotokoll Daten des Agenten). Bilder (older_pictures, seit 2026-10-30): gesammelt ab mehr als 10 sichtbaren auf die neuesten 3 und mit jeder Kompaktierung, nie die des aktuellen Batches; Ersatztext nach Herkunft (picture_gone). Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns und seit 2026-10-27 jedes abgebrochenen Turns (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
-  agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, seit 2026-10-31 jeder Chat-Lauf, lesbar für den Besitzer des Turns): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie; seit 2026-10-30 Messfelder ENTRY_FIELDS: started_at/duration_ms an tool, gate_ms an checked/paused), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
-  agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): der Agent liest vor der Antwort eine öffentliche Seite über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge-Modell als Helfer): zitiert von einer Vergleichsantwort, eigener Suchtreffer, Quelle früherer Nachrichten, Link des Nutzers oder, solange Prüfer folgen, jede öffentliche Adresse (SourceReader.chosen, LABEL_CHOSEN); Grenzen READS_PER_MESSAGE 15 / READS_PER_STEP 5, Seitentext im Toolergebnis und im Arbeitsprotokoll, read_sources in der Review; SourceReader.knows für das Gate
+  agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, seit 2026-10-31 jeder Chat-Lauf, lesbar für den Besitzer des Turns): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie; seit 2026-10-30 Messfelder ENTRY_FIELDS: started_at/duration_ms an tool), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
+  agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): der Agent liest vor der Antwort eine öffentliche Seite über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge-Modell als Helfer): zitiert von einer Vergleichsantwort, eigener Suchtreffer, Quelle früherer Nachrichten, Link des Nutzers oder, solange Prüfer folgen, jede öffentliche Adresse (SourceReader.chosen, LABEL_CHOSEN); Grenzen READS_PER_MESSAGE 15 / READS_PER_STEP 5, Seitentext im Toolergebnis und im Arbeitsprotokoll, read_sources in der Review
   agent_web_images.py        Tools find_pictures und show_image (seit 2026-10-28, in jedem Chat-Lauf, wo read_source läuft): find_pictures nimmt bis zu 6 Adressen je Aufruf (18 je Nachricht), holt davon 3 gleichzeitig (FETCHES_AT_ONCE, das DNS-Tor der Quellen hat 4 Plätze), Bild oder Vorschaubild einer Seite (og:image/twitter:image/JSON-LD, page_picture) serverseitig über watch_images._fetch + pinned_target, nur echte Bildbytes neu als WebP (encode, ≤1600 px, keine Mindestgröße: Größe im Ergebnis), dazu Seitentitel und Alt-Text (page_words); Kandidaten mit ID p1… nur im Prozess, Bildmodelle sehen sie auf 768 px (smaller, take_pictures → DelegationLoop._show_pictures), der Nutzer nicht. Seit 2026-10-29 legt erst show_image(picture=ID, caption) einen Kandidaten unter die Antwort: Ablage AgentFiles kind web_image mit origin {source: web, url, page, host, caption}, resources-Event; höchstens 6 je Nachricht. Seit 2026-10-31 search_pictures (nur mit BRAVE_SEARCH_API_KEY, picture_search.py): bis zu 10 Treffer je Suche (FOUND_PER_SEARCH), 4 Suchen je Nachricht, als Kandidaten mit ID, Seite, Seitentitel und Größe, ohne Bild für das Modell; die ersten 6 (PREFETCH) holt ein ThreadPool mit 2 Plätzen sofort (PREFETCH_AT_ONCE, DNS-Tor; fetch_found: Original mit der Seite als Referer, sonst Braves 500-px-Kopie), show_image wartet darauf (_arrived, nur dns_busy wird einmal neu versucht), ein Bild, das nicht kommt, ist status failed statt Fehler, dasselbe Bild (Hash) zeigt es einmal (shown_digests); find_pictures mit der Adresse eines Treffers behält dessen ID; close() aus DelegationLoop.run beendet wartende Abrufe. Seit 2026-11-01 picture_file(key) für vm_save_picture (agent_vm_tools.py) und saved_as(data, extension) nach SAVE_FORMATS (JPEG auf Weiß, PNG, WebP unverändert); agent_browser hängt an einen abgelehnten Download (HTTP-Status) DOWNLOAD_REFUSED_PICTURE an, wo die Bildwerkzeuge da sind. PLACE_NOTE: Bilder auf einer Zeile oder auf Zeilen ohne Leerzeile dazwischen sind eine Galerie
   picture_search.py          Brave Image Search für search_pictures (seit 2026-10-31): enabled() mit BRAVE_SEARCH_API_KEY, aus mit AGENT_PICTURE_SEARCH=0; search() fragt /res/v1/images/search mit safesearch strict und 12 Treffern, pictures() macht daraus {picture, thumbnail, page, title, width, height} (nur http(s) ohne Zugangsdaten, mit Seite, jedes Bild einmal, Braves Kopie, wo das Original fehlt)
   usage_repository.py        Run-Belege auf dem Tageskonto (admission/authorize_operation/reserve/consume/release/book_operation/get_run/context-target-binding)
@@ -9981,7 +9980,7 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
 - `ops_metrics/agent-audit-{YYYY-MM-DD}` (seit 2026-10-29, A-M1) — anonyme
   Tageszähler der Turns mit Prüfern (`agent_audit_metrics`, seit 2026-10-31 jeder Agent-Turn): je Turn am Ende ein
   Merge aus Increments (`turns`, `reviews`, `reviewers.n{k}`,
-  `reviewer_status`, Buckets `total_s`, `answer_s`, `marks_s`, `gate_s`,
+  `reviewer_status`, Buckets `total_s`, `answer_s`, `marks_s`,
   `final_s.{modell}`, `backlog_entries`, `halts.{art}.{entscheidung}`,
   `failures.{turn|reviewer|review}.{code}`), seit 2026-10-30 dazu `wrap_up.{grund}`
   und je Turn mit Arbeitsplatz `ws_turns`, `ws_steps`,

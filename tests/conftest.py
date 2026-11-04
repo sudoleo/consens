@@ -59,6 +59,15 @@ def _consensus_watches_as_before(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _short_reviewer_settle(monkeypatch):
+    """A reviewer's round waits up to SETTLE_SECONDS for its step's results;
+    scripted tools that wait for that round would hold every step that long.
+    Tests of the wait set it themselves."""
+    from app.services import agent_audit
+    monkeypatch.setattr(agent_audit, "SETTLE_SECONDS", .05)
+
+
+@pytest.fixture(autouse=True)
 def _no_workspace_provisioning(monkeypatch):
     """A new account's first message to the agent makes its workspace in the
     background (agent_workspace.provision). The suite's fake VMs count their

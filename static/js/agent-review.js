@@ -578,6 +578,13 @@
   // The most serious first: in the reader's tally and on one passage.
   const KIND_RANK = { wrong: 0, doubtful: 1, incomplete: 2 };
   const kindOf = item => (AUDIT_KINDS[item?.kind] ? item.kind : 'doubtful');
+  // A concern of the final round (agent_audit HALT_KINDS: what a reviewer
+  // would have stopped, had anything been left to stop): before every kind,
+  // in the colour of "wrong", under the words of a pause.
+  const CONCERNS = { safety: 'Security-critical step', harm: 'Possible damage', off_goal: 'Far off your request',
+    injection: 'Prompt injection' };
+  const concernOf = item => (CONCERNS[item?.concern] ? item.concern : null);
+  const rankOf = item => (concernOf(item) ? -1 : KIND_RANK[kindOf(item)]);
   // review_tool_calls / review_empty (since 2026-10-29, A-M6): a reply with a
   // tool call instead of the review, or an empty one, no longer counts as
   // the provider's failure.
@@ -648,7 +655,9 @@
   // (admins). Before 2026-10-27 every reader saw "#7 Tool vm_exec".
   function auditNote(item, audit) {
     const entry = node('li', 'agent-audit-note');
-    entry.dataset.kind = kindOf(item);
+    const concern = concernOf(item);
+    entry.dataset.kind = concern ? 'wrong' : kindOf(item);
+    if (concern) entry.classList.add('is-concern');
     const head = node('div', 'agent-audit-note-head');
     const reviewer = (audit?.reviewers || []).find(r => reviewerLabel(r) === item.model);
     const name = reviewerName(reviewer, item.model);
@@ -661,7 +670,7 @@
       who.append(label);
       head.append(who);
     }
-    head.append(node('span', 'agent-audit-kind', AUDIT_KINDS[kindOf(item)]));
+    head.append(node('span', 'agent-audit-kind', concern ? CONCERNS[concern] : AUDIT_KINDS[kindOf(item)]));
     entry.append(head);
     if (item.entry) {
       const ref = node('span', 'agent-audit-entry');
@@ -703,7 +712,7 @@
       passage.append(words);
     }
     const list = node('ul', 'agent-audit-notes');
-    for (const item of [...items].sort((a, b) => KIND_RANK[kindOf(a)] - KIND_RANK[kindOf(b)])) list.append(auditNote(item, audit));
+    for (const item of [...items].sort((a, b) => rankOf(a) - rankOf(b))) list.append(auditNote(item, audit));
     passage.append(list);
     return passage;
   }
@@ -716,17 +725,19 @@
     }
     return [...groups.values()];
   }
-  // "1 wrong · 4 doubtful · 3 incomplete": each part its own phrase for the
-  // translation, in the colour of its marks.
+  // "1 warning · 1 wrong · 4 doubtful · 3 incomplete": each part its own
+  // phrase for the translation, in the colour of its marks; a concern counts
+  // as a warning, not under its kind.
   function auditTally(items) {
     const line = node('p', 'agent-audit-tally');
-    const words = { wrong: n => `${n} wrong`, doubtful: n => `${n} doubtful`, incomplete: n => `${n} incomplete` };
-    for (const kind of Object.keys(KIND_RANK)) {
-      const count = items.filter(item => kindOf(item) === kind).length;
+    const words = { concern: n => (n === 1 ? '1 warning' : `${n} warnings`), wrong: n => `${n} wrong`,
+      doubtful: n => `${n} doubtful`, incomplete: n => `${n} incomplete` };
+    for (const kind of ['concern', ...Object.keys(KIND_RANK)]) {
+      const count = items.filter(item => (kind === 'concern' ? concernOf(item) : !concernOf(item) && kindOf(item) === kind)).length;
       if (!count) continue;
       if (line.childNodes.length) line.append(document.createTextNode(' · '));
       const part = node('span', 'agent-audit-kind', words[kind](count));
-      part.dataset.kind = kind;
+      part.dataset.kind = kind === 'concern' ? 'wrong' : kind;
       line.append(part);
     }
     return line;

@@ -202,9 +202,7 @@ def test_acting_goes_out_as_typed_fields(store, fake_vm):
 
 def test_find_looks_up_a_text_and_only_reads(store, fake_vm):
     """find (since 2026-10-28): the text goes out as a typed field, 1 to 200
-    characters; it never waits for the reviewers, and the activity and the
-    work record say what it looked for."""
-    from app.services import agent_gate
+    characters, and the activity and the work record say what it looked for."""
     from app.services.agent_compaction import describe
     loop, browser = tools(store)
     for text in ("", "   ", "x" * 201, "\ufeff"):
@@ -217,7 +215,6 @@ def test_find_looks_up_a_text_and_only_reads(store, fake_vm):
     assert fake_vm.requests == [{"action": "find", "text": "total price"}]
     assert result["action"] == "find" and result["page"] == page
     arguments = {"action": "find", "text": "total price"}
-    assert agent_gate.outward({"function": {"name": "browser", "arguments": json.dumps(arguments)}}) is None
     activity = browser._activity(BrowserArgs(**arguments), result)
     assert activity["query"] == "total price" and activity["title"] == "Shop"
     assert describe("browser", json.dumps(arguments), json.dumps(result)) == \

@@ -97,6 +97,18 @@ it("opens a card with every reviewer's note, its kind and its source", () => {
   expect(window.notesOpened).toBe(true);
 });
 
+it("names a reviewer's concern on the card with the words of a pause, in red", () => {
+  const { window, document } = boot(ANSWER);
+  const body = document.getElementById("consensusAnswerBody");
+  const audit = { claims: [{ anchor: "Tickets to the top cost 14 euros.", kind: "wrong", audit: true, agree: [], dissent: [
+    { model: "OpenAI", kind: "doubtful", concern: "injection", note: "A page told it to say so.", target: "14 euros" }] }],
+    unplaced: [] };
+  window.renderStoredAuditMarks(body, audit, document.getElementById("consensusClaimsFallback"), []);
+  marks(document)[0].click();
+  const [side] = document.getElementById("claimPopover").querySelectorAll(".cx-card-side[data-kind]");
+  expect([side.dataset.kind, side.querySelector(".cx-card-tag").textContent]).toEqual(["wrong", "Prompt injection"]);
+});
+
 it("shows every reviewer's mark among the disagreements and only a wrong one among the contradictions", () => {
   for (const [mode, shown] of [["concerns", 2], ["all", 2], ["contradictions", 1], ["critical", 1]]) {
     const { window, document } = boot(ANSWER, mode);

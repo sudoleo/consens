@@ -1,14 +1,14 @@
 """The agent's work log, written live by the app (docs/agent-work-log.md).
 
-Since 2026-10-25 (in audit mode only until 2026-10-31, then in every chat
-run of every account; routers/agent.py lets the turn's owner read it). While
-the agent works, the app records what it sees and does, never the agent
-itself: the context each model step receives (``context``: the chat's
-history and question, then everything the run adds to the conversation,
-such as the app's hints and workers' messages), the step's readable
-reasoning, text, tool calls and search hits (``step``), every tool result
-(``tool``), the app's own interventions (``app``: a retracted text, the
-memory lock, the fixed answer), and the run's ``start`` and ``end``.
+In every chat run of every account (routers/agent.py lets the turn's owner
+read it). While the agent works, the app records what it sees and does,
+never the agent itself: the context each model step receives (``context``:
+the chat's history and question, then everything the run adds to the
+conversation, such as the app's hints and workers' messages), the step's
+readable reasoning, text, tool calls and search hits (``step``), every tool
+result (``tool``), the app's own interventions (``app``: a retracted text, a
+pause for the user and the decision, the fixed answer), and the run's
+``start`` and ``end``.
 Delegated workers write into the same log under their own id. The reviewers,
 the comparison answers and the app's page fetches are not part of it
 (DelegationLoop._log_actor).
@@ -90,10 +90,9 @@ TOOL_DATA = {
     # 2026-10-31): model output.
     "compare_models": "agent",
 }
-# Measurements an entry may carry beside its content (since 2026-10-30): a
-# tool result's start and duration (``tool``, audit I4), a gate's wait on its
-# ``checked`` or ``paused`` entry (I9). Numbers and times only, never text.
-ENTRY_FIELDS = ("started_at", "duration_ms", "gate_ms")
+# Measurements an entry may carry beside its content: a tool result's start
+# and duration (``tool``). Numbers and times only, never text.
+ENTRY_FIELDS = ("started_at", "duration_ms")
 
 
 def _now():

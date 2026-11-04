@@ -541,10 +541,9 @@ describe("installing and asking for a domain", () => {
       .toBe("Network access · Not allowed after 30 minutes without a decision");
   });
 
-  // A step that acts outside the workspace that not every reviewer could
-  // check (agent_audit.gate_hold, GATE_UNCHECKED): no reviewer, no reason,
-  // yet the run waits for the user like on any pause (2026-10-28: it was
-  // filtered out, the heading said "Thinking…" and the history lost it).
+  // A saved turn's pause before a step that not every reviewer could check
+  // (from when calls waited for them): no reviewer, no reason, and the
+  // history keeps it with its decision.
   it("shows a pause before an unchecked step and keeps the decision", () => {
     const { host, activity } = setup();
     const events = [];

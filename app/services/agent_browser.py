@@ -25,16 +25,14 @@ one file the agent's user may read into the browser's folder for that call
 only. A screenshot comes to the agent as a picture (like vm_view_image),
 only for a chat model that takes images.
 
-The reviewers follow every action live; from 2026-10-27 to 2026-10-29 those
-that act outside (open, click, Enter, upload) waited for them first
-(agent_gate.py). What is the user's to do or to allow goes to them through
-ask_user (agent_ask.py). The calls share the workspace's lease with the VM
-tools (VMTools._start). The seconds the helper runs for an action count as VM
-time (agent_vm_time.py); its warm-up and its rest at the message's end do not,
-and once today's VM time is used up the browser goes on without counting
-more (VMSession.spend). A provider failure costs the call it happened in;
-MAX_FAILURES in a row turn the browser off for the rest of the message
-(runtime audit A1).
+The reviewers follow every action live. What is the user's to do or to
+allow goes to them through ask_user (agent_ask.py). The calls share the
+workspace's lease with the VM tools (VMTools._start). The seconds the helper
+runs for an action count as VM time (agent_vm_time.py); its warm-up and its
+rest at the message's end do not, and once today's VM time is used up the
+browser goes on without counting more (VMSession.spend). A provider failure
+costs the call it happened in; MAX_FAILURES in a row turn the browser off for
+the rest of the message (runtime audit A1).
 
 The first call of a message wakes the VM, brings its tools up to date and
 starts Chrome on a backend of its own (_warm, since 2026-10-29), begun

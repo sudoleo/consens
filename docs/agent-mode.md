@@ -220,19 +220,15 @@ Einstellung in ganzen Sätzen und gilt so im Code:
 |---|---|---|---|
 | Marken auf der Antwort, Notes | ja | nur wenn der Arbeitsplatz genutzt wurde | nein, „Not reviewed · …“ |
 | Aussteuern (Halt) | ja | ab dem ersten Schritt am Arbeitsplatz | nein |
-| Vorab-Prüfung (Memory nach Fremdinhalt, `request_domain`) | Prüfer, dann Nutzer | ab dem ersten Schritt am Arbeitsplatz, vorher wie Off | Memory gesperrt, Domain entscheidet nur der Nutzer |
 | `read_source` auf selbst gewählte Adressen | ja | ab dem Arbeitsplatz | nein (nur Suchtreffer, Quellen, Links des Nutzers) |
 | Prüferanteil am Tageskonto | ja | nur am Arbeitsplatz | nein |
 
 Was immer bleibt: die eigenen Sicherungen des Modells, die festen Grenzen der
-App (Zeit, Schritte, Tageskonto, VM-Zeit, geschlossenes Netz der Werkbank,
-Karten statt Schreibzugriffen, Freigabe jeder Domain durch den Nutzer,
-Memory-Sperre nach Fremdinhalt, die Sicherheitsregeln des Arbeitsplatzes) und
-der Stopp-Knopf. „Only in the workspace“ startet die Prüfer, sobald der
+App (Zeit, Schritte, Tageskonto, VM-Zeit, der eigene Unix-Nutzer des Agenten,
+Karten statt Schreibzugriffen, die Sicherheitsregeln des Arbeitsplatzes) und der Stopp-Knopf. „Only in the workspace“ startet die Prüfer, sobald der
 Arbeitsplatz geöffnet ist (ihre Kurzfassung kennt dann seine Regeln), oder, wo
 er schon offen war, mit dem ersten Schritt, der eines seiner Werkzeuge aufruft
-(nicht `ask_user` allein), und zwar vor dessen Vorab-Prüfung; sie lesen das
-Protokoll von Anfang an. Ohne Prüfer schließt eine vom Tageskonto abgelehnte
+(nicht `ask_user` allein); sie lesen das Protokoll von Anfang an. Ohne Prüfer schließt eine vom Tageskonto abgelehnte
 Runde nach bezahlter Arbeit weiter mit einer Antwort. Der Agent
 erfährt die Einstellung als Fakt (`AGENT_REVIEW_FACTS`), ändern kann er sie
 nicht, auch nicht über eine Einstellungskarte. Die Prüfung einer Antwort ohne
@@ -276,13 +272,13 @@ zu Quellen, Watches, Einstellungen, Dateien, Dokumenten, VM, GitHub und Memory
 sagen nur noch, was die App tut; ihre einzelnen Verbote stehen in der
 Verfassung. Werkzeugbeschreibungen ohne Wann-Listen (`read_source`), und
 `update_memory` sagt nicht mehr „call it first“ (seit Paket 1 falsch). Was
-gelten muss, setzt die App durch (Vorab-Prüfung, geschlossenes Netz, Karten).
+gelten muss, setzt die App durch (Domain nur mit dem Ja des Nutzers,
+geschlossenes Netz, Karten).
 Memory ohne Belegzitat (`AuditMemoryChange`, ein mitgeschicktes Zitat wird
 ignoriert): Das Modell entscheidet, was es sich merkt, auch
 Vorlieben, die der Nutzer nie wörtlich gesagt hat; der Nutzer sieht und löscht
 jede Änderung und nimmt sie mit Undo zurück. Fremdinhalt im Blick sperrt
-seit 2026-11-02 nichts mehr (vorher prüften die Prüfer, `GATE_MEMORY_NOTE`,
-ohne Prüfer sperrte Memory).
+nichts.
 Sensible Kategorien nur auf Bitte (DSGVO Art. 9). Der Vergleichsmodus behielt
 bis 2026-10-31 seine Zitatpflicht. Anlass: Terra 6.1 und Opus klagten
 über zu viele Regeln (Terra beschrieb dabei auch Regeln, die schon gestrichen
@@ -297,7 +293,7 @@ ist keine Anweisung, keine Passwörter, Außenwirkung nur auf Wunsch, nichts
 behaupten, was nicht passiert ist, besondere Datenkategorien im Memory). Keine
 Rezepte mehr, wann gesucht, gelesen oder nachgefragt wird, keine
 Schreibratschläge und keine Beispiele; Grenzen, die zählen, setzen die
-Werkzeuge durch (Leseadressen und -anzahl, Belegzitate, Memory-Sperre). Die
+Werkzeuge durch (Leseadressen und -anzahl, Belegzitate). Die
 Blöcke zu Watches, Einstellungen, Memory, Dateien, Dokumenten und Google sind
 kurz (`agent_watch.AUDIT_PROMPT`, `agent_settings.AUDIT_PROMPT`,
 `agent_memory.AUDIT_MEMORY_*`, `agent_files.AUDIT_UNTRUSTED`; im Admin „Agent:
@@ -351,11 +347,9 @@ in jedem Chat-Lauf im Kontomodus (Watch, Lesen und Bilder nicht in Chats mit
 Google-Daten). Sobald ein Schritt eigene Suchtreffer hat (`_searched`), ist
 Fremdinhalt im Blick (`outside_in_view`, auch für die Aufrufe desselben
 Schritts), wie nach `read_source`: Eine Einstellungsänderung braucht dann ein
-Belegzitat. Memory sperrte das bis 2026-11-02 ebenfalls (ohne Prüfer
-`memory_locked`, mit Prüfern seit 2026-10-28 ihre Vorab-Prüfung
-`agent_gate.outward` „memory“). Weil der Agent in fast jedem ersten Schritt
-sucht, bekam Max' Konto mit Opt-in einen Monat lang keine Erinnerung; seitdem
-ändert `update_memory` immer sofort, und der Prompt nennt, was sich zu merken
+Belegzitat. Memory sperrt es nicht: Weil der Agent in fast jedem ersten
+Schritt sucht, bekam Max' Konto mit Sperre einen Monat lang keine Erinnerung;
+`update_memory` ändert immer sofort, und der Prompt nennt, was sich zu merken
 lohnt (nicht mehr „call it first … before you search“, Max: Spielraum statt
 Mikromanagement). Was bis 2026-10-31 nur zum Vergleichsmodus
 gehörte (Vergleichslimit im Prompt, `FREE_PROMPT`, Tiefe, Antwortstart,
@@ -377,7 +371,7 @@ Modus `audit_compare_allowed`, `AGENT_AUDIT_COMPARE=all`).
 - **Werkzeug:** `AuditCompareArgs` (`question` bis 2.000 Zeichen, `context` bis
   8.000, `file_ids`, `depth` quick/full, Standard `full`; `extra="forbid"`),
   ohne `status_update` (der Text neben einem Aufruf ist die Notiz) und ohne
-  Memory-Feld (Memory geht über `update_memory` und das Gate). Die Beschreibung
+  Memory-Feld (Memory geht über `update_memory`). Die Beschreibung
   (`agent_comparison.AUDIT_COMPARE`) nennt nur Fakten und im Kontomodus die
   Grenze `turn_comparisons` („At most 4 times per message.“); ein Aufruf
   darüber startet nichts Bezahltes und sagt, dass die Nachricht ihr Maximum
@@ -412,9 +406,10 @@ Modus `audit_compare_allowed`, `AGENT_AUDIT_COMPARE=all`).
   Seiten (die Liste bleibt mit Adresse und Zahl der Antworten, die sie nennen,
   oder wird zur Zahl), zuletzt die Antworten selbst, jede gleich gekürzt; vorher
   fiel eine solche Runde für alle Einträge auf 1.500 Zeichen, und vom Vergleich
-  blieb der Anfang der ersten Antwort. Die Kurzfassung (`BRIEF_TOOLS`) erklärt
-  das Werkzeug: Ein verschwiegener Widerspruch der Antworten, der für den
-  Nutzer zählt, macht die Antwort unvollständig.
+  blieb der Anfang der ersten Antwort. Die Kurzfassung nennt das Werkzeug mit
+  seiner Beschreibung, und der Prüfer-Prompt sagt: Ein verschwiegener
+  Widerspruch der Antworten, der für den Nutzer zählt, macht die Antwort
+  unvollständig.
 - **Zeit:** Läuft die Zeit bis zur Antwort ab (`answer_time_left`), hört ein
   Vergleich sofort auf zu warten, auch ohne Antwort. Ein Modell, das noch
   schreibt, stoppt mit der fixierten Antwort (`late_cutoff`).
@@ -442,51 +437,98 @@ Modus `audit_compare_allowed`, `AGENT_AUDIT_COMPARE=all`).
 **Die gewählten Modelle prüfen, während der Agent arbeitet.** Ab dem Start
 des Laufs folgt jedes gewählte Modell dem Arbeitsprotokoll
 (`AnswerAudit.follow`, `ReviewerSession`, ein Thread und eine Sitzung je
-Prüfer; Einzelheiten in [agent-work-log.md](agent-work-log.md)). Hat das
-Protokoll einen neuen Schritt mit Tool-Aufrufen, beginnt eine Live-Runde mit
-den neuen Einträgen als JSON (keine Rundengrenze, der ganze Lauf; eigene
-Websuche mit `LIVE_SEARCH_ROUNDS` = 2); ihre Befunde nennen den Eintrag
-(`entry`). Ist das Gespräch eines Prüfers voll, geht er in einem neuen
-weiter, mit dem Anfang des Laufs und seinen bisherigen Befunden. Ist die
-Antwort fertig, fixiert sie `capture` als Version, und
-die App ruft `audit_answer` (`app_tools`, nie dem Modell angeboten; Aktivität
-„Reviewing the answer…“ / „Reviewed the answer“): `AnswerAudit.run` gibt jedem
-Prüfer die Schlussrunde mit dem Rest des Protokolls und der Antwort (eine
-Live-Runde, die dann noch läuft, bricht seit 2026-10-29 ab und ihre Einträge
-gehen mit, `cut_round`; `REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht, `ComparisonTools.worker_request`
-auf der Sitzung des Prüfers). Alle bekommen `review_system_prompt()`. Jeder
-Beleg eines Prüfers (`llm_calls`) nennt seit 2026-10-29 seine Rundenart
-(`round`: `live`, `gate`, `final`, `repair` für einen zweiten Versuch,
-`hedge`). Die
-Schlussrunde liefert die vollständige Liste `{"marks": [{quote, entry, kind,
-note, source}]}`: `wrong`, `doubtful` oder `incomplete`, ein Zitat wörtlich
-aus der Antwort und so lang, dass es nur einmal darin steht, oder die Nummer
-eines gelesenen Eintrags, die Anmerkung in der Sprache der Nachricht.
-`parse_review` liest tolerant (Fence, Text drumherum, Synonyme, „#12“,
-seit 2026-10-30 über `_read_json` auch Zeilenumbrüche in Strings, ein nicht
-maskiertes `"` in einem String und ein Komma vor der schließenden Klammer;
-Anlass: 5 von 7 unbrauchbaren Prüferantworten am 28./29.10. waren kurzes,
-vollständiges JSON von MiMo V2.6, das `json.loads` ablehnte). Ein zweites
-Objekt nach dem ersten bleibt unlesbar, weil in einer Gate-Runde das zweite
-den Halt tragen könnte. Ein gültiger Halt ohne `marks` ist in einer
-Live-Runde eine Runde ohne Befunde (vorher ging er mit der als unlesbar
-gezählten Runde verloren), in der Schlussrunde weiter unlesbar.
-Höchstens `MAX_MARKS` je Runde; Zitate nur in der Schlussrunde; `wrong`
-braucht eine http(s)-Quelle, sonst wird es `doubtful` (jede URL zählt, Max'
-Entscheidung). `source_url` liest auch einen Markdown-Link und entfernt nur
-Klammern, die sich schließen (`…/Mercury_(planet)` bleibt ganz). Keine
+Prüfer; Einzelheiten in [agent-work-log.md](agent-work-log.md)). Eine
+Live-Runde beginnt, sobald ein Schritt Werkzeuge aufruft oder nach dem ersten
+Schritt Fremdinhalt ins Protokoll kommt (`round_due`: eine Seite, eine Datei,
+eine Mail, die Ausgabe der VM, die Antwort eines anderen Modells); die
+Ergebnisse eines Schritts, die binnen `SETTLE_SECONDS` (2 s) kommen, gehen mit
+seiner Runde. Sie bekommt die neuen Einträge als JSON (keine Rundengrenze, der
+ganze Lauf; eigene Websuche mit `LIVE_SEARCH_ROUNDS` = 2); ihre Befunde nennen
+den Eintrag (`entry`).
+
+*Nur das Neue, Altes kompakt* (Max: „Können wir den Prüfern nur das geben,
+was neu ist?“). Die APIs sind zustandslos: Jede Runde schickt das Gespräch des
+Prüfers ganz. Ohne Grenze wüchse es mit jedem Schritt, bei 150 Schritten und 6
+Prüfern rund 700 wachsende Anfragen bis etwa 100.000 Tokens, die Kosten
+quadratisch. Das Gespräch wächst deshalb nur durch Anhängen (der Prompt-Cache liest seinen Anfang, bei Anthropic über den
+mitwandernden Cache-Punkt) bis `segment_cap` (`SEGMENT_CHARS` = 90.000
+Zeichen, etwa 30.000 Tokens, höchstens `LIVE_SHARE` von `session_budget`).
+Passt die nächste Runde nicht mehr, beginnt ein neues Gespräch mit dem
+Übertrag (`ReviewerSession._carry`, `carry_sections`): der Anfang des Laufs
+(Start-Eintrag, Kurzfassung der Anweisungen und die Frage ganz, der Verlauf
+kürzer, `workspace_opened`), die Nachrichten des Nutzers in den Lauf, die
+App-Einträge seiner Entscheidungen und der Grenzen (`paused`, `decision`,
+`limit`), eine Zeile je bis dahin gelesenem Eintrag (`carried_lines`: die
+neueren mit dem, was sie taten oder hielten, ältere nur Nummer, Art und Name,
+die ältesten gezählt) und die eigenen Marken und Halts. Jeder Teil hat seine
+Grenze (`CARRY_*_CHARS`, bei kleinen Fenstern zusammen kleiner), danach kommt
+nur Neues dazu. So bleibt jede Anfrage beschränkt und die Kosten eines Laufs
+wachsen linear mit seiner Länge: `tests/test_agent_audit_segments.py` spielt
+200 Schritte mit je 5.000 Zeichen Ausgabe, keine Anfrage über 90.000 Zeichen
+(im Mittel 56.000, 16 neue Gespräche), die zweiten hundert Schritte kosten
+wie die ersten; ohne Grenze wüchse dieselbe Folge auf 246.000 Zeichen je
+Anfrage.
+Antworten der Prüfer gehen als Text ins Gespräch, ohne ihr Reasoning. Passt
+eine Runde nicht einmal in ein neues Gespräch, liest sie weniger Einträge, der
+Rest kommt mit der nächsten (`_compose`); erst wenn kein einziger passt, folgt
+der Prüfer nicht mehr (`unfollowed_at_seq`). Eine gescheiterte Runde verliert
+weder das Gespräch noch seine OpenRouter-Sitzung (`conversation_key`: die
+nächste Runde findet den Anfang im Cache des Endpunkts); erst nach
+`MAX_ROUND_FAILURES` in Folge wechselt sie den Endpunkt. Wie viel der Agent
+dafür vom Tageskonto lässt, schätzt `_reviewer_step_charge`: das Meiste, was
+die Prüfer in einem der letzten `REVIEWER_CHARGE_STEPS` (8) Schritte nahmen,
+die Schlussrunden `FINAL_ROUND_CHARGE` (2) mal so viel (`_long_run_limit`;
+der Durchschnitt des ganzen Laufs bliebe hinter einem Gespräch zurück, das zu
+seiner Grenze wächst).
+
+Ist die Antwort fertig, startet `AnswerAudit.begin` die Schlussrunden sofort
+(aus `_finish_merged`, noch vor dem Speichern der Version, der Übergabe und
+dem Speichern von „running“), `capture`
+fixiert sie als Version, und die App ruft `audit_answer` (`app_tools`, nie dem
+Modell angeboten; Aktivität „Reviewing the answer…“ / „Reviewed the answer“):
+erst dann stoppt `finish_comparisons` Nachzügler der Vergleiche und wartet
+darauf höchstens `STRAGGLER_STOP_SECONDS` (5 s), und
+`AnswerAudit.run` wartet auf die Prüfer. Jeder bekommt in seiner Schlussrunde
+den Rest des Protokolls, was das Protokoll außerhalb seines laufenden
+Gesprächs über die Quellen hält, die die Antwort zitiert (`cited_evidence`:
+Suchauszug, gelesene Seite, Quellen eines Vergleichs, je
+`SOURCE_EVIDENCE_CHARS`, zusammen `EVIDENCE_CHARS`), und die Antwort (eine
+Live-Runde, die dann noch läuft, bricht ab und ihre Einträge gehen mit,
+`cut_round`; `REVIEW_SEARCH_ROUNDS` = 3, Dateien der Nachricht,
+`ComparisonTools.worker_request` auf der Sitzung des Prüfers). Passt das nicht
+mehr ins Gespräch, beginnt sie ein neues mit dem Übertrag. Alle bekommen
+`review_system_prompt()`. Jeder Beleg eines Prüfers (`llm_calls`) nennt seine
+Rundenart (`round`: `live`, `final`, `repair` für einen zweiten Versuch,
+`hedge`). Die Schlussrunde liefert die vollständige Liste `{"marks": [{quote,
+entry, kind, note, source, concern}]}`: `wrong`, `doubtful` oder
+`incomplete`, ein Zitat wörtlich aus der Antwort und so lang, dass es nur
+einmal darin steht, oder die Nummer eines gelesenen Eintrags, die Anmerkung in
+der Sprache der Nachricht. `concern` (einer der Haltgründe) trägt ein
+Sicherheitsbedenken, für das es nichts mehr anzuhalten gibt: Es steht in Notes
+zuerst, rot, mit den Worten der Pause („Prompt injection“) und zählt als
+„1 warning“; ein Halt, den ein Prüfer in der Schlussrunde trotzdem schickt,
+wird so ein Bedenken auf seinem Eintrag, statt verworfen zu werden.
+`parse_round` liest tolerant (Fence, Text drumherum, Synonyme, „#12“, über
+`_read_json` auch Zeilenumbrüche in Strings, ein nicht maskiertes `"` in einem
+String und ein Komma vor der schließenden Klammer; Anlass: 5 von 7
+unbrauchbaren Prüferantworten am 28./29.10. waren kurzes, vollständiges JSON
+von MiMo V2.6, das `json.loads` ablehnte) und liefert Marken und Halt aus
+einem Lesen. Ein zweites Objekt nach dem ersten bleibt unlesbar, weil das
+zweite den Halt tragen könnte. Ein gültiger Halt ohne `marks` ist eine Runde
+ohne Befunde. Höchstens `MAX_MARKS` je Runde; Zitate nur in der Schlussrunde;
+`wrong` braucht eine http(s)-Quelle, sonst wird es `doubtful` (jede URL zählt,
+Max' Entscheidung). `source_url` liest auch einen Markdown-Link und entfernt
+nur Klammern, die sich schließen (`…/Mercury_(planet)` bleibt ganz). Keine
 lesbare Liste: die Runde scheitert mit `review_unreadable`; ein Tool-Aufruf
-statt JSON heißt seit 2026-10-29 `review_tool_calls`, eine leere Antwort
-`review_empty` (`review_failure`; vorher beide `provider_error`, das nur noch
-Fehler des Anbieters meint; Notes nennt beide im Klartext). Eine gescheiterte
-Live-Runde kostet nur sich selbst (neue Sitzung, dieselben Einträge mit der
-nächsten Runde, nach `MAX_ROUND_FAILURES` = 2 in Folge eine Pause ab 60 s,
-die sich verdoppelt), auch
-ein 429 (sperrt das Modell nicht für den Agenten); scheitert die
-Schlussrunde, gelten die Befunde der Live-Runden. Wie viel ein Prüfer liest,
-hängt am Kontextfenster seines Modells (`session_budget`, `fitted_round`). Die Sitzung eines Prüfers speichert als
-Auftrag nur `REVIEW_ASSIGNMENT`; im Agent-Panel steht je Runde eine Nachricht
-(`round`, dann `result`).
+statt JSON heißt `review_tool_calls`, eine leere Antwort `review_empty`
+(`review_failure`; `provider_error` meint nur Fehler des Anbieters; Notes nennt
+beide im Klartext). Eine gescheiterte Live-Runde kostet nur sich selbst (neue
+Sitzung, dieselben Einträge mit der nächsten Runde, nach `MAX_ROUND_FAILURES`
+= 2 in Folge eine Pause ab 60 s, die sich verdoppelt), auch ein 429 (sperrt
+das Modell nicht für den Agenten); scheitert die Schlussrunde, gelten die
+Befunde der Live-Runden. Die Sitzung eines Prüfers speichert als Auftrag nur
+`REVIEW_ASSIGNMENT`; im Agent-Panel steht je Runde eine Nachricht (`round`,
+dann `result`).
 
 **Zitate finden.** `place_marks` sucht jedes Zitat mit einem toleranten
 Locator (`locate_quote` mit `_search_form`/`_anchor_form`/`_locate_in`, bis
@@ -517,13 +559,19 @@ null}`, `final_ms` und `hedged`), erst am Ende `audit.claims`/`audit.unplaced`/`
 scheitert, nicht lesbar antwortet oder bei der Frist noch arbeitet, verliert
 nur seine Marken. Die Prüfer starten nur mit mindestens `REVIEW_MIN_SECONDS`
 bis zum harten Stopp und enden `REVIEW_TIME_MARGIN` davor (`no_time`); der
-Agent hört dafür `REVIEW_RESERVE_SECONDS` früher auf (`answer_time_left`).
+Agent hört dafür `REVIEW_RESERVE_SECONDS` früher auf (`answer_time_left`;
+die tatsächliche Schranke der Schlussrunde: `FINAL_ROUND_SECONDS` 90 s,
+`REVIEWER_JOIN_SECONDS` 10 s, der Rand und `REVIEW_SAVE_SECONDS` 10 s für das
+Speichern, zusammen 125 s).
 Seit 2026-10-29 hat die Schlussrunde eine eigene Frist und Hedging (A-T2):
 ohne brauchbare Antwort nach `final_hedge_seconds` (p90 der letzten
 Schlussrunden des Modells im Prozess, mindestens 12 s, sonst 30 s) dieselbe
 Anfrage auf neuer Sitzung, die erste brauchbare gewinnt; nach
 `FINAL_ROUND_SECONDS` (90 s) `no_time` mit den Live-Befunden (Einzelheiten
-in [agent-work-log.md](agent-work-log.md), „Fehler“).
+in [agent-work-log.md](agent-work-log.md), „Fehler“). Eine Anfrage, die
+scheitert, während die andere noch läuft, endet „stopped“ (`superseded`),
+sobald die andere gewinnt: Sonst zeigte das Panel den Prüfer als gescheitert
+(„Its marks are missing…“), obwohl er fertig war.
 Scheitert die Prüfung als Ganzes (Fehler, Speicherbudget auch nach
 `trim_marks`, das erst die zitierten Worte und lange Anmerkungen kürzt),
 endet sie als `failed` mit `audit_unavailable`, der Turn trotzdem
@@ -541,13 +589,14 @@ auch `watch_error` (Deploy nach der Grace-Zeit, Firestore weg, Stopp des
 Wächters), die den Turn vorher als Fehler beendete. Eine Review, die so
 `cancelled` endet, behält die Live-Befunde wie eine gescheiterte
 Schlussrunde (A-M7, `AnswerAudit._live_findings`: `claims`/`unplaced`/`process`,
-jede Marke `live: true`); vorher fehlten sie. Seit 2026-10-29 (G7) gilt das
-auch für einen Stopp vor der fixierten Antwort (Stop, eine Pause mit Stop oder
-ohne Entscheidung): Haben die Prüfer Live-Befunde, speichert `close`
-(`_stopped_early`) eine Review `cancelled` ohne Version, die Befunde in
-`process` (ohne Antwort keine `claims`), die Zeilen der Prüfer `stopped` mit
-ihren Zählern; ohne Befunde gibt es wie bisher keine Review. Vorher standen
-sie nur in den Sitzungen der Prüfer. Kein Judge läuft: kein Score, keine
+jede Marke `live: true`). Das gilt auch für ein Ende vor der fixierten
+Antwort (Stop, eine Pause mit Stop oder ohne Entscheidung, ein Fehler des
+Laufs): Haben die Prüfer Live-Befunde, speichert `close` (`_before_answer`)
+eine Review ohne Version, nach einem Stopp `cancelled`, nach einem Fehler
+`failed` mit `run_failed`, die Befunde in `process` (ohne Antwort keine
+`claims`), die Zeilen der Prüfer `stopped` mit ihren Zählern; ohne Befunde gibt
+es keine Review. Endet der Lauf mit einem Fehler nach der fixierten Antwort,
+bleiben die Live-Befunde ebenso. Kein Judge läuft: kein Score, keine
 Unterschiedskarten, keine `differences_stats`, kein Model-Pulse-Pick.
 
 **Messen** (seit 2026-10-29, Spezifikation A-M1/A-M8): Am Ende jedes
@@ -555,13 +604,13 @@ Chat-Turns des Agenten (bis 2026-10-31 nur der Audit-Turns) zählt
 `agent_audit_metrics.record` ihn anonym in
 `ops_metrics/agent-audit-{UTC-Tag}`: Status, Review-Status, Prüferzahl,
 Buckets für Gesamtzeit, Zeit bis zur fixierten Antwort, Marken nach dem
-letzten Wort, Gate-Wartezeit, Schlussrunde je Modell und Rückstand beim
+letzten Wort, Schlussrunde je Modell und Rückstand beim
 Fixieren, dazu Halts je Art und Entscheidung und Ausfälle je Code. Kopiert
 wird im Lauf nur, was im Speicher steht (Zeiten des Protokolls, Holds der
 Aktivität); ein Daemon-Thread liest den gespeicherten Turn einmal und schreibt
 einen Merge aus Increments. Ohne UID, Chat oder Text, die Zähler überstehen
-das Löschen der Chats. Felder späterer Pakete (`final_ms`, `backlog`,
-`agent_holds`, `gate_ms`) zählen, sobald es sie gibt. Auswertung samt Zielen
+das Löschen der Chats. Felder, die ältere Turns nicht haben (`final_ms`,
+`backlog`, `agent_holds`), zählen, wo es sie gibt. Auswertung samt Zielen
 Z1–Z8: `scripts/audit_report.py --days 5` (nur lesend; seit 2026-10-31 zählt
 es Turns, deren eingefrorene Präferenzen nur noch `vm` halten, als Audit, alte
 nach `audit` bzw. `agent_review`). Seit 2026-10-30 zählt dort auch jeder Turn,
@@ -572,8 +621,7 @@ Schritte, Zeit und Bilder“), dazu der Grund jedes Wrap-ups (`wrap_up`).
 schaltete „Answer check off“ im Audit auch die Prüfer ab: `auditor` war
 `None`, der Prompt sagte es mit `AUDIT_OFF_PROMPT`). Jeder Chat-Lauf hat einen
 `AnswerAudit`; ohne Prüfer ist nur ein Lauf, dessen Prüfer nie starten (keine
-Sitzung folgt dem Protokoll, `auditor.sessions` leer): kein Gate vor einer
-Außenwirkung (Memory sperrte bis 2026-11-02 bei Fremdinhalt),
+Sitzung folgt dem Protokoll, `auditor.sessions` leer): kein Halt,
 `read_source` liest keine frei gewählte Seite, keine Zeit für Schlussrunden
 reserviert (`answer_time_left`), kein Überziehen für die Antwort nach einem
 bezahlten Schritt (`_paid_audit`), und die Review der fixierten Antwort endet
@@ -666,17 +714,32 @@ Marken; in der Schlussrunde gibt es keinen Halt, und seit 2026-10-29 nimmt
 davor kam, endet dort mit `ended` (vorher stand sie wirkungslos bis zum
 Turn-Ende, und die Uhr des Turns stand still). `parse_halt` nimmt nur einen
 der vier Gründe, einen Satz und einen gesehenen Eintrag; `AnswerAudit.halt`
-lässt je Prüfer und Eintrag einen zu (ein Prüfer reicht) und ruft
-`DelegationLoop.request_hold`. Ist schon eine Karte offen (ein anderer Halt,
-eine Gate- oder Domain-Karte), kommt der Halt seit 2026-10-29 auf diese
-Karte (`joined_halt`: jeder Grund mit seinem Prüfer in `reasons`, eine Karte
-ohne eigenen Grund übernimmt seinen, eine Domain-Karte zeigt dann `review:
-halt`; Frame `hold` mit derselben ID und neuer `revision`, die die Karte neu
-zeichnet, Protokoll `paused` „… also paused …“); vorher ging er verloren.
-Ist die Karte schon entschieden, aber noch nicht geschlossen, wartet er und
-öffnet danach als nächste Karte (`queued_hold`).
-Gezählt wird ein Halt in `AnswerAudit.halts` erst, wenn der Lauf ihn
-angezeigt, angehängt oder hinter die Karte des Nutzers gestellt hat. Der
+lässt je Prüfer und Eintrag einen zu (ein Prüfer reicht). **Nur mit Beleg:**
+Ein Halt hält nur an, wenn sein Zitat im genannten Eintrag steht
+(`quote_found` über `evidence_text`: Inhalt, Texte seines JSON, entschlüsselte
+Argumente der Aufrufe, Auszüge einer Datei; Groß/klein, Leerraum und
+JSON-Maskierung zählen nicht); sonst bleibt er eine Marke auf dem Eintrag
+(`keep_as_mark`, `doubtful` mit dem Grund als Anmerkung). Anlass: Alle 13
+Halts in Prod endeten mit „Continue“. Mit Beleg ruft er
+`DelegationLoop.request_hold`. Ist schon eine Karte offen (ein anderer Halt
+oder eine Domain-Karte), kommt der Halt auf diese Karte (`joined_halt`: jeder
+Grund mit seinem Prüfer in `reasons`, eine Karte ohne eigenen Grund übernimmt
+seinen, eine Domain-Karte zeigt dann `review: halt`; Frame `hold` mit
+derselben ID und neuer `revision`, die die Karte neu zeichnet). Ist die Karte
+schon entschieden, aber noch nicht geschlossen, wartet er und öffnet danach
+als nächste Karte (`queued_hold`). **Eine Karte je Eintrag:** Ein Halt auf
+einen Eintrag, über dessen Karte der Nutzer schon entschieden hat, öffnet
+keine zweite (`request_hold` antwortet `HOLD_DECIDED`; `hold_entries`,
+`queued_entries`, `decided_entries`), auch nicht im Moment zwischen
+Entscheidung und Schließen; er bleibt eine Marke. Vorher konnte ein zweiter
+Prüfer auf denselben Eintrag eine zweite Karte öffnen. Gezählt wird ein Halt
+in `AnswerAudit.halts`, wenn der Lauf ihn angezeigt, angehängt oder hinter die
+Karte des Nutzers gestellt hat oder er eine Marke wurde. **Unabhängig:** Der
+Protokolleintrag `paused` einer Prüferpause sagt nur „The work was paused for
+the user's decision.“, nie welcher Prüfer, warum oder zu welchem Eintrag:
+Jeder Prüfer liest das Protokoll, und keiner sieht, was ein anderer fand. Wer
+und warum stehen in der Aktivität des Nutzers. Die eigenen Halts trägt jeder
+Prüfer in sein neues Gespräch mit (`ReviewerSession.halts`). Der
 Lauf hält vor seinem nächsten Schritt oder Aufruf (`_hold_wait`, auch
 zwischen den Aufrufen einer Runde und bevor eine geschriebene Antwort zählt,
 seit 2026-10-29 auch die des Schlussschritts nach einem Turn-Limit,
@@ -717,8 +780,8 @@ wenn auch der sie nicht kennt, 409 `hold_over`. Vorher wurde der Fehler nur
 geloggt, und jede Entscheidung bekam 409. `deny` nimmt der Endpunkt seit
 2026-10-29 nur, wo es eine Antwort ist (`agent_sessions.deniable`: eine
 Domain, die Frage des Agenten mit `confirm` oder `secret`), sonst 422
-`invalid_action`; vorher lief ein Prüfer- oder Gate-Halt danach weiter wie
-nach `continue` (auch ein gegatetes `update_memory`). Seit 2026-10-30 prüft
+`invalid_action`; vorher lief ein Prüfer-Halt danach weiter wie nach
+`continue`. Seit 2026-10-30 prüft
 `agent_sessions.check_answer` alle Entscheidungen (auch `decide_unsaved`):
 `choose` nur auf einer Auswahlkarte und mit einem ihrer Indizes, dort weder
 `continue` noch `deny` (je 422). Kommt eine solche Entscheidung doch an
@@ -738,7 +801,7 @@ Hilfseinträgen, `agent-activity.js` `HOLD_ENTRIES`, A-B7), App-Einträge
 `paused`/`decision` im Arbeitsprotokoll (die Prüfer lesen die Entscheidung
 mit), `hold`/`hold_decision` am Lauf-Root, seit 2026-10-29 `agent_holds[]` am
 Turn-Dokument (jede beendete Pause, höchstens `HOLDS_KEPT` = 20: `kind`,
-`gate`, `ask`, `domain`, `reviewer`, `decision`, `seconds`, nie ein Grund; für
+`ask`, `domain`, `reviewer`, `decision`, `seconds`, nie ein Grund; für
 Auswertungen, nicht in `turn_detail`, `DelegationLoop._end_hold`; dort nur
 ihre Summe `agent_wait_seconds`, die „Thought for …“ abzieht), Tab-Titel
 „Paused“ (`tab-status.js`). **Überall sichtbar** (seit 2026-10-29, A-B2):
@@ -780,13 +843,13 @@ können.
 seit 2026-10-27 eine ältere Familie mit nacktem 16-px-Symbol, Titel auf einer
 zweiten Kante, Meta-Zeile, bis zu drei Links neben dem Knopf und Frist ab der
 ersten Sekunde, davor ein beiger Kasten mit gerahmten Knöpfen): Jede Karte über
-dem Feld, Prüfer-Pause, Gate, Domain und die Fragen des Agenten, hat das
+dem Feld, Prüfer-Pause, Domain und die Fragen des Agenten, hat das
 Raster des Design-Passes 438aacdc (`cardShell`, `.agent-hold-card`): die
 Glyphe hängt links in einem getönten Kreis (`.agent-hold-glyph`, Pausenton,
 Globus für die Domain, Hausgrün für den Browser und den Key), Titel, Worte,
 Beleg und Entscheidung stehen bündig an einer Kante, Radius `--radius-lg`,
 Abstände aus `--space-*`. **Ein** gefüllter Knopf (`.btn` „Let it continue“,
-„Let it run“, „Allow for this chat“, „Allow“, „Save“) und höchstens ein
+„Allow for this chat“, „Allow“, „Save“) und höchstens ein
 Textlink (`.text-link` „Don’t allow“, „Not now“). **Schreiben geht über das
 Eingabefeld** (die Nachricht ist die Steer-Entscheidung, `steer`; sein
 Platzhalter sagt solange „Or write to the agent…“, `runningPlaceholder`),
@@ -831,74 +894,21 @@ nach einem Reload (`failed`, `missing` vor dem Start), statt bis zum Neuöffnen
 die Karte nur ihre Gründe (`reasonLines`, Zeilen mit `data-reason`) und den
 Titel: eine Entscheidung unterwegs bleibt.
 
-**Vorab-Prüfung** (seit 2026-10-27, Max' Entscheidung nach der
-Harness-Kritik; seit 2026-10-29 nur noch zwei Arten): Ein Halt kommt erst nach
-dem Aufruf, denn die App schreibt einen Schritt ins Protokoll und führt ihn
-sofort aus, die Runde eines Prüfers dauert Sekunden. Deshalb warten manche
-Aufrufe vorher auf die Prüfer. Welche, entscheidet die App nach dem Werkzeug
-und seinen typisierten Argumenten (`agent_gate.outward`, nie ein Modell, nie
-ein Textmuster): jede Domain-Anfrage (`request_domain`, die danach immer der
-Nutzer entscheidet, siehe „Netz der Werkbank“) und eine Memory-Änderung,
-sobald Fremdinhalt im Blick ist (`memory_exposed`, seit 2026-10-28).
-
-**Browser-Aktionen und Seitenabrufe warten nicht mehr** (seit 2026-10-29,
-Max: „nicht SOTA, wirkt gehandicapt“; kritische Handlungen sind kein einzelner
-Klick, sondern werden hergeleitet). Vom 27./28. bis 29.10. warteten auch
-`browser` `open`, `click`, `drag`, `upload`, `download`, `key` mit `Enter` oder
-`Space` und `type` mit `enter` sowie `read_source`/`show_image` mit einer
-Adresse, die die Nachricht noch nicht hielt (`WEB_READS`, `GATE_WEB_NOTE`,
-`DelegationLoop._known_url`, alles entfernt). Prod-Messung über drei Tage
-davor: 30 Gate-Runden in 6 Läufen, Median 3,9 s je Klick (p90 10,5 s, ein Lauf
-fast eine Minute reines Warten), 4 Halts, alle vier vom Nutzer
-weitergelassen (ein Link aus einem Suchtreffer, ein Bild, zwei Spielzüge,
-einmal „kein Prüfer konnte prüfen“). Der einzige echte Injection-Halt bis
-dahin (CSV, 27.10.) kam in einer gewöhnlichen Live-Runde beim Lesen. Die
-Prüfer folgen diesen Schritten jetzt live wie jedem anderen; einen Schritt im
-Namen des Nutzers (Senden, Posten, Kaufen, Löschen) legt der Agent dem Nutzer
-selbst vor (`ask_user`, siehe „Der Agent fragt den Nutzer“). Bewusste Lücke:
-Liest der Agent eine präparierte Seite und klickt Sekunden später, kann die
-Live-Runde zu spät kommen; zu messen, wie oft ein Klick eine laufende Runde
-überholt. Bis zum Umbau nach dem Sicherheitsaudit (2026-10-27) suchte eine
-Liste von Mustern in Shell-Befehlen nach `curl`, `git push` u. Ä.; seit die
-Werkbank nur noch Paketquellen erreicht, kann ein Befehl nichts
-hinausschicken, was auch immer er sagt, und die Muster sind weg.
-
-Ablauf: `DelegationLoop._step` öffnet das Gate (`AnswerAudit.open_gate`) vor
-dem Protokolleintrag des Schritts, damit kein Prüfer ihn zuerst in einer
-gewöhnlichen Runde liest; `ready_gate` nennt danach den Eintrag und die
-Prüfer, die antworten können (folgend, nicht in der Fehlerpause, Thread
-lebt). Jeder davon bekommt eine Gate-Runde (`ReviewerSession._gate_round`):
-die neuen Einträge plus `GATE_NOTE` mit den Aufrufen, **ohne Websuche**, im
-selben Gespräch. Antwort `"gate": "go"` oder ein Halt (`parse_gate`; Marken
-dürfen dabei sein, ohne Entscheidung zählt sie als ausgefallen). Seit
-2026-10-29 (A-T3) hat das Gate Vorrang und eine Frist: `ready_gate` bricht
-eine laufende Live-Runde jedes gefragten Prüfers ab (`cut_round`, ihre
-Einträge gehen in die Gate-Runde), jeder Prüfer hat `GATE_SECONDS` (20 s) ab
-dem Eintrag, danach zählt er als ausgefallen (`gate_result`, also Karte
-`unchecked`, nie ein Go), eine unlesbare Antwort, auch ein Tool-Aufruf statt
-JSON, bekommt in dieser Zeit einen zweiten Versuch mit `REPAIR_NOTE` in
-derselben Sitzung (Beleg `repair`), und die Wartezeit hält die Turn-Uhr an wie
-ein Halt (`gate_paused`/`gate_started`, `_gate_pause`; vorher zählte sie zur
-Turn-Zeit). Der Aufruf
-wartet in `_gate_wait` (Aktivität „The reviewers check this step before it
-runs.“, Stop wirkt): Alle sagen go → er läuft, App-Eintrag `checked`
-(seit 2026-10-29 als JSON `{text, gate_ms, verdicts: [{provider, model,
-verdict, ms}]}`, `AnswerAudit.gate_trace`, ohne Texte der Prüfer; dieselben
-Felder `gate_ms`/`verdicts` trägt der Hold einer Gate- oder Domain-Karte). **Ein
-Halt reicht** → die Karte (`request_hold` mit `gate: true`, „A reviewer
-stopped a step before it ran“, Knopf „Let it run“; halten mehrere an, steht
-jeder mit seinem Grund in `reasons`). **Kann nicht jeder Prüfer des Laufs
-antworten** (einer ausgefallen, unlesbar, in der Fehlerpause oder nicht mehr
-folgend) → Karte der Art `unchecked` („Not every reviewer could check this
-step“), ohne Prüfer und Grund: Ein Prüfer, der nicht antworten konnte, zählt
-nie als Zustimmung (seit dem Sicherheitsaudit 2026-10-27; vorher reichte das
-Go eines einzigen, wenn die anderen ausgefallen waren). Der Agent erfährt nur die
-Entscheidung des Nutzers: `continue` lässt die Aufrufe des Schritts laufen,
-`steer` lässt sie ungelaufen (`HOLD_STEERED`) und gibt ihm die Nachricht, Stop
-stoppt. Die Entscheidung gilt für die gelisteten Aufrufe dieses einen
-Schritts (`Gate.decision`), nicht für spätere gleicher Art. Ein Halt der
-Gate-Runde zählt in `AnswerAudit.halts`, eine spätere Runde hält denselben
-Eintrag nicht noch einmal an. Ohne Prüfer (siehe „Ohne Prüfer“) gibt es kein Gate.
+**Kein Warten vor einem Aufruf.** Jeder Aufruf des Agenten läuft sofort; die
+Prüfer folgen ihm live und halten die Arbeit vor dem nächsten Schritt an, wo
+sie den Nutzer braucht (ein laufender VM-Befehl endet dann, ein streamender
+Schritt bricht ab). Was dem Nutzer gehört, legt der Agent ihm selbst vor:
+jeden Schritt in seinem Namen (Senden, Posten, Kaufen, Löschen über
+`ask_user`, siehe „Der Agent fragt den Nutzer“). Eine Memory-Änderung läuft
+sofort; der Nutzer sieht jede und nimmt sie mit Undo zurück. Warum keine
+Prüfung vor dem Aufruf: Sie umfasste zuletzt nur `request_domain`, das der
+Nutzer ohnehin entschied und das mit dem offenen Netz des Arbeitsplatzes
+wegfiel; ihre Runden waren bezahlt, auch wo die Domain schon offen war, und
+ihre Halts gingen dann verloren; Browser-Klicks davor kosteten im Median
+3,9 s je Klick, und jeder ihrer Halts war ein Fehlalarm. Der einzige echte
+Injection-Halt bis dahin kam in einer gewöhnlichen Live-Runde beim Lesen; seit
+Fremdinhalt selbst eine Runde startet, liest ein Prüfer ihn, bevor der
+nächste Schritt des Agenten handelt.
 
 Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
 der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
@@ -907,8 +917,11 @@ seit 2026-10-31 als Karten je Satz unter „Notes“, nicht als Marken im Text;
 Marken auf der Arbeit und nicht platzierte bleiben in der App.
 
 Tests: `tests/test_agent_audit.py` (Turn, Live-Runden, Schlussrunde,
-Prüfer, Fristen, Stop, Speichern, Memory-Sperre, Zitate, Einträge, Quellen,
-Prompts, Route, Aussteuern), `tests/test_agent_audit_compare.py`
+Prüfer, Fristen, Stop, Speichern, Zitate, Einträge, Quellen, Prompts, Route,
+Aussteuern), `tests/test_agent_audit_segments.py` (Gespräch in Abschnitten,
+Übertrag, Linearität über 200 Schritte, Beleg eines Halts),
+`tests/test_agent_outward_calls.py` (Aufrufe laufen sofort, Domain-Karte),
+`tests/test_agent_audit_compare.py`
 (`compare_models`), `tests/test_agent_audit_tempo.py` (seit
 2026-10-29: Tempo mit drei und sechs Prüfern, 200-Schritte-Lauf, drei Turns
 gleichzeitig; Ergebnisse in der Spezifikation unten, Paket 5),
@@ -1038,9 +1051,9 @@ Laufzeit-Audit 2026-10-30, T5): Dieselbe Browser-Aufgabe hätte sonst andere
 Grenzen, je nachdem, ob ihre Nachricht offen begann oder `open_workspace`
 rief. VM-Aufrufe zählen nicht zur
 Sperre für identische Aufrufe (`REPEATABLE_TOOLS`: dieselben Tests nach einer
-Änderung sind Fortschritt). Jedes VM-Werkzeug sperrt Memory wie `read_file`
-(Memory-Sperre unten): Ausgaben, Dateien und die Notizen des Arbeitsplatzes
-sind Fremdinhalt.
+Änderung sind Fortschritt). Ausgaben, Dateien und die Notizen des
+Arbeitsplatzes sind Fremdinhalt (`outside_in_view`, „Fremdinhalt im Blick“
+unten).
 
 **Lebenszyklus.** Seit 2026-10-27 eine VM pro Konto, der Arbeitsplatz (siehe
 „Arbeitsplatz“ unten), Name `workspace_name(uid)` (stabil, ohne Konto-ID);
@@ -1302,14 +1315,14 @@ weiterlaufen ließ (`CALL_AFTER_PAUSE`; eine Pause vor dem ersten Aufruf
 entscheidet der Nutzer mit den Aufrufen auf der Karte, sie laufen dann), nach
 `ask_user` (`CALL_AFTER_ASK`), nach einer Übernahme des Browsers
 (`CALL_AFTER_TAKEOVER`; eine Gruppe mit Werkzeugen des Arbeitsplatzes wartet
-einmal vor ihrem Start darauf), nach einer abgelehnten Domain
-(`CALL_AFTER_DENIAL`) und nach einem Gate-Veto. Ein Halt während einer Gruppe
-lässt sie zu Ende laufen und hält die nächste. Der Grund eines Prüfers erreicht
-den Agenten dabei nie, nur dass eine Pause war. Nicht gelaufene Aufrufe tragen
-App-Text und sperren Memory nicht. Reasoning-Signaturen: Die Nachricht des
-Agenten geht mit allen Aufrufen des Schritts zurück, auch dem über der Grenze,
-das Reasoning unverändert; mit signiertem Claude-Reasoning und mehreren
-Aufrufen live noch nicht geprüft.
+einmal vor ihrem Start darauf) und nach einer abgelehnten Domain
+(`CALL_AFTER_DENIAL`). Ein Halt während einer Gruppe lässt sie zu Ende laufen
+und hält die nächste. Der Grund eines Prüfers erreicht den Agenten dabei nie,
+nur dass eine Pause war. Nicht gelaufene Aufrufe tragen App-Text und sperren
+Memory nicht. Reasoning-Signaturen: Die Nachricht des Agenten geht mit allen
+Aufrufen des Schritts zurück, auch dem über der Grenze, das Reasoning
+unverändert; mit signiertem Claude-Reasoning und mehreren Aufrufen live noch
+nicht geprüft.
 
 **Faktzeile nach jedem Ergebnis (L3).** In jeder Nachricht mit Arbeitsplatz
 (offen oder geschlossen) hängt `_note_progress` nach den Ergebnissen und
@@ -1338,15 +1351,18 @@ Mitte des Verlaufs. Der Ersatztext nennt den Rückweg nach Herkunft, erkannt
 am Text der App über dem Bild (`picture_gone`): `vm_view_image`, ein neuer
 Screenshot mit `browser` oder `find_pictures` mit der Adresse (gleiche id).
 
-**Prüferrunden (K6).** `browser` mit `read`, `text`, `find`, `tabs`,
-`screenshot` löst wie `vm_read_file` keine eigene Live-Runde aus (Max'
-Entscheidung; siehe [agent-work-log.md](agent-work-log.md) „Wann“).
+**Prüferrunden (K6).** Jeder Schritt mit Aufrufen bekommt seine Live-Runde,
+auch einer, der nur liest (`browser` `read`, `vm_read_file`): Was ein Lesen
+zurückbringt, ist Fremdinhalt, über den eine Injection kommt, und dieser
+startet selbst eine Runde (`round_due`). Damit es nicht zwei Runden je
+Schritt werden, wartet die Runde eines Schritts bis `SETTLE_SECONDS` (2 s) auf
+seine Ergebnisse (`results_pending`; siehe [agent-work-log.md](agent-work-log.md)
+„Wann“). Eine Namensliste ruhiger Werkzeuge gibt es nicht mehr.
 
 **Messen (I1, I4, I6, I7, I9).** `agent_wrap_up` am Turn und der App-Eintrag
 `limit` nennen die Grenze eines Wrap-ups. Werkzeugeinträge im
-Arbeitsprotokoll tragen `started_at`/`duration_ms`, Gate-Einträge `step` und
-`gate_ms` als Felder (sie fehlten: `checked` wurde ohne Schritt geschrieben,
-der `paused`-Eintrag einer Gate-Karte ist Text). Belege tragen
+Arbeitsprotokoll tragen `started_at`/`duration_ms`, der `paused`-Eintrag
+einer Pause `step` als Feld. Belege tragen
 `request_started_at`, `first_token_at` und `stream_ended_at`;
 `scripts/audit_report.py` teilt damit jeden Agent-Schritt in unsere Zeit vor
 der Anfrage, die des Anbieters und unsere danach. Jeder Turn, der den
@@ -1800,12 +1816,10 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   bleiben im Backend, ein Pull Request geht weiter nur über die Karte.
 - **`request_domain(domain, reason)`** (`agent_domains.py`): ein Hostname,
   ohne Schema, Pfad, Port, Wildcard oder IP; nie Flys internes Netz oder die
-  Sprites-Adressen. Der Aufruf ist Außenwirkung (`agent_gate`): Die
-  Prüfer schätzen ihn in einer Gate-Runde ein (`GATE_DOMAIN_NOTE`: der Nutzer
-  entscheidet in jedem Fall), dann **entscheidet immer der Nutzer**
+  Sprites-Adressen. **Es entscheidet immer der Nutzer**
   (`DelegationLoop._domain_wait`, Karte `agent-domain-card`: Domain, Begründung
-  des Agenten als Daten, das Urteil der Prüfer oder dass nicht jeder prüfen
-  konnte; „Allow for this chat“ = `continue`, „Don’t allow“ = neue Antwort
+  des Agenten als Daten, der Halt eines Prüfers, der kommt, während sie offen
+  ist, oder dass niemand prüft; „Allow for this chat“ = `continue`, „Don’t allow“ = neue Antwort
   `deny`, eine Nachricht im Eingabefeld = `steer`, Stop am Feld; die
   Begründung des Agenten seit dem UX-Audit C16 als leise Zeile unter dem
   Titel statt im Code-Feld). **Keine automatische Freigabe**, auch
@@ -2158,7 +2172,7 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   höchstens 50 Striche, je 2–500 Punkte, 2.000 zusammen; zwischen zwei Punkten
   in Schritten von 8 px, damit eine Leinwand Linien bekommt): Zeichnen,
   Schieberegler, Drag-and-drop, viele Striche in einem Aufruf. Bis 2026-10-29
-  warteten beide wie ein Klick auf die Prüfer (Vorab-Prüfung, seitdem live).
+  warteten beide wie ein Klick auf die Prüfer, seitdem folgen sie live.
   Der VM-Prompt sagt dazu als Sicherheitsregel, dass der Agent nie ein CAPTCHA
   oder eine andere Prüfung auf einen Menschen löst. Chrome startet mit
   Software-WebGL (`--use-gl=angle --use-angle=swiftshader
@@ -2226,8 +2240,7 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   eine `.env`; `agent_secrets.holds`, `UPLOAD_KEY_REFUSED`): Schutz gegen ein
   Formular, das einen Key mitnimmt, nicht gegen einen umkodierten. `screenshot` kommt als Bild zum Agenten
   (wie `vm_view_image`, nur für Bildmodelle). Die Prüfer folgen jeder Aktion
-  live; bis 2026-10-29 warteten `open`, `click`, `upload`, `key Enter`,
-  `key Space` und `type` mit `enter` vorher auf sie (Vorab-Prüfung).
+  live (siehe „Kein Warten vor einem Aufruf“).
   Die Einrichtung läuft synchron im ersten Aufruf (bis 100 s): Im Hintergrund
   fror sie mit der schlafenden Sprite ein (gesehen 2026-10-27). Fällt die
   Browser-VM aus, ist nur `browser` für die Nachricht aus. Die Zeit, die der
@@ -2442,10 +2455,10 @@ mit `audit_access`). Die
   more minutes“ (erst in den letzten fünf). Ein Prüfer-Halt, der währenddessen kommt, wartet
   (`queued_hold`, ein zweiter kommt dazu) und hält dann vor dem nächsten
   Aufruf. Das Werkzeug
-  ersetzt die Vorab-Prüfung jedes Browser-Klicks (siehe „Vorab-Prüfung“):
-  Das handelnde Modell weiß, was ein Schritt im Namen des Nutzers bewirkt,
-  und der Nutzer entscheidet. Sein Ergebnis sperrt Memory (seit 2026-10-29
-  kann es die Seite des Browsers enthalten). Aktivität „Your turn“, Tab-Titel „Waiting for
+  steht für den Schritt im Namen des Nutzers (siehe „Kein Warten vor einem
+  Aufruf“): Das handelnde Modell weiß, was ein Schritt im Namen des Nutzers
+  bewirkt, und der Nutzer entscheidet. Sein Ergebnis ist Fremdinhalt (es kann
+  die Seite des Browsers enthalten). Aktivität „Your turn“, Tab-Titel „Waiting for
   you“ (`tab-status.js`), Kopf der Agent-Aktivität „Waiting for you“.
 - **Zurückgeben ohne wartenden Agenten** (seit 2026-10-29, Max: Wer bewusst
   „Hand back“ drückt, erwartet eine Antwort; wer nicht, schließt die Ansicht).
@@ -3029,8 +3042,8 @@ ebenso (`older_pictures`, seit 2026-10-30; davor ab dem vierten in jedem
 Schritt, siehe „Arbeitsplatz: Schritte, Zeit und Bilder“). Der Ersatztext
 nennt den Rückweg nach Herkunft; für die Kompaktierung zählt ein Bild als
 `PICTURE_CHARS` = 4.000 Zeichen statt seiner Base64-Länge, die
-Tokenschätzung wie jedes Bild 16.000. Das Bild ist Fremdinhalt (Memory-Sperre,
-im Arbeitsprotokoll Herkunft `vm`, dort als „[image]“; die Prüfer sehen das
+Tokenschätzung wie jedes Bild 16.000. Das Bild ist Fremdinhalt (im
+Arbeitsprotokoll Herkunft `vm`, dort als „[image]“; die Prüfer sehen das
 Bild nicht). Live gegen einen Anbieter noch nicht geprüft; das Format ist das
 der Anhänge.
 
@@ -3309,7 +3322,7 @@ des Agenten nie über die Datei-API), `tests/test_agent_browser.py`
 Anmeldezeile des Helfers, Pause per Nutzer und cgroup, Relay, Löschung),
 `tests/js/workspace-browser-refs.test.mjs` (`SNAPSHOT_JS`/`FIND_JS` in jsdom:
 Refs, Länge der Beschriftungen, Fundstellen), `tests/test_agent_workspace_view.py` (Live-Ansicht
-über die Exec-API), `tests/test_agent_gate.py` (Vorab-Prüfung, Domain-Karte),
+über die Exec-API), `tests/test_agent_outward_calls.py` (Aufrufe laufen sofort, Domain-Karte),
 `tests/test_agent_long_runs.py` (Grenzen langer Läufe, Wrap-up vor Konto- und
 Fensterende, Kompaktierung, Aktivitätsgröße),
 `tests/test_agent_github.py` (Verbinden nur mit GitHubs eigener Liste, Cookie
@@ -3369,7 +3382,7 @@ Max am 2026-10-30, als der Arbeitsplatz für alle Konten aufging
 (damals `AGENT_AUDIT_ACCESS=all`, seit 2026-10-31 `AGENT_VM_ACCESS=all`): eine
 Regel, die schädliches Verhalten erkennt,
 „nicht durch den Agenten, durch unseren Server“. Die größte Lücke war nicht der
-Agent (ihn halten seine eigenen Absagen, die Prüfer und das Gate), sondern die
+Agent (ihn halten seine eigenen Absagen und die Prüfer), sondern die
 Übernahme: In der Live-Ansicht steuert der Nutzer Chrome direkt, Agent und
 Prüfer sehen davon nichts. Drei Schichten, keine davon liest Wörter (kein
 Wortfilter, Max' Grundsatz), keine speichert eine IP-Adresse.
@@ -3886,8 +3899,8 @@ nur, dass er als Notiz erscheint. Folgen nur `SIDE_TOOLS` (`update_memory`,
 `prepare_pull_request`), bleibt der Text die Antwort, wenn diese Werkzeuge
 geklappt haben (`_side_results_accepted`: kein Fehler, Watch-Status
 `prepared`): Claude schreibt manchmal erst die Antwort und speichert dann eine
-Erinnerung. Hat eines nicht geklappt (auch eine Memory-Änderung, die gesperrt
-war oder an der Vorab-Prüfung scheiterte), nimmt die App den Text zurück, und
+Erinnerung. Hat eines nicht geklappt (auch eine Memory-Änderung, die
+scheiterte), nimmt die App den Text zurück, und
 der nächste Schritt schreibt mit dem Ergebnis im Blick (bis zur Gegenprüfung vom
 2026-10-14 behauptete die Antwort sonst ein Speichern oder eine Watch-Karte,
 die es nicht gab, und an einer Turn-Grenze schrieb der Abschluss eine zweite
@@ -3932,7 +3945,7 @@ Nutzerzitat an `compare_models` und `check_text` (`memory_field`,
 `MEMORY_WRITE_PROMPT`); bis 2026-10-14 an `answer`, und der Antwortschritt bekam
 die Erinnerungen als eigenen Block (`synthesis_prompt`).
 
-**Fremdinhalt im Blick (seit 2026-10-14, umgekehrt 2026-10-27; bis 2026-11-02 die Memory-Sperre).** Sobald in einer
+**Fremdinhalt im Blick.** Sobald in einer
 Nachricht ein Werkzeug ein Ergebnis geliefert hat, ist Fremdinhalt im Blick
 (`outside_in_view`), auch nach einem Fehler, dessen Text Ausgaben zitieren kann.
 Ausgenommen sind nur ein Aufruf, den die App vor dem Lauf abgelehnt hat
@@ -3947,7 +3960,7 @@ Ergebnis die Notizen des Arbeitsplatzes trägt (Sicherheitsaudit 2026-10-27).
 Die eigene Websuche zählt mit (`_searched`). Daran hängt heute nur die
 Belegpflicht für Einstellungen (`agent_settings.prepare`). Bis 2026-11-02
 sperrte es auch Memory (`memory_locked`, `MEMORY_LOCKED`, Aktivität „blocked“
-mit `untrusted_context`; mit Prüfern seit 2026-10-28 ihre Vorab-Prüfung).
+mit `untrusted_context`).
 Grund damals (2026-10-14): Eine präparierte Seite hätte sonst eine Erinnerung
 setzen können. Max hob die Sperre auf, weil sie praktisch jede Nachricht traf
 und Memory bei Opt-in einen Monat leer blieb; Rückhalt ist der Hinweis mit
@@ -4794,8 +4807,7 @@ Produktentscheidung, keine Modell-Sonderlösung:
   in der Anfrage, nennt Quellen im `context` Hinweise, nie Pflicht, und Angaben
   dort ohne Quelle ungeprüft. Die Rundenzahl hängt nie am Kontingent.
 - Prüfer: je Live-Runde bis zu `LIVE_SEARCH_ROUNDS` (2), in der Schlussrunde
-  `REVIEW_SEARCH_ROUNDS` (3); Gate-Runden suchen nicht (siehe
-  „Vorab-Prüfung“).
+  `REVIEW_SEARCH_ROUNDS` (3).
 - Seit 2026-10-07 kommen alle Prompts aus dem Code; ein gespeicherter
   Admin-Prompt mit einer alten Anweisung wirkt nicht mehr.
 
@@ -4822,8 +4834,8 @@ die Schlussrunden der Prüfer auf die fixierte Antwort (`_final_review`,
 Sitzung `audit` nach `final_answer`, mit Reparatur und neuer Sitzung) das
 Limit überziehen (`agent_quota.reserve(..., overdraft=True)`, nur im
 Kontomodus); die nächste Nachricht wird dann abgelehnt, wie nach einem
-überzogenen Pipeline-Lauf. Live- und Gate-Runden und jeder Steuer-Schritt
-laufen nur im Kontingent: Weist es einen Schritt vor seinem Claim ab, nimmt
+überzogenen Pipeline-Lauf. Live-Runden und jeder Steuer-Schritt laufen
+nur im Kontingent: Weist es einen Schritt vor seinem Claim ab, nimmt
 der Schlussschritt seinen Index (`_closing_index`, `TURN_ALLOWANCE_LIMIT`).
 Ohne bezahlte Arbeit endet ein abgewiesener erster Schritt mit der Absage.
 Ein begrenzter Lauf (`AgentPolicy` ohne `account_budget_only`, nur noch
@@ -5100,8 +5112,8 @@ deshalb ab, was Terra (seit dem 28.10. das Standard-Chatmodell) gefunden hatte,
 die Prüfer sahen nur „hat gesucht“, und der Agent wich auf den Browser aus, wo
 ein Prüfer die unerklärte Adresse prompt als Injection anhielt (Chat „Bester
 HSG-Spieler“: linktr.ee). Bis 2026-10-29 ging eine Adresse, die die Nachricht
-nicht hielt, vorher durch die Vorab-Prüfung (`WEB_READS`), seitdem folgen die
-Prüfer live. `AGENT_AUDIT_ANSWER_SECTION` sagt, dass bei manchen Anbietern die
+nicht hielt, vorher auf die Prüfer (`WEB_READS`), seitdem folgen die Prüfer
+live. `AGENT_AUDIT_ANSWER_SECTION` sagt, dass bei manchen Anbietern die
 Treffer nur das Modell erreichen; die Prüfer lesen in `REVIEW_PROMPT_BODY`, dass
 Adressen nach so einer Suche aus ihr stammen können. Seit 2026-10-18 war im
 Vergleichsmodus auch eine Quelle, auf die der Nutzer die Antwort beschränkt
@@ -5303,22 +5315,18 @@ seit 2026-10-29:
   Ergebnis (wie `vm_view_image`, `DelegationLoop._show_pictures`, Einleitung
   `INTRO` mit ID und Seite); ältere verlassen den Blick wie andere Bilder.
   Im Arbeitsprotokoll stehen beide Werkzeuge und die Bilder mit Herkunft
-  `web`; die Kurzbeschreibung für die Prüfer (`BRIEF_TOOLS`) sagt, dass nur
-  gezeigte Bilder den Nutzer erreichen.
-- Vorab-Prüfung bis 2026-10-29 (seitdem folgen die Prüfer live, siehe
-  „Vorab-Prüfung“): eine Adresse, die die Nachricht nicht hielt, wartete auf
-  die Prüfer (`WEB_READS`), ein schon gezeigtes Bild nicht mehr.
+  `web`; die Kurzfassung für die Prüfer nennt beide mit ihren
+  Beschreibungen, die sagen, dass nur gezeigte Bilder den Nutzer erreichen.
+- Bis 2026-10-29 wartete eine Adresse, die die Nachricht nicht hielt, auf die
+  Prüfer (`WEB_READS`), seitdem folgen sie live (siehe „Kein Warten vor einem
+  Aufruf“).
   Gleich nach dem Deploy (2026-10-28, 21:40 UTC) hielt MiMo V2.6 Pro so ein
   Bild als „injection“ an: Terra hatte fünfmal gesucht, kein Treffer stand im
   Protokoll (die eingebaute Suche meldet Treffer laut OpenRouter nur als
   Zitate im Antworttext, ein Schritt mit bloßem Werkzeugaufruf hat keine),
   und der Prüfer begründete mit einer nicht belegten Aussage über die Person.
-  Danach bekam die Gate-Runde für `read_source` und `show_image`
-  `GATE_WEB_NOTE`: was so ein Abruf kann (vom Server, ohne Anmeldungen, ändert
-  nichts; hinaus geht nur die Adresse), dass Suchtreffer im Protokoll fehlen
-  können, und dass die Frage, ob Seite oder Bild die Aussage stützt, in die
-  Marken zur Antwort gehört. Halten darf der Prüfer weiter aus jedem der vier
-  Gründe.
+  Der Prüfer-Prompt sagt seitdem, dass Suchtreffer im Protokoll fehlen
+  können; ob Seite oder Bild die Aussage stützt, gehört in die Marken.
 - Keine Mindestgröße: Am selben Abend kam ein 70×70-Avatar unter die Antwort.
   Eine Grenze von 160 px nahm Max zurück („pauschale Regel, kann zu Problemen
   führen“: ein kleines Logo, ein Diagramm, das einzige Foto). Das Ergebnis
@@ -5330,8 +5338,7 @@ seit 2026-10-29:
   `AGENT_AUDIT_IMAGE_PROMPT`); die Beschreibung sagt, was es tut, und
   `AGENT_AUDIT_ANSWER_SECTION`, dass Bilder im Markdown nicht erscheinen.
 
-Tests: `tests/test_agent_web_images.py`, die Gate-Fälle in
-`tests/test_agent_gate.py`.
+Tests: `tests/test_agent_web_images.py`, `tests/test_agent_outward_calls.py`.
 
 ### Bildersuche (search_pictures, seit 2026-10-31)
 

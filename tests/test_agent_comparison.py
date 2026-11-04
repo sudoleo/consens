@@ -10,6 +10,7 @@ comparison models'.
 """
 from dataclasses import replace
 import json
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -17,7 +18,7 @@ import pytest
 
 from app.core.openrouter_contract import provider_session_id
 from app.services import agent_quota, agent_budget_config
-from app.services.agent_comparison import comparison_selection
+from app.services.agent_comparison import ComparisonTools, comparison_selection
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
@@ -159,7 +160,7 @@ def test_reviewed_exact_version_context_sources_and_all_usage(store, compares, m
     assert len(review["versions"]) == 1
     assert saved["consensus"] == review["versions"][-1]["text"]
     assert review["answer_hash"] == answer_hash(saved["consensus"]) == review["versions"][-1]["hash"]
-    assert "checks" not in review or review["checks"] == []
+    assert "checks" not in review
     for i in range(compares):
         assert script.prompts[2 * i] == script.prompts[2 * i + 1]
         assert "https://example.org/report" in script.prompts[2 * i][1]["content"]
@@ -781,7 +782,8 @@ def test_an_answer_after_the_deadline_is_late_and_stays_out_of_what_the_agent_re
     saved = saved_turn(store, loop)
     comparison = saved["agent_review"]["comparisons"][0]
     assert "second option is cheaper" not in script.synthesis_evidence
-    assert sorted(comparison["synthesis_providers"]) == ["anthropic", "openai"]
+    assert sorted(a["provider"] for a in comparison["answers"] if not a.get("late")) == ["anthropic", "openai"]
+    assert "synthesis_providers" not in comparison and "basis_hash" not in comparison
     # The agent was told which answer it writes without.
     result = tool_results(loop)["call_0"]
     # Anonymous: the agent weighs the answers, not the models' names.
@@ -809,6 +811,27 @@ def test_a_model_still_writing_at_the_answer_is_stopped_and_reported(store):
     notes = [m["text"] for m in store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=stopped["id"])["messages"]
              if m["kind"] == "failure"]
     assert notes == ["It was still writing when the answer was finished. The answer uses the other answers."]
+
+
+def test_a_model_that_does_not_stop_holds_the_review_up_only_briefly(monkeypatch, caplog):
+    """finish_comparisons waited without a limit for every straggler to stop,
+    in front of the reviewers' final rounds."""
+    import logging
+    from app.services import agent_comparison
+    from app.services.agent_comparison import ComparisonCancellation
+    monkeypatch.setattr(agent_comparison, "STRAGGLER_STOP_SECONDS", .2)
+    release = threading.Event()
+    thread = threading.Thread(target=release.wait, args=(10,), name="agent-compare-stuck", daemon=True)
+    thread.start()
+    child = ComparisonCancellation()
+    tools = ComparisonTools.__new__(ComparisonTools)
+    tools._running = {"c1": {"openai": (thread, child)}}
+    started = time.monotonic()
+    with caplog.at_level(logging.WARNING):
+        tools._stop_running("c1", cutoff=True)
+    assert time.monotonic() - started < 1 and child.cancelled and child.cutoff
+    assert any("agent-compare-stuck" in record.getMessage() for record in caplog.records)
+    release.set()
 
 
 def test_text_of_a_model_stopped_mid_answer_is_kept_as_incomplete_but_never_read(store):
@@ -929,7 +952,7 @@ def test_every_comparison_waits_for_the_slowest_model(store, depth):
     list(loop.run())
     comparison = saved_turn(store, loop)["agent_review"]["comparisons"][0]
     assert "second option is cheaper" in script.synthesis_evidence
-    assert sorted(comparison["synthesis_providers"]) == ["anthropic", "gemini", "openai"]
+    assert sorted(a["provider"] for a in comparison["answers"]) == ["anthropic", "gemini", "openai"]
     assert not any(a.get("late") for a in comparison["answers"])
 
 

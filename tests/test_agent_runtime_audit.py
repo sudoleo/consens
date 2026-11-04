@@ -2,8 +2,8 @@
 (docs/agent-workspace-runtime-audit-2026-10-30.md): what the operator can
 measure afterwards (I1, I4, I7, I9), what the agent reads about its own run
 (L1, L3, L6, L7), several calls per step (T2, tests/test_agent_parallel_calls.py),
-the browser's reads without a live round of their own (K6) and the settlement
-in fewer round trips (T3). Fakes only: no model, no VM, no Firestore.
+the browser's reads with a live round like any call (K6) and the settlement in
+fewer round trips (T3). Fakes only: no model, no VM, no Firestore.
 """
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -18,7 +18,6 @@ from app.services.llm import agent_client
 from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
 from test_agent_runs import UID, pending, receipt, store, priced  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, Agent, fake_vm, results, vm_loop  # noqa: F401  (fixture)
-from test_agent_gate import stand_in  # noqa: F401  (fixture: update_memory stands in for a call that waits)
 
 
 class Steps(Agent):
@@ -109,12 +108,13 @@ def test_tool_entries_of_the_work_log_carry_start_and_duration(store, fake_vm):
 def test_entry_fields_are_measurements_only(store):
     from app.services.agent_work_log import WorkLog
     log = WorkLog(store, UID, "chat", "turn", ready=lambda: False)
-    log.app("checked", {"text": "x"}, step="completion:3", gate_ms=812)
-    log.app("paused", "text", gate_ms=True)
-    log.app("paused", "text", gate_ms=-1, duration_ms="x" * 41)
+    log.app("paused", {"text": "x"}, step="completion:3", duration_ms=812)
+    log.app("paused", "text", duration_ms=True, gate_ms=5)
+    log.app("paused", "text", duration_ms=-1, started_at="x" * 41)
     first, second, third = (entry for entry, _ in log.entries_after(0))
-    assert first["step"] == "completion:3" and first["gate_ms"] == 812
-    assert "gate_ms" not in second and "gate_ms" not in third and "duration_ms" not in third
+    assert first["step"] == "completion:3" and first["duration_ms"] == 812
+    assert "duration_ms" not in second and "gate_ms" not in second
+    assert "duration_ms" not in third and "started_at" not in third
 
 
 # --- I1: which limit ended the work ---------------------------------------------------
@@ -153,29 +153,23 @@ def test_the_limit_fact_names_each_limit():
         assert text and then
 
 
-# --- I9: a gate's entry names its step and its wait -----------------------------------
+# --- I9: a reviewer's pause names its step ------------------------------------------
 
-def test_a_gate_entry_names_its_step_and_its_wait(store, stand_in):
-    from test_agent_gate import gated, go, replies
-    script, loop, ran = gated(store, live={})
-    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
-    list(loop.run())
-    assert ran
-    [(checked, text)] = log_entries(loop, kind="app", name="checked")
-    # As fields of the entry, where scripts/audit_report.py reads them first.
-    assert checked["step"] == "completion:0" and checked["gate_ms"] == json.loads(text)["gate_ms"]
+def test_a_reviewers_pause_names_the_step_of_its_entry(store):
+    from test_agent_audit import Audit, audit_loop, decide_when_held, entry_of
 
-
-def test_a_gate_the_user_decides_keeps_its_step_and_wait_on_the_pause(store, stand_in):
-    from test_agent_audit import decide_when_held
-    from test_agent_gate import gated, go, halt, replies
-    script, loop, ran = gated(store, live={})
-    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", halt))
+    def halt(messages):
+        return json.dumps({"marks": [], "halt": {"entry": entry_of(messages, "step"), "kind": "harm",
+                                                 "quote": "lookup", "reason": "Looks up the wrong thing."}})
+    script = Audit(tool_steps=1, live={"anthropic": halt})
+    loop = audit_loop(store, script)
     waiter = decide_when_held(loop, store, "continue")
     list(loop.run())
     waiter.join(5)
-    [(paused, _)] = log_entries(loop, kind="app", name="paused")
-    assert paused["step"] == "completion:0" and type(paused["gate_ms"]) is int
+    [(paused, text)] = log_entries(loop, kind="app", name="paused")
+    # As a field of the entry, where scripts/audit_report.py reads it; the
+    # text says neither who paused nor why (every reviewer reads it).
+    assert paused["step"] == "completion:0" and text == "The work was paused for the user's decision."
 
 
 # --- L7: what an unknown tool's refusal says ------------------------------------------
@@ -206,34 +200,23 @@ def test_an_unknown_tool_refusal_says_only_what_holds():
     assert _refusal(["browser", "vm_exec"], called="fetch").endswith("Available tools: browser, vm_exec.")
 
 
-# --- K6: the browser's reads wait for the next round ----------------------------------
+# --- The browser's reads get their round like any call ---------------------------------
 
 def _step(*calls):
-    return ({"kind": "step"}, json.dumps({"tool_calls": [
+    return ({"seq": 3, "kind": "step"}, json.dumps({"tool_calls": [
         {"id": f"c{n}", "name": name, "arguments": json.dumps(arguments) if isinstance(arguments, dict) else arguments}
         for n, (name, arguments) in enumerate(calls)]}))
 
 
-@pytest.mark.parametrize("action", ["read", "text", "find", "tabs", "screenshot"])
-def test_a_browser_read_is_quiet_like_reading_a_file(action):
-    from app.services.agent_audit import QUIET_STEPS, work_goes_on
-    read = _step(("browser", {"action": action, "text": "Login"}))
-    assert not work_goes_on([read]) and not work_goes_on([read] * (QUIET_STEPS - 1))
-    # Quiet steps still get their round once QUIET_STEPS of them came.
-    assert work_goes_on([read] * QUIET_STEPS)
-    assert not work_goes_on([_step(("browser", {"action": action}), ("vm_read_file", {"path": "a"}))])
-
-
 @pytest.mark.parametrize("arguments", [
-    {"action": "open", "url": "https://example.com"}, {"action": "click", "ref": "e1"},
-    {"action": "type", "ref": "e2", "text": "read"}, {"action": "wait", "seconds": 5},
-    {"action": "download"}, {"action": "key", "key": "Enter"}, {"action": "scroll", "direction": "down"},
-    {}, "not json", '["read"]'])
-def test_every_other_browser_call_gets_its_round(arguments):
-    from app.services.agent_audit import work_goes_on
-    assert work_goes_on([_step(("browser", arguments))])
-    # Also beside a quiet read in the same step.
-    assert work_goes_on([_step(("browser", {"action": "read"}), ("browser", arguments))])
+    {"action": "read"}, {"action": "text"}, {"action": "screenshot"}, {"action": "open", "url": "https://example.com"},
+    {"action": "click", "ref": "e1"}, {"action": "type", "ref": "e2", "text": "read"}, {}, "not json"])
+def test_every_browser_call_gets_its_round_and_the_page_it_reads_one_of_its_own(arguments):
+    """A read brings the page in, where an injection comes from."""
+    from app.services.agent_audit import round_due
+    assert round_due([_step(("browser", arguments))], first_step=2)
+    page = ({"seq": 4, "kind": "tool", "name": "browser", "data": "web"}, "Page: ...")
+    assert round_due([page], first_step=2)
 
 
 # --- T2: several calls per step ---------------------------------------------------------
@@ -376,7 +359,7 @@ def test_a_halt_before_the_first_call_lets_the_step_run_on_the_users_go(store, f
         # follow its log entry, which lists the calls).
         if halts:
             loop.request_hold(halts.pop())
-    loop._open_gate = halt_after_the_step
+    loop._review_from_here = halt_after_the_step
     waiter = decide_when_held(loop, store, "continue")
     list(loop.run())
     waiter.join(5)

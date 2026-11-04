@@ -100,11 +100,9 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 # results of the tools below, which return only the user's or the app's own
 # content: memory, settings, the agent's own plan and documents, a prepared
 # card's status. A new tool counts until shown otherwise; ask_user too, since
-# it brings the browser's page back with the user's hand-back. Until
-# 2026-11-02 the same locked memory (memory_locked; with reviewers their gate
-# since 2026-10-28): the agent searches in nearly every first step, and an
-# opted-in account got not a single memory in a month. Max: the agent decides
-# what to keep, the user sees and can undo every change.
+# it brings the browser's page back with the user's hand-back. Memory does
+# not lock on it: the agent decides what to keep, the user sees and can undo
+# every change.
 OWN_CONTENT_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
                                "update_plan", "create_document", "revise_document", "open_workspace",
                                "report_finding", "finish_watch"})
@@ -123,6 +121,12 @@ TURN_INVALID_LIMIT = ("The model repeated invalid tool requests without progress
 LONG_RUN_CONTEXT_SHARE = .8
 # The agent's own steps as one session of RunCosts (its cached prefix).
 AGENT_SESSION = "agent"
+# What the reviewers take for one agent step is the most they took in one of
+# its last REVIEWER_CHARGE_STEPS (_reviewer_step_charge); their final rounds
+# cost about FINAL_ROUND_CHARGE times that (the answer, the evidence of its
+# sources and a search round more).
+REVIEWER_CHARGE_STEPS = 8
+FINAL_ROUND_CHARGE = 2
 TURN_ALLOWANCE_LIMIT = ("This response ended because today's token allowance is nearly used up. "
                         "The available results have been saved.")
 TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
@@ -139,6 +143,9 @@ USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the
 # why (HOLD_TIMEOUT_STOPPED, failure code hold_timeout). It never goes on by
 # itself.
 HOLD_TIMEOUT_SECONDS = 30 * 60
+# request_hold's answer to a reviewer's halt on an entry whose card the user
+# already decided: no second card (AnswerAudit.halt keeps it as a mark).
+HOLD_DECIDED = "decided"
 HOLD_TIMEOUT_STOPPED = "Stopped after 30 minutes without your decision."
 # Holds a turn keeps in agent_holds (_end_hold); later ones are not kept.
 HOLDS_KEPT = 20
@@ -276,11 +283,10 @@ def _waited(seconds):
 
 def joined_halt(hold, details):
     """``hold`` with a reviewer's halt (``details``) that came while it was
-    open (request_hold): every reason in ``reasons`` with its reviewer, as
-    AnswerAudit.gate_hold lists several, and the reviewers' names together.
-    A card without a reason of its own (not every reviewer could check, a
-    domain the reviewers let) takes the halt's. ``revision`` counts the
-    joins, so the card is drawn again (agent-chat.js renderHold)."""
+    open (request_hold): every reason in ``reasons`` with its reviewer, and
+    the reviewers' names together. A card without a reason of its own (a
+    domain) takes the halt's. ``revision`` counts the joins, so the card is
+    drawn again (agent-chat.js renderHold)."""
     own = [{"reviewer": hold["reviewer"], "kind": hold["kind"], "reason": hold["reason"]}] if hold.get("reason") else []
     reasons = [*(hold.get("reasons") or own),
                {"reviewer": details["reviewer"], "kind": details["kind"], "reason": details["reason"]}]
@@ -388,8 +394,7 @@ class DelegationLoop(AgentLoop):
         # Who checks this message's work (account setting ``reviewers``,
         # since 2026-11-01): "always" from the run's start, "workspace" from
         # the agent's first step that reaches for the workspace on
-        # (_review_from_here), "off" nobody. Without reviewers no halt, no
-        # gate.
+        # (_review_from_here), "off" nobody. Without reviewers no halt.
         if reviewers not in REVIEW_FACTS:
             raise ValueError("Unknown reviewers setting")
         self.reviewers = reviewers
@@ -465,6 +470,10 @@ class DelegationLoop(AgentLoop):
         # A reviewer's halt that came while the user's own card was open
         # (agent_ask.py): it opens once that card is answered.
         self.queued_hold = None
+        # The log entries the reviewers' halts named: on the open card, on
+        # the queued one, and on cards the user decided (request_hold): one
+        # card per entry.
+        self.hold_entries, self.queued_entries, self.decided_entries = set(), set(), set()
         self.hold_started = 0.0
         # The open hold could not be saved (_save_hold): its decision comes
         # in this process only (decide_unsaved).
@@ -491,14 +500,12 @@ class DelegationLoop(AgentLoop):
         # clock is injectable for tests.
         self.clock = time.monotonic
         self.turn_started = self.clock()
-        # The time the run waited for the reviewers' gate rounds (_gate_wait,
-        # _domain_wait), the wait at hand since ``gate_started``: it pauses
-        # the turn's clock like a halt (A-T3).
-        self.gate_paused, self.gate_started = 0.0, None
         self.routing_steps = 0
-        # What the reviewers' calls took from the allowance so far, in
-        # micro-euros (agent_quota.measured_charge): _long_run_limit's estimate.
+        # What the reviewers' calls took from the allowance, in micro-euros
+        # (agent_quota.measured_charge): in all, and by the agent's step they
+        # came in (_reviewer_step_charge).
         self.reviewer_charge = 0
+        self.reviewer_charges = {}
         # Set once a routing step reasoned through its allowance: every later
         # step of this turn, the answer and a wrap-up included, uses that lighter level.
         self.routing_lighter = None
@@ -787,12 +794,7 @@ class DelegationLoop(AgentLoop):
         on a reviewer's halt (request_hold)."""
         now = self.clock()
         paused = self.paused_seconds + (now - self.hold_started if self.hold is not None else 0.0)
-        return now - self.turn_started - paused - self._gate_pause(now)
-
-    def _gate_pause(self, now):
-        """Seconds the run waited for gate rounds, the wait at hand included."""
-        started = self.gate_started
-        return self.gate_paused + (now - started if started is not None else 0.0)
+        return now - self.turn_started - paused
 
     def _long_run(self):
         """Whether this turn works in its VM: from the VM's first start in
@@ -873,12 +875,12 @@ class DelegationLoop(AgentLoop):
         logging.info("Agent workspace opened step=%s", self.routing_steps)
         if self.work_log is not None:
             # The reviewers' brief was written from the tools the run started
-            # with: the workspace's rules (installing packages is normal work,
-            # a step in the user's name waits for their yes) reach reviewers
-            # who already follow as an entry of the app.
-            from app.services.agent_audit import tool_brief
+            # with: the workspace's facts and tools reach reviewers who
+            # already follow as an entry of the app.
+            from app.services.agent_audit import tool_brief, workspace_brief
             added = sorted(set(self.registry.tools) - before)
-            self.work_log.app("workspace_opened", {"text": " ".join(tool_brief(added)), "tools": added})
+            self.work_log.app("workspace_opened", {"text": workspace_brief(added),
+                                                   "tools": tool_brief(self.registry, added)})
         if self.reviewers == "workspace":
             # Its reviewers start now, their brief written from these tools.
             self._review_from_here(None)
@@ -958,19 +960,32 @@ class DelegationLoop(AgentLoop):
             # The next admission reads the ledger again and refuses then.
             logging.warning("Agent long run allowance unavailable category=%s", safe_exception(exc))
             return None
-        # One more step and the answer, at what their admission expects them to cost.
+        # One more step and the answer, at what their admission expects them
+        # to cost; the reviewers' rounds on that step and their final rounds.
         step = self.costs.estimate(model, self.messages, tools, native_searches=self._step_searches(),
                                    session=AGENT_SESSION)[1]
-        if left < 2 * micro_eur(step) + 2 * self._reviewer_step_charge():
+        if left < 2 * micro_eur(step) + (1 + FINAL_ROUND_CHARGE) * self._reviewer_step_charge():
             return TURN_ALLOWANCE_LIMIT
         return None
 
     def _reviewer_step_charge(self):
-        """What the reviewers take per agent step, from their charge in this
-        turn so far (0 without reviewers): the next step's live rounds and the
-        final rounds each need about that much (_long_run_limit)."""
+        """What the reviewers take for one agent step (0 without them): the
+        most they took during one of the last REVIEWER_CHARGE_STEPS steps.
+        Each of their requests is bounded (agent_audit segment_cap), so a
+        recent step stands for the next, where the average of the whole run
+        lags behind conversations that grow towards their cap."""
         with self.condition:
-            return self.reviewer_charge // max(1, self.routing_steps)
+            first = max(0, self.routing_steps - REVIEWER_CHARGE_STEPS)
+            return max((self.reviewer_charges.get(step, 0) for step in range(first, self.routing_steps + 1)),
+                       default=0)
+
+    def _count_reviewer_charge(self, usage):
+        """A reviewer's request took ``usage`` from the allowance, during the
+        agent's step at hand (under the run's condition)."""
+        from app.services import agent_quota
+        charge = agent_quota.measured_charge(usage) or 0
+        self.reviewer_charge += charge
+        self.reviewer_charges[self.routing_steps] = self.reviewer_charges.get(self.routing_steps, 0) + charge
 
     def _show_pictures(self):
         """The pictures vm_view_image read, the browser's screenshots and
@@ -1680,7 +1695,7 @@ class DelegationLoop(AgentLoop):
 
         ``summary`` ("history" or "run"): a summary step (_summarize). Its
         request ends with the app's summary request, the history's has no
-        file block, and nothing it calls opens a gate or starts reviewers."""
+        file block, and nothing it calls starts reviewers."""
         self._check(cancellation)
         # The caller's conversation, before this step adds its file block or
         # notes (work log: what is the conversation, what only this request).
@@ -1951,28 +1966,15 @@ class DelegationLoop(AgentLoop):
                 with self.condition:
                     self.unsettled[step] = (value, status)
                     if getattr(worker, "kind", None) == "audit":
-                        from app.services import agent_quota
-                        self.reviewer_charge += agent_quota.measured_charge(value.usage) or 0
+                        self._count_reviewer_charge(value.usage)
                 self._settle_step(step, value, status)
                 log_actor = self._log_actor(step, worker)
                 if log_actor == "agent" and status == "succeeded" and not summary:
                     self._review_from_here(value)
                 if log_actor:
-                    # Outward calls of the agent's step wait for the
-                    # reviewers (agent_gate): the gate opens before the
-                    # entry, so no reviewer reads it in an ordinary round first.
-                    # Not for a step a halt broke off: its calls never run.
-                    gate = (self._open_gate(value) if log_actor == "agent" and status == "succeeded"
-                            and getattr(value, "halted", None) is None and not summary else None)
-                    entry = None
-                    try:
-                        # What the step thought, wrote, called and found, also
-                        # when it failed or was stopped.
-                        entry = self.work_log.step(log_actor, step, model, value, log_status or status)
-                    finally:
-                        if gate is not None:
-                            self.comparison.auditor.ready_gate(gate, entry)
-                            value.gate = gate
+                    # What the step thought, wrote, called and found, also
+                    # when it failed or was stopped.
+                    self.work_log.step(log_actor, step, model, value, log_status or status)
             elif reservation is not None:
                 self.costs.release(reservation)
             count = (value.usage or {}).get("web_search_requests")
@@ -2258,45 +2260,51 @@ class DelegationLoop(AgentLoop):
         one too, between calls, so no VM command runs then; a reviewer's halt
         that comes while it is open waits until it is answered. A reviewer's
         halt while another hold is open joins that card (joined_halt), and
-        counts as shown: True as well. The app's own cards (``gate``,
-        ``ask``) wait for the open one: False. ``step``: the agent's step
-        the card is about, for its ``paused`` entry (a reviewer's halt: the
-        step of the entry it names)."""
+        counts as shown: True as well. One card per entry: a reviewer's halt
+        on an entry whose card the user decided opens none (HOLD_DECIDED).
+        The app's own cards (``domain``, ``ask``) wait for the open one:
+        False. ``step``: the agent's step the card is about, for its
+        ``paused`` entry (a reviewer's halt: the step of the entry it names)."""
         from uuid import uuid4
         joined = None
+        entry = details.get("entry")
+        halted = bool(details.get("reviewer")) and not details.get("ask") and not details.get("domain")
         with self.condition:
             if self.closed.is_set() or self.cancellation.cancelled:
                 return False
             if self.answer_fixed and not details.get("ask"):
                 # The answer stands (_finish_merged); its marks say the rest.
                 return False
+            if halted and (entry in self.decided_entries
+                           or (entry in self.hold_entries and self.hold_decision is not None)):
+                return HOLD_DECIDED
             if self.hold is not None:
-                if details.get("gate") or details.get("ask"):
+                if details.get("domain") or details.get("ask"):
                     return False
                 if self.hold.get("ask") or self.hold_decision is not None:
                     # Opens once the user's own card is answered, or the
                     # card they just decided is over (_hold_wait); a second
                     # halt meanwhile joins the first.
                     self.queued_hold = details if self.queued_hold is None else joined_halt(self.queued_hold, details)
+                    self.queued_entries.add(entry)
                     return True
-                # Before 2026-10-29 the second halt was lost, its reason
-                # neither on the card nor in the log.
                 joined = self.hold = joined_halt(self.hold, details)
+                self.hold_entries.add(entry)
             else:
                 hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
                         "timeout_seconds": self.hold_timeout}
                 self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
                 self.hold_unsaved = False
+                self.hold_entries = {entry} if halted else set()
                 self.condition.notify_all()
         if joined is not None:
-            self._show_joined(joined, details)
+            self._show_joined(joined)
             return True
         if self.vm_tools is not None and not details.get("ask"):
             self.vm_tools.interrupt()
         if not details.get("ask"):
             # The agent's step that streams now breaks off (_step): its
-            # searches and calls wait for the user too. Since 2026-10-29;
-            # before, it ran to its end, up to five search rounds included.
+            # searches and calls wait for the user too.
             with self.condition:
                 streaming = self.step_halt
             if streaming is not None:
@@ -2309,19 +2317,16 @@ class DelegationLoop(AgentLoop):
         self._send({"type": "hold", "hold": hold}, "hold")
         self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                   **{key: hold[key] for key in ("reviewer", "provider", "reason", "entry")},
-                                  **({"gate": True} if hold.get("gate") else {}),
                                   **({"domain": hold["domain"]} if hold.get("domain") else {}),
                                   **({"ask": hold["ask"], "request": hold.get("request", "")}
                                      if hold.get("ask") else {}),
                                   **({"choices": hold["choices"]} if hold.get("choices") else {}),
                                   "halt": hold["kind"], "state": "waiting"}), f"hold-{hold['id']}")
         if self.work_log is not None:
-            before = " before its calls ran" if details.get("gate") else ""
             asked = details.get("ask")
-            # The step and, for a gate, its wait as fields of the entry (I9).
-            fields = {"step": step or self._entry_step(details.get("entry"))}
-            if details.get("gate") and details.get("gate_ms") is not None:
-                fields["gate_ms"] = details["gate_ms"]
+            domain = details.get("domain")
+            # A reviewer's halt says neither who nor why: every reviewer
+            # reads the log, and none sees what another found.
             self.work_log.app("paused", (
                 "The user has the browser: the agent waits until they hand it back." if asked == "takeover" else
                 f"The agent asks the user to act in the browser: {details.get('request', '')}" if asked == "browser"
@@ -2330,12 +2335,9 @@ class DelegationLoop(AgentLoop):
                 else f"The agent asks the user to choose: {details.get('request', '')} "
                      f"({' / '.join(details.get('choices') or [])})" if asked == "choice"
                 else f"The agent asks the user before a step: {details.get('request', '')}" if asked else
-                f"The agent asks to reach {details['domain']} (entry {details['entry']}): the user decides."
-                if details.get("domain") else
-                f"{details['reviewer']} paused the work for the user{before} ({details['kind']}, "
-                f"entry {details['entry']}): {details['reason']}" if details.get("reviewer") else
-                f"No reviewer could check entry {details['entry']} before its calls ran: the user decides."),
-                **fields)
+                f"The agent asks to reach {domain}" + (f" (entry {entry})" if entry else "") + ": the user decides."
+                if domain else "The work was paused for the user's decision."),
+                step=step or self._entry_step(entry))
         return True
 
     def _entry_step(self, seq):
@@ -2349,11 +2351,11 @@ class DelegationLoop(AgentLoop):
             return None
         return found[0][0].get("step") if found and found[0][0].get("seq") == seq else None
 
-    def _show_joined(self, hold, details):
-        """The open card with a reviewer's halt that joined it: saved, sent
-        again (the same id, a new ``revision`` redraws it) and in the log
-        with the new reason. Nothing runs meanwhile: the open hold holds it.
-        Saved or not, its id is the one the root knows (or not) already."""
+    def _show_joined(self, hold):
+        """The open card with a reviewer's halt that joined it: saved and
+        sent again (the same id, a new ``revision`` redraws it). Nothing runs
+        meanwhile: the open hold holds it. Saved or not, its id is the one
+        the root knows (or not) already."""
         if self._save_hold(hold):
             with self.condition:
                 # The root knows it now: decisions go through it again.
@@ -2362,10 +2364,6 @@ class DelegationLoop(AgentLoop):
         self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                   "reviewer": hold["reviewer"], "reasons": hold.get("reasons") or []}),
                    f"hold-{hold['id']}")
-        if self.work_log is not None:
-            self.work_log.app("paused", f"{details['reviewer']} also paused the work for the user "
-                                        f"({details['kind']}, entry {details['entry']}): {details['reason']}",
-                              step=self._entry_step(details.get("entry")))
 
     def _save_hold(self, hold):
         """The open hold on the run's root (set_hold), where the decision
@@ -2424,11 +2422,10 @@ class DelegationLoop(AgentLoop):
         workspace opened (_open_workspace calls this with ``value`` None,
         after its tools took their place, so the reviewers' brief has its
         rules), or, where the message had it open from the start, with the
-        agent's first step that calls one of its tools, before that step's
-        gate opens (_open_gate), so they check its outward calls too. Not for
-        ask_user alone: a question to the user does not work in the
-        workspace. They read the log from its start: the message's work
-        before is theirs as well."""
+        agent's first step that calls one of its tools, so they read that
+        step in their first round. Not for ask_user alone: a question to the
+        user does not work in the workspace. They read the log from its
+        start: the message's work before is theirs as well."""
         if self.reviewers != "workspace" or self.work_log is None or self.comparison is None:
             return
         auditor = self.comparison.auditor
@@ -2441,78 +2438,6 @@ class DelegationLoop(AgentLoop):
         logging.info("Agent reviewers start with the workspace step=%s",
                      getattr(value, "step_id", None) or "open_workspace")
         auditor.follow(self.work_log)
-
-    def _open_gate(self, value):
-        """The gate for this agent step's calls that act outside the
-        workspace (agent_gate.outward), when reviewers follow the work
-        (agent_audit.AnswerAudit.open_gate); else None."""
-        auditor = self.comparison.auditor if self.comparison is not None else None
-        if auditor is None or not auditor.sessions or not getattr(value, "tool_calls", None):
-            return None
-        from app.services.agent_gate import outward
-        # A call past the step's limit never runs (CALL_OVER_LIMIT), nor one
-        # of a tool the account lacks ("unknown tool", bug hunt 2026-11-03):
-        # nothing to check. No tool waits here since 2026-11-04 (agent_gate).
-        over_limit = getattr(value, "over_limit_ids", None) or set()
-        calls = [call for call in value.tool_calls if call["id"] not in over_limit and outward(call)
-                 and (call.get("function") or {}).get("name") in self.registry.tools]
-        return auditor.open_gate(calls, value.step_id) if calls else None
-
-    def _gate_wait(self, gate):
-        """An outward call waits for the reviewers' verdicts on its step. All
-        say "go": it runs. One halt is enough, and so is no reviewer able to
-        answer: the user decides on the card (request_hold, ``gate``). The
-        agent learns only the user's decision: "continue" runs the call, a
-        message ("steer") leaves it unrun, Stop ends the response. Once per
-        step: the decision covers the step's outward calls, no others."""
-        if gate.decision is not None:
-            return gate.decision
-        auditor = self.comparison.auditor
-        announced = False
-        # The wait pauses the turn's clock (_gate_pause); each reviewer has
-        # GATE_SECONDS for its verdict (gate_result).
-        self.gate_started = self.clock()
-        try:
-            while True:
-                result = auditor.gate_result(gate)
-                if result is not None:
-                    break
-                if not announced:
-                    announced = True
-                    yield self.activity({"step_id": "gate", "id": f"gate-{gate.id}", "kind": "progress",
-                                         "text": "The reviewers check this step before it runs."})
-                auditor.gate_wait(.2)
-                if self.watch_error:
-                    raise self.watch_error
-                self.cancellation.raise_if_cancelled()
-                yield from self._events()
-        finally:
-            self.gate_paused += self.clock() - self.gate_started
-            self.gate_started = None
-        verdict, halts = result
-        if verdict == "go":
-            gate.decision = "continue"
-            if self.work_log is not None:
-                # The gate's step and wait as fields of the entry, as
-                # scripts/audit_report.py and agent_audit_metrics read them
-                # (I9: until 2026-10-30 neither was there).
-                trace = auditor.gate_trace(gate)
-                self.work_log.app("checked", {"text": f"The reviewers let the calls of entry {gate.entry} run.",
-                                              **trace}, step=gate.step, gate_ms=trace.get("gate_ms"))
-            return gate.decision
-        details = auditor.gate_hold(gate, halts)
-        while True:
-            # A reviewer's ordinary halt may be open: it comes first.
-            decision = yield from self._hold_wait()
-            self.cancellation.raise_if_cancelled()
-            if decision == "steer" or self.closed.is_set():
-                gate.decision = "steer"
-                return gate.decision
-            if self.request_hold(details, step=gate.step):
-                break
-        # Only the user's "continue" runs the calls.
-        gate.decision = "continue" if (yield from self._hold_wait()) == "continue" else "steer"
-        return gate.decision
 
     def _receive_hold(self, root):
         """The user's decision on the open hold, from the run's root (the watcher)."""
@@ -2627,7 +2552,7 @@ class DelegationLoop(AgentLoop):
         a choice card. The turn keeps what it was and how it ended, never its
         reasons nor that answer (``holds``, agent_holds)."""
         if len(self.holds) < HOLDS_KEPT:
-            self.holds.append({"kind": hold.get("kind"), "gate": bool(hold.get("gate")), "ask": hold.get("ask"),
+            self.holds.append({"kind": hold.get("kind"), "ask": hold.get("ask"),
                                "domain": hold.get("domain"), "reviewer": hold.get("reviewer") or None,
                                "decision": decision, "seconds": round(max(seconds, 0.0), 1)})
         try:
@@ -2662,6 +2587,8 @@ class DelegationLoop(AgentLoop):
                     self.paused_seconds += waited
                     choice, self.hold_choice = self.hold_choice, None
                     self.hold = self.hold_decision = None
+                    self.decided_entries |= self.hold_entries
+                    self.hold_entries = set()
                     break
                 self.condition.wait(.2)
             if self.watch_error:
@@ -2701,9 +2628,11 @@ class DelegationLoop(AgentLoop):
         yield from self._events()
         with self.condition:
             queued, self.queued_hold = self.queued_hold, None
-        if queued is not None and decision != "stop":
+            entries, self.queued_entries = self.queued_entries, set()
+        if queued is not None and decision != "stop" and self.request_hold(queued) is True:
             # The reviewer's halt that came meanwhile: before the next call.
-            self.request_hold(queued)
+            with self.condition:
+                self.hold_entries |= entries
         if decision == "stop" or (decision == "timeout" and not asked):
             if decision == "timeout":
                 # Said as such, not as a plain stop.
@@ -3074,8 +3003,7 @@ class DelegationLoop(AgentLoop):
         with self.condition:
             # The answer stands from here on: no reviewer's halt any more
             # (request_hold), and one that came after the last look ends
-            # with it. Before 2026-10-29 its card stood until the turn's end,
-            # doing nothing, and the turn's clock stood still.
+            # with it.
             self.answer_fixed = True
             late = self.hold if self.hold is not None and not self.hold.get("ask") else None
             if late is not None:
@@ -3091,7 +3019,10 @@ class DelegationLoop(AgentLoop):
             from app.services.agent_comparison import answer_hash
             self.work_log.app("answer_fixed", {"hash": answer_hash(value.text), "chars": len(value.text)},
                               step=value.step_id)
-        comparison.freeze_for_synthesis()
+        if not comparison.text and not comparison.finalized:
+            # The reviewers' final rounds start now, ahead of the saves below.
+            comparison.auditor.begin(value.text)
+        comparison.freeze_answers()
         comparison.capture(value.text)
         yield from self._hand_over()
         yield from self._finish_review(value)
@@ -3444,13 +3375,6 @@ class DelegationLoop(AgentLoop):
                                 continue
                             call = run[0]
                             name = (call.get("function") or {}).get("name")
-                            gate = getattr(value, "gate", None)
-                            if gate is not None and call["id"] in gate.call_ids \
-                                    and (yield from self._gate_wait(gate)) == "steer":
-                                # Not run: the user wrote to the agent instead.
-                                stopped = HOLD_STEERED
-                                not_run(call, stopped)
-                                continue
                             if name == ASK_TOOL:
                                 # The user's card (agent_ask.py); the tool then
                                 # returns their answer. A message on it is that

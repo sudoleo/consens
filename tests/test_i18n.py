@@ -352,12 +352,11 @@ def test_a_service_sentence_that_reaches_a_card_is_found():
 
 def test_a_progress_line_of_the_run_is_found():
     """The run's own progress lines reach the activity as they are (UX audit
-    2026-10-29 I6: the domain review's line stood in English in a German
-    run; the domain review went on 2026-11-04 with request_domain); the work
-    log's notes beside them are no text for the page."""
+    2026-10-29 I6: a progress line stood in English in a German run); the
+    work log's notes beside them are no text for the page."""
     keys = {item.key for item in i18n_tool.server_keys("app/services/agent_delegation.py")}
-    assert "The reviewers check this step before it runs." in keys
-    assert not any(key.startswith("The reviewers let the calls") for key in keys)
+    assert "The model's provider is busy right now. Trying again in a few seconds." in keys
+    assert not any(key.startswith(("The work was paused", "The agent asks to reach")) for key in keys)
     assert "app/services/agent_delegation.py" in i18n_tool.server_files()
 
 

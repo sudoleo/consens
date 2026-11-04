@@ -1635,12 +1635,8 @@
   // nothing for it, a message written now reaches it like any message
   // written while it works, and Stop is the Stop button. Without a decision
   // the response stops after timeout_seconds (30 min).
-  // A pause with `gate` (since 2026-10-27, agent_gate.py) comes before a step
-  // that acts outside the workspace runs: it runs only if the user lets it.
-  // "unchecked": not every reviewer could answer for it (one that failed or
-  // paused never counts as a go), so no reviewer and no reason.
   const holdKinds = { safety: "Security-critical step", harm: "Possible damage", off_goal: "Far off your request",
-    injection: "Prompt injection", unchecked: "Not checked" };
+    injection: "Prompt injection" };
   let holdTimer = null;
   // Every card names its deadline only in its last minutes, as the agent's
   // own questions did (UX audit 2026-10-29 C7): a reviewer's pause said
@@ -1794,13 +1790,11 @@
   }
   // Why the work waits, one line each (data-reason). A reviewer's pause: the
   // kind first, then the reviewer's own sentence (already in the user's
-  // language) and, quietly after it, who said it (UX audit C10: the kind
-  // stood once in a line of its own for all reasons, every name twice). A
-  // domain request: what the reviewers made of it (no concern, their
-  // concern, or that not every one could look). A second halt on the open
-  // pause comes as the same pause with more `reasons` (A-S2): renderHold
-  // swaps these lines and the title in place, so a decision on its way and
-  // the words in the field stay.
+  // language) and, quietly after it, who said it. A domain request: a
+  // reviewer's concern that joined it, or that nobody reviews this message.
+  // A second halt on the open pause comes as the same pause with more
+  // `reasons`: renderHold swaps these lines and the title in place, so a
+  // decision on its way and the words in the field stay.
   function holdReasons(hold) {
     return Array.isArray(hold.reasons) ? hold.reasons.filter(item => item && typeof item === "object") : [];
   }
@@ -1814,7 +1808,7 @@
       line.className = "agent-hold-reason";
       line.dataset.reason = "";
       const kind = holdKinds[item.kind];
-      if (kind && item.kind !== "unchecked") {
+      if (kind) {
         const label = document.createElement("strong");
         label.className = "agent-hold-kind";
         label.textContent = kind;
@@ -1845,27 +1839,17 @@
     if (hold.domain) {
       if (hold.review === "halt" || listed.length) return (listed.length ? listed : [own]).map(said);
       // "off": the user's setting has no reviewers here (Settings > Agent).
-      return [plain(hold.review === "go" ? "The reviewers see no problem with it."
-        : hold.review === "off" ? "Your reviewers are off, so only you decide." : "Not every reviewer could check this request.")];
+      return hold.review === "off" ? [plain("Your reviewers are off, so only you decide.")] : [];
     }
-    // "unchecked": no reviewer paused it, none could answer for it; what the
-    // step would do, in a sentence. A reviewer that pauses on it later stands
-    // under its name. A memory change waited here until 2026-11-02.
-    if (hold.kind === "unchecked" && !listed.length) return [plain("This step runs only with your OK.")];
     return (listed.length ? listed : [own]).map(said);
   }
   function reasonsKey(hold) {
     return JSON.stringify([hold.reason || "", hold.review || "", holdReasons(hold).map(item => [item.reviewer || "", item.reason || ""])]);
   }
-  // The title counts who paused (C10: two reviewers read "A reviewer paused
-  // the work"). Whole sentences, so every language says them its way.
+  // The title counts who paused. Whole sentences, so every language says
+  // them its way.
   function holdTitle(hold) {
-    if (hold.kind === "unchecked") return "Not every reviewer could check this step";
     const count = Math.max(1, holdReasons(hold).length);
-    if (hold.gate) {
-      return count === 1 ? "A reviewer paused before a step" : count === 2 ? "Two reviewers paused before a step"
-        : App.t("{count} reviewers paused before a step", { count });
-    }
     return count === 1 ? "A reviewer paused the work" : count === 2 ? "Two reviewers paused the work"
       : App.t("{count} reviewers paused the work", { count });
   }
@@ -1927,8 +1911,7 @@
     } else {
       label.textContent = kind === "result" ? App.agentActivity?.toolName?.(hold.step_name) || "Tool result"
         : tools.length === 1 && tools[0] ? App.agentActivity?.toolName?.(tools[0]) || "The agent’s step"
-        : kind === "context" || kind === "file" ? "What the agent received"
-        : hold.gate ? "The step that has not run yet" : "The agent’s step";
+        : kind === "context" || kind === "file" ? "What the agent received" : "The agent’s step";
     }
     // The work log's number only for those who can open the log (admins).
     if (hold.entry) {
@@ -2027,9 +2010,9 @@
     actions.append(...buttons.filter(Boolean));
     return actions;
   }
-  // The agent asks for a domain its workspace may reach (since 2026-10-27,
-  // agent_domains.py, DelegationLoop._domain_wait): the user decides every
-  // one, after the reviewers judged it. The domain and the agent's reason
+  // The agent asks for a domain its workspace may reach (agent_domains.py,
+  // DelegationLoop._domain_wait): the user decides every one; a reviewer's
+  // halt that comes meanwhile stands on the card. The domain and the agent's reason
   // are data (untranslated): the reason as the quiet line under the title,
   // like an ask card's request (C16; it stood in the code field). "Allow
   // for this chat" is the decision "continue", "Don't allow" is "deny".
@@ -2123,13 +2106,12 @@
   function holdCard(context, hold) {
     if (hold.ask) return askCard(context, hold);
     if (hold.domain) return domainCard(context, hold);
-    const kind = hold.kind === "unchecked" ? "is-unchecked" : hold.gate ? "is-gate" : "is-halt";
-    const { card, body, alert, title } = cardShell(kind, holdGlyphs.pause);
+    const { card, body, alert, title } = cardShell("is-halt", holdGlyphs.pause);
     title.textContent = holdTitle(hold);
     alert.append(...reasonLines(hold));
     if (hold.step) body.append(holdEvidence(hold));
-    body.append(cardStatus(), cardActions(holdButton(hold.gate ? "Let it run" : "Let it continue",
-      "btn agent-hold-continue", () => decideHold(context, "continue"))));
+    body.append(cardStatus(), cardActions(holdButton("Let it continue", "btn agent-hold-continue",
+      () => decideHold(context, "continue"))));
     return card;
   }
   // The card goes the way it came (C18): it fades and sinks 3px, then makes
@@ -2227,6 +2209,9 @@
       if (old.length) {
         old[0].before(...reasonLines(hold));
         for (const line of old) line.remove();
+      } else {
+        // A domain's card had no line of its own until the reviewer's.
+        host.querySelector(".agent-hold-alert")?.append(...reasonLines(hold));
       }
       const title = host.querySelector(".agent-hold-title");
       if (title && !hold.ask && !hold.domain) title.textContent = holdTitle(hold);
