@@ -2252,3 +2252,52 @@ def test_one_reviewer_is_enough(api):
     assert list(store.get_turn(UID, chat_id, turn["id"])["agent_settings"]["comparison_models"]) == ["anthropic"]
     assert calls.reviews and {review["model"].model for review in calls.reviews} == {
         comparison_selection({"anthropic": "claude-haiku-4-5"})["anthropic"].model}
+
+
+def test_a_stop_in_the_final_round_keeps_the_final_list_of_a_reviewer_already_done(store):
+    """A stop while one reviewer still worked on its final round dropped the
+    final list of the one already done: its row said completed, the review
+    held none of its marks (bug hunt 2026-11-03)."""
+    script = Audit({"anthropic": REVIEWS["anthropic"], "openai": "wait"})
+    loop = audit_loop(store, script)
+
+    def stop_when_one_is_done():
+        while True:
+            comparison = loop.comparison
+            sessions = comparison.auditor.sessions if comparison and comparison.auditor else {}
+            done = sessions.get("anthropic") is not None and sessions["anthropic"].final_marks is not None
+            if done and "final" in script.rounds.get("openai", []):
+                break
+            time.sleep(.01)
+        loop.cancellation.cancel()
+    threading.Thread(target=stop_when_one_is_done, daemon=True).start()
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "cancelled"
+    assert [(r["provider"], r["status"], r.get("marks")) for r in review["audit"]["reviewers"]] == [
+        ("anthropic", "completed", 2), ("openai", "stopped", None)]
+    tickets = by_anchor(review)["Tickets to the top cost 14 euros."]
+    assert [(d["model"], d["note"], d.get("live", False)) for d in tickets["dissent"]] == [
+        ("Anthropic", "The top costs 36.10 euros.", False)]
+
+
+@pytest.mark.parametrize("failure", [RuntimeError("storage down"), ValueError("Comparison review storage budget reached")])
+def test_a_failed_save_when_the_answer_is_fixed_costs_neither_the_answer_nor_the_review(store, monkeypatch, failure):
+    """capture() saved the fixed answer unprotected: one storage error (or a
+    snapshot over its budget) ended a turn with its answer complete as
+    failed (bug hunt 2026-11-03). The review saves right after it anyway."""
+    script = Audit()
+    loop = audit_loop(store, script)
+    real, failed = store.save_review, []
+
+    def save_review(uid, chat_id, turn_id, run_token, data, text):
+        if not failed and any(v.get("status") == "required" for v in data.get("versions") or []):
+            failed.append(True)
+            raise failure
+        return real(uid, chat_id, turn_id, run_token, data, text)
+    monkeypatch.setattr(store, "save_review", save_review)
+    list(loop.run())
+    turn = saved(store, loop)
+    assert failed
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER and not turn.get("agent_failure")
+    assert turn["agent_review"]["status"] == "succeeded"

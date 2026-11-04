@@ -293,8 +293,8 @@ REVIEW_PROMPT_BODY = (
     "final round.\n\n"
     "Every step runs at once, browser clicks included, so a halt stops the work before the agent's next step. The "
     "agent asks the user before a step that acts in their name, such as sending, posting, buying or deleting "
-    "(ask_user). Before two kinds of step the app asks you first: a request to let the workspace reach another "
-    "domain, and a memory change once pages or other outside content are in view. That round names the step's "
+    "(ask_user). Before one kind of step the app asks you first: a request to let the workspace reach another "
+    "domain. That round names the step's "
     "entry and its calls, which have not run yet and run only once every reviewer let them. Reply \"gate\": \"go\" "
     "when the user's request covers the calls, or a halt for that entry when one of the reasons above applies.\n\n"
     "Reply with only this JSON object and no other text (a mark's quote only in the final round, halt only when "
@@ -1203,8 +1203,8 @@ def _search_form(text):
 
 def _anchor_form(anchor):
     text = unicodedata.normalize("NFKC", str(anchor or "")).strip(_ANCHOR_EDGES)
-    if text.endswith("..."):
-        text = text[:-3]
+    # NFKC turns "…" into "...": a quote shortened at either end is the rest.
+    text = text.removeprefix("...").removesuffix("...")
     return _search_form(text.strip(_ANCHOR_EDGES))[0].strip()
 
 
@@ -2318,15 +2318,28 @@ class AnswerAudit:
         """A stopped review keeps what the reviewers found while the agent
         worked, as one whose final round failed does: in claims, unplaced and
         process, each mark ``live`` (A-M7, since 2026-10-29; until then a
-        stop lost them, B8). Never fails the stop."""
+        stop lost them, B8). A reviewer already through its final round keeps
+        that list (until 2026-11-04 a stop dropped it). Never fails the stop."""
         try:
-            with self.tools.lock:
-                reviews = [(self.reviewers[provider]["provider_label"], list(session.live_marks), True)
-                           for provider, session in self.sessions.items() if session.live_marks]
+            reviews = self._reviews()
             if reviews:
                 self._place(self.tools.text, reviews)
         except Exception as exc:
             logging.warning("Agent audit live marks not kept category=%s", safe_exception(exc))
+
+    def _reviews(self):
+        """Each reviewer's marks to place, (label, marks, live): its final
+        list when its final round ended, else what it found while the agent
+        worked."""
+        reviews = []
+        with self.tools.lock:
+            for provider, session in self.sessions.items():
+                label = self.reviewers[provider]["provider_label"]
+                if session.final_marks is not None:
+                    reviews.append((label, session.final_marks, False))
+                elif session.live_marks:
+                    reviews.append((label, list(session.live_marks), True))
+        return reviews
 
     def _place(self, answer, reviews):
         """The reviews' marks on the answer's sentences and on the work (place_marks)."""
@@ -2442,14 +2455,8 @@ class AnswerAudit:
 
     def _finish(self, answer, issues):
         tools = self.tools
-        reviews, done = [], 0
-        with tools.lock:
-            for provider, session in self.sessions.items():
-                if session.final_marks is not None:
-                    done += 1
-                    reviews.append((self.reviewers[provider]["provider_label"], session.final_marks, False))
-                elif session.live_marks:
-                    reviews.append((self.reviewers[provider]["provider_label"], list(session.live_marks), True))
+        reviews = self._reviews()
+        done = sum(1 for _, _, live in reviews if not live)
         self._place(answer, reviews)
         status = "succeeded" if done == len(self.reviewers) and done else "partial" if done else "failed"
         self._settle(status, issues)

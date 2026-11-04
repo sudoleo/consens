@@ -83,3 +83,10 @@ def test_sentence_offsets_point_at_the_sentence_not_an_earlier_copy(text, senten
     _, sentences = _enumerate_consensus_sentences(text, limit=None, spans=spans)
     assert [text[start:end] for start, end in spans] == sentences
     assert spans[-1][0] == text.rindex(sentence)
+
+
+@pytest.mark.parametrize("quote", ["...tickets to the top cost 14 euros", "… Tickets to the top cost 14 euros.",
+                                   "... tickets to the top cost 14 euros ..."])
+def test_an_ellipsis_before_the_quote_does_not_hide_it(quote):
+    answer = "The tower opened in 1889. Tickets to the top cost 14 euros. It is 330 metres tall."
+    assert found(answer, quote) == "Tickets to the top cost 14 euros."

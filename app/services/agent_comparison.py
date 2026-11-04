@@ -298,7 +298,7 @@ class ComparisonTools:
                                   "status": "required", "comparison_ids": [c["id"] for c in self.comparisons]})
             self.review = None
             self.finalized = False
-            self.checkpoint()
+            self._checkpoint_on_the_way()
 
     def worker_request(self, worker, model, messages, *, cancellation, slots, budget=None, searching=False,
                        search_rounds=1, one_off=True, keep_truncated=False, review_round=None):
@@ -696,7 +696,18 @@ class ComparisonTools:
                     self._rebuild(comparison)
                     changed = True
             if changed:
-                self.checkpoint()
+                self._checkpoint_on_the_way()
+
+    def _checkpoint_on_the_way(self):
+        """A save while the answer is being fixed: a failed one (storage, the
+        budget) never fails the turn with its answer complete; the review
+        saves right after it (AnswerAudit.run), and the run's end again
+        (close). Until 2026-11-04 one storage error failed the turn."""
+        try:
+            self.checkpoint()
+        except Exception as exc:
+            self.auditor._unsaved = True
+            logging.warning("Agent comparison review not saved yet category=%s", safe_exception(exc))
 
     def _stop_running(self, cid, *, cutoff=False):
         for thread, child in self._running.get(cid, {}).values():
