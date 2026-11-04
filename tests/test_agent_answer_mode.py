@@ -250,7 +250,8 @@ def test_the_step_that_reads_the_answers_writes_the_reviewed_answer(store):
     review_call = next(i for i, e in enumerate(events) if e.get("kind") == "tool" and e.get("name") == "audit_answer")
     assert max(i for i, e in enumerate(events) if e.get("type") == "delta") < review_call
     assert not retractions(events)
-    assert all(c.get("synthesis_providers") == ["anthropic", "openai"] for c in review["comparisons"])
+    assert all(sorted(a["provider"] for a in c["answers"] if not a.get("late")) == ["anthropic", "openai"]
+               for c in review["comparisons"])
     assert loop.completion.text == ANSWER
 
 

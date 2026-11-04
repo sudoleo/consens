@@ -53,9 +53,8 @@ without trouble). vm_save_picture (agent_vm_tools.py) writes a picture of
 this message into the workspace by its id, as the server fetched it
 (picture_file), in the format of the file's extension (saved_as).
 
-The fetch reaches out like a browser's open, which the reviewers follow live
-(from 2026-10-28 to 2026-10-29 an address the message did not hold waited
-for them first, agent_gate.py). Never in chats with Google data (like
+The fetch reaches out like a browser's open, which the reviewers follow
+live. Never in chats with Google data (like
 read_source). A chat model that takes images
 sees the pictures after the result (vm_view_image's way,
 DelegationLoop._show_pictures); one that does not chooses by page, title and

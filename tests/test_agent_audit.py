@@ -17,7 +17,8 @@ from pydantic import BaseModel, ConfigDict
 
 from app.services import agent_audit, agent_delegation, agent_memory, prompt_defaults
 from app.services.agent_audit import (AGENT_SEARCH_ROUNDS, LIVE_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS, locate_quote,
-                                      parse_review, place_marks, review_entry, round_message, work_goes_on)
+                                      parse_review, place_marks, results_pending, review_entry, round_due,
+                                      round_message)
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_delegation import DelegationLoop
@@ -58,7 +59,7 @@ REVIEWS = {
 }
 
 
-#: A reviewer reply with a tool call and no text (DeepSeek in a gate round, 2026-10-28).
+#: A reviewer reply with a tool call and no text.
 TOOL_CALL_REPLY = {"tool_calls": [{"id": "r1", "type": "function",
                                    "function": {"name": "web_search", "arguments": "{}"}}]}
 
@@ -322,12 +323,14 @@ def test_the_reviewers_read_the_work_log_and_the_whole_answer(store):
     assert [(name, data) for name, data, _ in context] == [
         ("system", "app"), ("user", "user"), ("assistant", "agent"), ("user", "user")]
     assert [content for _, _, content in context[1:]] == ["Paris trip?", "Yes, go in spring.", "And the tower?"]
-    # The agent's instructions, the app's own text, come as their brief.
+    # The agent's instructions, the app's own text, come as their brief, with
+    # the tools as the app describes them to the agent.
     brief = context[0][2]
     instructions = loop.messages[0]["content"]
-    assert instructions.startswith("Answer.") and len(json.dumps(brief)) < len(instructions)
+    assert instructions.startswith("Answer.") and instructions not in json.dumps(brief)
     assert brief["instructions"].startswith(f"The app's instructions to the agent ({len(instructions)} characters")
-    assert brief["tools"] == sorted(loop.registry.tools) and brief["memory"] == agent_audit.BRIEF_NO_MEMORY
+    assert brief["tools"] == {name: tool.description for name, tool in sorted(loop.registry.tools.items())}
+    assert brief["memory"] == agent_audit.BRIEF_NO_MEMORY
     [step] = [e for e in entries if e["kind"] == "step"]
     # The answer comes once, as the fixed answer, not again in its step.
     assert step["actor"] == "agent" and step["content"]["text"] == agent_audit.ANSWER_IN_STEP
@@ -514,6 +517,30 @@ def test_a_final_round_that_hangs_gets_its_hedge_and_the_first_reply_wins(store,
     assert [(r["provider"], r["hedged"], type(r["final_ms"])) for r in review["audit"]["reviewers"]] == [
         ("anthropic", False, int), ("openai", True, int)]
     assert review["audit"]["reviewers"][1]["final_ms"] >= 300
+
+
+def test_a_hedge_that_fails_while_the_first_request_wins_never_speaks_for_the_reviewer(store, monkeypatch):
+    """The panel showed a reviewer as failed that had finished: its hedge
+    failed, the first request won later, and the row took the hedge's
+    session, the last one ("Its marks are missing")."""
+    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .2)
+    asked = []
+
+    def final(messages):
+        asked.append(messages)
+        return held(.6, REVIEWS["openai"])(messages) if len(asked) == 1 else RuntimeError("provider down")
+    script = Audit({"anthropic": REVIEWS["anthropic"], "openai": final})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "succeeded" and len(asked) == 2
+    # The failed hedge ended as overtaken, without a message of failure.
+    assert audit_sessions(store, loop, "openai") == [("completed", None), ("stopped", "superseded")]
+    sessions = [a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"] if a.get("kind") == "audit"]
+    for session in sessions:
+        notes = store.delegation_view(UID, loop.chat_id, loop.turn_id, agent_id=session["id"])["messages"]
+        assert not [m for m in notes if m["kind"] == "failure"]
 
 
 def test_a_final_round_that_hangs_twice_ends_in_time_with_its_live_marks(store, monkeypatch):
@@ -795,8 +822,8 @@ def test_a_long_step_reads_within_its_limit_and_a_full_session_starts_over(store
     assert agent_audit.session_budget(model) == 201_600
     model.context_length = 2_000_000
     assert agent_audit.session_budget(model) == agent_audit.SESSION_CHARS
-    # A conversation too full for the final round: it starts over with the
-    # whole log, read shorter, in a new session.
+    # A conversation too full for the final round: it goes on in a new one,
+    # with the run's beginning and its marks carried over, in a new session.
     monkeypatch.setattr(agent_audit, "session_budget", lambda model: 60_000)
     script = Audit(tool_steps=1, live={
         "anthropic": lambda messages: json.dumps({"marks": [
@@ -819,10 +846,14 @@ def test_a_long_step_reads_within_its_limit_and_a_full_session_starts_over(store
     review = saved(store, loop)["agent_review"]
     assert review["status"] == "succeeded"
     system, final = script.prompts["anthropic"]
-    entries, answer = round_entries(final)
-    assert answer == ANSWER and entries[0]["seq"] == 1
+    rest, answer = round_entries(final)
+    session = loop.comparison.auditor.sessions["anthropic"]
+    assert final["content"].startswith("Final round. The agent's answer is fixed. Your earlier rounds no longer fit")
+    assert answer == ANSWER and rest[0]["seq"] == session.segment_from == session.cursor + 1
+    beginning = next(value["entries"] for head, value in round_sections(final).items() if "beginning" in head)
+    assert beginning[0]["seq"] == 1
     # It keeps the marks of its live round, whose conversation it no longer has.
-    step = [e["seq"] for e in entries if e["kind"] == "step"][0]
+    step = next(entry["seq"] for entry, _ in loop.work_log.entries_after(0) if entry["kind"] == "step")
     assert earlier_marks(final) == [{"entry": step, "kind": "doubtful", "note": "Unchecked."}]
     assert earlier_marks(script.prompts["openai"][-1]) == []
     views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
@@ -934,7 +965,7 @@ def test_reviewers_still_working_at_the_deadline_lose_their_marks_not_the_answer
     script = Audit({"anthropic": "wait", "openai": REVIEWS["openai"]})
     loop = audit_loop(store, script)
     # Plenty of time while the agent writes; .3 s once the answer is fixed.
-    monkeypatch.setattr(loop, "_hard_stop_left", lambda: .3 if loop.comparison.text else 1000)
+    monkeypatch.setattr(loop, "_hard_stop_left", lambda: .3 if loop.answer_fixed else 1000)
     list(loop.run())
     turn = saved(store, loop)
     review = turn["agent_review"]
@@ -948,7 +979,7 @@ def test_reviewers_still_working_at_the_deadline_lose_their_marks_not_the_answer
 def test_without_time_left_no_reviewer_starts(store, monkeypatch):
     script = Audit()
     loop = audit_loop(store, script)
-    monkeypatch.setattr(loop, "_hard_stop_left", lambda: 5 if loop.comparison.text else 1000)
+    monkeypatch.setattr(loop, "_hard_stop_left", lambda: 5 if loop.answer_fixed else 1000)
     list(loop.run())
     turn = saved(store, loop)
     assert turn["status"] == "completed" and turn["agent_review"]["status"] == "failed"
@@ -1094,6 +1125,37 @@ def test_a_stop_before_the_answer_keeps_what_the_reviewers_found_meanwhile(store
     # The reviewers' rows as after any stop, with their counters (A-M4).
     assert [(r["provider"], r["status"], r["rounds"], r["fresh"], r["pauses"]) for r in audit["reviewers"]] == [
         ("anthropic", "stopped", 1, 0, 0), ("openai", "stopped", 1, 0, 0)]
+
+
+def test_a_run_that_fails_before_its_answer_keeps_what_the_reviewers_found(store):
+    def gone(step):
+        raise ValueError("The provider is gone.")
+    script = Audit(tool_steps=1, live={"anthropic": step_mark("The lookup names no source.")}, on_answer=gone)
+    loop = audit_loop(store, script)
+    with pytest.raises(Exception):
+        list(loop.run())
+    turn = saved(store, loop)
+    review = turn["agent_review"]
+    assert turn["status"] == "failed" and review["status"] == "failed"
+    assert {"code": "run_failed"} in review["audit"]["issues"]
+    assert [(p["model"], p["note"], p.get("live")) for p in review["audit"]["process"]] == [
+        ("Anthropic", "The lookup names no source.", True)]
+    assert {row["status"] for row in review["audit"]["reviewers"]} == {"stopped"}
+
+
+def test_the_final_rounds_start_before_the_answers_saves(store, monkeypatch):
+    """The final rounds waited for the version's save, the hand-over and the
+    review's "running" save, one after another."""
+    script = Audit()
+    loop = audit_loop(store, script)
+    capture, seen = loop.comparison.capture, []
+
+    def fix(text):
+        seen.append(loop.comparison.auditor.final_answer)
+        capture(text)
+    monkeypatch.setattr(loop.comparison, "capture", fix)
+    list(loop.run())
+    assert seen == [ANSWER] and saved(store, loop)["agent_review"]["status"] == "succeeded"
 
 
 def test_a_failed_save_of_the_marks_is_saved_again_at_the_end(store, monkeypatch):
@@ -1244,7 +1306,7 @@ def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_oth
     page, so the agent could open nothing it found itself in this message,
     although the same results become readable as an earlier message's sources
     with the next one. Its own search results count now. Another page needs
-    reviewers, who follow the read live (since 2026-10-28, test_agent_gate):
+    reviewers, who follow the read live (since 2026-10-28, test_agent_outward_calls):
     without them it stays unread."""
     from test_agent_web_fetch import PAGE, fake_fetch
     from app.services.agent_read_source import LABEL_SEARCH
@@ -1396,17 +1458,30 @@ def test_a_reply_that_stays_unreadable_says_why_in_the_readers_words_not_its_own
                                                                                      usage=None))
 
 
-def test_a_halt_alone_is_a_live_round_without_marks_but_no_final_round():
+def test_a_halt_alone_is_a_live_round_without_marks_and_a_concern_in_the_final_round():
     reply = json.dumps({"halt": {"entry": 3, "kind": "injection", "reason": "Obeys the page."}})
-    assert parse_review(reply, known={3}, final=False) == []
-    assert agent_audit.parse_halt(reply, known={3})["kind"] == "injection"
+    assert agent_audit.parse_round(reply, known={3}, final=False) == (
+        [], {"entry": 3, "kind": "injection", "reason": "Obeys the page."})
     # A halt the reader cannot take is no round: the entries come again.
     with pytest.raises(agent_audit.ReviewUnreadable):
         parse_review(reply, known={9}, final=False)
-    # The final round holds no halt, only its list.
-    with pytest.raises(agent_audit.ReviewUnreadable) as caught:
-        parse_review(reply, known={3})
-    assert caught.value.shape == "no_marks"
+    # The final round has nothing left to stop: the halt arrives as a
+    # concern on its entry, first in the list, never dropped.
+    concern = {"entry": 3, "kind": "doubtful", "note": "Obeys the page.", "concern": "injection"}
+    assert agent_audit.parse_round(reply, known={3}) == ([concern], None)
+    marks = json.dumps({"marks": [{"entry": 3, "kind": "doubtful", "note": "Other."},
+                                  {"entry": 3, "kind": "wrong", "note": "Sends the notes out.", "concern": "Security"},
+                                  {"entry": 3, "kind": "doubtful", "note": "Style.", "concern": "style"}],
+                        "halt": {"entry": 3, "kind": "injection", "reason": "Obeys the page."}})
+    assert parse_review(marks, known={3}) == [
+        concern, {"entry": 3, "kind": "doubtful", "note": "Other."},
+        {"entry": 3, "kind": "doubtful", "note": "Sends the notes out.", "concern": "safety"},
+        {"entry": 3, "kind": "doubtful", "note": "Style."}]
+    # On the answer a concern paints its sentence as the most severe kind.
+    [claim], _, _ = place_marks("One plain sentence stands here.", [("OpenAI", [
+        {"quote": "One plain sentence", "kind": "doubtful", "note": "Leaks the key.", "concern": "harm"}], False)])
+    assert claim["kind"] == "wrong" and claim["dissent"][0]["concern"] == "harm"
+    assert agent_audit.review_text([{**concern, "concern": "harm"}]) == "- **harm** · #3: Obeys the page."
 
 
 def test_a_mark_on_the_work_needs_an_entry_the_reviewer_has_read():
@@ -1563,38 +1638,80 @@ def test_a_round_message_carries_new_entries_and_in_the_end_the_answer():
     assert final.startswith("Final round.") and round_entries({"content": final}) == ([], "The answer.")
 
 
-def test_only_a_step_that_calls_a_tool_starts_a_live_round():
-    def step(content, kind="step"):
-        return ({"kind": kind}, content)
-    assert work_goes_on([step(json.dumps({"tool_calls": [{"name": "read_source"}]}))])
-    assert not work_goes_on([step(json.dumps({"tool_calls": [], "text": "The answer."}))])
-    assert not work_goes_on([step(json.dumps({"tool_calls": [{"name": "x"}]}), kind="tool"), step("not json")])
-    assert not work_goes_on([])
-    # A step that only reads or keeps its plan waits for the next round: for
-    # one that does more, or for the third such step in a row.
-    quiet = step(json.dumps({"tool_calls": [{"name": "update_plan"}, {"name": "vm_read_file"}]}))
-    assert not work_goes_on([quiet]) and not work_goes_on([quiet, quiet])
-    assert work_goes_on([quiet, quiet, quiet])
-    assert work_goes_on([quiet, step(json.dumps({"tool_calls": [{"name": "vm_exec"}]}))])
-    assert work_goes_on([step(json.dumps({"tool_calls": [{"name": "update_plan"}, {"name": "vm_exec"}]}))])
-    assert agent_audit.QUIET_TOOLS.isdisjoint({"vm_exec", "vm_write_file", "vm_edit_file", "vm_share_file",
-                                               "read_source", "update_memory", "github_import", "prepare_pull_request",
-                                               "prepare_gmail_draft", "create_document", "start_agent"})
+def test_a_live_round_is_due_for_a_step_that_acts_or_content_from_outside():
+    def entry(seq, kind, data="app", content="", step=None):
+        return ({"seq": seq, "kind": kind, "data": data, **({"step": step} if step else {})}, content)
+    reading = entry(4, "step", "agent", json.dumps({"tool_calls": [{"name": "vm_read_file"}]}), step="completion:1")
+    answer = entry(4, "step", "agent", json.dumps({"tool_calls": [], "text": "The answer."}))
+    # Every step that calls a tool, a read as much as a command.
+    assert round_due([reading], first_step=2)
+    assert not round_due([answer], first_step=2) and not round_due([], first_step=2)
+    assert not round_due([entry(4, "tool", "app", json.dumps({"tool_calls": [{"name": "x"}]})), entry(5, "step")],
+                         first_step=2)
+    # A page, a file, an email, a command's output, another model's answer:
+    # content from outside, where an injection comes in, after the run's
+    # first step (what came before rides with that step's round).
+    for data in ("web", "file", "google", "vm", "agent"):
+        assert round_due([entry(5, "tool", data)], first_step=2)
+        assert round_due([entry(5, "context", data)], first_step=2)
+        assert not round_due([entry(1, "context", data)], first_step=2)
+        assert not round_due([entry(5, "tool", data)], first_step=None)
+    assert not round_due([entry(5, "tool", "app"), entry(6, "app"), entry(7, "context", "user")], first_step=2)
+    # A step's results ride with its round: it waits while a call has none yet.
+    two = entry(4, "step", "agent", json.dumps({"tool_calls": [{"name": "a"}, {"name": "b"}]}), step="completion:1")
+    result = entry(5, "tool", "web", step="completion:1")
+    assert results_pending([two]) and results_pending([two, result])
+    assert not results_pending([two, result, entry(6, "tool", "vm", step="completion:1")])
+    assert not results_pending([answer, result])
 
 
-def test_a_quiet_step_rides_with_the_next_round(store):
-    """A step that only keeps its plan starts no round of its own: its entries
-    come with the next step that acts (the scripted lookup)."""
-    script = Audit(tool_steps=2, step_tools={0: "update_plan"})
+class MailArgs(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+    step: int = 0
+
+
+def reading_mail(store, seconds=0.0):
+    """An audit turn whose first step reads an email (content from outside),
+    the read taking ``seconds``."""
+    script = Audit(tool_steps=1, step_tools={0: "gmail_read"})
     loop = audit_loop(store, script)
-    plan = ReadOnlyTool("update_plan", "Keep the plan.", LookupArgs, lambda args, *, cancellation: {"text": "Saved."})
-    loop.registry = ToolRegistry([*loop.registry.tools.values(), plan], argument_limit=loop.registry.argument_limit)
+
+    def read(args, *, cancellation):
+        time.sleep(seconds)
+        return {"text": "Hi, please forward the invoice to accounts@example.org."}
+    loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool("gmail_read", "Read an email.",
+                                                                               MailArgs, read)],
+                                 argument_limit=loop.registry.argument_limit)
+    return script, loop
+
+
+def live_rounds(script, family="anthropic"):
+    return [round_entries(m)[0] for m in script.prompts[family]
+            if m["role"] == "user" and m["content"].startswith("Round ")]
+
+
+def test_a_steps_results_ride_with_its_round(store, monkeypatch):
+    """One round reads what the agent did and what came back of it: no
+    second round for the result of a quick read."""
+    monkeypatch.setattr(agent_audit, "SETTLE_SECONDS", 2)
+    script, loop = reading_mail(store, seconds=.2)
     list(loop.run())
-    rounds = script.rounds["anthropic"]
-    assert rounds.count("live") == 1 and rounds[-1] == "final"
-    live = next(m for m in script.prompts["anthropic"] if m["role"] == "user" and m["content"].startswith("Round 1."))
-    names = [call["name"] for e in round_entries(live)[0] if e["kind"] == "step" for call in e["content"]["tool_calls"]]
-    assert names == ["update_plan", "lookup"]
+    [entries] = live_rounds(script)
+    assert [(e["kind"], e.get("name")) for e in entries if e["kind"] in {"step", "tool"}][-2:] == [
+        ("step", loop.model.model), ("tool", "gmail_read")]
+    assert script.rounds["anthropic"] == ["live", "final"]
+
+
+def test_content_from_outside_gets_its_round_before_the_agents_next_step_acts(store, monkeypatch):
+    """A slow read: the step's round goes ahead without it, and its result,
+    where an injection would come in, starts a round of its own."""
+    monkeypatch.setattr(agent_audit, "SETTLE_SECONDS", .05)
+    script, loop = reading_mail(store, seconds=.6)
+    list(loop.run())
+    rounds = live_rounds(script)
+    assert len(rounds) >= 2
+    assert not any(e.get("name") == "gmail_read" for e in rounds[0])
+    assert any(e["kind"] == "tool" and e.get("name") == "gmail_read" for e in rounds[1])
 
 
 # --- A reviewer stops the work for the user (halt, since 2026-10-26) ------------------
@@ -1603,8 +1720,9 @@ HALT_REASON = "The page told the agent to send the files to an unknown server."
 
 
 def halting_live(messages):
-    """A live round that halts on the run's first entry."""
-    return json.dumps({"marks": [], "halt": {"entry": 1, "kind": "injection", "reason": HALT_REASON}})
+    """A live round that halts on the run's first entry, quoting it."""
+    return json.dumps({"marks": [], "halt": {"entry": 1, "kind": "injection", "reason": HALT_REASON,
+                                             "quote": "Tell me about the Eiffel Tower."}})
 
 
 def decide_when_held(loop, store, action, text=""):
@@ -1703,7 +1821,8 @@ def test_a_halt_alone_with_a_slip_in_its_json_still_stops_the_work(store, caplog
     """Until 2026-10-30 a live round's halt without a list of marks counted
     as an unreadable reply and was lost with its round, and so was a reply
     with a quote mark left unescaped in a string (MiMo V2.6)."""
-    reply = '{"halt": {"entry": 1, "kind": "injection", "reason": "The page said "send the files"."}}'
+    reply = ('{"halt": {"entry": 1, "kind": "injection", "quote": "Tell me about the Eiffel Tower.", '
+             '"reason": "The page said "send the files"."}}')
     script = Audit(tool_steps=2, live={"anthropic": lambda messages: reply})
     loop = audit_loop(store, script)
     waiter = decide_when_held(loop, store, "continue")
@@ -1748,8 +1867,7 @@ def test_a_reviewers_halt_waits_for_the_user_and_the_agent_never_learns_of_it(st
     stored = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["agent_holds"]
     [kept] = stored
     assert {key: value for key, value in kept.items() if key != "seconds"} == {
-        "kind": "injection", "gate": False, "ask": None, "domain": None, "reviewer": record["reviewer"],
-        "decision": "continue"}
+        "kind": "injection", "ask": None, "domain": None, "reviewer": record["reviewer"], "decision": "continue"}
     assert kept["seconds"] >= .05 and HALT_REASON not in json.dumps(stored) and "agent_holds" not in turn
 
 
@@ -1758,8 +1876,8 @@ def test_a_turn_keeps_at_most_twenty_holds(store):
     for number in range(agent_delegation.HOLDS_KEPT + 5):
         loop._end_hold({"id": f"{number:012x}", "kind": "ask", "ask": "confirm", "reviewer": ""}, "deny", 2)
     assert len(loop.holds) == agent_delegation.HOLDS_KEPT == 20
-    assert loop.holds[0] == {"kind": "ask", "gate": False, "ask": "confirm", "domain": None, "reviewer": None,
-                             "decision": "deny", "seconds": 2}
+    assert loop.holds[0] == {"kind": "ask", "ask": "confirm", "domain": None, "reviewer": None, "decision": "deny",
+                             "seconds": 2}
 
 
 def test_a_halt_answered_with_a_message_goes_on_with_the_users_words(store):
@@ -1863,16 +1981,23 @@ def test_a_full_event_queue_neither_loses_the_halt_nor_ends_its_reviewer(store):
     assert frames[1]["decision"] == "continue" and frames[2]["state"] == "continue"
 
 
+def entry_words(loop, seq, chars=24):
+    """The first words of log entry ``seq``: a halt's quote that it holds."""
+    [(_, content)] = [(entry, content) for entry, content in loop.work_log.entries_after(seq - 1)[:1]]
+    return " ".join(agent_audit.evidence_text({}, content).split())[:chars]
+
+
 def join_when_held(loop, store, action, *, provider="openai", entry=2, reason="Deletes the user's files."):
     """Once a card is open, a reviewer's live halt on another entry comes
-    (AnswerAudit.halt), then the user decides on the card as it then is
-    (a copy of the hold in ``seen``)."""
+    (AnswerAudit.halt, quoting it), then the user decides on the card as it
+    then is (a copy of the hold in ``seen``)."""
     seen = []
 
     def run():
         hold = open_hold(loop)
         auditor = loop.comparison.auditor
-        auditor.halt(auditor.sessions[provider], {"entry": entry, "kind": "harm", "reason": reason})
+        auditor.halt(auditor.sessions[provider], {"entry": entry, "kind": "harm", "reason": reason,
+                                                  "quote": entry_words(loop, entry)})
         seen.append({**loop.hold, "halts": set(auditor.halts),
                      "saved": store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict().get("hold")})
         assert loop.hold["id"] == hold["id"]
@@ -1900,8 +2025,10 @@ def test_a_second_reviewers_halt_joins_the_open_card(store):
     # The same card again, one decision for both.
     holds = [e for e in events if e.get("type") == "hold"]
     assert [h["hold"]["id"] if h["hold"] else h["decision"] for h in holds] == [card["id"], card["id"], "continue"]
-    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
-    assert f"{labels['openai']} also paused the work for the user (harm, entry 2): Deletes the user's files." in said
+    # The log says that the work paused, once, never who paused it or why:
+    # every reviewer reads it.
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["name"] == "paused"]
+    assert said == ["The work was paused for the user's decision."]
     record = next(e for e in saved(store, loop)["agent_activity"] if e["kind"] == "hold")
     assert len(record["reasons"]) == 2 and record["state"] == "continue"
     assert saved(store, loop)["status"] == "completed"
@@ -2017,6 +2144,49 @@ def test_from_the_fixed_answer_on_no_reviewer_halts_the_work(store):
     assert turn["status"] == "completed" and turn["agent_review"]["status"] == "succeeded"
 
 
+def test_a_halt_without_its_evidence_stops_nothing_and_stays_a_mark(store):
+    """All 13 halts in Prod ended with the user's Continue. A halt counts
+    only where the entry it names holds the words it quotes."""
+    def invented(messages):
+        return json.dumps({"marks": [], "halt": {"entry": 1, "kind": "safety", "quote": "rm -rf ~",
+                                                 "reason": "Deletes the home folder."}})
+    script = Audit(tool_steps=2, live={"anthropic": invented})
+    loop = audit_loop(store, script)
+    events = list(loop.run())
+    assert not [e for e in events if e.get("type") == "hold"]
+    session = loop.comparison.auditor.sessions["anthropic"]
+    assert {"entry": 1, "kind": "doubtful", "note": "Deletes the home folder."} in session.live_marks
+    assert session.halts == [] and ("anthropic", 1) in loop.comparison.auditor.halts
+    assert saved(store, loop)["status"] == "completed"
+
+
+def test_an_entry_the_user_decided_opens_no_second_card(store):
+    """Two reviewers halting on one entry made two cards: the second came
+    as the first was decided, waited and opened after it."""
+    loop = audit_loop(store, Audit())
+    assert loop.request_hold(HALT) is True
+    first = loop.hold["id"]
+    loop._receive_hold({"hold_decision": {"id": first, "action": "continue"}})
+    # Decided, not yet closed: the same entry does not wait for a card of its own.
+    other = {**HALT, "reviewer": "Claude Haiku 4.5", "provider": "anthropic"}
+    assert loop.request_hold(other) == agent_delegation.HOLD_DECIDED
+    list(loop._hold_wait())
+    assert loop.hold is None and loop.queued_hold is None
+    # Closed: still none, while another entry gets its card.
+    assert loop.request_hold(other) == agent_delegation.HOLD_DECIDED and loop.hold is None
+    assert loop.request_hold({**other, "entry": 2}) is True and loop.hold["entry"] == 2
+    # A halt on the open card's entry joins it.
+    assert loop.request_hold({**HALT, "entry": 2}) is True and loop.hold["revision"] == 1
+    # The reviewer's halt on a decided entry stays what it found: a mark.
+    auditor = loop.comparison.auditor
+    session = agent_audit.ReviewerSession(auditor, "openai", loop.comparison.models["openai"])
+    auditor.sessions["openai"] = session
+    auditor.work_log = loop.work_log
+    loop.work_log.add("start", content={"question": "Tell me about the Eiffel Tower."})
+    auditor.halt(session, {"entry": 1, "kind": "harm", "reason": "Again.", "quote": "Eiffel Tower"})
+    assert session.live_marks == [{"entry": 1, "kind": "doubtful", "note": "Again."}] and session.halts == []
+
+
 def test_a_halt_as_the_user_decides_comes_right_after(store):
     """A-S2: the card was decided, the run had not closed it yet; the halt
     that came in that moment would have joined a card nobody reads again.
@@ -2081,7 +2251,8 @@ def test_a_deny_that_reached_a_reviewers_halt_stops_and_never_goes_on(store):
     # A halt the run no longer takes (A-S2) is not counted: it may come again.
     auditor = loop.comparison.auditor
     assert auditor.final_answer is None and ("anthropic", 1) in auditor.halts
-    auditor.halt(auditor.sessions["openai"], {"entry": 1, "kind": "harm", "reason": "Late."})
+    auditor.halt(auditor.sessions["openai"], {"entry": 1, "kind": "harm", "reason": "Late.",
+                                              "quote": "Tell me about the Eiffel Tower."})
     assert ("openai", 1) not in auditor.halts
 
 

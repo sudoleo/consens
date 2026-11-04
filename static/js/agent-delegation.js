@@ -508,7 +508,12 @@
   // ("- **kind** · #entry · “quote”: note (source)").
   const NO_OBJECTION = "No objections.";
   const NOTE_LINE = /^- \*\*([a-z_]+)\*\* · (?:#(\d+))?(?: · )?(“[^”]*”)?: (.*?)(?: \((https?:\/\/[^\s)]+)\))?$/;
-  const noteKinds = { wrong: "Wrong", doubtful: "Doubtful", incomplete: "Incomplete" };
+  // A concern (agent_audit HALT_KINDS) stands where the kind would, in the
+  // colour of "wrong".
+  const noteKinds = { wrong: "Wrong", doubtful: "Doubtful", incomplete: "Incomplete",
+    safety: "Security-critical step", harm: "Possible damage", off_goal: "Far off your request",
+    injection: "Prompt injection" };
+  const CONCERN_KINDS = new Set(["safety", "harm", "off_goal", "injection"]);
   const reviewNotes = text => String(text || "").trim() === NO_OBJECTION ? []
     : String(text || "").split("\n").filter(line => line.trim()).map(line => {
       const match = NOTE_LINE.exec(line.trim());
@@ -584,7 +589,7 @@
     const list = node("ul", "agent-review-notes");
     for (const note of notes) {
       const item = node("li", "agent-review-note");
-      if (note.kind) item.dataset.kind = note.kind;
+      if (note.kind) item.dataset.kind = CONCERN_KINDS.has(note.kind) ? "wrong" : note.kind;
       const head = node("span", "agent-review-note-where");
       if (note.kind) head.append(node("strong", "", noteKinds[note.kind] || note.kind));
       // The work log's number: for those who can open the log (admins).

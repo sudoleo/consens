@@ -2,7 +2,7 @@
 
 Only for the agent: a source a comparison answer cited, a result of its own
 search, a source of an earlier message, a link the user wrote, or, while
-reviewers follow the work, any public page (test_agent_gate.py). Bounded,
+reviewers follow the work, any public page (test_agent_outward_calls.py). Bounded,
 metered, given to the agent only as the read_source tool result (it writes
 the answer itself, agent_answer_mode), kept with the review, and never for
 comparison models, reviewers or Google-data chats. On unless
@@ -365,7 +365,7 @@ def test_reads_a_source_of_an_earlier_message_and_without_reviewers_no_link_from
     Saved sources of earlier messages count now. A link that stands only in an
     earlier answer's text does not: an injected page could have put it there
     with chat content in it (review 2026-10-11). Since 2026-10-28 such a page
-    is read while reviewers follow the read live (test_agent_gate.py); without
+    is read while reviewers follow the read live (test_agent_outward_calls.py); without
     them it stays unread."""
     calls = fake_fetch(monkeypatch)
     earlier = "https://www.tri247.com/live-kona"

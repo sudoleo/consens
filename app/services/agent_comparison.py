@@ -48,6 +48,9 @@ COMPARISON_BUDGET_SHARE = 0.6
 # allowance.
 REVIEW_ANSWER_CHARS = 300_000
 CHARS_PER_TOKEN = 4
+# How long the answer's fixing and the run's end wait for a comparison model
+# still writing to stop; one that does not is left behind (a daemon thread).
+STRAGGLER_STOP_SECONDS = 5
 # Search rounds per comparison answer, at most; each model decides how many it
 # needs. The same for every account and every answer of a comparison: their
 # search is booked by measured usage, not reserved (see docs/agent-mode.md, "Websuche").
@@ -132,11 +135,11 @@ COMPARISON_FAILURES = {
 SEARCHING_KINDS = frozenset({"comparison", "audit"})
 
 
-# compare_models' arguments (since 2026-10-31): what the models are asked.
-# No progress paragraph: the agent's own text beside a call is its note on
-# the work (AGENT_AUDIT_ANSWER_SECTION). No memory field: a change goes
-# through update_memory and the reviewers' gate. No docstring: it would
-# become the schema's description, which the model reads.
+# compare_models' arguments: what the models are asked. No progress
+# paragraph: the agent's own text beside a call is its note on the work
+# (AGENT_AUDIT_ANSWER_SECTION). No memory field: a change goes through
+# update_memory. No docstring: it would become the schema's description,
+# which the model reads.
 class AuditCompareArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     question: str = Field(min_length=1, max_length=2000)
@@ -206,6 +209,9 @@ class ComparisonTools:
         self._snapshots = self._saved = 0
         self._latest = None
         self._raw, self._failures, self._running = {}, {}, {}
+        # The providers whose answers the agent read, by comparison: an
+        # answer that came later is ``late``.
+        self._read = {}
         # Text a model had written before it stopped or failed. Kept for the
         # reader, marked incomplete; never part of what the agent reads.
         self._partials = {}
@@ -229,8 +235,6 @@ class ComparisonTools:
                 "answer_hash": answer_hash(self.text), "answer_version": len(self.versions),
                 "comparisons": self.comparisons, "versions": self.versions,
                 "mode": "audit", "audit": self.auditor.snapshot()}
-        if self.review:
-            data["checks"] = self.review["checks"]
         if self.reader is not None and self.reader.reads:
             data["read_sources"] = self.reader.snapshot()
         return data
@@ -420,7 +424,6 @@ class ComparisonTools:
         self.finalized = False
         if self.versions:
             self.versions[-1].update(status="required", comparison_ids=[c["id"] for c in self.comparisons])
-            self.versions[-1].pop("checks", None)
         self.checkpoint()
         depth = args.depth
         prompt = json.dumps({"question": args.question, "context": args.context}, ensure_ascii=False)
@@ -588,8 +591,8 @@ class ComparisonTools:
     def _freeze(self, comparison):
         """The answers present now are the ones the agent read."""
         with self.lock:
-            if comparison["id"] in self._raw and comparison.get("synthesis_providers") is None:
-                comparison["synthesis_providers"] = sorted(self._raw[comparison["id"]])
+            if comparison["id"] in self._raw and comparison["id"] not in self._read:
+                self._read[comparison["id"]] = set(self._raw[comparison["id"]])
                 self._rebuild(comparison)
                 self.checkpoint()
 
@@ -658,14 +661,14 @@ class ComparisonTools:
         normalized = normalize_provider_answers({p: transport.ProviderAnswer(
             provider=transport.PROVIDER_LABELS.get(p, p), model=self.models[p].selection_id,
             response=raw[p]["text"], sources=raw[p]["sources"]) for p in ordered}) if ordered else {}
-        in_synthesis = comparison.get("synthesis_providers")
+        read = self._read.get(cid)
         answers = []
         for p in ordered:
             item = normalized[p]
             answers.append({"provider": p, "provider_label": cfg.provider_label(p), "model": self.models[p].settings(),
                             "text": item.response, "sources": item.sources, "hash": answer_hash(item.response),
                             **({"truncated": True} if raw[p].get("truncated") else {}),
-                            **({"late": True} if in_synthesis is not None and p not in in_synthesis else {})})
+                            **({"late": True} if read is not None and p not in read else {})})
         comparison["answers"] = answers
         comparison["failed_models"] = [{**m.settings(), "failure": failures[p],
                                         **({"partial_text": partials[p]} if partials.get(p) else {})}
@@ -679,20 +682,19 @@ class ComparisonTools:
             comparison["pending_models"] = pending
         else:
             comparison.pop("pending_models", None)
-        comparison["basis_hash"] = answer_hash(json.dumps(answers, sort_keys=True, ensure_ascii=False))
         count = len(answers)
         # One answer of several is a partial comparison: no check needs two
         # sides any more (until 2026-10-31 a comparison of one answer failed).
         comparison["status"] = ("succeeded" if count == len(asked) else "partial" if count else
                                 "running" if pending and not final else "failed")
 
-    def freeze_for_synthesis(self):
+    def freeze_answers(self):
         """The answer rests on exactly the answers present when it is fixed."""
         with self.lock:
             changed = False
             for comparison in self.comparisons:
-                if comparison["id"] in self._raw and comparison.get("synthesis_providers") is None:
-                    comparison["synthesis_providers"] = sorted(self._raw[comparison["id"]])
+                if comparison["id"] in self._raw and comparison["id"] not in self._read:
+                    self._read[comparison["id"]] = set(self._raw[comparison["id"]])
                     self._rebuild(comparison)
                     changed = True
             if changed:
@@ -710,12 +712,17 @@ class ComparisonTools:
             logging.warning("Agent comparison review not saved yet category=%s", safe_exception(exc))
 
     def _stop_running(self, cid, *, cutoff=False):
+        """Stops the comparison's models still writing and waits for them, at
+        most STRAGGLER_STOP_SECONDS in all."""
         for thread, child in self._running.get(cid, {}).values():
             if thread.is_alive():
                 child.cutoff = cutoff
                 child.cancel()
+        until = time.monotonic() + STRAGGLER_STOP_SECONDS
         for thread, _ in self._running.get(cid, {}).values():
-            thread.join()
+            thread.join(max(0., until - time.monotonic()))
+            if thread.is_alive():
+                logging.warning("Agent comparison model still running after its stop thread=%s", thread.name)
 
     def finish_comparisons(self):
         """Before the review: stop stragglers, fix the final evidence basis.
@@ -768,9 +775,11 @@ class ComparisonTools:
         if not self.text:
             raise ValueError("No answer to review.")
         if not self.finalized:
-            # A model still answering a comparison stops; the reviewers read
-            # the answers the agent had. Its save failing costs that record,
-            # never the review or the answer.
+            # The final rounds first (AnswerAudit.begin): then a model still
+            # answering a comparison stops; the reviewers read the answers
+            # the agent had. Its save failing costs that record, never the
+            # review or the answer.
+            self.auditor.begin(self.text)
             try:
                 self.finish_comparisons()
             except Exception as exc:

@@ -2512,6 +2512,10 @@
           // unmarkierter Text heisst "kein Einwand", nicht "bestaetigt".
           const AUDIT_CLASSES = { wrong: "is-major", doubtful: "is-split", incomplete: "is-minor" };
           const AUDIT_KINDS = { wrong: "Wrong", doubtful: "Doubtful", incomplete: "Incomplete" };
+          // Ein Bedenken der Schlussrunde (agent_audit HALT_KINDS) steht mit
+          // den Worten einer Pause und in der Farbe von "falsch".
+          const AUDIT_CONCERNS = { safety: "Security-critical step", harm: "Possible damage",
+            off_goal: "Far off your request", injection: "Prompt injection" };
 
           function auditModels(items) {
             return Array.from(new Set(items.map(function (item) { return cardModel(item.model); })));
@@ -2553,8 +2557,10 @@
             card.appendChild(cardSide(claimAnswerSide(claim, ctx.spans), [], ctx,
               { label: claim.unplaced ? "Not found in the text" : "In the answer" }));
             claim.dissent.forEach(function (item) {
-              const side = cardSide({ text: item.note }, [item.model], ctx, { label: AUDIT_KINDS[item.kind] || "Doubtful" });
-              side.dataset.kind = item.kind;
+              const concern = AUDIT_CONCERNS[item.concern];
+              const side = cardSide({ text: item.note }, [item.model], ctx,
+                { label: concern || AUDIT_KINDS[item.kind] || "Doubtful" });
+              side.dataset.kind = concern ? "wrong" : item.kind;
               const source = auditSource(item.source);
               if (source) side.appendChild(source);
               card.appendChild(side);

@@ -62,7 +62,10 @@ def test_a_long_runs_reserve_counts_what_the_reviewers_took(store, monkeypatch):
     room = 2 * inputs + routing_output_limit(model) + answer_output_limit(model) + 1_000
     monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: room)
     assert loop._long_run_limit() is None
-    # 10,000 over four steps: the next step's live rounds and the final
-    # rounds need about 2,500 each, more than the 1,000 left over.
-    loop.reviewer_charge, loop.routing_steps = 10_000, 4
+    # The most a recent step's rounds took stands for the next step's, and
+    # the final rounds take about twice that: 3 x 400 over the 1,000 left.
+    loop.routing_steps = 4
+    loop.reviewer_charges = {1: 100, 3: 400, 4: 50}
     assert loop._long_run_limit() == TURN_ALLOWANCE_LIMIT
+    loop.reviewer_charges = {1: 100, 3: 300, 4: 50}
+    assert loop._long_run_limit() is None

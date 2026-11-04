@@ -1,7 +1,7 @@
 """The workbench's network per chat (agent_domains.py, since 2026-10-27): the
 package registries by default, another domain only after the user allowed
 it for the chat, in the policy while the chat's message has the workspace.
-The loop's card is in test_agent_gate.py; the VM here is FakeVM.
+The loop's card is in test_agent_outward_calls.py; the VM here is FakeVM.
 """
 import json
 

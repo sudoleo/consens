@@ -120,10 +120,9 @@ LABEL_EARLIER = "an earlier message's sources"
 # every step (the provider's own): the agent does not call it, so "your
 # search" read as a search it never made (2026-10-28).
 LABEL_SEARCH = "a web search result of this message"
-# Since 2026-10-28 any public page, which the reviewers follow live (until
-# 2026-10-29 one the message did not hold waited for them first,
-# agent_gate.py). The provider's search of GPT-6 Luna and GPT-6.1 Terra sends
-# no hits to the app, so they could read nothing they found.
+# Any public page, which the reviewers follow live. The provider's search of
+# GPT-6 Luna and GPT-6.1 Terra sends no hits to the app, so they could read
+# nothing they found.
 LABEL_CHOSEN = "a page you chose"
 
 

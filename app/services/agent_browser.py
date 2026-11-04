@@ -22,9 +22,8 @@ user sees. An upload copies one file of the workbench, read as the agent's
 user, to the browser VM for that call only. A screenshot comes to the agent as a picture
 (like vm_view_image), only for a chat model that takes images.
 
-The reviewers follow every action live; from 2026-10-27 to 2026-10-29 those
-that act outside (open, click, Enter, upload) waited for them first
-(agent_gate.py). What is the user's to do or to allow goes to them through
+The reviewers follow every action live. What is the user's to do or to
+allow goes to them through
 ask_user (agent_ask.py). The calls share the workspace's lease
 and VM time with the VM tools (VMTools._start). A provider failure costs the
 call it happened in; MAX_FAILURES in a row turn the browser off for the rest

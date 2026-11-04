@@ -34,22 +34,18 @@ def test_a_turn_is_counted_by_status_times_halts_and_failures():
         "issues": [{"code": "reviewers_unavailable", "count": 1}]}}}
     captured = {"ended_at": START + timedelta(seconds=40), "reviewers": 3, "entries": [
         {"at": at(3), "actor": "agent", "kind": "step"},
-        {"at": at(7.5), "actor": "app", "kind": "app", "name": "checked", "gate_ms": None},
         {"at": at(9), "actor": "agent", "kind": "step"},
-        {"at": at(30), "actor": "app", "kind": "app", "name": "paused", "gate_ms": 11_000},
         {"at": at(32), "actor": "app", "kind": "app", "name": "answer_fixed"}],
-        "holds": [{"halt": "injection", "gate": True, "state": "continue"},
+        "holds": [{"halt": "injection", "state": "continue"},
                   {"halt": "safety", "state": "steer"}, {"halt": "", "ask": "browser", "state": "handed_back"},
-                  {"halt": "domain", "gate": True, "domain": "example.org", "state": "waiting"}]}
+                  {"halt": "domain", "domain": "example.org", "state": "waiting"}]}
     assert metrics.turn_counters(turn, captured) == {
         "turns": {"completed": 1}, "reviewers": {"n3": 1}, "reviews": {"partial": 1},
         "total_s": {"le45": 1}, "answer_s": {"le45": 1}, "marks_s": {"le10": 1},
-        # The go after 4.5 s from its step's entry, the halt's own wait.
-        "gate_s": {"le5": 1, "le15": 1},
         "reviewer_status": {"completed": 2, "failed": 1},
         "final_s": {"openai_gpt-6-luna": {"le15": 1}}, "backlog_entries": {"le5": 1},
         "failures": {"reviewer": {"review_unreadable": 1}, "review": {"reviewers_unavailable": 1}},
-        "halts": {"gate_injection": {"continue": 1}, "safety": {"steer": 1}, "ask_browser": {"handed_back": 1},
+        "halts": {"injection": {"continue": 1}, "safety": {"steer": 1}, "ask_browser": {"handed_back": 1},
                   "domain": {"open": 1}}}
     # The turn's own hold history wins over the activity once it is saved.
     failed = {"status": "failed", "error_code": "cancelled", "created_at": START,

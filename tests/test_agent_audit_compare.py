@@ -150,7 +150,7 @@ def test_the_agent_asks_the_models_works_on_and_the_reviewers_read_their_answers
     assert not any(e.get("kind") == "tool" and e.get("name") == "judge_answer" for e in events)
     assert [e["status"] for e in events if e.get("kind") == "tool" and e.get("name") == "audit_answer"] == [
         "running", "succeeded"]
-    assert review["mode"] == "audit" and review["status"] == "succeeded" and review["checks"] == []
+    assert review["mode"] == "audit" and review["status"] == "succeeded" and "checks" not in review
     assert review["answer_hash"] == answer_hash(ANSWER) != answer_hash(ANSWER + " changed")
     [comparison] = review["comparisons"]
     assert comparison["status"] == "succeeded" and len(comparison["answers"]) == 2
@@ -167,7 +167,8 @@ def test_the_agent_asks_the_models_works_on_and_the_reviewers_read_their_answers
     assert compared["data"] == "agent"
     assert sorted(item["text"] for item in compared["content"]["answers"]) == sorted(ADVICE.values())
     brief = next(entry for entry in entries if entry["kind"] == "context" and entry["name"] == "system")["content"]
-    assert "compare_models asks the models the user chose" in brief["instructions"]
+    assert brief["tools"]["compare_models"].startswith("Ask the models the user chose for this chat the same question.")
+    assert "(compare_models) disagree" in script.prompts["openai"][0]["content"]
 
 
 def test_a_comparison_past_the_answers_time_stops_waiting_even_for_one_model(store):

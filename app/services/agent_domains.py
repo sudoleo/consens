@@ -3,9 +3,9 @@
 
 The workbench reaches the package registries (agent_vm.WORKBENCH_RULES) and
 nothing else. Another domain needs the user: the agent asks with
-``request_domain`` (domain, reason), the reviewers judge the request before
-the user sees it (a gate round, agent_audit.AnswerAudit.open_gate), and the
-user decides on a card (DelegationLoop._domain_wait). Never by itself, also
+``request_domain`` (domain, reason), and the user decides on a card
+(DelegationLoop._domain_wait), where a reviewer's halt that comes meanwhile
+joins it. Never by itself, also
 not when the user named the domain in a message: reading the user's words
 for permission would be a text filter again (Max, 2026-10-27).
 
