@@ -1,4 +1,5 @@
 """Bounded model/tool orchestration, independent of HTTP and provider transport."""
+import threading
 from uuid import uuid4
 
 from app.core.openrouter_contract import provider_session_id
@@ -40,6 +41,9 @@ class AgentLoop:
         self.remaining_tools = self.policy.max_tools
         self.seen_calls = set()
         self.progress = {}
+        # Calls of one step and the reviewers send activity from threads of
+        # their own: the trace and its step_id change together.
+        self.activity_lock = threading.RLock()
 
     def check(self, budget):
         self.cancellation.raise_if_cancelled()
@@ -55,15 +59,16 @@ class AgentLoop:
         event_id, kind = event.pop("id"), event.pop("kind")
         for key in ("version", "type"):
             event.pop(key, None)
-        if kind == "reasoning":
-            progress = self.progress.setdefault(step, ReasoningProgress())
-            compact = progress.update({"kind": kind, "id": event_id, **event})
-            if not compact:
-                return None
-            event = compact
-            event_id = "reasoning-summary"
-        self.completion.step_id = step
-        return self.completion.event(kind, f"{step}/{event_id}", **event)
+        with self.activity_lock:
+            if kind == "reasoning":
+                progress = self.progress.setdefault(step, ReasoningProgress())
+                compact = progress.update({"kind": kind, "id": event_id, **event})
+                if not compact:
+                    return None
+                event = compact
+                event_id = "reasoning-summary"
+            self.completion.step_id = step
+            return self.completion.event(kind, f"{step}/{event_id}", **event)
 
     def status(self, step, event_id, **data):
         return self.activity({"step_id": step, "id": event_id, "kind": "status", **data})

@@ -20,10 +20,13 @@ Nacharbeit verwendet dieselbe Agent-ID und denselben Gesprächsverlauf.
 Token-Deltas führen nicht zu neuen Orchestrator-Aufrufen. Der Orchestrator kann
 parallel selbst arbeiten oder explizit auf semantische Nachrichten warten.
 
-Pro Modellantwort werden maximal vier Toolaufrufe angenommen; sämtliche Resultate
-werden vor der nächsten Modellantwort in der ursprünglichen Reihenfolge geliefert.
-Das ist nötig, weil einzelne Provider trotz `parallel_tool_calls=false` mehrere
-Aufrufe liefern. Die tatsächliche Worker-Parallelität begrenzt ein gemeinsames
+Pro Modellantwort werden höchstens `TOOL_CALLS_PER_STEP` (16) Toolaufrufe
+angenommen; sämtliche Resultate werden vor der nächsten Modellantwort in der
+ursprünglichen Reihenfolge geliefert. Der Orchestrator fragt mit
+`parallel_tool_calls`, seine Delegationswerkzeuge laufen nacheinander. Worker
+fragen ohne und führen trotzdem gelieferte weitere Aufrufe der Reihe nach aus,
+weil einzelne Provider trotz `parallel_tool_calls=false` mehrere liefern. Die
+tatsächliche Worker-Parallelität begrenzt ein gemeinsames
 Semaphore. Worker haben keine Delegationstools. Bevor eine finale Antwort gespeichert
 wird, müssen alle Ergebnisse oder unabhängig geprüften Ersatzlösungen mit
 `review_agent` bewertet sein. `accepted=false, use_fallback=true` erlaubt eine

@@ -4545,11 +4545,14 @@ Antworten), danach prüfen die Prüfer sie; mit ungeprüften Worker-Ergebnissen
 gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige
 Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`). Seit 2026-10-30
 nennt das Wrap-up dem Agenten die Grenze (`_limit_fact`), und der Turn hält sie
-fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Bei
-offenem Arbeitsplatz fragt jeder Schritt des Agenten mit `parallel_tool_calls`
-(`_parallel_calls`, schaltet nur mit `open_workspace` um); die Aufrufe laufen
-nacheinander, höchstens `TOOL_CALLS_PER_STEP` = 4, jeder mit genau einem
-Ergebnis (`CALL_OVER_LIMIT`, `CALL_AFTER_*`), und nach jedem Batch einer
+fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Jeder
+Schritt des Agenten fragt in jeder Anfrage gleich mit `parallel_tool_calls`
+(`_step`; Worker ohne); die Aufrufe eines Schritts laufen in ihrer Reihenfolge,
+benachbarte Aufrufe lesender Werkzeuge (`ReadOnlyTool.concurrent`) als Gruppe
+gleichzeitig auf eigenen Threads (`_call_groups`, `_execute_together`), alle
+anderen allein, höchstens `TOOL_CALLS_PER_STEP` = 16, jeder mit genau einem
+Ergebnis in Aufrufreihenfolge (`CALL_OVER_LIMIT`, `CALL_REPEATED`,
+`CALL_AFTER_*`), und nach jedem Batch einer
 Nachricht mit Arbeitsplatz steht eine Faktzeile (`_note_progress`: Schritt und
 wie lange der Nutzer wartet, die Grenzen erst ab `LIMITS_SHOWN_FROM` = 80 %,
 seit 2026-11-01; `open_workspace` nennt keine Grenzen mehr). Details und
@@ -6399,7 +6402,9 @@ fest, was der Agent sieht und tut; die Prüfer lesen es aus dem Speicher
 (`last`, `entries_after`, `wait_for`, `wake`). Die Hooks:
 `run` (start, end), `_step` (`context`: das Gespräch des Akteurs nach
 Position samt Verlauf, dazu was nur die Anfrage trägt; `step` im finally nach
-der Abrechnung), `_execute` (`tool`, nicht für `app_registry`), `_retract`,
+der Abrechnung), `_run_call`/`_log_call` (`tool`, nicht für `app_registry`;
+eine gleichzeitige Gruppe schreibt ihre Einträge nach ihrem Ende in
+Aufrufreihenfolge), `_retract`,
 `_lock_memory`, `_finish_merged` (`answer_fixed`). `_log_actor` zählt nur den
 Agenten (`completion:N`) und seine Worker ohne `kind`; Prüfer, Vergleichsantworten
 und Seitenabrufe nie. Gespeichert unter `turns/{turn}/work_log/{seq:06d}`,

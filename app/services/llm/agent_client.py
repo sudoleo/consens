@@ -719,13 +719,13 @@ class AgentCompletion:
         # so the time between claim and settlement splits into ours before
         # the request, the provider's and ours after it (T3).
         self.request_started_at = self.first_token_at = self.stream_ended_at = None
-        # Several calls per step (DelegationLoop._parallel_calls: while the
-        # workspace is open, audit T2); off, the request asks for one call.
+        # Several calls per step: every step of the agent asks for them
+        # (DelegationLoop._step); off, the request asks for one call.
         self.parallel_tool_calls = False
         # Calls past tool_call_limit stay in tool_calls, without arguments,
         # their ids in over_limit_ids, so that each gets a result instead of
-        # vanishing from the conversation (DelegationLoop, T2). Off, they are
-        # skipped as before.
+        # vanishing from the conversation (DelegationLoop.run). Off, they are
+        # skipped.
         self.keep_over_limit = False
         self._over_limit = set()
         self.over_limit_ids = set()
@@ -1125,9 +1125,9 @@ class AgentCompletion:
             payload["tools"] = tools
             if any(tool.get("type") == "function" for tool in tools):
                 payload["tool_choice"] = "auto" if allow_tool_calls or native_searches else "none"
-                # Off unless the loop asks (DelegationLoop._parallel_calls). It
-                # is part of Anthropic's tool_choice: a change rewrites the
-                # cached messages, so it changes only with open_workspace.
+                # Part of Anthropic's tool_choice: a change rewrites the cached
+                # messages, so the agent's steps send the same value in every
+                # request (DelegationLoop._step).
                 payload["parallel_tool_calls"] = bool(self.parallel_tool_calls)
         if native_searches:
             payload["max_tool_calls"] = native_searches

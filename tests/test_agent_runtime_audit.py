@@ -1,7 +1,7 @@
 """The workspace at run time, audit 2026-10-30
 (docs/agent-workspace-runtime-audit-2026-10-30.md): what the operator can
 measure afterwards (I1, I4, I7, I9), what the agent reads about its own run
-(L1, L3, L6, L7), several calls per step while the workspace is open (T2),
+(L1, L3, L6, L7), several calls per step (T2, tests/test_agent_parallel_calls.py),
 the browser's reads without a live round of their own (K6) and the settlement
 in fewer round trips (T3). Fakes only: no model, no VM, no Firestore.
 """
@@ -236,7 +236,7 @@ def test_every_other_browser_call_gets_its_round(arguments):
     assert work_goes_on([_step(("browser", {"action": "read"}), ("browser", arguments))])
 
 
-# --- T2: several calls per step while the workspace is open ---------------------------
+# --- T2: several calls per step ---------------------------------------------------------
 
 def tool_results(loop):
     """Every tool result by its call's id, in order (each id at most once)."""
@@ -257,35 +257,41 @@ def ran(fake_vm, command):
     return any(call[0] == "exec" and call[2] == command for call in fake_vm.calls)
 
 
-def test_several_calls_per_step_only_while_the_workspace_is_open(store, fake_vm):
+def test_every_step_asks_for_several_calls_from_the_first_request_on(store, fake_vm):
     script = Steps([[("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})]])
     list(vm_loop(store, script).run())
     assert script.parallel == [True, True]
-    # Closed: one call per step until open_workspace ran, from the next step
-    # on several, together with its tools (one cache break), never back.
+    # Closed: the same before and after open_workspace (its tools break the
+    # cache once, the flag never), and so for the wrap-up.
     script = Steps([[("open_workspace", {"task": "Run the script"})], [("vm_exec", {"command": "ls"})]])
     list(vm_loop(store, script, request_id="two", workspace_closed=True).run())
-    assert script.parallel == [False, True, True]
-    # Without the workspace: one call per step, as before.
+    assert script.parallel == [True, True, True]
+    # Without the workspace too.
     script = Steps([[("no_such_tool", {})]])
     list(vm_loop(store, script, request_id="three", vm="off").run())
-    assert script.parallel and set(script.parallel) == {False}
+    assert script.parallel and set(script.parallel) == {True}
 
 
-def test_the_calls_of_a_step_run_in_order_and_a_fifth_gets_a_result(store, fake_vm):
-    from app.services.prompt_defaults import AGENT_VM_PROMPT
-    commands = ["ls", "pwd", "whoami", "date", "uptime"]
+def test_the_calls_of_a_step_run_in_order_and_one_past_the_limit_gets_a_result(store, fake_vm):
+    from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION, AGENT_VM_PROMPT
+    commands = [f"echo {n}" for n in range(agent_delegation.TOOL_CALLS_PER_STEP + 1)]
     script = Steps([[("vm_exec", {"command": command}) for command in commands]])
     loop = vm_loop(store, script)
     list(loop.run())
     found = tool_results(loop)
-    assert [found[f"call_0_{n}"].get("exit_code") for n in range(4)] == [0, 0, 0, 0]
-    assert found["call_0_4"] == {"error": agent_delegation.CALL_OVER_LIMIT}
-    assert [ran(fake_vm, command) for command in commands] == [True, True, True, True, False]
+    last = agent_delegation.TOOL_CALLS_PER_STEP
+    assert [found[f"call_0_{n}"].get("exit_code") for n in range(last)] == [0] * last
+    assert found[f"call_0_{last}"] == {"error": agent_delegation.CALL_OVER_LIMIT}
+    # Commands change the workspace: one after the other, in the step's order.
+    executed = [call[2] for call in fake_vm.calls if call[0] == "exec" and call[2] in commands]
+    assert executed == commands[:last]
     assert every_call_answered(loop)
-    # The prompt says what holds, as a fact.
-    words = ["", "one", "two", "three", "four"]
-    assert f"up to {words[agent_delegation.TOOL_CALLS_PER_STEP]}." in AGENT_VM_PROMPT
+    # The prompt says what holds, as a fact, for every message; the limit
+    # bounds a runaway step and needs no word there.
+    assert ("The tool calls of one message run in their order, and their results come back in that order; calls "
+            "that only read, such as reading a page or a file, run at the same time as the reading calls next to "
+            "them." in AGENT_AUDIT_ANSWER_SECTION)
+    assert "one after another" not in AGENT_VM_PROMPT and "sixteen" not in AGENT_VM_PROMPT
 
 
 def test_the_client_keeps_a_call_past_the_limit_without_its_arguments():

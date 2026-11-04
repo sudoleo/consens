@@ -353,7 +353,7 @@ class SourceReader:
             "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins, scripts "
             f"or clicks; a read takes about 10 to 30 seconds. At most {READS_PER_MESSAGE} per message.")
         self.tool = ReadOnlyTool("read_source", description, AuditReadSourceArgs, self.read,
-                                 activity=self.activity)
+                                 activity=self.activity, concurrent=True)
 
     # --- What may be read -------------------------------------------------
     def cited(self):
@@ -459,13 +459,17 @@ class SourceReader:
                                      "message's web search, a source the models you asked cite (compare_models), "
                                      "a source of an earlier message of this chat or one the user wrote, copied "
                                      "exactly.")
-                tried = next((r for r in self.reads if r["status"] in {"completed", "failed"}
+                tried = next((r for r in self.reads if r["status"] in {"completed", "failed", "running"}
                               and key in {url_key(r["url"]), url_key(r.get("cited_url"))}), None)
                 if tried is not None and tried["status"] == "failed":
                     raise ValueError("This source was already tried in this message and could not be read. Do not "
                                      "try it again; continue with what you have.")
             except ValueError as exc:
                 return {"status": "refused", "reason": str(exc)[:500]}
+            if tried is not None and tried["status"] == "running":
+                # Another call of this step reads it at the same time.
+                return {"status": "already_read", "url": tried["url"],
+                        "note": "Another call of this step reads this source; its text is in that call's result."}
             if tried is not None:
                 return {"status": "already_read", "url": tried["url"],
                         "note": "You already read this source in this message; its text is in that earlier result."}

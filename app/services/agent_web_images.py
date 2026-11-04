@@ -393,7 +393,7 @@ class WebImageTools:
                 "search_pictures", f"Search the web for pictures with Brave's image search: up to {FOUND_PER_SEARCH} "
                                    "come back, each with an id, its page, the page's title and its size; the user "
                                    "sees none of them. find_pictures with a picture's address shows it to you.",
-                SearchPicturesArgs, self.search, activity=self._search_activity))
+                SearchPicturesArgs, self.search, activity=self._search_activity, concurrent=True))
         tools.append(ReadOnlyTool(
             "show_image", f"Show the user a picture from {found}, by its id: the app puts it into your answer "
                           "where you write ![what it shows](picture:<id>) on a line of its own, else under the "
