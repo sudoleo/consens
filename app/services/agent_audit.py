@@ -2031,9 +2031,7 @@ class AnswerAudit:
         # bound to their log entry once the log holds it (brief).
         self._brief_parts = self._brief = None
         # Each reviewer's output allowance (output_share), computed once by
-        # the first reviewer that starts, from the allowance the route read
-        # before the agent's first claim (``allowance``) where it has one.
-        self.allowance = None
+        # the first reviewer that starts.
         self._shares = None
         self._shares_lock = threading.Lock()
 
@@ -2254,12 +2252,10 @@ class AnswerAudit:
 
     def output_share(self, provider):
         """A reviewer's output allowance (ComparisonTools._output_shares),
-        computed once for all of them by the first reviewer that starts, on
-        its own thread: it reads the account, and until 2026-11-01 that read
-        stood in follow(), between Send and the agent's first request."""
+        computed once for all of them by the first reviewer that starts."""
         with self._shares_lock:
             if self._shares is None:
-                self._shares = self.tools._output_shares(dict(self.tools.models), remaining=self.allowance)
+                self._shares = self.tools._output_shares(dict(self.tools.models))
             return self._shares[provider]
 
     def _settle(self, status, issues=()):

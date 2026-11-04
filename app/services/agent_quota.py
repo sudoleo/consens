@@ -7,7 +7,8 @@ weights that stood in for their cost.
 
 One ledger document per account and period serves Agent and the Consensus
 pipeline alike; the limit comes from the account tier (agent_budget_config).
-Agent reserves before every call and settles with measured usage. The pipeline
+Agent reserves what a call is expected to cost before it starts
+(agent_costs.RunCosts.estimate) and settles with measured usage. The pipeline
 is admitted per run against the expected cost of a typical run, holds that
 estimate while the run is young (``pipeline_holds``) and books the measured
 cost of every finished operation afterwards. A run may therefore push the
@@ -21,7 +22,8 @@ retries cannot release or charge it again.
 Bounded uncertainty (owner decision for R07): a started call whose final usage
 is missing is neither fully released nor fully charged. Its reservation is
 released and a bounded estimate is charged instead: the measured provisional
-lower bound, but at least ``UNKNOWN_ESTIMATE_FRACTION`` of the reservation.
+lower bound, but at least ``UNKNOWN_ESTIMATE_FRACTION`` of the reservation
+and, for a run that lost its process, what such a call of the run measured.
 Estimates live in their own ``estimated`` bucket, strictly separate from
 the measured ``used`` amount, and count against ``remaining``. When the
 provider later reports the generation's real cost, reconciliation swaps the
@@ -227,13 +229,15 @@ def provisional_lower_bound(usage):
     return agent_budget_config.micro_eur(cost) if type(cost) is int and cost >= 0 else 0
 
 
-def unknown_estimate(reserved, usage):
+def unknown_estimate(reserved, usage, *, expected=0):
     """Bounded charge for a started call without a final cost, else None.
-    ``reserved`` is the ledger's reservation of the call."""
+    ``reserved`` is the ledger's reservation of the call; ``expected`` what
+    such a call of its run measured (a run that lost its process,
+    AgentSessionStore.reap_delegation)."""
     if measured_charge(usage) is not None:
         return None
     floor = math.ceil(max(0, reserved) * UNKNOWN_ESTIMATE_FRACTION)
-    return max(provisional_lower_bound(usage), floor)
+    return max(provisional_lower_bound(usage), floor, max(0, int(expected or 0)))
 
 
 # A pipeline run holds its expected cost against concurrent admissions for at
@@ -346,25 +350,23 @@ def normalize(data):
 
 
 def reserve(data, amount, *, limit=None, overdraft=False):
-    """Hold ``amount`` for an active call. ``overdraft=True`` admits it even
-    beyond the limit (finishing an Agent message whose comparison already ran);
-    the next admission then fails, as after an overdrawn pipeline run. An int
-    ``overdraft`` lets only that many tokens of ``amount`` lie beyond the limit
-    (the answer an Agent step may write after its routing allowance)."""
+    """Hold ``amount`` for an active call. ``overdraft`` admits it even
+    beyond the limit (finishing an Agent message that holds paid work); the
+    next admission then fails, as after an overdrawn pipeline run."""
     data = normalize(data)
     remaining = _remaining(data, daily_limit() if limit is None else limit)
-    required = 0 if overdraft is True else amount - max(0, int(overdraft or 0))
-    if required > remaining:
-        raise AgentTokenBudgetExceeded(remaining, required, reserved=data.get("reserved", 0))
+    if not overdraft and amount > remaining:
+        raise AgentTokenBudgetExceeded(remaining, amount, reserved=data.get("reserved", 0))
     data["reserved"] = data.get("reserved", 0) + amount
     data["revision"] = data.get("revision", 0) + 1
     return data
 
 
-def settle(data, reserved, usage, *, measurable=False):
+def settle(data, reserved, usage, *, measurable=False, expected=0):
     """Swap a call's reservation for its charge (measured_charge).
     ``measurable``: an estimate charged instead can still be measured later
-    (the call has a provider generation id, agent_usage_reconciliation)."""
+    (the call has a provider generation id, agent_usage_reconciliation);
+    ``expected`` as for unknown_estimate."""
     data = normalize(data)
     actual = measured_charge(usage)
     data['reserved'] = max(0, data.get('reserved', 0) - reserved)
@@ -376,7 +378,7 @@ def settle(data, reserved, usage, *, measurable=False):
         # a bounded estimate is charged until reconciliation replaces it.
         data["unknown"] = data.get("unknown", 0) + reserved
         data['unknown_released'] = data.get('unknown_released', 0) + reserved
-        data["estimated"] = data.get("estimated", 0) + unknown_estimate(reserved, usage)
+        data["estimated"] = data.get("estimated", 0) + unknown_estimate(reserved, usage, expected=expected)
         if measurable:
             data["estimates_pending"] += 1
     data["revision"] = data.get("revision", 0) + 1

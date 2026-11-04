@@ -4146,13 +4146,13 @@ chat: …“, ändert sich mit jedem Upload) und die Google-Auswahl dieser
 Nachricht („Google data access was explicitly enabled for this message: …“).
 Im System bleiben nur ihre festen Regeln (`UNTRUSTED`, Google-Regeln), die mit
 denselben Tools kommen und gehen; die Tool-Liste ändert sich mit Dateien oder
-Google ohnehin, das ist selten. Hinweise für **einen** Schritt („Web search is
-unavailable for this step …“ in `_admit_chat_step`, `GOOGLE_NO_SEARCH` in
-`_step`) hängt `with_step_note` als eigene Nutzer-Nachricht **ans Ende** der
-Anfrage statt an `messages[0]`: so bleibt der Präfix der vorigen Schritte
-lesbar. Ausnahme: der Hinweis im Rückfall begrenzter Läufe (`_step`, bei
-`AgentTokenBudgetExceeded` ohne Kontomodus) hängt noch am System; Chats laufen
-im Kontomodus und erreichen ihn nicht.
+Google ohnehin, das ist selten. Hinweise für **einen** Request
+(`GOOGLE_NO_SEARCH` und die Bitten der Zusammenfassungen in `_step`) hängt
+`with_step_note` als eigene Nutzer-Nachricht **ans Ende** der Anfrage statt an
+`messages[0]`: so bleibt der Präfix der vorigen Schritte lesbar. Jeder
+Request einer Nachricht hat dieselben Tools, dasselbe Suchtool und
+`tool_choice` „auto“, auch Schlussschritt und Zusammenfassungen
+(agent-mode.md, „Tageskontingent“, „Eine Form je Nachricht“).
 `answer_conversation` (der echte Verlauf für Memory, Einstellungen, Gmail-
 Empfänger und lesbare Links) entfernt den App-Kontextblock (`strip_app_context`). `prompt_cache_control` setzt für
 `anthropic/`- und `qwen/`-Modelle OpenRouters automatisches
@@ -4638,8 +4638,8 @@ diese Teiltexte weg, dann der Text gelesener Seiten, dann Zitate und lange
 Notizen der Prüfer (`trim_marks`). Vergleichsmodelle erhalten keine
 Delegations-/Vergleichstools, aber Websuche
 (`call(..., search_rounds=…)` → `_step(searches_enabled=True)`;
-`SEARCH_ROUNDS`: `quick` eine Runde, `full` bis zu drei, für alle Konten gleich;
-ihre Suche wird gebucht, nicht reserviert, `soft_search`) und mit
+`SEARCH_ROUNDS`: `quick` eine Runde, `full` bis zu drei, für alle Konten gleich)
+und mit
 `comparison_system_prompt` das aktuelle Datum. `_merged_result` ist das
 Toolergebnis: die vollen Antworttexte anonym und gemischt (`random.Random(cid)`:
 der Agent wägt Begründung und Belege, nicht Namen), je mit ihren Quellen-URLs
@@ -4653,35 +4653,30 @@ markierte Evidenz (`keep_truncated`). Strukturierte Transportfehler werden am
 Fehlerfeld erkannt, nicht am Wort „Error“ im Antworttext; nur
 Legacy-Stringadapter behalten ihre Fehlerkonvention.
 
-Sobald die Nachricht bezahlte Arbeit hat (Antworten eines Vergleichs,
-`_paid_comparison`, oder ein Schritt des Agenten, dem Prüfer folgten,
-`_paid_audit`, seit 2026-10-29, A-R2), dürfen der Schlussschritt, der die
-Antwort ohne Tools schreibt (`_merged_wrap_up`, `closing`), und die
-Schlussrunden der Prüfer (`_final_review`) das Tageslimit überziehen
-(`_admit_chat_step` → `claim(overdraft=True)`). Ein Steuer-Schritt läuft auch
-danach nur im Kontingent; weist es ihn vor seinem Claim ab, schreibt der Agent
-die Antwort im frei gebliebenen Schritt (`_closing_index`, Grund
-`TURN_ALLOWANCE_LIMIT`), ohne bezahlte Arbeit nicht. Bis 2026-10-28 überzog
-nach dem ersten bezahlten Vergleich jeder Steuer-Schritt bis `turn_steps`
-(Sicherheitsaudit). `_long_run_limit` hält zusätzlich zweimal den bisherigen
-Prüfer-Verbrauch je Schritt frei (`reviewer_charge`, `_reviewer_step_charge`).
-Jeder Schritt des Agenten im Kontomodus kann die Antwort schreiben und wird mit
-dem Steuer-Budget zugelassen (`_routing_model`); sein Antwortbudget darüber
-(`_answer_output`) reserviert er einmal statt pro Suchrunde
-(`RunCosts.estimate(answer_output=…)`), und nur dieser Teil darf schon vor
-bezahlter Arbeit überziehen (`claim(overdraft=<Tokens>)` →
-`agent_quota.reserve`): eine Direktantwort kurz vor dem Limit wird nicht
-abgeschnitten, und Recherche geht nicht früher verloren. Suchkonfiguration
+Jeder Call im Kontomodus wird zu seinen erwarteten Kosten zugelassen
+(`DelegationLoop._admit` → `RunCosts.estimate`, `claim(reservation=…)`); das
+Kontingent entscheidet nur, ob er startet, nie über Suchrunden, Output-Grenze
+oder Tools (agent-mode.md, „Tageskontingent“). Sobald die Nachricht bezahlte
+Arbeit hat (Antworten eines Vergleichs, `_paid_comparison`, oder ein Schritt
+des Agenten, dem Prüfer folgten, `_paid_audit`), dürfen der Schlussschritt
+(`_merged_wrap_up`, `closing`) und die Schlussrunden der Prüfer
+(`_final_review`) das Tageslimit überziehen (`claim(overdraft=True)`). Ein
+Steuer-Schritt läuft auch danach nur im Kontingent; weist es ihn vor seinem
+Claim ab, schreibt der Agent die Antwort im frei gebliebenen Schritt
+(`_closing_index`, Grund `TURN_ALLOWANCE_LIMIT`), ohne bezahlte Arbeit nicht.
+`_long_run_limit` vergleicht das Ausgegebene (`agent_quota.shown_allowance`)
+mit einem erwarteten Schritt plus Antwort und hält zusätzlich zweimal den
+bisherigen Prüfer-Verbrauch je Schritt frei (`reviewer_charge`,
+`_reviewer_step_charge`). Jeder Schritt des Agenten im Kontomodus kann die
+Antwort schreiben und hat deren Output-Grenze (`_routing_model`). Suchkonfiguration
 (`search_tools`: eine für alle Modelle, Engine `auto`, nur Grok fest Exa),
-Reservierung (`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte
-stehen ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“.
-Die Output-Grenze einer Vergleichsantwort ist die Completion-Grenze des
-Modells, begrenzt durch `_output_shares` (fairer Anteil am freien
-Tageskontingent über `agent_quota.remaining_allowance`,
-`COMPARISON_BUDGET_SHARE`, je Modell zu dessen Output-Preis umgerechnet, und
-am Platz des Review-Snapshots, `REVIEW_ANSWER_CHARS`). `depth=quick` gibt eine
-kurze Längenvorgabe (`DEPTH_GUIDANCE`), `full` keine. Technische Token-,
-Kontext- und Snapshotgrenzen gelten weiter.
+Reservierung und Messwerte stehen ausschließlich in
+[agent-mode.md](agent-mode.md), Abschnitt „Websuche“. Die Output-Grenze einer
+Vergleichsantwort ist die Completion-Grenze des Modells innerhalb ihres
+Anteils am Platz des Review-Snapshots (`_output_shares`,
+`REVIEW_ANSWER_CHARS`), für jedes Konto gleich. `depth=quick` gibt eine kurze
+Längenvorgabe (`DEPTH_GUIDANCE`), `full` keine. Technische Token-, Kontext-
+und Snapshotgrenzen gelten weiter.
 
 **Die Antwort schreibt der Agent selbst (seit 2026-10-14).** In jedem
 Chat-Lauf (`DelegationLoop.merged`, gesetzt, sobald `comparison_models`
@@ -4743,19 +4738,19 @@ Ergebnissen“); gemessen wurde der Weg mit `scripts/evaluate_agent_answers.py`
 (mit dem Modus entfernt). Messung und Begründung: [agent-mode.md](agent-mode.md),
 „Die Antwort schreibt der Agent selbst (seit 2026-10-14)“.
 
-Jeder Schritt des Agenten in einem Chat-Lauf (mit Vergleichs-Tools) bekommt das Steuer-Budget `routing_output_limit`
-(`_routing_model`, seit 2026-10-08: `AGENT_MAX_OUTPUT_TOKENS` +
-`ROUTING_REASONING_HEADROOM` = 16.384 bei denkenden Modellen; Prod: Sonnet „max“
-brauchte 3.808/3.998 von 4.096 im ersten Schritt; die Reservierung wächst je
-Suchrunde mit) und darüber, weil er die Antwort schreiben kann, das
-Antwortbudget `answer_output_limit` (`_answer_output`, Zulassung oben): die
-Completion-Grenze des Chatmodells; denkende Modelle bekommen seit 2026-10-07
-`ANSWER_REASONING_HEADROOM` obendrauf, weil Reasoning im selben Budget zählt und
-adaptives Denken bei Claude weder Effort noch `reasoning.max_tokens` einhält.
-Seit 2026-10-08 entscheidet `agent_client.reasoning_active` über diese
-Zuschläge: kein Headroom bei Effort `none`, `reasoning.enabled=false` (Kimi
-K2.6) oder Modellen, die nur auf Anfrage denken (`default_enabled=false`), sonst
-verdoppelten Reservierung und Stop-Schätzung (`unknown_estimate`) sich grundlos.
+Jeder Schritt des Agenten in einem Chat-Lauf (mit Vergleichs-Tools) bekommt,
+weil er die Antwort schreiben kann, das Antwortbudget `answer_output_limit`
+(`_routing_model`, auch Schlussschritt und Zusammenfassungen): die
+Completion-Grenze des Chatmodells; denkende Modelle bekommen
+`ANSWER_REASONING_HEADROOM` obendrauf, weil Reasoning im selben Budget zählt
+und adaptives Denken bei Claude weder Effort noch `reasoning.max_tokens`
+einhält. Ein reiner Delegationslauf bekommt das Steuer-Budget
+`routing_output_limit` (`AGENT_MAX_OUTPUT_TOKENS` + `ROUTING_REASONING_HEADROOM`
+= 16.384 bei denkenden Modellen; Prod: Sonnet „max“ brauchte 3.808/3.998 von
+4.096 im ersten Schritt). `agent_client.reasoning_active` entscheidet über
+diese Zuschläge: kein Headroom bei Effort `none`, `reasoning.enabled=false`
+(Kimi K2.6) oder Modellen, die nur auf Anfrage denken
+(`default_enabled=false`).
 Endet ein Agent-Schritt ohne verwertbares Ergebnis (`_output_limited`:
 `length` ohne Text, `length` mit halb geschriebenem Toolcall, oder nach Reasoning
 `stop`/kein finish_reason ohne Text und Toolcall), wirft `AgentCompletion.stream`
@@ -4783,9 +4778,9 @@ kurze Prozess-Sperre (`AgentProviderCooldown`, dann ohne Claim auf demselben
 Index) genau einmal nach Retry-After bzw. `RATE_LIMIT_RETRY_SECONDS` (3 s)
 wiederholt, nur bis `RATE_LIMIT_RETRY_MAX_SECONDS` (10 s) und mit mindestens
 60 s bis zum harten Stopp; `_pause` bleibt abbrechbar, der Retry umgeht die
-selbst gesetzte Sperre (`check_cooldown=False`). `_admit_chat_step` kürzt für
-Vergleichsantworten und Prüferrunden (`SEARCHING_KINDS`) bei Konkurrenz die
-Output-Grenze (`clamp_floor` = `cfg.MAX_TOKENS`), statt zu warten.
+selbst gesetzte Sperre (`check_cooldown=False`). Halten laufende Calls das
+Kontingent, wartet `_admit` auf ihr Settlement, statt einen Call kleiner zu
+starten.
 **Prüfung beim Schreiben und vorläufige Marken (2026-10-17/18 bis 2026-10-31,
 entfernt).** Im Vergleichsmodus startete jede gezeigte Antwort-Delta
 Coverage-Fenster über den schon festen Sätzen
@@ -4838,9 +4833,9 @@ Coverage-Judge bekam die Seiten als `<page>`-Blöcke; heute bleibt der Vergleich
 nach einer Lesung möglich. Ablehnungen und nicht lesbare Seiten sind Ergebnisse
 (`refused`/`failed`), keine Toolfehler, damit sie nicht als
 `invalid_tool_rounds` den Turn beenden. `ReadOnlyTool.activity` liefert dem
-Tool-Ereignis `host`/`read`/`sources`; `agent_costs.fetch_bounds` reserviert die
-Seite, `_admit_chat_step` rechnet bei einem Abruf mit der vollen kleinsten
-Reservierung. Details: [agent-mode.md](agent-mode.md), „Quellen nachlesen“.
+Tool-Ereignis `host`/`read`/`sources`; `agent_costs.fetch_bounds` geht mit der
+Seite in die erwarteten Kosten des Abrufs ein. Details:
+[agent-mode.md](agent-mode.md), „Quellen nachlesen“.
 **Prompt-Aufteilung im Agenten:** `AGENT_AUDIT_SYSTEM_PROMPT`
 (`DEFAULT_PROMPTS["agent"]`, seit 2026-10-31; vorher nur mit dem Audit-Schalter,
 Katalogschlüssel `agent_audit`) ist der einzige Prompt des Agenten: seit
@@ -5112,8 +5107,7 @@ OpenRouter-Katalogs, 2–3 s je Nachricht:
   Rundgang (`ChatStore.chat_and_turn`, statt `get_turn` plus eigenem Chat-Read),
   `recover_allowance` (der einzige Schreiber darunter: er beendet Läufe mit
   abgelaufener Lease, wie jede Kontingent-Abfrage), Bookmark, Dateien, Memory,
-  Browser-Stand, das freie Kontingent für die Anteile der Prüfer, die erste
-  Seite des Verlaufs (`AgentRunStore.history_page`, nur `HISTORY_FIELDS`, nicht
+  Browser-Stand, die erste Seite des Verlaufs (`AgentRunStore.history_page`, nur `HISTORY_FIELDS`, nicht
   Aktivität und Review der früheren Turns) und die Dateiliste
   (`AgentFiles.list(checked=True)`, `FileContext.preload`). Jedes Ergebnis wird
   dort abgeholt, wo der Read früher stand; ein Fehler bricht die Anfrage also
@@ -5126,19 +5120,17 @@ OpenRouter-Katalogs, 2–3 s je Nachricht:
   nutzt), der Turn wird nicht zurückgelesen. `messages(first_page=…)` nimmt die
   vorab gelesene Seite nur, wenn `history_current` sie noch gelten lässt (kein
   früherer Turn darin `pending`, keiner fehlt), sonst liest es selbst.
-- Der erste Schritt des Agenten liest den Chat nicht noch einmal auf
-  Google-Daten (`DelegationLoop.google_data` aus der Route; `None`, wo niemand
-  es sagt, liest wie jeder Schritt); spätere Schritte schon (ein Gmail-Import
-  kann sie bringen). Die Route nimmt dafür, was die Transaktion von
-  `create_turn` am Chat sah (`chat_google_data`): Hat ein Turn eines anderen
-  Tabs zwischen ihrem ersten Read und der Anlage Mail importiert, gelten
-  Einwilligung (sonst 422, der Turn wird freigegeben) und das eingeschränkte
-  Modell auch hier.
-- Den Anteil der Prüfer am Kontingent (`ComparisonTools._output_shares`)
-  rechnet der erste startende Prüfer auf seinem Thread
-  (`AnswerAudit.output_share`), nicht `follow` vor dem ersten Schritt, aus dem
-  freien Kontingent, das die Route vor dem ersten Claim las
-  (`AnswerAudit.allowance`).
+- Kein Call liest den Chat auf Google-Daten (`DelegationLoop.google_data`
+  aus der Route, `None` nur ohne Route: dann einmal gelesen). Ein Gmail-Import
+  des Laufs setzt sie (`mark_google_data`), eine Markierung durch eine andere
+  Nachricht bringt der Watcher (`check_delegation` → `chat_google_data`).
+  Die Route nimmt dafür, was die Transaktion von `create_turn` am Chat sah
+  (`chat_google_data`): Hat ein Turn eines anderen Tabs zwischen ihrem ersten
+  Read und der Anlage Mail importiert, gelten Einwilligung (sonst 422, der
+  Turn wird freigegeben) und das eingeschränkte Modell auch hier.
+- Den Output-Anteil der Prüfer (`ComparisonTools._output_shares`, ein Anteil
+  am Review-Snapshot, nicht am Kontingent) rechnet der erste startende Prüfer
+  auf seinem Thread (`AnswerAudit.output_share`).
 - Die `quota`-Frames nach `started` und nach jedem `usage` liest ein eigener
   Pool (`_ALLOWANCE_READS`); `quota_frames` hängt sie an den nächsten Frame,
   am Ende wartet der Stream auf den Rest. Vorher wartete jeder Schritt drei
@@ -5916,7 +5908,9 @@ gegen gemessene Tokens genau einmal aus. Jeder terminale Beleg gibt seine
 Reserve frei, auch wenn finale Tokenzahlen fehlen. „Begrenzte Unsicherheit“
 (R07): Ein gestarteter Call ohne finale Usage wird weder ganz freigegeben noch
 ganz belastet, sondern mit einer Schätzung verbucht: gemessene provisorische
-Untergrenze, mindestens `UNKNOWN_ESTIMATE_FRACTION` (50 %) der Reserve. Sie
+Untergrenze, mindestens `UNKNOWN_ESTIMATE_FRACTION` (50 %) der Reserve, nach
+einem verlorenen Prozess (`reap_delegation`) auch mindestens, was der Lauf für
+so einen Call gemessen hat (`agent_sessions.expected_charges`). Sie
 steht im eigenen Ledger-Feld `estimated`, strikt getrennt von gemessenem
 `used`, und zählt gegen `remaining`; die API liefert `estimated` mit. Der Beleg
 erhält `quota_estimate` und `quota_reconcile=pending` (mit Provider-
@@ -5976,31 +5970,34 @@ Tokenizer-Initialisierung bei gleichzeitigen Kaltstarts; `encoding.cache_clear()
 setzt den Cache unter demselben Lock zurück.
 25 % Zuschlag plus Protokollreserve berücksichtigen abweichende Tokenizer;
 das ist eine Zulassungsschätzung, keine gemessene Usage und keine garantierte
-Provider-Obergrenze. `agent_costs.RunCosts.estimate` trennt diese Kalkulation
-von der lokalen Reservierung. Begrenzter Suchkontext zählt erst in Folgeaufrufen,
-nicht bereits vor der Suche. Legacy-Aufrufer behalten ihre konservativen Grenzen.
+Provider-Obergrenze. Ein Lauf zählt jede Nachricht und jedes Tool nur einmal
+(`TokenMemo` je `RunCosts`, `input_estimate(memo=…)`), kein prozessweiter
+Cache. `agent_costs.RunCosts.estimate` ist die eine Schätzung jedes Calls im
+Kontomodus: erwartete Kosten (Präfix zum Cache-Read-Preis, wo die Sitzung
+Cache gemessen hat; Output und Suchrunden als Mittel der gemessenen Calls
+gleicher Art und gleichen Modells, Startwerte `OUTPUT_START_TOKENS` und eine
+Runde zu `SEARCH_ROUND_TOKENS`), `reconcile` lernt aus den Belegen.
+Begrenzte Läufe (Legacy) reservieren den schlimmsten Fall (`_worst_case`).
 
-`DelegationLoop._admit_chat_step` verwendet diesen Pfad gemeinsam für Chat,
-Worker, Vergleichsmodelle und Prüfer. Konkurrenz durch aktive Reservierungen
-führt zu abbrechbarem Warten mit lokalem Settlement-Signal und Poll-Backoff
-(maximal drei Sekunden), auch über getrennte Runs/Prozesse. Die vorhandene
-Lease-Recovery bereinigt verwaiste Produzenten; fehlgeschlagene idempotente
-Settlement-Schreibvorgänge werden vor weiterem Warten nachgeholt. Wartende
-Aufrufe halten keine eigene Reservierung und erzeugen keinen bezahlten Beleg.
-Wenn auch ohne Konkurrenz zu wenig Budget für die optionale Suche bleibt,
-entfällt sie mit ausdrücklichem Hinweis an das Modell. Anschließend passt sich
-`max_tokens` an Restbudget/Modellfenster an; ein Minimum für sichtbare Antwort
-und explizite Reasoning-Budgets bleibt erhalten. Derselbe angepasste Wert geht
-an Provider und Receipt. Ein echter Output-Abbruch (`length`) speichert die
-Teilantwort als fehlgeschlagen statt fälschlich als vollständige Antwort.
+`DelegationLoop._admit` verwendet diesen Pfad gemeinsam für Chat, Worker,
+Vergleichsmodelle, Prüfer, Seitenabrufe und Zusammenfassungen. Konkurrenz
+durch aktive Reservierungen führt zu abbrechbarem Warten mit lokalem
+Settlement-Signal und Poll-Backoff (maximal drei Sekunden), auch über
+getrennte Runs/Prozesse. Die vorhandene Lease-Recovery bereinigt verwaiste
+Produzenten; fehlgeschlagene idempotente Settlement-Schreibvorgänge werden vor
+weiterem Warten nachgeholt. Wartende Aufrufe halten keine eigene Reservierung
+und erzeugen keinen bezahlten Beleg. Reicht das Kontingent nicht, startet der
+Call nicht; Suche, Tools und Output-Grenze bleiben unverändert. Nur das
+Modellfenster kürzt `max_tokens` (`RunCosts.fit`, mindestens
+`minimum_output`); derselbe Wert geht an Provider und Receipt. Ein echter
+Output-Abbruch (`length`) speichert die Teilantwort als fehlgeschlagen statt
+fälschlich als vollständige Antwort.
 
 Eine endgültig abgelehnte Reservierung ist von leerem Tagesbudget getrennt
 (`agent_token_reservation` / `agent_tokens_exhausted`); Fehler nennen benötigte
-und damals verfügbare Tokens. Scheitert vor dem Provider-Aufruf allein die
-Zulassung mit optionaler Suche, versucht DelegationLoop denselben Schritt ohne
-Suchreserve. Der Systemkontext macht fehlende neue Recherche ausdrücklich;
-Modellfenster und Tageskontingent bleiben verbindlich. Der
-abgelehnte Versuch schreibt keinen Beleg und startet keinen bezahlten Aufruf.
+und damals verfügbare Tokens. Ein abgelehnter Call schreibt keinen Beleg und
+startet keinen bezahlten Aufruf; Modellfenster und Tageskontingent bleiben
+verbindlich.
 
 Im Chat entfallen pauschale Reserven für hypothetische Folgeaufrufe; alle
 tatsächlich anstehenden Aufrufe reservieren atomar im Tagesledger. Den
@@ -6015,7 +6012,8 @@ und Codex eine volle Sitzung kompaktieren (`agent_compaction.py`
 `HISTORY_SUMMARY_ABOVE_CHARS` (60.000 Zeichen), plant `AgentRunStore.messages`
 (`summary=`) eine, und der erste Schritt der Nachricht schreibt sie
 (`DelegationLoop._summarize`, eigener Schritt `completion:0`, normal
-abgerechnet, ohne Werkzeuge). Die neuesten Nachrichten bis `HISTORY_KEEP_CHARS`
+abgerechnet, mit Tools und Tool-Wahl der Schritte, deren Calls nicht laufen).
+Die neuesten Nachrichten bis `HISTORY_KEEP_CHARS`
 (20.000), mindestens die letzte, bleiben wörtlich. Der Turn speichert sie
 sofort (`AgentRunStore.save_history_summary` → `agent_history_summary`:
 `content` byte-gleich, `through` = Position der letzten abgedeckten
@@ -6023,7 +6021,10 @@ Nachricht, `turns`); jede spätere Nachricht beginnt damit (Prompt-Cache bis
 zur nächsten), die Quellen der abgedeckten Turns bleiben für `read_source`
 offen. Geplante Watch-Läufe (`history_chars`) lesen und planen keine. Scheitert
 die Zusammenfassung (kein Text, abgeschnitten), läuft die Nachricht mit dem
-vollen Verlauf weiter. Darunter bleibt die Kürzung: Ein längerer Chat behält seit 2026-10-15 seine neuesten
+vollen Verlauf weiter; der Turn trägt `agent_history_summary_failed`
+(`held`), und die nächste wird erst geplant, wenn der Verlauf um
+`HISTORY_SUMMARY_RETRY_CHARS` gewachsen ist (eine des Laufs analog nach
+`RUN_SUMMARY_RETRY_TOKENS`, `run_summary_retry_at`). Darunter bleibt die Kürzung: Ein längerer Chat behält seit 2026-10-15 seine neuesten
 Nachrichten (`history_start`): die ältesten fallen in Schritten von
 `HISTORY_STEP_TURNS` (4) weg, damit der Verlauf ein paar Nachrichten lang am
 selben Punkt beginnt und im Prompt-Cache bleibt; der App-Kontext der neuen
@@ -8081,9 +8082,11 @@ Agent.
   `defaults`. Stufe: `agent_quota.account_tier(uid, tier)` = `admin` bei
   Admin-Rolle, sonst `free|plus|pro`. Agent für alle Stufen zu öffnen
   (2026-10-02) war deshalb nur eine Zugangsentscheidung, keine Ledger-Änderung.
-- **Agent** bleibt bei strikter Einzelabrechnung (Reserve vor jedem Call,
-  Settlement mit Messwerten, Schätzung + Reconciliation bei fehlender Usage);
-  nur das Limit kommt aus der Stufe.
+- **Agent** bleibt bei strikter Einzelabrechnung (Reserve der erwarteten
+  Kosten vor jedem Call, `RunCosts.estimate`; Settlement mit Messwerten,
+  Schätzung + Reconciliation bei fehlender Usage); nur das Limit kommt aus der
+  Stufe, und es entscheidet nur, ob ein Call startet (agent-mode.md,
+  „Tageskontingent“).
 - **Pipeline: messen und danach buchen.**
   - *Admission* (`/prepare`, Legacy-Direktaufrufe in `authorize_operation`,
     API v1 beim Annehmen): ein Lauf startet nur, wenn `remaining` (Limit −
@@ -8182,12 +8185,11 @@ nicht gemessen (Compare/Consensus liefen in den zehn Tagen davor an einem
 Kontotag). Admin → Limits gibt Euro ein (`admin-agent-budget.js` rechnet in
 Mikro-Euro um).
 
-In der Agent-Schleife rechnen alle Stellen, die den Rest des Kontos lesen,
-in Geld: `_admit_chat_step` kürzt die Ausgabe auf das, was der Rest bezahlt
-(`RunCosts.output_within`, zwei Schätzungen, linear), `beyond` (Antwort über
-der Routing-Grenze) ist deren Preis, `_long_run_limit` vergleicht mit
-`worst_case_nanos` zweier Schritte plus Antwort, `_output_shares` gibt jedem
-Vergleichsmodell/Prüfer Output-Tokens im Wert seines Anteils.
+In der Agent-Schleife lesen nur zwei Stellen den Rest des Kontos, beide in
+Geld: der Claim (`agent_quota.reserve` gegen die erwarteten Kosten des Calls)
+und `_long_run_limit` (das Ausgegebene, `shown_allowance`, gegen einen
+erwarteten Schritt plus Antwort). Output-Grenzen, Suchrunden und Tools hängen
+an keinem von beiden.
 
 **Herleitung der Token-Defaults bis 2026-10-31** (Prinzip: ein typischer Nutzer behält ungefähr
 seine bisherige Tageskapazität; Limit ≈ bisheriges Run-Limit × Tokens eines

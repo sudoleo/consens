@@ -338,8 +338,8 @@ Dateien, Dokumenten und Google (`agent_watch.AUDIT_PROMPT`,
 `agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
 `agent_files.AUDIT_UNTRUSTED`; im Admin „Agent: tool blocks“) und mit dem
 Arbeitsplatz VM, GitHub und Plan. Der Agent sucht in jedem Schritt mit bis zu
-`AGENT_SEARCH_ROUNDS` (5) Runden; passt die Reservierung nicht, geht
-`smaller_search` 5 → 3 → 1 → 0. Sein Text streamt wie jede Antwort, auch nach
+`AGENT_SEARCH_ROUNDS` (5) Runden, für jedes Konto gleich (siehe
+„Tageskontingent“). Sein Text streamt wie jede Antwort, auch nach
 eigenen Suchtreffern. `read_source` liest Seiten, die der Nutzer verlinkt,
 Quellen früherer Nachrichten, die Quellen der Antworten von `compare_models`,
 die eigenen Suchtreffer dieser Nachricht (`DelegationLoop.search_sources`
@@ -3406,18 +3406,15 @@ Tests: `tests/test_workspace_guard.py`.
 Jeder Aufruf von `compare_models` fragt alle gewählten Modelle (`asked`); die
 Auswahl im Compare-Picker wird nicht still verkleinert. Sie laufen gleichzeitig
 (eigener Semaphore je Vergleich, unabhängig von `max_parallel` der
-Worker-Delegation). Damit gleichzeitige Reservierungen sich nicht gegenseitig
-blockieren, erhält jede Antwort als Output-Grenze einen fairen Anteil
-(`_output_shares`: `COMPARISON_BUDGET_SHARE` = 60 % des freien Tageskontos
-geteilt durch die Modellanzahl, umgerechnet mit dem Ausgabepreis des Modells),
-höchstens die Completion-Grenze des Modells (`COMPARISON_OUTPUT_CEILING` =
-65.536). Weil die gespeicherte Review (600 kB) alle Antworttexte enthält,
-teilen sich die Antworten eines Turns zusätzlich `REVIEW_ANSWER_CHARS`
+Worker-Delegation). Die Output-Grenze jeder Antwort ist die Completion-Grenze
+des Modells (`COMPARISON_OUTPUT_CEILING` = 65.536) innerhalb ihres Anteils an
+der gespeicherten Review (`_output_shares`): Sie enthält alle Antworttexte
+(600 kB), also teilen sich die Antworten eines Turns `REVIEW_ANSWER_CHARS`
 (300.000 Zeichen, etwa vier je Token); die Grenze fällt nie unter
-`MAX_TOKENS`. Der Agent erhält jede Antwort vollständig im Toolergebnis.
-Vergleichsantworten und Prüferrunden starten bei Konkurrenz mit einer
-kleineren, noch passenden Grenze (mindestens `MAX_TOKENS`, `clamp_floor`),
-statt auf das Settlement anderer Aufrufe zu warten. Eine am Output-Limit
+`MAX_TOKENS`. Das Kontingent ändert sie nicht, auch nicht die der Prüfer
+(`AnswerAudit.output_share`). Der Agent erhält jede Antwort vollständig im
+Toolergebnis. Halten laufende Geschwister das Kontingent, wartet eine Antwort
+auf deren Settlement (siehe „Tageskontingent“). Eine am Output-Limit
 abgeschnittene Antwort bleibt Evidenz (`answers[].truncated`); endet eine nach
 dem Denken ohne ein Wort (`empty_answer`), versucht die App sie einmal neu.
 
@@ -3555,9 +3552,8 @@ Kontext gelangt davon nichts. Seit 2026-10-08 laufen die Auszüge auch nach
 32.000 Reasoning-Zeichen weiter (gespeichert wird nur bis dahin). Denkende
 Modelle bekommen zusätzlichen Platz im Ausgabebudget; Modelle, deren Reasoning
 abgeschaltet ist (Effort `none`, Kimi K2.6), nicht. Zugelassen wird ein Schritt
-mit dem Steuer-Budget (`AGENT_MAX_OUTPUT_TOKENS` plus 12.288 Tokens
-Denk-Reserve), das Antwortbudget darüber reserviert er einmal (siehe Ablauf und
-Grenzen-Tabelle). Verbraucht ein Schritt trotzdem alles fürs Denken, ohne Text
+zu seinen erwarteten Kosten, mit der vollen Output-Grenze (siehe
+„Tageskontingent“ und Grenzen-Tabelle). Verbraucht ein Schritt trotzdem alles fürs Denken, ohne Text
 oder vollständigen Toolcall (oder hört nach dem Denken ohne Text auf),
 wiederholt die App ihn einmal mit leichterer Denkstufe: bewusst zuerst `low`
 (live in 15 s bei gleicher Qualität), nur ohne diese Stufe `minimal` oder
@@ -3725,18 +3721,13 @@ seine eigenen Entscheidungen. Direkte Antworten brauchen einen Aufruf statt zwei
   läuft mit Prompt-Cache. Nach einem Vergleich wird ein kostenloser 429 einmal
   wiederholt, in jedem Turn ein unterwegs abgebrochener Schritt einmal und ein
   ausgedachter einmal leichter.
-- Zugelassen wird jeder Schritt wie ein Steuer-Schritt (Steuer-Budget je
-  Such-Segment, `_routing_model`). Das Antwortbudget darüber (`_answer_output`)
-  reserviert er einmal, nicht pro Suchrunde, und dieser Teil darf das
-  Tageslimit überziehen (`agent_quota.reserve(..., overdraft=<Tokens>)`);
-  sobald die Nachricht bezahlte Arbeit hat (Vergleichsantworten oder ein
-  Schritt des Agenten, dem Prüfer folgten: `_paid_comparison`, `_paid_audit`),
-  darf es der ganze Schlussschritt ohne Tools (seit 2026-10-28 nicht mehr jeder
-  Steuer-Schritt: Weist das Kontingent einen ab, schreibt der Agent die
-  Antwort, `_closing_index`). Vor dem Fix vom 2026-10-14 (noch hinter dem
-  Schalter) reservierte der erste Schritt mit drei Recherche-Runden rund 470k
-  Tokens statt 270k wie im getrennten Weg: Ein Free-Konto (660k) bekam schon ab
-  ≈ 190k Tagesverbrauch nur noch eine statt drei Recherche-Runden.
+- Zugelassen wird jeder Schritt zu seinen erwarteten Kosten, mit derselben
+  Output-Grenze und denselben Suchrunden (`_routing_model`, `_search_rounds`,
+  siehe „Tageskontingent“). Sobald die Nachricht bezahlte Arbeit hat
+  (Vergleichsantworten oder ein Schritt des Agenten, dem Prüfer folgten:
+  `_paid_comparison`, `_paid_audit`), darf der Schlussschritt das Tageslimit
+  überziehen; ein Steuer-Schritt nicht: Weist das Kontingent einen ab, schreibt
+  der Agent die Antwort (`_closing_index`).
 - Danach prüfen die Prüfer genau den sichtbaren Text.
 
 **Was der Nutzer sieht.** Text erscheint erst ab 300 Zeichen
@@ -3825,11 +3816,13 @@ und Memory bei Opt-in einen Monat leer blieb; Rückhalt ist der Hinweis mit
 Undo unter der Antwort und Settings › Memory.
 
 **Turn-Grenzen.** Erreicht ein Turn sein Zeit- oder Schrittlimit, schreibt der
-Agent die Antwort in einem letzten Schritt: dieselben Tools stehen im Request
-(Prompt-Cache), sind aber nicht aufrufbar (`tool_choice: none`), dazu eine
-App-Notiz mit der Grenze (`_limit_fact`). Toolcalls ohne Ergebnis (ein vom
-Wiederholungsschutz gestoppter Batch) bekommen vorher eines. Die Prüfer prüfen
-diese Antwort wie jede.
+Agent die Antwort in einem letzten Schritt mit dem Request jedes Schritts
+(dieselben Tools, dasselbe Suchtool, `tool_choice` „auto“: Prompt-Cache), dazu
+eine App-Notiz mit der Grenze (`_limit_fact`); seine Toolcalls laufen nicht
+(`allow_tools=False`, der Client verwirft sie). Antwortet er nur mit Toolcalls,
+schreibt er einmal neu mit `tool_choice` „none“ (`_closing_attempt`). Toolcalls
+ohne Ergebnis (ein vom Wiederholungsschutz gestoppter Batch) bekommen vorher
+eines. Die Prüfer prüfen diese Antwort wie jede.
 
 **Messen (bis 2026-10-31).** `scripts/evaluate_agent_answers.py` maß den
 Vergleichsmodus live (zehn Fragen, sechs Vergleichsfamilien, echte Judges;
@@ -3868,9 +3861,9 @@ ausgedachten Schritt und `read_source` (bis 60 s je Abruf) minutenlang dauern;
 - Denk-Auszüge erscheinen in jedem Schritt, auch in Schritten, die Systemprompt
   und Toolergebnisse sehen; Toolnamen oder Prompt-Regeln können so als
   Fortschrittszeile auftauchen (gespeichert in `agent_activity`).
-- An der Turn-Grenze nicht live geprüft: Liefert ein Anbieter trotz
-  `tool_choice: none` einen Toolcall, scheitert der Turn („Unexpected tool
-  call“).
+- An der Turn-Grenze nicht live geprüft: wie oft der Schlussschritt mit
+  `tool_choice` „auto“ trotz der Notiz sucht oder nur Toolcalls schickt (dann
+  folgt der Versuch mit „none“).
 - Bis 2026-10-31 beobachtet, im einen Modus nicht neu geprüft: Stoppt der
   Wiederholungs- oder Ungültig-Schutz im selben Schritt wie eine gezeigte
   Antwort mit `update_memory`, konnte der Turn scheitern, obwohl die Antwort
@@ -4222,100 +4215,114 @@ die Modellliste. Der Prompt-Abschnitt ist statisch und bleibt im Cache.
 
 ## Tageskontingent
 
-Seit 2026-10-01 teilt Agent das Tageskonto mit Compare, Consensus und Deep
-Think (siehe codebase-map, „Ein Konto in Euro für alle Modi“). Seit 2026-10-31
-zählt es Geld: Das Limit pro Stufe (Free/Plus/Pro/Admin) und die erwarteten
-Kosten eines typischen Laufs liegen in Mikro-Euro in app_config/agent_budget
-und sind in Admin → Limits in Euro speicherbar (Defaults: Free 1 €, Plus
-2,50 €, Pro/Admin 5 € pro UID und UTC-Tag, Reset um 00:00 UTC).
-`AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Der Button „Reset all
+Agent teilt das Tageskonto mit Compare, Consensus und den Reasoning-Läufen
+(siehe codebase-map, „Ein Konto in Euro für alle Modi“). Es zählt Geld: Das
+Limit pro Stufe (Free/Plus/Pro/Admin) und die erwarteten Kosten eines
+typischen Pipeline-Laufs liegen in Mikro-Euro in app_config/agent_budget und
+sind in Admin → Limits in Euro speicherbar (Defaults: Free 1 €, Plus 2,50 €,
+Pro/Admin 5 € pro UID und UTC-Tag, Reset um 00:00 UTC). Der Button „Reset all
 allowances“ setzt das Konto aller Nutzer über eine neue Budgetgeneration
-zurück, ohne Nutzer-Scan. Begonnene Aufrufe rechnen weiter gegen
-ihre ursprüngliche Generation ab. Einstellungen greifen spätestens beim nächsten
-Config-Refresh nach 30 Sekunden; der Admin-Client verwendet Revisionsschutz.
-Der bestehende
+zurück, ohne Nutzer-Scan; begonnene Aufrufe rechnen gegen ihre ursprüngliche
+Generation ab. Einstellungen greifen spätestens beim nächsten Config-Refresh
+nach 30 Sekunden; der Admin-Client verwendet Revisionsschutz. Der
 Kontingent-Ring im Sidebar-Footer zeigt im Agent-Chat den verbleibenden Anteil
-als abgerundete Prozentzahl des noch unverbrauchten Budgets: Limit minus
-gemessene verbrauchte Kosten. Reservierungen lassen die Anzeige nicht mehr springen.
-Sein Panel trennt unverbrauchtes, für neue Calls verfügbares und reserviertes Kontingent
-und enthält die Reset-Zeit. Consensus zeigt dort weiterhin das Run-Limit; der Composer enthält
-keine Budgetzeile. Das Kontingent gilt gemeinsam für Chat, delegierte Worker,
-Vergleichsantworten, Prüfer, Seitenabrufe und alle Repair-/Retry-Aufrufe.
+als abgerundete Prozentzahl: Limit minus verbrauchte Kosten
+(`agent_quota.shown_allowance`), Reservierungen lassen ihn nicht springen. Sein
+Panel trennt unverbrauchtes, für neue Calls verfügbares und reserviertes
+Kontingent und nennt die Reset-Zeit. Consensus zeigt dort weiterhin das
+Run-Limit; der Composer enthält keine Budgetzeile. Das Kontingent gilt
+gemeinsam für Chat, delegierte Worker, Vergleichsantworten, Prüfer,
+Seitenabrufe, Zusammenfassungen und alle Repair-/Retry-Aufrufe.
 
-**Seit 2026-10-31 (Max) zählt jeder Call, was er gekostet hat**
-(`agent_quota.measured_charge`): `usage.estimated_cost_nano_usd`, also
-OpenRouters `usage.cost` (Cache-Rabatt, Reasoning und Websuche inklusive),
-sonst der Katalogpreis, in Mikro-Euro zum festen Kurs 1 € = 1,15 $. Ein Call
-ohne endgültige Kosten (Abbruch, Katalogpreis ohne Suchzahl) bucht die
-begrenzte Schätzung und wird über `total_cost` der Generation abgeglichen
-(`generation_charge`). Die Gewichte unten (Cache-Reads, Prüfer) gibt es
-seitdem nicht mehr: ein Cache-Read kostet, was der Anbieter für ihn nimmt,
-ein Prüfer, was seine Runden kosten. Bis dahin galt:
-Gezählt wurde Provider-Input plus Provider-Output. Cache-Reads/-Writes sind bereits
-im Input enthalten, Reasoning bereits im Output.
-**Von 2026-10-27 bis 2026-10-31 (Max) zählten Cache-Reads zu einem Viertel**
-(`agent_quota.CACHED_INPUT_WEIGHT` = 0,25, `charged_tokens`): frischer Input,
-Cache-Writes und Output voll, `cached_input_tokens` zu 25 % (aufgerundet), in
-jedem Agent-Modus (Chat, Worker, Vergleichsmodelle, Judges, Prüfer). Ein
-Cache-Read kostet beim Anbieter ein Zehntel bis die Hälfte; Agent, Prüfer und
-Worker schicken ihr Gespräch mit jedem Schritt neu, und voll gezählt waren
-Cache-Treffer 60 % dessen, was ein Audit-Turn vom Konto nahm (Prod,
-24.–27.10.). Der Beleg trägt die Abbuchung als `quota_charged`, die Usage
-bleibt wie gemessen; der spätere Abgleich (`generation_tokens`) gewichtet
-`native_tokens_cached` gleich, ohne diese Angabe zählt er voll. Reservierungen
-halten weiter den vollen Input (wie viel davon im Cache liegt, weiß erst die
-Antwort), das Settlement gibt den Rest frei. Compare/Consensus/Reasoning-Läufe
-(`usage_meter`) zählen unverändert.
-**Von 2026-10-29 bis 2026-10-31 (Max, Audit-Spezifikation A-K2) zählten Prüfer zur Hälfte**
-(`agent_quota.AUDIT_REVIEWER_QUOTA_WEIGHT` = 0,5, `receipt_weight`): ein Call
-einer Sitzung der Art `audit` (Beleg `session_kind`, das `_claim_delegated`
-aus der Sitzung übernimmt) oder mit einer Prüfer-Runde (`round`) reserviert,
-bucht (`quota_charged`), schätzt und gleicht ab mit dem halben Wert, die
-Cache-Reads darin weiter zu einem Viertel (zusammen also ein Achtel). Grund:
-Prüfer schicken in jeder Live-Runde ihr ganzes Gespräch erneut und nahmen am
-28.–29.10. 48 % des Kontingents eines Audit-Turns bei 22 % seiner Kosten. Die
-Budgets des Laufs selbst (`reserved_tokens`, `max_tokens`) zählen weiter voll.
-Provider-Gesamtkosten haben Vorrang; ohne sie berechnet die App eine gekennzeichnete
-Katalogschätzung. Seit 2026-10-31 sind diese Kosten die Verbrauchsgrenze.
+**Jeder Call zählt, was er gekostet hat** (`agent_quota.measured_charge`):
+`usage.estimated_cost_nano_usd`, also OpenRouters `usage.cost`
+(Cache-Rabatt, Reasoning und Websuche inklusive), sonst der Katalogpreis, in
+Mikro-Euro zum festen Kurs 1 € = 1,15 $. Ein Cache-Read kostet, was der
+Anbieter für ihn nimmt, ein Prüfer, was seine Runden kosten. Ein Call ohne
+endgültige Kosten (Abbruch, Katalogpreis ohne Suchzahl) bucht eine begrenzte
+Schätzung (`unknown_estimate`: der gemessene Teil, mindestens die Hälfte seiner
+Reservierung) und wird über `total_cost` der Generation abgeglichen
+(`generation_charge`). Verliert ein Lauf seinen Prozess (OOM, harter Kill),
+schätzt `reap_delegation` jeden laufenden Call zusätzlich aus dem, was der Lauf
+gemessen hat (`agent_sessions.expected_charges`: der teuerste gemessene Call
+seiner Sitzung, sonst das Mittel seiner Art, sonst das des Laufs). Abbrüche und
+Fehler schenken keinen Verbrauch zurück, Replays führen keinen neuen Call aus,
+beim UTC-Wechsel zählt ein Call zu seinem Starttag.
 
-Vor jedem bezahlten Schritt reserviert der Server transaktional das erwartbare
-Inputvolumen mit Sicherheitsaufschlag und erlaubtem Output zusammen mit dessen
-dedupliziertem Beleg. Der Input wird lokal tokenisiert (tiktoken/cl100k plus
-25 % und Protokollreserve), einschließlich Tools und Antwortschemas.
-Settlement ersetzt die Reserve genau einmal durch gemessene Tokens. Bei
-fehlender finaler Usage endet die Reservierung ebenfalls; unbekannter Verbrauch
-bleibt als unbekannt gekennzeichnet und wird nicht als Schätzung abgebucht. Abbrüche und Fehler
-schenken keine bereits verbrauchten Tokens zurück. Replays führen keinen neuen
-Call aus. Beim UTC-Wechsel zählt ein Call zu seinem Starttag.
-Die Prozentanzeige erhält Live- und terminale Kontingent-Snapshots auch bei
-Fehlern; das Panel nennt zusätzlich reservierte Tokens. Ein Restbudget kann
-kleiner als die nötige Reserve für den nächsten Aufruf sein. Dieser Fall wird
-mit konkreten Zahlen als unzureichende Reserve erklärt, nicht als leeres Budget.
-Kann die optionale Suche nicht reserviert werden, darf derselbe Schritt vor
-jedem Provider-Aufruf ohne Suche neu zugelassen werden. Das Modell wird über
-fehlende neue Recherche informiert; reicht auch die reine Antwort nicht ins
-Budget, endet der Lauf weiterhin vor dem bezahlten Aufruf.
-Web Search bleibt nach Reasoning und Tool-Fortsetzungen erlaubt. „Skipped ·
-budget reserve“ bezeichnet eine unzureichende Reserve für Suchkontext und
-Folgeantwort, kein generelles Suchverbot nach dem Denken.
+**Zulassung: erwartete Kosten, keine Abstufung.** Vor jedem bezahlten Call
+reserviert der Server transaktional, was er erwartungsgemäß kostet
+(`agent_costs.RunCosts.estimate`, eine Schätzung für Schritte des Agenten,
+Zusammenfassungen, Vergleichsantworten, Prüferrunden und Seitenabrufe), samt
+dedupliziertem Beleg; das Settlement ersetzt die Reserve genau einmal durch
+die gemessenen Kosten. Die Schätzung:
 
-**Stufe und Parallelität (Nachbau 2026-10-14, Vergleichsmodus).** Im Agent-Lauf hängt nur das
-Limit an der Stufe. Nachgestellt ohne Modellaufrufe (Testharness aus
-`test_agent_answer_mode`/`test_agent_runs`, echte Reservierungs- und Kontocodes,
-EZB-Frage, sechs Daily-Familien, lange Vergleichsantworten, drei
-Coverage-Fenster): Ein frisches Free-Konto wartet in keinem der beiden
-damaligen Wege (getrennter Antwortschritt und Antwort des Agenten), genau wie
-Pro. Die größte Einzelreservierung ist der erste Schritt mit drei
-Recherche-Runden (≈ 329k, zugelassen ab 276k; im getrennten Weg bis
-2026-10-14 ≈ 276k); die sechs Vergleichsantworten reservieren je ≈ 13k (Suche
-gebucht, nicht reserviert), der Schlussschritt des Agenten und die Judges dürfen
-nach dem Vergleich überziehen.
-Bei bereits verbrauchtem Konto wird zuerst die Recherche des ersten Schritts
-abgestuft (drei Runden brauchen ≈ 276k Rest, eine ≈ 70k). Erst wenn der Rest
-die sechs parallelen Vergleichsantworten nicht mehr deckt (unter ≈ 55k, bei
-Free die letzten 8 %), starten einige mit kleinerem Budget oder warten auf
-Geschwister: gewollte Bremse am Limit, die nächste Nachricht wird ohnehin
-abgelehnt.
+- *Input* einmal, lokal tokenisiert (tiktoken/cl100k plus 25 % und
+  Protokollreserve, Tools und Antwortschemas eingeschlossen). Jede Nachricht
+  wird pro Lauf nur einmal gezählt (`agent_tokens.TokenMemo`): Ein Lauf schickt
+  sein ganzes Gespräch mit jedem Schritt, Zusammenfassungsplanung, Grenze
+  langer Läufe und Zulassung zählten es früher je Schritt drei- bis viermal.
+- *Präfix im Cache:* Hat der vorige Call derselben Sitzung (die Schritte des
+  Agenten, die Runden eines Prüfers) Cache-Tokens gemessen (gelesen oder
+  geschrieben), gilt dieser Teil zum Cache-Read-Preis; der Rest zum teureren von
+  Input- und Cache-Write-Preis.
+- *Output und Suche:* das Mittel, das Calls dieser Art auf diesem Modell im
+  Lauf gemessen haben, zu Beginn `OUTPUT_START_TOKENS` (4096) und eine
+  Suchrunde (`SEARCH_ROUND_TOKENS` = 6k Input plus Gebühr); eine Seite
+  `fetch_bounds`.
+
+Beispiel Sonnet 5.5, 20k Prompt, fünf Suchrunden, Antwortgrenze 65.536:
+erwartet 0,10 € für den ersten Schritt einer Nachricht, etwa 0,06 € für einen
+späteren mit 18k im Cache; gemessen kostet so ein Schritt etwa 0,05 €. Der
+schlimmste Fall (jeder Input-Token zum Cache-Write-Preis, der Prompt je
+Suchrunde erneut, 32k je Runde, die volle Output-Grenze je Segment) läge bei
+2,63 €, mehr als ein Free-Tag.
+
+Das Kontingent entscheidet nur, *ob* ein Call startet. Suchrunden,
+Output-Grenze, Tools und Tool-Wahl sind für jedes Konto und jeden Schritt einer
+Nachricht dieselben (`_routing_model`, `_search_rounds`); reicht der Rest
+nicht, geht nichts kleiner hinaus. Hart bleibt nur das Kontextfenster: Ein Call
+muss mit `minimum_output` hineinpassen, sonst endet er vor dem Provider
+(`RunCosts.fit` kürzt die Output-Grenze nur auf das, was das Fenster neben dem
+Input lässt). Halten laufende Calls das Kontingent, wartet ein Call, der danach
+passt, abbrechbar auf ihr Settlement (`_admit`, Backpressure, keine eigenen
+Reserven oder Provideraufrufe beim Warten). Sonst gilt:
+
+- Ein Steuer-Schritt, den das Kontingent ablehnt, gibt nach bezahlter Arbeit
+  seinen Index an den Schlussschritt; der Agent schreibt die Antwort aus dem
+  Vorhandenen (`_closing_index`, `TURN_ALLOWANCE_LIMIT`). Schlussschritt und
+  Schlussrunden der Prüfer dürfen dann überziehen (siehe „Websuche“,
+  „Reservierung“).
+- Eine Vergleichsantwort oder ein Seitenabruf scheitert allein; der Lauf geht
+  weiter.
+- Eine neue Nachricht bei leerem Kontingent endet vor ihrem ersten Call mit
+  der Absage (mit konkreten Zahlen als unzureichende Reserve erklärt, wenn
+  Reservierungen laufender Calls den Rest halten).
+
+Zugangsregeln (Premium-Modelle, Pro-Denkstufen) sind davon unberührt. Ein Call,
+der teurer wird als erwartet, wird voll gebucht und kann das Konto leicht unter
+null bringen; die nächste Zulassung scheitert dann, wie nach einem überzogenen
+Pipeline-Lauf.
+
+**Eine Form je Nachricht (Prompt-Cache).** Anthropic cached Tools,
+Systemprompt und Nachrichten samt `tool_choice` als Präfix; jede Abweichung
+schreibt alles dahinter neu. Deshalb schickt jeder Schritt einer Nachricht
+dieselben Tools mit demselben Suchtool (`max_uses`) und `tool_choice` „auto“:
+auch der Schlussschritt (`_merged_wrap_up`) und beide Zusammenfassungen, die nur
+schreiben dürfen (`allow_tools=False`; der Client verwirft ihre Toolcalls,
+`AgentCompletion.stream`). Antwortet der Schlussschritt nur mit Toolcalls, folgt
+ein zweiter Versuch mit `tool_choice` „none“ (`_closing_attempt`), der einzige
+abweichende Request. In Chats mit Google-Daten fehlt das Suchtool in allen
+Schritten (siehe unten). `parallel_tool_calls` wechselt einmal mit
+`open_workspace` (siehe „Arbeitsplatz auf Abruf“).
+
+**Google-Daten** (ZDR-Provider, keine Websuche): Ein Lauf hält sie, wenn der
+Chat sie beim Start der Nachricht hatte (die Route liest es,
+`DelegationLoop.google_data`) oder sobald ein Tool des Laufs sie hereinholt
+(`agent_gmail.record` → `mark_google_data`, ab dem nächsten Call). Anders
+kommen keine Google-Daten in das, was der Lauf sendet; eine Markierung, die eine
+andere Nachricht setzt, erreicht ihn mit dem nächsten Blick des Watchers
+(`check_delegation`, `chat_google_data`). Kein Call liest dafür das
+Chat-Dokument.
 
 Die Wiederherstellungsaktion prüft denselben Lauf mit derselben Request-Identität.
 „Recover saved answer“ erscheint bei bestätigt gespeichertem Antworttext,
@@ -4416,18 +4423,10 @@ Vollabfragen. Nach zehn Sekunden ohne Update wird bei sichtbarem Tab abgeglichen
 am Ende wird der terminale Zustand noch einmal geladen. Die Lease-Prüfung teilt
 ihren Receipt-Snapshot mit der Listenansicht, statt ihn doppelt zu lesen.
 
-Jeder tatsächlich anstehende Modellaufruf reserviert seinen geschätzten Input
-und erlaubten Output; Suchkontext zählt erst nach der Suche. Blockieren noch
-laufende Calls das Budget, warten neue Calls abbrechbar auf deren Settlement.
-Sie erzeugen während des Wartens keine eigenen Reserven oder Provideraufrufe.
-Ohne solche Konkurrenz entfällt bei Bedarf zunächst optionale Suche; danach
-wird die tatsächliche Outputgrenze passend zu Restbudget und Kontextfenster
-gesetzt. Explizite Reasoning-Budgets behalten ihren erforderlichen Platz.
-Reicht es auch für Input und eine minimale Antwort nicht, wird vor dem Provider
-gestoppt. Eine am Outputlimit abgeschnittene Antwort bleibt als Teilantwort erhalten.
-Eine zusätzliche pauschale Reserve für spätere Aufrufe (Antwort, Prüfer) entfällt
-im Chat. Reicht das Tagesbudget für einen nächsten Aufruf nicht, bleiben vorhandene
-Ergebnisse mit ihrem tatsächlichen, gegebenenfalls unvollständigen Prüfstatus erhalten.
+Eine am Outputlimit abgeschnittene Antwort bleibt als Teilantwort erhalten.
+Reicht das Tagesbudget für einen nächsten Aufruf nicht, bleiben vorhandene
+Ergebnisse mit ihrem tatsächlichen, gegebenenfalls unvollständigen Prüfstatus
+erhalten.
 
 Das zentrale Tageskontingent ist die einzige Verbrauchsgrenze des Agent-Chats.
 Es gibt kein Tool-, Such-, Nachrichten- oder Dollarbudget pro Lauf. Alte
@@ -4461,13 +4460,16 @@ Antworten oder einer schon fixierten Antwort.
 (`VMSession.started`, auch wenn die VM danach ausfällt), gelten
 `vm_turn_steps` = 200 und `vm_turn_seconds` = 2 h (Vorschlag, Konstanten in
 `AgentPolicy.for_chat`). Die eigentliche Grenze bleibt das Tageskonto: Vor
-jedem Schritt prüft `_long_run_limit`, ob es noch zwei Schritte im heutigen
-Umfang plus Antwort trägt, so teuer, wie ihre Zulassung sie reserviert
-(`worst_case_nanos`; `remaining_allowance`, ein Firestore-Lesezugriff je Schritt, nur in langen
-Läufen; mit Prüfern seit 2026-10-29 zusätzlich zweimal deren bisheriger
-Verbrauch je Agent-Schritt, `_reviewer_step_charge` aus `reviewer_charge`:
-ihre Runde auf den nächsten Schritt und ihre Schlussrunde) und ob das Gespräch
-samt Antwort unter 80 % des Modellfensters bleibt (`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
+jedem Schritt prüft `_long_run_limit`, ob das Ausgegebene (Limit minus
+Verbrauch, `agent_quota.shown_allowance`, ein Firestore-Lesezugriff je
+Schritt, nur in langen Läufen) noch einen Schritt und die Antwort trägt, zu
+dem, was ihre Zulassung erwartet (`RunCosts.estimate`), mit Prüfern zusätzlich
+zweimal deren bisheriger Verbrauch je Agent-Schritt (`_reviewer_step_charge`
+aus `reviewer_charge`: ihre Runde auf den nächsten Schritt und ihre
+Schlussrunde). Reservierungen laufender Prüferrunden zählen nicht: Sie sind
+noch kein Verbrauch und beendeten den Lauf sonst zu früh. Dazu muss das
+Gespräch samt Antwort unter 80 % des Modellfensters bleiben
+(`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
 `TURN_CONTEXT_LIMIT`). Der Wrap-up eines langen Laufs schreibt die Antwort auch
 ohne Vergleich aus der eigenen Arbeit („Write the answer now from what you
 have, without tool calls.“), statt abzubrechen; die Prüfer prüfen sie wie
@@ -4531,11 +4533,17 @@ sagt es („Summarizing …“, `SUMMARY_TEXTS`), das Arbeitsprotokoll vermerkt
   weiter jeden Aufruf (`own_messages`). So endet ein langer Lauf nicht mehr bei
   80 % des Fensters, und jeder weitere Schritt sendet nur noch einen Bruchteil.
 
-Eine Zusammenfassung ist nie Nutzertext (`is_summary`: kein Memory-Beleg,
-im Arbeitsprotokoll Daten des Agenten). Was nicht klappt (kein Text, zu kurz,
-abgeschnitten, ein Tool-Aufruf statt Text), ändert nichts; die eines Laufs
-wird in dieser Nachricht nicht noch einmal versucht. Ein Aufruf darin läuft
-nie und öffnet kein Prüfer-Tor.
+Beide Zusammenfassungen schicken die Tools, das Suchtool und die Tool-Wahl der
+Schritte (Prompt-Cache, siehe „Eine Form je Nachricht“); ihre Toolcalls
+verwirft der Client. Eine Zusammenfassung ist nie Nutzertext (`is_summary`:
+kein Memory-Beleg, im Arbeitsprotokoll Daten des Agenten). Was nicht klappt
+(kein Text, zu kurz, abgeschnitten, nur Toolcalls), ändert nichts und wartet
+auf Wachstum (`_summary_failed`): die eines Laufs, bis die nächste Anfrage um
+`RUN_SUMMARY_RETRY_TOKENS` = 25.000 Token gewachsen ist; die des Verlaufs, bis
+der Verlauf um `HISTORY_SUMMARY_RETRY_CHARS` = 30.000 Zeichen gewachsen ist
+(Marke `agent_history_summary_failed` am Turn, `AgentRunStore.messages`),
+statt in jeder Nachricht erneut zu scheitern. Ein Aufruf darin läuft nie und
+öffnet kein Prüfer-Tor.
 
 Die gespeicherte Aktivität eines Turns bekommt den Platz, den der Rest des
 Turn-Dokuments (1 MiB) übrig lässt, abzüglich 64 kB Reserve, höchstens
@@ -4557,9 +4565,9 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 | Parallele Vergleichsantworten | alle gewählten Modelle eines Vergleichs |
 | Modelle pro Vergleich | alle gewählten, 1 bis 6 (`MAX_RUN_FAMILIES`) |
 | Prüfer je Lauf | dieselben Modelle, je eine Sitzung und ein Thread |
-| Vergleichsantwort | Completion-Grenze des Modells (höchstens 65536), begrenzt durch fairen Budgetanteil und Reviewgröße; Längenvorgabe nur bei `depth=quick`. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit`. Endet sie nach Denken ohne ein Wort mit `stop` (`empty_answer`), versucht die App sie einmal neu |
-| Antwort (Ausgabegrenze jedes Schritts des Agenten) | Completion-Grenze des Chatmodells (höchstens 32768, mit aktivem Reasoning 65536; `answer_output_limit`), begrenzt durch Kontextfenster und Restbudget; der Teil über dem Steuer-Budget wird einmal reserviert und darf überziehen |
-| Orchestrierungsschritte (Zulassung) | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096; mit aktivem Reasoning zusätzlich 12288 (`ROUTING_REASONING_HEADROOM`), reserviert je Suchrunde |
+| Vergleichsantwort | Completion-Grenze des Modells (höchstens 65536), begrenzt durch den Anteil an der Reviewgröße; Längenvorgabe nur bei `depth=quick`. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit`. Endet sie nach Denken ohne ein Wort mit `stop` (`empty_answer`), versucht die App sie einmal neu |
+| Antwort (Ausgabegrenze jedes Schritts des Agenten, auch Schlussschritt und Zusammenfassungen) | Completion-Grenze des Chatmodells (höchstens 32768, mit aktivem Reasoning 65536; `answer_output_limit`), begrenzt nur durch das Kontextfenster |
+| Schritte ohne Vergleichstools (reine Delegation) | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096; mit aktivem Reasoning zusätzlich 12288 (`ROUTING_REASONING_HEADROOM`) |
 | Kontext | Modellfensterprüfung; initialer Chatverlauf maximal 120000 Zeichen |
 | Review-Snapshot | maximal 600 kB |
 | Gleichzeitige Runs je UID | 2 |
@@ -4646,8 +4654,7 @@ Produktentscheidung, keine Modell-Sonderlösung:
   Prompt (`agent_comparison.comparison_system_prompt`) nennt das Datum und die
   Rundenzahl, verlangt bei zeitabhängigen Fakten eine Suche mit Monat und Jahr
   in der Anfrage, nennt Quellen im `context` Hinweise, nie Pflicht, und Angaben
-  dort ohne Quelle ungeprüft. Eine kontingentabhängige Rundenzahl ist bewusst
-  vertagt.
+  dort ohne Quelle ungeprüft. Die Rundenzahl hängt nie am Kontingent.
 - Prüfer: je Live-Runde bis zu `LIVE_SEARCH_ROUNDS` (2), in der Schlussrunde
   `REVIEW_SEARCH_ROUNDS` (3); Gate-Runden suchen nicht (siehe
   „Vorab-Prüfung“).
@@ -4658,39 +4665,32 @@ Ohne Datum und Suche hatten sich fünf Vergleichsmodelle auf denselben
 veralteten Trainingsstand geeinigt („Claude 3.5 Sonnet, GPT-4o“ als neueste
 Modelle) — ein Scheinkonsens, den keine Prüfung erkennen kann.
 
-**Reservierung.** Jede Suchrunde reserviert für jedes Modell gleich
-`agent_costs.SEARCH_INPUT_TOKENS` (32k), höchstens so viel, wie das
-Kontextfenster noch fasst. Ausnahme seit 2026-10-06: **Vergleichsantworten und
-Prüferrunden reservieren ihre Suche nicht** (`soft_search`, `SEARCHING_KINDS`);
-sie muss nur ins Kontextfenster passen, die Abrechnung bucht den gemessenen
-Verbrauch. Die Worst-Case-Schranke für drei Runden und sechs parallele
-Antworten (≈ 1,5 M Tokens) läge sonst über einem ganzen Free-Tag, und die
-Zulassung hätte die zuletzt gestarteten Modelle abgestuft. Damit bezahlte
-Arbeit ihre Antwort und deren Prüfung erreicht, dürfen, sobald die Nachricht
-bezahlte Arbeit hat (Vergleichsantworten, `_paid_comparison`; seit 2026-10-29,
-A-R2, auch ein Schritt des Agenten, dem Prüfer folgten, `_paid_audit`), der
-Schlussschritt, der die Antwort ohne Tools schreibt (`_merged_wrap_up`), und
-die Schlussrunden der Prüfer auf die fixierte Antwort (`_final_review`, Sitzung
-`audit` nach `final_answer`, mit Reparatur und neuer Sitzung) das Limit
-überziehen (`agent_quota.reserve(..., overdraft=True)`, nur im Kontomodus); die
-nächste Nachricht wird dann abgelehnt, wie nach einem überzogenen
-Pipeline-Lauf. Live- und Gate-Runden und jeder Steuer-Schritt laufen nur im
-Kontingent: Weist es einen Schritt vor seinem Claim ab, nimmt der
-Schlussschritt seinen Index (`_closing_index`, `TURN_ALLOWANCE_LIMIT`). Bis
-2026-10-28 überzog jeder Steuer-Schritt nach dem ersten bezahlten Vergleich,
-ohne Absage bis `turn_steps` (Sicherheitsaudit); bis 2026-10-31 überzogen im
-Vergleichsmodus auch die Judges. Ohne bezahlte Arbeit endet ein abgewiesener
-erster Schritt mit der Absage. Ein Schritt des Agenten reserviert je
-Such-Segment das Steuer-Budget und das Antwortbudget darüber nur einmal
-(`answer_output`, siehe „Die Antwort schreibt der Agent selbst“). Grundlage,
-gemessen 2026-10-01 pro Runde: eigene OpenAI-Suche bis ≈ 11k Tokens, Exa
-(5 × 2000 Zeichen) ≈ 2,5k, Anthropic ≈ 2k, Google ≈ 0 (pro Anfrage
-abgerechnet). Die Abrechnung bucht den echten Verbrauch; eine ungewöhnlich
-große Runde kann das Tageslimit deshalb leicht überschreiten (weiche Grenze,
-kein Abbruch). Die Suchgebühr kommt aus dem Katalogpreis des Modells, sonst
-gilt die Exa-Pauschale. Passt eine Reservierung nicht, stuft `smaller_search`
-ab (5 → 3 → 1 → keine); Vergleichsantworten und Prüfer nur, wenn das
-Kontextfenster die Suche nicht fasst.
+**Reservierung.** Eine Suche geht mit dem erwarteten Preis in die Zulassung
+ein (`RunCosts.estimate`, siehe „Tageskontingent“): so viele Runden, wie
+Aufrufe dieser Art auf diesem Modell im Lauf im Mittel gebraucht haben (zu
+Beginn eine), je Runde `SEARCH_ROUND_TOKENS` (6k) Input und die Suchgebühr
+(Katalogpreis des Modells, sonst die Exa-Pauschale). Grundlage, gemessen
+2026-10-01 pro Runde: eigene OpenAI-Suche bis ≈ 11k Tokens, Exa (5 × 2000
+Zeichen) ≈ 2,5k, Anthropic ≈ 2k, Google ≈ 0 (pro Anfrage abgerechnet). Die
+Abrechnung bucht den echten Verbrauch; eine teurere Runde kann das Tageslimit
+deshalb leicht überschreiten (weiche Grenze, die nächste Zulassung scheitert).
+Die Rundenzahl im Request hängt nie am Kontingent: der Agent, die
+Vergleichsantworten und die Prüfer suchen mit ihren festen Runden, oder der
+Aufruf startet nicht. Damit bezahlte Arbeit ihre Antwort und deren Prüfung
+erreicht, dürfen, sobald die Nachricht bezahlte Arbeit hat
+(Vergleichsantworten, `_paid_comparison`; ein Schritt des Agenten, dem Prüfer
+folgten, `_paid_audit`), der Schlussschritt (`_merged_wrap_up`, `closing`) und
+die Schlussrunden der Prüfer auf die fixierte Antwort (`_final_review`,
+Sitzung `audit` nach `final_answer`, mit Reparatur und neuer Sitzung) das
+Limit überziehen (`agent_quota.reserve(..., overdraft=True)`, nur im
+Kontomodus); die nächste Nachricht wird dann abgelehnt, wie nach einem
+überzogenen Pipeline-Lauf. Live- und Gate-Runden und jeder Steuer-Schritt
+laufen nur im Kontingent: Weist es einen Schritt vor seinem Claim ab, nimmt
+der Schlussschritt seinen Index (`_closing_index`, `TURN_ALLOWANCE_LIMIT`).
+Ohne bezahlte Arbeit endet ein abgewiesener erster Schritt mit der Absage.
+Ein begrenzter Lauf (`AgentPolicy` ohne `account_budget_only`, nur noch
+Tests und Altaufrufer) reserviert weiter den schlimmsten Fall: je Runde
+`SEARCH_INPUT_TOKENS` (32k) und den ganzen Input und Output erneut.
 
 **Suchzähler.** OpenRouter meldet die Suchen eines Aufrufs im Usage-Paket als
 `usage.server_tool_use_details.web_search_requests` (live 2026-10-10);
@@ -5042,15 +5042,12 @@ Seitentext steht danach in `untrusted_page_text`.
 Modellschritt (`DelegationLoop._step` mit `server_tools=[web_fetch]` und
 eigener Completion, Generation-ID im Beleg für die spätere Usage-Abstimmung):
 Die Reservierung zählt die Seite mit (`agent_costs.fetch_bounds`:
-`max_content_tokens` × 1,25 plus eine Fortsetzung, dazu 0,1 ct Exa-Gebühr);
-gebucht werden die gemessene Usage und, weil OpenRouters `usage.cost` sie nicht
-enthält, die Exa-Gebühr für eine gelesene Seite. Reicht das Tageskonto nicht,
-scheitert nur dieser Abruf (`token_budget`), der Turn läuft weiter; Überziehen
-dürfen Abrufe nicht. Weil die Seitentokens nicht mit dem Ausgabelimit
-schrumpfen, rechnet `_admit_chat_step` bei einem Abruf mit der vollen kleinsten
-Reservierung und gibt auf, sobald ein kleineres Ausgabelimit nichts mehr bringt
-(vorher drehte die Zulassung bei knappem Konto ohne Pause Runden auf dem
-Ledger). Gemessen in der Probe: ein Abruf mit Luna 0,007–0,066 ct und
+`max_content_tokens` × 1,25, dazu 0,1 ct Exa-Gebühr), wie jeder Aufruf zum
+erwarteten Preis (siehe „Tageskontingent“); gebucht werden die gemessene Usage
+und, weil OpenRouters `usage.cost` sie nicht enthält, die Exa-Gebühr für eine
+gelesene Seite. Reicht das Tageskonto nicht, scheitert nur dieser Abruf
+(`token_budget`), der Turn läuft weiter; Überziehen dürfen Abrufe nicht.
+Gemessen in der Probe: ein Abruf mit Luna 0,007 bis 0,066 ct und
 2,6–3,9 s. Der gelesene Text steht danach im Verlauf jedes weiteren Schritts.
 
 **Wohin der Text geht.**

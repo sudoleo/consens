@@ -31,7 +31,7 @@ def search_family(model):
 
 
 # Exa results per search round. They bound what a round can add to the
-# input (SEARCH_INPUT_TOKENS); the publishers' own search may ignore them.
+# input; the publishers' own search may ignore them.
 SEARCH_RESULTS, SEARCH_RESULT_CHARACTERS = 5, 2000
 
 

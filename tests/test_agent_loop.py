@@ -444,6 +444,33 @@ def test_calls_ended_with_stop_are_calls_and_a_writing_step_ignores_a_call(store
     assert answer.finish_reason == "stop" and answer.text == "Four." and answer.tool_calls == []
 
 
+def test_a_writing_step_with_tool_choice_auto_keeps_the_request_and_drops_its_calls(store, monkeypatch):
+    """The agent's steps send tool_choice "auto" also where they may only
+    write (prompt cache): a reply of calls alone ends without text instead
+    of failing, so the loop can ask once more; "none" may still be asked."""
+    from app.services.llm.agent_client import AgentStreamIncomplete
+    requests, _, _ = transport(monkeypatch, [[packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())],
+                                             [packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())],
+                                             [packet({"content": "Four."}, finish="stop", usage=usage())]])
+    model = configured_model(resolve_agent_model("claude-haiku-4-5"))
+    tools = client_registry([]).schemas
+    calls_only = AgentCompletion()
+    list(calls_only.stream(model=model, messages=[{"role": "user", "content": "Hi"}], api_key="test", tools=tools,
+                           allow_tool_calls=False, tool_choice="auto"))
+    assert requests[0]["tool_choice"] == "auto" and requests[0]["tools"] == tools
+    assert calls_only.finish_reason == "tool_calls" and calls_only.text == "" and calls_only.tool_calls == []
+    assert calls_only.skipped_tool_parts
+    # Without the explicit choice a writing step's calls alone still fail it.
+    with pytest.raises(AgentStreamIncomplete):
+        list(AgentCompletion().stream(model=model, messages=[{"role": "user", "content": "Hi"}], api_key="test",
+                                      tools=tools, allow_tool_calls=False))
+    assert requests[1]["tool_choice"] == "none"
+    retry = AgentCompletion()
+    list(retry.stream(model=model, messages=[{"role": "user", "content": "Hi"}], api_key="test", tools=tools,
+                      allow_tool_calls=False, tool_choice="none"))
+    assert requests[2]["tool_choice"] == "none" and retry.text == "Four."
+
+
 def test_repeated_tool_identity_stops_without_reexecution(store, monkeypatch):
     response = [packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())]
     requests, _, _ = transport(monkeypatch, [response, response])

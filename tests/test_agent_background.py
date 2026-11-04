@@ -429,7 +429,7 @@ def test_post_response_is_the_tail_with_the_stream_headers(api, runs):
 def test_a_stop_before_the_first_model_call_is_saved_as_stopped(api, runs, live, monkeypatch):
     client, store, calls = api
     entered, release = threading.Event(), threading.Event()
-    original = agent.DelegationLoop._admit_chat_step
+    original = agent.DelegationLoop._admit
 
     def slow_admission(self, *args, **kwargs):
         entered.set()
@@ -437,7 +437,7 @@ def test_a_stop_before_the_first_model_call_is_saved_as_stopped(api, runs, live,
         self._check()
         return (yield from original(self, *args, **kwargs))
 
-    monkeypatch.setattr(agent.DelegationLoop, "_admit_chat_step", slow_admission)
+    monkeypatch.setattr(agent.DelegationLoop, "_admit", slow_admission)
     chat_id, _response = _start(client, "early-stop")
     assert entered.wait(5)
     assert client.post(f"/agent/chats/{chat_id}/requests/early-stop/stop", headers=AUTH).json() == {"status": "stopping"}

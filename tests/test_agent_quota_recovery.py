@@ -82,6 +82,36 @@ def test_reload_reaps_lost_lease_map_and_recovers_exact_saved_single_call_usage(
     assert store.get_turn(*args)['status'] == 'failed'
 
 
+def test_a_lost_call_is_estimated_from_what_its_run_measured(store):
+    """A hard kill (OOM, SIGKILL) loses a running call's cost. Its estimate
+    is at least half its reservation, and, as reservations are what a call
+    is expected to cost, at least the dearest measured call of its own
+    session (else of its kind, else the run's mean)."""
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
+    measured = AgentCompletion()
+    measured.text, measured.finish_reason = "ok", "stop"
+    measured.usage = measured_usage({'prompt_tokens': 50_000, 'completion_tokens': 2_000, 'cost': .023}, loop.model)
+    store.settle(*args, completion=measured, status='succeeded', final=False)
+    charged = agent_quota.measured_charge(measured.usage)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), step='completion:1',
+                reservation=(100, priced(100)))
+    aid = 'c' * 32
+    store.publish_agent(*args, run_token=loop.run_token, agent_id=aid,
+                        patch={'assignment': {'goal': 'Compare'}, 'status': 'working', 'kind': 'comparison'})
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), step=f'agent:{aid}:0',
+                reservation=(100, priced(100)))
+    root = store.receipt_ref(*args)
+    store._transaction(lambda tx: tx.update(root, {'lease_until': datetime.now(timezone.utc) - timedelta(seconds=60)}))
+    store.active_ref(UID).set({'leases': {}})
+    budget = agent_quota.snapshot(store.db, UID)
+    # The agent's next step: its session's measured call; the comparison
+    # answer, of a kind nothing measured: the run's mean (the same call here).
+    assert budget['estimated'] == 2 * charged and budget['reserved'] == 0
+    assert store.receipt_ref(*args, step='completion:1').get().to_dict()['quota_estimate'] == charged
+
+
 def test_live_lease_is_never_reaped_by_a_budget_refresh(store):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)

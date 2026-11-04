@@ -273,7 +273,7 @@ def test_only_the_closing_answer_after_paid_comparisons_starts_at_once(store, mo
         answers = [{"provider": "openai", "text": "The first option costs 100."}] if compared else []
         loop.comparison.comparisons.append({"id": "paid", "answers": answers})
     ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
-    ref.set({"used": 130000, "reserved": 100000})  # 20k free, 100k held by sibling calls
+    ref.set({"used": 149000, "reserved": 100000})  # 1k free, 100k held by sibling calls
     waited = []
     def wait(*_):
         waited.append(True)
@@ -281,7 +281,7 @@ def test_only_the_closing_answer_after_paid_comparisons_starts_at_once(store, mo
     monkeypatch.setattr(loop.condition, "wait", wait)
     model = replace(loop.model, max_output_tokens=60000)
     step = loop._step(model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation,
-                      searches_enabled=False, answer_candidate=True, allow_tools=not closing)
+                      searches_enabled=False, answer_candidate=True, allow_tools=not closing, closing=closing)
     if compared and closing:
         exhaust(step)
         assert not waited and limits == [60000]
