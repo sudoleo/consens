@@ -154,13 +154,18 @@ WATCH_PAUSED_SECONDS = 10
 # run, so the agent reads the message first. All the agent learns: a pause of
 # the user.
 HOLD_STEERED = "Not run: the user paused your work and wrote to you. Read their message first."
-# The calls of one step run one after another, at most this many (T2). What
-# a call that does not run reads instead, by why (the batch in run()): every
-# call of a step gets exactly one result, or the provider refuses the next
-# request. A pause, the user's own card, their turn in the browser or a
-# domain they refused ends the step's later calls: they were planned before.
-TOOL_CALLS_PER_STEP = 4
+# The calls of one step run in their order; neighbouring calls of tools that
+# only read run at the same time (ReadOnlyTool.concurrent, _call_groups). The
+# limit is no pace: a step that reads five sources and three files at once is
+# ordinary work, and SOTA harnesses set no small cap. It bounds a runaway
+# step, its threads and the results one request carries. What a call that
+# does not run reads instead, by why (the batch in run()): every call of a
+# step gets exactly one result, or the provider refuses the next request. A
+# pause, the user's own card, their turn in the browser or a domain they
+# refused ends the step's later calls: they were planned before.
+TOOL_CALLS_PER_STEP = 16
 CALL_OVER_LIMIT = f"Not run: a step runs at most {TOOL_CALLS_PER_STEP} calls."
+CALL_REPEATED = "Not run: this step made the same call before; its result is above."
 CALL_AFTER_PAUSE = "Not run: the work was paused before this call; the user let it go on with your next step."
 CALL_AFTER_ASK = "Not run: this step asked the user first. Their answer is in the ask_user result above."
 CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile and has handed it back. The page "
@@ -888,16 +893,6 @@ class DelegationLoop(AgentLoop):
             # Its reviewers start now, their brief written from these tools.
             self._review_from_here(None)
 
-    def _parallel_calls(self):
-        """Whether the agent's steps ask for several calls at once: while
-        its workspace is open (audit T2: plan and action, write and run,
-        three form fields were a step each, with the whole context every
-        time). The switch comes with open_workspace, whose tools rewrite the
-        prompt cache once anyway: Anthropic's tool_choice carries it, and a
-        change of it rewrites the cached messages. The workspace never
-        closes within a message, so it never switches back."""
-        return self.vm_tools is not None and not self.workspace_closed
-
     def _turn_seconds(self):
         if self.policy.vm_turn_seconds and self._long_run():
             return self.policy.vm_turn_seconds
@@ -1164,19 +1159,42 @@ class DelegationLoop(AgentLoop):
         refused with a tool error, and one more ends the turn.
         """
         limit = self.policy.turn_identical_calls if self.policy.account_budget_only else None
-        function = call.get("function") or {}
-        name = function.get("name")
-        if not limit or name in REPEATABLE_TOOLS:
+        if not limit or (call.get("function") or {}).get("name") in REPEATABLE_TOOLS:
             return None
-        try:
-            args = json.loads(function.get("arguments") or "{}")
-        except (TypeError, ValueError):
+        key = self._call_key(call)
+        if key is None:
             return None  # Invalid JSON is the invalid-tool guard's case.
-        key = f"{name}\0{json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
         seen = self.identical_calls[key] = self.identical_calls.get(key, 0) + 1
         if seen <= limit:
             return None
         return "refuse" if seen == limit + 1 else "stop"
+
+    def _call_groups(self, calls, over_limit):
+        """The step's calls in order as groups of ``(position, call)``:
+        neighbouring calls of tools that only read (ReadOnlyTool.concurrent)
+        form one group, which runs at the same time; every other call is a
+        group of its own, after the group before it."""
+        groups, together = [], False
+        for position, call in enumerate(calls):
+            tool = self.registry.tools.get((call.get("function") or {}).get("name"))
+            concurrent = tool is not None and tool.concurrent and call["id"] not in over_limit
+            if concurrent and together:
+                groups[-1].append((position, call))
+            else:
+                groups.append([(position, call)])
+            together = concurrent
+        return groups
+
+    @staticmethod
+    def _call_key(call):
+        """The call's tool and arguments as normalized JSON, or None for
+        arguments that are not JSON."""
+        function = call.get("function") or {}
+        try:
+            args = json.loads(function.get("arguments") or "{}")
+        except (TypeError, ValueError):
+            return None
+        return f"{function.get('name')}\0{json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
 
     def _publish(self, worker, *, patch=None, text=None, kind="message", sender="orchestrator", recipient=None,
                  wait=True, progress=False):
@@ -1459,11 +1477,25 @@ class DelegationLoop(AgentLoop):
 
     def _execute(self, registry, value, cancellation, call=None):
         call = call or value.tool_calls[0]
+        message, entry = self._run_call(registry, value, cancellation, call)
+        self._log_call(entry)
+        return message
+
+    def _log_call(self, entry):
+        """A call's work log entry, as _run_call returned it (None: none)."""
+        if entry is not None:
+            actor, step, call, message, started_at, duration_ms = entry
+            self.work_log.tool(actor, step, call, message, started_at=started_at, duration_ms=duration_ms)
+
+    def _run_call(self, registry, value, cancellation, call):
+        """One call of ``value``: its result message and its work log entry,
+        which the caller writes (_log_call). Calls of one step may run on
+        threads of their own at the same time (_execute_together)."""
         identity = (value.step_id, call["id"])
-        if identity in self.seen_calls:
-            raise ValueError("Duplicate tool call")
-        self.seen_calls.add(identity)
         with self.condition:
+            if identity in self.seen_calls:
+                raise ValueError("Duplicate tool call")
+            self.seen_calls.add(identity)
             self.tools_used += 1
             if not self.policy.account_budget_only and self.tools_used > self.policy.max_tools:
                 raise AnalysisBudgetExceeded("Shared tool limit reached")
@@ -1525,16 +1557,15 @@ class DelegationLoop(AgentLoop):
         message = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps(result, ensure_ascii=False)}
         # The app's own calls (the review of the fixed answer) are not the agent's work.
         duration_ms = int((time.monotonic() - began) * 1000)
-        if first_in_workspace is not None and self.first_workspace_call is None:
-            self.first_workspace_call = {
-                "kind": "browser" if (call.get("function") or {}).get("name") == "browser" else "vm",
-                "ms": duration_ms, "after_s": round(max(0.0, first_in_workspace), 1), "failed": status != "succeeded"
-                or (isinstance(result, dict) and "error" in result)}
+        with self.condition:
+            if first_in_workspace is not None and self.first_workspace_call is None:
+                self.first_workspace_call = {
+                    "kind": "browser" if (call.get("function") or {}).get("name") == "browser" else "vm",
+                    "ms": duration_ms, "after_s": round(max(0.0, first_in_workspace), 1),
+                    "failed": status != "succeeded" or (isinstance(result, dict) and "error" in result)}
         log_actor = self._log_actor(value.step_id) if registry is not self.app_registry else None
-        if log_actor:
-            self.work_log.tool(log_actor, value.step_id, call, message, started_at=started_at,
-                               duration_ms=duration_ms)
-        return message
+        entry = (log_actor, value.step_id, call, message, started_at, duration_ms) if log_actor else None
+        return message, entry
 
     def _admit_chat_step(self, model, messages, step, registry, cancellation, searches, claim_policy, worker,
                          clamp_floor=None, server_tools=(), answer_output=0, closing=False):
@@ -1767,9 +1798,12 @@ class DelegationLoop(AgentLoop):
         value.published = ""
         value.tool_call_limit = TOOL_CALLS_PER_STEP
         if worker is None:
-            # The agent's own steps: several calls while the workspace is
-            # open, and a call past the limit gets its result (T2).
-            value.parallel_tool_calls, value.keep_over_limit = self._parallel_calls(), True
+            # The agent's own steps ask for several calls, in every request
+            # of the message alike: Anthropic's tool_choice carries the flag,
+            # and a change of it rewrites the cached messages. A call past
+            # the limit gets its result. Workers keep one call a step: their
+            # only tool reports to the orchestrator.
+            value.parallel_tool_calls, value.keep_over_limit = True, True
         # A comparison answer's line is quoted live in the chat while the main
         # model waits (agent-activity.js highlight): it keeps updating, paced,
         # instead of freezing after the first few sentences.
@@ -2206,29 +2240,46 @@ class DelegationLoop(AgentLoop):
 
     def _execute_stream(self, value, call, registry=None):
         """Keep SSE live while a tool fans out or waits for the reviewers."""
+        [response] = yield from self._execute_together(value, [call], registry)
+        return response
+
+    def _execute_together(self, value, calls, registry=None):
+        """Runs ``calls`` at the same time, each on a thread of its own, while
+        SSE stays live, and returns their results in call order. Their work
+        log entries follow in that order once all have ended, as the agent
+        reads them. The first error in call order is raised once every call
+        has ended; a closed stream stops them all, as Stop does."""
         from contextvars import copy_context
-        result = queue.Queue(maxsize=1)
         registry = registry or self.registry
-        def work():
+        outcomes = [None] * len(calls)
+
+        def work(index, call):
             try:
-                result.put((self._execute(registry, value, self.cancellation, call), None))
+                outcomes[index] = (self._run_call(registry, value, self.cancellation, call), None)
             except BaseException as exc:
-                result.put((None, exc))
-        worker = threading.Thread(target=copy_context().run, args=(work,), daemon=True)
-        worker.start()
+                outcomes[index] = (None, exc)
+        threads = [threading.Thread(target=copy_context().run, args=(work, index, call), daemon=True)
+                   for index, call in enumerate(calls)]
+        for thread in threads:
+            thread.start()
         try:
-            while worker.is_alive():
-                yield from self._events()
-                worker.join(.1)
+            for thread in threads:
+                while thread.is_alive():
+                    yield from self._events()
+                    thread.join(.1)
             yield from self._events()
-            response, error = result.get()
-            if error:
-                raise error
-            return response
         finally:
-            if worker.is_alive():
+            if any(thread.is_alive() for thread in threads):
                 self.cancellation.cancel()
-                worker.join()
+                for thread in threads:
+                    thread.join()
+            for done, _ in filter(None, outcomes):
+                if done is not None:
+                    self._log_call(done[1])
+        for _, error in outcomes:
+            if error is not None:
+                raise error
+        return [done[0] for done, _ in outcomes]
 
     def _watch(self):
         from google.api_core.exceptions import DeadlineExceeded, InternalServerError, ServiceUnavailable
@@ -3419,12 +3470,12 @@ class DelegationLoop(AgentLoop):
                             yield from self._keep_cut_answer(value)
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     if value.tool_calls:
-                        accepted_tool = last_accepted = False
+                        accepted_tool = False
                         limit = None
                         results = {}
-                        # Why the step's later calls do not run (T2): the
-                        # user wrote to the agent (HOLD_STEERED), or the step
-                        # was interrupted (CALL_AFTER_*). Each such call gets
+                        # Why the step's later calls do not run: the user
+                        # wrote to the agent (HOLD_STEERED), or the step was
+                        # interrupted (CALL_AFTER_*). Each such call gets
                         # that as its result, the app's own text (``unrun``).
                         stopped, unrun = None, set()
                         # A browser call of this step that failed: the step's
@@ -3437,40 +3488,63 @@ class DelegationLoop(AgentLoop):
                             results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
                                                    "content": json.dumps({"error": text})}
 
-                        for position, call in enumerate(value.tool_calls):
-                            name = (call.get("function") or {}).get("name")
-                            if call["id"] in over_limit:
-                                not_run(call, CALL_OVER_LIMIT)
+                        # One group after the other; the calls of a group
+                        # run at the same time (_call_groups), any other call
+                        # on its own with its waits for the user.
+                        for group in self._call_groups(value.tool_calls, over_limit):
+                            if limit:
+                                break
+                            waiting = []
+                            for position, call in group:
+                                name = (call.get("function") or {}).get("name")
+                                if call["id"] in over_limit:
+                                    not_run(call, CALL_OVER_LIMIT)
+                                elif stopped is not None:
+                                    not_run(call, stopped)
+                                elif browser_failed and name == "browser":
+                                    not_run(call, CALL_AFTER_BROWSER_FAILURE)
+                                else:
+                                    # The chat's next message starts with the workspace open.
+                                    self.workspace_used = self.workspace_used or name in self.workspace_names
+                                    waiting.append((position, call))
+                            if not waiting:
                                 continue
-                            if stopped is not None:
-                                not_run(call, stopped)
-                                continue
-                            if browser_failed and name == "browser":
-                                not_run(call, CALL_AFTER_BROWSER_FAILURE)
-                                continue
-                            # The chat's next message starts with the workspace open.
-                            self.workspace_used = self.workspace_used or name in self.workspace_names
-                            # Between the calls of a batch too: after a halt
-                            # the next call waits for the user. Once the user
-                            # wrote to the agent, the rest of the batch waits
-                            # for the agent's next step instead; so does a
-                            # pause that came after a call of this step ran.
+                            position = waiting[0][0]
+                            # Before every group too: after a halt it waits
+                            # for the user. Once the user wrote to the agent,
+                            # the rest of the batch waits for the agent's next
+                            # step instead; so does a pause that came after a
+                            # call of this step ran.
                             paused = yield from self._hold_wait()
                             if paused == "steer" or (paused is not None and position):
                                 stopped = HOLD_STEERED if paused == "steer" else CALL_AFTER_PAUSE
-                                not_run(call, stopped)
+                                for _, call in waiting:
+                                    not_run(call, stopped)
                                 continue
-                            repeat = self._identical_call(call)
-                            if repeat == "stop":
-                                limit = TURN_REPEAT_LIMIT
-                                break
-                            if repeat == "refuse":
-                                results[call["id"]] = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
-                                    "error": f"This identical {name} call already ran {self.policy.turn_identical_calls} "
-                                             "times in this message and is not run again. Its results are above: use them "
-                                             "and continue with a different step. Repeating it ends the response."})}
-                                last_accepted = False
+                            run, keys = [], set()
+                            for _, call in waiting:
+                                name = (call.get("function") or {}).get("name")
+                                repeat = self._identical_call(call)
+                                if repeat == "stop":
+                                    limit = TURN_REPEAT_LIMIT
+                                    break
+                                if repeat == "refuse":
+                                    results[call["id"]] = {"role": "tool", "tool_call_id": call["id"], "content": json.dumps({
+                                        "error": f"This identical {name} call already ran {self.policy.turn_identical_calls} "
+                                                 "times in this message and is not run again. Its results are above: use them "
+                                                 "and continue with a different step. Repeating it ends the response."})}
+                                    continue
+                                key = self._call_key(call)
+                                if key is not None and key in keys:
+                                    # Run once: both would read the same.
+                                    not_run(call, CALL_REPEATED)
+                                    continue
+                                keys.add(key)
+                                run.append(call)
+                            if not run:
                                 continue
+                            call = run[0]
+                            name = (call.get("function") or {}).get("name")
                             gate = getattr(value, "gate", None)
                             # Only where the tool is the account's: a model without it
                             # (Free, since f4094fe2) that calls it anyway gets "unknown
@@ -3490,7 +3564,6 @@ class DelegationLoop(AgentLoop):
                                                                domain=domain)})}
                                     # The step's later calls counted on it.
                                     stopped = CALL_AFTER_DENIAL.format(domain=domain)
-                                    last_accepted = False
                                     continue
                             elif gate is not None and call["id"] in gate.call_ids \
                                     and (yield from self._gate_wait(gate)) == "steer":
@@ -3502,33 +3575,38 @@ class DelegationLoop(AgentLoop):
                                 # The user's card (agent_ask.py); the tool then
                                 # returns their answer. A message on it is that
                                 # answer: the rest of the batch waits, and so it
-                                # does after any answer (T2).
+                                # does after any answer.
                                 asked = yield from self._ask_wait(call)
                                 if asked != "run":
                                     # "run": arguments the tool refuses, no card.
                                     stopped = HOLD_STEERED if asked == "steer" else CALL_AFTER_ASK
-                            elif name in self.workspace_tools:
+                            elif any((c.get("function") or {}).get("name") in self.workspace_tools for c in run):
                                 taken = yield from self._takeover_wait()
                                 if taken in {"steer", "timeout"}:
                                     # Not run: nothing of the agent's reached the
                                     # workspace while the user had the browser.
                                     from app.services.agent_ask import TAKEOVER_TIMEOUT
                                     stopped = HOLD_STEERED if taken == "steer" else TAKEOVER_TIMEOUT
-                                    not_run(call, stopped)
-                                    last_accepted = False
+                                    for call in run:
+                                        not_run(call, stopped)
                                     continue
                                 if taken is not None and position:
                                     # The user had the browser after a call of
                                     # this step ran: the page is theirs now.
                                     stopped = CALL_AFTER_TAKEOVER
-                                    not_run(call, stopped)
+                                    for call in run:
+                                        not_run(call, stopped)
                                     continue
-                            result = yield from self._execute_stream(value, call)
-                            results[call["id"]] = result
-                            content = json.loads(result["content"])
-                            last_accepted = "error" not in content
-                            accepted_tool |= last_accepted
-                            browser_failed = browser_failed or (name == "browser" and not last_accepted)
+                            if len(run) > 1:
+                                done = yield from self._execute_together(value, run)
+                            else:
+                                done = [(yield from self._execute_stream(value, call))]
+                            for call, result in zip(run, done):
+                                results[call["id"]] = result
+                                accepted = "error" not in json.loads(result["content"])
+                                accepted_tool |= accepted
+                                browser_failed = browser_failed or (
+                                    (call.get("function") or {}).get("name") == "browser" and not accepted)
                             if self.comparison and self.comparison.finalized:
                                 # Ignore speculative extra calls in the same batch
                                 # once the review has reached an end state.

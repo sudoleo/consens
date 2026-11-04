@@ -271,7 +271,7 @@ Prüfer (`BRIEF_HEAD`) den Grundsatz. Der Halt bleibt eine Entscheidung des
 Nutzers; die harten Grenzen (Tageskonto, VM-Zeit, abgeschottete Werkbank, keine
 Domain-Freigaben ohne Pro) tragen, wo ein Modell sich überreden lässt. Danach nur Fakten der App
 (`AGENT_AUDIT_ANSWER_SECTION` „HOW CONSENS.IO WORKS“: Modus, Antwort und Notiz,
-Markdown mit Links statt `[S1]`, Prüfer unsichtbar, Wissensstand). Die Blöcke
+Aufrufe in Reihenfolge und lesende gleichzeitig, Markdown mit Links statt `[S1]`, Prüfer unsichtbar, Wissensstand). Die Blöcke
 zu Quellen, Watches, Einstellungen, Dateien, Dokumenten, VM, GitHub und Memory
 sagen nur noch, was die App tut; ihre einzelnen Verbote stehen in der
 Verfassung. Werkzeugbeschreibungen ohne Wann-Listen (`read_source`), und
@@ -1215,31 +1215,73 @@ Aus dem [Laufzeit-Audit](agent-workspace-runtime-audit-2026-10-30.md)
 (Befunde T2, T3, L1, L3, L6, L7, K6, I1, I4, I6, I7, I9). Grundsatz wie
 überall: Fakten im Ergebnis, keine Wann-Regeln.
 
-**Mehrere Aufrufe je Schritt (T2).** Solange der Arbeitsplatz offen ist,
-fragt jeder Schritt des Agenten mit `parallel_tool_calls`
-(`DelegationLoop._parallel_calls`); ohne Arbeitsplatz und bei Workern,
-Vergleichsantworten und Prüfern bleibt es aus. Bei Anthropic steckt der
-Schalter in `tool_choice`, eine Änderung schreibt die gecachten Nachrichten
-neu: Er schaltet deshalb nur zusammen mit `open_workspace` um, dessen
-Werkzeuge den Cache ohnehin einmal brechen, und nie zurück. Die Aufrufe eines
-Schritts laufen nacheinander, höchstens `TOOL_CALLS_PER_STEP` = 4;
-`AGENT_VM_PROMPT` sagt das als Fakt. Jede Call-ID bekommt genau ein Ergebnis,
-sonst lehnt der Anbieter die nächste Anfrage ab. Ein Aufruf über der Grenze
-bleibt ohne Argumente im Verlauf und liest `CALL_OVER_LIMIT`
-(`AgentCompletion.keep_over_limit`, `over_limit_ids`; bis dahin fiel er
-still weg). Die übrigen Aufrufe eines Schritts laufen nicht und sagen warum:
-nach einer Nachricht des Nutzers (`HOLD_STEERED`, wie bisher), nach einer
+**Mehrere Aufrufe je Schritt (T2).** Jeder Schritt des Agenten fragt mit
+`parallel_tool_calls` (`DelegationLoop._step`), in jeder Anfrage der Nachricht
+gleich, mit und ohne Arbeitsplatz: Bei Anthropic steckt der Schalter in
+`tool_choice`, und ein Wechsel schriebe die gecachten Nachrichten neu. Worker
+fragen ohne (ihr einziges Werkzeug meldet an den Orchestrator);
+Vergleichsantworten, Seitenabrufe und Prüfer haben keine Client-Werkzeuge, ihre
+Anfragen tragen das Feld nicht.
+
+Die Aufrufe eines Schritts laufen in ihrer Reihenfolge, in Gruppen
+(`_call_groups`): Benachbarte Aufrufe von Werkzeugen mit
+`ReadOnlyTool.concurrent` laufen gleichzeitig, jeder auf einem eigenen Thread
+(`_execute_together`), jeder andere Aufruf allein nach der Gruppe davor. Eine
+Gruppe dauert so lange wie ihr längster Aufruf. Das Flag setzt das Werkzeug dort,
+wo es definiert ist, und nur, wenn es nur liest, nichts vom Zustand eines anderen
+Aufrufs desselben Schritts braucht und threadsicher läuft: `read_source`,
+`search_pictures`, `read_file`, `read_document`, `gmail_read`, `calendar_read`,
+`search_chats`, `read_settings`, `vm_read_file` und `vm_view_image`. Allein
+laufen alles mit Nutzerinteraktion oder Zustandsänderung (`ask_user`,
+`request_domain`, `browser`, dessen Aktionen aufeinander aufbauen, `vm_exec` und
+die übrigen Werkzeuge des Arbeitsplatzes, die `prepare_*`-Karten,
+`update_memory`, `update_plan`, `open_workspace`, Dokumente, die Worker-Werkzeuge),
+dazu `compare_models` (seine Grenze je Nachricht und die Ausgabeanteile aus dem
+Kontingent rechnen mit einem Vergleich zur Zeit) und `find_pictures` (seine
+Bildgrenze je Nachricht zählt beim Abruf, die Bilder folgen in Reihenfolge).
+
+Jede Call-ID bekommt genau ein Ergebnis, sonst lehnt der Anbieter die nächste
+Anfrage ab, und die Ergebnisse stehen in Aufrufreihenfolge im Verlauf, auch wenn
+ein späterer Aufruf zuerst fertig war. Live-Events kommen je Call-ID
+(`completion:N:<id>/tool`); `AgentLoop.activity` hält dafür eine Sperre, weil
+Aufrufe und Prüfer von eigenen Threads senden. Die `tool`-Einträge des
+Arbeitsprotokolls (je Aufruf mit `started_at` und `duration_ms`) schreibt eine
+Gruppe nach ihrem Ende in Aufrufreihenfolge (`_run_call`, `_log_call`), so wie
+der Agent die Ergebnisse liest. Derselbe Aufruf zweimal in einer Gruppe läuft
+einmal, der zweite liest `CALL_REPEATED`; `read_source` erkennt außerdem eine
+Seite, die ein anderer Aufruf des Schritts gerade liest (`already_read`). Der
+Wiederholungsschutz (`_identical_call`) zählt jeden Aufruf einer Gruppe in
+Reihenfolge vor ihrem Start; beendet er die Antwort, laufen die Aufrufe der
+Gruppe vor dem beendenden noch. Stop bricht alle laufenden Aufrufe ab (sie
+teilen die Abbruchkennung des Laufs), ein geschlossener Stream ebenso; einen
+anderen Fehler eines Aufrufs reicht die Gruppe erst weiter, wenn die übrigen
+fertig sind.
+
+`TOOL_CALLS_PER_STEP` = 16 ist kein Takt, sondern Schutz gegen einen
+ausufernden Schritt (Threads, Ergebnisse in einer Anfrage): Fünf Quellen
+(`READS_PER_STEP`) und ein paar Dateien in einem Schritt sind gewöhnliche
+Arbeit, und gängige Harnesses setzen keine kleine Grenze. Ein Aufruf über der
+Grenze bleibt ohne Argumente im Verlauf und liest `CALL_OVER_LIMIT`
+(`AgentCompletion.keep_over_limit`, `over_limit_ids`). Die Prompts sagen es als
+Fakt, ohne die Grenze: `AGENT_AUDIT_ANSWER_SECTION` (Reihenfolge, Ergebnisse in
+ihr, Lesendes gleichzeitig mit den lesenden Nachbarn), `AGENT_VM_PROMPT` (Pause,
+`ask_user` und Übernahme beenden die späteren Aufrufe).
+
+Die übrigen Aufrufe eines Schritts laufen nicht und sagen warum; geprüft wird vor
+jeder Gruppe: nach einer Nachricht des Nutzers (`HOLD_STEERED`), nach einer
 Pause, die nach einem gelaufenen Aufruf des Schritts kam und die der Nutzer
 weiterlaufen ließ (`CALL_AFTER_PAUSE`; eine Pause vor dem ersten Aufruf
 entscheidet der Nutzer mit den Aufrufen auf der Karte, sie laufen dann), nach
 `ask_user` (`CALL_AFTER_ASK`), nach einer Übernahme des Browsers
-(`CALL_AFTER_TAKEOVER`), nach einer abgelehnten Domain (`CALL_AFTER_DENIAL`)
-und nach einem Gate-Veto. Der Grund eines Prüfers erreicht den Agenten dabei
-nie, nur dass eine Pause war. Nicht gelaufene Aufrufe tragen App-Text und
-sperren Memory nicht. Reasoning-Signaturen: Die Nachricht des Agenten geht
-mit allen Aufrufen des Schritts zurück, auch dem über der Grenze, das
-Reasoning unverändert; mit signiertem Claude-Reasoning und mehreren Aufrufen
-live noch nicht geprüft.
+(`CALL_AFTER_TAKEOVER`; eine Gruppe mit Werkzeugen des Arbeitsplatzes wartet
+einmal vor ihrem Start darauf), nach einer abgelehnten Domain
+(`CALL_AFTER_DENIAL`) und nach einem Gate-Veto. Ein Halt während einer Gruppe
+lässt sie zu Ende laufen und hält die nächste. Der Grund eines Prüfers erreicht
+den Agenten dabei nie, nur dass eine Pause war. Nicht gelaufene Aufrufe tragen
+App-Text und sperren Memory nicht. Reasoning-Signaturen: Die Nachricht des
+Agenten geht mit allen Aufrufen des Schritts zurück, auch dem über der Grenze,
+das Reasoning unverändert; mit signiertem Claude-Reasoning und mehreren
+Aufrufen live noch nicht geprüft.
 
 **Faktzeile nach jedem Ergebnis (L3).** In jeder Nachricht mit Arbeitsplatz
 (offen oder geschlossen) hängt `_note_progress` nach den Ergebnissen und
@@ -2982,7 +3024,7 @@ erreichbar), Checkpoint, Dateien, Live-Ausgabe, Exit-Code, Zeitlimit.
 Werkzeugs (live und mit `agent_activity` gespeichert): beim Start `command`/
 `cwd` bzw. `path`, während er läuft etwa jede Sekunde das Ende der Ausgabe
 (`output`, beide Ströme in Ankunftsreihenfolge, `VIEW_CHARS` = 2.000,
-`output_truncated`; `ReadOnlyTool.reports`, `DelegationLoop._execute`
+`output_truncated`; `ReadOnlyTool.reports`, `DelegationLoop._run_call`
 übergibt `report`), am Ende `exit_code`, `duration_ms`, `timed_out` oder
 `outcome` (`unavailable`, `no_time`). Die Updates eines Events ergänzen sich
 (Server `completion.event`, Browser `receive`). Das Ergebnis, das das Modell
@@ -3566,7 +3608,8 @@ seine eigenen Entscheidungen. Direkte Antworten brauchen einen Aufruf statt zwei
 
 - Der Systemprompt ist `AGENT_AUDIT_SYSTEM_PROMPT`: die Verfassung und
   `AGENT_AUDIT_ANSWER_SECTION` („HOW CONSENS.IO WORKS“: Text ohne Toolcall ist
-  die Antwort, Text daneben eine Notiz, Markdown mit Links statt Marken,
+  die Antwort, Text daneben eine Notiz, Aufrufe laufen in ihrer Reihenfolge und
+  lesende gleichzeitig (siehe „Mehrere Aufrufe je Schritt“), Markdown mit Links statt Marken,
   Formeln zwischen `$...$`/`$$...$$` gesetzt (seit 2026-11-01; DeepSeek V4.1
   Flash schrieb vorher ganze Antworten als blankes `O(2^{εn})`),
   Checklisten, Bilder nur wo gesetzt, Prüfer unsichtbar, Wissensstand). Die
@@ -5157,7 +5200,7 @@ Anbieters; nach vier Suchen kam der nächste Befehl als Index 5, und der Client
 nahm nur 0–3 an. Seitdem:
 - *Der Stream-Client wirft bei keiner einzelnen Zeile mehr den Schritt weg*
   (`AgentCompletion._tool_delta`): jeder Index unter `TOOL_INDEX_BOUND` (64)
-  nennt einen Aufruf, je Schritt bleiben höchstens `tool_call_limit` (4) in
+  nennt einen Aufruf, je Schritt bleiben höchstens `tool_call_limit` (16) in
   Stream-Reihenfolge (seit 2026-10-30 bleiben weitere Aufrufe des Agenten
   ohne Argumente stehen und bekommen ihr Ergebnis, `keep_over_limit`, siehe
   „Arbeitsplatz: Schritte, Zeit und Bilder“); ein Teilstück ohne Index setzt den letzten Aufruf fort;

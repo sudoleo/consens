@@ -392,7 +392,7 @@ class SettingsTools:
                 "answer, the defaults, and what this account can choose (chat models, reasoning levels, Pro-only "
                 "choices); also the facts about consens.io itself (price, daily allowance and what is left, limits, "
                 "sharing, memory, data, contact). Changes nothing.",
-                ReadSettings, self.read),
+                ReadSettings, self.read, concurrent=True),
             ReadOnlyTool(
                 TOOL_NAME,
                 "Prepare a change of the user's consens.io settings that they clearly asked for in this message: chat "

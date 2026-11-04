@@ -422,6 +422,7 @@ class FileContext:
         # Files the model opened itself; kept apart so they never evict the
         # user's explicit selection from later evidence.
         self.read_ids = []
+        self._read_lock = threading.Lock()
         # Object bytes by file id, with the hash they were checked against:
         # every step and every comparison answer of the turn sends the same
         # image/PDF, so it is downloaded once per turn, not once per call.
@@ -439,7 +440,9 @@ class FileContext:
         cancellation.raise_if_cancelled()
         data = self.files.get(self.uid, self.chat_id, args.file_id)
         if (data["mime"].startswith("image/") or not data["parts"]) and args.file_id not in self.file_ids:
-            self.read_ids = [fid for fid in self.read_ids if fid != args.file_id][-(4):] + [args.file_id]
+            # Reads of one step run at the same time (ReadOnlyTool.concurrent).
+            with self._read_lock:
+                self.read_ids = [fid for fid in self.read_ids if fid != args.file_id][-(4):] + [args.file_id]
         return self._excerpts(data, args)
 
     def _excerpts(self, data, args):
@@ -453,7 +456,8 @@ class FileContext:
                 "trust": "untrusted", "citation": f"{data['name']} · locator in excerpt"}
 
     def tools(self):
-        return [ReadOnlyTool("read_file", "Read bounded excerpts of a file in this chat. Cite its name and locator; use pagination for more.", ReadFileArgs, self.read)]
+        return [ReadOnlyTool("read_file", "Read bounded excerpts of a file in this chat. Cite its name and locator; use pagination for more.", ReadFileArgs, self.read,
+                             concurrent=True)]
 
     def catalog(self):
         read, self._preloaded = self._preloaded, None

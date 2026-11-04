@@ -1426,6 +1426,12 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   Ein `request_domain` dort zeigt die Domain-Karte mit dem Urteil der Prüfer.
 - [ ] Reviewers *Off* + Domain-Anfrage am Arbeitsplatz: die Karte sagt „Your
   reviewers are off, so only you decide.“
+- [ ] Mehrere Aufrufe je Schritt (`ReadOnlyTool.concurrent`): eine Frage, die
+  drei Seiten braucht, mit Claude (signiertes Reasoning), GPT und Gemini. Die
+  Aktivität zeigt die Lesungen eines Schritts gleichzeitig laufend, jede in
+  ihrer eigenen Zeile, der Schritt dauert etwa so lange wie die längste; die
+  nächste Anfrage lehnt kein Anbieter ab. Stop während der Lesungen beendet
+  alle, und keine Zeile bleibt laufend stehen.
 - [ ] Temporärer Chat: auf einem neuen Agent-Chat oben rechts die gestrichelte
   Sprechblase klicken → gedrückt, Begrüßung „Temporary chat. Gone when you
   leave it.“, Platzhalter „Ask in a temporary chat“, die Feldkante wird weich
