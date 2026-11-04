@@ -172,6 +172,9 @@ TOOL_FAILED = "This call failed on consens.io's side, not in your workspace, and
 LEASE_KEEP_SECONDS = 240
 LEASE_KEEP_MAX_SECONDS = 6 * 3600
 CLOSE_WAIT_SECONDS = 2.0
+# The network counters' look at the message's end (VMTools._note_net).
+NET_SECONDS = 15
+NET_BYTES = 64 * 1024
 CHECKPOINT_WAIT_SECONDS = agent_vm.CHECKPOINT_SECONDS + 10
 VM_NO_TIME = ("Not enough time is left in this message for a command. Write the answer from what you have.")
 VM_DAY_LIMIT = ("The VM time of this account for today is used up: commands, installations and new background "
@@ -204,9 +207,19 @@ INSTALL_TIMEOUT = 300
 # An install its time limit or Stop cut off leaves dpkg half done, and every
 # later apt-get would refuse until it is finished; the agent has no sudo to
 # finish it. The package lists are fetched again when older than a day.
+# Since 2026-11-04 the user's browser runs on the same computer, and root's
+# apt-get takes the agent's names, so an install never removes anything
+# (--no-remove: a package that conflicts with an installed one would
+# otherwise take out Chrome, its screen or sudo, -y says yes to that) and
+# takes each name only as the name of a package apt knows (apt-get reads a
+# name it does not know that holds . or + as a pattern, e.g. e.e for
+# thousands of packages).
 INSTALL_COMMAND = ("sudo -n env DEBIAN_FRONTEND=noninteractive dpkg --configure -a </dev/null >/dev/null 2>&1; "
                    "find /var/lib/apt/lists -maxdepth 1 -name '*_Packages*' -mmin -1440 2>/dev/null | grep -q . || "
-                   "sudo -n apt-get update -qq; sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -q -- {}")
+                   "sudo -n apt-get update -qq; known=$(apt-cache pkgnames --all-names 2>/dev/null); "
+                   "for name in {packages}; do printf '%s\\n' \"$known\" | grep -qxF -- \"$name\" || "
+                   "{{ echo \"E: Unable to locate package $name\" >&2; exit 100; }}; done; "
+                   "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-remove -- {packages}")
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 
@@ -1070,11 +1083,34 @@ class VMSession:
                 callback()
             except Exception as exc:
                 logging.info("Agent workspace close step failed category=%s", safe_exception(exc))
+        if self._bench_ran:
+            self._note_net()
         if self.backend is not None:
             try:
                 self.backend.close()
             except Exception as exc:
                 logging.info("Agent VM backend close failed category=%s", safe_exception(exc))
+
+    def _note_net(self):
+        """The VM's network counters for the server's safety rules once the
+        message's commands ran (since 2026-11-04, when the network opened
+        for the whole computer): the browser's answers bring them, but a
+        message that only ran commands brought none, and an upload with curl
+        went uncounted. Only where the guard counts; a failure costs this
+        look, the next one counts the bytes since boot all the same."""
+        from app.services import workspace_guard
+        if self.backend is None or not workspace_guard.counts():
+            return
+        out = []
+        try:
+            self.backend.run(self.name, workspace_guard.NET_ARGV, cwd=agent_vm.SERVER_HOME, timeout=NET_SECONDS,
+                             on_output=lambda stream, chunk: out.append(chunk) if stream == "stdout" else None,
+                             cancellation=ProviderCancellation())
+        except Exception as exc:
+            logging.info("Agent VM network counters not read category=%s", safe_exception(exc))
+            return
+        workspace_guard.note_net(self.loop.uid, workspace_guard.parse_net(
+            b"".join(out)[:NET_BYTES].decode("utf-8", "replace")))
 
     def _sweep_deleted(self):
         """A stopped message whose chat is being deleted or gone (a
@@ -1448,7 +1484,7 @@ class VMTools:
                 reported[0] = now
                 report(output.shown())
         report({"started_at": _now()})
-        outcome = self._exec(INSTALL_COMMAND.format(" ".join(shlex.quote(name) for name in packages)),
+        outcome = self._exec(INSTALL_COMMAND.format(packages=" ".join(shlex.quote(name) for name in packages)),
                              cwd=agent_vm.SERVER_HOME, timeout=timeout, on_output=on_output,
                              cancellation=cancellation, agent=False)
         with self.session._lock:

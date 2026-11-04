@@ -363,8 +363,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `ls /tmp/.X11-unix` → kein Zugriff bzw. leer (eigenes /tmp). Ein
       X-Client auf Display :1 (z. B. `xdpyinfo -display :1`, falls da) wird
       abgelehnt („Authorization required“). Live-Ansicht
-      zeigt Chrome wie vorher, Übernehmen und Tippen klappen. Automatisiert:
-      `test_workspace_cdp.py`, `test_agent_workspace.py`.
+      zeigt Chrome wie vorher, Übernehmen und Tippen klappen. Seit dem Review
+      2026-11-04 als Agent außerdem: `unshare --user --map-root-user true`
+      scheitert („Operation not permitted“), `cat /proc/self/oom_score_adj`
+      zeigt 800; `pip install`, `npm install`, `git clone` und `google-chrome
+      --headless=new --no-sandbox --screenshot http://localhost:<port>/`
+      laufen. `vm_install_packages(["jq"])` klappt, `["e.e"]` endet mit
+      „Unable to locate package“. Ein Konto mit alter Browser-VM: „Überall
+      abmelden“ vor dem ersten Öffnen löscht `consens-b-…` in Sprites.
+      Automatisiert: `test_workspace_cdp.py`, `test_agent_workspace.py`,
+      `test_workspace_nouserns.py` (unter Linux echt installiert).
 - [ ] Office-Dateien (2026-11-01, `docs/agent-mode.md`, Konverter
       `consens-office`): Konto mit Arbeitsplatz, „Mach mir eine kurze
       PowerPoint über X“. Der Agent installiert kein LibreOffice, ruft

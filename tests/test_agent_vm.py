@@ -119,6 +119,12 @@ class _FakeBackend(VMBackend):
         if agent_workspace.CHAT_SCRIPT in argv:
             return self._chat(name, argv, input, on_output)
         self._call("run", name, argv[-1])
+        from app.services import workspace_guard
+        if argv == workspace_guard.NET_ARGV:
+            # The network counters at a message's end (VMTools._note_net).
+            on_output("stdout", b"  eth0: 1000 10 0 0 0 0 0 0 2000 20 0 0 0 0 0 0\n"
+                                b"0b5f0d1c-9c55-4c1e-9f4e-3a1d2b9e7c10\n")
+            return ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
         from app.services import agent_secrets
         if agent_secrets.SAVE_SCRIPT in argv or agent_secrets.LOAD_SCRIPT in argv:
             assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN]
@@ -704,7 +710,14 @@ def test_installing_never_removes_a_package(store, fake_vm):
     assert "no apt package name" in refused["error"]
     assert installed["packages"] == ["g++", "python3.12-venv"] and installed["exit_code"] == 0
     [command] = [c for c in fake_vm.server if "apt-get install" in c]
-    assert command.endswith("-- g++ python3.12-venv")
+    assert command.endswith("apt-get install -y -q --no-remove -- g++ python3.12-venv")
+    # Since 2026-11-04 the user's browser runs on the same computer: no
+    # removal through a conflict either (-y would agree to it), and each
+    # name only as a package apt knows, never as a pattern (e.e).
+    assert "--no-remove" in command
+    check = command[command.index("known=$(apt-cache pkgnames --all-names"):command.index("apt-get install")]
+    assert "for name in g++ python3.12-venv; do" in check and 'grep -qxF -- "$name"' in check
+    assert "exit 100" in check
 
 
 def test_an_install_cut_off_before_is_finished_before_the_next_one(store, fake_vm):

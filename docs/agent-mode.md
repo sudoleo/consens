@@ -220,14 +220,15 @@ Einstellung in ganzen Sätzen und gilt so im Code:
 |---|---|---|---|
 | Marken auf der Antwort, Notes | ja | nur wenn der Arbeitsplatz genutzt wurde | nein, „Not reviewed · …“ |
 | Aussteuern (Halt) | ja | ab dem ersten Schritt am Arbeitsplatz | nein |
-| Vorab-Prüfung (Memory nach Fremdinhalt, `request_domain`) | Prüfer, dann Nutzer | ab dem ersten Schritt am Arbeitsplatz, vorher wie Off | Memory gesperrt, Domain entscheidet nur der Nutzer |
+| Vorab-Prüfung (Memory nach Fremdinhalt; bis 2026-11-04 auch `request_domain`) | Prüfer, dann Nutzer | ab dem ersten Schritt am Arbeitsplatz, vorher wie Off | Memory gesperrt |
 | `read_source` auf selbst gewählte Adressen | ja | ab dem Arbeitsplatz | nein (nur Suchtreffer, Quellen, Links des Nutzers) |
 | Prüferanteil am Tageskonto | ja | nur am Arbeitsplatz | nein |
 
 Was immer bleibt: die eigenen Sicherungen des Modells, die festen Grenzen der
-App (Zeit, Schritte, Tageskonto, VM-Zeit, geschlossenes Netz der Werkbank,
-Karten statt Schreibzugriffen, Freigabe jeder Domain durch den Nutzer,
-Memory-Sperre nach Fremdinhalt, die Sicherheitsregeln des Arbeitsplatzes) und
+App (Zeit, Schritte, Tageskonto, VM-Zeit, Karten statt Schreibzugriffen,
+Memory-Sperre nach Fremdinhalt, die Sicherheitsregeln des Arbeitsplatzes; bis
+2026-11-04 auch ein geschlossenes Netz der Werkbank mit Freigabe jeder Domain
+durch den Nutzer, „Ein Rechner“) und
 der Stopp-Knopf. „Only in the workspace“ startet die Prüfer, sobald der
 Arbeitsplatz geöffnet ist (ihre Kurzfassung kennt dann seine Regeln), oder, wo
 er schon offen war, mit dem ersten Schritt, der eines seiner Werkzeuge aufruft
@@ -242,10 +243,11 @@ Prüfer endet `off` (`audit.setting` sagt warum), nie `failed`. Die
 Kosten hält das Tageskonto (jede Browser-Aktion ist ein Modellschritt), den
 Arbeitsplatz zusätzlich die VM-Zeit: ohne Pro 20 Minuten am Tag
 (`agent_vm_time.BASE_DAILY_SECONDS`), Pro 2 Stunden. Wer die VM bekommt, regelt
-`AGENT_VM_ACCESS` (siehe „Agent VM“). Nur `request_domain` bleibt Pro und
-Admins (`routers/agent.py::domains_allowed`, `AGENT_VM_NO_DOMAINS_PROMPT`): Ein
-Skript auf der Werkbank erreicht freigegebene Domains ohne Modellschritt,
-tausende Anfragen in einem Befehl, die kein Tageskonto bremst.
+`AGENT_VM_ACCESS` (siehe „Agent VM“). Bis 2026-11-04 blieb `request_domain`
+Pro und Admins vorbehalten, weil ein Skript auf der Werkbank freigegebene
+Domains ohne Modellschritt erreicht; seit dem offenen Netz („Ein Rechner“)
+gibt es das Werkzeug nicht mehr, und Massenverkehr zählen die
+Sicherheitsregeln (`sent_bytes`, auch nach Nachrichten nur mit Befehlen).
 
 **Verfassung statt Regeln (seit 2026-10-28 abends).** Max: dem Modell keine
 Befehle und festen Wege geben, es entscheidet mit eigener Intelligenz. Der
@@ -837,9 +839,10 @@ dem Aufruf, denn die App schreibt einen Schritt ins Protokoll und führt ihn
 sofort aus, die Runde eines Prüfers dauert Sekunden. Deshalb warten manche
 Aufrufe vorher auf die Prüfer. Welche, entscheidet die App nach dem Werkzeug
 und seinen typisierten Argumenten (`agent_gate.outward`, nie ein Modell, nie
-ein Textmuster): jede Domain-Anfrage (`request_domain`, die danach immer der
-Nutzer entscheidet, siehe „Netz der Werkbank“) und eine Memory-Änderung,
-sobald Fremdinhalt im Blick ist (`memory_exposed`, seit 2026-10-28).
+ein Textmuster): eine Memory-Änderung, sobald Fremdinhalt im Blick ist
+(`memory_exposed`, seit 2026-10-28); bis 2026-11-04 auch jede Domain-Anfrage
+(`request_domain`, die danach immer der Nutzer entschied, siehe „Netz der
+Werkbank“), seit dem offenen Netz („Ein Rechner“) nicht mehr.
 
 **Browser-Aktionen und Seitenabrufe warten nicht mehr** (seit 2026-10-29,
 Max: „nicht SOTA, wirkt gehandicapt“; kritische Handlungen sind kein einzelner
@@ -1006,15 +1009,16 @@ auch ohne Verbindung. Die Login-Umgebung (PATH mit `/.sprite/bin` und
 warnt sonst in jedem Befehl über `bind`; die Ausgabe des Befehls selbst bleibt
 ungefiltert. Seit 2026-10-27 außerdem `vm_install_packages` (`packages`:
 1–30 apt-Paketnamen, jeder gegen `^[a-z0-9][a-z0-9+.-]{0,99}(?<!-)$` geprüft
-(nie mit `-` am Ende: `apt-get install sudo-` entfernt sudo, seit 2026-11-04) und
+(nie mit `-` am Ende: `apt-get install sudo-` entfernt sudo, seit 2026-11-04;
+seit dem Review auch nur Namen, die apt kennt, und `--no-remove`, „Ein Rechner“) und
 quotiert hinter `--`): Der Agent hat kein sudo, der Server installiert als
 root (erst `dpkg --configure -a`, das eine abgebrochene Installation beendet,
 seit 2026-11-04; `apt-get update` nur, wenn die Listen älter als ein Tag sind), bis
 300 s, zählt zur VM-Zeit. Python-Pakete installiert er mit pip (fällt von
 selbst auf `~/.local` zurück, gemessen) oder uv, Node-Pakete mit npm im
 Projekt (`nvm` verträgt kein eigenes `prefix`, `npx` für Werkzeuge). Dazu
-`browser` (siehe „Arbeitsplatz“) und `request_domain` (siehe „Netz der
-Werkbank“).
+`browser` (siehe „Arbeitsplatz“); `request_domain` (siehe „Netz der
+Werkbank“) gab es bis 2026-11-04.
 Ab dem ersten Start der Werkbank oder der ersten Antwort des Browsers in einer
 Nachricht ist sie ein langer Lauf mit eigenen
 Grenzen (200 Schritte, 2 Stunden statt 24 und 15 min, siehe „Lange VM-Läufe“
@@ -1098,8 +1102,8 @@ Seit 2026-10-29 Standard für jedes Konto mit VM (`vm_allowed`; Max nach der
 Probe unten). `AGENT_WORKSPACE_ON_DEMAND=off` ist der Notaus: Dann hat jede
 Nachricht alles von Anfang an, wie zuvor. Eine Nachricht beginnt in **Stufe 1**. Im Systemprompt steht an der Stelle von VM-, GitHub- und
 Plan-Block `AGENT_WORKSPACE_CLOSED_PROMPT` (vor dem Memory-Block). Statt der
-Werkzeuge des Arbeitsplatzes (VM, `browser`, `ask_user`, `request_domain`,
-GitHub, `update_plan`) gibt es nur `open_workspace` (`task`: wofür, ein Satz,
+Werkzeuge des Arbeitsplatzes (VM, `browser`, `ask_user`, GitHub,
+`update_plan`; bis 2026-11-04 auch `request_domain`) gibt es nur `open_workspace` (`task`: wofür, ein Satz,
 bis 200 Zeichen). Suche, `read_source`, Bilder, Watch, Einstellungen,
 Chatsuche, Dokumente und Memory bleiben. Ein Werkzeug des Arbeitsplatzes, das
 das Modell trotzdem aufruft, läuft nicht („unknown tool“), und die VM startet
@@ -1130,13 +1134,13 @@ die Sperre mit ihrem Ende zurück.
 wartete beim ersten Versuch auf das Einrichten beider VMs (Werkbank allein
 57 s, Browser mit Chrome rund 60 s). Seitdem richtet die erste Nachricht eines
 Kontos an den Agenten, das noch keinen Arbeitsplatz hat (der Datensatz nennt
-keine VM), beide VMs im Hintergrund ein (`agent_workspace.provision`, aus
+keine VM), sie im Hintergrund ein (`agent_workspace.provision`, aus
 `routers/agent.py`, sobald die Nachricht eine VM haben darf): Datensatz zuerst
-(die Kontolöschung findet sie), Browser-VM mit `warm` und `rest`, Werkbank mit
-`open_workbench`, einmal pro Prozess und Konto. Nennt der Datensatz die VMs
-schon, richtet sie nur die ein, die es nicht gibt (`vm.exists`): Live-Ansicht
-oder Terminal tragen beide ein, machen aber nur ihre eigene (seit 2026-11-04;
-vorher blieb die andere ihrem ersten Aufruf überlassen). Notaus
+(die Kontolöschung findet sie), dann der Rechner mit `open_workspace` und
+Chrome mit `warm` und `rest`, einmal pro Prozess und Konto. Nennt der
+Datensatz die VM schon, richtet sie sie nur ein, wenn es sie nicht gibt
+(`vm.exists`). Bis 2026-11-04 waren es zwei VMs (Browser-VM und Werkbank mit
+`open_workbench`), und die Prüfung lief je VM. Notaus
 `AGENT_WORKSPACE_PROVISION=off` (Standard der Testsuite). Ein Start der
 Nachricht wartet auf ein laufendes Setup der Werkbank, statt ein zweites
 anzustoßen (`agent_workspace.setup_lock`); der Browser hat dafür seine Sperre
@@ -1370,11 +1374,38 @@ mit den Mitteln des Rechners nicht:
   Namespace: Sperren und Sockets des echten `/tmp` (X, Chrome, Playwright)
   liegen außer Reichweite, alle Befehle des Agenten und das Terminal teilen
   sich sein eigenes.
+- **Keine User-Namespaces** (Review 2026-11-04, Max' OK). Zwischen dem
+  Agenten und den Anmeldungen steht jetzt der Kernel statt einer VM-Grenze.
+  Ein User-Namespace macht einen normalen Nutzer darin zu root und öffnet
+  ihm Teile des Kernels, die sonst nur root erreicht (nf_tables und
+  ähnliche); die meisten Kernel-Lücken von normalem Nutzer zu root liefen
+  so (CVE-2024-1086). Ubuntu sperrt sie seit 23.10, die Sprite erlaubt sie
+  (`unshare --user --map-root-user` gelang dem Agenten). `agent-run` setzt
+  deshalb vor `setpriv` den seccomp-Filter aus
+  `workspace_vm/workbench/nouserns.py` (Standardbibliothek, ctypes):
+  `clone`/`unshare` mit `CLONE_NEWUSER` und jedes `setns` enden mit EPERM,
+  `clone3` mit ENOSYS (seine Flags liegen hinter einem Zeiger; glibc nimmt
+  dann `clone`, wie unter Dockers Standardprofil), x32-Nummern gar nicht.
+  Kein Filter, kein Befehl (Exit 125). Kosten: Ein Chrome, das der Agent
+  selbst startet, hat keine eigene Sandbox und braucht `--no-sandbox` (der
+  Prompt sagt es; Playwright startet Chromium ohnehin so); rootless
+  Container und bubblewrap laufen nicht. Die Sandbox schützte die Dateien des
+  Agenten vor einer Seite, die seine Befehle ohnehin erreichen. Geprüft im
+  BPF-Nachbau (`tests/test_workspace_nouserns.py`) und unter Linux echt
+  installiert (CI): Threads, fork/exec laufen, `unshare --user` scheitert.
+- **Chrome zuerst.** `agent-run` setzt `oom_score_adj` 800 (der Agent kann
+  es nicht senken) und nice 10: Wird der Speicher knapp, beendet der Kernel
+  den Build des Agenten vor dem Chrome des Nutzers, und die Live-Ansicht
+  bleibt bei Last flüssig. Eine eigene cgroup gibt es nicht (die Sprite
+  nimmt keine Grenzen an, siehe Office-Konverter).
 - **Nur eigene Prozesse.** Jedes `pgrep`/`pkill` in `display.sh` und
   `harden.sh` trägt `-u` des eigenen Nutzers: ein Prozess des Agenten, der
   sich wie Chrome oder Xtigervnc nennt, zählt nicht. Das Muster für Chrome
   beginnt am Anfang der Befehlszeile, damit `cdp.py` (dessen Zeile Chromes
-  nennt) nicht als Chrome gilt.
+  nennt) nicht als Chrome gilt. `x_ours` zählt nur Stream-Sockets (Typ
+  0001): Linux trennt abstrakte Namen nach Typ, ein Datagram-Socket des
+  Agenten auf `@/tmp/.X11-unix/X1` ließ die Prüfung bei jedem Aufruf
+  scheitern und beendete so den Chrome des Nutzers (Review 2026-11-04).
 - **localhost ist der Agent.** Ohne Tunnel öffnet Chrome den Server des
   Agenten direkt. `browser.py` liest eine localhost-Seite nur auf Ports, auf
   denen der Nutzer des Agenten lauscht und kein anderer, auf keiner Adresse
@@ -1395,7 +1426,18 @@ mit den Mitteln des Rechners nicht:
   die Domain-Karten, `agent_domains.py` und die Regeln pro Chat sind weg, das
   Gate (`agent_gate.outward`) hält keinen Aufruf mehr an; die Anzeige alter
   Läufe bleibt. Die Regeln kommen mit einer neuen `VERSION` (`prepare`), nie
-  am Anfang oder Ende einer Nachricht.
+  am Anfang oder Ende einer Nachricht. Was das offene Netz an Verkehr bringt,
+  zählen die Sicherheitsregeln: Seit dem Review liest der Server die Zähler
+  auch am Ende jeder Nachricht, deren Befehle liefen
+  (`VMSession._note_net`; vorher nur Browser und Ansicht, ein Upload mit
+  curl blieb ungezählt), und ein Schließen beendet alle Prozesse des Agenten
+  (`workspace_guard._end_agent_processes`; vorher liefen Hintergrundprozesse
+  bis zu einer Stunde weiter).
+- **apt entfernt nichts.** `vm_install_packages` läuft als root mit Namen des
+  Agenten. Seit dem Review mit `--no-remove` (sonst entfernte `-y` jedes
+  Paket, das mit dem gewünschten kollidiert: Chrome, Xtigervnc, sudo) und nur
+  mit Namen, die apt kennt (`apt-cache pkgnames --all-names`, exakt; einen
+  unbekannten Namen mit `.` oder `+` liest apt-get als Muster).
 - **Was bleibt.** Ein Key, den der Nutzer dem Agenten gibt (`~/.secrets`),
   kann der Agent benutzen und damit auch hinausschicken, wie auf jedem
   Rechner; dagegen helfen nur die Prüfer und Keys, die nie auf den Rechner
@@ -1415,6 +1457,9 @@ mit den Mitteln des Rechners nicht:
   Arbeitsplatzes, solange der Datensatz sie noch nennt (`browser`), und leert
   die Liste der Anmeldungen: Max' Entscheidung, sich einmal neu anzumelden
   statt das Profil zu kopieren. Die Kontolöschung löscht beide Namen.
+  „Überall abmelden“ löscht die alte Browser-VM seit dem Review in jedem
+  Fall mit (`delete_old_browser`): Ein Konto, das seinen Arbeitsplatz seit
+  dem Umzug nicht geöffnet hatte, behielt sonst die VM mit allen Anmeldungen.
 - **Checkpoints** enthalten jetzt auch das Profil des Browsers. „Überall
   abmelden“ hebt wie bisher die Untergrenze (`restore_floor`), damit kein
   älterer eine Anmeldung zurückbringt; ein Restore setzt Anmeldungen sonst
@@ -1440,6 +1485,10 @@ mit den Mitteln des Rechners nicht:
   Chrome. Das letzte Warten in `display.sh` dauert höchstens 15 s und fragt
   nur ein Chrome, das es selbst gestartet hat (vorher bis zu 150 Fragen à
   5 s unter `--keep`, solange ein hängendes Chrome das Schloss hielt).
+  Nach dem Review zusätzlich an der Sprite zu prüfen: `agent-run` mit dem
+  seccomp-Filter (`/usr/bin/python3` vorhanden, `unshare --user` scheitert,
+  pip, npm, git, `google-chrome --headless=new --no-sandbox` und Playwright
+  laufen), `vm_install_packages` mit `--no-remove` und der Namensprüfung.
 
 - **Ein Name am Konto.** `users/{uid}/chat_state/agent_workspace` trägt
   `name`, bevor der Anbieter die VM anlegt (`claim`, `record_for_view`). Die
@@ -1647,7 +1696,8 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   gezählt erst, wenn die Datei gelesen ist. python-pptx & Co. holt der Agent
   bei Bedarf selbst (pip, ~4 s). Offen: ein echter Agent-Lauf in Prod
   (Smoke-Liste „Office-Dateien“).
-- **Netz für das Setup.** `dl.google.com` ist in `WORKBENCH_RULES` zu.
+- **Netz für das Setup (bis 2026-11-04;** seitdem ist das Netz offen und
+  `setup.sh` lädt Chrome ohne eigene Regel, „Ein Rechner“). `dl.google.com` war in `WORKBENCH_RULES` zu.
   `prepare` liest deshalb vor `setup.sh` die Regeln (`get_policy`), setzt sie
   plus `{"domain": "dl.google.com", "action": "allow"}` (`CHROME_RULE`) und
   stellt danach im `finally` genau die gelesenen Regeln wieder her, auch wenn
@@ -1753,9 +1803,11 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
 
 - **Kein Code des Agenten.** Chrome, TigerVNCs X-Server (`Xtigervnc`, seit
   2026-11-02; vorher Xvfb und x11vnc), openbox und Playwright
-  (`workspace_vm/browser/setup.sh`, einmal, ~70 s) laufen als `sprite`; der
-  Server ruft dort nur feste Programme mit festen Argumenten auf. Offenes Web
-  ohne `*.internal`/`*.flycast` (`BROWSER_RULES`). CDP nur auf 127.0.0.1:9222,
+  (`workspace_vm/browser/install.sh`, bis 2026-11-04 `setup.sh`, einmal,
+  ~70 s) laufen als `sprite`; der Server ruft dort nur feste Programme mit
+  festen Argumenten auf. Offenes Web ohne `*.internal`/`*.flycast` (bis
+  2026-11-04 `BROWSER_RULES`, seitdem `agent_vm.RULES` für den ganzen Rechner).
+  CDP bis 2026-11-04 nur auf 127.0.0.1:9222 (seitdem `cdp.sock`, „Ein Rechner“),
   der VNC-Server auf keinem Netz: nur der Unix-Socket
   `~/.consens/browser/vnc.sock` (0600) im Home des Anbieter-Nutzers
   (`-rfbunixpath`, `-rfbport -1`, X selbst `-nolisten tcp`; an Test-Sprites
@@ -1772,8 +1824,8 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   je Nachricht und je Ansicht) setzte die Netzregeln neu, und diese Anfrage
   wartete, während die schlafende VM aufwachte, länger als `REQUEST_SECONDS`
   (30 s); der Browser war für die Nachricht aus. Jetzt setzt nur eine neue
-  Version die Regeln (`prepare_browser`, `BROWSER_RULES` gehen in
-  `BROWSER_VERSION` ein), `open_browser` schaut sonst nur nach
+  Version die Regeln (bis 2026-11-04 `prepare_browser` mit `BROWSER_RULES` in
+  `BROWSER_VERSION`, seitdem `prepare` mit `agent_vm.RULES` in `VERSION`), `open_browser` schaut sonst nur nach
   (`ensure(name)` ohne Regeln), und was eine VM wecken kann (Regeln setzen,
   eine Datei des Anbieter-Nutzers lesen), wartet `WAKE_SECONDS` (90 s). Der
   erste Aufruf einer Nachricht dauerte in vier Tagen Prod im Median 10,4 s
@@ -2571,9 +2623,9 @@ mit `audit_access`). Die
   `static/vendor/xterm/6.0.0`, erst beim ersten Öffnen des Reiters geladen)).
   `WebSocket /agent/workspace/terminal` meldet sich wie die Ansicht an,
   diesmal mit Größe (`{"id_token", "cols", "rows"}`); der Server öffnet die
-  Werkbank (`agent_workspace.open_workbench`: legt sie mit den Grundregeln an,
-  wo es sie noch nicht gibt, lässt die Netzregeln einer laufenden Nachricht
-  unberührt, `prepare`) und ein Exec mit TTY auf `api.sprites.dev`
+  Arbeitsplatz (`agent_workspace.open_workspace`: legt ihn an, wo es ihn noch
+  nicht gibt, `prepare`; bis 2026-11-04 `open_workbench` mit den Grundregeln
+  der Werkbank) und ein Exec mit TTY auf `api.sprites.dev`
   (`exec_url(tty=(cols, rows))`, `max_run_after_disconnect` 5 s). Darin läuft
   `bash -l` über `agent-run --terminal` (`agent_vm.terminal_argv`): dieselben
   Rechte wie der Agent (Nutzer `agent`, ohne sudo, ohne `/.sprite`-Socket,
@@ -2986,8 +3038,9 @@ Arbeitsstand der nächsten Nachricht nennt den Stand („update_plan: 3 of 4
 steps done, now: …“).
 
 **GitHub aus der VM (seit 2026-10-26, mehrnutzerfähig).** Die Werkbank
-erreicht github.com nur nach Freigabe per Karte (`request_domain`, seit
-2026-11-02; von 2026-10-27 an ganz zu) und hält nie Schlüssel der App; ein
+erreicht github.com seit 2026-11-04 wie das ganze Web („Ein Rechner“; von
+2026-11-02 an nur nach Freigabe per Karte, `request_domain`, von 2026-10-27
+an ganz zu) und hält nie Schlüssel der App; ein
 Repository kommt über `github_import`, ein öffentliches auch ohne Verbindung und ohne Token
 (`GitHubTools._public`: `GET /repos/{repo}` ohne Anmeldung, nur bei
 `private: false`, dann Tarball über api.github.com; 60 Anfragen je Stunde
@@ -3319,9 +3372,14 @@ Wortfilter, Max' Grundsatz), keine speichert eine IP-Adresse.
    ebenso einmal am Tag eine Richtlinie auf einer VM, die nicht der
    erwarteten entspricht (`expected_policy`, nur aus beantworteten Aufrufen und
    nach dem Start der Ansicht). Beim Schließen endet, was noch läuft
-   (`_shut`): der localhost-Tunnel, und die Browser-VM schläft nach zwei
-   Minuten (`rest`). Hintergrundprozesse auf der Werkbank laufen aus (höchstens
-   eine Stunde, ihr Netz erreicht nur Paketquellen).
+   (`_shut`): seit 2026-11-04 jeder Prozess des Agenten
+   (`_end_agent_processes`, `sudo -n pkill -KILL -u agent`; das Netz ist
+   offen, ein Hintergrundprozess sendete sonst bis zu einer Stunde weiter),
+   und der Rechner schläft nach zwei Minuten (`rest`). Bis 2026-11-04 endete
+   der localhost-Tunnel, und Hintergrundprozesse liefen aus (ihr Netz erreichte
+   nur Paketquellen). Die Netzzähler (`net`) kommen aus Browser-Antworten,
+   der Ansicht und seit 2026-11-04 vom Ende jeder Nachricht, deren Befehle
+   liefen (`VMSession._note_net`); sie zählen den ganzen Rechner.
 
 **Wo geprüft wird.** `workspace_guard.status(uid)` (Cache 20 s, ein Fehler beim
 Lesen schließt nie) fragen: `VMTools._start` (jedes Werkzeug des Arbeitsplatzes,

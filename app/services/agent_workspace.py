@@ -119,7 +119,7 @@ CONTROL_REFRESH_SECONDS = 30
 # files hold whoever steers Chrome, since 2026-10-30, workspace_guard.py; the
 # live view's relay). One folder on the VM since 2026-11-04: the browser's
 # setup.sh is install.sh since then.
-TOOL_FILES = {"workbench": ("agent-run", "setup.sh"),
+TOOL_FILES = {"workbench": ("agent-run", "nouserns.py", "setup.sh"),
               "browser": ("browser.py", "cdp.py", "display.sh", "harden.sh", "install.sh", "openbox-menu.xml",
                           "openbox-rc.xml", "policy.json", "relay.py")}
 SETUP_SECONDS = 180
@@ -556,12 +556,22 @@ def retire_old_browser(db, uid, vm):
         return
     try:
         if record(db, uid).get("browser"):
-            vm.delete(agent_vm.old_browser_name(uid))
-            ref(db, uid).set({"browser": None, "sign_ins": []}, merge=True)
+            delete_old_browser(db, uid, vm)
+            ref(db, uid).set({"sign_ins": []}, merge=True)
             logging.info("Agent workspace old browser VM deleted")
         _retired.add(uid)
     except Exception as exc:
         logging.warning("Agent workspace old browser VM not deleted category=%s", safe_exception(exc))
+
+
+def delete_old_browser(db, uid, vm):
+    """The browser VM of 2026-10-27 to 2026-11-04, with the profile and every
+    sign-in it kept, by its name whatever the record says (a VM that is gone
+    counts as deleted), then the record forgets it. Also "Log out
+    everywhere" (routers/agent_workspace.py): an account that did not open
+    its workspace since the move still had that VM (review 2026-11-04)."""
+    vm.delete(agent_vm.old_browser_name(uid))
+    ref(db, uid).set({"browser": None}, merge=True)
 
 
 # The account's provisioning (module docstring): once per process and account.

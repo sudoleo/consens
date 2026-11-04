@@ -363,6 +363,25 @@ def test_signing_the_browser_out_waits_for_the_agent_and_deletes_its_profile(vie
     assert isinstance(agent_workspace.record(store.db, UID).get("restore_floor"), datetime)
 
 
+def test_logging_out_everywhere_also_deletes_the_browser_vm_from_before_the_move(view_api, fake_vm):
+    """Review 2026-11-04: until 2026-11-04 the browser had a VM of its own
+    with its own profile. An account that had not opened its workspace since
+    the move (retire_old_browser) kept that VM and every sign-in in it after
+    "Log out everywhere"; one that only used the live view had no workspace
+    VM at all, and nothing ran."""
+    from app.services import agent_vm
+    client, store, _, _ = view_api
+    old = agent_vm.old_browser_name(UID)
+    agent_workspace.ref(store.db, UID).set({"browser": old, "sign_ins": [{"site": "github.com"}]}, merge=True)
+    fake_vm.vms[old] = {"files": {}, "checkpoints": []}
+    assert client.post("/agent/workspace/reset-browser", headers=AUTH).json() == {"status": "reset"}
+    assert old not in fake_vm.vms and ("delete", old) in [call[:2] for call in fake_vm.calls]
+    kept = agent_workspace.record(store.db, UID)
+    assert kept.get("browser") is None and kept.get("sign_ins") == []
+    # Nothing ran on a workspace VM that is not there.
+    assert not [call for call in fake_vm.calls if call[0] == "exec"]
+
+
 def test_settings_list_where_the_browser_is_logged_in_and_take_a_site_off(view_api, fake_vm):
     """The sites the agent noted (note_sign_in), in Settings → Connections:
     one can go, and logging out everywhere empties the list."""

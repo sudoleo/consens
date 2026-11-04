@@ -118,8 +118,8 @@ def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes_and_rules(mo
     """One VM since 2026-11-04: the agent's tools and the browser's in one
     folder, one version, which the network rules are part of."""
     tools = agent_workspace.tool_files()
-    assert set(tools) == {"agent-run", "setup.sh", "browser.py", "cdp.py", "display.sh", "harden.sh", "install.sh",
-                          "openbox-menu.xml", "openbox-rc.xml", "policy.json", "relay.py"}
+    assert set(tools) == {"agent-run", "nouserns.py", "setup.sh", "browser.py", "cdp.py", "display.sh", "harden.sh",
+                          "install.sh", "openbox-menu.xml", "openbox-rc.xml", "policy.json", "relay.py"}
     assert all(b"\r\n" not in data for data in tools.values())
     assert agent_workspace.VERSION == agent_workspace._version() and len(agent_workspace.VERSION) == 16
     monkeypatch.setattr(agent_vm, "RULES", [{"domain": "*", "action": "allow"}])
@@ -145,8 +145,14 @@ def test_the_agent_runs_as_its_own_user_without_the_providers_socket():
     # the real /tmp are out of its reach.
     assert "tmp=/var/lib/consens/agent-tmp" in run
     assert '[ -d "$tmp" ] && [ ! -L "$tmp" ] || exit 125' in run and 'mount --bind "$tmp" /tmp || exit 125' in run
-    assert run.index('mount --bind "$tmp" /tmp') < run.index("exec setpriv")
+    assert run.index('mount --bind "$tmp" /tmp') < run.index("setpriv --reuid")
     assert '--reuid="$user" --regid="$user" --init-groups --no-new-privs' in run
+    # Since 2026-11-04: no user namespaces (the seccomp filter execs setpriv,
+    # so it holds from before the agent's user on), and the user's browser
+    # goes first when memory or the processor run short.
+    assert 'exec /usr/bin/python3 -I "$here/nouserns.py" \\\n    setpriv --reuid=' in run
+    assert run.index("echo 800 >/proc/self/oom_score_adj") < run.index("exec /usr/bin/python3")
+    assert "renice -n 10 -p $$" in run
     assert "/usr/bin/env -i HOME=" in run and 'timeout --kill-after=5 "$seconds"' in run
     # Never in the provider's namespace: there it would hide the socket from the provider too.
     assert 'readlink /proc/self/ns/mnt)" = "$(readlink /proc/1/ns/mnt)' in run
@@ -1314,10 +1320,15 @@ def test_only_the_bound_x_sockets_count_not_the_connections_to_it():
              "00000000ff0d0b22: 00000003 00000000 00000000 0001 03 85976 @/tmp/.X11-unix/X1\n"
              "000000008040b98f: 00000002 00000000 00010000 0001 01 85973 @/tmp/.X11-unix/X1\n"
              "000000008040b990: 00000002 00000000 00000000 0001 01 85999 @/tmp/.X11-unix/X1\n"
-             "000000008040b991: 00000002 00000000 00010000 0001 01 85974 @/tmp/.X11-unix/X2\n")
+             "000000008040b991: 00000002 00000000 00010000 0001 01 85974 @/tmp/.X11-unix/X2\n"
+             "000000008040b992: 00000002 00000000 00000000 0002 01 86001 @/tmp/.X11-unix/X1\n"
+             "000000008040b993: 00000002 00000000 00000000 0005 01 86002 @/tmp/.X11-unix/X1\n")
     found = subprocess.run(["awk", program], input=table, capture_output=True, text=True, check=True).stdout.split()
     # The listener and a socket bound to the name without listening (which
-    # could listen later); never the connections, never another display.
+    # could listen later); never the connections, never another display,
+    # never a datagram or seqpacket socket: Linux keeps abstract names apart
+    # by type, so the agent's user can bind one beside X's (review
+    # 2026-11-04), and Chrome connects to a stream socket only.
     assert found == ["85973", "85999"]
 
 

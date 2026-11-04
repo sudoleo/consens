@@ -121,10 +121,13 @@ wait
 # user of the computer since 2026-11-04 (harden.sh): no file:// pages,
 # printing off, which leaves headless --print-to-pdf and Playwright's pdf()
 # working (measured with Chrome 153 and the policy, review 2026-11-04).
-# `google-chrome --headless=new` runs as the agent's user with its sandbox
-# on: no_new_privs ignores the setuid helper, but the VM
-# allows user namespaces (test Sprite 2026-10-28), so no --no-sandbox and no
-# wrapper. Workspaces from before 2026-10-27 have Xvfb and x11vnc of the
+# `google-chrome --headless=new` runs as the agent's user with
+# --no-sandbox since 2026-11-04: no_new_privs ignores the setuid helper, and
+# agent-run's filter (nouserns.py) leaves it no user namespace, which kept
+# the agent's user from root's parts of the kernel more than the sandbox
+# kept a page from the agent's own files (its commands reach them anyway).
+# Until then the sandbox ran in user namespaces (test Sprite 2026-10-28).
+# Workspaces from before 2026-10-27 have Xvfb and x11vnc of the
 # old screen: those go (TigerVNC's X server took their place on
 # 2026-11-02). A failed install costs the workspace that tool until the
 # next version, never its user (the steps above).

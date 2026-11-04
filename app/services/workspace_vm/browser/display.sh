@@ -109,14 +109,18 @@ stop_chrome() {
 # another user's may exist at the moment Chrome connects. Connections count
 # for nothing: one still waiting (inode 0) or one X closes during the check
 # failed it, and anyone may connect without the cookie, so a loop of
-# connections ended the user's Chrome (review 2026-11-04).
+# connections ended the user's Chrome (review 2026-11-04). Nor do sockets
+# of another type (type 0001 is a stream, as X's and Chrome's): Linux keeps
+# abstract names apart by type, so the agent's user may bind a datagram
+# socket to the same name while X runs, and it too ended the user's Chrome
+# (review 2026-11-04, the kernel's unix_abstract_hash).
 x_pid() { pgrep -u "$me" -x Xtigervnc | head -n 1; }
 x_ours() {
   local pid inode
   pid="$(x_pid)"
   [ -n "$pid" ] || return 1
   [ -S /tmp/.X11-unix/X1 ] && [ "$(stat -c %u /tmp/.X11-unix/X1)" = "$me" ] || return 1
-  for inode in $(awk '$8 == "@/tmp/.X11-unix/X1" && $6 == "01" && $7 != 0 { print $7 }' /proc/net/unix); do
+  for inode in $(awk '$8 == "@/tmp/.X11-unix/X1" && $5 == "0001" && $6 == "01" && $7 != 0 { print $7 }' /proc/net/unix); do
     find "/proc/$pid/fd" -maxdepth 1 -lname "socket:\[$inode\]" 2>/dev/null | grep -q . || return 1
   done
 }

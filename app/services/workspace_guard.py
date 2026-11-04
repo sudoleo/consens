@@ -807,18 +807,78 @@ def _count(uid, pending):
 
 
 def _shut(uid):
-    """What still runs when the workspace closes: the VM's wake hold
-    shortens to two minutes (browser.py ``rest``), so Chrome's open tabs
-    sleep with it. An open view or terminal ends by itself
+    """What still runs when the workspace closes: every process of the
+    agent's user ends (since 2026-11-04: the network is open to the whole
+    computer, and a background process would go on sending for up to an
+    hour; until then it reached only package registries and ran out), and
+    the VM's wake hold shortens to two minutes (browser.py ``rest``), so
+    Chrome's open tabs sleep with it. An open view or terminal ends by itself
     (routers/agent_workspace.py), a running message's next workspace call
-    is refused (VMTools._start). The agent's background processes run out
-    (at most an hour). On a thread of its own; failures are only logged."""
+    is refused (VMTools._start). On a thread of its own; failures are only
+    logged."""
     def run():
-        try:
-            _rest_browser(uid)
-        except Exception as exc:
-            logging.info("Workspace guard browser not rested category=%s", safe_exception(exc))
+        for step, what in ((_end_agent_processes, "agent processes"), (_rest_browser, "browser")):
+            try:
+                step(uid)
+            except Exception as exc:
+                logging.info("Workspace guard %s not stopped category=%s", what, safe_exception(exc))
     threading.Thread(target=run, name="workspace-guard-shut", daemon=True).start()
+
+
+# The agent's processes, as the provider's user with sudo (the agent's own
+# user could not end those under agent-run's timeout either way).
+END_AGENT_PROCESSES = "sudo -n pkill -KILL -u {user} || true"
+
+
+def _end_agent_processes(uid):
+    from app.services import agent_vm
+    from app.services.llm.provider_runtime import ProviderCancellation
+    backend = agent_vm.backend()
+    if backend is None:
+        return
+    try:
+        name = agent_vm.workspace_name(uid)
+        if not backend.exists(name):
+            return
+        backend.run(name, ["bash", "-c", END_AGENT_PROCESSES.format(user=agent_vm.AGENT_USER)],
+                    cwd=agent_vm.SERVER_HOME, timeout=20, on_output=lambda stream, chunk: None,
+                    cancellation=ProviderCancellation())
+    finally:
+        backend.close()
+
+
+# The VM's network counters as relay.py and browser.py read them (their
+# net_counters), for a message whose commands ran without the browser
+# (agent_vm_tools.VMTools._finish, since 2026-11-04): the counters count the
+# whole computer, the agent's commands with the browser.
+NET_ARGV = ["cat", "/proc/net/dev", "/proc/sys/kernel/random/boot_id"]
+_BOOT_ID = re.compile(r"[0-9a-f-]{36}")
+
+
+def counts():
+    """Whether the guard counts here (_active), so a caller may skip a VM
+    call whose only use is the guard's."""
+    return _active()
+
+
+def parse_net(text):
+    """NET_ARGV's output as note_net takes it, or None: received and sent
+    bytes over every interface but loopback, and the boot they count from."""
+    lines = (text or "").splitlines()
+    boot = lines[-1].strip() if lines else ""
+    if not _BOOT_ID.fullmatch(boot):
+        return None
+    rx = tx = 0
+    for line in lines[:-1]:
+        name, sep, numbers = line.partition(":")
+        fields = numbers.split()
+        if not sep or name.strip() == "lo" or len(fields) < 9:
+            continue
+        try:
+            rx, tx = rx + int(fields[0]), tx + int(fields[8])
+        except ValueError:
+            continue
+    return {"rx": rx, "tx": tx, "boot": boot}
 
 
 def _rest_browser(uid):

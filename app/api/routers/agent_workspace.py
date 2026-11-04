@@ -163,7 +163,8 @@ def reset_workspace_browser(request: Request):
     never while a chat's message uses the workspace."""
     from app.services.llm.provider_runtime import ProviderCancellation
     uid = owner(request)
-    if not agent_workspace.record(db_firestore, uid).get("name"):
+    kept = agent_workspace.record(db_firestore, uid)
+    if not kept.get("name") and not kept.get("browser"):
         return JSONResponse({"status": "reset"}, headers=NO_STORE)
     if agent_workspace.held_by(db_firestore, uid):
         return JSONResponse({"error": "The agent is working in the workspace. Try again when its response is done.",
@@ -175,6 +176,9 @@ def reset_workspace_browser(request: Request):
         vm = _backend()
         try:
             agent_workspace.reset_browser(vm, uid, ProviderCancellation())
+            # The browser VM from before the move onto one computer, with its
+            # own profile, also where the workspace was not opened since.
+            agent_workspace.delete_old_browser(db_firestore, uid, vm)
         finally:
             vm.close()
     except agent_vm.VMUnavailable as exc:

@@ -12,13 +12,23 @@
 #    2026-11-04): the browser's screen and Chrome run on this computer as
 #    the provider's user, and their sockets and locks are in the real /tmp,
 #    where the agent could put its own in their way;
-# 3. becomes the agent's user with no way back to root (setpriv
+# 3. lets the user's browser go first when memory or the processor run
+#    short (since 2026-11-04, when it moved onto this computer): the kernel
+#    ends the agent's processes before Chrome when memory runs out
+#    (oom_score_adj 800, which the agent's user cannot lower), and they run
+#    at nice 10;
+# 4. makes no user namespaces (nouserns.py, a seccomp filter, since
+#    2026-11-04): they let an ordinary user reach the kernel's parts that
+#    are otherwise root's, the usual way of its flaws from the agent's user
+#    to root, and with root to the browser's sign-ins;
+# 5. becomes the agent's user with no way back to root (setpriv
 #    --no-new-privs: no sudo, no setuid program) in a clean environment;
-# 4. goes to the folder and runs the program under coreutils timeout.
+# 6. goes to the folder and runs the program under coreutils timeout.
 # Until 2026-10-29 it also joined a cgroup that a takeover of the browser
 # froze (pause.py; agent_workspace.py "Takeover" says why no more).
-# Exit 125: the namespace could not be made, so nothing ran.
+# Exit 125: the namespace or the filter could not be made, so nothing ran.
 set -u
+here="$(cd "$(dirname "$0")" && pwd)"
 user=agent
 home=/home/agent
 tmp=/var/lib/consens/agent-tmp
@@ -46,7 +56,11 @@ if [ "${1:-}" = "--inside" ]; then
   [ -d "$tmp" ] && [ ! -L "$tmp" ] || exit 125
   mount --bind "$tmp" /tmp || exit 125
   umask 022
-  exec setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs --inh-caps=-all -- \
+  # Precedence only, never a reason to run nothing.
+  echo 800 >/proc/self/oom_score_adj 2>/dev/null || true
+  renice -n 10 -p $$ >/dev/null 2>&1 || true
+  exec /usr/bin/python3 -I "$here/nouserns.py" \
+    setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs --inh-caps=-all -- \
     /usr/bin/env -i HOME="$home" USER="$user" LOGNAME="$user" SHELL=/bin/bash LANG=C.UTF-8 TERM="$term" \
     PATH="$home/.local/bin:/.sprite/bin:/usr/local/bin:/usr/bin:/bin" \
     /bin/bash -c 'cd -- "$1" 2>/dev/null || { echo "No such folder: $1" >&2; exit 1; }

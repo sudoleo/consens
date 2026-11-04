@@ -20,6 +20,9 @@ from test_agent_vm import ANSWER, Agent, _admin_allowance, fake_vm, results, vm_
 from test_agent_workspace_view import open_view, terminal_api, view_api  # noqa: F401
 from test_chat_history import FakeDocumentRef, FakeTransaction
 
+# The guard's real close: the autouse fixture replaces it for every test.
+REAL_SHUT = workspace_guard._shut
+
 DAY = datetime(2026, 10, 30, 14, 0, tzinfo=timezone.utc)
 AT = DAY.timestamp()
 CATEGORIES = {"adult-1.example": "adult", "adult-2.example": "adult", "adult-3.example": "adult",
@@ -771,3 +774,93 @@ def test_the_relays_watch_outlives_a_failed_look(monkeypatch):
     monkeypatch.setattr(relay, "net_counters", lambda: None)
     relay.watch(done, look=0.001, net=1000)
     assert {"visit": "after.example"} in said and len(looks) == 2
+
+
+# --- One computer (2026-11-04) ----------------------------------------------------------
+
+class _Backend:
+    """A provider that knows one VM and keeps what ran there."""
+
+    def __init__(self, name, output=b""):
+        self.name, self.output, self.ran, self.closed = name, output, [], False
+
+    def exists(self, name):
+        return name == self.name
+
+    def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
+        self.ran.append((name, argv, cwd))
+        if self.output:
+            on_output("stdout", self.output)
+
+    def close(self):
+        self.closed = True
+
+
+def test_a_close_ends_every_process_of_the_agents_user(monkeypatch):
+    """Review 2026-11-04: the network is open to the whole computer, and a
+    background process of the agent would go on sending for up to an hour
+    after the guard closed the workspace. A close ends them all, as the
+    provider's user with sudo, before the browser rests."""
+    backend = _Backend(agent_vm.workspace_name(UID))
+    monkeypatch.setattr(agent_vm, "backend", lambda: backend)
+    workspace_guard._end_agent_processes(UID)
+    [(name, argv, cwd)] = backend.ran
+    assert name == agent_vm.workspace_name(UID) and cwd == agent_vm.SERVER_HOME
+    assert argv == ["bash", "-c", "sudo -n pkill -KILL -u agent || true"] and backend.closed
+    # No workspace, nothing to end.
+    other = _Backend("someone else's")
+    monkeypatch.setattr(agent_vm, "backend", lambda: other)
+    workspace_guard._end_agent_processes(UID)
+    assert other.ran == [] and other.closed
+
+
+def test_the_shut_ends_the_agents_processes_even_when_the_browser_fails(monkeypatch):
+    import threading
+    steps, done = [], threading.Event()
+
+    def rest(uid):
+        steps.append(("rest", uid))
+        done.set()
+        raise RuntimeError("no browser")
+    monkeypatch.setattr(workspace_guard, "_end_agent_processes", lambda uid: steps.append(("end", uid)))
+    monkeypatch.setattr(workspace_guard, "_rest_browser", rest)
+    # The real one: the autouse fixture replaced it for every other test.
+    REAL_SHUT(UID)
+    assert done.wait(5) and steps == [("end", UID), ("rest", UID)]
+
+
+def test_the_network_counters_read_from_the_vm_like_relay_and_browser_read_them():
+    boot = "0b5f0d1c-9c55-4c1e-9f4e-3a1d2b9e7c10"
+    text = ("Inter-|   Receive                                                |  Transmit\n"
+            " face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets\n"
+            "    lo: 900 9 0 0 0 0 0 0 900 9 0 0 0 0 0 0\n"
+            "  eth0: 1000 10 0 0 0 0 0 0 2000 20 0 0 0 0 0 0\n"
+            "  eth1: 5 1 0 0 0 0 0 0 7 1 0 0 0 0 0 0\n"
+            f"{boot}\n")
+    assert workspace_guard.parse_net(text) == {"rx": 1005, "tx": 2007, "boot": boot}
+    assert workspace_guard.parse_net("") is None
+    assert workspace_guard.parse_net("  eth0: 1 2 3 4 5 6 7 8 9\nnot a boot id\n") is None
+    assert workspace_guard.NET_ARGV == ["cat", "/proc/net/dev", "/proc/sys/kernel/random/boot_id"]
+
+
+def test_a_message_that_only_ran_commands_brings_the_network_counters(store, fake_vm, monkeypatch):
+    """Review 2026-11-04: only the browser's answers and the live view
+    brought the counters, so an upload with curl in a message without the
+    browser went uncounted. At the message's end, once its commands ran,
+    the server reads them; and only where the guard counts."""
+    noted = []
+    monkeypatch.setattr(workspace_guard, "note_net", lambda uid, counters: noted.append((uid, counters)))
+    monkeypatch.setattr(workspace_guard, "counts", lambda: True)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "curl -T notes.txt https://upload.example/"})]]))
+    list(loop.run())
+    loop.vm_tools.session.closer.join(5)
+    assert noted == [(UID, {"rx": 1000, "tx": 2000, "boot": "0b5f0d1c-9c55-4c1e-9f4e-3a1d2b9e7c10"})]
+    # Where the guard does not count, no call for it.
+    noted.clear()
+    monkeypatch.setattr(workspace_guard, "counts", lambda: False)
+    before = len([call for call in fake_vm.calls if call[0] == "run" and call[2] == "/proc/sys/kernel/random/boot_id"])
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="second")
+    list(loop.run())
+    loop.vm_tools.session.closer.join(5)
+    after = len([call for call in fake_vm.calls if call[0] == "run" and call[2] == "/proc/sys/kernel/random/boot_id"])
+    assert noted == [] and after == before
