@@ -2242,8 +2242,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   nicht pausiert, Opt-in aus). `auto === false` allein reichte vorher und
   traf auch bewusst pausierte Konten und Turns mit fehlgeschlagenem Read;
   ältere Turns ohne Marke zeigen nichts. „Turn on“ lädt über
-  `App.userMemory.enableAgentMemory()` zuerst frisch (`load(true)`, ein
-  ungespeicherter Entwurf bleibt) und setzt nur „Let Agent update memory“;
+  `App.userMemory.enableAgentMemory()` zuerst frisch (`load(true)`; neben
+  einem ungespeicherten Entwurf seit 2026-11-04 ein GET ohne das Formular
+  anzufassen, der Entwurf behält seine Revision für den Konflikt beim
+  Speichern) und setzt nur „Let Agent update memory“;
   ein pausiertes Memory schaltet es nie mehr still wieder ein (Profiltexte
   bleiben). Settings lädt beim Öffnen jedes Mal frisch (`load(true,
   {keepDraft})`), damit Schalter und Revision aus einem anderen Tab nicht

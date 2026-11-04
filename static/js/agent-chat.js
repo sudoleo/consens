@@ -1214,10 +1214,14 @@
     handback = null;
     const context = registry.get(runId);
     const later = (context?.metadata.agentActivity || []).slice(seen);
-    if (context?.status !== "succeeded" || registry.visible()?.runId !== runId
+    // A message the user typed meanwhile goes out instead (flushQueue): their
+    // own words say more. Until 2026-11-04 the hand-back went first, and the
+    // waiting message, which then found a response running, was lost.
+    if (context?.status !== "succeeded" || registry.visible()?.runId !== runId || queueOf(context).length
         || later.some(item => item?.kind === "tool" && WORKSPACE_TOOL.test(String(item.name || "")))) return;
-    // After the run's own completion code: its saved turn becomes the chat's basis first.
-    setTimeout(sendHandback, 0);
+    // After the run's own completion code: its saved turn becomes the chat's
+    // basis first. A message that went out meanwhile is the next one.
+    setTimeout(() => { if (!registry.isExecuting(registry.visible()?.runId)) sendHandback(); }, 0);
   }
   // No byte for 45 s does not prove that a run died: some networks (company
   // proxies, virus scanners) hold an event stream back until it ends. Ask the

@@ -861,8 +861,20 @@
   // another window): the server's record is what the waiting run reads.
   // The button's hand-back says so to the chat ("consensio:workspace-handback",
   // agent-chat.js continueAfterHandback): the user expects the agent to go on.
-  // Closing the view and a lapsed takeover hand back without that.
+  // Closing the view and a lapsed takeover hand back without that. A second
+  // click while the first is on its way hands back once (a double click sent
+  // "Done in the browser." twice, bug hunt 2026-10-30).
+  let handingBack = false;
   async function handBack() {
+    if (handingBack) return;
+    handingBack = true;
+    try {
+      await handBackNow();
+    } finally {
+      handingBack = false;
+    }
+  }
+  async function handBackNow() {
     if (!view) {
       try {
         await post('/agent/workspace/control', { holder: 'agent' });

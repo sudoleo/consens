@@ -927,7 +927,9 @@
   }
   // The reviewers beside "Thought for …" of a turn in the history, as the
   // live turn shows them (agent-delegation.js); each opens the notes (B6).
-  function historyReviewers(body, review, open) {
+  // While the review runs they wait, as its Notes do (until 2026-11-04 a
+  // click said that no complete answer arrived).
+  function historyReviewers(body, review, open, pending) {
     body._agentModels?.remove(); body._agentModels = null;
     const activity = body.parentElement?.querySelector(':scope > * > .agent-activity > summary');
     const reviewers = review.audit?.reviewers || [];
@@ -940,7 +942,8 @@
       button.title = name; button.setAttribute('aria-label', `Notes from ${name}`);
       button.append(App.createModelMark?.({ provider: reviewer.provider_label, model: reviewer.model?.model, label: name })
         || node('span', 'model-mark-fallback', String(name).slice(0, 1)));
-      button.addEventListener('click', () => open('differences', { trigger: button }));
+      if (pending) button.disabled = true;
+      else button.addEventListener('click', () => open('differences', { trigger: button }));
       stack.append(button);
     }
     // A click on a mark opens the notes, not the activity.
@@ -1039,7 +1042,7 @@
       tabs.append(button);
     }
     for (const context of advice) App.answerReader?.refreshContext(context);
-    if (body.classList.contains('thread-history-answer-body')) historyReviewers(body, review, open);
+    if (body.classList.contains('thread-history-answer-body')) historyReviewers(body, review, open, pending);
     else { body._agentModels?.remove(); body._agentModels = null; }
     App.answerReader?.refreshContext(context);
     if (evidence.reveal || body._revealedMarks === review.answer_hash) revealMarks(body, review.answer_hash);

@@ -1289,6 +1289,34 @@ it('puts the reviewers of an audited turn in the history beside its "Thought for
   expect(activity.querySelectorAll('.agent-history-models')).toHaveLength(1);
   dom.window.close();
 });
+// Bug hunt 2026-11-02: a turn in the history whose review still ran (the
+// chat opened again within its seconds) had clickable reviewers, whose notes
+// said "no complete answer arrived". They wait as its Notes do.
+it('keeps the reviewers of a history turn shut while its review runs', () => {
+  const {window: w, document: d, dom} = setup();
+  const answer = d.querySelector('section');
+  const activity = d.createElement('div');
+  activity.innerHTML = '<details class="agent-activity"><summary>Thought for 1m</summary></details>';
+  answer.prepend(activity);
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  body.classList.add('thread-history-answer-body');
+  const running = auditReview('running');
+  for (const reviewer of running.audit.reviewers) reviewer.status = 'running';
+  w.App.agentReview.render(body, running);
+  let models = activity.querySelectorAll('summary > .agent-history-models .agent-inline-model');
+  expect(models).toHaveLength(3);
+  expect([...models].every(button => button.disabled)).toBe(true);
+  const opened = w.App.answerReader.openContext.mock.calls.length;
+  models[0].click();
+  expect(w.App.answerReader.openContext.mock.calls.length).toBe(opened);
+  // Done: they open the notes.
+  w.App.agentReview.render(body, auditReview('succeeded'));
+  models = activity.querySelectorAll('summary > .agent-history-models .agent-inline-model');
+  expect([...models].some(button => button.disabled)).toBe(false);
+  models[0].click();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
+  dom.window.close();
+});
 it('says an answer nobody reviewed by the account\'s setting is not reviewed, never "Reviewing…"', () => {
   for (const [setting, words] of [['off', 'Not reviewed · reviewers off'], ['workspace', 'Not reviewed · no work in the workspace']]) {
     const {window: w, document: d, dom} = setup();

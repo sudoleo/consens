@@ -253,6 +253,8 @@ body.workspace-view-open .agent-workspace-toggle { color: var(--ink); background
 .agent-history-models { margin: 2px 0 12px; }
 /* An earlier turn shows its marks beside "Thought for …", like the live one. */
 .agent-activity > summary > .agent-history-models { margin: 0; }
+/* Its review still runs: the marks wait, as its Notes do. */
+.agent-history-models .agent-inline-model:disabled { cursor: default; background: transparent; }
 .model-mark-fallback { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; font-size: var(--font-size-xs); color: var(--ink-2); }
 .agent-session-progress { font-size: var(--font-size-xs); line-height: 1.7; color: var(--ink-2); }
 .agent-session-task > summary { cursor: pointer; padding: 8px 0; color: var(--ink-3); }

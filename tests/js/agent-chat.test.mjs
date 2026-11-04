@@ -2613,6 +2613,36 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // Bug hunt 2026-10-30: a hand-back during a response with a waiting
+  // message sent "Done in the browser." first, and the waiting message,
+  // whose own send then saw a running response, was neither sent nor put
+  // back. The user's own words go out; the hand-back adds nothing.
+  it("sends the waiting message, not \"Done in the browser.\", after a hand-back during the response", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
+    document.body.append(queue);
+    let resolve;
+    window.streamSSERequest = vi.fn(() => new Promise(r => { resolve = r; }));
+    window.sendQuestion = vi.fn();
+    const input = document.getElementById("questionInput");
+    input.value = "Melde dich bei DHL an";
+    const pending = window.App.agentChat.send();
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalled());
+    input.value = "Danach die Sendungsnummer";
+    await window.App.agentChat.steer();
+    window.dispatchEvent(new window.CustomEvent("consensio:workspace-handback"));
+    resolve({ ok: true, data: { response: "Bitte melde dich an.", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
+      turn: { id: "b".repeat(32), question: "Melde dich bei DHL an", consensus: "Bitte melde dich an.", mode: "Agent",
+        execution_mode: "agent" } } });
+    await pending;
+    await vi.waitFor(() => expect(window.sendQuestion).toHaveBeenCalled());
+    expect(input.value).toBe("Danach die Sendungsnummer");
+    await new Promise(r => setTimeout(r, 20));
+    expect(window.streamSSERequest).toHaveBeenCalledTimes(1);
+    dom.window.close();
+  });
+
   // Until 2026-10-26 a run locked model and reasoning, and the Reasoning
   // button below the composer followed only now and then.
   it("takes a new reasoning level while a response runs, for the next message", async () => {

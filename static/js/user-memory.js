@@ -413,12 +413,33 @@
   // another tab since then must win. Reads fresh first, because a cached
   // profile from an earlier load could carry an old revision or old switches.
   async function enableAgentMemory() {
-    if (!currentUser()) return false;
-    if (!(await load(true, { keepDraft: true, quiet: true }))) return false;
-    if (state.saved?.enabled === false) return false;
-    if (state.saved?.auto_memory === true) return true;
-    const next = { ...(state.saved || emptyProfile()), auto_memory: true };
-    const ok = await persist(next, AUTO_ON_MESSAGE, { rewriteFields: false });
+    const user = currentUser();
+    if (!user) return false;
+    // An unsaved draft in Settings stays as it is: read fresh beside it and
+    // write the switch with the saved texts (until 2026-11-04 the draft made
+    // Turn on fail). The draft keeps the revision it was written on, so its
+    // Save still meets what another tab saved meanwhile (keepDraft in load).
+    const draft = state.loaded && state.uid === user.uid && isDirty();
+    let saved, revision;
+    if (draft) {
+      try {
+        const result = await api("GET");
+        saved = result.memory || emptyProfile();
+        revision = revisionOf(result);
+      } catch (_) {
+        return false;
+      }
+    } else {
+      if (!(await load(true, { keepDraft: true, quiet: true }))) return false;
+      saved = state.saved;
+      revision = state.revision;
+    }
+    if (saved?.enabled === false) return false;
+    if (saved?.auto_memory === true) return true;
+    const base = state.draftRevision ?? state.revision;
+    const next = { ...(saved || emptyProfile()), auto_memory: true };
+    const ok = await persist(next, AUTO_ON_MESSAGE, { rewriteFields: false, revision });
+    if (ok && draft && revision !== base) state.draftRevision = base;
     if (ok) window.App?.trackAppEvent?.("app_auto_memory_on", { source: "hint" });
     return ok;
   }

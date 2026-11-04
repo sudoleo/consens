@@ -228,6 +228,34 @@ describe("Hint under an Agent answer", () => {
     ctx.dom.window.close();
   });
 
+  // Bug hunt 2026-10-24: with an unsaved draft in Settings, Turn on failed
+  // ("Could not turn it on"), though the draft is meant to stay and only the
+  // switch to be set. Now it writes the switch with the saved texts, and the
+  // draft's Save still meets what changed elsewhere meanwhile.
+  it("Turn on beside an unsaved draft sets only the switch and keeps the draft", async () => {
+    const ctx = boot();
+    await open(ctx);
+    ctx.document.getElementById("memoryRoleInput").value = "Half-typed draft";
+    ctx.server.revision = 5;
+    ctx.window.localStorage.setItem("consensio.memoryHint.v1", JSON.stringify({ answers: 3, shown: 0, off: false }));
+    ctx.window.App.agentMemory.nudge(ctx.body, { key: "run-11", finished: true, memory: off });
+    const before = ctx.server.calls.length;
+    [...ctx.hint().querySelectorAll("button")].find(b => b.textContent === "Turn on").click();
+    await vi.waitFor(() => expect(ctx.hint().textContent).toMatch(/Memory is on|Could not/));
+    expect(ctx.hint().textContent).toContain("Memory is on");
+    const calls = ctx.server.calls.slice(before);
+    expect(calls.map(call => call.method)).toEqual(["GET", "PUT"]);
+    expect(calls[1].body).toMatchObject({ enabled: true, auto_memory: true, role: "Nurse", expected_revision: 5 });
+    expect(ctx.document.getElementById("memoryRoleInput").value).toBe("Half-typed draft");
+    expect(ctx.document.getElementById("memoryAutoSwitch").checked).toBe(true);
+    // The draft was written on revision 3: its Save meets the newer memory.
+    ctx.document.getElementById("saveMemoryBtn").click();
+    await settle();
+    const save = ctx.server.calls.filter(call => call.method === "PUT").at(-1).body;
+    expect(save).toMatchObject({ role: "Half-typed draft", auto_memory: true, expected_revision: 3 });
+    ctx.dom.window.close();
+  });
+
   it("Turn on never un-pauses memory that was paused in the meantime", async () => {
     const ctx = boot();
     ctx.server.profile = { ...ctx.server.profile, enabled: false };

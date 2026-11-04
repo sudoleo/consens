@@ -293,6 +293,8 @@ describe("the workspace view", () => {
       expect(env.document.querySelector(".workspace-view-cover").hidden).toBe(true);
       await vi.advanceTimersByTimeAsync(30_000);
       expect(controls(env.window)).toEqual(["user", "user"]);
+      // A double click hands back once (bug hunt 2026-10-30: twice "Done in the browser.").
+      back.click();
       back.click();
       await vi.waitFor(() => expect(rfb.viewOnly).toBe(true));
       // The button's hand-back tells the chat, which lets the agent go on (agent-chat.js).
@@ -392,7 +394,7 @@ describe("the workspace view", () => {
     env.window.addEventListener("consensio:workspace-holder", (event) => holders.push(event.detail.holder));
     env.window.addEventListener("consensio:workspace-handback", () => { handbacks += 1; });
     expect(env.workspace.holder()).toBeNull();
-    await env.workspace.handBack();
+    await Promise.all([env.workspace.handBack(), env.workspace.handBack()]);
     expect(controls(env.window)).toEqual(["agent"]);
     expect(holders).toEqual(["agent"]);
     expect(handbacks).toBe(1);
