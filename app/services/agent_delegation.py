@@ -31,7 +31,7 @@ from app.services.agent_provider_limits import (
     TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelEmptyAnswer, ModelOutputLimit, agent_failure,
     provider_cooldowns,
 )
-from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
+from app.services.agent_tools import CallOrder, ReadOnlyTool, ToolRegistry, give_turn, search_tools
 from app.services.agent_comparison import SEARCHING_KINDS
 from app.services.prompt_defaults import AGENT_REVIEW_FACTS as REVIEW_FACTS
 from app.services.llm.agent_client import (
@@ -1533,6 +1533,9 @@ class DelegationLoop(AgentLoop):
                 pass
         try:
             tool, args = registry.validate(call)
+            if not tool.ordered:
+                # Nothing it counts waits for the group's order (call_order).
+                give_turn()
             self._check(cancellation)
             publish("running")
             result = (tool.execute(args, cancellation=cancellation, report=report) if tool.reports
@@ -2245,20 +2248,26 @@ class DelegationLoop(AgentLoop):
 
     def _execute_together(self, value, calls, registry=None):
         """Runs ``calls`` at the same time, each on a thread of its own, while
-        SSE stays live, and returns their results in call order. Their work
-        log entries follow in that order once all have ended, as the agent
-        reads them. The first error in call order is raised once every call
-        has ended; a closed stream stops them all, as Stop does."""
+        SSE stays live, and returns their results in call order. What a
+        tool counts it counts in call order (agent_tools.call_order). Their
+        work log entries follow in that order once all have ended, as the
+        agent reads them. The first error in call order is raised once every
+        call has ended; a closed stream stops them all, as Stop does."""
         from contextvars import copy_context
         registry = registry or self.registry
         outcomes = [None] * len(calls)
+        order = CallOrder(len(calls))
 
         def work(index, call):
+            order.enter(index)
             try:
                 outcomes[index] = (self._run_call(registry, value, self.cancellation, call), None)
             except BaseException as exc:
                 outcomes[index] = (None, exc)
-        threads = [threading.Thread(target=copy_context().run, args=(work, index, call), daemon=True)
+            finally:
+                give_turn()
+        threads = [threading.Thread(target=copy_context().run, args=(work, index, call), daemon=True,
+                                    name=f"agent-call-{call['id']}"[:80])
                    for index, call in enumerate(calls)]
         for thread in threads:
             thread.start()

@@ -1240,6 +1240,20 @@ dazu `compare_models` (seine Grenze je Nachricht und die Ausgabeanteile aus dem
 Kontingent rechnen mit einem Vergleich zur Zeit) und `find_pictures` (seine
 Bildgrenze je Nachricht zählt beim Abruf, die Bilder folgen in Reihenfolge).
 
+Was ein solches Werkzeug zählt oder in Reihenfolge hält, zählt es in
+Aufrufreihenfolge, egal welcher Thread zuerst ankommt: Werkzeuge mit
+`ReadOnlyTool.ordered` tun das in `agent_tools.call_order`, das die Aufrufe einer
+Gruppe nacheinander in ihrer Reihenfolge durchlaufen (`CallOrder`; ein Aufruf
+ohne `ordered` gibt seinen Platz beim Start ab, einer, der vorher endet, mit
+seinem Ende). So lehnt eine Grenze immer den späteren Aufruf ab, wie
+nacheinander: `read_source` (`READS_PER_STEP`, `READS_PER_MESSAGE`, die Nummern
+der Lesungen), `search_pictures` (Suchen je Nachricht), `read_file` (die
+zuletzt geöffneten Bilddateien), `gmail_read` (Belege je Chat), `vm_read_file`
+und `vm_view_image` (das erste Ergebnis nennt den Ordner, Bilder in
+Reihenfolge). Nur dieser Abschnitt wartet; Abruf und Lesen selbst laufen
+weiter gleichzeitig. Die IDs gefundener Bilder vergibt `search_pictures` nach
+Ankunft, sie sind nur Namen.
+
 Jede Call-ID bekommt genau ein Ergebnis, sonst lehnt der Anbieter die nächste
 Anfrage ab, und die Ergebnisse stehen in Aufrufreihenfolge im Verlauf, auch wenn
 ein späterer Aufruf zuerst fertig war. Live-Events kommen je Call-ID

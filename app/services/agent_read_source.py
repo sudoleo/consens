@@ -35,7 +35,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.openrouter_contract import OPENROUTER_BASE_URL, openrouter_headers
 from app.services.agent_costs import FETCH_COST_NANOS
-from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+from app.services.agent_tools import ReadOnlyTool, ToolRegistry, call_order
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from app.services.llm.engines import _ProviderResponseError, web_fetch_tool
 from app.services.llm.provider_runtime import (AnalysisBudget, AnalysisBudgetExceeded, ProviderCancellation,
@@ -353,7 +353,7 @@ class SourceReader:
             "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins, scripts "
             f"or clicks; a read takes about 10 to 30 seconds. At most {READS_PER_MESSAGE} per message.")
         self.tool = ReadOnlyTool("read_source", description, AuditReadSourceArgs, self.read,
-                                 activity=self.activity, concurrent=True)
+                                 activity=self.activity, concurrent=True, ordered=True)
 
     # --- What may be read -------------------------------------------------
     def cited(self):
@@ -448,7 +448,8 @@ class SourceReader:
         answer."""
         loop = self.loop
         loop._check(cancellation)
-        with self.lock:
+        # The limits per step and message take the step's reads in call order.
+        with call_order(cancellation), self.lock:
             try:
                 self._refuse(args)
                 budget = self._time_budget()

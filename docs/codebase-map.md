@@ -4529,7 +4529,8 @@ fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Jeder
 Schritt des Agenten fragt in jeder Anfrage gleich mit `parallel_tool_calls`
 (`_step`; Worker ohne); die Aufrufe eines Schritts laufen in ihrer Reihenfolge,
 benachbarte Aufrufe lesender Werkzeuge (`ReadOnlyTool.concurrent`) als Gruppe
-gleichzeitig auf eigenen Threads (`_call_groups`, `_execute_together`), alle
+gleichzeitig auf eigenen Threads (`_call_groups`, `_execute_together`; Grenzen
+und Zähler darin in Aufrufreihenfolge über `agent_tools.call_order`), alle
 anderen allein, höchstens `TOOL_CALLS_PER_STEP` = 16, jeder mit genau einem
 Ergebnis in Aufrufreihenfolge (`CALL_OVER_LIMIT`, `CALL_REPEATED`,
 `CALL_AFTER_*`), und nach jedem Batch einer
