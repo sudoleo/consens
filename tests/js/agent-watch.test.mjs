@@ -132,6 +132,22 @@ describe("Agent Watch card", () => {
     expect(card().querySelector(".agent-watch-end").hidden).toBe(true);
   });
 
+  it("ends the Watch from a card the Agent prepared again for the same task", async () => {
+    // A later turn proposed the same task (already_watched): the card shows the
+    // running Watch, and its End acts on it too (bug hunt 2026-11-04).
+    const watch = { id: "w1", chat_id: CHAT, turn_id: "t0", task: TASK, goal: "", status: "active", interval: "daily",
+      next_run_at: "2026-11-04T07:00:00+00:00", last_run: null };
+    const { server, render, card } = boot({ watches: [watch], active_count: 1 });
+    render({ proposal: PROPOSAL });
+    await settle();
+    expect(card().dataset.state).toBe("watching");
+    expect(card().querySelector(".agent-watch-end").hidden).toBe(false);
+    card().querySelector(".agent-watch-end").click();
+    await settle();
+    expect(server.calls.some(call => call.url === "/agent/watches/w1/stop" && call.method === "POST")).toBe(true);
+    expect(card().dataset.state).toBe("ended");
+  });
+
   it("shows a paused Watch as paused, resumes it, and keeps a refused end in view (review 2026-11-03)", async () => {
     const paused = { id: "w1", chat_id: CHAT, turn_id: "t1", task: TASK, goal: "Registration is open", status: "paused",
       interval: "daily", run_time: "08:00", run_weekday: "", timezone: "", next_run_at: null,

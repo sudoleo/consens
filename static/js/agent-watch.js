@@ -248,12 +248,19 @@
     return App.t('Last run {when} did not finish.', { when: at });
   }
 
+  // This card's Watch: the one started from its turn, or the same task in its
+  // chat (the Agent prepared it again: already_watched). End and resume act
+  // on the Watch the card shows (bug hunt 2026-11-04).
+  function ownWatch(view, watches) {
+    return watches.find(watch => watch.turn_id === view.turnId)
+      || watches.find(watch => watch.task === view.proposal.task && watch.chat_id === view.chatId) || null;
+  }
+
   function sync(view) {
     const { proposal } = view;
     const data = chats.get(view.chatId) || null;
     const watches = Array.isArray(data?.watches) ? data.watches : [];
-    const own = watches.find(watch => watch.turn_id === view.turnId)
-      || watches.find(watch => watch.task === proposal.task && watch.chat_id === view.chatId) || null;
+    const own = ownWatch(view, watches);
     const other = !own && watches.find(watch => ['active', 'paused'].includes(watch.status)) || null;
     const allowed = Array.isArray(data?.intervals) && data.intervals.length ? data.intervals.filter(value => INTERVALS.includes(value)) : INTERVALS;
     if (!allowed.includes(view.choice.interval)) view.choice.interval = allowed.includes(proposal.interval) ? proposal.interval : allowed[0];
@@ -327,9 +334,8 @@
 
   // End or resume this card's Watch (stop, resume on its route).
   async function act(view, action) {
-    const own = (chats.get(view.chatId)?.watches || []).find(watch => watch.turn_id === view.turnId
-      && ['active', 'paused'].includes(watch.status));
-    if (view.busy || !own) return;
+    const own = ownWatch(view, chats.get(view.chatId)?.watches || []);
+    if (view.busy || !own || !['active', 'paused'].includes(own.status)) return;
     view.busy = true;
     view.message = '';
     sync(view);
