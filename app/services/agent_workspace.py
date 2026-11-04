@@ -121,7 +121,7 @@ CONTROL_REFRESH_SECONDS = 30
 # setup.sh is install.sh since then.
 TOOL_FILES = {"workbench": ("agent-run", "nouserns.py", "setup.sh"),
               "browser": ("browser.py", "cdp.py", "display.sh", "harden.sh", "install.sh", "openbox-menu.xml",
-                          "openbox-rc.xml", "policy.json", "relay.py")}
+                          "openbox-rc.xml", "policy.json", "relay.py", "xsocket.py")}
 SETUP_SECONDS = 180
 _FILES = Path(__file__).with_name("workspace_vm")
 

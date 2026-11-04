@@ -119,7 +119,7 @@ def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes_and_rules(mo
     folder, one version, which the network rules are part of."""
     tools = agent_workspace.tool_files()
     assert set(tools) == {"agent-run", "nouserns.py", "setup.sh", "browser.py", "cdp.py", "display.sh", "harden.sh",
-                          "install.sh", "openbox-menu.xml", "openbox-rc.xml", "policy.json", "relay.py"}
+                          "install.sh", "openbox-menu.xml", "openbox-rc.xml", "policy.json", "relay.py", "xsocket.py"}
     assert all(b"\r\n" not in data for data in tools.values())
     assert agent_workspace.VERSION == agent_workspace._version() and len(agent_workspace.VERSION) == 16
     monkeypatch.setattr(agent_vm, "RULES", [{"domain": "*", "action": "allow"}])
@@ -1286,7 +1286,10 @@ def test_the_agents_user_reaches_neither_chromes_protocol_nor_its_screen():
     assert 'if ! x_ours; then\n  [ "$mode" = "--keep" ] || stop_chrome' in display
     ours = display.split("x_ours() {", 1)[1].split("\n}", 1)[0]
     assert '"$(stat -c %u /tmp/.X11-unix/X1)" = "$me"' in ours
-    assert '$8 == "@/tmp/.X11-unix/X1"' in ours and 'find "/proc/$pid/fd"' in ours
+    # The kernel says whose the abstract socket is (xsocket.py, sock_diag):
+    # Ubuntu 26.04's Xtigervnc keeps its /proc/<pid>/fd from its own user
+    # (test Sprite 2026-11-04), so the check never looks there.
+    assert 'python3 "$here/xsocket.py" "$me"' in ours and "/proc/" not in ours
     assert display.index("if ! x_ours; then") < display.index('if [ -z "$(browser_pid)" ]')
     # Only the provider's user's processes count: one of the agent named like
     # Chrome or the X server is no Chrome and no screen.
@@ -1301,35 +1304,62 @@ def test_the_agents_user_reaches_neither_chromes_protocol_nor_its_screen():
     assert "9222" not in (VM_FILES / "browser" / "policy.json").read_text(encoding="utf-8")
 
 
-def test_only_the_bound_x_sockets_count_not_the_connections_to_it():
-    """Review 2026-11-04: x_ours read every socket named like X's, and a
-    connection still waiting (inode 0) or one X closed during the check
-    failed it. Anyone may connect without the cookie, so a loop of the
-    agent's connections ended the user's Chrome. The names /proc/net/unix
-    showed for a listener, a waiting and a taken connection (measured)."""
-    import re
-    import shutil
-    import subprocess
-    if not shutil.which("awk"):
-        pytest.skip("no awk")
-    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
-    ours = display.split("x_ours() {", 1)[1].split("\n}", 1)[0]
-    program = re.search(r"awk '([^']+)' /proc/net/unix", ours).group(1)
-    table = ("Num       RefCount Protocol Flags    Type St Inode Path\n"
-             "00000000ab124791: 00000003 00000000 00000000 0001 02     0 @/tmp/.X11-unix/X1\n"
-             "00000000ff0d0b22: 00000003 00000000 00000000 0001 03 85976 @/tmp/.X11-unix/X1\n"
-             "000000008040b98f: 00000002 00000000 00010000 0001 01 85973 @/tmp/.X11-unix/X1\n"
-             "000000008040b990: 00000002 00000000 00000000 0001 01 85999 @/tmp/.X11-unix/X1\n"
-             "000000008040b991: 00000002 00000000 00010000 0001 01 85974 @/tmp/.X11-unix/X2\n"
-             "000000008040b992: 00000002 00000000 00000000 0002 01 86001 @/tmp/.X11-unix/X1\n"
-             "000000008040b993: 00000002 00000000 00000000 0005 01 86002 @/tmp/.X11-unix/X1\n")
-    found = subprocess.run(["awk", program], input=table, capture_output=True, text=True, check=True).stdout.split()
-    # The listener and a socket bound to the name without listening (which
-    # could listen later); never the connections, never another display,
-    # never a datagram or seqpacket socket: Linux keeps abstract names apart
-    # by type, so the agent's user can bind one beside X's (review
-    # 2026-11-04), and Chrome connects to a stream socket only.
-    assert found == ["85973", "85999"]
+def _diag_answer(*sockets, done=True):
+    """A sock_diag answer as the kernel sends it: one message per socket
+    (type, state, name, uid), then NLMSG_DONE."""
+    import struct
+    xsocket = load("xsocket")
+    out = b""
+    for kind, state, name, uid in sockets:
+        attributes = b""
+        for which, payload in ((xsocket.UNIX_DIAG_NAME, name), (xsocket.UNIX_DIAG_UID, struct.pack("=I", uid))):
+            if payload is None:
+                continue
+            size = 4 + len(payload)
+            attributes += struct.pack("=HH", size, which) + payload + b"\0" * ((-size) % 4)
+        body = xsocket.MESSAGE.pack(1, kind, state, 0, 4242, 0, 0) + attributes
+        out += xsocket.HEADER.pack(16 + len(body), 20, 2, 1, 0) + body
+    if done:
+        out += xsocket.HEADER.pack(20, xsocket.NLMSG_DONE, 2, 1, 0) + b"\0" * 4
+    return out
+
+
+def test_only_the_users_own_stream_sockets_on_xs_name_count():
+    """x_ours asks the kernel whose the stream sockets bound to
+    @/tmp/.X11-unix/X1 are (xsocket.py, sock_diag). Until 2026-11-04 it
+    looked for them among the X server's descriptors, which Ubuntu 26.04's
+    Xtigervnc keeps from its own user: no Chrome ever started on the test
+    Sprite. Connections count for nothing (they carry the connecting user's
+    uid, and anyone may connect without the cookie: a loop of the agent's
+    connections ended the user's Chrome), nor do datagram or seqpacket
+    sockets (Linux keeps abstract names apart by type), nor another display."""
+    import socket as sockets
+    xsocket = load("xsocket")
+    name, me, agent = b"\0/tmp/.X11-unix/X1", 1001, 1500
+    stream, dgram, seqpacket = sockets.SOCK_STREAM, sockets.SOCK_DGRAM, sockets.SOCK_SEQPACKET
+    listen, bound, connected = xsocket.TCP_LISTEN, xsocket.TCP_CLOSE, 1
+    found, done = xsocket.parse(_diag_answer((stream, listen, name, me), (stream, connected, name, agent),
+                                             (dgram, bound, name, agent), (seqpacket, bound, name, agent),
+                                             (stream, listen, b"\0/tmp/.X11-unix/X2", agent),
+                                             (stream, listen, b"/tmp/.X11-unix/X1", me), (stream, listen, None, agent)))
+    assert done is True and len(found) == 7
+    assert xsocket.ours(found, me) and not xsocket.ours(found, agent)
+    # The agent's listener (or one it bound and has yet to listen on) is never ours.
+    for state in (listen, bound):
+        taken, _ = xsocket.parse(_diag_answer((stream, listen, name, me), (stream, state, name, agent)))
+        assert not xsocket.ours(taken, me)
+    # No stream socket on the name at all: X does not hold it, nothing starts.
+    empty, _ = xsocket.parse(_diag_answer((dgram, bound, name, me)))
+    assert not xsocket.ours(empty, me)
+    # An answer cut short ends nothing; an error says so.
+    part, done = xsocket.parse(_diag_answer((stream, listen, name, me), done=False))
+    assert done is False and xsocket.ours(part, me)
+    error = xsocket.HEADER.pack(36, xsocket.NLMSG_ERROR, 0, 1, 0) + b"\0" * 20
+    assert xsocket.parse(error) == ([], None)
+    # The request: every Unix socket with its name and its user.
+    request = xsocket.request()
+    assert len(request) == 16 + 24 and request[4:6] == (20).to_bytes(2, "little")
+    assert xsocket.main(["xsocket.py"]) == 2 and xsocket.main(["xsocket.py", "x"]) == 2
 
 
 def test_display_sh_waits_at_most_fifteen_seconds_and_asks_only_a_chrome_it_started():

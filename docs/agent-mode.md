@@ -1358,16 +1358,23 @@ mit den Mitteln des Rechners nicht:
   aus `os.urandom`); Chrome und openbox bekommen `XAUTHORITY`. Ohne Cookie
   verweigert X (lokal mit Xvfb geprüft). Chrome startet nur, wenn der
   X-Server dieses Nutzers seine Sockets selbst hält (`x_ours`): die Datei
-  `/tmp/.X11-unix/X1` gehört ihm, und jeder an `@/tmp/.X11-unix/X1`
-  gebundene Socket ohne Verbindung (abstrakt, den libxcb zuerst versucht;
-  Zustand 01 in `/proc/net/unix`) steckt in seinen fds. Verbindungen zählen
+  `/tmp/.X11-unix/X1` gehört ihm, und jeder Stream-Socket, der an
+  `@/tmp/.X11-unix/X1` gebunden ist (abstrakt, den libxcb zuerst versucht;
+  lauschend oder noch nicht), gehört diesem Nutzer, und es gibt einen
+  (`workspace_vm/browser/xsocket.py` fragt den Kernel über `sock_diag`,
+  `UNIX_DIAG_UID`, ohne Sonderrechte). Bis zum Sprite-Test vom 2026-11-04
+  suchte die Prüfung den Socket in den fds des X-Servers; das Xtigervnc von
+  Ubuntu 26.04 ist aber nicht dumpbar (`/proc/<pid>/fd` gehört root,
+  `dr-x------`), und root auf der Sprite hat kein `CAP_SYS_PTRACE`: Die
+  Prüfung scheiterte bei jedem Start, kein Chrome lief. Verbindungen zählen
   nicht: eine wartende (Inode 0) oder eine, die X während der Prüfung
   schließt, ließ sie scheitern, und verbinden darf jeder ohne Cookie. So
   beendete eine Schleife von Verbindungen des Agenten den Chrome des Nutzers
   (Review 2026-11-04, lokal nachgestellt); unter `--keep` beendet ein
   Scheitern der Prüfung Chrome ohnehin nicht mehr. Ist der Name belegt,
   startet X gar nicht („Cannot establish any listening sockets“, mit
-  Xtigervnc 1.13 auf Ubuntu 24.04 gemessen), und dann auch kein Chrome:
+  Xtigervnc 1.13 auf Ubuntu 24.04 und an der Sprite mit Ubuntu 26.04
+  gemessen), und dann auch kein Chrome:
   höchstens ein Ausfall, nie ein fremder Bildschirm, der Tasten mitliest.
 - **Eigenes /tmp für den Agenten.** `agent-run` legt `/var/lib/consens/agent-tmp`
   (vom Setup als root angelegt, 1777, Eigentümer `agent`) über `/tmp` seines
@@ -1391,10 +1398,15 @@ mit den Mitteln des Rechners nicht:
   Prompt sagt es; Playwright startet Chromium ohnehin so); rootless
   Container und bubblewrap laufen nicht. Die Sandbox schützte die Dateien des
   Agenten vor einer Seite, die seine Befehle ohnehin erreichen. Geprüft im
-  BPF-Nachbau (`tests/test_workspace_nouserns.py`) und unter Linux echt
-  installiert (CI): Threads, fork/exec laufen, `unshare --user` scheitert.
-- **Chrome zuerst.** `agent-run` setzt `oom_score_adj` 800 (der Agent kann
-  es nicht senken) und nice 10: Wird der Speicher knapp, beendet der Kernel
+  BPF-Nachbau (`tests/test_workspace_nouserns.py`), unter Linux echt
+  installiert (CI) und an der Sprite: `unshare --user` scheitert („Operation
+  not permitted“), Threads, fork/exec, git, node, npm, pip, Playwright
+  (`launch(channel="chrome")`) und `google-chrome --headless=new
+  --no-sandbox` laufen; ohne `--no-sandbox` bricht Chrome ab (Exit 134).
+- **Chrome zuerst.** `agent-run` setzt `oom_score_adj` 800 und nice 10 (an
+  der Sprite gemessen; senken könnte der Agent den Wert wieder, weil root
+  dort kein `CAP_SYS_RESOURCE` hat und die Untergrenze so nicht steigt: ein
+  Vorrang für Builds, keine Schranke): Wird der Speicher knapp, beendet der Kernel
   den Build des Agenten vor dem Chrome des Nutzers, und die Live-Ansicht
   bleibt bei Last flüssig. Eine eigene cgroup gibt es nicht (die Sprite
   nimmt keine Grenzen an, siehe Office-Konverter).
@@ -1402,8 +1414,8 @@ mit den Mitteln des Rechners nicht:
   `harden.sh` trägt `-u` des eigenen Nutzers: ein Prozess des Agenten, der
   sich wie Chrome oder Xtigervnc nennt, zählt nicht. Das Muster für Chrome
   beginnt am Anfang der Befehlszeile, damit `cdp.py` (dessen Zeile Chromes
-  nennt) nicht als Chrome gilt. `x_ours` zählt nur Stream-Sockets (Typ
-  0001): Linux trennt abstrakte Namen nach Typ, ein Datagram-Socket des
+  nennt) nicht als Chrome gilt. `x_ours` zählt nur Stream-Sockets: Linux
+  trennt abstrakte Namen nach Typ, ein Datagram-Socket des
   Agenten auf `@/tmp/.X11-unix/X1` ließ die Prüfung bei jedem Aufruf
   scheitern und beendete so den Chrome des Nutzers (Review 2026-11-04).
 - **localhost ist der Agent.** Ohne Tunnel öffnet Chrome den Server des
@@ -1469,7 +1481,7 @@ mit den Mitteln des Rechners nicht:
   eine `VERSION` für alle Werkzeuge (`TOOL_FILES`), keine Kopien zwischen VMs.
   Das Installieren des Browsers heißt `install.sh` (vorher `setup.sh` der
   Browser-VM; der Name gehört jetzt dem Setup als root).
-- **Offen:** ein Lauf an einer echten Sprite. Lokal geprüft sind `cdp.py` mit
+- **Vor dem Sprite-Test:** Lokal geprüft waren `cdp.py` mit
   echtem Chrome und Playwright, `browser.py` über `cdp.py` (öffnen, lesen,
   klicken, Passwortfeld verweigert, Download, Screenshot, residenter Helfer,
   fremder localhost-Port verweigert), das Cookie mit Xvfb und Chrome, und
@@ -1485,10 +1497,26 @@ mit den Mitteln des Rechners nicht:
   Chrome. Das letzte Warten in `display.sh` dauert höchstens 15 s und fragt
   nur ein Chrome, das es selbst gestartet hat (vorher bis zu 150 Fragen à
   5 s unter `--keep`, solange ein hängendes Chrome das Schloss hielt).
-  Nach dem Review zusätzlich an der Sprite zu prüfen: `agent-run` mit dem
-  seccomp-Filter (`/usr/bin/python3` vorhanden, `unshare --user` scheitert,
-  pip, npm, git, `google-chrome --headless=new --no-sandbox` und Playwright
-  laufen), `vm_install_packages` mit `--no-remove` und der Namensprüfung.
+- **Live geprüft 2026-11-04** (Max' OK) an vier frischen Test-Sprites
+  (`consens-test-…`, Ubuntu 26.04, Kernel 6.12, je danach gelöscht; Skript
+  `live_check.py` im Scratchpad der Session) mit `SpritesBackend`, `prepare`
+  und `browser.py` dieser Version. Agent: Filter, git/node/npm/pip,
+  Playwright und Chrome mit `--no-sandbox` wie oben. apt: `jq` installiert,
+  `e.e` endet mit „Unable to locate package“, `chrony` (verdrängte
+  `systemd-timesyncd`) bricht mit „Packages need to be removed but remove
+  is disabled“ ab. Browser: Der erste Lauf fand den Fehler in `x_ours`
+  (siehe „Bildschirm mit Cookie“, behoben mit `xsocket.py`); danach öffnet
+  der erste Aufruf eine Seite in 45 s samt Installation, `cdp.sock`,
+  `xauthority` und `vnc.sock` sind 0600, kein TCP-Port 9222. Als Agent:
+  X antwortet ohne Cookie „Authorization required“, X' abstrakter Name ist
+  belegt (EADDRINUSE), `/home/sprite`, `xauthority` und `cdp.sock` sind zu,
+  `/tmp/.X11-unix` gibt es in seinem `/tmp` nicht. Ein Datagram-Socket des
+  Agenten auf X' Namen lässt Chrome laufen (dieselbe pid); hält der Agent den
+  Stream-Namen vor dem Start, starten weder X noch Chrome, danach wieder
+  beide. localhost auf dem Port des Agenten liest der Browser, einen Port
+  ohne Server nicht. Das Schließen des Wächters beendet einen laufenden
+  Befehl des Agenten (Exit 137 nach 6 s), die Netzzähler lassen sich lesen.
+  Offen bleibt ein Konto mit altem Arbeitsplatz (Umzug, Smoke-Checkliste).
 
 - **Ein Name am Konto.** `users/{uid}/chat_state/agent_workspace` trägt
   `name`, bevor der Anbieter die VM anlegt (`claim`, `record_for_view`). Die

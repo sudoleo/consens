@@ -101,28 +101,25 @@ stop_chrome() {
   for _ in $(seq 30); do runs "$chrome" || runs "$hub" || return 0; sleep 0.1; done
 }
 # The X server of this user, and whether it holds its sockets: the file
-# /tmp/.X11-unix/X1 is this user's, and every socket bound to the name
-# @/tmp/.X11-unix/X1 without a connection (state 01: the abstract one X
-# listens on) is one of its own. An X server never starts on a name another
-# process holds (measured with Xvfb 21.1: "server already running"), so a
+# /tmp/.X11-unix/X1 is this user's, and every stream socket bound to the
+# name @/tmp/.X11-unix/X1 (listening or not yet) is this user's and there is
+# one (xsocket.py asks the kernel whose each is, sock_diag). An X server
+# never starts on a name another process holds ("Cannot establish any
+# listening sockets", measured with Xvfb 21.1 and Xtigervnc 1.13), so a
 # running one normally holds it; were it to listen without it, none of
 # another user's may exist at the moment Chrome connects. Connections count
-# for nothing: one still waiting (inode 0) or one X closes during the check
-# failed it, and anyone may connect without the cookie, so a loop of
-# connections ended the user's Chrome (review 2026-11-04). Nor do sockets
-# of another type (type 0001 is a stream, as X's and Chrome's): Linux keeps
-# abstract names apart by type, so the agent's user may bind a datagram
-# socket to the same name while X runs, and it too ended the user's Chrome
-# (review 2026-11-04, the kernel's unix_abstract_hash).
+# for nothing (anyone may connect without the cookie: a loop of the agent's
+# connections ended the user's Chrome, review 2026-11-04), nor do other
+# socket types (Linux keeps abstract names apart by type; a datagram socket
+# of the agent's on the name did the same). Until it asked the kernel the
+# check looked among the X server's own descriptors, which Ubuntu 26.04's
+# Xtigervnc, not dumpable, keeps from its own user (test Sprite 2026-11-04:
+# no Chrome ever started).
 x_pid() { pgrep -u "$me" -x Xtigervnc | head -n 1; }
 x_ours() {
-  local pid inode
-  pid="$(x_pid)"
-  [ -n "$pid" ] || return 1
+  [ -n "$(x_pid)" ] || return 1
   [ -S /tmp/.X11-unix/X1 ] && [ "$(stat -c %u /tmp/.X11-unix/X1)" = "$me" ] || return 1
-  for inode in $(awk '$8 == "@/tmp/.X11-unix/X1" && $5 == "0001" && $6 == "01" && $7 != 0 { print $7 }' /proc/net/unix); do
-    find "/proc/$pid/fd" -maxdepth 1 -lname "socket:\[$inode\]" 2>/dev/null | grep -q . || return 1
-  done
+  python3 "$here/xsocket.py" "$me"
 }
 # A cookie only this user reads, new with each start of the X server.
 new_cookie() {

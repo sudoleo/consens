@@ -15,8 +15,9 @@
 # 3. lets the user's browser go first when memory or the processor run
 #    short (since 2026-11-04, when it moved onto this computer): the kernel
 #    ends the agent's processes before Chrome when memory runs out
-#    (oom_score_adj 800, which the agent's user cannot lower), and they run
-#    at nice 10;
+#    (oom_score_adj 800; the Sprite's root lacks CAP_SYS_RESOURCE, so the
+#    agent's user could lower it again, which no build does, test Sprite
+#    2026-11-04), and they run at nice 10;
 # 4. makes no user namespaces (nouserns.py, a seccomp filter, since
 #    2026-11-04): they let an ordinary user reach the kernel's parts that
 #    are otherwise root's, the usual way of its flaws from the agent's user

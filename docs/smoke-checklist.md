@@ -372,7 +372,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       „Unable to locate package“. Ein Konto mit alter Browser-VM: „Überall
       abmelden“ vor dem ersten Öffnen löscht `consens-b-…` in Sprites.
       Automatisiert: `test_workspace_cdp.py`, `test_agent_workspace.py`,
-      `test_workspace_nouserns.py` (unter Linux echt installiert).
+      `test_workspace_nouserns.py` (unter Linux echt installiert). An
+      frischen Test-Sprites live geprüft 2026-11-04 (`docs/agent-mode.md`
+      „Ein Rechner“): alles hier außer dem Umzug eines Kontos mit altem
+      Arbeitsplatz und der Live-Ansicht im Browser.
 - [ ] Office-Dateien (2026-11-01, `docs/agent-mode.md`, Konverter
       `consens-office`): Konto mit Arbeitsplatz, „Mach mir eine kurze
       PowerPoint über X“. Der Agent installiert kein LibreOffice, ruft
