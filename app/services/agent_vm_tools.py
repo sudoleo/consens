@@ -85,7 +85,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.observability import safe_exception
 from app.services import agent_vm
-from app.services.agent_tools import ReadOnlyTool
+from app.services.agent_tools import ReadOnlyTool, call_order
 from app.services.error_alerts import report_server_exception
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 
@@ -1194,7 +1194,7 @@ class VMTools:
                          "For Python packages use pip or uv yourself, for Node npm in your project.",
                          VmInstallPackagesArgs, self.install, activity=self._install_activity, reports=True),
             ReadOnlyTool("vm_read_file", "Read a text file in your workspace by lines.", VmReadFileArgs, self.read,
-                         activity=self._path_activity, reports=True, concurrent=True),
+                         activity=self._path_activity, reports=True, concurrent=True, ordered=True),
             ReadOnlyTool("vm_write_file", "Write a text file in your workspace (creates folders, replaces the file).",
                          VmWriteFileArgs, self.write, argument_limit=TOOL_ARGUMENT_CHARS,
                          activity=self._path_activity, reports=True),
@@ -1218,7 +1218,7 @@ class VMTools:
             *([ReadOnlyTool("vm_view_image", "Look at a picture in your workspace (PNG, JPEG, WebP or GIF up to 5 MB), "
                             "such as a chart you plotted or a screenshot: it follows as an image after the result.",
                             VmViewImageArgs, self.view, activity=self._path_activity, reports=True,
-                            concurrent=True)]
+                            concurrent=True, ordered=True)]
               if sees_pictures(self.loop.model) else []),
             # Pictures of the web by their id, where the picture tools are (agent_web_images.py).
             *([ReadOnlyTool("vm_save_picture", "Put a picture from "
@@ -1523,8 +1523,9 @@ class VMTools:
             raise ValueError(f"No file at {path}.") from None
         report({"bytes": len(raw)})
         if b"\x00" in raw[:8192]:
-            return self.session.announce({"path": path, "binary": True, "bytes": len(raw),
-                                          "note": "Binary file: inspect it with vm_exec (file, xxd, python)."})
+            return self._announce_in_order({"path": path, "binary": True, "bytes": len(raw),
+                                            "note": "Binary file: inspect it with vm_exec (file, xxd, python)."},
+                                           cancellation)
         lines = file_lines(raw)
         if not complete:
             # The last line may be cut; it is read with the rest.
@@ -1557,7 +1558,13 @@ class VMTools:
         elif not complete:
             result["more"] = (f"The file is larger than {READ_BYTES // (1024 * 1024)} MB: read its further lines "
                               "with vm_exec (sed -n, tail).")
-        return self.session.announce(result)
+        return self._announce_in_order(result, cancellation)
+
+    def _announce_in_order(self, result, cancellation):
+        """session.announce for a read that may run beside others of its step:
+        the first in the step's call order names the folder (call_order)."""
+        with call_order(cancellation):
+            return self.session.announce(result)
 
     def _notes_kept(self, path):
         """A temporary chat reads the workspace's notes and leaves them as
@@ -1638,10 +1645,12 @@ class VMTools:
         if mime is None:
             raise ValueError(f"{path} is no PNG, JPEG, WebP or GIF picture. Convert it first (for example with "
                              "matplotlib's savefig or ImageMagick).")
-        with self._pictures_lock:
-            self._pictures.append((path, mime, raw))
-        return self.session.announce({"path": path, "mime": mime, "bytes": len(raw),
-                                      "note": "The picture follows as an image after these results."})
+        # The pictures follow the results in the step's call order.
+        with call_order(cancellation):
+            with self._pictures_lock:
+                self._pictures.append((path, mime, raw))
+            return self.session.announce({"path": path, "mime": mime, "bytes": len(raw),
+                                          "note": "The picture follows as an image after these results."})
 
     def save_picture(self, args, *, cancellation, report=None):
         """A picture find_pictures or search_pictures found, written into the

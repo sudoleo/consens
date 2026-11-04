@@ -22,7 +22,7 @@ from app.core.observability import safe_exception
 from app.services import agent_file_extract, persistence_guard
 from app.services.chat_store import ChatStore, ChatNotFound
 from app.services.llm.attachments import parse_attachments
-from app.services.agent_tools import ReadOnlyTool
+from app.services.agent_tools import ReadOnlyTool, call_order
 from app.services.agent_tokens import pdf_visual_tokens
 
 logger = logging.getLogger(__name__)
@@ -422,7 +422,6 @@ class FileContext:
         # Files the model opened itself; kept apart so they never evict the
         # user's explicit selection from later evidence.
         self.read_ids = []
-        self._read_lock = threading.Lock()
         # Object bytes by file id, with the hash they were checked against:
         # every step and every comparison answer of the turn sends the same
         # image/PDF, so it is downloaded once per turn, not once per call.
@@ -440,8 +439,8 @@ class FileContext:
         cancellation.raise_if_cancelled()
         data = self.files.get(self.uid, self.chat_id, args.file_id)
         if (data["mime"].startswith("image/") or not data["parts"]) and args.file_id not in self.file_ids:
-            # Reads of one step run at the same time (ReadOnlyTool.concurrent).
-            with self._read_lock:
+            # The newest opened files, in the step's call order.
+            with call_order(cancellation):
                 self.read_ids = [fid for fid in self.read_ids if fid != args.file_id][-(4):] + [args.file_id]
         return self._excerpts(data, args)
 
@@ -457,7 +456,7 @@ class FileContext:
 
     def tools(self):
         return [ReadOnlyTool("read_file", "Read bounded excerpts of a file in this chat. Cite its name and locator; use pagination for more.", ReadFileArgs, self.read,
-                             concurrent=True)]
+                             concurrent=True, ordered=True)]
 
     def catalog(self):
         read, self._preloaded = self._preloaded, None
