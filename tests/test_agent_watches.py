@@ -181,6 +181,31 @@ def test_a_due_run_moves_the_watch_on_and_is_taken_once(store):
     assert agent_watches.claim(watch_id, now=NOW, db=store.db) == (None, "not_due")
 
 
+def test_watches_due_at_the_same_time_take_turns(store):
+    # Many Watches at the default 08:00: the one that has waited longest goes
+    # first, so a full morning skips another one each day, not always the same
+    # (bug hunt 2026-11-04: the tie went by document id).
+    scheduled = NOW - timedelta(minutes=5)
+
+    def due_pro(when):
+        watch = start(store, *proposed_chat(store), tier="pro")
+        store.db.collection(agent_watches.COLLECTION).document(watch["id"]).update({"next_run_at": when})
+        return watch["id"]
+
+    ids = [due_pro(scheduled) for _ in range(3)]
+    by_name = [watch_id for watch_id, _uid in agent_watches.due(now=NOW, db=store.db)]
+    assert sorted(by_name) == sorted(ids)
+    for days, watch_id in enumerate(by_name):
+        # The last by name ran longest ago; the first never did.
+        last = None if days == 0 else {"at": NOW - timedelta(days=days), "outcome": "quiet", "summary": ""}
+        store.db.collection(agent_watches.COLLECTION).document(watch_id).update({"last_run": last})
+    first, *rest = by_name
+    assert [watch_id for watch_id, _uid in agent_watches.due(now=NOW, db=store.db)] == [first, *reversed(rest)]
+    # An earlier time still goes first.
+    earlier = due_pro(scheduled - timedelta(minutes=1))
+    assert agent_watches.due(now=NOW, db=store.db)[0] == (earlier, UID)
+
+
 def test_a_late_run_is_skipped_and_a_running_one_waits(store):
     watch_id = due_watch(store, next_run_at=NOW - timedelta(hours=3))
     assert agent_watches.claim(watch_id, now=NOW, db=store.db) == (None, "late")

@@ -671,13 +671,26 @@ def _stream(query):
         return query.stream()
 
 
+def _waited_since(data: dict) -> datetime:
+    """When a Watch last ran (one that never did: the earliest)."""
+    last = data.get("last_run") if isinstance(data.get("last_run"), dict) else {}
+    at = last.get("at")
+    return at if isinstance(at, datetime) else datetime.min.replace(tzinfo=timezone.utc)
+
+
 def due(*, now: datetime | None = None, db=None, max_items: int = DUE_BATCH) -> list[tuple[str, str]]:
-    """(watch id, uid) of the Watches whose time has come, the oldest first."""
+    """(watch id, uid) of the Watches whose time has come, the oldest first.
+    Watches due at the same time (the default 08:00) go by how long they have
+    waited: when the morning's capacity ends before LATE_AFTER, another one is
+    skipped each day, not always the same (bug hunt 2026-11-04)."""
     db = _db(db)
     now = now or utcnow()
     query = (db.collection(COLLECTION).where(filter=FieldFilter("next_run_at", "<=", now))
              .order_by("next_run_at").limit(max_items))
-    return [(snapshot.id, str((snapshot.to_dict() or {}).get("uid") or "")) for snapshot in _stream(query)]
+    found = [(snapshot.id, snapshot.to_dict() or {}) for snapshot in _stream(query)]
+    found.sort(key=lambda item: (item[1].get("next_run_at") if isinstance(item[1].get("next_run_at"), datetime)
+                                 else now, _waited_since(item[1])))
+    return [(watch_id, str(data.get("uid") or "")) for watch_id, data in found]
 
 
 def earliest_next_run_at(*, db=None) -> datetime | None:
