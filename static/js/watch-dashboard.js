@@ -105,8 +105,18 @@
       : App.watchFields?.scheduleLabel ? App.watchFields.scheduleLabel(watch) : watch.interval;
   }
 
+  // Its first run has not ended: due now, or going. Its start moves
+  // next_run_at on to the following time at once (agent_watches.claim), so a
+  // first run under way says so by `looking` alone (bug hunt 2026-11-04).
   function firstRunPending(watch) {
-    return watch.status === 'active' && !watch.last_run && Date.parse(watch.next_run_at || '') <= Date.now() + 60000;
+    return watch.status === 'active' && !watch.last_run
+      && (watch.looking === true || Date.parse(watch.next_run_at || '') <= Date.now() + 60000);
+  }
+
+  // A chat the page opened for its Watch (no turn_id) is in the sidebar only
+  // once its first run has ended; a chat's own Watch has its chat already.
+  function chatPending(watch) {
+    return !watch.bookmark_id || (!watch.turn_id && firstRunPending(watch));
   }
 
   function looking(watch) {
@@ -1077,7 +1087,7 @@
   function followFirstRuns() {
     clearTimeout(page.follow);
     page.follow = null;
-    const pending = (page.data?.watches || []).some(watch => firstRunPending(watch) || watch.looking === true);
+    const pending = (page.data?.watches || []).some(watch => looking(watch));
     if (!pending) {
       page.followTries = 0;
       return;
@@ -1226,7 +1236,7 @@
       ui().api('POST', `/agent/watches/${encodeURIComponent(watch.id)}/seen`, {}).catch(() => {});
       draw();
     }
-    if (firstRunPending(watch) || !watch.bookmark_id) {
+    if (chatPending(watch)) {
       App.toast?.({ message: App.t('Its first look is under way. Its chat appears in a moment.') });
       return;
     }

@@ -242,6 +242,47 @@ describe("The page: what wants the reader first, then what runs", () => {
     expect(document.querySelector("#appToasts .toast.is-shown").textContent).toContain("Its chat appears in a moment");
   });
 
+  it("knows a first look under way after its start moved the next run on", async () => {
+    vi.useFakeTimers();
+    try {
+      // claim() sets next_run_at to tomorrow at the start; last_run comes at the end.
+      const tomorrow = new Date(Date.now() + 86400000).toISOString();
+      const { window, document, server } = boot({ watches: [watch({ last_run: null, runs: 1, looking: true, next_run_at: tomorrow })] });
+      await window.App.watchDashboard.render();
+      document.getElementById("watchDashboard").hidden = false;
+      expect(document.querySelector(".aw-line").textContent).toBe("Its first look is under way.");
+      // The page's own start (watch.js) draws it once more at once.
+      await vi.advanceTimersByTimeAsync(1000);
+      const reads = () => server.calls.filter(([method, url]) => method === "GET" && url === "/agent/watches").length;
+      const before = reads();
+      await vi.advanceTimersByTimeAsync(15000);
+      expect(reads()).toBe(before + 1);
+      // Its chat is not in the sidebar before the run has ended.
+      document.querySelector(".aw-open").click();
+      [...detail(document).querySelectorAll(".wd-detail-actions button")].find(button => button.textContent === "Open chat").click();
+      expect(window.openBookmark).not.toHaveBeenCalled();
+      expect(document.querySelector("#appToasts .toast.is-shown").textContent).toContain("Its chat appears in a moment");
+      server.watches[0] = { ...server.watches[0], looking: false, last_run: { at: new Date().toISOString(), outcome: "quiet", summary: "" } };
+      await vi.advanceTimersByTimeAsync(60000);
+      await vi.waitFor(() => expect(document.querySelector(".aw-line").textContent).toBe("Nothing new."));
+      // Its first look is there: no more looks.
+      const after = reads();
+      await vi.advanceTimersByTimeAsync(300000);
+      expect(reads()).toBe(after);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("opens a chat's own Watch during its first look: that chat is there already", async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString();
+    const { window, document } = boot({ watches: [watch({ turn_id: "t1", last_run: null, runs: 1, looking: true, next_run_at: tomorrow })] });
+    await window.App.watchDashboard.render();
+    document.querySelector(".aw-open").click();
+    [...detail(document).querySelectorAll(".wd-detail-actions button")].find(button => button.textContent === "Open chat").click();
+    expect(window.openBookmark).toHaveBeenCalledWith("agent_b1");
+  });
+
   it("looks again until a new Watch's first look is there", async () => {
     vi.useFakeTimers();
     try {
