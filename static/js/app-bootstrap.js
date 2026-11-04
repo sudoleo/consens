@@ -202,14 +202,21 @@
   // J6): the chat column is never painted, the page and its card skeleton
   // are, and watch.js takes over once the session is known.
   const watchPage = window.location.pathname === "/app/watches";
+  // The Watches page as it will stand (watch-dashboard.js): the field, one
+  // wide card and two, then the rows. Nothing below moves when they arrive (J6).
   window.App.watchSkeleton = function () {
     const card = '<div class="wd-skeleton-card" aria-hidden="true">'
       + '<span class="skeleton is-status"></span><span class="skeleton is-title"></span>'
-      + '<span class="skeleton is-line"></span><span class="skeleton is-line is-short"></span>'
-      + '<span class="skeleton is-foot"></span></div>';
+      + '<span class="skeleton is-line"></span><span class="skeleton is-foot"></span></div>';
+    const row = '<div class="wd-skeleton-row" aria-hidden="true"><span class="skeleton is-picture"></span>'
+      + '<span class="wd-skeleton-lines"><span class="skeleton is-title"></span><span class="skeleton is-line"></span></span>'
+      + '<span class="skeleton is-pulse"></span></div>';
     return '<div class="wd-skeleton skeleton-group" role="status" aria-label="Loading your watches">'
-      + '<div class="wd-skeleton-summary" aria-hidden="true"><span class="skeleton"></span></div>'
-      + '<div class="wd-skeleton-list">' + card.repeat(3) + '</div></div>';
+      + '<div class="wd-skeleton-field" aria-hidden="true"></div>'
+      + '<span class="skeleton wd-skeleton-heading" aria-hidden="true"></span>'
+      + '<div class="wd-skeleton-cards">' + card.repeat(3) + '</div>'
+      + '<span class="skeleton wd-skeleton-heading" aria-hidden="true"></span>'
+      + '<div class="wd-skeleton-rows">' + row.repeat(3) + '</div></div>';
   };
   function bookmarksSkeleton() {
     return '<div class="skeleton-group bookmarks-skeleton" role="status" aria-label="Loading chats">'

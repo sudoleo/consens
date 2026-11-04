@@ -479,13 +479,15 @@ def test_logged_out_watch_deep_link_survives_and_late_login_renders(browser, pha
         page.route("**/agent/watches", lambda route: _json(route, {
             "watches": [], "intervals": ["daily", "weekly"], "active_count": 0, "active_limit": 2}))
 
-        # A guest sees what a Watch does and the way in (J3).
-        expect(page.locator(".aw-empty-title")).to_have_text("Let the Agent keep an eye on things")
+        # A guest sees what a Watch does, the field and the way in (J3).
+        expect(page.locator(".aw-hero-title")).to_have_text("What should the Agent keep an eye on?")
+        expect(page.locator(".aw-hero-login")).to_have_text("Log in")
         assert page.url.endswith("/app/watches")
 
         page.evaluate("() => window.__switchE2EUser('account-b')")
-        expect(page.locator(".aw-empty-title")).to_have_text("Nothing watched yet", timeout=5000)
-        expect(page.locator("#watchDashCreate")).to_have_text("New Watch")
+        expect(page.locator(".aw-hero-login")).to_have_count(0, timeout=5000)
+        expect(page.locator(".aw-hero .wc")).to_be_visible()
+        expect(page.locator("#watchDashCreate")).to_have_count(0)
         assert page.url.endswith("/app/watches")
     finally:
         context.close()

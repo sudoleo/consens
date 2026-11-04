@@ -209,7 +209,7 @@
   "Let the Agent keep watch.": "Lass den Agenten für dich aufpassen.",
   "Tell the Agent what to check and how often. It looks on your schedule, on the web as you would, and speaks up only when it finds something, with the page that shows it.": "Sag dem Agenten, was er wie oft nachsehen soll. Er schaut nach deinem Zeitplan im Web nach, so wie du es tun würdest, und meldet sich nur, wenn er etwas findet, mit der Seite, die es zeigt.",
   "Watch example": "Beispiel einer Watch",
-  "<0><1/>Watch</0> <2><3/>New</2>": "<0><1/>Watch</0> <2><3/>Neu</2>",
+  "<0><1/>Watch</0> <2><3/>Found something</2>": "<0><1/>Watch</0> <2><3/>Etwas gefunden</2>",
   "Watch the price of the Garmin Forerunner 965 at bike-discount.de.": "Beobachte den Preis der Garmin Forerunner 965 bei bike-discount.de.",
   "<0>Done when</0> <1>Under 400 €</1>": "<0>Fertig, wenn</0> <1>Unter 400 €</1>",
   "<0>Daily at 08:00</0><1>Email</1><2>Telegram</2>": "<0>Täglich um 08:00</0><1>E-Mail</1><2>Telegram</2>",

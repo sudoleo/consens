@@ -4,14 +4,17 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 import { ENGLISH_QUESTION, GERMAN_SCRIPTS, settleGerman, useGerman } from "./helpers/german.mjs";
 
 /**
- * The Watches page since 2026-11-03 (watch-dashboard.js): the Agent's
- * Watches by what they want from the reader (Needs you, New, Running,
- * Paused, Ended folded away), each a row that opens its chat; "…" pauses,
- * resumes, picks the channels and ends it; the messages (mail, Telegram)
- * and the archived Consensus Watches below. "New Watch" and every other way
- * to start one open the sheet (watch-sheet.js). The page's routing (one
- * page, the chat steps aside, the first frame) stays as Apple-Audit
- * package J asked for it.
+ * The Watches page since the redesign of 2026-11-04 (watch-dashboard.js,
+ * watch-composer.js): one field that takes a sentence and starts a Watch
+ * (the page itself while there is none, a slim field above the list once
+ * there are some); what wants the reader first ("Since you last looked":
+ * a wide card for one that needs them, cards for findings and goals); the
+ * running and paused ones with their pulse ("Watching"); a panel per Watch
+ * instead of the "…" menu (its looks, what they found, goal, how often,
+ * channels, Open chat, Pause, End); a quiet foot (Notifications, the ended
+ * ones, the archive). The pill under an answer opens the same field in a
+ * sheet (watch-sheet.js). The page's routing stays as Apple-Audit package J
+ * asked for it.
  */
 const SHELL = `
   <nav id="viewSwitch" class="view-switch" data-active="chat">
@@ -26,41 +29,54 @@ const SHELL = `
       <div id="shareModalBody"></div>
     </div>
   </dialog>
-  <div id="watchDashboard" class="watch-page" hidden>
+  <main id="watchDashboard" class="watch-page" hidden>
     <div class="watch-page-inner">
       <header class="wd-head">
-        <div id="watchDashLimit" class="watch-limit-summary is-compact" hidden></div>
-        <button type="button" id="watchDashCreate" class="wd-button is-primary"><span class="wd-button-label">New Watch</span></button>
+        <div class="wd-head-copy">
+          <h1 id="watchDashTitle">Watches</h1>
+          <p id="watchDashStatus" class="wd-status is-empty"></p>
+        </div>
+        <div id="watchDashLimit" class="wd-capacity" hidden></div>
       </header>
+      <div id="watchDashCompose" class="wd-compose" hidden></div>
       <div id="watchDashBody"></div>
     </div>
-  </div>`;
+  </main>`;
 
 const LATER = new Date(Date.now() + 20 * 3600 * 1000).toISOString();
 const EARLIER = new Date(Date.now() - 2 * 3600 * 1000).toISOString();
+const DAY = 24 * 3600 * 1000;
 
 function watch(extra = {}) {
   return {
     id: "w1", chat_id: "c".repeat(32), turn_id: "", bookmark_id: "agent_b1", task: "Check whether IRONMAN Hamburg 2027 registration is open.",
     goal: "Registration is open", status: "active", interval: "daily", run_time: "08:00", run_weekday: "", timezone: "",
     next_run_at: LATER, created_at: EARLIER, runs: 3, last_run: { at: EARLIER, outcome: "quiet", summary: "" },
-    ended: "", unread: false, email_enabled: true, telegram_enabled: true, image: null, ...extra,
+    ended: "", unread: false, email_enabled: true, telegram_enabled: true, image: null, looks: [], looking: false, ...extra,
   };
 }
 
+function looks(pattern, summaries = {}) {
+  const kinds = { q: "quiet", f: "finding", n: "needs_you", x: "failed" };
+  return [...pattern].map((char, index) => ({ at: new Date(Date.now() - (pattern.length - index) * DAY).toISOString(),
+    outcome: kinds[char], summary: summaries[index] || "" }));
+}
+
 function boot({ watches = [], archive = [], user = true, path = "/app/watches", telegram = null, failList = false,
-  german = false, limit = 5 } = {}) {
+  german = false, limit = 5, intervals = ["daily", "weekly"] } = {}) {
   const server = { watches, archive, telegram: telegram || { configured: true, connected: false }, calls: [] };
   const harness = loadScripts(
     [...(german ? GERMAN_SCRIPTS : []), "static/js/motion.js", "static/js/modal-dialog.js", "static/js/popover.js",
       "static/js/notices.js", "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js",
-      "static/js/watch-sheet.js", "static/js/watch.js", "static/js/agent-watch.js", "static/js/watch-dashboard.js"],
+      "static/js/watch-composer.js", "static/js/watch-sheet.js", "static/js/watch.js", "static/js/agent-watch.js",
+      "static/js/watch-dashboard.js"],
     {
       body: SHELL,
       before(window) {
         if (german) useGerman(window);
         window.history.replaceState(null, "", path);
         window.scrollTo = () => {};
+        window.Element.prototype.scrollIntoView = function () {};
         window.App = { watch: {}, showPopup: vi.fn(), trackAppEvent: vi.fn(), openAuthModal: vi.fn() };
         window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
         window.auth = user ? { currentUser: { uid: "watch-user", email: "max@example.com", getIdToken: async () => "token" } }
@@ -78,11 +94,12 @@ function boot({ watches = [], archive = [], user = true, path = "/app/watches", 
           const one = url.match(/^\/agent\/watches\/(\w+)$/);
           if (url.startsWith("/agent/watches?") || (url === "/agent/watches" && method === "GET")) {
             if (failList) { status = 503; data = { detail: "Watches are unavailable right now. Try again." }; }
-            else data = { watches: server.watches, intervals: ["daily", "weekly"], active_limit: limit,
+            else data = { watches: server.watches, intervals, active_limit: limit,
               active_count: server.watches.filter(item => item.status === "active").length };
           } else if (url === "/agent/watches" && method === "POST") {
             const created = watch({ id: "new1", task: body.task, goal: body.goal, interval: body.interval,
-              chat_id: body.chat_id || "n".repeat(32), next_run_at: new Date().toISOString(), runs: 0, last_run: null });
+              run_time: body.run_time, run_weekday: body.run_weekday, chat_id: body.chat_id || "n".repeat(32),
+              next_run_at: new Date().toISOString(), runs: 0, last_run: null });
             server.watches.unshift(created);
             status = 201;
             data = { watch: created };
@@ -116,8 +133,17 @@ function boot({ watches = [], archive = [], user = true, path = "/app/watches", 
 }
 
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
-const rows = document => [...document.querySelectorAll(".aw-row")];
+const rows = document => [...document.querySelectorAll("#watchDashBody .is-watching .aw-row")].map(row => row.dataset.watchId);
+const cards = document => [...document.querySelectorAll(".aw-card")].map(card => card.dataset.watchId);
 const titles = document => [...document.querySelectorAll(".aw-section-title")].map(node => node.textContent);
+const detail = document => document.querySelector("dialog.wd-detail");
+const field = document => document.querySelector("#watchDashBody .wc, #watchDashCompose .wc");
+const posted = server => server.calls.find(([method, url]) => method === "POST" && url === "/agent/watches")?.[2];
+
+function type(window, input, text) {
+  input.value = text;
+  input.dispatchEvent(new window.Event("input", { bubbles: true }));
+}
 
 describe("Watch times (watch-fields.js)", () => {
   it("writes one schedule, names a foreign time zone as a place and the own one never", () => {
@@ -131,98 +157,92 @@ describe("Watch times (watch-fields.js)", () => {
   });
 });
 
-describe("The Agent's Watches by what they want from the reader", () => {
-  it("lists Needs you, New, Running and Paused in that order, the ended ones folded away", async () => {
-    const { window, document } = boot({ watches: [
-      watch({ id: "run", task: "Running task one." }),
+describe("The page: what wants the reader first, then what runs", () => {
+  it("puts a Watch that needs you and new findings first, the running ones and the paused ones under them", async () => {
+    const { window, document, server } = boot({ watches: [
+      watch({ id: "run", task: "Running task one.", next_run_at: new Date(Date.now() + 3 * 3600 * 1000).toISOString() }),
+      watch({ id: "later", task: "Running task two." }),
       watch({ id: "found", task: "A task that found something.", unread: true,
         last_run: { at: EARLIER, outcome: "finding", summary: "The registration is open." } }),
+      watch({ id: "goal", task: "A task that reached its goal.", unread: true, status: "done", ended: "goal", next_run_at: null,
+        last_run: { at: EARLIER, outcome: "done", summary: "It is open now." } }),
       watch({ id: "ask", task: "A task that needs the user.", unread: true,
         last_run: { at: EARLIER, outcome: "needs_you", summary: "I need you to log in to the portal." } }),
       watch({ id: "rest", task: "A paused task.", status: "paused", next_run_at: null }),
       watch({ id: "old", task: "An ended task.", status: "done", ended: "user", next_run_at: null }),
     ] });
     await window.App.watchDashboard.render();
-    expect(titles(document)).toEqual(["Needs you", "New", "Running", "Paused", "Messages"]);
-    expect(rows(document).map(row => row.dataset.watchId)).toEqual(["ask", "found", "run", "rest"]);
-    const needs = document.querySelector('.aw-row[data-watch-id="ask"]');
-    expect(needs.querySelector(".aw-line").textContent).toBe("I need you to log in to the portal.");
-    expect(needs.querySelector(".aw-dot")).not.toBeNull();
-    expect(needs.querySelector(".aw-open").getAttribute("aria-label")).toMatch(/^Needs you\. A task that needs the user\./);
+    expect(titles(document)).toEqual(["Since you last looked", "Watching"]);
+    expect(cards(document)).toEqual(["ask", "found", "goal"]);
+    const needs = document.querySelector('.aw-card[data-watch-id="ask"]');
+    expect(needs.classList.contains("is-needs")).toBe(true);
+    expect(needs.querySelector(".aw-card-text").textContent).toBe("I need you to log in to the portal.");
+    expect(needs.querySelector(".aw-card-action").textContent).toBe("Decide");
+    expect(needs.getAttribute("aria-label")).toMatch(/^Needs you\. A task that needs the user\./);
+    expect(document.querySelector('.aw-card[data-watch-id="goal"] .aw-badge').textContent).toBe("Goal reached");
+    expect(document.querySelector('.aw-card[data-watch-id="found"] .aw-badge').textContent).toBe("Found something");
+    // Running by their next look, the paused ones last; the ended one waits in the foot.
+    expect(rows(document)).toEqual(["run", "later", "rest"]);
     const running = document.querySelector('.aw-row[data-watch-id="run"]');
     expect(running.querySelector(".aw-line").textContent).toBe("Nothing new.");
-    expect(running.querySelector(".aw-meta").textContent).toMatch(/^Daily at 08:00 · next run /);
-    expect(document.querySelector('.aw-row[data-watch-id="rest"] .aw-meta').textContent).toBe("Daily at 08:00 · paused");
-    expect(document.getElementById("watchDashLimit").textContent).toBe("3 of 5 Watches running");
-    const disclosure = document.querySelector(".aw-disclosure");
-    expect(disclosure.textContent).toBe("Show ended Watches (1)");
-    disclosure.click();
-    expect(document.querySelector('.aw-row[data-watch-id="old"] .aw-line').textContent).toBe("Ended.");
+    expect(running.querySelector(".aw-meta").textContent).toBe("Daily at 08:00");
+    const upcoming = window.App.format.upcoming(server.watches[0].next_run_at);
+    expect(running.querySelector(".aw-next").textContent).toBe(upcoming.charAt(0).toUpperCase() + upcoming.slice(1));
+    expect(document.querySelector('.aw-row[data-watch-id="rest"] .aw-next').textContent).toBe("Paused");
+    expect(document.getElementById("watchDashLimit").textContent).toBe("4 of 5 running");
+    expect(document.querySelectorAll("#watchDashLimit .wd-meter-step.is-on")).toHaveLength(4);
+    expect(document.getElementById("watchDashStatus").textContent).toBe(`Next look ${upcoming}`);
+    // One way in: the field above the list, no button of its own.
+    expect(document.querySelector("#watchDashCompose .wc.is-inline.is-collapsed")).not.toBeNull();
+    expect(document.querySelectorAll("#watchDashboard .wd-button.is-primary")).toHaveLength(0);
+    const ended = document.querySelector('.aw-foot-link[data-key="ended"]');
+    expect(ended.textContent).toBe("Ended1");
+    expect(ended.getAttribute("aria-expanded")).toBe("false");
+    ended.click();
+    expect(document.querySelector('.aw-drawer.is-ended .aw-row[data-watch-id="old"] .aw-line').textContent).toBe("Ended.");
+    expect(document.querySelector('.aw-foot-link[data-key="ended"]').getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("opens a row's chat and counts its finding as seen", async () => {
+  it("opens a card's chat and counts its finding as seen", async () => {
     const { window, document, server } = boot({ watches: [watch({ unread: true,
       last_run: { at: EARLIER, outcome: "finding", summary: "Open." } })] });
     await window.App.watchDashboard.render();
-    document.querySelector(".aw-open").click();
+    document.querySelector(".aw-card").click();
     await settle();
     expect(window.openBookmark).toHaveBeenCalledWith("agent_b1");
     expect(server.calls).toContainEqual(["POST", "/agent/watches/w1/seen", {}]);
+    // Seen, it joins the running ones.
+    expect(rows(document)).toEqual(["w1"]);
   });
 
-  it("says a first run is under way instead of opening a chat that is not there yet", async () => {
+  it("draws the last looks as a pulse with a ring for the next and says it in words", async () => {
+    const { window, document } = boot({ watches: [watch({ looks: looks("qqfxqqnqqqqqqqqfqq") }),
+      watch({ id: "now", looking: true, looks: looks("qq") })] });
+    await window.App.watchDashboard.render();
+    const pulse = document.querySelector('.aw-row[data-watch-id="w1"] .aw-pulse');
+    const dots = [...pulse.querySelectorAll(".aw-dot")].map(dot => dot.className.replace("aw-dot ", ""));
+    // The newest 14, oldest first, then the next one.
+    expect(dots).toEqual(["is-quiet", "is-quiet", "is-needs", ...Array(8).fill("is-quiet"), "is-found", "is-quiet", "is-quiet", "is-next"]);
+    expect(pulse.querySelector(".aw-dots").getAttribute("aria-hidden")).toBe("true");
+    expect(pulse.querySelector(".visually-hidden").textContent).toBe("Found something once in the last 14 looks. Once it needed you.");
+    const now = document.querySelector('.aw-row[data-watch-id="now"]');
+    expect(now.querySelector(".aw-dot.is-next.is-now")).not.toBeNull();
+    expect(now.querySelector(".aw-next").textContent).toBe("Looking now");
+    expect(document.getElementById("watchDashStatus").textContent).toBe("Looking now");
+  });
+
+  it("says a first look is under way and opens no chat that is not there yet", async () => {
     const { window, document } = boot({ watches: [watch({ last_run: null, runs: 0, next_run_at: new Date().toISOString() })] });
     await window.App.watchDashboard.render();
-    expect(document.querySelector(".aw-line").textContent).toBe("Its first run is under way.");
+    expect(document.querySelector(".aw-line").textContent).toBe("Its first look is under way.");
     document.querySelector(".aw-open").click();
+    expect(detail(document).open).toBe(true);
+    [...detail(document).querySelectorAll(".wd-detail-actions button")].find(button => button.textContent === "Open chat").click();
     expect(window.openBookmark).not.toHaveBeenCalled();
     expect(document.querySelector("#appToasts .toast.is-shown").textContent).toContain("Its chat appears in a moment");
   });
 
-  it("pauses, picks the channels and ends a Watch from its menu", async () => {
-    const { window, document, server } = boot({ watches: [watch()], telegram: { configured: true, connected: true,
-      telegram_username: "maxl" } });
-    await window.App.watchDashboard.render();
-    const open = () => { document.querySelector(".aw-more").click(); return [...document.querySelectorAll(".aw-menu .bookmark-menu-item")]; };
-    expect(open().map(item => item.textContent.replace("✓", ""))).toEqual(["Open chat", "Pause", "Email", "Telegram", "End Watch"]);
-    document.querySelector('.aw-menu [data-action="pause"]').click();
-    await vi.waitFor(() => expect(titles(document)).toContain("Paused"));
-    expect(server.calls).toContainEqual(["POST", "/agent/watches/w1/pause", {}]);
-    const items = open();
-    expect(items.map(item => item.dataset.action)).toContain("resume");
-    const telegram = items.find(item => item.dataset.action === "telegram");
-    expect(telegram.getAttribute("aria-checked")).toBe("true");
-    telegram.click();
-    await vi.waitFor(() => expect(server.calls).toContainEqual(["PATCH", "/agent/watches/w1", { telegram_enabled: false }]));
-    open();
-    document.querySelector('.aw-menu [data-action="end"]').click();
-    await vi.waitFor(() => expect(server.calls).toContainEqual(["POST", "/agent/watches/w1/stop", {}]));
-    expect(window.App.confirm).toHaveBeenCalledWith(expect.objectContaining({ title: "End this Watch?", danger: true }));
-  });
-
-  it("closes the menu from outside, keeps focus on the row after an action and the archive open (review 2026-11-03)", async () => {
-    const { window, document } = boot({ watches: [watch()], archive: [
-      { id: "old1", question: "When does GPT-6 ship?", share_path: "/s/gpt-6" }] });
-    await window.App.watchDashboard.render();
-    const more = () => document.querySelector('.aw-row[data-watch-id="w1"] .aw-more');
-    more().click();
-    expect(document.querySelector(".aw-menu")).not.toBeNull();
-    document.querySelector(".aw-section-title").dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
-    expect(more().getAttribute("aria-expanded")).toBe("false");
-    more().click();
-    window.dispatchEvent(new window.Event("scroll"));
-    expect(more().getAttribute("aria-expanded")).toBe("false");
-    document.querySelector(".aw-archive").open = true;
-    document.querySelector(".aw-archive").dispatchEvent(new window.Event("toggle"));
-    more().click();
-    document.querySelector('.aw-menu [data-action="pause"]').click();
-    await vi.waitFor(() => expect(titles(document)).toContain("Paused"));
-    // The row moved to Paused; its "…" has the focus again, the archive is still open.
-    expect(document.activeElement).toBe(more());
-    expect(document.querySelector(".aw-archive").open).toBe(true);
-  });
-
-  it("looks again until a new Watch's first run is there", async () => {
+  it("looks again until a new Watch's first look is there", async () => {
     vi.useFakeTimers();
     try {
       const { window, document, server } = boot({ watches: [watch({ last_run: null, runs: 0, next_run_at: new Date().toISOString() })] });
@@ -230,11 +250,11 @@ describe("The Agent's Watches by what they want from the reader", () => {
       document.getElementById("watchDashboard").hidden = false;
       const reads = () => server.calls.filter(([method, url]) => method === "GET" && url === "/agent/watches").length;
       const before = reads();
-      server.watches[0].last_run = { at: new Date().toISOString(), outcome: "finding", summary: "Open now." };
+      server.watches[0].last_run = { at: new Date().toISOString(), outcome: "quiet", summary: "" };
       await vi.advanceTimersByTimeAsync(15000);
       expect(reads()).toBe(before + 1);
-      await vi.waitFor(() => expect(document.querySelector(".aw-line").textContent).toBe("Open now."));
-      // Its first run is there: no more looks.
+      await vi.waitFor(() => expect(document.querySelector(".aw-line").textContent).toBe("Nothing new."));
+      // Its first look is there: no more looks.
       await vi.advanceTimersByTimeAsync(300000);
       expect(reads()).toBe(before + 1);
     } finally {
@@ -246,8 +266,10 @@ describe("The Agent's Watches by what they want from the reader", () => {
     const { window, document } = boot({ watches: [watch({ id: "g", status: "done", ended: "google_data", unread: true,
       last_run: { at: EARLIER, outcome: "google_data", summary: "" } })] });
     await window.App.watchDashboard.render();
-    expect(document.querySelector('.aw-row[data-watch-id="g"] .aw-line').textContent)
+    const card = document.querySelector('.aw-card[data-watch-id="g"]');
+    expect(card.querySelector(".aw-card-text").textContent)
       .toBe("Its chat now holds Google information, so it no longer runs on a schedule.");
+    expect(card.querySelector(".aw-badge").textContent).toBe("Ended");
   });
 
   it("counts the Agent's Watches in the plan line, not the archived ones", async () => {
@@ -257,36 +279,35 @@ describe("The Agent's Watches by what they want from the reader", () => {
     expect(document.querySelector("#watchUsageDisplay strong").textContent).toBe("2 / 2");
   });
 
-  it("shows where the messages go and pairs Telegram from the page", async () => {
-    const { window, document, server } = boot({ watches: [watch()] });
-    await window.App.watchDashboard.render();
-    const notes = [...document.querySelectorAll(".aw-channel-note")].map(node => node.textContent);
-    expect(notes[0]).toBe("A Watch writes to max@example.com when a run finds something, needs you, or reaches its goal.");
-    expect(notes[1]).toBe("Get what your Watches find as a chat message too.");
-    window.open = vi.fn(() => ({ closed: false, location: { href: "" }, close() {} }));
-    [...document.querySelectorAll(".aw-channel button")].find(button => button.textContent === "Connect Telegram").click();
-    await vi.waitFor(() => expect(server.calls.some(([method, url]) => method === "POST" && url === "/api/my/telegram/link")).toBe(true));
-  });
-
-  it("keeps the Consensus Watches from before as an archive with their pages", async () => {
+  it("keeps the Consensus Watches from before in the foot, with their pages", async () => {
     const { window, document } = boot({ watches: [watch()], archive: [
       { id: "old1", question: "When does GPT-6 ship?", share_path: "/s/gpt-6", last_run_at: "2026-10-30T08:00:00+00:00" }] });
     await window.App.watchDashboard.render();
-    const archive = document.querySelector(".aw-archive");
-    expect(archive.querySelector(".aw-archive-count").textContent).toBe("1");
-    const link = archive.querySelector(".aw-archive-link");
+    const toggle = document.querySelector('.aw-foot-link[data-key="archive"]');
+    expect(toggle.querySelector(".aw-count").textContent).toBe("1");
+    toggle.click();
+    const link = document.querySelector(".aw-drawer.is-archive .aw-archive-link");
     expect(link.textContent).toBe("When does GPT-6 ship?");
     expect(link.getAttribute("href")).toBe("/s/gpt-6");
-    expect(archive.querySelector(".aw-archive-when").textContent).toMatch(/^Last checked /);
+    expect(document.querySelector(".aw-archive-when").textContent).toMatch(/^Last checked /);
+    // Open stays open across a redraw, and the focus with its toggle.
+    await window.App.watchDashboard.render();
+    expect(document.querySelector(".aw-drawer.is-archive").hidden).toBe(false);
   });
 
-  it("starts with an empty state whose button opens the sheet", async () => {
-    const { window, document } = boot();
+  it("says where findings go and pairs Telegram from Notifications", async () => {
+    const { window, document, server } = boot({ watches: [watch()] });
     await window.App.watchDashboard.render();
-    expect(document.querySelector(".aw-empty-title").textContent).toBe("Nothing watched yet");
-    document.querySelector(".aw-empty .wd-button").click();
-    await settle();
-    expect(document.querySelector(".watch-sheet").hasAttribute("open")).toBe(true);
+    expect(document.querySelector(".aw-foot-note").textContent).toContain("Findings also reach you by email.");
+    document.querySelector(".aw-foot-change").click();
+    const sheet = document.querySelector("dialog.wd-notify");
+    expect(sheet.open).toBe(true);
+    const notes = [...sheet.querySelectorAll(".aw-channel-note")].map(node => node.textContent);
+    expect(notes[0]).toBe("A Watch writes to max@example.com when a look finds something, needs you, or reaches its goal.");
+    expect(notes[1]).toBe("Get what your Watches find as a chat message too.");
+    window.open = vi.fn(() => ({ closed: false, location: { href: "" }, close() {} }));
+    [...sheet.querySelectorAll(".aw-channel button")].find(button => button.textContent === "Connect Telegram").click();
+    await vi.waitFor(() => expect(server.calls.some(([method, url]) => method === "POST" && url === "/api/my/telegram/link")).toBe(true));
   });
 
   it("keeps the reason and offers another try when the list cannot load", async () => {
@@ -294,6 +315,7 @@ describe("The Agent's Watches by what they want from the reader", () => {
     await window.App.watchDashboard.render();
     expect(document.querySelector(".aw-alert p").textContent).toBe("Watches are unavailable right now. Try again.");
     expect(document.querySelector(".aw-alert button").textContent).toBe("Try again");
+    expect(document.getElementById("watchDashCompose").hidden).toBe(true);
   });
 
   it("leaves the task as written on a German page, its own words German", async () => {
@@ -302,52 +324,213 @@ describe("The Agent's Watches by what they want from the reader", () => {
     await settleGerman(window);
     expect(document.querySelector(".aw-title").textContent).toBe(ENGLISH_QUESTION);
     expect(document.querySelector(".aw-line").textContent).toBe("Nichts Neues.");
-    expect(titles(document)[0]).toBe("Läuft");
+    expect(titles(document)).toEqual(["Wird beobachtet"]);
+    expect(document.querySelector("#watchDashCompose .wc-task").placeholder).toBe("Etwas im Blick behalten…");
   });
 });
 
-describe("The sheet that starts a Watch", () => {
-  it("opens from New Watch and starts one in a chat of its own", async () => {
+describe("One Watch's panel (instead of the … menu)", () => {
+  it("shows its looks and what they found, pauses, picks the channels and ends it", async () => {
+    const { window, document, server } = boot({ telegram: { configured: true, connected: true, telegram_username: "maxl" },
+      watches: [watch({ looks: looks("qfqx", { 1: "Two new listings, both over budget." }) })] });
+    await window.App.watchDashboard.render();
+    document.querySelector('.aw-row[data-watch-id="w1"] .aw-open').click();
+    const panel = detail(document);
+    expect(panel.open).toBe(true);
+    expect(panel.querySelector(".wd-sheet-title").textContent).toBe("Check whether IRONMAN Hamburg 2027 registration is open.");
+    expect(panel.querySelector(".wd-detail-status").textContent).toMatch(/^Running · next look (today|tomorrow), /);
+    expect(panel.querySelector(".wd-activity-title").textContent).toBe("Last 4 looks");
+    expect(panel.querySelector(".wd-activity-count").textContent).toBe("1 finding");
+    expect([...panel.querySelectorAll(".wd-find-text")].map(node => node.textContent))
+      .toEqual(["A look did not finish. It tried again on schedule.", "Two new listings, both over budget."]);
+    expect([...panel.querySelectorAll(".wd-setting-label")].map(node => node.textContent))
+      .toEqual(["Done when", "How often", "Email", "Telegram"]);
+    const pause = () => [...panel.querySelectorAll(".wd-detail-more button")].find(button => /^(Pause|Resume)$/.test(button.textContent));
+    pause().click();
+    await vi.waitFor(() => expect(server.calls).toContainEqual(["POST", "/agent/watches/w1/pause", {}]));
+    await vi.waitFor(() => expect(pause().textContent).toBe("Resume"));
+    expect(document.querySelector('.aw-row[data-watch-id="w1"]').classList.contains("is-paused")).toBe(true);
+    const telegram = panel.querySelector('.wd-setting[data-key="telegram"] .wd-switch');
+    expect(telegram.getAttribute("aria-checked")).toBe("true");
+    telegram.click();
+    await vi.waitFor(() => expect(server.calls).toContainEqual(["PATCH", "/agent/watches/w1", { telegram_enabled: false }]));
+    await vi.waitFor(() => expect(panel.querySelector('.wd-setting[data-key="telegram"] .wd-switch').getAttribute("aria-checked")).toBe("false"));
+    // The switch keeps the focus across the redraw.
+    expect(window.document.activeElement).toBe(panel.querySelector('.wd-setting[data-key="telegram"] .wd-switch'));
+    [...panel.querySelectorAll(".wd-detail-more button")].find(button => button.textContent === "End Watch").click();
+    await vi.waitFor(() => expect(server.calls).toContainEqual(["POST", "/agent/watches/w1/stop", {}]));
+    expect(window.App.confirm).toHaveBeenCalledWith(expect.objectContaining({ title: "End this Watch?", danger: true }));
+    // Ended, it keeps only Open chat and leaves the list for the foot.
+    await vi.waitFor(() => expect(panel.querySelector(".wd-settings")).toBeNull());
+    expect(rows(document)).toEqual([]);
+  });
+
+  it("changes its goal and how often it runs in place", async () => {
+    const { window, document, server } = boot({ watches: [watch({ goal: "" })], intervals: ["every_6_hours", "daily", "weekly"] });
+    await window.App.watchDashboard.render();
+    document.querySelector(".aw-open").click();
+    const panel = detail(document);
+    expect(panel.querySelector('.wd-setting[data-key="goal"] .wd-setting-value').textContent).toBe("Runs until you end it");
+    panel.querySelector('.wd-setting[data-key="goal"] .wd-pill').click();
+    const input = panel.querySelector("#wdGoalInput");
+    input.value = "  It is open ";
+    panel.querySelector(".wd-edit").dispatchEvent(new window.Event("submit", { cancelable: true }));
+    await vi.waitFor(() => expect(server.calls).toContainEqual(["PATCH", "/agent/watches/w1", { goal: "It is open" }]));
+    await vi.waitFor(() => expect(panel.querySelector('.wd-setting[data-key="goal"] .wd-setting-value').textContent).toBe("It is open"));
+    panel.querySelector('.wd-setting[data-key="schedule"] .wd-pill').click();
+    const segments = [...panel.querySelectorAll(".wc-segment")];
+    expect(segments.map(segment => segment.getAttribute("aria-disabled"))).toEqual(["true", null, null, null]);
+    panel.querySelector('.wc-segment[data-interval="weekly"]').click();
+    panel.querySelector('.wc-day[data-weekday="friday"]').click();
+    const time = panel.querySelector(".wc-time");
+    time.value = "09:30";
+    time.dispatchEvent(new window.Event("change"));
+    [...panel.querySelectorAll('.wd-setting[data-key="schedule"] button')].find(button => button.textContent === "Save").click();
+    await vi.waitFor(() => expect(server.calls.some(([method, url, body]) => method === "PATCH" && url === "/agent/watches/w1"
+      && body.interval === "weekly")).toBe(true));
+    const [, , body] = server.calls.filter(([method]) => method === "PATCH").at(-1);
+    expect(body).toMatchObject({ interval: "weekly", run_time: "09:30", run_weekday: "friday" });
+    await vi.waitFor(() => expect(panel.querySelector('.wd-setting[data-key="schedule"] .wd-setting-value').textContent)
+      .toBe("Weekly on Friday at 09:30"));
+  });
+
+  it("opens from the pill's Watching for the chat's Watch", async () => {
+    const { window, document } = boot({ watches: [watch()] });
+    await window.App.watchDashboard.render();
+    window.App.watchDashboard.focusWatch("w1");
+    expect(detail(document).open).toBe(true);
+  });
+});
+
+describe("The field that starts a Watch (watch-composer.js)", () => {
+  it("is the page while there is no Watch: a question, the field and four ways to begin, no second button", async () => {
+    const { window, document } = boot();
+    await window.App.watchDashboard.render();
+    expect(document.getElementById("watchDashboard").classList.contains("is-empty")).toBe(true);
+    expect(document.querySelector(".aw-hero-title").textContent).toBe("What should the Agent keep an eye on?");
+    expect(document.querySelectorAll(".wc")).toHaveLength(1);
+    expect(document.querySelector(".aw-hero .wc.is-hero")).not.toBeNull();
+    expect(document.querySelectorAll("#watchDashboard .wd-button")).toHaveLength(0);
+    expect(document.querySelector(".aw-foot-note")).toBeNull();
+    const starters = [...document.querySelectorAll(".aw-starter")];
+    expect(starters.map(button => button.textContent)).toEqual(["A price drops", "Registration opens", "A new release", "News on a topic"]);
+    starters[3].click();
+    expect(document.querySelector(".wc-task").value).toBe("Every week, tell me what changed around ");
+    expect(document.querySelector(".wc-when").textContent).toMatch(/^Weekly on \w+day at 08:00$/);
+    expect(document.activeElement).toBe(document.querySelector(".wc-task"));
+  });
+
+  it("starts one in a chat of its own from a sentence, a goal and a weekday", async () => {
     const { window, document, server } = boot({ watches: [watch()] });
     await window.App.watchDashboard.render();
-    document.getElementById("watchDashCreate").click();
+    const form = field(document);
+    const task = form.querySelector(".wc-task");
+    task.focus();
+    expect(form.classList.contains("is-collapsed")).toBe(false);
+    type(window, task, "Tell me when the new Garmin 975 is announced.");
+    form.querySelector(".wc-goal-add").click();
+    type(window, form.querySelector(".wc-goal-input"), "it is announced");
+    expect(form.querySelector(".wc-preview").textContent)
+      .toBe("Its first look starts right away, in a chat of its own. It ends by itself once its goal is reached.");
+    form.querySelector(".wc-when").click();
+    expect(form.querySelector(".wc-popover").hidden).toBe(false);
+    form.querySelector('.wc-segment[data-interval="weekly"]').click();
+    form.querySelector('.wc-day[data-weekday="tuesday"]').click();
+    expect(form.querySelector(".wc-when").textContent).toBe("Weekly on Tuesday at 08:00");
+    task.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.waitFor(() => expect(posted(server)).toBeTruthy());
+    expect(posted(server)).toMatchObject({ task: "Tell me when the new Garmin 975 is announced.", goal: "it is announced",
+      interval: "weekly", run_time: "08:00", run_weekday: "tuesday" });
+    expect(posted(server).chat_id).toBeUndefined();
+    await vi.waitFor(() => expect(document.querySelector('.aw-row[data-watch-id="new1"]')).not.toBeNull());
+    // The field is empty again; the new Watch has the focus.
+    expect(task.value).toBe("");
+    expect(document.activeElement).toBe(document.querySelector('.aw-row[data-watch-id="new1"] .aw-open'));
+    expect(detail(document)?.open).toBeFalsy();
+  });
+
+  it("offers the plan's intervals and says what the others need", async () => {
+    const { window, document } = boot({ watches: [watch()] });
+    await window.App.watchDashboard.render();
+    const form = field(document);
+    form.querySelector(".wc-task").focus();
+    form.querySelector(".wc-when").click();
+    const locked = [...form.querySelectorAll(".wc-segment.is-locked")].map(segment => segment.dataset.interval);
+    expect(locked).toEqual(["hourly", "every_6_hours"]);
+    expect(form.querySelector(".wc-picker-note").textContent).toBe("Shorter intervals come with Plus and Pro.");
+    form.querySelector('.wc-segment[data-interval="hourly"]').click();
+    expect(form.querySelector('.wc-segment[aria-checked="true"]').dataset.interval).toBe("daily");
+    // The 24-hour clock of the app, never the browser's.
+    expect(form.querySelector(".wc-time").value).toBe("08:00");
+    expect([...form.querySelector(".wc-time").options].map(option => option.value)).toContain("23:30");
+    form.querySelector(".wc-popover").dispatchEvent(new window.KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(form.querySelector(".wc-popover").hidden).toBe(true);
+    expect(document.activeElement).toBe(form.querySelector(".wc-when"));
+  });
+
+  it("asks for a sentence before it sends anything, and says a full plan at once", async () => {
+    const { window, document, server } = boot({ watches: [watch(), watch({ id: "w2" })], limit: 2 });
+    await window.App.watchDashboard.render();
+    const form = field(document);
+    form.querySelector(".wc-task").focus();
+    await settle();
+    expect(form.querySelector(".wc-error").textContent).toBe("All your Watches are in use. End one first.");
+    type(window, form.querySelector(".wc-task"), "Short");
+    form.dispatchEvent(new window.Event("submit", { cancelable: true }));
+    expect(form.querySelector(".wc-error").textContent).toBe("Say in a sentence what the Agent should do.");
+    expect(posted(server)).toBeUndefined();
+  });
+
+  it("speaks German on a German page and leaves what is typed as it is", async () => {
+    const { window, document } = boot({ german: true });
+    await window.App.watchDashboard.render();
+    await settleGerman(window);
+    const form = field(document);
+    expect(form.querySelector(".wc-task").placeholder).toBe("Sag mir, sobald die Anmeldung für den IRONMAN Hamburg 2027 öffnet");
+    expect(document.querySelector(".aw-hero-title").textContent).toBe("Worauf soll der Agent für dich achten?");
+    expect(form.querySelector(".wc-when").textContent).toBe("Täglich um 08:00");
+    document.querySelector(".aw-starter").click();
+    expect(form.querySelector(".wc-task").value).toBe("Sag mir, wenn der Preis fällt für ");
+  });
+
+  it("goes into the sign-in from the empty page of a guest, and back into the field after it (J3)", async () => {
+    const { window, document } = boot({ user: false });
+    await vi.waitFor(() => expect(document.querySelector(".aw-hero .wc")).not.toBeNull());
+    const form = field(document);
+    type(window, form.querySelector(".wc-task"), "Is the new iPhone out in Germany?");
+    form.dispatchEvent(new window.Event("submit", { cancelable: true }));
+    expect(window.App.openAuthModal).toHaveBeenCalledWith("login", expect.anything(), "watch", expect.anything());
+    expect(JSON.parse(window.localStorage.getItem("consensio.watchAfterLogin.v1")).question).toBe("Is the new iPhone out in Germany?");
+    form.querySelector(".wc-task").value = "";
+    window.auth.currentUser = { uid: "new-user", getIdToken: async () => "token" };
+    window.dispatchEvent(new window.CustomEvent("consensio:auth-state", { detail: { uid: "new-user" } }));
+    await vi.waitFor(() => expect(field(document)?.querySelector(".wc-task").value).toBe("Is the new iPhone out in Germany?"));
+    expect(document.querySelector(".watch-sheet")).toBeNull();
+    expect(window.localStorage.getItem("consensio.watchAfterLogin.v1")).toBeNull();
+  });
+});
+
+describe("The pill's sheet (watch-sheet.js)", () => {
+  it("starts one in that chat with the same field and stays open while it starts", async () => {
+    const { window, document, server } = boot({ path: "/app" });
+    window.App.watchSheet.open({ chatId: "a".repeat(32), task: "And what about the price of it?" });
     await settle();
     const sheet = document.querySelector(".watch-sheet");
     expect(sheet.hasAttribute("open")).toBe(true);
-    expect([...sheet.querySelectorAll(".watch-sheet-interval option")].map(option => option.value)).toEqual(["daily", "weekly"]);
-    sheet.querySelector(".watch-sheet-task").value = "Tell me when the new Garmin 975 is announced.";
-    sheet.querySelector(".watch-sheet-goal").value = "It is announced";
-    sheet.querySelector(".watch-sheet-start").click();
-    await vi.waitFor(() => expect(server.calls.some(([method, url]) => method === "POST" && url === "/agent/watches")).toBe(true));
-    const [, , body] = server.calls.find(([method, url]) => method === "POST" && url === "/agent/watches");
-    expect(body).toMatchObject({ task: "Tell me when the new Garmin 975 is announced.", goal: "It is announced",
-      interval: "daily", run_time: "08:00" });
-    expect(body.chat_id).toBeUndefined();
-    await vi.waitFor(() => expect(document.querySelector('.aw-row[data-watch-id="new1"]')).not.toBeNull());
-    expect(sheet.hasAttribute("open")).toBe(false);
-  });
-
-  it("stays open while it starts, and its examples speak German on a German page", async () => {
-    const { window, document } = boot({ german: true });
-    await window.App.watchDashboard.render();
-    window.App.watchSheet.open({});
-    await settleGerman(window);
-    const sheet = document.querySelector(".watch-sheet");
-    expect(sheet.querySelector(".watch-sheet-goal").placeholder).toBe("Die Anmeldung ist offen");
-    sheet.querySelector(".watch-sheet-start").disabled = true;
+    expect(sheet.querySelector(".wc.is-sheet .wc-task").value).toBe("And what about the price of it?");
+    expect(sheet.querySelector(".wc-preview").textContent).toBe("It looks again in this chat on this schedule. It runs until you end it.");
+    let release;
+    const fetch = window.fetch;
+    window.fetch = vi.fn((url, options) => (options?.method === "POST"
+      ? new Promise(resolve => { release = () => resolve(fetch(url, options)); }) : fetch(url, options)));
+    sheet.querySelector(".wc-send").click();
+    await settle();
     const cancel = new window.Event("cancel", { cancelable: true });
     sheet.dispatchEvent(cancel);
     expect(cancel.defaultPrevented).toBe(true);
-  });
-
-  it("asks for a sentence before it sends anything", async () => {
-    const { window, document, server } = boot();
-    await window.App.watchDashboard.render();
-    window.App.watchSheet.open();
-    await settle();
-    document.querySelector(".watch-sheet-start").click();
-    expect(document.querySelector(".watch-sheet-error").textContent).toBe("Say in a sentence what the Agent should do.");
-    expect(server.calls.some(([method, url]) => method === "POST" && url === "/agent/watches")).toBe(false);
+    release();
+    await vi.waitFor(() => expect(sheet.hasAttribute("open")).toBe(false));
+    expect(posted(server)).toMatchObject({ chat_id: "a".repeat(32), task: "And what about the price of it?" });
   });
 
   it("sends a guest into the sign-in and back to the sheet with the question (J3)", async () => {
@@ -359,7 +542,7 @@ describe("The sheet that starts a Watch", () => {
     window.auth.currentUser = { uid: "new-user", getIdToken: async () => "token" };
     window.dispatchEvent(new window.CustomEvent("consensio:auth-state", { detail: { uid: "new-user" } }));
     await settle();
-    expect(document.querySelector(".watch-sheet .watch-sheet-task").value).toBe("Is the new iPhone out in Germany?");
+    expect(document.querySelector(".watch-sheet .wc-task").value).toBe("Is the new iPhone out in Germany?");
     expect(window.localStorage.getItem("consensio.watchAfterLogin.v1")).toBeNull();
   });
 
@@ -373,10 +556,11 @@ describe("The sheet that starts a Watch", () => {
 });
 
 describe("The page beside the chat (J1, J6)", () => {
-  it("gives a guest a sign-in instead of an endless skeleton", async () => {
+  it("gives a guest the field and a way to log in instead of an endless skeleton", async () => {
     const { document } = boot({ user: false, path: "/app/watches" });
-    await vi.waitFor(() => expect(document.querySelector(".aw-empty-title")).not.toBeNull());
-    expect(document.querySelector(".aw-empty-title").textContent).toBe("Let the Agent keep an eye on things");
+    await vi.waitFor(() => expect(document.querySelector(".aw-hero-title")).not.toBeNull());
+    expect(document.querySelector(".aw-hero .wc")).not.toBeNull();
+    expect(document.querySelector(".aw-hero-login").textContent).toBe("Log in");
   });
 
   it("leaves Watches at once for New chat, so the composer can take the focus", () => {
@@ -403,7 +587,7 @@ describe("The page beside the chat (J1, J6)", () => {
     expect(page.hidden).toBe(true);
   });
 
-  // openBookmark calls it: Enter on a row and a Watch's row open the chat
+  // openBookmark calls it: Enter on a row and a Watch's card open the chat
   // without a click, and it loaded unseen behind Watches (2026-10-23).
   it("leaves Watches for a chat opened without a click", () => {
     const { window, document } = boot({ watches: [] });
@@ -424,7 +608,9 @@ describe("The page beside the chat (J1, J6)", () => {
     });
     expect(document.body.classList.contains("is-watch-view")).toBe(true);
     expect(document.getElementById("watchDashboard").hidden).toBe(false);
+    expect(document.querySelector("#watchDashBody .wd-skeleton-field")).not.toBeNull();
     expect(document.querySelectorAll("#watchDashBody .wd-skeleton-card").length).toBe(3);
+    expect(document.querySelectorAll("#watchDashBody .wd-skeleton-row").length).toBe(3);
     expect(document.getElementById("viewSwitch").dataset.active).toBe("watches");
   });
 });

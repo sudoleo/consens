@@ -6,7 +6,7 @@ in a chat (``chat_id`` + ``task``, the Watch pill's sheet) or in a chat of its
 own (``task`` alone, "New Watch" on the Watches page). GET lists the
 account's Watches (one chat's with ``chat_id``); the others act on one:
 stop, pause, resume, seen (its finding was looked at) and PATCH (its
-channels). /agent-watch/unsubscribe is the mail's "Stop emails" link: GET
+channels, its goal, how often it runs). /agent-watch/unsubscribe is the mail's "Stop emails" link: GET
 asks, POST acts (also the mail clients' one-click POST).
 """
 from __future__ import annotations
@@ -44,9 +44,14 @@ class StartWatch(Strict):
     timezone: str = Field(default="", max_length=64)
 
 
-class Channels(Strict):
+class WatchChanges(Strict):
     email_enabled: bool | None = None
     telegram_enabled: bool | None = None
+    goal: str | None = Field(default=None, max_length=agent_watches.GOAL_MAX_CHARS + 100)
+    interval: str | None = Field(default=None, max_length=20)
+    run_time: str | None = Field(default=None, max_length=5)
+    run_weekday: str | None = Field(default=None, max_length=10)
+    timezone: str | None = Field(default=None, max_length=64)
 
 
 def _refusal(exc: agent_watches.AgentWatchError) -> JSONResponse:
@@ -146,12 +151,17 @@ def watch_seen(request: Request, watch_id: str):
 
 @router.patch("/agent/watches/{watch_id}")
 @limiter.limit("30/minute")
-def watch_channels(request: Request, watch_id: str, payload: Channels):
+def change_watch(request: Request, watch_id: str, payload: WatchChanges):
     uid = _chat_uid(request)
     require_agent_access(uid)
     watch_id = _watch_id(watch_id)
-    return _act(lambda: agent_watches.set_channels(
-        uid, watch_id, email=payload.email_enabled, telegram=payload.telegram_enabled, db=db_firestore))
+    reschedules = any(value is not None for value in (payload.interval, payload.run_time, payload.run_weekday,
+                                                       payload.timezone))
+    return _act(lambda: agent_watches.update(
+        uid, watch_id, tier=get_user_tier(uid) if reschedules else None, email=payload.email_enabled,
+        telegram=payload.telegram_enabled, goal=payload.goal, interval=payload.interval,
+        run_time=payload.run_time, weekday=payload.run_weekday, timezone_name=payload.timezone,
+        db=db_firestore))
 
 
 # --- the mail's "Stop emails" link -------------------------------------------

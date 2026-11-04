@@ -1068,23 +1068,28 @@ Server.
       Eine zweite Watch im selben Chat ist gesperrt, ein volles Konto nennt den
       Limit-Satz. Kein Vorschlag in temporären Chats und in Chats mit
       Gmail/Kalender-Daten. Unter einer abgebrochenen Antwort keine Karte.
-- [ ] Watches-Seite (seit dem Abend von 2026-11-03): leer „Nothing watched
-      yet“ mit „New Watch“; das Blatt verlangt einen Satz, bietet nur die
-      Intervalle der Stufe und legt einen eigenen Chat an, dessen erster Lauf
-      gleich kommt (Zeile „Its first run is under way“, danach erscheint der
-      Chat in der Seitenleiste). Ein Befund steht unter „New“ mit Punkt; ein
-      Klick öffnet den Chat und der Punkt verschwindet. „…“: Pause legt die
-      Zeile unter „Paused“, Resume zurück, Email/Telegram als Häkchen, End
-      Watch fragt erst. Unten „Messages“ (Mailadresse, Telegram koppeln) und
-      „Earlier Watches“ mit den archivierten Seiten. Auf dem Handy: kein
-      seitliches Scrollen, „…“ immer sichtbar.
-- [ ] Pille unter der neuesten Agent-Antwort öffnet das Blatt mit der Frage
-      als Auftrag und startet die Watch in diesem Chat; danach steht dort
-      „Watching“ und ein Klick führt zur Watch-Seite. Ältere Antworten und
+- [ ] Watches-Seite (neu seit 2026-11-04): leer steht nur die Frage „What
+      should the Agent keep an eye on?“ mit dem Feld und vier Anfängen, kein
+      Knopf daneben. Ein Satz, „Done when“ als Token, „How often“ zeigt nur
+      die Intervalle der Stufe (die anderen mit Schloss und Satz), Uhrzeiten
+      im 24-Stunden-Takt; Return legt einen eigenen Chat an, dessen erster
+      Blick gleich kommt (Zeile „Its first look is under way“, Puls „Looking
+      now“). Mit Watches: das Feld schmal über der Liste, öffnet sich beim
+      Klick. Ein Befund steht als Karte unter „Since you last looked“, ein
+      Klick öffnet den Chat, danach steht die Watch unter „Watching“. Eine
+      Zeile öffnet ihr Panel: Pause/Resume, „Done when“ und „How often“
+      ändern, Email/Telegram schalten, End Watch fragt erst. Unten „Change“
+      (Notifications: Mailadresse, Telegram koppeln), „Ended“ und „Earlier
+      Watches“ klappen auf. Hell und dunkel; auf dem Handy kein seitliches
+      Scrollen, Funde blättern seitlich, das Panel kommt von unten.
+- [ ] Pille unter der neuesten Agent-Antwort öffnet das Blatt mit demselben
+      Feld und der Frage als Auftrag und startet die Watch in diesem Chat;
+      danach steht dort „Watching“ und ein Klick öffnet ihr Panel auf der
+      Watch-Seite. Ältere Antworten und
       temporäre Chats haben keine Pille; gespeicherte Consensus-Antworten
       auch nicht.
 - [ ] Archiv: Eine alte öffentliche Watch-Seite zeigt ihren letzten Stand ohne
-      „Follow“; `/app/watches?create=1` öffnet das neue Blatt.
+      „Follow“; `/app/watches?create=1` setzt den Cursor ins Feld der Seite.
 - [ ] Mail eines Befunds: „Stop emails from this Watch“ fragt auf einer
       Seite, schaltet nach dem Knopf nur die Mails aus (die Watch läuft
       weiter); „Open the chat in consens.io“ öffnet nach dem Login genau den

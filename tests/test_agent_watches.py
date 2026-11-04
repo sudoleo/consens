@@ -436,6 +436,87 @@ def test_the_goal_ends_the_watch_and_a_halt_nobody_decided_needs_the_user(store,
     assert ended_run(store, None, status="failed", agent_failure={"code": "provider_error"})[0] == "failed"
 
 
+def test_each_run_is_kept_as_a_look_for_the_pulse_with_what_it_found(store, monkeypatch):
+    """The page's pulse and detail (watch-dashboard.js): every run in order,
+    a finding with its line, at most LOOKS_KEPT of them."""
+    monkeypatch.setattr("app.services.watch_scheduler.wake_watch_scheduler", lambda: None)
+    _, watch_id, _ = ended_run(store, None)
+    assert [look["outcome"] for look in record(store, watch_id)["looks"]] == ["quiet"]
+    assert "summary" not in record(store, watch_id)["looks"][0]
+    long_finding = "Registration is open. " * 30
+    _, found_id, _ = ended_run(store, {"finding": {"summary": long_finding, "evidence_url": "https://www.ironman.com/x"}})
+    look = record(store, found_id)["looks"][-1]
+    assert look["outcome"] == "finding" and look["at"] == NOW
+    assert len(look["summary"]) == agent_watches.LOOK_SUMMARY_CHARS and look["summary"].endswith("…")
+    view = agent_watches.serialize(found_id, record(store, found_id))["looks"]
+    assert view == [{"at": NOW.isoformat(), "outcome": "finding", "summary": look["summary"]}]
+    # A run that did not start is a look too, one that already ran is none.
+    agent_watches._not_started(found_id, "not_started", db=store.db, now=NOW)
+    agent_watches._not_started(found_id, "already_ran", db=store.db, now=NOW)
+    assert [item["outcome"] for item in record(store, found_id)["looks"]] == ["finding", "not_started"]
+    # The newest LOOKS_KEPT stay.
+    store.db.collection(agent_watches.COLLECTION).document(found_id).update(
+        {"looks": [agent_watches._look("quiet", NOW - timedelta(days=day)) for day in range(40, 0, -1)]})
+    agent_watches._not_started(found_id, "not_started", db=store.db, now=NOW)
+    kept = record(store, found_id)["looks"]
+    assert len(kept) == agent_watches.LOOKS_KEPT and kept[-1]["outcome"] == "not_started"
+    assert kept[0]["at"] == NOW - timedelta(days=29)
+
+
+def test_a_watch_from_before_the_looks_shows_its_last_run_and_one_running_says_so(store):
+    watch = start(store, *proposed_chat(store))
+    data = record(store, watch["id"])
+    assert agent_watches.serialize(watch["id"], data)["looks"] == []
+    data = {**data, "last_run": {"at": NOW, "outcome": "finding", "summary": "Open."}}
+    assert agent_watches.serialize(watch["id"], data)["looks"] == [
+        {"at": NOW.isoformat(), "outcome": "finding", "summary": "Open."}]
+    started = agent_watches.utcnow() - timedelta(minutes=3)
+    assert agent_watches.serialize(watch["id"], {**data, "running": {"started_at": started}})["looking"] is True
+    stale = agent_watches.utcnow() - agent_watches.RUN_STALE_AFTER - timedelta(minutes=1)
+    assert agent_watches.serialize(watch["id"], {**data, "running": {"started_at": stale}})["looking"] is False
+    assert agent_watches.serialize(watch["id"], {**data, "running": None})["looking"] is False
+
+
+def test_a_running_watch_takes_a_new_schedule_and_goal_from_now(store):
+    watch = start(store, *proposed_chat(store), tier="plus")
+    changed = agent_watches.update(UID, watch["id"], tier="plus", interval="weekly", run_time="09:30",
+                                   weekday="monday", goal="  Registration is open ", db=store.db, now=NOW)
+    assert (changed["interval"], changed["run_time"], changed["run_weekday"]) == ("weekly", "09:30", "monday")
+    assert changed["goal"] == "Registration is open" and changed["timezone"] == "Europe/Berlin"
+    # 3 Nov 2026 is a Tuesday: next Monday 09:30 in Berlin is 08:30 UTC.
+    assert changed["next_run_at"] == datetime(2026, 11, 9, 8, 30, tzinfo=timezone.utc).isoformat()
+    every = agent_watches.update(UID, watch["id"], tier="plus", interval="every_6_hours", db=store.db, now=NOW)
+    assert (every["run_time"], every["run_weekday"]) == ("", "")
+    assert every["next_run_at"] == (NOW + timedelta(hours=6)).isoformat()
+    # Daily keeps no weekday from before; the goal can go.
+    daily = agent_watches.update(UID, watch["id"], tier="plus", interval="daily", run_time="07:00", goal="",
+                                 db=store.db, now=NOW)
+    assert (daily["run_time"], daily["run_weekday"], daily["goal"]) == ("07:00", "", "")
+    with pytest.raises(agent_watches.AgentWatchError) as error:
+        agent_watches.update(UID, watch["id"], tier="plus", interval="hourly", db=store.db, now=NOW)
+    assert error.value.code == "interval_not_allowed" and error.value.status == 403
+    with pytest.raises(agent_watches.AgentWatchError) as error:
+        agent_watches.update(UID, watch["id"], goal="x" * 201, db=store.db, now=NOW)
+    assert error.value.code == "invalid_goal"
+    with pytest.raises(agent_watches.AgentWatchError):
+        agent_watches.update("someone-else", watch["id"], goal="", db=store.db, now=NOW)
+
+
+def test_a_paused_watch_keeps_a_new_schedule_for_its_resume_and_an_ended_one_keeps_its_own(store):
+    watch = start(store, *proposed_chat(store))
+    agent_watches.pause(UID, watch["id"], db=store.db, now=NOW)
+    changed = agent_watches.update(UID, watch["id"], tier="free", interval="weekly", run_time="10:00", db=store.db, now=NOW)
+    assert changed["status"] == "paused" and changed["next_run_at"] is None and changed["interval"] == "weekly"
+    resumed = agent_watches.resume(UID, watch["id"], tier="free", db=store.db, now=NOW)
+    assert (resumed["interval"], resumed["run_time"]) == ("weekly", "10:00")
+    agent_watches.stop(UID, watch["id"], db=store.db, now=NOW)
+    with pytest.raises(agent_watches.AgentWatchError) as error:
+        agent_watches.update(UID, watch["id"], tier="free", interval="daily", db=store.db, now=NOW)
+    assert error.value.code == "ended" and error.value.status == 409
+    # Its channels still change: the mail link's "Stop emails" works on any.
+    assert agent_watches.update(UID, watch["id"], email=False, db=store.db, now=NOW)["email_enabled"] is False
+
+
 # --- the mail -------------------------------------------------------------------
 
 def mail(**overrides):
@@ -832,6 +913,14 @@ def test_the_routes_pause_resume_mark_seen_and_choose_channels(watch_api):
     assert client.post(f"/agent/watches/{watch_id}/seen", headers=AUTH).json()["watch"]["unread"] is False
     changed = client.patch(f"/agent/watches/{watch_id}", json={"email_enabled": False}, headers=AUTH).json()["watch"]
     assert changed["email_enabled"] is False and changed["telegram_enabled"] is True
+    moved = client.patch(f"/agent/watches/{watch_id}", json={"interval": "weekly", "run_time": "09:00",
+                                                              "run_weekday": "friday", "goal": "It is open"},
+                         headers=AUTH).json()["watch"]
+    assert (moved["interval"], moved["run_time"], moved["run_weekday"], moved["goal"]) == ("weekly", "09:00", "friday", "It is open")
+    # The plan decides how often (free: daily and weekly).
+    hourly = client.patch(f"/agent/watches/{watch_id}", json={"interval": "hourly"}, headers=AUTH)
+    assert hourly.status_code == 403 and hourly.json()["code"] == "interval_not_allowed"
+    assert client.patch(f"/agent/watches/{watch_id}", json={"colour": "red"}, headers=AUTH).status_code == 422
     other = {"Authorization": "Bearer someone-else"}
     assert client.post(f"/agent/watches/{watch_id}/pause", headers=other).status_code == 404
 

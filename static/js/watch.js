@@ -337,10 +337,14 @@
     return false;
   }
 
-  // Every way to start a Watch (the pill, New Watch on the page, the public
-  // page's invitation, a sign-in that came between) opens the sheet, which
-  // sends a guest into the sign-in first.
-  function startWatch(options) {
+  // Every way to start a Watch (the pill, the public page's invitation, a
+  // sign-in that came between): on the Watches page its own field takes it
+  // (watch-dashboard.js compose), anywhere else, and from the pill in a
+  // chat, the sheet (watch-sheet.js), which sends a guest into the sign-in
+  // first.
+  function startWatch(options = {}) {
+    if (!options.chatId && onWatchPagePath() && watchViewIsOpen()
+      && window.App.watchDashboard?.compose?.(options)) return;
     window.App.watchSheet?.open(options);
   }
 
@@ -597,12 +601,12 @@
     const waitForAuth = function () {
       if (window.auth?.currentUser) {
         if (firstLook(window.auth.currentUser.uid)) window.App.watchDashboard?.render();
-        if (wantsCreate) startWatch({ trigger: document.getElementById("watchDashCreate"), source: "watch_page" });
+        if (wantsCreate) startWatch({ source: "watch_page" });
         return;
       }
       if (window.__consensioAuthState?.known === true || Date.now() - startedAt >= 8000) {
         window.App.watchDashboard?.renderGuest?.();
-        if (wantsCreate) requireAccount({}, document.getElementById("watchDashCreate"));
+        if (wantsCreate) startWatch({ source: "watch_page" });
         return;
       }
       setTimeout(waitForAuth, 250);
@@ -747,12 +751,6 @@
     initViewSwitchHint();
   }
 
-  function initDashboardCreateButton() {
-    document.getElementById("watchDashCreate")?.addEventListener("click", event => {
-      startWatch({ trigger: event.currentTarget, source: "dashboard" });
-    });
-  }
-
   function resetAfterLogout() {
     const { page } = dashEls();
     watchState.resetSession();
@@ -798,7 +796,6 @@
     smoothHeight: smoothHeight
   };
   initViewSwitch();
-  initDashboardCreateButton();
   initWatchPageRoute();
   window.addEventListener("consensio:auth-state", event => {
     const uid = event.detail?.uid || null;

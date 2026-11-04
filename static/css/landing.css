@@ -1236,8 +1236,9 @@ img { display: block; max-width: 100%; }
 .lp-watch-card-head img { width: 18px; filter: invert(1); }
 .dark-mode .lp-watch-card-head img { filter: none; }
 /* "New" in the amber of a finding the reader has not seen yet. */
-.lp-watch-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; background: var(--partial-bg); color: var(--partial); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); }
-.lp-watch-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--partial); }
+/* The finding's green, as on the Watches page (components-watch.css .aw-badge). */
+.lp-watch-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; background: var(--agree-bg); color: var(--agree); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); }
+.lp-watch-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--agree); }
 .lp-watch-card h3 { max-width: 32ch; margin: 20px 0 0; color: var(--text-primary); font-size: var(--font-size-lg); line-height: var(--line-height-ui); }
 /* The goal line reads like the dashboard's .wd-goal: running text, so a
    narrow card wraps it like a sentence. */

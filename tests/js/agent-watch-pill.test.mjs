@@ -27,7 +27,7 @@ function agentApp({ watches = [] } = {}) {
     "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/thread-history.js",
     "static/js/agent-chat.js", "static/js/run-view.js",
     "static/js/modal-dialog.js", "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js",
-    "static/js/watch-sheet.js", "static/js/agent-watch.js"], {
+    "static/js/watch-composer.js", "static/js/watch-sheet.js", "static/js/agent-watch.js"], {
     body: BODY,
     before(window) {
       window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
@@ -70,10 +70,11 @@ const agentTurn = (id, question, extra = {}) => ({ id: id.repeat(32), turn_id: i
   consensus: `Answer to ${question}`, status: "completed", mode: "Agent", execution_mode: "agent", ...extra });
 
 // What the pill opens since 2026-11-03: the sheet that starts a Watch in
-// this chat (watch-sheet.js), its task prefilled with the answer's question.
+// this chat (watch-sheet.js, since 2026-11-04 the Watch field of
+// watch-composer.js), its task prefilled with the answer's question.
 function sheetTask(document) {
   const sheet = document.querySelector(".watch-sheet");
-  return sheet?.open ? sheet.querySelector(".watch-sheet-task").value : null;
+  return sheet?.open ? sheet.querySelector(".wc-task").value : null;
 }
 
 async function ask(window, document, question) {
@@ -100,7 +101,7 @@ describe("Watch pill under the newest Agent answer (J20, since 2026-11-03 per ch
     live.click();
     await settle();
     expect(sheetTask(document)).toBe("And what about the price of it?");
-    document.querySelector(".watch-sheet-start").click();
+    document.querySelector(".watch-sheet .wc-send").click();
     await vi.waitFor(() => expect(window.fetch.mock.calls.some(([url, options]) => url === "/agent/watches"
       && options?.method === "POST")).toBe(true));
     const [, options] = window.fetch.mock.calls.find(([url, request]) => url === "/agent/watches" && request?.method === "POST");

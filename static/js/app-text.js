@@ -130,6 +130,14 @@
     return intl ? intl.format(day) : day.toDateString();
   }
 
+  // The name of a day alone: "Monday", "Mon", "M" (`style`: long, short, narrow).
+  function weekday(value, { style = "long" } = {}) {
+    const day = toDate(value);
+    if (!day) return "";
+    const intl = formatter("date", { weekday: style });
+    return intl ? intl.format(day) : day.toDateString().slice(0, 3);
+  }
+
   // "Oct 19, 14:03", "Tue, Oct 21, 09:00", "Oct 19, 2025, 14:03".
   function dateTime(value, options = {}) {
     const day = toDate(value);
@@ -198,7 +206,7 @@
     return number(numeric) + " " + (numeric === 1 ? singular : plural);
   }
 
-  App.format = Object.freeze({ LOCALE, number, time, date, month, dateTime, upcoming, duration, relative, count, toDate });
+  App.format = Object.freeze({ LOCALE, number, time, date, month, weekday, dateTime, upcoming, duration, relative, count, toDate });
 
   // ------------------------------------------------------------------
   // App.words -- the glossary (Apple-Audit H9). One word per state.

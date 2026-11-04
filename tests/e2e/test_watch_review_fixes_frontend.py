@@ -1,13 +1,16 @@
-"""The Watches page and the Watch pill in the built /app, since 2026-11-03.
+"""The Watches page and the Watch pill in the built /app, since 2026-11-03
+(redrawn 2026-11-04).
 
 A Watch runs the Agent on a schedule in its chat (agent_watches.py). Writer-
 free like the other Phase-4 browser tests: every API answer comes from the
-route handlers below. The page lists the Agent's Watches by what they want
-from the reader and opens a row's chat; "…" pauses and ends one; the page
-opened directly loads once; the newest answer's pill opens the sheet that
-starts a Watch in its chat.
+route handlers below. The page puts what wants the reader first (cards that
+open their chat) and the running ones under it; a row opens its panel, which
+pauses and ends it; the field above the list starts one; the page opened
+directly loads once; the newest answer's pill opens the sheet with the same
+field that starts a Watch in its chat.
 """
 import json
+import re
 from datetime import datetime, timedelta, timezone
 
 from playwright.sync_api import expect
@@ -76,13 +79,15 @@ def test_the_page_lists_watches_by_what_they_need_and_opens_a_chat(browser, phas
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     try:
-        expect(page.locator(".aw-row")).to_have_count(3)
+        expect(page.locator(".aw-card")).to_have_count(2)
+        expect(page.locator(".aw-row")).to_have_count(1)
         titles = page.locator(".aw-section-title").all_text_contents()
-        assert titles[:3] == ["Needs you", "New", "Running"], titles
-        expect(page.locator(".aw-row.is-needs .aw-line")).to_have_text("The portal asks for a new login.")
+        assert titles == ["Since you last looked", "Watching"], titles
+        expect(page.locator(".aw-card.is-needs .aw-card-text")).to_have_text("The portal asks for a new login.")
+        page.locator('.aw-foot-link[data-key="archive"]').click()
         expect(page.locator(".aw-archive-link")).to_have_text("When does GPT-6 ship?")
         page.evaluate("() => { window.__opened = []; window.openBookmark = id => window.__opened.push(id); }")
-        page.locator('.aw-row[data-watch-id="found"] .aw-open').click()
+        page.locator('.aw-card[data-watch-id="found"]').click()
         page.wait_for_function("() => window.__opened.length === 1")
         assert page.evaluate("() => window.__opened") == ["agent_found"]
         assert ("POST", "seen", "found") in state["calls"]
@@ -91,23 +96,55 @@ def test_the_page_lists_watches_by_what_they_need_and_opens_a_chat(browser, phas
         context.close()
 
 
-def test_a_watch_is_paused_and_ended_from_its_menu(browser, phase4_server):
+def test_a_watch_is_paused_and_ended_from_its_panel(browser, phase4_server):
     state = {"calls": [], "watches": [_watch("w1", "Check the Garmin 965 price on bike-discount.de.")]}
     context, page = _real_firebase_page(browser, phase4_server, path="/app/watches",
                                         before_goto=lambda page: _watch_routes(page, state))
     try:
         row = page.locator('.aw-row[data-watch-id="w1"]')
         expect(row).to_be_visible()
-        row.locator(".aw-more").click()
-        menu = page.locator(".aw-menu")
-        expect(menu).to_be_visible()
-        menu.get_by_role("menuitem", name="Pause").click()
-        expect(page.locator(".aw-section.is-paused")).to_be_visible()
-        row.locator(".aw-more").click()
-        page.locator(".aw-menu").get_by_role("menuitem", name="End Watch").click()
+        row.locator(".aw-open").click()
+        panel = page.locator("dialog.wd-detail")
+        expect(panel).to_be_visible()
+        expect(panel.locator(".wd-sheet-title")).to_have_text("Check the Garmin 965 price on bike-discount.de.")
+        panel.get_by_role("button", name="Pause").click()
+        expect(page.locator('.aw-row[data-watch-id="w1"]')).to_have_class(re.compile(r"\bis-paused\b"))
+        expect(panel.get_by_role("button", name="Resume")).to_be_visible()
+        panel.get_by_role("button", name="End Watch").click()
         page.locator("#appConfirmDialog .confirm-accept").click()
-        expect(page.locator(".aw-disclosure")).to_have_text("Show ended Watches (1)")
+        expect(page.locator('.aw-foot-link[data-key="ended"] .aw-count')).to_have_text("1")
         assert [call[:2] for call in state["calls"]] == [("POST", "pause"), ("POST", "stop")]
+        panel.get_by_role("button", name="Close").click()
+        expect(panel).to_be_hidden()
+    finally:
+        context.close()
+
+
+def test_the_field_above_the_list_starts_a_watch_in_a_chat_of_its_own(browser, phase4_server):
+    state = {"calls": [], "watches": [_watch("w1", "Check the Garmin 965 price on bike-discount.de.")]}
+    context, page = _real_firebase_page(browser, phase4_server, path="/app/watches",
+                                        before_goto=lambda page: _watch_routes(page, state))
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        field = page.locator("#watchDashCompose .wc")
+        expect(field).to_have_class(re.compile(r"\bis-collapsed\b"))
+        field.locator(".wc-task").click()
+        expect(field).not_to_have_class(re.compile(r"\bis-collapsed\b"))
+        field.locator(".wc-task").fill("Tell me when registration for IRONMAN Hamburg 2027 opens.")
+        field.locator(".wc-goal-add").click()
+        page.keyboard.type("registration is open")
+        field.locator(".wc-when").click()
+        field.locator('.wc-segment[data-interval="weekly"]').click()
+        expect(field.locator(".wc-when")).to_contain_text("Weekly on")
+        field.locator(".wc-task").press("Enter")
+        expect(page.locator('.aw-row[data-watch-id="new1"]')).to_be_visible()
+        created = next(call[2] for call in state["calls"] if call[1] == "create")
+        assert created["task"] == "Tell me when registration for IRONMAN Hamburg 2027 opens."
+        assert created["goal"] == "registration is open" and created["interval"] == "weekly"
+        assert "chat_id" not in created
+        expect(field.locator(".wc-task")).to_have_value("")
+        assert not errors, errors
     finally:
         context.close()
 
@@ -132,7 +169,7 @@ def test_the_watch_page_opened_directly_loads_once(browser, phase4_server):
         expect(page.locator('.aw-row[data-watch-id="w1"]')).to_be_visible()
         page.wait_for_timeout(1500)
         assert counts == {"/agent/watches": 1, "/api/my/watches": 1, "/api/my/telegram": 1}, counts
-        expect(page.locator("#watchDashLimit")).to_have_text("1 of 5 Watches running")
+        expect(page.locator("#watchDashLimit")).to_have_text("1 of 5 running")
     finally:
         context.close()
 
@@ -191,8 +228,8 @@ def test_the_newest_answer_has_the_pill_and_it_starts_a_watch_in_this_chat(brows
         live.click()
         sheet = page.locator(".watch-sheet")
         expect(sheet).to_be_visible()
-        expect(sheet.locator(".watch-sheet-task")).to_have_value(questions[1])
-        sheet.locator(".watch-sheet-start").click()
+        expect(sheet.locator(".wc-task")).to_have_value(questions[1])
+        sheet.locator(".wc-send").click()
         expect(sheet).to_be_hidden()
         created = next(call[2] for call in state["calls"] if call[1] == "create")
         assert created["chat_id"] == chat_id and created["task"] == questions[1]

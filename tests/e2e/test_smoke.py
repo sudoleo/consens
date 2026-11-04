@@ -1298,46 +1298,44 @@ def _agent_watch_routes(page, *, watches, active_count=0, active_limit=2, create
         body='{"status":"success","telegram":{"configured":false,"connected":false}}'))
 
 
-def test_new_watch_sheet_asks_for_a_sentence_then_starts_a_watch_of_its_own(app_page):
-    """Watches page since 2026-11-03: an empty page says what a Watch does,
-    "New Watch" opens the sheet, which asks for a sentence before it sends
-    anything; the started Watch is on the page at once, its first run under
-    way in a chat of its own."""
+def test_the_empty_watches_page_is_the_field_and_it_starts_a_watch_of_its_own(app_page):
+    """Watches page since 2026-11-04: with no Watch the page is one question
+    and one field (no button of its own), which asks for a sentence before
+    it sends anything; the started Watch is on the page at once, its first
+    look under way in a chat of its own."""
     created = []
     _agent_watch_routes(app_page, watches=[], created=created)
     app_page.click("#viewSwitchWatches")
-    expect(app_page.locator(".aw-empty-title")).to_have_text("Nothing watched yet")
-    expect(app_page.locator(".aw-channel-title").first).to_have_text("Email")
-
-    app_page.click("#watchDashCreate")
-    sheet = app_page.locator(".watch-sheet")
-    expect(sheet).to_be_visible()
-    expect(sheet.locator(".watch-sheet-title")).to_have_text("New Watch")
-    expect(sheet.locator(".watch-sheet-task")).to_be_focused()
-    sheet.locator(".watch-sheet-start").click()
-    expect(sheet.locator(".watch-sheet-error")).to_have_text("Say in a sentence what the Agent should do.")
+    expect(app_page.locator(".aw-hero-title")).to_have_text("What should the Agent keep an eye on?")
+    expect(app_page.locator("#watchDashCreate")).to_have_count(0)
+    field = app_page.locator(".aw-hero .wc")
+    task = field.locator(".wc-task")
+    task.fill("Short")
+    task.press("Enter")
+    expect(field.locator(".wc-error")).to_have_text("Say in a sentence what the Agent should do.")
     assert created == []
 
-    sheet.locator(".watch-sheet-task").fill("Tell me when registration for IRONMAN Hamburg 2027 opens.")
-    sheet.locator(".watch-sheet-goal").fill("Registration is open")
-    sheet.locator(".watch-sheet-interval").select_option("weekly")
-    expect(sheet.locator(".watch-sheet-time")).to_be_visible()
-    sheet.locator(".watch-sheet-start").click()
-    expect(sheet).to_be_hidden()
-    assert created[0]["task"] == "Tell me when registration for IRONMAN Hamburg 2027 opens."
-    assert created[0]["interval"] == "weekly" and "chat_id" not in created[0]
+    task.fill("Tell me when registration for IRONMAN Hamburg 2027 opens.")
+    field.locator(".wc-goal-add").click()
+    app_page.keyboard.type("registration is open")
+    field.locator(".wc-when").click()
+    field.locator('.wc-segment[data-interval="weekly"]').click()
+    expect(field.locator(".wc-time")).to_be_visible()
+    task.press("Enter")
     row = app_page.locator('.aw-row[data-watch-id="new1"]')
     expect(row).to_be_visible()
-    expect(row.locator(".aw-line")).to_have_text("Its first run is under way.")
+    expect(row.locator(".aw-line")).to_have_text("Its first look is under way.")
+    assert created[0]["task"] == "Tell me when registration for IRONMAN Hamburg 2027 opens."
+    assert created[0]["goal"] == "registration is open"
+    assert created[0]["interval"] == "weekly" and "chat_id" not in created[0]
 
 
-def test_watch_limit_is_said_in_the_sheet_before_any_typing(app_page):
+def test_watch_limit_is_said_in_the_field_before_any_typing(app_page):
     _agent_watch_routes(app_page, watches=[], active_count=2, active_limit=2)
     app_page.click("#viewSwitchWatches")
-    expect(app_page.locator("#watchDashLimit")).to_have_text("2 of 2 Watches running")
-    app_page.click("#watchDashCreate")
-    expect(app_page.locator(".watch-sheet .watch-sheet-error")).to_have_text(
-        "All your Watches are in use. End one first.")
+    expect(app_page.locator("#watchDashLimit")).to_have_text("2 of 2 running")
+    app_page.locator(".aw-hero .wc-task").click()
+    expect(app_page.locator(".aw-hero .wc-error")).to_have_text("All your Watches are in use. End one first.")
 
 
 def test_exclude_model_toggles_excluded_class(app_page):

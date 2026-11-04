@@ -3900,17 +3900,27 @@ fortgesetzte; ihre öffentlichen Seiten bleiben, wie sie zuletzt waren
   alte Watch-Dialog, der Hinweis nach dem dritten Lauf und die Pille selbst
   sind aus dem Frontend entfernt. Wer den Schalter zurücknimmt, braucht ein
   neues Anlegen.
-- **Watches-Seite** (`watch-dashboard.js`): die Watches des Agenten nach dem,
-  was sie vom Leser wollen (Braucht dich, Neu, Läuft, Pausiert, Beendet
-  eingeklappt), jede eine Zeile mit Bild, Auftrag, letztem Befund und
-  Zeitplan; ein Klick öffnet ihren Chat und gilt als gelesen. „…“: Pause,
-  Fortsetzen, Mail und Telegram an/aus, Beenden. Darunter, wohin die
-  Nachrichten gehen, und die archivierten Watches mit ihren Seiten.
-- **Neue Watch** (`watch-sheet.js`): ein Blatt mit dem Auftrag in eigenen
-  Worten, „Fertig, wenn“, wie oft und wann. Von der Seite legt es einen
-  eigenen Chat an, dessen erster Lauf sofort kommt; von der Pille unter der
-  neuesten Antwort startet es die Watch in diesem Chat. Eine Watch je Chat,
-  deshalb keine Pille unter älteren Antworten und keine in temporären Chats.
+- **Watches-Seite** (`watch-dashboard.js`, neu gezeichnet 2026-11-04 nach
+  Max' Freigabe des Entwurfs): Ein Feld legt eine Watch an (eine Watch ist
+  ein Satz, `watch-composer.js`), ohne Watch ist es die ganze Seite, sonst
+  eine schmale Zeile über der Liste. Oben „Since you last looked“: was den
+  Leser will (eine breite Karte „Needs you“ mit „Decide“, Karten für Funde
+  und erreichte Ziele; ein Klick öffnet den Chat und gilt als gelesen).
+  Darunter „Watching“: laufende und pausierte Watches, jede mit ihrem Puls
+  (die letzten 14 Blicke als Punkte, ein Ring für den nächsten). Eine Zeile
+  öffnet ihr Panel statt eines „…“-Menüs: die letzten 30 Blicke, was sie
+  fanden, Ziel und Zeitplan (beide änderbar, `PATCH`), Mail und Telegram,
+  Open chat, Pause, End. Unten eine Zeile, wohin Funde gehen („Change“
+  öffnet Notifications), die beendeten und die archivierten Watches.
+- **Neue Watch** (`watch-composer.js`): der Auftrag in eigenen Worten, zwei
+  Chips darunter: wie oft (ein Popover mit den Intervallen der Stufe,
+  Wochentag und Uhrzeit im 24-Stunden-Takt) und „Done when“ (ein Token zum
+  Eintippen); ein Satz darunter sagt, was als Nächstes passiert, Return
+  startet. Von der Seite legt es einen eigenen Chat an, dessen erster Lauf
+  sofort kommt; von der Pille unter der neuesten Antwort öffnet dasselbe
+  Feld in einem Blatt (`watch-sheet.js`) und startet die Watch in diesem
+  Chat. Eine Watch je Chat, deshalb keine Pille unter älteren Antworten und
+  keine in temporären Chats.
 - **Im Chat**: Über einer geplanten Nachricht steht „Scheduled Watch run“;
   Läufe ohne Befund hintereinander falten sich zu einer Zeile („4×
   nachgesehen · nichts Neues · zuletzt …“), ein Klick zeigt sie. Öffnen des

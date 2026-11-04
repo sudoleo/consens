@@ -2220,28 +2220,36 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertLess(source.index('id="sharedLinksButton"'), source.index('id="watchedLinksButton"'))
         self.assertIn("window.openWatchDashboard?.()", source)
 
-    def test_every_way_to_start_a_watch_opens_the_sheet(self):
-        """Since 2026-11-03 a Watch runs the Agent: New Watch, the pill under
-        an answer, the public page's invitation (?create=1) and a sign-in in
-        between all open watch-sheet.js."""
+    def test_every_way_to_start_a_watch_opens_the_one_field(self):
+        """Since 2026-11-04 one field starts a Watch (watch-composer.js): on
+        the Watches page its own (compose), from the pill under an answer
+        and anywhere else the sheet with the same field. The public page's
+        invitation (?create=1) and a sign-in in between go the same way. The
+        page has no button of its own any more (two said the same, Max)."""
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
+        sheet = Path("static/js/watch-sheet.js").read_text(encoding="utf-8")
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         share_source = Path("templates/watch_share.html").read_text(encoding="utf-8")
+        self.assertIn("window.App.watchDashboard?.compose?.(options)", source)
         self.assertIn("window.App.watchSheet?.open(options)", source)
-        self.assertIn('startWatch({ trigger: event.currentTarget, source: "dashboard" })', source)
+        self.assertIn("App.watchComposer.create({ mode: 'sheet'", sheet)
         self.assertIn('startWatch({ task: pending.question || "", source: "after_login" })', source)
         self.assertIn('url.searchParams.get("create") === "1"', source)
-        self.assertIn('id="watchDashCreate"', html_source)
+        self.assertIn('id="watchDashCompose"', html_source)
+        self.assertNotIn('id="watchDashCreate"', html_source)
         self.assertIn("watch_awaiting_first_run", share_source)
 
     def test_watch_empty_state_explains_the_difference_to_a_scheduled_prompt(self):
-        """The empty page is where the mental model is set: since 2026-11-03 a
-        Watch runs the Agent on a schedule and speaks only when it finds
-        something. One heading and one action (the page head's), no second
-        hero (J24)."""
+        """The empty page is where the mental model is set: a Watch runs the
+        Agent on a schedule and speaks only when something changes. Since
+        2026-11-04 the field is the empty page: one question, one field, the
+        page head only for screen readers, so still one heading and one
+        action (J24)."""
         source = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
-        self.assertIn("Nothing watched yet", source)
-        self.assertIn("tells you only when it finds something", source)
+        css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
+        self.assertIn("What should the Agent keep an eye on?", source)
+        self.assertIn("writes to you only when something changes", source)
+        self.assertIn(".watch-page.is-empty .wd-head {", css)
         self.assertNotIn("Create your first Watch", source)
         self.assertNotIn("Start from an example", source)
         # The agreement score is not what a watch reports.
@@ -2327,15 +2335,17 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn(".share-question.is-clamped", public_css)
         self.assertIn("-webkit-line-clamp: 3", public_css)
         self.assertRegex(public_css, r"@media \(scripting: enabled\) \{\s*\.share-question\.is-clamped")
-        # A row on /app/watches is a teaser: two lines, its chat shows all.
-        self.assertIn("-webkit-line-clamp: 2", watch_css.split(".aw-line {", 1)[1].split("}", 1)[0])
+        # /app/watches since 2026-11-04: a finding's card shows up to four
+        # lines, a running Watch's row one; its chat shows all.
+        self.assertIn("-webkit-line-clamp: 4", watch_css.split(".aw-card-text {", 1)[1].split("}", 1)[0])
+        self.assertIn("text-overflow: ellipsis", watch_css.split(".aw-line {", 1)[1].split("}", 1)[0])
 
     def test_watch_cards_open_their_settings_in_place_and_keep_their_styles(self):
         dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         input_css = Path("static/css/components-input.css").read_text(encoding="utf-8")
-        # A row's settings are its "…" menu since 2026-11-03.
-        self.assertIn("more.setAttribute('aria-haspopup', 'menu')", dashboard)
-        self.assertIn("more.setAttribute('aria-expanded', 'false')", dashboard)
+        # A row's settings are its panel since 2026-11-04 (no "…" menu).
+        self.assertIn("open.setAttribute('aria-haspopup', 'dialog')", dashboard)
+        self.assertIn("open.addEventListener('click', () => openDetail(watch.id, open));", dashboard)
         # No global button rule may repaint any button on the page: the solid
         # look is opt-in via `.btn`, one rule for it and the older primaries
         # such as `.wd-button.is-primary` (Apple-Audit G4).

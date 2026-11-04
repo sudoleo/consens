@@ -669,10 +669,12 @@ def test_watch_rows_have_no_left_rail():
     coloured rail down its edge."""
     watch = read("static/css/components-watch.css")
     row_rule = watch.split(".aw-row {", 1)[1].split("}", 1)[0]
-    limit_rule = watch.split(".watch-limit-summary.is-compact {", 1)[1].split("}", 1)[0]
+    card_rule = watch.split(".aw-card {", 1)[1].split("}", 1)[0]
+    capacity_rule = watch.split(".wd-capacity {", 1)[1].split("}", 1)[0]
 
     assert "border-left" not in row_rule
-    assert "background: transparent" in limit_rule
+    assert "border-left" not in card_rule
+    assert "background" not in capacity_rule
     assert ".watch-dash-stat" not in read("static/css/shell.css")
 
 

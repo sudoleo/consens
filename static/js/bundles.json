@@ -170,8 +170,12 @@
           "note": "App.watchFields: the one wording of a Watch's schedule. Before watch-sheet.js, watch-dashboard.js and agent-watch.js, which use it."
         },
         {
+          "file": "static/js/watch-composer.js",
+          "note": "App.watchComposer: the one field that starts a Watch (a sentence, how often, done when) and the schedule picker. After watch-fields.js; watch-sheet.js and watch-dashboard.js create it, App.watchUi and App.popover only at runtime."
+        },
+        {
           "file": "static/js/watch-sheet.js",
-          "note": "App.watchSheet: the sheet that starts a Watch in the user's own words (the pill, New Watch, the public page's invitation). watch.js opens it at runtime; uses App.modalDialog and App.watchFields, App.watchUi only when opened."
+          "note": "App.watchSheet: the sheet with the Watch field for the pill under an answer (its chat) and starts away from the Watches page. watch.js opens it at runtime; uses App.modalDialog and App.watchComposer."
         },
         {
           "file": "static/js/watch.js",
@@ -179,7 +183,7 @@
         },
         {
           "file": "static/js/watch-dashboard.js",
-          "note": "Renders /app/watches: the Agent's Watches by what they need, their messages, the archive. Uses App.watchUi (api, Telegram); watch.js calls App.watchDashboard.render at view time."
+          "note": "Renders /app/watches: the field to start one, what wants the reader, the running ones with their pulse, a panel per Watch, Notifications, the archive. Uses App.watchUi (api, Telegram) and App.watchComposer; watch.js calls App.watchDashboard.render and compose at view time."
         },
         {
           "file": "static/js/mobile-header.js",

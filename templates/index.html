@@ -965,24 +965,22 @@
 
   <!-- Watches-Seite (/app/watches): scrollt im Dokument rechts der Seitenleiste,
        der Chat tritt solange zur Seite (body.is-watch-view). app-bootstrap.js
-       malt sie bei direktem Aufruf ab dem ersten Bild mit Kartenskelett,
-       watch.js hält URL und Umschalter synchron, watch-dashboard.js rendert die
-       Watches des Agenten (seit 2026-11-03), watch-sheet.js legt neue an. -->
+       malt sie bei direktem Aufruf ab dem ersten Bild mit Skelett, watch.js
+       hält URL und Umschalter synchron, watch-dashboard.js rendert die
+       Watches des Agenten (seit 2026-11-03, neu gezeichnet 2026-11-04): ein
+       Feld zum Anlegen (watch-composer.js, #watchDashCompose), darunter, was
+       den Leser will, und was läuft. Ohne Watch steht das Feld groß in der
+       Seite, der Kopf ist dann nur für Screenreader da (.is-empty). -->
   <main id="watchDashboard" class="watch-page" hidden>
     <div class="watch-page-inner">
       <header class="wd-head">
         <div class="wd-head-copy">
           <h1 id="watchDashTitle">Watches</h1>
-          <p class="wd-head-lead">The Agent checks for you on a schedule and tells you only when it finds something.</p>
-          <div id="watchDashLimit" class="watch-limit-summary is-compact" aria-live="polite" hidden></div>
+          <p id="watchDashStatus" class="wd-status is-empty" aria-live="polite"></p>
         </div>
-        <div class="wd-head-actions">
-          <button type="button" id="watchDashCreate" class="wd-button is-primary">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>
-            <span class="wd-button-label">New Watch</span>
-          </button>
-        </div>
+        <div id="watchDashLimit" class="wd-capacity" aria-live="polite" hidden></div>
       </header>
+      <div id="watchDashCompose" class="wd-compose" hidden></div>
       <div id="watchDashBody"></div>
     </div>
   </main>
@@ -1542,9 +1540,10 @@
                 <span class="faq-toggle-icon">＋</span>
               </h3>
               <p>
-                A Watch asks your question again on a schedule, weekly or monthly (daily on Pro). It writes to you
-                by email or Telegram only when new evidence moves the answer, or when what you are waiting for
-                happens. Start one with the Watch button under an answer; all of them are under Watches at the top.
+                A Watch lets the Agent keep an eye on something for you: a price, a page, a date, the news. It looks
+                on a schedule (daily or weekly, more often on Plus and Pro) and writes to you by email or Telegram
+                only when it finds something, needs you, or reaches its goal. Start one on Watches at the top or with
+                the eye under an answer.
               </p>
             </div>
 

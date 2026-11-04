@@ -92,6 +92,11 @@ MAX_PARALLEL_RUNS = 3
 # many characters (AgentRunStore.messages ``history_chars``), so the
 # hundredth run costs what the first did.
 HISTORY_CHARS = 40_000
+# The runs a Watch keeps for its page (``looks``): the pulse of its row
+# shows the newest 14, its detail 30 with what they found, each finding
+# cut to a line (the whole one is in the chat).
+LOOKS_KEPT = 30
+LOOK_SUMMARY_CHARS = 280
 
 _running: dict[str, str] = {}
 _running_lock = threading.Lock()
@@ -206,6 +211,9 @@ def serialize(watch_id: str, data: dict) -> dict:
         "last_run": {"at": last["at"].isoformat() if isinstance(last.get("at"), datetime) else None,
                      "outcome": last.get("outcome") or "", "summary": last.get("summary") or "",
                      "evidence_url": last.get("evidence_url") or ""} if last else None,
+        "looks": _looks_view(data),
+        # A run is going right now (claim noted it, its end has not come yet).
+        "looking": _looking(data),
         "ended": data.get("ended") or "",
         # A finding, a question or the goal the user has not looked at yet (``seen``).
         "unread": data.get("unread") is True,
@@ -213,6 +221,40 @@ def serialize(watch_id: str, data: dict) -> dict:
         "telegram_enabled": data.get("telegram_enabled") is not False,
         "image": watch_images.image_view(watch_id, data),
     }
+
+
+def _look(outcome: str, at: datetime, summary="") -> dict:
+    """One run as its Watch keeps it (``looks``): when, how it went and,
+    when it told the user something, what in a line."""
+    look = {"at": at, "outcome": str(outcome or "")}
+    line = _line(summary, LOOK_SUMMARY_CHARS + 1)
+    if line:
+        look["summary"] = line if len(line) <= LOOK_SUMMARY_CHARS else line[:LOOK_SUMMARY_CHARS - 1].rstrip() + "…"
+    return look
+
+
+def _with_look(data: dict, look: dict) -> list[dict]:
+    kept = [item for item in (data.get("looks") or []) if isinstance(item, dict) and isinstance(item.get("at"), datetime)]
+    return [*kept, look][-LOOKS_KEPT:]
+
+
+def _looks_view(data: dict) -> list[dict]:
+    """Its runs, oldest first. A Watch from before ``looks`` (2026-11-04)
+    shows its last run alone."""
+    looks = [item for item in (data.get("looks") or []) if isinstance(item, dict) and isinstance(item.get("at"), datetime)]
+    if not looks:
+        last = data.get("last_run") if isinstance(data.get("last_run"), dict) else {}
+        if isinstance(last.get("at"), datetime) and last.get("outcome"):
+            looks = [_look(last["outcome"], last["at"], last.get("summary") or "")]
+    return [{"at": item["at"].isoformat(), "outcome": str(item.get("outcome") or ""),
+             "summary": str(item.get("summary") or "")} for item in looks[-LOOKS_KEPT:]]
+
+
+def _looking(data: dict) -> bool:
+    running = data.get("running") if isinstance(data.get("running"), dict) else {}
+    started = running.get("started_at")
+    return (data.get("status") == STATUS_ACTIVE and isinstance(started, datetime)
+            and utcnow() - started < RUN_STALE_AFTER)
 
 
 def outlook(uid: str, chat_id: str, tier, *, db=None) -> dict:
@@ -432,13 +474,45 @@ def seen(uid: str, watch_id: str, *, db=None, now: datetime | None = None) -> di
 def set_channels(uid: str, watch_id: str, *, email: bool | None = None, telegram: bool | None = None,
                  db=None, now: datetime | None = None) -> dict:
     """Where a run that found something tells the user: mail, Telegram, both or neither."""
+    return update(uid, watch_id, email=email, telegram=telegram, db=db, now=now)
+
+
+def update(uid: str, watch_id: str, *, tier=None, email: bool | None = None, telegram: bool | None = None,
+           goal: str | None = None, interval: str | None = None, run_time: str | None = None,
+           weekday: str | None = None, timezone_name: str | None = None, db=None,
+           now: datetime | None = None) -> dict:
+    """What the user changes on a Watch's page (PATCH): its channels, its
+    goal ("" runs it until they end it) and how often it runs. A new
+    schedule counts from now; a paused Watch keeps it for its resume. An
+    ended Watch keeps what it had."""
     db = _db(db)
     now = now or utcnow()
-    patch = {key: value for key, value in (("email_enabled", email), ("telegram_enabled", telegram))
-             if isinstance(value, bool)}
+    channels = {key: value for key, value in (("email_enabled", email), ("telegram_enabled", telegram))
+                if isinstance(value, bool)}
+    if goal is not None:
+        goal = _line(goal, GOAL_MAX_CHARS + 1)
+        if len(goal) > GOAL_MAX_CHARS:
+            raise AgentWatchError("invalid_goal", "Keep the goal to one short sentence.")
+    reschedules = any(value is not None for value in (interval, run_time, weekday, timezone_name))
 
     def operation(tx):
         data = _owned(tx, db, uid, watch_id)
+        patch = dict(channels)
+        if (goal is not None or reschedules) and data.get("status") not in {STATUS_ACTIVE, STATUS_PAUSED}:
+            raise AgentWatchError("ended", "This Watch has ended.", status=409)
+        if goal is not None:
+            patch["goal"] = goal
+        if reschedules:
+            wanted = str(interval or data.get("interval") or "daily")
+            schedule = validate_schedule(
+                wanted, data.get("run_time") if run_time is None else run_time,
+                ((data.get("run_weekday") if weekday is None else weekday) or "") if wanted == "weekly" else "",
+                data.get("timezone") if timezone_name is None else timezone_name)
+            if tier is not None and schedule["interval"] not in allowed_intervals(tier):
+                raise AgentWatchError("interval_not_allowed", "Runs this often need a higher plan.", status=403)
+            patch.update(schedule)
+            if data.get("status") == STATUS_ACTIVE:
+                patch.update({"next_run_at": next_run(schedule, now=now), "retry_of": None})
         if patch:
             tx.update(_ref(db, watch_id), {**patch, "updated_at": now})
         return {**data, **patch}
@@ -730,6 +804,9 @@ def _not_started(watch_id: str, outcome: str, *, db, now: datetime) -> None:
         data = snapshot.to_dict() or {}
         patch = {"running": None, "updated_at": now,
                  "last_run": {"at": now, "turn_id": "", "outcome": outcome, "summary": ""}}
+        if outcome != "already_ran":
+            # A run that ran already is no look of its own.
+            patch["looks"] = _with_look(data, _look(outcome, now))
         if outcome in _ENDING and data.get("status") in {STATUS_ACTIVE, STATUS_PAUSED}:
             _end(tx, db, watch_id, data, reason=outcome, now=now)
             patch["unread"] = outcome != "chat_gone"
@@ -938,6 +1015,7 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
         patch = {"last_run": {"at": now, "turn_id": turn_id, "outcome": outcome,
                               "summary": _line(details.get("summary"), FINDING_MAX_CHARS),
                               "evidence_url": evidence_url},
+                 "looks": _with_look(data, _look(outcome, now, details.get("summary") if tells else "")),
                  "updated_at": now}
         if tells:
             patch["unread"] = True

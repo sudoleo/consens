@@ -270,13 +270,13 @@ def test_landing_watch_example_uses_the_live_watch_wording_and_no_scores():
     # An Agent Watch since 2026-11-03: the words its page, sheet, chat,
     # mail and Telegram message use.
     dashboard = read("static/js/watch-dashboard.js")
-    sheet = read("static/js/watch-sheet.js")
+    field = read("static/js/watch-composer.js")
     chat = read("static/js/thread-history.js")
     mail = read("app/services/mailer.py")
     telegram = read("app/services/telegram_watch.py")
     for label, source in (
-        ("New", dashboard),
-        ("Done when", sheet),
+        ("Found something", dashboard),
+        ("Done when", field),
         ("nothing new", chat),
         ("What it found", mail),
         ("Your Watch found something", telegram),
