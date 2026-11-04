@@ -13,8 +13,14 @@
 // stands. It shows only once a start took SHOW_MS, so a quick one never
 // flashes a bar. done() fills it.
 //
-// App.startProgress.create() → { node, set(until), done(), stop() }; set
-// takes an ISO time or epoch milliseconds, the node shows itself.
+// Since 2026-11-04 (Max: "at least statements like configuring the user
+// settings, connecting the VM") a line above the bar names the step the
+// start is at: the real steps of that start, in their real order, moved on
+// by the same estimate as the bar (steps(list) for each phase the server
+// reports). Never made-up work, and never back to an earlier step.
+//
+// App.startProgress.create() → { node, set(until), steps(list), done(), stop() };
+// set takes an ISO time or epoch milliseconds, the node shows itself.
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -46,13 +52,18 @@
     const fill = document.createElement('span');
     fill.className = 'start-progress-fill';
     track.append(fill);
+    const step = document.createElement('span');
+    step.className = 'start-progress-step';
+    step.hidden = true;
     const left = document.createElement('span');
     left.className = 'start-progress-left';
-    node.append(track, left);
+    node.append(step, track, left);
 
     const began = Date.now();
     // The bar's way: from ``from`` at ``since`` to AT_ESTIMATE at ``until``.
     let from = 0, since = began, until = 0, value = 0, timer = null, finished = false;
+    // The phase's steps (English, App.t's) and when they came: they share the time to the estimate.
+    let list = [], listSince = 0, reached = 0;
     function at(now) {
       if (!until) return value;
       const x = (now - since) / Math.max(1000, until - since);
@@ -68,9 +79,19 @@
       fill.style.transform = `scaleX(${value.toFixed(4)})`;
       const text = finished ? '' : leftText(until - now);
       if (left.textContent !== text) left.textContent = text;
+      // The phase's steps share its time to the estimate evenly (a phase that
+      // comes after the bar passed the estimate still walks through its own).
+      if (list.length && !finished) {
+        const share = until ? (now - listSince) / Math.max(1000, until - listSince) : 0;
+        reached = Math.max(reached, Math.min(list.length - 1, Math.floor(share * list.length)));
+      }
+      const said = finished || !list.length ? '' : App.t(list[reached]);
+      if (step.textContent !== said) step.textContent = said;
+      step.hidden = !said;
       const percent = String(Math.round(value * 100));
       if (node.getAttribute('aria-valuenow') !== percent) node.setAttribute('aria-valuenow', percent);
-      if (node.getAttribute('aria-valuetext') !== text && text) node.setAttribute('aria-valuetext', text);
+      const spoken = [said, text].filter(Boolean).join(' ');
+      if (node.getAttribute('aria-valuetext') !== spoken && spoken) node.setAttribute('aria-valuetext', spoken);
     }
     function tick() {
       // A node taken out of the page stops counting.
@@ -88,6 +109,15 @@
       if (!timer) timer = setInterval(tick, TICK_MS);
       draw();
     }
+    // The steps of the phase the start is in now; the same list again changes nothing.
+    function steps(next) {
+      const items = Array.isArray(next) ? next.filter(item => typeof item === 'string' && item) : [];
+      if (finished || (items.length === list.length && items.every((item, index) => item === list[index]))) return;
+      list = items;
+      listSince = Date.now();
+      reached = 0;
+      draw();
+    }
     function done() {
       if (finished) return;
       finished = true;
@@ -101,7 +131,7 @@
       clearInterval(timer);
       timer = null;
     }
-    return { node, set, done, stop, get value() { return value; } };
+    return { node, set, steps, done, stop, get value() { return value; } };
   }
 
   App.startProgress = { create, leftText };

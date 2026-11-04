@@ -134,6 +134,17 @@
     paused: 'Paused while this tab was in the background, to save your workspace time.',
     watching: 'Watching. Click the screen to take over.',
   };
+  // What the start does in each phase the server reports, in order, over the
+  // bar (start-progress.js steps, since 2026-11-04; Max wanted to see what
+  // happens instead of a bare bar). The real work, never made up: waking is
+  // the server's _open (the VM, its tools and rules), setup install.sh and
+  // harden.sh (once per computer), starting display.sh.
+  const STEPS = {
+    waking: ['Waking your workspace in the cloud…', 'Checking its tools and settings…', 'Connecting to it…'],
+    setup: ['Installing the browser’s screen…', 'Installing a window manager and fonts…',
+      'Installing the browser’s tools…', 'Setting the browser’s safety rules…'],
+    starting: ['Starting the screen…', 'Starting Chrome…', 'Opening your tabs…'],
+  };
   // Why the server closed the view, by close code: noVNC owns the socket's
   // messages once it is ready, so these come as codes, not states.
   const CLOSED = { 4410: 'ended', 4409: 'replaced', 4402: 'no_time', 4429: 'too_many', 4423: 'guarded',
@@ -962,6 +973,7 @@
       try { message = JSON.parse(event.data); } catch (error) { return; }
       const state = message?.state;
       if (message?.until) view.progress?.set(message.until);
+      if (STEPS[state]) view.progress?.steps?.(STEPS[state]);
       if (state !== 'ready') {
         if (state === 'connecting') {
           setDayLeft(Number(message.left_seconds ?? NaN));

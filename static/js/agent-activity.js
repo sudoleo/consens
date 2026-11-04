@@ -930,6 +930,15 @@
   // VMSession._wait), and a bar under the step counts it down
   // (start-progress.js, since 2026-11-02: a first start took a minute and
   // more with one word, and a new user gave up).
+  // What a message's start of the workspace does, in order, over its bar
+  // (start-progress.js steps, since 2026-11-04): the browser needs the VM
+  // and Chrome, the other tools the chat's folder and the message's restore
+  // point too (VMSession: claim, prepare, open_chat, checkpoint). Real work only.
+  const START_STEPS = {
+    bench: ['Waking your workspace in the cloud…', 'Checking its tools and settings…',
+      'Opening this chat’s folder…', 'Saving a restore point…'],
+    browser: ['Waking your workspace in the cloud…', 'Checking its tools and settings…', 'Starting Chrome…'],
+  };
   function starting(item) {
     return Boolean(item && item.status === 'running' && !item.started_at && item.starting_until
       && vmTools.has(item.name));
@@ -1734,7 +1743,10 @@
           || item.kind === 'start') {
           if (item.kind === 'vm') updateVm(p, item.item);
           if (item.kind === 'hold') updateHold(p, item.item);
-          if (item.kind === 'start') p._progress.set(item.item.starting_until);
+          if (item.kind === 'start') {
+            p._progress.set(item.item.starting_until);
+            p._progress.steps?.(START_STEPS[item.item.name === 'browser' ? 'browser' : 'bench']);
+          }
           place(item, p);
           continue;
         }

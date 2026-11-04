@@ -389,6 +389,9 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
   display: block; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--ink) 72%, transparent);
   transform: scaleX(0); transform-origin: left center;
 }
+/* The step the start is at (since 2026-11-04), over the bar in the ink, the time left grey under it. */
+.start-progress-step { color: var(--ink); font-size: var(--font-size-micro); line-height: 1.3; }
+.start-progress-step[hidden] { display: none; }
 .start-progress-left { min-height: 1.3em; color: var(--ink-3); font-size: var(--font-size-micro); line-height: 1.3; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: no-preference) {
   .start-progress-fill { transition: transform var(--dur-state) var(--ease-linear); }

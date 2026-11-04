@@ -158,5 +158,18 @@
     <showIcons>no</showIcons>
     <manageDesktops>no</manageDesktops>
   </menu>
-  <applications/>
+  <!-- Every normal window fills the screen (since 2026-11-04): Chrome's
+       start-maximized needs a window manager that is already running, and
+       a Chrome that started first kept its own bounds, 37 px below the
+       screen's bottom edge in Max's live view. Applied whenever openbox
+       takes a window, also one it finds at its own start. A sign-in popup
+       fills it as well, which the small live view needs anyway. No frame of
+       openbox's: Chrome draws its own, and a window openbox found at its
+       start got a title bar of 17 px over Chrome's (test Sprite 2026-11-04). -->
+  <applications>
+    <application class="*" type="normal">
+      <decor>no</decor>
+      <maximized>yes</maximized>
+    </application>
+  </applications>
 </openbox_config>

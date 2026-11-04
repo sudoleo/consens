@@ -152,3 +152,42 @@ describe("the bar where the user waits", () => {
     expect(rules[1]).toMatch(/padding-left: calc\(\.86em \* 1\.395 \+ \.55em\)/);
   });
 });
+
+describe("the start's steps", () => {
+  const step = bar => bar.node.querySelector(".start-progress-step");
+  it("names the real step the start is at, moved on by the bar, never backwards (Max, 2026-11-04)", () => {
+    const { App, host, advance } = setup();
+    const bar = App.startProgress.create();
+    host.append(bar.node);
+    bar.set(new Date(NOW + 60_000).toISOString());
+    bar.steps(["One…", "Two…", "Three…"]);
+    advance(1_500);
+    expect(step(bar).hidden).toBe(false);
+    expect(step(bar).textContent).toBe("One…");
+    expect(bar.node.getAttribute("aria-valuetext")).toBe("One… About a minute left");
+    advance(25_000);
+    expect(step(bar).textContent).toBe("Two…");
+    advance(25_000);
+    expect(step(bar).textContent).toBe("Three…");
+    // Past the estimate it stays on the last step, the same list again changes nothing.
+    advance(40_000);
+    bar.steps(["One…", "Two…", "Three…"]);
+    expect(step(bar).textContent).toBe("Three…");
+    // A new phase starts its own steps from where the bar stands.
+    bar.set(new Date(Date.now() + 30_000).toISOString());
+    bar.steps(["Starting…", "Opening…"]);
+    expect(step(bar).textContent).toBe("Starting…");
+    bar.done();
+    expect(step(bar).hidden).toBe(true);
+  });
+
+  it("shows no step line without steps", () => {
+    const { App, host, advance } = setup();
+    const bar = App.startProgress.create();
+    host.append(bar.node);
+    bar.set(new Date(NOW + 60_000).toISOString());
+    advance(1_500);
+    expect(step(bar).hidden).toBe(true);
+    expect(bar.node.getAttribute("aria-valuetext")).toBe("About a minute left");
+  });
+});

@@ -696,6 +696,13 @@ def test_openbox_starts_no_program_and_shows_no_menu():
     for action in ('name="Execute"', 'name="ShowMenu"', "<execute>", 'name="Exit"', 'name="Iconify"'):
         assert action not in rc
     assert "<item" not in menu and "<execute>" not in menu
+    # Every normal window fills the screen, whoever started first (Max's live
+    # view 2026-11-04: Chrome ran below the screen's edge).
+    import xml.etree.ElementTree as ElementTree
+    space = {"ob": "http://openbox.org/3.4/rc"}
+    [rule] = ElementTree.fromstring(rc).findall("ob:applications/ob:application", space)
+    assert rule.get("class") == "*" and rule.get("type") == "normal"
+    assert rule.find("ob:maximized", space).text == "yes" and rule.find("ob:decor", space).text == "no"
 
 
 def test_the_relay_names_each_tabs_host_once_it_changes(monkeypatch):

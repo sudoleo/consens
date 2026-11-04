@@ -146,11 +146,15 @@ describe("the workspace's loading and terminal (2026-10-28)", () => {
       await vi.advanceTimersByTimeAsync(300);
       expect(bar.hidden).toBe(false);
       expect(bar.querySelector(".start-progress-left").textContent).toBe("About a minute left");
+      // Over the bar, the step the setup is at (Max, 2026-11-04): the real ones, in order.
+      expect(bar.querySelector(".start-progress-step").textContent).toBe("Installing the browser’s screen…");
       // Chrome starts: the estimate stands.
       socket.deliver(JSON.stringify({ state: "starting", until: new Date(now + 63_000).toISOString() }));
+      expect(bar.querySelector(".start-progress-step").textContent).toBe("Starting the screen…");
       now += 30_000;
       await vi.advanceTimersByTimeAsync(300);
       expect(bar.querySelector(".start-progress-left").textContent).toBe("About 35 seconds left");
+      expect(bar.querySelector(".start-progress-step").textContent).toBe("Starting Chrome…");
       socket.deliver(JSON.stringify({ state: "ready" }));
       expect(bar.getAttribute("aria-valuenow")).toBe("100");
       expect(screen.classList.contains("is-loading")).toBe(false);

@@ -1153,7 +1153,13 @@ Live-Ansicht `until`, schon während der Server die VM weckt (Zustand `waking` a
 ohne Balken bei „Starting your workspace…“). Chat und Live-Ansicht zählen das als schmalen Balken mit
 „Noch etwa 40 Sekunden“ herunter (`start-progress.js`); er erscheint erst nach
 1,2 s, läuft nie rückwärts und steht nach der Schätzung bei „Gleich fertig…“,
-bis der Start fertig ist. Die Aktivität zeigt „Arbeitsplatz geöffnet · <Aufgabe>“, die
+bis der Start fertig ist. Seit 2026-11-04 (Max: wenigstens Sätze wie
+„configuring the user settings“, „connecting the VM“) steht über dem Balken
+der Schritt, an dem der Start ist: die echten Schritte der jeweiligen Phase in
+ihrer Reihenfolge, nach derselben Schätzung weitergeschaltet, nie zurück und
+nie erfunden (`steps(list)`; Live-Ansicht `STEPS` je Zustand `waking`,
+`setup`, `starting`; Chat `START_STEPS`: Browser bzw. Ordner und
+Wiederherstellungspunkt der Nachricht). Die Aktivität zeigt „Arbeitsplatz geöffnet · <Aufgabe>“, die
 Prüfer sehen den Schritt im Arbeitsprotokoll. `open_workspace` bringt keinen
 Fremdinhalt (`OWN_CONTENT_TOOLS`).
 
@@ -3327,7 +3333,11 @@ Prüfer sehen davon nichts. Drei Schichten, keine davon liest Wörter (kein
 Wortfilter, Max' Grundsatz), keine speichert eine IP-Adresse.
 
 1. **Chrome sperrt, egal wer steuert** (`workspace_vm/browser/harden.sh`,
-   `policy.json`, `openbox-rc.xml`, `openbox-menu.xml`). `display.sh` ruft
+   `policy.json`, `openbox-rc.xml`, `openbox-menu.xml`; seit 2026-11-04
+   maximiert openbox jedes normale Fenster ohne eigenen Rahmen: Startete
+   Chrome vor openbox, stand es in Max' Live-Ansicht in seinen eigenen
+   Maßen 37 px unter dem Bildschirmrand; an Test-Sprites danach in jeder
+   Reihenfolge 0,0, 1280×800). `display.sh` ruft
    `harden.sh` vor jedem Start von Chrome und startet ohne die Regeln keinen.
    `harden.sh` installiert die Richtlinie nach
    `/etc/opt/chrome/policies/managed/consens.json`, lenkt `xdg-open` per
