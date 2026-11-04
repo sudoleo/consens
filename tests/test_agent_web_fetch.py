@@ -714,14 +714,14 @@ def test_gemini_grounding_redirects_are_read_as_the_page_they_point_to(store, mo
     redirect = "https://vertexaisearch.cloud.google.com/grounding-api-redirect/AbC123"
     monkeypatch.setattr(agent_read_source, "resolve_redirect", lambda url: CITED if url == redirect else url)
     calls = fake_fetch(monkeypatch)
-    loop, events, saved = run(store, Plan(steps=[[compare()], [read_call(redirect), read_call(redirect)]],
+    loop, events, saved = run(store, Plan(steps=[[compare()], [read_call(redirect)], [read_call(redirect)]],
                                           cited=(redirect,)))
     assert calls[0]["tools"][0]["parameters"]["allowed_domains"] == ["example.org"]
     [record] = saved["agent_review"]["read_sources"]
     assert record["url"] == CITED and record["cited_url"] == redirect and record["host"] == "example.org"
     running, done, *_ = tool_events(events)
     assert "host" not in running and done["host"] == "example.org"
-    # The redirect it was cited by counts as read too.
+    # The redirect it was cited by counts as read too, in a later step.
     assert results(loop)[1]["status"] == "already_read" and len(calls) == 1
 
 

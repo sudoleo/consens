@@ -1263,7 +1263,7 @@ class VMTools:
                          "For Python packages use pip or uv yourself, for Node npm in your project.",
                          VmInstallPackagesArgs, self.install, activity=self._install_activity, reports=True),
             ReadOnlyTool("vm_read_file", "Read a text file in your workspace by lines.", VmReadFileArgs, self.read,
-                         activity=self._path_activity, reports=True),
+                         activity=self._path_activity, reports=True, concurrent=True),
             ReadOnlyTool("vm_write_file", "Write a text file in your workspace (creates folders, replaces the file).",
                          VmWriteFileArgs, self.write, argument_limit=TOOL_ARGUMENT_CHARS,
                          activity=self._path_activity, reports=True),
@@ -1286,7 +1286,8 @@ class VMTools:
             # Only for a chat model that takes images.
             *([ReadOnlyTool("vm_view_image", "Look at a picture in your workspace (PNG, JPEG, WebP or GIF up to 5 MB), "
                             "such as a chart you plotted or a screenshot: it follows as an image after the result.",
-                            VmViewImageArgs, self.view, activity=self._path_activity, reports=True)]
+                            VmViewImageArgs, self.view, activity=self._path_activity, reports=True,
+                            concurrent=True)]
               if sees_pictures(self.loop.model) else []),
             # Pictures of the web by their id, where the picture tools are (agent_web_images.py).
             *([ReadOnlyTool("vm_save_picture", "Put a picture from "

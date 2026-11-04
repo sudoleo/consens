@@ -67,7 +67,7 @@ class ChatSearch:
         return [ReadOnlyTool(TOOL_NAME, (
             "Find the user's earlier chats in consens.io by words of their title, start date or latest question, "
             "or open one by its chat_id to read its questions and answers. Read-only; chats with Google data are "
-            "not included."), SearchChatsArgs, self.search, activity=self.activity)]
+            "not included."), SearchChatsArgs, self.search, activity=self.activity, concurrent=True)]
 
     def activity(self, args, result):
         if args.chat_id:

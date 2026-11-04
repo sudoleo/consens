@@ -132,6 +132,11 @@ class ReadOnlyTool:
     # The tool reports while it runs: execute(..., report=fields) updates its
     # running trace event with ``fields`` (a VM command's output so far).
     reports: bool = False
+    # The tool only reads, and its call needs nothing that another call of
+    # the same step changes or asks the user: neighbouring calls of such
+    # tools run at the same time (DelegationLoop._call_groups). Its execute
+    # must be thread-safe.
+    concurrent: bool = False
 
     def schema(self):
         if (not re.fullmatch(r"[a-z][a-z0-9_]{0,63}", self.name)
