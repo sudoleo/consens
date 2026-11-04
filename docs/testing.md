@@ -425,8 +425,8 @@ Mobil: hochgestellte Zahlen, Quellenvorschau per Tastatur, Quellenliste,
 unveränderter Markdown und dieselben Verweise im archivierten Verlauf.
 
 Agent Beta: Backend-Verträge in `tests/test_agent_runs.py` und
-`tests/test_agent_loop.py` (gemeinsame Websuche aller angebotenen Modelle, Schrittbudgets, Tool-Schemas, Abbruch
-und Teilabrechnung) sowie `tests/test_agent_search.py` (Provider-Gesamtkosten,
+`tests/test_agent_loop.py` (Lauf einer Nachricht mit Antwort im Werkzeuglauf, Prompt-Cache-Punkte,
+Stream- und Usage-Verarbeitung, Tool-Schemas) sowie `tests/test_agent_search.py` (Provider-Gesamtkosten,
 Cache-Writes, geteilte Usage-Chunks, HTTP-/SSE-429 und Wartefristen). Browser-State in
 `tests/js/agent-chat.test.mjs`. Der isolierte Layout-/Bookmark-Browserlauf
 `tests/e2e/test_agent_chat_frontend.py` nutzt dieselben vollständig gemockten

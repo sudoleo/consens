@@ -1,25 +1,16 @@
-"""The agent reads one public web page as text (read_source).
+"""The agent reads one public web page as text (read_source, docs/agent-mode.md "Quellen
+nachlesen").
 
-Why a client tool instead of OpenRouter's ``openrouter:web_fetch`` directly in
-the agent's step: over Chat Completions, our transport, the fetched text never
-reaches us, only a counter in ``usage.server_tool_use_details`` (live probe
-2026-10-10, artifacts/web-fetch-probe/validation.md). The reviewers could not
-see what the agent read. So the agent calls read_source, and the server opens
-the page with OpenRouter's fetch in a small Responses API call of a standard
-judge model (the fetched text arrives there as an output item). The text
-becomes the tool result the agent works from, the reviewers read it in the
-work log, and it is saved with the review.
+A client tool instead of OpenRouter's ``openrouter:web_fetch`` in the agent's step: over Chat
+Completions the fetched text never reaches us, only a counter, so the reviewers could not see what
+the agent read. The server opens the page with that fetch in a small Responses API call of a
+standard judge model, where the text arrives as an output item; it becomes the tool result, the
+reviewers read it in the work log, and it is saved with the review.
 
-Bounds: a source a comparison answer of this message cited, a result of this
-message's own web search, a source an earlier message of the chat saved, a
-URL the user wrote, or, while reviewers follow the work, any public page the
-agent chooses; only before the answer, at most READS_PER_MESSAGE pages per
-message and READS_PER_STEP per step, READ_CONTENT_TOKENS per page. Never for
-comparison models or reviewers, never in chats with Google data. On unless
-AGENT_READ_SOURCES=0. See docs/agent-mode.md, "Quellen nachlesen". Until
-2026-10-31 comparison mode read only the answers' sources, with a purpose and
-a point for each read.
-"""
+Readable: a source a comparison answer cited, a result of this message's search, a source an earlier
+message saved, a URL the user wrote, or, while reviewers follow, any public page; only before the
+answer and within READS_PER_MESSAGE, READS_PER_STEP and READ_CONTENT_TOKENS. Never for comparison
+models or reviewers, never in chats with Google data."""
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -45,30 +36,22 @@ from app.services.llm.streaming import _sse_pairs
 from app.services.source_catalog import canonical_source_url
 
 ENABLED_ENV = "AGENT_READ_SOURCES"
-# Pages per message and per routing step. Every later routing step re-sends
-# what was read (from the prompt cache). Since 2026-10-28 fifteen instead of
-# five: the agent decides itself how much it reads (Max), five cut thorough
-# research short; five at once instead of three, so reading them takes fewer
-# steps that each re-send the conversation.
+# Every later step re-sends what was read (from the prompt cache). The agent decides how much it
+# reads; five per message cut thorough research short.
 READS_PER_MESSAGE = 15
 READS_PER_STEP = 5
-# Exa cuts a page at about this many tokens (max_content_tokens); a 15-page
-# PDF arrived as 15,900 characters at 4,000 tokens.
+# Exa cuts a page at about this many tokens: a 15-page PDF arrived as 15,900 characters.
 READ_CONTENT_TOKENS = 4000
 READ_TEXT_CHARS = 24_000
-# One read, redirect and fallback helper included, ends after this long (live
-# 1.5-3.9 s per fetch), and none starts when less than READ_MIN_SECONDS are
-# left before the answer must begin (AgentLoop.answer_time_left): a
-# stalled fetch must not eat the answer's time. A read that runs out fails;
-# the turn goes on.
+# One read ends after this long (live 1.5-3.9 s per fetch), and none starts with less than
+# READ_MIN_SECONDS before the answer must begin: a stalled fetch must not eat the answer's time.
 READ_SECONDS = 60
 READ_MIN_SECONDS = 45
 READ_TIME_MARGIN = 10
-# The helper only has to call the fetch tool and say "OK"; the room covers a
-# little reasoning where a model cannot switch it off (Gemini "minimal").
+# The helper only calls the fetch tool and says "OK"; the room covers a little reasoning where a
+# model cannot switch it off.
 FETCH_OUTPUT_TOKENS = 512
-# Read pages in the saved review give way first, to this length, before the
-# 600 kB review budget would fail (agent_comparison._checkpoint).
+# Read pages in the saved review give way first, before the review budget would fail.
 READ_TRIM_CHARS = 2000
 RESPONSES_URL = OPENROUTER_BASE_URL + "/responses"
 FETCH_INSTRUCTION = ("Call the web_fetch tool exactly once, for exactly the URL below. Do not fetch any other URL. "
@@ -79,8 +62,7 @@ _LIGHTEST = ("none", "minimal", "low")
 
 
 def enabled():
-    """On unless AGENT_READ_SOURCES=0 (2026-10-11: off by default, the Agent
-    told users it could not read any source)."""
+    """On unless AGENT_READ_SOURCES=0."""
     return os.environ.get(ENABLED_ENV, "1").strip() != "0"
 
 
@@ -94,44 +76,28 @@ def url_key(value):
     return urlunsplit(("https", parts.netloc, path, parts.query, ""))
 
 
-# Sources from the chat itself (2026-10-11): asked "kannst du eine Quelle
-# direkt nachlesen?" after an answer citing tri247.com, the Agent could open
-# nothing, because only this message's comparison answers counted. Two more
-# kinds are readable now, neither of which a page can steer:
-# * the sources saved with the chat's earlier messages (provider citations,
-#   pages read before; AgentLoop.chat_sources from AgentRunStore.messages);
-# * URLs the user wrote (user_urls). Links in earlier answer TEXT are not: the
-#   agent writes from untrusted evidence, and an injected page could
-#   make it write a URL carrying chat content for a later, click-free fetch.
-#   The same holds for an answer passage the user quotes with "Ask about
-#   this": it is cut off like for memory evidence (user_words, review
-#   2026-10-12).
-# One character class, no nested quantifier: linear on any text. Typographic
-# quotes end a URL like straight ones ("„https://…“" kept the closing quote).
+# Besides this message's sources the chat's earlier saved sources and the URLs the user wrote are
+# readable, neither of which a page can steer. Links in earlier answer text are not: an injected
+# page could make the agent write a URL carrying chat content for a later, click-free fetch. The
+# same holds for an answer passage the user quotes (user_words). One character class, no nested
+# quantifier: linear on any text; typographic quotes end a URL like straight ones.
 _CHAT_URL = re.compile("https?://[^\\s<>\"'`\\[\\]{}|\\\\^\u201c\u201d\u201e\u00ab\u00bb\u2018\u2019\u2039\u203a]+",
                        re.IGNORECASE)
 _URL_TRAILING = ".,;:!?*"
 CHAT_URLS_MAX = 60
 LABEL_USER = "your message"
 LABEL_EARLIER = "an earlier message's sources"
-# The agent researches itself (since 2026-10-27). Its own search results are
-# provider citations like the earlier messages' sources, which they become
-# with the next message anyway: no page wrote them. The web search runs with
-# every step (the provider's own): the agent does not call it, so "your
-# search" read as a search it never made (2026-10-28).
+# The agent's own search results are provider citations, which no page wrote. The search runs with
+# every step without the agent calling it, so "your search" read as one it never made.
 LABEL_SEARCH = "a web search result of this message"
-# Any public page, which the reviewers follow live. The provider's search of
-# GPT-6 Luna and GPT-6.1 Terra sends no hits to the app, so they could read
-# nothing they found.
+# Any public page, which the reviewers follow live: some providers' searches send no hits to the
+# app, so their models could read nothing they found.
 LABEL_CHOSEN = "a page you chose"
 
 
 def user_urls(conversation):
-    """URLs the user wrote, latest message first.
-
-    Markdown links and bare URLs alike; trailing punctuation and an
-    unbalanced closing parenthesis (the end of "[text](url)") are cut. A
-    quoted answer passage is not the user's text (user_words)."""
+    """URLs the user wrote, latest message first: Markdown links and bare URLs, trailing punctuation
+    and an unbalanced closing parenthesis cut. A quoted answer passage is not the user's text."""
     from app.services.agent_memory import user_words
     found, seen = [], set()
     for message in reversed(conversation or []):
@@ -164,8 +130,8 @@ def host_of(value):
 
 
 def _safe_url(value):
-    """The rules of a cited URL (AgentCompletion._annotations): http(s), a
-    host, no userinfo, no whitespace or control characters, at most 2048."""
+    """The rules of a cited URL: http(s), a host, no userinfo, no whitespace or control characters,
+    at most 2048."""
     if not isinstance(value, str) or len(value) > 2048 or any(c.isspace() or ord(c) < 32 for c in value):
         return False
     try:
@@ -176,9 +142,8 @@ def _safe_url(value):
 
 
 def _same_page(fetched, requested):
-    """Whether the page the fetch reports is the one requested. Exa may report
-    it normalised (scheme, "www.", trailing slash, query); another path on the
-    same host is another page."""
+    """Whether the fetched page is the requested one. Exa may report it normalised (scheme, "www.",
+    trailing slash, query); another path on the same host is another page."""
     if not fetched:
         return True
     if url_key(fetched) == url_key(requested):
@@ -188,7 +153,6 @@ def _same_page(fetched, requested):
 
 
 def _ascii_host(url):
-    """The host for allowed_domains, IDN in its ASCII form."""
     host = urlsplit(url).hostname or ""
     try:
         return host.encode("idna").decode("ascii")
@@ -196,10 +160,8 @@ def _ascii_host(url):
         return host
 
 
-# Gemini's grounding cites Google's redirect, not the page. Exa would refuse it
-# under the page's domain filter, and the trace would name Google. One request
-# to Google's fixed host reads where it points; the page itself is fetched by
-# Exa as usual.
+# Gemini's grounding cites Google's redirect, not the page: Exa would refuse it under the page's
+# domain filter. One request to Google's fixed host reads where it points.
 GROUNDING_REDIRECT_HOSTS = frozenset({"vertexaisearch.cloud.google.com"})
 REDIRECT_SECONDS = 5.0
 
@@ -222,22 +184,16 @@ def resolve_redirect(url):
     return target
 
 
-# read_source's arguments (no docstring: it would become the schema's
-# description). Since 2026-10-28 only the address: no purpose and point to
-# justify a read with (a list of when to read, which Max took out of the
-# prompt on 2026-10-28), and no status_update, since text beside a tool call
-# shows the user as a note. The description says the rest once.
+# Only the address: no docstring (it would become the schema's description), no purpose to justify a
+# read, and no status_update, since text beside a call shows the user as a note.
 class AuditReadSourceArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     url: str = Field(min_length=1, max_length=2048, description="The page's http(s) address.")
 
 
 class PageFetch(AgentCompletion):
-    """One OpenRouter Responses API call whose only job is one web_fetch.
-
-    The fetched page arrives as an ``openrouter:web_fetch`` output item; the
-    helper's own text is discarded. Usage is measured like any model step and
-    settled by AgentLoop._step."""
+    """One OpenRouter Responses API call whose only job is one web_fetch. The page arrives as an
+    output item, the helper's own text is discarded; usage is settled like any model step."""
 
     def __init__(self):
         super().__init__()
@@ -257,9 +213,8 @@ class PageFetch(AgentCompletion):
 
     def stream(self, *, model, messages, api_key, tools=None, native_searches=0, allow_tool_calls=False,
                prompt_cache=True, session_id=None):
-        # The same routing as AgentCompletion.stream: fastest endpoint without
-        # prompt collection, the registry's (or a Google chat's) settings on top.
-        # A page read is a helper step: it never gets the chat's session_id.
+        # The same routing as AgentCompletion.stream; a page read is a helper step and never gets
+        # the chat's session_id.
         from app.core.openrouter_contract import provider_routing
         payload = {"model": model.model, "input": messages, "tools": list(tools or []), "stream": True,
                    "max_output_tokens": model.max_output_tokens,
@@ -283,8 +238,8 @@ class PageFetch(AgentCompletion):
                         raise ValueError("Invalid provider event")
                     kind = data.get("type")
                     progress.touch()
-                    # The generation receipt, as in AgentCompletion: usage of a
-                    # stream that broke off is reconciled by this id later.
+                    # The generation receipt: usage of a stream that broke off is reconciled by this
+                    # id later.
                     response_id = (data.get("response") or {}).get("id") if isinstance(data.get("response"), dict) else None
                     if isinstance(response_id, str) and response_id:
                         self.generation_id = response_id[:200]
@@ -301,8 +256,7 @@ class PageFetch(AgentCompletion):
                         usage = measured_usage(response.get("usage"), model)
                         if usage is not None and (self.page or {}).get("status") == "completed" \
                                 and usage.get("estimated_cost_nano_usd") is not None:
-                            # Exa's fee for the page is not part of the cost
-                            # OpenRouter reports (probe 2026-10-10); book it too.
+                            # Exa's fee for the page is not part of the cost OpenRouter reports.
                             usage["estimated_cost_nano_usd"] += FETCH_COST_NANOS
                         if usage is not None:
                             self.usage = usage
@@ -318,8 +272,8 @@ class PageFetch(AgentCompletion):
 
 
 def _helper_models():
-    """The standard judges of OpenAI (Luna) and Gemini: cheap, proven
-    and admin-configured; the second only after the first failed."""
+    """The standard judges of OpenAI and Gemini: cheap and admin-configured; the second only after
+    the first failed."""
     from app.services.llm.consensus_engine import DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
     return [DIFFERENCES_JUDGE_MODEL_BY_PROVIDER[p] for p in ("openai", "gemini") if DIFFERENCES_JUDGE_MODEL_BY_PROVIDER.get(p)]
 
@@ -347,19 +301,16 @@ class SourceReader:
         self.lock = threading.Lock()
         self._steps = {}
         self._user_urls = None
-        # Since 2026-10-28: what it opens, not when to.
+        # What it opens, not when to.
         description = (
             "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins, scripts "
             f"or clicks; a read takes about 10 to 30 seconds. At most {READS_PER_MESSAGE} per message.")
         self.tool = ReadOnlyTool("read_source", description, AuditReadSourceArgs, self.read,
                                  activity=self.activity, concurrent=True, ordered=True)
 
-    # --- What may be read -------------------------------------------------
     def cited(self):
-        """Canonical URL -> {url, title, cited_by}: every source of every
-        comparison answer of this message, the agent's own search results
-        (LABEL_SEARCH), then the chat's earlier sources and the user's links
-        (see _CHAT_URL)."""
+        """Canonical URL -> {url, title, cited_by}: the comparison answers' sources, the agent's own
+        search results, then the chat's earlier sources and the user's links."""
         cited = {}
         for comparison in self.comparison.comparisons:
             for answer in comparison.get("answers") or []:
@@ -393,8 +344,7 @@ class SourceReader:
         return cited
 
     def chosen(self, url):
-        """A page the agent named itself, while reviewers follow the work
-        (they follow the read live); else None."""
+        """A page the agent named itself while reviewers follow the work; else None."""
         auditor = getattr(self.comparison, "auditor", None)
         url = url.strip()
         if not getattr(auditor, "sessions", None) or not _safe_url(url) or not url_key(url):
@@ -432,22 +382,19 @@ class SourceReader:
             record.update(fields)
 
     def _checkpoint(self):
-        # Saving the review must not turn a finished read into a tool error;
-        # the run's end saves it again (agent_runs fixes a stale "running").
+        # Saving the review must not turn a finished read into a tool error; the run's end saves it
+        # again.
         try:
             self.comparison.checkpoint()
         except Exception as exc:
             logging.warning("Agent source read could not save the review category=%s", type(exc).__name__)
 
-    # --- The tool ----------------------------------------------------------
     def read(self, args, *, cancellation):
-        """The tool. Refusals and failed pages are results, not tool errors:
-        three tool errors in a row end the turn (AgentLoop.run), and a
-        paywalled page or a mis-copied URL must not cost the paid work its
-        answer."""
+        """The tool. Refusals and failed pages are results, not tool errors: three tool errors in a
+        row end the turn, and a paywalled page must not cost the paid work its answer."""
         loop = self.loop
         loop._check(cancellation)
-        # The limits per step and message take the step's reads in call order.
+        # The limits take the step's reads in call order.
         with call_order(cancellation), self.lock:
             try:
                 self._refuse(args)
@@ -478,8 +425,8 @@ class SourceReader:
             self.reads.append(record)
             self._steps[loop.routing_steps] = self._steps.get(loop.routing_steps, 0) + 1
         self._checkpoint()
-        # Its own stop, linked to the turn's: a Stop ends the read and the
-        # turn, the time budget ends only the read.
+        # Its own stop, linked to the turn's: Stop ends the read and the turn, the time budget only
+        # the read.
         limit = ProviderCancellation()
         unlink = cancellation.register(limit)
         expired = threading.Event()
@@ -530,8 +477,7 @@ class SourceReader:
                 failure = page.get("error") or (f"HTTP {page['http_status']}" if page.get("http_status") else "unreadable")
                 break
             if not _same_page(page["url"], url):
-                # The helper may only fetch the cited page; another page of
-                # the same host would be quoted as if it were the cited one.
+                # Another page of the same host would be quoted as if it were the cited one.
                 failure = "a different page was fetched"
                 break
             text = page["text"].strip()
@@ -546,8 +492,7 @@ class SourceReader:
         return self._failed(record, failure)
 
     def _failed(self, record, failure):
-        """A page that could not be read: a result without page text, never a
-        tool error (see read)."""
+        """A page that could not be read: a result without page text, never a tool error."""
         self._update(record, status="failed", error=failure[:200])
         return {"status": "failed", "url": record["url"],
                 "reason": "Not enough token allowance left today to read a source." if failure == "token_budget"
@@ -596,18 +541,15 @@ class SourceReader:
             failure = agent_failure(exc)
             logging.warning("Agent source read failed model=%s code=%s", model.model, failure.get("code"))
             loop._terminal(worker, "failed", failure["error"], failure)
-            # The turn's own limits end the turn; an empty allowance only
-            # refuses this optional read, a provider failure tries the next helper.
+            # The turn's own limits end the turn; an empty allowance only refuses this optional
+            # read, a provider failure tries the next helper.
             if isinstance(exc, (AnalysisBudgetExceeded, AgentRunInterrupted)) and not isinstance(exc, AgentTokenBudgetExceeded):
                 raise
             return exc
 
     def activity(self, args, result):
-        """Trace fields: the host while reading; the read source once read.
-
-        Only a cited URL names its host (a refused one shows none), and a
-        grounding redirect names Google, not the page: no host until the
-        result names the page it resolved to."""
+        """Trace fields: the host while reading, the read source once read. A refused URL shows no
+        host, and a grounding redirect none until the result names its page."""
         status = result.get("status") if isinstance(result, dict) else None
         if status in {"completed", "failed", "already_read"}:
             url = result.get("url") or ""
@@ -623,7 +565,6 @@ class SourceReader:
                 extra["sources"] = [{"url": result["url"], "title": result.get("title") or host}]
         return extra
 
-    # --- Evidence ------------------------------------------------------------
     def snapshot(self):
         """Saved with the review: what was read, from where it came."""
         with self.lock:

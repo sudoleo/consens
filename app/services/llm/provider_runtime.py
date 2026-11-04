@@ -1,9 +1,8 @@
 """Shared transport budgets and cooperative cancellation for LLM providers.
 
-Provider calls deliberately have no automatic transport retry. A logical
-operation claim authorizes one paid call; schema-level fallbacks and retries
-remain explicit in the consensus layer and therefore auditable.
-"""
+Provider calls deliberately have no automatic transport retry: a logical operation claim authorizes
+one paid call, and fallbacks and retries stay explicit in the consensus layer, so they are
+auditable."""
 
 from __future__ import annotations
 
@@ -137,14 +136,10 @@ _thread_context = threading.local()
 def bind_provider_cancellation(
     cancellation: ProviderCancellation,
 ) -> Iterator[ProviderCancellation]:
-    """Bindet die Cancellation an DIESEN Thread.
-
-    Invariante: Ein Producer, der hier gebunden wird, muss vollstaendig auf
-    einem Thread laufen. Ein Generator, den Starlette ueber
-    iterate_in_threadpool zieht, erfuellt das nicht (jedes next() kann auf
-    einem anderen Worker landen) und wuerde fremde Cancellations sehen --
-    solche Producer gehoeren in den Pump-Thread von iter_sse_with_keepalive.
-    """
+    """Bind the cancellation to this thread. A producer bound here must run entirely on one thread:
+    a generator Starlette pulls through iterate_in_threadpool may run each next() on another worker
+    and would see foreign cancellations, so such producers belong in iter_sse_with_keepalive's pump
+    thread."""
     previous = getattr(_thread_context, "cancellation", None)
     _thread_context.cancellation = cancellation
     try:
@@ -193,8 +188,8 @@ class AnalysisBudget:
         self.max_calls = float("inf") if unlimited else ANALYSIS_MAX_CALLS if max_calls is None else max_calls
         self.calls = 0
         self.lock = threading.Lock()
-        # A run of phases (analysis_run_scope) gives each phase its own budget;
-        # ``run`` is the run a phase belongs to, ``phased`` marks the run itself.
+        # A run of phases gives each phase its own budget; ``run`` is the run a phase belongs to,
+        # ``phased`` marks the run itself.
         self.run = run
         self.phased = False
         self.phase_calls = 0
@@ -255,10 +250,8 @@ def _bound_analysis_scope(budget):
 
 @contextmanager
 def analysis_budget_scope(seconds=None, max_calls=None):
-    """One budget for an analysis step, shared across its threads.
-
-    An existing budget is reused (an Agent's, or the step's caller's). Inside
-    analysis_run_scope the step is a phase and opens its own budget instead."""
+    """One budget for an analysis step, shared across its threads. An existing budget (an Agent's,
+    the caller's) is reused; inside analysis_run_scope the step is a phase with its own budget."""
     existing = current_analysis_budget()
     if existing is not None and not existing.phased:
         yield existing
@@ -269,13 +262,9 @@ def analysis_budget_scope(seconds=None, max_calls=None):
 
 @contextmanager
 def analysis_run_scope():
-    """A Consensus run of phases: synthesis, then both judges (audit C3).
-
-    Each budgeted phase gets its own deadline and call count, so a slow
-    synthesis never uses up the judges' time. The run carries the shared
-    cancellation, totals every phase for ``analysis_runtime``, and bounds
-    unbudgeted work inside it like a single default budget. An existing budget
-    (an Agent's) keeps governing every phase instead."""
+    """A Consensus run of phases: each budgeted phase gets its own deadline and call count, so a
+    slow synthesis never uses up the judges' time. The run carries the shared cancellation and
+    totals every phase; an existing budget (an Agent's) governs every phase instead."""
     existing = current_analysis_budget()
     if existing is not None:
         yield existing
@@ -302,8 +291,8 @@ def _scoped(function, scope):
 
 
 def analysis_budgeted(function=None, *, seconds=None, max_calls=None):
-    """Runs an analysis step in analysis_budget_scope; ``seconds``/``max_calls``
-    size a budget it opens (default: ANALYSIS_TIMEOUT_SECONDS/ANALYSIS_MAX_CALLS)."""
+    """Runs an analysis step in analysis_budget_scope; ``seconds``/``max_calls`` size a budget it
+    opens."""
     if function is None:
         return lambda inner: analysis_budgeted(inner, seconds=seconds, max_calls=max_calls)
     return _scoped(function, lambda: analysis_budget_scope(seconds, max_calls))
@@ -345,12 +334,9 @@ class ProviderProgressWatchdog:
 
 
 async def _guard_provider_io(awaitable, cancellation, budget, progress=None, *, sends_request=False):
-    """Await provider I/O while honouring cancellation, deadline and progress.
-
-    With ``sends_request`` the awaitable is the one that opens the connection
-    and sends the request: a stop raised before its task ever ran is marked
-    as never dispatched, so the usage meter does not charge it.
-    """
+    """Await provider I/O while honouring cancellation, deadline and progress. With
+    ``sends_request``, a stop raised before the request's task ever ran is marked as never
+    dispatched, so the meter does not charge it."""
     from app.services.llm.provider_dispatch import mark_not_dispatched
 
     task = asyncio.ensure_future(awaitable)
@@ -380,11 +366,8 @@ async def _guard_provider_io(awaitable, cancellation, budget, progress=None, *, 
 
 
 def cancellable_post_json(url, *, json, headers):
-    """Cancel the actual socket task even while waiting for response headers.
-
-    Runs only in synchronous provider workers, never on FastAPI's event loop.
-    No transport retries. Polling monitors cancellation, not provider results.
-    """
+    """Cancel the actual socket task even while waiting for response headers. Synchronous provider
+    workers only, no transport retries."""
     from app.services.llm import usage_meter
     from app.services.llm.engines import _ProviderHTTPStatusError
 
@@ -409,8 +392,8 @@ def cancellable_post_json(url, *, json, headers):
         raise
     except BaseException as exc:
         from app.services.llm.provider_dispatch import never_reached_provider
-        # Connect failure or a stop before dispatch: nothing reached the
-        # provider. Timeout/cancellation after the request left: estimate.
+        # Nothing reached the provider; a timeout or cancellation after the request left is
+        # estimated.
         if never_reached_provider(exc):
             metered.rejected()
         else:
@@ -430,11 +413,8 @@ async def _bounded_error_body(response, limit=16_384):
 
 
 def cancellable_sse_lines(url, *, json, headers, progress=None):
-    """Drive async socket reads on the existing synchronous SSE worker.
-
-    A deadline/disconnect cancels header reads and idle body reads alike; no
-    extra producer thread, abandoned request or hidden retry is introduced.
-    """
+    """Drive async socket reads on the existing synchronous SSE worker: a deadline or disconnect
+    cancels header and idle body reads alike, without an extra thread or hidden retry."""
     from app.services.llm.provider_dispatch import mark_not_dispatched
 
     cancellation = current_provider_cancellation()

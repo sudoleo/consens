@@ -1,34 +1,18 @@
 """The agent's work log, written live by the app (docs/agent-work-log.md).
 
-In every chat run of every account (routers/agent.py lets the turn's owner
-read it). While the agent works, the app records what it sees and does,
-never the agent itself: the context each model step receives (``context``:
-the chat's history and question, then everything the run adds to the
-conversation, such as the app's hints and workers' messages), the step's
-readable reasoning, text, tool calls and search hits (``step``), every tool
-result (``tool``), the app's own interventions (``app``: a retracted text, a
-pause for the user and the decision, the fixed answer), and the run's
-``start`` and ``end``.
-Delegated workers write into the same log under their own id. The reviewers,
-the comparison answers and the app's page fetches are not part of it
-(AgentLoop._log_actor).
+The app records what the agent sees and does, never the agent itself: the context each model step
+receives (``context``), the step's readable reasoning, text, tool calls and search hits (``step``),
+every tool result (``tool``), the app's own interventions (``app``) and the run's ``start`` and
+``end``. Reviewers, comparison answers and page fetches are not part of it.
 
-The log only grows: an entry is never changed, a retraction is a new entry.
-One writer thread saves the entries in order, up to BATCH_LIMIT per
-Firestore transaction of their own (AgentSessionStore.save_work_log), as
-chunk documents ``users/{uid}/chats/{chat}/turns/{turn}/work_log/{seq:06d}``
-named after their first entry (``seq``, ``last_seq``, ``entries``; until
-2026-11-01 one document per entry, which readers still take). Content above
-INLINE_CHARS goes to the private object store (agent_files.PrivateObjects);
-without one it is kept shortened. Recording never raises and never holds the
-agent up: an entry that cannot be saved is lost, and the turn then carries
-``work_log_incomplete``.
+The log only grows: a retraction is a new entry. One writer thread saves the entries in order as
+chunk documents ``.../turns/{turn}/work_log/{seq:06d}`` (older turns: one document per entry, still
+readable). Content above INLINE_CHARS goes to the private object store, else it is kept shortened.
+Recording never raises and never holds the agent up: an entry that cannot be saved is lost, and the
+turn carries ``work_log_incomplete``.
 
-Retention: the turn carries ``work_log_expires_at`` (RETENTION_DAYS after
-the run started); the hourly retention maintenance removes expired logs
-(cleanup_expired_work_logs), and chat and account deletion remove them with
-the turn (chat_store._delete_chat_tree -> delete_turn_log).
-"""
+The turn carries ``work_log_expires_at``; hourly maintenance removes expired logs, and chat and
+account deletion remove them with the turn."""
 from __future__ import annotations
 
 from collections import deque
@@ -43,31 +27,24 @@ import time
 from app.core.observability import safe_exception
 
 RETENTION_DAYS = 30
-# Content up to this many characters stays in the entry; longer content goes
-# to the object store and the entry keeps PREVIEW_CHARS of it.
+# Longer content goes to the object store and the entry keeps PREVIEW_CHARS of it.
 INLINE_CHARS = 16_000
 PREVIEW_CHARS = 2_000
-# Entries per Firestore transaction. They go out together as a few chunk
-# documents (AgentSessionStore.save_work_log, CHUNK_BYTES each), never one
-# document per entry (until 2026-11-01: 687 writes on a day of 15 messages,
-# and as many deletes 30 days later).
+# Entries per Firestore transaction, saved as a few chunk documents: one document per entry cost
+# hundreds of writes a day and as many deletes later.
 BATCH_LIMIT = 50
-# The writer gathers what comes within this long after the first entry it
-# has not saved yet (the run's end saves at once): a step brings several
-# entries one after another. On the 687 entries of 2026-11-01 that is 202
-# writes instead of 627 (2 s: 285, 10 s: 136). Only the saved log's view
-# (admins, agent-work-log.js, polling every 3 s) sees entries this much
+# The writer gathers what comes within this long after its oldest unsaved entry, since a step brings
+# several in a row (about a third of the writes). Only the saved log's view sees entries this much
 # later; the reviewers read the log in memory.
 FLUSH_SECONDS = 5.0
 WRITE_ATTEMPTS = 3
-# Seconds the run's end waits for the writer; what it has not saved by then
-# is lost (the log then has no ``end`` entry, which readers take as a gap).
+# What the writer has not saved by then is lost (the log then lacks its ``end`` entry, which readers
+# take as a gap).
 CLOSE_SECONDS = 20
 OBJECT_PREFIX = "work-log"
 KINDS = ("start", "context", "step", "tool", "app", "end")
-# Where an entry's content comes from. Content from outside the user and the
-# app (web, file, google, agent: model output, vm: what the agent's own VM
-# returned) is data for every later reader, never instructions.
+# Content from outside the user and the app (web, file, google, agent output, vm) is data for every
+# later reader, never instructions.
 DATA_CLASSES = ("user", "web", "file", "google", "memory", "agent", "vm", "app")
 UNTRUSTED_DATA = frozenset({"web", "file", "google", "agent", "vm"})
 TOOL_DATA = {
@@ -79,17 +56,14 @@ TOOL_DATA = {
     "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm", "vm_edit_file": "vm", "vm_share_file": "vm",
     "vm_start_process": "vm", "vm_process_output": "vm", "vm_stop_process": "vm", "vm_view_image": "vm", "vm_render_office": "vm",
     "vm_install_packages": "vm", "github_import": "vm", "prepare_pull_request": "vm", "update_plan": "agent",
-    # Pages of the open web, in the user's signed-in browser; ask_user brings
-    # the page back with it once the user handed the browser back (agent_ask.py).
+    # The open web in the user's signed-in browser; ask_user brings the page back once the user
+    # handed it back.
     "browser": "web", "ask_user": "web",
-    # Pictures of the web the server fetched (agent_web_images.py).
     "find_pictures": "web", "search_pictures": "web", "show_image": "web", "vm_save_picture": "web",
-    # The answers of the user's chosen models with their pages (since
-    # 2026-10-31): model output.
+    # The answers of the user's chosen models: model output.
     "compare_models": "agent",
 }
-# Measurements an entry may carry beside its content: a tool result's start
-# and duration (``tool``). Numbers and times only, never text.
+# A tool result's start and duration beside its content: numbers and times only, never text.
 ENTRY_FIELDS = ("started_at", "duration_ms")
 
 
@@ -111,8 +85,7 @@ def _measure(value):
 
 
 def readable_reasoning(value):
-    """The step's reasoning a person can read: its text and summary blocks,
-    never encrypted ones (agent_client: those are not stored anywhere)."""
+    """The step's readable reasoning: text and summary blocks, never encrypted ones."""
     parts = []
     for detail in getattr(value, "_reasoning_parts", None) or []:
         if not isinstance(detail, dict):
@@ -128,8 +101,8 @@ def readable_reasoning(value):
 
 
 def message_text(message):
-    """A context message as text; images and files as a placeholder (their
-    bytes never enter the log)."""
+    """A context message as text; images and files as a placeholder (their bytes never enter the
+    log)."""
     content = message.get("content")
     if isinstance(content, str):
         return content
@@ -150,15 +123,10 @@ def message_text(message):
 
 
 def context_data(actor, index, own_from, message, text):
-    """The data class of the conversation message at ``index`` (DATA_CLASSES).
-
-    Messages before ``own_from`` are the chat as the run received it: the
-    user's questions (with the app's context block) and the agent's earlier
-    answers, and after an answer of a VM turn its work record (the app's,
-    from VM output: ``vm``). Later user-role messages are never the user's
-    words: the app adds its hints, and workers report to the agent. A
-    worker's user-role messages are the agent's (its assignment and later
-    messages)."""
+    """The data class of the conversation message at ``index``. Messages before ``own_from`` are the
+    chat as the run received it (the user's questions with the app's context, earlier answers, work
+    records as ``vm``); later user-role messages are the app's, except the user's notes into the
+    run."""
     from app.services.agent_compaction import PICTURE_OPEN, is_summary, is_work_record
     role = message.get("role")
     if role in {"system", "tool"}:
@@ -167,14 +135,13 @@ def context_data(actor, index, own_from, message, text):
         # A summary of the chat or of the run is the agent's own text.
         return "agent"
     if is_work_record(text) or text.startswith(PICTURE_OPEN):
-        # The app's record of VM output, a picture of the VM; a picture of
-        # the browser or one find_pictures fetched is the web's.
+        # The app's record of VM output or a VM picture; a picture of the browser or one
+        # find_pictures fetched is the web's.
         from app.services.agent_browser import SCREENSHOT_INTRO
         from app.services.agent_web_images import INTRO
         return "web" if text.startswith((SCREENSHOT_INTRO.split("{")[0], INTRO.split("{")[0])) else "vm"
     from app.services.agent_loop import USER_NOTE_OPEN
     if text.startswith(USER_NOTE_OPEN):
-        # A message the user sent into the running response.
         return "user"
     if index < own_from:
         return "user"
@@ -190,8 +157,7 @@ _OBJECT_STORES_LOCK = threading.Lock()
 
 
 def _objects():
-    """The private object store, one client per configuration, or None where
-    none is configured."""
+    """The private object store, one client per configuration, or None."""
     from app.services.agent_files import PrivateObjects, StorageNotConfigured, _local_dir
     key = (os.getenv("AGENT_FILES_BUCKET", ""), _local_dir())
     with _OBJECT_STORES_LOCK:
@@ -204,18 +170,15 @@ def _objects():
 
 
 class WorkLog:
-    """The work log of one turn. Every recording method is thread-safe and
-    never raises; one writer thread saves the entries (``close`` waits for it
-    at the run's end, at most CLOSE_SECONDS)."""
+    """The work log of one turn. Every recording method is thread-safe and never raises; ``close``
+    waits for the writer at most CLOSE_SECONDS."""
 
     def __init__(self, store, uid, chat_id, turn_id, *, ready=lambda: True, objects=None, clock=_now,
                  sleep=time.sleep, flush_seconds=FLUSH_SECONDS):
         self.store, self.uid, self.chat_id, self.turn_id = store, uid, chat_id, turn_id
         self._flush_seconds = flush_seconds
-        # When the oldest unsaved entry came (time.monotonic), or None.
         self._pending_since = None
-        # Entries are saved once the run has started its first model step;
-        # a run that never did keeps no log.
+        # A run that never started a model step keeps no log.
         self._ready = ready
         self._clock, self._sleep = clock, sleep
         self._objects = objects
@@ -223,22 +186,18 @@ class WorkLog:
         self._condition = threading.Condition()
         self._seq = 0
         self._pending = deque()
-        # Per actor: how much of its conversation is in the log, the tool
-        # results logged when they returned, the request additions logged.
+        # Per actor: how much of its conversation is logged, the tool results logged on return, the
+        # request additions logged.
         self._cursors, self._logged, self._extras = {}, {}, {}
-        # Every entry in order with its whole content, for the reviewers who
-        # follow the log while the agent works (agent_audit.ReviewerSession).
+        # Every entry with its whole content, for the reviewers who follow the log live.
         self._entries = []
         self._thread = None
         self._closing = False
-        # Set when an entry could not be saved; the writer says so on the turn.
         self.incomplete = False
 
-    # --- Recording ------------------------------------------------------------
 
     def add(self, kind, *, actor="app", name="", data="app", step=None, content="", fields=None):
-        """Append one entry; returns its sequence number (None if refused).
-        ``fields``: measurements of ENTRY_FIELDS beside the content."""
+        """Append one entry; returns its sequence number (None if refused)."""
         try:
             text = content if isinstance(content, str) else _json(content)
             with self._condition:
@@ -266,16 +225,10 @@ class WorkLog:
             return None
 
     def context(self, actor, conversation, request, *, step=None, own_from=0):
-        """What a model step receives, as far as not yet in the log.
-
-        ``conversation``: the actor's own message list, which only grows
-        (AgentLoop.messages, Worker.messages). Every message past this
-        actor's cursor is logged, except the model's own messages from
-        ``own_from`` on (they are its step entries; earlier ones are the
-        chat's history) and the tool results logged when they returned.
-        ``request``: what this step sends, the conversation plus what the app
-        adds for the step only (the file block, a step note, a changed system
-        prompt); each such addition is logged once per distinct text."""
+        """What a model step receives, as far as not yet in the log. ``conversation`` only grows:
+        every message past this actor's cursor is logged except the model's own from ``own_from`` on
+        (they are its step entries) and tool results logged on return. ``request``: the conversation
+        plus what the app adds for this step only, each distinct addition logged once."""
         try:
             with self._condition:
                 cursor = self._cursors.get(actor, 0)
@@ -310,17 +263,15 @@ class WorkLog:
             self.incomplete = True
 
     def rewound(self, actor, start, *, seen=()):
-        """The actor's conversation was rewritten from ``start`` on (a
-        summary, AgentLoop._summarize), against ``context``'s rule that
-        it only grows: the log goes on from there. ``seen``: messages now
-        past ``start`` that are in the log already."""
+        """The actor's conversation was rewritten from ``start`` on (a summary): the log goes on
+        from there. ``seen``: messages now past ``start`` already in the log."""
         with self._condition:
             self._cursors[actor] = min(self._cursors.get(actor, 0), start)
             self._logged.setdefault(actor, set()).update(id(message) for message in seen)
 
     def step(self, actor, step, model, value, status):
-        """A finished (or failed, or stopped) model step: what it thought,
-        wrote and called. Returns its entry's number (None if not written)."""
+        """A finished, failed or stopped model step: what it thought, wrote and called. Returns its
+        entry's number."""
         try:
             citations = {}
             for citation in getattr(value, "citations", None) or []:
@@ -339,8 +290,7 @@ class WorkLog:
             }
             if getattr(value, "published", ""):
                 content["shown"] = True
-            # Model output, the agent's or a worker's: data for every later
-            # reader, never instructions.
+            # Model output: data for every later reader, never instructions.
             return self.add("step", actor=actor, name=getattr(model, "model", ""), data="agent", step=step,
                             content=content)
         except Exception as exc:
@@ -349,10 +299,8 @@ class WorkLog:
             return None
 
     def tool(self, actor, step, call, message, *, started_at=None, duration_ms=None):
-        """A tool result as it goes into the actor's conversation (where the
-        next ``context`` then skips it), with when the call started (UTC,
-        ISO) and how long it ran: a slow browser or VM call shows in the log
-        itself, not only as the gap to the next entry (audit I4)."""
+        """A tool result as it goes into the conversation, with its start (UTC) and duration, so a
+        slow call shows in the log itself."""
         try:
             name = (call.get("function") or {}).get("name") or ""
             with self._condition:
@@ -364,36 +312,30 @@ class WorkLog:
             self.incomplete = True
 
     def app(self, name, content="", *, step=None, **fields):
-        """An intervention of the app itself; ``fields`` as in ``add``."""
         return self.add("app", name=name, step=step, content=content, fields=fields)
 
-    # --- Reading while it grows (the reviewers) -------------------------------
 
     @property
     def last(self):
-        """The number of the newest entry (0 before the first)."""
         with self._condition:
             return self._seq
 
     def entries_after(self, seq):
-        """``[(entry, whole content)]`` of every entry after number ``seq``."""
         with self._condition:
             return list(self._entries[seq:])
 
     def wait_for(self, seq, timeout):
-        """Until an entry after number ``seq`` exists, ``wake`` is called or
-        ``timeout`` passes (also once closed: a reader never spins)."""
+        """Until an entry after ``seq`` exists, ``wake`` is called or ``timeout`` passes (also once
+        closed: a reader never spins)."""
         with self._condition:
             if self._seq <= seq:
                 self._condition.wait(timeout)
 
     def wake(self):
-        """Everyone waiting in ``wait_for`` looks again."""
         with self._condition:
             self._condition.notify_all()
 
     def close(self, timeout=CLOSE_SECONDS):
-        """No more entries; wait (at most ``timeout``) for the writer."""
         with self._condition:
             self._closing = True
             self._condition.notify_all()
@@ -403,7 +345,6 @@ class WorkLog:
             if thread.is_alive():
                 logging.warning("Agent work log still saving at the run's end thread=%s", thread.name)
 
-    # --- Saving ---------------------------------------------------------------
 
     def _start(self):
         if self._thread is None:
@@ -411,8 +352,8 @@ class WorkLog:
             self._thread.start()
 
     def _due(self):
-        """Pending entries go now: the batch is full or the oldest waited
-        FLUSH_SECONDS. Seconds left until then otherwise (None: nothing)."""
+        """Pending entries go now when the batch is full or the oldest waited FLUSH_SECONDS; else
+        the seconds until then (None: nothing)."""
         if not self._pending:
             return None
         if len(self._pending) >= BATCH_LIMIT or self._pending_since is None:
@@ -452,8 +393,7 @@ class WorkLog:
         entries = [self._stored(entry, text) for entry, text in batch]
         if not self._save(entries):
             self.incomplete = True
-            # Content stored for entries that were never saved has no record
-            # that would ever delete it.
+            # Content stored for entries never saved has no record that would ever delete it.
             for entry in entries:
                 if entry.get("ref") and self._objects is not None:
                     try:
@@ -481,7 +421,6 @@ class WorkLog:
         return False
 
     def _stored(self, entry, text):
-        """The entry as saved: its content inline, or in the object store."""
         entry = dict(entry)
         if len(text) <= INLINE_CHARS:
             entry["content"] = text
@@ -510,10 +449,8 @@ def _put(objects, key, text):
         pass
 
 
-# --- Reading, deleting, retention ---------------------------------------------
 
 def entry_content(entry, objects=None):
-    """An entry's whole content (from the object store when it is there)."""
     if not entry.get("ref"):
         return entry.get("content", "")
     objects = objects if objects is not None else _objects()
@@ -524,9 +461,8 @@ def entry_content(entry, objects=None):
 
 
 def delete_turn_log(turn_ref, objects=None):
-    """Delete one turn's log: the stored content its entries name, then the
-    entries. A turn without a log costs one empty query, never a call to the
-    object store. Returns the number of entries deleted."""
+    """Delete one turn's log: the stored content its entries name, then the entries. Returns the
+    number deleted."""
     from app.services.agent_sessions import work_log_entries
     snapshots = list(turn_ref.collection("work_log").select(["ref", "entries"]).stream())
     keys = [entry["ref"] for snapshot in snapshots for entry in work_log_entries(snapshot.to_dict())

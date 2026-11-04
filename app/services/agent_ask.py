@@ -1,40 +1,17 @@
-"""ask_user: the agent hands a step to the user and waits (since 2026-10-29).
+"""ask_user: the agent hands a step to the user and waits on a card above the field
+(AgentLoop._ask_wait).
 
-Working together in the workspace's browser had no "your turn". A sign-in
-was the user's to do, yet the agent could only call the browser again (each
-call waited up to 120 s while the user had it, VMSession.wait_for_user) or
-end its answer, and the user did not see that they still held the browser
-(Max, 2026-10-29: he waited for the agent while it waited for him). Now the
-agent asks, and the run pauses on a card above the field
-(AgentLoop._ask_wait, a hold with ``ask``):
+``browser``: the user takes over the browser for what is theirs to do (a sign-in, a payment, a human
+check); handing it back continues the work, and the agent hears only that, never what they did.
+``secret``: the user pastes a key that the server writes into the workspace (agent_secrets.py), never
+into the chat or a model's context. ``choices``: two to four answers as buttons, since a confirm
+card cannot say which of two ways to go. None of these: the user allows or declines a step taken in
+their name (sending, posting, booking, deleting): the acting model knows what such a step does, and
+the user decides rather than a reviewer on every click.
 
-- ``browser``: the user takes over the browser for what is theirs to do
-  there (a sign-in, a password, a payment, a check for a human, a last click
-  the agent leaves to them). Handing it back is the trigger: once they had it
-  and gave it back (agent_workspace.user_has_browser), the work goes on. The
-  agent hears only that, never what the user did there, and reads the page
-  again itself.
-- ``secret`` (a name such as OPENAI_API_KEY): the user pastes a key or a
-  token into a field on the card, and the server writes it to the workbench
-  (agent_secrets.py, POST .../secret), never into the chat, the record or a
-  model's context; the agent hears where it lies.
-- ``choices`` (two to four short answers, since 2026-10-30): the user picks
-  one on the card, and the agent hears which. Before, a question with two
-  ways to go had only the confirm card: on chess.com DeepSeek asked "against
-  a person or a bot?", the card said Allow or Don't allow, and from
-  "allowed" it guessed the person.
-- none of these: the user allows or declines a step before the agent takes
-  it, such as sending, posting, booking or deleting in their name: the
-  acting model knows what a step does in the user's name, and the user
-  decides, not a reviewer on every click.
-
-The user can also take over without being asked: the agent's next call into
-the workspace then waits the same way (AgentLoop._takeover_wait, card
-``takeover``) instead of failing after 120 s. A message written on the card
-is the user's answer, Stop stops. Without an answer in HOLD_TIMEOUT_SECONDS
-the agent hears so and finishes its answer; the response does not stop as
-it does after a reviewer's halt.
-"""
+A user who takes over unasked makes the next workspace call wait the same way (card ``takeover``). A
+message on the card is the answer, Stop stops; without an answer in HOLD_TIMEOUT_SECONDS the agent
+hears so and finishes its answer."""
 from __future__ import annotations
 
 import json
@@ -48,14 +25,10 @@ from app.services.agent_tools import ReadOnlyTool
 
 TOOL = "ask_user"
 REQUEST_CHARS = 600
-# The answers of a choice card (``choices``), each a button.
 MIN_CHOICES = 2
 MAX_CHOICES = 4
 CHOICE_CHARS = 80
-# How often a waiting run looks whether the user handed the browser back
-# (the account's record, agent_workspace.control_state): the agent goes on
-# within a few seconds. 2 s until the first games were played (2026-10-29),
-# then 1 s, a read every second through a card of up to 30 minutes.
+# How often a waiting run looks whether the user handed the browser back.
 HANDBACK_POLL_SECONDS = 3
 
 # What the agent reads, by the card's kind and the user's answer.
@@ -90,8 +63,7 @@ ANSWERS = {
     ("choice", "timeout"): {"status": "no_answer", "note": "The user did not answer within 30 minutes. Finish with "
                                                            "what you have and say what waits for them."},
 }
-# A call into the workspace that waited while the user had the browser and
-# was never handed it back.
+# A workspace call that waited while the user had the browser and was never handed it back.
 TAKEOVER_TIMEOUT = ("The user took over the workspace's browser and did not hand it back within 30 minutes, so "
                     "this call did not run. Finish with what you have and say what waits for them.")
 
@@ -119,8 +91,7 @@ class AskUserArgs(BaseModel):
         if self.choices:
             if self.browser or self.secret:
                 raise ValueError("choices go without browser and secret.")
-            # Without invisible characters (zero-width and the like): "Bot"
-            # and "Bot" with one would be two buttons that read the same.
+            # Without invisible characters: two answers that read the same would be two buttons.
             self.choices = [" ".join("".join(char for char in choice if unicodedata.category(char) != "Cf").split())
                             for choice in self.choices]
             if (len(self.choices) < MIN_CHOICES or not all(any(char.isalnum() for char in choice)
@@ -131,8 +102,8 @@ class AskUserArgs(BaseModel):
 
 
 def requested(call):
-    """``(request, browser, secret, choices)`` of an ask_user call, or None
-    when its arguments are not valid (the tool then says why)."""
+    """``(request, browser, secret, choices)`` of an ask_user call, or None when its arguments are
+    not valid."""
     function = (call or {}).get("function") or {}
     if function.get("name") != TOOL:
         return None
@@ -145,18 +116,15 @@ def requested(call):
 
 
 def hold(kind, request="", secret="", choices=()):
-    """A hold of the user's (AgentLoop.request_hold): ``kind`` is
-    "browser", "confirm", "secret" (with the key's name), "choice" (with its
-    answers) or "takeover". The fields a reviewer's halt has stay empty, so
-    the card and the activity tell the two apart by ``ask``."""
+    """A hold of the user's: ``kind`` "browser", "confirm", "secret", "choice" or "takeover". The
+    fields a reviewer's halt has stay empty, so card and activity tell the two apart by ``ask``."""
     return {"reviewer": "", "provider": "", "kind": "ask", "reason": "", "entry": None, "ask": kind,
             "request": request, **({"secret": secret} if secret else {}),
             **({"choices": list(choices)} if choices else {})}
 
 
 def chosen(hold, choice):
-    """The answer of a choice card the user picked by its index, or None
-    when ``choice`` names none of them."""
+    """The answer picked by its index, or None when ``choice`` names none."""
     choices = (hold or {}).get("choices") or []
     if (hold or {}).get("ask") != "choice" or type(choice) is not int or not 0 <= choice < len(choices):
         return None
@@ -164,8 +132,7 @@ def chosen(hold, choice):
 
 
 def answer(kind, decision, secret="", picked=None):
-    """What the tool returns for the user's ``decision`` on a card of
-    ``kind``; ``picked``: the answer they chose on a choice card."""
+    """What the tool returns for the user's ``decision`` on a card of ``kind``."""
     said = dict(ANSWERS.get((kind, decision)) or ANSWERS.get((kind, "continue")) or ANSWERS[(kind, "timeout")])
     if kind == "secret" and said["status"] == "saved":
         said["path"] = agent_secrets.path(secret)
@@ -177,9 +144,8 @@ def answer(kind, decision, secret="", picked=None):
 
 
 class AskTools:
-    """ask_user of one message, next to the browser (VMTools). The loop runs
-    it once the user answered on the card (AgentLoop._ask_wait puts the
-    answer in ``loop.ask_answer``)."""
+    """ask_user of one message. The loop runs it once the user answered (the answer in
+    ``loop.ask_answer``)."""
 
     def __init__(self, vm_tools):
         self.vm = vm_tools
@@ -202,7 +168,7 @@ class AskTools:
                              "you need from them.")
         browser = getattr(self.vm, "browser_tools", None)
         if result.get("status") == "handed_back" and browser is not None:
-            # The browser as the user left it, in this result (agent_browser.look).
+            # The browser as the user left it, in this result.
             try:
                 seen = browser.look(cancellation)
             except ValueError:

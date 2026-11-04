@@ -5150,7 +5150,7 @@ Antwort fixiert ist:
 - Der Turn bleibt `pending`, bis die Prüfer fertig sind
   (`agent_sessions.review_tail`). Für diesen Nachlauf gelten: Claims nur für
   Prüfer-Sitzungen, ohne `agent_turn_id`-Bindung und ohne Lease im Konto
-  (`_claim_delegated`); der Herzschlag (`check_delegation`) verlängert nur die
+  (`AgentSessionStore.claim`); der Herzschlag (`check_delegation`) verlängert nur die
   Lease des Laufs, nie die Chat-Sperre; `finish_run` schreibt Chat-Felder
   (`agent_workspace_used`, Sperre) nur, wenn der Chat noch diesem Turn gehört.
 - Die nächste Nachricht liest einen Turn im Nachlauf wie einen fertigen

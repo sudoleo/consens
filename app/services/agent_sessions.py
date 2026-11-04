@@ -1,8 +1,7 @@
-"""Owner-bound delegation journal. Public messages are separate from turn traces.
+"""Owner-bound journal of a run's agent sessions, separate from turn traces.
 
-The root receipt fences a producer, all paid steps and ordered event writes.
-There is deliberately no resume path for paid steps after process loss.
-"""
+The root receipt fences a producer, all paid steps and ordered event writes. There is deliberately
+no resume path for paid steps after process loss."""
 from datetime import datetime, timedelta, timezone
 import logging
 import threading
@@ -22,43 +21,37 @@ from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCa
 
 
 PRODUCER_LEASE_SECONDS = 120
-# The run's watcher looks every 10 s (agent_loop.WATCH_SECONDS); a
-# renewal writes the root, the chat's lock and the account's running
-# responses. With 60 s left it renews about every 60 s and has six tries
-# before the lease ends (a database blip of up to a minute is tolerated);
-# at 90 s (until 2026-11-01) it renewed every 30 s.
+# A renewal writes the root, the chat's lock and the account's running responses. With 60 s left the
+# watcher (every 10 s) renews about every 60 s and has six tries before the lease ends, tolerating a
+# database blip of up to a minute.
 PRODUCER_RENEW_BEFORE_SECONDS = 60
-# Size contract of the per-turn root receipt (R29). Running steps always stay
-# in the root maps; only settled steps beyond this window are folded into
-# `compacted_usage`/`compacted_steps`. Each step keeps its own immutable
-# llm_calls receipt, so compaction loses neither usage nor history.
+# Size contract of the root receipt: running steps always stay in its maps, only settled steps
+# beyond this window fold into `compacted_usage`/`compacted_steps`. Each step keeps its own
+# immutable receipt, so nothing is lost.
 ROOT_SETTLED_STEP_WINDOW = 32
 ROOT_MAX_RUNNING_STEPS = 64
 ROOT_MAX_BYTES = 256_000
 TECHNICAL_STEP_LIMIT = ("This response reached a technical limit for one agent turn. "
                         "The available results have been saved; send a follow-up message to continue.")
-# Messages the user sends into a running response (add_user_note), on its root
-# receipt, which the run's watcher reads every few seconds anyway.
+# Messages the user sends into a running response, on its root receipt, which the watcher reads
+# anyway.
 USER_NOTES_MAX = 10
-# What a session keeps for itself: its assignment (the browser loads it on
-# demand) and the ids of its last journal updates, by which a retried
-# ambiguous commit finds that it was saved (publish_agents).
+# What a session keeps for itself: its assignment (loaded on demand) and the ids of its last journal
+# updates, by which a retried ambiguous commit finds it was saved.
 SESSION_PRIVATE = frozenset({"assignment", "event_ids"})
 SESSION_EVENT_IDS = 8
 
 
 def review_tail(turn):
-    """A turn whose answer is fixed and whose reviewers still work: its run
-    handed the chat over (agent_runs.hand_over). Its reviewers' steps go on
-    without the chat's lock and without a place among the account's running
-    responses; the chat may already run its next message."""
+    """A turn whose answer is fixed and whose reviewers still work: their steps go on without the
+    chat's lock or a running-response slot, and the chat may already run its next message."""
     return turn.get("status") == "pending" and turn.get("agent_answer_fixed_at") is not None
 
 USER_NOTE_CHARS = 4000
 HOLD_NOT_DENIABLE = "This pause cannot be declined. Let it continue, write to the agent or stop it."
 HOLD_CHOOSE = "Choose one of the answers, write to the agent or stop it."
 HOLD_NO_CHOICES = "This pause has no answers to choose from. Let it continue, write to the agent or stop it."
-# Updates of a store's time under the account lock (lock_time).
+# Updates of a store's time under the account lock.
 _LOCK_TIMES = threading.Lock()
 
 
@@ -71,20 +64,16 @@ class HoldActionRefused(ValueError):
 
 
 def deniable(hold):
-    """Whether "deny" answers ``hold``: the agent's own question to allow a
-    step or to give a key (agent_ask.py), or a domain it asked for (until
-    2026-11-04, request_domain). A reviewer's halt or a gate goes on, gets a
-    message or stops; before 2026-10-29 a "deny" there went on like
-    "continue", and a gated update_memory ran."""
+    """Whether "deny" answers ``hold``: the agent's own question to allow a step or give a key. A
+    reviewer's halt or a gate goes on, gets a message or stops; a "deny" there must never run the
+    gated step."""
     hold = hold or {}
     return bool(hold.get("domain")) or hold.get("ask") in {"confirm", "secret"}
 
 
 def check_answer(hold, action, choice=None):
-    """HoldActionRefused when ``action`` is no answer to ``hold``: "deny"
-    where it does not decline (deniable), "choose" without one of a choice
-    card's answers, and on a choice card (agent_ask.py) anything but a pick,
-    a message or Stop."""
+    """HoldActionRefused when ``action`` is no answer to ``hold``: "deny" where it does not decline,
+    "choose" without a valid answer, and on a choice card anything but a pick, a message or Stop."""
     from app.services.agent_ask import chosen
     if action == "deny" and not deniable(hold):
         raise HoldActionRefused(HOLD_CHOOSE if (hold or {}).get("ask") == "choice" else HOLD_NOT_DENIABLE)
@@ -103,11 +92,9 @@ def root_usage(root):
 
 
 def expected_charges(root, sessions):
-    """What a call of this run whose cost was lost is expected to have cost,
-    in micro-euros, from the run's measured calls (a function of its step):
-    the dearest of its own session's, whose conversation only grows; else the
-    mean of its kind's sessions (comparison answers, reviewers); else the
-    mean of the run. 0 without a measured call."""
+    """The expected cost in micro-euros of a call whose cost was lost, from the run's measured
+    calls: the dearest of its own session's (whose conversation only grows), else the mean of its
+    kind's sessions, else of the run; 0 without a measured call."""
     def session_of(step):
         return step.rsplit(":", 1)[0]
 
@@ -152,8 +139,8 @@ def compact_root(patch, data):
     previous = data.get("compacted_usage") if data.get("compacted_steps") else None
     compacted = aggregate_usage([previous, *folded] if previous is not None else folded)
     if compacted is None:
-        # Every folded step was unmetered: keep a count-only aggregate, or the
-        # next fold would drop these calls and report a complete usage.
+        # Every folded step was unmetered: keep a count-only aggregate, or the next fold would
+        # report a complete usage.
         compacted = {**{field: None for field in USAGE_FIELDS}, "web_search_requests": None,
                      "complete": False, "cost_complete": False, "measured_calls": 0,
                      "unmetered_calls": len(folded), "cost_source": "catalog", "source": "provider",
@@ -165,18 +152,16 @@ def compact_root(patch, data):
 def _serialized_size(value):
     import json
     return len(json.dumps(value, default=str, ensure_ascii=False).encode("utf-8"))
-# A work log chunk stays well within Firestore's 1 MiB per document: an
-# entry keeps at most agent_work_log.INLINE_CHARS of content inline.
+# Well within Firestore's 1 MiB per document: an entry keeps at most INLINE_CHARS inline.
 WORK_LOG_CHUNK_BYTES = 600_000
-# Chunks a reader fetches at a time until it holds the page it was asked for.
+# Chunks a reader fetches at a time until it holds the page it asked for.
 WORK_LOG_PAGE_CHUNKS = 10
 
 
 def work_log_chunks(entries):
-    """``entries`` (in order) as chunk documents: ``seq`` and ``last_seq``
-    of the entries they hold, ``entries`` themselves, each at most
-    WORK_LOG_CHUNK_BYTES. The same entries make the same documents, so a
-    retried save writes them again, never twice."""
+    """``entries`` as chunk documents of at most WORK_LOG_CHUNK_BYTES with their ``seq`` and
+    ``last_seq``. The same entries make the same documents, so a retried save never writes them
+    twice."""
     import json
     chunks, current, size = [], [], 0
     for entry in entries:
@@ -192,8 +177,8 @@ def work_log_chunks(entries):
 
 
 def work_log_entries(document):
-    """The entries a work log document holds: a chunk's, or itself (one
-    entry per document until 2026-11-01)."""
+    """The entries a work log document holds: a chunk's, or itself (older turns: one entry per
+    document)."""
     document = document or {}
     return list(document["entries"]) if isinstance(document.get("entries"), list) else [document]
 
@@ -201,16 +186,13 @@ def work_log_entries(document):
 class AgentSessionStore:
     @staticmethod
     def _read_all(tx, refs):
-        """``refs`` read in one round trip of transaction ``tx``
-        (chat_store.read_together). Until 2026-10-21 each read was its own
-        round trip: a claim read nine documents one after another while every
-        other call of the account waited for the account lock (agent_journal)."""
+        """``refs`` read in one round trip of ``tx``: a claim read nine documents one after another
+        while every other call of the account waited for its lock."""
         return read_together(refs, tx)
 
     def _agent_transaction(self, uid, operation):
-        # Shared with the pipeline's usage transactions: both write the same
-        # token-account document. How long this store's transactions waited
-        # for it and held it (lock_time, A-T5).
+        # Shared with the pipeline's usage transactions on the same token-account document; this
+        # store measures how long it waited and held it.
         asked = time.monotonic()
         with agent_quota.account_lock(uid):
             got = time.monotonic()
@@ -229,18 +211,14 @@ class AgentSessionStore:
             meter["longest_wait"] = max(meter["longest_wait"], waited)
 
     def lock_time(self):
-        """{calls, waited, held, longest_wait} (seconds) of this store's
-        transactions under agent_quota.account_lock so far. The route makes
-        one store per turn, so it is the turn's (A-T5, since 2026-10-29: up to
-        six reviewers and the agent queue their claims and settlements there,
-        each a Firestore round trip; how much that costs was not measured)."""
+        """{calls, waited, held, longest_wait} in seconds of this store's transactions under the
+        account lock; one store per turn, so it is the turn's."""
         with _LOCK_TIMES:
             return dict(self.__dict__.get("_lock_meter") or {"calls": 0, "waited": 0.0, "held": 0.0,
                                                                "longest_wait": 0.0})
 
     def report_lock_time(self):
-        """The turn's time under the account lock as a metric and one log
-        line with numbers only (AgentLoop.run at its end)."""
+        """The turn's time under the account lock as a metric and one log line with numbers only."""
         meter = self.lock_time()
         if not meter["calls"]:
             return
@@ -325,8 +303,8 @@ class AgentSessionStore:
             tokens, cost = reservation
             daily = daily_snapshot.to_dict() or {}
             kind = (agent.to_dict() or {}).get("kind") if agent else None
-            # The account holds the call's expected cost in micro-euros,
-            # whatever kind of call it is (agent_costs.RunCosts.estimate).
+            # The account holds the call's expected cost in micro-euros, whatever kind of call it
+            # is.
             quota_amount = agent_budget_config.micro_eur(cost)
             daily = agent_quota.reserve(daily, quota_amount, limit=limit, overdraft=overdraft)
             states[step] = "running"
@@ -343,7 +321,7 @@ class AgentSessionStore:
                       "chat_id": chat_id, "turn_id": turn_id, "status": "running",
                       "model": model.snapshot(), "created_at": firestore.SERVER_TIMESTAMP}
             if kind:
-                # The session's kind outlives the chat (scripts/audit_report.py).
+                # The session's kind outlives the chat.
                 record["session_kind"] = kind
             if root.exists:
                 tx.update(root_ref, patch)
@@ -351,13 +329,11 @@ class AgentSessionStore:
             else:
                 tx.set(root_ref, {**record, **patch})
                 tx.update(chat_ref, {"agent_lock_until": data["lease_until"]})
-            # The account's running responses change only with a new run or
-            # an expired lease: a later step of the same run writes nothing
-            # here (2026-11-01; every claim rewrote the map).
+            # The running responses change only with a new run or an expired lease: a later step
+            # writes nothing here.
             if leases != stored_leases:
                 tx.set(active_ref, {"leases": leases})
-            # The call is counted in the day's ledger it reserves from, not
-            # on the user document (agent_quota.count_claim).
+            # Counted in the day's ledger it reserves from, not on the user document.
             tx.set(daily_ref, agent_quota.count_claim(daily))
             return True
         return self._agent_transaction(uid, operation)
@@ -377,16 +353,10 @@ class AgentSessionStore:
         self._agent_transaction(uid, operation)
 
     def save_work_log(self, uid, chat_id, turn_id, entries, *, expires_at, incomplete=False):
-        """Append work log entries of the run (agent_work_log.WorkLog).
-
-        Its own transaction, never behind the account lock: no model step
-        waits for the log. It reads neither the root receipt nor anything
-        else a claim, settlement or session update writes in a hurry: a
-        server transaction locks what it reads, so a log write must never
-        make those wait. The fence: the account is not being deleted, the
-        chat is active and the turn still runs (``pending``; finish_run ends
-        that, so nothing is written after the run). The turn carries the
-        log's expiry for retention and, once an entry was lost,
+        """Append work log entries of the run in their own transaction, never behind the account
+        lock and reading nothing a claim, settlement or session update writes: a server transaction
+        locks what it reads, and a log write must never make those wait. Fenced by account, active
+        chat and pending turn. The turn carries the log's expiry and, once an entry was lost,
         ``work_log_incomplete``."""
         turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
         def operation(tx):
@@ -401,7 +371,7 @@ class AgentSessionStore:
             if turn.get("work_log_expires_at") is None:
                 patch["work_log_expires_at"] = expires_at
             if entries and not turn.get("work_log_chunks"):
-                # Readers take this turn's log by its chunks (read_work_log).
+                # Readers take this turn's log by its chunks.
                 patch["work_log_chunks"] = True
             if incomplete and not turn.get("work_log_incomplete"):
                 patch["work_log_incomplete"] = True
@@ -410,19 +380,16 @@ class AgentSessionStore:
         self._transaction(operation)
 
     def _work_log_turn(self, uid, chat_id, turn_id):
-        """The turn's own stored fields (not its client view), owner-bound by
-        path, of an active chat."""
+        """The turn's own stored fields, owner-bound by path, of an active chat."""
         chat, turn = self._chat_ref(uid, chat_id).get(), self._turn_ref(uid, chat_id, turn_id).get()
         if not chat.exists or (chat.to_dict() or {}).get("status") != "active" or not turn.exists:
             raise ChatNotFound("Chat not found")
         return turn.to_dict() or {}
 
     def read_work_log(self, uid, chat_id, turn_id, *, after=0, limit=100):
-        """The turn's work log entries after ``after``, in order. A turn
-        written in chunks (``work_log_chunks``, since 2026-11-01) is read
-        by the chunks' last entry, which also finds the one that holds
-        ``after + 1``, a few chunks at a time until ``limit`` entries are
-        there; an older turn by its single entry documents."""
+        """The turn's work log entries after ``after``, in order: chunked turns by the chunks' last
+        entry, a few chunks at a time until ``limit`` entries are there; older turns by single entry
+        documents."""
         turn = self._work_log_turn(uid, chat_id, turn_id)
         log = self._turn_ref(uid, chat_id, turn_id).collection("work_log")
         entries = []
@@ -430,10 +397,8 @@ class AgentSessionStore:
         if not chunked:
             query = log.order_by("seq").start_after({"seq": after}).limit(limit + 1)
             entries = [snapshot.to_dict() or {} for snapshot in query.stream()]
-            # A reader that saw the turn just before its first chunked save
-            # finds chunks here: it reads them as chunks. Until 2026-11-03 a
-            # chunk came back as one entry, and the next read after its seq
-            # skipped the entries in it.
+            # A reader that saw the turn just before its first chunked save finds chunks here and
+            # must read them as chunks, or the next read after its seq skips the entries in them.
             chunked = any(isinstance(entry.get("entries"), list) for entry in entries)
         if chunked:
             entries = []
@@ -450,7 +415,7 @@ class AgentSessionStore:
                 "incomplete": bool(turn.get("work_log_incomplete")), "status": turn.get("status")}
 
     def work_log_entry(self, uid, chat_id, turn_id, seq):
-        """One entry with its whole content (agent_work_log.entry_content)."""
+        """One entry with its whole content."""
         from app.services.agent_work_log import entry_content
         turn = self._work_log_turn(uid, chat_id, turn_id)
         log = self._turn_ref(uid, chat_id, turn_id).collection("work_log")
@@ -468,8 +433,7 @@ class AgentSessionStore:
         try:
             return {**entry, "content": entry_content(entry)}
         except FileUnavailable:
-            # The object store no longer holds it (expired, or not configured
-            # here): the saved beginning is all there is.
+            # The object store no longer holds it: the saved beginning is all there is.
             return {**entry, "content_unavailable": True}
 
     @staticmethod
@@ -492,24 +456,11 @@ class AgentSessionStore:
         return result
 
     def publish_agents(self, uid, chat_id, turn_id, *, run_token, updates):
-        """Several session updates of one run in one transaction (agent_journal).
-
-        ``updates``: ``(agent_id, patch, message, event_id)`` in the order
-        their events get their sequence numbers. Returns one entry per update:
-        its event, or the exception that refused this update alone (a limit,
-        a missing assignment, a stopped run for a status that does not end
-        its session); the others are saved all the same, as if written one
-        by one. An event id saved before (a retried ambiguous commit) returns
-        its first commit. A deleted account, chat or closed run refuses the
-        whole call. Until 2026-10-22 every update was its own transaction:
-        six comparison answers starting together queued six writes behind
-        the account lock, each before its model call could be claimed.
-
-        The session remembers the ids of its last updates (``event_ids``,
-        SESSION_EVENT_IDS): a retried id returns the session as that first
-        commit left it. Until 2026-11-01 each event was a document of its own
-        (``agent_events``) that nothing else read: a write and a read more
-        per update, a fifth of a message's writes."""
+        """Several session updates of one run in one transaction. ``updates``: ``(agent_id, patch,
+        message, event_id)`` in sequence order. Returns per update its event or the exception that
+        refused it alone; the others are saved as if written one by one. A deleted account, chat or
+        closed run refuses the whole call. A retried event id (an ambiguous commit) returns the
+        session as the first commit left it (``event_ids``)."""
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
         agent_refs = [self.agent_ref(uid, chat_id, turn_id, agent_id) for agent_id, *_ in updates]
@@ -529,7 +480,7 @@ class AgentSessionStore:
             if data.get("run_token") != run_token:
                 raise TurnStatusConflict("Agent session is closed")
             seq, agents, messages = data.get("event_seq", 0), data.get("agent_count", 0), data.get("message_count", 0)
-            # Sessions as this call leaves them: one updated twice reads its own first update.
+            # One session updated twice reads its own first update.
             sessions = {}
             results = []
             for (agent_id, patch, message, event_id), agent_ref, agent in zip(updates, agent_refs, snapshots):
@@ -580,14 +531,14 @@ class AgentSessionStore:
         if (chat.get("status") != "active" or root.get("run_token") != run_token
                 or root.get("run_status") != "running" or root.get("cancel_requested")):
             raise ProviderCancelled("Agent run stopped")
-        # The root as read: the caller takes the user's notes from it, and
-        # whether the chat holds Google data (AgentLoop._holds_google_data).
+        # The root as read: the caller takes the user's notes from it, and whether the chat holds
+        # Google data.
         root = {**root, "chat_google_data": bool(chat.get("google_data"))}
         now = datetime.now(timezone.utc)
         if root["lease_until"] > now + timedelta(seconds=PRODUCER_RENEW_BEFORE_SECONDS):
             return root
-        # Renew all three fences together, only while this producer still owns
-        # a live lease. A crashed or superseded producer can never resume work.
+        # Renew all three fences together, only while this producer still owns a live lease: a
+        # crashed or superseded producer can never resume work.
         chat_ref, active_ref = self._chat_ref(uid, chat_id), self.active_ref(uid)
         turn_ref = self._turn_ref(uid, chat_id, turn_id)
         def operation(tx):
@@ -599,9 +550,8 @@ class AgentSessionStore:
             leases = dict(active.get("leases") or {})
             if (data.get("cancel_requested") or current_chat.get("status") != "active"):
                 raise ProviderCancelled("Agent run stopped")
-            # Handed over: the run renews only itself, never the chat's lock
-            # (it may belong to the next message) nor a place among the
-            # account's running responses.
+            # Handed over: the run renews only itself, never the chat's lock (maybe the next
+            # message's) nor a running-response slot.
             tail = review_tail(turn)
             if (data.get("run_token") != run_token or data.get("run_status") != "running"
                     or (current_chat.get("agent_turn_id") != turn_id and not tail)
@@ -618,10 +568,9 @@ class AgentSessionStore:
         return root
 
     def set_hold(self, uid, chat_id, turn_id, hold, *, replaces=None):
-        """The run's open hold (a reviewer paused it, agent_audit.AnswerAudit.halt)
-        or None once decided: the decision endpoint checks against it.
-        ``replaces``: clear only while that hold is the stored one, so a
-        late clear never removes a newer hold written in between."""
+        """The run's open hold, or None once decided: the decision endpoint checks against it.
+        ``replaces``: clear only while that hold is the stored one, so a late clear never removes a
+        newer hold."""
         ref = self.receipt_ref(uid, chat_id, turn_id)
 
         def operation(tx):
@@ -634,7 +583,7 @@ class AgentSessionStore:
         return self._agent_transaction(uid, operation)
 
     def open_hold(self, uid, chat_id, turn_id):
-        """The run's open hold (set_hold), or None once it is over or decided."""
+        """The run's open hold, or None once it is over or decided."""
         data = self.receipt_ref(uid, chat_id, turn_id).get().to_dict() or {}
         hold = data.get("hold") or None
         if (data.get("run_status") != "running" or data.get("cancel_requested") or not hold
@@ -643,12 +592,9 @@ class AgentSessionStore:
         return hold
 
     def decide_hold(self, uid, chat_id, turn_id, hold_id, action, text="", choice=None):
-        """The user's decision on an open hold: "continue", "stop" or "steer"
-        (continue with ``text`` as their message into the run, like a note),
-        "deny" where it declines, "choose" with the ``choice`` (an index) on a
-        choice card (check_answer).
-        The run's watcher reads it from the root (AgentLoop._receive_hold);
-        returns the fields saved, for a run in this process (AgentLoop.receive)."""
+        """The user's decision on an open hold ("continue", "stop", "steer" with ``text``, "deny",
+        "choose" with ``choice``), saved on the root for the watcher. Returns the fields saved, for
+        a run in this process."""
         from uuid import uuid4
         ref = self.receipt_ref(uid, chat_id, turn_id)
 
@@ -674,8 +620,7 @@ class AgentSessionStore:
         return self._agent_transaction(uid, operation)
 
     def add_user_note(self, uid, chat_id, turn_id, text):
-        """A message of the user into the running response (AgentLoop
-        takes it before its next step). At most USER_NOTES_MAX per response."""
+        """A message of the user into the running response, at most USER_NOTES_MAX."""
         from uuid import uuid4
         ref = self.receipt_ref(uid, chat_id, turn_id)
 
@@ -705,8 +650,8 @@ class AgentSessionStore:
                 tx.update(ref, {"cancel_requested": True})
             elif (not root and chat.get("status") == "active" and turn.get("status") == "pending"
                     and chat.get("execution_mode") == "agent" and turn.get("execution_mode") == "agent"):
-                # Fence admission in the SAME transaction, even before the
-                # first receipt. Otherwise a claim between two writes loses Stop.
+                # Fence admission in the same transaction, even before the first receipt, or a claim
+                # between two writes loses Stop.
                 tx.update(turn_ref, {"status": "failed", "error_code": "cancelled",
                     "agent_failure": {"code": "cancelled", "error": "Response stopped before a model call started."},
                     "updated_at": firestore.SERVER_TIMESTAMP})
@@ -771,8 +716,8 @@ class AgentSessionStore:
         def fence_expired(tx):
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
             current = ref.get(transaction=tx).to_dict() or {}
-            # A renewal can commit after the initial read. Check expiration and
-            # fence the producer atomically before recovering any of its calls.
+            # A renewal can commit after the initial read: check expiry and fence the producer
+            # atomically before recovering any of its calls.
             if (current.get('run_status') != 'running' or not (current.get('policy') or {}).get('delegation')
                     or current['lease_until'] > datetime.now(timezone.utc)):
                 return current, False, False
@@ -796,8 +741,8 @@ class AgentSessionStore:
                     session = sessions.get(aid) or {}
                     usage = session.get('usage') or {}
                     steps = [key for key in root['step_states'] if key.startswith(f'agent:{aid}:')]
-                    # A single terminal call's saved session is an exact receipt.
-                    # Never distribute a multi-call aggregate across missing steps.
+                    # A single terminal call's saved session is an exact receipt; never distribute
+                    # an aggregate across missing steps.
                     if (len(steps) == 1 and session.get('status') in {'completed', 'failed', 'stopped'}
                             and usage.get('complete') is True and usage.get('measured_calls') == 1
                             and not usage.get('unmetered_calls') and agent_quota.measured_charge(usage) is not None):
@@ -812,11 +757,11 @@ class AgentSessionStore:
                 usage = aggregate_usage([value for step, value in settled.get("step_usage", {}).items()
                                          if step.startswith(f"agent:{snap.id}:")])
                 if settled.get("compacted_steps"):
-                    # Earlier steps may be compacted out of the root; each
-                    # step's own immutable receipt is authoritative.
+                    # Earlier steps may be compacted out of the root; each step's own receipt is
+                    # authoritative.
                     usage = aggregate_usage(self._worker_receipt_usage(uid, chat_id, turn_id, snap.id))
-                # A dead process cannot report its final monotonic duration.
-                # Preserve the last durable measurement as an explicit lower bound.
+                # A dead process cannot report its final duration: the last durable measurement is
+                # an explicit lower bound.
                 observed = data.get("updated_at") or data.get("created_at")
                 self.publish_agent(uid, chat_id, turn_id, run_token=root["run_token"], agent_id=snap.id,
                                    patch={"status": "stopped", "usage": usage,

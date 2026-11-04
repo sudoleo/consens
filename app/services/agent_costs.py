@@ -30,14 +30,11 @@ def provider_cost_nanos(raw):
     return None
 
 
-# What a search round is expected to add to a call. Measured 2026-10-01 per
-# round: OpenAI's own search up to ~11k tokens, Exa (5 x 2,000 characters)
-# ~2.5k, Anthropic ~2k, Google grounding ~0 (billed per request); about the
-# mean of those families.
+# Expected input per search round: about the mean of the families (measured: OpenAI's own search up
+# to ~11k tokens, Exa ~2.5k, Anthropic ~2k, Google grounding ~0, billed per request).
 SEARCH_ROUND_TOKENS = 6_000
-# Output a call is expected to write until its run has measured calls of its
-# kind on its model: about one routing step with reasoning (prod 2026-10-07,
-# Sonnet 5.5: 3,808 and 3,998 tokens).
+# Until the run has measured calls of its kind on its model: about one routing step with reasoning
+# (measured on Sonnet 5.5: about 3,900 tokens).
 OUTPUT_START_TOKENS = 4_096
 
 
@@ -46,11 +43,8 @@ def search_cost_nanos(model):
     return provider_cost_nanos(model.web_search_usd_per_request) or 7_000_000
 
 
-# A page read (openrouter:web_fetch, agent_read_source) adds at most its
-# max_content_tokens to the input of the continuation that reads it; the cap
-# is approximate, hence the margin (live 2026-10-10: a PDF cut at 4,000 tokens
-# arrived as 4,063 input tokens with the prompt). Exa charges $0.001 per page,
-# outside the cost OpenRouter reports for the call.
+# A page read adds at most its max_content_tokens to the reading continuation's input; the cap is
+# approximate, hence the margin. Exa's $0.001 per page is outside the cost OpenRouter reports.
 FETCH_TOKEN_MARGIN = 1.25
 FETCH_COST_NANOS = 1_000_000
 
@@ -76,16 +70,11 @@ def _mean(values):
 
 
 class RunCosts:
-    """What one run's calls are expected to cost, and what they cost.
-
-    A call is admitted at what it is
-    expected to cost (``estimate``), and settlement books what it cost. The
-    expectation learns from the run's own receipts (``reconcile``): the
-    prompt prefix the provider held in its cache after the session's last
-    call is priced as a cache read, the output and the search rounds are the
-    means its kind of call measured on that model so far. A call that costs
-    more than expected may leave the account a little below zero; the next
-    admission then fails."""
+    """What one run's calls are expected to cost, and what they cost. A call is admitted at its
+    ``estimate``; the expectation learns from the run's receipts: the prefix the provider cached
+    after the session's last call is priced as a cache read, output and search rounds are the means
+    its kind measured on that model. A call dearer than expected may leave the account a little
+    below zero; the next admission then fails."""
 
     def __init__(self):
         from app.services.agent_tokens import TokenMemo
@@ -101,14 +90,13 @@ class RunCosts:
         self._lock = threading.RLock()
 
     def inputs(self, messages, tools=(), request_config=None):
-        """Estimated input tokens of a request (agent_tokens.input_estimate),
-        each message counted once per run."""
+        """Estimated input tokens of a request, each message counted once per run."""
         from app.services.agent_tokens import input_estimate
         return input_estimate(messages, tools, request_config, memo=self.memo)
 
     def fit(self, model, messages, tools=()):
-        """``model`` with its output limit within the context window the
-        input leaves. The window is a hard limit whatever the allowance."""
+        """``model`` with its output limit within the context window the input leaves: a hard limit
+        whatever the allowance."""
         from app.services.agent_tokens import minimum_output
         room = model.context_length - self.inputs(messages, tools, model.request_config)
         if room < minimum_output(model):
@@ -116,8 +104,8 @@ class RunCosts:
         return model if room >= model.max_output_tokens else replace(model, max_output_tokens=room)
 
     def rewritten(self, session):
-        """The session's conversation changed before its end (a summary, a
-        compaction, new tools): its next call finds no cached prefix."""
+        """The session's conversation changed before its end (summary, compaction, new tools): its
+        next call finds no cached prefix."""
         with self._lock:
             self._cached.pop(session, None)
 
@@ -138,9 +126,8 @@ class RunCosts:
             return tokens, cost
 
     def estimate(self, model, messages, tools=(), *, native_searches=0, session=None, kind="agent"):
-        """Expected tokens and cost (nano-USD) of one call. ``session``: the
-        conversation the call continues (the agent's steps, a reviewer's
-        rounds); ``kind``: what sort of call it is, for the measured means."""
+        """Expected tokens and cost (nano-USD) of one call. ``session``: the conversation the call
+        continues; ``kind``: its sort, for the measured means."""
         from app.services.agent_tokens import minimum_output
         inputs = self.inputs(messages, tools, model.request_config)
         if inputs + minimum_output(model) > model.context_length:
@@ -152,7 +139,7 @@ class RunCosts:
         rounds = min(native_searches, _mean(searched) if searched else 1) if native_searches else 0
         pages, fetched = fetch_bounds(tools)
         added = rounds * SEARCH_ROUND_TOKENS + fetched
-        # Fresh input at what writing it to the cache costs where that is dearer (Anthropic).
+        # Fresh input at the cache write price where that is dearer (Anthropic).
         fresh = max(Decimal(model.input_usd_per_million), Decimal(model.cache_write_usd_per_million or 0))
         cost = _nanos(cached * Decimal(model.cache_read_usd_per_million) + (inputs - cached + added) * fresh
                       + output * Decimal(model.output_usd_per_million))
@@ -165,8 +152,8 @@ class RunCosts:
             tokens, cost = remaining_reservation(reservation, usage)
             self.tokens += tokens - reservation[0]
             self.cost += cost - reservation[1]
-            # Missing usage keeps the full reservation. Never guess a zero cost.
-            # Nor learn from a call that never reached the model (no input).
+            # Missing usage keeps the full reservation, never a guessed zero; nor learn from a call
+            # that never reached the model.
             if model is None or not usage or not usage.get("complete", True) or not usage.get("input_tokens"):
                 return
             if session is not None:

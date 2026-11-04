@@ -85,6 +85,13 @@ Text-, Stil- oder Dokumentationskorrekturen genügt der betroffene Kontext.
 (siehe Abschnitt „Bei Änderungen aktualisieren" dort). Die Karte muss zum Code
 passen — bei Abweichung gilt der Code, und die Karte wird korrigiert.
 
+**Kommentare:** Wenige, und nur für ein nicht offensichtliches Warum (eine
+Randbedingung, eine Messung, ein Vertrag mit Provider oder Browser). Keine
+Geschichte im Code: keine Daten, kein „bis/seit …“, keine Namen, Audit-Kürzel
+oder Vorfälle; dafür gibt es Git. Docstrings: ein Satz, dazu nur das nötige
+Warum. Wer Verhalten ändert, löscht oder korrigiert dabei veraltete Kommentare,
+Docstrings und Doku-Absätze, statt Nachträge anzuhängen.
+
 **Schnell-Hinweise:**
 - Frontend-Module reden über `window.*` / `window.App` (keine ES-Imports). Die
   Script-Ladereihenfolge ist ein Vertrag — für `/app` steht sie in
