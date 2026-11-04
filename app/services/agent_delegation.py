@@ -1059,8 +1059,20 @@ class DelegationLoop(AgentLoop):
         from app.services.agent_tokens import input_estimate
         model = self.routing_lighter or self.model
         inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
+        # A long run ends once its answer no longer fits (_long_run_limit):
+        # its summary comes before that.
+        end_at = (model.context_length * LONG_RUN_CONTEXT_SHARE - answer_output_limit(model)
+                  if self._long_run() else None)
         return "run" if agent_compaction.run_summary_due(inputs, model.context_length, self.messages,
-                                                         self.turn_start) else None
+                                                         self.turn_start, end_at=end_at) else None
+
+    def _answer_fits(self):
+        """Whether the answer still fits beside the run as it stands
+        (LONG_RUN_CONTEXT_SHARE of the window, as _long_run_limit)."""
+        from app.services.agent_tokens import input_estimate
+        model = self.routing_lighter or self.model
+        inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
+        return inputs + answer_output_limit(model) <= model.context_length * LONG_RUN_CONTEXT_SHARE
 
     def _summarize(self, index, steps, search):
         """Compaction as Claude Code and Codex do it (agent_compaction.py,
@@ -3259,9 +3271,18 @@ class DelegationLoop(AgentLoop):
                     self._check()
                     # Before the limits: they measure what the next step sends.
                     self._compact()
-                    index = yield from self._summarize(index, steps, {"searches_enabled": True,
-                                                                      "search_rounds": search_rounds})
+                    # A turn that ends here at its time, step or allowance
+                    # limit writes its answer from the whole run while that
+                    # fits, without a summary first: its time and cost go to
+                    # the answer (bug hunt 2026-11-04). A full context is
+                    # what a summary is for.
                     limit = self._turn_limit()
+                    if limit in (None, TURN_CONTEXT_LIMIT) or not self._answer_fits():
+                        summarized_at = index
+                        index = yield from self._summarize(index, steps, {"searches_enabled": True,
+                                                                          "search_rounds": search_rounds})
+                        if index != summarized_at:
+                            limit = self._turn_limit()
                     if limit:
                         # The wrap-up takes this unused step index: model
                         # steps are claimed without gaps.

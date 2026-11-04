@@ -538,12 +538,17 @@ def history_keep(sizes):
     return kept
 
 
-def run_summary_due(inputs, context_length, messages, start):
+def run_summary_due(inputs, context_length, messages, start, *, end_at=None):
     """Whether the run's own steps ``messages[start:]`` are summarized before
     its next step, which would send ``inputs`` tokens. Right after a summary
     the run's own part is small, so the next one waits until it has grown
-    back (RUN_SUMMARY_OWN_SHARE)."""
+    back (RUN_SUMMARY_OWN_SHARE). ``end_at``: the size at which the run would
+    end because its answer no longer fits (a long run, LONG_RUN_CONTEXT_SHARE
+    less the answer's allowance); the summary comes before it. Without it
+    Haiku 4.5 ended at 96k before its summary at 100k (bug hunt 2026-11-04)."""
     above = min(RUN_SUMMARY_ABOVE_TOKENS, int(context_length * RUN_SUMMARY_WINDOW_SHARE))
+    if end_at is not None and end_at > 0:
+        above = min(above, int(end_at))
     if inputs <= above or not any(message.get("role") == "assistant" for message in messages[start:]):
         return False
     return own_chars(messages, start) >= own_chars(messages, 0) * RUN_SUMMARY_OWN_SHARE

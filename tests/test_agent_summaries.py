@@ -7,14 +7,15 @@ No test calls a provider.
 """
 import json
 
-from app.services import agent_compaction
+from app.services import agent_compaction, agent_delegation
 from app.services.agent_compaction import (HISTORY_SUMMARY_OPEN, HISTORY_SUMMARY_PARTIAL, HISTORY_SUMMARY_REQUEST,
                                            RUN_SUMMARY_OPEN, RUN_SUMMARY_REQUEST, SUMMARY_CLOSE, history_keep,
                                            is_summary, run_summary_due, run_tail, summary_message, summary_text)
 from app.services.agent_delegation import LONG_RUN_CONTEXT_SHARE, SUMMARY_TEXTS, DelegationLoop
 from app.services.agent_runs import strip_app_context
 from app.services.agent_work_log import context_data
-from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
+from app.services.llm.agent_client import (AgentCompletion, AgentModel, answer_output_limit, measured_usage,
+                                           resolve_agent_model)
 from test_agent_runs import UID, _answered, pending, receipt, store  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, _admin_allowance, fake_vm, vm_loop  # noqa: F401  (fixtures)
 
@@ -288,7 +289,7 @@ def test_a_long_run_summarizes_its_steps_and_goes_on(store, fake_vm, monkeypatch
     loop = vm_loop(store, script)
     seen = []
 
-    def due(inputs, context_length, messages, start):
+    def due(inputs, context_length, messages, start, end_at=None):
         # After the third command, once.
         commands = sum(1 for m in messages[start:] if m.get("role") == "tool")
         seen.append(commands)
@@ -328,8 +329,8 @@ def test_a_run_summary_that_does_not_work_out_is_not_tried_again(store, fake_vm,
     script = Summarizer(calls, reply=tool_call_instead)
     loop = vm_loop(store, script)
     monkeypatch.setattr(agent_compaction, "run_summary_due",
-                        lambda inputs, context_length, messages, start: any(m.get("role") == "tool"
-                                                                            for m in messages[start:]))
+                        lambda inputs, context_length, messages, start, end_at=None: any(
+                            m.get("role") == "tool" for m in messages[start:]))
     list(loop.run())
     assert len(script.summary_requests()) == 1
     turn = stored(store, loop)
@@ -343,6 +344,54 @@ def test_a_run_is_summarized_before_it_would_end_at_the_window():
     """Before summaries a long run at LONG_RUN_CONTEXT_SHARE of the window
     wrote its answer (TURN_CONTEXT_LIMIT); the summary comes first."""
     assert agent_compaction.RUN_SUMMARY_WINDOW_SHARE < LONG_RUN_CONTEXT_SHARE
+    # Also where the answer's allowance is large: a long run of Haiku 4.5
+    # ends at 0.8 x 200k less its answer, before 100k (bug hunt 2026-11-04).
+    model = resolve_agent_model("claude-haiku-4-5")
+    end_at = model.context_length * LONG_RUN_CONTEXT_SHARE - answer_output_limit(model)
+    assert end_at < agent_compaction.RUN_SUMMARY_ABOVE_TOKENS
+    messages = run_messages(4, 40_000)
+    assert not run_summary_due(int(end_at) - 1, model.context_length, messages, 2)
+    assert run_summary_due(int(end_at) + 1, model.context_length, messages, 2, end_at=end_at)
+    assert not run_summary_due(int(end_at), model.context_length, messages, 2, end_at=end_at)
+
+
+def test_a_long_run_tells_its_summary_where_it_would_end(store, fake_vm, monkeypatch):
+    seen = []
+
+    def due(inputs, context_length, messages, start, end_at=None):
+        seen.append(end_at)
+        return False
+    monkeypatch.setattr(agent_compaction, "run_summary_due", due)
+    loop = vm_loop(store, Summarizer([[("vm_exec", {"command": "make"})]]))
+    list(loop.run())
+    model = loop.routing_lighter or loop.model
+    # Before the VM started the run is no long run yet.
+    assert seen[0] is None
+    assert seen[-1] == model.context_length * LONG_RUN_CONTEXT_SHARE - answer_output_limit(model)
+
+
+def test_a_run_ending_at_its_step_limit_answers_without_a_summary_first(store, fake_vm, monkeypatch):
+    """The summary of a run that ends anyway cost time and money and the
+    answer came from the shorter version (bug hunt 2026-11-04)."""
+    calls = [[("vm_exec", {"command": f"make step{n}"})] for n in range(3)]
+    script = Summarizer(calls)
+    loop = vm_loop(store, script)
+    monkeypatch.setattr(agent_compaction, "run_summary_due",
+                        lambda inputs, context_length, messages, start, end_at=None: sum(
+                            1 for m in messages[start:] if m.get("role") == "tool") >= 3)
+    loop._turn_limit = lambda: agent_delegation.TURN_STEP_LIMIT if loop.routing_steps >= 3 else None
+    list(loop.run())
+    assert script.summary_requests() == []
+    turn = stored(store, loop)
+    assert turn["status"] == "completed" and turn["assistant_response"] == ANSWER
+    # A context that no longer holds the answer is still summarized first.
+    script = Summarizer(calls)
+    loop = vm_loop(store, script, request_id="two")
+    loop._turn_limit = lambda: agent_delegation.TURN_STEP_LIMIT if loop.routing_steps >= 3 else None
+    # It does not fit until the run is summarized.
+    loop._answer_fits = lambda: bool(loop.run_summaries)
+    list(loop.run())
+    assert len(script.summary_requests()) == 1
 
 
 # --- As Claude Code and Codex keep it (2026-11-03) --------------------------------
@@ -385,7 +434,7 @@ def test_a_run_summary_keeps_the_users_messages_and_the_apps_state(store, fake_v
     script = Summarizer(calls)
     loop = vm_loop(store, script)
 
-    def due(inputs, context_length, messages, start):
+    def due(inputs, context_length, messages, start, end_at=None):
         commands = sum(1 for m in messages[start:] if m.get("role") == "tool")
         if commands >= 4 and not loop.run_summaries:
             # The user wrote into the run after its first steps.

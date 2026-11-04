@@ -4638,6 +4638,13 @@ sagt es („Summarizing …“, `SUMMARY_TEXTS`), das Arbeitsprotokoll vermerkt
   der nächsten Nachricht (`work_record`) und die Belege einer Watch kennen
   weiter jeden Aufruf (`own_messages`). So endet ein langer Lauf nicht mehr bei
   80 % des Fensters, und jeder weitere Schritt sendet nur noch einen Bruchteil.
+  Bei einem langen Lauf liegt die Marke höchstens dort, wo er sonst endete
+  (80 % des Fensters abzüglich der Antwort-Erlaubnis; ohne das endete Haiku 4.5
+  bei 96k, vor seiner Zusammenfassung bei 100k). Erreicht ein Lauf seine Zeit-,
+  Schritt- oder Kontingentgrenze, schreibt er die Antwort ohne Zusammenfassung
+  vorab aus dem ganzen Lauf, solange sie in diese 80 % passt
+  (`_answer_fits`); zusammengefasst wird nur, wenn er weiterarbeitet oder sie
+  nicht mehr passt.
 
 Eine Zusammenfassung ist nie Nutzertext (`is_summary`: kein Memory-Beleg,
 im Arbeitsprotokoll Daten des Agenten). Was nicht klappt (kein Text, zu kurz,
