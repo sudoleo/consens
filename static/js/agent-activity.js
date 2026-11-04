@@ -1249,8 +1249,8 @@
   // A reviewer's halt (agent_audit.py): who paused the work, why (the
   // reviewer's own sentence) and what the user decided (agent-chat.js
   // renderHold has the card).
-  // "unchecked" (agent_gate.py, since 2026-10-27): a step that acts outside
-  // the workspace that not every reviewer could check before it ran.
+  // "unchecked": a pause of a saved turn from when calls outside the
+  // workspace waited for the reviewers and not every one could check it.
   const holdKinds = { safety: 'Security-critical step', harm: 'Possible damage', off_goal: 'Far off your request',
     injection: 'Prompt injection', unchecked: 'Not checked', domain: 'Network access' };
   const holdStates = { waiting: 'Waiting for your decision', continue: 'You let the work go on',

@@ -8,6 +8,7 @@ the promised 24 hours, one failing deadline never stops the sweep, Compare
 chats are deleted without receipt reads, and no bookmark binds to one.
 """
 from datetime import timedelta
+import json
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -19,7 +20,7 @@ import pytest
 from app.api.routers import bookmarks as bookmarks_router
 from app.core.rate_limit import limiter
 from app.services import chat_store
-from app.services.agent_audit import tool_brief
+from app.services.agent_audit import BRIEF_WORKSPACE, tool_brief
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_vm_tools import OPEN_WORKSPACE
 from app.services.chat_store import (TEMPORARY_CHAT_DELETED_WITHIN, TEMPORARY_CHAT_RETRY, TEMPORARY_CHAT_TTL,
@@ -78,9 +79,14 @@ def test_workspace_reviewers_start_once_it_opened_and_know_its_rules(store):
     try:
         loop._open_workspace()
         assert auditor.sessions
-        assert all(line in auditor._brief_parts["instructions"] for line in tool_brief(["vm_exec", "ask_user"]))
+        # The brief has the workspace's tools as the app describes them, and its facts.
+        assert auditor._brief_parts["tools"] == tool_brief(loop.registry)
+        assert {"vm_exec", "ask_user"} <= set(auditor._brief_parts["tools"])
+        assert BRIEF_WORKSPACE in auditor._brief_parts["instructions"]
         opened = [(entry, text) for entry, text in loop.work_log.entries_after(0) if entry.get("name") == "workspace_opened"]
-        assert len(opened) == 1 and tool_brief(["vm_exec"])[0] in opened[0][1]
+        assert len(opened) == 1
+        content = json.loads(opened[0][1])
+        assert content == {"text": BRIEF_WORKSPACE, "tools": {"ask_user": "ask_user.", "vm_exec": "vm_exec."}}
     finally:
         loop.comparison.close()
 

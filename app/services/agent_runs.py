@@ -543,8 +543,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     receipt_patch[field] = getattr(completion, field)
             review_round = getattr(completion, "review_round", None)
             if isinstance(review_round, str) and review_round:
-                # A reviewer's call: live, gate, final, repair
-                # or hedge (agent_audit; DelegationLoop.worker_completion).
+                # A reviewer's call: live, final, repair or hedge
+                # (agent_audit; DelegationLoop.worker_completion).
                 receipt_patch["round"] = review_round
             charged = agent_quota.measured_charge(usage)
             if daily_ref and charged is not None:
@@ -713,8 +713,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     # What the next message is told this one did (messages).
                     patch["agent_work_record"] = completion.work_record
                 if getattr(completion, "holds", None):
-                    # The turn's pauses (DelegationLoop._end_hold): kind, gate,
-                    # ask, domain, reviewer, decision and seconds, no reasons.
+                    # The turn's pauses (DelegationLoop._end_hold): kind, ask,
+                    # domain, reviewer, decision and seconds, no reasons.
                     patch["agent_holds"] = completion.holds
                 if isinstance(getattr(completion, "wrap_up", None), dict):
                     # Which limit ended its work (DelegationLoop._wrap_up):

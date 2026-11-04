@@ -20,7 +20,7 @@ from PIL import Image
 from app.services import agent_vm_tools, agent_web_images, picture_search, prompt_defaults, watch_images
 from app.services.agent_web_images import INTRO, encode, fetch_picture, page_picture, page_words
 from test_agent_audit import Audit, audit_loop
-from test_agent_gate import go, replies
+from test_agent_outward_calls import calm, replies
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 
 PAGE = "https://liquipedia.net/hearthstone/Jeef"
@@ -181,7 +181,7 @@ def test_the_agent_looks_first_and_only_what_it_shows_lands_under_the_answer(sto
                    step_args={0: {"urls": [PAGE, FOUND, blocked, PAGE]}, 1: {"urls": [PAGE]},
                               2: {"picture": "p1", "caption": "Jeef at Lobby Legends"}, 3: {"picture": "p1"},
                               4: {"picture": "p9"}}, live={})
-    script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
+    script.live.update(anthropic=replies(script, "anthropic", calm), openai=replies(script, "openai", calm))
     loop = audit_loop(store, script)
     # No block of their own (2026-10-28): the descriptions say what they do,
     # and the answer section that a picture shows only where the agent places

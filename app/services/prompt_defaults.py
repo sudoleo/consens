@@ -13,8 +13,8 @@
 # principles, and the facts of the app the model cannot know (Max: no
 # commands or set ways, the model decides with its own judgment). Everything
 # else is a fact in its block or a tool's description, and what must hold is
-# enforced by the app (reviewers' gate, closed network, cards instead of
-# writes). Before, separate rules said the same in many places. The fourth
+# enforced by the app (closed network, the user's yes for a domain, cards
+# instead of writes). Before, separate rules said the same in many places. The fourth
 # principle (2026-10-30, Max): nothing that harms others or consens.io,
 # whatever the user asks; one of the four the user's yes does not lift. The
 # app's hard limits (token account, VM time, the closed workbench) hold where

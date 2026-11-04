@@ -15,11 +15,9 @@ Contracts that are design, not convenience:
 2. **The user sees every change.** Agent decides what to keep, with search
    results, pages or files in view or not: each change shows under the
    answer with Undo, and Settings > Memory (edit, delete, Undo) is the
-   backstop. Until 2026-11-02 outside content in view locked memory for the
-   rest of the message (with reviewers since 2026-10-28 their gate,
-   agent_gate.outward "memory"); the agent searches in nearly every first
-   step, and an opted-in account got not a single memory in a month (Max:
-   remove the lock). Until 2026-10-28 every change carried ``evidence``, a
+   backstop. Outside content in view locks nothing: the agent searches in
+   nearly every first step, and a lock kept an opted-in account's memory
+   empty. Until 2026-10-28 every change carried ``evidence``, a
    verbatim quote of the user's own words: it kept preferences the user never
    put into words out. ``evidence_matches`` and ``user_words`` remain for the
    settings tool (agent_settings.py) and the user's links

@@ -24,10 +24,9 @@ agent asks, and the run pauses on a card above the field
   a person or a bot?", the card said Allow or Don't allow, and from
   "allowed" it guessed the person.
 - none of these: the user allows or declines a step before the agent takes
-  it, such as sending, posting, booking or deleting in their name. This took
-  the place of the reviewers' gate on every browser click (agent_gate.py):
-  the acting model knows what a step does in the user's name, and the user
-  decides, not a cheaper model on every click (Max, 2026-10-29).
+  it, such as sending, posting, booking or deleting in their name: the
+  acting model knows what a step does in the user's name, and the user
+  decides, not a reviewer on every click.
 
 The user can also take over without being asked: the agent's next call into
 the workspace then waits the same way (DelegationLoop._takeover_wait, card
