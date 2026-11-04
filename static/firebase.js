@@ -3296,7 +3296,10 @@ window.openBookmark = async function (bookmarkId) {
       const fresh = await loadBookmarkView(bookmarkId);
       const stillShown = shownEpoch === bookmarkViewEpoch && isCurrentAuthenticatedUser(requestUid, requestGeneration)
         && bookmarkWriteAllowed(requestUid, bookmarkId);
-      if (!stillShown) return;
+      // A transcript that failed to load says nothing new: the full view on
+      // screen stays, and so does its cache entry (until 2026-11-04 the
+      // fallback without the earlier messages was drawn over it).
+      if (!stillShown || fresh.conversationLoadFailed) return;
       if (bookmarkViewSignature(fresh) !== bookmarkViewSignature(cached)) {
         loadSingleBookmarkUI(fresh.bookmark, fresh.turns, { conversationLoadFailed: fresh.conversationLoadFailed,
           running: fresh.running, keepComposer: true });

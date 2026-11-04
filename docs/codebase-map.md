@@ -6696,6 +6696,8 @@ setzt ein hängendes `waiting/running` der Passage auf `failed`/`cancelled`
   `upsertBookmarkMeta`, Löschen und `bookmarkUi.invalidate` werfen ihn raus)
   steht sofort da und wird im Hintergrund geprüft; nur eine echte Änderung
   (`bookmarkViewSignature`) rendert ihn neu, ohne die Leseposition zu bewegen.
+  Eine Prüfung, deren Transkript nicht lädt, ändert seit 2026-11-04 nichts
+  (vorher zeichnete sie den Rückfall ohne frühere Nachrichten darüber).
   Der Chat, der schon auf dem Schirm steht (seine Zeile erneut, „…“ → Share),
   wird seit 2026-10-31 gar nicht neu gezeichnet, nur geprüft: Folgefrage,
   Zitat und Anhänge im Composer bleiben. Zeichnet die Prüfung einen Chat
