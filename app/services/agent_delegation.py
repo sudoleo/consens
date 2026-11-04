@@ -2465,9 +2465,12 @@ class DelegationLoop(AgentLoop):
         if auditor is None or not auditor.sessions or not getattr(value, "tool_calls", None):
             return None
         from app.services.agent_gate import outward
-        # A call past the step's limit never runs (CALL_OVER_LIMIT): nothing to check.
+        # A call past the step's limit never runs (CALL_OVER_LIMIT), nor one
+        # of a tool the account lacks (request_domain without Pro: "unknown
+        # tool", bug hunt 2026-11-03): nothing to check.
         over_limit = getattr(value, "over_limit_ids", None) or set()
-        calls = [call for call in value.tool_calls if call["id"] not in over_limit and outward(call)]
+        calls = [call for call in value.tool_calls if call["id"] not in over_limit and outward(call)
+                 and (call.get("function") or {}).get("name") in self.registry.tools]
         return auditor.open_gate(calls, value.step_id) if calls else None
 
     def _gate_wait(self, gate):

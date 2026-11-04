@@ -585,3 +585,21 @@ def test_a_memory_needs_no_quote(store):
     assert [item["text"] for item in repo(store).get(UID)[0]] == ["Prefers short answers."]
     tool = next(t for t in loop.registry.tools.values() if t.name == "update_memory")
     assert "evidence" not in json.dumps(tool.schema()) and "can undo it" in tool.description
+
+
+def test_a_request_for_a_domain_without_the_tool_opens_no_gate(store):
+    """An account without request_domain (Free) whose model calls it anyway
+    opened a paid gate round and, on a halt or silence, a card whose yes ended
+    in "unknown tool" (bug hunt 2026-11-03; 9dffb7d3 closed only the domain
+    card). Now the call gets its refusal at once."""
+    script = Audit(tool_steps=1, step_tools={0: "request_domain"},
+                   step_args={0: {"domain": "api.example.com", "reason": "Docs"}})
+    script.live.update(anthropic=replies(script, "anthropic", halt), openai=replies(script, "openai", halt))
+    loop = audit_loop(store, script)
+    assert "request_domain" not in loop.registry.tools
+    events = list(loop.run())
+    assert not getattr(script, "gate_searches", {})
+    assert not [e for e in events if e.get("type") == "hold"]
+    [result] = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
+    assert "unknown tool" in result["error"]
+    assert saved(store, loop)["status"] == "completed"
