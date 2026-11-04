@@ -49,22 +49,49 @@ def root(loop):
     loop.claimed = True
 
 
-def test_screenshot_sized_prompt_fits_20933_tokens_without_byte_reservation(store):
+def expected(loop, searches=1):
+    """What the loop's first step is expected to cost, in micro-euros."""
+    from app.services.agent_budget_config import micro_eur
+    from app.services.agent_delegation import AGENT_SESSION
+    from app.services.agent_tools import search_tools
+    model = loop._routing_model()
+    tools = [*loop.registry.schemas, *search_tools(model, searches)]
+    return micro_eur(loop.costs.estimate(model, loop.messages, tools, native_searches=searches,
+                                         session=AGENT_SESSION)[1])
+
+
+def test_a_screenshot_sized_prompt_reserves_its_expected_cost_with_its_search(store):
+    observed, held = [], []
+    class Capture(Completion):
+        def stream(self, **kwargs):
+            observed.append(kwargs)
+            held.append(store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["quota_reserved"])
+            yield from super().stream(**kwargs)
+    loop = chat_loop(store, Capture)
+    loop.messages.append({"role": "user", "content": "Vergleiche die Ergebnisse und belege die Unsicherheit. " * 400})
+    amount = expected(loop)
+    ref = quota(store, amount)
+    list(loop.run())
+    # Exactly what it is expected to cost fits: the whole step, its search included.
+    assert len(observed) == 1 and observed[0]["native_searches"] == 1 and held == [amount]
+    assert observed[0]["model"].max_output_tokens == loop._routing_model().max_output_tokens
+    assert ref.get().to_dict()["reserved"] == 0
+    assert ref.get().to_dict()["used"] == 250000 - amount + 150
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
+def test_a_call_that_does_not_fit_is_refused_never_sent_smaller(store):
     observed = []
     class Capture(Completion):
         def stream(self, **kwargs):
             observed.append(kwargs)
             yield from super().stream(**kwargs)
     loop = chat_loop(store, Capture)
-    loop.messages.append({"role": "user", "content": "Vergleiche die Ergebnisse und belege die Unsicherheit. " * 400})
-    old = input_bound(loop.messages, loop.registry.schemas) + loop.model.max_output_tokens
-    assert old > 26283
-    ref = quota(store, 20933)
-    list(loop.run())
-    assert len(observed) == 1 and observed[0]["native_searches"] == 0
-    assert ref.get().to_dict()["reserved"] == 0
-    assert ref.get().to_dict()["used"] == 250000 - 20933 + 150
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+    ref = quota(store, expected(loop) - 1)
+    with pytest.raises(agent_quota.AgentTokenBudgetExceeded):
+        list(loop.run())
+    assert observed == [] and loop.costs.calls == 0
+    assert ref.get().to_dict().get("reserved", 0) == 0
 
 
 @pytest.mark.parametrize("text", ["Deutsche Umlaute: Größe und äußere Ähnlichkeit. ", "中文问题与回答。", "🚵🏽‍♀️⚡", "<|endoftext|>"])
@@ -79,38 +106,12 @@ def test_offline_counting_accepts_unicode_and_special_token_literals(text, monke
     assert input_estimate(messages, request_config={"response_format": {"schema": text * 500}}) > count
 
 
-def test_small_remaining_budget_sets_provider_and_receipt_output_cap(store):
-    observed = []
-    class Capture(Completion):
-        def stream(self, **kwargs):
-            observed.append(kwargs["model"])
-            yield from super().stream(**kwargs)
-    loop = chat_loop(store, Capture)
-    inputs = input_estimate(loop.messages, loop.registry.schemas, loop.model.request_config)
-    # Include the small notice added when optional search is unavailable.
-    ref = quota(store, inputs + 900)
-    list(loop.run())
-    assert len(observed) == 1 and 256 <= observed[0].max_output_tokens < 1000
-    saved = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
-    assert saved["model"]["max_output_tokens"] == observed[0].max_output_tokens
-    assert saved["quota_reserved"] <= inputs + 900
-    assert ref.get().to_dict()["reserved"] == 0
-    assert totals(store)["calls"] == loop.costs.calls == 1
-
-
-def test_search_does_not_reserve_its_results_before_the_search(store):
-    observed = []
-    class Capture(Completion):
-        def stream(self, **kwargs):
-            observed.append(kwargs["native_searches"])
-            yield from super().stream(**kwargs)
-    from app.services.llm.agent_client import ROUTING_REASONING_HEADROOM
-    loop = chat_loop(store, Capture)
-    # Fits one round only because its results are not reserved up front; the
-    # routing reasoning headroom is reserved for both generations of the round.
-    quota(store, 45000 + 2 * ROUTING_REASONING_HEADROOM)
-    list(loop.run())
-    assert observed == [1]
+def comparison_cost(loop, model, messages):
+    """What one comparison answer is expected to cost, in micro-euros."""
+    from app.services.agent_budget_config import micro_eur
+    from app.services.agent_tools import search_tools
+    return micro_eur(loop.costs.estimate(model, messages, search_tools(model, 1), native_searches=1,
+                                         session="new", kind="comparison")[1])
 
 
 @pytest.mark.parametrize("cancel", [False, True])
@@ -131,8 +132,7 @@ def test_parallel_comparison_waits_for_receipt_instead_of_failing_or_shrinking(s
     root(loop)
     model = next(iter(loop.comparison.models.values()))
     messages = [{"role": "system", "content": "Answer"}, {"role": "user", "content": "Which option?"}]
-    bound = loop.costs.estimate(model, messages)[0]
-    ref = quota(store, bound + 300)
+    ref = quota(store, comparison_cost(loop, model, messages) + 300)
     original = loop._state
     def state(worker, status, **patch):
         result = original(worker, status, **patch)
@@ -259,13 +259,13 @@ def test_a_reply_after_the_steps_own_search_stands_and_every_step_may_research(s
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 0
 
 
-def test_parallel_comparison_keeps_its_search_instead_of_waiting(store):
-    from app.services.agent_tools import search_tools
+def test_parallel_comparison_answers_start_together_with_the_same_search_and_output(store):
     entered, finish, waiting = threading.Event(), threading.Event(), threading.Event()
-    searches = []
+    searches, caps = [], []
     class Slow(Completion):
         def stream(self, **kwargs):
             searches.append(kwargs["native_searches"])
+            caps.append(kwargs["model"].max_output_tokens)
             if len(searches) == 1:
                 entered.set()
                 assert finish.wait(5)
@@ -275,12 +275,9 @@ def test_parallel_comparison_keeps_its_search_instead_of_waiting(store):
     loop.costs.policy, loop.budget, loop.factory = loop.policy, AnalysisBudget(unlimited=True), Slow
     root(loop)
     model = next(iter(loop.comparison.models.values()))
-    searching = model
     messages = [{"role": "system", "content": "Answer"}, {"role": "user", "content": "Which option?"}]
-    with_search = loop.costs.estimate(searching, messages, search_tools(searching, 1), native_searches=1)[0]
-    without = loop.costs.estimate(model, messages)[0]
-    # Room for one searching answer plus one without search, not for two searching.
-    ref = quota(store, with_search + without + 300)
+    # Room for exactly two answers as their admission expects them.
+    ref = quota(store, 2 * comparison_cost(loop, model, messages))
     original = loop._state
     def state(worker, status, **patch):
         if status == "waiting":
@@ -296,10 +293,9 @@ def test_parallel_comparison_keeps_its_search_instead_of_waiting(store):
         assert entered.wait(5)
         second = pool.submit(call)
         try:
-            # The sibling starts at once, with the same search, while the first
-            # still runs: comparison answers do not reserve their search tokens.
+            # The sibling starts at once, with the same search and output.
             second.result(timeout=5)
-            assert searches == [1, 1] and not waiting.is_set()
+            assert searches == [1, 1] and caps == [model.max_output_tokens] * 2 and not waiting.is_set()
         finally:
             finish.set()
         first.result(timeout=5)
@@ -316,13 +312,11 @@ def test_google_chat_tells_the_model_that_web_search_is_unavailable(store):
     loop = chat_loop(store, Capture)
     store._chat_ref(UID, loop.chat_id).update({"google_data": True})
     loop.google_data_consent = True
-    # The first step goes by what the route read (google_data), not by
-    # another read of the chat; a later one reads it, after a Gmail import.
+    # The steps go by what the route read (google_data), not by another
+    # read of the chat per call.
     loop.google_data = True
     exhaust(loop._step(loop.model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation, search_rounds=3))
-    loop.google_data = False
-    exhaust(loop._step(loop.model, loop.messages, "completion:1", ToolRegistry(), loop.cancellation, search_rounds=3))
-    assert [call["native_searches"] for call in observed] == [0, 0]
+    assert observed[-1]["native_searches"] == 0
     # After the newest message: the system prompt, and with it the prefix the
     # chat's steps have cached, stays as it was (with_step_note).
     assert observed[0]["messages"][-1] == {"role": "user", "content": GOOGLE_NO_SEARCH}
@@ -331,17 +325,50 @@ def test_google_chat_tells_the_model_that_web_search_is_unavailable(store):
     assert all(GOOGLE_NO_SEARCH not in str(message["content"]) for message in loop.messages)
 
 
-def test_a_search_that_does_not_fit_is_noted_after_the_newest_message(store):
-    observed = []
+def test_google_data_this_run_brings_in_restricts_its_next_calls(store, monkeypatch):
+    """A run that started without Google data gets some only through its own
+    tools (the Gmail import marks it, mark_google_data); a mark another
+    message set meanwhile reaches it with the watcher's look at the chat
+    (check_delegation), not with a read of the chat per call."""
+    from app.services import google_connections
+    observed, restricted = [], []
     class Capture(Completion):
         def stream(self, **kwargs):
             observed.append(kwargs)
             yield from super().stream(**kwargs)
     loop = chat_loop(store, Capture)
-    inputs = input_estimate(loop.messages, loop.registry.schemas, loop.model.request_config)
-    quota(store, inputs + 900)
-    list(loop.run())
-    assert observed[0]["native_searches"] == 0
-    assert observed[0]["messages"][0] == loop.messages[0]
-    assert observed[0]["messages"][-1]["role"] == "user"
-    assert observed[0]["messages"][-1]["content"].startswith("Web search is unavailable for this step")
+    loop.google_data, loop.google_data_consent = False, True
+    monkeypatch.setattr(google_connections, "restricted_model", lambda model: restricted.append(model) or model)
+    store._chat_ref(UID, loop.chat_id).update({"google_data": True})
+    exhaust(loop._step(loop.model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation, search_rounds=3))
+    assert store.check_delegation(UID, loop.chat_id, loop.turn_id, loop.run_token)["chat_google_data"] is True
+    loop.mark_google_data()
+    exhaust(loop._step(loop.model, loop.messages, "completion:1", ToolRegistry(), loop.cancellation, search_rounds=3))
+    assert [call["native_searches"] for call in observed] == [3, 0] and len(restricted) == 1
+
+
+@pytest.mark.parametrize("tier", ["free", "pro"])
+def test_every_account_gets_the_same_steps_whatever_is_left(store, monkeypatch, tier):
+    """No step of a message is made smaller for the allowance: the same
+    search rounds, output limit, tools and tool choice for Free and Pro,
+    with the day fresh or nearly used up. The allowance decides only
+    whether a step starts."""
+    from app.services import agent_budget_config
+    from test_agent_answer_mode import COMPARE, Merged, merged_loop
+    monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: tier)
+    limit = agent_budget_config.DEFAULT_TIER_LIMITS[tier]
+    requests = []
+    for left in (limit, 20_000):
+        script = Merged([{"tools": [COMPARE]}, {"text": "The first option costs 100."}])
+        loop = merged_loop(store, script)
+        ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
+        ref.set({"used": limit - left})
+        list(loop.run())
+        assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+        requests.append([{key: kwargs[key] for key in ("native_searches", "tools", "tool_choice")}
+                         for kwargs in (script.kwargs[0], script.kwargs[1])]
+                        + [script.limits[0], script.limits[1]])
+    from app.services.agent_audit import AGENT_SEARCH_ROUNDS
+    assert requests[0] == requests[1]
+    assert requests[0][0]["native_searches"] == AGENT_SEARCH_ROUNDS
+    assert requests[0][0]["tools"] == requests[0][1]["tools"]

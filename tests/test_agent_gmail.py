@@ -36,7 +36,8 @@ def gmail(google, tmp_path, monkeypatch):
     monkeypatch.setenv('AGENT_FILES_LOCAL_DIR',str(tmp_path))
     cid=connection(google,caps=['gmail_read','gmail_send'])
     files=AgentFiles(google.db);chat=files.chats.create_chat('owner',execution_mode='agent')['id']
-    loop=SimpleNamespace(uid='owner',chat_id=chat,turn_id='first',file_context=FileContext(files,'owner',chat,[]),outgoing=Queue(),google_evidence=[])
+    loop=SimpleNamespace(uid='owner',chat_id=chat,turn_id='first',file_context=FileContext(files,'owner',chat,[]),outgoing=Queue(),google_evidence=[],google_data=False)
+    loop.mark_google_data=lambda: setattr(loop,'google_data',True)
     actions=AgentActions(google.db,connections=google,files=files)
     tool=GmailTools(loop,google,actions,GoogleSelection(connection_id=cid,gmail=True,consent=True))
     google.wire.handler=lambda method,url,kwargs: {'data':encoded(b'Price: 42 EUR\nDelivery: 2 weeks'),'size':29} if '/attachments/' in url else message()
@@ -86,6 +87,8 @@ def test_search_and_complete_thread_pagination_keep_context_bounded(gmail):
     assert continuation['messages'][0]['body_offset']==6000 and continuation['messages'][0]['next_body_offset'] is None
     evidence=list(tool.files.chats._chat_ref('owner',tool.loop.chat_id).collection('google_evidence').stream())
     assert len(evidence)==8 and all('body' not in s.to_dict() for s in evidence)
+    # The run's later calls follow the Google rules (DelegationLoop.mark_google_data).
+    assert tool.loop.google_data is True
 
 
 def test_mime_external_body_html_charset_and_malformed_content(gmail):

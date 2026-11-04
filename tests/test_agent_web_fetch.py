@@ -661,8 +661,8 @@ def test_a_stop_during_a_read_stops_the_turn(store, monkeypatch, enabled):
 
 
 def test_admission_gives_up_when_a_page_read_cannot_fit(store, monkeypatch, enabled):
-    """The read's tokens do not shrink with its output allowance: a short
-    allowance must refuse the read at once, not retry the same claim forever."""
+    """A short allowance refuses the read at once, never retries the same
+    claim forever."""
     from dataclasses import replace
     from types import SimpleNamespace
     from app.services.agent_quota import AgentTokenBudgetExceeded
@@ -678,8 +678,9 @@ def test_admission_gives_up_when_a_page_read_cannot_fit(store, monkeypatch, enab
     monkeypatch.setattr(loop.store, "claim", claim)
     model = replace(resolve_agent_model("claude-haiku-4-5"), max_output_tokens=agent_read_source.FETCH_OUTPUT_TOKENS)
     tool = web_fetch_tool(max_uses=1, max_content_tokens=READ_CONTENT_TOKENS, allowed_domains=["example.org"])
-    admission = loop._admit_chat_step(model, [{"role": "user", "content": "Read " + CITED}], "agent:x:0", ToolRegistry(),
-                                      loop.cancellation, 0, {}, SimpleNamespace(kind="source"), None, server_tools=[tool])
+    admission = loop._admit(model, [{"role": "user", "content": "Read " + CITED}], "agent:x:0",
+                            [*ToolRegistry().schemas, tool], loop.cancellation, 0, {},
+                            SimpleNamespace(kind="source", id="x"))
     with pytest.raises(AgentTokenBudgetExceeded):
         while True:
             next(admission)

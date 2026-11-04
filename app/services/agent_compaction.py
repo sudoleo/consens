@@ -61,13 +61,16 @@ and billed like any other step.
   puts the plan back after compacting, the app adds the plan and the
   background processes of the message (run_state). The summary request repeats the next step's
   request with the request at its end (same tools, same tool choice), so it
-  reads the cached prefix. A long VM run no longer ends at the window's
+  reads the cached prefix; so does the history's, which ends where the
+  messages that stay begin. A long VM run no longer ends at the window's
   LONG_RUN_CONTEXT_SHARE, and each later step sends a fraction.
 
 A summary is the agent's own text, never the user's words (``is_summary``):
 the work log files it as the agent's, memory evidence leaves it out. A
-summary that does not work out (no text, cut off, a tool call instead)
-changes nothing: the run goes on with what it had.
+summary that does not work out (no text, cut off, calls instead of text)
+changes nothing: the run goes on with what it had, and the next attempt
+waits until the history or the run has grown (HISTORY_SUMMARY_RETRY_CHARS,
+RUN_SUMMARY_RETRY_TOKENS).
 """
 from __future__ import annotations
 
@@ -128,6 +131,10 @@ HISTORY_SUMMARY_ABOVE_CHARS = 60_000
 HISTORY_KEEP_CHARS = 20_000
 RUN_SUMMARY_ABOVE_TOKENS = 100_000
 RUN_SUMMARY_WINDOW_SHARE = .6
+# After a summary that did not work out, the next waits until the chat's
+# history (characters) or the run's next request (tokens) has grown this much.
+HISTORY_SUMMARY_RETRY_CHARS = 30_000
+RUN_SUMMARY_RETRY_TOKENS = 25_000
 # At least this share of the request is the run's own steps: else a summary
 # of them saves too little to pay for itself.
 RUN_SUMMARY_OWN_SHARE = .5

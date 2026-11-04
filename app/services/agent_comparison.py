@@ -36,12 +36,9 @@ from app.services.source_catalog import normalize_provider_answers
 
 
 # Upper bound for one comparison answer. The effective allowance is the
-# model's own completion limit and a fair share of the remaining account
-# budget (see ComparisonTools._output_shares), not a product length cap.
+# model's own completion limit within its share of the saved review
+# (ComparisonTools._output_shares), not a product length cap.
 COMPARISON_OUTPUT_CEILING = 65_536
-# Share of the remaining daily budget that one comparison may reserve for all
-# of its answers together; the rest stays for the agent and the reviewers.
-COMPARISON_BUDGET_SHARE = 0.6
 # The saved review (600 kB) holds every answer text next to the answer and the
 # reviewers' marks. All comparison answers of a turn share this many
 # characters; at roughly four characters per token that bounds each answer's
@@ -127,8 +124,7 @@ COMPARISON_FAILURES = {
 
 # Helper calls that research the web themselves: comparison answers and the
 # reviewers of the agent's work (agent_audit.py). Searching calls retry an
-# answer that ended without a word, do not reserve their search up front and
-# show their reasoning as a live line.
+# answer that ended without a word and show their reasoning as a live line.
 SEARCHING_KINDS = frozenset({"comparison", "audit"})
 
 
@@ -593,38 +589,17 @@ class ComparisonTools:
                 self._rebuild(comparison)
                 self.checkpoint()
 
-    def _output_shares(self, models, remaining=None):
-        """Fair output allowance per answer ({provider: tokens}), so parallel
-        calls need not queue.
-
-        Every call reserves its full output before it starts. Without a share,
-        a few large reservations make the others wait for their settlement.
-        The account counts money (agent_quota): an answer's share of the
-        remaining allowance buys as many output tokens as its model's price
-        allows. ``remaining``: the unreserved allowance as the caller read it
-        (micro-euros), else read now."""
-        from decimal import Decimal
-        from app.services.agent_budget_config import nano_usd
-        loop = self.loop
+    def _output_shares(self, models):
+        """Output allowance per answer ({provider: tokens}): the model's own
+        limit within its share of the saved review's characters, at least
+        cfg.MAX_TOKENS. The same for every account: the allowance decides
+        only whether an answer starts (DelegationLoop._admit)."""
         count = max(1, len(models))
         with self.lock:
             stored = sum(len(a["text"]) for c in self.comparisons for a in c.get("answers", []))
             stored += sum(len(t) for partials in self._partials.values() for t in partials.values())
         storage = max(0, REVIEW_ANSWER_CHARS - stored) // count // CHARS_PER_TOKEN
-        try:
-            from app.services import agent_quota
-            remaining = agent_quota.remaining_allowance(loop.store.db, loop.uid) if remaining is None else remaining
-        except Exception:
-            remaining = None
-        shares = {}
-        for provider, model in models.items():
-            share = storage
-            # Nano-USD per output token.
-            price = Decimal(model.output_usd_per_million) * 1000
-            if remaining is not None and price > 0:
-                share = min(storage, int(nano_usd(remaining) * Decimal(str(COMPARISON_BUDGET_SHARE)) / count / price))
-            shares[provider] = max(cfg.MAX_TOKENS, share)
-        return shares
+        return {provider: max(cfg.MAX_TOKENS, storage) for provider in models}
 
     def _await_answers(self, comparison, done, finished, cancellation):
         """Every asked model's answer (Max, 2026-10-07: the one that

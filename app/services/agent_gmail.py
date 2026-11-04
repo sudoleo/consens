@@ -184,6 +184,8 @@ class GmailTools:
             tx.set(target, data)
             tx.update(ref, {"google_data": True, "google_evidence_count": count + (0 if exists else 1)})
         self.files.chats._transaction(save)
+        # Every later call of this run follows the Google rules.
+        self.loop.mark_google_data()
 
     def full_message(self, identifier, cancellation):
         message = self.api("GET", "/messages/" + quote(identifier, safe=""), cancellation, params={"format": "full"})

@@ -17,7 +17,7 @@ from app.services import agent_quota, agent_budget_config
 from app.services.agent_costs import USAGE_FIELDS, aggregate_usage, remaining_reservation
 from app.services.agent_runtime import AgentCapacityExceeded
 from app.services.agent_provider_limits import AgentRunInterrupted
-from app.services.chat_store import ChatNotFound, TurnStatusConflict, read_together
+from app.services.chat_store import ChatNotFound, TurnStatusConflict, _is_live_chat, read_together
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancelled
 
 
@@ -100,6 +100,35 @@ def root_usage(root):
     if root.get("compacted_steps"):
         usages.insert(0, root.get("compacted_usage"))
     return aggregate_usage(usages)
+
+
+def expected_charges(root, sessions):
+    """What a call of this run whose cost was lost is expected to have cost,
+    in micro-euros, from the run's measured calls (a function of its step):
+    the dearest of its own session's, whose conversation only grows; else the
+    mean of its kind's sessions (comparison answers, reviewers); else the
+    mean of the run. 0 without a measured call."""
+    def session_of(step):
+        return step.rsplit(":", 1)[0]
+
+    def kind_of(session):
+        return (sessions.get(session.split(":")[1]) or {}).get("kind") if session.startswith("agent:") else "agent"
+
+    own, kinds, charges = {}, {}, []
+    for step, usage in (root.get("step_usage") or {}).items():
+        charge = agent_quota.measured_charge(usage)
+        if charge is None:
+            continue
+        session = session_of(step)
+        own[session] = max(own.get(session, 0), charge)
+        kinds.setdefault(kind_of(session), []).append(charge)
+        charges.append(charge)
+    mean = lambda values: -(-sum(values) // len(values)) if values else 0
+
+    def expected(step):
+        session = session_of(step)
+        return own.get(session) or mean(kinds.get(kind_of(session), ())) or mean(charges)
+    return expected
 
 
 def _step_index(step):
@@ -297,8 +326,8 @@ class AgentSessionStore:
             tokens, cost = reservation
             daily = daily_snapshot.to_dict() or {}
             kind = (agent.to_dict() or {}).get("kind") if agent else None
-            # The account holds the call's worst-case cost in micro-euros,
-            # whatever kind of call it is (agent_quota.measured_charge).
+            # The account holds the call's expected cost in micro-euros,
+            # whatever kind of call it is (agent_costs.RunCosts.estimate).
             quota_amount = agent_budget_config.micro_eur(cost)
             daily = agent_quota.reserve(daily, quota_amount, limit=limit,
                                         overdraft=overdraft if limits.get("account_budget_only") else False)
@@ -554,13 +583,18 @@ class AgentSessionStore:
         return self._agent_transaction(uid, operation)
 
     def check_delegation(self, uid, chat_id, turn_id, run_token):
-        chat = self.get_chat(uid, chat_id)
+        snapshot = self._chat_ref(uid, chat_id).get()
+        if not _is_live_chat(snapshot):
+            raise ChatNotFound("Chat not found")
+        chat = snapshot.to_dict() or {}
         ref = self.receipt_ref(uid, chat_id, turn_id)
         root = ref.get().to_dict() or {}
         if (chat.get("status") != "active" or root.get("run_token") != run_token
                 or root.get("run_status") != "running" or root.get("cancel_requested")):
             raise ProviderCancelled("Agent run stopped")
-        # The root as read: the caller takes the user's notes from it.
+        # The root as read: the caller takes the user's notes from it, and
+        # whether the chat holds Google data (DelegationLoop._holds_google_data).
+        root = {**root, "chat_google_data": bool(chat.get("google_data"))}
         if not (root.get("policy") or {}).get("account_budget_only"):
             return root
         now = datetime.now(timezone.utc)
@@ -767,6 +801,7 @@ class AgentSessionStore:
         # Billing receipts survive chat deletion; never recreate the chat.
         agents = list(self._turn_ref(uid, chat_id, turn_id).collection('agents').stream())
         sessions = {snap.id: snap.to_dict() for snap in agents}
+        expected = expected_charges(root, sessions)
         for step, state in root["step_states"].items():
             if state == "running":
                 value = AgentCompletion()
@@ -782,7 +817,8 @@ class AgentSessionStore:
                             and not usage.get('unmetered_calls') and agent_quota.measured_charge(usage) is not None):
                         value.usage = {**usage, 'source': 'saved_agent'}
                         value.finish_reason = session.get('finish_reason') or ''
-                self.settle(uid, chat_id, turn_id, completion=value, status="cancelled", step=step, final=False)
+                self.settle(uid, chat_id, turn_id, completion=value, status="cancelled", step=step, final=False,
+                            expected=expected(step))
         settled = ref.get().to_dict()
         for snap in agents:
             data = snap.to_dict()

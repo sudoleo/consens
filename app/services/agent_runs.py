@@ -56,7 +56,8 @@ REQUEST_TIMES = ("request_started_at", "first_token_at", "stream_ended_at")
 # What the conversation needs of an earlier turn (messages): not its
 # activity, review or work log, which take up to about a megabyte.
 HISTORY_FIELDS = ("status", "question", "assistant_response", "consensus", "app_context",
-                  "agent_work_record", "sources", "agent_answer_fixed_at", "agent_history_summary")
+                  "agent_work_record", "sources", "agent_answer_fixed_at", "agent_history_summary",
+                  "agent_history_summary_failed")
 
 
 def in_history(turn):
@@ -286,15 +287,20 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         history since passes HISTORY_SUMMARY_ABOVE_CHARS (DelegationLoop
         writes it in its first step): ``end``, the index where the messages
         that stay word for word begin, ``through``, the position of the last
-        message it covers, ``turns`` and ``partial``. A Watch's scheduled run
-        (``history_chars``) neither reads nor plans one."""
+        message it covers, ``turns``, ``partial`` and ``held``, the history's
+        characters. After one that did not work out
+        (``agent_history_summary_failed``) the next is planned once the
+        history has grown by HISTORY_SUMMARY_RETRY_CHARS. A Watch's scheduled
+        run (``history_chars``) neither reads nor plans one."""
         from app.services import agent_compaction
         config = config or prompt_config.get_config()
         system_prompt = config["prompts"]["agent"]
         messages = [{"role": "system", "content": system_prompt}]
         earlier = []
-        # The newest saved summary of the history and its turn's position.
+        # The newest saved summary of the history and its turn's position;
+        # the newest attempt that did not work out, and its turn's.
         saved_summary, summary_at = None, -1
+        failed_summary, failed_at = None, -1
         cursor = ""
         while True:
             # Agent answers live on the turn itself. Do not issue an empty
@@ -325,6 +331,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 if (isinstance(found, dict) and agent_compaction.is_summary(found.get("content"))
                         and type(found.get("through")) is int and turn["position"] > summary_at):
                     saved_summary, summary_at = found, turn["position"]
+                failed = turn.get("agent_history_summary_failed")
+                if isinstance(failed, dict) and type(failed.get("held")) is int and turn["position"] > failed_at:
+                    failed_summary, failed_at = failed, turn["position"]
             cursor = page.get("next_cursor") or ""
             if not cursor:
                 break
@@ -353,12 +362,15 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 sources.extend(source for source in saved if isinstance(source, dict))
         replayed = sizes[start:]
         held = sum(replayed) + (len(saved_summary["content"]) if saved_summary is not None else 0)
-        if summary is not None and not history_chars and held > agent_compaction.HISTORY_SUMMARY_ABOVE_CHARS:
+        backoff = (failed_summary["held"] + agent_compaction.HISTORY_SUMMARY_RETRY_CHARS
+                   if failed_summary is not None and failed_at > summary_at else 0)
+        if (summary is not None and not history_chars and held > agent_compaction.HISTORY_SUMMARY_ABOVE_CHARS
+                and held >= backoff):
             keep = agent_compaction.history_keep(replayed)
             if keep < len(replayed):
                 summary.update({
                     "end": starts[len(replayed) - keep], "through": earlier[start:][len(replayed) - keep - 1][0],
-                    "turns": len(replayed) - keep,
+                    "turns": len(replayed) - keep, "held": held,
                     "partial": bool(start) or (saved_summary is not None
                                                and agent_compaction.HISTORY_SUMMARY_PARTIAL in saved_summary["content"])})
         context = context or get_agent_turn_context(model, config)
@@ -452,7 +464,9 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         except Exception:
             return None
 
-    def settle(self, uid, chat_id, turn_id, *, completion, status, step="completion:0", final=True):
+    def settle(self, uid, chat_id, turn_id, *, completion, status, step="completion:0", final=True, expected=0):
+        """``expected``: what such a call of the run measured, in micro-euros,
+        for a call without a final cost (agent_quota.unknown_estimate)."""
         if status not in {"succeeded", "failed", "cancelled"}:
             raise ValueError("Invalid agent settlement status")
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id, step)
@@ -503,8 +517,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             if daily_ref:
                 tx.set(daily_ref, agent_quota.count_settlement(
                     agent_quota.settle(daily, receipt_data["quota_reserved"], usage,
-                                       measurable=bool(completion.generation_id)), usage))
-                estimate = agent_quota.unknown_estimate(receipt_data["quota_reserved"], usage)
+                                       measurable=bool(completion.generation_id), expected=expected), usage))
+                estimate = agent_quota.unknown_estimate(receipt_data["quota_reserved"], usage, expected=expected)
             elif user.exists:
                 ledger = agent_quota.count_settlement({"agent_usage": (user.to_dict() or {}).get("agent_usage")}, usage)
                 tx.update(user_ref, {"agent_usage": {**ledger["agent_usage"], "updated_at": firestore.SERVER_TIMESTAMP}})
@@ -619,11 +633,13 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
         return self._agent_transaction(uid, operation)
 
-    def save_history_summary(self, uid, chat_id, turn_id, *, run_token, summary):
+    def save_history_summary(self, uid, chat_id, turn_id, *, run_token, summary=None, failed=None):
         """The summary of the chat's history this turn's first step wrote
         (DelegationLoop._summarize): saved on the turn right away, so later
-        messages start with it (messages) also when this one fails. False
-        when the run no longer holds the turn."""
+        messages start with it (messages) also when this one fails. Or,
+        ``failed``, the mark of one that did not work out, after which the
+        next waits for the history to grow (messages). False when the run
+        no longer holds the turn."""
         root_ref, turn_ref = self.receipt_ref(uid, chat_id, turn_id), self._turn_ref(uid, chat_id, turn_id)
 
         def operation(tx):
@@ -633,7 +649,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             if (not run_token or data.get("run_token") != run_token or data.get("run_status") != "running"
                     or not turn.exists or (turn.to_dict() or {}).get("status") != "pending"):
                 return False
-            tx.update(turn_ref, {"agent_history_summary": summary})
+            tx.update(turn_ref, {"agent_history_summary": summary} if failed is None
+                      else {"agent_history_summary_failed": failed})
             return True
 
         return self._agent_transaction(uid, operation)

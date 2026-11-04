@@ -176,6 +176,7 @@ def test_the_plan_names_what_the_summary_replaces_and_what_stays(store, monkeypa
     plan = {}
     messages = store.messages(UID, chat_id, target, summary=plan)
     # 40,000 characters held: the newest message (8,000) stays, four go.
+    assert 40_000 <= plan.pop("held") < 41_000
     assert plan == {"end": 9, "through": 4, "turns": 4, "partial": False}
     assert messages[plan["end"]]["content"].endswith("Question r4")
     # A short chat plans nothing, and a Watch's run neither reads nor plans one.
@@ -231,10 +232,15 @@ def test_the_first_step_summarizes_the_history_and_the_turn_keeps_it(store):
     loop = history_loop(store, script)
     events = list(loop.run())
     request, answer = script.seen
-    # The summary request: only what it replaces, no tools to call.
+    # The summary request: only what it replaces, with the tools, the search
+    # and the tool choice of the agent's steps (their cached prefix); a call
+    # in it would not run.
     assert [m["content"] for m in request[1:]] == ["Question one", "Answer one", "Question two", "Answer two",
                                                      HISTORY_SUMMARY_REQUEST]
     assert script.kwargs[0]["allow_tool_calls"] is False
+    for key in ("tools", "native_searches", "tool_choice"):
+        assert script.kwargs[0][key] == script.kwargs[1][key]
+    assert script.kwargs[0]["tool_choice"] == "auto" and script.kwargs[0]["native_searches"] > 0
     summary = summary_message(SUMMARY)["content"]
     # The agent's step: the summary, the kept message, the question.
     assert [m["content"] for m in answer[1:4]] == [summary, "Question three", "Answer three"]
@@ -260,6 +266,35 @@ def test_a_history_summary_that_does_not_work_out_changes_nothing(store):
                                                    "Question three", "Answer three"]
     turn = stored(store, loop)
     assert "agent_history_summary" not in turn and turn["status"] == "completed"
+    # The turn keeps the mark: the next message waits for the history to grow.
+    assert turn["agent_history_summary_failed"] == {"held": 0}
+
+
+def _failed_summary(store, chat_id, request_id, held, answer="Done."):
+    """An earlier turn whose history summary did not work out at ``held``."""
+    _answered(store, chat_id, request_id, answer)
+    turn = [t for t in store.history_page(UID, chat_id)["snapshots"]
+            if (t.to_dict() or {}).get("question") == f"Question {request_id}"][0]
+    turn.reference.update({"agent_history_summary_failed": {"held": held}})
+
+
+def test_after_a_history_summary_that_did_not_work_out_the_next_waits_for_growth(store, monkeypatch):
+    monkeypatch.setattr(agent_compaction, "HISTORY_SUMMARY_ABOVE_CHARS", 30_000)
+    monkeypatch.setattr(agent_compaction, "HISTORY_KEEP_CHARS", 10_000)
+    monkeypatch.setattr(agent_compaction, "HISTORY_SUMMARY_RETRY_CHARS", 10_000)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    for index in range(5):
+        _answered(store, chat_id, f"r{index}", "x" * 8_000)
+    _failed_summary(store, chat_id, "f0", 40_000)
+
+    def plan(position):
+        planned = {}
+        store.messages(UID, chat_id, {"position": position, "question": "Continue"}, summary=planned)
+        return planned
+    assert plan(7) == {}
+    # Grown by the retry margin since: planned again.
+    _answered(store, chat_id, "r5", "y" * 10_000)
+    assert plan(8)["held"] >= 50_000
 
 
 def test_a_partial_history_says_so_in_its_summary(store):
@@ -301,8 +336,10 @@ def test_a_long_run_summarizes_its_steps_and_goes_on(store, fake_vm, monkeypatch
     index = script.seen.index(requests[0])
     after = script.seen[index + 1]
     assert requests[0][-1]["content"] == RUN_SUMMARY_REQUEST
-    assert script.kwargs[index].get("allow_tool_calls") is not False
-    assert script.kwargs[index]["tools"] == script.kwargs[index - 1]["tools"]
+    # It may only write, in the request of the steps around it.
+    assert script.kwargs[index]["allow_tool_calls"] is False
+    for key in ("tools", "native_searches", "tool_choice"):
+        assert script.kwargs[index][key] == script.kwargs[index - 1][key] == script.kwargs[index + 1][key]
     # The next step: the question, the summary, then the latest step whole.
     start = next(n for n, m in enumerate(after) if strip_app_context(str(m.get("content"))).endswith("Analyse my data."))
     assert after[start + 1]["content"] == summary_message(SUMMARY, run=True)["content"]
@@ -319,7 +356,7 @@ def test_a_long_run_summarizes_its_steps_and_goes_on(store, fake_vm, monkeypatch
     assert "agent_history_summary" not in turn
 
 
-def test_a_run_summary_that_does_not_work_out_is_not_tried_again(store, fake_vm, monkeypatch):
+def test_a_run_summary_that_does_not_work_out_waits_for_the_run_to_grow(store, fake_vm, monkeypatch):
     def tool_call_instead(completion):
         completion.tool_calls = [{"id": "x", "type": "function",
                                   "function": {"name": "vm_exec", "arguments": json.dumps({"command": "echo never-run"})}}]
@@ -331,12 +368,34 @@ def test_a_run_summary_that_does_not_work_out_is_not_tried_again(store, fake_vm,
                         lambda inputs, context_length, messages, start: any(m.get("role") == "tool"
                                                                             for m in messages[start:]))
     list(loop.run())
-    assert len(script.summary_requests()) == 1
+    # The run's next requests stay far below RUN_SUMMARY_RETRY_TOKENS more.
+    assert len(script.summary_requests()) == 1 and loop.run_summary_retry_at is not None
     turn = stored(store, loop)
     assert turn["status"] == "completed" and turn["assistant_response"] == ANSWER
     # Its call never ran.
     assert "never-run" not in json.dumps(fake_vm.calls, default=str)
     assert all(not is_summary(str(m.get("content"))) for m in script.seen[-1])
+
+
+def test_a_failed_run_summary_is_tried_again_once_the_run_has_grown(store, fake_vm, monkeypatch):
+    attempts = []
+
+    def first_fails(completion):
+        attempts.append(1)
+        if len(attempts) == 1:
+            completion.text, completion.finish_reason = "Short.", "stop"
+        else:
+            completion.text, completion.finish_reason = SUMMARY, "stop"
+    calls = [[("vm_exec", {"command": f"make step{n}"})] for n in range(5)]
+    script = Summarizer(calls, reply=first_fails)
+    loop = vm_loop(store, script)
+    monkeypatch.setattr(agent_compaction, "RUN_SUMMARY_RETRY_TOKENS", 1)
+    monkeypatch.setattr(agent_compaction, "run_summary_due",
+                        lambda inputs, context_length, messages, start: not loop.run_summaries and sum(
+                            1 for m in messages[start:] if m.get("role") == "tool") >= 2)
+    list(loop.run())
+    assert len(script.summary_requests()) == 2 and loop.run_summaries == 1
+    assert stored(store, loop)["assistant_response"] == ANSWER
 
 
 def test_a_run_is_summarized_before_it_would_end_at_the_window():

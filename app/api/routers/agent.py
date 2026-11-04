@@ -400,9 +400,6 @@ def _turn_reads(uid, payload, store):
         "files": lambda: [public_file(files.get(uid, chat_id, fid)) for fid in payload.file_ids],
         "memory": lambda: _memory_snapshot(uid),
         "workspace": lambda: workspace_turn(uid) if vm_allowed(uid) else (None, []),
-        # What the reviewers' output shares divide, read before the first
-        # step's claim reserves from it (AnswerAudit.output_share).
-        "allowance": lambda: agent_quota.remaining_allowance(db_firestore, uid),
         # Before the turn exists: messages checks that it still holds
         # (AgentRunStore.history_current). Both are used only after the
         # turn's creation found the chat live.
@@ -425,14 +422,6 @@ def sweep_after(store, uid, chat_id, recover):
             pass
         store.sweep_abandoned_turns(uid, chat_id)
     return _TURN_READS.submit(sweep)
-
-
-def _read_or_none(read):
-    try:
-        return read.result()
-    except Exception as exc:
-        logging.warning("Agent allowance read ahead unavailable category=%s", safe_exception(exc))
-        return None
 
 
 def _first_history_page(read):
@@ -694,8 +683,6 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             # before a call needs it (agent_workspace.provision).
             from app.services import agent_workspace
             agent_workspace.provision(store, uid)
-        if loop.comparison is not None:
-            loop.comparison.auditor.allowance = _read_or_none(reads["allowance"])
         # Every view follows the run through this buffer (POST tail, GET .../live).
         live, live_owned = agent_live.acquire(uid, payload.chat_id, payload.client_request_id)
     except Exception as exc:
