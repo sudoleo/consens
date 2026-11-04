@@ -1005,7 +1005,8 @@ auch ohne Verbindung. Die Login-Umgebung (PATH mit `/.sprite/bin` und
 `~/.local/bin`) lädt still vorweg (`SHELL_PRELUDE`): Die `.bashrc` der Sprite
 warnt sonst in jedem Befehl über `bind`; die Ausgabe des Befehls selbst bleibt
 ungefiltert. Seit 2026-10-27 außerdem `vm_install_packages` (`packages`:
-1–30 apt-Paketnamen, jeder gegen `^[a-z0-9][a-z0-9+.-]{0,99}$` geprüft und
+1–30 apt-Paketnamen, jeder gegen `^[a-z0-9][a-z0-9+.-]{0,99}(?<!-)$` geprüft
+(nie mit `-` am Ende: `apt-get install sudo-` entfernt sudo, seit 2026-11-04) und
 quotiert hinter `--`): Der Agent hat kein sudo, der Server installiert als
 root (`apt-get update` nur, wenn die Listen älter als ein Tag sind), bis
 300 s, zählt zur VM-Zeit. Python-Pakete installiert er mit pip (fällt von

@@ -195,8 +195,9 @@ USER_WAIT_SECONDS = 120
 USER_POLL_SECONDS = 2
 VM_USER_HAS_BROWSER = ("The user has taken over the workspace's browser and still has it, so nothing ran in the VM: "
                        "the workspace waits for them. Call the tool again to wait on, or answer with what you have.")
-# vm_install_packages: apt's names (Debian policy: lower case, digits, + - .).
-PACKAGE = r"^[a-z0-9][a-z0-9+.-]{0,99}$"
+# vm_install_packages: apt's names (Debian policy: lower case, digits, + - .),
+# never ending in -, which apt-get install reads as "remove this package".
+PACKAGE = r"^[a-z0-9][a-z0-9+.-]{0,99}(?<!-)$"
 MAX_PACKAGES = 30
 INSTALL_TIMEOUT = 300
 # The package lists are fetched again when older than a day.

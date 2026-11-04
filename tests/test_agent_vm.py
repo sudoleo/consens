@@ -693,6 +693,21 @@ def test_the_vm_comes_beside_compare_models(store, fake_vm):
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
 
 
+def test_installing_never_removes_a_package(store, fake_vm):
+    """apt-get install reads a name ending in - as "remove it", as root: the
+    agent, which has no sudo, must not take sudo or python3 out of its
+    workspace that way. A name ending in + (g++) only installs."""
+    script = Agent([[("vm_install_packages", {"packages": ["sudo-"]})],
+                    [("vm_install_packages", {"packages": ["g++", "python3.12-venv"]})]])
+    loop = vm_loop(store, script)
+    list(loop.run())
+    refused, installed = results(loop)
+    assert "no apt package name" in refused["error"]
+    assert installed["packages"] == ["g++", "python3.12-venv"] and installed["exit_code"] == 0
+    [command] = [c for c in fake_vm.server if "apt-get install" in c]
+    assert command.endswith("-- g++ python3.12-venv")
+
+
 def test_the_same_command_may_run_again(store, fake_vm):
     """The identical-call guard stops a loop without progress; a VM command's
     result depends on the VM's state (tests again after an edit)."""
