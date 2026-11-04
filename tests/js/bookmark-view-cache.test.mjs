@@ -20,22 +20,26 @@ function slice(start, end) {
   return FIREBASE.slice(from, FIREBASE.indexOf(end, from));
 }
 
-function harness(views) {
+function harness(views, { fetch = null } = {}) {
   const win = { App: { chatScroll: {}, watch: {}, runRegistry: { findByBookmarkId: () => null } } };
   const document = { body: { classList: { contains: () => false } }, querySelector: () => null };
   const drawn = vi.fn();
   const cache = new Map();
+  const details = new Map();
   let active = null;
   const loadBookmarkView = vi.fn(async id => views[id].shift());
+  // Rename (renameBookmark) beside the opening, in the same scope.
   Function("window", "document", "auth", "authState", "bookmarkWriteAllowed", "syncActiveBookmark",
     "isCurrentAuthenticatedUser", "hideChatOpening", "showChatOpening", "loadSingleBookmarkUI",
     "bookmarkViewCache", "BOOKMARK_VIEW_CACHE_SIZE", "bookmarkDetailCache", "activeBookmarkId",
-    "trackAppEvent", "loadBookmarkView", "openedBookmarkId", "bookmarkViewEpoch", "console",
-    `${slice("function rememberBookmarkView(", "window.loadAllBookmarkMetadata")}`)(
-    win, document, { currentUser: { uid: "owner" } }, { generation: 1 }, () => true, id => { active = id ?? active; },
-    () => true, () => {}, () => ({}), drawn, cache, 10, new Map(), () => active,
-    () => {}, loadBookmarkView, null, 0, { warn() {}, error() {} });
-  return { open: win.openBookmark, drawn, cache, loadBookmarkView };
+    "trackAppEvent", "loadBookmarkView", "openedBookmarkId", "bookmarkViewEpoch", "console", "fetch",
+    `${slice("function rememberBookmarkView(", "window.loadAllBookmarkMetadata")}
+    ${slice("async function renameBookmark(", "// Pin moves the chat")}
+    window.renameBookmark = renameBookmark;`)(
+    win, document, { currentUser: { uid: "owner", getIdToken: async () => "token" } }, { generation: 1 }, () => true,
+    id => { active = id ?? active; }, () => true, () => {}, () => ({}), drawn, cache, 10, details, () => active,
+    () => {}, loadBookmarkView, null, 0, { warn() {}, error() {} }, fetch);
+  return { open: win.openBookmark, rename: win.renameBookmark, drawn, cache, details, loadBookmarkView };
 }
 
 const turns = [
@@ -73,5 +77,36 @@ describe("a chat back from the view cache", () => {
     expect(drawn.mock.calls[3][1]).toBe(longer.turns);
     expect(drawn.mock.calls[3][2].keepComposer).toBe(true);
     expect(cache.get("a")).toBe(longer);
+  });
+
+  it("is drawn anew when the chat got its share result elsewhere", async () => {
+    // Shared in another tab: the server noted a share result on the chat.
+    const shared = { ...full, bookmark: { ...full.bookmark, share_result_id: "r1" } };
+    const { open, drawn, cache } = harness({ a: [full, shared], b: [other] });
+    await open("a");
+    await open("b");
+    await open("a");
+
+    expect(drawn).toHaveBeenCalledTimes(4);
+    expect(drawn.mock.calls[3][0].share_result_id).toBe("r1");
+    expect(cache.get("a")).toBe(shared);
+  });
+});
+
+describe("a renamed chat (bug hunt 2026-11-04)", () => {
+  it("keeps its view and takes the new name, instead of loading again over a typed follow-up", async () => {
+    const renamed = { ...full, bookmark: { ...full.bookmark, title: "Renamed", title_source: "user" } };
+    const fetch = vi.fn(async () => ({ ok: true, json: async () => ({ bookmark: { id: "a", title: "Renamed" } }) }));
+    const { open, rename, drawn, cache, details } = harness({ a: [full, renamed] }, { fetch });
+    await open("a");
+    details.set("a", { ...full.bookmark });
+    await rename("a", "Renamed");
+
+    expect(fetch).toHaveBeenCalledWith("/bookmarks/a/title", expect.objectContaining({ method: "PATCH" }));
+    expect(cache.get("a").bookmark.title).toBe("Renamed");
+    expect(details.get("a").title).toBe("Renamed");
+    // Its row clicked again: the chat on screen stays as it is (keepComposer).
+    await open("a");
+    expect(drawn).toHaveBeenCalledTimes(1);
   });
 });

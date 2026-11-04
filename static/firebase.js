@@ -2495,6 +2495,9 @@ async function requestBookmarkShareResult() {
       if (version === bookmarkShareResultVersion && !agentTurn) {
         window.App.state.set("lastShareResultId", resultId, "share");
       }
+      // The server noted the result on the chat: shared again after a
+      // detour, it is sent with the version it has now.
+      if (resultId && !agentTurn) patchCachedBookmark(bookmarkId, { share_result_id: resultId });
       return version === bookmarkShareResultVersion ? resultId : null;
     } catch (error) {
       if (version === bookmarkShareResultVersion) {
@@ -3241,10 +3244,21 @@ function rememberBookmarkView(bookmarkId, view) {
     bookmarkViewCache.delete(bookmarkViewCache.keys().next().value);
   }
 }
+// What the server just changed on a chat (its name, its share result): the
+// chat seen a moment ago takes it over. Dropping it instead redrew the chat on
+// its next opening (a typed follow-up gone) and left the old name in the
+// detail cache; keeping it unchanged sent a stale share version (409).
+function patchCachedBookmark(bookmarkId, patch) {
+  const view = bookmarkViewCache.get(bookmarkId);
+  if (view?.bookmark) view.bookmark = { ...view.bookmark, ...patch };
+  const detail = bookmarkDetailCache.get(bookmarkId);
+  if (detail) bookmarkDetailCache.set(bookmarkId, { ...detail, ...patch });
+}
 // What a chat's view is made of, to tell whether a background check found
 // anything new.
 function bookmarkViewSignature(view) {
   return JSON.stringify([view.bookmark?.timestamp || null, view.bookmark?.title || "", view.bookmark?.responses?.consensus?.length || 0,
+    view.bookmark?.share_result_id || "",
     (view.turns || []).map(turn => [turn.id || turn.turn_id, turn.status, turn.agent_review?.status, String(turn.consensus || "").length]),
     view.running?.id || null]);
 }
@@ -3738,7 +3752,7 @@ async function renameBookmark(bookmarkId, title) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.detail || `Rename failed (${response.status})`);
   if (!isCurrentAuthenticatedUser(requestUid, generation)) return null;
-  bookmarkViewCache.delete(bookmarkId);
+  patchCachedBookmark(bookmarkId, { title: String(data.bookmark?.title || title), title_source: "user" });
   return data.bookmark || null;
 }
 
