@@ -726,7 +726,7 @@ def predict_starter_questions(request: Request):
 _RUNNING_SETTINGS = ("selection", "comparison_selection", "file_ids", "google_selection", "google_data_consent")
 
 
-def _running_agent_turn(turns: list[dict]) -> dict | None:
+def _running_agent_turn(turns: list[dict], *, more: bool = False) -> dict | None:
     """The chat's Agent turn that still runs (started in another tab or on
     another device), with what a browser needs to follow it: its request
     identity for GET /agent/chats/{chat}/live and the settings its
@@ -734,13 +734,15 @@ def _running_agent_turn(turns: list[dict]) -> dict | None:
     The newest only; a stale one is settled by recover_only itself. A turn
     whose answer stands while its reviewers work (hand_over) is followed only
     as the chat's newest; under a later message it stands in the transcript
-    (_transcript_turn)."""
+    (_transcript_turn). ``more``: later turns follow on the next page, so the
+    page's last one is not the chat's newest (until 2026-11-04 it was taken
+    for it)."""
     for index in range(len(turns) - 1, -1, -1):
         turn = turns[index]
         request_id = turn.get("client_request_id")
         if turn.get("status") != "pending" or not isinstance(request_id, str) or not request_id:
             continue
-        if turn.get("agent_answer_fixed") is True and index != len(turns) - 1:
+        if turn.get("agent_answer_fixed") is True and (more or index != len(turns) - 1):
             continue
         settings = turn.get("agent_settings") if isinstance(turn.get("agent_settings"), dict) else {}
         return {
@@ -833,7 +835,8 @@ def load_bookmark_conversation(
                 "next_cursor": metadata_page.get("next_cursor"),
                 "has_more": metadata_page.get("has_more") is True,
             }
-        running = _running_agent_turn(page["turns"]) if agent_history else None
+        running = (_running_agent_turn(page["turns"], more=page.get("has_more") is True)
+                   if agent_history else None)
         return {
             "status": "success",
             "chat_id": chat_id,

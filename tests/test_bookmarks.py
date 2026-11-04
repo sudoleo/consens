@@ -427,6 +427,12 @@ def test_agent_bookmark_shows_a_turn_under_review_in_its_place():
         pages["turns"] = [reviewing]
         body = client.get(f"/bookmarks/{bookmark_id}/conversation", headers={"Authorization": "Bearer token"}).json()
         assert body["turns"] == [] and body["running"]["id"] == "1" * 32
+        # Last on a page with later messages on the next one: not the chat's
+        # newest, so it stands in its place (bug hunt 2026-11-04: it was
+        # followed as running and missing from the transcript).
+        pages.update(turns=[reviewing], has_more=True, next_cursor="next-page")
+        body = client.get(f"/bookmarks/{bookmark_id}/conversation", headers={"Authorization": "Bearer token"}).json()
+        assert body["turns"] == [reviewing] and body["running"] is None
 
 
 def test_agent_bookmark_names_its_running_turn_for_another_tab_to_follow():
