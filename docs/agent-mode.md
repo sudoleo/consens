@@ -1131,7 +1131,10 @@ Kontos an den Agenten, das noch keinen Arbeitsplatz hat (der Datensatz nennt
 keine VM), beide VMs im Hintergrund ein (`agent_workspace.provision`, aus
 `routers/agent.py`, sobald die Nachricht eine VM haben darf): Datensatz zuerst
 (die Kontolöschung findet sie), Browser-VM mit `warm` und `rest`, Werkbank mit
-`open_workbench`, einmal pro Prozess und Konto, Notaus
+`open_workbench`, einmal pro Prozess und Konto. Nennt der Datensatz die VMs
+schon, richtet sie nur die ein, die es nicht gibt (`vm.exists`): Live-Ansicht
+oder Terminal tragen beide ein, machen aber nur ihre eigene (seit 2026-11-04;
+vorher blieb die andere ihrem ersten Aufruf überlassen). Notaus
 `AGENT_WORKSPACE_PROVISION=off` (Standard der Testsuite). Ein Start der
 Nachricht wartet auf ein laufendes Setup der Werkbank, statt ein zweites
 anzustoßen (`agent_workspace.setup_lock`); der Browser hat dafür seine Sperre

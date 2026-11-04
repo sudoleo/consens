@@ -1654,13 +1654,38 @@ def test_a_new_accounts_first_message_makes_both_vms_in_the_background(store, fa
 
 
 def test_an_account_that_had_its_workspace_is_left_as_it_is(store, fake_vm, provisioning, monkeypatch):
-    """A record that names the VMs: a message, the live view or the terminal
-    opened them before. Nothing is made, nothing woken. And off is off."""
-    agent_workspace.ref(store.db, UID).set({"name": agent_vm.workspace_name(UID), "browser": agent_vm.browser_name(UID)})
+    """A record that names the VMs, both there: a message opened them
+    before. Nothing is made, nothing woken. And off is off."""
+    browser, workbench = agent_vm.browser_name(UID), agent_vm.workspace_name(UID)
+    agent_workspace.ref(store.db, UID).set({"name": workbench, "browser": browser})
+    backend = fake_vm.backend()
+    for name in (browser, workbench):
+        backend.ensure(name)
     agent_workspace.provision(store, UID).join(10)
-    assert fake_vm.vms == {} and fake_vm.warmed == []
+    assert [call[0] for call in fake_vm.calls if call[0] not in {"exists", "close"}] == ["ensure", "ensure"]
+    assert fake_vm.warmed == [] and fake_vm.vms[workbench]["files"] == {}
     monkeypatch.setenv("AGENT_WORKSPACE_PROVISION", "off")
     assert agent_workspace.provision(store, "another-account") is None
+
+
+@pytest.mark.parametrize("opened", ["browser", "workbench"])
+def test_a_view_opened_before_the_first_message_leaves_the_other_vm_to_the_provisioning(
+        store, fake_vm, provisioning, opened):
+    """The live view (or the terminal) names both VMs on the record but makes
+    only its own: the first message then made neither, and the other one's
+    whole setup fell to its first call (bug hunt 2026-11-03). Now each VM
+    that is not there is made; the one that is stays as it is."""
+    browser, workbench = agent_vm.browser_name(UID), agent_vm.workspace_name(UID)
+    agent_workspace.record_for_view(store, UID, provider="fake")
+    fake_vm.backend().ensure(browser if opened == "browser" else workbench)
+    agent_workspace.provision(store, UID).join(10)
+    if opened == "browser":
+        assert fake_vm.warmed == []
+        assert fake_vm.vms[workbench]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
+        assert fake_vm.vms[browser]["files"] == {}
+    else:
+        assert fake_vm.warmed == [browser] and fake_vm.rested == [browser]
+        assert fake_vm.vms[workbench]["files"] == {}
 
 
 def test_a_messages_start_waits_for_the_setup_running_and_runs_none_of_its_own(store, fake_vm):

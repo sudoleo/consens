@@ -586,9 +586,11 @@ def provision(store, uid, *, factory=None):
     """A new account's workspace before it is needed (since 2026-11-02, the
     module's docstring): both VMs made and set up in the background, the
     browser's Chrome started once and then told to rest (the helper's warm
-    and rest, as after a message). Only where the account's record names no
-    VM yet, so nothing ever opened one, and the server's safety rules leave
-    the workspace open. Called with the account's messages to the agent
+    and rest, as after a message). Only a VM that is not there: where the
+    account's record names none yet nothing ever opened one, else the live
+    view or the terminal may have made only its own (until 2026-11-04 that
+    left the other to its first call). And only while the server's safety
+    rules leave the workspace open. Called with the account's messages to the agent
     that may use the workspace (routers/agent.py); asks the record once per
     process and account, on a thread of its own, so the message never waits
     for it. Returns the thread, or None."""
@@ -609,14 +611,19 @@ def _provision_new(store, uid, factory):
         vm = factory()
         if vm is None:
             return
-        provider = vm.provider
-        vm.close()
-        if not _record_new(store, uid, provider):
+        try:
+            new = _record_new(store, uid, vm.provider)
+            kinds = {kind for kind, name in (("browser", agent_vm.browser_name(uid)),
+                                             ("workbench", agent_vm.workspace_name(uid)))
+                     if new or not vm.exists(name)}
+        finally:
+            vm.close()
+        if not kinds:
             return
     except Exception as exc:
         logging.warning("Agent workspace provision not started category=%s", safe_exception(exc))
         return
-    _provision(uid, factory)
+    _provision(uid, factory, kinds)
 
 
 def _record_new(store, uid, provider):
@@ -639,9 +646,10 @@ def _record_new(store, uid, provider):
     return made["new"]
 
 
-def _provision(uid, factory):
-    """Both VMs side by side, each on a backend of its own; failures are
-    only logged: the first call that needs a VM sets up what is missing."""
+def _provision(uid, factory, kinds=("browser", "workbench")):
+    """The VMs of ``kinds`` side by side, each on a backend of its own;
+    failures are only logged: the first call that needs a VM sets up what is
+    missing."""
     from app.services import agent_browser
     from app.services.llm.provider_runtime import ProviderCancellation
     seconds = {}
@@ -674,7 +682,7 @@ def _provision(uid, factory):
             if vm is not None:
                 vm.close()
     threads = [threading.Thread(target=target, name=f"agent-workspace-provision-{target.__name__}", daemon=True)
-               for target in (browser, workbench)]
+               for target in (browser, workbench) if target.__name__ in kinds]
     for thread in threads:
         thread.start()
     for thread in threads:

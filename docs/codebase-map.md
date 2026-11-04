@@ -6456,7 +6456,8 @@ eigenem Thread, `open_workspace` beginnt beide schon während des nächsten
 Modellschritts: `VMTools.prewarm`, aus `DelegationLoop._request_workspace`;
 eine offen beginnende Nachricht wärmt nur den Browser). Seit 2026-11-02
 richtet die erste Nachricht eines Kontos ohne Arbeitsplatz beide VMs im
-Hintergrund ein (`agent_workspace.provision` aus `routers/agent.py`, Notaus
+Hintergrund ein, seit 2026-11-04 je VM, die es noch nicht gibt (Live-Ansicht
+oder Terminal davor machen nur ihre eigene; `agent_workspace.provision` aus `routers/agent.py`, Notaus
 `AGENT_WORKSPACE_PROVISION=off`); `_bench` wartet auf ein laufendes Setup
 (`agent_workspace.setup_lock`). Wartende Schritte melden `starting_until`
 (`agent_workspace.Start`/`start_until`, Schätzung `START_SECONDS`), die
