@@ -185,7 +185,7 @@ REVIEWER_JOIN_SECONDS = 10
 REVIEW_TIME_MARGIN = 15
 REVIEW_MIN_SECONDS = 30
 # What the review takes after the answer, which the agent's own steps leave
-# free (DelegationLoop.answer_time_left): its final rounds, the join of their
+# free (AgentLoop.answer_time_left): its final rounds, the join of their
 # threads, the margin and REVIEW_SAVE_SECONDS for its saves.
 REVIEW_SAVE_SECONDS = 10
 REVIEW_RESERVE_SECONDS = FINAL_ROUND_SECONDS + REVIEWER_JOIN_SECONDS + REVIEW_TIME_MARGIN + REVIEW_SAVE_SECONDS
@@ -205,7 +205,7 @@ _KIND_ALIASES = {word: kind for kind, words in _KIND_WORDS.items() for word in w
 # step the user did not ask for, damage beyond the task, work far off the
 # user's goal, or the agent following instructions that came from content
 # instead of the user. The agent never learns of it; the run waits for the
-# user (DelegationLoop.request_hold). In the final round, with nothing left
+# user (AgentLoop.request_hold). In the final round, with nothing left
 # to stop, the same reasons mark a "concern" that stands first in the notes.
 HALT_KINDS = ("safety", "harm", "off_goal", "injection")
 _HALT_ALIASES = {"security": "safety", "security_critical": "safety", "unsafe": "safety", "damage": "harm",
@@ -2129,7 +2129,7 @@ class ReviewerSession:
         """A new agent session for this reviewer (agent panel row), on the
         OpenRouter session of its conversation; ``own``: on one of its own
         (the final round's hedge)."""
-        from app.services.agent_delegation import Worker
+        from app.services.agent_loop import Worker
         title = f"Review · {self.model.label}"
         worker = Worker(uuid4().hex, self.model, self.messages)
         worker.kind = "audit"
@@ -2157,8 +2157,8 @@ class AnswerAudit:
     every reviewer is done, so no mark comes and goes while the page is read.
 
     ``setting``: the user's ``reviewers`` (user_settings.py). "always"
-    follows from the run's start (DelegationLoop.run), "workspace" from the
-    agent's first step in the workspace on (DelegationLoop._review_from_here),
+    follows from the run's start (AgentLoop.run), "workspace" from the
+    agent's first step in the workspace on (AgentLoop._review_from_here),
     "off" never. A review the setting kept the reviewers from ends "off"
     (``unreviewed``), not "failed": nobody failed, nobody was asked."""
 
@@ -2241,7 +2241,7 @@ class AnswerAudit:
 
     def halt(self, session, halt):
         """A reviewer stops the work for the user: the run pauses before its
-        next step and asks the user (DelegationLoop.request_hold). The agent
+        next step and asks the user (AgentLoop.request_hold). The agent
         never learns of it. Only with evidence: a halt whose quote its entry
         does not hold stops nothing and stays a mark. Once per reviewer and
         entry; a card the user already decided for its entry is not opened
@@ -2367,7 +2367,7 @@ class AnswerAudit:
         or "failed" (none), and the answer final in each case. Only a stop
         ends it with "cancelled", the live marks kept (_live_findings), and
         raises; the user's Stop or any other interruption then ends the
-        review, not the turn (DelegationLoop._finish_review). Without
+        review, not the turn (AgentLoop._finish_review). Without
         reviewers by the user's setting (``unreviewed``) it ends "off" at once."""
         tools = self.tools
         if self.unreviewed:

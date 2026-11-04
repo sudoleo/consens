@@ -22,7 +22,7 @@ from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCa
 
 
 PRODUCER_LEASE_SECONDS = 120
-# The run's watcher looks every 10 s (agent_delegation.WATCH_SECONDS); a
+# The run's watcher looks every 10 s (agent_loop.WATCH_SECONDS); a
 # renewal writes the root, the chat's lock and the account's running
 # responses. With 60 s left it renews about every 60 s and has six tries
 # before the lease ends (a database blip of up to a minute is tolerated);
@@ -240,7 +240,7 @@ class AgentSessionStore:
 
     def report_lock_time(self):
         """The turn's time under the account lock as a metric and one log
-        line with numbers only (DelegationLoop.run at its end)."""
+        line with numbers only (AgentLoop.run at its end)."""
         meter = self.lock_time()
         if not meter["calls"]:
             return
@@ -581,7 +581,7 @@ class AgentSessionStore:
                 or root.get("run_status") != "running" or root.get("cancel_requested")):
             raise ProviderCancelled("Agent run stopped")
         # The root as read: the caller takes the user's notes from it, and
-        # whether the chat holds Google data (DelegationLoop._holds_google_data).
+        # whether the chat holds Google data (AgentLoop._holds_google_data).
         root = {**root, "chat_google_data": bool(chat.get("google_data"))}
         now = datetime.now(timezone.utc)
         if root["lease_until"] > now + timedelta(seconds=PRODUCER_RENEW_BEFORE_SECONDS):
@@ -647,8 +647,8 @@ class AgentSessionStore:
         (continue with ``text`` as their message into the run, like a note),
         "deny" where it declines, "choose" with the ``choice`` (an index) on a
         choice card (check_answer).
-        The run's watcher reads it from the root (DelegationLoop._receive_hold);
-        returns the fields saved, for a run in this process (DelegationLoop.receive)."""
+        The run's watcher reads it from the root (AgentLoop._receive_hold);
+        returns the fields saved, for a run in this process (AgentLoop.receive)."""
         from uuid import uuid4
         ref = self.receipt_ref(uid, chat_id, turn_id)
 
@@ -674,7 +674,7 @@ class AgentSessionStore:
         return self._agent_transaction(uid, operation)
 
     def add_user_note(self, uid, chat_id, turn_id, text):
-        """A message of the user into the running response (DelegationLoop
+        """A message of the user into the running response (AgentLoop
         takes it before its next step). At most USER_NOTES_MAX per response."""
         from uuid import uuid4
         ref = self.receipt_ref(uid, chat_id, turn_id)

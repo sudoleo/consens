@@ -13,7 +13,7 @@ import pytest
 from app.services import agent_chat_search
 from app.services.agent_chat_search import ChatSearch, SearchChatsArgs
 from test_agent_comparison import Script
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 from test_agent_watch import watch_loop
 
@@ -95,4 +95,4 @@ def test_what_an_opened_chat_never_is(store, which, message):
 def test_what_it_brings_is_outside_content(store):
     value = SimpleNamespace(tool_calls=[{"id": "c1", "function": {"name": "search_chats", "arguments": "{}"}}])
     results = {"c1": {"role": "tool", "tool_call_id": "c1", "content": json.dumps({"chats": []})}}
-    assert DelegationLoop._brought_outside_content(None, value, results) is True
+    assert AgentLoop._brought_outside_content(None, value, results) is True

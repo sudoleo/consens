@@ -202,9 +202,9 @@ def test_the_runs_end_waits_for_the_log_at_most_its_limit(caplog):
 def test_the_journal_and_the_log_wait_at_most_fifteen_seconds_together(store, monkeypatch):
     """A-R3 (2026-10-29): the journal had no limit and the work log alone 20 s;
     the run's end and finish_run waited for both."""
-    from app.services import agent_delegation
-    assert agent_delegation.CLOSE_WAIT_SECONDS == 15
-    monkeypatch.setattr(agent_delegation, "CLOSE_WAIT_SECONDS", 1)
+    from app.services import agent_loop
+    assert agent_loop.CLOSE_WAIT_SECONDS == 15
+    monkeypatch.setattr(agent_loop, "CLOSE_WAIT_SECONDS", 1)
     loop = audit_loop(store, Audit())
     waits = {}
     journal_close, log_close = loop.journal.close, loop.work_log.close

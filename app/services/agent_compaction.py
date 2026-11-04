@@ -1,4 +1,4 @@
-"""Compaction of a long VM run's own conversation (DelegationLoop._compact),
+"""Compaction of a long VM run's own conversation (AgentLoop._compact),
 and the run's work record for the chat's next message (``work_record``).
 
 A turn that works in its VM may run for hours and hundreds of steps
@@ -35,11 +35,11 @@ history repeats it after that turn's answer as an app message, byte for byte
 as saved, so the next message's prompt still continues the previous one's
 cached prefix. It is never the user's words (``is_work_record``): memory
 evidence, the user's links and addresses and the comparison's context leave
-it out (DelegationLoop.answer_conversation).
+it out (AgentLoop.answer_conversation).
 
 Summaries (since 2026-11-03), as Claude Code and Codex compact a session
 whose context fills up: the chat model itself writes a summary that replaces
-what it covers, in one step of the turn (DelegationLoop._summarize), claimed
+what it covers, in one step of the turn (AgentLoop._summarize), claimed
 and billed like any other step.
 
 - The chat's history: once the earlier messages since the last summary pass

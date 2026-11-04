@@ -7,7 +7,7 @@ import pytest
 
 from app.services import agent_watch, agent_watches
 from app.services.agent_comparison import comparison_selection
-from app.services.agent_delegation import HOLD_TIMEOUT_SECONDS, DelegationLoop
+from app.services.agent_loop import HOLD_TIMEOUT_SECONDS, AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.chat_store import turn_detail
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
@@ -79,7 +79,7 @@ def watch_loop(store, script, *, watch_outlook=None, question="Tell me when IRON
     unless ``reviewers``, whose rounds Script answers without marks.
     ``watch_run``: a Watch's scheduled run."""
     chat, turn = pending(store, question=question)
-    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": question}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
@@ -246,7 +246,7 @@ def watch_outage(uid, chat_id):
 def test_a_reply_next_to_a_watch_that_was_not_prepared_is_written_again(store, watch_outlook, reply):
     """The reply pointed to a card that offers no new Watch: it goes back and
     the next step writes the answer with the result in view
-    (DelegationLoop._side_results_accepted, review 2026-10-14)."""
+    (AgentLoop._side_results_accepted, review 2026-10-14)."""
     script = WatchWithReply(direct_reply=reply)
     loop = watch_loop(store, script, question="Kannst du den Watch bitte für mich starten?",
                       watch_outlook=watch_outlook)
@@ -376,5 +376,5 @@ def test_a_search_result_counts_as_seen_with_its_title_and_finish_ends_the_watch
 
 def test_the_run_tools_add_no_outside_content_and_ride_along_an_answer():
     from app.services.agent_answer_mode import SIDE_TOOLS
-    from app.services.agent_delegation import OWN_CONTENT_TOOLS
+    from app.services.agent_loop import OWN_CONTENT_TOOLS
     assert {"report_finding", "finish_watch"} <= SIDE_TOOLS & OWN_CONTENT_TOOLS

@@ -152,7 +152,7 @@ def agent_sources(completion, review=None):
 
 
 # Volatile per-message context (clock to the second, selected model; from
-# DelegationLoop the chat's file list and this message's Google selection)
+# AgentLoop the chat's file list and this message's Google selection)
 # travels with the newest user message instead of the system prompt. The system prompt
 # and the replayed history then stay byte-identical across a chat's messages,
 # so providers can serve them from their prompt cache. A clock at the top of
@@ -282,7 +282,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         of an earlier turn, agent_compaction "Summaries") stands for the
         messages it covers, exactly as saved; their sources stay openable.
         ``summary``, a dict, receives the plan of the next one once the
-        history since passes HISTORY_SUMMARY_ABOVE_CHARS (DelegationLoop
+        history since passes HISTORY_SUMMARY_ABOVE_CHARS (AgentLoop
         writes it in its first step): ``end``, the index where the messages
         that stay word for word begin, ``through``, the position of the last
         message it covers, ``turns``, ``partial`` and ``held``, the history's
@@ -447,7 +447,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             review_round = getattr(completion, "review_round", None)
             if isinstance(review_round, str) and review_round:
                 # A reviewer's call: live, final, repair or hedge
-                # (agent_audit; DelegationLoop.worker_completion).
+                # (agent_audit; AgentLoop.worker_completion).
                 receipt_patch["round"] = review_round
             charged = agent_quota.measured_charge(usage)
             if charged is not None:
@@ -472,7 +472,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
     def hand_over(self, uid, chat_id, turn_id, *, run_token, completion):
         """The answer is fixed and only its review is left (agent_audit): the
-        chat is free for its next message from here on (DelegationLoop._hand_over).
+        chat is free for its next message from here on (AgentLoop._hand_over).
 
         The turn stays ``pending`` until the reviewers are done (finish_run),
         but says since when its answer stands (``agent_answer_fixed_at``,
@@ -515,7 +515,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
     def save_history_summary(self, uid, chat_id, turn_id, *, run_token, summary=None, failed=None):
         """The summary of the chat's history this turn's first step wrote
-        (DelegationLoop._summarize): saved on the turn right away, so later
+        (AgentLoop._summarize): saved on the turn right away, so later
         messages start with it (messages) also when this one fails. Or,
         ``failed``, the mark of one that did not work out, after which the
         next waits for the history to grow (messages). False when the run
@@ -593,11 +593,11 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     # What the next message is told this one did (messages).
                     patch["agent_work_record"] = completion.work_record
                 if getattr(completion, "holds", None):
-                    # The turn's pauses (DelegationLoop._end_hold): kind, ask,
+                    # The turn's pauses (AgentLoop._end_hold): kind, ask,
                     # domain, reviewer, decision and seconds, no reasons.
                     patch["agent_holds"] = completion.holds
                 if isinstance(getattr(completion, "wrap_up", None), dict):
-                    # Which limit ended its work (DelegationLoop._wrap_up):
+                    # Which limit ended its work (AgentLoop._wrap_up):
                     # reason code, steps and seconds, no text (audit I1).
                     patch["agent_wrap_up"] = completion.wrap_up
                 if status == "succeeded" or fixed:

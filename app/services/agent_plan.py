@@ -1,6 +1,6 @@
 """The agent's plan for a long task (update_plan, like Claude Code's todo list).
 
-Offered with the agent's VM (AgentPreferences.vm, DelegationLoop), where a
+Offered with the agent's VM (AgentPreferences.vm, AgentLoop), where a
 message may run for hours. Each call replaces the whole list: what the agent
 means to do, one step in progress while it works on it, each step completed
 once done. The plan is the agent's declared intent, written by the model, so
@@ -37,7 +37,7 @@ class UpdatePlanArgs(BaseModel):
 
 
 class PlanTools:
-    """The plan of one message (DelegationLoop.plan_tools)."""
+    """The plan of one message (AgentLoop.plan_tools)."""
 
     def __init__(self, reviewed=True):
         # The latest plan, as the agent last wrote it ([] before the first).

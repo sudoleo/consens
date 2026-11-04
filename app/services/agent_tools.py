@@ -137,7 +137,7 @@ class ReadOnlyTool:
     reports: bool = False
     # The tool only reads, and its call needs nothing that another call of
     # the same step changes or asks the user: neighbouring calls of such
-    # tools run at the same time (DelegationLoop._call_groups). Its execute
+    # tools run at the same time (AgentLoop._call_groups). Its execute
     # must be thread-safe.
     concurrent: bool = False
     # With ``concurrent``: what the tool counts or keeps in order (a limit
@@ -155,7 +155,7 @@ class ReadOnlyTool:
                 "parameters": argument_schema(self.arguments)}}
 
 
-# The place of the running call in its group (DelegationLoop._execute_together):
+# The place of the running call in its group (AgentLoop._execute_together):
 # (CallOrder, index), None outside a group.
 _CALL_TURN = contextvars.ContextVar("agent_call_turn", default=None)
 

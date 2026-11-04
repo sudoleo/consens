@@ -26,7 +26,7 @@ from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
 from app.services.agent_sessions import HoldActionRefused, NotesFull
 from app.services.agent_policy import AgentPolicy
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
 from app.services.agent_tools import configured_model
 from app.services.agent_runtime import AgentCapacityExceeded, AgentStreamingResponse, agent_capacity
@@ -151,7 +151,7 @@ def workspace_turn(uid):
 
 def workspace_closed(chat_data, browser):
     """Whether this message starts without the workspace's tools, only with
-    open_workspace (agent_vm.on_demand, DelegationLoop._open_workspace).
+    open_workspace (agent_vm.on_demand, AgentLoop._open_workspace).
     It starts with them where the chat's last message used the workspace
     (finish_run: agent_workspace_used) or the user has its browser or just
     handed it back (``browser``, browser_turn): the work goes on there. With
@@ -653,7 +653,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                                   history_chars=_watch_history_chars() if watch_run else None,
                                   summary=history_summary)
         cancellation = ProviderCancellation()
-        loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
+        loop = AgentLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,
                          completion_factory=AgentCompletion, policy=policy, file_context=file_context,
                          google_selection=payload.google_selection,
@@ -759,7 +759,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             error = "This response was stopped."
             failure = {"code": "cancelled"}
             if (getattr(completion, "failure", None) or {}).get("code") == "hold_timeout":
-                # A pause nobody decided (DelegationLoop._hold_wait): said so.
+                # A pause nobody decided (AgentLoop._hold_wait): said so.
                 error, failure = completion.failure["error"], {"code": "hold_timeout"}
         except (AgentCapacityExceeded, TurnStatusConflict, AnalysisBudgetExceeded) as exc:
             failure = agent_failure(exc)
@@ -1082,7 +1082,7 @@ class AgentNoteRequest(BaseModel):
 def add_agent_note(request: Request, chat_id: str, request_id: str, payload: AgentNoteRequest):
     """A message into the running response, by the browser's request identity
     (Enter while it runs, agent-chat.js addNote; since 2026-10-26, with Agent
-    VM). The run takes it before its next step (DelegationLoop._take_notes)."""
+    VM). The run takes it before its next step (AgentLoop._take_notes)."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
@@ -1118,9 +1118,9 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
 def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text="", choice=None):
     """The user's decision on the run's open hold: saved on its root
     (decide_hold) and, when this process runs it, handed to the run at once
-    (DelegationLoop.receive), not with its watcher's next look, which still
+    (AgentLoop.receive), not with its watcher's next look, which still
     reads the same. A hold whose save failed is known only to its run
-    (DelegationLoop.unsaved_hold): the run takes the decision itself, so a
+    (AgentLoop.unsaved_hold): the run takes the decision itself, so a
     pause stays decidable. Raises as decide_hold when neither knows it open."""
     loop = agent_background.run_loop(uid, chat_id, request_id)
     try:
@@ -1151,7 +1151,7 @@ class AgentHoldDecision(BaseModel):
 @limiter.limit("30/minute")
 def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: AgentHoldDecision):
     """The user's decision when a reviewer paused the response (agent_audit.py
-    halt, DelegationLoop.request_hold; since 2026-10-26): let it go on, stop
+    halt, AgentLoop.request_hold; since 2026-10-26): let it go on, stop
     it, or go on with a message to the agent. The agent learns only of the
     message, as one the user wrote while it worked. On the agent's own
     question (agent_ask.py) "continue" allows its step and "deny" does not."""

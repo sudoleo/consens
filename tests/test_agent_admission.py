@@ -53,7 +53,7 @@ def expected(loop, searches=None):
     from app.services.agent_audit import AGENT_SEARCH_ROUNDS
     from app.services.agent_budget_config import micro_eur
     searches = AGENT_SEARCH_ROUNDS if searches is None else searches
-    from app.services.agent_delegation import AGENT_SESSION
+    from app.services.agent_loop import AGENT_SESSION
     from app.services.agent_tools import search_tools
     model = loop._routing_model()
     tools = [*loop.registry.schemas, *search_tools(model, searches)]
@@ -302,7 +302,7 @@ def test_parallel_comparison_answers_start_together_with_the_same_search_and_out
 
 
 def test_google_chat_tells_the_model_that_web_search_is_unavailable(store):
-    from app.services.agent_delegation import GOOGLE_NO_SEARCH
+    from app.services.agent_loop import GOOGLE_NO_SEARCH
     observed = []
     class Capture(Completion):
         def stream(self, **kwargs):

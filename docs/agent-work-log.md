@@ -33,7 +33,7 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 
 | Eintrag | Woher im Code | Inhalt |
 |---|---|---|
-| `start` | Beginn von `DelegationLoop.run` (`_log_start`) | Frage, Modell, Einstellungen, gewählte Dateien, Grenzen des Laufs |
+| `start` | Beginn von `AgentLoop.run` (`_log_start`) | Frage, Modell, Einstellungen, gewählte Dateien, Grenzen des Laufs |
 | `context` | `_step`, direkt vor der Anfrage | Was die Anfrage trägt, je Akteur nur, was noch nicht im Protokoll steht. Nach Position im Gespräch des Akteurs: im ersten Schritt Systemprompt (mit Memory-Block), Verlauf (frühere Fragen und Antworten) und Frage mit App-Kontext, danach alles, was der Lauf anhängt, etwa Hinweise der App, auch derselbe Hinweis ein zweites Mal. Was nur die einzelne Anfrage trägt (Dateiblock, Notiz eines Schritts, geänderter Systemprompt), einmal je Text. Die eigenen Nachrichten des Modells in diesem Lauf sind seine `step`-Einträge. |
 | `step` | Ende jedes `_step` des Agenten, nach der Abrechnung | Modell, Status, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`, nur wenn der Anbieter sie schickt), Abschlussgrund, Verbrauch (mit der Zahl der Suchen) |
 | `tool` | Ergebnis eines Aufrufs (`_run_call`; gleichzeitige Aufrufe eines Schritts nach ihrem Ende in Aufrufreihenfolge) | Das vollständige Ergebnis, wie es in den Kontext des Agenten geht: gelesene Seiten, Dateiauszüge, Gmail/Kalender, Memory-Antworten, Befehle und Dateien der Agent-VM (Exit-Code, gekürzte Ausgaben, Dauer), Fehler. Seit 2026-10-30 mit den Feldern `started_at` (UTC, ISO) und `duration_ms` des Aufrufs (I4) |
@@ -42,7 +42,7 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 
 Nie im Protokoll: die Prüfer, die Antworten der
 Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
-(`DelegationLoop._log_actor`); ihr Ergebnis steht als `tool`-Eintrag darin.
+(`AgentLoop._log_actor`); ihr Ergebnis steht als `tool`-Eintrag darin.
 
 ### Was nicht hineinkommt
 
@@ -114,7 +114,7 @@ Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
   schon abgelegte Inhalte werden wieder entfernt, und der Turn trägt
   `work_log_incomplete`. Am Laufende wartet der Lauf auf den Rest, seit
   2026-10-29 zusammen mit dem Journal der Sitzungen höchstens 15 s
-  (`agent_delegation.CLOSE_WAIT_SECONDS`, vorher das Protokoll allein 20 s und
+  (`agent_loop.CLOSE_WAIT_SECONDS`, vorher das Protokoll allein 20 s und
   das Journal unbegrenzt); was dann noch fehlt, ist verloren (Logzeile mit dem
   Namen des Threads), dem Protokoll fehlt der `end`-Eintrag, was die Ansicht
   als unvollständig zeigt, und `finish_run` läuft trotzdem. Prüfer-Threads
@@ -268,7 +268,7 @@ seine Befunde aus den Live-Runden (`live`, „During the run“).
 Anfang aus dem Cache: Die Kosten wachsen linear mit dem Lauf. Ein langer Lauf
 hält dafür im Tageskonto das Meiste frei, was die Prüfer in einem der letzten
 acht Schritte nahmen, und das Doppelte für ihre Schlussrunden
-(`DelegationLoop._reviewer_step_charge`, `_long_run_limit`). Jede Runde wird
+(`AgentLoop._reviewer_step_charge`, `_long_run_limit`). Jede Runde wird
 zu ihrem erwarteten Preis zugelassen (`RunCosts.estimate`, Sitzung
 `conversation_key`, Art `audit`): Das zuletzt im Cache gemessene Präfix des
 Gesprächs zählt zum Cache-Read-Preis; ein neues Gespräch beginnt ohne

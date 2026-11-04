@@ -58,7 +58,7 @@ READ_CONTENT_TOKENS = 4000
 READ_TEXT_CHARS = 24_000
 # One read, redirect and fallback helper included, ends after this long (live
 # 1.5-3.9 s per fetch), and none starts when less than READ_MIN_SECONDS are
-# left before the answer must begin (DelegationLoop.answer_time_left): a
+# left before the answer must begin (AgentLoop.answer_time_left): a
 # stalled fetch must not eat the answer's time. A read that runs out fails;
 # the turn goes on.
 READ_SECONDS = 60
@@ -99,7 +99,7 @@ def url_key(value):
 # nothing, because only this message's comparison answers counted. Two more
 # kinds are readable now, neither of which a page can steer:
 # * the sources saved with the chat's earlier messages (provider citations,
-#   pages read before; DelegationLoop.chat_sources from AgentRunStore.messages);
+#   pages read before; AgentLoop.chat_sources from AgentRunStore.messages);
 # * URLs the user wrote (user_urls). Links in earlier answer TEXT are not: the
 #   agent writes from untrusted evidence, and an injected page could
 #   make it write a URL carrying chat content for a later, click-free fetch.
@@ -237,7 +237,7 @@ class PageFetch(AgentCompletion):
 
     The fetched page arrives as an ``openrouter:web_fetch`` output item; the
     helper's own text is discarded. Usage is measured like any model step and
-    settled by DelegationLoop._step."""
+    settled by AgentLoop._step."""
 
     def __init__(self):
         super().__init__()
@@ -442,7 +442,7 @@ class SourceReader:
     # --- The tool ----------------------------------------------------------
     def read(self, args, *, cancellation):
         """The tool. Refusals and failed pages are results, not tool errors:
-        three tool errors in a row end the turn (DelegationLoop.run), and a
+        three tool errors in a row end the turn (AgentLoop.run), and a
         paywalled page or a mis-copied URL must not cost the paid work its
         answer."""
         loop = self.loop
@@ -556,7 +556,7 @@ class SourceReader:
 
     def _call(self, model, record, cancellation):
         """One metered helper step; returns the PageFetch or the exception."""
-        from app.services.agent_delegation import Worker
+        from app.services.agent_loop import Worker
         from app.services.agent_provider_limits import AgentRunInterrupted, agent_failure
         from app.services.agent_quota import AgentTokenBudgetExceeded
         loop = self.loop

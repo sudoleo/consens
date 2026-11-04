@@ -12,7 +12,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.services import agent_ask, agent_delegation, agent_workspace
+from app.services import agent_ask, agent_loop, agent_workspace
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from test_agent_audit import ANSWER, Audit, LookupArgs, audit_loop, decide_when_held, saved
 from test_agent_runs import AUTH, UID, api, pending, store  # noqa: F401  (fixtures)
@@ -175,7 +175,7 @@ def test_without_an_answer_the_agent_finishes_instead_of_stopping(store, monkeyp
     started = time.monotonic()
     clock = {"skew": 0.0}
     loop.clock = lambda: time.monotonic() + clock["skew"]
-    watcher = when_held(loop, lambda hold: clock.update(skew=agent_delegation.HOLD_TIMEOUT_SECONDS + 1))
+    watcher = when_held(loop, lambda hold: clock.update(skew=agent_loop.HOLD_TIMEOUT_SECONDS + 1))
     events = list(loop.run())
     watcher.join(5)
     assert time.monotonic() - started < 10
@@ -345,7 +345,7 @@ def test_a_takeover_never_handed_back_leaves_the_call_unrun(store, monkeypatch):
     loop.workspace_tools = frozenset({"browser"})
     clock = {"skew": 0.0}
     loop.clock = lambda: time.monotonic() + clock["skew"]
-    watcher = when_held(loop, lambda hold: clock.update(skew=agent_delegation.HOLD_TIMEOUT_SECONDS + 1))
+    watcher = when_held(loop, lambda hold: clock.update(skew=agent_loop.HOLD_TIMEOUT_SECONDS + 1))
     list(loop.run())
     watcher.join(5)
     assert ran == []

@@ -16,7 +16,7 @@ from app.services import agent_compaction, agent_quota
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_compaction import (CONTENT_CLEARED, OUTPUT_CLEARED, WORK_RECORD_CLOSE, WORK_RECORD_OPEN,
                                            compact, describe, is_work_record, stub, work_record)
-from app.services.agent_delegation import (DelegationLoop, TURN_ALLOWANCE_LIMIT, TURN_CONTEXT_LIMIT,
+from app.services.agent_loop import (AgentLoop, TURN_ALLOWANCE_LIMIT, TURN_CONTEXT_LIMIT,
                                            TURN_WRAP_UP_SECONDS)
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_runs import ACTIVITY_MAX_BYTES, activity_budget, bounded_activity, json_bytes
@@ -426,7 +426,7 @@ def test_the_record_lists_the_calls_and_keeps_its_ends_when_long():
 def loop_after(store, script, chat_id, request_id, question):
     """A message of the chat ``chat_id`` with its saved history (AgentRunStore.messages)."""
     chat, turn = pending(store, chat_id=chat_id, request_id=request_id, question=question)
-    return without_reviewers(DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    return without_reviewers(AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"), messages=store.messages(UID, chat, turn),
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
         completion_factory=script.factory,

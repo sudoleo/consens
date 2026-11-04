@@ -16,7 +16,7 @@ import pytest
 
 from app.services import agent_vm, agent_vm_tools, agent_workspace, prompt_defaults
 from app.services.agent_comparison import AgentPreferences, comparison_selection
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_vm import ExecOutcome, SpritesBackend, VMBackend, VMFileMissing, VMUnavailable
 from app.services.agent_vm_tools import (MODEL_STREAM_CHARS, VIEW_CHARS, VM_NO_TIME, VM_UNAVAILABLE, VMTools,
@@ -259,7 +259,7 @@ def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", file_cont
     """A turn with the workspace whose reviewers never start
     (agent_reviewers.InertAnswerAudit): ``script`` scripts the agent alone."""
     chat, turn = pending(store, chat_id=chat_id, request_id=request_id)
-    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Analyse my data."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
@@ -1467,7 +1467,7 @@ def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, m
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     upload = files.upload(UID, chat_id, {"name": "data.csv", "data": base64.b64encode(b"a\n1\n").decode()})
     chat, turn = pending(store, chat_id=chat_id)
-    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Analyse my data."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),

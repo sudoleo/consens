@@ -114,7 +114,7 @@ TURN_INVALID_LIMIT = ("The model repeated invalid tool requests without progress
 # A long VM run (AgentPolicy.vm_turn_*) ends with its answer while there is
 # still room for it: before the day's allowance cannot hold one more step and
 # the answer, and before its conversation fills this share of the model's
-# window (DelegationLoop._long_run_limit).
+# window (AgentLoop._long_run_limit).
 LONG_RUN_CONTEXT_SHARE = .8
 # The agent's own steps as one session of RunCosts (its cached prefix).
 AGENT_SESSION = "agent"
@@ -260,7 +260,7 @@ PASSING_FAILURE_CODES = frozenset({"provider_error", "provider_timeout"})
 
 def _passing_failure(error):
     """A step that broke off in passing: one more attempt may well succeed
-    (DelegationLoop._answer_attempt). Before 2026-10-27 such a step ended the
+    (AgentLoop._answer_attempt). Before 2026-10-27 such a step ended the
     whole turn, minutes of paid work in the VM and the web included."""
     from app.services.agent_provider_limits import agent_failure
     if isinstance(error, (ModelOutputLimit, AnalysisBudgetExceeded)):
@@ -323,7 +323,7 @@ class Worker:
     session_key: str = ""
 
 
-class DelegationLoop:
+class AgentLoop:
     def __init__(self, *, store, uid, chat_id, turn_id, model, messages, api_key,
                  cancellation, policy=None, registry=None, completion_factory=AgentCompletion, mock_answer=None,
                  comparison_models, cooldowns=None, file_context=None, google_selection=None, google_data_consent=False,

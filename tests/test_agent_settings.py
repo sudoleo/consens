@@ -503,7 +503,7 @@ def test_a_settings_only_message_ends_with_the_reply_and_a_saved_proposal(store)
 
 def test_a_reply_next_to_an_adjusted_change_is_written_again(store):
     """The first reply did not know that Max is Pro: the next step writes it
-    with the result in view (DelegationLoop._side_results_accepted)."""
+    with the result in view (AgentLoop._side_results_accepted)."""
     script = SettingsScript(changes(reasoning="max"), reply="Switched to Max.")
     loop = settings_loop(store, script=script, effort="low", question="Denk ab jetzt maximal gründlich.")
     list(loop.run())

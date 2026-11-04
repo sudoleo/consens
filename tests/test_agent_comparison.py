@@ -19,7 +19,7 @@ import pytest
 from app.core.openrouter_contract import provider_session_id
 from app.services import agent_quota, agent_budget_config
 from app.services.agent_comparison import ComparisonTools, comparison_selection
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import ModelEmptyAnswer
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
@@ -98,7 +98,7 @@ def make_loop(store, script, *, messages=None, models=None, preferences=None, re
     """A turn of the agent with ``script``'s completions; its reviewers never
     start (agent_reviewers.InertAnswerAudit) unless ``reviewers``."""
     chat, turn = pending(store)
-    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"), messages=messages or [{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
         completion_factory=script.factory,
@@ -1010,8 +1010,8 @@ def test_a_database_outage_while_saving_a_failed_answer_does_not_stop_the_turn(s
     journal batches them): an outage that outlasts the retry still costs no
     other answer, each update then tries on its own."""
     from google.api_core.exceptions import ServiceUnavailable
-    from app.services import agent_delegation
-    monkeypatch.setattr(agent_delegation, "TERMINAL_RETRY_SECONDS", 0)
+    from app.services import agent_loop
+    monkeypatch.setattr(agent_loop, "TERMINAL_RETRY_SECONDS", 0)
     script = Plan([{"tools": [compare()]}, {"text": ANSWER}], fail_model=True)
     loop = make_loop(store, script)
     publish, failures = store.publish_agents, []

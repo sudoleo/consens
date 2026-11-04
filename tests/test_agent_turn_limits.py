@@ -12,9 +12,9 @@ import json
 
 import pytest
 
-from app.services import agent_delegation
+from app.services import agent_loop
 from app.services.agent_comparison import answer_hash, comparison_selection
-from app.services.agent_delegation import DelegationLoop, TURN_WRAP_UP_SECONDS
+from app.services.agent_loop import AgentLoop, TURN_WRAP_UP_SECONDS
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation
@@ -61,7 +61,7 @@ def test_compare_models_states_the_per_message_comparison_limit(store):
     """The limit stands in the tool's description (AUDIT_COMPARE), not in
     the prompt."""
     chat, turn = pending(store)
-    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
@@ -277,7 +277,7 @@ def test_repeatable_tools_are_not_counted_as_identical_calls(store):
     # rendering the same deck again after an edit is checking the edit.
     # The same plan between work steps says where the agent stands; refusing
     # it ended a long VM run at its fourth unchanged plan.
-    assert agent_delegation.REPEATABLE_TOOLS == {"vm_exec", "vm_read_file", "vm_write_file",
+    assert agent_loop.REPEATABLE_TOOLS == {"vm_exec", "vm_read_file", "vm_write_file",
                                                  "vm_edit_file", "vm_share_file", "vm_start_process",
                                                  "vm_process_output", "vm_stop_process", "vm_view_image",
                                                  "vm_render_office", "update_plan", "browser"}

@@ -19,7 +19,7 @@ takes no new customers and the services that scrape Google break its terms.
 What leaves: the words the agent searches for, from the server, with
 consens.io's key; nothing of the user's account or browser (privacy.html).
 Never in chats with Google data, like read_source and find_pictures
-(agent_delegation.py).
+(agent_loop.py).
 """
 from __future__ import annotations
 

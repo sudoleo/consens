@@ -9,7 +9,7 @@ import httpx
 import pytest
 
 from app.services import agent_sessions, agent_quota
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import AgentRunInterrupted
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
@@ -23,7 +23,7 @@ from app.services.agent_comparison import comparison_selection
 def chat_loop(store, factory):
     chat, turn = pending(store)
     model = resolve_agent_model("claude-haiku-4-5")
-    return without_reviewers(DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"], model=model,
+    return without_reviewers(AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"], model=model,
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Work through the task."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
         completion_factory=factory,
@@ -219,10 +219,10 @@ def test_brief_database_outage_does_not_cancel_a_healthy_producer(store, monkeyp
         checks.append(args)
         if len(checks) == 1:
             raise ServiceUnavailable("temporary")
-    from app.services import agent_delegation
+    from app.services import agent_loop
     class CloseAfterTwoChecks:
         def wait(self, seconds):
-            assert seconds == agent_delegation.WATCH_SECONDS
+            assert seconds == agent_loop.WATCH_SECONDS
             return len(checks) == 2
     monkeypatch.setattr(store, "check_delegation", check)
     loop.closed = CloseAfterTwoChecks()

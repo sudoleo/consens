@@ -1,4 +1,4 @@
-"""Several calls per step at the same time (DelegationLoop._call_groups,
+"""Several calls per step at the same time (AgentLoop._call_groups,
 _execute_together): neighbouring calls of tools that only read
 (ReadOnlyTool.concurrent) run together, every other call on its own, in the
 step's order. Each call keeps exactly one result, in call order, its own live
@@ -12,7 +12,7 @@ import time
 from pydantic import BaseModel, ConfigDict
 import pytest
 
-from app.services import agent_delegation
+from app.services import agent_loop
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, call_order
 from app.services.llm.provider_runtime import ProviderCancelled
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
@@ -130,8 +130,8 @@ def test_calls_that_change_something_run_one_after_another_in_the_steps_order(st
     assert probes.spans["x"][1] <= probes.spans["y"][0] <= probes.spans["y"][1] <= probes.spans["z"][0]
 
 
-@pytest.mark.parametrize("decision, expected", [("continue", agent_delegation.CALL_AFTER_PAUSE),
-                                                ("steer", agent_delegation.HOLD_STEERED)])
+@pytest.mark.parametrize("decision, expected", [("continue", agent_loop.CALL_AFTER_PAUSE),
+                                                ("steer", agent_loop.HOLD_STEERED)])
 def test_a_halt_before_a_group_ends_the_whole_group(store, decision, expected):
     from test_agent_audit import decide_when_held
     probes = Probes()
@@ -156,7 +156,7 @@ def test_a_halt_while_a_group_runs_lets_it_finish_and_ends_the_steps_later_calls
     waiter.join(5)
     found = tool_results(loop)
     assert found["call_0_0"] == {"read": "a"} and found["call_0_1"] == {"read": "b"}
-    assert found["call_0_2"] == {"error": agent_delegation.CALL_AFTER_PAUSE} and "w" not in probes.runs
+    assert found["call_0_2"] == {"error": agent_loop.CALL_AFTER_PAUSE} and "w" not in probes.runs
 
 
 def test_stop_during_a_group_ends_every_call_of_it(store):
@@ -225,7 +225,7 @@ def test_the_same_read_twice_in_a_group_runs_once(store):
     loop = probe_loop(store, [[read("a"), read("b"), read("a")]], probes)
     list(loop.run())
     found = tool_results(loop)
-    assert found["call_0_2"] == {"error": agent_delegation.CALL_REPEATED}
+    assert found["call_0_2"] == {"error": agent_loop.CALL_REPEATED}
     assert sorted(probes.runs) == ["a", "b"] and every_call_answered(loop)
 
 
@@ -240,7 +240,7 @@ def test_the_repeat_guard_counts_each_call_of_a_group_in_order(store):
     assert found["call_2_0"] == {"read": "b"} and "is not run again" in found["call_2_1"]["error"]
     # The fourth ends the response: the call before it in its group still runs.
     assert found["call_3_0"] == {"read": "c"}
-    assert found["call_3_1"] == {"error": agent_delegation.CALL_AT_LIMIT}
+    assert found["call_3_1"] == {"error": agent_loop.CALL_AT_LIMIT}
     assert probes.runs.count("a") == 2 and every_call_answered(loop)
     turn = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
     assert turn["agent_wrap_up"]["reason"] == "repeat"
@@ -301,7 +301,7 @@ def test_the_users_turn_in_the_browser_before_a_group_ends_it(store, fake_vm):
     list(loop.run())
     found = tool_results(loop)
     assert found["call_0_0"]["exit_code"] == 0
-    assert found["call_0_1"] == found["call_0_2"] == {"error": agent_delegation.CALL_AFTER_TAKEOVER}
+    assert found["call_0_1"] == found["call_0_2"] == {"error": agent_loop.CALL_AFTER_TAKEOVER}
 
 
 def test_calls_group_by_their_tools_never_past_the_limit():
@@ -310,7 +310,7 @@ def test_calls_group_by_their_tools_never_past_the_limit():
         ReadOnlyTool("write", "Write.", ProbeArgs, lambda args, **kw: {})])})()
     calls = [{"id": f"c{n}", "function": {"name": name, "arguments": "{}"}}
              for n, name in enumerate(["read", "read", "write", "read", "unknown", "read", "read"])]
-    groups = agent_delegation.DelegationLoop._call_groups(loop, calls, over_limit={"c6"})
+    groups = agent_loop.AgentLoop._call_groups(loop, calls, over_limit={"c6"})
     assert [[call["id"] for _, call in group] for group in groups] == [
         ["c0", "c1"], ["c2"], ["c3"], ["c4"], ["c5"], ["c6"]]
 

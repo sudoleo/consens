@@ -215,7 +215,7 @@ def _empty_over_http(script, monkeypatch):
 @pytest.mark.parametrize("source", [
     "http",
     # Unreachable with the real client (it raises on an empty stop); the loop
-    # refuses it itself (DelegationLoop._finish_merged).
+    # refuses it itself (AgentLoop._finish_merged).
     "scripted",
 ])
 def test_empty_answer_cannot_start_the_review_or_complete_the_turn(store, monkeypatch, source):

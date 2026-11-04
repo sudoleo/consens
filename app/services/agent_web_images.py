@@ -57,7 +57,7 @@ The fetch reaches out like a browser's open, which the reviewers follow
 live. Never in chats with Google data (like
 read_source). A chat model that takes images
 sees the pictures after the result (vm_view_image's way,
-DelegationLoop._show_pictures); one that does not chooses by page, title and
+AgentLoop._show_pictures); one that does not chooses by page, title and
 alt text.
 """
 from __future__ import annotations
@@ -353,7 +353,7 @@ def _reason(exc):
 
 class WebImageTools:
     """find_pictures, search_pictures and show_image for one message
-    (DelegationLoop.image_tools)."""
+    (AgentLoop.image_tools)."""
 
     def __init__(self, loop):
         self.loop = loop
@@ -415,7 +415,7 @@ class WebImageTools:
 
     def take_pictures(self):
         """The pictures looked at since the last call, for a chat model that
-        takes images (DelegationLoop._show_pictures)."""
+        takes images (AgentLoop._show_pictures)."""
         with self.lock:
             pictures, self._pictures = self._pictures, []
         return pictures
@@ -561,7 +561,7 @@ class WebImageTools:
             return candidate["fetch"]
 
     def close(self):
-        """The run is over (DelegationLoop.run): fetches still waiting to
+        """The run is over (AgentLoop.run): fetches still waiting to
         begin never do, and none begins later."""
         with self.lock:
             fetcher, self._fetcher = self._fetcher, None

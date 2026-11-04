@@ -14,8 +14,8 @@ import threading
 
 import pytest
 
-from app.services import agent_delegation
-from app.services.agent_delegation import TURN_TIME_LIMIT, TURN_WRAP_UP_SECONDS
+from app.services import agent_loop
+from app.services.agent_loop import TURN_TIME_LIMIT, TURN_WRAP_UP_SECONDS
 from app.core.observability import provider_diagnostic
 from app.services.agent_provider_limits import (
     TURN_OUTPUT_LIMIT, ModelDeclined, ModelEmptyAnswer, ModelOutputLimit, ProviderCooldowns, agent_failure,
@@ -142,7 +142,7 @@ def test_a_safety_stop_without_a_word_is_declined_and_not_retried(monkeypatch, p
     assert isinstance(error, ModelDeclined)
     failure = agent_failure(error)
     assert failure["code"] == "model_declined" and "Another chat model" in failure["error"]
-    assert not agent_delegation._passing_failure(error)
+    assert not agent_loop._passing_failure(error)
 
 
 def test_the_client_says_once_when_a_tool_call_begins(monkeypatch):
@@ -185,7 +185,7 @@ def test_reasoning_past_the_stored_bound_still_streams_but_is_not_stored(monkeyp
 
 def test_answer_step_thinking_excerpts_keep_updating_past_the_stored_bound(store, monkeypatch):
     """The step after the comparison thinks before it writes the answer."""
-    monkeypatch.setattr(agent_delegation, "THINKING_UPDATE_SECONDS", 0)
+    monkeypatch.setattr(agent_loop, "THINKING_UPDATE_SECONDS", 0)
     chunk = "Some filler about weighing evidence and costs carefully. " * 20
     late = REASONING_STORAGE_CHARS // len(chunk) + 5
     # A highlight is the last sentence of a finished paragraph: the number
@@ -241,7 +241,7 @@ class ThoughtOutRouting(Script):
 
 
 def _routing_loop(store, script, monkeypatch, lighter=low):
-    monkeypatch.setattr(agent_delegation, "lighter_reasoning", lambda model: lighter(model) if lighter else None)
+    monkeypatch.setattr(agent_loop, "lighter_reasoning", lambda model: lighter(model) if lighter else None)
     loop = make_loop(store, script)
     loop.factory = script.factory()
     return loop
@@ -298,7 +298,7 @@ def test_a_thought_only_wrap_up_answer_is_written_again_with_lighter_reasoning(s
     """At a turn limit one last step with tools listed but not callable
     writes the answer (_merged_wrap_up). Thinking through its allowance
     there gets the same single retry with lighter reasoning."""
-    monkeypatch.setattr(agent_delegation, "lighter_reasoning", lambda model: lighter(model) if lighter else None)
+    monkeypatch.setattr(agent_loop, "lighter_reasoning", lambda model: lighter(model) if lighter else None)
     script = Script(compares=10)
     base = type(script.factory())
     wrap_up = []
@@ -340,7 +340,7 @@ def test_a_thought_only_wrap_up_answer_is_written_again_with_lighter_reasoning(s
 # --- A free 429 after paid comparisons: one short retry -------------------
 
 def _answer_with(monkeypatch, store, first, *, retry_seconds=0):
-    monkeypatch.setattr(agent_delegation, "RATE_LIMIT_RETRY_SECONDS", retry_seconds)
+    monkeypatch.setattr(agent_loop, "RATE_LIMIT_RETRY_SECONDS", retry_seconds)
     answer = "The first option costs 100."
     requests, _, _ = transport(monkeypatch, [[first], [
         packet({"content": answer}, finish="stop", usage={"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001})]])
@@ -354,7 +354,7 @@ def _answer_with(monkeypatch, store, first, *, retry_seconds=0):
 def test_rate_limited_answer_step_is_retried_once_and_the_429_costs_nothing(store, monkeypatch):
     """The step after the comparison is refused with a free 429 and retried."""
     loop, requests, answer = _answer_with(monkeypatch, store, _ProviderHTTPStatusError(429, retry_after=1))
-    monkeypatch.setattr(agent_delegation.DelegationLoop, "_pause", lambda self, seconds: iter(()))
+    monkeypatch.setattr(agent_loop.AgentLoop, "_pause", lambda self, seconds: iter(()))
     events = list(loop.run())
     turn = saved(store, loop)
     assert len(requests) == 2 and turn["status"] == "completed" and turn["consensus"] == answer
@@ -376,7 +376,7 @@ def test_rate_limit_retry_respects_the_turn_deadline_and_stops(store):
     loop = chat_loop(store, Script())
     now = [loop.turn_started]
     loop.clock = lambda: now[0]
-    assert loop._rate_limit_delay(None) == agent_delegation.RATE_LIMIT_RETRY_SECONDS
+    assert loop._rate_limit_delay(None) == agent_loop.RATE_LIMIT_RETRY_SECONDS
     assert loop._rate_limit_delay(4) == 4 and loop._rate_limit_delay(11) is None
     now[0] += loop.policy.turn_seconds + TURN_WRAP_UP_SECONDS - 30
     assert loop._rate_limit_delay(1) is None
@@ -390,7 +390,7 @@ def test_rate_limit_retry_respects_the_turn_deadline_and_stops(store):
 def test_answer_reserve_follows_the_reasoning_level_and_moves_the_soft_limit(store):
     loop = chat_loop(store, Script())
     loop.model = SONNET
-    assert loop._answer_reserve() == agent_delegation.ANSWER_RESERVE_SECONDS["max"]
+    assert loop._answer_reserve() == agent_loop.ANSWER_RESERVE_SECONDS["max"]
     hard = loop.policy.turn_seconds + TURN_WRAP_UP_SECONDS
     loop.turn_started = 0.0  # exact arithmetic (the monotonic clock loses bits)
     now = [hard - loop._answer_reserve() - 1]
@@ -400,7 +400,7 @@ def test_answer_reserve_follows_the_reasoning_level_and_moves_the_soft_limit(sto
     # A "max" answer would no longer fit before the hard stop.
     assert loop._turn_limit() == TURN_TIME_LIMIT
     loop.model = low(SONNET)
-    assert loop._answer_reserve() < agent_delegation.ANSWER_RESERVE_SECONDS["max"]
+    assert loop._answer_reserve() < agent_loop.ANSWER_RESERVE_SECONDS["max"]
 
 
 class AnswerContext(Straggler):

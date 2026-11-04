@@ -11,7 +11,7 @@ from app.services import agent_compaction
 from app.services.agent_compaction import (HISTORY_SUMMARY_OPEN, HISTORY_SUMMARY_PARTIAL, HISTORY_SUMMARY_REQUEST,
                                            RUN_SUMMARY_OPEN, RUN_SUMMARY_REQUEST, SUMMARY_CLOSE, history_keep,
                                            is_summary, run_summary_due, run_tail, summary_message, summary_text)
-from app.services.agent_delegation import LONG_RUN_CONTEXT_SHARE, SUMMARY_TEXTS, DelegationLoop
+from app.services.agent_loop import LONG_RUN_CONTEXT_SHARE, SUMMARY_TEXTS, AgentLoop
 from app.services.agent_runs import strip_app_context
 from app.services.agent_work_log import context_data
 from app.services.llm.agent_client import AgentCompletion, measured_usage
@@ -306,7 +306,7 @@ def test_a_partial_history_says_so_in_its_summary(store):
 def test_memory_evidence_never_takes_a_summary_for_the_users_words(store):
     loop = vm_loop(store, Summarizer(), vm="off")
     summary = summary_message(SUMMARY)
-    fresh = DelegationLoop(store=store, uid=UID, chat_id=loop.chat_id, turn_id=loop.turn_id, model=loop.model,
+    fresh = AgentLoop(store=store, uid=UID, chat_id=loop.chat_id, turn_id=loop.turn_id, model=loop.model,
                            messages=[loop.messages[0], summary, {"role": "user", "content": "Go on."}],
                            api_key="test", cancellation=loop.cancellation, policy=loop.policy,
                            completion_factory=Summarizer().factory,
@@ -436,7 +436,7 @@ def test_a_history_summary_moves_what_the_run_appended_after_its_question(store)
 
 
 def test_a_run_summary_keeps_the_users_messages_and_the_apps_state(store, fake_vm, monkeypatch):
-    from app.services.agent_delegation import USER_NOTE_OPEN
+    from app.services.agent_loop import USER_NOTE_OPEN
     note = {"role": "user", "content": USER_NOTE_OPEN + "\nPlease also add a test for emoji."}
     plan = [{"content": "Build the parser", "status": "completed"}, {"content": "Test it", "status": "in_progress"}]
     calls = [[("update_plan", {"items": plan})], *[[("vm_exec", {"command": f"make step{n}"})] for n in range(5)]]

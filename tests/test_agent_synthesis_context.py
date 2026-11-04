@@ -178,12 +178,12 @@ def _thought_only():
 
 
 def test_thought_only_answer_step_is_written_again_with_lighter_reasoning(store, monkeypatch):
-    from app.services import agent_delegation
+    from app.services import agent_loop
     script = Script()
     answer = "The first option costs 100."
     requests, _, _ = transport(monkeypatch, [_thought_only(), [
         packet({"content": answer}, finish="stop", usage={"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001})]])
-    monkeypatch.setattr(agent_delegation, "lighter_reasoning", lambda model: replace(
+    monkeypatch.setattr(agent_loop, "lighter_reasoning", lambda model: replace(
         model, reasoning_effort="low", request_config={**model.request_config, "reasoning": {"effort": "low", "exclude": False}}))
     loop = make_loop(store, script)
     loop.factory = _AnswerOverHttp.factory(script)
@@ -200,11 +200,11 @@ def test_thought_only_answer_step_is_written_again_with_lighter_reasoning(store,
 
 
 def test_thought_only_answer_without_lighter_reasoning_fails_as_output_limit_not_provider_error(store, monkeypatch):
-    from app.services import agent_delegation
+    from app.services import agent_loop
     from app.services.agent_provider_limits import ModelOutputLimit, agent_failure
     script = Script()
     requests, _, _ = transport(monkeypatch, [_thought_only()])
-    monkeypatch.setattr(agent_delegation, "lighter_reasoning", lambda model: None)
+    monkeypatch.setattr(agent_loop, "lighter_reasoning", lambda model: None)
     loop = make_loop(store, script)
     loop.factory = _AnswerOverHttp.factory(script)
     with pytest.raises(ModelOutputLimit):

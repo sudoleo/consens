@@ -876,7 +876,7 @@ def on_demand():
     """The workspace on demand (docs/agent-mode.md "Arbeitsplatz auf Abruf"),
     since 2026-10-29 for every account with the VM (vm_allowed): a message
     starts without the workspace's tools until the agent opens it
-    (DelegationLoop._open_workspace). AGENT_WORKSPACE_ON_DEMAND=off, the
+    (AgentLoop._open_workspace). AGENT_WORKSPACE_ON_DEMAND=off, the
     emergency off, gives them from the start again."""
     return os.getenv("AGENT_WORKSPACE_ON_DEMAND", "").strip().lower() != "off"
 

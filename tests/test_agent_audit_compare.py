@@ -12,7 +12,7 @@ import pytest
 from app.services import agent_audit
 from app.services.agent_audit import COMPARISON_ENTRY_CHARS, ENTRY_CHARS, review_entry
 from app.services.agent_comparison import AgentPreferences, answer_hash, comparison_selection
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
@@ -80,7 +80,7 @@ class Advised(Audit):
 
 def advised_loop(store, script, *, on_note=None, reviewers="always"):
     chat, turn = pending(store)
-    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Tell me about the Eiffel Tower."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),

@@ -133,7 +133,7 @@ _ENTRIES = (
     ("agent_workspace_closed", "Agent: workspace on demand",
      "In place of \"Agent: Linux VM\", \"Agent: plan\" and \"Agent: GitHub\" while a message has not opened the "
      "workspace (AGENT_WORKSPACE_ON_DEMAND): only open_workspace is offered, and opening puts those three blocks "
-     "and their tools here (DelegationLoop._open_workspace).",
+     "and their tools here (AgentLoop._open_workspace).",
      "prompt_defaults.py:AGENT_WORKSPACE_CLOSED_PROMPT", _workspace_closed),
     ("answers", "Consensus mode: individual answers",
      "Default instructions for each answering model in Consensus mode, after the date context. A user's "

@@ -41,7 +41,7 @@ Die Antwort schreibt der Agent selbst: Klartext in einem Schritt ohne
 Toolcalls ist die Antwort und beendet die Nachricht (siehe „Die Antwort
 schreibt der Agent selbst“). Die Prüfung der fixierten Antwort (`audit_answer`)
 führt die App selbst aus (`ComparisonTools.app_tools`,
-`DelegationLoop.app_registry`); das Modell sieht sie nicht. Der Prompt
+`AgentLoop.app_registry`); das Modell sieht sie nicht. Der Prompt
 (`DEFAULT_PROMPTS["agent"]` = `AGENT_AUDIT_SYSTEM_PROMPT`: die Verfassung
 `_AGENT_AUDIT_STEERING` und die App-Fakten `AGENT_AUDIT_ANSWER_SECTION`) steht
 in `prompt_defaults.py`; der Admin zeigt ihn lesend als „Agent:
@@ -337,7 +337,7 @@ Arbeitsplatz VM, GitHub und Plan. Der Agent sucht in jedem Schritt mit bis zu
 „Tageskontingent“). Sein Text streamt wie jede Antwort, auch nach
 eigenen Suchtreffern. `read_source` liest Seiten, die der Nutzer verlinkt,
 Quellen früherer Nachrichten, die Quellen der Antworten von `compare_models`,
-die eigenen Suchtreffer dieser Nachricht (`DelegationLoop.search_sources`
+die eigenen Suchtreffer dieser Nachricht (`AgentLoop.search_sources`
 sammelt die Anbieter-Zitate jedes Schritts, `SourceReader.cited` nimmt sie mit
 `LABEL_SEARCH` auf, „a web search result of this message“) und, solange Prüfer
 folgen, jede öffentliche Seite (siehe „Quellen nachlesen“). Watch,
@@ -720,7 +720,7 @@ Argumente der Aufrufe, Auszüge einer Datei; Groß/klein, Leerraum und
 JSON-Maskierung zählen nicht); sonst bleibt er eine Marke auf dem Eintrag
 (`keep_as_mark`, `doubtful` mit dem Grund als Anmerkung). Anlass: Alle 13
 Halts in Prod endeten mit „Continue“. Mit Beleg ruft er
-`DelegationLoop.request_hold`. Ist schon eine Karte offen (ein anderer Halt
+`AgentLoop.request_hold`. Ist schon eine Karte offen (ein anderer Halt
 oder eine Domain-Karte), kommt der Halt auf diese Karte (`joined_halt`: jeder
 Grund mit seinem Prüfer in `reasons`, eine Karte ohne eigenen Grund übernimmt
 seinen, eine Domain-Karte zeigt dann `review: halt`; Frame `hold` mit
@@ -765,7 +765,7 @@ wie jede Nachricht während der Arbeit; die übrigen Aufrufe der Runde laufen
 nicht, `HOLD_STEERED`, und eine schon geschriebene Antwort geht zurück); Stop
 ist der Stop-Knopf. Läuft der Lauf im selben Prozess, hat er die Entscheidung
 (und eine Nachricht über `…/notes`), sobald die Anfrage antwortet
-(`DelegationLoop.receive`, seit 2026-10-29; vorher erst mit dem nächsten
+(`AgentLoop.receive`, seit 2026-10-29; vorher erst mit dem nächsten
 Blick des Wächters, bis 3 s); der gespeicherte Root bleibt die Wahrheit für
 andere Prozesse. Während einer Pause liest der Wächter den Root deshalb nur
 alle `WATCH_PAUSED_SECONDS` (10 s, so oft wie seit 2026-11-01 auch `WATCH_SECONDS`; eine Pause von
@@ -774,7 +774,7 @@ alle `WATCH_PAUSED_SECONDS` (10 s, so oft wie seit 2026-11-01 auch `WATCH_SECOND
 (seit 2026-10-29): `set_hold` wird dreimal versucht (`_save_hold`, Pause ab
 `HOLD_SAVE_BACKOFF_SECONDS`, verdoppelt), die Karte kommt trotzdem, und der
 Endpunkt gibt die Entscheidung dann dem Lauf seines Prozesses
-(`DelegationLoop.unsaved_hold`/`decide_unsaved`, auch für `…/secret`); erst
+(`AgentLoop.unsaved_hold`/`decide_unsaved`, auch für `…/secret`); erst
 wenn auch der sie nicht kennt, 409 `hold_over`. Vorher wurde der Fehler nur
 geloggt, und jede Entscheidung bekam 409. `deny` nimmt der Endpunkt seit
 2026-10-29 nur, wo es eine Antwort ist (`agent_sessions.deniable`: eine
@@ -801,7 +801,7 @@ Hilfseinträgen, `agent-activity.js` `HOLD_ENTRIES`, A-B7), App-Einträge
 mit), `hold`/`hold_decision` am Lauf-Root, seit 2026-10-29 `agent_holds[]` am
 Turn-Dokument (jede beendete Pause, höchstens `HOLDS_KEPT` = 20: `kind`,
 `ask`, `domain`, `reviewer`, `decision`, `seconds`, nie ein Grund; für
-Auswertungen, nicht in `turn_detail`, `DelegationLoop._end_hold`; dort nur
+Auswertungen, nicht in `turn_detail`, `AgentLoop._end_hold`; dort nur
 ihre Summe `agent_wait_seconds`, die „Thought for …“ abzieht), Tab-Titel
 „Paused“ (`tab-status.js`). **Überall sichtbar** (seit 2026-10-29, A-B2):
 Tab-Titel, Seitenleisten-Zeile und Kopf der Aktivität sagen „Paused“ bzw.
@@ -1134,7 +1134,7 @@ Arbeitsplatzes (Browser, `vm_exec`) nach `open_workspace` kommen
 (`ToolRegistry._unknown_notes`, L7).
 
 `open_workspace` öffnet **Stufe 2**, sobald die Aufrufe seines Schritts gelaufen
-sind (`DelegationLoop._open_workspace`, auf dem Thread des Laufs): Die Blöcke
+sind (`AgentLoop._open_workspace`, auf dem Thread des Laufs): Die Blöcke
 des Arbeitsplatzes ersetzen den kurzen, seine Werkzeuge stehen an der Stelle von
 `open_workspace`. Prompt und Werkzeugliste sind danach dieselben wie bei einer
 Nachricht, die ihn von Anfang an hatte (Test). Weil die Werkzeuge den Request
@@ -1242,7 +1242,7 @@ Aus dem [Laufzeit-Audit](agent-workspace-runtime-audit-2026-10-30.md)
 überall: Fakten im Ergebnis, keine Wann-Regeln.
 
 **Mehrere Aufrufe je Schritt (T2).** Jeder Schritt des Agenten fragt mit
-`parallel_tool_calls` (`DelegationLoop._step`), in jeder Anfrage der Nachricht
+`parallel_tool_calls` (`AgentLoop._step`), in jeder Anfrage der Nachricht
 gleich, mit und ohne Arbeitsplatz: Bei Anthropic steckt der Schalter in
 `tool_choice`, und ein Wechsel schriebe die gecachten Nachrichten neu.
 Vergleichsantworten, Seitenabrufe und Prüfer haben keine Client-Werkzeuge, ihre
@@ -1815,7 +1815,7 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
 - **`request_domain(domain, reason)`** (`agent_domains.py`): ein Hostname,
   ohne Schema, Pfad, Port, Wildcard oder IP; nie Flys internes Netz oder die
   Sprites-Adressen. **Es entscheidet immer der Nutzer**
-  (`DelegationLoop._domain_wait`, Karte `agent-domain-card`: Domain, Begründung
+  (`AgentLoop._domain_wait`, Karte `agent-domain-card`: Domain, Begründung
   des Agenten als Daten, der Halt eines Prüfers, der kommt, während sie offen
   ist, oder dass niemand prüft; „Allow for this chat“ = `continue`, „Don’t allow“ = neue Antwort
   `deny`, eine Nachricht im Eingabefeld = `steer`, Stop am Feld; die
@@ -2109,7 +2109,7 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
     - *Aktion auf einem Element:* gibt nach `ACT_MS` = 3 s mit Grund auf
       (Klick, Tippen, Auswahl; vorher 10 s bzw. 5 s).
     - *Ein gescheiterter Browser-Aufruf beendet die Browser-Aufrufe seines
-      Schritts* (`CALL_AFTER_BROWSER_FAILURE`, DelegationLoop): Klicken,
+      Schritts* (`CALL_AFTER_BROWSER_FAILURE`, AgentLoop): Klicken,
       Tippen, Enter in einem Schritt bauen aufeinander auf; scheitert der
       Klick, landete der Text sonst im falschen Feld. Andere Werkzeuge des
       Schritts laufen weiter.
@@ -2407,7 +2407,7 @@ mit `audit_access`). Die
   Ein Wechsel des Halters ist das Fenster-Event `consensio:workspace-holder`.
 - **Der Agent fragt den Nutzer** (`ask_user`, `agent_ask.py`, seit
   2026-10-29, nur mit dem Arbeitsplatz): Der Lauf hält auf einer Karte über
-  dem Feld (ein Halt mit `ask`, `DelegationLoop._ask_wait` → `_user_hold`),
+  dem Feld (ein Halt mit `ask`, `AgentLoop._ask_wait` → `_user_hold`),
   die Zeit der Antwort steht still (`paused_seconds`). Mit `browser` übergibt
   er dem Nutzer den Browser (Anmelden, Passwort, Bezahlen, Prüfung auf einen
   Menschen, ein letzter Klick): Karte „The agent needs you in the browser“ mit
@@ -2531,7 +2531,7 @@ mit `audit_access`). Die
   start`; nie ausgeben, nie ins Projekt oder in die Antwort). Was ein Befehl
   oder eine Seite danach vom Wert zeigt, maskiert `agent_secrets.scrub` als
   `[secret ~/.secrets/NAME, hidden from you]` (Werkzeug-Ergebnisse vor dem
-  Modell und dem Protokoll in `DelegationLoop`, jede Aktivität in
+  Modell und dem Protokoll in `AgentLoop`, jede Aktivität in
   `AgentLoop.activity`; ab 8 Zeichen): Die Maske sagt, wo der Key liegt und
   dass die Datei stimmt, damit der Agent sie nicht für einen Platzhalter hält
   und neu fragt. `scrub` trifft nur ganze Werte; was gekürzt wird, maskiert
@@ -2560,7 +2560,7 @@ mit `audit_access`). Die
      120 s, nie in die Zeit der Antwort); dauert die Übernahme länger, hört der
      Agent `VM_USER_HAS_BROWSER`, und es lief nichts. Seit 2026-10-29 sieht
      schon die Schleife vor jedem Aufruf an den Arbeitsplatz nach
-     (`DelegationLoop._takeover_wait`, `workspace_tools`): Hat der Nutzer
+     (`AgentLoop._takeover_wait`, `workspace_tools`): Hat der Nutzer
      übernommen, wartet der Aufruf auf einer Karte „You have the browser“ mit
      „Hand back“ (auch ohne offene Ansicht in diesem Fenster), bis er
      zurückgibt; erst nach 30 min ohne Rückgabe hört der Agent
@@ -3120,7 +3120,7 @@ Prüfer-Prompt sagt, Plan und Protokoll gegeneinander zu halten (als erledigt
 markiert, aber nicht getan; Abweichung ohne Grund). Eine Antwort mit einem
 letzten `update_plan` im selben Schritt bleibt stehen (`SIDE_TOOLS`), aber nur,
 wenn dieser den Plan abschließt (alle Schritte `completed`,
-`agent_delegation._plan_finished`): ein Satz vor einem Update mit offenen
+`agent_loop._plan_finished`): ein Satz vor einem Update mit offenen
 Schritten ist Einleitung, der Lauf geht weiter; der
 Arbeitsstand der nächsten Nachricht nennt den Stand („update_plan: 3 of 4
 steps done, now: …“).
@@ -3260,7 +3260,7 @@ erreichbar), Checkpoint, Dateien, Live-Ausgabe, Exit-Code, Zeitlimit.
 Werkzeugs (live und mit `agent_activity` gespeichert): beim Start `command`/
 `cwd` bzw. `path`, während er läuft etwa jede Sekunde das Ende der Ausgabe
 (`output`, beide Ströme in Ankunftsreihenfolge, `VIEW_CHARS` = 2.000,
-`output_truncated`; `ReadOnlyTool.reports`, `DelegationLoop._run_call`
+`output_truncated`; `ReadOnlyTool.reports`, `AgentLoop._run_call`
 übergibt `report`), am Ende `exit_code`, `duration_ms`, `timed_out` oder
 `outcome` (`unavailable`, `no_time`). Die Updates eines Events ergänzen sich
 (Server `completion.event`, Browser `receive`). Das Ergebnis, das das Modell
@@ -3465,7 +3465,7 @@ Wortfilter, Max' Grundsatz), keine speichert eine IP-Adresse.
 
 **Wo geprüft wird.** `workspace_guard.status(uid)` (Cache 20 s, ein Fehler beim
 Lesen schließt nie) fragen: `VMTools._start` (jedes Werkzeug des Arbeitsplatzes,
-VM wie Browser, Prozesse, GitHub), `DelegationLoop._request_workspace`
+VM wie Browser, Prozesse, GitHub), `AgentLoop._request_workspace`
 (`open_workspace`), `VMTools.prewarm` und `BrowserTools._warm` (wecken keine
 VM), `_admit` für Ansicht und Terminal (Close-Code 4423 bis morgen, 4424
 gesperrt; `workspace-view.js` sagt es in einem Satz, ohne „Reconnect“),
@@ -3668,7 +3668,7 @@ Der Agent schreibt die Antwort selbst, als Klartext in einem Schritt ohne
 Toolcalls (Ablauf unter „Die Antwort schreibt der Agent selbst“). Vorherige
 Tools werden zuerst ausgeführt, ebenso die Prüfung aller unterstützenden
 Agenten. Erst wenn dieser Schritt vollständig endet, zeigt
-`DelegationLoop._finish_merged` den Text ganz, fixiert ihn als Version
+`AgentLoop._finish_merged` den Text ganz, fixiert ihn als Version
 (`capture`: `versions[]` mit Hash und den Vergleichen davor; App-Eintrag
 `answer_fixed` im Protokoll; ab hier nimmt `request_hold` keinen Prüfer-Halt
 mehr an), und die App ruft `audit_answer` über `app_registry`
@@ -3794,7 +3794,7 @@ Denken sichtbar** (UX-Audit Paket A): Unter einer Überschrift steht ihr erster
 Satz mit in der Zeile („Checking the numbers – The search found …“, vorher
 blieb von einer Terra-Zusammenfassung nur die Überschrift); eine nach Zeit
 getaktete Zeile wartet nicht zusätzlich auf 400 neue Zeichen; am Ende jedes
-Schritts schickt `DelegationLoop._closing_thoughts` die Denkzeile
+Schritts schickt `AgentLoop._closing_thoughts` die Denkzeile
 `completion:N/thinking` einmal mit ihrem letzten Wort und `sections`
 (`ReasoningProgress.closing`: Überschriften mit ihren Absätzen, sonst die
 vollständigen Sätze je Absatz, zusammen höchstens 4.000 Zeichen). Der Turn
@@ -4465,7 +4465,7 @@ Schritten (siehe unten). `parallel_tool_calls` wechselt einmal mit
 
 **Google-Daten** (ZDR-Provider, keine Websuche): Ein Lauf hält sie, wenn der
 Chat sie beim Start der Nachricht hatte (die Route liest es,
-`DelegationLoop.google_data`) oder sobald ein Tool des Laufs sie hereinholt
+`AgentLoop.google_data`) oder sobald ein Tool des Laufs sie hereinholt
 (`agent_gmail.record` → `mark_google_data`, ab dem nächsten Call). Anders
 kommen keine Google-Daten in das, was der Lauf sendet; eine Markierung, die eine
 andere Nachricht setzt, erreicht ihn mit dem nächsten Blick des Watchers
@@ -4633,7 +4633,7 @@ bleiben unberührt. Prompt-Cache: Jede Änderung einer älteren Nachricht
 schreibt den Cache ab dort neu, deshalb schneidet die App nur oberhalb der Marke
 und nur, wenn es mindestens `MIN_GAIN_CHARS` = 30.000 Zeichen spart; danach
 bleibt der Präfix stabil, bis der eigene Teil seit dem Schnitt um
-`REGROW_CHARS` = 90.000 Zeichen gewachsen ist (`DelegationLoop.compacted_to`;
+`REGROW_CHARS` = 90.000 Zeichen gewachsen ist (`AgentLoop.compacted_to`;
 bis 2026-11-03 nur bis zur Marke: Ein Lauf, dessen Aufrufe und Antworten
 allein über der Marke blieben, schnitt ab etwa Schritt 16 jeden dritten Schritt
 und schrieb den Cache jedes Mal neu). Nur
@@ -4644,7 +4644,7 @@ stehen. Das Arbeitsprotokoll behält die vollen Ergebnisse und vermerkt den
 Schnitt (`app`-Eintrag `compacted`).
 
 **Zusammenfassungen** (seit 2026-11-03, `agent_compaction.py` „Summaries“,
-`DelegationLoop._summarize` vor jedem Schritt nach `_compact`), wie Claude Code
+`AgentLoop._summarize` vor jedem Schritt nach `_compact`), wie Claude Code
 und Codex eine volle Sitzung kompaktieren: Das Chatmodell schreibt in einem
 eigenen Schritt eine Zusammenfassung, die ersetzt, was sie abdeckt. Der
 Schritt ist geclaimt und abgerechnet wie jeder andere, seine Zeile im Verlauf
@@ -5058,7 +5058,7 @@ standardmäßig an, `0` schaltet ab. Code: `agent_read_source.py`.
 - Quellen, die eine Antwort von `compare_models` dieser Nachricht zitiert;
 - die eigenen Suchtreffer dieser Nachricht (`LABEL_SEARCH`, seit 2026-10-27);
 - die gespeicherten Quellen früherer Nachrichten des Chats (`turn.sources`,
-  über `AgentRunStore.messages(sources=…)` → `DelegationLoop.chat_sources`,
+  über `AgentRunStore.messages(sources=…)` → `AgentLoop.chat_sources`,
   Label „an earlier message's sources“, seit 2026-10-11) und URLs, die der
   Nutzer selbst geschrieben hat (`user_urls`, Label „your message“): Vorher
   fand „kannst du eine Quelle direkt nachlesen?“ nach einer Antwort mit
@@ -5154,14 +5154,14 @@ Helfers („OK“) wird verworfen.
 Grenze erreicht, Google-Daten, schon gescheitert) kommen als
 `{"status": "refused", "reason"}`, nicht lesbare Seiten als
 `{"status": "failed", "reason"}`, beide ohne `error`-Schlüssel. Drei Toolfehler
-in Folge beenden einen Turn ohne Antwort (`DelegationLoop.run`,
+in Folge beenden einen Turn ohne Antwort (`AgentLoop.run`,
 `invalid_tool_rounds`); eine Paywall, ein 403 oder ein falsch kopierter Link
 dürfen die bezahlte Arbeit nicht um ihre Antwort bringen. Ein Toolergebnis
 beginnt mit `status` und `note` (untrusted data, nächster Schritt), der
 Seitentext steht danach in `untrusted_page_text`.
 
 **Kosten.** Der Helfer ist ein gewöhnlicher, beanspruchter und abgerechneter
-Modellschritt (`DelegationLoop._step` mit `server_tools=[web_fetch]` und
+Modellschritt (`AgentLoop._step` mit `server_tools=[web_fetch]` und
 eigener Completion, Generation-ID im Beleg für die spätere Usage-Abstimmung):
 Die Reservierung zählt die Seite mit (`agent_costs.fetch_bounds`:
 `max_content_tokens` × 1,25, dazu 0,1 ct Exa-Gebühr), wie jeder Aufruf zum
@@ -5284,7 +5284,7 @@ seit 2026-10-29:
   „Couldn’t get the picture“ steht nur noch in Turns vor 2026-10-29.
 - Höchstens 6 gezeigte je Nachricht; dieselbe ID noch einmal ist dasselbe
   Bild. Ein Chatmodell, das Bilder nimmt, sieht die Kandidaten nach dem
-  Ergebnis (wie `vm_view_image`, `DelegationLoop._show_pictures`, Einleitung
+  Ergebnis (wie `vm_view_image`, `AgentLoop._show_pictures`, Einleitung
   `INTRO` mit ID und Seite); ältere verlassen den Blick wie andere Bilder.
   Im Arbeitsprotokoll stehen beide Werkzeuge und die Bilder mit Herkunft
   `web`; die Kurzfassung für die Prüfer nennt beide mit ihren

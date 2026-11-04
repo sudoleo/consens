@@ -75,7 +75,7 @@ def test_stop_and_first_admission_are_atomic_without_process_lock(monkeypatch):
 def test_chat_admission_waits_across_runs_then_uses_released_allowance():
     from agent_reviewers import without_reviewers
     from app.services.agent_comparison import comparison_selection
-    from app.services.agent_delegation import DelegationLoop
+    from app.services.agent_loop import AgentLoop
     from app.services.agent_tools import ToolRegistry
     from app.services.llm.provider_runtime import ProviderCancellation
     assert_safe_e2e_environment()
@@ -99,7 +99,7 @@ def test_chat_admission_waits_across_runs_then_uses_released_allowance():
             chat = store.create_chat(uid, execution_mode='agent')['id']
             turn = store.create_turn(uid, chat, question='Question', mode='Agent', deep_search=False,
                 selected_models=[model.model], consensus_model=model.model, client_request_id=str(i), execution_mode='agent')['id']
-            loop = DelegationLoop(store=store, uid=uid, chat_id=chat, turn_id=turn, model=model,
+            loop = AgentLoop(store=store, uid=uid, chat_id=chat, turn_id=turn, model=model,
                 messages=[{'role': 'system', 'content': 'Answer.'}, {'role': 'user', 'content': 'Question'}],
                 api_key='test', cancellation=ProviderCancellation(), policy=AgentPolicy(),
                 completion_factory=Completion,

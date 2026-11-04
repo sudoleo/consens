@@ -11,7 +11,7 @@ pause for the user and the decision, the fixed answer), and the run's
 ``start`` and ``end``.
 Delegated workers write into the same log under their own id. The reviewers,
 the comparison answers and the app's page fetches are not part of it
-(DelegationLoop._log_actor).
+(AgentLoop._log_actor).
 
 The log only grows: an entry is never changed, a retraction is a new entry.
 One writer thread saves the entries in order, up to BATCH_LIMIT per
@@ -172,7 +172,7 @@ def context_data(actor, index, own_from, message, text):
         from app.services.agent_browser import SCREENSHOT_INTRO
         from app.services.agent_web_images import INTRO
         return "web" if text.startswith((SCREENSHOT_INTRO.split("{")[0], INTRO.split("{")[0])) else "vm"
-    from app.services.agent_delegation import USER_NOTE_OPEN
+    from app.services.agent_loop import USER_NOTE_OPEN
     if text.startswith(USER_NOTE_OPEN):
         # A message the user sent into the running response.
         return "user"
@@ -269,7 +269,7 @@ class WorkLog:
         """What a model step receives, as far as not yet in the log.
 
         ``conversation``: the actor's own message list, which only grows
-        (DelegationLoop.messages, Worker.messages). Every message past this
+        (AgentLoop.messages, Worker.messages). Every message past this
         actor's cursor is logged, except the model's own messages from
         ``own_from`` on (they are its step entries; earlier ones are the
         chat's history) and the tool results logged when they returned.
@@ -311,7 +311,7 @@ class WorkLog:
 
     def rewound(self, actor, start, *, seen=()):
         """The actor's conversation was rewritten from ``start`` on (a
-        summary, DelegationLoop._summarize), against ``context``'s rule that
+        summary, AgentLoop._summarize), against ``context``'s rule that
         it only grows: the log goes on from there. ``seen``: messages now
         past ``start`` that are in the log already."""
         with self._condition:

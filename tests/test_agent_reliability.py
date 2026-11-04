@@ -159,7 +159,7 @@ def test_loop_initialization_failure_unlocks_chat_and_releases_capacity(api, mon
     monkeypatch.setattr(agent, "agent_capacity", capacity)
     def fail(**kwargs):
         raise ValueError("Unavailable worker configuration")
-    monkeypatch.setattr(agent, "DelegationLoop", fail)
+    monkeypatch.setattr(agent, "AgentLoop", fail)
     chat = store.create_chat(UID, execution_mode="agent")["id"]
     result = client.post('/agent', headers=AUTH, json={"chat_id": chat, "question": "Hi",
         "client_request_id": "init", "bookmark_id": "initialization"})

@@ -20,7 +20,7 @@ class AgentPolicy:
     # A turn that works in the agent's VM (agent_vm_tools.py) is a long run
     # from its first VM call on: these replace turn_steps and turn_seconds.
     # The ledger and the model's context window end it earlier
-    # (DelegationLoop._long_run_limit).
+    # (AgentLoop._long_run_limit).
     vm_turn_steps: int = 200
     vm_turn_seconds: int = 7200
 

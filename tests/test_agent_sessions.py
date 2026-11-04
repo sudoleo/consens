@@ -6,7 +6,7 @@ pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 
 from agent_reviewers import without_reviewers
 from app.services.agent_comparison import comparison_selection
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.chat_store import TurnStatusConflict
 from app.services.llm.agent_client import AgentCompletion, resolve_agent_model
@@ -17,7 +17,7 @@ from test_agent_runs import UID, AUTH, api, pending, priced, receipt, store, tot
 def make_loop(store, factory=AgentCompletion, **kwargs):
     """A chat turn of the agent with ``factory``'s completions and no reviewers."""
     chat, turn = pending(store)
-    return without_reviewers(DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    return without_reviewers(AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"), messages=[{"role": "system", "content": "Answer."},
         {"role": "user", "content": "Verify two independent calculations."}], api_key="test-sessions",
         cancellation=ProviderCancellation(), policy=AgentPolicy(), completion_factory=factory,

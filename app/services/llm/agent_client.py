@@ -580,7 +580,7 @@ def with_cache_points(messages, cache, history_end=None):
     Sonnet as chat model: none of 20 first steps read the cache, follow-ups
     a minute apart included; GPT-6 Luna, which sets its own breakpoints,
     read 98 % on the next message). The system prompt stays the same across
-    a chat's messages (memory closes it, DelegationLoop) and the history
+    a chat's messages (memory closes it, AgentLoop) and the history
     only grows, so the next message within the cache lifetime reads both.
     A token is written once, whichever breakpoint covers it: the extra
     points cost nothing on a miss. With the top-level one, three of the
@@ -705,7 +705,7 @@ class AgentCompletion:
         self.native_finish_reason = ""
         self.refusal = False
         # A helper call's own OpenRouter session, and whether no later request
-        # re-sends its prompt (DelegationLoop.worker_completion, see stream).
+        # re-sends its prompt (AgentLoop.worker_completion, see stream).
         self.session_id = None
         self.one_off = False
         # The chat model's steps: index of the chat's last earlier message,
@@ -718,11 +718,11 @@ class AgentCompletion:
         # the request, the provider's and ours after it (T3).
         self.request_started_at = self.first_token_at = self.stream_ended_at = None
         # Several calls per step: every step of the agent asks for them
-        # (DelegationLoop._step); off, the request asks for one call.
+        # (AgentLoop._step); off, the request asks for one call.
         self.parallel_tool_calls = False
         # Calls past tool_call_limit stay in tool_calls, without arguments,
         # their ids in over_limit_ids, so that each gets a result instead of
-        # vanishing from the conversation (DelegationLoop.run). Off, they are
+        # vanishing from the conversation (AgentLoop.run). Off, they are
         # skipped.
         self.keep_over_limit = False
         self._over_limit = set()
@@ -1031,7 +1031,7 @@ class AgentCompletion:
         and judges. Live deltas already showed it; text and citation offsets
         are moved together (see citations.presearch_end). Text the user
         already saw as the agent's answer stays (``published``, set by
-        DelegationLoop._candidate_delta): cutting it lost the opening of an
+        AgentLoop._candidate_delta): cutting it lost the opening of an
         answer that searched midway (review 2026-10-14)."""
         if getattr(self, "published", ""):
             self._results_at = None
@@ -1133,7 +1133,7 @@ class AgentCompletion:
                 payload["tool_choice"] = tool_choice or ("auto" if allow_tool_calls or native_searches else "none")
                 # Part of Anthropic's tool_choice: a change rewrites the cached
                 # messages, so the agent's steps send the same value in every
-                # request (DelegationLoop._step).
+                # request (AgentLoop._step).
                 payload["parallel_tool_calls"] = bool(self.parallel_tool_calls)
         if native_searches:
             payload["max_tool_calls"] = native_searches

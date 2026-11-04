@@ -13,7 +13,7 @@ import pytest
 
 from app.services import agent_browser
 from app.services.agent_browser import BrowserArgs
-from app.services.agent_delegation import CALL_AFTER_BROWSER_FAILURE
+from app.services.agent_loop import CALL_AFTER_BROWSER_FAILURE
 from test_agent_runs import store  # noqa: F401  (fixture)
 from test_agent_vm import Agent, _admin_allowance, fake_vm, results, vm_loop  # noqa: F401  (fixtures)
 from test_browser_vm_results import load

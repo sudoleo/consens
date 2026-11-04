@@ -29,7 +29,7 @@ def provider_routing(overrides: dict | None = None) -> dict:
 def provider_session_id(uid: str, chat_id: str, worker_id: str = "") -> str:
     """OpenRouter's session (header ``x-session-id``) for the chat model's
     steps in one chat, or with ``worker_id`` for the requests of one helper
-    call of it (DelegationLoop.worker_completion).
+    call of it (AgentLoop.worker_completion).
 
     Every Agent step re-sends system prompt, memory and history, and so does
     the chat's next message. Each endpoint caches that prefix only for itself

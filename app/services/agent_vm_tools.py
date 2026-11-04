@@ -3,7 +3,7 @@ and vm_share_file (agent_vm.py).
 
 For accounts with the VM (AgentPreferences.vm, routers/agent.py
 vm_allowed), never in chats with Google data, in turns with
-comparison or audit tools on the account's token ledger (DelegationLoop).
+comparison or audit tools on the account's token ledger (AgentLoop).
 Since 2026-10-27 the VM is the account's workspace (agent_workspace.py),
 shared by its chats one message at a time, each chat in its own folder
 (agent_vm.chat_dir), where commands start and relative paths lead. One
@@ -95,7 +95,7 @@ INPUT_FOLDER = "input"
 EXEC_TIMEOUT_DEFAULT = 60
 EXEC_TIMEOUT_MAX = 300
 # A command needs at least this long before the answer must start
-# (DelegationLoop.answer_time_left); with less left it is not started.
+# (AgentLoop.answer_time_left); with less left it is not started.
 MIN_COMMAND_SECONDS = 15
 # Per stream: the end the model reads, and the end kept while it runs.
 MODEL_STREAM_CHARS = 12_000
@@ -278,7 +278,7 @@ class VmShareFileArgs(BaseModel):
     name: str = Field(default="", max_length=120, description="File name the user sees; default the file's own name.")
 
 
-# The workspace on demand (AGENT_WORKSPACE_ON_DEMAND, DelegationLoop._open_workspace):
+# The workspace on demand (AGENT_WORKSPACE_ON_DEMAND, AgentLoop._open_workspace):
 # a message that starts without the workspace has this one tool of it.
 OPEN_WORKSPACE = "open_workspace"
 OPEN_WORKSPACE_DESCRIPTION = ("Open your workspace for this message: the Linux computer and the browser you share "
@@ -586,7 +586,7 @@ class VMSession:
         self.state = "idle"
         # Set once the workbench was ready or a browser call answered in this
         # message, also if it fails later: the turn is a long run from then
-        # on (DelegationLoop._long_run), the browser alone included, as after
+        # on (AgentLoop._long_run), the browser alone included, as after
         # open_workspace (the same browser task keeps the same limits whether
         # its message started with the workspace open or opened it).
         self.started = False
@@ -908,7 +908,7 @@ class VMSession:
         while getattr(self.loop, "hold", None) is None:
             try:
                 # The first look may share the run's own of a moment ago
-                # (DelegationLoop._takeover_wait); a wait reads anew.
+                # (AgentLoop._takeover_wait); a wait reads anew.
                 if not agent_workspace.user_has_browser(self.loop.store.db, self.loop.uid, fresh=looked):
                     return
             except Exception as exc:
@@ -1172,7 +1172,7 @@ class VMTools:
         self._rendered, self._rendered_lock = {}, threading.Lock()
         # The background-process tools, once they are offered: the processes
         # this message started (ProcessTools.started), which a summary of the
-        # run names (DelegationLoop._summarize).
+        # run names (AgentLoop._summarize).
         self.processes = None
 
     def tools(self):
@@ -1393,7 +1393,7 @@ class VMTools:
         return timeout
 
     def interrupt(self):
-        """A reviewer's halt (DelegationLoop.request_hold): the running
+        """A reviewer's halt (AgentLoop.request_hold): the running
         command ends now, as if the user had stopped it."""
         with self.session._lock:
             running = self._running
@@ -1743,7 +1743,7 @@ class VMTools:
         return self.session.announce(result)
 
     def take_pictures(self):
-        """The pictures read since the last call (DelegationLoop._show_pictures)."""
+        """The pictures read since the last call (AgentLoop._show_pictures)."""
         with self._pictures_lock:
             pictures, self._pictures = self._pictures, []
         return pictures
@@ -1832,7 +1832,7 @@ class VMTools:
                 return None
         return pdf if pdf.startswith(b"%PDF-") and len(pdf) <= PREVIEW_BYTES else None
 
-    # --- Activity fields (DelegationLoop._execute) -----------------------------
+    # --- Activity fields (AgentLoop._execute) -----------------------------
 
     @staticmethod
     def _outcome(result):

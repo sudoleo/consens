@@ -6,7 +6,7 @@ call waited up to 120 s while the user had it, VMSession.wait_for_user) or
 end its answer, and the user did not see that they still held the browser
 (Max, 2026-10-29: he waited for the agent while it waited for him). Now the
 agent asks, and the run pauses on a card above the field
-(DelegationLoop._ask_wait, a hold with ``ask``):
+(AgentLoop._ask_wait, a hold with ``ask``):
 
 - ``browser``: the user takes over the browser for what is theirs to do
   there (a sign-in, a password, a payment, a check for a human, a last click
@@ -29,7 +29,7 @@ agent asks, and the run pauses on a card above the field
   decides, not a reviewer on every click.
 
 The user can also take over without being asked: the agent's next call into
-the workspace then waits the same way (DelegationLoop._takeover_wait, card
+the workspace then waits the same way (AgentLoop._takeover_wait, card
 ``takeover``) instead of failing after 120 s. A message written on the card
 is the user's answer, Stop stops. Without an answer in HOLD_TIMEOUT_SECONDS
 the agent hears so and finishes its answer; the response does not stop as
@@ -145,7 +145,7 @@ def requested(call):
 
 
 def hold(kind, request="", secret="", choices=()):
-    """A hold of the user's (DelegationLoop.request_hold): ``kind`` is
+    """A hold of the user's (AgentLoop.request_hold): ``kind`` is
     "browser", "confirm", "secret" (with the key's name), "choice" (with its
     answers) or "takeover". The fields a reviewer's halt has stay empty, so
     the card and the activity tell the two apart by ``ask``."""
@@ -178,7 +178,7 @@ def answer(kind, decision, secret="", picked=None):
 
 class AskTools:
     """ask_user of one message, next to the browser (VMTools). The loop runs
-    it once the user answered on the card (DelegationLoop._ask_wait puts the
+    it once the user answered on the card (AgentLoop._ask_wait puts the
     answer in ``loop.ask_answer``)."""
 
     def __init__(self, vm_tools):

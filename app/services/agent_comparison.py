@@ -161,7 +161,7 @@ AUDIT_COMPARE = ("Ask the models the user chose for this chat the same question.
 
 class AuditAnswerArgs(BaseModel):
     """The app's own call of the review once the answer is fixed
-    (DelegationLoop._finish_review); never offered to the agent."""
+    (AgentLoop._finish_review); never offered to the agent."""
     model_config = ConfigDict(extra="forbid", strict=True)
 
 
@@ -348,7 +348,7 @@ class ComparisonTools:
     def call(self, model, messages, *, title, comparison_id, slots, cancellation, partial, search_rounds=1,
              budget=None, file_ids=None):
         """One comparison answer on a session of its own."""
-        from app.services.agent_delegation import Worker
+        from app.services.agent_loop import Worker
         worker = Worker(uuid4().hex, model, messages)
         worker.kind = "comparison"
         worker.file_ids = file_ids or []
@@ -595,7 +595,7 @@ class ComparisonTools:
         """Output allowance per answer ({provider: tokens}): the model's own
         limit within its share of the saved review's characters, at least
         cfg.MAX_TOKENS. The same for every account: the allowance decides
-        only whether an answer starts (DelegationLoop._admit)."""
+        only whether an answer starts (AgentLoop._admit)."""
         count = max(1, len(models))
         with self.lock:
             stored = sum(len(a["text"]) for c in self.comparisons for a in c.get("answers", []))
@@ -744,7 +744,7 @@ class ComparisonTools:
 
     def audit(self, args, *, cancellation):
         """audit_answer: the app's own call once the answer is fixed
-        (DelegationLoop._finish_review). Never offered to the model; a failed
+        (AgentLoop._finish_review). Never offered to the model; a failed
         review costs marks, never the answer (AnswerAudit.run)."""
         if not self.text:
             raise ValueError("No answer to review.")

@@ -16,7 +16,7 @@ import pytest
 from app.services import agent_read_source
 from app.services.agent_comparison import comparison_selection
 from app.services.agent_costs import FETCH_COST_NANOS, RunCosts, fetch_bounds
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_read_source import (READ_CONTENT_TOKENS, READS_PER_MESSAGE, READS_PER_STEP, UNTRUSTED_NOTE,
                                             AuditReadSourceArgs, PageFetch, resolve_redirect, url_key, user_urls)
@@ -133,7 +133,7 @@ def chat_loop(store, plan, *, google_selection=None, google_data=False, policy=N
               chat_sources=None):
     """A chat turn of the agent whose reviewers never start (agent_reviewers.py)."""
     chat, turn = pending(store)
-    return without_reviewers(DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    return without_reviewers(AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": AGENT_AUDIT_SYSTEM_PROMPT},
                   *(conversation or [{"role": "user", "content": "Price?"}])],
@@ -565,7 +565,7 @@ def test_reads_stop_at_the_message_and_step_limits(store, monkeypatch, enabled):
 
 
 def test_the_step_limit_refuses_the_last_read_in_call_order_whoever_arrives_first(store, monkeypatch, enabled):
-    """The reads of a step run at the same time (DelegationLoop._call_groups):
+    """The reads of a step run at the same time (AgentLoop._call_groups):
     the first one reaches the limit last here, and the limit still refuses
     the step's last read, as if they had run one after another."""
     import threading

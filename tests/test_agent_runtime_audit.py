@@ -13,7 +13,7 @@ import re
 from pydantic import BaseModel, ConfigDict
 import pytest
 
-from app.services import agent_delegation
+from app.services import agent_loop
 from app.services.llm import agent_client
 from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
 from test_agent_runs import UID, claim, pending, receipt, store, priced  # noqa: F401  (fixture)
@@ -145,10 +145,10 @@ def test_a_turn_that_ends_by_itself_has_no_wrap_up(store, fake_vm):
 
 def test_the_limit_fact_names_each_limit():
     loop = type("Loop", (), {"_turn_seconds": lambda self: 7200, "_turn_steps": lambda self: 200})()
-    fact = agent_delegation.DelegationLoop._limit_fact
-    assert fact(loop, agent_delegation.TURN_TIME_LIMIT)[0] == "It reached its time limit (120 minutes per message)."
-    assert "allowance" in fact(loop, agent_delegation.TURN_ALLOWANCE_LIMIT)[1]
-    for reason in agent_delegation.WRAP_UP_REASONS:
+    fact = agent_loop.AgentLoop._limit_fact
+    assert fact(loop, agent_loop.TURN_TIME_LIMIT)[0] == "It reached its time limit (120 minutes per message)."
+    assert "allowance" in fact(loop, agent_loop.TURN_ALLOWANCE_LIMIT)[1]
+    for reason in agent_loop.WRAP_UP_REASONS:
         text, then = fact(loop, reason)
         assert text and then
 
@@ -257,14 +257,14 @@ def test_every_step_asks_for_several_calls_from_the_first_request_on(store, fake
 
 def test_the_calls_of_a_step_run_in_order_and_one_past_the_limit_gets_a_result(store, fake_vm):
     from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION, AGENT_VM_PROMPT
-    commands = [f"echo {n}" for n in range(agent_delegation.TOOL_CALLS_PER_STEP + 1)]
+    commands = [f"echo {n}" for n in range(agent_loop.TOOL_CALLS_PER_STEP + 1)]
     script = Steps([[("vm_exec", {"command": command}) for command in commands]])
     loop = vm_loop(store, script)
     list(loop.run())
     found = tool_results(loop)
-    last = agent_delegation.TOOL_CALLS_PER_STEP
+    last = agent_loop.TOOL_CALLS_PER_STEP
     assert [found[f"call_0_{n}"].get("exit_code") for n in range(last)] == [0] * last
-    assert found[f"call_0_{last}"] == {"error": agent_delegation.CALL_OVER_LIMIT}
+    assert found[f"call_0_{last}"] == {"error": agent_loop.CALL_OVER_LIMIT}
     # Commands change the workspace: one after the other, in the step's order.
     executed = [call[2] for call in fake_vm.calls if call[0] == "exec" and call[2] in commands]
     assert executed == commands[:last]
@@ -332,8 +332,8 @@ HALT = {"reviewer": "Claude Haiku 4.5", "provider": "anthropic", "kind": "harm",
         "entry": 1}
 
 
-@pytest.mark.parametrize("decision, expected", [("continue", agent_delegation.CALL_AFTER_PAUSE),
-                                                ("steer", agent_delegation.HOLD_STEERED)])
+@pytest.mark.parametrize("decision, expected", [("continue", agent_loop.CALL_AFTER_PAUSE),
+                                                ("steer", agent_loop.HOLD_STEERED)])
 def test_a_halt_between_calls_ends_the_steps_later_calls(store, fake_vm, decision, expected):
     from test_agent_audit import decide_when_held
     loop = probing(store, [[("probe", {}), ("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})]],
@@ -376,7 +376,7 @@ def test_asking_the_user_ends_the_steps_later_calls(store, fake_vm):
     waiter.join(5)
     found = tool_results(loop)
     assert found["call_0_0"] == agent_ask.ANSWERS[("confirm", "continue")]
-    assert found["call_0_1"] == {"error": agent_delegation.CALL_AFTER_ASK}
+    assert found["call_0_1"] == {"error": agent_loop.CALL_AFTER_ASK}
     assert not ran(fake_vm, "rm notes.txt") and every_call_answered(loop)
 
 
@@ -400,7 +400,7 @@ def test_the_users_turn_in_the_browser_ends_the_steps_later_calls(store, fake_vm
     list(loop.run())
     found = tool_results(loop)
     assert found["call_0_0"]["exit_code"] == 0
-    assert found["call_0_1"] == found["call_0_2"] == {"error": agent_delegation.CALL_AFTER_TAKEOVER}
+    assert found["call_0_1"] == found["call_0_2"] == {"error": agent_loop.CALL_AFTER_TAKEOVER}
     assert not ran(fake_vm, "pwd") and every_call_answered(loop)
 
 
@@ -429,12 +429,12 @@ def test_each_batch_ends_with_the_step_and_how_long_the_user_has_waited(store, f
     assert loop.messages[-1]["content"] == ("[consens.io, written by the app: step 160 of at most 200; the user has "
                                             "been waiting 97 minutes for your answer, of at most 120 minutes for "
                                             "this message.]")
-    assert [agent_delegation._waited(s) for s in (0.2, 45, 61, 150)] == [
+    assert [agent_loop._waited(s) for s in (0.2, 45, 61, 150)] == [
         "1 second", "45 seconds", "1 minute", "2 minutes"]
     # A message without the workspace has no such line.
     script = Steps([[("no_such_tool", {})]])
     list(vm_loop(store, script, request_id="two", vm="off").run())
-    assert not any(str(m.get("content")).startswith(agent_delegation.PROGRESS_OPEN)
+    assert not any(str(m.get("content")).startswith(agent_loop.PROGRESS_OPEN)
                    for request in script.requests for m in request)
 
 

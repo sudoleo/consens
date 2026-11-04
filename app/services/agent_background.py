@@ -72,7 +72,7 @@ class BackgroundRun:
     turn_id: str
     cancel: Callable[[], None]
     interrupt: Callable[[Exception], None]
-    # The turn's DelegationLoop: a decision or a note the user's request just
+    # The turn's AgentLoop: a decision or a note the user's request just
     # saved reaches it at once (run_loop), not with its watcher's next look.
     loop: object = None
     finished: threading.Event = field(default_factory=threading.Event)
@@ -111,7 +111,7 @@ class AgentBackgroundRuns:
             return run is not None and not run.finished.is_set()
 
     def run_loop(self, uid, chat_id, request_id):
-        """The DelegationLoop of this request's turn while this process runs
+        """The AgentLoop of this request's turn while this process runs
         it, else None (another worker, finished, not started)."""
         with self._lock:
             run = self._runs.get(self.key(uid, chat_id, request_id))
@@ -182,7 +182,7 @@ class AgentBackgroundRuns:
     def stop_chat(self, uid, chat_id) -> int:
         """Cancel every turn of this account's chat that this process runs
         (the chat was deleted, a temporary chat left): at once, not at the
-        run's next look (agent_delegation.WATCH_SECONDS)."""
+        run's next look (agent_loop.WATCH_SECONDS)."""
         with self._lock:
             runs = [run for run in self._runs.values() if (run.uid, run.chat_id) == (str(uid), str(chat_id))]
             for run in runs:

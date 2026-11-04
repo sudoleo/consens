@@ -15,13 +15,13 @@ import time
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from app.services import agent_audit, agent_delegation, agent_memory, prompt_defaults
+from app.services import agent_audit, agent_loop, agent_memory, prompt_defaults
 from app.services.agent_audit import (AGENT_SEARCH_ROUNDS, LIVE_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS, locate_quote,
                                       parse_review, place_marks, results_pending, review_entry, round_due,
                                       round_message)
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, current_provider_cancellation
@@ -187,7 +187,7 @@ def after_live_rounds(script, *families, until=None):
 
 def audit_loop(store, script, *, messages=None, memory=None, reviewers="always"):
     chat, turn = pending(store)
-    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=messages or [{"role": "system", "content": "Answer."},
                               {"role": "user", "content": "Tell me about the Eiffel Tower."}],
@@ -1869,7 +1869,7 @@ def test_a_reviewers_halt_waits_for_the_user_and_the_agent_never_learns_of_it(st
     # Not a word of it in the agent's conversation; its time stood still.
     conversation = json.dumps(loop.messages)
     assert HALT_REASON not in conversation and holds[0]["hold"]["id"] not in conversation
-    assert agent_delegation.USER_NOTE_OPEN not in conversation
+    assert agent_loop.USER_NOTE_OPEN not in conversation
     assert loop.paused_seconds >= .05
     # The user's record of it, with the decision; the reviewers' log has both.
     record = next(e for e in turn["agent_activity"] if e["kind"] == "hold")
@@ -1889,9 +1889,9 @@ def test_a_reviewers_halt_waits_for_the_user_and_the_agent_never_learns_of_it(st
 
 def test_a_turn_keeps_at_most_twenty_holds(store):
     loop = audit_loop(store, Audit())
-    for number in range(agent_delegation.HOLDS_KEPT + 5):
+    for number in range(agent_loop.HOLDS_KEPT + 5):
         loop._end_hold({"id": f"{number:012x}", "kind": "ask", "ask": "confirm", "reviewer": ""}, "deny", 2)
-    assert len(loop.holds) == agent_delegation.HOLDS_KEPT == 20
+    assert len(loop.holds) == agent_loop.HOLDS_KEPT == 20
     assert loop.holds[0] == {"kind": "ask", "ask": "confirm", "domain": None, "reviewer": None, "decision": "deny",
                              "seconds": 2}
 
@@ -1903,13 +1903,13 @@ def test_a_halt_answered_with_a_message_goes_on_with_the_users_words(store):
     list(loop.run())
     waiter.join(5)
     notes = [m["content"] for m in loop.messages if m.get("role") == "user" and "Use only the official site." in str(m.get("content"))]
-    assert len(notes) == 1 and notes[0].startswith(agent_delegation.USER_NOTE_OPEN)
+    assert len(notes) == 1 and notes[0].startswith(agent_loop.USER_NOTE_OPEN)
     assert HALT_REASON not in json.dumps(loop.messages)
     assert saved(store, loop)["status"] == "completed"
 
 
 def test_a_halt_without_a_decision_stops_the_response_after_its_time(store, monkeypatch):
-    monkeypatch.setattr(agent_delegation, "HOLD_TIMEOUT_SECONDS", .3)
+    monkeypatch.setattr(agent_loop, "HOLD_TIMEOUT_SECONDS", .3)
     script = Audit(tool_steps=2, live={"anthropic": halting_live})
     loop = audit_loop(store, script)
     events = []
@@ -1921,7 +1921,7 @@ def test_a_halt_without_a_decision_stops_the_response_after_its_time(store, monk
     assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict().get("cancel_requested")
     # A-R4: the turn says why, not only "Response stopped".
     assert saved(store, loop)["agent_failure"] == {"code": "hold_timeout",
-                                                   "error": agent_delegation.HOLD_TIMEOUT_STOPPED}
+                                                   "error": agent_loop.HOLD_TIMEOUT_STOPPED}
 
 
 def test_a_halt_while_the_agent_writes_its_answer_holds_the_answer_until_the_user_decides(store):
@@ -1937,7 +1937,7 @@ def test_a_halt_while_the_agent_writes_its_answer_holds_the_answer_until_the_use
     # The first answer did not count: the user's message got a second step.
     assert [step for step, _ in script.calls if step.startswith("completion:")] == ["completion:0", "completion:1"]
     users = [m["content"] for m in loop.messages if m.get("role") == "user"]
-    assert users[-1] == f"{agent_delegation.USER_NOTE_OPEN}\nName the source in the answer."
+    assert users[-1] == f"{agent_loop.USER_NOTE_OPEN}\nName the source in the answer."
     turn = saved(store, loop)
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
 
@@ -2082,7 +2082,7 @@ def test_a_halt_breaks_off_the_step_that_streams_and_it_runs_again(store, action
                 if entry["kind"] == "step" and entry.get("step") == "completion:1")
     assert json.loads(step)["status"] == "cancelled"
     users = [m["content"] for m in loop.messages if m.get("role") == "user"]
-    assert (f"{agent_delegation.USER_NOTE_OPEN}\nName the source." in users) == (action == "steer")
+    assert (f"{agent_loop.USER_NOTE_OPEN}\nName the source." in users) == (action == "steer")
     assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == [action]
     turn = saved(store, loop)
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
@@ -2097,7 +2097,7 @@ def test_a_halt_during_the_closing_step_holds_its_answer_until_the_user_decides(
     halted = []
     script = Audit(tool_steps=1)
     loop = audit_loop(store, script)
-    loop._turn_limit = lambda: agent_delegation.TURN_STEP_LIMIT if loop.routing_steps >= 1 else None
+    loop._turn_limit = lambda: agent_loop.TURN_STEP_LIMIT if loop.routing_steps >= 1 else None
     attempt = loop._answer_attempt
 
     def halt_as_it_ends(model, messages, index, steps, **kwargs):
@@ -2125,10 +2125,10 @@ def test_a_halt_during_the_closing_step_holds_its_answer_until_the_user_decides(
     users = [m["content"] for m in loop.messages if m.get("role") == "user"]
     if action == "steer":
         # The user's message got another closing step, under the limit's rule.
-        assert f"{agent_delegation.USER_NOTE_OPEN}\nName the source." in users and len(closing) >= 2
+        assert f"{agent_loop.USER_NOTE_OPEN}\nName the source." in users and len(closing) >= 2
         assert users[-1].startswith("App rule: this message has reached its limit.")
     else:
-        assert not any(agent_delegation.USER_NOTE_OPEN in u for u in users)
+        assert not any(agent_loop.USER_NOTE_OPEN in u for u in users)
     turn = saved(store, loop)
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
 
@@ -2185,11 +2185,11 @@ def test_an_entry_the_user_decided_opens_no_second_card(store):
     loop._receive_hold({"hold_decision": {"id": first, "action": "continue"}})
     # Decided, not yet closed: the same entry does not wait for a card of its own.
     other = {**HALT, "reviewer": "Claude Haiku 4.5", "provider": "anthropic"}
-    assert loop.request_hold(other) == agent_delegation.HOLD_DECIDED
+    assert loop.request_hold(other) == agent_loop.HOLD_DECIDED
     list(loop._hold_wait())
     assert loop.hold is None and loop.queued_hold is None
     # Closed: still none, while another entry gets its card.
-    assert loop.request_hold(other) == agent_delegation.HOLD_DECIDED and loop.hold is None
+    assert loop.request_hold(other) == agent_loop.HOLD_DECIDED and loop.hold is None
     assert loop.request_hold({**other, "entry": 2}) is True and loop.hold["entry"] == 2
     # A halt on the open card's entry joins it.
     assert loop.request_hold({**HALT, "entry": 2}) is True and loop.hold["revision"] == 1
@@ -2275,8 +2275,8 @@ def test_a_deny_that_reached_a_reviewers_halt_stops_and_never_goes_on(store):
 def test_the_watcher_looks_less_often_during_a_pause(store, monkeypatch):
     """A-R9: during a pause the root is read every WATCH_PAUSED_SECONDS, not
     every WATCH_SECONDS; a decision of this process comes at once (A-T4)."""
-    monkeypatch.setattr(agent_delegation, "WATCH_SECONDS", .05)
-    monkeypatch.setattr(agent_delegation, "WATCH_PAUSED_SECONDS", 30)
+    monkeypatch.setattr(agent_loop, "WATCH_SECONDS", .05)
+    monkeypatch.setattr(agent_loop, "WATCH_PAUSED_SECONDS", 30)
     looks, check = [], type(store).check_delegation
 
     def counted(self, *args, **kwargs):
@@ -2350,7 +2350,7 @@ def unsaved_holds(store, monkeypatch):
     """set_hold fails for every hold that opens (a database outage); clears
     still work. Returns the attempts."""
     from google.api_core.exceptions import ServiceUnavailable
-    monkeypatch.setattr(agent_delegation, "HOLD_SAVE_BACKOFF_SECONDS", 0)
+    monkeypatch.setattr(agent_loop, "HOLD_SAVE_BACKOFF_SECONDS", 0)
     attempts, original = [], type(store).set_hold
 
     def set_hold(self, uid, chat_id, turn_id, hold, *, replaces=None):
@@ -2391,7 +2391,7 @@ def test_a_pause_that_could_not_be_saved_is_still_decided(api, monkeypatch, acti
     assert turn["status"] == "completed"
     assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == [action]
     notes = [m["content"] for m in loop.messages if m.get("role") == "user" and text and text in str(m["content"])]
-    assert notes == ([f"{agent_delegation.USER_NOTE_OPEN}\n{text}"] if text else [])
+    assert notes == ([f"{agent_loop.USER_NOTE_OPEN}\n{text}"] if text else [])
 
 
 # --- The route ---------------------------------------------------------------------

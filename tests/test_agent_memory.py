@@ -10,7 +10,7 @@ from app.api.routers import users as users_router
 from app.core.rate_limit import limiter
 from app.services import agent_memory, user_memory
 from app.services.agent_comparison import comparison_selection
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_memory import AgentMemoryError, FirestoreAgentMemoryRepository, MemorySnapshot
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import measured_usage, prompt_cache_control, resolve_agent_model
@@ -294,7 +294,7 @@ def memory_loop(store, script, *, snapshot=None, question="I moved to Munich las
     """A turn of the agent whose reviewers never start (agent_reviewers.py):
     with outside content in view, memory locks."""
     chat, turn = pending(store, question=question)
-    loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
+    loop = AgentLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model(model),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": question}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
@@ -425,7 +425,7 @@ def test_every_tool_result_brings_outside_content_but_the_apps_own(name, content
     from types import SimpleNamespace
     value = SimpleNamespace(tool_calls=[{"id": "c1", "function": {"name": name, "arguments": "{}"}}])
     results = {"c1": {"role": "tool", "tool_call_id": "c1", "content": json.dumps(content)}}
-    assert DelegationLoop._brought_outside_content(None, value, results) is locks
+    assert AgentLoop._brought_outside_content(None, value, results) is locks
 
 
 def test_a_memory_only_message_needs_no_comparison(store):
@@ -493,7 +493,7 @@ def test_anthropic_requests_carry_automatic_cache_control(monkeypatch):
 def test_a_one_off_call_caches_only_for_its_own_search_rounds(monkeypatch, one_off, searches, cached):
     """A cache write costs a quarter more than plain input. A judge's prompt
     is never sent again; a comparison answer's search rounds re-read its own
-    (DelegationLoop.worker_completion)."""
+    (AgentLoop.worker_completion)."""
     from app.services.llm import agent_client
     from app.services.llm.agent_client import AgentCompletion
     from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget

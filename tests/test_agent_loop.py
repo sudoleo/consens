@@ -9,7 +9,7 @@ import pytest
 from app.core.openrouter_contract import provider_session_id
 from agent_reviewers import without_reviewers
 from app.services.agent_comparison import comparison_selection
-from app.services.agent_delegation import DelegationLoop
+from app.services.agent_loop import AgentLoop
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, configured_model
 from app.services.llm import agent_client
 from app.services.llm.agent_client import AgentCompletion, resolve_agent_model
@@ -96,7 +96,7 @@ def reviewed_transport(monkeypatch, answer, *, searches=0):
 
 def chat_loop(store, chat_id, turn, model, messages=None):
     """The agent's run of ``turn``, without reviewers."""
-    return without_reviewers(DelegationLoop(
+    return without_reviewers(AgentLoop(
         store=store, uid=UID, chat_id=chat_id, turn_id=turn["id"], model=model,
         messages=messages or store.messages(UID, chat_id, turn, model=model), api_key="test",
         cancellation=ProviderCancellation(),
@@ -531,7 +531,7 @@ def test_refused_tool_calls_say_what_to_change(caplog):
     # (cut after two errors) gave Claude nothing to correct: it repeated the
     # call until "repeated invalid tool requests" ended the turn (2026-10-09).
     from app.services.agent_comparison import AuditCompareArgs
-    from app.services.agent_delegation import DelegationLoop
+    from app.services.agent_loop import AgentLoop
     registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", AuditCompareArgs, lambda a, **kw: {}),
                              ReadOnlyTool("audit_answer", "Review", AuditCompareArgs, lambda a, **kw: {})],
                             argument_limit=24_000)
@@ -553,7 +553,7 @@ def test_refused_tool_calls_say_what_to_change(caplog):
         assert problem in text
     assert len(text) < 500 and "pydantic.dev" not in text and secret not in text
     with caplog.at_level("WARNING"):
-        DelegationLoop._log_rejected_call(call("compare_models", json.dumps({"question": secret})), invalid.value)
+        AgentLoop._log_rejected_call(call("compare_models", json.dumps({"question": secret})), invalid.value)
     assert "tool=compare_models" in caplog.text and "question:missing" in caplog.text
     assert secret not in caplog.text
 

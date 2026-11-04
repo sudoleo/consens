@@ -1630,7 +1630,7 @@
     host.hidden = !queue.length;
   }
   // A reviewer paused the work for the user (agent_audit.py halt,
-  // DelegationLoop.request_hold; since 2026-10-26): one card above the field
+  // AgentLoop.request_hold; since 2026-10-26): one card above the field
   // until the user decides. The agent never learns of it: going on changes
   // nothing for it, a message written now reaches it like any message
   // written while it works, and Stop is the Stop button. Without a decision
@@ -2011,7 +2011,7 @@
     return actions;
   }
   // The agent asks for a domain its workspace may reach (agent_domains.py,
-  // DelegationLoop._domain_wait): the user decides every one; a reviewer's
+  // AgentLoop._domain_wait): the user decides every one; a reviewer's
   // halt that comes meanwhile stands on the card. The domain and the agent's reason
   // are data (untranslated): the reason as the quiet line under the title,
   // like an ask card's request (C16; it stood in the code field). "Allow
@@ -2580,7 +2580,7 @@
         registry.update(context.runId, () => {});
       } },
       // The last word stands and the server checks exactly this text next
-      // (agent_delegation._answer_check_follows): bound to the text on screen.
+      // (agent_loop._answer_check_follows): bound to the text on screen.
       answer_check: { receive() {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         context.metadata.answerCheckText = context.consensus.streamText || '';
