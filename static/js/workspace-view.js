@@ -3,7 +3,8 @@
 // through noVNC (static/vendor/novnc, loaded when the panel first opens).
 // The user watches; a click on the screen takes the browser over, and the
 // agent waits (agent_workspace.py "Takeover") until "Hand back"; its server
-// on the workbench keeps answering localhost here (agent_tunnel.py). While the user has it, the panel refreshes the takeover every
+// runs on the same computer as this Chrome, so localhost keeps answering here
+// (one computer since 2026-11-04). While the user has it, the panel refreshes the takeover every
 // REFRESH_MS, and at once when the page comes back to the front; a reload of
 // this tab opens the view again in the user's hands (A-S6, 2026-10-29); a
 // closed tab lets it expire by itself. Sign-ins happen here, by

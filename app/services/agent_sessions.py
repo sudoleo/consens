@@ -71,9 +71,9 @@ class HoldActionRefused(ValueError):
 
 
 def deniable(hold):
-    """Whether "deny" answers ``hold``: a domain the agent asked for
-    (agent_domains.py) or the agent's own question to allow a step or to give
-    a key (agent_ask.py). A reviewer's halt or a gate goes on, gets a
+    """Whether "deny" answers ``hold``: the agent's own question to allow a
+    step or to give a key (agent_ask.py), or a domain it asked for (until
+    2026-11-04, request_domain). A reviewer's halt or a gate goes on, gets a
     message or stops; before 2026-10-29 a "deny" there went on like
     "continue", and a gated update_memory ran."""
     hold = hold or {}

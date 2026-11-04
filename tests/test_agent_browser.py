@@ -1,7 +1,8 @@
 """The agent's ``browser`` tool (agent_browser.py, since 2026-10-27): typed
-actions in the Chrome of the account's browser VM, through one fixed
-program there (workspace_vm/browser/browser.py) with JSON on stdin, never a
-shell command in the agent's VM. The VMs are FakeVM (test_agent_vm.py),
+actions in the Chrome of the account's workspace (a browser VM of its own
+until 2026-11-04), through one fixed program there
+(workspace_vm/browser/browser.py) run as the provider's user with JSON on
+stdin, never a shell command of the agent's. The VMs are FakeVM (test_agent_vm.py),
 whose ``browser`` answers for the program; nothing calls Sprites.
 """
 import base64
@@ -15,7 +16,8 @@ from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 from test_agent_vm import chat_path, NAME, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401
 
-BROWSER = agent_vm.browser_name(UID)
+# The browser runs in the workspace since 2026-11-04.
+BROWSER = NAME
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
 
 
@@ -55,19 +57,21 @@ def test_the_agent_uses_the_browser_through_typed_actions_on_its_own_vm(store, f
     loop = vm_loop(store, script)
     events = list(loop.run())
     assert "browser" in script.offered[0]
-    # One fixed program on the browser VM, the request as JSON: no shell, no command text.
+    # One fixed program in the workspace, the request as JSON: no shell, no command text.
     assert fake_vm.requests == [{"action": "read"}, {"action": "text", "offset": 40},
                                 {"action": "scroll", "direction": "down"}]
     runs = [call for call in fake_vm.calls if call[0] == "run"]
     assert runs and all(call[1] == BROWSER and call[2].endswith(f"exec python3 {agent_workspace.BROWSER_HELPER}")
                         for call in runs)
-    assert not [call for call in fake_vm.calls if call[0] == "exec" and call[1] == BROWSER]
-    # The browser VM: the open web, its tools up to date, never a checkpoint.
-    assert fake_vm.vms[BROWSER]["policy"] == agent_vm.BROWSER_RULES
-    assert fake_vm.vms[BROWSER]["files"][agent_workspace.VERSION_PATH] == agent_workspace.BROWSER_VERSION.encode()
+    # Nothing ran as a shell command but the workspace's own setup.
+    from test_agent_vm import SETUP
+    assert [call[2] for call in fake_vm.calls if call[0] == "exec"] == [SETUP]
+    # The workspace: the open web, its tools up to date, no checkpoint for the browser alone.
+    assert fake_vm.vms[BROWSER]["policy"] == agent_vm.RULES
+    assert fake_vm.vms[BROWSER]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
     assert fake_vm.vms[BROWSER]["checkpoints"] == [] and fake_vm.calls.count(("ensure", BROWSER)) == 1
-    # The first call woke the browser VM and its Chrome once, on a backend of
-    # its own, while the workbench got ready (since 2026-10-29).
+    # The first call woke the VM and its Chrome once, on a backend of its own,
+    # while the lease was taken (since 2026-10-29).
     assert fake_vm.warmed == [BROWSER]
     # The workspace's lease covers it; the page comes back as text.
     read = results(loop)[0]
@@ -85,13 +89,13 @@ def test_the_agent_uses_the_browser_through_typed_actions_on_its_own_vm(store, f
 
 @pytest.mark.parametrize("url", ["file:///home/sprite/.consens/browser/profile/Default/Cookies",
                                  "chrome://settings", "javascript:alert(1)", "view-source:https://example.com",
-                                 "http://localhost:9222/json", "http://127.0.0.1:80/", "http://[::1]/",
+                                 "http://127.0.0.1:80/", "http://[::1]/",
                                  "localhost", "http://app.localhost:3000/",
                                  "http://10.0.0.8/", "http://169.254.169.254/latest", "https://consens-x.internal/",
                                  "data:text/html,hi"])
 def test_the_browser_never_opens_its_own_computer(url):
-    """A page of the browser VM itself would show its profile with every
-    sign-in, its debugging port the browser's control."""
+    """A file of the workspace would show the browser's profile with every
+    sign-in; a private network is Fly.io's or the provider's."""
     with pytest.raises(ValueError):
         check_url(url)
 
@@ -99,8 +103,9 @@ def test_the_browser_never_opens_its_own_computer(url):
 def test_localhost_with_a_port_is_the_workspaces():
     """DeepSeek, 2026-10-28, and Max's tic-tac-toe runs, 2026-10-29: models
     opened their dev server in the browser first, and got a refusal. Since
-    2026-10-29 localhost:<port> is that port of the workbench (agent_tunnel.py),
-    a bare one over http; a refusal names the way."""
+    2026-10-29 localhost:<port> is the agent's server on that port (a tunnel
+    to the workbench until 2026-11-04, the same computer since), a bare one
+    over http; a refusal names the way."""
     assert check_url("http://localhost:8765/") == "http://localhost:8765/"
     assert check_url("localhost:3000") == "http://localhost:3000"
     assert check_url("127.0.0.1:5173/app") == "http://127.0.0.1:5173/app"
@@ -109,15 +114,15 @@ def test_localhost_with_a_port_is_the_workspaces():
         8765, 3000, None, None]
     with pytest.raises(ValueError, match="name the port"):
         check_url("http://localhost/")
-    with pytest.raises(ValueError, match="Port 9222 is the browser's own computer"):
-        check_url("http://127.0.0.1:9222/json")
-    with pytest.raises(ValueError, match="localhost:<port> is that port of your workspace"):
+    # No debugging port any more (cdp.py): 9222 is a port like any other.
+    assert check_url("http://127.0.0.1:9222/json") == "http://127.0.0.1:9222/json"
+    with pytest.raises(ValueError, match="localhost:<port> where your server listens"):
         check_url("file:///tmp/t.html")
     with pytest.raises(ValueError, match="in your workspace already"):
         check_url("http://localhost:3000/a.pdf", local=False)
     # The prompt says it as a fact too, and the workbench's clock.
     from app.services.prompt_defaults import AGENT_VM_PROMPT
-    assert "http://localhost:<port> there is that port of your workspace" in AGENT_VM_PROMPT
+    assert "http://localhost:<port> there is your server on that port" in AGENT_VM_PROMPT
     assert "clock runs on UTC" in AGENT_VM_PROMPT
     # Checks the user need not see: Playwright with the workbench's Chrome (test Sprite 2026-10-28).
     assert 'launch(channel="chrome")' in AGENT_VM_PROMPT
@@ -227,7 +232,7 @@ def test_a_download_comes_into_the_chat_folder_and_leaves_the_browser(store, fak
     """Since 2026-10-28: what the browser downloaded (a click, the action
     download, the user in the view) lands in the chat's downloads folder as
     the agent's user, never over an existing file, and is deleted on the
-    browser VM; larger than DOWNLOAD_BYTES is skipped and deleted too."""
+    browser's folder; larger than DOWNLOAD_BYTES is skipped and deleted too."""
     loop, browser = tools(store)
     folder = chat_path(loop.chat_id)
     loop.vm_tools.session.ready(ProviderCancellation())
@@ -240,9 +245,10 @@ def test_a_download_comes_into_the_chat_folder_and_leaves_the_browser(store, fak
     assert f"{folder}/downloads/invoice (2).pdf" in result["note"]
     files = fake_vm.vms[NAME]["files"]
     assert files[f"{folder}/downloads/invoice (2).pdf"] == b"%PDF-1.7" and files[f"{folder}/downloads/invoice.pdf"] == b"older"
-    # Written as the agent's user, read and deleted by the server on the browser VM.
+    # Written as the agent's user, read and deleted by the server in the browser's folder.
     assert ("write", f"{folder}/downloads/invoice (2).pdf") not in fake_vm.server_files
-    assert not [path for path in fake_vm.vms[BROWSER]["files"] if "/downloads/" in path]
+    assert not [path for path in fake_vm.vms[BROWSER]["files"]
+                if path.startswith(agent_workspace.BROWSER_DOWNLOADS + "/")]
     # The next message's work record names where it went.
     from app.services.agent_compaction import describe
     line = describe("browser", json.dumps({"action": "click", "ref": "e4"}), json.dumps(result))
@@ -296,7 +302,8 @@ def test_only_the_browsers_download_folder_is_copied(store, fake_vm):
         {"file": f"{agent_workspace.BROWSER_DOWNLOADS}/../profile/Default/Cookies", "name": "Cookies", "bytes": 6}]}
     result = call(browser, action="read")
     assert "downloads" not in result
-    assert not [path for path in fake_vm.vms[NAME]["files"] if "Cookies" in path]
+    assert [path for path in fake_vm.vms[NAME]["files"] if "Cookies" in path] == [
+        "/home/sprite/.consens/browser/profile/Default/Cookies"]
 
 
 def test_download_takes_a_public_address_or_the_current_page(store, fake_vm):
@@ -546,10 +553,10 @@ def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypat
     again for another 40 s before it said so. Now it says so at once."""
     opened = []
 
-    def refuse(vm, uid, start=None):
+    def refuse(vm, uid, cancellation=None, **kwargs):
         opened.append(uid)
         raise agent_vm.VMUnavailable("read: HTTP 502")
-    monkeypatch.setattr(agent_workspace, "open_browser", refuse)
+    monkeypatch.setattr(agent_workspace, "open_workspace", refuse)
     loop, browser = tools(store)
     with pytest.raises(ValueError, match="did not start"):
         call(browser, action="read")
@@ -578,71 +585,21 @@ def test_a_long_runs_older_pages_shrink_and_the_work_record_names_each_step():
         "request_domain api.example.com -> error:")
 
 
-def test_localhost_opens_through_the_tunnel_to_the_workbench(store, fake_vm, monkeypatch):
-    """Since 2026-10-29 (agent_tunnel.py): an address on localhost opens the
-    tunnel for its port first, and every request names the ports it holds,
-    the only localhost pages browser.py reads. A port the browser VM uses
-    itself is refused; a tunnel that does not start costs that address,
-    never the browser."""
-    import threading
-    from app.services import agent_tunnel
+def test_localhost_opens_the_agents_server_on_the_same_computer(store, fake_vm):
+    """Since 2026-11-04 the browser runs in the workspace: localhost:<port>
+    is the agent's server there, without a tunnel (2026-10-29 to
+    2026-11-04 every request named the ports the tunnel held). Which
+    localhost pages it reads browser.py decides from the kernel's table of
+    the agent's user's listening ports (agent_ports)."""
     loop, browser = tools(store)
-    opened, resumed = [], []
-
-    def open_port(uid, port, backend_factory=None, db=None):
-        opened.append((uid, port, db is store.db))
-        if port == 3001:
-            return False
-        agent_tunnel._asked.setdefault(uid, set()).add(port)
-        return True
-    starting = []
-
-    def resume(uid, backend_factory=None, db=None, find=False):
-        resumed.append((uid, find))
-        if starting:
-            thread = threading.Thread(target=lambda: starting.append("joined"))
-            thread.start()
-            return thread
-        return None
-    monkeypatch.setattr(agent_tunnel, "open_port", open_port)
-    monkeypatch.setattr(agent_tunnel, "resume", resume)
-    monkeypatch.setattr(agent_tunnel, "_asked", {})
     fake_vm.browser = lambda request: {"status": "ok", "text": f'Page: "Game"\nURL: {request.get("url") or "http://localhost:3000/"}'}
-    call(browser, action="read")
-    assert "local_ports" not in fake_vm.requests[-1] and resumed == []
     result = call(browser, action="open", url="localhost:3000")
-    assert opened == [(UID, 3000, True)]
-    # The other ports of the agent's servers follow in the background.
-    assert (UID, True) in resumed
-    assert fake_vm.requests[-1]["url"] == "http://localhost:3000" and fake_vm.requests[-1]["local_ports"] == [3000]
-    # Said once, with the first open of the port.
-    assert result["note"] == agent_browser.LOCAL_OPENED.format(port=3000)
-    assert "note" not in call(browser, action="open", url="localhost:3000")
+    assert fake_vm.requests[-1] == {"action": "open", "url": "http://localhost:3000", "new_tab": False}
+    assert result["page"].startswith('Page: "Game"') and "note" not in result
     call(browser, action="read")
-    assert fake_vm.requests[-1] == {"action": "read", "local_ports": [3000]}
-    # A tunnel that is starting again: a click on a localhost page waits
-    # for it, a read does not need to.
-    starting.append("starting")
-    call(browser, action="read")
-    assert starting == ["starting", "joined"] or starting == ["starting"]
-    starting[:] = ["starting"]
-    call(browser, action="click", ref="e1")
-    assert starting == ["starting", "joined"]
-    starting.clear()
-    with pytest.raises(ValueError, match="Port 3001 is the browser's own computer"):
-        call(browser, action="open", url="http://localhost:3001/")
-
-    def down(uid, port, backend_factory=None, db=None):
-        raise agent_vm.VMUnavailable("exec: HTTP 502")
-    monkeypatch.setattr(agent_tunnel, "open_port", down)
-    with pytest.raises(ValueError, match="did not open"):
-        call(browser, action="open", url="http://127.0.0.1:3002/")
-    assert not browser.off and call(browser, action="read")["action"] == "read"
-    # The account's ports from its record (a restart of the server) count too.
-    agent_tunnel._asked.clear()
-    loop.vm_tools.session.claim = agent_workspace.Claim(restored=False, tunnel_ports=(5173,))
-    call(browser, action="read")
-    assert fake_vm.requests[-1]["local_ports"] == [5173]
+    assert fake_vm.requests[-1] == {"action": "read"}
+    # The agent's side need not be ready for it: only the lease.
+    assert loop.vm_tools.session.state == "leased"
 
 
 def test_a_refused_download_names_the_way_a_picture_comes_without_the_browser(store, fake_vm, monkeypatch):

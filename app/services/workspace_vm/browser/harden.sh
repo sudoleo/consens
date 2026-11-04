@@ -1,5 +1,5 @@
 #!/bin/bash
-# consens.io browser VM: the rules that hold whoever steers Chrome, the agent
+# consens.io workspace: the rules that hold whoever steers Chrome, the agent
 # through browser.py or the user in the live view (since 2026-10-30, the
 # server's safety rules, workspace_guard.py). display.sh runs this before it
 # starts Chrome and starts none when it fails; it does the work again only
@@ -9,15 +9,16 @@
 # - policy.json is Chrome's managed policy: Google's SafeSites filter (no
 #   adult sites), Safe Browsing's warnings without "proceed anyway", SafeSearch,
 #   no file dialogs, no extensions, no incognito or guest window, a history
-#   nobody deletes, no printing, and neither the VM's files, DevTools, a few
-#   of Chrome's own pages nor its debugging port as a page. Chrome runs as
-#   the provider's user, who has sudo: a "Save as" over one of the server's
-#   scripts, or DevTools on the debugging port, was a way out of the browser
-#   into a root shell in the live view. Measured on a test Sprite
-#   2026-10-30: DeveloperToolsAvailability 2 also shuts Playwright out of
-#   every page (new_page fails), so DevTools stay closed through
-#   URLBlocklist (devtools://), which leaves the debugging port to
-#   browser.py; DNS over HTTPS (Cloudflare's family resolver) does not
+#   nobody deletes, no printing, and neither the VM's files, DevTools nor a
+#   few of Chrome's own pages. Chrome runs as the provider's user, who has
+#   sudo: a "Save as" over one of the server's scripts, or DevTools, was a
+#   way out of the browser into a root shell in the live view. Measured on a
+#   test Sprite 2026-10-30: DeveloperToolsAvailability 2 also shuts
+#   Playwright out of every page (new_page fails), so DevTools stay closed
+#   through URLBlocklist (devtools://), which leaves the debugging protocol
+#   to browser.py (since 2026-11-04 a pipe, cdp.py, no port at all, until
+#   then 127.0.0.1:9222, which the list blocked as a page as well); DNS over
+#   HTTPS (Cloudflare's family resolver) does not
 #   work at all, the provider's network rules only let through addresses
 #   its own resolver gave out (ERR_CONNECTION_REFUSED).
 # - xdg-open opens nothing: Chrome opens a download or another app's link
@@ -51,7 +52,7 @@ mkdir -p "$HOME/.config/openbox"
 install -m 644 "$here/openbox-rc.xml" "$HOME/.config/openbox/rc.xml"
 install -m 644 "$here/openbox-menu.xml" "$HOME/.config/openbox/menu.xml"
 # A running openbox takes the new configuration at once.
-if pgrep -x openbox >/dev/null; then
-  DISPLAY=:1 openbox --reconfigure >/dev/null 2>&1 || true
+if pgrep -u "$(id -u)" -x openbox >/dev/null; then
+  DISPLAY=:1 XAUTHORITY="$dir/xauthority" openbox --reconfigure >/dev/null 2>&1 || true
 fi
 echo "$version" >"$marker"

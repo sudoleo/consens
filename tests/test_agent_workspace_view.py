@@ -1,6 +1,7 @@
 """The workspace from the browser (routers/agent_workspace.py, since
-2026-10-27): the live view's WebSocket through to the browser VM's relay on
-the provider's exec API, the user's takeover and signing its browser out.
+2026-10-27): the live view's WebSocket through to the relay on the
+workspace's VM (a browser VM of its own until 2026-11-04) over the
+provider's exec API, the user's takeover and signing its browser out.
 The VMs are FakeVM (test_agent_vm.py), the exec socket a fake; nothing calls
 Sprites.
 """
@@ -20,7 +21,6 @@ from test_agent_runs import AUTH, UID, pending, store  # noqa: F401  (fixture)
 from test_agent_vm import _admin_allowance, fake_vm  # noqa: F401  (fixtures)
 
 NAME = agent_vm.workspace_name(UID)
-BROWSER = agent_vm.browser_name(UID)
 
 
 class Relay:
@@ -88,15 +88,15 @@ def test_the_view_signs_in_with_its_first_message_and_carries_vnc_both_ways(view
     # The relay on the provider's exec API (security audit 2026-10-27,
     # finding 1): the token goes to api.sprites.dev only, never to an address
     # of the VM; the view's bytes reach its stdin (0x00), which ends (0x04).
-    assert gateway.url.startswith(f"wss://api.sprites.dev/v1/sprites/{BROWSER}/exec?") and gateway.closed
+    assert gateway.url.startswith(f"wss://api.sprites.dev/v1/sprites/{NAME}/exec?") and gateway.closed
     assert b"\x00RFB 003.008\n" in gateway.received and gateway.received[-1] == b"\x04"
-    # The view opens the browser VM even before a chat used it: both VMs
-    # recorded first, the browser created with the open web, its tools up to date.
+    # The view opens the workspace even before a chat used it: recorded
+    # first, created with the open web, its tools up to date.
     record = agent_workspace.record(store.db, UID)
-    assert record["name"] == NAME and record["browser"] == BROWSER and "lease" not in record
-    assert ("ensure", BROWSER) in fake_vm.calls and ("ensure", NAME) not in fake_vm.calls
-    assert fake_vm.vms[BROWSER]["policy"] == agent_vm.BROWSER_RULES
-    assert fake_vm.vms[BROWSER]["files"][agent_workspace.VERSION_PATH] == agent_workspace.BROWSER_VERSION.encode()
+    assert record["name"] == NAME and "browser" not in record and "lease" not in record
+    assert ("ensure", NAME) in fake_vm.calls
+    assert fake_vm.vms[NAME]["policy"] == agent_vm.RULES
+    assert fake_vm.vms[NAME]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
 
 
 def test_the_views_start_says_about_when_it_ends_and_ends_with_ready(view_api, fake_vm):
@@ -160,32 +160,7 @@ def test_a_view_or_terminal_gone_before_its_first_state_ends_quietly():
     assert asyncio.run(workspace_router._state(Gone(RuntimeError("closed")), "connecting")) is False
 
 
-def test_the_view_starts_the_tunnel_again_for_the_agents_app(view_api, fake_vm, monkeypatch):
-    """localhost in the view keeps reaching the agent's server after its run
-    (agent_tunnel.resume, since 2026-10-29)."""
-    client, store, _, _ = view_api
-    resumed = []
-    monkeypatch.setattr(workspace_router.agent_tunnel, "resume",
-                        lambda uid, backend_factory=None, db=None, find=False: resumed.append(
-                            (uid, backend_factory, find)))
-    monkeypatch.setattr(workspace_router.agent_tunnel, "_asked", {})
-    # Ports kept on the account's record from before a restart of the server.
-    agent_workspace.ref(store.db, UID).set({"tunnel_ports": [5173, 80]}, merge=True)
-    with client.websocket_connect("/agent/workspace/view") as ws:
-        ws.send_text(json.dumps({"id_token": "verified"}))
-        assert [json.loads(ws.receive_text())["state"] for _ in range(3)] == ["connecting", "starting", "ready"]
-    # With the servers the agent started since.
-    assert resumed == [(UID, workspace_router._backend, True)]
-    assert workspace_router.agent_tunnel.asked(UID) == {5173}
-    # Taking the browser over keeps the tunnel from ending as idle and starts it again.
-    touched = []
-    monkeypatch.setattr(workspace_router.agent_tunnel, "touch", touched.append)
-    fake_vm.vms.setdefault(BROWSER, {"files": {}, "checkpoints": []})
-    assert client.post("/agent/workspace/control", json={"holder": "user"}, headers=AUTH).status_code == 200
-    assert touched == [UID] and resumed[-1] == (UID, workspace_router._backend, False)
-
-
-# --- The user's terminal on the workbench (since 2026-10-28) --------------------------
+# --- The user's terminal in the workspace (since 2026-10-28) --------------------------
 
 def terminal_api(view_api, monkeypatch, frames):
     """The view API with the terminal's exec socket: a fake TTY that sends
@@ -226,11 +201,10 @@ def test_the_terminal_is_a_shell_with_the_agents_rights_in_the_users_size(view_a
     assert record["terminal"]["id"] and "view" not in record
 
 
-def test_the_terminal_ends_with_its_shell_and_leaves_a_running_chats_network_rules(view_api, fake_vm, monkeypatch):
+def test_the_terminal_ends_with_its_shell_and_leaves_the_vm_as_it_is(view_api, fake_vm, monkeypatch):
     client, _, shell = terminal_api(view_api, monkeypatch, [b"bye\r\n", json.dumps({"type": "exit", "exit_code": 0})])
-    from app.services import agent_domains
-    running = agent_domains.rules(["api.example.com"])
-    fake_vm.vms[NAME] = {"files": {}, "checkpoints": [], "policy": list(running)}
+    fake_vm.vms[NAME] = {"files": {agent_workspace.VERSION_PATH: agent_workspace.VERSION.encode()},
+                         "checkpoints": [], "policy": list(agent_vm.RULES)}
     with client.websocket_connect("/agent/workspace/terminal") as ws:
         ws.send_text(json.dumps({"id_token": "verified", "cols": "wide", "rows": 30}))
         assert [json.loads(ws.receive_text())["state"] for _ in range(2)] == ["connecting", "ready"]
@@ -238,12 +212,11 @@ def test_the_terminal_ends_with_its_shell_and_leaves_a_running_chats_network_rul
         with pytest.raises(WebSocketDisconnect) as closed:
             ws.receive_bytes()
     assert closed.value.code == 1000
-    # An unusable size falls back to 80 x 24; an existing workbench keeps a
-    # running chat's rules (its setup's download server comes and goes,
-    # agent_workspace.prepare).
+    # An unusable size falls back to 80 x 24; a workspace at this version is
+    # not set up again, nor are its rules touched.
     assert [call[3] for call in fake_vm.calls if call[0] == "exec_url"] == [(80, 24)]
-    assert fake_vm.vms[NAME]["policy"] == running
-    assert not [call for call in fake_vm.calls if call[0] == "ensure" and call[1] == NAME]
+    assert fake_vm.vms[NAME]["policy"] == agent_vm.RULES
+    assert not [call for call in fake_vm.calls if call[0] in {"policy", "exec"}]
 
 
 def test_the_terminal_needs_the_vm_and_counts_against_the_rate_limit(view_api, fake_vm, monkeypatch):
@@ -260,7 +233,7 @@ def test_the_terminal_needs_the_vm_and_counts_against_the_rate_limit(view_api, f
 def test_the_view_connects_to_the_providers_api_only(monkeypatch):
     import asyncio
     with pytest.raises(ValueError):
-        asyncio.run(workspace_router.connect_upstream(f"wss://{BROWSER}-x1.sprites.app/vnc"))
+        asyncio.run(workspace_router.connect_upstream(f"wss://{NAME}-x1.sprites.app/vnc"))
 
 
 def open_view(client):
@@ -339,29 +312,27 @@ def test_taking_over_and_handing_back_write_the_vms_control_files(view_api, fake
     assert client.post("/agent/workspace/control", json={"holder": "user"}, headers=AUTH).status_code == 404
     agent_workspace.record_for_view(store, UID, provider="fake")
     fake_vm.vms[NAME] = {"files": {}, "checkpoints": []}
-    fake_vm.vms[BROWSER] = {"files": {}, "checkpoints": []}
     monkeypatch.setattr(agent_workspace.time, "time", lambda: 5000.0)
     taken = client.post("/agent/workspace/control", json={"holder": "user"}, headers=AUTH)
     assert taken.status_code == 200 and taken.json() == {"holder": "user", "seconds": agent_workspace.CONTROL_SECONDS}
-    control = json.loads(fake_vm.vms[BROWSER]["files"][agent_workspace.BROWSER_CONTROL])
+    control = json.loads(fake_vm.vms[NAME]["files"][agent_workspace.BROWSER_CONTROL])
     assert control == {"holder": "user", "until": 5000.0 + agent_workspace.CONTROL_SECONDS}
     # The agent waits: the server holds its calls (the record) and the
-    # browser refuses (control.json there). What runs on the workbench goes
-    # on (since 2026-10-29: the agent's server answers the browser,
-    # agent_tunnel.py), so the workbench is not touched.
+    # browser refuses (control.json next to it). What the agent runs goes
+    # on (the agent's server answers the browser), so nothing else is touched.
     assert agent_workspace.record(store.db, UID)["control"] == control
     assert agent_workspace.user_has_browser(store.db, UID, now=5000.0)
     assert [call for call in fake_vm.calls if call[0] in {"write", "exec"}] == [
-        ("write", BROWSER, agent_workspace.BROWSER_CONTROL)]
-    assert fake_vm.server == [] and not [call for call in fake_vm.calls if NAME in call]
+        ("write", NAME, agent_workspace.BROWSER_CONTROL)]
+    assert fake_vm.server == []
     assert all(path.startswith("/home/sprite/.consens/") for _, path in fake_vm.server_files)
     assert client.post("/agent/workspace/control", json={"holder": "agent"}, headers=AUTH).status_code == 200
-    assert json.loads(fake_vm.vms[BROWSER]["files"][agent_workspace.BROWSER_CONTROL])["holder"] == "agent"
+    assert json.loads(fake_vm.vms[NAME]["files"][agent_workspace.BROWSER_CONTROL])["holder"] == "agent"
     # Handing back is noted, so a waiting run sees it between two looks too.
     assert agent_workspace.record(store.db, UID)["control"] == {"holder": "agent", "until": 0, "returned_at": 5000.0}
     assert agent_workspace.control_state(store.db, UID, now=5000.0) == (False, 5000.0)
     assert not agent_workspace.user_has_browser(store.db, UID, now=5000.0)
-    assert fake_vm.server == [] and not [call for call in fake_vm.calls if NAME in call]
+    assert fake_vm.server == []
     assert client.post("/agent/workspace/control", json={"holder": "root"}, headers=AUTH).status_code == 422
     allowed.clear()
     assert client.post("/agent/workspace/control", json={"holder": "user"}, headers=AUTH).status_code == 403
@@ -381,11 +352,12 @@ def test_signing_the_browser_out_waits_for_the_agent_and_deletes_its_profile(vie
     assert busy.status_code == 409 and busy.json()["code"] == "running"
     agent_workspace.ref(store.db, UID).update({"lease": {
         "chat_id": chat, "turn_id": "running", "until": datetime.now(timezone.utc) - timedelta(seconds=1)}})
-    fake_vm.vms[BROWSER] = {"files": {}, "checkpoints": []}
+    fake_vm.vms[NAME] = {"files": {}, "checkpoints": []}
     assert client.post("/agent/workspace/reset-browser", headers=AUTH).json() == {"status": "reset"}
-    # On the browser VM, as the server.
+    # In the workspace, as the server, ending only its own user's processes.
     [(name, command)] = [(call[1], call[2]) for call in fake_vm.calls if call[0] == "exec"]
-    assert name == BROWSER and f"rm -rf {agent_workspace.BROWSER_PROFILE}" in command and "pkill" in command
+    assert name == NAME and f"rm -rf {agent_workspace.BROWSER_PROFILE}" in command
+    assert 'pkill -u "$(id -u)"' in command
     assert fake_vm.server == [command]
     # No checkpoint from before brings the sign-ins back (restorable).
     assert isinstance(agent_workspace.record(store.db, UID).get("restore_floor"), datetime)
@@ -408,7 +380,7 @@ def test_settings_list_where_the_browser_is_logged_in_and_take_a_site_off(view_a
     chat, _ = pending(store)
     agent_workspace.claim(store, UID, chat, "done", provider="fake")
     agent_workspace.release(store, UID, "done")
-    fake_vm.vms[BROWSER] = {"files": {}, "checkpoints": []}
+    fake_vm.vms[NAME] = {"files": {}, "checkpoints": []}
     assert client.post("/agent/workspace/reset-browser", headers=AUTH).json() == {"status": "reset"}
     assert client.get("/agent/workspace/sign-ins", headers=AUTH).json() == {"sign_ins": []}
     # Only for an account with the workspace.

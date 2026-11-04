@@ -1,10 +1,12 @@
-"""The agent's own Linux VMs (docs/agent-mode.md, "Agent VM", "Arbeitsplatz").
+"""The agent's own Linux VM (docs/agent-mode.md, "Agent VM", "Arbeitsplatz").
 
-Since 2026-10-27 two per account, the workspace (agent_workspace.py): the
-workbench (workspace_name), where the agent's commands and files are, shared
-by the account's chats one at a time, each in its own folder (chat_dir); and
-the browser (browser_name), the Chrome its user watches and steers live and
-the agent uses through the ``browser`` tool (agent_browser.py). Before, each
+One per account since 2026-11-04, the workspace (agent_workspace.py,
+workspace_name): the agent's commands and files, shared by the account's
+chats one at a time, each in its own folder (chat_dir), and the Chrome its
+user watches and steers live and the agent uses through the ``browser`` tool
+(agent_browser.py). From 2026-10-27 to 2026-11-04 the browser had a VM of its
+own (old_browser_name), deleted when the account's workspace first starts
+after the move (agent_workspace.retire_old_browser). Before 2026-10-27 each
 chat had a VM of its own (vm_name); chats that still record one keep it
 until they are deleted.
 
@@ -15,16 +17,19 @@ nothing else. The tools the agent calls, the per-message session and the
 activity events are in agent_vm_tools.py.
 
 The agent has no access to what it must not have, by the VM's own means
-rather than rules on its commands (security audit 2026-10-27). On the
-workbench every command of the agent, and every file its tools read or
-write, runs as its own Unix user without sudo (AGENT_USER), in a mount
-namespace without the provider's management socket and checkpoints
+rather than rules on its commands (security audit 2026-10-27, Max
+2026-11-04: Unix users and file modes instead of bridges between two VMs).
+Every command of the agent, and every file its tools read or write, runs as
+its own Unix user without sudo (AGENT_USER), in a mount namespace without
+the provider's management socket and checkpoints and with a /tmp of its own
 (workspace_vm/workbench/agent-run, started as root by ``agent_argv``). The
 provider's exec and file APIs run as ``sprite``, which may sudo: only the
 server's own steps use them directly, in SERVER_HOME, which the agent's user
-cannot open. The workbench reaches only package registries (WORKBENCH_RULES)
-and what the user allowed for the chat (agent_domains.py); the browser the
-open web (BROWSER_RULES), with no code of the agent in it.
+cannot open. So does the browser: Chrome, its screen and its profile with
+the user's sign-ins run as ``sprite``, its protocol on a socket in that home
+(workspace_vm/browser/cdp.py), its screen behind a cookie there. The VM
+reaches the open web (RULES), like the browser always did: one policy per
+VM, and the agent's commands share it since the move (Max's decision).
 
 The VMs never hold a secret: the provider token (SPRITES_TOKEN) goes only
 into the headers of this module's requests to SPRITES_API, never to a VM's
@@ -59,20 +64,14 @@ from app.core.observability import safe_exception
 SPRITES_API = "https://api.sprites.dev"
 # The policy is DNS-based, per sprite, and applies at once (measured on a
 # Sprite 2026-10-27: a closed domain gets REFUSED, raw IPs are closed under an
-# allowlist, nothing inside can change it). The workbench reaches the package
-# registries its tools install from and nothing else (since 2026-10-27; from
-# 2026-10-26 it had the open web): what the agent wrote there leaves only
-# through tools the reviewers see and the user decides on. npm's registry
-# also takes uploads (PUT), a known rest risk Max accepted. GitHub's hosts
-# come like any other domain, on the user's card (agent_domains, since
-# 2026-11-02); github_import brings repositories in through the backend.
-WORKBENCH_DOMAINS = ("archive.ubuntu.com", "*.archive.ubuntu.com", "security.ubuntu.com", "ports.ubuntu.com",
-                     "pypi.org", "files.pythonhosted.org", "registry.npmjs.org")
-WORKBENCH_RULES = [{"domain": domain, "action": "allow"} for domain in WORKBENCH_DOMAINS]
-# The browser reaches the open web like any browser, Fly.io's private network
-# (*.internal, *.flycast) not.
-BROWSER_RULES = [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"},
-                 {"domain": "*", "action": "allow"}]
+# allowlist, nothing inside can change it). The workspace reaches the open web
+# like any browser, Fly.io's private network (*.internal, *.flycast) not.
+# From 2026-10-27 to 2026-11-04 these were the browser VM's rules, and the
+# workbench reached only the package registries and the domains the user
+# allowed for a chat (request_domain): with the browser on the workbench one
+# policy holds for both (Max, 2026-11-04: "offenes Netz").
+RULES = [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"},
+         {"domain": "*", "action": "allow"}]
 # The agent's Unix user on the workbench (created by workspace_vm/workbench/
 # setup.sh) and its home, where its chats' folders, notes and repositories are.
 AGENT_USER = "agent"
@@ -182,8 +181,9 @@ def workspace_name(uid):
     return "consens-w-" + hashlib.sha256(f"workspace:{uid}".encode("utf-8")).hexdigest()[:32]
 
 
-def browser_name(uid):
-    """The account's browser VM, next to its workbench (since 2026-10-27)."""
+def old_browser_name(uid):
+    """The account's browser VM from 2026-10-27 to 2026-11-04: only to delete
+    it (agent_workspace.retire_old_browser, the account's deletion)."""
     return "consens-b-" + hashlib.sha256(f"browser:{uid}".encode("utf-8")).hexdigest()[:32]
 
 
@@ -231,9 +231,8 @@ class VMBackend:
     """What the agent's VM tools need from a provider. Every method raises
     VMUnavailable when the provider fails; ``close`` ends the backend's
     connections (one backend per message). ``agent`` (exec and the file
-    methods): as the agent's user on the workbench (agent_argv), the
-    default; only the server's own steps pass False, in SERVER_HOME or on
-    the browser VM."""
+    methods): as the agent's user (agent_argv), the default; only the
+    server's own steps pass False, in SERVER_HOME (its tools, the browser)."""
 
     provider = ""
 
@@ -243,9 +242,9 @@ class VMBackend:
 
     def ensure(self, name, rules=None):
         """Create the VM if it does not exist yet and apply the network
-        ``rules`` (WORKBENCH_RULES, agent_domains.rules); None leaves them as
-        they are (the browser VM sets its rules with a new version of its
-        tools, agent_workspace.prepare_browser). True when it was created."""
+        ``rules`` (RULES); None leaves them as they are (a new version of
+        the tools sets them, agent_workspace.prepare). True when it was
+        created."""
         raise NotImplementedError
 
     def set_policy(self, name, rules):
@@ -278,8 +277,8 @@ class VMBackend:
         raise NotImplementedError
 
     def open_stream(self, name, argv, *, cwd):
-        """A command that keeps running with its stdin open (tunnel.py on
-        both VMs, agent_tunnel): an object with ``send(bytes)`` for stdin,
+        """A command that keeps running with its stdin open: an object with
+        ``send(bytes)`` for stdin,
         ``recv(timeout)`` for stdout's next bytes (b"" when nothing came, None
         once it ended) and ``close()``."""
         raise NotImplementedError
@@ -946,14 +945,15 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
 
 def delete_workspace(uid, *, factory=None):
     """Delete the account's workspace with its account (agent_workspace.py):
-    the workbench with every chat's folder, and the browser with its
-    sign-ins. By the names that follow from the account, so a record
-    already gone never hides them; gone already is fine."""
+    every chat's folder and the browser with its sign-ins, and the browser VM
+    of 2026-10-27 to 2026-11-04 where it is still there. By the names that
+    follow from the account, so a record already gone never hides them; gone
+    already is fine."""
     vm = (factory or backend)()
     if vm is None:
         raise VMUnavailable("delete: no provider configured")
     try:
         vm.delete(workspace_name(uid))
-        vm.delete(browser_name(uid))
+        vm.delete(old_browser_name(uid))
     finally:
         vm.close()

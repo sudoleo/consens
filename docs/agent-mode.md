@@ -1301,21 +1301,150 @@ Erst die Aufteilung aus I7 nachmessen.
 
 Max' Entscheidung 2026-10-27: Der Agent arbeitet in den Konten der Nutzer, und
 Nutzer und Agent teilen sich einen Arbeitsrechner. Nach dem Sicherheitsaudit
-desselben Tages (acht Funde) sind es **zwei VMs pro Konto** (Max' Variante A):
-die **Werkbank** (`agent_vm.workspace_name`, Befehle und Dateien des Agenten)
-und der **Browser** (`agent_vm.browser_name`, Chrome, Bildschirm, VNC). Max'
-Grundsatz dabei: Der Agent wird nicht mit einprogrammierten Regeln
+desselben Tages (acht Funde) waren es bis 2026-11-04 **zwei VMs pro Konto**
+(Max' Variante A): die Werkbank (Befehle und Dateien des Agenten) und der
+Browser (Chrome, Bildschirm, VNC). Seit 2026-11-04 ist es wieder **ein
+Rechner** (`agent_vm.workspace_name`), siehe „Ein Rechner“ gleich unten. Max'
+Grundsatz bleibt: Der Agent wird nicht mit einprogrammierten Regeln
 (Befehls-Regexe, Textfilter) eingesperrt, er bekommt grundlegend keinen Zugriff
 auf das, was er nicht haben soll; der Schutz sitzt in der Infrastruktur
-(Unix-Nutzer, Dateirechte, Netz-Policy, getrennte VMs). Code:
-`agent_workspace.py`, `agent_browser.py`, `agent_domains.py` (Server),
-`workspace_vm/workbench/` und `workspace_vm/browser/` (laufen in den VMs).
+(Unix-Nutzer, Dateirechte, Sockets nur für einen Nutzer). Code:
+`agent_workspace.py`, `agent_browser.py` (Server), `workspace_vm/workbench/` und
+`workspace_vm/browser/` (laufen auf dem Rechner, ein Ordner
+`/home/sprite/.consens/workspace`).
 
-- **Zwei Namen am Konto.** `users/{uid}/chat_state/agent_workspace` trägt
-  `name` (Werkbank) und `browser`, bevor der Anbieter eine der beiden anlegt
-  (`claim`, `record_for_view`). Die Kontolöschung löscht beide über die
-  abgeleiteten Namen; Checkpoints gibt es nur von der Werkbank, die
-  Browser-VM bekommt nie einen.
+#### Ein Rechner (seit 2026-11-04)
+
+Max am 2026-11-04: Über `upload` konnte der Agent jede Datei, auch
+`~/.secrets`, an jede Website schicken (Laufzeit-Audit desselben Tages,
+Befund 3). Das war nicht der erste Fund an einer Brücke zwischen den zwei
+VMs: localhost-Tunnel, Uploads und Downloads von VM zu VM, Warmlauf zweier
+VMs, je eine eigene Sicherheitsschicht von uns, und der Agent drehte mehr
+Runden, weil Browser und Werkbank getrennte Welten waren. Seine Linie: „Sudo
+ist um einiges sicherer als eine von uns implementierte Sicherheitslayer bei
+unseren Brücken zwischen den VMs.“ Der Browser hatte offenes Netz und war damit
+ohnehin ein Ausgang: Was der Agent lesen kann, kann er hinausschicken, so oder
+so. Deshalb ein Rechner, und was der Agent nicht erreichen soll, erreicht er
+mit den Mitteln des Rechners nicht:
+
+- **Unix-Nutzer.** Der Agent bleibt `agent` (uid 1500, ohne sudo, `agent-run`).
+  Chrome, sein Bildschirm (Xtigervnc), openbox, `browser.py`, `relay.py` und
+  `cdp.py` laufen als Nutzer des Anbieters (`sprite`), alles in
+  `/home/sprite` (750, der Agent ist nicht in der Gruppe): Profil mit
+  Anmeldungen, Downloads, Uploads, `control.json`, die Sockets.
+- **Kein Debug-Port.** Chromes CDP auf 127.0.0.1:9222 hätte jeder Nutzer des
+  Rechners erreicht, mit jedem Cookie. `display.sh` startet Chrome jetzt über
+  `workspace_vm/browser/cdp.py` mit `--remote-debugging-pipe`: Chrome liest auf
+  fd 3, antwortet auf fd 4, und nur `cdp.py` hält die andere Seite. Es bietet
+  das Protokoll auf `~/.consens/browser/cdp.sock` an (0600, Ordner 700), als
+  WebSocket für Playwright (`connect_over_cdp("ws+unix://…/cdp.sock:/devtools/browser")`,
+  `browser.CDP`) und als `GET /json/list` für `display.sh` und `relay.py`.
+  Jede Verbindung bekommt eine eigene Browser-Session
+  (`Target.attachToBrowserTarget`); `cdp.py` setzt ihre Session und eigene IDs
+  ein, leitet Antworten und Ereignisse nur an die Verbindung zurück, deren
+  Session sie nennen (auch die Seiten, die ihr Auto-Attach brachte), und löst
+  beim Ende ihre Session (`Target.detachFromTarget`). Lokal gegen echten Chrome
+  und Playwright 1.63 geprüft (2026-11-04): Verbinden 0,05 s, zwei Verbindungen
+  zugleich, nach dem Trennen lädt ein neuer Tab ohne wartenden Debugger, ein
+  Dialog bleibt offen, ein Download landet in `~/Downloads` (wie nach einer
+  geschlossenen Port-Verbindung). Endet Chrome, endet `cdp.py`; endet
+  `cdp.py`, endet Chrome (die Pipe schließt).
+- **Bildschirm mit Cookie.** Xtigervnc startet mit `-auth
+  ~/.consens/browser/xauthority` (0600, bei jedem Start neu, MIT-MAGIC-COOKIE
+  aus `os.urandom`); Chrome und openbox bekommen `XAUTHORITY`. Ohne Cookie
+  verweigert X (lokal mit Xvfb geprüft). Chrome startet nur, wenn der
+  X-Server dieses Nutzers seine Sockets selbst hält (`x_ours`): die Datei
+  `/tmp/.X11-unix/X1` gehört ihm, und jeder an `@/tmp/.X11-unix/X1`
+  gebundene Socket ohne Verbindung (abstrakt, den libxcb zuerst versucht;
+  Zustand 01 in `/proc/net/unix`) steckt in seinen fds. Verbindungen zählen
+  nicht: eine wartende (Inode 0) oder eine, die X während der Prüfung
+  schließt, ließ sie scheitern, und verbinden darf jeder ohne Cookie. So
+  beendete eine Schleife von Verbindungen des Agenten den Chrome des Nutzers
+  (Review 2026-11-04, lokal nachgestellt); unter `--keep` beendet ein
+  Scheitern der Prüfung Chrome ohnehin nicht mehr. Ist der Name belegt,
+  startet X gar nicht („Cannot establish any listening sockets“, mit
+  Xtigervnc 1.13 auf Ubuntu 24.04 gemessen), und dann auch kein Chrome:
+  höchstens ein Ausfall, nie ein fremder Bildschirm, der Tasten mitliest.
+- **Eigenes /tmp für den Agenten.** `agent-run` legt `/var/lib/consens/agent-tmp`
+  (vom Setup als root angelegt, 1777, Eigentümer `agent`) über `/tmp` seines
+  Namespace: Sperren und Sockets des echten `/tmp` (X, Chrome, Playwright)
+  liegen außer Reichweite, alle Befehle des Agenten und das Terminal teilen
+  sich sein eigenes.
+- **Nur eigene Prozesse.** Jedes `pgrep`/`pkill` in `display.sh` und
+  `harden.sh` trägt `-u` des eigenen Nutzers: ein Prozess des Agenten, der
+  sich wie Chrome oder Xtigervnc nennt, zählt nicht. Das Muster für Chrome
+  beginnt am Anfang der Befehlszeile, damit `cdp.py` (dessen Zeile Chromes
+  nennt) nicht als Chrome gilt.
+- **localhost ist der Agent.** Ohne Tunnel öffnet Chrome den Server des
+  Agenten direkt. `browser.py` liest eine localhost-Seite nur auf Ports, auf
+  denen der Nutzer des Agenten lauscht und kein anderer, auf keiner Adresse
+  (`agent_ports`: `/proc/net/tcp` und `tcp6`, Zustand LISTEN, uid 1500, ab
+  1024; sonst hätte ein Server des Agenten auf 127.0.0.2 einen fremden auf
+  127.0.0.1 mit demselben Port lesbar gemacht, Review 2026-11-04); sonst nur
+  die Adresse. Ein Name, der auf 127.0.0.1 zeigt (etwa `*.nip.io`), geht an
+  dieser Prüfung vorbei, bringt aber nichts, was die Shell des Agenten nicht
+  ohnehin erreicht, und keine Cookies von localhost.
+- **Chromes Policy gilt für alle Nutzer des Rechners**, also auch für das
+  headless Chrome des Agenten: keine `file://`-Seiten (eine lokale Datei
+  serviert er auf localhost), `--print-to-pdf` und Playwrights `pdf()`
+  laufen trotz `PrintingEnabled: false` (mit Chrome 153 und der Policy
+  gemessen).
+- **Offenes Netz** (Max' Entscheidung): Die Policy gilt je VM, der Browser
+  braucht das offene Web, also haben es auch die Befehle des Agenten
+  (`agent_vm.RULES`: alles außer `*.internal`, `*.flycast`). `request_domain`,
+  die Domain-Karten, `agent_domains.py` und die Regeln pro Chat sind weg, das
+  Gate (`agent_gate.outward`) hält keinen Aufruf mehr an; die Anzeige alter
+  Läufe bleibt. Die Regeln kommen mit einer neuen `VERSION` (`prepare`), nie
+  am Anfang oder Ende einer Nachricht.
+- **Was bleibt.** Ein Key, den der Nutzer dem Agenten gibt (`~/.secrets`),
+  kann der Agent benutzen und damit auch hinausschicken, wie auf jedem
+  Rechner; dagegen helfen nur die Prüfer und Keys, die nie auf den Rechner
+  kommen (ein Proxy, der sie einsetzt, wäre der nächste Schritt). Eine
+  angemeldete Seite kann der Agent über das Werkzeug `browser` missbrauchen,
+  wenn eine Seite ihn manipuliert: dafür die Prüfer und `ask_user` vor
+  Schritten im Namen des Nutzers.
+- **Umzug.** `setup.sh` (root, neue `VERSION`) macht einmal je Rechner (Marke
+  `/var/lib/consens/one-computer`, auf der Platte, also auch nach einem
+  Restore von davor): beendet Browser, Bildschirm, Tunnel und Gateway früherer
+  Bauweisen und die Prozesse des Agenten (die das echte `/tmp` teilten),
+  löscht `~/.consens/browser` und `/usr/local/lib/consens/tunnel.py`. Jede
+  Version danach lässt Chrome und openbox in Ruhe (vorher beendete jede neue
+  Version sie mit Namen, was nun den Browser des Nutzers bei jedem Deploy
+  beendet hätte). Die Browser-VM von vorher (`agent_vm.old_browser_name`)
+  löscht `agent_workspace.retire_old_browser` beim nächsten Öffnen des
+  Arbeitsplatzes, solange der Datensatz sie noch nennt (`browser`), und leert
+  die Liste der Anmeldungen: Max' Entscheidung, sich einmal neu anzumelden
+  statt das Profil zu kopieren. Die Kontolöschung löscht beide Namen.
+- **Checkpoints** enthalten jetzt auch das Profil des Browsers. „Überall
+  abmelden“ hebt wie bisher die Untergrenze (`restore_floor`), damit kein
+  älterer eine Anmeldung zurückbringt; ein Restore setzt Anmeldungen sonst
+  auf den Stand der Nachricht zurück, wie die Dateien.
+- **Vorher und nachher**: ein Start statt zweier (`open_workspace` unter
+  `setup_lock`, für Nachricht, Warmlauf, Ansicht, Terminal und Bereitstellung),
+  eine `VERSION` für alle Werkzeuge (`TOOL_FILES`), keine Kopien zwischen VMs.
+  Das Installieren des Browsers heißt `install.sh` (vorher `setup.sh` der
+  Browser-VM; der Name gehört jetzt dem Setup als root).
+- **Offen:** ein Lauf an einer echten Sprite. Lokal geprüft sind `cdp.py` mit
+  echtem Chrome und Playwright, `browser.py` über `cdp.py` (öffnen, lesen,
+  klicken, Passwortfeld verweigert, Download, Screenshot, residenter Helfer,
+  fremder localhost-Port verweigert), das Cookie mit Xvfb und Chrome, und
+  dass X bei belegtem abstraktem Namen nicht startet. Nicht lokal prüfbar:
+  Xtigervnc auf Ubuntu 26.04 (dass es den abstrakten Socket hält, sonst
+  greift die Prüfung vor jedem Chrome-Start), `agent-run` mit dem Bind auf
+  `/tmp` im Namespace der Sprite und Playwright 1.64.1 mit `ws+unix`.
+  Nachgetragen nach dem Review: `display.sh` lokal mit Xtigervnc 1.13
+  (Ubuntu 24.04), openbox und Chrome als eigener Nutzer, der Agent als uid
+  1500: X verlangt das Cookie, Home, Cookie und `cdp.sock` sind zu, eine
+  Verbindungsschleife des Agenten lässt Chrome laufen (mit der alten Prüfung
+  endete es), ein vom Agenten belegter abstrakter Name verhindert X und
+  Chrome. Das letzte Warten in `display.sh` dauert höchstens 15 s und fragt
+  nur ein Chrome, das es selbst gestartet hat (vorher bis zu 150 Fragen à
+  5 s unter `--keep`, solange ein hängendes Chrome das Schloss hielt).
+
+- **Ein Name am Konto.** `users/{uid}/chat_state/agent_workspace` trägt
+  `name`, bevor der Anbieter die VM anlegt (`claim`, `record_for_view`). Die
+  Kontolöschung löscht sie über den abgeleiteten Namen, die Browser-VM von
+  vorher ebenso. Von 2026-10-27 bis 2026-11-04 stand dort auch `browser`.
 - **Ein Chat zur Zeit.** Die Sperre (`lease {chat_id, turn_id, until}`,
   `LEASE_SECONDS` = 10 min) hält, solange die Nachricht die VM nutzt; seit
   2026-10-30 verlängert ein eigener Thread sie alle `LEASE_KEEP_SECONDS`
@@ -1330,7 +1459,7 @@ auf das, was er nicht haben soll; der Schutz sitzt in der Infrastruktur
 - **Ordner pro Chat.** `/home/agent/chats/<chat>`: Befehle starten dort,
   relative Pfade führen dorthin, Anhänge liegen in `input`. Home, installierte
   Pakete, `~/repos` (GitHub) und der Browser sind gemeinsam. Chat löschen löscht
-  nur seinen Ordner, Konto löschen beide VMs (`account_deletion` Bereich
+  nur seinen Ordner, Konto löschen die VM (`account_deletion` Bereich
   `agent_workspace`, vor den Chats).
 - **Ordner mit Namen** (2026-10-27): Jeder Chat-Ordner trägt `.consens-chat`
   mit Titel, Startdatum und ID des Chats (`agent_workspace.open_chat`, bei
@@ -1548,7 +1677,10 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   eines temporären Chats tragen zusätzlich `temporary` und fehlen in der Liste
   anderer Chats.
 
-#### Netz der Werkbank (Fund 4)
+#### Netz der Werkbank (Fund 4, bis 2026-11-04)
+
+Seit 2026-11-04 hat der ganze Rechner das offene Web (`agent_vm.RULES`, „Ein
+Rechner“); dieser Abschnitt beschreibt die Zeit davor.
 
 Die Policy der Sprite arbeitet über DNS, gilt pro VM und sofort (gesperrte
 Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
@@ -1612,7 +1744,12 @@ Domain: DNS REFUSED, rohe IPs gesperrt, von innen nur lesbar).
   jeder Klick und jedes Enter wartet vorher auf die Prüfer) und die Werkbank
   selbst (nur Paketquellen, sonst `request_domain`).
 
-#### Browser-VM (Fund 2)
+#### Browser-VM (Fund 2; seit 2026-11-04 auf demselben Rechner)
+
+Was hier über die Browser-VM steht, gilt für den Browser auf dem gemeinsamen
+Rechner weiter, bis auf: kein Debug-Port (`cdp.py`), Bildschirm mit Cookie,
+keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
+`VERSION` des Arbeitsplatzes („Ein Rechner“).
 
 - **Kein Code des Agenten.** Chrome, TigerVNCs X-Server (`Xtigervnc`, seit
   2026-11-02; vorher Xvfb und x11vnc), openbox und Playwright
@@ -2313,7 +2450,8 @@ mit `audit_access`). Die
   laufendes `pause.py`, taut beide cgroups auf (`cgroup.freeze` 0, SIGCONT)
   und löscht `pause.py` und `control.json`; `agent-run` tritt keiner cgroup
   mehr bei.
-- **localhost-Brücke** (seit 2026-10-29, `agent_tunnel.py`,
+- **localhost-Brücke** (2026-10-29 bis 2026-11-04, entfernt: seither öffnet
+  Chrome den Server des Agenten direkt, „Ein Rechner“; `agent_tunnel.py`,
   `workspace_vm/tunnel.py`; Max' Tic-Tac-Toe-Läufe: Modelle bauten dem
   Nutzer ein Spiel, starteten den Dev-Server und öffneten localhost im
   Browser, der ihn nicht erreichte): `http://localhost:<port>` (auch

@@ -1,10 +1,13 @@
 #!/bin/bash
-# consens.io browser VM: installs the browser, its screen and the VNC server
-# once (agent_browser.py). Called by browser.py and relay.py; the lock makes
+# consens.io workspace: installs the browser's screen, its VNC server, a
+# window manager, fonts and Playwright once, as the provider's user with sudo
+# (agent_browser.py; setup.sh, which runs as root with every new version,
+# installs Chrome itself). Called by browser.py and relay.py; the lock makes
 # a second caller wait for the first, the marker makes later calls free.
-# No code of the agent ever runs in this VM: the server calls browser.py with
-# typed arguments, and the user's live view reaches the VNC server only
-# through relay.py on the provider's exec API.
+# setup.sh until 2026-11-04, when the browser moved onto the workbench (its
+# setup.sh took the name). The agent never runs this: the server calls
+# browser.py with typed arguments, and the user's live view reaches the VNC
+# server only through relay.py on the provider's exec API.
 set -e
 dir="$HOME/.consens/browser"
 # -2 since 2026-11-02: the screen is TigerVNC's X server (display.sh). A VM
@@ -21,15 +24,20 @@ export DEBIAN_FRONTEND=noninteractive
 # first, and an update that fails for one source (Google's, which Chrome's
 # package added) still counts for the others.
 apt="sudo apt-get -o DPkg::Lock::Timeout=60"
-if ! command -v google-chrome >/dev/null || ! command -v Xtigervnc >/dev/null; then
+if ! command -v google-chrome >/dev/null || ! command -v Xtigervnc >/dev/null || ! command -v openbox >/dev/null; then
   sudo dpkg --configure -a || true
   $apt update -qq || true
 fi
 if ! command -v google-chrome >/dev/null; then
-  curl -fsSL --retry 3 -o /tmp/consens-chrome.deb \
+  # In a folder only this user opens.
+  download="$(mktemp -d)"
+  curl -fsSL --retry 3 -o "$download/chrome.deb" \
     https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
-  $apt install -y -qq /tmp/consens-chrome.deb openbox fonts-noto-core fonts-noto-color-emoji
-  rm -f /tmp/consens-chrome.deb
+  $apt install -y -qq "$download/chrome.deb"
+  rm -rf "$download"
+fi
+if ! command -v openbox >/dev/null; then
+  $apt install -y -qq openbox fonts-noto-core fonts-noto-color-emoji
 fi
 if ! command -v Xtigervnc >/dev/null; then
   $apt install -y -qq --no-install-recommends tigervnc-standalone-server

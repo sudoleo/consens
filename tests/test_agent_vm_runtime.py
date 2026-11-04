@@ -16,7 +16,7 @@ import time
 import httpx
 import pytest
 
-from app.services import agent_browser, agent_tunnel, agent_vm, agent_vm_tools, agent_workspace
+from app.services import agent_browser, agent_vm, agent_vm_tools, agent_workspace
 from app.services.agent_browser import BrowserArgs
 from app.services.agent_vm_tools import VmExecArgs, VMTools
 from app.services.llm.provider_runtime import ProviderCancellation
@@ -24,18 +24,10 @@ from test_agent_runs import UID, store  # noqa: F401  (fixture)
 from test_agent_vm import (ANSWER, NAME, Agent, FakeSocket, _admin_allowance, _FakeBackend, fake_vm,  # noqa: F401
                            results, tool_events, vm_loop)
 
-BROWSER = agent_vm.browser_name(UID)
+# The browser runs in the workspace since 2026-11-04.
+BROWSER = NAME
 # The real start before the first call; the shared fixture turns it off.
 PREWARM = VMTools.prewarm
-
-
-@pytest.fixture(autouse=True)
-def clean_tunnel_state():
-    yield
-    for uid in list(agent_tunnel._tunnels):
-        agent_tunnel.close(uid)
-    for state in (agent_tunnel._asked, agent_tunnel._working, agent_tunnel._kept_until, agent_tunnel._local_page):
-        state.clear()
 
 
 def wait_for(condition, seconds=5.0):
@@ -53,7 +45,12 @@ def browse(loop, **arguments):
 
 
 def bench_calls(fake_vm):
-    return [call for call in fake_vm.calls if len(call) > 1 and call[1] == NAME]
+    """What only the agent's side does: the chat's folder (its marker), the
+    message's checkpoint and the agent's own commands. The VM and its tools
+    the browser's warm-up opens too (one VM since 2026-11-04)."""
+    return [call for call in fake_vm.calls if call[0] in {"checkpoint", "move_path"}
+            or (call[0] == "write" and str(call[2]).startswith(agent_vm.HOME))
+            or (call[0] == "run" and str(call[2]).startswith(agent_vm.HOME))]
 
 
 # --- T1: the start while the model thinks -------------------------------------------
@@ -86,13 +83,15 @@ def test_open_workspace_starts_it_while_the_model_thinks(store, fake_vm, monkeyp
                       ready=lambda: holder["loop"].vm_tools.session.state == "ready" and fake_vm.warmed == [BROWSER])
     loop = holder["loop"] = vm_loop(store, script, workspace_closed=True)
     list(loop.run())
-    # Before the step after open_workspace answered, the workbench was ready
-    # and the browser warm: the first call waited for nothing.
+    # Before the step after open_workspace answered, the agent's side was
+    # ready and the browser warm: the first call waited for nothing.
     assert script.seen is True
     assert results(loop)[1]["exit_code"] == 0
-    assert [call[0] for call in bench_calls(fake_vm)].count("ensure") == 1
+    # The warm-up and the agent's side share one setup (setup_lock).
+    from test_agent_vm import SETUP
+    assert fake_vm.server.count(SETUP) == 1
     turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert {"lease", "rules", "tools", "chat", "checkpoint"} <= set(turn["agent_vm"]["phases"])
+    assert {"lease", "tools", "chat", "checkpoint"} <= set(turn["agent_vm"]["phases"])
 
 
 def test_a_message_that_starts_open_warms_only_the_browser_and_lets_it_rest(store, fake_vm, monkeypatch):
@@ -100,7 +99,7 @@ def test_a_message_that_starts_open_warms_only_the_browser_and_lets_it_rest(stor
     loop = vm_loop(store, Agent())
     assert wait_for(lambda: fake_vm.warmed == [BROWSER])
     list(loop.run())
-    # Nothing of the workbench, no lease, no checkpoint: no call needed them.
+    # Nothing of the agent's side, no lease, no checkpoint: no call needed them.
     assert not bench_calls(fake_vm) and not agent_workspace.record(store.db, UID).get("lease")
     assert "agent_vm" not in store.get_turn(UID, loop.chat_id, loop.turn_id)
     # The warmed browser goes to rest with the message (K2).
@@ -152,7 +151,7 @@ def test_the_browser_needs_only_the_lease_and_the_turn_counts_its_calls(store, f
     loop = vm_loop(store, script)
     events = list(loop.run())
     read, click = results(loop)
-    # No workbench: no rules, tools, folder, checkpoint or notes for a web run.
+    # No agent's side: no folder, checkpoint or notes for a web run.
     assert not bench_calls(fake_vm) and "workspace_notes" not in read and "chat_folder" not in read
     turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
     vm = turn["agent_vm"]
@@ -184,7 +183,7 @@ def test_a_download_brings_the_workbench_after_its_checkpoint(store, fake_vm):
     assert checkpoint < written and "chat_folder" in result
 
 
-# --- T6: the rules only when they change, the account read once -------------------
+# --- T6: the rules only with a new version, the account read once -----------------
 
 
 def recorded_rules(monkeypatch):
@@ -205,69 +204,19 @@ def recorded_rules(monkeypatch):
     return seen
 
 
-def test_the_rules_go_out_only_when_they_change_and_always_come_back(store, fake_vm, monkeypatch):
-    from app.services import agent_domains
+def test_the_rules_go_out_only_with_a_new_version_and_no_message_changes_them(store, fake_vm, monkeypatch):
+    """Since 2026-11-04 the workspace's rules are the open web for every
+    chat (agent_vm.RULES): set with a new version of its tools, never by a
+    message's start or end (until then a chat's domains came and went)."""
     seen = recorded_rules(monkeypatch)
-    base = agent_workspace.policy_key(agent_vm.WORKBENCH_RULES)
     first = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     list(first.run())
-    assert seen[0] == ("ensure", agent_vm.WORKBENCH_RULES)
-    # Confirmed at the message's end; unknown while a message holds the lease.
-    assert agent_workspace.record(store.db, UID)["policy"] == base
+    assert seen == [("ensure", None), ("policy", agent_vm.RULES)]
+    assert "policy" not in agent_workspace.record(store.db, UID)
     seen.clear()
     second = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=first.chat_id, request_id="two")
     list(second.run())
     assert seen == [("ensure", None)]
-    # A chat with a domain sets its rules and takes them back at its end.
-    seen.clear()
-    other = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="other")
-    agent_domains.grant(store, UID, other.chat_id, "api.example.com", "t0")
-    list(other.run())
-    assert seen == [("ensure", agent_domains.rules(["api.example.com"])), ("policy", agent_vm.WORKBENCH_RULES)]
-    assert agent_workspace.record(store.db, UID)["policy"] == base
-
-
-def test_rules_whose_reset_failed_are_set_again_by_the_next_message(store, fake_vm, monkeypatch):
-    from app.services import agent_domains
-    seen = recorded_rules(monkeypatch)
-    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
-    agent_domains.grant(store, UID, loop.chat_id, "api.example.com", "t0")
-    setting = _FakeBackend.set_policy
-
-    def failing(self, name, rules):
-        raise agent_vm.VMUnavailable("policy: no connection")
-    monkeypatch.setattr(_FakeBackend, "set_policy", failing)
-    list(loop.run())
-    assert agent_workspace.record(store.db, UID)["policy"] is None
-    monkeypatch.setattr(_FakeBackend, "set_policy", setting)
-    seen.clear()
-    later = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="later")
-    list(later.run())
-    assert seen[0] == ("ensure", agent_vm.WORKBENCH_RULES)
-    # So are rules a setup's widening may have left (agent_workspace._open_for_setup).
-    agent_workspace._policy_unsure.add(NAME)
-    try:
-        seen.clear()
-        list(vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="unsure").run())
-        assert seen[0] == ("ensure", agent_vm.WORKBENCH_RULES)
-    finally:
-        agent_workspace._policy_unsure.discard(NAME)
-
-
-def test_rules_left_unknown_by_a_failed_setup_go_back_at_the_messages_end(store, fake_vm, monkeypatch):
-    # A setup widens the rules for a moment; when it fails, they are unknown,
-    # and the message's end still sets the base list (the chat's domain too).
-    from app.services import agent_domains
-    seen = recorded_rules(monkeypatch)
-    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
-    agent_domains.grant(store, UID, loop.chat_id, "api.example.com", "t0")
-
-    def failing(*args, **kwargs):
-        raise agent_vm.VMUnavailable("setup: no connection")
-    monkeypatch.setattr(agent_workspace, "prepare", failing)
-    list(loop.run())
-    assert seen[-1] == ("policy", agent_vm.WORKBENCH_RULES)
-    assert agent_workspace.record(store.db, UID)["policy"] == agent_workspace.policy_key(agent_vm.WORKBENCH_RULES)
 
 
 def test_the_chats_folder_notes_and_keys_come_in_one_command(store, fake_vm):
@@ -382,28 +331,24 @@ def test_a_restore_waits_for_a_running_response_also_past_its_lease(store, fake_
     assert agent_workspace.in_use(store, UID) is False
 
 
-def test_the_message_ends_without_waiting_for_the_rules(store, fake_vm, monkeypatch):
-    from app.services import agent_domains
+def test_the_message_ends_without_waiting_for_its_lease_to_go(store, fake_vm, monkeypatch):
     monkeypatch.setattr(agent_vm_tools, "CLOSE_WAIT_SECONDS", .2)
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
-    agent_domains.grant(store, UID, loop.chat_id, "api.example.com", "t0")
     loop.vm_tools.exec(VmExecArgs(command="ls"), cancellation=ProviderCancellation())
-    gate, setting = threading.Event(), _FakeBackend.set_policy
+    gate, release = threading.Event(), agent_workspace.release
 
-    def slow(self, name, rules):
+    def slow(*args, **kwargs):
         gate.wait(5)
-        return setting(self, name, rules)
-    monkeypatch.setattr(_FakeBackend, "set_policy", slow)
+        return release(*args, **kwargs)
+    monkeypatch.setattr(agent_workspace, "release", slow)
     started = time.monotonic()
     loop.vm_tools.session.close()
     assert time.monotonic() - started < 1
-    # The lease stays until the rules are back: no other chat meets them.
-    assert agent_workspace.record(store.db, UID)["lease"]["turn_id"] == loop.turn_id
     gate.set()
     loop.vm_tools.session.closer.join(5)
-    record = agent_workspace.record(store.db, UID)
-    assert record["lease"] is None and record["policy"] == agent_workspace.policy_key(agent_vm.WORKBENCH_RULES)
-    assert fake_vm.vms[NAME]["policy"] == agent_vm.WORKBENCH_RULES
+    assert agent_workspace.record(store.db, UID)["lease"] is None
+    # The VM's rules stay as its version set them.
+    assert fake_vm.vms[NAME]["policy"] == agent_vm.RULES
 
 
 def test_the_start_waits_no_longer_than_the_answer_allows(store, fake_vm, monkeypatch):
@@ -508,106 +453,17 @@ def test_sprites_says_whether_a_vm_was_cold_and_kills_quickly():
 
 
 def test_the_turn_and_the_log_say_how_the_start_went(store, fake_vm, monkeypatch, caplog):
-    monkeypatch.setattr(_FakeBackend, "statuses", {NAME: "cold", BROWSER: "warm"}, raising=False)
+    monkeypatch.setattr(_FakeBackend, "statuses", {NAME: "cold"}, raising=False)
     caplog.set_level(logging.INFO)
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})], [("browser", {"action": "read"})]]))
     list(loop.run())
     vm = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_vm"]
-    assert vm["cold"] == {"workbench": True, "browser": False} and vm["browser_calls"] == 1
+    assert vm["cold"] == {"workbench": True, "browser": True} and vm["browser_calls"] == 1
     tag = f"turn={loop.turn_id[:8]} step="
     assert any(record.getMessage().startswith("Agent VM ready") and tag in record.getMessage()
                for record in caplog.records)
     assert any(record.getMessage().startswith("Agent browser call") and tag in record.getMessage()
                for record in caplog.records)
-
-
-# --- K1, T7: the tunnel only while someone may look ----------------------------------
-
-
-def test_the_tunnel_is_wanted_while_a_message_runs_or_the_view_is_open(monkeypatch):
-    uid = "tunnel-wanted"
-    assert not agent_tunnel.wanted(uid)
-    agent_tunnel.begin(uid)
-    assert agent_tunnel.wanted(uid)
-    monkeypatch.setattr(agent_tunnel, "KEEP_SECONDS", 0)
-    agent_tunnel.end(uid)
-    assert not agent_tunnel.wanted(uid)
-    agent_tunnel.viewing(uid)
-    assert agent_tunnel.wanted(uid)
-    # Nobody wants it: it does not start again.
-    agent_tunnel._kept_until.clear()
-    agent_tunnel.seed(uid, [3000])
-    assert agent_tunnel.resume(uid, backend_factory=lambda: pytest.fail("no tunnel")) is None
-
-
-def test_the_open_view_is_the_tunnels_heartbeat(store):
-    agent_workspace.record_for_view(store, UID, provider="fake")
-    agent_tunnel._kept_until.clear()
-    view = agent_workspace.claim_view(store, UID, 60)
-    assert agent_tunnel.wanted(UID)
-    agent_tunnel._kept_until.clear()
-    assert agent_workspace.holds_view(store.db, UID, view) and agent_tunnel.wanted(UID)
-    agent_tunnel._kept_until.clear()
-    # The terminal is no view of the agent's app.
-    terminal = agent_workspace.claim_view(store, UID, 60, "terminal")
-    assert agent_workspace.holds_view(store.db, UID, terminal, "terminal") and not agent_tunnel.wanted(UID)
-
-
-class Stream:
-    """A tunnel side whose page keeps connecting (O) and never sends data."""
-
-    def __init__(self, clock):
-        self.clock, self.sent, self.closed = clock, [], False
-
-    def recv(self, timeout):
-        self.clock.now += agent_tunnel.POLL_SECONDS
-        return agent_tunnel.frame(b"O", 7, (3000).to_bytes(2, "big"))
-
-    def send(self, data):
-        self.sent.append(data)
-
-    def close(self):
-        self.closed = True
-
-
-def test_a_page_that_keeps_calling_its_server_keeps_no_tunnel_alive():
-    from test_agent_vm import Clock
-    clock = Clock()
-    uid = "tunnel-busy-page"
-    tunnel = agent_tunnel.Tunnel(uid, None, clock=clock)
-    tunnel.stream, tunnel.bench = Stream(clock), Stream(clock)
-    tunnel.ports.add(3000)
-    agent_tunnel.begin(uid)
-    used = tunnel.used
-    tunnel._from_browser(b"O", 1, (3000).to_bytes(2, "big"))
-    # A connection attempt is no use: only its data is.
-    assert tunnel.used == used
-    agent_tunnel._working.clear()
-    agent_tunnel._kept_until.clear()
-    reader = threading.Thread(target=tunnel._read, args=(tunnel.stream, tunnel._from_browser), daemon=True)
-    reader.start()
-    reader.join(5)
-    assert not reader.is_alive() and tunnel.closing
-
-
-def test_the_tunnel_comes_back_only_for_a_localhost_page(store, fake_vm, monkeypatch):
-    resumed = []
-    monkeypatch.setattr(agent_tunnel, "resume", lambda uid, **kwargs: resumed.append(uid))
-    agent_tunnel.seed(UID, [3000])
-    loop = vm_loop(store, Agent())
-    browse(loop, action="read")
-    # The page in front is example.com: no tunnel, no wait (T7, K1).
-    assert resumed == [] and agent_tunnel.page_local(UID) is False
-    fake_vm.browser = lambda request: {"status": "ok", "text": 'Page: "App"\nURL: http://localhost:3000/\n'}
-    browse(loop, action="read")
-    assert agent_tunnel.page_local(UID) is True
-    browse(loop, action="click", ref="e1")
-    assert resumed == [UID]
-    # The next message's first call knows the account's last page.
-    loop.vm_tools.session.close()
-    later = vm_loop(store, Agent(), request_id="later")
-    browse(later, action="click", ref="e1")
-    assert resumed == [UID, UID]
 
 
 # --- K4 -----------------------------------------------------------------------------

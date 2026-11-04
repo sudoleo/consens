@@ -261,7 +261,7 @@ ANSWER = "The script printed 42: the mean of the column is 42."
 
 
 def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", file_context=None,
-            google_data=False, workspace_closed=False, domains=True):
+            google_data=False, workspace_closed=False):
     """A turn with the workspace whose reviewers never start
     (agent_reviewers.InertAnswerAudit): ``script`` scripts the agent alone."""
     chat, turn = pending(store, chat_id=chat_id, request_id=request_id)
@@ -275,8 +275,7 @@ def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", file_cont
         agent_preferences=AgentPreferences(vm=vm), file_context=file_context,
         # A chat with Google data always carries the user's consent (the
         # route refuses it without).
-        google_data=google_data, google_data_consent=google_data, workspace_closed=workspace_closed,
-        domains=domains)
+        google_data=google_data, google_data_consent=google_data, workspace_closed=workspace_closed)
     return without_reviewers(loop)
 
 
@@ -340,16 +339,15 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     assert {"vm_exec", "vm_read_file", "vm_write_file"} <= set(script.offered[0])
     folder = chat_path(loop.chat_id)
     assert folder == f"/home/agent/chats/question-one-{loop.chat_id[:6]}"
-    # The account and the chat name the workspace before the provider creates it; it reaches the registries only.
+    # The account and the chat name the workspace before the provider creates it; it reaches the open web
+    # (since 2026-11-04, with the browser on it), never Fly.io's private network.
     chat = store._chat_ref(UID, loop.chat_id).get().to_dict()
     assert chat["agent_vm"]["name"] == NAME and chat["agent_vm"]["provider"] == "fake"
     assert chat["agent_vm"]["workspace"] is True
     workspace = agent_workspace.record(store.db, UID)
     assert workspace["name"] == NAME and workspace["provider"] == "fake"
-    assert workspace["browser"] == agent_vm.browser_name(UID)
-    assert fake_vm.vms[NAME]["policy"] == agent_vm.WORKBENCH_RULES
-    assert {rule["domain"] for rule in agent_vm.WORKBENCH_RULES} >= {"pypi.org", "registry.npmjs.org"}
-    assert all(rule["action"] == "allow" and "*" != rule["domain"] for rule in agent_vm.WORKBENCH_RULES)
+    assert "browser" not in workspace
+    assert fake_vm.vms[NAME]["policy"] == agent_vm.RULES
     # The agent's files go through its own user; the server's own only to its home.
     assert all(path.startswith("/home/sprite/.consens/") for _, path in fake_vm.server_files)
     # Its tools, the chat's folder, then one checkpoint for the message, before its first call ran.
@@ -381,8 +379,9 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     # The message's summary: its checkpoint (in which VM, when) and the commands' run time.
     taken = datetime.fromisoformat(turn["agent_vm"].pop("checkpoint_at"))
     assert taken.tzinfo is not None
-    # How long each part of the start took (runtime audit 2026-10-30, I5).
-    assert set(turn["agent_vm"].pop("phases")) == {"lease", "rules", "tools", "chat", "checkpoint"}
+    # How long each part of the start took (runtime audit 2026-10-30, I5;
+    # the VM's rules come with its tools since 2026-11-04).
+    assert set(turn["agent_vm"].pop("phases")) == {"lease", "tools", "chat", "checkpoint"}
     assert turn["agent_vm"] == {"provider": "fake", "name": NAME, "checkpoint": "v1", "calls": 3, "commands": 1,
                                 "seconds": 3.0}
     # Command output is outside content: a settings change needs the user's words.
@@ -1375,7 +1374,7 @@ def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, m
 
 # --- The workspace on demand (AGENT_WORKSPACE_ON_DEMAND, 2026-10-29) ----------------
 
-WORKSPACE_TOOLS = {"vm_exec", "vm_write_file", "browser", "ask_user", "request_domain", "github_import", "update_plan"}
+WORKSPACE_TOOLS = {"vm_exec", "vm_write_file", "browser", "ask_user", "github_import", "update_plan"}
 
 
 def test_a_message_opens_its_workspace_on_demand_and_goes_on_as_if_it_had_it_from_the_start(store, fake_vm):
@@ -1573,7 +1572,7 @@ def test_a_chat_deleted_while_its_folder_was_made_deletes_the_folder(store, fake
     loop = vm_loop(store, Agent())
     original = _FakeBackend.ensure
 
-    def deleted_meanwhile(self, name, rules):
+    def deleted_meanwhile(self, name, rules=None):
         original(self, name, rules)
         store._chat_ref(UID, loop.chat_id).update({"status": "deleting"})
     _FakeBackend.ensure = deleted_meanwhile
@@ -1602,13 +1601,13 @@ def test_sprites_creates_a_missing_vm_and_applies_its_network_rules():
             return httpx.Response(404)
         # Live 2026-10-25: the policy answers 204 without a body; any 2xx is success.
         return httpx.Response(201, json={}) if request.url.path == "/v1/sprites" else httpx.Response(204)
-    sprites(handler).ensure("consens-abc", agent_vm.WORKBENCH_RULES)
+    sprites(handler).ensure("consens-abc", agent_vm.RULES)
     assert seen == [("GET", "/v1/sprites/consens-abc", None),
                     ("POST", "/v1/sprites", json.dumps({"name": "consens-abc"}, separators=(",", ":"))),
                     ("POST", "/v1/sprites/consens-abc/policy/network",
-                     json.dumps({"rules": agent_vm.WORKBENCH_RULES}, separators=(",", ":")))]
-    # The browser VM reaches the open web, never Fly.io's private network.
-    assert agent_vm.BROWSER_RULES[:2] == [{"domain": "*.internal", "action": "deny"},
+                     json.dumps({"rules": agent_vm.RULES}, separators=(",", ":")))]
+    # The workspace reaches the open web, never Fly.io's private network.
+    assert agent_vm.RULES[:2] == [{"domain": "*.internal", "action": "deny"},
                                           {"domain": "*.flycast", "action": "deny"}]
 
 
@@ -1628,7 +1627,7 @@ def test_sprites_ensure_without_rules_leaves_them_and_a_waking_call_gets_time():
     backend = sprites(handler)
     assert backend.ensure("consens-b-abc") is False
     assert seen == [("GET", "/v1/sprites/consens-b-abc")]
-    backend.set_policy("consens-b-abc", agent_vm.BROWSER_RULES)
+    backend.set_policy("consens-b-abc", agent_vm.RULES)
     backend.read_file("consens-b-abc", "/home/sprite/.consens/VERSION", limit=64, agent=False)
     assert timeouts["/v1/sprites/consens-b-abc"] == agent_vm.REQUEST_SECONDS
     assert timeouts["/v1/sprites/consens-b-abc/policy/network"] == agent_vm.WAKE_SECONDS
@@ -1637,7 +1636,7 @@ def test_sprites_ensure_without_rules_leaves_them_and_a_waking_call_gets_time():
 
 def test_sprites_failures_are_one_kind_of_error():
     with pytest.raises(VMUnavailable):
-        sprites(lambda request: httpx.Response(500)).ensure("consens-abc", agent_vm.WORKBENCH_RULES)
+        sprites(lambda request: httpx.Response(500)).ensure("consens-abc", agent_vm.RULES)
 
     def offline(request):
         raise httpx.ConnectError("down")
@@ -1958,10 +1957,6 @@ def test_one_switch_opens_the_vm_to_every_account(monkeypatch):
     for value in ("all", " ALL ", "pro"):
         monkeypatch.setenv("AGENT_VM_ACCESS", value)
         assert agent.vm_allowed("free") is True
-    # Domains beyond the package registries stay Pro's: a script there needs no model step.
-    assert agent.domains_allowed("free") is False
-    monkeypatch.setattr(agent, "_premium_allowed", lambda uid: True)
-    assert agent.domains_allowed("pro") is True
     # Without the switch an unknown tier is no answer: 503, never a guess.
     monkeypatch.setenv("AGENT_VM_ACCESS", "")
 
@@ -1973,20 +1968,20 @@ def test_one_switch_opens_the_vm_to_every_account(monkeypatch):
     assert error.value.status_code == 503
 
 
-def test_without_pro_the_workspace_has_the_browser_but_no_request_domain(store, fake_vm):
-    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), domains=False)
+def test_the_workspace_has_the_browser_and_the_open_web_but_no_request_domain(store, fake_vm):
+    """Since 2026-11-04 the workspace reaches the open web (agent_vm.RULES):
+    no account asks for a domain any more."""
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     names = set(loop.registry.tools)
     assert {"vm_exec", "browser", "ask_user"} <= names and "request_domain" not in names
     system = loop.messages[0]["content"]
-    assert prompt_defaults.AGENT_VM_NO_DOMAINS_PROMPT in system and "request_domain" not in system
+    assert prompt_defaults.AGENT_VM_PROMPT in system and "request_domain" not in system
     list(loop.run())
     assert results(loop)[0]["exit_code"] == 0
-    pro = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="two")
-    assert "request_domain" in pro.registry.tools and prompt_defaults.AGENT_VM_PROMPT in pro.messages[0]["content"]
     # A model that calls it anyway gets "unknown tool", and the user no
     # card whose yes would end in it (bug hunt 2026-10-31).
     asked = vm_loop(store, Agent([[("request_domain", {"domain": "api.example.com", "reason": "Docs"})]]),
-                    domains=False, request_id="three")
+                    request_id="three")
     events = list(asked.run())
     assert not [event for event in events if event.get("type") == "hold"]
     assert "error" in results(asked)[0]

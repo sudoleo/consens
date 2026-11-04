@@ -181,17 +181,15 @@ only, never to a VM's address, and never reaches the browser), and since
 the workbench: first message `{"id_token", "cols", "rows"}`, an exec with a TTY
 on `api.sprites.dev` running `bash -l` through `agent-run --terminal` with the
 agent's rights, raw bytes both ways, checked
-`{"type": "resize"}`; `agent_workspace.open_workbench`, `agent_vm.terminal_argv`).
-Since 2026-10-29 `http://localhost:<port>` in that browser is the workbench's
-port (`agent_tunnel.py`: `workspace_vm/tunnel.py listen` on the browser VM
-hands Chrome's connections over the exec API to the server, which carries them
-to `tunnel.py connect` on the workbench (as the agent's user), one direction
-only; not the provider's proxy API, which never passed on a closed
-connection, live probe 2026-10-29; the live view
-resumes it, `agent_tunnel.resume`), and `POST
+`{"type": "resize"}`; `agent_workspace.open_workspace`, `agent_vm.terminal_argv`).
+Since 2026-11-04 browser and workbench are one VM (`agent_vm.workspace_name`;
+Chrome as the provider's user, its protocol on a socket only that user opens,
+`workspace_vm/browser/cdp.py`), and `http://localhost:<port>` in that browser
+is the agent's server on the same computer (from 2026-10-29 to 2026-11-04 a
+tunnel, `agent_tunnel.py`, between two VMs), and `POST
 /agent/chats/{chat}/requests/{request}/secret` (`routers/agent.py`) writes a
-key the agent asked for with `ask_user` `secret` to `~/.secrets/<name>` on the
-workbench, never into the chat (`agent_secrets.py`).
+key the agent asked for with `ask_user` `secret` to `~/.secrets/<name>` in the
+workspace, never into the chat (`agent_secrets.py`).
 One view and one terminal per account (the newest wins, `agent_workspace.claim_view`), its open time counted as VM time, 6 opens a minute, the reason of its end as close code (4410/4409/4402/4429; since 2026-10-30 the first state carries `left_seconds`, the day's VM time left, and every end is logged with its code and side and counted anonymously in `ops_metrics/workspace-view-{day}`); all need Agent access and the VM (`routers/agent.py::vm_allowed`: admins only
 since 2026-10-27, `AGENT_VM_ACCESS=all` (or the older `pro`) for every account
 since 2026-10-31) on a server with a VM provider.
@@ -6081,11 +6079,8 @@ Hintergrundprozess reserviert höchstens die Hälfte des Rests
 (`agent_vm_processes.DAY_SHARE`), der Agent erfährt einen Rest unter 30 min
 (`vm_time_left_today`) und warum ein Befehl stoppte (`VM_DAY_CUT`); Details
 `docs/agent-mode.md` „VM-Zeit pro Tag“. Domains über die Paketquellen hinaus
-(`request_domain`) bleiben Pro und Admins (`domains_allowed`,
-`DelegationLoop(domains=…)`, sonst ohne `DomainTools` und mit
-`AGENT_VM_NO_DOMAINS_PROMPT`, Admin-Katalog `agent_vm_no_domains`): ein Skript
-auf der Werkbank erreicht sie ohne Modellschritt, das hält kein Tageskonto auf.
-Der Prüfer-Brief nennt `request_domain` nur, wo es das Werkzeug gibt. Prompt:
+(`request_domain`) gab es bis 2026-11-04 (Pro und Admins); seither erreicht der
+Arbeitsplatz das offene Web (`agent_vm.RULES`). Prompt:
 `DEFAULT_PROMPTS["agent"]` = `AGENT_AUDIT_SYSTEM_PROMPT` (seit 2026-10-28
 schlank: nur App-Fakten, App-Verträge, Sicherheit und Wahrheit; Blöcke
 `agent_watch.AUDIT_PROMPT`, `agent_settings.AUDIT_PROMPT`,
@@ -6237,8 +6232,8 @@ oder dauert er länger als `GATE_SECONDS`, entscheidet der Nutzer (`unchecked`).
 Ohne Arbeitsplatz (Google-Daten, kein VM-Zugang) prüft dann
 niemand. `off`: niemand. Ohne Prüfer (`AnswerAudit.unreviewed`): kein Halt,
 kein Gate (Memory sperrte bis 2026-11-02 nach Fremdinhalt), `read_source` öffnet keine selbst gewählten Adressen
-(`agent_read_source`), `request_domain` geht ohne Gate-Runde an den Nutzer
-(Karte mit `review: "off"`, „Your reviewers are off, so only you decide.“),
+(`agent_read_source`), `request_domain` ging bis 2026-11-04 ohne Gate-Runde an
+den Nutzer (Karte mit `review: "off"`),
 keine Prüferreserve vor dem harten Stopp (`answer_time_left`), kein
 `answer_check`-Frame, kein Schritt `audit_answer` in der Aktivität
 (`_finish_review` ruft `ComparisonTools.audit` direkt), und die Prüfung endet
@@ -6349,9 +6344,10 @@ und faltet nie, ohne eigene Statuszeile darunter, seit 2026-10-29, UX-Audit C9),
 
 **Vorab-Prüfung** (seit 2026-10-27, Details `docs/agent-mode.md`
 „Vorab-Prüfung“): `agent_gate.outward` erkennt nach Werkzeug und typisierten
-Argumenten die Aufrufe, die vorher auf die Prüfer warten: seit 2026-10-29 nur
+Argumenten die Aufrufe, die vorher auf die Prüfer warten: von 2026-10-29 an
 `request_domain` und `update_memory`, sobald Fremdinhalt im Blick ist
-(`memory_exposed`). Browser-Aktionen (`open`, `click`, `upload`, Enter/Space,
+(`memory_exposed`, bis 2026-11-02); seit 2026-11-04 (offenes Netz, kein
+`request_domain`) keiner mehr, die Maschinerie bleibt. Browser-Aktionen (`open`, `click`, `upload`, Enter/Space,
 `type` mit `enter`) und `read_source`/`show_image` mit unbekannter Adresse
 (`WEB_READS`, `GATE_WEB_NOTE`, `_known_url`, entfernt) warteten vom 27./28. bis
 29.10.: Median 3,9 s je Klick, vier Halts, alle Fehlalarm (Max: „nicht SOTA“);
@@ -6367,11 +6363,9 @@ Antwort, ausgefallen oder pausiert (`GATE_UNCHECKED`, seit 2026-10-27 nie ein Go
 `continue` lässt laufen, `steer` nicht (`HOLD_STEERED`). Karte in
 `agent-chat.js` (`holdCard`: „Let it run“, „The step that has not run yet“,
 Art `unchecked`), Aktivität `agent-activity.js` („Paused before a step ran“).
-`request_domain` wartet in `_domain_wait` auf dieselbe Gate-Runde
-(`GATE_DOMAIN_NOTE`) und dann immer auf den Nutzer (`request_hold` mit
-`domain`, `domain_reason`, `review`; Karte `domainCard` in `agent-chat.js`,
-„Allow for this chat“ = `continue`, „Don’t allow“ = `deny`, neue Antwort von
-`POST …/hold`); erlaubt läuft das Werkzeug (`loop.allowed_domains`).
+`request_domain` wartete bis 2026-11-04 in `_domain_wait` auf dieselbe
+Gate-Runde und dann immer auf den Nutzer (Halt mit `domain`, Karte
+`domainCard` in `agent-chat.js`, die für alte Läufe bleibt).
 
 **Der Agent fragt den Nutzer** (`ask_user`, `agent_ask.py`, seit 2026-10-29,
 mit dem Arbeitsplatz; Details `docs/agent-mode.md` „Arbeitsplatz“): Die
@@ -6443,8 +6437,8 @@ VM-Werkzeug, kein Prompt und kein `vm_time` in `/user_status`, seit
 2026-10-26) registriert
 `DelegationLoop` auf Account-Turns ohne Google-Daten `agent_vm_tools.VMTools`
 (`vm_exec`, `vm_read_file`, `vm_write_file`, `vm_edit_file`, `vm_share_file`,
-`vm_install_packages`, Prozesse, `browser`, `request_domain`, GitHub) und hängt
-`AGENT_VM_PROMPT` vor dem Memory-Block an. **Arbeitsplatz auf
+`vm_install_packages`, Prozesse, `browser`, GitHub; `request_domain` bis
+2026-11-04) und hängt `AGENT_VM_PROMPT` vor dem Memory-Block an. **Arbeitsplatz auf
 Abruf** (seit 2026-10-29 Standard für jedes Konto mit VM, Notaus
 `AGENT_WORKSPACE_ON_DEMAND=off`): `routers/agent.py::workspace_closed` lässt eine Nachricht ohne diese
 Werkzeuge beginnen (`DelegationLoop(workspace_closed=True)`): an ihrer Stelle nur
@@ -6455,89 +6449,96 @@ genau diese Stellen (danach gleich einer Nachricht, die sie von Anfang an hatte)
 und `_long_run` gilt ab dann. Offen beginnt eine Nachricht, wenn die letzte des
 Chats ein Werkzeug des Arbeitsplatzes aufrief (Chat-Feld `agent_workspace_used`,
 `finish_run`) oder der Nutzer den Browser hat. Details: docs/agent-mode.md
-„Arbeitsplatz auf Abruf“. Seit 2026-10-27
-**ein Arbeitsplatz pro Konto aus zwei VMs** (Sicherheitsaudit, Variante A):
-die Werkbank (`agent_vm.workspace_name(uid)`) und die Browser-VM
-(`agent_vm.browser_name(uid)`), beide Fly.io Sprites über
+„Arbeitsplatz auf Abruf“. **Ein Rechner pro Konto (seit 2026-11-04)**:
+`agent_vm.workspace_name(uid)`, eine Fly.io Sprite über
 `agent_vm.SpritesBackend`, Token `SPRITES_TOKEN` nur in Anfragen an
-`api.sprites.dev`. Die Werkbank wird beim ersten VM-Aufruf angelegt und über
+`api.sprites.dev`. Von 2026-10-27 bis 2026-11-04 waren es zwei VMs
+(Sicherheitsaudit, Variante A: Werkbank und Browser-VM,
+`agent_vm.old_browser_name`, die `agent_workspace.retire_old_browser` beim
+nächsten Öffnen löscht, samt Liste der Anmeldungen). Seither laufen Chrome,
+sein Bildschirm, `browser.py`, `relay.py` und `cdp.py` auf demselben Rechner
+als Nutzer des Anbieters, der Agent als `agent` ohne sudo; Chrome hat keinen
+Debug-Port (`workspace_vm/browser/cdp.py` hält seine Pipe und bietet CDP auf
+einem Unix-Socket 0600 an, `ws+unix://…/cdp.sock:/devtools/browser`), X fragt
+nach einem Cookie, Chrome startet nur auf einem X-Server, der seine Sockets
+selbst hält (`display.sh` `x_ours`), `agent-run` gibt dem Agenten ein eigenes
+`/tmp`, und das Netz ist offen (`agent_vm.RULES`; `request_domain`,
+`agent_domains.py` und der localhost-Tunnel `agent_tunnel.py` sind entfernt).
+Details: `docs/agent-mode.md` „Ein Rechner“. Die VM wird beim ersten Aufruf
+(`agent_workspace.open_workspace` unter `setup_lock`, für Nachricht,
+Browser-Warmlauf, Ansicht, Terminal und Bereitstellung) angelegt und über
 Nachrichten und Chats wiederverwendet, jeder Chat in seinem Ordner
 `/home/agent/chats/<chat>` (`agent_vm.chat_dir`: Startordner der Befehle, Ziel
 relativer Pfade; seit 2026-10-28 nach dem Titel benannt, `agent_vm.chat_folder`,
 Name am Chat unter `agent_vm.folder`, umbenannt in `agent_workspace.open_chat`,
 einem Befehl als Agent mit Marker, Schlüsseln und Notizen). Immer nur ein Chat: Der erste Aufruf einer Nachricht nimmt
 die Sperre (`agent_workspace.claim`, Dokument
-`users/{uid}/chat_state/agent_workspace` mit `name`, `browser`,
+`users/{uid}/chat_state/agent_workspace` mit `name`, bis 2026-11-04 `browser`,
 `lease {chat_id, turn_id, until}`, 10 min, seit 2026-10-30 von einem eigenen
 Thread alle 4 min verlängert (`VMSession._keep_lease`, auch während die
 Nachricht auf den Nutzer wartet), am
-Nachrichtenende freigegeben, seit 2026-10-29 `tunnel_ports` (höchstens 8)
-und `secret_names` (höchstens 32, nie Werte), die `Claim` mitliefert, und
-seit 2026-10-30 `policy`, der Fingerabdruck der zuletzt bestätigten
-Netzregeln: `claim` setzt ihn für die Sperre auf `None`, `release` bestätigt
-ihn); hält sie ein anderer Chat, sagt `VM_BUSY` das
+Nachrichtenende freigegeben, seit 2026-10-29 `secret_names` (höchstens 32, nie
+Werte), die `Claim` mitliefert; `tunnel_ports` und `policy` gab es bis
+2026-11-04); hält sie ein anderer Chat, sagt `VM_BUSY` das
 dem Agenten (Aktivität `outcome: busy`), die Antwort läuft weiter. Die Sperre
 reicht dem Browser; die Werkbank startet erst mit ihrem ersten Werkzeug
 (`VMSession.ready(bench=…)`, Teile `_lease` und `_bench` je als `_Job` auf
 eigenem Thread, `open_workspace` beginnt beide schon während des nächsten
 Modellschritts: `VMTools.prewarm`, aus `DelegationLoop._request_workspace`;
 eine offen beginnende Nachricht wärmt nur den Browser). Seit 2026-11-02
-richtet die erste Nachricht eines Kontos ohne Arbeitsplatz beide VMs im
-Hintergrund ein, seit 2026-11-04 je VM, die es noch nicht gibt (Live-Ansicht
-oder Terminal davor machen nur ihre eigene; `agent_workspace.provision` aus `routers/agent.py`, Notaus
-`AGENT_WORKSPACE_PROVISION=off`); `_bench` wartet auf ein laufendes Setup
-(`agent_workspace.setup_lock`). Wartende Schritte melden `starting_until`
+richtet die erste Nachricht eines Kontos ohne Arbeitsplatz die VM im
+Hintergrund ein und startet Chrome einmal (`agent_workspace.provision` aus
+`routers/agent.py`, Notaus `AGENT_WORKSPACE_PROVISION=off`); jeder Start
+wartet auf ein laufendes Setup (`agent_workspace.setup_lock`). Wartende Schritte melden `starting_until`
 (`agent_workspace.Start`/`start_until`, Schätzung `START_SECONDS`), die
 Live-Ansicht `until` (auch `waking` während des Weckens, `_waking`); `start-progress.js` (`App.startProgress`) zeigt daraus
 Balken und Restzeit. Das Bild der Live-Ansicht kommt seit 2026-11-02 von TigerVNCs X-Server
 (`display.sh`, continuous updates, 30 Bilder/s statt rund 13 bei x11vnc;
 `docs/agent-mode.md`, „Flüssigere Live-Ansicht“); Render trägt es ohne
 permessage-deflate (Startbefehl `--ws-per-message-deflate false`). Der Start der
-Werkbank schreibt das Konto-Dokument und das Chat-Feld `agent_vm`
-(`workspace: true`), ruft `ensure(name, rules)` (nur wenn die Regeln vom
-bestätigten Stand abweichen; Netz zu bis auf die
-Paketquellen `WORKBENCH_RULES`, dazu die Domains, die der Nutzer dem Chat
-erlaubt hat, `agent_domains.rules`; am Nachrichtenende zurück auf die
-Paketquellen), bringt die Werkbank auf Stand (`agent_workspace.prepare`, nur
-bei neuer `VERSION`: `workspace_vm/workbench/*` nach `/home/sprite/.consens/workspace`,
-`setup.sh` als root: Nutzer `agent` ohne sudo, Umzug aus `/home/sprite`, alter
-Browser und Gateway-Dienst weg, Xvfb/x11vnc/openbox der alten Bauweise
-entfernt, ripgrep und headless Chrome installiert, wo sie fehlen; dafür
-öffnet `prepare` `dl.google.com` nur um das Setup herum: Regeln lesen
-(`get_policy`), plus `CHROME_RULE` setzen, danach im `finally` genau die
-gelesenen zurück, nie die Grundliste), legt den Chat-Ordner an
+Seite des Agenten schreibt das Konto-Dokument und das Chat-Feld `agent_vm`
+(`workspace: true`), bringt die VM auf Stand (`agent_workspace.prepare`, nur
+bei neuer `VERSION`: Netzregeln `agent_vm.RULES` setzen, alle Werkzeuge aus
+`workspace_vm/workbench` und `workspace_vm/browser` (`TOOL_FILES`) nach
+`/home/sprite/.consens/workspace`, `setup.sh` als root: Nutzer `agent` ohne
+sudo, sein `/tmp` unter `/var/lib/consens/agent-tmp`, Umzug aus
+`/home/sprite`, einmal je Rechner Reste früherer Bauweisen weg (Marke
+`/var/lib/consens/one-computer`), Xvfb/x11vnc entfernt, ripgrep, poppler und
+Chrome installiert, wo sie fehlen; Bildschirm, openbox und Playwright
+installiert `install.sh` des Browsers beim ersten Browser-Aufruf), legt den Chat-Ordner an
 (`agent_workspace.open_chat`), nimmt den Checkpoint der Nachricht neben dem
 Rest (nur ändernde Aufrufe warten darauf, `checkpoint_wait`) und kopiert ihre
 Anhänge danach in den `input`-Ordner des Chats. Ein Ausfall des Anbieters
 kostet den Aufruf, erst drei in Folge die VM (`VMSession.failed`,
 `MAX_FAILURES`); unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
-Aufrufs (`VMTools._guarded`). Das Nachrichtenende (`VMSession.close`) setzt
-Regeln zurück und gibt die Sperre frei auf einem eigenen Thread (`_finish`,
-höchstens 2 s gewartet). Jeder
+Aufrufs (`VMTools._guarded`). Das Nachrichtenende (`VMSession.close`) gibt die
+Sperre frei auf einem eigenen Thread (`_finish`, höchstens 2 s gewartet); die
+Netzregeln ändert keine Nachricht mehr (bis 2026-11-04 setzte sie sie zurück). Jeder
 Befehl und jede Datei des Agenten läuft als dieser Nutzer über
 `agent_vm.agent_argv` (`sudo -n /bin/bash agent-run …`: eigener
 Mount-Namespace ohne `/.sprite/api.sock` und Checkpoints, `setpriv
 --no-new-privs`); die Datei-API (läuft als `sprite`) nutzt nur der Server in
 seinem eigenen Home (`agent=False`). Chats, die noch eine eigene VM von vorher
 haben (`agent_vm.vm_name`), behalten sie bis zu ihrer Löschung. Den Chrome
-der Browser-VM bedient der Agent mit dem Werkzeug `browser`
+des Arbeitsplatzes bedient der Agent mit dem Werkzeug `browser`
 (`agent_browser.py`: typisierte Aktionen, das Backend ruft
 `workspace_vm/browser/browser.py` mit JSON auf stdin; nie in Passwortfelder,
 nie während der Nutzer übernommen hat, nur http(s) zu öffentlichen Adressen).
 Seit 2026-10-28 heilt sich ein Chrome, der nicht mehr antwortet: `display.sh`
-startet ihn neu, wenn der Debug-Port (`/json/list`) schweigt, nur noch Kinder
-leben oder `browser.py` `--restart` verlangt (`--keep` startet nur, beendet nie);
+startet ihn neu, wenn sein Protokoll (`/json/list` über `cdp.sock`, bis
+2026-11-04 der Debug-Port) schweigt, nur noch Kinder oder `cdp.py` leben oder
+`browser.py` `--restart` verlangt (`--keep` startet nur, beendet nie);
 `browser.py` verbindet nach einem Neustart erneut, beendet jede Aktion nach
 `CALL_LIMIT` über einen Wächter (Antwort `failed`, Neustart), `open` liefert eine
 noch ladende Seite; `relay.py` hält Chrome bei offener Live-Ansicht am Leben
-(`keep_chrome`). Seit 2026-10-29 hält jeder Aufruf die Browser-VM 10 min wach
+(`keep_chrome`). Seit 2026-10-29 hält jeder Aufruf die VM 10 min wach
 (`browser.stay_awake`, ablaufender Hold der Sprites-Tasks-API): eingeschlafen
 verlor Chrome zwischen zwei Schritten jede Live-Verbindung. Seit 2026-10-30
 kürzt das Ende einer Nachricht mit Browser den Hold auf 2 min (Server-Aktion
-`rest`, wie `warm` nie eine des Agenten; Aufruf `BrowserTools._rest`). Der
-localhost-Tunnel (`agent_tunnel.py`) lebt nur, solange eine Nachricht den
-Arbeitsplatz nutzt (`begin`/`end`) oder die Live-Ansicht offen ist (`viewing`,
-Herzschlag über `agent_workspace.holds_view`), plus 2 min (`wanted`). Nach
+`rest`, wie `warm` nie eine des Agenten; Aufruf `BrowserTools._rest`).
+localhost im Browser ist seit 2026-11-04 der Server des Agenten auf demselben
+Rechner (bis dahin der Tunnel `agent_tunnel.py`); `browser.py` liest dort nur
+Ports, auf denen der Nutzer des Agenten lauscht (`agent_ports`). Nach
 einer Aktion wartet `browser.py` auf die Ruhe der Seite statt des Netzes
 (`quiet`) und antwortet auf derselben Seite nur mit dem, was sich seit dem
 letzten Blick änderte (`after_text`, `~/.consens/browser/last-look.json`);
@@ -6545,14 +6546,14 @@ Fehler nennen Call-Log-Ursache und Seite (`on_failure`). Details
 `docs/agent-mode.md`, „Browser-VM“.
 Während der Übernahme wartet der Agent: `control` im Konto-Dokument
 lässt jeden Aufruf warten (`VMSession.wait_for_user`, höchstens 120 s, dann
-`VM_USER_HAS_BROWSER`), und `browser.py` handelt nicht. Was auf der Werkbank
-läuft, läuft seit 2026-10-29 weiter (bis dahin fror `pause.py` es ein): Der
-Server des Agenten antwortet dem Browser über die localhost-Brücke
-(`agent_tunnel.py`). Einfügen in der Ansicht tippt die
+`VM_USER_HAS_BROWSER`), und `browser.py` handelt nicht. Was der Agent laufen
+hat, läuft seit 2026-10-29 weiter (bis dahin fror `pause.py` es ein): Sein
+Server antwortet dem Browser, und Bildschirm und Chrome erreicht sein Nutzer
+nicht (Cookie, Socket 0600). Einfügen in der Ansicht tippt die
 Zwischenablage als Tasten ein, nie über die Zwischenablage der VM. Details in
 `docs/agent-mode.md`, „Arbeitsplatz“. Live-Ansicht: `routers/agent_workspace.py`
-(WebSocket `/agent/workspace/view` über die Exec-API zum Relay der
-Browser-VM, `POST /agent/workspace/control` für Übernehmen/Zurückgeben,
+(WebSocket `/agent/workspace/view` über die Exec-API zum Relay auf der VM,
+`POST /agent/workspace/control` für Übernehmen/Zurückgeben,
 `POST /agent/workspace/reset-browser`, `GET /agent/workspace`, seit 2026-11-02
 `GET /agent/workspace/sign-ins` und `POST /agent/workspace/sign-ins/remove`:
 wo der Browser angemeldet ist, vom Agenten mit `note_sign_in` geführt, mit
@@ -6648,7 +6649,8 @@ Verbindung). (2) `app/services/workspace_guard.py` zählt je Konto und UTC-Tag:
 Hosts aus den Browser-Aufrufen des Agenten (`agent_browser.BrowserTools.call` →
 `note_browser_call`) und aus der Live-Ansicht (`relay.py` `watch`: Zeilen
 `{"visit"}`, `{"net"}`, `{"policy"}` auf stderr, `routers/agent_workspace.py::relay_line`),
-Bytes von Ansicht und Terminal (`Meter`), Netzzähler der Browser-VM; neue
+Bytes von Ansicht und Terminal (`Meter`), Netzzähler der VM (seit 2026-11-04
+auch die Befehle des Agenten); neue
 Hosts ordnet `classify` über Cloudflares Security-/Family-Resolver ein.
 (3) `RULES` schließen bis zum nächsten UTC-Tag oder sperren bis zur Freigabe
 (`scripts/workspace_guard.py list|status|unlock`); gezählt je Website
@@ -9369,16 +9371,14 @@ app/services/
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Die Prüfer jedes Agent-Laufs (seit 2026-10-25 als Audit, seit 2026-10-31 der eine Modus für jedes Konto): AGENT_SEARCH_ROUNDS des Agenten; AnswerAudit lässt die gewählten Modelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (toleranter Locator), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; compare_models-Ergebnisse strukturiert (COMPARISON_ENTRY_CHARS, ROUND_TIERS, BRIEF_TOOLS); Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate); seit 2026-10-29 eigene Cancellation je Live-/Gate-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS), Gate-Frist GATE_SECONDS und gate_trace
   agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt; seit 2026-10-30 auch jeder Turn mit Arbeitsplatz (workspace_counters: ws_*, wrap_up)
-  agent_gate.py              Vorab-Prüfung (seit 2026-10-27): outward erkennt nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer laufen: request_domain (danach entscheidet immer der Nutzer; update_memory mit Fremdinhalt im Blick bis 2026-11-02); Browser-Aktionen und read_source/show_image standen vom 27./28. bis 29.10. darauf (Begründung im Modul-Docstring)
+  agent_gate.py              Vorab-Prüfung (2026-10-27 bis 2026-11-04): outward erkannte nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer liefen (zuletzt request_domain; update_memory mit Fremdinhalt im Blick bis 2026-11-02); seit dem offenen Netz des Arbeitsplatzes keiner mehr, das Gate selbst (agent_audit.open_gate, DelegationLoop._gate_wait) bleibt
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm), seit 2026-10-30 auch mit 2–4 Antworten als Knöpfen (choices → choice, chosen()); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back
-  agent_domains.py           Netz der Werkbank pro Chat (seit 2026-10-27): Paketquellen als Standard, request_domain (ein Hostname, nie Fly-intern/Sprites; GitHub seit 2026-11-02 wie jede Domain) nach Prüfern und Nutzer, Freigaben am Chat (agent_domains, höchstens 20), rules() für die Policy während der Nachricht des Chats
-  agent_browser.py           Werkzeug browser (seit 2026-10-27): typisierte Aktionen (open/read/text/find/click auch an x,y/drag mit strokes/type/select/key/scroll/back/forward/tabs/tab/screenshot/upload/download/wait) auf der Browser-VM über workspace_vm/browser/browser.py mit JSON auf stdin; Adressen nur http(s) und öffentlich, seit 2026-10-29 auch http://localhost:<port> als Port der Werkbank (local_port, _tunnel startet agent_tunnel, local_ports in jeder Anfrage), Upload einer Werkbank-Datei für einen Aufruf, Downloads des Browsers (Aktion, download, Nutzer in der Ansicht) seit 2026-10-28 in <Chat-Ordner>/downloads/ (_keep_downloads, bis 25 MB, danach auf der Browser-VM gelöscht), Screenshot als Bild, open bringt seit 2026-10-29 ein kleines JPEG der Seite für ihre Karte im Chat (preview_url, nur in der Aktivität, bounded_activity streicht es zuerst), Ausfall kostet nur dieses Werkzeug (Grund im Log); seit 2026-10-29 weckt _warm beim ersten Aufruf einer Nachricht die Browser-VM und startet Chrome (Helfer-Aktion warm) auf eigenem Backend, während die Werkbank bereit wird; screenshot_after bringt bei Aktionen, die die Seite ändern, das Bild danach im selben Aufruf (PICTURE_AFTER); show legt seit 2026-10-30 den Screenshot unter die Antwort (_show, kind web_image, Herkunft browser); Aktionen in PREVIEW_AFTER bringen alle PREVIEW_SECONDS ein neues Bild für die Seitenkarte, die Aktivität page_title/page_url; look zeigt ask_user den Browser nach der Rückgabe; click/drag an x,y melden seit 2026-10-30, was an ihren Punkten lag und was sich danach änderte (browser.py HIT_JS); seit 2026-11-03 ist eine Ref veraltet, wenn ihr Element inzwischen anderes zeigt (browser.py KEY_JS/data-consens-key, located), Aktionen auf Elementen geben nach ACT_MS = 3 s mit Grund auf, wait mit text wartet bis die Seite den Text zeigt (wait_for_text), und ein gescheiterter Browser-Aufruf lässt die späteren Browser-Aufrufe seines Schritts ungelaufen (agent_delegation CALL_AFTER_BROWSER_FAILURE); seit 2026-11-02 note_sign_in (Liste, wo der Browser angemeldet ist, sign_in_site: Hostname, nie in temporären Chats)
-  agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (exists/ensure(rules=None: nur anlegen)/set_policy/get_policy/run mit stdin/exec/exec_url/read_file/write_file/delete_path/move_path, die Dateien mit agent=True als Agenten-Nutzer, delete_service/checkpoint/restore/delete) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets, Handshake einmal wiederholt); WORKBENCH_RULES (Paketquellen) und BROWSER_RULES (offenes Web ohne Fly-intern), WAKE_SECONDS (90 s für Aufrufe, die eine schlafende VM wecken können: Regeln setzen, Datei des Anbieter-Nutzers lesen), agent_argv/wrapped_command (Agenten-Befehle über agent-run), workspace_name und browser_name je Konto, chat_dir/chat_folder je Chat (Ordnername aus Titel + ID-Anfang, seit 2026-10-28; vm_name nur noch für alte Chat-VMs), delete_chat_vm (Hintergrundprozesse des Chats über agent_vm_processes.delete_for_chat, Chat-Ordner unter gemerktem Namen und ID als Agent und am alten Ort, alte VM über vm_name), delete_workspace (beide VMs) und restore_workspace; ein Anbieterwechsel betrifft nur diese Datei
-  agent_tunnel.py            localhost-Brücke (seit 2026-10-29): ein Tunnel je Konto im Prozess (Tunnel), trägt Rahmen zwischen tunnel.py listen (Browser-VM) und tunnel.py connect (Werkbank, als Agent über agent-run, /usr/local/lib/consens/tunnel.py), beide über open_stream, zwei Threads, keiner je Verbindung; Rahmen H/L/O/F/Q/D/C/A mit Flusssteuerung (WINDOW je Verbindung und Richtung), MAX_CONNECTIONS, MAX_FRAME, O nur für gehaltene Ports, die Werkbank-Seite kann nur antworten; nie Port 9222 oder unter 1024; open_ports (keine Antwort = VMUnavailable, nur Absage = belegt), Tunnel.listening (Q: lauschende Ports des Agenten), seed/asked/live/touch, resume(find) für Live-Ansicht, Übernahme und Browser-Aufruf; Ports auf dem Datensatz (tunnel_ports); Ende nach IDLE_SECONDS ohne Bytes; 502-Seite bei F
+  agent_browser.py           Werkzeug browser (seit 2026-10-27): typisierte Aktionen (open/read/text/find/click auch an x,y/drag mit strokes/type/select/key/scroll/back/forward/tabs/tab/screenshot/upload/download/wait) im Arbeitsplatz (seit 2026-11-04 derselbe Rechner, vorher die Browser-VM) über workspace_vm/browser/browser.py mit JSON auf stdin als Nutzer des Anbieters; Adressen nur http(s) und öffentlich, seit 2026-10-29 auch http://localhost:<port>, der Server des Agenten (local_port; bis 2026-11-04 über agent_tunnel), Upload einer Datei, die der Nutzer des Agenten lesen darf, für einen Aufruf, Downloads des Browsers (Aktion, download, Nutzer in der Ansicht) seit 2026-10-28 in <Chat-Ordner>/downloads/ (_keep_downloads, bis 25 MB, danach im Ordner des Browsers gelöscht), Screenshot als Bild, open bringt seit 2026-10-29 ein kleines JPEG der Seite für ihre Karte im Chat (preview_url, nur in der Aktivität, bounded_activity streicht es zuerst), Ausfall kostet nur dieses Werkzeug (Grund im Log); seit 2026-10-29 weckt _warm beim ersten Aufruf einer Nachricht die VM (agent_workspace.open_workspace) und startet Chrome (Helfer-Aktion warm) auf eigenem Backend, während die Sperre genommen wird; screenshot_after bringt bei Aktionen, die die Seite ändern, das Bild danach im selben Aufruf (PICTURE_AFTER); show legt seit 2026-10-30 den Screenshot unter die Antwort (_show, kind web_image, Herkunft browser); Aktionen in PREVIEW_AFTER bringen alle PREVIEW_SECONDS ein neues Bild für die Seitenkarte, die Aktivität page_title/page_url; look zeigt ask_user den Browser nach der Rückgabe; click/drag an x,y melden seit 2026-10-30, was an ihren Punkten lag und was sich danach änderte (browser.py HIT_JS); seit 2026-11-03 ist eine Ref veraltet, wenn ihr Element inzwischen anderes zeigt (browser.py KEY_JS/data-consens-key, located), Aktionen auf Elementen geben nach ACT_MS = 3 s mit Grund auf, wait mit text wartet bis die Seite den Text zeigt (wait_for_text), und ein gescheiterter Browser-Aufruf lässt die späteren Browser-Aufrufe seines Schritts ungelaufen (agent_delegation CALL_AFTER_BROWSER_FAILURE); seit 2026-11-02 note_sign_in (Liste, wo der Browser angemeldet ist, sign_in_site: Hostname, nie in temporären Chats)
+  agent_vm.py                Agent VM, Anbieter-Schnittstelle (seit 2026-10-25): VMBackend (exists/ensure(rules=None: nur anlegen)/set_policy/get_policy/run mit stdin/exec/exec_url/read_file/write_file/delete_path/move_path, die Dateien mit agent=True als Agenten-Nutzer, delete_service/checkpoint/restore/delete) und SpritesBackend (REST über httpx, Befehle über das exec-WebSocket mit websockets, Handshake einmal wiederholt); RULES (offenes Web ohne Fly-intern, seit 2026-11-04 für die ganze VM; vorher WORKBENCH_RULES mit Paketquellen für die Werkbank), WAKE_SECONDS (90 s für Aufrufe, die eine schlafende VM wecken können: Regeln setzen, Datei des Anbieter-Nutzers lesen), agent_argv/wrapped_command (Agenten-Befehle über agent-run), workspace_name je Konto (old_browser_name nur zum Löschen der Browser-VM von 2026-10-27 bis 2026-11-04), chat_dir/chat_folder je Chat (Ordnername aus Titel + ID-Anfang, seit 2026-10-28; vm_name nur noch für alte Chat-VMs), delete_chat_vm (Hintergrundprozesse des Chats über agent_vm_processes.delete_for_chat, Chat-Ordner unter gemerktem Namen und ID als Agent und am alten Ort, alte VM über vm_name), delete_workspace (die VM und die alte Browser-VM) und restore_workspace; ein Anbieterwechsel betrifft nur diese Datei
   agent_secrets.py           Keys für den Agenten (seit 2026-10-29): save schreibt als Agenten-Nutzer nach ~/.secrets/<NAME> (umask 077, Wert nur auf stdin) und den Namen auf den Datensatz (secret_names), load liest sie bei jedem VM-Start wieder (VMSession.ready), remember/scrub maskieren sie als „[secret ~/.secrets/NAME, hidden from you]“ in Werkzeug-Ergebnissen und Aktivität; KEYS_NOTE mit dem ersten VM-Ergebnis (workspace_keys)
-  agent_workspace.py         Arbeitsplatz des Kontos (seit 2026-10-27, zwei VMs; seit 2026-11-02 provision: neues Konto bei der ersten Agent-Nachricht im Hintergrund eingerichtet, setup_lock, Start/start_until mit START_SECONDS für Balken und Restzeit): Konto-Dokument users/{uid}/chat_state/agent_workspace mit name, browser und Sperre (claim/renew/release, ein Chat zur Zeit, 10 min ohne Aufruf läuft sie ab; claim liefert die Domains des Chats), prepare (Werkbank bei neuer VERSION: workspace_vm/workbench/*, setup.sh als root mit dl.google.com nur um das Setup herum (_open_for_setup: gelesene Regeln + CHROME_RULE, danach genau die gelesenen zurück), alten Dienst view entfernen), prepare_browser/open_browser (Browser-VM, BROWSER_VERSION aus BROWSER_FILES inkl. harden.sh, policy.json und openbox-Konfiguration; seit 2026-10-29 setzt nur eine neue Version die Netzregeln, BROWSER_RULES sind Teil der Version), Übernahme (set_control: control im Konto-Dokument mit returned_at beim Zurückgeben + control.json auf der Browser-VM; seit 2026-10-29 friert nichts mehr auf der Werkbank ein; control_state, user_has_browser), reset_browser (Profil auf der Browser-VM), delete_for_account (Tunnel zu, beide VMs über die Namen aus der UID, Datensatz danach, Wächter und Spuren über workspace_guard.delete_for_account), remember_values/listed (Listen auf dem Datensatz: tunnel_ports, secret_names), sign_ins/note_sign_in/clear_sign_ins/sign_ins_note (seit 2026-11-02: wo der Browser angemeldet ist, SIGN_INS_KEPT, Kontext jeder Nachricht), control_of (control_state eines schon gelesenen Datensatzes), restorable/raise_restore_floor (Restore nur für eigene, höchstens 14 Tage alte Checkpoints nach der letzten Abmeldung oder Chat-Löschung); Ordnernamen (make_chat_dir benennt nach dem Titel um, record_folder merkt den Namen am Chat; .consens-chat: Titel, Start, ID) und Arbeitsplatz-Notizen ~/NOTES.md (read_notes, Anfang mit dem ersten VM-Ergebnis)
+  agent_workspace.py         Arbeitsplatz des Kontos (seit 2026-10-27; zwei VMs bis 2026-11-04, seither ein Rechner, Begründung im Modul-Docstring; seit 2026-11-02 provision: neues Konto bei der ersten Agent-Nachricht im Hintergrund eingerichtet, setup_lock, Start/start_until mit START_SECONDS für Balken und Restzeit): Konto-Dokument users/{uid}/chat_state/agent_workspace mit name und Sperre (claim/renew/release, ein Chat zur Zeit, 10 min ohne Aufruf läuft sie ab), open_workspace (VM anlegen und prepare unter setup_lock, für Nachricht, Browser-Warmlauf, Ansicht, Terminal, Bereitstellung; danach retire_old_browser: die Browser-VM von vorher löschen, solange der Datensatz sie nennt, Anmeldungen leeren), prepare (bei neuer VERSION aus TOOL_FILES beider Ordner und agent_vm.RULES: Regeln setzen, Werkzeuge schreiben, setup.sh als root, alten Dienst view entfernen), Übernahme (set_control: control im Konto-Dokument mit returned_at beim Zurückgeben + control.json neben dem Browser; seit 2026-10-29 friert nichts mehr ein; control_state, user_has_browser), reset_browser (Chrome und cdp.py des Anbieter-Nutzers beenden, Profil löschen), delete_for_account (VM und alte Browser-VM über die Namen aus der UID, Datensatz danach, Wächter und Spuren über workspace_guard.delete_for_account), remember_values/listed (Listen auf dem Datensatz: secret_names), sign_ins/note_sign_in/clear_sign_ins/sign_ins_note (seit 2026-11-02: wo der Browser angemeldet ist, SIGN_INS_KEPT, Kontext jeder Nachricht), control_of (control_state eines schon gelesenen Datensatzes), restorable/raise_restore_floor (Restore nur für eigene, höchstens 14 Tage alte Checkpoints nach der letzten Abmeldung oder Chat-Löschung; seit 2026-11-04 enthalten sie das Browser-Profil); Ordnernamen (make_chat_dir benennt nach dem Titel um, record_folder merkt den Namen am Chat; .consens-chat: Titel, Start, ID) und Arbeitsplatz-Notizen ~/NOTES.md (read_notes, Anfang mit dem ersten VM-Ergebnis)
   workspace_guard.py         Sicherheitsregeln des Arbeitsplatzes auf dem Server (seit 2026-10-30): note_visit/note_browser_call/note_view_bytes/note_net/note_policy (nie blockierend, ein Thread zählt je Konto in einer Transaktion), classify (Cloudflares Security- und Family-Resolver: malware/adult/clean, Cache 24 h), Spur workspace_trail/{uid}_{tag} (Hosts, Stunden, Bytes; 31 Tage, cleanup_expired_trails), Wächter workspace_guard/{uid} (open/closed bis morgen/locked), RULES/judge/decide (je Website, nur Nutzerverhalten sperrt, zweites Schließen in 7 Tagen sperrt, Admins nur gemeldet), _shut, status (Cache 20 s, Lesefehler schließt nie), unlock mit baseline, Telegram ohne Konto; Details docs/agent-mode.md „Sicherheitsregeln des Arbeitsplatzes“
-  workspace_vm/              Läuft in den VMs (LF per .gitattributes). tunnel.py (beide VMs, localhost-Brücke seit 2026-10-29: listen auf der Browser-VM lauscht auf 127.0.0.1/::1 nur auf genannten Ports, connect auf der Werkbank öffnet 127.0.0.1, sonst ::1, und nennt die lauschenden Ports seines Nutzers; Rahmen über stdin/stdout an agent_tunnel, Flusssteuerung, nie blockierend; end_others nur für Python-Prozesse derselben Datei und desselben Modus; nur Standardbibliothek). workbench/: agent-run (jeder Befehl des Agenten: Mount-Namespace ohne api.sock/Checkpoints/Logs, setpriv auf den Nutzer agent mit no-new-privs, timeout), setup.sh (Nutzer agent ohne sudo, /home/sprite 750, Umzug aus dem alten Home, alter Browser weg samt Xvfb/x11vnc/openbox, ripgrep, poppler-utils und headless Chrome für den Agenten (ohne Googles apt-Quelle), Laufzeit-Shims vorbereitet; beendet seit 2026-10-29 das alte pause.py und taut seine cgroups auf, legt tunnel.py nach /usr/local/lib/consens/ für den Agenten-Nutzer). office/ (seit 2026-11-01, Konverter-Sprite consens-office, agent_office.py): setup.sh (LibreOffice Impress/Writer/Calc ohne Recommends, Office-Schriften, poppler-utils, python3-pil, Nutzer office0–office2 ohne sudo/Home/Shell, erst dpkg --configure -a, danach apt-get clean, Marke VERSION zuletzt), convert.sh (cd /, eine Datei von stdin, einer von drei Plätzen per flock auf /run/consens-office/slotN.lock, Platz vorher und nachher geräumt (kill -1 als officeN, Dateien), seit 2026-11-01 abends auch jeder gerade freie Platz (clean_free, Lock kurz gehalten; `convert.sh clean` nur das), jeder Befehl eines Platzes mit prlimit --as 2 GB (Umwandlung braucht 0,5–0,6 GB, die VM hat 8 GB ohne Swap; ihre cgroup nimmt keine eigenen Grenzen an), LibreOffice als officeN in einem Ordner nur dieser Umwandlung mit eigenem Profil, Seitenzahl als officeN geschrieben, pdfinfo/pdftoppm, tar auf stdout; Exit 2 Typ, 3 kein PDF, 4 alle Plätze belegt, 5 Zeitlimit; Schrittlimits unter RUN_SECONDS; live geprüft 2026-11-01), sheet.py (Übersicht: Folien zwei, Hochformat drei Spalten, Seitennummern, höchstens 1568 px). browser/: browser.py (das eine Programm des Werkzeugs browser: JSON rein und raus, Playwright über CDP, Seite als Text mit Refs, Hauptinhalt zuerst, find mit denselben Refs, Seitenkopf mit „Cookies saved for this site: yes|no“ aus den Cookies; click/drag an x,y seit 2026-10-30 mit Element und Box unter jedem Punkt und den Änderungen danach, nächste zuerst, auf Canvas/Frame/Video mit Bildvergleich um den Punkt: HIT_JS, look_at, hit_report; jede Aktion auf der Seite vorn seit 2026-10-30 mit dieser Beobachtung (eine Ref in einem Frame dort), Warten auf die Ruhe der Seite statt 2 s networkidle (quiet, Traffic, QUIET_JS; Navigation lädt wie bisher, loaded), danach Kopf und nur die seit dem letzten Blick geänderten Zeilen (after_text, changes/outline mit Frames und Überlagerung, last-look.json; ganze Liste nach Navigation, bei read und wenn mehr als die Hälfte neu ist; scroll nennt die Lage und listet zuerst, was im Blick ist, IN_VIEW_JS), Fehler mit der letzten aussagekräftigen Call-Log-Zeile und der Seite (on_failure, failure_text; veraltete Ref mit ganzer Liste, StaleRef), download nur Name/Bytes/Content-Type, 0 Byte refused; Server-Aktion rest kürzt den Wach-Hold auf REST_FOR; read seit 2026-10-30 mit dem, was über der Seite liegt, zuerst und den Elementen von Frames unter ihrer Zeile (with_frames; die Aktion read liest alle Frames, das Lesen nach einer Aktion nur Frames über der Seite, find keine; element sucht einen Frame-Ref nur in dem Frame, aus dem er stammt, remember_frames/frame-refs.json, nie in einem der eigenen VM); seit 2026-10-30 hält ein residenter Helfer (`--serve`, Unix-Socket ~/.consens/browser/serve.sock mit 0600, serve.lock, SERVE_IDLE, VERSION = Hash der Datei) Playwrights Treiber, verbindet sich mit Chrome nur je Aufruf (ready/disconnect, KEPT; verbunden lenkt Playwright Downloads um und schließt Dialoge), ein Aufruf ohne Helfer läuft selbst und startet einen; `free` (sonst beschäftigt: Aufruf läuft nach 1 s selbst), `took` und erst auf `go` des Aufrufs gehandelt, der Helfer verbindet mit einem Neustart wie ein Aufruf ohne ihn (connect), ein Aufruf wartet höchstens READY_SECONDS 35 s auf `took`, `declined`/`stale` = Aufruf läuft selbst, nie zweimal, ein Aufruf, der vor seiner Antwort endet, beendet Helfer und Aktion: through_server/exchange/serve_one/serve), display.sh (seit 2026-11-02 Xtigervnc als Bildschirm und VNC-Server in einem, nur auf dem Unix-Socket vnc.sock (0600), ohne TCP, ohne Zwischenablage, schickt ohne Anfrage höchstens 30 Bilder/s; eine VM von vorher räumt Xvfb/x11vnc/openbox, nie unter --keep; openbox, Chrome mit dauerhaftem Profil und Software-WebGL (SwiftShader, seit 2026-10-28; ein Chrome ohne startet einmal neu)), setup.sh (einmalige Installation samt tigervnc-standalone-server, Marke setup-done-2 auch in browser.py/relay.py, Chrome-Richtlinie ohne Passwörter/Karten), relay.py (Live-Ansicht: Zustände auf stderr, dann VNC zwischen stdin/stdout; nur Standardbibliothek); browser.py liest seit 2026-10-29 keine Seite der eigenen VM (own_computer, localhost nur auf local_ports)
+  workspace_vm/              Läuft auf dem Rechner des Arbeitsplatzes (LF per .gitattributes; workbench/ und browser/ in einem Ordner /home/sprite/.consens/workspace, eine VERSION). workbench/: agent-run (jeder Befehl des Agenten: Mount-Namespace ohne api.sock/Checkpoints/Logs, seit 2026-11-04 mit eigenem /tmp aus /var/lib/consens/agent-tmp, setpriv auf den Nutzer agent mit no-new-privs, timeout), setup.sh (Nutzer agent ohne sudo, /home/sprite 750, /tmp des Agenten, Umzug aus dem alten Home, einmal je Rechner (Marke /var/lib/consens/one-computer) Browser, Bildschirm, Tunnel und Gateway früherer Bauweisen samt Prozessen des Agenten weg, Xvfb/x11vnc entfernt, ripgrep, poppler-utils und Chrome (ohne Googles apt-Quelle), Laufzeit-Shims vorbereitet; beendet seit 2026-10-29 das alte pause.py und taut seine cgroups auf). tunnel.py (localhost-Brücke zwischen den zwei VMs) gab es von 2026-10-29 bis 2026-11-04. office/ (seit 2026-11-01, Konverter-Sprite consens-office, agent_office.py): setup.sh (LibreOffice Impress/Writer/Calc ohne Recommends, Office-Schriften, poppler-utils, python3-pil, Nutzer office0–office2 ohne sudo/Home/Shell, erst dpkg --configure -a, danach apt-get clean, Marke VERSION zuletzt), convert.sh (cd /, eine Datei von stdin, einer von drei Plätzen per flock auf /run/consens-office/slotN.lock, Platz vorher und nachher geräumt (kill -1 als officeN, Dateien), seit 2026-11-01 abends auch jeder gerade freie Platz (clean_free, Lock kurz gehalten; `convert.sh clean` nur das), jeder Befehl eines Platzes mit prlimit --as 2 GB (Umwandlung braucht 0,5–0,6 GB, die VM hat 8 GB ohne Swap; ihre cgroup nimmt keine eigenen Grenzen an), LibreOffice als officeN in einem Ordner nur dieser Umwandlung mit eigenem Profil, Seitenzahl als officeN geschrieben, pdfinfo/pdftoppm, tar auf stdout; Exit 2 Typ, 3 kein PDF, 4 alle Plätze belegt, 5 Zeitlimit; Schrittlimits unter RUN_SECONDS; live geprüft 2026-11-01), sheet.py (Übersicht: Folien zwei, Hochformat drei Spalten, Seitennummern, höchstens 1568 px). browser/: browser.py (das eine Programm des Werkzeugs browser: JSON rein und raus, Playwright über CDP, Seite als Text mit Refs, Hauptinhalt zuerst, find mit denselben Refs, Seitenkopf mit „Cookies saved for this site: yes|no“ aus den Cookies; click/drag an x,y seit 2026-10-30 mit Element und Box unter jedem Punkt und den Änderungen danach, nächste zuerst, auf Canvas/Frame/Video mit Bildvergleich um den Punkt: HIT_JS, look_at, hit_report; jede Aktion auf der Seite vorn seit 2026-10-30 mit dieser Beobachtung (eine Ref in einem Frame dort), Warten auf die Ruhe der Seite statt 2 s networkidle (quiet, Traffic, QUIET_JS; Navigation lädt wie bisher, loaded), danach Kopf und nur die seit dem letzten Blick geänderten Zeilen (after_text, changes/outline mit Frames und Überlagerung, last-look.json; ganze Liste nach Navigation, bei read und wenn mehr als die Hälfte neu ist; scroll nennt die Lage und listet zuerst, was im Blick ist, IN_VIEW_JS), Fehler mit der letzten aussagekräftigen Call-Log-Zeile und der Seite (on_failure, failure_text; veraltete Ref mit ganzer Liste, StaleRef), download nur Name/Bytes/Content-Type, 0 Byte refused; Server-Aktion rest kürzt den Wach-Hold auf REST_FOR; read seit 2026-10-30 mit dem, was über der Seite liegt, zuerst und den Elementen von Frames unter ihrer Zeile (with_frames; die Aktion read liest alle Frames, das Lesen nach einer Aktion nur Frames über der Seite, find keine; element sucht einen Frame-Ref nur in dem Frame, aus dem er stammt, remember_frames/frame-refs.json, nie in einem der eigenen VM); seit 2026-10-30 hält ein residenter Helfer (`--serve`, Unix-Socket ~/.consens/browser/serve.sock mit 0600, serve.lock, SERVE_IDLE, VERSION = Hash der Datei) Playwrights Treiber, verbindet sich mit Chrome nur je Aufruf (ready/disconnect, KEPT; verbunden lenkt Playwright Downloads um und schließt Dialoge), ein Aufruf ohne Helfer läuft selbst und startet einen; `free` (sonst beschäftigt: Aufruf läuft nach 1 s selbst), `took` und erst auf `go` des Aufrufs gehandelt, der Helfer verbindet mit einem Neustart wie ein Aufruf ohne ihn (connect), ein Aufruf wartet höchstens READY_SECONDS 35 s auf `took`, `declined`/`stale` = Aufruf läuft selbst, nie zweimal, ein Aufruf, der vor seiner Antwort endet, beendet Helfer und Aktion: through_server/exchange/serve_one/serve), display.sh (seit 2026-11-02 Xtigervnc als Bildschirm und VNC-Server in einem, nur auf dem Unix-Socket vnc.sock (0600), ohne TCP, ohne Zwischenablage, schickt ohne Anfrage höchstens 30 Bilder/s; seit 2026-11-04 mit X-Cookie (xauthority, 0600, je Start neu), Chrome nur auf einem X-Server, der seine Sockets selbst hält (x_ours), pgrep/pkill nur für den eigenen Nutzer, Chrome über cdp.py ohne Debug-Port; eine VM von vorher räumt Xvfb/x11vnc/openbox, nie unter --keep; openbox, Chrome mit dauerhaftem Profil und Software-WebGL (SwiftShader, seit 2026-10-28; ein Chrome ohne startet einmal neu)), cdp.py (seit 2026-11-04: startet Chrome mit --remote-debugging-pipe, bietet CDP als WebSocket und /json/list auf cdp.sock (0600), eine Browser-Session je Verbindung, IDs und Sessions getrennt, Ende einer Verbindung löst ihre Session; nur Standardbibliothek), install.sh (bis 2026-11-04 setup.sh; einmalige Installation von Bildschirm, openbox, Schriften und Playwright, Chrome wo es fehlt, Marke setup-done-2 auch in browser.py/relay.py), relay.py (Live-Ansicht: Zustände auf stderr, dann VNC zwischen stdin/stdout; Ziele über cdp.sock; nur Standardbibliothek); browser.py liest seit 2026-10-29 keine Seite der eigenen VM (own_computer), localhost seit 2026-11-04 nur auf Ports, auf denen der Nutzer des Agenten lauscht (agent_ports, /proc/net/tcp)
   agent_vm_tools.py          Werkzeuge vm_exec/vm_read_file/vm_write_file/vm_edit_file/vm_share_file/vm_view_image/vm_save_picture/vm_render_office (model_picture seit 2026-11-01: jedes Bild ans Modell – vm_view_image, Browser-Screenshot, Office-Übersicht, find_pictures – geht über picture_message höchstens PICTURE_SIDE = 1568 px lang und etwa PICTURE_SENT_BYTES = 400 KB groß, sonst neu als WebP; Screenshots (1280×800) behalten ihre Pixel für click an x,y; nicht dekodierbar → wie bisher roh; vm_save_picture seit 2026-11-01, nur wo image_tools existiert: Bild aus find_pictures/search_pictures per ID über WebImageTools.picture_file (holt einen Suchtreffer erst jetzt) als .jpg/.png/.webp nach Dateiendung (agent_web_images.saved_as) in die Werkbank, Ergebnis mit Größe, picture und page, keine VM-Zeit; vm_render_office seit 2026-11-01: Office-Datei der Werkbank über agent_office.render als PDF daneben unter ihrem ganzen Namen (deck.pptx.pdf), Übersicht der ersten Seiten wie vm_view_image mit OVERVIEW_INTRO (beginnt mit agent_compaction.PICTURE_OPEN, geht mit OVERVIEW_GONE), 30/h je Konto erst nach dem Lesen, keine VM-Zeit; vm_edit_file seit 2026-10-26: exaktes Ersetzen auf den Bytes, eindeutig oder replace_all, zeigt die geänderten Zeilen; vm_view_image seit 2026-10-26 nur für Bildmodelle: das Bild folgt den Ergebnissen als Nutzernachricht, DelegationLoop._show_pictures; nur wo das Konto die VM hat (routers/agent.py vm_allowed), nie mit Google-Daten): VMSession je Nachricht (Chat-Feld agent_vm vor dem Anlegen, Netzregeln mit den Domains des Chats, Checkpoint der Nachricht, Anhänge in den input-Ordner des Chats, Policy am Ende zurück), vm_install_packages (apt als root für den Agenten ohne sudo, seit 2026-10-27), Ausgabe-Enden für Modell und Anzeige, Live-Updates per report, Turn-Summe agent_vm; ein VM-Ausfall kostet nur die Werkzeuge; OpenWorkspaceArgs/OPEN_WORKSPACE für den Arbeitsplatz auf Abruf (seit 2026-10-29, DelegationLoop._open_workspace)
   agent_office.py            Ein Office-Konverter für alle Konten (seit 2026-11-01): Sprite consens-office des Betreibers mit LibreOffice, Werkzeuge workspace_vm/office/* mit VERSION (prepare einmal pro Prozess, Setup als root, Marke zuletzt), Netz nur Ubuntus Spiegel (RULES); render(data, extension) schickt die Bytes per stdin an convert.sh und liest ein tar (in.pdf, pages.png, pages.txt) → Rendered; OfficeRefused (Datei, Exit 2/3/5) vs. OfficeUnavailable (Konverter); höchstens PARALLEL=3 zugleich (Warten schaut nach Stop), 20 MB, LibreOffice 90 s, Server wartet RUN_SECONDS=165; mit weniger als MIN_SECONDS=85 s Antwortzeit startet keine Umwandlung (OfficeUnavailable "no time", vm_render_office meldet VM_NO_TIME und zählt keinen Render der Stunde; bis 2026-11-03 bekam LibreOffice 1 s und die Datei galt als schuld); Setup mit eigener Cancellation, nach Fehlschlag SETUP_RETRY_SECONDS=600 aus; _forget nach Provider-Ausfall/Exit 127; nach Stop, Zeitüberschreitung oder Verbindungsverlust `sweep` (`convert.sh clean`) im Hintergrund nach SWEEP_DELAY_SECONDS: Live-Probe 2026-11-01, der Provider beendet convert.sh, LibreOffice läuft als officeN mit der Datei weiter, die Falle des Skripts läuft nie; `render(seconds=…)` bleibt in der Restzeit der Antwort; ersetzt LibreOffice pro Werkbank (Speicher je Konto)
   agent_vm_processes.py      vm_start_process/vm_process_output/vm_stop_process (seit 2026-10-26): Dev-Server und lange Tests unter einem Aufseher-Skript in der VM (~/.consens/processes/<id>, timeout, output.log, exit_code), das die Sprite per Tasks-API (/.sprite/api.sock) wach hält, solange der Prozess läuft; höchstens 3 gleichzeitig, je höchstens 1 h (Standard 30 min); seit 2026-11-01 nennt die Datei chat den startenden Chat, delete_for_chat (chat_command) stoppt und löscht seine Prozesse mit ihm
@@ -10116,8 +10116,8 @@ alte Gemini-ADC-JSON ist entfernt.
   `AGENT_VM_ACCESS`: leer = VM (Arbeitsplatz mit Browser, Live-Ansicht,
   Restore) nur für Admins (seit 2026-10-27), `all` = für jedes Konto
   (`agent_vm.open_to_all`, `routers/agent.py::vm_allowed`); `pro`, der Wert
-  vor 2026-10-31, heißt dasselbe. `request_domain` bleibt Pro und Admins
-  (`domains_allowed`). `AGENT_AUDIT_ACCESS` und `AGENT_AUDIT_COMPARE` gibt es
+  vor 2026-10-31, heißt dasselbe. `request_domain` (Pro und Admins) gibt es
+  seit 2026-11-04 nicht mehr. `AGENT_AUDIT_ACCESS` und `AGENT_AUDIT_COMPARE` gibt es
   seit 2026-10-31 nicht mehr (ein Modus für jedes Konto).
   `AGENT_WORKSPACE_ON_DEMAND`: leer (Standard) = jede Nachricht mit VM
   beginnt ohne die Werkzeuge des Arbeitsplatzes und öffnet ihn mit

@@ -1,26 +1,29 @@
 """The agent's ``browser`` tool (since 2026-10-27, docs/agent-mode.md
-"Arbeitsplatz"): the account's Chrome on its browser VM
-(agent_vm.browser_name), the one the user watches and steers live.
+"Arbeitsplatz"): the account's Chrome on its workspace
+(agent_vm.workspace_name), the one the user watches and steers live.
 
-Before, the agent ran a ``browser`` command in its own VM, next to Chrome,
-its debugging port and its profile with every sign-in. Now the browser has a
-VM of its own with no code of the agent on it (security audit 2026-10-27,
-finding 2): the agent chooses an action and its typed arguments, the backend
-checks them and calls one fixed program there, workspace_vm/browser/
-browser.py, with the request as JSON on its stdin and no shell. The program
-reads pages as text with refs (e12), finds a text on the page with the refs
-it is in, says whether the browser holds cookies for the page's site (never
-which), never shows a password field's value, never types into
-one, and does not act while the user has the browser.
+Before 2026-10-27 the agent ran a ``browser`` command in its own VM, next to
+Chrome, its debugging port and its profile with every sign-in. From then to
+2026-11-04 the browser had a VM of its own (security audit 2026-10-27,
+finding 2); since then it runs on the workspace again, as the provider's
+user, and the agent's user reaches neither its protocol (a socket only that
+user opens, workspace_vm/browser/cdp.py), its screen nor its profile (Max:
+the computer's own users instead of bridges between two VMs). The agent
+chooses an action and its typed arguments, the backend checks them and
+calls one fixed program there, workspace_vm/browser/browser.py, with the
+request as JSON on its stdin and no shell. The program reads pages as text
+with refs (e12), finds a text on the page with the refs it is in, says
+whether the browser holds cookies for the page's site (never which), never
+shows a password field's value, never types into one, and does not act
+while the user has the browser.
 
-Addresses are http(s) only and never the VM itself (file://, the browser's
-debugging port): a page of the VM would show its profile, and since
-2026-10-29 browser.py reads no such page, also one a link or a redirect
-led to. ``http://localhost:<port>`` (1024 and up) is that port of the
-workbench since then (agent_tunnel.py): the agent's app in the browser the
-user sees. An upload copies one file of the workbench, read as the agent's
-user, to the browser VM for that call only. A screenshot comes to the agent as a picture
-(like vm_view_image), only for a chat model that takes images.
+Addresses are http(s) only and never the computer's own files (file://).
+``http://localhost:<port>`` (1024 and up) is the agent's own server there:
+browser.py reads such a page only where the agent's user listens on the
+port (the kernel's socket table), never another user's. An upload copies
+one file the agent's user may read into the browser's folder for that call
+only. A screenshot comes to the agent as a picture (like vm_view_image),
+only for a chat model that takes images.
 
 The reviewers follow every action live; from 2026-10-27 to 2026-10-29 those
 that act outside (open, click, Enter, upload) waited for them first
@@ -30,15 +33,13 @@ and VM time with the VM tools (VMTools._start). A provider failure costs the
 call it happened in; MAX_FAILURES in a row turn the browser off for the rest
 of the message (since 2026-10-30; before, the first did, runtime audit A1).
 
-The first call of a message wakes the browser VM and starts Chrome on a
-backend of its own (_warm, since 2026-10-29), begun already when the agent
-opens its workspace or the message starts with it open (prewarm, VMTools.prewarm,
-since 2026-10-30). Since then the browser needs only the workspace's lease,
-not the workbench (runtime audit T5): its rules, tools, folder, checkpoint and
-notes come with the first call that needs the workbench (a localhost address,
-an upload, a download). Before 2026-10-29 it prepared the workbench and only
-then woke the browser VM and started Chrome, one after the other: in Prod a
-first call took a median 10 s and up to 99 s, every later one 1.9 s.
+The first call of a message wakes the VM, brings its tools up to date and
+starts Chrome on a backend of its own (_warm, since 2026-10-29), begun
+already when the agent opens its workspace or the message starts with it
+open (prewarm, VMTools.prewarm, since 2026-10-30). The browser needs only
+the workspace's lease and the VM's tools, not the chat's folder (runtime
+audit T5): the folder, checkpoint and notes come with the first call that
+needs them (an upload, a download).
 
 Each call's activity says when the browser itself began (``started_at``,
 after the start of the workspace) and how long the call took
@@ -46,7 +47,7 @@ after the start of the workspace) and how long the call took
 action (runtime audit V3, I4); while the first call waits for the
 browser's start, about when that ends (``starting_until``, since
 2026-11-02), which the chat counts down. At the message's end a browser it used is
-told to rest (the helper's action ``rest``): its VM sleeps after two
+told to rest (the helper's action ``rest``): the VM sleeps after two
 minutes instead of ten (K2).
 """
 from __future__ import annotations
@@ -81,7 +82,7 @@ FIND_CHARS = 200
 UPLOAD_BYTES = 15 * 1024 * 1024
 # A file the browser downloaded comes into the chat's folder (downloads/) up
 # to this size, at most this many per call (since 2026-10-28); larger ones
-# are deleted on the browser VM and named as skipped.
+# are deleted from the browser's folder and named as skipped.
 DOWNLOAD_BYTES = 25 * 1024 * 1024
 DOWNLOADS_PER_CALL = 10
 # click at x,y and drag's strokes (since 2026-10-28), pixels of the
@@ -110,10 +111,10 @@ SCREENSHOT_INTRO = ("[consens.io: the picture of the workspace's browser at {url
 BROWSER_UNAVAILABLE = ("The workspace's browser is not available right now. Continue without it for this message "
                        "and say so if the answer needed it.")
 # A failure that costs the call alone (BrowserTools._unavailable), and the
-# browser VM that did not start this time (a 502 while it woke).
+# VM that did not start this time (a 502 while it woke).
 BROWSER_INTERRUPTED = ("The connection to the browser broke off during this call, so whether the action happened "
                        "is unknown; the page shows what it did.")
-BROWSER_NOT_STARTED = "The browser's computer did not start just now; nothing happened in it."
+BROWSER_NOT_STARTED = "The workspace did not start just now; nothing happened in its browser."
 # The helper's rest at the message's end (K2): its own short time, never the message's.
 REST_SECONDS = 20
 # How often the first call, waiting for the browser's start, looks for a new estimate of its end.
@@ -213,11 +214,10 @@ def sign_in_site(value):
     raise ValueError("site is a site's host name, such as web.whatsapp.com, not an IP address.")
 
 
-# localhost on the browser is the workbench's, port by port (agent_tunnel.py).
+# localhost in the browser is the workspace's own: the agent's servers, port
+# by port (browser.py reads a page there only where the agent's user listens).
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
-# Actions that may load from the page's server: on a localhost page they wait
-# for a tunnel that is starting again (_local_ports).
-NETWORK_ACTIONS = frozenset({"click", "type", "select", "key", "back", "forward", "tab", "wait", "upload"})
+LOCAL_PORTS = range(1024, 65536)
 
 
 def canonical_host(host):
@@ -235,8 +235,8 @@ def canonical_host(host):
 
 def check_url(url, *, local=True):
     """The address to open, or ValueError: http(s) to a host name or a
-    public address, never the browser VM itself; with ``local``,
-    ``http://localhost:<port>`` too, that port of the workbench."""
+    public address, never the computer's own files or a private network;
+    with ``local``, ``http://localhost:<port>`` too, the agent's server."""
     text = url.strip()
     if text == "about:blank":
         return text
@@ -257,13 +257,6 @@ def check_url(url, *, local=True):
     if host in LOCAL_HOSTS:
         if not local:
             raise ValueError(LOCAL_DOWNLOAD)
-        from app.services.agent_tunnel import RESERVED_PORTS
-        try:
-            port = parts.port
-        except ValueError:
-            port = None
-        if port in RESERVED_PORTS:
-            raise ValueError(LOCAL_TAKEN.format(port=port))
         if local_port(text) is None:
             raise ValueError(LOCAL_PORT)
         return text
@@ -278,10 +271,9 @@ def check_url(url, *, local=True):
 
 
 def local_port(url):
-    """The workbench's port that ``url`` names (http(s)://localhost:3000,
-    127.0.0.1, [::1]), or None: not localhost, no port, or one the tunnel
-    never takes (below 1024, the browser's debugging port)."""
-    from app.services import agent_tunnel
+    """The port of the agent's server that ``url`` names
+    (http(s)://localhost:3000, 127.0.0.1, [::1]), or None: not localhost, no
+    port, or one below 1024."""
     parts = urlsplit(url)
     if canonical_host(parts.hostname or "") not in LOCAL_HOSTS:
         return None
@@ -289,21 +281,17 @@ def local_port(url):
         port = parts.port
     except ValueError:
         return None
-    return port if agent_tunnel.allowed_port(port) else None
+    return port if port in LOCAL_PORTS else None
 
 
-# The browser runs on a computer of its own and reaches the web; the
-# workbench only as localhost (since 2026-10-29). DeepSeek's feedback
-# 2026-10-28: it tried its dev server here first, and got this refusal.
-BROWSER_PRIVATE = ("That address is the browser's own computer or a private network: the browser reaches public "
-                   "pages, and http://localhost:<port> is that port of your workspace (your dev server).")
+# The browser reaches the web, and localhost is the agent's servers on the
+# same computer (since 2026-11-04; from 2026-10-29 a tunnel to the workbench).
+# DeepSeek's feedback 2026-10-28: it tried its dev server here first, and got
+# this refusal.
+BROWSER_PRIVATE = ("That address is the workspace's own files or a private network: the browser reaches public "
+                   "pages, and http://localhost:<port> where your server listens (your dev server).")
 LOCAL_PORT = ("localhost in the browser is your workspace, port by port: name the port your server listens on, "
               "1024 and up (http://localhost:3000).")
-LOCAL_TAKEN = "Port {port} is the browser's own computer. Let your server listen on another port and open that."
-LOCAL_DOWN = "The way from the browser to your workspace did not open. Try again in a moment."
-# Said with the first open of a localhost address in a message.
-LOCAL_OPENED = ("localhost:{port} here is port {port} of your workspace. The browser also reaches the other ports "
-                "your servers listen on now; a server you start later, once you open its address.")
 LOCAL_DOWNLOAD = "download takes a file on the web: what your workspace serves is in your workspace already."
 # After a download a site refused, where vm_save_picture is (agent_vm_tools.py):
 # on 2026-11-01 Wikimedia refused twelve picture downloads with 429 and 400,
@@ -347,10 +335,10 @@ def required(args):
 
 
 def helper(backend, name, request, timeout, cancellation):
-    """browser.py's run for ``request`` (a dict, on stdin) on the browser VM
-    ``name``: its stdout and the command's outcome. A fixed command with the
-    login environment (python3 and Playwright in the provider's user's
-    folders), never a shell of the agent's."""
+    """browser.py's run for ``request`` (a dict, on stdin) on the workspace
+    ``name``, as the provider's user: its stdout and the command's outcome.
+    A fixed command with the login environment (python3 and Playwright in
+    the provider's user's folders), never a shell of the agent's."""
     from app.services import agent_workspace
     out = bytearray()
 
@@ -384,7 +372,7 @@ class BrowserTools:
 
     def __init__(self, vm_tools):
         self.vm = vm_tools
-        self.name = agent_vm.browser_name(vm_tools.loop.uid)
+        self.name = agent_vm.workspace_name(vm_tools.loop.uid)
         self.ready = False
         self.off = False
         # Provider failures in a row (A1), the warm-up begun before the
@@ -393,8 +381,6 @@ class BrowserTools:
         self.failures = 0
         self.warming = None
         self._timing = None
-        # The localhost ports this message's results explained (LOCAL_OPENED).
-        self.told_ports = set()
         # The address of the page in front, as the last answer said (None before it).
         self.page_url = None
         # When the page's card in the chat last got a picture (PREVIEW_SECONDS).
@@ -404,9 +390,9 @@ class BrowserTools:
 
     def tools(self):
         return [ReadOnlyTool(
-            "browser", "Use the browser you share with the user, a Chrome on a computer of its own that they see "
-                       "live and can take over, signed in where the user signed in; http://localhost:<port> there is "
-                       "that port of your workspace. Pages come back as text with refs (e12) for click, "
+            "browser", "Use the browser you share with the user, a Chrome in your workspace that they see live "
+                       "and can take over, signed in where the user signed in; http://localhost:<port> there is your "
+                       "server on that port. Pages come back as text with refs (e12) for click, "
                        "type, select and upload, and find looks up a text on the page with the refs it is in. After "
                        "an action on the same page comes what it did, the Page and URL lines and only the lines that "
                        "changed since you last looked (+ new, ~ changed, - gone); read lists the whole page, as do "
@@ -452,14 +438,14 @@ class BrowserTools:
         self.warming = self._warm(cancellation)
 
     def _warm(self, cancellation):
-        """Starts waking the browser VM and its Chrome (the helper's action
-        warm, which reads nothing of the pages) on a backend of its own, so it
-        runs while VMTools._start gets the lease. Returns the
-        thread, whose ``ok`` says whether the browser VM is open and
-        ``refused`` holds the provider's VMUnavailable when it would not open
-        (the call then does not ask the same VM again: Prod 2026-10-29, a VM
-        that did not start answered 502 after 40 s, twice), or None when the
-        workspace cannot be used now."""
+        """Starts waking the VM, its tools and its Chrome (the helper's
+        action warm, which reads nothing of the pages) on a backend of its
+        own, so it runs while VMTools._start gets the lease. Returns the
+        thread, whose ``ok`` says whether the VM is open and ``refused`` holds
+        the provider's VMUnavailable when it would not open (the call then
+        does not ask the same VM again: Prod 2026-10-29, a VM that did not
+        start answered 502 after 40 s, twice), or None when the workspace
+        cannot be used now."""
         from app.services import agent_workspace, workspace_guard
         session = self.vm.session
         left = session.left()
@@ -480,7 +466,7 @@ class BrowserTools:
                 if backend is None:
                     return
                 try:
-                    agent_workspace.open_browser(backend, uid, start)
+                    agent_workspace.open_workspace(backend, uid, cancellation, start=start, db=self._db())
                 except agent_vm.VMUnavailable as exc:
                     thread.refused = exc
                     raise
@@ -528,8 +514,8 @@ class BrowserTools:
                 report({"starting_until": None})
 
     def _rest(self):
-        """The message ended: the helper shortens the browser VM's wake hold
-        to about two minutes (browser.py ``rest``), on a backend of its own
+        """The message ended: the helper shortens the VM's wake hold to about
+        two minutes (browser.py ``rest``), on a backend of its own
         and its own short time. A helper without the action answers with an
         error, which changes nothing; failures are only logged."""
         from app.services.llm.provider_runtime import ProviderCancellation
@@ -573,51 +559,6 @@ class BrowserTools:
     def _db(self):
         return getattr(getattr(self.vm.loop, "store", None), "db", None)
 
-    def _tunnel(self, port):
-        """localhost:``port`` in the browser reaches the workbench's port
-        (agent_tunnel.py), or ValueError saying why not; the other ports the
-        agent's servers listen on follow in the background, before the page
-        calls them. A tunnel that does not start costs this address, never
-        the browser."""
-        from app.services import agent_tunnel
-        uid, factory = self.vm.loop.uid, self.vm.session._factory
-        try:
-            held = agent_tunnel.open_port(uid, port, backend_factory=factory, db=self._db())
-        except agent_vm.VMUnavailable as exc:
-            logging.warning("Agent tunnel unavailable category=%s", safe_exception(exc))
-            raise ValueError(LOCAL_DOWN) from None
-        if not held:
-            raise ValueError(LOCAL_TAKEN.format(port=port))
-        agent_tunnel.resume(uid, backend_factory=factory, db=self._db(), find=True)
-
-    def _local_ports(self, action, deadline=None):
-        """The ports the account's tunnel took, for browser.py, which reads
-        localhost on those alone (kept on the account's record, so a restart
-        of the server forgets none). A tunnel that ended (idle, the VM's
-        sleep, a restart) starts again for them only while the page in front
-        is the workbench's localhost (this message's last answer, else the
-        account's last page, agent_tunnel.page_local); an action that may
-        load from that page waits for it, so its first click after a pause
-        does not find the way shut. Until 2026-10-30 every call of an
-        account that ever used localhost started it, and the first call of
-        a message waited up to LISTEN_SECONDS on any page (runtime audit
-        T7, K1)."""
-        from app.services import agent_tunnel
-        uid = self.vm.loop.uid
-        claim = getattr(self.vm.session, "claim", None)
-        if claim is not None:
-            agent_tunnel.seed(uid, getattr(claim, "tunnel_ports", ()))
-        ports = agent_tunnel.asked(uid)
-        local = local_port(self.page_url) is not None if self.page_url is not None else agent_tunnel.page_local(uid)
-        if ports and local:
-            starting = agent_tunnel.resume(uid, backend_factory=self.vm.session._factory, db=self._db())
-            if starting is not None and action in NETWORK_ACTIONS:
-                wait = agent_tunnel.LISTEN_SECONDS
-                if deadline is not None:
-                    wait = max(0.0, min(wait, deadline - time.monotonic()))
-                starting.join(wait)
-        return sorted(ports)
-
     def _unavailable(self, exc, text=BROWSER_INTERRUPTED):
         """A provider failure in a call: that call's error (``text``) and the
         next call tries again; MAX_FAILURES in a row turn the browser off for
@@ -638,7 +579,8 @@ class BrowserTools:
         return ValueError(text)
 
     def _upload(self, path, cancellation):
-        """The workbench's file at ``path`` on the browser VM, for this call."""
+        """The file at ``path``, read as the agent's user (what it may not
+        read it cannot upload), in the browser's folder for this call."""
         from app.services import agent_workspace
         session = self.vm.session
         try:
@@ -654,7 +596,7 @@ class BrowserTools:
         return target, len(raw)
 
     def call(self, args, *, cancellation, report=None):
-        from app.services import agent_tunnel, agent_workspace
+        from app.services import agent_workspace
         from app.services.agent_vm_tools import MIN_COMMAND_SECONDS, VM_NO_TIME, _now, vm_path
         report = report or (lambda fields: None)
         self._timing = None
@@ -662,10 +604,8 @@ class BrowserTools:
             raise ValueError(BROWSER_UNAVAILABLE)
         required(args)
         request = {"action": args.action}
-        port = None
         if args.action == "open":
             request.update(url=check_url(args.url), new_tab=args.new_tab)
-            port = local_port(request["url"])
         if args.action == "download" and args.url.strip():
             request["url"] = check_url(args.url, local=False)
         from app.services.agent_vm_tools import sees_pictures
@@ -695,12 +635,11 @@ class BrowserTools:
         warming = None
         if not self.ready:
             warming, self.warming = self.warming or self._warm(cancellation), None
-        # The lease is all the browser needs; the workbench only what reaches
-        # it: a localhost address (its port) and an upload (its file). Its
-        # actions are steps of the agent's model, not VM time: the browser
-        # goes on once today's is used up (since 2026-10-31).
-        self.vm._start(cancellation, bench=port is not None or args.action == "upload", change=False,
-                       spends=False)
+        # The lease is all the browser needs (its warm-up brings the VM's
+        # tools); the chat's folder only an upload (its file). Its actions
+        # are steps of the agent's model, not VM time: the browser goes on
+        # once today's is used up (since 2026-10-31).
+        self.vm._start(cancellation, bench=args.action == "upload", change=False, spends=False)
         prepared = time.monotonic()
         session = self.vm.session
         upload = None
@@ -723,13 +662,8 @@ class BrowserTools:
                 if deadline - time.monotonic() < MIN_COMMAND_SECONDS:
                     raise ValueError(VM_NO_TIME)
                 if warming is None or not warming.ok:
-                    agent_workspace.open_browser(session.backend, self.vm.loop.uid)
+                    agent_workspace.open_workspace(session.backend, self.vm.loop.uid, cancellation, db=self._db())
                 self.ready = True
-            if port is not None:
-                self._tunnel(port)
-            ports = self._local_ports(args.action, deadline)
-            if ports:
-                request["local_ports"] = ports
             if args.action == "upload":
                 path = vm_path(args.file, session.dir)
                 target, size = self._upload(path, cancellation)
@@ -765,7 +699,7 @@ class BrowserTools:
         session.started = True
         status, text = answer.get("status"), str(answer.get("text") or "")
         # Where a call's time goes (since 2026-10-30): before the browser
-        # (the lease, the first call's start of the browser VM), the
+        # (the lease, the first call's start of the VM), the
         # command on the VM, the helper inside it, and whether the resident
         # helper answered (browser.py serve).
         logging.info("Agent browser call action=%s first=%s seconds=%.2f before=%.2f exec=%.2f helper=%s served=%s "
@@ -775,7 +709,6 @@ class BrowserTools:
         seen = re.search(r"^URL: (\S+)", text, re.M)
         if seen:
             self.page_url = seen.group(1)
-            agent_tunnel.note_page(self.vm.loop.uid, local_port(self.page_url) is not None)
         # The server's safety rules count what the browser was asked for and
         # what it shows, a refused or blocked page too (workspace_guard.py).
         from app.services import workspace_guard
@@ -795,9 +728,6 @@ class BrowserTools:
             self.previewed_at = time.monotonic()
             report({"preview": shown})
         result = {"action": args.action, "page": text}
-        if port is not None and port not in self.told_ports:
-            self.told_ports.add(port)
-            result["note"] = LOCAL_OPENED.format(port=port)
         files = answer.get("downloads")
         if isinstance(files, list) and files:
             kept, skipped = self._keep_downloads(files, cancellation)
@@ -882,9 +812,10 @@ class BrowserTools:
     def _keep_downloads(self, files, cancellation):
         """The browser's finished downloads into the chat's folder
         (downloads/, as the agent's user, never over an existing file), then
-        gone from the browser VM: ``(kept, skipped)``. They need the
-        workbench, which a browser call alone does not start (T5): it starts
-        now, and a download changes it, so after the message's checkpoint."""
+        gone from the browser's folder: ``(kept, skipped)``. They need the
+        chat's folder, which a browser call alone does not prepare (T5): it
+        comes now, and a download changes the workspace, so after the
+        message's checkpoint."""
         from app.services import agent_workspace
         session = self.vm.session
         kept, skipped = [], []

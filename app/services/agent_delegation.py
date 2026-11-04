@@ -136,7 +136,7 @@ USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the
 # A reviewer's halt (agent_audit.AnswerAudit.halt) waits this long for the
 # user's decision; then the response stops, as with the Stop button, and says
 # why (HOLD_TIMEOUT_STOPPED, failure code hold_timeout). It never goes on by
-# itself; a domain nobody allowed stays closed.
+# itself.
 HOLD_TIMEOUT_SECONDS = 30 * 60
 HOLD_TIMEOUT_STOPPED = "Stopped after 30 minutes without your decision."
 # Holds a turn keeps in agent_holds (_end_hold); later ones are not kept.
@@ -157,15 +157,14 @@ HOLD_STEERED = "Not run: the user paused your work and wrote to you. Read their 
 # The calls of one step run one after another, at most this many (T2). What
 # a call that does not run reads instead, by why (the batch in run()): every
 # call of a step gets exactly one result, or the provider refuses the next
-# request. A pause, the user's own card, their turn in the browser or a
-# domain they refused ends the step's later calls: they were planned before.
+# request. A pause, the user's own card or their turn in the browser ends the
+# step's later calls: they were planned before.
 TOOL_CALLS_PER_STEP = 4
 CALL_OVER_LIMIT = f"Not run: a step runs at most {TOOL_CALLS_PER_STEP} calls."
 CALL_AFTER_PAUSE = "Not run: the work was paused before this call; the user let it go on with your next step."
 CALL_AFTER_ASK = "Not run: this step asked the user first. Their answer is in the ask_user result above."
 CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile and has handed it back. The page "
                        "may have changed.")
-CALL_AFTER_DENIAL = "Not run: the user did not allow {domain} earlier in this step."
 CALL_AT_LIMIT = "Not run: this message reached its limit."
 # Since 2026-11-03: a step's browser calls build on each other (click a chat,
 # type, Enter). When one fails, the next would act on a page that is not
@@ -369,7 +368,7 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
-                 domains=True, reviewers="always", temporary=False, watch_run=None, history_summary=None,
+                 reviewers="always", temporary=False, watch_run=None, history_summary=None,
                  **kwargs):
         super().__init__(**kwargs)
         # A scheduled run of a Watch (agent_watches.py, since 2026-11-03):
@@ -389,14 +388,10 @@ class DelegationLoop(AgentLoop):
         # since 2026-11-01): "always" from the run's start, "workspace" from
         # the agent's first step that reaches for the workspace on
         # (_review_from_here), "off" nobody. Without reviewers no halt, no
-        # gate: a domain waits for the user alone (_domain_wait).
+        # gate.
         if reviewers not in REVIEW_FACTS:
             raise ValueError("Unknown reviewers setting")
         self.reviewers = reviewers
-        # Domains beyond the package registries for the workbench
-        # (request_domain): Pro and admins, routers/agent.py domains_allowed,
-        # which the route passes (AGENT_VM_NO_DOMAINS_PROMPT without).
-        self.domains = domains
         # With comparison tools (every chat run, routers/agent.py) the agent
         # writes the answer itself as its last step (agent_answer_mode) and
         # the user's chosen models review it (agent_audit.py); a
@@ -688,9 +683,6 @@ class DelegationLoop(AgentLoop):
         self.first_workspace_call = None
         # The user's answer on an ask_user card, for the tool to return (_ask_wait, agent_ask.py).
         self.ask_answer = None
-        # Domains the user allowed on a card in this message: request_domain
-        # runs only for these (_domain_wait, agent_domains.py).
-        self.allowed_domains = set()
         from app.services import agent_vm
         # Without a provider (no SPRITES_TOKEN) the agent is not told of a
         # VM that would answer every call with "not available".
@@ -810,13 +802,12 @@ class DelegationLoop(AgentLoop):
         """The workspace's blocks of the system prompt, each after a blank line."""
         from app.services import agent_github
         from app.services.prompt_defaults import (AGENT_GITHUB_IMPORT_PROMPT, AGENT_GITHUB_PROMPT, AGENT_PLAN_PROMPT,
-                                                  AGENT_VM_NO_DOMAINS_PROMPT, AGENT_VM_PROMPT)
+                                                  AGENT_VM_PROMPT)
         # GitHub (agent_github.py): the tools come with the VM, so the prompt does too;
         # without the app only the import of public repositories. The plan of
         # a long task (agent_plan.py) comes with the VM, where tasks run long.
         github = AGENT_GITHUB_PROMPT if agent_github.configured() else AGENT_GITHUB_IMPORT_PROMPT
-        vm = AGENT_VM_PROMPT if self.domains else AGENT_VM_NO_DOMAINS_PROMPT
-        return "".join("\n\n" + block for block in (vm, github, AGENT_PLAN_PROMPT))
+        return "".join("\n\n" + block for block in (AGENT_VM_PROMPT, github, AGENT_PLAN_PROMPT))
 
     def _workspace_tool_list(self):
         """The workspace's tools: the VM's, the browser and GitHub among them, and the plan."""
@@ -826,8 +817,8 @@ class DelegationLoop(AgentLoop):
         vm_tools = self.vm_tools.tools()
         self.workspace_names = frozenset(tool.name for tool in vm_tools)
         # Calls into the workspace wait while the user has its browser
-        # (_takeover_wait); asking the user and a domain request do not.
-        self.workspace_tools = self.workspace_names - {ASK_TOOL, "request_domain"}
+        # (_takeover_wait); asking the user does not.
+        self.workspace_tools = self.workspace_names - {ASK_TOOL}
         return [*vm_tools, *self.plan_tools.tools()]
 
     def _workspace_opener(self):
@@ -2466,8 +2457,8 @@ class DelegationLoop(AgentLoop):
             return None
         from app.services.agent_gate import outward
         # A call past the step's limit never runs (CALL_OVER_LIMIT), nor one
-        # of a tool the account lacks (request_domain without Pro: "unknown
-        # tool", bug hunt 2026-11-03): nothing to check.
+        # of a tool the account lacks ("unknown tool", bug hunt 2026-11-03):
+        # nothing to check. No tool waits here since 2026-11-04 (agent_gate).
         over_limit = getattr(value, "over_limit_ids", None) or set()
         calls = [call for call in value.tool_calls if call["id"] not in over_limit and outward(call)
                  and (call.get("function") or {}).get("name") in self.registry.tools]
@@ -2528,81 +2519,6 @@ class DelegationLoop(AgentLoop):
         # Only the user's "continue" runs the calls.
         gate.decision = "continue" if (yield from self._hold_wait()) == "continue" else "steer"
         return gate.decision
-
-    def _domain_wait(self, gate, call):
-        """A request for a domain (request_domain) waits for the reviewers'
-        verdicts on its step, like any outward call, and then always for the
-        user: never allowed by the app, nor by the reviewers, nor because the
-        user's words named the domain (Max, 2026-10-27). The card shows the
-        domain, the agent's reason and what the reviewers made of it
-        (request_hold with ``domain``). Returns "allow" (the user let it,
-        the domain is in ``allowed_domains``), "deny", "steer" (the user
-        wrote to the agent) or "run" for a call whose arguments are not
-        valid (the tool then says why). Stop ends the response."""
-        from app.services import agent_domains
-        asked = agent_domains.requested(call)
-        if asked is None:
-            return "run"
-        domain, reason = asked
-        if domain in self.allowed_domains or agent_domains.open_already(domain):
-            return "allow"
-        try:
-            chat = self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}
-            if domain in agent_domains.granted(chat):
-                self.allowed_domains.add(domain)
-                return "allow"
-        except Exception as exc:
-            logging.info("Agent domains unreadable category=%s", safe_exception(exc))
-        auditor = self.comparison.auditor if self.comparison is not None else None
-        verdict, halts = "unchecked", []
-        if gate is not None and auditor is not None and call["id"] in gate.call_ids:
-            announced = False
-            # As in _gate_wait: the turn's clock stands meanwhile.
-            self.gate_started = self.clock()
-            try:
-                while True:
-                    result = auditor.gate_result(gate)
-                    if result is not None:
-                        break
-                    if not announced:
-                        announced = True
-                        yield self.activity({"step_id": "gate", "id": f"gate-{gate.id}", "kind": "progress",
-                                             "text": "The reviewers check this request before you decide."})
-                    auditor.gate_wait(.2)
-                    if self.watch_error:
-                        raise self.watch_error
-                    self.cancellation.raise_if_cancelled()
-                    yield from self._events()
-            finally:
-                self.gate_paused += self.clock() - self.gate_started
-                self.gate_started = None
-            verdict, halts = result
-        details = {"reviewer": "", "provider": "", "kind": "domain", "reason": "", "gate": True,
-                   "entry": gate.entry if gate is not None else None, "step": "", "step_name": "",
-                   "step_kind": "", "step_source": "", "domain": domain, "domain_reason": reason,
-                   # "off": the user's setting has no reviewers here (agent-chat.js says so).
-                   "review": verdict if verdict in {"go", "halt"} else
-                             "off" if auditor is not None and auditor.unreviewed else "unchecked",
-                   **(auditor.gate_trace(gate) if gate is not None and auditor is not None
-                      and call["id"] in gate.call_ids else {})}
-        if halts:
-            shown = auditor.gate_hold(gate, halts)
-            details.update(reviewer=shown.get("reviewer", ""), provider=shown.get("provider", ""),
-                           reason=shown.get("reason", ""),
-                           **({"reasons": shown["reasons"]} if shown.get("reasons") else {}))
-        while True:
-            # A reviewer's ordinary halt may be open: it comes first.
-            decision = yield from self._hold_wait()
-            self.cancellation.raise_if_cancelled()
-            if decision == "steer" or self.closed.is_set():
-                return "steer"
-            if self.request_hold(details, step=gate.step if gate is not None else None):
-                break
-        decision = yield from self._hold_wait()
-        if decision == "continue":
-            self.allowed_domains.add(domain)
-            return "allow"
-        return "steer" if decision == "steer" else "deny"
 
     def _receive_hold(self, root):
         """The user's decision on the open hold, from the run's root (the watcher)."""
@@ -2787,8 +2703,6 @@ class DelegationLoop(AgentLoop):
                             **({"continue": "The user allowed it."} if asked == "confirm" else
                                {"continue": "The user saved the key in the workspace.",
                                 "deny": "The user did not give the key."} if asked == "secret" else {}))
-            elif hold.get("domain"):
-                said.update(timeout="No decision in 30 minutes: not allowed, the work goes on.")
             self.work_log.app("decision", said[decision])
         yield from self._events()
         with self.condition:
@@ -2796,9 +2710,7 @@ class DelegationLoop(AgentLoop):
         if queued is not None and decision != "stop":
             # The reviewer's halt that came meanwhile: before the next call.
             self.request_hold(queued)
-        # A domain nobody decided stays closed and the work goes on
-        # (_domain_wait: "deny"); before 2026-10-29 the response stopped.
-        if decision == "stop" or (decision == "timeout" and not asked and not hold.get("domain")):
+        if decision == "stop" or (decision == "timeout" and not asked):
             if decision == "timeout":
                 # Said as such, not as a plain stop.
                 self.completion.failure = {"code": "hold_timeout", "error": HOLD_TIMEOUT_STOPPED}
@@ -3472,27 +3384,7 @@ class DelegationLoop(AgentLoop):
                                 last_accepted = False
                                 continue
                             gate = getattr(value, "gate", None)
-                            # Only where the tool is the account's: a model without it
-                            # (Free, since f4094fe2) that calls it anyway gets "unknown
-                            # tool", never a card whose yes ends there (bug hunt 2026-10-31).
-                            if name == "request_domain" and name in self.registry.tools:
-                                # The user decides every domain (_domain_wait).
-                                decision = yield from self._domain_wait(gate, call)
-                                if decision == "steer":
-                                    stopped = HOLD_STEERED
-                                    not_run(call, stopped)
-                                    continue
-                                if decision == "deny":
-                                    from app.services.agent_domains import DOMAIN_DENIED, requested
-                                    domain = requested(call)[0]
-                                    results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
-                                                           "content": json.dumps({"error": DOMAIN_DENIED.format(
-                                                               domain=domain)})}
-                                    # The step's later calls counted on it.
-                                    stopped = CALL_AFTER_DENIAL.format(domain=domain)
-                                    last_accepted = False
-                                    continue
-                            elif gate is not None and call["id"] in gate.call_ids \
+                            if gate is not None and call["id"] in gate.call_ids \
                                     and (yield from self._gate_wait(gate)) == "steer":
                                 # Not run: the user wrote to the agent instead.
                                 stopped = HOLD_STEERED

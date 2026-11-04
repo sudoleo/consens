@@ -8,15 +8,20 @@
 # 1. enters a mount namespace of its own without the provider's management
 #    socket (/.sprite/api.sock: checkpoints, services, the VM's lifetime),
 #    its checkpoints and its logs; the runtimes in /.sprite/bin stay;
-# 2. becomes the agent's user with no way back to root (setpriv
+# 2. gives it a /tmp of its own (TMP, the same for all its commands, since
+#    2026-11-04): the browser's screen and Chrome run on this computer as
+#    the provider's user, and their sockets and locks are in the real /tmp,
+#    where the agent could put its own in their way;
+# 3. becomes the agent's user with no way back to root (setpriv
 #    --no-new-privs: no sudo, no setuid program) in a clean environment;
-# 3. goes to the folder and runs the program under coreutils timeout.
+# 4. goes to the folder and runs the program under coreutils timeout.
 # Until 2026-10-29 it also joined a cgroup that a takeover of the browser
 # froze (pause.py; agent_workspace.py "Takeover" says why no more).
 # Exit 125: the namespace could not be made, so nothing ran.
 set -u
 user=agent
 home=/home/agent
+tmp=/var/lib/consens/agent-tmp
 term=dumb
 
 if [ "${1:-}" = "--inside" ]; then
@@ -38,6 +43,8 @@ if [ "${1:-}" = "--inside" ]; then
       mount -t tmpfs -o ro,nosuid,nodev,noexec,size=4k,mode=0755 consens-hidden "$hidden" || exit 125
     fi
   done
+  [ -d "$tmp" ] && [ ! -L "$tmp" ] || exit 125
+  mount --bind "$tmp" /tmp || exit 125
   umask 022
   exec setpriv --reuid="$user" --regid="$user" --init-groups --no-new-privs --inh-caps=-all -- \
     /usr/bin/env -i HOME="$home" USER="$user" LOGNAME="$user" SHELL=/bin/bash LANG=C.UTF-8 TERM="$term" \

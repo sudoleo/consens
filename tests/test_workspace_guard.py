@@ -648,7 +648,7 @@ def test_only_verified_accounts_reach_the_workspace(monkeypatch):
 # --- The browser VM's own rules ------------------------------------------------------------
 
 def browser_file(name):
-    return agent_workspace.tool_files("browser")[name].decode()
+    return agent_workspace.tool_files()[name].decode()
 
 
 def test_chromes_policy_blocks_what_the_test_sprite_showed_and_keeps_playwright_working():
@@ -666,22 +666,26 @@ def test_chromes_policy_blocks_what_the_test_sprite_showed_and_keeps_playwright_
     assert policy["IncognitoModeAvailability"] == 1 and policy["BrowserGuestModeEnabled"] is False
     assert policy["AllowDeletingBrowserHistory"] is False and policy["ExtensionInstallBlocklist"] == ["*"]
     assert policy["PasswordManagerEnabled"] is False and policy["PrintingEnabled"] is False
-    assert {"file://*", "devtools://*", "chrome://flags", "chrome://restart", "chrome://quit", "127.0.0.1:9222",
-            "localhost:9222"} <= set(policy["URLBlocklist"])
+    assert {"file://*", "devtools://*", "chrome://flags", "chrome://restart", "chrome://quit"} <= set(
+        policy["URLBlocklist"])
+    # No debugging port since 2026-11-04 (cdp.py holds Chrome's pipe): nothing
+    # to block, and the agent's server may use 9222 like any port.
+    assert not [url for url in policy["URLBlocklist"] if "9222" in url]
     assert "DeveloperToolsAvailability" not in policy and not any(key.startswith("DnsOverHttps") for key in policy)
 
 
 def test_chrome_starts_only_under_its_rules_and_restarts_once_for_new_ones():
     display, harden = browser_file("display.sh"), browser_file("harden.sh")
-    rules = display.index('bash "$(dirname "$0")/harden.sh"')
+    rules = display.index('bash "$here/harden.sh"')
     failed = display[rules:display.index("fi", rules)]
     # A Chrome that runs under older rules ends too (the review of 2026-10-31).
-    assert rules < display.index("setsid nohup google-chrome") and "stop_chrome" in failed and "exit 1" in failed
-    assert 'flags="webgl-1 rules-$(cat "$dir/hardened" 2>/dev/null)"' in display
+    assert rules < display.index('setsid nohup python3 "$here/cdp.py"') and "stop_chrome" in failed \
+        and "exit 1" in failed
+    assert 'flags="webgl-1 pipe-1 rules-$(cat "$dir/hardened" 2>/dev/null)"' in display
     assert "/etc/opt/chrome/policies/managed/consens.json" in harden and 'cmp -s "$here/policy.json"' in harden
     assert "dpkg-divert" in harden and "exit 1" in harden and "openbox --reconfigure" in harden
-    # setup.sh no longer writes a policy of its own.
-    assert "policies/managed" not in browser_file("setup.sh")
+    # The browser's installation writes no policy of its own.
+    assert "policies/managed" not in browser_file("install.sh")
 
 
 def test_openbox_starts_no_program_and_shows_no_menu():
@@ -717,14 +721,15 @@ def test_the_relay_names_each_tabs_host_once_it_changes(monkeypatch):
         def __exit__(self, *args):
             return False
 
-    def urlopen(url, timeout):
-        assert url == "http://127.0.0.1:9222/json/list"
+    def cdp_get(path, timeout=3):
+        # Chrome's targets through cdp.py's socket (since 2026-11-04, no port).
+        assert path == "/json/list"
         try:
-            return Response(next(lists))
+            return Response(next(lists)).read()
         except StopIteration:
             done.set()
             raise OSError("gone")
-    monkeypatch.setattr(relay.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(relay, "cdp_get", cdp_get)
     monkeypatch.setattr(relay, "say", said.append)
     monkeypatch.setattr(relay, "policy_print", lambda: "fingerprint")
     monkeypatch.setattr(relay, "net_counters", lambda: {"rx": 1, "tx": 2, "boot": "b"})
@@ -754,13 +759,13 @@ def test_the_relays_watch_outlives_a_failed_look(monkeypatch):
         def __exit__(self, *args):
             return False
 
-    def urlopen(url, timeout):
-        looks.append(url)
+    def cdp_get(path, timeout=3):
+        looks.append(path)
         if len(looks) == 1:
             raise http.client.IncompleteRead(b"")
         done.set()
-        return Response()
-    monkeypatch.setattr(relay.urllib.request, "urlopen", urlopen)
+        return Response().read()
+    monkeypatch.setattr(relay, "cdp_get", cdp_get)
     monkeypatch.setattr(relay, "say", said.append)
     monkeypatch.setattr(relay, "policy_print", lambda: "")
     monkeypatch.setattr(relay, "net_counters", lambda: None)

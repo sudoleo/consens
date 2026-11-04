@@ -3,9 +3,10 @@ workspace-view.js, docs/agent-mode.md "Arbeitsplatz"): the live view of its
 Chrome, the user's takeover, resetting the browser and the list of sites it
 is logged in to (since 2026-11-02, agent-sign-ins.js).
 
-The view is a WebSocket the server carries through to the browser VM
-(agent_vm.browser_name): since the security audit of 2026-10-27 over a
-command on the provider's exec API, workspace_vm/browser/relay.py, whose
+The view is a WebSocket the server carries through to the workspace's VM
+(agent_vm.workspace_name; from 2026-10-27 to 2026-11-04 a browser VM of its
+own): since the security audit of 2026-10-27 over a command on the
+provider's exec API, workspace_vm/browser/relay.py, whose
 stdin and stdout carry the VNC bytes. The provider's token goes only to
 api.sprites.dev, never to an address of the VM (before, it went to the VM's
 own address, where a service answered that the agent could change). The
@@ -18,7 +19,7 @@ counts against the day's VM time (agent_vm_time.py) and never runs past it,
 and opening is rate limited. Its first state ("connecting") names what is
 left of the day's VM time (``left_seconds``, absent without a cap) for the
 panel's head (since 2026-10-30, runtime audit V4). While the server wakes
-the browser VM, "waking" carries about when the browser's start ends
+the VM, "waking" carries about when the browser's start ends
 (``until``, since 2026-11-02), as setup and starting do after it.
 
 How a view or terminal ended goes to the log with its close code, who ended
@@ -28,7 +29,7 @@ day ``ops_metrics/workspace-view-{day}`` counts them anonymously: opened,
 refused or failed by reason, how they ended, their open seconds and a bucket
 of their length (runtime audit I8; written off the event loop, never raised).
 
-The terminal (since 2026-10-28) is the user's own shell on the workbench,
+The terminal (since 2026-10-28) is the user's own shell in the workspace,
 the same way: a WebSocket carried to an exec with a TTY on the provider's
 API (agent_vm.terminal_argv), with the agent's rights and nothing more, one
 per account, its time VM time. The first message also names the terminal's
@@ -63,7 +64,7 @@ from app.api.routers.chat_history import _chat_uid
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.security import db_firestore, verify_user_token
-from app.services import agent_tunnel, agent_vm, agent_vm_time, agent_workspace, workspace_guard
+from app.services import agent_vm, agent_vm_time, agent_workspace, workspace_guard
 from app.services.agent_documents import Strict
 
 router = APIRouter()
@@ -134,9 +135,7 @@ def workspace_status(request: Request):
 def workspace_control(request: Request, payload: Control):
     """The user takes the browser over (refreshed by the open view every
     CONTROL_REFRESH_SECONDS, else it expires) or hands it back. Meanwhile
-    the agent waits (agent_workspace.set_control). While the user has the
-    browser, the localhost tunnel neither ends as idle nor stays ended: they
-    may be trying the agent's app (agent_tunnel.py)."""
+    the agent waits (agent_workspace.set_control)."""
     uid = owner(request)
     guard = workspace_guard.status(uid)
     if payload.holder == "user" and guard.closed:
@@ -144,10 +143,6 @@ def workspace_control(request: Request, payload: Control):
     record = agent_workspace.record(db_firestore, uid)
     if not record.get("name"):
         raise HTTPException(status_code=404, detail="Open the workspace first.")
-    if payload.holder == "user":
-        agent_tunnel.seed(uid, agent_workspace.listed(record, "tunnel_ports", int))
-        agent_tunnel.touch(uid)
-        agent_tunnel.resume(uid, backend_factory=_backend, db=db_firestore)
     try:
         vm = _backend()
         try:
@@ -228,20 +223,15 @@ def _sign_in(token):
 
 
 def _open(uid, seconds, start=None):
-    """The browser VM for the view (created if nothing used it yet, its
+    """The workspace for the view (created if nothing used it yet, its
     tools up to date): the exec address of its relay on the provider's API,
     for at most ``seconds`` (the VM ends the relay by itself then).
     ``start`` (agent_workspace.Start) learns what the browser's start has to do."""
     store = _store()
-    record = agent_workspace.record_for_view(store, uid, provider="sprites")
+    agent_workspace.record_for_view(store, uid, provider="sprites")
     vm = _backend()
     try:
-        name = agent_workspace.open_browser(vm, uid, start)
-        # The agent's app on localhost goes on working in the view after
-        # its run and a restart of the server, with the servers it started
-        # since (agent_tunnel.py).
-        agent_tunnel.seed(uid, agent_workspace.listed(record, "tunnel_ports", int))
-        agent_tunnel.resume(uid, backend_factory=_backend, db=store.db, find=True)
+        name = agent_workspace.open_workspace(vm, uid, start=start, db=store.db)
         argv = agent_vm.wrapped_command(f"exec python3 {agent_workspace.BROWSER_RELAY}", seconds + RELAY_GRACE_SECONDS,
                                         False)
         return vm.exec_url(name, argv, cwd=agent_vm.SERVER_HOME, stdin=True)
@@ -250,13 +240,14 @@ def _open(uid, seconds, start=None):
 
 
 def _open_terminal(uid, seconds, size):
-    """The workbench for the terminal (created if nothing used it yet, its
+    """The workspace for the terminal (created if nothing used it yet, its
     tools up to date): the exec address of a login shell with a TTY of
     ``size`` (cols, rows) as the agent's user, for at most ``seconds``."""
-    agent_workspace.record_for_view(_store(), uid, provider="sprites")
+    store = _store()
+    agent_workspace.record_for_view(store, uid, provider="sprites")
     vm = _backend()
     try:
-        name = agent_workspace.open_workbench(vm, uid)
+        name = agent_workspace.open_workspace(vm, uid, db=store.db)
         return vm.exec_url(name, agent_vm.terminal_argv(seconds + RELAY_GRACE_SECONDS), cwd=agent_vm.SERVER_HOME,
                            stdin=True, tty=size)
     finally:
@@ -293,7 +284,7 @@ async def _state(websocket, state, **fields):
     return True
 
 
-# While the server wakes the browser VM for the view (_open: its status, a
+# While the server wakes the VM for the view (_open: its status, a
 # VM that slept, its tools, a new one's setup), the view hears about when
 # the start ends ("waking" with "until"). Until 2026-11-02 the first estimate
 # came with the relay's first state, after the wake, and a view that waited
@@ -649,7 +640,7 @@ def relay_line(uid, line):
     """One JSON line of the relay's stderr: its state, which the caller
     passes on, or what the safety rules count (a page's host with who
     steered then, the VM's network counters, its Chrome policy). Anything
-    else is dropped: the browser VM is not trusted."""
+    else is dropped: what runs on the VM is not trusted."""
     try:
         data = json.loads(line) if len(line) <= STATE_LINE_BYTES else None
     except ValueError:

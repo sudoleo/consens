@@ -31,10 +31,6 @@
     "chrome://net-export",
     "chrome://net-internals",
     "chrome://restart",
-    "chrome://quit",
-    "127.0.0.1:9222",
-    "localhost:9222",
-    "[::1]:9222",
-    "0.0.0.0:9222"
+    "chrome://quit"
   ]
 }

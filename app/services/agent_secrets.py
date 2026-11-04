@@ -56,7 +56,7 @@ def path(name):
 
 
 def save(vm, uid, name, value, cancellation, db=None):
-    """Writes the key to the account's workbench; VMUnavailable when it
+    """Writes the key into the account's workspace; VMUnavailable when it
     could not. ``value`` loses only its surrounding whitespace. Its name
     goes on the account's record (never the value)."""
     from app.services import agent_workspace
@@ -65,7 +65,7 @@ def save(vm, uid, name, value, cancellation, db=None):
     value = value.strip()
     if not value or len(value) > VALUE_CHARS:
         raise ValueError("The key is empty or too long.")
-    workbench = agent_workspace.open_workbench(vm, uid, cancellation)
+    workbench = agent_workspace.open_workspace(vm, uid, cancellation, db=db)
     outcome = vm.run(workbench, agent_vm.agent_argv(["bash", "-c", SAVE_SCRIPT, "bash", name], SAVE_SECONDS,
                                                     agent_vm.HOME),
                      cwd="/", timeout=SAVE_SECONDS, on_output=lambda stream, chunk: None,

@@ -1,4 +1,4 @@
-"""consens.io browser VM: the live view's way to the VNC server
+"""consens.io workspace: the live view's way to the VNC server
 (routers/agent_workspace.py; since 2026-10-27 instead of a gateway service
 behind the VM's own address).
 
@@ -6,7 +6,7 @@ The server runs this over the provider's exec API, with the provider's token
 on api.sprites.dev only, and carries the user's WebSocket through it: the
 view's bytes arrive on stdin, the VNC server's leave on stdout. Before that,
 stderr says how far it is, one JSON line each: {"state": "setup"} while
-setup.sh installs the browser (once), {"state": "starting"} while display.sh
+install.sh installs the browser (once), {"state": "starting"} while display.sh
 starts it, {"state": "ready"} once the VNC server answers, or
 {"state": "error"}. It ends with stdin (the view closed) or the VNC server.
 
@@ -26,7 +26,7 @@ line is a count in Firestore, the counters' rules are per day), and
 {"policy": fingerprint} of Chrome's policy once Chrome runs. Only the host,
 never the address's path or the page.
 
-Standard library only, so it runs before setup.sh installed anything.
+Standard library only, so it runs before install.sh installed anything.
 """
 import hashlib
 import json
@@ -35,7 +35,6 @@ import socket
 import subprocess
 import sys
 import threading
-import urllib.request
 from urllib.parse import urlsplit
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -44,8 +43,10 @@ MARKER = os.path.expanduser("~/.consens/browser/setup-done-2")
 VNC = os.path.expanduser("~/.consens/browser/vnc.sock")
 CHUNK = 65536
 KEEP_SECONDS = 10
-# The safety rules' look at the browser (watch).
-TARGETS = "http://127.0.0.1:9222/json/list"
+# The safety rules' look at the browser (watch): Chrome's targets through
+# cdp.py's socket (since 2026-11-04; Chrome has no port any more).
+CDP = os.path.expanduser("~/.consens/browser/cdp.sock")
+TARGETS = "/json/list"
 LOOK_SECONDS = 1
 NET_SECONDS = 60
 POLICY = "/etc/opt/chrome/policies/managed/consens.json"
@@ -121,8 +122,7 @@ def watch(done, look=LOOK_SECONDS, net=NET_SECONDS):
                 counters = net_counters()
                 if counters:
                     say({"net": counters})
-            with urllib.request.urlopen(TARGETS, timeout=3) as response:
-                targets = json.loads(response.read().decode("utf-8"))
+            targets = json.loads(cdp_get(TARGETS).decode("utf-8"))
             now = {}
             for target in targets if isinstance(targets, list) else ():
                 if isinstance(target, dict) and target.get("type") == "page":
@@ -135,6 +135,26 @@ def watch(done, look=LOOK_SECONDS, net=NET_SECONDS):
             shown = now
         except Exception:
             continue
+
+
+def cdp_get(path, timeout=3):
+    """``GET path`` on cdp.py's socket: the body of its answer."""
+    import http.client
+
+    class Connection(http.client.HTTPConnection):
+        def connect(self):
+            self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            self.sock.settimeout(timeout)
+            self.sock.connect(CDP)
+    connection = Connection("localhost", timeout=timeout)
+    try:
+        connection.request("GET", path)
+        response = connection.getresponse()
+        if response.status != 200:
+            raise OSError(f"HTTP {response.status}")
+        return response.read()
+    finally:
+        connection.close()
 
 
 def run(script, *args):
@@ -173,7 +193,7 @@ def pipe(read, write, done):
 def main():
     if not os.path.exists(MARKER):
         state("setup")
-    if not run("setup.sh"):
+    if not run("install.sh"):
         state("error")
         return 1
     state("starting")

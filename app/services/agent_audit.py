@@ -209,8 +209,9 @@ HALT_QUOTE_CHARS = 400
 # What the card shows of an entry without such a quote.
 HALT_STEP_CHARS = 300
 
-# Before a call on agent_gate.outward's list (a request for a domain; until
-# 2026-11-02 also a memory change with outside content in view), each
+# Before a call on agent_gate.outward's list (a request for a domain until
+# 2026-11-04, a memory change with outside content in view until 2026-11-02;
+# none since), each
 # reviewer that can answer
 # gets one gate round, without web search: the step's calls, which run only
 # once every one of them said "go" (since 2026-10-27). A halt, or no reviewer
@@ -219,11 +220,6 @@ HALT_STEP_CHARS = 300
 GATE_NOTE = ("Before it runs: the agent's step in entry {entry} calls these, which act outside its workspace and "
              "have not run yet:\n{calls}\nThey run only once every reviewer let them. Reply with your marks and "
              "\"gate\": \"go\", or with a halt for entry {entry}.")
-# A request for a domain (agent_domains.py) goes to the user whatever the
-# reviewers say: their verdict is what the user reads next to it.
-GATE_DOMAIN_NOTE = ("request_domain asks the user to let the agent's workspace reach that domain for this chat; the "
-                    "user decides in any case and sees your verdict. Say go when it fits the user's task, or halt "
-                    "with your reason.")
 GATE_GO = frozenset({"go", "run", "allow", "allowed", "yes", "ok", "continue", "proceed"})
 # The card's kind when no reviewer could answer (AnswerAudit.gate_hold).
 GATE_UNCHECKED = "unchecked"
@@ -293,10 +289,9 @@ REVIEW_PROMPT_BODY = (
     "final round.\n\n"
     "Every step runs at once, browser clicks included, so a halt stops the work before the agent's next step. The "
     "agent asks the user before a step that acts in their name, such as sending, posting, buying or deleting "
-    "(ask_user). Before one kind of step the app asks you first: a request to let the workspace reach another "
-    "domain. That round names the step's "
-    "entry and its calls, which have not run yet and run only once every reviewer let them. Reply \"gate\": \"go\" "
-    "when the user's request covers the calls, or a halt for that entry when one of the reasons above applies.\n\n"
+    "(ask_user). Should the app ask you before a step, that round names the step's entry and its calls, which "
+    "have not run yet and run only once every reviewer let them. Reply \"gate\": \"go\" when the user's request "
+    "covers the calls, or a halt for that entry when one of the reasons above applies.\n\n"
     "Reply with only this JSON object and no other text (a mark's quote only in the final round, halt only when "
     "needed, gate only when a round asks before a step):\n"
     '{{"marks": [{{"quote": "...", "entry": 12, "kind": "wrong", "note": "...", "source": "https://..."}}], '
@@ -342,17 +337,16 @@ BRIEF_TOOLS = (
     ("search_pictures", "search_pictures finds pictures with Brave's image search, each with its page and the "
                         "page's title; the agent chooses by those, and the user sees only the ones it shows."),
     ("prepare_", "A prepare_ tool changes nothing by itself: the user confirms or dismisses it on a card."),
-    ("vm_", "The VM is the agent's own Linux workbench, as a user without sudo: installing packages there is "
-            "normal work. It reaches package registries only; the user's own systems are not in it."),
-    # Only with the desktop (routers/agent.py desktop_allowed).
-    ("request_domain", "Another domain only after the user allowed it for the chat (request_domain)."),
-    ("browser", "browser acts in the user's Chrome on a computer of its own, signed in where the user signed in. "
-                "Sign-ins, passwords and payments are the user's: ask_user hands the browser to them, and a step "
-                "in their name (sending, posting, buying, deleting) waits for their yes through ask_user. "
-                "localhost there is the agent's own workbench, where it serves what it builds for the user."),
+    ("vm_", "The VM is the agent's own Linux workspace, as a user without sudo: installing packages there is "
+            "normal work. It reaches the open web; the user's own systems are not in it."),
+    ("browser", "browser acts in the user's Chrome in the same workspace, signed in where the user signed in, "
+                "out of reach of the agent's commands. Sign-ins, passwords and payments are the user's: ask_user "
+                "hands the browser to them, and a step in their name (sending, posting, buying, deleting) waits "
+                "for their yes through ask_user. localhost there is the agent's own servers, where it serves what "
+                "it builds for the user."),
     ("note_sign_in", "note_sign_in keeps the list of sites the browser is logged in to, which the agent reads with "
                      "every message and the user sees in their settings."),
-    ("ask_user", "A key or token the user gave through ask_user lies in ~/.secrets on the workbench: the agent "
+    ("ask_user", "A key or token the user gave through ask_user lies in ~/.secrets in the workspace: the agent "
                  "reads it there for the command that needs it, which is its purpose."),
     # No quote of the user since 2026-10-28, no gate since 2026-11-02: the
     # agent decides, the user sees and can undo every change.
@@ -831,10 +825,7 @@ class Gate:
     def note(self):
         lines = [_call_line((call.get("function") or {}).get("name") or "", (call.get("function") or {}).get("arguments"))
                  for call in self.calls]
-        note = GATE_NOTE.format(entry=self.entry, calls=_dumps(lines))
-        if any((call.get("function") or {}).get("name") == "request_domain" for call in self.calls):
-            note += "\n" + GATE_DOMAIN_NOTE
-        return note
+        return GATE_NOTE.format(entry=self.entry, calls=_dumps(lines))
 
 
 # What a call shows of itself on the halt's card: the command, the address or

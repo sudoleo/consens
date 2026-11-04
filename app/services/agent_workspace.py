@@ -1,29 +1,45 @@
 """The account's workspace (since 2026-10-27, docs/agent-mode.md "Workspace"):
-two Linux VMs for all of an account's chats and its user, like a
-colleague's computer and its browser. The agent works on the workbench
-(agent_vm.workspace_name, agent_vm_tools.py) as a user of its own; the
-browser (agent_vm.browser_name) holds Chrome, which the user watches and
-steers live (routers/agent_workspace.py, workspace-view.js) and the agent
-uses through the ``browser`` tool (agent_browser.py). No code of the agent
-runs on the browser, and the workbench reaches only package registries and
-what the user allowed for the chat (agent_domains.py): security audit
-2026-10-27, Max's option A. localhost in the browser is the workbench's
-(agent_tunnel.py, since 2026-10-29), one direction only.
+one Linux VM for all of an account's chats and its user, like a colleague's
+computer with its browser (agent_vm.workspace_name). The agent works there
+as a user of its own (agent_vm_tools.py); Chrome runs there as the
+provider's user, which the user watches and steers live
+(routers/agent_workspace.py, workspace-view.js) and the agent uses through
+the ``browser`` tool (agent_browser.py). localhost in that browser is the
+agent's own servers, no tunnel between them.
 
-Record and lease: ``users/{uid}/chat_state/agent_workspace`` names both VMs
-before the provider creates either, so the account's deletion always finds
-them, and leases the workspace to one chat's message at a time (``lease``:
-chat, turn, until). A lease ends with its message (release) or by itself
+From 2026-10-27 to 2026-11-04 the browser had a VM of its own and the
+workbench reached only the package registries (security audit 2026-10-27,
+Max's option A). Every feature between them needed a bridge (a localhost
+tunnel, uploads and downloads copied from VM to VM, warm-ups of two VMs),
+each bridge a rule of its own, and the agent still sent a key of
+~/.secrets through the browser's upload (Max, 2026-11-04: "Sudo ist um
+einiges sicherer als eine von uns implementierte Sicherheitslayer"). Since
+then one VM, and what the agent must not reach it cannot reach by the
+computer's own means: Unix users and file modes. Chrome's protocol is a
+socket in the provider's home (workspace_vm/browser/cdp.py, no TCP port),
+its screen asks for a cookie from there and starts only on its own socket
+(display.sh), and the agent's commands have a /tmp of their own
+(agent-run). The network is open for the whole VM, as it was for the
+browser (agent_vm.RULES, Max's decision). What a key the user gave the agent
+can do, the agent can do with it: that holds on any computer.
+
+Record and lease: ``users/{uid}/chat_state/agent_workspace`` names the VM
+before the provider creates it, so the account's deletion always finds it,
+and leases the workspace to one chat's message at a time (``lease``: chat,
+turn, until). A lease ends with its message (release) or by itself
 LEASE_SECONDS after its last VM call, so a run that died never blocks the
-workspace. The user's live view takes no lease: it is their computer.
+workspace. The user's live view takes no lease: it is their computer. A
+record that still names the browser VM of before (``browser``) has it
+deleted at the workspace's next start (retire_old_browser): the sign-ins are
+made again once.
 
-Tools in the VMs (workspace_vm/): on the workbench ``agent-run``, which every
-command and file operation of the agent goes through, and its setup (the
-agent's user, the move from the layout before); on the browser
-``browser.py``, the one program the browser tool calls, the browser's setup
-and start, the live view's relay and the tunnel to the workbench. They are written again whenever their
-VERSION changed (prepare, prepare_browser), at a message's first call of
-either or when the view opens.
+Tools in the VM (workspace_vm/): ``agent-run``, which every command and file
+operation of the agent goes through, and setup.sh (the agent's user, its
+/tmp, the moves from the layouts before); ``browser.py``, the one program
+the browser tool calls, with cdp.py, the browser's installation, start and
+rules and the live view's relay. They are written again whenever their
+VERSION changed (prepare), at a message's first call or when the view or
+terminal opens.
 
 Folders and notes (like Claude Code's memory): each chat's folder names its
 chat in CHAT_MARKER (title, start, id), so a chat finds another's files; and
@@ -34,29 +50,28 @@ the first VM result of every message (open_chat), as data; the user's memory
 
 Takeover: the account's record says the user has the browser until a time
 the open view keeps moving on (CONTROL_SECONDS, ``control``), and so does
-``control.json`` on the browser. While it holds, the agent waits: the server
-holds its calls (user_has_browser, VMSession.wait_for_user) and browser.py
-refuses to act. What already runs on the workbench goes on: from 2026-10-27
-to 2026-10-29 pause.py froze it, from the time the browser lived on the
-workbench, where the agent's processes could have watched the user type.
-On a VM of its own nothing of the workbench sees the browser, and the
-agent's server must answer it while the user tries the agent's app
-(agent_tunnel.py). The reviewers follow what the agent does, never what the
-user does.
+``control.json`` next to the browser. While it holds, the agent waits: the
+server holds its calls (user_has_browser, VMSession.wait_for_user) and
+browser.py refuses to act. What already runs of the agent goes on: from
+2026-10-27 to 2026-10-29 pause.py froze it, from the time the browser lived
+on the workbench without users of its own, where the agent's processes could
+have watched the user type. Now they reach neither the screen nor Chrome,
+and the agent's server must answer the browser while the user tries the
+agent's app. The reviewers follow what the agent does, never what the user
+does.
 
-A new account's workspace (provision, since 2026-11-02): each VM's first
-setup installs Chrome and the rest (about a minute each). A colleague of
-Max's waited for both on her first try ("every normal user is gone then"),
+A new account's workspace (provision, since 2026-11-02): its first setup
+installs Chrome, its screen and the rest (about a minute). A colleague of
+Max's waited for it on her first try ("every normal user is gone then"),
 two minutes after her first message to the agent. So the account's first
-message to the agent makes both VMs in the background, while the user
-still talks to the agent; the first call that needs one waits only for
-what is left (setup_lock, the browser's own setup lock). The time a start
+message to the agent makes the VM in the background, while the user still
+talks to the agent; the first call that needs it waits only for what is
+left (setup_lock, the browser's own installation lock). The time a start
 still takes (START_SECONDS, start_until) is what the chat and the live view
 count down.
 """
 from __future__ import annotations
 
-from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 import hashlib
@@ -75,23 +90,19 @@ WORKSPACE_DOC = "agent_workspace"
 LEASE_SECONDS = 600
 # A lease is moved on when a VM call finds less than this left.
 LEASE_RENEW_SECONDS = LEASE_SECONDS - 120
-# The server's own files, in the provider's home on each VM; on the
-# workbench the agent's user cannot open it.
+# The server's own files, in the provider's home, which the agent's user
+# cannot open.
 WORKSPACE_DIR = agent_vm.TOOLS_DIR
 VERSION_PATH = WORKSPACE_DIR + "/version"
 BROWSER_STATE = agent_vm.SERVER_HOME + "/.consens/browser"
 BROWSER_CONTROL = BROWSER_STATE + "/control.json"
 BROWSER_PROFILE = BROWSER_STATE + "/profile"
 BROWSER_UPLOADS = BROWSER_STATE + "/uploads"
-# What the browser downloaded, until agent_browser copies it to the workbench
-# (workspace_vm/browser/browser.py DOWNLOADS).
+# What the browser downloaded, until agent_browser copies it into the chat's
+# folder (workspace_vm/browser/browser.py DOWNLOADS).
 BROWSER_DOWNLOADS = BROWSER_STATE + "/downloads"
 BROWSER_HELPER = WORKSPACE_DIR + "/browser.py"
 BROWSER_RELAY = WORKSPACE_DIR + "/relay.py"
-BROWSER_TUNNEL = WORKSPACE_DIR + "/tunnel.py"
-# tunnel.py on the workbench, where the agent's user reads it (setup.sh
-# installs it there, root's, 0644): its connect runs as that user.
-WORKBENCH_TUNNEL = "/usr/local/lib/consens/tunnel.py"
 NOTES_PATH = HOME + "/NOTES.md"
 # What of the notes comes with a message's first VM result; the rest the agent
 # reads itself.
@@ -102,17 +113,16 @@ OLD_GATEWAY_SERVICE = "view"
 # CONTROL_REFRESH_SECONDS while the user has the browser).
 CONTROL_SECONDS = 90
 CONTROL_REFRESH_SECONDS = 30
-WORKBENCH_FILES = ("agent-run", "setup.sh", "tunnel.py")
-# harden.sh with policy.json and openbox's two files: the rules that hold
-# whoever steers Chrome (since 2026-10-30, workspace_guard.py).
-BROWSER_FILES = ("browser.py", "display.sh", "harden.sh", "openbox-menu.xml", "openbox-rc.xml", "policy.json",
-                 "relay.py", "setup.sh", "tunnel.py")
+# The tools of the VM, by their folder in workspace_vm/: the agent's side
+# (agent-run, setup.sh) and the browser's (browser.py and cdp.py, its
+# installation, start and rules: harden.sh with policy.json and openbox's two
+# files hold whoever steers Chrome, since 2026-10-30, workspace_guard.py; the
+# live view's relay). One folder on the VM since 2026-11-04: the browser's
+# setup.sh is install.sh since then.
+TOOL_FILES = {"workbench": ("agent-run", "setup.sh"),
+              "browser": ("browser.py", "cdp.py", "display.sh", "harden.sh", "install.sh", "openbox-menu.xml",
+                          "openbox-rc.xml", "policy.json", "relay.py")}
 SETUP_SECONDS = 180
-# setup.sh installs headless Chrome from Google's own server, which the
-# workbench's policy closes (agent_vm.WORKBENCH_RULES): prepare opens it
-# around the setup alone (_open_for_setup).
-CHROME_DOMAIN = "dl.google.com"
-CHROME_RULE = {"domain": CHROME_DOMAIN, "action": "allow"}
 _FILES = Path(__file__).with_name("workspace_vm")
 
 # What the agent reads when another chat has the workspace; the activity
@@ -133,59 +143,30 @@ class Claim:
     restored: bool
     title: str = ""
     started: str = ""
-    # The domains the user allowed for this chat (agent_domains.py).
-    domains: tuple = ()
     # The name of the chat's folder as the chat records it (open_chat),
     # empty before its first message since 2026-10-28.
     folder: str = ""
-    # Since 2026-10-29: the ports the browser reached on the workbench
-    # (agent_tunnel.py) and the names of the keys the user gave the agent
-    # (agent_secrets.py), both kept on the account's record across restarts.
-    tunnel_ports: tuple = ()
+    # Since 2026-10-29: the names of the keys the user gave the agent
+    # (agent_secrets.py), kept on the account's record across restarts.
     secrets: tuple = ()
-    # The workbench's network rules as the last message confirmed them at
-    # its end (policy_key), or None when nobody knows them for sure. The
-    # claim leaves the record's key unknown until this message's release
-    # says it again (release), so a run that died never leaves a key behind
-    # that the workbench does not have (runtime audit 2026-10-30, T6).
-    policy: str | None = None
 
 
-def policy_key(rules):
-    """A short fingerprint of network rules, to see whether they changed."""
-    return hashlib.sha256(json.dumps(list(rules), sort_keys=True).encode()).hexdigest()[:16]
+def tool_files():
+    """The VM's tools as written there (LF line ends whatever the checkout)."""
+    return {name: (_FILES / folder / name).read_bytes().replace(b"\r\n", b"\n")
+            for folder, names in TOOL_FILES.items() for name in names}
 
 
-# Workbenches whose rules this process changed and could not confirm back
-# (_open_for_setup's restore failed): their next start sets the rules
-# whatever the record says.
-_policy_unsure: set[str] = set()
-
-
-def policy_unsure(name):
-    return name in _policy_unsure
-
-
-def tool_files(kind="workbench"):
-    """A VM's tools as written there (LF line ends whatever the checkout):
-    its own folder's, else the ones both VMs run (workspace_vm/tunnel.py)."""
-    names = WORKBENCH_FILES if kind == "workbench" else BROWSER_FILES
-    return {name: (_FILES / kind / name if (_FILES / kind / name).exists() else _FILES / name)
-            .read_bytes().replace(b"\r\n", b"\n") for name in names}
-
-
-def _version(kind):
-    digest = hashlib.sha256(kind.encode() + b"\0" + agent_vm.AGENT_USER.encode() + b"\0")
-    for name, data in sorted(tool_files(kind).items()):
+def _version():
+    digest = hashlib.sha256(b"workspace\0" + agent_vm.AGENT_USER.encode() + b"\0")
+    for name, data in sorted(tool_files().items()):
         digest.update(name.encode() + b"\0" + data + b"\0")
-    if kind == "browser":
-        # Its network rules come with a new version (prepare_browser).
-        digest.update(json.dumps(agent_vm.BROWSER_RULES, sort_keys=True).encode())
+    # Its network rules come with a new version (prepare).
+    digest.update(json.dumps(agent_vm.RULES, sort_keys=True).encode())
     return digest.hexdigest()[:16]
 
 
-VERSION = _version("workbench")
-BROWSER_VERSION = _version("browser")
+VERSION = _version()
 
 
 # How long a start of a VM takes until its first call can run, by what it
@@ -244,11 +225,11 @@ def start_until(uid, kinds=("browser", "workbench"), besides=None):
     return latest
 
 
-# One setup of a workbench at a time in this process (one server instance):
-# the account's provisioning and a message's start (VMSession._bench) never
-# run setup.sh side by side, whose rules for its download the other would
-# undo; the second waits and finds the version there. The browser VM's
-# setup holds a lock of its own on the VM (workspace_vm/browser/setup.sh).
+# One setup of a workspace at a time in this process (one server instance):
+# the account's provisioning, a message's start (VMSession._bench), the
+# browser's warm-up and the view never run setup.sh side by side; the second
+# waits and finds the version there. The browser's installation holds a lock
+# of its own on the VM (workspace_vm/browser/install.sh).
 _setup_locks: dict[str, threading.Lock] = {}
 _setup_locks_lock = threading.Lock()
 
@@ -279,12 +260,12 @@ def _held_by_other(lease, chat_id, now):
 
 def claim(store, uid, chat_id, turn_id, *, provider):
     """In one transaction: the account may write, the chat is still active,
-    the account's workspace (both VMs) is recorded on the account and the
-    chat (before the provider creates either) and leased to this message.
-    Raises WorkspaceBusy when another chat's message holds it. Returns a
-    Claim: whether the workspace was restored since this chat last used it,
-    the chat's title and start for its folder (open_chat) and the
-    domains its user allowed (agent_domains.py)."""
+    the account's workspace is recorded on the account and the chat (before
+    the provider creates it) and leased to this message. Raises
+    WorkspaceBusy when another chat's message holds it. Returns a Claim:
+    whether the workspace was restored since this chat last used it, the
+    chat's title and start for its folder (open_chat) and the names of the
+    account's keys."""
     from app.services import persistence_guard
     from app.services.chat_store import ChatNotFound
     name = agent_vm.workspace_name(uid)
@@ -309,17 +290,10 @@ def claim(store, uid, chat_id, turn_id, *, provider):
         outcome["started"] = started.date().isoformat() if isinstance(started, datetime) else ""
         folder = used.get("folder")
         outcome["folder"] = folder if isinstance(folder, str) else ""
-        from app.services import agent_domains
-        outcome["domains"] = agent_domains.granted(chat_data)
-        outcome["tunnel_ports"] = listed(record, "tunnel_ports", int)
         outcome["secrets"] = listed(record, "secret_names", str)
-        policy = record.get("policy")
-        outcome["policy"] = policy if isinstance(policy, str) else None
         tx.set(workspace, {**{key: value for key, value in record.items() if key != "lease"},
-                           "provider": provider, "name": name, "browser": agent_vm.browser_name(uid),
+                           "provider": provider, "name": name,
                            "created_at": record.get("created_at") or now.isoformat(),
-                           # Unknown while this message may change the rules (Claim.policy).
-                           "policy": None,
                            "lease": {"chat_id": chat_id, "turn_id": turn_id, "until": now + timedelta(
                                seconds=LEASE_SECONDS)}})
         tx.update(chat, {"agent_vm": {**{key: value for key, value in used.items()
@@ -329,9 +303,8 @@ def claim(store, uid, chat_id, turn_id, *, provider):
                                       "restores_seen": restores}})
     store._transaction(operation)
     return Claim(restored=outcome.get("restored", False), title=outcome.get("title", ""),
-                 started=outcome.get("started", ""), domains=tuple(outcome.get("domains") or ()),
-                 folder=outcome.get("folder", ""), tunnel_ports=outcome.get("tunnel_ports", ()),
-                 secrets=outcome.get("secrets", ()), policy=outcome.get("policy"))
+                 started=outcome.get("started", ""), folder=outcome.get("folder", ""),
+                 secrets=outcome.get("secrets", ()))
 
 
 def listed(record, field, kind):
@@ -342,9 +315,8 @@ def listed(record, field, kind):
 
 def remember_values(db, uid, field, values, *, keep):
     """Adds ``values`` to the list ``field`` of the account's record, the
-    newest last and at most ``keep`` (agent_tunnel's ports, agent_secrets'
-    names): the record outlives a restart of the server, the process's
-    memory does not."""
+    newest last and at most ``keep`` (agent_secrets' names): the record
+    outlives a restart of the server, the process's memory does not."""
     doc = ref(db, uid)
     current = [value for value in ((doc.get().to_dict() or {}).get(field) or []) if value not in values]
     doc.set({field: [*current, *values][-keep:]}, merge=True)
@@ -423,17 +395,14 @@ def renew(store, uid, turn_id):
     return held["ours"]
 
 
-def release(store, uid, turn_id, policy=None):
-    """Ends this message's lease; failures only cost the wait for its expiry.
-    ``policy``: the workbench's rules as this message leaves them, confirmed
-    (policy_key), or None when it does not know them for sure; the next
-    message sets its rules unless they are confirmed the same (Claim.policy)."""
+def release(store, uid, turn_id):
+    """Ends this message's lease; failures only cost the wait for its expiry."""
     workspace = ref(store.db, uid)
 
     def operation(tx):
         record = workspace.get(transaction=tx).to_dict() or {}
         if (record.get("lease") or {}).get("turn_id") == turn_id:
-            tx.update(workspace, {"lease": None, "policy": policy})
+            tx.update(workspace, {"lease": None})
     try:
         store._transaction(operation)
     except Exception as exc:
@@ -495,13 +464,10 @@ def mark_restored(store, uid):
 
 
 def record_for_view(store, uid, *, provider):
-    """The view may open the workspace before any chat used it: both VMs
-    recorded on the account (no lease) before the provider creates one.
+    """The view may open the workspace before any chat used it: the VM
+    recorded on the account (no lease) before the provider creates it.
     Returns the record as it was."""
-    from app.services import agent_tunnel, persistence_guard
-    # The view opening may start the localhost tunnel: it is wanted from now
-    # on, before claim_view names the view (agent_tunnel.viewing).
-    agent_tunnel.viewing(uid)
+    from app.services import persistence_guard
     workspace = ref(store.db, uid)
     seen = {}
 
@@ -509,10 +475,8 @@ def record_for_view(store, uid, *, provider):
         persistence_guard.ensure_account_write_allowed(uid=uid, db=store.db, transaction=tx)
         current = workspace.get(transaction=tx).to_dict() or {}
         seen["record"] = current
-        if (current.get("name") != agent_vm.workspace_name(uid)
-                or current.get("browser") != agent_vm.browser_name(uid)):
+        if current.get("name") != agent_vm.workspace_name(uid):
             tx.set(workspace, {**current, "provider": provider, "name": agent_vm.workspace_name(uid),
-                               "browser": agent_vm.browser_name(uid),
                                "created_at": current.get("created_at") or _now().isoformat()})
     store._transaction(operation)
     return seen.get("record") or {}
@@ -528,8 +492,8 @@ VIEW_CHECK_SECONDS = 30
 def claim_view(store, uid, seconds, kind="view"):
     """This view is the account's one from now on (record_for_view made the
     record): its id, which the view checks (holds_view). ``kind``: "view"
-    for the browser's live view, "terminal" for the user's terminal on the
-    workbench; each kind has one at a time."""
+    for the browser's live view, "terminal" for the user's terminal; each
+    kind has one at a time."""
     view_id = secrets.token_hex(8)
     workspace = ref(store.db, uid)
 
@@ -537,38 +501,67 @@ def claim_view(store, uid, seconds, kind="view"):
         if workspace.get(transaction=tx).exists:
             tx.update(workspace, {kind: {"id": view_id, "until": _now() + timedelta(seconds=seconds)}})
     store._transaction(operation)
-    if kind == "view":
-        _viewing(uid)
     return view_id
 
 
 def holds_view(db, uid, view_id, kind="view"):
     """Whether ``view_id`` is still the account's view of that kind (no newer
-    one took over). The open view asks every VIEW_CHECK_SECONDS: for the
-    browser's view that is its heartbeat, which keeps the localhost tunnel
-    wanted while the user may look at the agent's app (agent_tunnel.viewing)."""
-    held = (record(db, uid).get(kind) or {}).get("id") == view_id
-    if held and kind == "view":
-        _viewing(uid)
-    return held
+    one took over). The open view asks every VIEW_CHECK_SECONDS."""
+    return (record(db, uid).get(kind) or {}).get("id") == view_id
 
 
-def _viewing(uid):
-    from app.services import agent_tunnel
-    agent_tunnel.viewing(uid)
-
-
-def open_workbench(vm, uid, cancellation=None):
-    """The account's workbench for the user's terminal and the account's
-    provisioning: created with the base network rules where nothing made it
-    yet (on an existing one a running chat's message keeps the rules it
-    set), its tools and the agent's user up to date (prepare); its name."""
+def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=None):
+    """The account's VM for whatever needs it (a message's start, the
+    browser's warm-up, the view, the terminal, the provisioning): created
+    with the network rules where nothing made it yet, its tools and the
+    agent's user up to date (prepare), under the setup lock; its name.
+    ``start`` (a Start) learns what the start has to do: the setup of a VM
+    made just now, else how it wakes (the provider's status, a hint only: a
+    VM that just ran may say "cold" too). ``db``: the browser VM of before
+    goes once the workspace is ready (retire_old_browser). ``timeout``: at
+    most this long for a setup (prepare)."""
     name = agent_vm.workspace_name(uid)
-    with setup_lock(name):
-        if not vm.exists(name):
-            vm.ensure(name, agent_vm.WORKBENCH_RULES)
-        prepare(vm, name, cancellation)
+    lock = setup_lock(name)
+    while not lock.acquire(timeout=.2):
+        if cancellation is not None:
+            cancellation.raise_if_cancelled()
+    try:
+        # A VM made just now has no version yet: prepare sets its rules.
+        created = vm.ensure(name)
+        if start is not None:
+            phase = "setup" if created else {"cold": "cold", "warm": "warm"}.get(getattr(vm, "statuses", {}).get(name))
+            if phase:
+                start.phase(phase)
+        prepare(vm, name, cancellation, timeout=timeout,
+                on_setup=None if start is None else (lambda: start.phase("setup" if created else "update")))
+    finally:
+        lock.release()
+    if db is not None:
+        retire_old_browser(db, uid, vm)
     return name
+
+
+# Accounts whose browser VM of before is gone (or never was), in this process.
+_retired: set[str] = set()
+
+
+def retire_old_browser(db, uid, vm):
+    """The browser VM of 2026-10-27 to 2026-11-04 goes once the account's
+    workspace runs (Max: the sign-ins are made again once): deleted by its
+    name, then the record forgets it, and the list of sign-ins with it
+    (sign_ins), since none of them holds on the new browser. Only where the
+    record still names it; a failure leaves it for the next start (the
+    account's deletion takes it in any case, agent_vm.delete_workspace)."""
+    if uid in _retired:
+        return
+    try:
+        if record(db, uid).get("browser"):
+            vm.delete(agent_vm.old_browser_name(uid))
+            ref(db, uid).set({"browser": None, "sign_ins": []}, merge=True)
+            logging.info("Agent workspace old browser VM deleted")
+        _retired.add(uid)
+    except Exception as exc:
+        logging.warning("Agent workspace old browser VM not deleted category=%s", safe_exception(exc))
 
 
 # The account's provisioning (module docstring): once per process and account.
@@ -584,14 +577,13 @@ def provisioning():
 
 def provision(store, uid, *, factory=None):
     """A new account's workspace before it is needed (since 2026-11-02, the
-    module's docstring): both VMs made and set up in the background, the
+    module's docstring): the VM made and set up in the background, the
     browser's Chrome started once and then told to rest (the helper's warm
     and rest, as after a message). Only a VM that is not there: where the
-    account's record names none yet nothing ever opened one, else the live
-    view or the terminal may have made only its own (until 2026-11-04 that
-    left the other to its first call). And only while the server's safety
-    rules leave the workspace open. Called with the account's messages to the agent
-    that may use the workspace (routers/agent.py); asks the record once per
+    account's record names none yet nothing ever opened one, else it may be
+    gone (deleted by hand). And only while the server's safety rules leave
+    the workspace open. Called with the account's messages to the agent that
+    may use the workspace (routers/agent.py); asks the record once per
     process and account, on a thread of its own, so the message never waits
     for it. Returns the thread, or None."""
     if not provisioning() or uid in _provisioned:
@@ -613,22 +605,20 @@ def _provision_new(store, uid, factory):
             return
         try:
             new = _record_new(store, uid, vm.provider)
-            kinds = {kind for kind, name in (("browser", agent_vm.browser_name(uid)),
-                                             ("workbench", agent_vm.workspace_name(uid)))
-                     if new or not vm.exists(name)}
+            needed = new or not vm.exists(agent_vm.workspace_name(uid))
         finally:
             vm.close()
-        if not kinds:
+        if not needed:
             return
     except Exception as exc:
         logging.warning("Agent workspace provision not started category=%s", safe_exception(exc))
         return
-    _provision(uid, factory, kinds)
+    _provision(uid, factory, store.db)
 
 
 def _record_new(store, uid, provider):
-    """Names both VMs on the account's record where it names none yet (the
-    account's deletion finds them from then on, as record_for_view); whether
+    """Names the VM on the account's record where it names none yet (the
+    account's deletion finds it from then on, as record_for_view); whether
     it did."""
     from app.services import persistence_guard
     workspace = ref(store.db, uid)
@@ -640,55 +630,30 @@ def _record_new(store, uid, provider):
         made["new"] = not current.get("name")
         if made["new"]:
             tx.set(workspace, {**current, "provider": provider, "name": agent_vm.workspace_name(uid),
-                               "browser": agent_vm.browser_name(uid),
                                "created_at": current.get("created_at") or _now().isoformat()})
     store._transaction(operation)
     return made["new"]
 
 
-def _provision(uid, factory, kinds=("browser", "workbench")):
-    """The VMs of ``kinds`` side by side, each on a backend of its own;
-    failures are only logged: the first call that needs a VM sets up what is
+def _provision(uid, factory, db=None):
+    """The VM set up and its browser started once, then told to rest;
+    failures are only logged: the first call that needs it sets up what is
     missing."""
     from app.services import agent_browser
     from app.services.llm.provider_runtime import ProviderCancellation
-    seconds = {}
-
-    def browser():
-        start, vm, began = Start(uid, "browser").phase("setup"), None, time.monotonic()
-        try:
-            vm = factory()
-            name = open_browser(vm, uid)
-            for action, timeout in (("warm", agent_browser.CALL_SECONDS), ("rest", agent_browser.REST_SECONDS)):
-                agent_browser.helper(vm, name, {"action": action}, timeout, ProviderCancellation())
-            seconds["browser"] = time.monotonic() - began
-        except Exception as exc:
-            logging.warning("Agent workspace provision failed vm=browser category=%s", safe_exception(exc))
-        finally:
-            start.end()
-            if vm is not None:
-                vm.close()
-
-    def workbench():
-        start, vm, began = Start(uid, "workbench").phase("setup"), None, time.monotonic()
-        try:
-            vm = factory()
-            open_workbench(vm, uid)
-            seconds["workbench"] = time.monotonic() - began
-        except Exception as exc:
-            logging.warning("Agent workspace provision failed vm=workbench category=%s", safe_exception(exc))
-        finally:
-            start.end()
-            if vm is not None:
-                vm.close()
-    threads = [threading.Thread(target=target, name=f"agent-workspace-provision-{target.__name__}", daemon=True)
-               for target in (browser, workbench) if target.__name__ in kinds]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    logging.info("Agent workspace provisioned %s", " ".join(f"{kind}={value:.1f}" for kind, value in seconds.items())
-                 or "nothing")
+    start, vm, began = Start(uid, "browser").phase("setup"), None, time.monotonic()
+    try:
+        vm = factory()
+        name = open_workspace(vm, uid, db=db)
+        for action, timeout in (("warm", agent_browser.CALL_SECONDS), ("rest", agent_browser.REST_SECONDS)):
+            agent_browser.helper(vm, name, {"action": action}, timeout, ProviderCancellation())
+        logging.info("Agent workspace provisioned seconds=%.1f", time.monotonic() - began)
+    except Exception as exc:
+        logging.warning("Agent workspace provision failed category=%s", safe_exception(exc))
+    finally:
+        start.end()
+        if vm is not None:
+            vm.close()
 
 
 def _quiet(stream, chunk):
@@ -703,96 +668,42 @@ def _current(vm, name, version):
     return raw.decode("utf-8", "replace").strip() == version
 
 
-@contextmanager
-def _open_for_setup(vm, name):
-    """CHROME_RULE for setup.sh alone: the rules read before come back
-    exactly as they were, also when the setup fails or is stopped. A
-    running chat's message may have added its domains (agent_domains.py),
-    so they never go back to the base list. A policy that lets it through
-    already, or none at all (open), stays untouched."""
-    before = vm.get_policy(name)
-    widen = bool(before) and not any(rule.get("action") == "allow" and rule.get("domain") in {CHROME_DOMAIN, "*"}
-                                     for rule in before)
-    if widen:
-        # Until the rules are back for sure, the next start sets them anew
-        # (policy_unsure), whatever the account's record says.
-        _policy_unsure.add(name)
-        vm.set_policy(name, [*before, CHROME_RULE])
-    try:
-        yield
-    finally:
-        if widen:
-            vm.set_policy(name, before)
-            _policy_unsure.discard(name)
-
-
 class SetupFailed(agent_vm.VMUnavailable):
     """setup.sh did not succeed: no command of the agent may run there
     (a refusal of the workbench, not a broken connection)."""
 
 
 def prepare(vm, name, cancellation=None, timeout=None, on_setup=None):
-    """The workbench at this VERSION, only when the version there differs
-    (else one read): its tools written to the provider's home, the live
-    view's gateway service of the layout before removed, and setup.sh run
-    as root (the agent's user, the tools every workbench has; once, the
-    move of its files out of the provider's home) while the policy lets it
-    reach CHROME_DOMAIN. Returns whether it wrote them; raises SetupFailed
-    when the setup failed, so no command runs with the provider's rights.
-    ``timeout``: at most this long for the setup (the time the message has
-    left before its answer, runtime audit 2026-10-30, A5). ``on_setup``:
-    called when the setup is about to run (the start's phase)."""
+    """The VM at this VERSION, only when the version there differs (else
+    one read): its network rules (agent_vm.RULES, the open web since
+    2026-11-04), its tools written to the provider's home, the live view's
+    gateway service of the layout before removed, and setup.sh run as root
+    (the agent's user and its /tmp, the tools every workspace has; once, the
+    moves from the layouts before). Returns whether it wrote them; raises
+    SetupFailed when the setup failed, so no command runs with the
+    provider's rights. ``timeout``: at most this long for the setup (the
+    time the message has left before its answer, runtime audit 2026-10-30,
+    A5). ``on_setup``: called when the setup is about to run (the start's
+    phase)."""
     from app.services.llm.provider_runtime import ProviderCancellation
     if _current(vm, name, VERSION):
         return False
     if on_setup is not None:
         on_setup()
-    for file, data in tool_files("workbench").items():
+    vm.set_policy(name, agent_vm.RULES)
+    for file, data in tool_files().items():
         vm.write_file(name, f"{WORKSPACE_DIR}/{file}", data, agent=False)
     vm.delete_service(name, OLD_GATEWAY_SERVICE)
     said = []
     seconds = SETUP_SECONDS if timeout is None else max(1, min(SETUP_SECONDS, int(timeout)))
-    with _open_for_setup(vm, name):
-        outcome = vm.exec(name, f"sudo -n bash {WORKSPACE_DIR}/setup.sh", cwd=agent_vm.SERVER_HOME,
-                          timeout=seconds, on_output=lambda stream, chunk: said.append(chunk),
-                          cancellation=cancellation or ProviderCancellation(), agent=False)
+    outcome = vm.exec(name, f"sudo -n bash {WORKSPACE_DIR}/setup.sh", cwd=agent_vm.SERVER_HOME,
+                      timeout=seconds, on_output=lambda stream, chunk: said.append(chunk),
+                      cancellation=cancellation or ProviderCancellation(), agent=False)
     if outcome.exit_code != 0:
-        logging.warning("Agent workbench setup failed exit=%s", outcome.exit_code)
+        logging.warning("Agent workspace setup failed exit=%s", outcome.exit_code)
         raise SetupFailed("setup")
     vm.write_file(name, VERSION_PATH, VERSION.encode(), agent=False)
     return True
-
-
-def prepare_browser(vm, name):
-    """The browser VM's tools and network rules at BROWSER_VERSION
-    (browser.py installs and starts the browser itself when called).
-    Returns whether it wrote them."""
-    if _current(vm, name, BROWSER_VERSION):
-        return False
-    vm.set_policy(name, agent_vm.BROWSER_RULES)
-    for file, data in tool_files("browser").items():
-        vm.write_file(name, f"{WORKSPACE_DIR}/{file}", data, agent=False)
-    vm.write_file(name, VERSION_PATH, BROWSER_VERSION.encode(), agent=False)
-    return True
-
-
-def open_browser(vm, uid, start=None):
-    """The account's browser VM, created if needed, with its tools and
-    network rules up to date; its name. Until 2026-10-29 every opening set
-    its rules anew, a request that waits while the VM wakes: in Prod it once
-    ran into its time limit, and the browser was off for the message. The
-    rules only change with a new version, which sets them. ``start`` (a
-    Start) learns what the browser's start has to do: its setup on a VM made
-    just now, else how it wakes (the provider's status, a hint only: a VM
-    that just ran may say "cold" too)."""
-    name = agent_vm.browser_name(uid)
-    created = vm.ensure(name)
-    if start is not None:
-        phase = "setup" if created else {"cold": "cold", "warm": "warm"}.get(getattr(vm, "statuses", {}).get(name))
-        if phase:
-            start.phase(phase)
-    prepare_browser(vm, name)
-    return name
 
 
 # Makes the chat's folder (as the agent's user, with the folders the file
@@ -963,7 +874,7 @@ def set_control(db, uid, vm, holder):
     control = {"holder": holder, "until": now + CONTROL_SECONDS if holder == "user" else 0,
                **({"returned_at": now} if holder == "agent" else {})}
     payload = control_payload(holder, now=now)
-    browser = agent_vm.browser_name(uid)
+    browser = agent_vm.workspace_name(uid)
     if holder == "user":
         ref(db, uid).update({"control": control})
         _forget_control(uid)
@@ -1032,36 +943,37 @@ def user_has_browser(db, uid, now=None, fresh=False):
 
 
 def reset_browser(vm, uid, cancellation):
-    """Ends the browser and deletes its profile on the browser VM: every
-    sign-in, cookie and open tab. The next use starts a fresh one. A browser
-    VM that was never made has nothing to sign out of."""
-    name = agent_vm.browser_name(uid)
+    """Ends the browser and deletes its profile: every sign-in, cookie and
+    open tab. The next use starts a fresh one. A workspace that was never
+    made has nothing to sign out of. As the provider's user, whose
+    processes alone it ends (cdp.py names the profile too, and goes with
+    Chrome)."""
+    name = agent_vm.workspace_name(uid)
     if not vm.exists(name):
         return
-    vm.exec(name, f"pkill -f '[u]ser-data-dir={BROWSER_PROFILE}'; sleep 1; rm -rf {BROWSER_PROFILE} "
+    vm.exec(name, f"pkill -u \"$(id -u)\" -f '[u]ser-data-dir={BROWSER_PROFILE}'; sleep 1; rm -rf {BROWSER_PROFILE} "
                   f"{BROWSER_UPLOADS}", cwd=agent_vm.SERVER_HOME, timeout=60, on_output=_quiet,
             cancellation=cancellation, agent=False)
 
 
 def delete_for_account(db, uid, *, factory=None):
-    """With the account (account_deletion.py): both VMs of the workspace by
-    the names that follow from the account, then its record. Before 2026-10-27 a
-    missing record ended this, and a later area of the deletion removed the
-    record after one failed provider call: the VM stayed for good. Only a
-    server without a provider skips an account without a record (it never
-    made one there). The safety rules' guard and trail go with it
-    (workspace_guard.py, since 2026-10-30)."""
-    from app.services import agent_tunnel, workspace_guard
+    """With the account (account_deletion.py): the workspace's VM (and the
+    browser VM of before) by the names that follow from the account, then
+    its record. Before 2026-10-27 a missing record ended this, and a later
+    area of the deletion removed the record after one failed provider call:
+    the VM stayed for good. Only a server without a provider skips an
+    account without a record (it never made one there). The safety rules'
+    guard and trail go with it (workspace_guard.py, since 2026-10-30)."""
+    from app.services import workspace_guard
     workspace = ref(db, uid)
-    agent_tunnel.close(uid)
     if agent_vm.configured() or factory is not None or workspace.get().exists:
         agent_vm.delete_workspace(uid, factory=factory)
     workspace.delete()
     workspace_guard.delete_for_account(db, uid)
 
 
-# A message's checkpoint of the workbench (VMSession.ready; the browser VM has
-# none) may bring the workspace back for
+# A message's checkpoint of the workspace (VMSession.ready; since 2026-11-04
+# it holds the browser's profile too) may bring the workspace back for
 # this long, and only after the last time something left it for good
 # (``restore_floor``): signing the browser out everywhere or deleting a
 # chat. An older checkpoint would bring the sign-ins or the chat's folder

@@ -148,14 +148,11 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Prüfer. „Stop“ stoppt wie der Stop-Knopf. Automatisiert:
       `test_agent_audit.py` (halt), `agent-chat.test.mjs`,
       `agent-vm-activity.test.mjs`, `tab-status.test.mjs`.
-- [ ] Vorab-Prüfung (2026-10-27, seit 2026-10-29 nur Domain und Memory;
-      Konto mit Arbeitsplatz und `request_domain` (Pro oder Admin), echter
-      Provider): „Lade
-      die Startseite von example.com mit curl“ → Aktivität „The reviewers check
-      this request before you decide.“, dann die Domain-Karte mit dem Urteil
-      der Prüfer. Ein Browser-Klick („Öffne wikipedia.org und klick auf
-      Zufälliger Artikel“) läuft ohne Gate-Runde und ohne Karte.
-      Automatisiert: `test_agent_gate.py`, `agent-chat.test.mjs`.
+- [ ] Vorab-Prüfung (2026-10-27, seit 2026-11-04 wartet kein Aufruf mehr
+      auf die Prüfer, `request_domain` gibt es nicht mehr, das Netz ist offen):
+      „Lade die Startseite von example.com mit curl“ → läuft ohne Gate-Runde
+      und ohne Domain-Karte. Ein Browser-Klick („Öffne wikipedia.org und klick
+      auf Zufälliger Artikel“) ebenso. Automatisiert: `test_agent_gate.py`.
 - [ ] Der Agent fragt dich (2026-10-29, `ask_user`, Arbeitsplatz offen oder
       zu): „Melde dich bei <Website mit Login> an und lies meine letzte
       Bestellung.“ → Karte „Der Agent braucht dich im Browser“ mit seiner
@@ -281,8 +278,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       einer kleinen API“): Die Seite lädt ihre Daten. Ein Video oder eine große
       Datei laden und anhalten: andere Seiten des Servers laden weiter. Den
       Server stoppen und neu laden → Seite „Nothing answers on port …“.
-      `http://localhost:9222` oder `http://127.1:9222` im Auftrag → Absage, die
-      Seite wird nie gelesen. Passwort aus dem
+      Seit 2026-11-04 läuft der Server auf demselben Rechner wie der Browser,
+      ohne Tunnel. Ein Port, auf dem kein Server des Agenten lauscht (z. B.
+      `http://localhost:22`), im Auftrag → Absage, die Seite wird nie gelesen. Passwort aus dem
       eigenen Passwortmanager kopieren und im Bild mit Strg+V (Cmd+V) oder
       „Einfügen“ einfügen: Es landet im Feld, auch mit Umlauten und Sonderzeichen,
       und schickt das Formular nicht ab.
@@ -291,13 +289,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Chat, während der erste läuft: „Übersprungen · Arbeitsplatz gerade in
       einem anderen Chat“, die Antwort kommt. Datei im ersten Chat schreiben,
       zweiten Chat bitten, sie aus dem Ordner des ersten zu lesen: klappt.
-      Werkbank (seit 2026-10-27): „Prüfe, ob du sudo hast und example.com
-      erreichst“ → beides nein, `pip install requests` klappt. „Installier
-      ffmpeg“ → Schritt „Installed ffmpeg“. „Lade die Startseite von
-      example.com mit curl“ → Karte „Der Agent möchte example.com erreichen“
-      mit Begründung und Urteil der Prüfer; „Nicht erlauben“ → er macht ohne
-      weiter; beim nächsten Versuch „Für diesen Chat erlauben“ → klappt, in
-      einem anderen Chat nicht.
+      Werkbank (seit 2026-10-27, seit 2026-11-04 mit offenem Netz): „Prüfe,
+      ob du sudo hast und example.com erreichst“ → kein sudo, example.com
+      ja, ohne Karte. `pip install requests` klappt. „Installier ffmpeg“ →
+      Schritt „Installed ffmpeg“.
       Chat löschen: nur sein Ordner unter `/home/agent/chats` ist weg.
       Einstellungen → Workspace → „Überall abmelden“: danach ist die Website
       wieder ausgeloggt. Nach einer Stunde schließt die Ansicht von selbst.
@@ -326,7 +321,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `workspace-view.test.mjs`.
 - [ ] Flüssige Live-Ansicht (2026-11-02, echter Provider, nach dem Deploy mit
       `--ws-per-message-deflate false` im Render-Startbefehl): Live-Ansicht eines
-      Kontos öffnen, dessen Browser-VM von vorher ist. Einmal „Der Browser wird
+      Kontos öffnen, dessen Arbeitsplatz von vorher ist. Einmal „Der Browser wird
       eingerichtet“ (gut 10 s), danach das Bild mit den Tabs von vorher. Eine lange
       Seite (z. B. de.wikipedia.org/wiki/Berlin) übernehmen und mit dem Mausrad
       scrollen: Das Bild läuft flüssig mit, ohne halb gezeichnete Streifen.
@@ -351,11 +346,25 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Browser-Schritt zeigt kurz „Arbeitsplatz startet …“, dann „Läuft · N s“;
       nach einem Klick nennt das Ergebnis, was sich änderte, nicht die ganze
       Seite. Render-Log: `Agent VM ready … turn=… step=…` mit Phasen,
-      `Agent browser call …`; am Nachrichtenende hält die Browser-VM nur noch
-      ~2 min wach (Sprites `GET /v1/tasks` auf der Browser-VM: Hold
-      `consens-browser-awake` mit Ablauf ~2 min nach dem Lauf). Ein Lauf mit
-      localhost-Seite: Nach dem Lauf und geschlossener Ansicht endet der Tunnel
-      nach ~2 min („Agent tunnel ended“).
+      `Agent browser call …`; am Nachrichtenende hält der Arbeitsplatz nur noch
+      ~2 min wach (Sprites `GET /v1/tasks` auf der Workspace-VM: Hold
+      mit Ablauf ~2 min nach dem Lauf; seit 2026-11-04 gibt es keine eigene
+      Browser-VM und keinen Tunnel mehr).
+- [ ] Ein Rechner (2026-11-04, `docs/agent-mode.md` „Ein Rechner“; echte
+      Sprite, Konto mit altem Arbeitsplatz und alter Browser-VM): Erster Lauf
+      nach dem Deploy: Der Arbeitsplatz richtet sich einmal neu ein, die alte
+      Browser-VM `consens-browser-…` ist danach in Sprites gelöscht, die Liste
+      der Anmeldungen ist leer (einmal neu anmelden). „Bau mir ein Tic-Tac-Toe
+      und öffne es in meinem Browser“ → Server und Seite ohne Tunnel, die
+      Ansicht zeigt das Spiel. „Lade eine Datei aus dem Netz mit curl und lade
+      sie auf <Upload-Seite> hoch“ → klappt ohne Karte. Als Agent: `ls
+      /home/sprite`, `cat /home/sprite/.consens/browser/xauthority`, `curl
+      --unix-socket /home/sprite/.consens/browser/cdp.sock http://x/json` und
+      `ls /tmp/.X11-unix` → kein Zugriff bzw. leer (eigenes /tmp). Ein
+      X-Client auf Display :1 (z. B. `xdpyinfo -display :1`, falls da) wird
+      abgelehnt („Authorization required“). Live-Ansicht
+      zeigt Chrome wie vorher, Übernehmen und Tippen klappen. Automatisiert:
+      `test_workspace_cdp.py`, `test_agent_workspace.py`.
 - [ ] Office-Dateien (2026-11-01, `docs/agent-mode.md`, Konverter
       `consens-office`): Konto mit Arbeitsplatz, „Mach mir eine kurze
       PowerPoint über X“. Der Agent installiert kein LibreOffice, ruft
@@ -384,7 +393,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       „Sicherheitsregeln des Arbeitsplatzes“; echte Sprite, ein NICHT-Admin-Konto
       für das Schließen, Admins werden nur gemeldet):
       **Chrome:** Live-Ansicht öffnen und übernehmen: `file:///etc/hostname`,
-      `http://127.0.0.1:9222/json`, `chrome://flags` und eine Erwachsenenseite
+      `chrome://flags` und eine Erwachsenenseite
       zeigen „vom Administrator blockiert“; Strg+S, Strg+O, Strg+Umschalt+I und
       Strg+Umschalt+N tun nichts; Rechtsklick auf den Desktop (Chrome per
       Doppelklick auf die Titelleiste verkleinern) zeigt kein Menü. Der Agent
@@ -1428,9 +1437,6 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
 - [ ] Reviewers *Only in the workspace*: eine reine Chatfrage endet mit „Not
   reviewed · no work in the workspace“; eine Aufgabe, für die der Agent den
   Arbeitsplatz öffnet, bekommt ab diesem Schritt Prüferzeilen und am Ende Notes.
-  Ein `request_domain` dort zeigt die Domain-Karte mit dem Urteil der Prüfer.
-- [ ] Reviewers *Off* + Domain-Anfrage am Arbeitsplatz: die Karte sagt „Your
-  reviewers are off, so only you decide.“
 - [ ] Temporärer Chat: auf einem neuen Agent-Chat oben rechts die gestrichelte
   Sprechblase klicken → gedrückt, Begrüßung „Temporary chat. Gone when you
   leave it.“, Platzhalter „Ask in a temporary chat“, die Feldkante wird weich

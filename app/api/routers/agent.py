@@ -116,14 +116,6 @@ def vm_allowed(uid):
         ) from None
 
 
-# Domains beyond the package registries for the workbench (request_domain):
-# Pro and admins only (2026-10-30). A script there reaches them without a
-# model step, thousands of requests in one command, which no token account
-# holds back; the browser's actions are each a step.
-def domains_allowed(uid):
-    return vm_allowed(uid) and _premium_allowed(uid)
-
-
 # The user handed the workspace's browser back this recently: they just
 # worked in it (the hand-back button sends "Done in the browser.",
 # agent-chat.js continueAfterHandback).
@@ -686,7 +678,6 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
                          watch_run=watch_run, history_summary=history_summary or None,
-                         domains=preferences.vm == "on" and domains_allowed(uid),
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         if loop.vm_tools is not None:
@@ -1165,8 +1156,8 @@ def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text
 class AgentHoldDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^[0-9a-f]{12}$")
-    # "deny": not allowed, for a domain the agent asked for (agent_domains.py)
-    # or its own question (agent_ask.py); on any other hold 422 (deniable).
+    # "deny": not allowed, for the agent's own question (agent_ask.py; until
+    # 2026-11-04 also a domain it asked for); on any other hold 422 (deniable).
     # "choose": one of the answers of the agent's choice card, by its index
     # in ``choice`` (since 2026-10-30); 422 elsewhere (check_answer).
     action: Literal["continue", "stop", "steer", "deny", "choose"]
@@ -1180,9 +1171,8 @@ def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: 
     """The user's decision when a reviewer paused the response (agent_audit.py
     halt, DelegationLoop.request_hold; since 2026-10-26): let it go on, stop
     it, or go on with a message to the agent. The agent learns only of the
-    message, as one the user wrote while it worked. On a domain the agent
-    asked for (since 2026-10-27, DelegationLoop._domain_wait) "continue"
-    allows it for the chat and "deny" does not."""
+    message, as one the user wrote while it worked. On the agent's own
+    question (agent_ask.py) "continue" allows its step and "deny" does not."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):

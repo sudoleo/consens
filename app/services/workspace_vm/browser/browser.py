@@ -1,6 +1,9 @@
-"""consens.io browser VM: the one program the server runs here for the
+"""consens.io workspace: the one program the server runs here for the
 agent's ``browser`` tool (agent_browser.py, since 2026-10-27 instead of a
-shell command in the agent's VM).
+shell command of the agent), as the provider's user. From 2026-10-27 to
+2026-11-04 on a VM of its own; since then on the workbench, next to the
+agent's user, who reaches neither Chrome's protocol (cdp.py, a socket only
+this user opens), its screen (display.sh) nor this folder.
 
 One action per call, as JSON on stdin, typed by the server: {"action":
 "open", "url": ...}, {"action": "click", "ref": "e12"} and so on (ACTIONS).
@@ -77,9 +80,10 @@ SETUP_MARKER = os.path.join(STATE, "setup-done-2")
 CONTROL = os.path.join(STATE, "control.json")
 # The last ref given in this browser: refs are never given twice.
 REF_COUNTER = os.path.join(STATE, "ref-count")
-# Where the server puts a file of the workbench for an upload.
+# Where the server puts a file of the agent's for an upload.
 UPLOADS = os.path.join(STATE, "uploads")
-CDP = "http://127.0.0.1:9222"
+# Chrome's protocol through cdp.py (since 2026-11-04; until then its port 9222 on 127.0.0.1).
+CDP = "ws+unix://" + os.path.join(STATE, "cdp.sock") + ":/devtools/browser"
 READ_CHARS = 6000
 AFTER_ACTION_CHARS = 4000
 # The page as the agent last looked at it (after_text, since 2026-10-30):
@@ -158,8 +162,8 @@ REMOVED_SHOWN = 3
 PICTURE_AROUND = 40
 PICTURE_SECONDS = 2
 # Files a page downloaded (a click, Enter, an address that downloads, the
-# action download) until the server copies them to the workbench and deletes
-# them here (agent_browser.py, since 2026-10-28). What the user downloads in
+# action download) until the server copies them into the chat's folder and
+# deletes them here (agent_browser.py, since 2026-10-28). What the user downloads in
 # the live view lands in Chrome's own folder and is taken along as well.
 DOWNLOADS = os.path.join(STATE, "downloads")
 CHROME_DOWNLOADS = os.path.join(HOME, "Downloads")
@@ -657,7 +661,7 @@ def ensure_browser():
     starts it unless it runs."""
     if not os.path.exists(SETUP_MARKER):
         try:
-            subprocess.run(["bash", os.path.join(HERE, "setup.sh")], stdout=subprocess.DEVNULL,
+            subprocess.run(["bash", os.path.join(HERE, "install.sh")], stdout=subprocess.DEVNULL,
                            stderr=subprocess.DEVNULL, stdin=subprocess.DEVNULL, timeout=SETUP_SECONDS)
         except subprocess.TimeoutExpired:
             pass
@@ -685,7 +689,7 @@ def stay_awake(expire=AWAKE_FOR):
 # rest's answer: the server ends a message with it (agent_browser.py) and
 # only logs it. A browser.py before 2026-10-30 refuses rest as an unknown
 # action (and holds the VM its 10 minutes once more).
-RESTED = (f"The hold that keeps the browser VM awake ends in {REST_FOR} now; then the VM sleeps unless a call or "
+RESTED = (f"The hold that keeps the workspace awake ends in {REST_FOR} now; then it sleeps unless a call or "
           "the live view keeps it awake.")
 
 
@@ -1031,7 +1035,7 @@ def frame_refs():
 
 
 def frame_hidden(frame):
-    """Whether ``frame`` or a frame it lies in is the browser's own computer."""
+    """Whether ``frame`` or a frame it lies in is the workspace itself."""
     for _ in range(FRAME_DEPTH + 8):
         if frame is None:
             return False
@@ -1098,7 +1102,7 @@ def with_frames(frame, lines, count, depth=1, budget=None, allowed=None, refs=No
             out.append(f"frame {src} (not read)")
             continue
         if frame_hidden(child):
-            out.append(f"frame {src} (the browser's own computer, which you do not read)")
+            out.append(f"frame {src} (the workspace's own, which you do not read)")
             continue
         budget[0] -= 1
         try:
@@ -1469,7 +1473,7 @@ def find_text(page, query):
 
 def element(page, ref):
     """The element read gave ``ref``: on the page, or in the frame read
-    found it in (remember_frames), never in one of the browser's own computer."""
+    found it in (remember_frames), never in one that is the workspace's own."""
     return located(page, ref)[1]
 
 
@@ -1657,7 +1661,7 @@ def hit_report(seen, page):
         lines.append("Its frame left the page after it.")
         return "\n".join(lines)
     if hidden(acted):
-        # It led to the browser's own computer: nothing of it, as in read.
+        # It led to the workspace itself: nothing of it, as in read.
         return "\n".join(lines)
     try:
         changes = acted.evaluate(HIT_JS, {"mode": "after", "points": [list(pair) for pair in seen["points"]],
@@ -1729,13 +1733,48 @@ def keep_downloads(caught):
     return names
 
 
-# localhost is the workbench's where the tunnel holds the port (tunnel.py,
-# agent_tunnel.py), named by the server with every request (local_ports).
+# localhost is the agent's on the ports its user listens on (agent_ports;
+# from 2026-10-29 to 2026-11-04 the workbench's through a tunnel, on the
+# ports the server named): a page there is the agent's own server, any other
+# port is not its to read.
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
-OWN_COMPUTER = ("This page is on the browser's own computer, which you do not read. Open a page of the web, or "
-                "http://localhost:<port> for a port of your workspace.")
-# The ports the tunnel holds for this request (run).
+OWN_COMPUTER = ("This page is the workspace's own (a file, the browser's own pages, a private network or a localhost "
+                "port none of your servers listens on), which you do not read. Open a page of the web, or "
+                "http://localhost:<port> where your server listens.")
+# The ports the agent's servers listen on, as this request found them (run).
 LOCAL_PORTS = set()
+# The agent's user (agent_vm.AGENT_UID) and where Linux lists the listening sockets.
+AGENT_UID = 1500
+SOCKET_TABLES = ("/proc/net/tcp", "/proc/net/tcp6")
+
+
+def agent_ports(tables=SOCKET_TABLES, uid=AGENT_UID):
+    """The TCP ports the agent's user listens on (state 0A), from 1024 up,
+    and no other user on any address: what localhost in the browser may show
+    of it. The kernel's own table, never what a page or a process says of
+    itself. Ports another user listens on too go: the agent's listener on
+    127.0.0.2 made another user's server on 127.0.0.1 with the same port
+    readable as localhost (review 2026-11-04)."""
+    ports, others = set(), set()
+    for table in tables:
+        try:
+            with open(table, encoding="ascii") as handle:
+                rows = handle.read().splitlines()[1:]
+        except OSError:
+            continue
+        for row in rows:
+            fields = row.split()
+            if len(fields) < 8 or fields[3] != "0A":
+                continue
+            try:
+                port = int(fields[1].rsplit(":", 1)[1], 16)
+            except (IndexError, ValueError):
+                continue
+            if fields[7] != str(uid):
+                others.add(port)
+            elif port >= 1024:
+                ports.add(port)
+    return ports - others
 # Chrome's empty new tab, which shows nothing of the VM.
 NEW_TAB = ("chrome://newtab", "chrome://new-tab-page")
 
@@ -1786,17 +1825,17 @@ def wait_for_text(context, request, query):
 
 
 def own_computer(url, local_ports=()):
-    """Whether the page at ``url`` is the browser's own computer or a
-    private network (its debugging port, a link or a redirect there): never
-    read nor shown to the agent. Since 2026-10-29 for every page, not only
-    for an address the agent opens; localhost on a port the tunnel holds is
-    the workbench's."""
+    """Whether the page at ``url`` is the workspace's own or a private
+    network (a link or a redirect there too): never read nor shown to the
+    agent. Since 2026-10-29 for every page, not only for an address the
+    agent opens; localhost on a port of ``local_ports`` (agent_ports) is the
+    agent's own server."""
     from urllib.parse import urlsplit
     parts = urlsplit(url)
     if not url or parts.scheme in {"about", "chrome-error", "blob", "data"} or url.startswith(NEW_TAB):
         return False
     if parts.scheme not in {"http", "https"}:
-        # file://, chrome://, view-source: and the like: the VM's own files and
+        # file://, chrome://, view-source: and the like: the computer's own files and
         # the browser's own pages, also after a takeover or with back.
         return True
     host = (parts.hostname or "").lower().rstrip(".")
@@ -1837,7 +1876,7 @@ def fetch(context, page, url):
         raise Refused("download takes the address of a file on the web (or the current page's).")
     response = context.request.get(target, timeout=DOWNLOAD_SECONDS * 1000, max_redirects=10)
     if not public_address(response.url):
-        raise Refused("That download leads to the browser's own computer or a private network.")
+        raise Refused("That download leads to the workspace itself or a private network.")
     if not response.ok:
         raise Refused(f"The download failed: HTTP {response.status}.")
     body = response.body()
@@ -1888,12 +1927,12 @@ def run(request):
         return {"text": RESTED}
     query = find_query(request) if action == "find" or (action == "wait" and request.get("text")) else ""
     LOCAL_PORTS.clear()
-    LOCAL_PORTS.update(port for port in request.get("local_ports") or () if type(port) is int)
+    LOCAL_PORTS.update(agent_ports())
     if not KEPT.get("prepared"):
         # The resident helper did it before it took the call (ready).
         ensure_browser()
     if action == "warm":
-        # The server's own start of the browser while the workbench gets
+        # The server's own start of the browser while the agent's side gets
         # ready (agent_browser.BrowserTools._warm, since 2026-10-29): it
         # reads nothing of the pages, and the agent never asks for it.
         return {"text": ""}
@@ -2224,7 +2263,7 @@ def failure_text(exc, log=True):
     the last step of its call log that says why (since 2026-10-30, audit L4:
     "Timeout 10000ms exceeded." alone, where the log said
     "<div class="consent-layer"></div> intercepts pointer events"). A page of
-    the browser's own computer gives no ``log``: its steps quote the page."""
+    the workspace itself gives no ``log``: its steps quote the page."""
     text = str(exc).strip()
     if not text:
         return type(exc).__name__

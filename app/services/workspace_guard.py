@@ -15,7 +15,7 @@ durch den Agenten, durch unseren Server". Three layers (docs/agent-mode.md
    from the agent's calls (agent_browser.py, note_browser_call) and from the
    live view (relay.py's lines, routers/agent_workspace.py, each with who
    steered: the user after their takeover, else the agent they watched),
-   the bytes of the live view and the browser VM's network counters. Each
+   the bytes of the live view and the workspace VM's network counters. Each
    host is sorted once by Cloudflare's public resolvers (classify:
    "malware" where the security resolver blocks it, malware and phishing;
    "adult" where only the family resolver does), flagged ones count once
@@ -98,7 +98,8 @@ RULES = (
     # The live view's bytes (both ways, through our server): hours of video
     # streamed through it, not pages read. The terminal does not count.
     Rule("view_bytes", "view_bytes", 6 * GIB),
-    # What the browser VM sent and received on its own network (the view's
+    # What the workspace's VM sent and received on its own network, the
+    # browser's and since 2026-11-04 the agent's commands' too (the view's
     # bytes go through the provider's exec API and do not count there,
     # measured on a test Sprite 2026-10-31): uploads or a flood from Fly.io's
     # addresses, and downloads in bulk.
@@ -114,7 +115,7 @@ MAX_HOSTS = 2000
 HISTORY = 20
 # A host is a hostname or an address as urlsplit gives it; anything else is dropped.
 HOST = re.compile(r"^[a-z0-9._:-]{1,253}$")
-# The workbench's localhost (agent_tunnel.py), never a site.
+# The workspace's own localhost (the agent's servers), never a site.
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 FLAGGED = ("adult", "malware")
 
@@ -214,7 +215,7 @@ def expected_policy():
     """The fingerprint of Chrome's policy as harden.sh installs it (relay.py
     and browser.py report what the VM has)."""
     from app.services import agent_workspace
-    return hashlib.sha256(agent_workspace.tool_files("browser")["policy.json"]).hexdigest()[:16]
+    return hashlib.sha256(agent_workspace.tool_files()["policy.json"]).hexdigest()[:16]
 
 
 def uid_tag(uid):
@@ -266,7 +267,7 @@ _categories_lock = threading.Lock()
 
 def normal_host(host):
     """``host`` lower case without a trailing dot, or None when it is no
-    host of a site (empty, odd characters, the workbench's localhost)."""
+    host of a site (empty, odd characters, the workspace's own localhost)."""
     if not isinstance(host, str):
         return None
     host = host.strip().lower().rstrip(".")
@@ -475,7 +476,7 @@ def note_view_bytes(uid, count):
 
 
 def note_net(uid, counters):
-    """The browser VM's network counters as relay.py or browser.py read them."""
+    """The VM's network counters as relay.py or browser.py read them."""
     if not uid or not isinstance(counters, dict) or not _active():
         return
     rx, tx, boot = counters.get("rx"), counters.get("tx"), counters.get("boot")
@@ -487,7 +488,7 @@ def note_net(uid, counters):
 
 
 def note_policy(uid, fingerprint):
-    """The fingerprint of the Chrome policy on the account's browser VM, after
+    """The fingerprint of the Chrome policy on the account's workspace, after
     Chrome started under it (relay.py) or answered a call (browser.py)."""
     if not uid or not isinstance(fingerprint, str) or not _active():
         return
@@ -799,26 +800,20 @@ def _count(uid, pending):
             _alert(_alert_text(uid, detail, outcome["trail"], now, admin=True))
         elif kind == "policy":
             logging.warning("Workspace guard policy differs account=%s", uid_tag(uid))
-            _alert(f"⚠️ consens.io workspace: Chrome's policy differs on a browser VM\n"
+            _alert(f"⚠️ consens.io workspace: Chrome's policy differs in a workspace\n"
                    f"Expected {expected_policy()}, the VM has {detail or 'none'} (the log line names the account's "
                    f"tag).\nEnvironment: {_environment()}")
     return bool(skipped)
 
 
 def _shut(uid):
-    """What still runs when the workspace closes: the localhost tunnel ends,
-    and the browser VM's wake hold shortens to two minutes (browser.py
-    ``rest``), so Chrome's open tabs sleep with it. An open view or terminal
-    ends by itself (routers/agent_workspace.py), a running message's next
-    workspace call is refused (VMTools._start). Background processes on the
-    workbench run out (at most an hour; its network reaches only package
-    registries). On a thread of its own; failures are only logged."""
+    """What still runs when the workspace closes: the VM's wake hold
+    shortens to two minutes (browser.py ``rest``), so Chrome's open tabs
+    sleep with it. An open view or terminal ends by itself
+    (routers/agent_workspace.py), a running message's next workspace call
+    is refused (VMTools._start). The agent's background processes run out
+    (at most an hour). On a thread of its own; failures are only logged."""
     def run():
-        try:
-            from app.services import agent_tunnel
-            agent_tunnel.close(uid)
-        except Exception as exc:
-            logging.info("Workspace guard tunnel not closed category=%s", safe_exception(exc))
         try:
             _rest_browser(uid)
         except Exception as exc:
@@ -834,7 +829,7 @@ def _rest_browser(uid):
     if backend is None:
         return
     try:
-        name = agent_vm.browser_name(uid)
+        name = agent_vm.workspace_name(uid)
         if not backend.exists(name):
             return
         backend.run(name, agent_vm.wrapped_command(f"exec python3 {agent_workspace.BROWSER_HELPER}", 20, False),

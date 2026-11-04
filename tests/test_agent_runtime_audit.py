@@ -415,20 +415,6 @@ def test_the_users_turn_in_the_browser_ends_the_steps_later_calls(store, fake_vm
     assert not ran(fake_vm, "pwd") and every_call_answered(loop)
 
 
-def test_a_refused_domain_ends_the_steps_later_calls(store, fake_vm):
-    from app.services.agent_domains import DOMAIN_DENIED
-    from test_agent_audit import decide_when_held
-    loop = vm_loop(store, Steps([[("request_domain", {"domain": "api.example.com", "reason": "Its API."}),
-                                  ("vm_exec", {"command": "curl https://api.example.com"})]]))
-    waiter = decide_when_held(loop, store, "deny")
-    list(loop.run())
-    waiter.join(5)
-    found = tool_results(loop)
-    assert found["call_0_0"] == {"error": DOMAIN_DENIED.format(domain="api.example.com")}
-    assert found["call_0_1"] == {"error": agent_delegation.CALL_AFTER_DENIAL.format(domain="api.example.com")}
-    assert every_call_answered(loop)
-
-
 # --- L3: a line of facts after each batch ---------------------------------------------
 
 def test_each_batch_ends_with_the_step_and_how_long_the_user_has_waited(store, fake_vm):

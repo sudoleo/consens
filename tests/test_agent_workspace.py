@@ -1,6 +1,6 @@
 """The account's workspace (agent_workspace.py, since 2026-10-27): its lease,
-its tools in the two VMs (workspace_vm/workbench, workspace_vm/browser) and
-the Sprites calls behind them. The loop's use of it is in test_agent_vm.py
+its tools in its VM (workspace_vm/workbench, workspace_vm/browser; two VMs
+until 2026-11-04) and the Sprites calls behind them. The loop's use of it is in test_agent_vm.py
 and test_agent_browser.py; nothing here calls Sprites or starts a browser:
 the relay runs against a local echo server, browser.py's helpers without
 Playwright, agent-run and setup.sh are checked as text (they ran on a test
@@ -28,10 +28,7 @@ VM_FILES = Path(agent_workspace.__file__).with_name("workspace_vm")
 
 
 def load(name, kind="browser"):
-    path = VM_FILES / kind / f"{name}.py"
-    # Run by both VMs (tunnel.py): in the folder above.
-    spec = importlib.util.spec_from_file_location(f"workspace_vm_{kind}_{name}",
-                                                  path if path.exists() else VM_FILES / f"{name}.py")
+    spec = importlib.util.spec_from_file_location(f"workspace_vm_{kind}_{name}", VM_FILES / kind / f"{name}.py")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -117,33 +114,38 @@ def test_the_list_of_sign_ins_keeps_the_first_day_and_the_newest_sites(store, mo
 
 # --- Tools in the VMs -----------------------------------------------------------------
 
-def test_the_vms_tools_are_lf_and_their_versions_follow_their_bytes():
-    workbench, browser = agent_workspace.tool_files("workbench"), agent_workspace.tool_files("browser")
-    assert set(workbench) == {"agent-run", "setup.sh", "tunnel.py"}
-    # One tunnel.py for both VMs; the workbench installs it where its agent's user reads it.
-    assert workbench["tunnel.py"] == browser["tunnel.py"]
-    assert f'install -D -m 0644 "$(dirname -- "$0")/tunnel.py" {agent_workspace.WORKBENCH_TUNNEL}' in (
-        workbench["setup.sh"].decode())
-    assert set(browser) == {"browser.py", "display.sh", "harden.sh", "openbox-menu.xml", "openbox-rc.xml",
-                            "policy.json", "relay.py", "setup.sh", "tunnel.py"}
-    assert all(b"\r\n" not in data for data in [*workbench.values(), *browser.values()])
-    assert agent_workspace.VERSION == agent_workspace._version("workbench") and len(agent_workspace.VERSION) == 16
-    assert agent_workspace.BROWSER_VERSION == agent_workspace._version("browser")
-    assert agent_workspace.VERSION != agent_workspace.BROWSER_VERSION
-    # The browser's setup, its helper and the relay name the same marker.
+def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes_and_rules(monkeypatch):
+    """One VM since 2026-11-04: the agent's tools and the browser's in one
+    folder, one version, which the network rules are part of."""
+    tools = agent_workspace.tool_files()
+    assert set(tools) == {"agent-run", "setup.sh", "browser.py", "cdp.py", "display.sh", "harden.sh", "install.sh",
+                          "openbox-menu.xml", "openbox-rc.xml", "policy.json", "relay.py"}
+    assert all(b"\r\n" not in data for data in tools.values())
+    assert agent_workspace.VERSION == agent_workspace._version() and len(agent_workspace.VERSION) == 16
+    monkeypatch.setattr(agent_vm, "RULES", [{"domain": "*", "action": "allow"}])
+    assert agent_workspace._version() != agent_workspace.VERSION
+    # The browser's installation, its helper and the relay name the same marker.
     marker = "setup-done-2"
-    assert all(marker in browser[name].decode() for name in ("setup.sh", "browser.py", "relay.py"))
+    assert all(marker in tools[name].decode() for name in ("install.sh", "browser.py", "relay.py"))
+    # Nothing of the two-VM layout's tunnel is left.
+    assert not [name for name, data in tools.items() if b"tunnel.py" in data and name != "setup.sh"]
 
 
 def test_the_agent_runs_as_its_own_user_without_the_providers_socket():
     """agent-run (security audit 2026-10-27, findings 1 to 3): a mount
     namespace of its own hides the management socket, the checkpoints and
-    the logs; then the agent's user with no way back to root. Checked as
-    text here; on a test Sprite it ran (docs/agent-mode.md)."""
-    run = agent_workspace.tool_files("workbench")["agent-run"].decode()
+    the logs, and since 2026-11-04 gives the agent a /tmp of its own; then
+    the agent's user with no way back to root. Checked as text here; on a
+    test Sprite it ran (docs/agent-mode.md)."""
+    run = agent_workspace.tool_files()["agent-run"].decode()
     assert "unshare --mount --propagation private" in run
     assert "mount --bind /dev/null /.sprite/api.sock || exit 125" in run
     assert "/.sprite/checkpoints /.sprite/logs" in run and "mount -t tmpfs -o ro" in run
+    # Its own /tmp, root's folder above it: the screen's sockets and locks in
+    # the real /tmp are out of its reach.
+    assert "tmp=/var/lib/consens/agent-tmp" in run
+    assert '[ -d "$tmp" ] && [ ! -L "$tmp" ] || exit 125' in run and 'mount --bind "$tmp" /tmp || exit 125' in run
+    assert run.index('mount --bind "$tmp" /tmp') < run.index("exec setpriv")
     assert '--reuid="$user" --regid="$user" --init-groups --no-new-privs' in run
     assert "/usr/bin/env -i HOME=" in run and 'timeout --kill-after=5 "$seconds"' in run
     # Never in the provider's namespace: there it would hide the socket from the provider too.
@@ -151,108 +153,102 @@ def test_the_agent_runs_as_its_own_user_without_the_providers_socket():
     assert "user=agent" in run and f"home={agent_vm.HOME}" in run
     assert agent_vm.agent_argv(["ls"], 30, "/home/agent/x") == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "30",
                                                                 "/home/agent/x", "ls"]
-    setup = agent_workspace.tool_files("workbench")["setup.sh"].decode()
+    setup = agent_workspace.tool_files()["setup.sh"].decode()
     assert f"--uid {agent_vm.AGENT_UID}" in setup.replace('"$uid"', str(agent_vm.AGENT_UID))
     assert 'gpasswd -d "$user" sudo' in setup and 'chmod 750 "$legacy"' in setup and 'chmod 700 "$home"' in setup
-    # Once: the agent's files out of the provider's home, the old browser and its sign-ins gone.
+    assert 'install -d -o root -g root -m 0755 "$state"' in setup
+    assert 'install -d -o "$user" -g "$user" -m 1777 "$tmp"' in setup and "tmp=$state/agent-tmp" in setup
+    # Once: the agent's files out of the provider's home.
     for moved in ('move "$legacy/chats" "$home/chats"', 'move "$legacy/NOTES.md" "$home/NOTES.md"',
-                  'move "$legacy/repos" "$home/repos"', 'rm -rf "$legacy/.consens/browser"'):
+                  'move "$legacy/repos" "$home/repos"'):
         assert moved in setup
 
 
-def test_every_workbench_gets_ripgrep_and_headless_chrome_and_loses_the_old_screen():
+def test_the_move_onto_one_computer_happens_once_and_never_ends_the_browser_again():
+    """Since 2026-11-04 the browser runs here, as the provider's user: what
+    older layouts left (a browser and its screen, the gateway, the tunnel,
+    the agent's processes that share the real /tmp) goes once, behind a
+    marker on the VM's disk. Before, every new version ended Chrome and
+    openbox by name, which would now end the user's browser at each deploy."""
+    setup = agent_workspace.tool_files()["setup.sh"].decode()
+    once = setup[setup.index('if [ ! -e "$merged" ]; then'):setup.index('  touch "$merged"\nfi')]
+    assert "merged=$state/one-computer" in setup
+    for step in ("pkill -KILL -u sprite -f '/opt/google/chrome/|google-chrome|cdp\\.py'",
+                 "pkill -KILL -u sprite -x openbox", 'pkill -KILL -u "$user"',
+                 'rm -rf "$legacy/.consens/browser" "$legacy/.local/bin/browser" /usr/local/lib/consens/tunnel.py',
+                 "find /tmp -maxdepth 1 -user sprite \\( -name 'playwright*'"):
+        assert step in once
+    rest = setup.replace(once, "")
+    assert "openbox" not in rest.split("tools() {")[0] and "/opt/google/chrome/" not in rest
+    assert not [line for line in rest.splitlines() if line.strip().startswith("pkill") and "sprite" in line
+                and "processes" not in line]
+    # The browser's current tools are never deleted (they lie in the same folder).
+    assert "for old in gateway.py ref-count setup-done-2 setup.lock pause.lock tunnel.py; do" in once
+    assert not [line for line in setup.splitlines() if line.lstrip().startswith(("rm", "for old"))
+                and ("browser.py" in line or "display.sh" in line or "cdp.py" in line)]
+
+
+def test_every_workspace_gets_ripgrep_and_chrome_and_loses_the_old_screen():
     """setup.sh (Paket 4, ran on a test Sprite 2026-10-28, docs/agent-mode.md):
     ripgrep from the Ubuntu mirrors and Chrome from Google's server, each only
-    when missing and without questions; the old layout's screen, VNC server
-    and window manager purged where installed, Chrome kept. A failed install
-    never fails the setup (the agent's user does not depend on it)."""
-    setup = agent_workspace.tool_files("workbench")["setup.sh"].decode()
+    when missing and without questions; the old layout's screen and VNC
+    server purged where installed, Chrome and the window manager kept (the
+    browser runs here since 2026-11-04). A failed install never fails the
+    setup (the agent's user does not depend on it)."""
+    setup = agent_workspace.tool_files()["setup.sh"].decode()
     assert "export DEBIAN_FRONTEND=noninteractive" in setup and " -y -qq " in setup
     assert "if ! command -v rg " in setup and "apt_get install --no-install-recommends ripgrep poppler-utils" in setup
     # pdftotext for the PDFs the agent reads (DeepSeek's feedback 2026-10-28).
     assert "! command -v pdftotext" in setup
     assert "if ! command -v google-chrome " in setup
-    # Google's apt source never stays (the workbench cannot reach it, every
-    # apt run warned), and Chrome's daily job does not add it again.
+    # Google's apt source never stays: an apt run for the agent never updates the browser's Chrome.
     assert 'repo_add_once="false"' in setup and "> /etc/default/google-chrome" in setup
     assert "rm -f /etc/apt/sources.list.d/google-chrome.list" in setup
     tools = setup[setup.index("tools() {"):setup.index("\ntools ||")]
     assert tools.count("no_chrome_source") == 2 and tools.index("no_chrome_source") < tools.index("apt_get update")
-    assert f"https://{agent_workspace.CHROME_DOMAIN}/linux/direct/google-chrome-stable_current_amd64.deb" in setup
-    # Downloaded where only root can open it: the agent's user shares /tmp.
+    assert "https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb" in setup
+    # Downloaded where only root can open it.
     assert 'download=$(mktemp -d)' in setup and 'apt_get install "$download/chrome.deb"' in setup
-    assert "/tmp/" not in setup
-    assert "for package in xvfb x11vnc openbox; do" in setup and 'if installed "$package"' in setup
+    assert "for package in xvfb x11vnc; do" in setup and 'if installed "$package"' in setup
     assert "apt_get purge $old" in setup
     assert not [line for line in setup.splitlines() if "purge" in line and "chrome" in line.lower()]
     assert 'tools || echo "setup: a tool could not be installed' in setup
-    # Only the old browser (the provider's user) is ended, never the agent's headless Chrome.
-    assert "pkill -KILL -u sprite -f '/opt/google/chrome/'" in setup
-    # Its leftovers in /tmp go, only those of the provider's user (2026-10-28).
-    assert "find /tmp -maxdepth 1 -user sprite \\( -name 'playwright*'" in setup
 
 
-def _recording_setup(fake_vm, name, *, stop=False):
-    """A backend whose exec notes the policy each command ran under, and is
-    stopped at the setup when ``stop``."""
-    from app.services.llm.provider_runtime import ProviderCancelled
-    backend, during = fake_vm.backend(), []
-    run = backend.exec
-
-    def recording(vm_name, command, **kwargs):
-        during.append(list(fake_vm.vms[vm_name]["policy"]))
-        if stop:
-            raise ProviderCancelled()
-        return run(vm_name, command, **kwargs)
-    backend.exec = recording
-    return backend, during
-
-
-def test_only_the_setup_reaches_chromes_download_server_and_a_chats_domains_stay(fake_vm):
-    """prepare reads the rules, adds dl.google.com for setup.sh alone, then
-    sets exactly what it read: a running chat's domains (agent_domains.py)
-    stay, never the base list. Also when the setup fails or is stopped."""
-    from app.services import agent_domains
+def test_a_new_version_opens_the_network_writes_the_tools_and_runs_the_setup(fake_vm):
+    """prepare (since 2026-11-04): the VM's rules are the open web without
+    Fly.io's network, set with each new version before the setup, which
+    needs them for Chrome's download; up to date it touches nothing. A
+    failed setup leaves the version unwritten, so it runs again."""
     from app.services.llm.provider_runtime import ProviderCancelled
     from test_agent_vm import SETUP
     name = agent_vm.workspace_name(UID)
-    chat_rules = agent_domains.rules(["api.example.com"])
-    fake_vm.vms[name] = {"files": {}, "checkpoints": [], "policy": list(chat_rules)}
-    backend, during = _recording_setup(fake_vm, name)
+    fake_vm.vms[name] = {"files": {}, "checkpoints": [], "policy": [{"domain": "pypi.org", "action": "allow"}]}
+    backend = fake_vm.backend()
     assert agent_workspace.prepare(backend, name) is True
-    assert during == [[*chat_rules, {"domain": "dl.google.com", "action": "allow"}]]
-    assert fake_vm.vms[name]["policy"] == chat_rules
-    assert [call[0] for call in fake_vm.calls if call[0] in {"get_policy", "policy", "exec"}] == [
-        "get_policy", "policy", "exec", "policy"]
+    assert fake_vm.vms[name]["policy"] == agent_vm.RULES
+    assert agent_vm.RULES[:2] == [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"}]
+    operations = [call[0] for call in fake_vm.calls if call[0] in {"policy", "write", "exec"}]
+    assert operations[0] == "policy" and operations.index("exec") > operations.index("write")
+    assert set(fake_vm.vms[name]["files"]) >= {f"{agent_workspace.WORKSPACE_DIR}/{file}"
+                                              for file in agent_workspace.tool_files()}
     # Up to date: the policy is not touched.
     fake_vm.calls.clear()
     assert agent_workspace.prepare(backend, name) is False
-    assert not [call for call in fake_vm.calls if call[0] in {"get_policy", "policy"}]
-    # A failed setup: the same rules come back and the version stays unwritten, so it runs again.
+    assert not [call for call in fake_vm.calls if call[0] in {"get_policy", "policy", "exec"}]
     del fake_vm.vms[name]["files"][agent_workspace.VERSION_PATH]
     fake_vm.commands[SETUP] = ([("stderr", b"useradd: failed\n")], 1, .5)
     with pytest.raises(agent_vm.VMUnavailable):
         agent_workspace.prepare(backend, name)
-    assert during[-1] == during[0] and fake_vm.vms[name]["policy"] == chat_rules
     assert agent_workspace.VERSION_PATH not in fake_vm.vms[name]["files"]
-    # Stopped during the setup: the same.
-    stopped, during = _recording_setup(fake_vm, name, stop=True)
+    stopped = fake_vm.backend()
+
+    def stop(*args, **kwargs):
+        raise ProviderCancelled()
+    stopped.exec = stop
     with pytest.raises(ProviderCancelled):
         agent_workspace.prepare(stopped, name)
-    assert during == [[*chat_rules, agent_workspace.CHROME_RULE]] and fake_vm.vms[name]["policy"] == chat_rules
-
-
-def test_a_policy_that_lets_google_through_already_stays_untouched(fake_vm):
-    """None set (open), the domain allowed for the chat, or everything: no
-    second rule, no change."""
-    name = agent_vm.workspace_name(UID)
-    for rules in ([], [*agent_vm.WORKBENCH_RULES, agent_workspace.CHROME_RULE], [{"domain": "*", "action": "allow"}]):
-        fake_vm.vms[name] = {"files": {}, "checkpoints": [], "policy": list(rules)}
-        fake_vm.calls.clear()
-        backend, during = _recording_setup(fake_vm, name)
-        assert agent_workspace.prepare(backend, name) is True
-        assert during == [rules] and fake_vm.vms[name]["policy"] == rules
-        assert not [call for call in fake_vm.calls if call[0] == "policy"]
+    assert agent_workspace.VERSION_PATH not in fake_vm.vms[name]["files"]
 
 
 def test_the_takeover_expires_unless_the_view_refreshes_it(tmp_path, monkeypatch):
@@ -366,21 +362,47 @@ def test_the_helpers_page_picture_is_chromes_scaled_viewport_or_nothing():
     assert browser.preview(Broken()) == ""
 
 
-def test_the_browser_vm_sets_its_network_rules_with_a_new_version_only(fake_vm, monkeypatch):
-    """Prod 2026-10-29: every opening set the rules anew, a request that
-    waits while the VM wakes; once it ran into its limit and the browser was
-    off for the message. They only change with a new version, which sets
-    them (the rules are part of BROWSER_VERSION)."""
+def test_opening_the_workspace_sets_its_network_rules_with_a_new_version_only(fake_vm, store):
+    """Prod 2026-10-29: every opening of the browser set the rules anew, a
+    request that waits while the VM wakes; once it ran into its limit and
+    the browser was off for the message. They only change with a new
+    version, which sets them (the rules are part of VERSION)."""
     backend = fake_vm.backend()
-    name = agent_workspace.open_browser(backend, UID)
-    assert fake_vm.vms[name]["policy"] == agent_vm.BROWSER_RULES
+    name = agent_workspace.open_workspace(backend, UID, db=store.db)
+    assert name == agent_vm.workspace_name(UID)
+    assert fake_vm.vms[name]["policy"] == agent_vm.RULES
     assert [call for call in fake_vm.calls if call[0] == "policy"] == [("policy", name)]
     # Current: no policy request, so a failing one costs nothing.
     fake_vm.fail.add("policy")
-    agent_workspace.open_browser(backend, UID)
+    agent_workspace.open_workspace(backend, UID, db=store.db)
     assert len([call for call in fake_vm.calls if call[0] == "policy"]) == 1
-    monkeypatch.setattr(agent_vm, "BROWSER_RULES", [{"domain": "*", "action": "allow"}])
-    assert agent_workspace._version("browser") != agent_workspace.BROWSER_VERSION
+
+
+def test_the_browser_vm_of_before_goes_once_with_its_sign_ins(fake_vm, store, monkeypatch):
+    """Max, 2026-11-04: the sign-ins are made again once. A record that
+    names the browser VM of 2026-10-27 to 2026-11-04 has it deleted when the
+    workspace opens, then forgets it and the list of sign-ins; a record
+    without one costs no deletion."""
+    monkeypatch.setattr(agent_workspace, "_retired", set())
+    old = agent_vm.old_browser_name(UID)
+    fake_vm.vms[old] = {"files": {}, "checkpoints": []}
+    agent_workspace.ref(store.db, UID).set({"name": agent_vm.workspace_name(UID), "browser": old,
+                                            "sign_ins": [{"site": "web.whatsapp.com", "name": "WhatsApp",
+                                                          "since": "2026-11-02"}]})
+    backend = fake_vm.backend()
+    agent_workspace.open_workspace(backend, UID, db=store.db)
+    assert old not in fake_vm.vms and ("delete", old) in fake_vm.calls
+    record = agent_workspace.record(store.db, UID)
+    assert not record.get("browser") and agent_workspace.sign_ins(record) == []
+    # Once per process; and a failing deletion is tried at the next start.
+    fake_vm.calls.clear()
+    agent_workspace.open_workspace(backend, UID, db=store.db)
+    assert not [call for call in fake_vm.calls if call[0] == "delete"]
+    monkeypatch.setattr(agent_workspace, "_retired", set())
+    agent_workspace.ref(store.db, UID).set({"browser": old}, merge=True)
+    fake_vm.fail.add("delete")
+    agent_workspace.open_workspace(backend, UID, db=store.db)
+    assert agent_workspace.record(store.db, UID)["browser"] == old and UID not in agent_workspace._retired
 
 
 def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_has_it(tmp_path, monkeypatch, capsys):
@@ -624,7 +646,7 @@ def test_read_lists_the_elements_of_a_frame_with_refs_of_their_own(tmp_path, mon
     assert lines == ["(over the page:)", "frame https://cmp.example/, its elements:", '  heading "Datenschutz"',
                      '  [e9] button "Alle akzeptieren"', "  frame https://cmp.example/inner, its elements:",
                      '    [e9] link "Details"', "(the page under it:)", '[e1] link "Story"', "frame https://ads.example/",
-                     "frame http://192.168.0.1/ (the browser's own computer, which you do not read)",
+                     "frame http://192.168.0.1/ (the workspace's own, which you do not read)",
                      "frame https://video.example/, its elements:", '  [e9] button "Play"']
     # Numbered on: the page's one ref, then the consent frame's, the inner frame's, the video's.
     assert consent.asked == [1] and inner.asked == [2] and video.asked == [3] and pixel.asked == own.asked == []
@@ -1194,7 +1216,7 @@ def test_chrome_starts_with_software_webgl_and_an_old_one_restarts_once():
     assert '[ "$(cat "$dir/chrome-flags" 2>/dev/null)" != "$flags" ]' in restart
     assert "swiftshader" not in restart.split("then", 1)[0].split("flags=", 1)[1].split("\n", 1)[1]
     assert '[ -n "$why" ] && stop_chrome' in restart
-    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index("for _ in $(seq 150)")]
+    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index("# A Chrome started here is ready once it answers")]
     assert 'echo "$flags" >"$dir/chrome-flags"' in start
 
 
@@ -1204,65 +1226,156 @@ def test_the_screen_is_tigervnc_on_a_unix_socket_only():
     Sprite 2026-11-02). Its VNC server stays on a Unix socket of the
     provider's user; nothing listens on TCP, nothing moves the clipboard."""
     display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
-    start = display[display.index('if ! runs "^Xtigervnc :1 "'):display.index("# The rules that hold")]
-    for flag in ('-rfbunixpath "$dir/vnc.sock" -rfbunixmode 0600 -rfbport -1', "-nolisten tcp",
+    start = display[display.index('if [ -z "$(x_pid)" ]'):display.index("# The rules that hold")]
+    for flag in ('-rfbunixpath "$dir/vnc.sock"', "-rfbunixmode 0600 -rfbport -1", "-nolisten tcp",
                  "-AcceptCutText=0 -SendCutText=0", "-AcceptSetDesktopSize=0", "-FrameRate 30"):
         assert flag in start, flag
-    assert "x11vnc -display" not in display.split('if ! runs "^Xtigervnc :1 "', 1)[1]
+    assert "x11vnc -display" not in display.split('if [ -z "$(x_pid)" ]', 1)[1]
     # A VM from before makes way, Chrome first; never under the view's --keep,
     # and no Xtigervnc on the display an old Xvfb still holds.
-    move = display[display.index('old="'):display.index('if ! runs "^Xtigervnc :1 "')]
-    assert '[ "$mode" != "--keep" ]' in move and move.index("stop_chrome") < move.index('pkill -TERM -f -- "$old"')
+    move = display[display.index('old="'):display.index('if [ -z "$(x_pid)" ]')]
+    assert '[ "$mode" != "--keep" ]' in move and move.index("stop_chrome") < move.index('pkill -TERM -u "$me" -f -- "$old"')
     assert '! runs "^Xvfb :1 "' in start.split("\n", 1)[0]
     # The relay connects where it listens.
     assert '"~/.consens/browser/vnc.sock"' in (VM_FILES / "browser" / "relay.py").read_text(encoding="utf-8")
     # Set up before: Chrome stays, TigerVNC comes once (a new marker).
-    setup = (VM_FILES / "browser" / "setup.sh").read_text(encoding="utf-8")
-    assert 'marker="$dir/setup-done-2"' in setup
+    install = (VM_FILES / "browser" / "install.sh").read_text(encoding="utf-8")
+    assert 'marker="$dir/setup-done-2"' in install
     assert "if ! command -v Xtigervnc >/dev/null; then\n  $apt install -y -qq --no-install-recommends " \
-           "tigervnc-standalone-server" in setup
-    assert "x11vnc" not in setup and "xvfb" not in setup
+           "tigervnc-standalone-server" in install
+    assert "x11vnc" not in install and "xvfb" not in install
     # That VM's browser waits for it: apt waits for another apt, finishes a
     # cut-off install, and one failing source does not end the setup.
-    assert 'apt="sudo apt-get -o DPkg::Lock::Timeout=60"' in setup
-    assert "sudo dpkg --configure -a || true\n  $apt update -qq || true" in setup
+    assert 'apt="sudo apt-get -o DPkg::Lock::Timeout=60"' in install
+    assert "sudo dpkg --configure -a || true\n  $apt update -qq || true" in install
+    # Chrome's package is downloaded where only this user opens it.
+    assert 'download="$(mktemp -d)"' in install and "/tmp/consens-chrome.deb" not in install
     # The old screen is gone before Xtigervnc takes its display, also after KILL.
-    move = display[display.index('old="'):display.index('if ! runs "^Xtigervnc :1 "')]
-    assert move.index('pkill -KILL -f -- "$old"') < move.rindex('runs "$old" || break')
+    assert move.index('pkill -KILL -u "$me" -f -- "$old"') < move.rindex('runs "$old" || break')
+
+
+def test_the_agents_user_reaches_neither_chromes_protocol_nor_its_screen():
+    """Since 2026-11-04 the browser runs on the workbench, next to the
+    agent's user (Max: the computer's own users instead of bridges). Chrome
+    has no debugging port, which any user of the computer could have steered
+    (cdp.py holds its pipe, display.sh starts Chrome only through it); the X
+    server asks for a cookie only the provider's user reads, new with each
+    start; Chrome starts only on an X server that holds its own sockets; and
+    every process display.sh looks for or ends is the provider's user's."""
+    import re
+    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
+    assert "9222" not in display and "--remote-debugging-port" not in display
+    assert "--remote-debugging-address" not in display
+    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index("# A Chrome started here is ready once it answers")]
+    assert 'setsid nohup python3 "$here/cdp.py" "$cdp" google-chrome --user-data-dir="$profile"' in start
+    assert 'cdp="$dir/cdp.sock"' in display and 'chmod 700 "$dir"' in display
+    # The X server's cookie: written by this user with umask 077, then -auth.
+    assert 'auth="$dir/xauthority"' in display and 'export DISPLAY=:1 XAUTHORITY="$auth"' in display
+    cookie = display.split("new_cookie() {", 1)[1].split("\n}", 1)[0]
+    assert "umask 077" in cookie and "MIT-MAGIC-COOKIE-1" in cookie and "os.urandom(16)" in cookie
+    screen = display[display.index('if [ -z "$(x_pid)" ]'):display.index("# The rules that hold")]
+    assert screen.index("new_cookie") < screen.index("Xtigervnc :1 -auth \"$auth\"")
+    # Chrome only on an X server that holds its sockets; else nothing starts,
+    # and the live view's --keep leaves a running Chrome be.
+    assert 'if ! x_ours; then\n  [ "$mode" = "--keep" ] || stop_chrome' in display
+    ours = display.split("x_ours() {", 1)[1].split("\n}", 1)[0]
+    assert '"$(stat -c %u /tmp/.X11-unix/X1)" = "$me"' in ours
+    assert '$8 == "@/tmp/.X11-unix/X1"' in ours and 'find "/proc/$pid/fd"' in ours
+    assert display.index("if ! x_ours; then") < display.index('if [ -z "$(browser_pid)" ]')
+    # Only the provider's user's processes count: one of the agent named like
+    # Chrome or the X server is no Chrome and no screen.
+    for line in display.splitlines():
+        if re.search(r"\bp(grep|kill)\b", line) and not line.lstrip().startswith("#"):
+            assert '-u "$me"' in line, line
+    assert 'x_pid() { pgrep -u "$me" -x Xtigervnc' in display
+    harden = (VM_FILES / "browser" / "harden.sh").read_text(encoding="utf-8")
+    assert 'XAUTHORITY="$dir/xauthority" openbox --reconfigure' in harden
+    assert 'pgrep -u "$(id -u)" -x openbox' in harden
+    # No port, so Chrome's policy blocks none any more.
+    assert "9222" not in (VM_FILES / "browser" / "policy.json").read_text(encoding="utf-8")
+
+
+def test_only_the_bound_x_sockets_count_not_the_connections_to_it():
+    """Review 2026-11-04: x_ours read every socket named like X's, and a
+    connection still waiting (inode 0) or one X closed during the check
+    failed it. Anyone may connect without the cookie, so a loop of the
+    agent's connections ended the user's Chrome. The names /proc/net/unix
+    showed for a listener, a waiting and a taken connection (measured)."""
+    import re
+    import shutil
+    import subprocess
+    if not shutil.which("awk"):
+        pytest.skip("no awk")
+    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
+    ours = display.split("x_ours() {", 1)[1].split("\n}", 1)[0]
+    program = re.search(r"awk '([^']+)' /proc/net/unix", ours).group(1)
+    table = ("Num       RefCount Protocol Flags    Type St Inode Path\n"
+             "00000000ab124791: 00000003 00000000 00000000 0001 02     0 @/tmp/.X11-unix/X1\n"
+             "00000000ff0d0b22: 00000003 00000000 00000000 0001 03 85976 @/tmp/.X11-unix/X1\n"
+             "000000008040b98f: 00000002 00000000 00010000 0001 01 85973 @/tmp/.X11-unix/X1\n"
+             "000000008040b990: 00000002 00000000 00000000 0001 01 85999 @/tmp/.X11-unix/X1\n"
+             "000000008040b991: 00000002 00000000 00010000 0001 01 85974 @/tmp/.X11-unix/X2\n")
+    found = subprocess.run(["awk", program], input=table, capture_output=True, text=True, check=True).stdout.split()
+    # The listener and a socket bound to the name without listening (which
+    # could listen later); never the connections, never another display.
+    assert found == ["85973", "85999"]
+
+
+def test_display_sh_waits_at_most_fifteen_seconds_and_asks_only_a_chrome_it_started():
+    """Review 2026-11-04: the last wait asked Chrome 150 times with 5 s each,
+    so a hung Chrome under the live view's --keep held the lock for almost
+    13 minutes and browser.py's own restart waited in vain."""
+    display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
+    wait = display[display.index("# A Chrome started here is ready once it answers"):]
+    assert "until=$((SECONDS + 15))" in wait and 'while [ "$SECONDS" -lt "$until" ]' in wait
+    assert '{ [ -z "$started" ] || answers 2; }' in wait and "seq 150" not in display
+    start = display[display.index('started=""'):display.index("# A Chrome started here is ready once it answers")]
+    assert start.index('if [ -z "$(browser_pid)" ]; then\n  started=1') < start.index('"$here/cdp.py"')
 
 
 def test_a_chrome_that_no_longer_answers_starts_anew():
     """Max's browser VM, 2026-10-28: a page load and the next connection ran
     into their limits, Chrome died two minutes later, and the open view stayed
-    black. display.sh now tells Chrome's browser process from its children,
-    restarts one whose debugging port does not answer (or that is gone while
-    children remain), and only after every process of the profile ended."""
+    black. display.sh tells Chrome's browser process from its children and
+    from cdp.py, restarts one whose debugging pipe does not answer (or that is
+    gone while children or cdp.py remain), and only after every process of
+    the profile ended."""
     import re
     display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
     # The browser process runs under its starter's name, its children as
     # /opt/google/chrome/chrome (test Sprite 2026-10-28: the old pattern found
-    # only the children). Both belong to the profile, nothing else does.
+    # only the children). Both belong to the profile, nothing else does, also
+    # not cdp.py, whose command line names Chrome's.
     profile = "/home/sprite/.consens/browser/profile"
+    sock = "/home/sprite/.consens/browser/cdp.sock"
     pattern = re.search(r'^chrome="(.*)"$', display, re.M).group(1).replace("$profile", profile)
-    for line in (f"/usr/bin/google-chrome --user-data-dir={profile} --remote-debugging-port=9222",
+    hub = re.search(r'^hub="(.*)"$', display, re.M).group(1).replace("$cdp", sock).replace("\\.", "\\.")
+    for line in (f"/usr/bin/google-chrome --user-data-dir={profile} --remote-debugging-pipe",
                  f"/opt/google/chrome/chrome --type=renderer --user-data-dir={profile} --lang=en-US"):
         assert re.search(pattern, line), line
     for line in (f"/opt/google/chrome/chrome_crashpad_handler --database={profile}/Crash Reports",
-                 f"/usr/bin/google-chrome --user-data-dir={profile}2", f"bash display.sh --keep"):
+                 f"/usr/bin/google-chrome --user-data-dir={profile}2", "bash display.sh --keep",
+                 f"python3 /home/sprite/.consens/workspace/cdp.py {sock} google-chrome --user-data-dir={profile}"):
         assert not re.search(pattern, line), line
+    for line in (f"python3 /home/sprite/.consens/workspace/cdp.py {sock} google-chrome --user-data-dir={profile}",
+                 f"/usr/bin/python3.13 /home/sprite/.consens/workspace/cdp.py {sock} google-chrome"):
+        assert re.search(hub, line), line
+    assert not re.search(hub, f"/usr/bin/google-chrome --user-data-dir={profile}")
     # The children carry the profile's --user-data-dir too: they are not Chrome.
     assert 'grep -q -- " --type="' in display.split("browser_pid() {", 1)[1].split("}", 1)[0]
-    # Alive means its main thread answers: the target list, not the version.
-    assert 'curl -s -m 5 -o /dev/null "http://127.0.0.1:9222/json/list"' in display
+    # Alive means its main thread answers: the target list, not the version, through cdp.py's socket.
+    assert 'curl -s -m "${1:-5}" -o /dev/null --unix-socket "$cdp" "http://localhost/json/list"' in display
     decide = display[display.index('pid="$(browser_pid)"'):display.index('[ -n "$why" ] && stop_chrome')]
     assert '[ "$mode" != "--keep" ]' in decide and '[ "$mode" = "--restart" ]' in decide
-    assert "! listens 9222 || { ! answers && ! answers; }" in decide
-    assert 'elif [ -z "$pid" ] && runs "$chrome"; then' in decide
-    # Never two Chromes on one profile: KILL after TERM, then wait until all are gone.
+    assert '[ ! -S "$cdp" ] || ! runs "$hub" || { ! answers && ! answers; }' in decide
+    assert 'elif [ -z "$pid" ] && { runs "$chrome" || runs "$hub"; }; then' in decide
+    # Never two Chromes on one profile: cdp.py and Chrome get TERM, then KILL,
+    # then the script waits until all are gone.
     stop = display.split("stop_chrome() {", 1)[1].split("\n}", 1)[0]
-    assert stop.index("pkill -TERM") < stop.index("pkill -KILL") < stop.rindex('runs "$chrome" || return 0')
+    assert stop.index('pkill -TERM -u "$me" -f -- "$hub"') < stop.index("pkill -KILL") \
+        < stop.rindex('runs "$chrome" || runs "$hub" || return 0')
     # Earlier starts stay in the log, each with its reason, up to about 1 MB.
-    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index("for _ in $(seq 150)")]
+    start = display[display.index('if [ -z "$(browser_pid)" ]'):display.index("# A Chrome started here is ready once it answers")]
     assert 'Chrome starts${why:+, restarted: $why}" >>"$log"' in start and '>>"$log" 2>&1' in start
     assert '-gt 1000000 ] && mv -f "$log" "$log.1"' in start
 
@@ -1424,7 +1537,7 @@ def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, ca
     server.close()
     lines = [json.loads(line) for line in capfd.readouterr().err.splitlines()]
     states = [line["state"] for line in lines if "state" in line]
-    assert states == ["setup", "starting", "ready"] and scripts == ["setup.sh", "display.sh"]
+    assert states == ["setup", "starting", "ready"] and scripts == ["install.sh", "display.sh"]
     # Besides the states only the network counters at the end (None here without /proc).
     assert all("state" in line or "net" in line for line in lines)
     assert stdout.getvalue().startswith(b"RFB 003.008\n") or stdout.getvalue() == b""
@@ -1455,7 +1568,7 @@ def test_the_open_view_starts_a_chrome_that_ended_again(monkeypatch):
 
 def test_a_relay_without_its_browser_says_so(monkeypatch, capfd):
     relay = load("relay")
-    monkeypatch.setattr(relay, "run", lambda script, *args: script == "setup.sh")
+    monkeypatch.setattr(relay, "run", lambda script, *args: script == "install.sh")
     monkeypatch.setattr(relay.os.path, "exists", lambda path: True)
     assert relay.main() == 1
     assert [json.loads(line)["state"] for line in capfd.readouterr().err.splitlines()] == ["starting", "error"]
@@ -1591,14 +1704,14 @@ def test_a_chat_folder_is_only_ever_a_folder_of_its_own():
 
 # --- Deletion ------------------------------------------------------------------------------
 
-def test_the_accounts_deletion_deletes_both_vms_by_their_names(store, fake_vm):
+def test_the_accounts_deletion_deletes_its_vm_and_the_browser_vm_of_before_by_their_names(store, fake_vm):
     """Also without a record (security audit 2026-10-27): the names follow
-    from the account."""
+    from the account, the browser VM of 2026-10-27 to 2026-11-04 too."""
     fake_vm.vms[agent_vm.workspace_name(UID)] = {"files": {}, "checkpoints": []}
-    fake_vm.vms[agent_vm.browser_name(UID)] = {"files": {}, "checkpoints": []}
+    fake_vm.vms[agent_vm.old_browser_name(UID)] = {"files": {}, "checkpoints": []}
     agent_workspace.delete_for_account(store.db, UID, factory=fake_vm.backend)
     assert ("delete", agent_vm.workspace_name(UID)) in fake_vm.calls
-    assert ("delete", agent_vm.browser_name(UID)) in fake_vm.calls and fake_vm.vms == {}
+    assert ("delete", agent_vm.old_browser_name(UID)) in fake_vm.calls and fake_vm.vms == {}
     assert agent_workspace.record(store.db, UID) == {}
 
 
@@ -1630,22 +1743,20 @@ def provisioning(monkeypatch):
     monkeypatch.setattr(agent_workspace, "_provisioned", set())
 
 
-def test_a_new_accounts_first_message_makes_both_vms_in_the_background(store, fake_vm, provisioning):
+def test_a_new_accounts_first_message_makes_its_vm_in_the_background(store, fake_vm, provisioning):
     """Prod 2026-11-02: a colleague of Max's signed up, talked to the agent,
-    then waited for the setup of both VMs (57 s for the workbench alone). Now
-    the account's first message makes them in the background: the browser
-    with its Chrome started once and told to rest, the workbench set up
-    under its base rules; the record names both first, so the account's
-    deletion finds them."""
+    then waited for the setup (57 s for the workbench alone). Now the
+    account's first message makes the VM in the background, under its
+    rules, with its Chrome started once and told to rest; the record names
+    it first, so the account's deletion finds it."""
     thread = agent_workspace.provision(store, UID)
     thread.join(10)
-    browser, workbench = agent_vm.browser_name(UID), agent_vm.workspace_name(UID)
+    name = agent_vm.workspace_name(UID)
     record = agent_workspace.record(store.db, UID)
-    assert record["name"] == workbench and record["browser"] == browser and record["provider"] == "fake"
-    assert fake_vm.warmed == [browser] and fake_vm.rested == [browser] and fake_vm.requests == []
-    assert fake_vm.vms[workbench]["policy"] == agent_vm.WORKBENCH_RULES
-    assert fake_vm.vms[workbench]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
-    assert fake_vm.vms[browser]["files"][agent_workspace.VERSION_PATH] == agent_workspace.BROWSER_VERSION.encode()
+    assert record["name"] == name and "browser" not in record and record["provider"] == "fake"
+    assert fake_vm.warmed == [name] and fake_vm.rested == [name] and fake_vm.requests == []
+    assert fake_vm.vms[name]["policy"] == agent_vm.RULES
+    assert fake_vm.vms[name]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
     # Its estimates (what the chat counts down meanwhile) ended with it.
     assert agent_workspace.start_until(UID) is None
     # Once per process and account: no second look at the record.
@@ -1654,45 +1765,38 @@ def test_a_new_accounts_first_message_makes_both_vms_in_the_background(store, fa
 
 
 def test_an_account_that_had_its_workspace_is_left_as_it_is(store, fake_vm, provisioning, monkeypatch):
-    """A record that names the VMs, both there: a message opened them
+    """A record that names the VM, and it is there: a message opened it
     before. Nothing is made, nothing woken. And off is off."""
-    browser, workbench = agent_vm.browser_name(UID), agent_vm.workspace_name(UID)
-    agent_workspace.ref(store.db, UID).set({"name": workbench, "browser": browser})
-    backend = fake_vm.backend()
-    for name in (browser, workbench):
-        backend.ensure(name)
+    name = agent_vm.workspace_name(UID)
+    agent_workspace.ref(store.db, UID).set({"name": name})
+    fake_vm.backend().ensure(name)
     agent_workspace.provision(store, UID).join(10)
-    assert [call[0] for call in fake_vm.calls if call[0] not in {"exists", "close"}] == ["ensure", "ensure"]
-    assert fake_vm.warmed == [] and fake_vm.vms[workbench]["files"] == {}
+    assert [call[0] for call in fake_vm.calls if call[0] not in {"exists", "close"}] == ["ensure"]
+    assert fake_vm.warmed == [] and fake_vm.vms[name]["files"] == {}
     monkeypatch.setenv("AGENT_WORKSPACE_PROVISION", "off")
     assert agent_workspace.provision(store, "another-account") is None
 
 
-@pytest.mark.parametrize("opened", ["browser", "workbench"])
-def test_a_view_opened_before_the_first_message_leaves_the_other_vm_to_the_provisioning(
-        store, fake_vm, provisioning, opened):
-    """The live view (or the terminal) names both VMs on the record but makes
-    only its own: the first message then made neither, and the other one's
-    whole setup fell to its first call (bug hunt 2026-11-03). Now each VM
-    that is not there is made; the one that is stays as it is."""
-    browser, workbench = agent_vm.browser_name(UID), agent_vm.workspace_name(UID)
+def test_a_view_opened_before_the_first_message_leaves_the_provisioning_nothing(store, fake_vm, provisioning):
+    """The live view (or the terminal) names the VM on the record and makes
+    it: the first message then makes nothing more. A record whose VM is gone
+    gets it made again."""
+    name = agent_vm.workspace_name(UID)
     agent_workspace.record_for_view(store, UID, provider="fake")
-    fake_vm.backend().ensure(browser if opened == "browser" else workbench)
+    fake_vm.backend().ensure(name)
     agent_workspace.provision(store, UID).join(10)
-    if opened == "browser":
-        assert fake_vm.warmed == []
-        assert fake_vm.vms[workbench]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
-        assert fake_vm.vms[browser]["files"] == {}
-    else:
-        assert fake_vm.warmed == [browser] and fake_vm.rested == [browser]
-        assert fake_vm.vms[workbench]["files"] == {}
+    assert fake_vm.warmed == [] and fake_vm.vms[name]["files"] == {}
+    del fake_vm.vms[name]
+    agent_workspace._provisioned.discard(UID)
+    agent_workspace.provision(store, UID).join(10)
+    assert fake_vm.warmed == [name]
+    assert fake_vm.vms[name]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
 
 
 def test_a_messages_start_waits_for_the_setup_running_and_runs_none_of_its_own(store, fake_vm):
-    """The account's provisioning holds the workbench's setup (setup_lock):
-    the message's start waits for it, then finds the version there, so
-    setup.sh never runs twice side by side (each would undo the other's
-    rule for Chrome's download)."""
+    """The account's provisioning holds the VM's setup (setup_lock): the
+    message's start waits for it, then finds the version there, so setup.sh
+    never runs twice side by side."""
     import threading
     from test_agent_vm import SETUP, Agent, vm_loop
     from app.services.agent_vm_tools import VmExecArgs
@@ -1711,7 +1815,7 @@ def test_a_messages_start_waits_for_the_setup_running_and_runs_none_of_its_own(s
         assert not done.wait(.6)
         # The provisioning's setup ends: the workbench is there at this version.
         backend, name = fake_vm.backend(), agent_vm.workspace_name(UID)
-        backend.ensure(name, agent_vm.WORKBENCH_RULES)
+        backend.ensure(name, agent_vm.RULES)
         agent_workspace.prepare(backend, name)
     finally:
         lock.release()

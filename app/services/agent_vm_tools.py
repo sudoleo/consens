@@ -9,16 +9,15 @@ shared by its chats one message at a time, each chat in its own folder
 (agent_vm.chat_dir), where commands start and relative paths lead. One
 VMSession per message: its first call of the workspace leases it and
 records it on the account and the chat (before the provider creates it, so
-deleting either always finds it); the browser needs no more (since
-2026-10-30). The first call of the workbench wakes or creates it, sets its
-rules where they changed, brings its tools up to date, takes the message's
+deleting either always finds it); the browser needs no more than that and
+the VM's tools (since 2026-10-30). The first call of the agent's side wakes
+or creates the VM, brings its tools up to date, takes the message's
 checkpoint (the state before this message changed anything; only a call
-that changes the workbench waits for it) and copies the message's
+that changes the workspace waits for it) and copies the message's
 attachments into the chat folder's ``input``. open_workspace begins all of
 it while the model thinks (VMTools.prewarm). Another chat holding the
 workspace costs the VM tools for this message (VM_BUSY), never the answer.
-Messages that never call the workbench neither wake it nor take a
-checkpoint.
+Messages that never call the agent's side take no checkpoint.
 
 Each call is one activity event of its tool (agent-activity.js): what ran,
 its output's end while it runs (``report``, at most every REPORT_SECONDS),
@@ -62,9 +61,11 @@ the agent runs as its own user without sudo (agent_vm.agent_argv), so its
 tools reach only what that user may; a path it may not use is the agent's
 error, never the VM's failure. System packages come through
 vm_install_packages: typed apt package names that the server installs as
-root. The browser is a VM of its own (agent_browser.py), and the
-workbench's network is closed but for the package registries and what the
-user allowed for the chat (request_domain, agent_domains.py).
+root. The browser runs on the same VM as the provider's user
+(agent_browser.py), out of the agent's user's reach, and the VM reaches the
+open web (agent_vm.RULES; until 2026-11-04 the browser had a VM of its own
+and the agent's side reached only the package registries and the domains
+the user allowed for a chat).
 """
 from __future__ import annotations
 
@@ -545,9 +546,6 @@ class VMSession:
         self.claim = None
         # The workspace's notes (agent_workspace.open_chat), with the first result.
         self.notes = None
-        # The domains the user allowed for this chat, in the workbench's
-        # policy while this message has the workspace (agent_domains.py).
-        self.domains = []
         self.backend = None
         # idle, leased (the browser may run), ready (the workbench too),
         # unavailable or busy (both for the rest of the message).
@@ -587,11 +585,8 @@ class VMSession:
         self._checkpoint_job = None
         self._closed = False
         self._stop = threading.Event()
-        # The workbench's rules as this message set them (policy_key), None
-        # while unknown; whether its start touched them (_leave_policy).
-        self._policy = None
+        # Whether the agent's side started in this message (_sweep_deleted).
         self._bench_ran = False
-        self._tunnel = False
         # What else ends with the message (the browser's rest, agent_browser).
         self._on_close = []
         self.closer = None
@@ -693,7 +688,7 @@ class VMSession:
         """The lease (agent_workspace.claim): the account and the chat name
         the workspace before the provider creates it, and this message holds
         it, kept by _keep_lease while it runs."""
-        from app.services import agent_tunnel, agent_workspace
+        from app.services import agent_workspace
         since = time.monotonic()
         with self._lock:
             if self.backend is None:
@@ -718,12 +713,10 @@ class VMSession:
                 self.claim, self.leased, self._leased_at = claim, True, self.clock()
                 if self.state == "idle":
                     self.state = "leased"
-                self._tunnel = True
         if closed:
             # The message ended while this start ran (a prewarm it never used).
-            agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id, policy=claim.policy)
+            agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id)
             raise _VMOff(VM_UNAVAILABLE)
-        agent_tunnel.begin(self.loop.uid)
         threading.Thread(target=self._keep_lease, name="agent-vm-lease", daemon=True).start()
         self._took("lease", since)
 
@@ -762,10 +755,11 @@ class VMSession:
             return
 
     def _bench(self, cancellation):
-        """The workbench: its rules (only when they differ from what the last
-        message confirmed, T6), its tools, the chat's folder with notes and
-        keys in one command, then the checkpoint beside the rest."""
-        from app.services import agent_domains, agent_secrets, agent_workspace
+        """The agent's side: the VM and its tools (agent_workspace.open_workspace,
+        which the browser's warm-up and the account's provisioning share
+        under the setup lock), the chat's folder with notes and keys in one
+        command, then the checkpoint beside the rest."""
+        from app.services import agent_secrets, agent_workspace
         lease = self._job("lease", cancellation)
         if lease is not None:
             while not lease.done.wait(.1):
@@ -774,50 +768,18 @@ class VMSession:
                 raise lease.error
         backend, claim = self.backend, self.claim
         since = time.monotonic()
-        # What the user is told while a call waits for this (_wait), and
-        # the account's provisioning, which this waits for when it sets the
-        # workbench up right now (agent_workspace.setup_lock).
+        # What the user is told while a call waits for this (_wait).
         start = agent_workspace.Start(self.loop.uid, "workbench")
-        setup = agent_workspace.setup_lock(self.name)
         try:
             self._go_on(cancellation)
-            if not setup.acquire(blocking=False):
-                while not setup.acquire(timeout=.2):
-                    self._go_on(cancellation)
-                # The account's provisioning set the workbench up meanwhile (its own phase in the log).
-                since = self._took("setup_wait", since)
-            try:
-                with self._lock:
-                    self.domains = list(dict.fromkeys([*claim.domains, *self.domains]))
-                    domains, self._bench_ran, self._policy = list(self.domains), True, None
-                rules = agent_domains.rules(domains)
-                key = agent_workspace.policy_key(rules)
-                if claim.policy == key and not agent_workspace.policy_unsure(self.name):
-                    created = backend.ensure(self.name)
-                    if created:
-                        # Made anew: no rules yet.
-                        backend.set_policy(self.name, rules)
-                else:
-                    created = backend.ensure(self.name, rules)
-                with self._lock:
-                    self._policy = key
-                status = getattr(backend, "statuses", {}).get(self.name)
-                if status:
-                    self.cold["workbench"] = status == "cold"
-                if created or status == "cold":
-                    start.phase("setup" if created else "cold")
-                since = self._took("rules", since)
-                self._go_on(cancellation)
-                # A setup widens the rules for a moment (agent_workspace._open_for_setup):
-                # unknown until it is through.
-                with self._lock:
-                    self._policy = None
-                agent_workspace.prepare(backend, self.name, cancellation, timeout=self._answer_left(),
-                                        on_setup=lambda: start.phase("setup" if created else "update"))
-                with self._lock:
-                    self._policy = key
-            finally:
-                setup.release()
+            with self._lock:
+                self._bench_ran = True
+            agent_workspace.open_workspace(backend, self.loop.uid, cancellation, start=start,
+                                           db=getattr(getattr(self.loop, "store", None), "db", None),
+                                           timeout=self._answer_left())
+            status = getattr(backend, "statuses", {}).get(self.name)
+            if status:
+                self.cold["workbench"] = status == "cold"
             since = self._took("tools", since)
             self._go_on(cancellation)
             opened = agent_workspace.open_chat(backend, self.name, self.loop.chat_id, title=claim.title,
@@ -1068,24 +1030,19 @@ class VMSession:
 
     def close(self):
         """The message's end: its VM time charged, then on a thread of its
-        own (_finish) the chat's domains out of the workbench's rules, the
-        lease released and the browser told to rest. The message waits for
-        that at most CLOSE_WAIT_SECONDS: until 2026-10-30 it waited for the
-        rules up to WAKE_SECONDS, also when a deploy's interrupt left it 20
-        (runtime audit A6). Whatever does not finish leaves the record's rules
-        unknown, so the next start sets them (Claim.policy), and the lease
-        ends by itself."""
-        from app.services import agent_tunnel, agent_vm_time
+        own (_finish) the lease released and the browser told to rest. The
+        message waits for that at most CLOSE_WAIT_SECONDS: until 2026-10-30
+        it waited for the workbench's rules up to WAKE_SECONDS, also when a
+        deploy's interrupt left it 20 (runtime audit A6). Whatever does not
+        finish leaves the lease to end by itself."""
+        from app.services import agent_vm_time
         with self._lock:
             if self._closed:
                 return
             self._closed = True
-            tunnel = self._tunnel
         self._stop.set()
         if self.seconds + self.reserved > 0:
             agent_vm_time.charge(self.loop.store, self.loop.uid, self.seconds + self.reserved)
-        if tunnel:
-            agent_tunnel.end(self.loop.uid)
         self.closer = threading.Thread(target=self._finish, name="agent-vm-close", daemon=True)
         self.closer.start()
         self.closer.join(CLOSE_WAIT_SECONDS)
@@ -1101,11 +1058,9 @@ class VMSession:
             self.leased = False
             callbacks = list(self._on_close)
         # A lease that ran out while the message waited (a card, up to 30
-        # minutes) may be another chat's message's now: the rules are that
-        # message's, never set back from here (bug hunt 2026-10-30).
+        # minutes) may be another chat's message's now (bug hunt 2026-10-30).
         if leased and agent_workspace.holds_lease(self.loop.store, self.loop.uid, self.loop.turn_id) is not False:
-            policy = self._leave_policy()
-            agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id, policy=policy)
+            agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id)
         # After the release: it touches this chat's paths alone, and another
         # chat's message need not wait for it.
         if self._bench_ran and self.loop.cancellation.cancelled:
@@ -1149,29 +1104,6 @@ class VMSession:
         except Exception as exc:
             logging.warning("Agent VM folder of a deleted chat not swept category=%s", safe_exception(exc))
 
-    def _leave_policy(self):
-        """The workbench's rules as the message leaves them: the chat's
-        domains go (the next claim sets its own chat's), and the key the
-        release confirms; None when unknown (a failure, a start cut short)."""
-        from app.services import agent_workspace
-        with self._lock:
-            ran, key, domains, claim = self._bench_ran, self._policy, list(self.domains), self.claim
-        if not ran:
-            # The workbench's start never touched them: as the claim found them.
-            return claim.policy if claim is not None else None
-        base = agent_workspace.policy_key(agent_vm.WORKBENCH_RULES)
-        if not domains and key == base:
-            return base
-        # The chat's domains in them, or unknown (a setup that widened them
-        # for a moment, a start cut short): back to the base list either way.
-        try:
-            self.backend.set_policy(self.name, agent_vm.WORKBENCH_RULES)
-        except Exception as exc:
-            logging.warning("Agent workbench policy reset failed category=%s %s", safe_exception(exc),
-                            log_tag(self.loop))
-            return None
-        return base
-
 
 class VMTools:
     """The VM tools of one message, around its VMSession."""
@@ -1200,7 +1132,6 @@ class VMTools:
         from app.services import agent_github, agent_web_images
         from app.services.agent_ask import AskTools
         from app.services.agent_browser import BrowserTools
-        from app.services.agent_domains import DomainTools
         from app.services.agent_vm_processes import ProcessTools
         # GitHub through the user's own installation of the app (agent_github.py);
         # without the app's configuration the tools say "not set up".
@@ -1253,8 +1184,6 @@ class VMTools:
             *self._browser_tools(BrowserTools).tools(),
             # The user's part: their turn in the browser, their yes to a step (agent_ask.py).
             *AskTools(self).tools(),
-            # Domains beyond the package registries: Pro and admins (routers/agent.py domains_allowed).
-            *(DomainTools(self).tools() if getattr(self.loop, "domains", True) else []),
             *github,
         ]]
 
@@ -1287,11 +1216,11 @@ class VMTools:
 
     def prewarm(self, *, bench=True):
         """Starts the workspace while the model still thinks, on a thread of
-        its own (runtime audit 2026-10-30, T1): after open_workspace the
-        browser VM with its Chrome and, with ``bench``, the lease and the
-        workbench; for a message that starts with the workspace open only
-        the browser (nothing else is known to be needed). Nothing when the
-        day's VM time is used up or the workspace is off; Stop ends it."""
+        its own (runtime audit 2026-10-30, T1): after open_workspace the VM
+        with its Chrome and, with ``bench``, the lease and the agent's side;
+        for a message that starts with the workspace open only the browser
+        (nothing else is known to be needed). Nothing when the day's VM time
+        is used up or the workspace is off; Stop ends it."""
         def run():
             from app.services import workspace_guard
             from app.services.agent_browser import BrowserTools
