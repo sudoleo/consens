@@ -5276,9 +5276,10 @@ ab. Ein gestoppter Turn sendet jetzt ein Terminal-Frame `error` mit
 `code: cancelled` (für andere Tabs und wiederverbindende Browser). Zwei
 gleichzeitige POSTs derselben Identität: der zweite bekommt 409
 `request_running` (schon vor der Vorbereitung, wenn der Prozess die Identität
-laufen hat; sonst `AgentRunDuplicate`, das `start()` vor Shutdown und Stop-Marke
-prüft), `agent_live.acquire` teilt einen noch laufenden Puffer statt ihn zu
-ersetzen. Kommt SIGTERM während der Vorbereitung, endet der schon angelegte Turn
+laufen hat; sonst, wenn er den Puffer nicht selbst angelegt hat, vor `start()`,
+seit 2026-11-04; sonst `AgentRunDuplicate`, das `start()` vor Shutdown und
+Stop-Marke prüft), `agent_live.acquire` teilt einen noch laufenden Puffer statt
+ihn zu ersetzen. Kommt SIGTERM während der Vorbereitung, endet der schon angelegte Turn
 mit `run_interrupted` (503).
 
 *Neustart/Deploy.* Render schickt SIGTERM und wartet die Shutdown-Frist des
@@ -5317,7 +5318,9 @@ bekommt er zuerst die neuesten verworfenen Frames mit bleibendem Zustand
 `event: reset`. Ein als Ganzes verdrängter Puffer (`evicted`) liefert nichts
 mehr und beendet seinen Tail ohne Terminal-Frame; der Browser folgt dann dem
 gespeicherten Turn. `acquire()` meldet, ob die Anfrage den Puffer angelegt hat:
-nur dann darf sie ihn (und den Turn) bei einem Startfehler beenden;
+nur dann startet sie den Lauf und darf ihn (und den Turn) bei einem Startfehler
+beenden (bis 2026-11-04 startete auch die andere, und kam sie zuerst, verwarf
+das `AgentRunDuplicate` des Anlegers den Puffer ihres Laufs);
 `AgentRunDuplicate` verwirft einen eigenen, nie benutzten Puffer (`discard`).
 `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (Agent-Zugang,
 120/min, `private, no-store`, kein Firestore) liefert `{events:[{seq,type,data}],

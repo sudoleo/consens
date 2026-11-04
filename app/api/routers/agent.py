@@ -858,6 +858,15 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                 from app.services import agent_watches
                 agent_watches.turn_ended(uid, payload.chat_id, turn["id"], watch_run)
 
+    if not live_owned:
+        # Another request of this identity made the buffer and starts the run
+        # of this same turn. Never this one: its start could come first, and
+        # the maker's duplicate refusal then discarded the buffer this run
+        # fed (bug hunt 2026-11-01). Its buffer and turn stay untouched.
+        lease.release()
+        return JSONResponse({"error": "This request is still running.", "code": "request_running",
+                             "recoverable": True, "recovery_state": "running"}, status_code=409)
+
     def interrupt(reason):
         # Shutdown: end with this reason instead of a plain Stop, so the
         # saved turn says why it is incomplete.
@@ -872,21 +881,17 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         # Two identical requests at once: the first one runs this turn; its
         # buffer and saved state stay untouched.
         lease.release()
-        if live_owned:
-            agent_live.discard(live)
+        agent_live.discard(live)
         return JSONResponse({"error": str(exc), "code": "request_running", "recoverable": True,
                              "recovery_state": "running"}, status_code=409)
     except Exception as exc:
         try:
-            # A buffer this request did not create belongs to a running
-            # duplicate, and so does the turn: leave both alone.
-            if live_owned:
-                agent_live.finish(live)
-                failure = ({"code": "cancelled", "error": str(exc)} if isinstance(exc, AgentRunStopped)
-                           else {"code": "run_interrupted", "error": str(exc)} if isinstance(exc, AgentShuttingDown)
-                           else agent_failure(exc))
-                store.release_unclaimed(uid, payload.chat_id, turn["id"], failure=failure)
-                _save_interrupted(uid, payload, store, turn["id"])
+            agent_live.finish(live)
+            failure = ({"code": "cancelled", "error": str(exc)} if isinstance(exc, AgentRunStopped)
+                       else {"code": "run_interrupted", "error": str(exc)} if isinstance(exc, AgentShuttingDown)
+                       else agent_failure(exc))
+            store.release_unclaimed(uid, payload.chat_id, turn["id"], failure=failure)
+            _save_interrupted(uid, payload, store, turn["id"])
         finally:
             lease.release()
         if isinstance(exc, AgentRunStopped):

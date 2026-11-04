@@ -501,3 +501,22 @@ def test_following_a_turn_never_uses_up_the_send_limit(api, runs, monkeypatch):
     second = client.post("/agent", json={**payload, "client_request_id": "next"}, headers=AUTH)
     assert second.status_code == 200 and "event: final" in second.text and len(calls) == 2
 
+
+
+def test_a_request_that_did_not_make_the_buffer_never_starts_the_run(api, runs, live, monkeypatch):
+    """Two identical requests at once (bug hunt 2026-11-01): the one that did
+    not make the live buffer could start first; the maker's start then found
+    a duplicate and discarded the buffer the run fed (both tails without an
+    end), and with a Stop the second one used up the stop mark without
+    releasing the turn. Only the buffer's maker starts the run."""
+    client, store, calls = api
+    chat_id = _chat(client)
+    # The maker of the buffer, about to start its run.
+    owned, created = live.acquire(UID, chat_id, "race")
+    assert created
+    response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi", "client_request_id": "race",
+                                           "bookmark_id": "bm1"}, headers=AUTH)
+    assert response.status_code == 409 and response.json()["code"] == "request_running"
+    assert runs.active() == 0 and not calls
+    assert live.read(UID, chat_id, "race")["done"] is False
+    assert _turn(store, chat_id)["status"] == "pending"
