@@ -636,8 +636,13 @@
   // A thought for the calm view: the newest heading of a reasoning summary
   // ("Checking the numbers", the way ChatGPT shows it), else its newest
   // complete sentence; of a note its first. Short ones only, nothing cut: a
-  // longer one leaves the thought before it standing.
+  // longer one leaves the thought before it standing. A sentence of raw
+  // thinking needs THOUGHT_WORDS words and a capital at its start: Max's
+  // line read "Also maybe share nothing." (2026-11-04), a scrap of the
+  // model's deliberation that tells the user nothing.
   const CALM_CHARS = 120;
+  const THOUGHT_WORDS = 6;
+  const substantial = sentence => /^[\p{Lu}\d]/u.test(sentence) && sentence.split(/\s+/).length >= THOUGHT_WORDS;
   const HEADING = /^\s*(?:\*\*([^*]+)\*\*|__([^_]+)__|#{1,6}\s+(.+?))\s*$/;
   const plain = line => line.replace(/^[#*>\s-]+/, '').replace(/^\d{1,3}[.)]\s+/, '')
     .replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim();
@@ -650,7 +655,8 @@
         if (heading && heading.length <= 80) return heading;
       }
       for (let index = lines.length - 1; index >= 0; index -= 1) {
-        const fit = sentences(plain(lines[index])).findLast(sentence => sentence.length <= CALM_CHARS);
+        const fit = sentences(plain(lines[index])).findLast(sentence => sentence.length <= CALM_CHARS
+          && substantial(sentence));
         if (fit) return fit;
       }
       return '';
@@ -683,24 +689,28 @@
       line.timer = line.next = null;
       return text;
     }
-    if (!line || now - line.at >= dwell) {
+    // Each text stands its own time (since 2026-11-04, one line for status
+    // and thought): a thought its seconds also when a step follows it.
+    if (!line || now - line.at >= line.hold) {
       clearTimeout(line?.timer);
-      lines.set(id, { text, at: now, timer: null, next: null });
+      lines.set(id, { text, at: now, hold: dwell, timer: null, next: null });
       return text;
     }
     line.next = text;
+    line.nextHold = dwell;
     line.timer ||= setTimeout(() => {
       line.timer = null;
       if (line.next === null || lines.get(id) !== line) return;
       line.text = line.next;
+      line.hold = line.nextHold ?? dwell;
       line.next = null;
       line.at = performance.now();
       const node = view.previewNodes.get(id);
       if (!view.running || !node?.isConnected) return;
-      if (id === 'calm-thought') { crossfade(node, line.text, view); return; }
+      if (id === 'calm-status') { crossfade(node, line.text, view); return; }
       settle(view, () => { node.textContent = line.text; });
       motion(node, [{ opacity: .65 }, { opacity: 1 }], () => {}, 160);
-    }, Math.max(0, line.at + dwell - now) + 20);
+    }, Math.max(0, line.at + line.hold - now) + 20);
     return line.text;
   }
   function dropPaced(view) {
@@ -1661,15 +1671,22 @@
         || (item.kind === 'hold' && ((item.item.state || 'waiting') === 'waiting' || index > since))
         || (item.kind === 'user' && index > since));
       if (running && !saving && !held) {
-        lines.push({ id: 'calm-status', kind: 'step', current: true, text: pace(view, 'calm-status', heading, STATUS_DWELL_MS) });
-        let thought = '';
-        for (let index = events.length - 1; index >= 0 && !thought; index -= 1) {
-          const item = events[index];
-          if ((isProgress.has(item) && !item.from_user) || isReasoning.has(item)) thought = thoughtOf(item);
-        }
+        // One line (since 2026-11-04; Max: the thin, indented thought under
+        // the status "does not fit there"): what a running step does, else
+        // the newest thought since the last step, else the status. It keeps
+        // the mark and its sheen and cross-fades from one to the next.
         const aside = paragraphs.find(item => item.id === 'comparison-highlight' || item.id === 'waiting');
+        let thought = '';
+        if (!activeTool && !aside) {
+          for (let index = events.length - 1; index >= 0 && !thought; index -= 1) {
+            const item = events[index];
+            if (item.kind === 'tool') break;
+            if ((isProgress.has(item) && !item.from_user) || isReasoning.has(item)) thought = thoughtOf(item);
+          }
+        }
+        lines.push({ id: 'calm-status', kind: 'step', current: true, fade: true,
+          text: pace(view, 'calm-status', thought || heading, thought ? THOUGHT_DWELL_MS : STATUS_DWELL_MS) });
         if (aside) lines.push(aside);
-        else if (thought) lines.push({ id: 'calm-thought', kind: 'progress', calm: true, text: pace(view, 'calm-thought', thought, THOUGHT_DWELL_MS) });
       }
     }
     // The workspace's start, counted down right under the step that waits for it.
@@ -1753,7 +1770,6 @@
         if (item.quiet && p.getAttribute('aria-hidden') !== 'true') p.setAttribute('aria-hidden', 'true');
         // The agent's note beside a call: a few lines here, whole in the timeline.
         p.classList.toggle('agent-progress-note', item.kind === 'progress' && String(item.id).endsWith('/note'));
-        p.classList.toggle('agent-progress-thought', Boolean(item.calm));
         p.classList.toggle('agent-progress-step', item.kind === 'step');
         p.classList.toggle('agent-current-status', Boolean(item.current));
         if (item.current) { if (p.getAttribute('role') !== 'status') p.setAttribute('role', 'status'); }
@@ -1761,7 +1777,7 @@
         if (item.status && p.dataset.status !== item.status) p.dataset.status = item.status;
         // A reasoning line that changes in place (a comparison model's quote,
         // the chat model's thinking) cross-fades; a step only brightens.
-        if (item.kind === 'progress') crossfade(p, item.text, view);
+        if (item.kind === 'progress' || item.fade) crossfade(p, item.text, view);
         else if (p.textContent !== window.App.t(item.text)) {
           const previous = p.textContent;
           p.textContent = item.text;

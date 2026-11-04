@@ -5567,17 +5567,21 @@ Fortsetzungsdaten bleiben im laufenden Provider-Protokoll.
 casual Nutzer zeigen sie viel zu viel … er soll keine Konsolenbefehle sehen
 (per default).“ Ohne die Kontoeinstellung `detailed_progress` (Display →
 Detailed progress) baut `renderActivity` statt der vollen Live-Absätze nur
-`calm-status` und `calm-thought`: eine Zeile in Alltagsworten, was der Agent
+eine Zeile `calm-status` (bis 2026-11-04 darunter `calm-thought` als dünner,
+eingerückter Untertitel; Max: „passt da nicht hin“): in Alltagsworten, was der Agent
 gerade tut (`calmStep`: Arbeitsplatz-Befehle und Prozesse „Working in the
 workspace…“, Pakete „Setting up the workspace…“, Dateien mit Namen ohne Pfad
 „Writing “snake.js”…“, Browser nach Aktion ohne Ref/Koordinate, eine Seite mit
-ihrem Host; andere Werkzeuge in ihren bisherigen Worten), darunter wie ein
-Untertitel ein Gedanke (`calmThought`: die neueste Überschrift einer
-Reasoning-Zusammenfassung, sonst der neueste vollständige Satz ≤ 120 Zeichen,
-bei einer Notiz ihr erster; ein längerer lässt den alten stehen, gekürzt wird
-nichts). Während Vergleichsmodelle antworten, steht dort deren Zitat
-(`comparisonLine`), beim Warten auf Tokens der Grund. `pace` hält beide Zeilen
-(Status 1,2 s, Gedanke 4 s); was dazwischen kommt und geht, erscheint nie, der
+ihrem Host; andere Werkzeuge in ihren bisherigen Worten), und solange kein
+Schritt läuft, statt dessen der neueste Gedanke seit dem letzten Schritt
+(`calmThought`: die neueste Überschrift einer Reasoning-Zusammenfassung, sonst
+der neueste vollständige Satz ≤ 120 Zeichen mit mindestens sechs Wörtern und
+Großbuchstaben vorn (`THOUGHT_WORDS`, gegen Fetzen wie „Also maybe share
+nothing.“), bei einer Notiz ihr erster; ein längerer lässt den alten stehen,
+gekürzt wird nichts). Sie behält Zeichen und Schimmer und blendet weich über
+(`fade`). Während Vergleichsmodelle antworten, steht darunter deren Zitat
+(`comparisonLine`), beim Warten auf Tokens der Grund. `pace` hält jeden Text
+seine eigene Zeit (Status 1,2 s, Gedanke 4 s, auch wenn ein Schritt folgt); was dazwischen kommt und geht, erscheint nie, der
 neueste Stand übernimmt per eigenem Timer. Kein „Ran 4 commands“-Stapel, kein
 `<code>`/`<pre>`, keine Ausgabe. Es bleiben Plan-Checkliste und Seitenkarte
 oben, Prüfer-Pausen, „Waiting for your confirmation below“ und Nachrichten des

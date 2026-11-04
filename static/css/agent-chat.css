@@ -947,12 +947,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-progress .agent-progress-note {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden;
 }
-/* The calm view's thought (agent-activity.js calmThought, since 2026-11-01)
-   stands under the line of what the agent does as a subtitle under its
-   title: on the edge of its words after the mark, --space-1 below it (the
-   negative margin collapses with the line's --trace-gap). */
-.agent-progress .agent-progress-thought { padding-left: calc(.86em * 1.395 + .55em); }
-.agent-progress .agent-current-status + .agent-progress-thought { margin-top: calc(var(--space-1) - var(--trace-gap)); }
+/* The calm view's thought (agent-activity.js calmThought) stood under the
+   status as a thin subtitle from 2026-11-01 to 11-04; since then it is the
+   status line itself while the agent thinks (Max: it did not fit there). */
 /* The workspace's start counted down (start-progress.js) under the step
    that waits for it, on the edge of its words: after the mark under the
    calm status, flush under a tool's line, which has none (until 2026-11-03

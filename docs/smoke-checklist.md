@@ -1621,10 +1621,11 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   ohne inneren Scrollkasten. Auch bei 320/390 px keine abgeschnittenen Texte.
 - [ ] Ruhige Live-Zeile (Standard, Display → Detailed progress aus): Während ein
   Arbeitsplatz-Lauf Befehle ausführt, steht unter „Working for …“ nur eine Zeile
-  in Alltagsworten („Working in the workspace…“, „Writing “snake.js”…“) und
-  darunter ein Gedanke, bündig mit dem Text hinter dem Zeichen. Kein Befehl,
-  keine Ausgabe, kein Pfad; keine Zeile blitzt kürzer als etwa eine Sekunde auf,
-  der Gedanke wechselt höchstens alle paar Sekunden. Klick auf den Kopf zeigt
+  in Alltagsworten („Working in the workspace…“, „Writing “snake.js”…“); denkt
+  der Agent gerade, steht in derselben Zeile sein Gedanke (Überschrift oder
+  ganzer Satz, nie ein Fetzen), weich übergeblendet, kein Untertitel darunter.
+  Kein Befehl, keine Ausgabe, kein Pfad; keine Zeile blitzt kürzer als etwa
+  eine Sekunde auf, ein Gedanke steht ein paar Sekunden. Klick auf den Kopf zeigt
   alles. Schalter an: sofort die vollen Zeilen, auch mitten im Lauf.
 - [ ] Duration-Verlauf auch direkt beim Abschluss und nach erneutem Öffnen prüfen:
   Bereits während „Thinking…“ sind Modell, Reasoning-Einstellung und aktuelle

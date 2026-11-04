@@ -3,8 +3,9 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 // The calm view every account starts with (2026-11-01, Max: "a casual user
 // sees far too much, and no console commands by default"): under the head
-// one line says in everyday words what the agent does now, and one thought
-// of its own says what it is after, each held a while. The Display switch
+// one line says in everyday words what the agent does now, or while it
+// thinks what it is after (since 2026-11-04 one line, Max: the thin thought
+// under the status "does not fit there"), each held a while. The Display switch
 // "Detailed progress" (account setting detailed_progress) brings back the
 // lines in full; the history under the head keeps everything either way.
 function setup() {
@@ -21,7 +22,8 @@ function setup() {
   const render = (spec = {}) => activity.render(host, { running: true, status: "running", events, ...spec });
   const preview = () => host.querySelector(".agent-progress");
   const status = () => preview().querySelector(".agent-current-status")?.textContent;
-  const thought = () => preview().querySelector(".agent-progress-thought")?.textContent;
+  // Since 2026-11-04 the thought is the status line itself while no step runs.
+  const thought = () => status();
   // Time passes, and the timers whose time came run.
   const wait = ms => {
     clock.now += ms;
@@ -37,20 +39,25 @@ const note = (id, text) => ({ version: 1, kind: "progress", id: `${id}/note`, st
 
 describe("the calm live view", () => {
   it("says what the agent does in words: no command, no output, no fold of earlier steps", () => {
-    const { activity, events, render, preview, status, thought, host } = setup();
+    const { activity, events, render, preview, status, host, wait } = setup();
     activity.receive(events, note("completion:1", "I'll install the charting library first. Then I build the chart."));
+    render();
+    // Before the step, the agent's own note is the line.
+    expect(status()).toBe("I'll install the charting library first.");
     activity.receive(events, tool({ name: "vm_exec", status: "running", command: "pip install pandas matplotlib",
       started_at: new Date().toISOString(), output: "Collecting pandas\nDownloading pandas-2.3.whl (12 MB)\n" }));
     render();
+    // The note stands its seconds, then the running step takes the line.
+    expect(status()).toBe("I'll install the charting library first.");
+    wait(4100);
     expect(status()).toBe("Working in the workspace…");
-    expect(thought()).toBe("I'll install the charting library first.");
     // Nothing of the console: no block, no code, no output, no command.
     expect(preview().querySelector(".agent-vm, code, pre, .agent-vm-fold")).toBeNull();
     expect(preview().textContent).not.toContain("pip");
     expect(preview().textContent).not.toContain("Collecting");
-    // One line of what it does, its thought under it, nothing else.
+    // One line of what it does, nothing under it (no thin subtitle since 2026-11-04).
     expect([...preview().children].map(child => child.className)).toEqual([
-      "agent-progress-step agent-current-status", "agent-progress-thought"]);
+      "agent-progress-step agent-current-status"]);
     expect(preview().querySelector(".agent-current-status").getAttribute("role")).toBe("status");
     // The history under the head keeps the command, a click away.
     expect(host.querySelector(".agent-activity-content .agent-vm-target").textContent).toBe("pip install pandas matplotlib");
@@ -137,6 +144,11 @@ describe("the calm live view", () => {
     reasoning("r2", "The user wants the 2026 rates. I should check the official site first. Then", "text");
     render();
     expect(thought()).toBe("I should check the official site first.");
+    // A scrap of deliberation says nothing to the user (Max, 2026-11-04): the line keeps its thought.
+    wait(5000);
+    reasoning("r2", " Also maybe share nothing.", "text");
+    render();
+    expect(thought()).toBe("I should check the official site first.");
     // A sentence too long for the line leaves the one before it standing: nothing is cut.
     wait(5000);
     reasoning("r2", ` maybe ${"compare ".repeat(20)}all of them.`, "text");
@@ -172,7 +184,8 @@ describe("the calm live view", () => {
     render({ highlights: [{ id: "a", order: 1, label: "Gemini", text: "Checking the 2026 figures." }] });
     const lines = [...preview().querySelectorAll("p")].map(p => p.textContent);
     expect(lines).toEqual(["Gemini: Checking the 2026 figures."]);
-    expect(thought()).toBeUndefined();
+    // The status line stays the step's while the models answer, no thought on it.
+    expect(preview().querySelector(".agent-current-status")?.textContent ?? "").not.toContain("I'll ask other models.");
     activity.receive(events, tool({ name: "compare_models", status: "succeeded" }));
     activity.receive(events, { version: 1, kind: "status", id: "wait", status: "waiting", text: "Waiting for the allowance." });
     render();
@@ -189,7 +202,7 @@ describe("the calm live view", () => {
     window.App.userSettings.set("detailed_progress", true);
     render();
     expect(preview().querySelector(".agent-vm .agent-vm-target").textContent).toBe("npm test");
-    expect(preview().querySelector(".agent-progress-thought, .agent-current-status")).toBeNull();
+    expect(preview().querySelector(".agent-current-status")).toBeNull();
     window.App.userSettings.set("detailed_progress", false);
     render();
     expect(preview().querySelector(".agent-vm")).toBeNull();
