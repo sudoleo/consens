@@ -374,7 +374,8 @@ def pause(uid: str, watch_id: str, *, db=None, now: datetime | None = None) -> d
         slots = slots_ref.get(transaction=tx)
         active = dict((slots.to_dict() or {}).get("active") or {}) if slots.exists else {}
         active.pop(watch_id, None)
-        patch = {"status": STATUS_PAUSED, "next_run_at": None, "updated_at": now}
+        # A busy run's retry (retry_of) ends here: after the resume, late counts from the new time.
+        patch = {"status": STATUS_PAUSED, "next_run_at": None, "retry_of": None, "updated_at": now}
         tx.update(_ref(db, watch_id), patch)
         tx.set(slots_ref, {"active": active, "updated_at": now})
         return {**data, **patch}
@@ -404,7 +405,8 @@ def resume(uid: str, watch_id: str, *, tier, db=None, now: datetime | None = Non
                     "run_time": (data.get("run_time") or DEFAULT_RUN_TIME) if interval in TIMED else "",
                     "run_weekday": (data.get("run_weekday") or "") if interval == "weekly" else "",
                     "timezone": data.get("timezone") or "UTC"}
-        patch = {"status": STATUS_ACTIVE, **schedule, "next_run_at": next_run(schedule, now=now), "updated_at": now}
+        patch = {"status": STATUS_ACTIVE, **schedule, "next_run_at": next_run(schedule, now=now), "retry_of": None,
+                 "updated_at": now}
         tx.update(_ref(db, watch_id), patch)
         tx.set(slots_ref, {"active": {**active, watch_id: data.get("chat_id")}, "updated_at": now})
         return {**data, **patch}

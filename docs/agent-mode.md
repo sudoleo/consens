@@ -3847,7 +3847,9 @@ Geprüft am Abend von 2026-11-03 (Review vor dem Deploy):
   heute, wenn sie noch kommt (`next_run` ohne Vorgänger).
 - Ein belegter Chat (409/429/503) holt denselben Lauf in 10 min nach
   (`retry_of`): er zählt für kein Limit, verspätet sich ab seiner ersten Zeit
-  und verschiebt den Zeitplan nicht. 403/422 beenden die Watch mit Grund
+  und verschiebt den Zeitplan nicht. Pausieren und Fortsetzen beenden ihn
+  (seit 2026-11-04; vorher galt der nächste Lauf nach dem Fortsetzen als
+  verspätet und wurde übersprungen). 403/422 beenden die Watch mit Grund
   (`google_data`, `cannot_run`), ungelesen, die Seite sagt warum.
 - Der Takt schläft nicht mehr an archivierten Consensus-Watches fest; jedes
   Laufende weckt ihn (threadsicher über `call_soon_threadsafe`), wartende

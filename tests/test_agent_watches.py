@@ -308,6 +308,22 @@ def test_a_busy_run_keeps_its_time_its_count_and_its_end(store, router):
     assert record(store, watch_id)["next_run_at"] == NOW + timedelta(hours=1)
 
 
+def test_pausing_during_a_busy_retry_never_skips_the_run_after_the_resume(store, router):
+    """A retry measures its lateness from its first time (retry_of): paused
+    in between and resumed later, the Watch's next run is a new one, and it
+    ran instead of being skipped as two hours late."""
+    watch_id = due_watch(store, next_run_at=NOW)
+    router(HTTPException(status_code=409, detail="Turn state conflict"))
+    run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)
+    agent_watches.start_run({**run, "claimed_at": NOW}, db=store.db, now=NOW)
+    assert record(store, watch_id)["retry_of"] == NOW
+    agent_watches.pause(UID, watch_id, db=store.db, now=NOW + timedelta(minutes=5))
+    resumed = agent_watches.resume(UID, watch_id, tier="pro", db=store.db, now=NOW + timedelta(hours=1))
+    following = datetime.fromisoformat(resumed["next_run_at"])
+    run, reason = agent_watches.claim(watch_id, now=following, db=store.db)
+    assert reason == "" and run["scheduled_at"] == following
+
+
 def test_a_chat_that_took_in_google_information_ends_its_watch_and_says_so(store, router):
     watch_id = due_watch(store, next_run_at=NOW)
     run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)
