@@ -49,6 +49,12 @@ from app.services import persistence_guard, watch_service
 COLLECTION = "agent_watches"
 STATE_COLLECTION = "agent_watch_state"
 DAYS_COLLECTION = "agent_watch_days"
+# A day's counts (DAYS_COLLECTION/{date}, with each account's UID) serve that
+# day's caps and a run claimed before midnight that gives its run back after
+# it. Older days go (purge_days, once a day from run_tick), and an account's
+# deletion takes its UID out of those left: they kept the UIDs of deleted
+# accounts for good (bug hunt 2026-11-04).
+DAYS_KEPT = 2
 
 STATUS_ACTIVE = "active"
 STATUS_PAUSED = "paused"
@@ -657,7 +663,38 @@ def delete_for_account(db, uid: str) -> int:
         ids.append(snapshot.id)
     _slots_ref(db, uid).delete()
     _drop_images(db, ids)
+    _forget_in_days(db, uid)
     return len(ids)
+
+
+def _forget_in_days(db, uid: str) -> None:
+    """Takes ``uid`` out of the day counts still kept (DAYS_KEPT)."""
+    for snapshot in db.collection(DAYS_COLLECTION).stream():
+        if uid not in dict((snapshot.to_dict() or {}).get("accounts") or {}):
+            continue
+
+        def operation(tx, ref=snapshot.reference):
+            day = ref.get(transaction=tx)
+            accounts = dict(((day.to_dict() or {}) if day.exists else {}).get("accounts") or {})
+            if accounts.pop(uid, None) is not None:
+                tx.update(ref, {"accounts": accounts})
+        watch_service._run_transaction(db, operation)
+
+
+def purge_days(*, db=None, now: datetime | None = None) -> int:
+    """Deletes the day counts older than DAYS_KEPT days; returns how many."""
+    db = _db(db)
+    now = now or utcnow()
+    oldest = (now.date() - timedelta(days=DAYS_KEPT - 1)).isoformat()
+    gone = 0
+    for snapshot in _stream(db.collection(DAYS_COLLECTION)):
+        if snapshot.id < oldest:
+            snapshot.reference.delete()
+            gone += 1
+    return gone
+
+
+_days_purged = None  # the date of this process's last purge_days
 
 
 # --- the schedule's runs ---------------------------------------------------
@@ -939,6 +976,13 @@ async def run_tick(*, now: datetime | None = None, db=None) -> int:
     # Each claim reads the clock again (a start takes a moment); a given ``now`` holds for all.
     clock = (lambda: now) if now is not None else utcnow
     now = clock()
+    global _days_purged
+    if _days_purged != now.date():
+        _days_purged = now.date()
+        try:
+            await asyncio.to_thread(purge_days, db=db, now=now)
+        except Exception as exc:
+            logging.warning("Agent watch day purge failed category=%s", safe_exception(exc))
     try:
         candidates = await asyncio.to_thread(due, now=now, db=db)
     except Exception as exc:

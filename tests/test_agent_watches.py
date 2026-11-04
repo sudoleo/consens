@@ -160,6 +160,29 @@ def test_ending_frees_the_slot_and_a_chats_deletion_takes_its_watch(store):
     assert agent_watches.list_for(UID, db=store.db) == []
 
 
+def test_day_counts_keep_no_deleted_account_and_no_old_day(store, monkeypatch):
+    """agent_watch_days/{date} holds each account's UID for the day's caps; a
+    deleted account's UID went nowhere and old days stayed for good (bug hunt
+    2026-11-04)."""
+    days = store.db.collection(agent_watches.DAYS_COLLECTION)
+    for back in (0, 1, 2, 9):
+        day = (NOW - timedelta(days=back)).date().isoformat()
+        days.document(day).set({"runs": 3, "accounts": {UID: 2, "other-user": 1}, "updated_at": NOW})
+    assert agent_watches.purge_days(db=store.db, now=NOW) == 2
+    kept = sorted(snapshot.id for snapshot in days.stream())
+    assert kept == [(NOW - timedelta(days=1)).date().isoformat(), NOW.date().isoformat()]
+    agent_watches.delete_for_account(store.db, UID)
+    assert [snapshot.to_dict()["accounts"] for snapshot in days.stream()] == [{"other-user": 1}] * 2
+    # The scheduler purges once a day.
+    monkeypatch.setattr("app.services.llm.mock_llm.mock_llm_enabled", lambda: False)
+    monkeypatch.setattr(agent_watches, "_days_purged", None)
+    purged = []
+    monkeypatch.setattr(agent_watches, "purge_days", lambda **kwargs: purged.append(kwargs["now"]))
+    for at in (NOW, NOW + timedelta(hours=1), NOW + timedelta(days=1)):
+        asyncio.run(agent_watches.run_tick(now=at, db=store.db))
+    assert purged == [NOW, NOW + timedelta(days=1)]
+
+
 # --- the scheduler's runs -------------------------------------------------------
 
 def due_watch(store, **fields):

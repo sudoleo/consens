@@ -9965,7 +9965,9 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   `next_run_at` und keinen Platz. `users/{uid}/agent_watch_state/slots`
   (`active`: Watch-ID → Chat-ID) hält Limit und eine Watch je Chat in einer
   Transaktion; `agent_watch_days/{YYYY-MM-DD}` (`runs`, `accounts`: UID →
-  Läufe) die Tagesgrenzen des Servers und jedes Kontos. `retry_of` ist die
+  Läufe) die Tagesgrenzen des Servers und jedes Kontos, nur heute und gestern
+  (`purge_days` einmal am Tag aus `run_tick`, `DAYS_KEPT` = 2; die
+  Kontolöschung nimmt die UID dort heraus, seit 2026-11-04). `retry_of` ist die
   ursprüngliche Zeit eines Laufs, der wegen eines belegten Chats gleich noch
   einmal kommt; `ended` auch `google_data`/`cannot_run` (der Lauf konnte im
   Chat nicht mehr starten). Gelöscht mit dem Chat (`ChatStore._purge_chat`) und dem Konto
