@@ -11,7 +11,7 @@ const entries = [
     content: '{"question":"How tall?"}', chars: 24 },
   { seq: 2, at: "2026-10-25T18:20:35Z", actor: "agent", kind: "tool", name: "read_source", data: "web", format: "text",
     content: "Page begins", chars: 40000, ref: "work-log/u/c/t/000002" },
-  { seq: 3, at: "2026-10-25T18:20:40Z", actor: "worker:abc", kind: "step", name: "openai/gpt", data: "agent", format: "json",
+  { seq: 3, at: "2026-10-25T18:20:40Z", actor: "agent", kind: "step", name: "openai/gpt", data: "agent", format: "json",
     content: '{"text":"330 m"}', chars: 16 },
 ];
 function boot(status = "succeeded") {
@@ -59,7 +59,7 @@ describe("Agent work log", () => {
     expect(logCalls(w)[0][0]).toContain(`/agent/chats/${chatId}/turns/${turnId}/work-log?after=0&limit=200`);
     const rows = [...host.querySelectorAll(".agent-work-log-entry")];
     expect(rows.map(row => [row.querySelector(".agent-work-log-actor").textContent, row.querySelector(".agent-work-log-kind").textContent,
-      row.querySelector(".agent-work-log-data").textContent])).toEqual([["App", "Start"], ["Agent", "Tool"], ["Worker", "Step"]]
+      row.querySelector(".agent-work-log-data").textContent])).toEqual([["App", "Start"], ["Agent", "Tool"], ["Agent", "Step"]]
       .map(([actor, kind], index) => [actor, kind, ["App", "Web", "Model"][index]]));
     // Outside content is marked as data.
     expect(rows[1].querySelector(".agent-work-log-data").classList.contains("is-untrusted")).toBe(true);

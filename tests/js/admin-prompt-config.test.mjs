@@ -47,21 +47,17 @@ describe('Admin prompt configuration', () => {
             expect(fetch.mock.calls.filter(([, options]) => options.method === 'PUT')).toHaveLength(1);
         } finally { fetch.mockRestore(); window.close(); }
     });
-    it('hides retired chat caps while preserving legacy values when saving current settings', async () => {
-        const delegation = { enabled: true, max_calls: 32, seconds: 300, max_cost_nano_usd: 3000000000,
-            max_parallel: 2, max_agents: 4, message_chars: 4000 };
+    it('sends only the timezone, also when an older saved config still lists delegation settings', async () => {
         const request = vi.fn(async (method, _path, body) => method === 'GET'
-            ? { ...loaded(), config: { ...config, delegation } }
+            ? { ...loaded(), config: { ...config, delegation: { enabled: true, max_parallel: 2 } } }
             : { config: { ...body.config, revision: 5 } });
         const { window, doc, panel } = boot(request);
         await panel.setUser('admin');
-        expect(doc.getElementById('delegation-seconds').hidden).toBe(true);
-        expect(doc.getElementById('delegation-max_parallel').hidden).toBe(false);
-        expect(doc.getElementById('delegationConfig').textContent).toContain('daily allowance in euros');
-        change(window, 'delegation-max_parallel', '3');
+        expect(doc.getElementById('delegationConfig')).toBeNull();
+        change(window, 'promptReferenceTimezone', 'UTC');
         submit(window);
         await vi.waitFor(() => expect(doc.getElementById('promptConfigStatus').textContent).toContain('Saved.'));
-        expect(request.mock.calls[1][2].config.delegation).toEqual({ ...delegation, max_parallel: 3 });
+        expect(request.mock.calls[1][2].config).toEqual({ reference_timezone: 'UTC' });
         window.close();
     });
     it('shows the code prompts read-only and never sends them', async () => {
@@ -125,19 +121,6 @@ describe('Admin prompt configuration', () => {
         window.close();
     });
 
-    it('opens the collapsed delegation section when a setting is invalid', async () => {
-        const delegation = { enabled: false, max_parallel: 2, max_agents: 4 };
-        const request = vi.fn(async () => ({ ...loaded(), config: { ...config, delegation },
-            delegation_limits: { max_parallel: [1, 4], max_agents: [1, 8] } }));
-        const { window, doc, panel } = boot(request);
-        await panel.setUser('admin');
-        expect(doc.getElementById('delegationConfig').closest('details').open).toBe(false);
-        change(window, 'delegation-max_parallel', '99');
-        submit(window);
-        expect(doc.getElementById('delegationConfig').closest('details').open).toBe(true);
-        expect(request).toHaveBeenCalledTimes(1);
-        window.close();
-    });
 });
 
 describe('Central default and personal Consensus instructions', () => {

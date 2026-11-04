@@ -17,7 +17,6 @@ from app.services import agent_read_source
 from app.services.agent_comparison import comparison_selection
 from app.services.agent_costs import FETCH_COST_NANOS, RunCosts, fetch_bounds
 from app.services.agent_delegation import DelegationLoop
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_read_source import (READ_CONTENT_TOKENS, READS_PER_MESSAGE, READS_PER_STEP, UNTRUSTED_NOTE,
                                             AuditReadSourceArgs, PageFetch, resolve_redirect, url_key, user_urls)
@@ -134,13 +133,12 @@ def chat_loop(store, plan, *, google_selection=None, google_data=False, policy=N
               chat_sources=None):
     """A chat turn of the agent whose reviewers never start (agent_reviewers.py)."""
     chat, turn = pending(store)
-    config = {**defaults(), "enabled": False}
     return without_reviewers(DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": AGENT_AUDIT_SYSTEM_PROMPT},
                   *(conversation or [{"role": "user", "content": "Price?"}])],
-        api_key="test", cancellation=ProviderCancellation(), policy=policy or AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=plan.factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=policy or AgentPolicy(),
+        completion_factory=plan.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         google_selection=google_selection, google_data=google_data, chat_sources=chat_sources))
 
@@ -250,13 +248,11 @@ def test_on_unless_switched_off(monkeypatch):
         assert agent_read_source.enabled() is on, value
 
 
-@pytest.mark.parametrize("case", ["off", "google_selection", "google_data", "bounded"])
-def test_absent_when_switched_off_in_google_chats_and_bounded_runs(store, monkeypatch, case):
+@pytest.mark.parametrize("case", ["off", "google_selection", "google_data"])
+def test_absent_when_switched_off_and_in_google_chats(store, monkeypatch, case):
     monkeypatch.setenv("AGENT_READ_SOURCES", "0" if case == "off" else "1")
     kwargs = ({"google_selection": Selection()} if case == "google_selection"
               else {"google_data": True} if case == "google_data" else {})
-    if case == "bounded":
-        kwargs["policy"] = AgentPolicy.from_config({**defaults(), "enabled": True})
     loop = chat_loop(store, Plan(), **kwargs)
     assert "read_source" not in loop.registry.tools and loop.comparison.reader is None
     # The pictures of the web come with reading (the server fetches them alike).
@@ -414,10 +410,9 @@ def test_text_sent_with_a_read_is_no_answer_the_read_runs_first(store, monkeypat
 
 
 def test_the_store_hands_earlier_sources_to_the_loop(store):
-    from test_agent_runs import AgentModel, receipt
+    from test_agent_runs import answered
     chat, first = pending(store, question="Who leads?")
-    assert store.claim(UID, chat, first["id"], AgentModel())
-    store.settle(UID, chat, first["id"], completion=receipt(), status="succeeded")
+    assert answered(store, chat, first["id"])
     store._turn_ref(UID, chat, first["id"]).update({
         "sources": [{"url": "https://www.tri247.com/live-kona", "title": "Live", "id": "S1"}, "junk"]})
     _, second = pending(store, chat_id=chat, request_id="two", question="Lies nach")
@@ -796,7 +791,7 @@ def test_mock_llm_reads_without_a_provider_call(store, monkeypatch, enabled):
 
 def test_reservation_includes_the_page_tokens_and_fee():
     model = resolve_agent_model("claude-haiku-4-5")
-    costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": False}))
+    costs = RunCosts()
     messages = [{"role": "user", "content": "Read " + CITED}]
     tool = web_fetch_tool(max_uses=1, max_content_tokens=READ_CONTENT_TOKENS, allowed_domains=["example.org"])
     plain_tokens, plain_cost = costs.estimate(model, messages, [])

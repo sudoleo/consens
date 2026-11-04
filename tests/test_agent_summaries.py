@@ -14,8 +14,8 @@ from app.services.agent_compaction import (HISTORY_SUMMARY_OPEN, HISTORY_SUMMARY
 from app.services.agent_delegation import LONG_RUN_CONTEXT_SHARE, SUMMARY_TEXTS, DelegationLoop
 from app.services.agent_runs import strip_app_context
 from app.services.agent_work_log import context_data
-from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
-from test_agent_runs import UID, _answered, pending, receipt, store  # noqa: F401  (fixture)
+from app.services.llm.agent_client import AgentCompletion, measured_usage
+from test_agent_runs import UID, _answered, answered, pending, receipt, store  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, _admin_allowance, fake_vm, vm_loop  # noqa: F401  (fixtures)
 
 SUMMARY = "The user builds a parser in /home/sprite/parser; tests pass except test_unicode. " * 5
@@ -200,8 +200,7 @@ def test_the_summarized_turns_keep_their_sources_openable(store):
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     _, turn = pending(store, chat_id=chat_id, request_id="r0", question="Question r0")
     value = receipt()
-    store.claim(UID, chat_id, turn["id"], AgentModel())
-    store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
+    answered(store, chat_id, turn["id"], value)
     store._turn_ref(UID, chat_id, turn["id"]).update(
         {"sources": [{"url": "https://example.com/old", "title": "Old"}]})
     _summarized(store, chat_id, "r1", 1)
@@ -310,7 +309,7 @@ def test_memory_evidence_never_takes_a_summary_for_the_users_words(store):
     fresh = DelegationLoop(store=store, uid=UID, chat_id=loop.chat_id, turn_id=loop.turn_id, model=loop.model,
                            messages=[loop.messages[0], summary, {"role": "user", "content": "Go on."}],
                            api_key="test", cancellation=loop.cancellation, policy=loop.policy,
-                           delegation_config=loop.config, completion_factory=Summarizer().factory,
+                           completion_factory=Summarizer().factory,
                            comparison_models=None)
     assert [m["content"] for m in fresh.answer_conversation] == ["Go on."]
 

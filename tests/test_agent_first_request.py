@@ -131,7 +131,6 @@ def test_the_history_read_ahead_is_read_again_when_a_turn_changed_in_between(sto
 
 
 def test_a_run_builds_the_model_catalog_once(api, trips, monkeypatch):  # noqa: F811
-    from app.services import agent_delegation
     built = collections.Counter()
     real = agent_client.agent_models
 
@@ -140,11 +139,9 @@ def test_a_run_builds_the_model_catalog_once(api, trips, monkeypatch):  # noqa: 
             built[threading.current_thread().name.split("_")[0]] += 1
         return real(**kwargs)
     monkeypatch.setattr(agent_client, "agent_models", counted)
-    monkeypatch.setattr(agent_delegation, "agent_models", counted)
     send(api, trips, monkeypatch, "Hi", "catalog")
-    # The route resolves the chat model and the reviewers' models; the loop
-    # builds its worker catalog once (until 2026-11-01: twice per model).
-    assert sum(built.values()) <= 1 + 1 + len(COMPARISON_MODELS), built
+    # The route resolves the chat model and the reviewers' models.
+    assert sum(built.values()) <= 1 + len(COMPARISON_MODELS), built
 
 
 def test_a_chat_that_gained_google_data_after_the_first_read_keeps_its_rules(api, monkeypatch):  # noqa: F811

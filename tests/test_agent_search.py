@@ -5,9 +5,7 @@ from types import SimpleNamespace
 import pytest
 
 from app.api.routers import agent
-from app.services import agent_loop
 from app.services.agent_costs import RunCosts, provider_cost_nanos, search_cost_nanos, token_cost_nanos
-from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import ProviderCooldowns, AgentProviderCooldown
 from app.services.llm.agent_client import AgentCompletion, agent_models, measured_usage, resolve_agent_model
 from app.services.llm.engines import _ProviderHTTPStatusError, _raise_provider_http_status
@@ -42,6 +40,8 @@ def test_provider_total_wins_over_catalog_including_search_cache_and_reasoning(m
     ({"server_tool_use_details": {"web_search_requests": "3"}}, None),
     ({}, None),
 ])
+
+
 def test_search_count_is_read_from_both_usage_shapes(raw, expected):
     model = resolve_agent_model("claude-haiku-4-5")
     measured = measured_usage({"prompt_tokens": 100, "completion_tokens": 20, **raw}, model, searches_enabled=True)
@@ -120,7 +120,6 @@ def test_every_searching_step_is_counted_with_the_pages_it_kept(monkeypatch, sto
     of pages it kept on its receipt."""
     from app.services.agent_tools import search_tools
     from app.services.llm import agent_client
-    from test_agent_delegation import make_loop
     model = resolve_agent_model("claude-haiku-4-5")
     metrics = []
     monkeypatch.setattr(agent_client, "record_metric", lambda *args, **kwargs: metrics.append((*args, kwargs)))
@@ -145,12 +144,13 @@ def test_every_searching_step_is_counted_with_the_pages_it_kept(monkeypatch, sto
     list(completion.stream(model=model, messages=[{"role": "user", "content": "Q"}], api_key="key"))
     assert completion.search_hits is None
     # The receipt keeps it.
+    from test_agent_sessions import make_loop
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     value = receipt()
     value.search_hits = 0
-    store.settle(*args, completion=value, status="succeeded", final=False)
+    store.settle(*args, completion=value, status="succeeded")
     assert store.receipt_ref(*args).get().to_dict()["search_hits"] == 0
 
 
@@ -206,7 +206,7 @@ def test_stream_merges_split_usage_and_records_actual_cost_idempotently(store, m
 
 def test_unknown_usage_does_not_release_a_reservation_with_known_cost_only():
     model = resolve_agent_model()
-    costs = RunCosts(AgentPolicy())
+    costs = RunCosts()
     reserved = costs.reserve(model, [])
     costs.reconcile(reserved, measured_usage({"cost": .01}, model))
     assert costs.tokens == reserved[0]  # Unknown tokens keep their reservation.
@@ -260,7 +260,6 @@ def test_rate_limit_blocks_immediate_resubmission_without_another_paid_claim(api
     client, store, calls = api
     gate = ProviderCooldowns()
     monkeypatch.setattr(agent, "provider_cooldowns", gate)
-    monkeypatch.setattr(agent_loop, "provider_cooldowns", gate)
     from app.services.llm.engines import _ProviderResponseError
     def fail(self, **kwargs):
         calls.append(kwargs)

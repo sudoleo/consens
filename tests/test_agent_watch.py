@@ -8,7 +8,6 @@ import pytest
 from app.services import agent_watch, agent_watches
 from app.services.agent_comparison import comparison_selection
 from app.services.agent_delegation import HOLD_TIMEOUT_SECONDS, DelegationLoop
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.chat_store import turn_detail
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
@@ -75,25 +74,21 @@ class WatchScript(Script):
 
 
 def watch_loop(store, script, *, watch_outlook=None, question="Tell me when IRONMAN Hamburg registration opens.",
-               preferences=None, google_data=False, comparisons=True, reviewers=False, watch_run=None,
-               temporary=False):
+               preferences=None, google_data=False, reviewers=False, watch_run=None, temporary=False):
     """A chat turn of the agent; its reviewers never start (agent_reviewers.py)
     unless ``reviewers``, whose rounds Script answers without marks.
-    ``comparisons=False``: a delegation-only run, without the agent's tools.
     ``watch_run``: a Watch's scheduled run."""
     chat, turn = pending(store, question=question)
-    config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": question}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"})
-        if comparisons else None,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=script.factory,
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=preferences, google_data=google_data, watch_run=watch_run, temporary=temporary)
     if loop.watch_tools:
         loop.watch_tools.outlook = watch_outlook or outlook()
-    if comparisons and not reviewers:
+    if not reviewers:
         without_reviewers(loop)
     script.loop = loop
     return loop
@@ -277,14 +272,12 @@ def test_the_watch_block_says_what_a_watch_does_as_facts():
     assert "call answer" not in prompt and "compare" not in prompt
 
 
-def test_no_watch_tool_with_google_data_in_a_temporary_chat_or_without_comparisons(store):
+def test_no_watch_tool_with_google_data_or_in_a_temporary_chat(store):
     google = watch_loop(store, WatchScript(), google_data=True)
     assert google.watch_tools is None and "prepare_watch" not in google.registry.tools
     assert agent_watch.AUDIT_PROMPT not in google.messages[0]["content"]
     temporary = watch_loop(store, WatchScript(), temporary=True)
     assert temporary.watch_tools is None and "prepare_watch" not in temporary.registry.tools
-    bounded = watch_loop(store, WatchScript(), comparisons=False)
-    assert bounded.watch_tools is None and "prepare_watch" not in bounded.registry.tools
 
 
 @pytest.mark.parametrize("arguments,problem", [

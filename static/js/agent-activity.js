@@ -24,12 +24,6 @@
     // The comparison models review the answer (judge_answer and check_text:
     // the comparison mode, turns saved before 2026-10-31).
     audit_answer: ['Answer review', 'Reviewing the answer…', 'Reviewed the answer'],
-    start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
-    wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
-    send_agent: ['Follow up', 'Following up with a model…', 'Followed up with a model'],
-    review_agent: ['Review a model', 'Reviewing a model response…', 'Reviewed a model response'],
-    stop_agent: ['Stop a model', 'Stopping a model…', 'Stopped a model'],
-    report_to_orchestrator: ['Report to the main model', 'Reporting to the main model…', 'Reported to the main model'],
     read_file: ['Read files', 'Reading your files…', 'Read your files'],
     read_document: ['Open document', 'Opening the document…', 'Opened the document'],
     create_document: ['Create document', 'Writing the document…', 'Created a document'],

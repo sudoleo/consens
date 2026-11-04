@@ -39,13 +39,12 @@ def turn(*, status="completed", reviewers, holds=(), entries=(), agents=(), vm=F
 def data():
     reviewer, flash = "a" * 32, "b" * 32
     turns = {
-        # A turn with a gate, a halt and a step that searched without a hit.
+        # A turn with a halt and a step that searched without a hit.
         (OWN, "c1", "t1"): turn(reviewers=[LUNA, FLASH], holds=[
-            {"kind": "injection", "gate": True, "decision": "continue"}], entries=[
+            {"kind": "injection", "decision": "continue"}], entries=[
             (2, {"actor": "agent", "kind": "step", "model": TERRA, "searches": 2, "hits": 0}),
-            (6, {"actor": "app", "kind": "app", "name": "checked", "gate_ms": None}),
             (8, {"actor": "agent", "kind": "step", "model": TERRA, "searches": 1, "hits": 3}),
-            (9, {"actor": "app", "kind": "app", "name": "paused", "gate_ms": 12_000}),
+            (9, {"actor": "app", "kind": "app", "name": "paused"}),
             (20, {"actor": "app", "kind": "app", "name": "decision"}),
             (30, {"actor": "app", "kind": "app", "name": "answer_fixed"})],
             agents=[{"id": reviewer, "kind": "audit", "status": "completed", "created_at": at(1).isoformat()},
@@ -87,10 +86,7 @@ def test_the_spec_tables_and_targets_from_turns_receipts_and_counters():
     assert times["final_round_by_model"] == {FLASH: {"n": 1, "p50": 2, "p90": 2, "max": 2},
                                              LUNA: {"n": 1, "p50": 10.5, "p90": 10.5, "max": 10.5}}
     assert times["live_request_by_model"][LUNA]["p50"] == 4
-    # The go 4 s after its step, the gate halt by its own wait.
-    assert result["gate"] == {"rounds": 2, "results": {"go": 1, "injection": 1},
-                              "wait": {"n": 2, "p50": 8, "p90": 12, "max": 12}}
-    assert result["halts"]["by_kind_and_decision"] == {"gate:injection -> continue": 1}
+    assert result["halts"]["by_kind_and_decision"] == {"injection -> continue": 1}
     tokens = result["tokens"]
     assert tokens["agent"]["calls"] == 3 and tokens["reviewer"]["calls"] == 4
     assert tokens["reviewer_final"]["calls"] == 2 and tokens["reviewer"]["cached_share"] == .8
@@ -101,13 +97,13 @@ def test_the_spec_tables_and_targets_from_turns_receipts_and_counters():
     assert result["counters"] == {"days": ["2026-10-29", "2026-10-30"], "turns": {"completed": 5, "failed": 1},
                                   "marks_s": {"le10": 3, "le30": 1}}
     targets = {t["id"]: t for t in result["targets"]}
-    # 12 s of marks after the last word miss Z1's median; a gate at p90 12 s misses Z5.
-    assert targets["Z1"]["ok"] is False and targets["Z5"]["ok"] is False
+    # 12 s of marks after the last word miss Z1's median.
+    assert targets["Z1"]["ok"] is False and "Z5" not in targets
     assert targets["Z2"]["value"]["share"] == 1.0 and targets["Z3"]["ok"] and targets["Z6"]["ok"]
     assert targets["Z7"]["ok"] is None and targets["Z8"]["value"] == .364
     assert result["release"]["turns"] == 2 and result["release"]["three_reviewers"] == 0
     text = render(result)
-    assert "Z5 MISSED" in text and "Z3 ok" in text and "Z7 -" in text
+    assert "Z1 MISSED" in text and "Z3 ok" in text and "Z7 -" in text
     # The report never names an account or a chat.
     assert OWN not in text and GUEST not in text and "c1" not in text
 

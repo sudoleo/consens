@@ -76,8 +76,6 @@ TOOL_DATA = {
     "gmail_read": "google", "calendar_read": "google", "import_gmail_attachment": "google",
     "prepare_gmail_draft": "google", "prepare_calendar_event": "google",
     "update_memory": "memory",
-    "start_agent": "agent", "send_agent": "agent", "wait_agents": "agent", "review_agent": "agent",
-    "stop_agent": "agent", "report_to_orchestrator": "agent",
     "vm_exec": "vm", "vm_read_file": "vm", "vm_write_file": "vm", "vm_edit_file": "vm", "vm_share_file": "vm",
     "vm_start_process": "vm", "vm_process_output": "vm", "vm_stop_process": "vm", "vm_view_image": "vm", "vm_render_office": "vm",
     "vm_install_packages": "vm", "github_import": "vm", "prepare_pull_request": "vm", "update_plan": "agent",
@@ -180,7 +178,7 @@ def context_data(actor, index, own_from, message, text):
         return "user"
     if index < own_from:
         return "user"
-    return "agent" if text.startswith("Worker messages") else "app"
+    return "app"
 
 
 def object_key(uid, chat_id, turn_id, seq):

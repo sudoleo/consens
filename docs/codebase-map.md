@@ -267,7 +267,7 @@ encrypted token envelopes, refresh leases, revocation, daily API limits and the
 allowlisted Google transport. Tokens never enter tools or model contexts. The
 `google_selection` and model-sharing consent are frozen in `agent_settings` and
 checked on replay. `agent_calendar.py` registers selected-calendar read/search,
-instances/freebusy and preparation tools; workers get no direct connection tools.
+instances/freebusy and preparation tools.
 Calendar excerpts and proposals enter the existing tool-free synthesis as explicit
 untrusted evidence. A chat's `google_data` marker enforces the Google routing rule
 (ZDR + no data collection, optional allowlists; see "Google als Quelle" above) for all
@@ -318,7 +318,7 @@ Agent documents (27.09.2026): `agent_documents.py` registers `create_document`,
 `read_document`, and `revise_document` on the root's existing bounded ToolRegistry.
 The tools run before the immutable synthesis/review handoff. The synthesis receives
 saved output descriptors explicitly, and `resources` SSE refreshes the
-`agent-workspace.js` document cards (one per `document_id`, after the answer). No worker receives document-write tools. Files reuse
+`agent-workspace.js` document cards (one per `document_id`, after the answer). Files reuse
 the private owner/chat-bound store and authenticated download route from PR 1.
 `agent_document_render.py` renders strict structured content offline in a bounded
 subprocess using python-docx and ReportLab, then reopens both formats. Versions
@@ -3950,7 +3950,7 @@ Das Admin-Dashboard ist ebenfalls externisiert: `static/css/admin.css` enthält
 die vormals template-lokalen Styles, `static/js/admin.js` Auth, Rendering und
 Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
 `static/js/admin-prompt-config.js` besitzt den separaten Configuration-Tab:
-Laden/Speichern von Zeitzone und Delegations-Einstellungen, Änderungsanzeige,
+Laden/Speichern der Zeitzone, Änderungsanzeige,
 schreibgeschützte Anzeige der Systemprompts (`#promptCatalog`, je Eintrag ein
 `<details>` mit `<pre id="prompt-{key}">` aus `prompts_readonly`) und Schutz vor
 verspäteten Antworten eines vorherigen Login-Zustands.
@@ -4133,7 +4133,7 @@ stehen als App-Kontextblock (`with_app_context`, Marker
 Verlaufsnachrichten bleiben wörtlich. Vorher stand die Uhrzeit oben im System
 und machte jeden Cache ab dort bei jeder Nachricht ungültig.
 `DelegationLoop` hängt danach die Werkzeug-Blöcke an (Dateien, Google, Watch,
-Einstellungen, Arbeitsplatz; Worker-Katalog nur mit Delegation) und zuletzt
+Einstellungen, Arbeitsplatz) und zuletzt
 Memory, sodass eine Memory-Änderung nur ab dort neu cached.
 Was sich zwischen den Nachrichten eines Chats ändert, steht seit 2026-10-21
 ebenfalls im App-Kontextblock der neuesten Frage (`DelegationLoop._app_context`
@@ -4216,11 +4216,11 @@ kann den Request aber nie ungültig machen) aus
 `openrouter_contract.provider_session_id`: ein SHA-256-Präfix über uid und
 Chat-ID, gleich für alle Nachrichten eines Chats, ohne beide im Klartext. OpenRouter bleibt damit ab dem ersten erfolgreichen
 Aufruf beim selben Endpunkt (pro Modell, Fallback bei Ausfall, vergessen nach
-10 min Leerlauf). Jeder Hilfsaufruf (Vergleichsantwort, Prüfer-Sitzung,
-delegierter Worker) bekommt seit 2026-10-21 eine eigene Session
+10 min Leerlauf). Jeder Hilfsaufruf (Vergleichsantwort, Prüfer-Sitzung)
+bekommt seit 2026-10-21 eine eigene Session
 (`provider_session_id(uid, chat_id, worker.id)` über
 `DelegationLoop.worker_completion` → `AgentCompletion.session_id`): Der Retry
-einer leer beendeten Antwort und der nächste Schritt eines Workers senden
+einer leer beendeten Antwort und die nächste Runde eines Prüfers senden
 denselben Präfix noch einmal; die erste Anfrage nimmt weiter den schnellsten
 Endpunkt, und kein Hilfsaufruf teilt die Session des Chats oder eines anderen.
 Seitenlesungen (`PageFetch`) senden keine. Die Session gehört dem Adapter
@@ -4244,7 +4244,7 @@ setzt deshalb für Anfragen mit Marker zwei eigene Breakpoints: das Ende des
 System-Prompts (über alle Nachrichten eines Chats gleich, Memory schließt ihn
 ab) und die letzte frühere Nachricht des Chats (`AgentLoop.history_end` =
 Index vor der neuen Frage, nur Schritte des Chatmodells über
-`AgentCompletion.history_end`; Worker markieren nur ihr System). Die nächste
+`AgentCompletion.history_end`; Hilfsaufrufe markieren nur ihr System). Die nächste
 Nachricht liest damit System und Verlauf bis zur vorletzten Antwort. Ein
 Token wird nur einmal geschrieben, egal welcher Breakpoint ihn abdeckt: Bei
 einem Miss kosten die Punkte nichts. Mit dem automatischen sind es drei der
@@ -4347,7 +4347,7 @@ Blindtest in `docs/agent-mode.md`. Uploads (`POST /agent/chats/{chat}/files`) fo
 der Anhangregel ab Plus (`require_uploads`); Liste, Download und Löschen
 bleiben offen, weil Agent Dokumente für jedes Konto in denselben Speicher schreibt. Detail und Turn-Stop laufen owner- und
 turngebunden über den echten Store. Beide Antworten sind `private, no-store`;
-Stop setzt die Delegationssperre nur für diesen Turn, auch bei Wiederholung.
+Stop setzt die Sperre des Laufs nur für diesen Turn, auch bei Wiederholung.
 
 Zuverlässigkeitsprüfung (20.09.2026): `POST /agent` sendet bereits vor der
 Token-Admission `accepted` mit der dauerhaften Chat-/Turn-ID. Der Browser kann
@@ -4430,8 +4430,7 @@ Snapshots den bisherigen Stand ausgeben (vorher wartete die erste Nachricht nach
 je fünf Minuten auf den Download des ganzen Katalogs). Solange noch kein Abruf
 gelang, wartet ein Snapshot darauf (nach einem Fehler höchstens alle 30 s einer).
 Nicht auflösbare Admin-IDs bleiben als `available: false` mit `unavailable_reason`
-sichtbar und werden bei der Auswahl abgelehnt. Der statische Katalog hält außerdem
-die separat geprüften Delegationsfähigkeiten; er begrenzt die Chatmodellauswahl nicht.
+sichtbar und werden bei der Auswahl abgelehnt.
 
 Chatmodell und Prüfer (die gewählten Vergleichsmodelle) teilen sich seit 2026-10-01 EINEN Chip in
 `.composer-models` (`.agent-model-picker`). Der Chip nennt das Chatmodell
@@ -4524,28 +4523,24 @@ freie Trefferflächen der Optionen bei 320 und 390 px.
 (Quellenprüfung entfernt); das Feld wird von alten offenen Seiten noch
 angenommen und ignoriert.
 
-POST /agent verwendet den bestehenden DelegationLoop mit `AgentPolicy.for_chat`.
-`account_budget_only` ersetzt zusätzliche Laufzeit-, Call-, Tool-, Worker-Runden-,
-Such-, Nachrichten- und Dollarlimits durch das zentrale Tages-Tokenbudget. Im
-persistierten Policy-Snapshot stehen die nicht angewendeten Limits auf null.
-Der injizierte AnalysisBudget ist nur für diesen Lauf zeit-/aufrufunbegrenzt;
-Consensus und Legacy-Aufrufer behalten ihre eigenen Grenzen. Seit 2026-10-05
-begrenzen weiche Schutzgrenzen pro Turn (`AgentPolicy.turn_*`, gesetzt nur in
-`for_chat`, im Snapshot sichtbar) eine Schleife gültiger Aufrufe: 4 Vergleiche
+POST /agent verwendet den DelegationLoop mit `AgentPolicy()`. Die einzige
+Verbrauchsgrenze ist das zentrale Tageskonto; es gibt kein Laufzeit-, Call-,
+Tool-, Such-, Nachrichten- oder Dollarlimit je Lauf. Der injizierte
+AnalysisBudget ist für den Lauf zeit-/aufrufunbegrenzt; Consensus behält seine
+eigenen Grenzen. Weiche Schutzgrenzen pro Turn (`AgentPolicy.turn_*`, im
+Snapshot sichtbar) beenden eine Schleife gültiger Aufrufe: 4 Vergleiche
 (`turn_comparisons`, der fünfte ist ein Tool-Fehler), 24 Orchestrierungsschritte, 15 min bis zum
 Wrap-up plus 5 min (`TURN_WRAP_UP_SECONDS`) bis zum harten Stopp in `_check`, und
-höchstens zwei identische Toolcalls (3. abgelehnt, 4. beendet; `wait_agents`,
-derselbe Plan per `update_plan` und die VM-Werkzeuge ausgenommen). Wrap-up (`_merged_wrap_up`) = der Agent schreibt die Antwort in
+höchstens zwei identische Toolcalls (3. abgelehnt, 4. beendet; derselbe Plan
+per `update_plan`, der Browser und die VM-Werkzeuge ausgenommen). Wrap-up (`_merged_wrap_up`) = der Agent schreibt die Antwort in
 einem letzten Schritt ohne aufrufbare Tools aus dem, was er hat (seit
 2026-10-31 ohne Bedingung an Vergleiche; vorher nur aus einem Vergleich mit ≥2
-Antworten), danach prüfen die Prüfer sie; mit ungeprüften Worker-Ergebnissen
-(`_can_wrap_up`) stattdessen `AnalysisBudgetExceeded` mit
-gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige
+Antworten), danach prüfen die Prüfer sie; seit 2026-10-12 enden auch drei ungültige
 Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`). Seit 2026-10-30
 nennt das Wrap-up dem Agenten die Grenze (`_limit_fact`), und der Turn hält sie
 fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Jeder
 Schritt des Agenten fragt in jeder Anfrage gleich mit `parallel_tool_calls`
-(`_step`; Worker ohne); die Aufrufe eines Schritts laufen in ihrer Reihenfolge,
+(`_step`); die Aufrufe eines Schritts laufen in ihrer Reihenfolge,
 benachbarte Aufrufe lesender Werkzeuge (`ReadOnlyTool.concurrent`) als Gruppe
 gleichzeitig auf eigenen Threads (`_call_groups`, `_execute_together`; Grenzen
 und Zähler darin in Aufrufreihenfolge über `agent_tools.call_order`), alle
@@ -4557,19 +4552,19 @@ wie lange der Nutzer wartet, die Grenzen erst ab `LIMITS_SHOWN_FROM` = 80 %,
 seit 2026-11-01; `open_workspace` nennt keine Grenzen mehr). Details und
 Tabelle: [agent-mode.md](agent-mode.md) („Tageskontingent“-Abschnitt,
 „Arbeitsplatz: Schritte, Zeit und Bilder“).
-Worker-Delegation bleibt separat durch delegation_config.enabled und die
-geprüfte Modell-/Reasoning-Kombination freigegeben. policy.delegation aktiviert
-hier auch ohne Worker-Freigabe das gemeinsame persistente Schrittjournal.
-agent_loop.py bleibt die gemeinsame Basis und der eigenständig testbare direkte
-Legacy-Loop. Der ausgewählte Chat-Provider erhält seine vollständigen
+`policy.delegation` (immer wahr) kennzeichnet einen Lauf mit Sitzungen
+(Vergleichsantworten, Prüfer, Seitenabrufe): Root-Receipt, Reaper und das
+Sitzungspanel des Browsers suchen danach. Die Worker-Delegation
+(`start_agent` …) ist seit 2026-11-04 entfernt; gespeicherte Turns mit ihren
+Sitzungen zeigt der Browser weiter über den allgemeinen Sitzungs-Renderer.
+Der ausgewählte Chat-Provider erhält seine vollständigen
 Reasoning-/Signaturblöcke für Tool-Fortsetzungen zurück; verschlüsselte Blöcke
-werden weder angezeigt noch persistiert. Weitere Details zur Worker-Kommunikation
-stehen in [agent-delegation.md](agent-delegation.md).
+werden weder angezeigt noch persistiert.
 
 **Werkzeuge des Agenten und `compare_models`.** agent_comparison.py
 registriert für den Agenten `compare_models` (`AuditCompareArgs`: Frage,
 Kontext, `file_ids`, Tiefe `quick`/`full`; kein Fortschrittsabsatz, kein
-Memory-Feld) mit der Beschreibung `AUDIT_COMPARE`, im Kontomodus samt
+Memory-Feld) mit der Beschreibung `AUDIT_COMPARE` samt
 „At most {turn_comparisons} times per message“, in fester Reihenfolge
 (Prompt-Cache). Ein Tool, das die Steuerung beendet, gibt es nicht: die
 Antwort ist der Klartext eines Schritts ohne Toolcalls (bis 2026-10-14 das
@@ -4596,8 +4591,7 @@ flachen Schemas über OpenRouter (`agent_client.stream`). Seit 2026-10-07 steuer
 „Prompt-Aufteilung im Agenten“ unten). Ob der Agent sucht, liest, die Modelle
 fragt, den Arbeitsplatz nutzt oder direkt antwortet, entscheidet er selbst:
 kein zweiter LLM-Router, keine sprachabhängige Keyword-Klassifikation.
-Deaktivierte Worker liefern weder Worker-Katalog noch Delegationsprompt im
-Chatkontext. Auch Vergleichsmodelle, Prüfer und Worker erhalten eine knappe
+Auch Vergleichsmodelle und Prüfer erhalten eine knappe
 Rollen-/Produkterklärung. Bis 2026-10-31 hatte der Vergleichsmodus dazu
 `check_text` (siehe „Eingefügten Text prüfen“), Familienwahl je Vergleich im
 freien Modus (`free_compare_args`), eigene Suche nur vor dem ersten Vergleich
@@ -4633,7 +4627,7 @@ Die Agent-Sitzung bekommt dazu eine Nachricht `kind: "partial"` und
 `partial: true`. Würde der Review-Snapshot 600 KB überschreiten, fallen zuerst
 diese Teiltexte weg, dann der Text gelesener Seiten, dann Zitate und lange
 Notizen der Prüfer (`trim_marks`). Vergleichsmodelle erhalten keine
-Delegations-/Vergleichstools, aber Websuche
+Werkzeuge, aber Websuche
 (`call(..., search_rounds=…)` → `_step(searches_enabled=True)`;
 `SEARCH_ROUNDS`: `quick` eine Runde, `full` bis zu drei, für alle Konten gleich)
 und mit
@@ -4650,7 +4644,7 @@ markierte Evidenz (`keep_truncated`). Strukturierte Transportfehler werden am
 Fehlerfeld erkannt, nicht am Wort „Error“ im Antworttext; nur
 Legacy-Stringadapter behalten ihre Fehlerkonvention.
 
-Jeder Call im Kontomodus wird zu seinen erwarteten Kosten zugelassen
+Jeder Call wird zu seinen erwarteten Kosten zugelassen
 (`DelegationLoop._admit` → `RunCosts.estimate`, `claim(reservation=…)`); das
 Kontingent entscheidet nur, ob er startet, nie über Suchrunden, Output-Grenze
 oder Tools (agent-mode.md, „Tageskontingent“). Sobald die Nachricht bezahlte
@@ -4664,7 +4658,7 @@ Claim ab, schreibt der Agent die Antwort im frei gebliebenen Schritt
 `_long_run_limit` vergleicht das Ausgegebene (`agent_quota.shown_allowance`)
 mit einem erwarteten Schritt plus Antwort und hält zusätzlich zweimal den
 bisherigen Prüfer-Verbrauch je Schritt frei (`reviewer_charge`,
-`_reviewer_step_charge`). Jeder Schritt des Agenten im Kontomodus kann die
+`_reviewer_step_charge`). Jeder Schritt des Agenten kann die
 Antwort schreiben und hat deren Output-Grenze (`_routing_model`). Suchkonfiguration
 (`search_tools`: eine für alle Modelle, Engine `auto`, nur Grok fest Exa),
 Reservierung und Messwerte stehen ausschließlich in
@@ -4676,17 +4670,13 @@ Längenvorgabe (`DEPTH_GUIDANCE`), `full` keine. Technische Token-, Kontext-
 und Snapshotgrenzen gelten weiter.
 
 **Die Antwort schreibt der Agent selbst (seit 2026-10-14).** In jedem
-Chat-Lauf (`DelegationLoop.merged`, gesetzt, sobald `comparison_models`
-übergeben ist, auch in begrenzten Läufen) ist der Klartext eines Schritts ohne
-Toolcalls die Antwort; ein reiner Delegationslauf ohne Vergleichs-Tools endet
-weiter mit seinem gestreamten Text. Eine Direktantwort ist ein einziger
+Chat-Lauf ist der Klartext eines Schritts ohne Toolcalls die Antwort. Eine Direktantwort ist ein einziger
 Aufruf; nach Recherche, gelesenen Seiten oder einem Vergleich schreibt
 derselbe Aufruf, der die Ergebnisse liest, die Antwort. Streaming
 (`_orchestrate` → `_step(answer_candidate=True)`, `_candidate_delta`;
 Konstanten in `agent_answer_mode.py`): Text erscheint ab `ANSWER_HOLD_CHARS`
 (300) Zeichen und nie nach Beginn eines Toolcalls; kürzerer Text (Gruß,
-Rückfrage) erscheint, wenn der Schritt endet. `hold` (`_hold_answer`:
-ungeprüfte Worker oder Mailbox) blendet ihn ganz aus. Folgt doch ein
+Rückfrage) erscheint, wenn der Schritt endet. Folgt doch ein
 Toolcall, nimmt `_retract` den Text per Status `retract` mit `clear_response`
 zurück und zeigt seit 2026-10-28 den ganzen Schritttext als Notiz `note` in der
 Zeitleiste (`NOTE_CHARS` = 8000, Zeilen bleiben; auch nie gestreamter kurzer
@@ -4702,8 +4692,7 @@ dem Lauf abgelehnte Aufrufe nicht) und nach eigener Websuche gilt Fremdinhalt
 als im Blick (`outside_in_view`): Eine Einstellungsänderung braucht dann ein
 Belegzitat (`agent_settings`). Bis 2026-11-02 sperrte das auch Memory
 (`memory_locked`, App-Eintrag gleichen Namens; mit Prüfern ihre Vorab-Prüfung
-„memory“), seitdem ändert `update_memory` immer sofort. Ungeprüfte Worker-Ergebnisse halten die Antwort
-zurück (`_retract` plus Aufforderung zu `review_agent`). `_finish_merged`
+„memory“), seitdem ändert `update_memory` immer sofort. `_finish_merged`
 fixiert die Antwort (`answer_fixed`: kein Halt eines Prüfers mehr, ein später
 endet mit ihr), gleicht den sichtbaren Text an (`_show_answer`, auch nach
 `_drop_presearch_text`), schreibt den App-Eintrag `answer_fixed` (Hash, Länge),
@@ -4741,10 +4730,9 @@ weil er die Antwort schreiben kann, das Antwortbudget `answer_output_limit`
 Completion-Grenze des Chatmodells; denkende Modelle bekommen
 `ANSWER_REASONING_HEADROOM` obendrauf, weil Reasoning im selben Budget zählt
 und adaptives Denken bei Claude weder Effort noch `reasoning.max_tokens`
-einhält. Ein reiner Delegationslauf bekommt das Steuer-Budget
-`routing_output_limit` (`AGENT_MAX_OUTPUT_TOKENS` + `ROUTING_REASONING_HEADROOM`
-= 16.384 bei denkenden Modellen; Prod: Sonnet „max“ brauchte 3.808/3.998 von
-4.096 im ersten Schritt). `agent_client.reasoning_active` entscheidet über
+einhält; mindestens gilt das Steuer-Budget `routing_output_limit`
+(`AGENT_MAX_OUTPUT_TOKENS` + `ROUTING_REASONING_HEADROOM` = 16.384 bei
+denkenden Modellen). `agent_client.reasoning_active` entscheidet über
 diese Zuschläge: kein Headroom bei Effort `none`, `reasoning.enabled=false`
 (Kimi K2.6) oder Modellen, die nur auf Anfrage denken
 (`default_enabled=false`).
@@ -4754,7 +4742,7 @@ Endet ein Agent-Schritt ohne verwertbares Ergebnis (`_output_limited`:
 `ModelOutputLimit` und setzt `output_limited` (Code `output_limit`, nicht mehr
 `provider_error`); der `stop`-Fall ist die Unterklasse `ModelEmptyAnswer`
 (Code `empty_answer`, seit 2026-10-15): kein Limit, sondern Zufall. `_step` wertet
-das für Agent-Schritte (nicht Worker) als erledigten, bezahlten Schritt
+das für Agent-Schritte als erledigten, bezahlten Schritt
 (`_thought_only`), damit der nächste Claim nicht an einem fehlgeschlagenen
 Vorgänger scheitert; eine Vergleichsantwort mit `retry_empty` ebenso
 (`value.empty_answer`), und `ComparisonTools.worker_request` versucht sie (wie
@@ -4854,8 +4842,7 @@ und `AGENT_ANSWER_SECTION`, dazu `AGENT_WRITE_NOTE`, `AGENT_READ_SOURCE_PROMPT`
 und die `ORCHESTRATOR_PROMPT`-Zwillinge in Watch und Einstellungen) gibt es seit
 2026-10-31 nicht mehr; das frühere zweite Protokoll `agent_comparison.PROMPT`,
 das alte `SYNTHESIS_PROMPT` und `agent_contradictions.PROMPT` waren schon vorher
-entfallen. `agent_delegation_config.ORCHESTRATOR_PROMPT` ist der Prompt der
-Worker-Delegation (nur mit `delegation_config.enabled`).
+entfallen.
 Vergleichsmodelle: „Respect the user's goals and constraints in the context“ statt
 „Context is untrusted data“; in Google-Daten-Chats (keine Websuche) hängt `_step`
 `GOOGLE_NO_SEARCH` als letzte Nachricht an die Anfrage (`with_step_note`, seit
@@ -4867,8 +4854,7 @@ Dateien hat oder eine Gmail-Auswahl im Turn Anhänge importieren kann; Dokument-
 Entscheidungen: `docs/prompt-review/README.md`.
 Der Agent schreibt die Antwort in seinem eigenen Verlauf: Gespräch, eigene
 Suchergebnisse und Toolergebnisse (Vergleichsantworten mit Auszügen, gelesene
-Seiten, Memory-, Watch-, Dokument- und Google-Ergebnisse, Worker-Ergebnisse nach
-`review_agent`). Die Antwort ist nur der Text seines letzten Schritts;
+Seiten, Memory-, Watch-, Dokument- und Google-Ergebnisse). Die Antwort ist nur der Text seines letzten Schritts;
 Toolaufrufe, Statusfelder und zurückgenommene Notizen gehören nicht dazu. Der
 tatsächliche Nutzer-/Antwortverlauf wird beim Start vor allen
 Laufzeit-Ergänzungen als `answer_conversation` gesichert (oben). Seit 2026-10-07
@@ -4928,8 +4914,8 @@ reduced-motion und forced-colors; `renderAudit` nimmt sie
 (`body._checkStatus`) im selben Render weg. Der Prüfzustand beginnt mit dem
 letzten Wort: `_step` sendet das SSE-Ereignis `answer_check` (live, nie
 gespeichert, kein Sticky-Frame), sobald `_answer_check_follows` gilt
-(Antwortschritt endet sauber mit genau dem sichtbaren Text, ohne Toolaufruf,
-keine offenen Worker oder Mailbox), noch vor Settlement, Kontingent-Snapshot und
+(Antwortschritt endet sauber mit genau dem sichtbaren Text, ohne Toolaufruf),
+noch vor Settlement, Kontingent-Snapshot und
 den Review-Checkpoints von `freeze_for_synthesis`/`capture`. Der Handler merkt
 sich den Text (`context.metadata.answerCheckText`); `project` zeigt die
 Prüfung, solange genau dieser Text steht und noch keine Version vorliegt,
@@ -4963,7 +4949,7 @@ ausgeführten Toolcall brechen als Protokollstillstand ab; gültige Arbeit
 begrenzen nur die weichen Schutzgrenzen pro Turn (4 Vergleiche, 24 Schritte,
 15 min, keine identischen Wiederholungen; in einem Turn mit VM-Arbeit 200
 Schritte und 2 h, Wrap-up vor Tageskonto- und Fensterende, alte VM-Ausgabe
-kompaktiert; siehe oben bei `AgentPolicy.for_chat`), die nach Möglichkeit noch
+kompaktiert; siehe oben bei `AgentPolicy`), die nach Möglichkeit noch
 eine Antwort samt Prüfung liefern.
 
 **Journal, Abbruch und Verlauf.**
@@ -5057,13 +5043,13 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   statt 9–10 Dokumente: Die Account-Zähler stehen im Tageskonto
   (`agent_quota.count_claim`/`count_settlement`, Admin-Suche
   `usage_totals`), nicht mehr am User-Dokument; `chat_state/agent_runs` nur bei
-  Änderung; ein delegiertes Settlement liest Chat, Turn und diese Liste nicht
+  Änderung; ein Settlement liest Chat, Turn und diese Liste nicht
   mehr; die Lease wird erst unter 60 s Rest verlängert (`PRODUCER_RENEW_BEFORE_SECONDS`,
   etwa jede Minute statt alle 30 s), das Arbeitsprotokoll schreibt Sammeldokumente
   (Abschnitt „Arbeitsprotokoll“). Eine kurze Nachricht mit zwei Prüfern: 49
   statt 70 Schreib- und 131 statt 160 Lesevorgänge; Rundgänge bis zur ersten
-  Anfrage unverändert 4 (`tests/test_agent_first_request.py`). Wartende Aufrufer (neue Sitzung
-  vor ihrem Claim, Nachrichten eines delegierten Workers fürs Postfach) kommen
+  Anfrage unverändert 4 (`tests/test_agent_first_request.py`). Wartende Aufrufer (eine neue Sitzung
+  vor ihrem Claim) kommen
   bei vollem Stapel zuerst, mit allem, was ihre Sitzung vorher übergab. Noch
   ungeschriebene Updates einer Sitzung werden ein Update (`completed` +
   Ergebnis). Live-Zeilen (`progress=True`) ersetzen eine wartende Zeile; die
@@ -5631,7 +5617,7 @@ Sichtbare Statusbereiche behalten ihre kurzen Übergänge.
 Tool-Nennungen bleiben Text; ausschließlich bestätigte running-Toolereignisse
 oder der Review-Status bestimmen den aktuellen Arbeitsschritt im Verlauf.
 Alte gespeicherte Reasoning-Verläufe bleiben als begrenzte Auszüge lesbar.
-`agent_progress.py`/`agent_loop.py` behalten für Legacy-Läufe und Worker drei Zeilen
+`agent_progress.py` behält für Sitzungen drei Zeilen
 und acht Updates je Modellschritt; Provider-Zusammenfassungen haben Vorrang.
 Seit 2026-10-21 ist jede Zeile eine vollständige Aussage (`_excerpts`, Tests
 `test_agent_progress.py`): ein Satz endet nur, wenn nach dem Satzzeichen
@@ -5648,7 +5634,7 @@ nur das eines Schritts, das seine Notiz wörtlich wiederholt (A1). Gekürzt wird
 über 160 Zeichen weicht einem kürzeren, sonst bleibt der alte Auszug stehen.
 `compactReasoning` (agent-activity.js) wendet dieselben Satzgrenzen auf
 gespeicherte Zeilen an (≤ 180 Zeichen, abgeschnittene „…“-Zeilen fallen weg).
-Worker verwenden weiterhin `progress_text`/`progress_kind` in ihrer Sitzung.
+Sitzungen verwenden weiterhin `progress_text`/`progress_kind`.
 agent-delegation.js verwendet das bestehende geordnete Activity-Journal,
 überlappende Modell-Icons und die Agent-Detailseitenleiste auch für Vergleichs-
 und Prüfer-Aufrufe (kind `comparison`/`audit`; gespeicherte Vergleichsmodus-Turns
@@ -6028,15 +6014,12 @@ selben Punkt beginnt und im Prompt-Cache bleibt; der App-Kontext der neuen
 Nachricht sagt dem Modell das (`HISTORY_OMITTED_NOTE`). Vorher brach jede
 weitere Nachricht ab, gespeichert als `provider_error`, und der Chat war tot
 (Audit A9). Passt nur die neue Nachricht nicht ins Modellfenster, kommt
-`ConversationTooLong` (422, `conversation_too_long`). Der Admin-Prompteditor zeigt
-nur wirksame Worker-Parallelitäts-/Nachrichtengrößen und verweist auf Limits für
-das zentrale Tagesbudget; alte Config-Felder bleiben beim Speichern erhalten.
+`ConversationTooLong` (422, `conversation_too_long`).
 Konten behalten maximal zwei aktive Läufe; AGENT_MAX_CONCURRENT_RUNS begrenzt
 Produzenten pro Prozess (Default 16), auch solche, deren Browser längst weg ist
 (der Producer hält seinen Slot bis zum Turn-Ende). Consensus behält seine Run-Limits.
 Ein einzelner Chat-Turn ist trotzdem nicht unbegrenzt: Vergleichs-, Schritt-,
-Zeit- und Wiederholungsgrenzen pro Turn (`AgentPolicy.turn_*`, oben bei
-`AgentPolicy.for_chat`) stoppen Schleifen gültiger Aufrufe vor dem Tageskonto.
+Zeit- und Wiederholungsgrenzen pro Turn (`AgentPolicy.turn_*`) stoppen Schleifen gültiger Aufrufe vor dem Tageskonto.
 
 Agent nutzt den gemeinsamen `engines.web_search_tool`-Builder mit derselben
 Engine-Wahl wie Consensus (Details: [agent-mode.md](agent-mode.md), „Websuche“).
@@ -6122,7 +6105,7 @@ Ab dem Start des Laufs folgt jeder Prüfer dem Arbeitsprotokoll
 (`run` ruft `auditor.follow(work_log)`; `ReviewerSession` je Prüfer, eigener
 Thread, eine Sitzung Art `audit`, Runden über
 `ComparisonTools.worker_request` mit eigener Websuche): eine Live-Runde,
-sobald ein Schritt des Agenten oder eines Workers Werkzeuge aufruft oder nach
+sobald ein Schritt des Agenten Werkzeuge aufruft oder nach
 dem ersten Schritt Fremdinhalt ins Protokoll kommt (`round_due`, Herkunft in
 `UNTRUSTED_DATA`); Ergebnisse, die binnen `SETTLE_SECONDS` (2 s) zu ihrem
 Schritt kommen, gehen mit derselben Runde (`results_pending`), und was
@@ -6408,8 +6391,7 @@ der Abrechnung), `_run_call`/`_log_call` (`tool`, nicht für `app_registry`;
 eine gleichzeitige Gruppe schreibt ihre Einträge nach ihrem Ende in
 Aufrufreihenfolge), `_retract`,
 `_lock_memory`, `_finish_merged` (`answer_fixed`). `_log_actor` zählt nur den
-Agenten (`completion:N`) und seine Worker ohne `kind`; Prüfer, Vergleichsantworten
-und Seitenabrufe nie. Gespeichert unter `turns/{turn}/work_log/{seq:06d}`,
+Agenten (`completion:N`); Prüfer, Vergleichsantworten und Seitenabrufe nie. Gespeichert unter `turns/{turn}/work_log/{seq:06d}`,
 seit 2026-11-01 als Sammeldokumente (`work_log_chunks`: `seq`, `last_seq`,
 `entries`, höchstens 600.000 Bytes; der Schreib-Thread sammelt
 `FLUSH_SECONDS` = 5), alte Einzeldokumente liest `work_log_entries` weiter
@@ -9351,7 +9333,7 @@ app/api/routers/             siehe §2
   api_v1.py                  Gescopte Run-, Publish-, Share-Lifecycle- und Indexing-API + OpenAPI-Modelle
   chat_history.py            Owner-gebundene Chat-API (Anlage, Liste, Detail, Löschen) und Task-Checks
 app/services/
-  prompt_config.py           DB-Einstellungen (Zeitzone, Delegation) mit Code-Prompts, Validierung, Transaktionsrevisionen und 30-s-Cache
+  prompt_config.py           DB-Einstellungen (Zeitzone) mit Code-Prompts, Validierung, Transaktionsrevisionen und 30-s-Cache
   prompt_catalog.py          Schreibgeschützter Katalog aller Systemprompts aus dem Code für den Admin
   prompt_defaults.py         Code-eigene Systemprompts für Agent, Einzelantworten und Synthese
 app/services/llm/
@@ -9696,30 +9678,26 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   `accepted → failed` (`reservation_expired`) und nach Owner-Löschung der
   inhaltsfreie Tombstone `succeeded|failed → deleted` bis zum Retention-Ablauf.
 - `app_config/prompts` — globale Laufzeit-Einstellungen aus `prompt_config.py`
-  (Dokumentname historisch): `reference_timezone`, `delegation` (aktiviert,
-  Laufzeit-/Kontext-/Nachrichten-/Parallelitäts- und Budgetlimits; Defaults in
-  `agent_delegation_config.py`), ganzzahlige `revision`, UTC-`updated_at` und
-  Admin-UID bzw. Wartungskennung `updated_by`.
+  (Dokumentname historisch): `reference_timezone`, ganzzahlige `revision`,
+  UTC-`updated_at` und Admin-UID bzw. Wartungskennung `updated_by`.
   **Systemprompts sind seit 2026-10-07 code-eigen und im Admin nur lesbar:**
-  `get_config()` behält seine Form (`prompts.agent|answers|consensus`,
-  `delegation.orchestrator_prompt|worker_prompt`), setzt die Texte aber immer aus
-  `prompt_defaults.DEFAULT_PROMPTS` bzw. `agent_delegation_config.PROMPTS`.
-  Prompttexte in älteren Dokumenten werden beim Lesen ignoriert (das Dokument lädt
-  weiter fehlerfrei) und beim nächsten Speichern entfernt; neue Revisionen
-  enthalten keine Prompttexte. Prompt-Änderungen gehen nur über Code + Deploy.
+  `get_config()` behält seine Form (`prompts.agent|answers|consensus`), setzt
+  die Texte aber immer aus `prompt_defaults.DEFAULT_PROMPTS`. Prompttexte und
+  Delegations-Einstellungen in älteren Dokumenten werden beim Lesen ignoriert
+  (das Dokument lädt weiter fehlerfrei) und beim nächsten Speichern entfernt. Prompt-Änderungen gehen nur über Code + Deploy.
   `GET /api/admin/prompt-config` (Router `admin.py`) liest frisch und liefert die
-  editierbare Sicht (`config`/`defaults` ohne Prompttexte), Limits sowie
+  editierbare Sicht (`config`/`defaults` ohne Prompttexte) sowie
   `prompts_readonly` aus `prompt_catalog.prompt_catalog()`; es erzeugt keinen Datensatz.
   `PUT /api/admin/prompt-config` verlangt `revision` plus `config` mit
-  `reference_timezone` und optional vollständigen `delegation`-Einstellungen
-  (fehlt `delegation`, bleibt die gespeicherte erhalten). Von Alt-Clients
-  mitgeschickte `prompts` bzw. Delegations-Prompttexte werden verworfen.
+  `reference_timezone`. Von Alt-Clients mitgeschickte `prompts` oder
+  `delegation` werden verworfen.
   Beide Endpoints prüfen widerrufbare Auth-Tokens und `is_user_admin`.
   Eine Firestore-Transaktion prüft die erwartete Revision und schreibt aktive
   Konfiguration sowie vollständigen Audit-Snapshot unter
   `app_config/prompts/revisions/{revision:012d}` gemeinsam. Konflikte liefern 409;
   der Browser bewahrt den Entwurf. Unveränderte bereits gespeicherte Werte
-  erzeugen keine neue Revision (außer ein Altdokument trägt noch Prompttexte).
+  erzeugen keine neue Revision (außer ein Altdokument trägt noch Prompttexte
+  oder Delegations-Einstellungen).
   Runtime-Reads sind pro Worker 30 Sekunden
   gecacht; bei Lesefehlern bleibt der letzte gültige Stand oder der App-Default
   aktiv. Admin-Lese-/Schreibfehler liefern 503 und keine vorgetäuschte Speicherung.
@@ -9730,9 +9708,7 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   braucht Platz an anderer Stelle oder einen eigenen Abschnitt wie `WATCHES`.
   `prompt_catalog.py` listet die angezeigten Prompts als eine Liste
   `{key, label, used_for, source, text}` (`agent`: Agent-Steuerung samt Schreibregeln, `comparison`: Vergleichsmodelle mit Datums-Platzhalter für Tiefe „full“,
-  `answers`/`consensus`: Consensus-Einzelantworten/-Endantwort,
-  `delegation_orchestrator`/`delegation_worker`; bis 2026-10-14 zusätzlich die
-  Prompts des getrennten Antwortschritts); neue Prompts = ein Eintrag in `_ENTRIES`. Datum, Modellidentität, Verlauf,
+  `answers`/`consensus`: Consensus-Einzelantworten/-Endantwort); neue Prompts = ein Eintrag in `_ENTRIES`. Datum, Modellidentität, Verlauf,
   Quellen-/Antwort-Scaffolding und Tooldefinitionen werden im Code zusammengesetzt.
   Eigene Nutzer-Prompts haben für Einzelantworten Vorrang. Judge-/Resolve-/
   Spezialprompts bleiben im Code.
@@ -12014,15 +11990,14 @@ ihn in den Modi `pdf-text` und `docx-text` (siehe Attachments). Word-XML liest
 expliziter Modellfähigkeit. Von `read_file` geöffnete Bilder ergänzen die
 Nutzerauswahl (`selection()`), verdrängen sie aber nie. Native PDFs werden nur
 gesendet, wenn ihre seitenbasierte Tokenreservierung ins Kontextfenster passt.
-Vergleiche erhalten die Auswahl (oder ihre `file_ids`), Worker nur explizite
-`file_ids`; Prüfer bekommen die Dateien der Nachricht mit. Private Bilddaten
+Vergleiche erhalten die Auswahl (oder ihre `file_ids`); Prüfer bekommen die Dateien der Nachricht mit. Private Bilddaten
 werden nur im flüchtigen Provider-Payload ergänzt, mit konservativer
 Tokenreservierung und tatsächlicher Usage-Abrechnung. Seit 2026-10-15 (Audit
 A6) steht der Dateiblock des Hauptmodells direkt hinter der Frage der Nachricht
 (`DelegationLoop.turn_start` als `anchor`, Auszugssuche mit der Frage), nicht
 hinter dem neuesten Tool-Ergebnis: In jedem Schritt derselbe Block an derselben
 Stelle, also aus dem Prompt-Cache statt jedes Mal voll bezahlt. Vergleichs- und
-andere Worker-Aufrufe hängen ihn weiter ans Ende ihres eigenen Prompts.
+Prüferaufrufe hängen ihn weiter ans Ende ihres eigenen Prompts.
 `FileContext` (eine Instanz pro Turn) lädt Bild-/PDF-Bytes einmal pro Turn
 (`_raw`, gebunden an den SHA-256 des Datensatzes); die Metadaten liest jeder
 Aufruf weiter einmal, damit eine gelöschte oder abgelaufene Datei sofort
@@ -12249,7 +12224,7 @@ Rücksetzzeit in Ortszeit und Aktionen; ohne Antworttext kehrt die Frage in den
 Composer zurück. Budget-Polling läuft nur im Agent-Modus: alle 5 min, bei
 Fokus/Sichtbarkeit nur, wenn der letzte bestätigte Kontostand (Fetch oder
 Laufmeldung) älter als 60 s ist oder der letzte Refresh scheiterte.
-Serverseitig fragt `agent_quota.snapshot` laufende Delegations-Wurzeln nur
+Serverseitig fragt `agent_quota.snapshot` laufende Lauf-Wurzeln (`policy.delegation`) nur
 alle `RECOVERY_QUIET_S` (120 s) pro Nutzer erneut ab, wenn keine lief, und
 merkt sich ein geschlossenes leeres Vortagsblatt (`PREVIOUS_DAY_GRACE` 2 h nach
 Mitternacht) für 10 min.

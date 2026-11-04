@@ -113,7 +113,6 @@ def test_the_answer_is_written_from_the_actual_document_results(setup):
     from test_agent_runs import UID, pending
     from app.services.agent_comparison import answer_hash, comparison_selection
     from app.services.agent_delegation import DelegationLoop
-    from app.services.agent_delegation_config import defaults
     from app.services.agent_policy import AgentPolicy
     from app.services.agent_runs import AgentRunStore
     from app.services.llm.agent_client import measured_usage, resolve_agent_model
@@ -136,12 +135,11 @@ def test_the_answer_is_written_from_the_actual_document_results(setup):
                 return
             yield from super().stream(**kwargs)
 
-    config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare the offers and write a brief."}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
-        delegation_config=config, completion_factory=Workflow, file_context=FileContext(files, UID, chat, []),
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=Workflow, file_context=FileContext(files, UID, chat, []),
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
     script.loop = without_reviewers(loop)
     events = list(loop.run())
@@ -168,7 +166,6 @@ def test_the_file_list_travels_with_the_message_not_the_system_prompt(setup):
     from test_agent_runs import UID, pending
     from app.services.agent_comparison import comparison_selection
     from app.services.agent_delegation import DelegationLoop
-    from app.services.agent_delegation_config import defaults
     from app.services.agent_files import AUDIT_UNTRUSTED
     from app.services.agent_policy import AgentPolicy
     from app.services.agent_runs import APP_CONTEXT_CLOSE, AgentRunStore, strip_app_context, with_app_context
@@ -176,15 +173,14 @@ def test_the_file_list_travels_with_the_message_not_the_system_prompt(setup):
     files, _ = setup
     store = AgentRunStore(files.db)
     chat, turn = pending(store)
-    config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
 
     def loop():
         return DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
             model=resolve_agent_model("claude-haiku-4-5"),
             messages=[{"role": "system", "content": "Answer."},
                       {"role": "user", "content": with_app_context("Compare the offers.", "Current date: today.")}],
-            api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
-            delegation_config=config, completion_factory=AgentCompletion, file_context=FileContext(files, UID, chat, []),
+            api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+            completion_factory=AgentCompletion, file_context=FileContext(files, UID, chat, []),
             comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
 
     files.upload(UID, chat, {"name": "offer.txt", "data": base64.b64encode(b"Price: 42 EUR").decode()})

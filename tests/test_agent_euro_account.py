@@ -8,11 +8,10 @@ reviewer the same as any call. Ledgers of the token account stay apart.
 from dataclasses import replace
 
 from app.services import agent_budget_config, agent_quota
-from app.services.agent_costs import RunCosts, worst_case_nanos
-from app.services.agent_policy import AgentPolicy
-from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
+from app.services.agent_costs import RunCosts
+from app.services.llm.agent_client import AgentCompletion, measured_usage
 from test_agent_runs import UID, PRICED, store, priced  # noqa: F401  (fixtures)
-from test_agent_delegation import make_loop
+from test_agent_sessions import make_loop
 
 
 DEAR = replace(PRICED, model="anthropic/claude-opus-4.7", label="Dear", selection_id="dear",
@@ -29,7 +28,7 @@ def settled(store, model, raw):
     value = AgentCompletion()
     value.text, value.finish_reason = "ok", "stop"
     value.usage = measured_usage(raw, model)
-    store.settle(*args, completion=value, status="succeeded", final=False)
+    store.settle(*args, completion=value, status="succeeded")
     return store.receipt_ref(*args).get().to_dict()
 
 
@@ -68,7 +67,7 @@ def test_a_reviewer_counts_what_it_cost_like_any_call(store):
     value = AgentCompletion()
     value.text, value.finish_reason = "ok", "stop"
     value.usage = measured_usage(USAGE, PRICED)
-    store.settle(*args, completion=value, status="succeeded", step=step, final=False)
+    store.settle(*args, completion=value, status="succeeded", step=step)
     assert store.receipt_ref(*args, step).get().to_dict()["quota_charged"] == 1_305
 
 
@@ -92,7 +91,7 @@ def test_the_euro_ledger_is_apart_from_the_token_ledger(store, monkeypatch):
     value = AgentCompletion()
     value.text, value.finish_reason = "ok", "stop"
     value.usage = measured_usage(USAGE, PRICED)
-    store.settle(*args, completion=value, status="succeeded", final=False)
+    store.settle(*args, completion=value, status="succeeded")
     assert tokens.get().to_dict()["reserved"] == 0
     # The euro ledger keeps its own hold and charge untouched.
     assert euros.get().to_dict() == {"used": 0, "reserved": 400}
@@ -106,7 +105,7 @@ def test_a_reservation_is_what_the_call_is_expected_to_cost():
     rounds its kind of call measured on that model so far."""
     from decimal import Decimal
     from app.services.agent_costs import OUTPUT_START_TOKENS, SEARCH_ROUND_TOKENS, search_cost_nanos
-    costs = RunCosts(AgentPolicy(account_budget_only=True))
+    costs = RunCosts()
     model = replace(DEAR, max_output_tokens=65_536, context_length=1_000_000)
     messages = [{"role": "user", "content": "Which option? " * 2_000}]
     inputs = costs.inputs(messages)
@@ -127,8 +126,6 @@ def test_a_reservation_is_what_the_call_is_expected_to_cost():
     cached, fresh = inputs - 100, 100 + 2 * SEARCH_ROUND_TOKENS
     assert after[1] == int((cached * Decimal("1.5") + fresh * Decimal("18.75") + 1_000 * 75) * 1000) \
         + 2 * search_cost_nanos(model)
-    # Far below the worst case, and the output limit sent stays the model's own.
-    assert after[1] * 20 < worst_case_nanos(model, inputs * 6 + 5 * 32_000 * 6, 65_536 * 6)
     # Another session reads nothing from that cache.
     assert costs.estimate(model, messages, session="reviewer")[1] > costs.estimate(model, messages, session="agent")[1]
 
@@ -141,13 +138,6 @@ def test_every_comparison_model_gets_the_same_output_whatever_is_left(store, mon
     monkeypatch.setattr(cfg, "MAX_TOKENS", 500)
     shares = loop.comparison._output_shares({"cheap": PRICED, "dear": DEAR})
     for left in (0, 10, 5_000_000):
-        monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid, **kwargs: left)
+        monkeypatch.setattr(agent_quota, "shown_allowance", lambda db, uid, **kwargs: (left, left))
         assert loop.comparison._output_shares({"cheap": PRICED, "dear": DEAR}) == shares
     assert shares == {"cheap": REVIEW_ANSWER_CHARS // 2 // CHARS_PER_TOKEN, "dear": REVIEW_ANSWER_CHARS // 2 // CHARS_PER_TOKEN}
-
-
-def test_worst_case_prices_every_input_at_the_dearest_input_price():
-    assert worst_case_nanos(DEAR, 1_000, 0) == 1_000 * 18_750
-    assert worst_case_nanos(DEAR, 0, 100) == 100 * 75_000
-    assert worst_case_nanos(AgentModel(model="x/free", input_usd_per_million="0", output_usd_per_million="0",
-                                       cache_read_usd_per_million="0", cache_write_usd_per_million=""), 5, 5) == 0

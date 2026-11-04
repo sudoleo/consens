@@ -25,7 +25,7 @@ from app.services.agent_memory import FirestoreAgentMemoryRepository, MemorySnap
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_runs import AgentRunStore, get_agent_turn_context
 from app.services.agent_sessions import HoldActionRefused, NotesFull
-from app.services.agent_policy import AgentPolicy, supports_delegation
+from app.services.agent_policy import AgentPolicy
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_provider_limits import AgentProviderCooldown, agent_failure, provider_cooldowns
 from app.services.agent_tools import configured_model
@@ -586,11 +586,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                 raise HTTPException(403, "Authorize Gmail for the selected account first.")
         lease = agent_capacity.acquire()
         config = prompt_config.get_config()
-        delegation_config = config["delegation"]
-        # Comparisons always use the shared bounded loop; worker delegation
-        # retains its separately configured model/protocol feature gate.
-        delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
-        policy = AgentPolicy.for_chat(delegation_config)
+        policy = AgentPolicy()
         comparisons = comparison_selection(payload.comparison_models)
         # Read beside the others; a temporary chat reads it and writes nothing.
         memory = reads["memory"].result()
@@ -621,7 +617,6 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             selected_models=[model.model], consensus_model=model.model,
             client_request_id=payload.client_request_id, execution_mode="agent", attachments=file_meta,
             agent_settings={**model.settings(), "policy": policy.snapshot(), "config_revision": config["revision"],
-                            "delegation_config": delegation_config,
                             "file_ids": payload.file_ids,
                             "google_selection": payload.google_selection.model_dump() if payload.google_selection else None,
                             "google_data_consent": payload.google_data_consent,
@@ -663,7 +658,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                          completion_factory=AgentCompletion, policy=policy, file_context=file_context,
                          google_selection=payload.google_selection,
                          google_data_consent=payload.google_data_consent, google_data=google_data,
-                         delegation_config=delegation_config, cooldowns=provider_cooldowns,
+                         cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
                          watch_run=watch_run, history_summary=history_summary or None,

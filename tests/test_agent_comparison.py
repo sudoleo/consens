@@ -20,10 +20,9 @@ from app.core.openrouter_contract import provider_session_id
 from app.services import agent_quota, agent_budget_config
 from app.services.agent_comparison import ComparisonTools, comparison_selection
 from app.services.agent_delegation import DelegationLoop
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_provider_limits import ModelEmptyAnswer
-from app.services.llm.agent_client import AgentCompletion, measured_usage, metered_model, resolve_agent_model
+from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, AnalysisBudgetExceeded
 from agent_reviewers import without_reviewers
 from test_agent_runs import UID, AUTH, api, pending, receipt, store, priced, totals
@@ -95,15 +94,14 @@ class Script:
         return Completion()
 
 
-def make_loop(store, script, *, messages=None, delegation=False, models=None, preferences=None, reviewers=False):
+def make_loop(store, script, *, messages=None, models=None, preferences=None, reviewers=False):
     """A turn of the agent with ``script``'s completions; its reviewers never
     start (agent_reviewers.InertAnswerAudit) unless ``reviewers``."""
     chat, turn = pending(store)
-    config = {**defaults(), "enabled": delegation, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"), messages=messages or [{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
-        delegation_config=config, completion_factory=script.factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=script.factory,
         comparison_models=comparison_selection(models or {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=preferences)
     if not reviewers:
@@ -191,12 +189,10 @@ def test_reviewed_exact_version_context_sources_and_all_usage(store, compares, m
     assert stats == [] and not list(store.db.collection("model_votes").stream())
 
 
-@pytest.mark.parametrize('account_budget_only', [False, True])
-def test_fixed_answer_cannot_be_reopened_by_a_second_review_or_late_comparison(store, account_budget_only):
+def test_fixed_answer_cannot_be_reopened_by_a_second_review_or_late_comparison(store):
     from app.services.agent_comparison import AuditAnswerArgs, AuditCompareArgs
     script = Script()
     loop = make_loop(store, script)
-    loop.policy = loop.costs.policy = replace(loop.policy, account_budget_only=account_budget_only)
     events = list(loop.run())
     saved = saved_turn(store, loop)
     assert saved['consensus'] == 'The first option costs 100.'
@@ -280,7 +276,7 @@ def test_atomic_daily_budget_and_duplicate_settlement(store, monkeypatch):
     value.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 5,
         "prompt_tokens_details": {"cached_tokens": 5}, "completion_tokens_details": {"reasoning_tokens": 5}}, loop.model)
     for _ in range(2):
-        store.settle(UID, loop.chat_id, loop.turn_id, completion=value, status="cancelled", final=False)
+        store.settle(UID, loop.chat_id, loop.turn_id, completion=value, status="cancelled")
     quota = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict()
     # 15 tokens at the flat test price, settled once.
     assert quota["used"] == 15 and quota["reserved"] == 0
@@ -309,7 +305,7 @@ def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(st
     assert agent_quota.snapshot(store.db, UID)['remaining'] == 500
     config.save(expected_revision=1, updated_by='admin', reset=True)
     assert agent_quota.snapshot(store.db, UID)['remaining'] == 2000
-    store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(), status='succeeded', final=False)
+    store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(), status='succeeded')
     # The step admitted before the reset settles in its own generation.
     assert agent_quota.snapshot(store.db, UID)['used'] == 0
     old = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT).get().to_dict()
@@ -317,7 +313,7 @@ def test_admin_budget_is_enforced_and_reset_isolated_from_inflight_settlement(st
     assert old['used'] == 115 and old['reserved'] == 0
     assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, step='completion:1', reservation=(800, priced(800)), **params)
     assert agent_quota.snapshot(store.db, UID)['reserved'] == 800
-    store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(), status='succeeded', step='completion:1', final=False)
+    store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(), status='succeeded', step='completion:1')
     assert agent_quota.snapshot(store.db, UID)['used'] == 115
 
 
@@ -348,13 +344,9 @@ def test_every_model_searches_with_one_configuration(store, depth, limit, rounds
         completion.stream = recording
         return completion
     script.factory = factory
-    from app.services.llm.provider_runtime import AnalysisBudget
     agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": limit})
     # One family with its own search, one without; the same models review.
     loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"}, reviewers=True)
-    loop.policy = AgentPolicy.for_chat(loop.config)
-    loop.costs.policy = loop.policy
-    loop.budget = AnalysisBudget(unlimited=True)
     list(loop.run())
     reviews = [row for row in seen if row[4].startswith(REVIEWER)]
     seen = [row for row in seen if not row[4].startswith(REVIEWER)]
@@ -391,7 +383,6 @@ def test_a_comparison_that_overdraws_the_day_still_reaches_its_answer(store):
     on a small allowance, the answer is written and reviewed beyond the
     limit. The next message is refused instead."""
     from app.services.agent_audit import REVIEW_SEARCH_ROUNDS
-    from app.services.llm.provider_runtime import AnalysisBudget
     script = Script(depth="full")
     rounds, reviewed, base = [], [], script.factory
     def factory():
@@ -413,9 +404,6 @@ def test_a_comparison_that_overdraws_the_day_still_reaches_its_answer(store):
     limit = 60_000
     agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": limit})
     loop = make_loop(store, script, models={"anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"}, reviewers=True)
-    loop.policy = AgentPolicy.for_chat(loop.config)
-    loop.costs.policy = loop.policy
-    loop.budget = AnalysisBudget(unlimited=True)
     list(loop.run())
     saved = saved_turn(store, loop)
     assert rounds == [3, 3]
@@ -424,7 +412,6 @@ def test_a_comparison_that_overdraws_the_day_still_reaches_its_answer(store):
     assert [row["status"] for row in saved["agent_review"]["audit"]["reviewers"]] == ["completed", "completed"]
     ledger = agent_quota.snapshot(store.db, UID)
     assert ledger["used"] > limit and ledger["reserved"] == 0
-    assert agent_quota.remaining_allowance(store.db, UID) == 0
 
 
 def test_overdraft_admits_a_reservation_beyond_the_limit_only_when_asked():
@@ -437,27 +424,9 @@ def test_overdraft_admits_a_reservation_beyond_the_limit_only_when_asked():
     assert (refused.value.required, refused.value.remaining) == (200, 100)
 
 
-def test_a_bounded_run_reserves_the_worst_case_of_every_search_round():
-    """A bounded run's budget is a hard limit: every round may send the whole
-    input again and add SEARCH_INPUT_TOKENS (a small window caps it)."""
-    from app.services.agent_costs import RunCosts, SEARCH_INPUT_TOKENS
-    costs = RunCosts(AgentPolicy.from_config({**defaults(), "enabled": True}))
-    messages = [{"role": "user", "content": "Q"}]
-    estimate = lambda model, n: costs.estimate(model, messages, native_searches=n)[0]
-    native, exa = resolve_agent_model("claude-haiku-4-5"), metered_model("deepseek-v4.1-flash")
-    for model in (native, exa):
-        none, one, three = estimate(model, 0), estimate(model, 1), estimate(model, 3)
-        assert none < one < three
-        assert one - 2 * none <= 2 * SEARCH_INPUT_TOKENS
-    small = replace(native, context_length=20_000, max_output_tokens=4_000)
-    assert estimate(small, 1) <= 2 * small.context_length
-    with pytest.raises(AnalysisBudgetExceeded, match="context limit"):
-        costs.estimate(replace(native, max_output_tokens=native.context_length), messages)
-
-
 def test_an_account_step_reserves_its_expected_search_not_one_bound_per_round():
     from app.services.agent_costs import RunCosts, SEARCH_ROUND_TOKENS, search_cost_nanos
-    costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
+    costs = RunCosts()
     messages = [{"role": "user", "content": "Q"}]
     model = resolve_agent_model("claude-haiku-4-5")
     none, one, five = (costs.estimate(model, messages, native_searches=n) for n in (0, 1, 5))
@@ -469,53 +438,12 @@ def test_an_account_step_reserves_its_expected_search_not_one_bound_per_round():
         costs.estimate(replace(model, context_length=10), messages)
 
 
-@pytest.mark.parametrize("remaining", [100, 100_000])
-def test_a_bounded_step_that_does_not_fit_is_refused_never_sent_without_search(store, remaining):
-    calls = []
-    class Completion(AgentCompletion):
-        def stream(self, *, model, messages, **kwargs):
-            calls.append(kwargs)
-            yield from ()
-    loop = make_loop(store, Script())
-    loop.factory = Completion
-    loop.search_remaining = 1
-    ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
-    ref.set({"used": 250000 - remaining})
-    with pytest.raises(agent_quota.AgentTokenBudgetExceeded):
-        list(loop.run())
-    assert calls == [] and loop.costs.calls == 0 and loop.costs.tokens == 0
-    assert ref.get().to_dict() == {"used": 250000 - remaining}
-    assert loop.search_remaining == 1
-
-
-@pytest.mark.parametrize("reported,remaining", [(0, 1), (1, 0), (3, -2)])
-def test_search_budget_books_the_reported_count_including_an_overrun(store, reported, remaining):
-    calls = []
-    class Completion(AgentCompletion):
-        def stream(self, *, model, messages, **kwargs):
-            calls.append(kwargs["native_searches"])
-            self.text, self.finish_reason = "Answer.", "stop"
-            self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .001,
-                "server_tool_use_details": {"web_search_requests": reported}}, model, searches_enabled=True)
-            yield {"type": "delta", "text": self.text}
-    # Room for the search reservation in the daily allowance.
-    agent_budget_config.store(store.db).save(expected_revision=0, updated_by="admin", tier_limits={"pro": 5_000_000})
-    loop = make_loop(store, Script())
-    loop.factory = Completion
-    loop.search_remaining = 1
-    list(loop.run())
-    assert calls == [1]
-    assert saved_turn(store, loop)["status"] == "completed"
-    # The overrun is debt: later reservations get no search until it is paid.
-    assert loop.search_remaining == remaining
-
-
 def test_unknown_terminal_usage_releases_admission_and_utc_day_is_separate(store, monkeypatch):
     loop = make_loop(store, Script())
     monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-19")
     assert store.claim(UID, loop.chat_id, loop.turn_id, loop.model, run_token=loop.run_token,
         policy=loop.policy.snapshot(), reservation=(500, priced(500)))
-    store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(measured=False), status="cancelled", final=False)
+    store.settle(UID, loop.chat_id, loop.turn_id, completion=receipt(measured=False), status="cancelled")
     quota = agent_quota.quota_ref(store.db, UID, "2026-09-19" + agent_quota.LEDGER_UNIT).get().to_dict()
     assert quota['reserved'] == 0 and quota['unknown'] == quota['unknown_released'] == 500
     assert agent_quota.public(agent_quota.quota_ref(store.db, UID, "2026-09-20" + agent_quota.LEDGER_UNIT).get().to_dict())["remaining"] == 250000
@@ -526,9 +454,10 @@ def test_a_run_past_midnight_settles_the_old_day_and_reserves_on_the_new_one(sto
     args = (UID, loop.chat_id, loop.turn_id)
     monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-19")
     assert store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
-    store.settle(*args, completion=receipt(measured=False), status="succeeded", final=False)
+    store.settle(*args, completion=receipt(measured=False), status="succeeded")
     monkeypatch.setattr(agent_quota, "day_key", lambda: "2026-09-20")
-    assert store.claim(*args, loop.model, step="completion:1", run_token=loop.run_token, reservation=(50, priced(50)))
+    assert store.claim(*args, loop.model, step="completion:1", run_token=loop.run_token, policy=loop.policy.snapshot(),
+                       reservation=(50, priced(50)))
     previous = agent_quota.quota_ref(store.db, UID, '2026-09-19' + agent_quota.LEDGER_UNIT).get().to_dict()
     assert previous['reserved'] == 0 and previous['unknown'] == previous['unknown_released'] == 100
     # Only the new step's own reservation: no hold moves along (since 2026-10-31).
@@ -704,7 +633,6 @@ def test_comparison_models_answer_at_the_same_time(store):
 
     script = Parallel()
     loop = make_loop(store, script, models=THREE)
-    assert loop.policy.max_parallel == 2
     list(loop.run())
     review = saved_turn(store, loop)["agent_review"]
     assert [len(c["answers"]) for c in review["comparisons"]] == [3]

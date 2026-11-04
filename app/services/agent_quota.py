@@ -145,18 +145,10 @@ def public_snapshot(data, period, config, tier, *, now=None, limit=None):
             "tier": tier, "run_estimates": agent_budget_config.run_estimates_for(config, tier)}
 
 
-def remaining_allowance(db, uid, *, tier=None):
-    """Plain read of today's unreserved allowance (micro-euros), without snapshot repairs."""
-    config = agent_budget_config.get_config(db)
-    tier = account_tier(uid) if tier is None else tier
-    data = quota_ref(db, uid, period_key(config)).get().to_dict() or {}
-    return _remaining(data, agent_budget_config.limit_for(config, tier))
-
-
 def shown_allowance(db, uid, *, tier=None):
     """``(left, limit)`` of today's allowance as the sidebar ring shows it
     (token-budget.js view): the limit less what was spent, not less what
-    running calls hold for the moment (remaining_allowance)."""
+    running calls hold for the moment."""
     config = agent_budget_config.get_config(db)
     tier = account_tier(uid) if tier is None else tier
     data = quota_ref(db, uid, period_key(config)).get().to_dict() or {}

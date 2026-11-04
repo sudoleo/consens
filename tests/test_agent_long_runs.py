@@ -18,7 +18,6 @@ from app.services.agent_compaction import (CONTENT_CLEARED, OUTPUT_CLEARED, WORK
                                            compact, describe, is_work_record, stub, work_record)
 from app.services.agent_delegation import (DelegationLoop, TURN_ALLOWANCE_LIMIT, TURN_CONTEXT_LIMIT,
                                            TURN_WRAP_UP_SECONDS)
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_runs import ACTIVITY_MAX_BYTES, activity_budget, bounded_activity, json_bytes
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
@@ -68,12 +67,10 @@ def stored(store, loop):
 
 # --- Limits -----------------------------------------------------------------------
 
-def test_a_vm_turn_has_its_own_limits_and_a_bounded_run_none():
-    chat = AgentPolicy.for_chat(defaults())
+def test_a_vm_turn_has_its_own_limits():
+    chat = AgentPolicy()
     assert (chat.vm_turn_steps, chat.vm_turn_seconds) == (200, 7200)
     assert chat.snapshot()["vm_turn_seconds"] == 7200
-    bounded = AgentPolicy.from_config({**defaults(), "enabled": True})
-    assert "vm_turn_steps" not in bounded.snapshot() and "vm_turn_seconds" not in bounded.snapshot()
 
 
 def test_a_turn_is_a_long_run_from_its_first_vm_call_on(store, fake_vm):
@@ -144,7 +141,6 @@ def test_reservations_of_running_calls_do_not_end_a_long_run_early(store, fake_v
     limit = agent_quota.snapshot(store.db, UID)["limit"]
     ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
     ref.set({"used": limit // 2, "reserved": limit // 2})
-    assert agent_quota.remaining_allowance(store.db, UID) == 0
     assert loop._long_run_limit() is None
     # Spent, it ends the run with its answer.
     ref.set({"used": limit, "reserved": 0})
@@ -163,7 +159,6 @@ def test_a_long_run_ends_with_its_answer_before_the_context_window_is_full(store
 def test_a_short_turn_never_reads_the_allowance_between_steps(store, fake_vm, monkeypatch):
     def unexpected(db, uid, **kwargs):
         raise AssertionError("read the allowance")
-    monkeypatch.setattr(agent_quota, "remaining_allowance", unexpected)
     monkeypatch.setattr(agent_quota, "shown_allowance", unexpected)
     loop = vm_loop(store, LongAgent([]))
     list(loop.run())
@@ -431,11 +426,10 @@ def test_the_record_lists_the_calls_and_keeps_its_ends_when_long():
 def loop_after(store, script, chat_id, request_id, question):
     """A message of the chat ``chat_id`` with its saved history (AgentRunStore.messages)."""
     chat, turn = pending(store, chat_id=chat_id, request_id=request_id, question=question)
-    config = {**defaults(), "enabled": False, "max_searches": 0}
     return without_reviewers(DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"), messages=store.messages(UID, chat, turn),
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=script.factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=AgentPreferences(vm="on")))
 

@@ -218,9 +218,8 @@ class ComparisonTools:
         self.reader = None
         self.auditor = AnswerAudit(self, setting=reviewers)
         # Every chosen model, every answer awaited, the depth the agent's.
-        limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
-        self.tools = [ReadOnlyTool("compare_models", AUDIT_COMPARE + (
-            f" At most {limit} times per message." if limit else ""), AuditCompareArgs, self.compare)]
+        self.tools = [ReadOnlyTool("compare_models", AUDIT_COMPARE + f" At most {loop.policy.turn_comparisons} times "
+                                   "per message.", AuditCompareArgs, self.compare)]
         # The review: run by the app once the answer is written, never
         # offered to the agent.
         self.app_tools = [ReadOnlyTool("audit_answer", "Have the user's comparison models review the fixed answer.",
@@ -406,8 +405,8 @@ class ComparisonTools:
             raise ValueError("Files are not available")
         if self.text:
             raise ValueError("The answer is already being written. Do not call further tools.")
-        limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
-        if limit and len(self.comparisons) >= limit:
+        limit = loop.policy.turn_comparisons
+        if len(self.comparisons) >= limit:
             # Nothing paid starts; the existing comparisons stand.
             raise ValueError(f"This message already has its maximum of {limit} comparisons. Do not compare "
                              "again: go on from the comparisons you already have.")

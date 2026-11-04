@@ -25,8 +25,7 @@ Method as in that spec (section 8):
 Times: total = turn created until the run finished; to the answer = until
 the last ``answer_fixed``; marks after the last word = from there until the
 run finished; final round = a reviewer's first receipt after the answer was
-fixed until its last one settled; gate wait = the agent's step entry until
-``checked``/``paused`` of its gate (or the entry's own ``gate_ms``).
+fixed until its last one settled.
 p50 is the median, p90 the nearest rank. Turns whose chat is gone keep only their
 receipts: counted apart (``deleted``), audit when a receipt says so
 (``session_kind``/``round``), else by the shape of their receipts.
@@ -56,7 +55,7 @@ sys.path.insert(0, str(ROOT))
 TZ = ZoneInfo("Europe/Berlin")
 # The operator's own accounts (Max), as in scripts/cache_hit_rate.py.
 OWN_UID_PREFIXES = ("mWKgPU", "XP4WVO", "f8MfuG")
-REVIEWER_ROUNDS = {"live", "gate", "final", "repair", "hedge"}
+REVIEWER_ROUNDS = {"live", "final", "repair", "hedge"}
 FINAL_ROUNDS = {"final", "repair", "hedge"}
 TERMINAL_SESSIONS = {"completed", "failed", "stopped"}
 # Holds that ended without the user deciding them (Z4, a proxy).
@@ -86,19 +85,11 @@ def _usage(receipt):
 
 
 def _log_entry(entry):
-    """A work log entry's time and kind; for a gate its wait, for an agent
-    step only how often it searched and how many pages it kept."""
+    """A work log entry's time and kind; for an agent step only how often it
+    searched and how many pages it kept."""
     kept = {key: entry.get(key) for key in ("seq", "at", "actor", "kind", "name", "step")}
     content = entry.get("content")
-    if entry.get("kind") == "app" and entry.get("name") in {"checked", "paused"}:
-        value = entry.get("gate_ms")
-        if value is None and entry.get("format") == "json" and isinstance(content, str):
-            try:
-                value = (json.loads(content) or {}).get("gate_ms")
-            except (ValueError, AttributeError):
-                value = None
-        kept["gate_ms"] = value if isinstance(value, (int, float)) and not isinstance(value, bool) else None
-    elif (entry.get("kind") == "step" and entry.get("actor") == "agent" and isinstance(content, str)
+    if (entry.get("kind") == "step" and entry.get("actor") == "agent" and isinstance(content, str)
           and not entry.get("ref") and not entry.get("truncated")):
         try:
             step = json.loads(content)
@@ -125,9 +116,9 @@ def _turn(turn):
                               "failure": (item.get("failure") or {}).get("code") if isinstance(item.get("failure"), dict)
                               else None, "final_ms": item.get("final_ms"), "backlog": item.get("backlog")})
     saved_holds = turn.get("agent_holds")
-    holds = ([{key: hold.get(key) for key in ("kind", "gate", "ask", "domain", "decision", "seconds")}
+    holds = ([{key: hold.get(key) for key in ("kind", "ask", "domain", "decision", "seconds")}
               for hold in saved_holds if isinstance(hold, dict)] if isinstance(saved_holds, list) else
-             [{"kind": item.get("halt"), "gate": item.get("gate"), "ask": item.get("ask"),
+             [{"kind": item.get("halt"), "ask": item.get("ask"),
                "domain": bool(item.get("domain")), "decision": item.get("state")}
               for item in turn.get("agent_activity") or [] if isinstance(item, dict) and item.get("kind") == "hold"])
     return {"status": turn.get("status"), "error_code": turn.get("error_code"), "failure": failure.get("code"),
@@ -315,34 +306,12 @@ def deleted_turns(data):
     return dict(out)
 
 
-def _gates(row):
-    """Each gate of a turn: (result, wait in seconds)."""
-    holds = list(row["info"].get("holds") or [])
-    gates, step_at, paused = [], None, 0
-    for entry in row["log"]:
-        if entry.get("kind") == "step" and entry.get("actor") == "agent":
-            step_at = entry.get("at")
-            continue
-        if entry.get("kind") != "app" or entry.get("name") not in {"checked", "paused"}:
-            continue
-        hold = None
-        if entry["name"] == "paused":
-            hold = holds[paused] if paused < len(holds) else None
-            paused += 1
-            if not (hold and hold.get("gate")):
-                continue
-        wait = entry["gate_ms"] / 1000 if entry.get("gate_ms") is not None else _seconds(step_at, entry.get("at"))
-        result = "go" if entry["name"] == "checked" else "domain" if hold.get("domain") else hold.get("kind") or "halt"
-        gates.append((result, wait))
-    return gates
-
-
 def _hold_label(hold):
     if hold.get("ask"):
         return f"ask:{hold['ask']}"
     if hold.get("domain"):
         return "domain"
-    return f"gate:{hold.get('kind')}" if hold.get("gate") else str(hold.get("kind") or "?")
+    return str(hold.get("kind") or "?")
 
 
 def _tokens(rows):
@@ -471,7 +440,6 @@ def report(data):
     times["final_round_by_model"] = {model: quantiles(values) for model, values in sorted(final_by_model.items())}
     times["live_request_by_model"] = {model: quantiles(values) for model, values in sorted(live_by_model.items())}
     times["agent_step"] = step_split(data["receipts"])
-    gates = [gate for row in rows for gate in _gates(row)]
     holds = [hold for row in rows for hold in row["info"].get("holds") or []]
     reviewer_failures = Counter(item["failure"] for r in rows for item in (r["info"]["review"] or {}).get("reviewers") or []
                                 if item.get("failure"))
@@ -495,7 +463,7 @@ def report(data):
     undecided = sum(1 for hold in holds if hold.get("decision") in UNDECIDED)
     open_sessions = sum(1 for r in rows if r["end"] is not None for s in r["sessions"].values()
                         if s.get("kind") == "audit" and s.get("status") not in TERMINAL_SESSIONS)
-    marks, gate_wait = times["marks_after_last_word"], quantiles(wait for _, wait in gates)
+    marks = times["marks_after_last_word"]
     targets = [
         _target("Z1", "marks after the last word (s)", marks,
                 "p50 <= 10, p90 <= 20, max <= 60",
@@ -509,8 +477,6 @@ def report(data):
                 and review_status.get("failed", 0) / reviewed <= .005),
         _target("Z3", "turns failed after the answer was fixed", failed_after_answer, "0", failed_after_answer == 0),
         _target("Z4", "holds that ended without a decision (proxy)", undecided, "0", undecided == 0),
-        _target("Z5", "gate wait (s)", gate_wait, "p90 <= 10, never over 20",
-                None if not gate_wait["n"] else gate_wait["p90"] <= 10 and gate_wait["max"] <= 20),
         _target("Z6", "reviewer sessions not ended after their turn", open_sessions, "0", open_sessions == 0),
         _target("Z7", "browser loses a running or paused run", None, "0 (smoke, A-L4; not in the data)", None),
         _target("Z8", "reviewers' share of the allowance", quota["reviewer_share"],
@@ -539,7 +505,6 @@ def report(data):
                    "live_rounds": {"total": live_total, "failed": live_failed}},
         "times": times,
         "live_rounds_per_turn": quantiles(live_per_turn),
-        "gate": {"rounds": len(gates), "results": dict(Counter(result for result, _ in gates)), "wait": gate_wait},
         "halts": {"count": len(holds), "by_kind_and_decision": dict(Counter(
                       f"{_hold_label(h)} -> {h.get('decision')}" for h in holds)),
                   "until_decision": quantiles(_seconds(p.get("at"), d.get("at")) for r in rows for p, d in r["pauses"] if d)},
@@ -569,7 +534,7 @@ def render(result):
         f"deleted chats: {data['deleted'] or 'none'}; reviewers per turn: {data['reviewers_per_turn']}")
     status = result["status"]
     add(f"Status: {status['turns']}; failures {status['turn_failures']}; reviews {status['reviews']}; "
-        f"reviewer failures {status['reviewer_failures']}; live or gate rounds failed "
+        f"reviewer failures {status['reviewer_failures']}; live rounds failed "
         f"{status['live_rounds']['failed']}/{status['live_rounds']['total']}")
     add("\nTimes, completed turns (s)")
     for name in ("total", "total_without_pauses", "to_answer", "marks_after_last_word"):
@@ -580,10 +545,8 @@ def render(result):
     add(f"  live rounds per turn      {_q(result['live_rounds_per_turn'])}")
     for name, value in result["times"]["agent_step"].items():
         add(f"  agent step {name:<14} {_q(value)}")
-    gate = result["gate"]
-    add(f"\nGate: {gate['rounds']} rounds {gate['results']}; wait {_q(gate['wait'])}")
     halts = result["halts"]
-    add(f"Halts: {halts['count']} {halts['by_kind_and_decision']}; until decided {_q(halts['until_decision'])}")
+    add(f"\nHalts: {halts['count']} {halts['by_kind_and_decision']}; until decided {_q(halts['until_decision'])}")
     add("\nTokens and cost")
     for role, item in result["tokens"].items():
         share = "-" if item["cached_share"] is None else f"{item['cached_share']:.0%}"

@@ -83,6 +83,24 @@ def priced(amount):
     return amount * NANO_USD_PER_MICRO_EUR
 
 
+RUN_TOKEN = "run-token"
+
+
+def claim(store, chat_id, turn_id, model=None, *, uid=UID, step="completion:0"):
+    """A run's claim of a model step, as the agent makes it."""
+    from app.services.agent_policy import AgentPolicy
+    return store.claim(uid, chat_id, turn_id, model or AgentModel(), step=step, run_token=RUN_TOKEN,
+                       policy=AgentPolicy().snapshot(), reservation=(1, priced(1)))
+
+
+def answered(store, chat_id, turn_id, completion=None, *, status="succeeded", uid=UID, model=None):
+    """A turn whose one step was claimed and settled and whose run finished."""
+    completion = completion or receipt()
+    claim(store, chat_id, turn_id, model, uid=uid)
+    store.settle(uid, chat_id, turn_id, completion=completion, status=status)
+    return store.finish_run(uid, chat_id, turn_id, completion=completion, status=status, run_token=RUN_TOKEN)
+
+
 def test_usage_uses_reported_tokens_and_does_not_double_count_reasoning():
     usage = receipt().usage
     assert usage["input_tokens"] == 1000
@@ -99,7 +117,7 @@ def test_usage_uses_reported_tokens_and_does_not_double_count_reasoning():
 def test_parallel_claims_and_settlement_are_exactly_once(store):
     chat_id, turn = pending(store)
     with ThreadPoolExecutor(max_workers=2) as pool:
-        claims = list(pool.map(lambda _: store.claim(UID, chat_id, turn["id"], AgentModel()), range(2)))
+        claims = list(pool.map(lambda _: claim(store, chat_id, turn["id"]), range(2)))
     assert sorted(claims) == [False, True]
     assert totals(store)["calls"] == 1
     assert totals(store)["unsettled_calls"] == 1
@@ -108,14 +126,14 @@ def test_parallel_claims_and_settlement_are_exactly_once(store):
     assert sorted(settled) == [False, True]
     assert totals(store)["estimated_cost_nano_usd"] == 132000
     assert totals(store)["unsettled_calls"] == 0
+    store.finish_run(UID, chat_id, turn["id"], completion=receipt(), status="succeeded", run_token=RUN_TOKEN)
     assert store.get_turn(UID, chat_id, turn["id"])["consensus"] == "A helpful answer"
     assert not any("usage_runs" in path for path in store.db.documents)
 
 
 def test_followups_use_all_completed_messages_without_compression(store):
     chat_id, first = pending(store)
-    assert store.claim(UID, chat_id, first["id"], AgentModel())
-    store.settle(UID, chat_id, first["id"], completion=receipt(), status="succeeded")
+    assert answered(store, chat_id, first["id"])
     _, second = pending(store, chat_id=chat_id, request_id="two", question="What next?")
     messages = store.messages(UID, chat_id, second)
     assert [message["role"] for message in messages] == ["system", "user", "assistant", "user"]
@@ -128,12 +146,11 @@ def test_followups_use_all_completed_messages_without_compression(store):
 
 def test_final_turn_keeps_search_sources_from_previous_steps(store):
     chat_id, turn = pending(store)
-    assert store.claim(UID, chat_id, turn["id"], AgentModel())
     completion = receipt()
     completion.activity = [{"kind": "tool", "name": "web_search", "sources": [
         {"url": "https://example.org/search", "title": "Primary source"}, {"url": "javascript:bad()"}]}]
     completion.sources = [{"url": "https://example.org/answer", "title": "Answer citation"}]
-    store.settle(UID, chat_id, turn["id"], completion=completion, status="succeeded")
+    assert answered(store, chat_id, turn["id"], completion)
     assert {s["url"] for s in store.get_turn(UID, chat_id, turn["id"])["sources"]} == {
         "https://example.org/search", "https://example.org/answer"}
 
@@ -149,8 +166,7 @@ def test_chat_lock_prevents_two_different_turns_running_together(store):
 @pytest.mark.parametrize("status", ["failed", "cancelled"])
 def test_missing_usage_is_unknown_instead_of_zero(store, status):
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
-    store.settle(UID, chat_id, turn["id"], completion=receipt(measured=False), status=status)
+    answered(store, chat_id, turn["id"], receipt(measured=False), status=status)
     assert totals(store)["unmetered_calls"] == 1
     assert "estimated_cost_nano_usd" not in totals(store)
     assert store.get_turn(UID, chat_id, turn["id"])["status"] == "failed"
@@ -159,7 +175,7 @@ def test_missing_usage_is_unknown_instead_of_zero(store, status):
 
 def test_chat_deletion_does_not_erase_cost_or_resurrect_turn(store):
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
+    claim(store, chat_id, turn["id"])
     store.delete_chat(UID, chat_id)
     store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
     assert totals(store)["estimated_cost_nano_usd"] == 132000
@@ -169,7 +185,7 @@ def test_chat_deletion_does_not_erase_cost_or_resurrect_turn(store):
 
 def test_account_tombstone_fences_settlement(store):
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
+    claim(store, chat_id, turn["id"])
     store.db.documents[("account_deletion_jobs", UID)] = {"status": "pending", "created_at": datetime.now(timezone.utc)}
     with pytest.raises(persistence_guard.AccountDeletionInProgress):
         store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
@@ -178,12 +194,12 @@ def test_account_tombstone_fences_settlement(store):
 
 def test_failed_transaction_can_settle_again_without_partial_accounting(store):
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
+    claim(store, chat_id, turn["id"])
     store.db.fail_transaction_after_staged_writes = 2
     with pytest.raises(RuntimeError):
         store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
     assert totals(store)["unsettled_calls"] == 1
-    assert store.get_turn(UID, chat_id, turn["id"])["status"] == "pending"
+    assert store.receipt_ref(UID, chat_id, turn["id"]).get().to_dict()["status"] == "running"
     store.db.fail_transaction_after_staged_writes = None
     assert store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
 
@@ -431,8 +447,7 @@ def test_recovering_a_failed_turn_never_calls_a_model_and_names_its_request(api)
     from app.services import agent_quota
     client, store, calls = api
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
-    store.settle(UID, chat_id, turn["id"], completion=receipt(), status="failed")
+    answered(store, chat_id, turn["id"], status="failed")
     payload = {"chat_id": chat_id, "question": "Question one", "client_request_id": "one", "bookmark_id": "bm1",
                "recover_only": True}
     ledger = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
@@ -598,7 +613,7 @@ def test_disconnect_closes_producer_and_settles_unknown_usage(store):
     from app.services.llm.streaming import iter_sse_with_keepalive
     from app.services.llm.provider_runtime import ProviderCancellation
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
+    claim(store, chat_id, turn["id"])
     cancellation = ProviderCancellation()
     settled = threading.Event()
     def events():
@@ -616,7 +631,7 @@ def test_disconnect_closes_producer_and_settles_unknown_usage(store):
 def test_account_cleanup_removes_step_receipts(store):
     from app.services.account_deletion import FirestoreAccountDeletion
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
+    claim(store, chat_id, turn["id"])
     FirestoreAccountDeletion(store.db)._delete_user_subcollections(UID)
     assert not store.receipt_ref(UID, chat_id, turn["id"]).get().exists
 
@@ -775,8 +790,7 @@ def test_context_check_precedes_paid_claim_for_small_model(api, monkeypatch):
     from app.services import prompt_config
     budget = agent_runs.CONTEXT_CHAR_LIMIT - len(prompt_config.get_config()["prompts"]["agent"]) - len("Continue")
     value.text = "Old answer " * ((budget - 2000) // len("Old answer "))
-    store.claim(UID, chat_id, turn["id"], AgentModel())
-    store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
+    answered(store, chat_id, turn["id"], value)
     monkeypatch.setenv("AGENT_MODEL", "openai/gpt-3.5-turbo")
     response = client.post("/agent", headers=AUTH, json={"chat_id": chat_id, "question": "Continue",
         "client_request_id": "small", "bookmark_id": "bm1"})
@@ -801,8 +815,7 @@ def _answered(store, chat_id, request_id, answer):
     _, turn = pending(store, chat_id=chat_id, request_id=request_id, question=f"Question {request_id}")
     value = receipt()
     value.text = answer
-    store.claim(UID, chat_id, turn["id"], AgentModel())
-    store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
+    answered(store, chat_id, turn["id"], value)
 
 
 def test_a_long_chat_keeps_its_newest_messages_instead_of_failing(store, monkeypatch):

@@ -17,7 +17,6 @@ import pytest
 from app.services import agent_vm, agent_vm_tools, agent_workspace, prompt_defaults
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_delegation import DelegationLoop
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_vm import ExecOutcome, SpritesBackend, VMBackend, VMFileMissing, VMUnavailable
 from app.services.agent_vm_tools import (MODEL_STREAM_CHARS, VIEW_CHARS, VM_NO_TIME, VM_UNAVAILABLE, VMTools,
@@ -260,12 +259,11 @@ def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", file_cont
     """A turn with the workspace whose reviewers never start
     (agent_reviewers.InertAnswerAudit): ``script`` scripts the agent alone."""
     chat, turn = pending(store, chat_id=chat_id, request_id=request_id)
-    config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Analyse my data."}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=script.factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=AgentPreferences(vm=vm), file_context=file_context,
         # A chat with Google data always carries the user's consent (the
@@ -1469,17 +1467,16 @@ def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, m
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     upload = files.upload(UID, chat_id, {"name": "data.csv", "data": base64.b64encode(b"a\n1\n").decode()})
     chat, turn = pending(store, chat_id=chat_id)
-    config = {**defaults(), "enabled": True, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Analyse my data."}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=Agent().factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=Agent().factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=AgentPreferences(vm="on"),
         file_context=FileContext(files, UID, chat_id, [upload["id"]]),
         memory=MemorySnapshot(available=True, enabled=True, auto=True))
-    assert {"start_agent", "compare_models", "read_file", "update_memory", "vm_exec", "vm_view_image",
+    assert {"compare_models", "read_file", "update_memory", "vm_exec", "vm_view_image",
             "github_import", "update_plan"} <= set(loop.registry.tools)
 
 

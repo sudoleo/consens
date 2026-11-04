@@ -35,12 +35,11 @@ lokal braucht, startet mit `LOCAL_BACKGROUND_JOBS=1` (wirkt nicht zusammen mit
 
 ## Gemeinsamer Einstieg unter Windows
 
-Delegation: `tests/test_agent_delegation.py` prüft Kommunikation, Abbruch,
-Budgets und Wiederherstellung ohne bezahlte Aufrufe;
-`tests/e2e/test_agent_transactions.py` atomare Schritte im Firestore-Emulator;
-`tests/e2e/test_agent_delegation_frontend.py` die gebaute Desktop-/Mobilansicht.
-Optionale kostenpflichtige Provider-Probes und Qualitäts-/Kostenvergleiche stehen
-in [agent-delegation.md](agent-delegation.md); sie sind kein Teil normaler Tests.
+Sitzungen des Agenten (Vergleichsantworten, Prüfer, Seitenabrufe):
+`tests/test_agent_sessions.py` prüft Journal, Ansichten und Wiederherstellung
+ohne bezahlte Aufrufe; `tests/e2e/test_agent_transactions.py` atomare Schritte
+im Firestore-Emulator; `tests/e2e/test_agent_delegation_frontend.py` die
+gebaute Desktop-/Mobilansicht.
 
 PowerShell 5.1 oder neuer, aus dem Projektverzeichnis:
 
@@ -377,7 +376,7 @@ Zusätzlich: aktualisierte Kontingente bei SSE-Fehlern/Disconnect, veraltete und
 fremde Snapshots sowie Tool-Nennungen gegenüber bestätigten Aufrufen.
 Agentenleiste: `agent-delegation.test.mjs` prüft gemessene Tokenzahlen (ohne
 Doppelzählung), sofortige Prüfer- und gespeicherte Judge-Details ohne weitere Requests und Skeleton/
-Cache für Worker. `test_agent_delegation_frontend.py` prüft diese Abläufe mit
+Cache für Sitzungsdetails. `test_agent_delegation_frontend.py` prüft diese Abläufe mit
 gedrosseltem Detailabruf, sanfter Öffnung und Reduced Motion auf Desktop/Mobil.
 `test_agent_progress.py` prüft außerdem den gedrosselten Unicode-Zeichenzähler,
 gemeldete Token-Snapshots, unveränderte Abrechnung und fehlende zusätzliche

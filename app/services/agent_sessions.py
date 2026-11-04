@@ -255,7 +255,7 @@ class AgentSessionStore:
             raise ValueError("Invalid agent identity")
         return self._turn_ref(uid, chat_id, turn_id).collection("agents").document(agent_id)
 
-    def _claim_delegated(self, uid, chat_id, turn_id, model, *, step, run_token, policy, reservation, overdraft=False):
+    def claim(self, uid, chat_id, turn_id, model, *, step="completion:0", run_token, policy, reservation, overdraft=False):
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         receipt_ref = self.receipt_ref(uid, chat_id, turn_id, step)
         chat_ref, turn_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id)
@@ -298,7 +298,7 @@ class AgentSessionStore:
                 if len(leases) >= 2:
                     raise AgentCapacityExceeded("Two agent responses are already running.")
                 data = {"run_token": run_token, "run_status": "running", "policy": policy,
-                        "lease_until": now + timedelta(seconds=PRODUCER_LEASE_SECONDS if policy.get("account_budget_only") else policy["seconds"] + 30),
+                        "lease_until": now + timedelta(seconds=PRODUCER_LEASE_SECONDS),
                         "step_states": {}, "step_usage": {}, "reservations": {}, "event_seq": 0,
                         "reserved_tokens": 0, "reserved_cost": 0}
                 leases[root_ref.id] = data["lease_until"]
@@ -308,7 +308,6 @@ class AgentSessionStore:
                 if data.get("run_token") == run_token and data.get("cancel_requested"):
                     raise ProviderCancelled("Agent run stopped")
                 raise TurnStatusConflict("Delegation producer is no longer authorized")
-            limits = data["policy"]
             states = dict(data["step_states"])
             prefix = "completion" if agent_id == "orchestrator" else f"agent:{agent_id}"
             previous_step = f"{prefix}:{index - 1}"
@@ -329,11 +328,7 @@ class AgentSessionStore:
             # The account holds the call's expected cost in micro-euros,
             # whatever kind of call it is (agent_costs.RunCosts.estimate).
             quota_amount = agent_budget_config.micro_eur(cost)
-            daily = agent_quota.reserve(daily, quota_amount, limit=limit,
-                                        overdraft=overdraft if limits.get("account_budget_only") else False)
-            if not limits.get("account_budget_only") and (len(states) + data.get("compacted_steps", 0) >= limits["max_calls"] or data["reserved_tokens"] + tokens > limits["max_tokens"]
-                    or data["reserved_cost"] + cost > limits["max_cost_nano_usd"]):
-                raise AnalysisBudgetExceeded("The shared agent budget was reached.")
+            daily = agent_quota.reserve(daily, quota_amount, limit=limit, overdraft=overdraft)
             states[step] = "running"
             reservations = {**data["reservations"], step: list(reservation)}
             patch = {**data, "step_states": states, "reservations": reservations, "quota_day": day,
@@ -548,21 +543,14 @@ class AgentSessionStore:
                     ending = (patch or {}).get("status") in {"stopped", "failed"}
                     if (data.get("cancel_requested") or data["lease_until"] <= datetime.now(timezone.utc)) and not ending:
                         raise ProviderCancelled("Agent run stopped")
-                    if not data["policy"].get("account_budget_only") and seq + 1 > 1024:
-                        raise AnalysisBudgetExceeded("Agent event limit reached")
                     session = {**(current or {}), **(patch or {}), "id": agent_id, "seq": seq + 1,
                                "updated_at": datetime.now(timezone.utc).isoformat()}
-                    if current is None:
-                        if not data["policy"].get("account_budget_only") and agents >= 64:
-                            raise AnalysisBudgetExceeded("Agent limit reached")
-                        if not session.get("assignment"):
-                            raise TurnStatusConflict("Agent assignment is missing")
+                    if current is None and not session.get("assignment"):
+                        raise TurnStatusConflict("Agent assignment is missing")
                     if message:
-                        if not data["policy"].get("account_budget_only") and messages + 1 > data["policy"]["max_messages"]:
-                            raise AnalysisBudgetExceeded("Agent message limit reached")
                         if len(message["text"]) > max(data["policy"]["message_chars"], data["policy"]["result_chars"]):
                             raise ValueError("Agent message is too long")
-                except (TurnStatusConflict, ProviderCancelled, AnalysisBudgetExceeded, ValueError) as exc:
+                except (TurnStatusConflict, ProviderCancelled, ValueError) as exc:
                     results.append(exc)
                     continue
                 seq += 1
@@ -595,8 +583,6 @@ class AgentSessionStore:
         # The root as read: the caller takes the user's notes from it, and
         # whether the chat holds Google data (DelegationLoop._holds_google_data).
         root = {**root, "chat_google_data": bool(chat.get("google_data"))}
-        if not (root.get("policy") or {}).get("account_budget_only"):
-            return root
         now = datetime.now(timezone.utc)
         if root["lease_until"] > now + timedelta(seconds=PRODUCER_RENEW_BEFORE_SECONDS):
             return root
@@ -817,7 +803,7 @@ class AgentSessionStore:
                             and not usage.get('unmetered_calls') and agent_quota.measured_charge(usage) is not None):
                         value.usage = {**usage, 'source': 'saved_agent'}
                         value.finish_reason = session.get('finish_reason') or ''
-                self.settle(uid, chat_id, turn_id, completion=value, status="cancelled", step=step, final=False,
+                self.settle(uid, chat_id, turn_id, completion=value, status="cancelled", step=step,
                             expected=expected(step))
         settled = ref.get().to_dict()
         for snap in agents:

@@ -20,7 +20,6 @@ from app.services import agent_budget_config, agent_delegation, agent_memory, ag
 from app.services.agent_memory import FirestoreAgentMemoryRepository
 from app.services.agent_comparison import answer_hash, comparison_selection
 from app.services.agent_delegation import DelegationLoop
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
 from app.services.agent_provider_limits import ModelOutputLimit, ProviderCooldowns
@@ -131,13 +130,12 @@ def merged_loop(store, script, *, messages=None, memory=None, reviewers=False):
     """A chat turn with ``script``'s steps; its reviewers never start
     (agent_reviewers.InertAnswerAudit) unless ``reviewers``."""
     chat, turn = pending(store)
-    config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=messages or [{"role": "system", "content": "Answer."},
                               {"role": "user", "content": "Which option is cheaper?"}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=script.factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         memory=memory)
     if not reviewers:
@@ -177,12 +175,11 @@ def tool_result(loop, call_id):
 
 # --- Prompts and tools -----------------------------------------------------------
 
-def test_every_turn_with_comparison_tools_writes_its_own_answer(store):
-    """No switch any more: chat turns and bounded runs alike have no answer
-    tool and get the facts of the app (AGENT_AUDIT_ANSWER_SECTION)."""
+def test_every_turn_writes_its_own_answer(store):
+    """No answer tool: every turn gets the facts of the app (AGENT_AUDIT_ANSWER_SECTION)."""
     from test_agent_comparison import make_loop
     for loop in (merged_loop(store, Merged([{}])), make_loop(store, Script())):
-        assert loop.merged and "answer" not in loop.registry.tools
+        assert "answer" not in loop.registry.tools
         assert prompt_defaults.AGENT_AUDIT_ANSWER_SECTION in loop.messages[0]["content"]
 
 

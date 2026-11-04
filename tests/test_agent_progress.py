@@ -292,7 +292,8 @@ def test_a_call_with_a_progress_argument_is_refused_without_a_progress_line(stor
     for index, name in enumerate(("compare_models", "check_text")):
         args = {"status_update": "Comparing.", "question": "Q", "context": ""}
         call = {"id": str(index), "function": {"name": name, "arguments": json.dumps(args)}}
-        result = loop._execute(loop.registry, value, loop.cancellation, call)
+        result, entry = loop._run_call(loop.registry, value, loop.cancellation, call)
+        loop._log_call(entry)
         assert "error" in json.loads(result["content"])
     assert not any(e["kind"] == "progress" for e in loop.completion.activity)
     assert loop.comparison.comparisons == []

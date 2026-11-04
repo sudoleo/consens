@@ -320,8 +320,8 @@ ALONE = {"vm_exec", "vm_install_packages", "vm_write_file", "vm_edit_file", "vm_
          "vm_start_process", "vm_process_output", "vm_stop_process", "vm_save_picture", "browser", "ask_user",
          "request_domain", "github_import", "prepare_pull_request", "update_plan", "update_memory",
          "open_workspace", "create_document", "revise_document", "compare_models", "find_pictures", "show_image",
-         "prepare_settings_change", "prepare_watch", "start_agent", "send_agent", "wait_agents", "stop_agent",
-         "review_agent", "import_gmail_attachment", "prepare_gmail_draft", "prepare_calendar_event"}
+         "prepare_settings_change", "prepare_watch", "import_gmail_attachment", "prepare_gmail_draft",
+         "prepare_calendar_event"}
 
 
 def test_only_tools_that_read_run_together(store, fake_vm, tmp_path, monkeypatch):

@@ -39,7 +39,6 @@ import pytest
 from app.services import agent_audit, agent_delegation, agent_quota
 from app.services.agent_comparison import AgentPreferences, ComparisonTools, comparison_selection
 from app.services.agent_delegation import DelegationLoop
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_runs import AgentRunStore
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
@@ -369,13 +368,12 @@ def tempo_loop(store, script, *, model="claude-haiku-4-5"):
     """The turn as a workbench run (DelegationLoop._long_run: up to 200
     steps and two hours, old command output compacted)."""
     chat, turn = pending(store, uid=script.uid)
-    config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=script.uid, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model(model),
         messages=[{"role": "system", "content": "Answer."},
                   {"role": "user", "content": "Build me a small site in the workspace."}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=script.factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=script.factory,
         comparison_models=comparison_selection(script.reviewers), agent_preferences=AgentPreferences())
     loop.registry = ToolRegistry([*loop.registry.tools.values(), *tools(script)],
                                  argument_limit=loop.registry.argument_limit)

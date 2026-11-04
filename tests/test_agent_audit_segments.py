@@ -192,7 +192,7 @@ def test_a_new_conversation_is_priced_without_the_old_ones_cache():
     from app.services.agent_costs import RunCosts
     provider = Provider()
     session, log = reviewer(provider)
-    costs = session.loop.costs = RunCosts(SimpleNamespace(account_budget_only=True))
+    costs = session.loop.costs = RunCosts()
     forgotten = []
     costs.rewritten = lambda key: (forgotten.append(key), RunCosts.rewritten(costs, key))
     opening(log)

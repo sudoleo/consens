@@ -1,5 +1,4 @@
-"""Provider protocol + durable orchestration. No real paid model calls."""
-from concurrent.futures import ThreadPoolExecutor
+"""Provider protocol of the agent's requests. No real paid model calls."""
 from dataclasses import replace
 import json
 import re
@@ -8,14 +7,14 @@ from pydantic import BaseModel, ConfigDict, Field
 import pytest
 
 from app.core.openrouter_contract import provider_session_id
-from app.services.agent_loop import AgentLoop
-from app.services.agent_policy import AgentPolicy, tools_for_model
+from agent_reviewers import without_reviewers
+from app.services.agent_comparison import comparison_selection
+from app.services.agent_delegation import DelegationLoop
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, configured_model
-from app.services.chat_store import ChatNotFound, TurnStatusConflict
 from app.services.llm import agent_client
 from app.services.llm.agent_client import AgentCompletion, resolve_agent_model
-from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation, ProviderCancelled, current_analysis_budget
-from test_agent_runs import AUTH, UID, api, pending, receipt, store, totals
+from app.services.llm.provider_runtime import ProviderCancellation, current_analysis_budget
+from test_agent_runs import AUTH, UID, answered, api, pending, store, totals
 
 
 REAL_STREAM = AgentCompletion.stream
@@ -52,7 +51,8 @@ def transport(monkeypatch, responses):
     requests, budgets, closed = [], [], []
     def lines(url, **kwargs):
         index = len(requests)
-        requests.append(kwargs["json"])
+        # A copy: the run goes on appending to the conversation it sent.
+        requests.append(json.loads(json.dumps(kwargs["json"])))
         budget = current_analysis_budget()
         budgets.append(budget)
         budget.consume()  # same shared transport admission as real HTTP
@@ -94,12 +94,18 @@ def reviewed_transport(monkeypatch, answer, *, searches=0):
     return agent, reviews
 
 
-def loop_for(store, **kwargs):
+def chat_loop(store, chat_id, turn, model, messages=None):
+    """The agent's run of ``turn``, without reviewers."""
+    return without_reviewers(DelegationLoop(
+        store=store, uid=UID, chat_id=chat_id, turn_id=turn["id"], model=model,
+        messages=messages or store.messages(UID, chat_id, turn, model=model), api_key="test",
+        cancellation=ProviderCancellation(),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"})))
+
+
+def loop_for(store):
     chat_id, turn = pending(store)
-    model = configured_model(resolve_agent_model("claude-haiku-4-5"))
-    return AgentLoop(store=store, uid=UID, chat_id=chat_id, turn_id=turn["id"], model=model,
-                     messages=store.messages(UID, chat_id, turn, model=model), api_key="test",
-                     cancellation=ProviderCancellation(), **kwargs)
+    return chat_loop(store, chat_id, turn, configured_model(resolve_agent_model("claude-haiku-4-5")))
 
 
 def test_a_service_tier_of_the_model_config_reaches_the_request(store, monkeypatch):
@@ -108,9 +114,7 @@ def test_a_service_tier_of_the_model_config_reaches_the_request(store, monkeypat
     chat_id, turn = pending(store)
     model = configured_model(resolve_agent_model("claude-haiku-4-5"))
     model = replace(model, request_config={**model.request_config, "service_tier": "priority"})
-    loop = AgentLoop(store=store, uid=UID, chat_id=chat_id, turn_id=turn["id"], model=model,
-                     messages=store.messages(UID, chat_id, turn, model=model), api_key="test",
-                     cancellation=ProviderCancellation())
+    loop = chat_loop(store, chat_id, turn, model)
     list(loop.run())
     assert requests[0]["service_tier"] == "priority"
     assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny"}
@@ -138,9 +142,7 @@ def test_every_step_of_a_chat_stays_on_the_endpoint_holding_its_cached_prefix(st
     model = configured_model(resolve_agent_model("claude-haiku-4-5"))
     # The adapter owns the session: a registry value never reaches the request.
     model = replace(model, request_config={**model.request_config, "session_id": "from-registry"})
-    loop = AgentLoop(store=store, uid=UID, chat_id=chat_id, turn_id=turn["id"], model=model,
-                     messages=store.messages(UID, chat_id, turn, model=model), api_key="test",
-                     cancellation=ProviderCancellation(), registry=client_registry([]))
+    loop = chat_loop(store, chat_id, turn, model)
     list(loop.run())
     assert len(requests) == len(headers) == 2
     session = headers[0]["x-session-id"]
@@ -169,17 +171,16 @@ def test_a_request_without_a_session_keeps_the_plain_routing(monkeypatch):
 EPHEMERAL = {"type": "ephemeral"}
 
 
-def follow_up_loop(store, model="claude-haiku-4-5", **kwargs):
-    """An AgentLoop for a chat's second message: system prompt, one earlier
-    question and answer, then the new question."""
+def follow_up_loop(store, model="claude-haiku-4-5"):
+    """The run of a chat's second message: system prompt, one earlier
+    question and answer, then the new question. Returns the loop and its
+    conversation as the run begins (its system prompt with the run's blocks)."""
     chat_id, first = pending(store)
-    assert store.claim(UID, chat_id, first["id"], resolve_agent_model(model))
-    store.settle(UID, chat_id, first["id"], completion=receipt(), status="succeeded")
+    assert answered(store, chat_id, first["id"], model=resolve_agent_model(model))
     _, second = pending(store, chat_id=chat_id, request_id="two", question="What next?")
     model = configured_model(resolve_agent_model(model))
-    messages = store.messages(UID, chat_id, second, model=model)
-    return AgentLoop(store=store, uid=UID, chat_id=chat_id, turn_id=second["id"], model=model, messages=messages,
-                     api_key="test", cancellation=ProviderCancellation(), **kwargs), messages
+    loop = chat_loop(store, chat_id, second, model)
+    return loop, [dict(message) for message in loop.messages]
 
 
 def marked(content):
@@ -194,7 +195,7 @@ def test_the_next_message_finds_the_system_prompt_and_history_cached(store, monk
         [packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())],
         [packet({"content": "Result: 4"}), packet(finish="stop", usage=usage())],
     ])
-    loop, messages = follow_up_loop(store, registry=client_registry([]))
+    loop, messages = follow_up_loop(store)
     assert [message["role"] for message in messages] == ["system", "user", "assistant", "user"]
     list(loop.run())
     assert len(requests) == 2
@@ -304,87 +305,6 @@ def test_other_provider_errors_never_resend_the_request(monkeypatch):
     assert len(requests) == 1
 
 
-@pytest.mark.real_prices
-def test_native_search_stays_in_selected_model_request_with_real_citations(store, monkeypatch):
-    sources = [{"type": "url_citation", "url_citation": {"url": "https://example.com/report", "title": "Report"}},
-               {"type": "url_citation", "url_citation": {"url": "javascript:alert(1)", "title": "Bad"}}]
-    requests, _, closed = transport(monkeypatch, [[packet({"content": "Answer", "annotations": sources}), packet(finish="stop", usage=usage(2))]])
-    loop = loop_for(store)
-    events = list(loop.run())
-    assert len(requests) == 1 and closed == [0]
-    request = requests[0]
-    assert request["model"] == "anthropic/claude-haiku-4.5"
-    assert request["tools"] == [{"type": "openrouter:web_search", "parameters": {
-        "engine": "auto", "max_uses": 2, "max_results": 5, "max_total_results": 10, "max_characters": 2000}}]
-    assert request["max_tool_calls"] == 2
-    assert request["provider"] == {"sort": "throughput", "data_collection": "deny"}
-    assert "tool_choice" not in request
-    assert "plugins" not in request
-    assert "parallel_tool_calls" not in request
-    tool_events = [event for event in events if event and event.get("kind") == "tool"]
-    assert len(tool_events) == 1 and tool_events[0]["status"] == "succeeded"
-    assert tool_events[0]["count"] == 2
-    assert tool_events[0]["sources"] == [{"url": "https://example.com/report", "title": "Report"}]
-    assert "query" not in tool_events[0]  # native API doesn't expose it
-    assert totals(store)["calls"] == 1
-    assert totals(store)["estimated_cost_nano_usd"] == 20_200_000
-    assert loop.completion.usage["complete"] is True
-    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert saved["consensus"] == "Answer"
-    assert saved["agent_activity"][-1]["status"] == "succeeded"
-    assert len(store.active_ref(UID).get().to_dict()["leases"]) == 0
-
-
-def test_explicit_tool_loop_validates_executes_and_settles_each_step_once(store, monkeypatch):
-    requests, budgets, closed = transport(monkeypatch, [
-        [packet({"tool_calls": [call(arguments='{"num')] }),
-         packet({"tool_calls": [{"index": 0, "function": {"arguments": 'ber":2}'}}]}, finish="tool_calls", usage=usage())],
-        [packet({"content": "Result: 4"}), packet(finish="stop", usage=usage(1))],
-    ])
-    executed = []
-    loop = loop_for(store, registry=client_registry(executed))
-    events = list(loop.run())
-    assert executed == [2] and len(requests) == 2 and closed == [0, 1]
-    assert budgets[0] is budgets[1] and budgets[0].calls == 2
-    assert requests[1]["messages"][-1] == {"role": "tool", "tool_call_id": "call_one", "content": '{"result": 4}'}
-    assert requests[1]["tools"][-1]["parameters"]["max_uses"] == 1
-    assert totals(store)["calls"] == totals(store)["measured_calls"] == 2
-    assert loop.completion.usage["input_tokens"] == 200
-    assert loop.completion.usage["estimated_cost_nano_usd"] == totals(store)["estimated_cost_nano_usd"]
-    assert not store.claim(UID, loop.chat_id, loop.turn_id, loop.model, step="completion:1", run_token=loop.run_token)
-    assert not store.settle(UID, loop.chat_id, loop.turn_id, step="completion:1", completion=receipt(), status="succeeded", final=False)
-    assert not store.finish_run(UID, loop.chat_id, loop.turn_id, completion=loop.completion, status="succeeded", run_token=loop.run_token)
-    assert any(e and e.get("clear_response") for e in events)
-    assert {e["step_id"] for e in loop.completion.activity} >= {"completion:0", "tool:0", "completion:1", "run"}
-
-
-@pytest.mark.parametrize("arguments,name", [('{}', 'double'), ('{"number":true}', 'double'), ('{"number":101}', 'double'),
-    ('{"number":2,"command":"write"}', 'double'), ('{"number":1,"number":2}', 'double'), ('{"number":2}', 'write_file'), ('[1]', 'double'), ('{', 'double')])
-def test_invalid_or_unapproved_tool_never_executes_or_spawns_another_paid_call(store, monkeypatch, arguments, name):
-    requests, _, _ = transport(monkeypatch, [[packet({"tool_calls": [call(arguments, name)]}, finish="tool_calls", usage=usage())]])
-    executed = []
-    loop = loop_for(store, registry=client_registry(executed))
-    with pytest.raises(ValueError):
-        list(loop.run())
-    assert not executed and len(requests) == totals(store)["calls"] == 1
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "failed"
-    assert not store.active_ref(UID).get().to_dict()["leases"]
-
-
-@pytest.mark.parametrize("fragment,error", [([{**call(), "index": -1}], RuntimeError),
-                                            ([call(arguments="x" * 2049)], ValueError)])
-def test_malformed_streamed_tool_calls_close_transport(store, monkeypatch, fragment, error):
-    # Since 2026-10-27 a fragment no call of ours stands behind is skipped and
-    # an oversized call reaches the registry, which refuses it with its limit;
-    # neither executes, and the transport closes as before.
-    _, _, closed = transport(monkeypatch, [[packet({"tool_calls": fragment}, finish="tool_calls", usage=usage())]])
-    executed = []
-    loop = loop_for(store, registry=client_registry(executed))
-    with pytest.raises(error):
-        list(loop.run())
-    assert closed == [0] and totals(store)["calls"] == 1 and executed == []
-
-
 def tool_fragments(*chunks, limit=4, argument_limit=2048):
     """The calls an AgentCompletion collects from streamed fragments."""
     value = AgentCompletion()
@@ -471,167 +391,6 @@ def test_a_writing_step_with_tool_choice_auto_keeps_the_request_and_drops_its_ca
     assert requests[2]["tool_choice"] == "none" and retry.text == "Four."
 
 
-def test_repeated_tool_identity_stops_without_reexecution(store, monkeypatch):
-    response = [packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())]
-    requests, _, _ = transport(monkeypatch, [response, response])
-    executed = []
-    loop = loop_for(store, registry=client_registry(executed))
-    with pytest.raises(TurnStatusConflict):
-        list(loop.run())
-    assert executed == [2] and len(requests) == 2
-
-
-@pytest.mark.parametrize("budget", [replace(AgentPolicy(), max_tools=0), replace(AgentPolicy(), max_calls=1),
-    replace(AgentPolicy(), max_tokens=10), replace(AgentPolicy(), max_cost_nano_usd=1), replace(AgentPolicy(), seconds=0)])
-def test_limits_prevent_unapproved_work(store, monkeypatch, budget):
-    requests, _, _ = transport(monkeypatch, [[packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())]])
-    executed = []
-    loop = loop_for(store, registry=client_registry(executed), policy=budget)
-    with pytest.raises((AnalysisBudgetExceeded, RuntimeError)):
-        list(loop.run())
-    assert not executed and len(requests) <= 1
-    assert not (store.active_ref(UID).get().to_dict() or {}).get("leases")
-
-
-@pytest.mark.parametrize("failure", [ProviderCancelled(), RuntimeError("provider failure")])
-def test_cancel_or_failure_in_second_step_keeps_first_usage_and_never_retries(store, monkeypatch, failure):
-    requests, _, closed = transport(monkeypatch, [
-        [packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())], [failure]])
-    loop = loop_for(store, registry=client_registry([]))
-    with pytest.raises(type(failure)):
-        list(loop.run())
-    assert len(requests) == 2 and closed == [0, 1]
-    assert totals(store)["measured_calls"] == 1 and totals(store)["unmetered_calls"] == 1
-    assert totals(store)["unsettled_calls"] == 0
-    assert loop.completion.usage["complete"] is False
-    assert not store.active_ref(UID).get().to_dict()["leases"]
-
-
-def test_cancel_between_tool_and_model_prevents_next_claim(store, monkeypatch):
-    requests, _, _ = transport(monkeypatch, [[packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())]])
-    loop = loop_for(store, registry=client_registry([]))
-    source = loop.run()
-    for event in source:
-        if event and event.get("kind") == "tool" and event.get("status") == "succeeded":
-            loop.cancellation.cancel()
-            break
-    with pytest.raises(ProviderCancelled):
-        list(source)
-    assert len(requests) == totals(store)["calls"] == 1
-
-
-def test_close_during_provider_stream_settles_cancelled_and_closes_socket(store, monkeypatch):
-    _, _, closed = transport(monkeypatch, [[packet({"content": "partial"}), packet(finish="stop", usage=usage())]])
-    loop = loop_for(store)
-    source = loop.run()
-    for event in source:
-        if event and event["type"] == "delta":
-            source.close()
-            break
-    assert closed == [0]
-    assert totals(store)["unmetered_calls"] == 1
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["error_code"] == "cancelled"
-    assert not any(e.get("kind") == "tool" for e in loop.completion.activity)
-
-
-def test_missing_search_cost_keeps_only_cost_reservation(store, monkeypatch):
-    raw = usage()
-    raw.pop("server_tool_use")
-    transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=raw)]])
-    loop = loop_for(store)
-    events = list(loop.run())
-    assert loop.completion.usage["complete"] is True
-    assert loop.completion.usage["cost_complete"] is False
-    assert loop.costs.tokens == 120
-    assert totals(store).get("incomplete_calls", 0) == 0
-    assert loop.remaining_tools == 0
-    assert not any(e and e.get("kind") == "tool" for e in events)
-    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert not any(e.get("kind") == "tool" for e in saved["agent_activity"])
-
-
-@pytest.mark.parametrize("selection_id", [m.selection_id for m, _ in agent_client.agent_models()])
-@pytest.mark.parametrize("search_count", [None, 0])
-def test_greetings_offer_optional_search_without_inventing_tool_activity(store, monkeypatch, selection_id, search_count):
-    raw = {"prompt_tokens": 800, "completion_tokens": 62, "cost": 0.0004}
-    if search_count is not None:
-        raw["server_tool_use"] = {"web_search_requests": search_count}
-    requests, _, _ = transport(monkeypatch, [[packet({"content": "Hey!", "reasoning": "A greeting. No tool needed."}, finish="stop", usage=raw)]])
-    # This legacy-loop protocol test needs room for premium native-search
-    # windows. Rejection limits are covered separately; chat uses its token ledger.
-    loop = loop_for(store, policy=replace(AgentPolicy(), max_cost_nano_usd=50_000_000_000))
-    loop.model = resolve_agent_model(selection_id)
-    loop.messages[-1]["content"] = "was geht ab"
-    events = list(loop.run())
-    assert len(requests) == 1
-    assert "tool_choice" not in requests[0] and "plugins" not in requests[0]
-    assert requests[0]["tools"][0]["type"] == "openrouter:web_search"
-    assert not any(e and e.get("kind") == "tool" for e in events)
-    assert loop.completion.usage["complete"] is True
-    assert loop.completion.usage["estimated_cost_nano_usd"] == 400_000
-    assert totals(store)["calls"] == 1
-
-
-@pytest.mark.parametrize("sources", [[], [{"type": "url_citation", "url_citation": {"url": "https://example.org/report", "title": "Report"}}]])
-def test_interrupted_search_only_records_activity_if_use_is_confirmed(store, monkeypatch, sources):
-    transport(monkeypatch, [[packet({"content": "Partial", "annotations": sources}), RuntimeError("Stream interrupted")]])
-    loop = loop_for(store)
-    with pytest.raises(RuntimeError, match="Stream interrupted"):
-        list(loop.run())
-    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    tools = [e for e in saved["agent_activity"] if e.get("kind") == "tool"]
-    assert len(tools) == (1 if sources else 0)
-    if sources:
-        assert tools[0]["status"] == "unknown" and tools[0]["sources"][0]["url"] == "https://example.org/report"
-
-
-@pytest.mark.parametrize("selection_id", [m.selection_id for m, _ in agent_client.agent_models()])
-def test_every_offered_model_can_use_the_consensus_search_route(store, monkeypatch, selection_id):
-    from app.services.agent_tools import search_family
-    from app.services.llm.engines import build_provider_payload
-    requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=usage())]])
-    loop = loop_for(store, policy=replace(AgentPolicy(), max_cost_nano_usd=50_000_000_000))
-    loop.model = resolve_agent_model(selection_id)
-    list(loop.run())
-    assert tools_for_model(loop.model) == ("web_search",)
-    family = search_family(loop.model)
-    reference = build_provider_payload(family)["payload"]
-    assert requests[0]["tools"][0]["parameters"]["engine"] == reference["tools"][0]["parameters"]["engine"]
-    assert requests[0]["max_tool_calls"] == 2
-    assert loop.completion.usage["complete"] is True
-
-
-def test_crash_receipts_and_continuation_claim_races_remain_fenced(store):
-    loop = loop_for(store)
-    args = (UID, loop.chat_id, loop.turn_id, loop.model)
-    assert store.claim(*args, run_token=loop.run_token, policy=loop.policy.snapshot())
-    with pytest.raises(TurnStatusConflict):
-        store.claim(*args, step="completion:1", run_token=loop.run_token)
-    store.settle(*args[:3], completion=receipt(), status="succeeded", final=False)
-    assert len(store.active_ref(UID).get().to_dict()["leases"]) == 1
-    with pytest.raises(TurnStatusConflict):
-        store.claim(*args, step="completion:1", run_token="another-process")
-    with ThreadPoolExecutor(max_workers=4) as pool:
-        result = list(pool.map(lambda _: store.claim(*args, step="completion:1", run_token=loop.run_token), range(4)))
-    assert sum(result) == 1 and totals(store)["calls"] == 2
-    assert not store.claim(*args)  # process recovery never repeats root
-
-
-def test_deletion_between_steps_preserves_accounting_and_fences_next_call(store, monkeypatch):
-    requests, _, _ = transport(monkeypatch, [[packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())]])
-    loop = loop_for(store, registry=client_registry([]))
-    source = loop.run()
-    for event in source:
-        if event and event.get("kind") == "tool" and event.get("status") == "succeeded":
-            store.delete_chat(UID, loop.chat_id)
-            break
-    with pytest.raises(ChatNotFound):
-        list(source)
-    assert len(requests) == totals(store)["calls"] == 1
-    assert not store._chat_ref(UID, loop.chat_id).get().exists
-    assert not store.active_ref(UID).get().to_dict()["leases"]
-
-
 def test_native_endpoint_replay_uses_receipt_and_does_not_search_again(api, monkeypatch):
     client, store, _ = api
     monkeypatch.setattr(AgentCompletion, "stream", REAL_STREAM)
@@ -676,18 +435,6 @@ def test_known_search_charge_survives_missing_tokens_without_inventing_zero_toke
     assert totals(store)["estimated_cost_nano_usd"] == 10_000_000
 
 
-@pytest.mark.parametrize("field", SEARCH_FIELDS)
-def test_known_search_count_returns_the_unused_search_budget(store, monkeypatch, field):
-    transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop",
-                                    usage={"prompt_tokens": 100, "completion_tokens": 20, **search_usage(1, field)})]])
-    loop = loop_for(store)
-    events = list(loop.run())
-    assert loop.completion.usage["web_search_requests"] == 1
-    assert loop.remaining_tools == 1  # Two reserved, one used.
-    tool = next(e for e in events if e and e.get("name") == "web_search")
-    assert tool["status"] == "succeeded" and tool["count"] == 1
-
-
 @pytest.mark.real_prices
 @pytest.mark.parametrize("field", SEARCH_FIELDS)
 def test_search_overrun_is_booked_and_never_fails_the_answer(store, monkeypatch, field):
@@ -695,6 +442,7 @@ def test_search_overrun_is_booked_and_never_fails_the_answer(store, monkeypatch,
     # 2-3 times, Gemini 3.5 Flash-Lite 3 times at a limit of 1, 2026-10-10).
     metrics = []
     monkeypatch.setattr(agent_client, "record_metric", lambda *args, **kwargs: metrics.append((*args, kwargs)))
+    monkeypatch.setattr("app.services.agent_audit.AGENT_SEARCH_ROUNDS", 2)
     requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop",
         usage={"prompt_tokens": 100, "completion_tokens": 20, **search_usage(3, field)})]])
     loop = loop_for(store)
@@ -705,61 +453,10 @@ def test_search_overrun_is_booked_and_never_fails_the_answer(store, monkeypatch,
     # All three searches are booked (catalog price, no provider cost here).
     assert loop.completion.usage["web_search_requests"] == 3
     assert totals(store)["estimated_cost_nano_usd"] == 30_200_000
-    assert loop.remaining_tools == -1
     tool = next(e for e in events if e and e.get("name") == "web_search")
     assert tool["status"] == "succeeded" and tool["count"] == 3
     assert [metric for metric in metrics if metric[0] == "search_overrun"] == [
         ("search_overrun", loop.model.model, {"processed": 1})]
-
-
-def test_usage_beyond_total_budget_stops_after_accounting(store, monkeypatch):
-    raw = {**usage(1), "prompt_tokens": 4_100_000}
-    transport(monkeypatch, [[packet({"content": "Answer"}, finish="stop", usage=raw)]])
-    loop = loop_for(store)
-    with pytest.raises(AnalysisBudgetExceeded, match="beyond"):
-        list(loop.run())
-    assert totals(store)["input_tokens"] == 4_100_000
-    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "failed"
-
-
-def test_two_client_tools_then_final_answer_use_three_steps_and_one_owner_slot(store, monkeypatch):
-    requests, _, _ = transport(monkeypatch, [
-        [packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())],
-        [packet({"tool_calls": [call(identity="call_two")]}, finish="tool_calls", usage=usage())],
-        [packet({"content": "Done"}, finish="stop", usage=usage())]])
-    executed = []
-    loop = loop_for(store, registry=client_registry(executed))
-    for event in loop.run():
-        if event and event.get("kind") == "tool" and event["status"] == "running":
-            assert len(store.active_ref(UID).get().to_dict()["leases"]) == 1
-    assert len(requests) == 3 and executed == [2, 2]
-    assert requests[2]["tool_choice"] == "none"
-    assert all(tool["type"] == "function" for tool in requests[2]["tools"])
-    assert totals(store)["calls"] == totals(store)["measured_calls"] == 3
-
-
-def test_oversized_tool_result_never_reaches_next_model(store, monkeypatch):
-    requests, _, _ = transport(monkeypatch, [[packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())]])
-    registry = ToolRegistry([ReadOnlyTool("double", "Test", Arguments, lambda args, **kwargs: "x" * 8001)])
-    loop = loop_for(store, registry=registry)
-    with pytest.raises(ValueError, match="result exceeds"):
-        list(loop.run())
-    assert len(requests) == 1
-    assert all(len(event.get("text", "")) < 8000 for event in loop.completion.activity)
-
-
-def test_close_on_tool_started_persists_stopped_instead_of_working(store, monkeypatch):
-    transport(monkeypatch, [[packet({"tool_calls": [call()]}, finish="tool_calls", usage=usage())]])
-    executed = []
-    loop = loop_for(store, registry=client_registry(executed))
-    source = loop.run()
-    for event in source:
-        if event and event.get("kind") == "tool" and event.get("status") == "running":
-            source.close()
-            break
-    assert not executed
-    tool = next(e for e in loop.completion.activity if e["kind"] == "tool")
-    assert tool["status"] == "cancelled"
 
 
 def test_normalized_input_output_usage_aliases():

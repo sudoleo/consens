@@ -99,8 +99,7 @@ dasselbe Modell Pro. Der Standard trägt die Registry-ID wie alle
 anderen Modelle (einmal in der Liste); die OpenRouter-ID wird für ältere Clients
 weiter aufgelöst. Er steht im eingebauten Katalog `agent_model_catalog.json`,
 damit der Agent auch ohne Live-Katalog startet; die Landing-Mockups zeigen sein
-Label (`agent_model_label()`). Hilfsagenten (Delegation) sind mit dem neuen Standard nicht geprüft;
-die Delegation ist ohnehin standardmäßig aus.
+Label (`agent_model_label()`).
 
 Preise, Kontextgrenzen und Reasoning-Stufen werden aus dem öffentlichen
 OpenRouter-Modellkatalog nachgeladen und fünf Minuten zwischengespeichert.
@@ -343,7 +342,7 @@ sammelt die Anbieter-Zitate jedes Schritts, `SourceReader.cited` nimmt sie mit
 `LABEL_SEARCH` auf, „a web search result of this message“) und, solange Prüfer
 folgen, jede öffentliche Seite (siehe „Quellen nachlesen“). Watch,
 Einstellungen, Chatsuche, Dateien, Dokumente, Google, Bilder und Memory gibt es
-in jedem Chat-Lauf im Kontomodus (Watch, Lesen und Bilder nicht in Chats mit
+in jedem Chat-Lauf (Watch, Lesen und Bilder nicht in Chats mit
 Google-Daten). Sobald ein Schritt eigene Suchtreffer hat (`_searched`), ist
 Fremdinhalt im Blick (`outside_in_view`, auch für die Aufrufe desselben
 Schritts), wie nach `read_source`: Eine Einstellungsänderung braucht dann ein
@@ -372,7 +371,7 @@ Modus `audit_compare_allowed`, `AGENT_AUDIT_COMPARE=all`).
   8.000, `file_ids`, `depth` quick/full, Standard `full`; `extra="forbid"`),
   ohne `status_update` (der Text neben einem Aufruf ist die Notiz) und ohne
   Memory-Feld (Memory geht über `update_memory`). Die Beschreibung
-  (`agent_comparison.AUDIT_COMPARE`) nennt nur Fakten und im Kontomodus die
+  (`agent_comparison.AUDIT_COMPARE`) nennt nur Fakten und die
   Grenze `turn_comparisons` („At most 4 times per message.“); ein Aufruf
   darüber startet nichts Bezahltes und sagt, dass die Nachricht ihr Maximum
   hat, der letzte erlaubte sagt es im Ergebnis. Jeder Vergleich fragt alle
@@ -749,7 +748,7 @@ ein laufender VM-Befehl endet sofort
 seit 2026-10-29 bricht auch ein Modellschritt des Agenten ab, der gerade
 streamt (vorher lief er zu Ende, bis zu fünf Suchrunden eingeschlossen):
 Jeder Schritt des Agenten streamt unter einer eigenen Cancellation unter der
-des Turns (`_halt_scope`, `step_halt`; nie Worker- oder Prüferrunden), wird
+des Turns (`_halt_scope`, `step_halt`; nie Vergleichs- oder Prüferrunden), wird
 wie ein unterwegs abgebrochener Schritt mit dem Verbrauchten abgerechnet
 (`value.halted`, im Protokoll `cancelled`), sein sichtbarer Text geht zurück
 (`_retract`), und nach der Entscheidung läuft er auf dem nächsten Index neu,
@@ -1245,8 +1244,7 @@ Aus dem [Laufzeit-Audit](agent-workspace-runtime-audit-2026-10-30.md)
 **Mehrere Aufrufe je Schritt (T2).** Jeder Schritt des Agenten fragt mit
 `parallel_tool_calls` (`DelegationLoop._step`), in jeder Anfrage der Nachricht
 gleich, mit und ohne Arbeitsplatz: Bei Anthropic steckt der Schalter in
-`tool_choice`, und ein Wechsel schriebe die gecachten Nachrichten neu. Worker
-fragen ohne (ihr einziges Werkzeug meldet an den Orchestrator);
+`tool_choice`, und ein Wechsel schriebe die gecachten Nachrichten neu.
 Vergleichsantworten, Seitenabrufe und Prüfer haben keine Client-Werkzeuge, ihre
 Anfragen tragen das Feld nicht.
 
@@ -1262,7 +1260,7 @@ Aufrufs desselben Schritts braucht und threadsicher läuft: `read_source`,
 laufen alles mit Nutzerinteraktion oder Zustandsänderung (`ask_user`,
 `request_domain`, `browser`, dessen Aktionen aufeinander aufbauen, `vm_exec` und
 die übrigen Werkzeuge des Arbeitsplatzes, die `prepare_*`-Karten,
-`update_memory`, `update_plan`, `open_workspace`, Dokumente, die Worker-Werkzeuge),
+`update_memory`, `update_plan`, `open_workspace`, Dokumente),
 dazu `compare_models` (seine Grenze je Nachricht und die Ausgabeanteile aus dem
 Kontingent rechnen mit einem Vergleich zur Zeit) und `find_pictures` (seine
 Bildgrenze je Nachricht zählt beim Abruf, die Bilder folgen in Reihenfolge).
@@ -1379,7 +1377,7 @@ gemacht: das Settlement erst nach der Nutzung des Ergebnisses abschließen
 (gleichzeitige Zulassungen von Prüfern und Vergleichsantworten sähen die
 Reservierung länger, nahe der Tagesgrenze anders geklemmt; nicht nachweislich
 abrechnungsneutral), die Anlage einer Sitzung in den Claim falten (betrifft
-Worker, nicht Agent-Schritte, und liegt in `agent_sessions.py`), und die
+Sitzungen, nicht Agent-Schritte, und liegt in `agent_sessions.py`), und die
 Google-Prüfung je Schritt (`_step` liest den Chat) sparen (Datenschutz-Pfad).
 Erst die Aufteilung aus I7 nachmessen.
 
@@ -3556,8 +3554,7 @@ Tests: `tests/test_workspace_guard.py`.
 
 Jeder Aufruf von `compare_models` fragt alle gewählten Modelle (`asked`); die
 Auswahl im Compare-Picker wird nicht still verkleinert. Sie laufen gleichzeitig
-(eigener Semaphore je Vergleich, unabhängig von `max_parallel` der
-Worker-Delegation). Die Output-Grenze jeder Antwort ist die Completion-Grenze
+(eigener Semaphore je Vergleich). Die Output-Grenze jeder Antwort ist die Completion-Grenze
 des Modells (`COMPARISON_OUTPUT_CEILING` = 65.536) innerhalb ihres Anteils an
 der gespeicherten Review (`_output_shares`): Sie enthält alle Antworttexte
 (600 kB), also teilen sich die Antworten eines Turns `REVIEW_ANSWER_CHARS`
@@ -3804,7 +3801,7 @@ vollständigen Sätze je Absatz, zusammen höchstens 4.000 Zeichen). Der Turn
 speichert sie mit; aufgeklappt zeigt die Zeitleiste sie als Absätze unter der
 Überschrift (`agent-activity.js` `updateThought`), und eine Notiz des Agenten
 blendet das Denken nicht mehr aus. Sonst speichert der Turn pro Schritt
-nur den letzten Kurztext, Worker-Sitzungen nur den aktuellen Fortschritt;
+nur den letzten Kurztext, Sitzungen nur den aktuellen Fortschritt;
 das bestehende Event-Journal enthält die begrenzten Kurztext-Updates. Der
 Antwortbereich zeigt während des Laufs kurze Reasoning-Absätze unterhalb
 des standardmäßig geschlossenen Thinking-Disclosures. Der aktuelle Arbeits-,
@@ -4093,7 +4090,7 @@ Tageskonto verbrauchen. Außerdem kennt der Server die Zeitzone des Nutzers
 nicht.
 
 **Gating:**
-- Das Tool gibt es in jedem Chat-Lauf im Kontomodus ohne Google-Daten, nicht in
+- Das Tool gibt es in jedem Chat-Lauf ohne Google-Daten, nicht in
   temporären Chats (eine Watch wohnt in ihrem Chat) und nicht in einem
   geplanten Lauf.
 - Die Watch läuft in dem Chat, in dem sie vorbereitet wurde (Kontext, Dateien
@@ -4220,7 +4217,7 @@ fortgesetzte; ihre öffentlichen Seiten bleiben, wie sie zuletzt waren
 ## Frühere Chats durchsuchen (seit 2026-10-28)
 
 `search_chats` (`agent_chat_search.py`, `ChatSearch`) gibt der Agent in
-eigenen Account-Turns (`account_budget_only`), in jedem Modus. Mit `query`
+jedem Chat-Lauf. Mit `query`
 sucht es in den bis zu 200 Chats des Kontos (`SEARCH_CHATS`, nach
 `updated_at`) in Titel, Startdatum (`YYYY-MM-DD`) und letzter Frage (jedes Wort
 muss vorkommen, Groß-/Kleinschreibung egal) und nennt höchstens 10
@@ -4324,7 +4321,7 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   verlangte im Vergleichsmodus `ORCHESTRATOR_PROMPT` dazu einen klaren Wunsch
   in dieser Nachricht, eine Antwort ohne Vergleich und das Vorbereiten vor
   jeder Recherche. Mehrere Aufrufe in einem Turn landen auf einer Karte.
-- **Gating:** jeder Chat-Lauf im Kontomodus, auch mit Google-Daten (es
+- **Gating:** jeder Chat-Lauf, auch mit Google-Daten (es
   verlässt kein Text den Chat; in einem Chat mit Google-Daten nur Modelle, die
   `restricted_model` zulässt). Nicht über die Consensus-API. „Pro“ heißt hier
   wie im Picker die Stufe allein (`is_user_pro`), nicht Admin: die Karte geht
@@ -4382,7 +4379,7 @@ als abgerundete Prozentzahl: Limit minus verbrauchte Kosten
 Panel trennt unverbrauchtes, für neue Calls verfügbares und reserviertes
 Kontingent und nennt die Reset-Zeit. Consensus zeigt dort weiterhin das
 Run-Limit; der Composer enthält keine Budgetzeile. Das Kontingent gilt
-gemeinsam für Chat, delegierte Worker, Vergleichsantworten, Prüfer,
+gemeinsam für Chat, Vergleichsantworten, Prüfer,
 Seitenabrufe, Zusammenfassungen und alle Repair-/Retry-Aufrufe.
 
 **Jeder Call zählt, was er gekostet hat** (`agent_quota.measured_charge`):
@@ -4580,11 +4577,10 @@ Ergebnisse mit ihrem tatsächlichen, gegebenenfalls unvollständigen Prüfstatus
 erhalten.
 
 Das zentrale Tageskontingent ist die einzige Verbrauchsgrenze des Agent-Chats.
-Es gibt kein Tool-, Such-, Nachrichten- oder Dollarbudget pro Lauf. Alte
-Admin-Werte dafür werden von `AgentPolicy.for_chat` nicht angewendet;
-Legacy-/Evaluierungsaufrufe und die bestehende Consensus-Pipeline bleiben begrenzt.
-Seit 2026-10-05 gelten pro Nachricht weiche Schutzgrenzen (Konstanten in
-`AgentPolicy.for_chat`, nicht im Admin), damit eine Schleife gültiger Aufrufe
+Es gibt kein Tool-, Such-, Nachrichten- oder Dollarbudget pro Lauf; die
+Consensus-Pipeline hat ihr eigenes (`AnalysisBudget`). Pro Nachricht gelten
+weiche Schutzgrenzen (Konstanten in `AgentPolicy`, nicht im Admin), damit eine
+Schleife gültiger Aufrufe
 nicht das ganze Tageskonto in einem Turn verbrennt (jeder Orchestrierungsschritt
 sendet den gesamten Verlauf erneut, die Kosten wachsen quadratisch):
 
@@ -4594,23 +4590,18 @@ sendet den gesamten Verlauf erneut, die Kosten wachsen quadratisch):
 | Orchestrierungsschritte (`turn_steps`) | 24 | Vor dem 25. Routing-Schritt: Wrap-up (siehe unten). |
 | Zeit (`turn_seconds`) | 15 min | Vor dem nächsten Routing-Schritt: Wrap-up; harter Stopp in `_check` (auch mitten im Schritt, Watcher bricht ab) nach weiteren `TURN_WRAP_UP_SECONDS` = 5 min. Seit 2026-10-08 kommt der Wrap-up früher, wenn bis zum harten Stopp weniger als `ANSWER_RESERVE_SECONDS` der Denkstufe bleibt (max 10 min, high 6 min, low 2,5 min); ebenso endet dann das Warten auf Nachzügler. |
 | Lange VM-Läufe (`vm_turn_steps`, `vm_turn_seconds`) | 200 Schritte, 2 h | Ersetzen `turn_steps` und `turn_seconds`, sobald die VM in der Nachricht einmal lief (`_long_run`, seit 2026-10-26; Wrap-up und harter Stopp wie dort). |
-| Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (bis 2026-10-31 ohne das Anzeigefeld `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. `wait_agents` ist ausgenommen. |
+| Identische Toolcalls (`turn_identical_calls`) | 2 | Gleicher Toolname + gleiche normalisierte JSON-Argumente (bis 2026-10-31 ohne das Anzeigefeld `status_update`): 3. Aufruf wird mit Tool-Fehler abgelehnt, der 4. beendet den Turn per Wrap-up. Ausgenommen sind die Werkzeuge in `REPEATABLE_TOOLS` (VM, Browser, Plan). |
 
-Wrap-up: Sind alle Worker geprüft (`_can_wrap_up`), schreibt der Agent die
-Antwort in einem letzten Schritt ohne aufrufbare Tools aus dem, was er hat
-(`_merged_wrap_up`, siehe „Turn-Grenzen“), und die Prüfer prüfen sie wie im
-Normalpfad; der Turn endet regulär. Die Grenze steht am Turn (`agent_wrap_up`)
-und als App-Eintrag `limit` im Protokoll. Sonst (ein ungeprüfter Worker, ein
-reiner Delegationslauf) endet er mit `AnalysisBudgetExceeded` (`run_limit`, „…
-The available results have been saved; send a follow-up message to
-continue.“); gespeicherte Vergleiche bleiben erhalten. Bis 2026-10-31 schrieb
-der Vergleichsmodus einen Wrap-up nur mit einem Vergleich mit mindestens zwei
-Antworten oder einer schon fixierten Antwort.
+Wrap-up: Der Agent schreibt die Antwort in einem letzten Schritt ohne
+aufrufbare Tools aus dem, was er hat (`_merged_wrap_up`, siehe
+„Turn-Grenzen“), und die Prüfer prüfen sie wie im Normalpfad; der Turn endet
+regulär. Die Grenze steht am Turn (`agent_wrap_up`) und als App-Eintrag
+`limit` im Protokoll.
 
 **Lange VM-Läufe (seit 2026-10-26).** Arbeitet der Agent in seiner VM
 (`VMSession.started`, auch wenn die VM danach ausfällt), gelten
 `vm_turn_steps` = 200 und `vm_turn_seconds` = 2 h (Vorschlag, Konstanten in
-`AgentPolicy.for_chat`). Die eigentliche Grenze bleibt das Tageskonto: Vor
+`AgentPolicy`). Die eigentliche Grenze bleibt das Tageskonto: Vor
 jedem Schritt prüft `_long_run_limit`, ob das Ausgegebene (Limit minus
 Verbrauch, `agent_quota.shown_allowance`, ein Firestore-Lesezugriff je
 Schritt, nur in langen Läufen) noch einen Schritt und die Antwort trägt, zu
@@ -4712,13 +4703,11 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 
 | Grenze | Standard |
 |---|---|
-| Parallele Worker-Unteraufrufe | 2 (`max_parallel`, nur Delegation) |
 | Parallele Vergleichsantworten | alle gewählten Modelle eines Vergleichs |
 | Modelle pro Vergleich | alle gewählten, 1 bis 6 (`MAX_RUN_FAMILIES`) |
 | Prüfer je Lauf | dieselben Modelle, je eine Sitzung und ein Thread |
 | Vergleichsantwort | Completion-Grenze des Modells (höchstens 65536), begrenzt durch den Anteil an der Reviewgröße; Längenvorgabe nur bei `depth=quick`. Eine am Output-Limit abgeschnittene Antwort bleibt als Evidenz erhalten (`answers[].truncated`); ohne Text gilt sie als `output_limit`. Endet sie nach Denken ohne ein Wort mit `stop` (`empty_answer`), versucht die App sie einmal neu |
 | Antwort (Ausgabegrenze jedes Schritts des Agenten, auch Schlussschritt und Zusammenfassungen) | Completion-Grenze des Chatmodells (höchstens 32768, mit aktivem Reasoning 65536; `answer_output_limit`), begrenzt nur durch das Kontextfenster |
-| Schritte ohne Vergleichstools (reine Delegation) | AGENT_MAX_OUTPUT_TOKENS, standardmäßig 4096; mit aktivem Reasoning zusätzlich 12288 (`ROUTING_REASONING_HEADROOM`) |
 | Kontext | Modellfensterprüfung; initialer Chatverlauf maximal 120000 Zeichen |
 | Review-Snapshot | maximal 600 kB |
 | Gleichzeitige Runs je UID | 2 |
@@ -4760,7 +4749,7 @@ und `sources`. Rein anzeigende Felder hat seit 2026-10-31 kein Werkzeug mehr
 `context` darf fehlen. Abgelehnte Aufrufe loggen Tool, Feldpfade und Argumentlänge
 (`Agent tool call rejected`), nie Inhalte.
 
-## Recherche, Delegation und Providerprotokoll
+## Recherche und Providerprotokoll
 
 ### Websuche
 
@@ -4832,24 +4821,18 @@ erreicht, dürfen, sobald die Nachricht bezahlte Arbeit hat
 folgten, `_paid_audit`), der Schlussschritt (`_merged_wrap_up`, `closing`) und
 die Schlussrunden der Prüfer auf die fixierte Antwort (`_final_review`,
 Sitzung `audit` nach `final_answer`, mit Reparatur und neuer Sitzung) das
-Limit überziehen (`agent_quota.reserve(..., overdraft=True)`, nur im
-Kontomodus); die nächste Nachricht wird dann abgelehnt, wie nach einem
+Limit überziehen (`agent_quota.reserve(..., overdraft=True)`); die nächste Nachricht wird dann abgelehnt, wie nach einem
 überzogenen Pipeline-Lauf. Live-Runden und jeder Steuer-Schritt laufen
 nur im Kontingent: Weist es einen Schritt vor seinem Claim ab, nimmt
 der Schlussschritt seinen Index (`_closing_index`, `TURN_ALLOWANCE_LIMIT`).
 Ohne bezahlte Arbeit endet ein abgewiesener erster Schritt mit der Absage.
-Ein begrenzter Lauf (`AgentPolicy` ohne `account_budget_only`, nur noch
-Tests und Altaufrufer) reserviert weiter den schlimmsten Fall: je Runde
-`SEARCH_INPUT_TOKENS` (32k) und den ganzen Input und Output erneut.
 
 **Suchzähler.** OpenRouter meldet die Suchen eines Aufrufs im Usage-Paket als
 `usage.server_tool_use_details.web_search_requests` (live 2026-10-10);
 `agent_client.reported_searches` liest daneben weiter die frühere Form
 `usage.server_tool_use`. `tool_calls_requested`/`tool_calls_executed` im selben
 Objekt zählen jedes Server-Tool, auch `web_fetch` und gescheiterte Versuche,
-und gelten nicht als Suchzahl. Bis 2026-10-11 las der Code nur die alte Form:
-Die Zahl war in Prod immer unbekannt, jeder gebundene Schritt verbrauchte sein
-ganzes Suchbudget, und eine Suche ohne Quellenannotation zeigte keine Aktivität.
+und gelten nicht als Suchzahl.
 
 **Mehr Suchen als erlaubt.** `max_uses` und `max_tool_calls` gehen weiter mit,
 aber OpenRouter setzt sie nicht für jedes Modell durch: Bei Limit 1 suchten
@@ -4864,11 +4847,8 @@ verworfen hätte). Stattdessen:
 - `AgentCompletion._record_search_overrun` zählt einmal je Aufruf
   `search_overrun:<modell>` in `/health/metrics` (`processed` = Suchen über dem
   Limit).
-- Gebundene Läufe: `search_remaining` (Delegation) und `remaining_tools`
-  (`AgentLoop`) dürfen negativ werden. Die Überschreitung ist Schuld; spätere
-  Schritte bekommen bis zum Ausgleich keine Suche (`max(0, …)` bei der
-  Reservierung). Im Kontomodus gilt nur das Tageskonto, und die Suchtreffer
-  stecken in den gemessenen Input-Tokens.
+- Es gilt nur das Tageskonto, und die Suchtreffer stecken in den gemessenen
+  Input-Tokens.
 - Die Aktivität zeigt die echte Zahl („3 searches“).
 
 **Messung 2026-10-01** (echter Vergleichs-Prompt, ZDR, Exa gegen eigene Suche):
@@ -4887,10 +4867,7 @@ Suchaktivität; Startzeiten/Queries werden nicht erfunden. Vergleichsmodelle
 sehen keine anderen Vergleichsantworten. Kein eigener Suchdienst, kein
 zusätzliches Suchmodell; Provider-Routing/ZDR bleiben bestehen.
 
-Worker-Delegation bleibt standardmäßig deaktiviert und verwendet weiter die
-geprüften Modell-/Reasoning-Kombinationen und die bestehende Admin-Konfiguration;
-siehe [agent-delegation.md](agent-delegation.md). Vergleichstools sind davon
-unabhängig. Der gemeinsame Tool-Loop erhält die kompletten Provider-Fortsetzungs-
+Der Tool-Loop erhält die kompletten Provider-Fortsetzungs-
 informationen intern; verschlüsselte Reasoning-Blöcke werden nie öffentlich oder
 persistiert. Gespeichertes sichtbares Reasoning bleibt auf 32000 Zeichen begrenzt
 (`REASONING_STORAGE_CHARS`); weitere Deltas erreichen nur noch die Live-
@@ -5041,10 +5018,7 @@ zusammen; die vier meistzitierten Quellen bis 1.200 Zeichen, die übrigen bis
 Reddit mit nur „Reddit“) gibt keinen Auszug. Jede Quelle bleibt gelistet und
 zitierbar, auch ohne Auszug. Scheitert das Bündeln der Auszüge unerwartet,
 steht das Ergebnis mit leerer `sources`-Liste (Warnung im Log); nur ein Stopp
-beendet den Vergleich. Gebundene Läufe (nicht Kontomodus, nur in Tests) lehnen
-einen Schritt über `context_chars` ab; dort bekommen die Auszüge nur den Platz,
-den der Kontext übrig lässt (halbiert, bis es passt). Im
-Kontomodus bekommt jedes Vergleichsergebnis das volle Budget.
+beendet den Vergleich. Jedes Vergleichsergebnis bekommt das volle Budget.
 Alle Felder von `sources` laufen durch `_scrub` (Surrogate wie oben). Kein
 Modellaufruf, keine Suche; Kosten entstehen nur als Input-Tokens der folgenden
 Schritte des Agenten (mit Prompt-Cache).
@@ -5129,8 +5103,7 @@ keine).
 der Prüfbarkeit: Über Chat Completions (unser Transport) kommt der gelesene
 Text nie beim Client an, nur ein Zähler in `usage.server_tool_use_details`
 (`tool_calls_requested`/`tool_calls_executed`, auch für gescheiterte Abrufe).
-Weder die Judges von damals noch die Prüfer hätten gesehen, was der Agent gelesen hat,
-das Problem, an dem die Worker-Delegation scheiterte. Die Responses API liefert
+Weder die Judges von damals noch die Prüfer hätten gesehen, was der Agent gelesen hat. Die Responses API liefert
 den Text dagegen als Output-Item `{"type": "openrouter:web_fetch", url, title,
 content, httpStatus, error}` (Live-Probe `scripts/probe_web_fetch.py`, Ergebnis
 `artifacts/web-fetch-probe/validation.md`). Deshalb ruft der Agent das
@@ -5174,8 +5147,7 @@ Helfers („OK“) wird verworfen.
   Vergleichsmodus schon: Der Seitentext sollte nicht in eine neue Aufgabe an
   die unabhängigen Modelle geraten); die Modelle sehen nur die Frage des
   Agenten.
-- Nie für Vergleichsmodelle, Prüfer oder Worker, nie in gebundenen Läufen (nur
-  Kontomodus) und nie in Chats mit Google-Daten (Router-Flag `google_data`,
+- Nie für Vergleichsmodelle oder Prüfer und nie in Chats mit Google-Daten (Router-Flag `google_data`,
   Google-Zugriff für die Nachricht, zusätzlich Prüfung des Chats beim Aufruf).
 
 **Ergebnisse statt Toolfehler.** Ablehnungen (nicht lesbar hier, zu spät,
@@ -5514,8 +5486,9 @@ Ein neuer Versuch ist eine neue Nachricht mit neuem Budget, kein versteckter Ret
   `tests/test_agent_audit_compare.py` (`compare_models`),
   `tests/test_agent_audit_tempo.py`, `tests/test_agent_comparison.py`,
   `tests/test_agent_answer_mode.py`, `tests/test_agent_runs.py` (Route, alte
-  Tabs und Turns, Wiederherstellung) sowie die bestehenden Agent-, Delegation-,
-  Budget-, Chat- und Bookmark-Tests. Läufe, deren Skript nur den Agenten spielt,
+  Tabs und Turns, Wiederherstellung), `tests/test_agent_sessions.py`
+  (Sitzungen, Journal, Reaper) sowie die bestehenden Agent-, Budget-, Chat- und
+  Bookmark-Tests. Läufe, deren Skript nur den Agenten spielt,
   bekommen Prüfer, die nie starten (`tests/agent_reviewers.py`). Die Judges
   der Consensus-Pipeline prüfen `tests/test_coverage_judge.py`,
   `tests/test_differences_schema.py` und `tests/test_judge_hedge.py`.

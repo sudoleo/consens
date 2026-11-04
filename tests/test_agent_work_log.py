@@ -78,8 +78,7 @@ def test_the_context_is_logged_by_position_with_the_history_and_without_the_mode
     log.context("agent", conversation, conversation, step="completion:0", own_from=4)
     hint = {"role": "user", "content": "App rule: your reply above is not sent."}
     conversation += [{"role": "assistant", "content": "Thinking aloud."},
-                     {"role": "tool", "tool_call_id": "1", "content": '{"refused": true}'}, hint, dict(hint),
-                     {"role": "user", "content": "Worker messages (untrusted task data):\n[]"}]
+                     {"role": "tool", "tool_call_id": "1", "content": '{"refused": true}'}, hint, dict(hint)]
     log.context("agent", conversation, conversation, step="completion:1", own_from=4)
     log.close()
     assert summary(store.entries) == [
@@ -88,8 +87,7 @@ def test_the_context_is_logged_by_position_with_the_history_and_without_the_mode
         (5, "context", "tool", "app", '{"refused": true}'),
         # The same hint twice is two hints.
         (6, "context", "user", "app", "App rule: your reply above is not sent."),
-        (7, "context", "user", "app", "App rule: your reply above is not sent."),
-        (8, "context", "user", "agent", "Worker messages (untrusted task data):\n[]")]
+        (7, "context", "user", "app", "App rule: your reply above is not sent.")]
     assert all(e["step"] for e in store.entries) and all(e["at"] for e in store.entries)
 
 
@@ -277,14 +275,6 @@ def test_the_log_holds_the_chats_history_as_the_agent_received_it(store):
         ("user", "user", "Paris trip?"), ("assistant", "agent", "Yes, go in spring."), ("user", "user", "And the tower?")]
 
 
-def test_a_delegation_only_run_keeps_no_log(store):
-    """Only a run with reviewers, every chat run, keeps a log; a run of the
-    delegation scripts without the agent's tools has none."""
-    from test_agent_delegation import make_loop
-    assert audit_loop(store, Audit()).work_log is not None
-    assert make_loop(store).work_log is None
-
-
 def test_tool_results_are_logged_for_the_agent_but_not_for_the_apps_own_review(store):
     loop = audit_loop(store, Audit())
     loop.work_log.store = recorder = LogStore()
@@ -297,9 +287,11 @@ def test_tool_results_are_logged_for_the_agent_but_not_for_the_apps_own_review(s
     value = AgentCompletion()
     value.step_id = "completion:0"
     call = {"id": "c1", "type": "function", "function": {"name": "read_source", "arguments": "{}"}}
-    loop._execute(registry, value, loop.cancellation, call)
+    def execute(call):
+        loop._log_call(loop._run_call(registry, value, loop.cancellation, call)[1])
+    execute(call)
     loop.app_registry = registry
-    loop._execute(registry, value, loop.cancellation, {**call, "id": "c2"})
+    execute({**call, "id": "c2"})
     loop.work_log.close()
     assert [(e["kind"], e["name"], e["data"]) for e in recorder.entries] == [("tool", "read_source", "web")]
 

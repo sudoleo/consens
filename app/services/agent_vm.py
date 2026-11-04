@@ -196,10 +196,6 @@ def old_browser_name(uid):
 
 
 CHATS_DIR = HOME + "/chats"
-# Where the chats' folders were before the agent had a user of its own
-# (moved by workspace_vm/workbench/setup.sh).
-LEGACY_CHATS_DIR = SERVER_HOME + "/chats"
-
 
 FOLDER_TITLE_CHARS = 40
 FOLDER_ID_CHARS = 6
@@ -922,8 +918,8 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
     and the chat's own VM from before 2026-10-27. That one's name comes from the chat (vm_name), never from
     the record: a chat that moved to the workspace lost it there, and its VM
     stayed (security audit 2026-10-27). The folder goes as the agent's user
-    (its tools brought up to date first, agent_workspace.prepare) and from
-    where it was before the agent had a user of its own (LEGACY_CHATS_DIR).
+    (its tools brought up to date first, agent_workspace.prepare, whose
+    setup has moved a folder from the provider's home before).
     Gone already is fine. Raises when the provider fails or is not
     configured: the chat's deletion job then retries
     (chat_store.run_chat_deletion), so none of the chat's files outlives it."""
@@ -954,7 +950,6 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
             if isinstance(folder, str) and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", folder):
                 vm.delete_path(name, chat_dir(chat_id, folder))
             vm.delete_path(name, chat_dir(chat_id))
-            vm.delete_path(name, f"{LEGACY_CHATS_DIR}/{chat_dir(chat_id).rsplit('/', 1)[1]}", agent=False)
         vm.delete(vm_name(uid, chat_id))
     finally:
         vm.close()

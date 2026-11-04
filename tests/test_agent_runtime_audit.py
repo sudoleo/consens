@@ -16,7 +16,7 @@ import pytest
 from app.services import agent_delegation
 from app.services.llm import agent_client
 from app.services.llm.agent_client import AgentCompletion, AgentModel, measured_usage
-from test_agent_runs import UID, pending, receipt, store, priced  # noqa: F401  (fixture)
+from test_agent_runs import UID, claim, pending, receipt, store, priced  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, Agent, fake_vm, results, vm_loop  # noqa: F401  (fixture)
 
 
@@ -74,7 +74,7 @@ def test_a_streamed_step_keeps_its_request_times_and_the_receipt_saves_them(stor
     assert started <= first <= ended
     # The receipt keeps them beside created_at and settled_at (AgentRunStore.settle).
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
+    claim(store, chat_id, turn["id"])
     value = receipt()
     value.request_started_at, value.first_token_at, value.stream_ended_at = started, first, ended
     store.settle(UID, chat_id, turn["id"], completion=value, status="succeeded")
@@ -84,7 +84,7 @@ def test_a_streamed_step_keeps_its_request_times_and_the_receipt_saves_them(stor
 
 def test_a_step_without_a_stream_saves_no_request_times(store):
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel())
+    claim(store, chat_id, turn["id"])
     store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
     saved = store.receipt_ref(UID, chat_id, turn["id"]).get().to_dict()
     assert not {"request_started_at", "first_token_at", "stream_ended_at"} & set(saved)
@@ -514,7 +514,7 @@ def _settled_step(guess):
     """A delegated step claimed and settled; ``guess``: whether the
     settlement may read the expected ledger day with the rest."""
     from app.services import agent_quota
-    from test_agent_delegation import make_loop
+    from test_agent_sessions import make_loop
     store, trips = _counting_store()
     if not guess:
         store._expected_daily = lambda uid: None
@@ -522,7 +522,7 @@ def _settled_step(guess):
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
     del trips[:]
-    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    store.settle(*args, completion=receipt(), status="succeeded")
     saved = store.receipt_ref(*args).get().to_dict()
     day = agent_quota.quota_ref(store.db, UID, saved["quota_day"])
     ledger = {key: value for key, value in store.db.documents[day.path].items() if not key.endswith("_at")}
@@ -545,7 +545,7 @@ def test_a_step_claimed_on_another_ledger_day_reads_its_own(monkeypatch):
     from app.services import agent_quota
     from app.services.agent_runs import AgentRunStore
     store, trips = _counting_store()
-    from test_agent_delegation import make_loop
+    from test_agent_sessions import make_loop
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
@@ -554,7 +554,7 @@ def test_a_step_claimed_on_another_ledger_day_reads_its_own(monkeypatch):
     monkeypatch.setattr(AgentRunStore, "_expected_daily",
                         lambda self, uid: agent_quota.quota_ref(store.db, uid, "1999-12-31"))
     del trips[:]
-    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    store.settle(*args, completion=receipt(), status="succeeded")
     assert [kind for kind, _ in trips] == ["get_all", "get"]
     assert store.receipt_ref(*args).get().to_dict()["status"] == "succeeded"
 

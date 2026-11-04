@@ -1,4 +1,4 @@
-"""One-level, bidirectional agent sessions with bounded concurrent providers."""
+"""The agent's run of one chat message: model steps, tool calls, the user's holds and the answer."""
 from __future__ import annotations
 
 from collections import deque
@@ -11,10 +11,9 @@ import re
 import threading
 import time
 from itertools import chain, count
-from typing import Literal
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import ValidationError
 
 from app.core.observability import provider_diagnostic, safe_exception
 from app.core.openrouter_contract import provider_session_id
@@ -25,7 +24,6 @@ from app.services.agent_costs import aggregate_usage
 from app.services.agent_quota import AgentTokenBudgetExceeded
 from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
-from app.services.agent_policy import supports_delegation
 from app.services.agent_provider_limits import (
     TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelEmptyAnswer, ModelOutputLimit, agent_failure,
     provider_cooldowns,
@@ -34,8 +32,7 @@ from app.services.agent_tools import CallOrder, ReadOnlyTool, ToolRegistry, give
 from app.services.agent_comparison import SEARCHING_KINDS
 from app.services.prompt_defaults import AGENT_REVIEW_FACTS as REVIEW_FACTS
 from app.services.llm.agent_client import (
-    AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, reasoning_active, resolve_agent_model,
-    routing_output_limit,
+    answer_output_limit, lighter_reasoning, reasoning_active, routing_output_limit,
 )
 from app.services.llm import agent_model_metadata
 from app.services.llm.provider_runtime import (
@@ -50,7 +47,7 @@ GOOGLE_NO_SEARCH = ("Web search is unavailable in this chat because it contains 
                     "supplied material and your existing knowledge, state uncertainty about anything that may have "
                     "changed, and do not imply new web research.")
 
-# Account-mode turns (AgentPolicy.for_chat) have no run budget, only the daily
+# Turns have no run budget, only the daily
 # token ledger. Soft per-turn guards stop a loop of valid calls before it burns
 # the whole account: the wrap-up after turn_seconds gets this much extra time
 # for the answer and its review, then the run stops hard (also mid-step).
@@ -87,12 +84,12 @@ THINKING_UPDATE_SECONDS = 3
 # and time limits bound them (agent_vm_tools.py). The same plan again between
 # work steps says where the agent stands; refused, it ended a long VM run at
 # its fourth unchanged plan.
-REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
+REPEATABLE_TOOLS = frozenset({"vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
                               "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process",
                               "vm_view_image", "vm_render_office", "update_plan", "browser"})
 # Once a tool's result may have brought outside content into the agent's
 # context (model answers and their sources, pages, emails, calendars, files,
-# a VM's output or the workspace's notes, a worker's report), a settings
+# a VM's output or the workspace's notes), a settings
 # change needs the user's own words (outside_in_view, agent_settings): a page
 # could otherwise suggest it. Since the workspace's security audit
 # (2026-10-27) every result counts, an error too (its text may quote what a
@@ -302,57 +299,14 @@ def joined_halt(hold, details):
     return joined
 
 
-class StrictArgs(BaseModel):
-    model_config = ConfigDict(extra="forbid", strict=True)
-
-
-class StartAgent(StrictArgs):
-    title: str = Field(min_length=1, max_length=100)
-    goal: str = Field(min_length=1, max_length=2000)
-    context: str = Field(max_length=12_000)
-    constraints: str = Field(min_length=1, max_length=2000)
-    expected_output: str = Field(min_length=1, max_length=1000)
-    acceptance_criteria: str = Field(min_length=1, max_length=2000)
-    model_id: str = Field(min_length=1, max_length=160)
-    file_ids: list[str] = Field(default_factory=list, max_length=5)
-
-
-class AgentTarget(StrictArgs):
-    agent_id: str = Field(pattern=r"^[a-f0-9]{32}$")
-
-
-class SendAgent(AgentTarget):
-    text: str = Field(min_length=1, max_length=8000)
-    kind: Literal["message", "answer", "rework"] = "message"
-
-
-class WaitAgents(StrictArgs):
-    seconds: int = Field(default=20, ge=0, le=30)
-
-
-class Report(StrictArgs):
-    kind: Literal["question", "blocker", "progress"]
-    text: str = Field(min_length=1, max_length=8000)
-
-
-class ReviewAgent(AgentTarget):
-    accepted: bool
-    check: str = Field(min_length=1, max_length=2000)
-    use_fallback: bool = False
-
-
 @dataclass
 class Worker:
     id: str
     model: object
     messages: list
     state: str = "waiting"
-    inbox: deque = field(default_factory=deque)
-    cancellation: ProviderCancellation = field(default_factory=ProviderCancellation)
-    thread: object = None
     usages: list = field(default_factory=list)
     calls: int = 0
-    reviewed: bool = False
     started: float = field(default_factory=time.monotonic)
     stream_chars: int = 0
     # Text the latest step streamed, also when it ended early.
@@ -363,8 +317,6 @@ class Worker:
     # progress_kind): its end record carries it, so a line the journal
     # leaves out because the call has ended (_journal_write) is not lost.
     progress: dict | None = None
-    result: dict | None = None
-    reviewed_evidence: dict | None = None
     # The OpenRouter session its requests use (worker_completion): its own
     # id, or the id of an earlier session whose conversation it goes on
     # with on the same endpoint (a reviewer's round cut short, agent_audit).
@@ -372,8 +324,7 @@ class Worker:
 
 
 class DelegationLoop(AgentLoop):
-    def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
-                 file_context=None, google_selection=None, google_data_consent=False,
+    def __init__(self, *, comparison_models, cooldowns=None, file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
                  reviewers="always", temporary=False, watch_run=None, history_summary=None,
                  **kwargs):
@@ -398,11 +349,6 @@ class DelegationLoop(AgentLoop):
         if reviewers not in REVIEW_FACTS:
             raise ValueError("Unknown reviewers setting")
         self.reviewers = reviewers
-        # With comparison tools (every chat run, routers/agent.py) the agent
-        # writes the answer itself as its last step (agent_answer_mode) and
-        # the user's chosen models review it (agent_audit.py); a
-        # delegation-only run ends with plain text.
-        self.merged = comparison_models is not None
         # Saved sources of the chat's earlier messages: read_source may open them.
         self.chat_sources = list(chat_sources or [])
         # This message's own search results (provider citations of its steps):
@@ -440,11 +386,8 @@ class DelegationLoop(AgentLoop):
         # Whether the chat holds Google data, as the route read it (and
         # marked it) a moment ago; None where nobody said.
         self.google_data = google_data
-        self.config = dict(delegation_config)
         self.cooldowns = cooldowns or provider_cooldowns
-        self.workers = {}
         self.condition = threading.Condition(threading.RLock())
-        self.slots = threading.BoundedSemaphore(self.policy.max_parallel)
         self.outgoing = queue.Queue(maxsize=1024)
         self.live_progress = {}
         # The live stream counters and the journal's saved events, never the
@@ -454,7 +397,6 @@ class DelegationLoop(AgentLoop):
         self.journal = AgentJournal(self._journal_write, failed=self._journal_failed,
                                     progress_gap=THINKING_UPDATE_SECONDS / 2)
         self.unsettled = {}
-        self.mailbox = deque()
         # The user's messages into this run (USER_NOTE_OPEN): seen ids, and
         # those not yet in the conversation.
         self.notes_seen, self.notes = set(), deque()
@@ -485,18 +427,15 @@ class DelegationLoop(AgentLoop):
         # Every hold of the turn as it ended, without its reasons (_end_hold).
         self.holds = []
         self.paused_seconds = 0.0
-        self.tools_used = 0
         self.invalid_tool_rounds = 0
-        self.search_remaining = self.policy.max_searches
         self.closed = threading.Event()
         self.watch_error = None
         # Set once outside content is in view: after the step's own web
         # search or a batch with a result of a tool not in OWN_CONTENT_TOOLS.
         # A settings change then needs the user's words (agent_settings).
         self.outside_in_view = False
-        self.budget = AnalysisBudget(seconds=self.policy.seconds, max_calls=self.policy.max_calls,
-                                     unlimited=self.policy.account_budget_only)
-        # Per-turn guards of account mode (see TURN_WRAP_UP_SECONDS); the
+        self.budget = AnalysisBudget(unlimited=True)
+        # Per-turn guards (see TURN_WRAP_UP_SECONDS); the
         # clock is injectable for tests.
         self.clock = time.monotonic
         self.turn_started = self.clock()
@@ -523,72 +462,44 @@ class DelegationLoop(AgentLoop):
         # The run's own messages a summary replaced: its work record and
         # evidence still know them (own_messages).
         self.summarized = []
-        # One catalog for all of them: built once per model of the picker,
-        # about 45 times, it was most of a message's work before its first
-        # request (until 2026-11-01).
-        available = agent_models()
-        resolved = {model.selection_id: resolve_agent_model(model.selection_id, models=available) for model, _ in available}
-        self.models = {selection: model for selection, model in resolved.items() if supports_delegation(model)
-                       and (worker_model_ids is None or selection in worker_model_ids)}
-        catalog = [{"id": m.selection_id, "label": m.label, "input_usd_per_million": m.input_usd_per_million,
-                    "output_usd_per_million": m.output_usd_per_million, "context_length": m.context_length}
-                   for m in self.models.values()]
         self.messages[0] = dict(self.messages[0])
-        if self.merged:
-            from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION
-            if AGENT_AUDIT_ANSWER_SECTION not in self.messages[0]["content"]:
-                # Not the code prompt (tests): the facts of the app still apply.
-                self.messages[0]["content"] += "\n\n" + AGENT_AUDIT_ANSWER_SECTION
-            # Who reviews the work, by the user's setting: the same through
-            # the message, the workspace's opening included (cache).
-            self.messages[0]["content"] += "\n\n" + REVIEW_FACTS[reviewers]
-            if temporary:
-                from app.services.prompt_defaults import AGENT_TEMPORARY_CHAT_PROMPT
-                self.messages[0]["content"] += "\n\n" + AGENT_TEMPORARY_CHAT_PROMPT
-        if self.config["enabled"] or comparison_models is None:
-            self.messages[0]["content"] += ("\n\n" + self.config["orchestrator_prompt"]
-                + "\nAvailable worker models (server registry): " + json.dumps(catalog))
-        if not self.policy.account_budget_only:
-            self.messages[0]["content"] += "\nShared run limits: " + json.dumps(self.policy.snapshot())
-        self.registry = ToolRegistry([
-            ReadOnlyTool("start_agent", "Start a bounded subtask in a new worker session. Returns immediately.", StartAgent, self.start_agent),
-            ReadOnlyTool("send_agent", "Send a clarification, answer or rework in the same worker session.", SendAgent, self.send_agent),
-            ReadOnlyTool("wait_agents", "Wait for semantic messages or results. Does not wait on tokens.", WaitAgents, self.wait_agents),
-            ReadOnlyTool("stop_agent", "Stop this worker including its active provider request.", AgentTarget, self.stop_agent),
-            ReadOnlyTool("review_agent", "Record your actual verification of a result or fallback after failure.", ReviewAgent, self.review_agent),
-        ], argument_limit=24_000)
-        self.comparison = None
-        self.app_registry = None
+        from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION
+        if AGENT_AUDIT_ANSWER_SECTION not in self.messages[0]["content"]:
+            # Not the code prompt (tests): the facts of the app still apply.
+            self.messages[0]["content"] += "\n\n" + AGENT_AUDIT_ANSWER_SECTION
+        # Who reviews the work, by the user's setting: the same through
+        # the message, the workspace's opening included (cache).
+        self.messages[0]["content"] += "\n\n" + REVIEW_FACTS[reviewers]
+        if temporary:
+            from app.services.prompt_defaults import AGENT_TEMPORARY_CHAT_PROMPT
+            self.messages[0]["content"] += "\n\n" + AGENT_TEMPORARY_CHAT_PROMPT
         # Pictures from the web under the answer (find_pictures, show_image).
         self.image_tools = None
-        if comparison_models is not None:
-            from app.services.agent_comparison import ComparisonTools
-            from app.services import agent_read_source
-            read_sources = (agent_read_source.enabled() and self.policy.account_budget_only
-                            and not google_selection and not google_data)
-            # compare_models and the reviewers (agent_audit.AnswerAudit); its
-            # limit per message stands in the tool's description.
-            self.comparison = ComparisonTools(self, comparison_models, preferences=agent_preferences,
-                                              reviewers=reviewers)
-            self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
-                                          *self.comparison.tools], argument_limit=24_000)
-            # The review: run by the app once the answer is written, never
-            # offered to the model.
-            self.app_registry = ToolRegistry(self.comparison.app_tools)
-            if read_sources:
-                # Reading pages (docs/agent-mode.md, "Quellen nachlesen"); the
-                # tool's description says what it does. Registered for the
-                # whole turn: a tool list that changes between steps would
-                # rewrite the prompt cache.
-                self.comparison.reader = agent_read_source.SourceReader(self, self.comparison)
-                self.registry = ToolRegistry([*self.registry.tools.values(), self.comparison.reader.tool],
-                                             argument_limit=24_000)
-                # The same bounds as reading: the server fetches the page
-                # (agent_web_images.py, docs/agent-mode.md "Bilder").
-                from app.services.agent_web_images import WebImageTools
-                self.image_tools = WebImageTools(self)
-                self.registry = ToolRegistry([*self.registry.tools.values(), *self.image_tools.tools()],
-                                             argument_limit=24_000)
+        from app.services.agent_comparison import ComparisonTools
+        from app.services import agent_read_source
+        read_sources = agent_read_source.enabled() and not google_selection and not google_data
+        # compare_models and the reviewers (agent_audit.AnswerAudit); its
+        # limit per message stands in the tool's description.
+        self.comparison = ComparisonTools(self, comparison_models, preferences=agent_preferences,
+                                          reviewers=reviewers)
+        self.registry = ToolRegistry(self.comparison.tools, argument_limit=24_000)
+        # The review: run by the app once the answer is written, never
+        # offered to the model.
+        self.app_registry = ToolRegistry(self.comparison.app_tools)
+        if read_sources:
+            # Reading pages (docs/agent-mode.md, "Quellen nachlesen"); the
+            # tool's description says what it does. Registered for the
+            # whole turn: a tool list that changes between steps would
+            # rewrite the prompt cache.
+            self.comparison.reader = agent_read_source.SourceReader(self, self.comparison)
+            self.registry = ToolRegistry([*self.registry.tools.values(), self.comparison.reader.tool],
+                                         argument_limit=24_000)
+            # The same bounds as reading: the server fetches the page
+            # (agent_web_images.py, docs/agent-mode.md "Bilder").
+            from app.services.agent_web_images import WebImageTools
+            self.image_tools = WebImageTools(self)
+            self.registry = ToolRegistry([*self.registry.tools.values(), *self.image_tools.tools()],
+                                         argument_limit=24_000)
 
         if self.file_context:
             from app.services.agent_files import AUDIT_UNTRUSTED
@@ -638,12 +549,11 @@ class DelegationLoop(AgentLoop):
                  "request, write the proposed text or event in your answer for the user to use themselves: "
                  "consens.io sends and changes nothing in Google."))
         # A Watch the user asks for is prepared, never started (agent_watch.py):
-        # only on their own account-mode turns, never with Google data. The
+        # never with Google data. The
         # condition holds for a whole chat, so the prompt stays cacheable.
         # Since 2026-11-03 a Watch runs the agent in its chat: none in a
         # temporary chat, and a scheduled run reports instead of preparing.
-        if (self.comparison is not None and self.policy.account_budget_only
-                and not google_selection and not google_data and not temporary):
+        if not google_selection and not google_data and not temporary:
             from app.services import agent_watch
             if watch_run:
                 self.messages[0]["content"] += "\n\n" + agent_watch.RUN_PROMPT
@@ -655,23 +565,21 @@ class DelegationLoop(AgentLoop):
             self.registry = ToolRegistry([*self.registry.tools.values(), *tools],
                                          argument_limit=max(self.registry.argument_limit, 24_000))
         # A settings change the user asks for is prepared, never written
-        # (agent_settings.py): on their own account-mode turns, also with
+        # (agent_settings.py), also with
         # Google data (only enumerated values, no text leaves the chat).
-        if self.comparison is not None and self.policy.account_budget_only:
-            from app.services import agent_settings
-            self.settings_tools = agent_settings.SettingsTools(self, google_data=bool(google_selection or google_data))
-            self.messages[0]["content"] += "\n\n" + agent_settings.AUDIT_PROMPT
-            self.registry = ToolRegistry([*self.registry.tools.values(), *self.settings_tools.tools()],
-                                         argument_limit=max(self.registry.argument_limit, 24_000))
+        from app.services import agent_settings
+        self.settings_tools = agent_settings.SettingsTools(self, google_data=bool(google_selection or google_data))
+        self.messages[0]["content"] += "\n\n" + agent_settings.AUDIT_PROMPT
+        self.registry = ToolRegistry([*self.registry.tools.values(), *self.settings_tools.tools()],
+                                     argument_limit=max(self.registry.argument_limit, 24_000))
         # The user's earlier chats, found and read on demand (agent_chat_search.py):
-        # on their own account-mode turns; chats with Google data stay out, and
+        # chats with Google data stay out, and
         # so do temporary chats, also from a temporary chat.
-        if self.comparison is not None and self.policy.account_budget_only:
-            from app.services.agent_chat_search import ChatSearch
-            self.registry = ToolRegistry([*self.registry.tools.values(), *ChatSearch(self).tools()],
-                                         argument_limit=self.registry.argument_limit)
-        # The agent's own Linux VM (Agent VM, admins; agent_vm_tools.py): on
-        # account-mode turns, never with Google data (it would leave the
+        from app.services.agent_chat_search import ChatSearch
+        self.registry = ToolRegistry([*self.registry.tools.values(), *ChatSearch(self).tools()],
+                                     argument_limit=self.registry.argument_limit)
+        # The agent's own Linux VM (Agent VM, admins; agent_vm_tools.py):
+        # never with Google data (it would leave the
         # allowed providers). A setting, so the prompt stays cacheable.
         self.vm_tools = None
         self.plan_tools = None
@@ -696,9 +604,8 @@ class DelegationLoop(AgentLoop):
         from app.services import agent_vm
         # Without a provider (no SPRITES_TOKEN) the agent is not told of a
         # VM that would answer every call with "not available".
-        if (self.comparison is not None and self.policy.account_budget_only and not google_selection
-                and not google_data and agent_preferences is not None and agent_preferences.vm == "on"
-                and agent_vm.configured()):
+        if (not google_selection and not google_data and agent_preferences is not None
+                and agent_preferences.vm == "on" and agent_vm.configured()):
             from app.services.agent_vm_tools import VMTools
             self.vm_tools = VMTools(self)
             if workspace_closed:
@@ -719,34 +626,22 @@ class DelegationLoop(AgentLoop):
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
         from app.services.agent_memory import orchestrator_prompt
-        if self.comparison is not None:
-            self.messages[0]["content"] += "\n\n" + orchestrator_prompt(self.memory.snapshot)
-            memory_tools = self.memory.tools()
-            if memory_tools:
-                self.registry = ToolRegistry([*self.registry.tools.values(), *memory_tools],
-                                             argument_limit=max(self.registry.argument_limit, 24_000))
-        # The live work log (agent_work_log.py, docs/agent-work-log.md) of
-        # every run with reviewers: what the agent sees and does, written by
+        self.messages[0]["content"] += "\n\n" + orchestrator_prompt(self.memory.snapshot)
+        memory_tools = self.memory.tools()
+        if memory_tools:
+            self.registry = ToolRegistry([*self.registry.tools.values(), *memory_tools],
+                                         argument_limit=max(self.registry.argument_limit, 24_000))
+        # The live work log (agent_work_log.py, docs/agent-work-log.md): what
+        # the agent sees and does, written by
         # the app. Saved once the run owns the turn (its first claimed step).
-        self.work_log = None
-        if self.merged:
-            from app.services.agent_work_log import WorkLog
-            self.work_log = WorkLog(self.store, self.uid, self.chat_id, self.turn_id, ready=lambda: self.claimed)
+        from app.services.agent_work_log import WorkLog
+        self.work_log = WorkLog(self.store, self.uid, self.chat_id, self.turn_id, ready=lambda: self.claimed)
 
     def _log_actor(self, step, worker=None):
-        """Who a model step or tool result is in the work log: the agent, one
-        of its delegated workers, or nobody (reviewers, comparison answers
-        and the app's page fetches are not the agent's work)."""
-        if self.work_log is None:
-            return None
-        if worker is not None:
-            return f"worker:{worker.id}" if getattr(worker, "kind", None) is None else None
-        if step.startswith("completion:"):
-            return "agent"
-        parts = step.split(":")
-        if len(parts) == 3 and parts[0] == "agent" and parts[1] in self.workers:
-            return f"worker:{parts[1]}"
-        return None
+        """Who a model step or tool result is in the work log: the agent, or
+        nobody (reviewers, comparison answers and the app's page fetches are
+        not the agent's work)."""
+        return "agent" if worker is None and step.startswith("completion:") else None
 
     def _log_start(self):
         """The work log's first entry: the request as the run received it.
@@ -755,7 +650,7 @@ class DelegationLoop(AgentLoop):
             question = next((m["content"] for m in reversed(self.answer_conversation) if m["role"] == "user"), "")
             content = {
                 "question": question, "model": self.model.settings(),
-                "preferences": self.comparison.preferences.model_dump() if self.comparison is not None else None,
+                "preferences": self.comparison.preferences.model_dump(),
                 "files": self.file_context.selection() if self.file_context else [],
                 "policy": self.policy.snapshot()}
         except Exception as exc:
@@ -783,9 +678,7 @@ class DelegationLoop(AgentLoop):
         if cancellation:
             cancellation.raise_if_cancelled()
         self.budget.check()
-        seconds = self._turn_seconds()
-        if (self.policy.account_budget_only and seconds
-                and self._turn_elapsed() >= seconds + TURN_WRAP_UP_SECONDS):
+        if self._turn_elapsed() >= self._turn_seconds() + TURN_WRAP_UP_SECONDS:
             # Hard stop, also inside a step; the watcher cancels running calls.
             raise AnalysisBudgetExceeded(TURN_TIME_LIMIT)
 
@@ -873,34 +766,26 @@ class DelegationLoop(AgentLoop):
         self.costs.rewritten(AGENT_SESSION)
         self.workspace_closed, self.workspace_opened = False, True
         logging.info("Agent workspace opened step=%s", self.routing_steps)
-        if self.work_log is not None:
-            # The reviewers' brief was written from the tools the run started
-            # with: the workspace's facts and tools reach reviewers who
-            # already follow as an entry of the app.
-            from app.services.agent_audit import tool_brief, workspace_brief
-            added = sorted(set(self.registry.tools) - before)
-            self.work_log.app("workspace_opened", {"text": workspace_brief(added),
-                                                   "tools": tool_brief(self.registry, added)})
+        # The reviewers' brief was written from the tools the run started
+        # with: the workspace's facts and tools reach reviewers who
+        # already follow as an entry of the app.
+        from app.services.agent_audit import tool_brief, workspace_brief
+        added = sorted(set(self.registry.tools) - before)
+        self.work_log.app("workspace_opened", {"text": workspace_brief(added),
+                                               "tools": tool_brief(self.registry, added)})
         if self.reviewers == "workspace":
             # Its reviewers start now, their brief written from these tools.
             self._review_from_here(None)
 
     def _turn_seconds(self):
-        if self.policy.vm_turn_seconds and self._long_run():
-            return self.policy.vm_turn_seconds
-        return self.policy.turn_seconds
+        return self.policy.vm_turn_seconds if self._long_run() else self.policy.turn_seconds
 
     def _turn_steps(self):
-        if self.policy.vm_turn_steps and self._long_run():
-            return self.policy.vm_turn_steps
-        return self.policy.turn_steps
+        return self.policy.vm_turn_steps if self._long_run() else self.policy.turn_steps
 
     def _hard_stop_left(self):
-        """Seconds until the turn's hard stop in _check, or None without one."""
-        seconds = self._turn_seconds()
-        if not (self.policy.account_budget_only and seconds):
-            return None
-        return seconds + TURN_WRAP_UP_SECONDS - self._turn_elapsed()
+        """Seconds until the turn's hard stop in _check."""
+        return self._turn_seconds() + TURN_WRAP_UP_SECONDS - self._turn_elapsed()
 
     def _answer_reserve(self):
         """ANSWER_RESERVE_SECONDS for the chat model's effective reasoning."""
@@ -916,28 +801,22 @@ class DelegationLoop(AgentLoop):
 
     def answer_time_left(self):
         """Seconds before the answer must start to finish ahead of the
-        hard stop, or None for runs without one (bounded runs). The
-        reviewers of the answer need their time after it as well."""
+        hard stop. The reviewers of the answer need their time after it as well."""
         left = self._hard_stop_left()
-        if left is None:
-            return None
-        if self.comparison is not None and self.comparison.auditor.sessions:
+        if self.comparison.auditor.sessions:
             from app.services.agent_audit import REVIEW_RESERVE_SECONDS
             left -= REVIEW_RESERVE_SECONDS
         return left - self._answer_reserve()
 
     def _turn_limit(self):
         """Soft per-turn limit before the next orchestrator step, if reached."""
-        policy = self.policy
-        if not policy.account_budget_only:
-            return None
         seconds, steps = self._turn_seconds(), self._turn_steps()
-        if seconds and (self._turn_elapsed() >= seconds or self.answer_time_left() <= 0):
+        if self._turn_elapsed() >= seconds or self.answer_time_left() <= 0:
             # Also when the answer at the chosen reasoning level would no
             # longer fit before the hard stop (TURN_WRAP_UP_SECONDS is less
             # than a "max" answer and its review need).
             return TURN_TIME_LIMIT
-        if steps and self.routing_steps >= steps:
+        if self.routing_steps >= steps:
             return TURN_STEP_LIMIT
         return self._long_run_limit() if self._long_run() else None
 
@@ -1012,15 +891,15 @@ class DelegationLoop(AgentLoop):
         limits only once LIMITS_SHOWN_FROM of one is used. New content at
         the end only: the cached prefix stays. A fact, never a rule
         (docs/agent-mode.md)."""
-        if self.vm_tools is None or not self.policy.account_budget_only:
+        if self.vm_tools is None:
             return
         steps, seconds = self._turn_steps(), self._turn_seconds()
         elapsed = max(0.0, self._turn_elapsed())
         step = f"step {self.routing_steps}"
-        if steps and self.routing_steps >= steps * LIMITS_SHOWN_FROM:
+        if self.routing_steps >= steps * LIMITS_SHOWN_FROM:
             step += f" of at most {steps}"
         line = f"{PROGRESS_OPEN} {step}; the user has been waiting {_waited(elapsed)} for your answer"
-        if seconds and elapsed >= seconds * LIMITS_SHOWN_FROM:
+        if elapsed >= seconds * LIMITS_SHOWN_FROM:
             line += f", of at most {seconds // 60} minutes for this message"
         self.messages.append({"role": "user", "content": line + ".]"})
 
@@ -1044,8 +923,7 @@ class DelegationLoop(AgentLoop):
         self.costs.rewritten(AGENT_SESSION)
         logging.info("Agent long run compacted results=%s chars_before=%s chars_after=%s",
                      len(cut.replacements), cut.before, cut.after)
-        if self.work_log is not None:
-            self.work_log.app("compacted", cut.summary())
+        self.work_log.app("compacted", cut.summary())
 
     def own_messages(self):
         """The run's own messages since this message's question, also those a
@@ -1056,10 +934,8 @@ class DelegationLoop(AgentLoop):
     def _summary_due(self):
         """"history" while the chat's history waits for its summary (first
         step only), "run" once the run's own steps fill the next request
-        (agent_compaction.run_summary_due), else None. Only in account mode
-        with comparison tools (every chat run): there a step's text never
-        streams as the answer."""
-        if not (self.merged and self.policy.account_budget_only) or self.mock_answer is not None:
+        (agent_compaction.run_summary_due), else None."""
+        if self.mock_answer is not None:
             return None
         if self.history_summary is not None:
             return "history"
@@ -1095,8 +971,7 @@ class DelegationLoop(AgentLoop):
         step = f"completion:{index}"
         yield self.activity({"step_id": step, "id": "summary", "kind": "progress",
                              "text": SUMMARY_TEXTS[kind]})
-        if self.work_log is not None:
-            self.work_log.app("summary", {"kind": kind, **({"turns": plan["turns"]} if plan else {})}, step=step)
+        self.work_log.app("summary", {"kind": kind, **({"turns": plan["turns"]} if plan else {})}, step=step)
         try:
             value = yield from self._answer_attempt(self._routing_model(), request, index, steps,
                                                     registry=self.registry, summary=kind, **args)
@@ -1129,10 +1004,9 @@ class DelegationLoop(AgentLoop):
             except Exception as exc:
                 # This message goes on with it; the next one summarizes again.
                 logging.warning("Agent history summary not saved category=%s", safe_exception(exc))
-            if self.work_log is not None:
-                # The summary step logged only what it replaced: the summary,
-                # the kept messages and the question come next.
-                self.work_log.rewound("agent", 1)
+            # The summary step logged only what it replaced: the summary,
+            # the kept messages and the question come next.
+            self.work_log.rewound("agent", 1)
         else:
             cut = agent_compaction.run_tail(self.messages, self.turn_start, asked)
             replaced = self.messages[self.turn_start:cut]
@@ -1148,15 +1022,13 @@ class DelegationLoop(AgentLoop):
                                                *tail]
             self.run_summaries += 1
             self.compacted_to = None
-            if self.work_log is not None:
-                # The summary comes next; the user's messages and the kept step
-                # are in the log already, a message the user sent meanwhile not yet.
-                self.work_log.rewound("agent", self.turn_start, seen=[*notes, *logged])
+            # The summary comes next; the user's messages and the kept step
+            # are in the log already, a message the user sent meanwhile not yet.
+            self.work_log.rewound("agent", self.turn_start, seen=[*notes, *logged])
         self.costs.rewritten(AGENT_SESSION)
         after = agent_compaction.own_chars(self.messages, 1)
         logging.info("Agent summary kind=%s chars_before=%s chars_after=%s", kind, before, after)
-        if self.work_log is not None:
-            self.work_log.app("summarized", {"kind": kind, "chars_before": before, "chars_after": after}, step=step)
+        self.work_log.app("summarized", {"kind": kind, "chars_before": before, "chars_after": after}, step=step)
         return next(steps)
 
     def _summary_failed(self, kind, plan):
@@ -1185,9 +1057,9 @@ class DelegationLoop(AgentLoop):
         ``turn_identical_calls`` run normally, the next identical one is
         refused with a tool error, and one more ends the turn.
         """
-        limit = self.policy.turn_identical_calls if self.policy.account_budget_only else None
-        if not limit or (call.get("function") or {}).get("name") in REPEATABLE_TOOLS:
+        if (call.get("function") or {}).get("name") in REPEATABLE_TOOLS:
             return None
+        limit = self.policy.turn_identical_calls
         key = self._call_key(call)
         if key is None:
             return None  # Invalid JSON is the invalid-tool guard's case.
@@ -1229,8 +1101,7 @@ class DelegationLoop(AgentLoop):
 
         ``wait=False``: hand it over and go on; the journal saves it in this
         session's order and sends its event then. A caller that needs the
-        saved event (a new session before its receipt, a worker's message for
-        the orchestrator's mailbox) waits. ``progress``: a live reasoning
+        saved event (a new session before its receipt) waits. ``progress``: a live reasoning
         line, replaced by a newer one while it waits."""
         patch = dict(patch or {})
         if worker.state not in {"completed", "failed", "stopped"}:
@@ -1241,15 +1112,7 @@ class DelegationLoop(AgentLoop):
         if not wait:
             self.journal.submit(worker, patch, message, wait=False, progress=progress)
             return None
-        event = self.journal.submit(worker, patch, message, wait=True)
-        if sender == worker.id and message and getattr(worker, "kind", "worker") == "worker":
-            with self.condition:
-                if kind == "result":
-                    worker.result = {key: message[key] for key in ("text", "sources", "result_truncated") if key in message}
-                    worker.reviewed_evidence = None
-                self.mailbox.append({**message, "agent_id": worker.id, "message_id": event["id"], "seq": event["seq"]})
-                self.condition.notify_all()
-        return event
+        return self.journal.submit(worker, patch, message, wait=True)
 
     def _journal_write(self, jobs):
         """Saves journal jobs of different sessions in one transaction (on
@@ -1344,115 +1207,9 @@ class DelegationLoop(AgentLoop):
                                         "usage": aggregate_usage(worker.usages), **patch}, wait=False)
             self.condition.notify_all()
 
-    def _worker(self, agent_id):
-        worker = self.workers.get(agent_id)
-        if worker is None:
-            raise ValueError("Unknown agent in this run")
-        return worker
-
-    def start_agent(self, args, *, cancellation):
-        self._check(cancellation)
-        with self.condition:
-            active = sum(not w.reviewed and w.state not in {"failed", "stopped"} for w in self.workers.values())
-            if (active if self.policy.account_budget_only else len(self.workers)) >= self.policy.max_agents:
-                raise ValueError("Agent limit reached; use an existing session or finish the work yourself.")
-            if args.model_id not in self.models:
-                raise ValueError("Model has no verified worker tool protocol. Select an offered worker model.")
-            assignment = args.model_dump(exclude={"model_id", "title"})
-            if args.file_ids and not self.file_context:
-                raise ValueError("Files are not available")
-            if self.file_context:
-                for fid in args.file_ids:
-                    self.file_context.files.get(self.uid, self.chat_id, fid)
-            encoded = json.dumps(assignment, ensure_ascii=False)
-            if len(encoded) > self.policy.context_chars:
-                raise ValueError("Assignment exceeds the configured context limit")
-            worker = Worker(uuid4().hex, self.models[args.model_id], [
-                {"role": "system", "content": "You are a research worker inside consens.io, a multi-model question-answering app. "
-                    "Complete your assigned supporting task for its Consensus workflow.\n" + self.config["worker_prompt"]},
-                {"role": "user", "content": encoded}])
-            self._publish(worker, patch={"title": args.title, "assignment": assignment, "task_id": uuid4().hex,
-                "model": worker.model.settings(), "status": "waiting", "duration_ms": 0, "usage": None,
-                "created_at": datetime.now(timezone.utc).isoformat()})
-            worker.file_ids = args.file_ids
-            self.workers[worker.id] = worker
-            worker.inbox.append(None)  # Initial assignment is already in the conversation.
-            worker.thread = threading.Thread(target=self._work, args=(worker,), name="agent-worker", daemon=True)
-            worker.thread.start()
-            return {"agent_id": worker.id, "status": "waiting"}
-
-    def send_agent(self, args, *, cancellation):
-        self._check(cancellation)
-        if len(args.text) > self.policy.message_chars:
-            raise ValueError("Message exceeds the configured limit")
-        with self.condition:
-            worker = self._worker(args.agent_id)
-            if worker.state in {"failed", "stopped"} or worker.cancellation.cancelled:
-                raise ValueError("This worker stopped; handle the task yourself or start a replacement.")
-            self._publish(worker, text=args.text, kind=args.kind)
-            worker.inbox.append(args.text)
-            worker.reviewed = False
-            worker.reviewed_evidence = None
-            if worker.state in {"completed", "review", "question", "waiting"}:
-                self._state(worker, "rework" if args.kind == "rework" else "waiting")
-            self.condition.notify_all()
-            return {"agent_id": worker.id, "delivery": "next_model_boundary"}
-
-    def stop_agent(self, args, *, cancellation):
-        self._check(cancellation)
-        worker = self._worker(args.agent_id)
-        worker.cancellation.cancel()
-        with self.condition:
-            self.condition.notify_all()
-        return {"agent_id": worker.id, "status": "stopping", "next": "Verify a fallback with review_agent."}
-
-    def review_agent(self, args, *, cancellation):
-        self._check(cancellation)
-        with self.condition:
-            worker = self._worker(args.agent_id)
-            if worker.state not in {"review", "failed", "stopped", "completed"} or worker.inbox:
-                raise ValueError("Wait for the current result before reviewing it.")
-            self._publish(worker, text=args.check, kind="review")
-            worker.reviewed = args.accepted or args.use_fallback
-            if worker.reviewed:
-                replacement = args.use_fallback or worker.state in {"failed", "stopped"} or worker.result is None
-                worker.reviewed_evidence = ({"text": args.check, "sources": [], "replacement": True}
-                    if replacement else {**worker.result, "replacement": False})
-            else:
-                worker.reviewed_evidence = None
-            if worker.reviewed and worker.state == "review":
-                self._state(worker, "completed", review_outcome="fallback" if args.use_fallback else "accepted",
-                            ended_at=datetime.now(timezone.utc).isoformat())
-            return {"agent_id": worker.id, "accepted": args.accepted, "fallback_verified": args.use_fallback,
-                    "next": "Request targeted rework, or verify your own replacement with use_fallback=true." if not worker.reviewed else "verified"}
-
-    def _mail(self):
-        with self.condition:
-            messages = list(self.mailbox)
-            self.mailbox.clear()
-            return messages
-
-    def wait_agents(self, args, *, cancellation):
-        until = time.monotonic() + args.seconds
-        with self.condition:
-            while not self.mailbox and any(w.state in {"working", "waiting", "rework"} for w in self.workers.values()):
-                self._check(cancellation)
-                left = until - time.monotonic()
-                if left <= 0:
-                    break
-                self.condition.wait(min(.2, left))
-            return {"messages": self._mail(), "agents": self._summaries()}
-
-    def _summaries(self):
-        return [{"agent_id": w.id, "status": w.state, "reviewed": w.reviewed} for w in self.workers.values()]
-
-    def _workers_ready(self):
-        with self.condition:
-            return all(w.reviewed and not w.inbox for w in self.workers.values())
-
     def _paid_comparison(self):
         """Whether a comparison of this message holds paid answers."""
-        return bool(self.comparison and any(c.get("answers") for c in self.comparison.comparisons))
+        return any(c.get("answers") for c in self.comparison.comparisons)
 
     def _paid_audit(self):
         """Whether the agent has a paid step in this message that reviewers
@@ -1460,34 +1217,23 @@ class DelegationLoop(AgentLoop):
         after paid comparisons (spec A-R2). Also where the user's setting
         has no reviewers (``unreviewed``, since 2026-11-01): until then every
         turn had them, and a refusal must not throw the paid research away."""
-        auditor = self.comparison.auditor if self.comparison is not None else None
-        return bool(auditor is not None and (auditor.sessions or auditor.unreviewed)
+        auditor = self.comparison.auditor
+        return bool((auditor.sessions or auditor.unreviewed)
                     and any(message.get("role") == "assistant" for message in self.own_messages()))
 
     def _final_review(self, worker):
         """Whether ``worker`` is a reviewer at its final round (the answer is
         fixed): its calls may overdraw the allowance (spec A-R2)."""
-        auditor = self.comparison.auditor if self.comparison is not None else None
-        return getattr(worker, "kind", None) == "audit" and auditor is not None and auditor.final_answer is not None
+        return getattr(worker, "kind", None) == "audit" and self.comparison.auditor.final_answer is not None
 
     def _closing_index(self, exc):
         """The free step index of a routing step the allowance refused, when
         the turn closes with its answer instead (_merged_wrap_up, which may
         overdraw after paid work), else None: the refusal ends it."""
         step = getattr(exc, "unclaimed_step", None)
-        if not (step and self.merged and self.policy.account_budget_only
-                and (self._paid_comparison() or self._paid_audit()) and self._can_wrap_up()):
+        if not (step and (self._paid_comparison() or self._paid_audit())):
             return None
         return int(step.split(":")[1])
-
-    def _report(self, worker, args, *, cancellation):
-        self._check(cancellation)
-        if len(args.text) > self.policy.message_chars:
-            raise ValueError("Report exceeds the configured message limit")
-        self._publish(worker, text=args.text, kind=args.kind, sender=worker.id, recipient="orchestrator")
-        if args.kind in {"question", "blocker"}:
-            self._state(worker, "question")
-        return {"delivered": True, "wait_for_reply": args.kind in {"question", "blocker"}}
 
     @staticmethod
     def _log_rejected_call(call, exc):
@@ -1501,12 +1247,6 @@ class DelegationLoop(AgentLoop):
                   if isinstance(cause, ValidationError) else type(cause or exc).__name__)
         logging.warning("Agent tool call rejected tool=%s problem=%s argument_chars=%s",
                         name or "-", fields[:300], len(raw) if isinstance(raw, str) else type(raw).__name__)
-
-    def _execute(self, registry, value, cancellation, call=None):
-        call = call or value.tool_calls[0]
-        message, entry = self._run_call(registry, value, cancellation, call)
-        self._log_call(entry)
-        return message
 
     def _log_call(self, entry):
         """A call's work log entry, as _run_call returned it (None: none)."""
@@ -1523,9 +1263,6 @@ class DelegationLoop(AgentLoop):
             if identity in self.seen_calls:
                 raise ValueError("Duplicate tool call")
             self.seen_calls.add(identity)
-            self.tools_used += 1
-            if not self.policy.account_budget_only and self.tools_used > self.policy.max_tools:
-                raise AnalysisBudgetExceeded("Shared tool limit reached")
         tool = args = result = None
         status = "failed"
         reason = None
@@ -1663,7 +1400,7 @@ class DelegationLoop(AgentLoop):
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
               search_rounds=1, retry_rate_limit=False, retry_passing=False, retry_empty=False, check_cooldown=True,
-              server_tools=(), completion=None, answer_candidate=False, hold=False,
+              server_tools=(), completion=None, answer_candidate=False,
               allow_tools=True, closing=False, tool_choice="auto", summary=None):
         """One claimed, metered model call.
 
@@ -1711,22 +1448,12 @@ class DelegationLoop(AgentLoop):
             searches_enabled = False
         else:
             note = ""
-        # With comparison tools a step's text is published only as an answer
-        # candidate (_candidate_delta, _show_answer); a delegation-only run
-        # streams its text.
-        publish_text = not worker and not self.comparison
-        stream_answer = answer_candidate and not worker and not hold
-        if not self.policy.account_budget_only and len(json.dumps(messages, ensure_ascii=False)) > self.policy.context_chars:
-            raise AnalysisBudgetExceeded("Agent session context limit reached")
+        # A step's text is published only as an answer candidate
+        # (_candidate_delta, _show_answer).
+        stream_answer = answer_candidate and not worker
         if check_cooldown:
             self.cooldowns.check(model, self.api_key)
-        with self.condition:
-            if not self.policy.account_budget_only and worker and self.costs.calls >= self.policy.max_calls - 2:
-                raise AnalysisBudgetExceeded("Remaining calls are reserved for the orchestrator")
-            # A provider overrun leaves search_remaining negative (see below).
-            searches = (search_rounds if self.policy.account_budget_only else max(0, min(search_rounds, self.search_remaining))) if searches_enabled else 0
-            if not self.policy.account_budget_only:
-                self.search_remaining -= searches
+        searches = search_rounds if searches_enabled else 0
         if self.file_context and summary != "history":
             ids = getattr(worker, "file_ids", []) if worker else self.file_context.selection()
             # The main model's file block follows this message's question, not
@@ -1745,16 +1472,7 @@ class DelegationLoop(AgentLoop):
         tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
         session, kind = self._meter_keys(worker)
         reservation = None
-        try:
-            if self.policy.account_budget_only:
-                model = self.costs.fit(model, messages, tools)
-            else:
-                reservation = self.costs.reserve(model, messages, tools, native_searches=searches)
-        except Exception:
-            if not self.policy.account_budget_only:
-                with self.condition:
-                    self.search_remaining += searches
-            raise
+        model = self.costs.fit(model, messages, tools)
         claimed = False
         provider_attempted = False
         # What the work log says of the step, where it differs from its settlement.
@@ -1769,8 +1487,7 @@ class DelegationLoop(AgentLoop):
             # The agent's own steps ask for several calls, in every request
             # of the message alike: Anthropic's tool_choice carries the flag,
             # and a change of it rewrites the cached messages. A call past
-            # the limit gets its result. Workers keep one call a step: their
-            # only tool reports to the orchestrator.
+            # the limit gets its result.
             value.parallel_tool_calls, value.keep_over_limit = True, True
         # A comparison answer's line is quoted live in the chat while the main
         # model waits (agent-activity.js highlight): it keeps updating, paced,
@@ -1787,14 +1504,9 @@ class DelegationLoop(AgentLoop):
         halt = ProviderCancellation() if worker is None else None
         status = "failed"
         try:
-            claim_policy = {**self.policy.snapshot(), "worker_models": [m.snapshot() for m in self.models.values()]}
             try:
-                if self.policy.account_budget_only:
-                    reservation, claimed = yield from self._admit(model, messages, step, tools, cancellation, searches,
-                                                                  claim_policy, worker, closing=closing)
-                else:
-                    claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, model, step=step,
-                        run_token=self.run_token, policy=claim_policy, reservation=reservation)
+                reservation, claimed = yield from self._admit(model, messages, step, tools, cancellation, searches,
+                                                              self.policy.snapshot(), worker, closing=closing)
             except AgentTokenBudgetExceeded as exc:
                 # Refused before its claim: the step stays free for the
                 # closing step (_closing_index).
@@ -1810,8 +1522,7 @@ class DelegationLoop(AgentLoop):
             if not worker:
                 if step == "completion:0":
                     yield {"type": "started", "chat_id": self.chat_id, "turn_id": self.turn_id, "delegation": True}
-                yield self.status(step, "started", status="working", settings=model.settings(),
-                                  clear_response=step != "completion:0" and not self.comparison)
+                yield self.status(step, "started", status="working", settings=model.settings(), clear_response=False)
             log_actor = self._log_actor(step, worker)
             if log_actor:
                 # Exactly what this request carries, as far as not yet logged:
@@ -1820,8 +1531,6 @@ class DelegationLoop(AgentLoop):
                                       own_from=self.turn_start if worker is None else 0)
             if self.mock_answer is not None:
                 value.text, value.finish_reason = self.mock_answer, "stop"
-                if publish_text:
-                    yield {"type": "delta", "text": value.text}
             else:
                 self._check(cancellation)
                 provider_attempted = True
@@ -1851,7 +1560,7 @@ class DelegationLoop(AgentLoop):
                                 # Chat progress is explicitly written for the user in
                                 # tool arguments. Provider reasoning remains continuation
                                 # data, never a substitute for a status update...
-                                if self.comparison and event["kind"] == "reasoning":
+                                if event["kind"] == "reasoning":
                                     # ...except in a step that may write the answer:
                                     # minutes of silent thinking look like a stalled
                                     # run. One updated line: the newest verbatim excerpt.
@@ -1864,14 +1573,14 @@ class DelegationLoop(AgentLoop):
                                 event = self.activity(event)
                             if event and event["type"] == "activity" and event.get("id") == f"{step}/tool_call":
                                 yield event
-                                if stream_answer and self.merged:
+                                if stream_answer:
                                     yield from self._move_preamble(value)
                                 continue
                             if event and event["type"] == "delta" and stream_answer:
                                 event = self._candidate_delta(value)
                                 if event is None:
                                     continue
-                            elif event and event["type"] == "delta" and not publish_text:
+                            elif event and event["type"] == "delta":
                                 # Neither planning nor follow-up checks may replace
                                 # or append to the dedicated user-facing answer.
                                 continue
@@ -1934,8 +1643,7 @@ class DelegationLoop(AgentLoop):
                 # the next step (a failed step would block that claim).
                 value.rate_limited = exc
                 status = "succeeded"
-            elif (retry_passing and claimed and not value.published and not (publish_text and value.text)
-                  and _passing_failure(exc)):
+            elif retry_passing and claimed and not value.published and _passing_failure(exc):
                 # Broke off before the user saw a word of it: settled with what
                 # it used (usage, or its bounded estimate) so the retry can
                 # claim the next step; the work log keeps it as failed.
@@ -1946,13 +1654,9 @@ class DelegationLoop(AgentLoop):
         finally:
             if worker is not None:
                 worker.partial_text = value.text or ""
-            if publish_text and value.text:
-                # Retain streamed text when a provider fails mid-answer. Reviewed
-                # candidates are checkpointed separately, with their exact hash.
-                self.completion.text = value.text
-            elif stream_answer and value.published and not value._tool_parts:
-                # The same for a step that was streaming its answer: what the
-                # user saw, not text held back after its own search results.
+            if stream_answer and value.published and not value._tool_parts:
+                # Retain what the user saw of an answer when a provider fails
+                # mid-answer, not text held back after its own search results.
                 self.completion.text = value.published
             if claimed:
                 if not provider_attempted and self.mock_answer is None:
@@ -1978,21 +1682,10 @@ class DelegationLoop(AgentLoop):
             elif reservation is not None:
                 self.costs.release(reservation)
             count = (value.usage or {}).get("web_search_requests")
-            with self.condition:
-                if self.policy.account_budget_only:
-                    pass
-                elif not claimed:
-                    self.search_remaining += searches
-                elif type(count) is int and count >= 0:
-                    # The real count, also beyond the reserved rounds: OpenRouter
-                    # does not enforce the limit for every model. The overrun is
-                    # debt the next reservations see.
-                    self.search_remaining += searches - count
         # A reviewer's round runs through this step too; what it found is no
         # search of the agent's, which read_source may open.
         if value.sources and getattr(worker, "kind", None) != "audit":
             self.search_sources.extend(value.sources)
-        self.costs.check()
         if not worker:
             yield self.activity({"step_id": "run", "id": "usage", "kind": "usage", "usage": self.costs.total()})
             if value.sources or (type(count) is int and count > 0):
@@ -2028,7 +1721,7 @@ class DelegationLoop(AgentLoop):
         for attempt in range(3):
             try:
                 self.store.settle(self.uid, self.chat_id, self.turn_id, completion=value,
-                                  status=status, step=step, final=False)
+                                  status=status, step=step)
                 with self.condition:
                     self.unsettled.pop(step, None)
                     self.condition.notify_all()
@@ -2043,7 +1736,7 @@ class DelegationLoop(AgentLoop):
 
     def worker_completion(self, worker, *, one_off=False, review_round=None):
         """A fresh completion for one request of ``worker``, on the worker's
-        own OpenRouter session: its next step (a delegated session) or its
+        own OpenRouter session: its next round (a reviewer) or its
         retry (a comparison answer that ended empty) re-sends the prefix it
         cached and finds it on the same endpoint; for a single request the
         session changes nothing. ``one_off``: no later request continues
@@ -2057,83 +1750,17 @@ class DelegationLoop(AgentLoop):
         value.review_round = review_round
         return value
 
-    def _work(self, worker):
-        unregister = self.cancellation.register(worker.cancellation)
-        registry = ToolRegistry([ReadOnlyTool("report_to_orchestrator", "Report a finding, blocker or question to the orchestrator.",
-            Report, lambda args, cancellation: self._report(worker, args, cancellation=cancellation))], argument_limit=10_000)
-        try:
-            with bind_provider_cancellation(worker.cancellation), bind_analysis_budget(self.budget):
-                ready = False
-                while not self.closed.is_set():
-                    with self.condition:
-                        while not ready and not worker.inbox:
-                            self._check(worker.cancellation)
-                            self.condition.wait(.2)
-                        self._check(worker.cancellation)
-                        if worker.state in {"review", "completed", "question"}:
-                            self._state(worker, "waiting")
-                        while worker.inbox:
-                            text = worker.inbox.popleft()
-                            if text is not None:
-                                worker.messages.append({"role": "user", "content": "Orchestrator message:\n" + text})
-                    if not self.policy.account_budget_only and worker.calls >= self.policy.worker_calls:
-                        raise AnalysisBudgetExceeded("Worker call limit reached")
-                    while not self.slots.acquire(timeout=.2):
-                        self._check(worker.cancellation)
-                    try:
-                        self._state(worker, "working")
-                        generator = self._step(worker.model, worker.messages, f"agent:{worker.id}:{worker.calls}",
-                                               registry, worker.cancellation, worker=worker,
-                                               completion=self.worker_completion(worker))
-                        try:
-                            while True:
-                                next(generator)
-                        except StopIteration as done:
-                            value = done.value
-                        worker.calls += 1
-                    finally:
-                        self.slots.release()
-                    worker.messages.append(value.assistant_message())
-                    if value.tool_calls:
-                        results = [self._execute(registry, value, worker.cancellation, call) for call in value.tool_calls]
-                        worker.messages.extend(results)
-                        ready = not any(json.loads(result["content"]).get("wait_for_reply", False) for result in results)
-                    else:
-                        # A result and a concurrently queued clarification stay ordered.
-                        with self.condition:
-                            worker.reviewed = False
-                            self._state(worker, "review", sources=value.sources, finish_reason=value.finish_reason)
-                            self._publish(worker, text=value.text[:self.policy.result_chars], kind="result",
-                                          sender=worker.id, recipient="orchestrator",
-                                          patch={"result_truncated": len(value.text) > self.policy.result_chars,
-                                                 "sources": value.sources, "finish_reason": value.finish_reason})
-                        ready = False
-        except (ProviderCancelled, GeneratorExit):
-            if worker.state != "completed":
-                self._terminal(worker, "stopped", "Worker stopped.")
-        except Exception as exc:
-            failure = agent_failure(exc)
-            self._terminal(worker, "failed", failure["error"], failure)
-        finally:
-            unregister()
-            worker.cancellation.cancel()
-            if worker.state not in {"completed", "failed", "stopped"}:
-                self._terminal(worker, "stopped", "Run ended.")
-
     def _terminal(self, worker, state, text, failure=None):
         """Save how a worker (a comparison answer, a page read) ended.
 
         A short database outage retries once (_journal_write) and otherwise
         leaves only this record unsaved: one model's failure used to stop the
-        whole turn when writing it hit a transient error (audit A12). Only a
-        delegated worker's end waits for the database: it is a message for
-        the orchestrator's mailbox."""
-        mailbox = getattr(worker, "kind", "worker") == "worker"
+        whole turn when writing it hit a transient error (audit A12)."""
         try:
             with self.condition:
                 self._state(worker, state, ended_at=datetime.now(timezone.utc).isoformat(), failure=failure)
                 self._publish(worker, text=text[:self.policy.message_chars], kind="failure", sender=worker.id,
-                              recipient="orchestrator", wait=mailbox)
+                              recipient="orchestrator", wait=False)
         except Exception as exc:
             with self.condition:
                 worker.state = state
@@ -2322,28 +1949,27 @@ class DelegationLoop(AgentLoop):
                                      if hold.get("ask") else {}),
                                   **({"choices": hold["choices"]} if hold.get("choices") else {}),
                                   "halt": hold["kind"], "state": "waiting"}), f"hold-{hold['id']}")
-        if self.work_log is not None:
-            asked = details.get("ask")
-            domain = details.get("domain")
-            # A reviewer's halt says neither who nor why: every reviewer
-            # reads the log, and none sees what another found.
-            self.work_log.app("paused", (
-                "The user has the browser: the agent waits until they hand it back." if asked == "takeover" else
-                f"The agent asks the user to act in the browser: {details.get('request', '')}" if asked == "browser"
-                else f"The agent asks the user for the key {details.get('secret', '')}: {details.get('request', '')}"
-                if asked == "secret"
-                else f"The agent asks the user to choose: {details.get('request', '')} "
-                     f"({' / '.join(details.get('choices') or [])})" if asked == "choice"
-                else f"The agent asks the user before a step: {details.get('request', '')}" if asked else
-                f"The agent asks to reach {domain}" + (f" (entry {entry})" if entry else "") + ": the user decides."
-                if domain else "The work was paused for the user's decision."),
-                step=step or self._entry_step(entry))
+        asked = details.get("ask")
+        domain = details.get("domain")
+        # A reviewer's halt says neither who nor why: every reviewer
+        # reads the log, and none sees what another found.
+        self.work_log.app("paused", (
+            "The user has the browser: the agent waits until they hand it back." if asked == "takeover" else
+            f"The agent asks the user to act in the browser: {details.get('request', '')}" if asked == "browser"
+            else f"The agent asks the user for the key {details.get('secret', '')}: {details.get('request', '')}"
+            if asked == "secret"
+            else f"The agent asks the user to choose: {details.get('request', '')} "
+                 f"({' / '.join(details.get('choices') or [])})" if asked == "choice"
+            else f"The agent asks the user before a step: {details.get('request', '')}" if asked else
+            f"The agent asks to reach {domain}" + (f" (entry {entry})" if entry else "") + ": the user decides."
+            if domain else "The work was paused for the user's decision."),
+            step=step or self._entry_step(entry))
         return True
 
     def _entry_step(self, seq):
         """The step of work log entry ``seq`` (a reviewer's halt names its
         entry), or None."""
-        if self.work_log is None or not isinstance(seq, int) or seq < 1:
+        if not isinstance(seq, int) or seq < 1:
             return None
         try:
             found = self.work_log.entries_after(seq - 1)
@@ -2426,7 +2052,7 @@ class DelegationLoop(AgentLoop):
         step in their first round. Not for ask_user alone: a question to the
         user does not work in the workspace. They read the log from its
         start: the message's work before is theirs as well."""
-        if self.reviewers != "workspace" or self.work_log is None or self.comparison is None:
+        if self.reviewers != "workspace":
             return
         auditor = self.comparison.auditor
         if auditor.sessions:
@@ -2611,20 +2237,19 @@ class DelegationLoop(AgentLoop):
             self.ask_decision = decision
         self._end_hold(hold, decision, waited, picked)
         asked = hold.get("ask")
-        if self.work_log is not None:
-            said = {"continue": "The user let the work go on.",
-                    "deny": "The user did not allow it.",
-                    "steer": "The user let the work go on with a message.",
-                    "stop": "The user stopped the work.",
-                    "timeout": "No decision in 30 minutes: the response stopped.",
-                    "handed_back": "The user handed the browser back.",
-                    "choose": f"The user chose: {picked}"}
-            if asked:
-                said.update(timeout="No answer in 30 minutes: the agent goes on without one.",
-                            **({"continue": "The user allowed it."} if asked == "confirm" else
-                               {"continue": "The user saved the key in the workspace.",
-                                "deny": "The user did not give the key."} if asked == "secret" else {}))
-            self.work_log.app("decision", said[decision])
+        said = {"continue": "The user let the work go on.",
+                "deny": "The user did not allow it.",
+                "steer": "The user let the work go on with a message.",
+                "stop": "The user stopped the work.",
+                "timeout": "No decision in 30 minutes: the response stopped.",
+                "handed_back": "The user handed the browser back.",
+                "choose": f"The user chose: {picked}"}
+        if asked:
+            said.update(timeout="No answer in 30 minutes: the agent goes on without one.",
+                        **({"continue": "The user allowed it."} if asked == "confirm" else
+                           {"continue": "The user saved the key in the workspace.",
+                            "deny": "The user did not give the key."} if asked == "secret" else {}))
+        self.work_log.app("decision", said[decision])
         yield from self._events()
         with self.condition:
             queued, self.queued_hold = self.queued_hold, None
@@ -2671,21 +2296,18 @@ class DelegationLoop(AgentLoop):
         """The chat model for its next step, at the lighter level once a
         routing step of this turn reasoned through its allowance. Its output
         limit: reasoning headroom on top of the text allowance
-        (routing_output_limit); with comparison tools, where every step may
-        write the answer, the answer's (answer_output_limit). The same for
+        (routing_output_limit), at least the answer's (answer_output_limit):
+        every step may write the answer. The same for
         every step of the message and every account."""
         model = self.routing_lighter or self.model
-        limit = routing_output_limit(model)
-        if self.merged:
-            limit = max(limit, answer_output_limit(model))
-        return replace(model, max_output_tokens=limit)
+        return replace(model, max_output_tokens=max(routing_output_limit(model), answer_output_limit(model)))
 
     def _search_rounds(self):
         """Search rounds of every step of the agent in this message: the same
         for every account and every step, whatever the allowance (a changed
         search tool rewrites the provider's cached prefix)."""
         from app.services.agent_audit import AGENT_SEARCH_ROUNDS
-        return AGENT_SEARCH_ROUNDS if self.merged else 1
+        return AGENT_SEARCH_ROUNDS
 
     def _step_searches(self):
         """The search rounds a step of the agent sends: none with Google data."""
@@ -2746,10 +2368,9 @@ class DelegationLoop(AgentLoop):
             if cause is None:
                 return value
             delay = self._passing_delay() if passing else self._rate_limit_delay(getattr(cause, "retry_after", None))
-            index = next(steps, None) if delay is not None else None
-            if index is None:
+            if delay is None:
                 raise cause
-            step = f"completion:{index}"
+            step = f"completion:{next(steps)}"
         if passing:
             logging.warning("Agent step broke off, retrying model=%s category=%s detail=%s retry_in=%s", model.model,
                             safe_exception(cause), provider_diagnostic(cause), delay)
@@ -2775,9 +2396,7 @@ class DelegationLoop(AgentLoop):
             yield from self._retract(value)
             if (yield from self._hold_wait()) == "steer":
                 self._take_notes(step)
-            index = next(steps, None)
-            if index is None:
-                raise AnalysisBudgetExceeded("Agent orchestration call limit reached")
+            index = next(steps)
             # Past the process gate already (cooldowns.check).
             step, step_args = f"completion:{index}", {**step_args, "check_cooldown": False}
 
@@ -2841,15 +2460,12 @@ class DelegationLoop(AgentLoop):
 
     # --- Merged answer (agent_answer_mode) --------------------------------
     def _orchestrate(self, model, index, steps, search):
-        """One steering step; in a merged turn its text may be the answer."""
+        """One steering step; its text may be the answer."""
         # A step that broke off in passing runs once more in every turn; after
         # paid comparisons a free 429 does too (_answer_attempt).
-        if not self.merged:
-            return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
-                                                    rate_limit=False, **search))
-        args = {**search, "answer_candidate": True, "hold": self._hold_answer()}
         return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
-                                                rate_limit=bool(self.comparison.comparisons), **args))
+                                                rate_limit=bool(self.comparison.comparisons),
+                                                answer_candidate=True, **search))
 
     def _closing_thoughts(self, step, thinking):
         """The step's thinking line once its stream is over, with what it
@@ -2900,8 +2516,7 @@ class DelegationLoop(AgentLoop):
         streamed) stands in the timeline as a progress note, lines kept."""
         published = getattr(value, "published", "")
         if published:
-            if self.work_log is not None:
-                self.work_log.app("retract", published, step=value.step_id)
+            self.work_log.app("retract", published, step=value.step_id)
             self.completion.text = ""
             value.published = ""
             yield self.status(value.step_id, "retract", status="working", clear_response=True)
@@ -2975,23 +2590,16 @@ class DelegationLoop(AgentLoop):
                 return True
         return False
 
-    def _hold_answer(self):
-        """Whether a step's text must stay hidden while it streams: a text
-        reply now would not be sent (unchecked workers)."""
-        return not self._workers_ready() or bool(self.mailbox)
-
     def _answer_check_follows(self, value):
         """Whether the step that just streamed ``value`` ends the turn with a
         review of exactly its visible text (_finish_merged, _finish_review):
-        a complete answer, shown in full, without tool calls, and nothing
-        left that would take the text back (_workers_ready, mailbox)."""
+        a complete answer, shown in full, without tool calls."""
         comparison = self.comparison
-        return bool(comparison is not None and not comparison.text and not comparison.finalized
+        return bool(not comparison.text and not comparison.finalized
                     and value.text.strip() and getattr(value, "published", "") == value.text
                     and not value._tool_parts and not value.tool_calls
                     and value.finish_reason not in {"length", "max_tokens"}
-                    and not getattr(value, "output_limited", False)
-                    and self._workers_ready() and not self.mailbox)
+                    and not getattr(value, "output_limited", False))
 
     def _finish_merged(self, value):
         """The agent's text is the answer: visible in full, then fixed as a
@@ -3015,10 +2623,9 @@ class DelegationLoop(AgentLoop):
         yield from self._show_answer(value)
         # Saved with the turn also when a check fails afterwards.
         self.completion.text = value.text
-        if self.work_log is not None:
-            from app.services.agent_comparison import answer_hash
-            self.work_log.app("answer_fixed", {"hash": answer_hash(value.text), "chars": len(value.text)},
-                              step=value.step_id)
+        from app.services.agent_comparison import answer_hash
+        self.work_log.app("answer_fixed", {"hash": answer_hash(value.text), "chars": len(value.text)},
+                          step=value.step_id)
         if not comparison.text and not comparison.finalized:
             # The reviewers' final rounds start now, ahead of the saves below.
             comparison.auditor.begin(value.text)
@@ -3038,7 +2645,7 @@ class DelegationLoop(AgentLoop):
         2026-11-01, when a message sent in between waited for the review."""
         # Only while reviewers review: without them (the setting "off", or
         # "workspace" without a workspace step) the run ends right here anyway.
-        if not getattr(getattr(self.comparison, "auditor", None), "sessions", None):
+        if not self.comparison.auditor.sessions:
             return
         self._release_workspace()
         if self._long_run():
@@ -3089,19 +2696,12 @@ class DelegationLoop(AgentLoop):
                 self.messages.append({"role": "tool", "tool_call_id": call["id"], "content": json.dumps(
                     {"error": CALL_AT_LIMIT})})
 
-    def _can_wrap_up(self):
-        """Whether a merged turn may close with its answer: the agent's own
-        research and work carry it, once no worker result is unchecked."""
-        return self._workers_ready()
-
     def _merged_wrap_up(self, reason, steps, value):
-        """A per-turn limit in a merged turn: one last step of the agent
+        """A per-turn limit: one last step of the agent
         writes the answer from what it has. Its request is every step's
         (tools, search and tool choice: it reads their cached prefix, at the
         message's largest request); a call it makes is not run."""
         comparison = self.comparison
-        if not self._can_wrap_up():
-            raise AnalysisBudgetExceeded(reason)
         logging.info("Agent turn limit reached; the agent writes the answer from what it has")
         if not comparison.text:
             self._close_open_calls()
@@ -3111,9 +2711,7 @@ class DelegationLoop(AgentLoop):
             self.messages.append({"role": "user", "content": " ".join(filter(None, (
                 "App rule: this message has reached its limit.", fact,
                 "Write the answer now from what you have, without tool calls.", then)))})
-            index = next(steps, None)
-            if index is None:
-                raise AnalysisBudgetExceeded("Agent orchestration call limit reached before writing the answer")
+            index = next(steps)
             # The level this turn switched to after a thought-only step, if any.
             model = self._routing_model()
             args = {"answer_candidate": True, "allow_tools": False, "closing": True, "searches_enabled": True,
@@ -3121,9 +2719,9 @@ class DelegationLoop(AgentLoop):
             value = yield from self._closing_attempt(model, index, steps, args)
             if _thought_only(value):
                 lighter = lighter_reasoning(model)
-                index = next(steps, None) if lighter else None
-                if index is None:
+                if not lighter:
                     raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
+                index = next(steps)
                 yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",
                                      "text": "The model used its whole output allowance on reasoning before writing. "
                                              "Writing the answer again with lighter reasoning."})
@@ -3157,9 +2755,7 @@ class DelegationLoop(AgentLoop):
         value = yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry, **args)
         if value.text.strip() or not getattr(value, "skipped_tool_parts", 0) or value.tool_calls:
             return value
-        index = next(steps, None)
-        if index is None:
-            return value
+        index = next(steps)
         logging.warning("Agent closing step called tools only; writing again without tools model=%s", model.model)
         return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
                                                 **{**args, "tool_choice": "none"}))
@@ -3185,8 +2781,7 @@ class DelegationLoop(AgentLoop):
         """A per-turn limit: the answer and its review from what the run
         holds, else stop.
 
-        With comparison tools the agent writes the answer from what it has
-        (_merged_wrap_up); a delegation-only run stops.
+        The agent writes the answer from what it has (_merged_wrap_up).
         Which limit it was stays with the turn (``agent_wrap_up``) and in the
         work log (``limit``), written by the app (audit I1): until 2026-10-30
         a wrap-up looked like an answer the agent chose to give."""
@@ -3194,12 +2789,8 @@ class DelegationLoop(AgentLoop):
         self.completion.wrap_up = {"reason": code, "steps": self.routing_steps,
                                    "seconds": round(max(0.0, self._turn_elapsed()), 1)}
         logging.info("Agent turn limit reached reason=%s steps=%s", code, self.routing_steps)
-        if self.work_log is not None:
-            self.work_log.app("limit", {**self.completion.wrap_up, "text": reason})
-        if self.merged:
-            yield from self._merged_wrap_up(reason, steps, value)
-            return
-        raise AnalysisBudgetExceeded(reason)
+        self.work_log.app("limit", {**self.completion.wrap_up, "text": reason})
+        yield from self._merged_wrap_up(reason, steps, value)
 
     def run(self):
         status = "failed"
@@ -3207,19 +2798,18 @@ class DelegationLoop(AgentLoop):
         watcher.start()
         try:
             with bind_analysis_budget(self.budget), bind_provider_cancellation(self.cancellation):
-                if self.work_log is not None:
-                    self._log_start()
-                    # The reviewers follow the log from here on (agent_audit),
-                    # where the user's setting has them from the start.
-                    if self.reviewers == "always":
-                        self.comparison.auditor.follow(self.work_log)
+                self._log_start()
+                # The reviewers follow the log from here on (agent_audit),
+                # where the user's setting has them from the start.
+                if self.reviewers == "always":
+                    self.comparison.auditor.follow(self.work_log)
                 if self.mock_answer is not None and self.answer_conversation:
                     self.memory.mock_turn(self.answer_conversation[-1]["content"])
                     if self.watch_tools:
                         self.watch_tools.mock_turn(self.answer_conversation[-1]["content"])
                     if self.settings_tools:
                         self.settings_tools.mock_turn(self.answer_conversation[-1]["content"])
-                steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
+                steps = count()
                 search_rounds = self._search_rounds()
                 value = None
                 for index in steps:
@@ -3238,9 +2828,6 @@ class DelegationLoop(AgentLoop):
                         status = "succeeded"
                         break
                     self.routing_steps += 1
-                    incoming = self._mail()
-                    if incoming:
-                        self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
                     if self._take_notes(f"completion:{index}"):
                         yield from self._events()
                     # The agent researches the answer itself, in every step,
@@ -3254,13 +2841,12 @@ class DelegationLoop(AgentLoop):
                             # complete tool call (prod: Sonnet "max"). One retry with
                             # lighter reasoning, kept for this turn's later steps.
                             lighter = lighter_reasoning(self.routing_lighter or self.model)
-                            index = next(steps, None) if lighter else None
-                            if index is None:
+                            if not lighter:
                                 raise ModelOutputLimit(TURN_OUTPUT_LIMIT)
-                            if self.merged:
-                                # Text it streamed before a tool call cut in half
-                                # does not stay under the retry's text.
-                                yield from self._retract(value)
+                            index = next(steps)
+                            # Text it streamed before a tool call cut in half
+                            # does not stay under the retry's text.
+                            yield from self._retract(value)
                             logging.warning("Agent routing step reasoned through its allowance model=%s effort=%s retry_effort=%s",
                                             routing.model, routing.reasoning_effort, lighter.reasoning_effort)
                             yield self.activity({"step_id": f"completion:{index}", "id": "retry", "kind": "progress",
@@ -3290,14 +2876,13 @@ class DelegationLoop(AgentLoop):
                     # A step that wrote its answer and then only saved a
                     # memory or prepared a Watch: the text stands as the answer.
                     answered_with_tools = False
-                    if self.merged and value.tool_calls:
+                    if value.tool_calls:
                         # Text that is no answer after all goes back out of view.
                         answered_with_tools = self._answered_with_tools(value)
                         if not answered_with_tools:
                             yield from self._retract(value, note=True)
                     if value.finish_reason in {"length", "max_tokens"}:
-                        if self.merged:
-                            yield from self._keep_cut_answer(value)
+                        yield from self._keep_cut_answer(value)
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     if value.tool_calls:
                         accepted_tool = False
@@ -3411,7 +2996,7 @@ class DelegationLoop(AgentLoop):
                                 accepted_tool |= accepted
                                 browser_failed = browser_failed or (
                                     (call.get("function") or {}).get("name") == "browser" and not accepted)
-                            if self.comparison and self.comparison.finalized:
+                            if self.comparison.finalized:
                                 # Ignore speculative extra calls in the same batch
                                 # once the review has reached an end state.
                                 break
@@ -3444,46 +3029,28 @@ class DelegationLoop(AgentLoop):
                             break
                         self.invalid_tool_rounds = 0 if accepted_tool else self.invalid_tool_rounds + 1
                         if self.invalid_tool_rounds >= 3:
-                            # A merged turn still reaches its reviewed answer
+                            # The turn still reaches its reviewed answer
                             # (_wrap_up), e.g. after three rounds of malformed
-                            # tool calls; a delegation-only run stops.
+                            # tool calls.
                             yield from self._wrap_up(TURN_INVALID_LIMIT, steps, value)
                             status = "succeeded"
                             break
                         # Once the answer is fixed only its review remains, and
                         # the app runs it itself (_finish_review): no further
                         # steering step for it.
-                        if (not (self.comparison and (self.comparison.finalized or self.comparison.text))
-                                and not answered_with_tools):
+                        if not (self.comparison.finalized or self.comparison.text) and not answered_with_tools:
                             continue
-                    if self.comparison and self.comparison.finalized and self._workers_ready():
-                        # All accepted results are already in the synthesis.
-                        # Old mailbox notifications cannot restart a finished run.
-                        self._mail()
-                    if not self._workers_ready() or self.mailbox:
-                        # No unchecked result can silently become the final response.
-                        if self.merged:
-                            yield from self._retract(value)
-                        self.messages.append({"role": "user", "content": "Before finalizing, resolve questions and verify each worker result or your own replacement with review_agent (use_fallback=true for a verified replacement). Preserve the original user's requested output format, without a workflow recap. Current sessions: " + json.dumps(self._summaries())})
-                        continue
                     if self.hold is not None:
                         # A reviewer's halt still open as the answer stands:
                         # it counts only once the user decided, and their
                         # message gets the agent's next step.
                         if (yield from self._hold_wait()) == "steer":
-                            if self.merged:
-                                yield from self._retract(value)
+                            yield from self._retract(value)
                             continue
-                    if self.merged:
-                        # The agent wrote the answer itself (agent_answer_mode).
-                        yield from self._finish_merged(value)
-                    else:
-                        # A delegation-only run: its streamed text is the response.
-                        self.completion.text, self.completion.finish_reason = value.text, value.finish_reason
+                    # The agent wrote the answer itself (agent_answer_mode).
+                    yield from self._finish_merged(value)
                     status = "succeeded"
                     break
-                else:
-                    raise AnalysisBudgetExceeded("Agent orchestration call limit reached")
         except ProviderCancelled:
             if self.watch_error:
                 self.completion.failure = agent_failure(self.watch_error)
@@ -3501,15 +3068,10 @@ class DelegationLoop(AgentLoop):
             raise
         finally:
             self.closed.set()
-            for worker in self.workers.values():
-                worker.cancellation.cancel()
             with self.condition:
                 self.condition.notify_all()
-            for worker in self.workers.values():
-                worker.thread.join()
             watcher.join()
-            if self.comparison:
-                self.comparison.close()
+            self.comparison.close()
             if self.image_tools is not None:
                 # Pictures fetched ahead and never shown stop with the run.
                 self.image_tools.close()
@@ -3547,27 +3109,25 @@ class DelegationLoop(AgentLoop):
                 # instead of starting over ("" without a single call).
                 from app.services.agent_compaction import work_record
                 self.completion.work_record = work_record(self.own_messages(), 0)
-            if self.work_log is not None:
-                # The log's last entry, saved before finish_run: a write after
-                # it finds the turn no longer pending (save_work_log).
-                self.work_log.add("end", content={
-                    "status": status, "finish_reason": self.completion.finish_reason, "answer": self.completion.text,
-                    "failure": getattr(self.completion, "failure", None), "usage": self.completion.usage,
-                    "vm": getattr(self.completion, "vm", None),
-                    # The agent's last plan, to hold against what it did.
-                    "plan": self.plan_tools.items if self.plan_tools is not None and self.plan_tools.items else None})
-                self.work_log.close(timeout=max(0., close_wait))
+            # The log's last entry, saved before finish_run: a write after
+            # it finds the turn no longer pending (save_work_log).
+            self.work_log.add("end", content={
+                "status": status, "finish_reason": self.completion.finish_reason, "answer": self.completion.text,
+                "failure": getattr(self.completion, "failure", None), "usage": self.completion.usage,
+                "vm": getattr(self.completion, "vm", None),
+                # The agent's last plan, to hold against what it did.
+                "plan": self.plan_tools.items if self.plan_tools is not None and self.plan_tools.items else None})
+            self.work_log.close(timeout=max(0., close_wait))
             self.status("run", "finished", status=status, finish_reason=self.completion.finish_reason)
             if self.claimed:
                 self.store.finish_run(self.uid, self.chat_id, self.turn_id, completion=self.completion,
                                       status=status, run_token=self.run_token)
             else:
                 self.store.release_unclaimed(self.uid, self.chat_id, self.turn_id, failure=getattr(self.completion, "failure", None))
-            if self.comparison is not None:
-                # Anonymous daily counters of every chat turn, its use of the
-                # workspace included (I6), saved off this thread.
-                from app.services import agent_audit_metrics
-                agent_audit_metrics.record(self)
+            # Anonymous daily counters of every chat turn, its use of the
+            # workspace included (I6), saved off this thread.
+            from app.services import agent_audit_metrics
+            agent_audit_metrics.record(self)
             # The turn's time under the account lock (A-T5).
             report = getattr(self.store, "report_lock_time", None)
             if callable(report):

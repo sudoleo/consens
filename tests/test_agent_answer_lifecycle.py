@@ -16,6 +16,7 @@ from app.services.agent_comparison import answer_hash
 from app.services.agent_provider_limits import ProviderCooldowns
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancelled
+from app.services.agent_audit import AGENT_SEARCH_ROUNDS
 from test_agent_comparison import Script, make_loop
 from test_agent_loop import packet, transport
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
@@ -57,9 +58,9 @@ def answer_factory(script, *, early_review=False, ending="stop", chunks=CHUNKS, 
             if index == answer_step:
                 script.calls.append((self.step_id, model.model))
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
-                # The agent's own steering step: its model, its tools, no search.
+                # The agent's own steering step: its model, its tools, its search.
                 assert model.selection_id == script.loop.model.selection_id
-                assert tools and kwargs["native_searches"] == 0
+                assert tools and kwargs["native_searches"] == AGENT_SEARCH_ROUNDS
                 assert not final_round(script.loop)
                 # No unfinished assistant tool-call message may enter this step.
                 pending = set()

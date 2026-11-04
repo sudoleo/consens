@@ -298,10 +298,7 @@
   "The answers of the AIs the agent asked": "Die Antworten der KIs, die der Agent gefragt hat",
   "<0><1/>Claude</0> <2>If the 12 years are firm, buying is likely the better deal, but not by much, and not for the reason most people think.</2>": "<0><1/>Claude</0> <2>Wenn die 12 Jahre feststehen, ist Kaufen wahrscheinlich das bessere Geschäft, aber nicht um viel und nicht aus dem Grund, den die meisten vermuten.</2>",
   "<0><1/>DeepSeek</0> <2>If you are not sure you will really stay 12 years, I would keep renting.</2>": "<0><1/>DeepSeek</0> <2>Wenn ihr nicht sicher seid, dass ihr wirklich 12 Jahre bleibt, würde ich weiter mieten.</2>",
-  "Before a risky step": "Vor einem riskanten Schritt",
   "<0>Possible damage:</0> This cancels both contracts, but you asked about the internet contract only. <1>Claude</1>": "<0>Möglicher Schaden:</0> Damit werden beide Verträge gekündigt, du hast aber nur nach dem Internetvertrag gefragt. <1>Claude</1>",
-  "<0>The step that has not run yet</0> Clicks “Cancel both contracts”": "<0>Der Schritt, der noch nicht gelaufen ist</0> Klickt auf „Beide Verträge kündigen“",
-  "The step runs only if you let it. Until then the agent waits, and you can stop the run instead.": "Der Schritt läuft nur, wenn du ihn lässt. Bis dahin wartet der Agent, und du kannst den Lauf stattdessen stoppen.",
   "Open Answers to read what each AI answered when the agent asked, or compare two answers side by side.": "Unter „Antworten“ liest du, was jede KI auf die Frage des Agenten geantwortet hat, oder vergleichst zwei Antworten nebeneinander.",
   "Doubt is marked in place": "Zweifel werden direkt markiert",
   "Where a reviewer finds a passage wrong, doubtful or incomplete, the sentence itself carries the mark, instead of the doubt being smoothed into one confident answer.": "Wo ein Prüfer eine Stelle für falsch, zweifelhaft oder unvollständig hält, trägt der Satz selbst die Markierung, statt dass der Zweifel in einer selbstsicheren Antwort glattgebügelt wird.",
@@ -320,5 +317,8 @@
   "On 314 closed-book MMLU-Pro questions, the consensus ranks first overall, and pulls clear exactly where the models disagree. It tests the consensus engine behind Watches, Topics and the API, not the agent’s answers.": "Bei 314 MMLU-Pro-Fragen ohne Hilfsmittel liegt der Konsens insgesamt auf Platz eins und setzt sich genau dort ab, wo die Modelle uneins sind. Getestet ist die Konsens-Engine hinter Watches, Themen und der API, nicht die Antworten des Agenten.",
   "Highest accuracy overall and on the hard questions. The top of the field is a statistical tie.": "Höchste Genauigkeit insgesamt und bei den schweren Fragen. An der Spitze liegt das Feld statistisch gleichauf.",
   "<0>+32pts</0><1>Lead over the weakest model on questions where the answers split.</1>": "<0>+32 Pkt.</0><1>Vorsprung vor dem schwächsten Modell bei Fragen, bei denen die Antworten auseinandergehen.</1>",
-  "See the full benchmark": "Zum vollständigen Benchmark"
+  "See the full benchmark": "Zum vollständigen Benchmark",
+  "When a step looks risky": "Wenn ein Schritt riskant aussieht",
+  "<0>The agent’s step</0> Clicks “Cancel both contracts”": "<0>Schritt des Agenten</0> Klickt auf „Beide Verträge kündigen“",
+  "The work goes on only once you let it. Until then the agent waits, and you can stop the run instead.": "Die Arbeit geht erst weiter, wenn du sie lässt. Bis dahin wartet der Agent, und du kannst den Lauf stattdessen stoppen."
 }

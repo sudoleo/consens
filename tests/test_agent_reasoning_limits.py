@@ -401,7 +401,6 @@ def test_answer_reserve_follows_the_reasoning_level_and_moves_the_soft_limit(sto
     assert loop._turn_limit() == TURN_TIME_LIMIT
     loop.model = low(SONNET)
     assert loop._answer_reserve() < agent_delegation.ANSWER_RESERVE_SECONDS["max"]
-    assert make_loop(store, Script()).answer_time_left() is None  # bounded runs
 
 
 class AnswerContext(Straggler):

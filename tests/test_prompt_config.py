@@ -10,7 +10,7 @@ import pytest
 
 from app.api.routers import admin
 from app.core.rate_limit import limiter
-from app.services import agent_delegation_config, prompt_catalog, prompt_config, agent_runs
+from app.services import prompt_catalog, prompt_config, agent_runs
 from app.services.llm import base, consensus_engine
 from app.services.llm.agent_client import resolve_agent_model
 from app.services.prompt_defaults import (AGENT_AUDIT_ANSWER_SECTION, AGENT_AUDIT_SYSTEM_PROMPT, ANSWER_SYSTEM_PROMPT,
@@ -88,28 +88,24 @@ LEGACY_PROMPTS = {"agent": "Outdated admin agent prompt.", "answers": "Old answe
 
 
 def changed():
-    config = {"reference_timezone": "America/New_York", "delegation": agent_delegation_config.settings_defaults()}
-    config["delegation"].update(enabled=True, max_agents=3)
-    return config
+    return {"reference_timezone": "America/New_York"}
 
 
 def legacy_document(revision=4):
-    """An old Firestore document that still stores admin-edited prompt texts."""
-    delegation = {**agent_delegation_config.settings_defaults(), "max_agents": 3,
-                  "orchestrator_prompt": "Outdated orchestrator.", "worker_prompt": "Outdated worker."}
+    """An old Firestore document that still stores admin-edited prompt texts
+    and the delegation settings of the removed worker delegation."""
+    delegation = {"enabled": True, "max_agents": 3, "orchestrator_prompt": "Outdated orchestrator."}
     return {"reference_timezone": "UTC", "prompts": dict(LEGACY_PROMPTS), "delegation": delegation,
             "revision": revision, "updated_at": None, "updated_by": "someone"}
 
 
 def assert_code_prompts(config):
     assert config["prompts"] == DEFAULT_PROMPTS
-    assert config["delegation"]["orchestrator_prompt"] == agent_delegation_config.ORCHESTRATOR_PROMPT
-    assert config["delegation"]["worker_prompt"] == agent_delegation_config.WORKER_PROMPT
+    assert "delegation" not in config
 
 
 def assert_prompt_free(document):
-    assert "prompts" not in document
-    assert not set(agent_delegation_config.PROMPTS) & set(document["delegation"])
+    assert "prompts" not in document and "delegation" not in document
 
 
 def test_admin_read_is_write_free_and_save_is_versioned_and_audited(client, config_store):
@@ -122,7 +118,7 @@ def test_admin_read_is_write_free_and_save_is_versioned_and_audited(client, conf
     assert response.status_code == 200
     saved = response.json()["config"]
     assert saved["revision"] == 1 and saved["updated_by"] == "admin"
-    assert saved["reference_timezone"] == "America/New_York" and saved["delegation"] == changed()["delegation"]
+    assert saved["reference_timezone"] == "America/New_York"
     stored = config_store.db.documents[("app_config", "prompts")]
     assert stored == config_store.db.documents[("app_config", "prompts", "revisions", "000000000001")]
     assert_prompt_free(stored)
@@ -134,8 +130,6 @@ def test_admin_read_is_write_free_and_save_is_versioned_and_audited(client, conf
     restored = client.put("/api/admin/prompt-config", headers=AUTH,
                           json={"revision": 1, "config": {"reference_timezone": "UTC"}})
     assert restored.status_code == 200 and restored.json()["config"]["revision"] == 2
-    # A timezone-only (legacy) save keeps the saved delegation settings.
-    assert restored.json()["config"]["delegation"] == changed()["delegation"]
     first = config_store.db.documents[("app_config", "prompts", "revisions", "000000000001")]
     assert first["reference_timezone"] == "America/New_York"
 
@@ -144,7 +138,6 @@ def test_stored_prompt_texts_are_ignored_on_read(config_store):
     config_store.db.documents[("app_config", "prompts")] = legacy_document()
     config = prompt_config.get_config()
     assert config["revision"] == 4 and config["reference_timezone"] == "UTC"
-    assert config["delegation"]["max_agents"] == 3
     assert_code_prompts(config)
 
 
@@ -154,12 +147,12 @@ def test_legacy_clients_cannot_store_prompts_and_saving_cleans_old_documents(cli
                "delegation": {**legacy_document()["delegation"], "orchestrator_prompt": "Injected"}}
     response = client.put("/api/admin/prompt-config", headers=AUTH, json={"revision": 4, "config": payload})
     assert response.status_code == 200
-    # Settings are unchanged, but the save still drops the stored prompt texts.
+    # Settings are unchanged, but the save still drops the stored prompt texts
+    # and delegation settings.
     assert response.json()["config"]["revision"] == 5
     assert_prompt_free(response.json()["config"])
     stored = config_store.db.documents[("app_config", "prompts")]
     assert_prompt_free(stored)
-    assert stored["delegation"]["max_agents"] == 3
     assert_code_prompts(config_store.read(force=True))
     again = client.put("/api/admin/prompt-config", headers=AUTH, json={"revision": 5, "config": payload})
     assert again.status_code == 200 and again.json()["config"]["revision"] == 5  # Clean documents stay put.
@@ -172,8 +165,7 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
         "agent", "agent_review_facts", "agent_temporary_chat", "comparison", "agent_audit_blocks", "agent_watch_run",
         "audit_reviewer",
         "agent_vm", "agent_plan",
-        "agent_github", "agent_workspace_closed", "answers", "consensus",
-        "delegation_orchestrator", "delegation_worker"]
+        "agent_github", "agent_workspace_closed", "answers", "consensus"]
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
     texts = {entry["key"]: entry["text"] for entry in entries}
@@ -189,8 +181,6 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
                                    "AGENT_WRITE_NOTE", "AGENT_READ_SOURCE_PROMPT", "audit_compare", "check_text",
                                    "comparison mode", "audit mode"))
     assert texts["answers"] == ANSWER_SYSTEM_PROMPT and texts["consensus"] == CONSENSUS_SYSTEM_PROMPT
-    assert texts["delegation_orchestrator"] == agent_delegation_config.ORCHESTRATOR_PROMPT
-    assert texts["delegation_worker"] == agent_delegation_config.WORKER_PROMPT
     comparison = texts["comparison"]
     assert comparison.startswith("You are an independent answer model")
     assert prompt_catalog.DATE_PLACEHOLDER in comparison and "Current date:" not in comparison
@@ -257,10 +247,6 @@ def test_admin_access_is_checked_before_config_reads_or_writes(client, config_st
     lambda c: c.update(reference_timezone="not/a/timezone"),
     lambda c: c.update(extra="unsupported"),
     lambda c: c.pop("reference_timezone"),
-    lambda c: c["delegation"].update(max_agents=99),
-    lambda c: c["delegation"].update(enabled="yes"),
-    lambda c: c["delegation"].pop("max_parallel"),
-    lambda c: c["delegation"].update(unknown=1),
 ])
 def test_invalid_config_is_rejected_without_writes(client, config_store, mutation):
     config = changed()
@@ -329,15 +315,3 @@ def test_cache_refreshes_other_workers_and_failed_writes_never_activate(config_s
     with pytest.raises(RuntimeError):
         other.read(force=True)
 
-
-def test_delegation_limits_are_validated_and_legacy_saves_preserve_them(config_store):
-    assert prompt_config.defaults()["delegation"]["enabled"] is False
-    config = changed()
-    config["delegation"].update(enabled=True, max_agents=2, max_parallel=3)
-    with pytest.raises(prompt_config.PromptConfigError):
-        config_store.save(config, expected_revision=0, updated_by="admin")
-    config["delegation"]["max_parallel"] = 2
-    saved = config_store.save(config, expected_revision=0, updated_by="admin")
-    saved = config_store.save({"reference_timezone": "UTC"}, expected_revision=saved["revision"], updated_by="admin")
-    assert agent_delegation_config.settings_only(saved["delegation"]) == config["delegation"]
-    assert_code_prompts(saved)

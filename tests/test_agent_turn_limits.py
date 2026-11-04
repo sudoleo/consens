@@ -1,4 +1,4 @@
-"""Soft per-turn guards of account-mode Agent chat (AgentPolicy.for_chat).
+"""Soft per-turn guards of Agent chat (AgentPolicy).
 
 The daily token ledger stays the spending limit. A turn that loops on valid
 calls still ends: at most four comparisons, a step cap and a deadline, and no
@@ -15,22 +15,15 @@ import pytest
 from app.services import agent_delegation
 from app.services.agent_comparison import answer_hash, comparison_selection
 from app.services.agent_delegation import DelegationLoop, TURN_WRAP_UP_SECONDS
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import measured_usage, resolve_agent_model
-from app.services.llm.provider_runtime import AnalysisBudget, AnalysisBudgetExceeded, ProviderCancellation
+from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation
 from test_agent_comparison import Script, make_loop
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 
 
 def chat_loop(store, script, **kwargs):
-    """make_loop with the chat's policy (AgentPolicy.for_chat): its turn
-    guards and no run budget."""
-    loop = make_loop(store, script, **kwargs)
-    loop.policy = AgentPolicy.for_chat(loop.config)
-    loop.costs.policy = loop.policy
-    loop.budget = AnalysisBudget(unlimited=True)
-    return loop
+    return make_loop(store, script, **kwargs)
 
 
 def reviewed(review, text):
@@ -58,30 +51,24 @@ def saved_turn(store, loop):
     return store.get_turn(UID, loop.chat_id, loop.turn_id)
 
 
-def test_chat_policy_sets_turn_guards_and_bounded_policy_keeps_its_snapshot():
-    chat = AgentPolicy.for_chat(defaults())
+def test_chat_policy_sets_turn_guards():
+    chat = AgentPolicy()
     assert (chat.turn_comparisons, chat.turn_steps, chat.turn_seconds, chat.turn_identical_calls) == (4, 24, 900, 2)
     assert chat.snapshot()["turn_steps"] == 24
-    bounded = AgentPolicy.from_config({**defaults(), "enabled": True})
-    assert bounded.turn_comparisons is bounded.turn_steps is bounded.turn_seconds is None
-    assert not any(key.startswith("turn_") for key in bounded.snapshot())
 
 
 def test_compare_models_states_the_per_message_comparison_limit(store):
     """The limit stands in the tool's description (AUDIT_COMPARE), not in
-    the prompt; a bounded run has none."""
+    the prompt."""
     chat, turn = pending(store)
-    config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=Script().factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=Script().factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
     assert loop.registry.tools["compare_models"].description.endswith(" At most 4 times per message.")
     assert "comparisons per message" not in loop.messages[0]["content"]
-    bounded = make_loop(store, Script())
-    assert "At most" not in bounded.registry.tools["compare_models"].description
 
 
 def test_fifth_comparison_is_refused_and_the_answer_uses_the_first_four(store):
@@ -158,7 +145,7 @@ def test_deadline_wraps_up_without_sleeping(store, fail_model):
     assert reviewed(saved["agent_review"], saved["consensus"])
 
 
-def test_hard_deadline_stops_inside_a_step_only_in_account_mode(store):
+def test_hard_deadline_stops_inside_a_step(store):
     loop = chat_loop(store, Script())
     # A small start keeps the arithmetic exact; on Linux the large monotonic
     # clock loses the last bits and "exactly on the limit" lands just before it.
@@ -169,10 +156,6 @@ def test_hard_deadline_stops_inside_a_step_only_in_account_mode(store):
     now[0] += 1
     with pytest.raises(AnalysisBudgetExceeded, match="time limit"):
         loop._check()
-    bounded = make_loop(store, Script())
-    bounded.clock = lambda: now[0] + 10_000
-    bounded._check()
-    assert bounded._turn_limit() is None
 
 
 @pytest.mark.parametrize("fail_model", [False, True])
@@ -280,9 +263,9 @@ def test_three_invalid_rounds_still_end_in_an_answer(store, fail_model):
     assert len(saved["agent_review"]["comparisons"]) == 1
 
 
-def test_repeated_polling_is_not_counted_as_identical_calls(store):
+def test_repeatable_tools_are_not_counted_as_identical_calls(store):
     loop = chat_loop(store, Script())
-    call = {"id": "w", "type": "function", "function": {"name": "wait_agents", "arguments": '{"seconds":0}'}}
+    call = {"id": "w", "type": "function", "function": {"name": "vm_exec", "arguments": '{"command":"ls"}'}}
     assert all(loop._identical_call(call) is None for _ in range(10))
     other = {"id": "c", "type": "function", "function": {"name": "read_file", "arguments": '{"b":1,"a":2}'}}
     reordered = {"id": "d", "type": "function", "function": {"name": "read_file", "arguments": '{"a":2,"b":1}'}}
@@ -294,7 +277,7 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
     # rendering the same deck again after an edit is checking the edit.
     # The same plan between work steps says where the agent stands; refusing
     # it ended a long VM run at its fourth unchanged plan.
-    assert agent_delegation.REPEATABLE_TOOLS == {"wait_agents", "vm_exec", "vm_read_file", "vm_write_file",
+    assert agent_delegation.REPEATABLE_TOOLS == {"vm_exec", "vm_read_file", "vm_write_file",
                                                  "vm_edit_file", "vm_share_file", "vm_start_process",
                                                  "vm_process_output", "vm_stop_process", "vm_view_image",
                                                  "vm_render_office", "update_plan", "browser"}

@@ -22,7 +22,6 @@ from app.services.agent_audit import (AGENT_SEARCH_ROUNDS, LIVE_SEARCH_ROUNDS, R
 from app.services.agent_comparison import AgentPreferences, comparison_selection
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_delegation import DelegationLoop
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled, current_provider_cancellation
@@ -188,13 +187,12 @@ def after_live_rounds(script, *families, until=None):
 
 def audit_loop(store, script, *, messages=None, memory=None, reviewers="always"):
     chat, turn = pending(store)
-    config = {**defaults(), "enabled": False, "max_searches": 0}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=messages or [{"role": "system", "content": "Answer."},
                               {"role": "user", "content": "Tell me about the Eiffel Tower."}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
-        delegation_config=config, completion_factory=script.factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=script.factory,
         comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
         agent_preferences=AgentPreferences(), memory=memory, reviewers=reviewers)
     if script.tool_steps:
@@ -1242,12 +1240,12 @@ def test_a_crash_or_the_reaper_leaves_no_reviewer_at_work(store):
     """A-R6 (2026-10-29): after a crash or reap finish_run set the review's
     status, while single reviewers still said "running"."""
     from datetime import datetime, timedelta, timezone
-    from test_agent_delegation import make_loop
+    from test_agent_sessions import make_loop
     from test_agent_runs import receipt
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
-    store.settle(*args, completion=receipt(), status="succeeded", final=False)
+    store.settle(*args, completion=receipt(), status="succeeded")
     reviewers = [{"provider": "anthropic", "status": "completed", "marks": 0}, {"provider": "openai", "status": "running"},
                  {"provider": "google", "status": "waiting"}]
     store.save_review(*args, loop.run_token, {"version": 1, "status": "running", "mode": "audit", "comparisons": [],

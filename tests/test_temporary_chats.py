@@ -346,15 +346,14 @@ def test_a_run_that_outlives_its_deleted_chat_leaves_no_texts_on_its_receipt(sto
     """Leaving a temporary chat mid-run deletes it at once; the run stops a
     few seconds later (its watcher). What it wrote to its receipt meanwhile
     goes when it ends."""
-    from test_agent_runs import receipt
-    from app.services.llm.agent_client import AgentModel
+    from test_agent_runs import RUN_TOKEN, claim, receipt
     chat_id, turn = pending(store)
-    store.claim(UID, chat_id, turn["id"], AgentModel(), run_token="tok")
+    claim(store, chat_id, turn["id"])
     store.settle(UID, chat_id, turn["id"], completion=receipt(), status="succeeded")
     store.delete_chat(UID, chat_id)
     ref = store.receipt_ref(UID, chat_id, turn["id"])
     ref.update({"user_notes": [{"id": "n1", "text": "late words"}], "hold": {"id": "h1", "reason": "late"}})
-    store.finish_run(UID, chat_id, turn["id"], completion=receipt(), status="cancelled", run_token="tok")
+    store.finish_run(UID, chat_id, turn["id"], completion=receipt(), status="cancelled", run_token=RUN_TOKEN)
     data = ref.get().to_dict()
     assert data["run_status"] == "cancelled" and not {"user_notes", "hold", "hold_decision"} & set(data)
 

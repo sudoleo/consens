@@ -102,7 +102,7 @@
   function actorLabel(actor) {
     if (actor === 'agent') return 'Agent';
     if (actor === 'app') return 'App';
-    return String(actor || '').startsWith('worker:') ? 'Worker' : String(actor || '');
+    return String(actor || '');
   }
   function entryRow(view, entry) {
     const item = node('li', 'agent-work-log-entry');

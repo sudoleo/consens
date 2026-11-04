@@ -26,7 +26,6 @@ from app.core import config as cfg
 from app.services import agent_delegation
 from app.services.agent_comparison import comparison_selection
 from app.services.agent_delegation import DelegationLoop
-from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
 from app.services.agent_runs import AgentRunStore
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
@@ -152,13 +151,12 @@ assert len(SIX_FAMILIES) == cfg.MAX_RUN_FAMILIES
 def run_turn(store):
     timeline = Timeline()
     chat, turn = pending(store)
-    config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
         model=resolve_agent_model("claude-haiku-4-5"),
         messages=[{"role": "system", "content": "Answer."},
                   {"role": "user", "content": "What should I pack for a marathon training camp?"}],
-        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
-        delegation_config=config, completion_factory=timeline.factory,
+        api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy(),
+        completion_factory=timeline.factory,
         # The most a run asks (Custom, MAX_RUN_FAMILIES): six families answer in
         # parallel. High Quality had six until 2026-11-01, now three.
         comparison_models=comparison_selection(SIX_FAMILIES))
