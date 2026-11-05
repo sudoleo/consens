@@ -316,6 +316,46 @@ def test_the_supervisor_ends_a_process_at_its_time_limit(shell, tmp_path):
     assert state == 124 and output == "started\n"
 
 
+def ending(directory, seconds=2):
+    """A supervisor in its last moments: the command has ended (its pid is
+    gone), the exit code follows after ``seconds``. The shell command that
+    sets it up, as start_command starts a supervisor."""
+    Path(directory, "run.sh").write_text(f'sleep {seconds}; date +%s > "$1/ended"; echo 3 > "$1/exit_code"\n',
+                                         newline="\n")
+    d = shlex.quote(directory)
+    return (f"true & echo $! > {d}/pid; wait; date +%s > {d}/started; "
+            f"setsid nohup bash {d}/run.sh {d} consens-x >/dev/null 2>&1 < /dev/null & echo $! > {d}/sid; ")
+
+
+def test_a_process_whose_supervisor_is_still_ending_has_exited_and_is_not_lost(shell, tmp_path):
+    """Between the command's end and its exit code the supervisor sleeps up
+    to a second, or holds the VM a last time (curl, up to 5 s): a look then
+    found neither the command nor its exit code, said "lost" ("the VM
+    stopped it, start it again") and the agent ran a finished run again
+    (bug hunt P24). While this folder's supervisor lives, a look waits for
+    its exit code, in the list too."""
+    run, root = shell
+    single = prepare(root, "66666661", "true", tmp_path.as_posix())
+    code, text = run(ending(single) + status_command(single))
+    assert code == 0 and parse_status(text)[0] == 3
+    listed = prepare(root, "66666662", "true", tmp_path.as_posix())
+    code, text = run(ending(listed) + list_command(root=root))
+    assert code == 0 and sorted(line.split("\t")[1] for line in text.splitlines()) == ["3", "3"]
+
+
+def test_a_pid_the_vm_gave_to_another_process_is_no_supervisor(shell, tmp_path):
+    """After a restart the supervisor's pid can belong to anything: that
+    process is not waited for, the lost one is lost at once."""
+    run, root = shell
+    directory = prepare(root, "66666663", "true", tmp_path.as_posix())
+    d = shlex.quote(directory)
+    started = time.monotonic()
+    code, text = run(f"true & echo $! > {d}/pid; wait; sleep 30 >/dev/null 2>&1 & echo $! > {d}/sid; "
+                     + status_command(directory) + f"; kill $(cat {d}/sid)")
+    assert code == 0 and parse_status(text)[0] == "lost"
+    assert time.monotonic() - started < agent_vm_processes.SETTLE_SECONDS / 2
+
+
 def test_a_process_that_ends_early_gives_its_unused_time_back_once(store, fake_vm, fixed_id, monkeypatch):
     """Its whole limit is charged when it starts; once a look finds it ended,
     what it did not run comes back (runtime audit 2026-10-30, K5): to the

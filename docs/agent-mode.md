@@ -3042,7 +3042,12 @@ Liste, ohne je gelaufen zu sein), jeder endet spätestens nach
 seine ID). Status: `running`, `exited` mit `exit_code`, `stopped` (seit
 2026-10-28: `vm_stop_process` hat ihn beendet, Marke `stopped` im Prozessordner;
 vorher stand dort der Exit-Code von coreutils `timeout`, 124, der wie sein
-Zeitlimit las) oder `lost` (die VM hat ihn ohne Exit-Code beendet). **Erstattung**
+Zeitlimit las) oder `lost` (die VM hat ihn ohne Exit-Code beendet). Ist der
+Befehl gerade zu Ende und der Aufseher schreibt den Exit-Code noch (bis zu
+1 s Schlaf, ein letzter Hold bis 5 s), wartet ein Blick seit 2026-11-05 bis
+`SETTLE_SECONDS` darauf, solange der Aufseher dieses Ordners lebt (PID aus
+`sid`, seine Kommandozeile nennt `run.sh` des Ordners); vorher hieß ein
+fertiger Lauf `lost`, und der Agent startete ihn neu. **Erstattung**
 (seit 2026-10-30, K5): Der Start bucht das ganze Zeitlimit und schreibt es mit
 dem UTC-Tag nach `reserve`; der Aufseher schreibt Start und Ende (`started`,
 `ended`). Findet ein Blick darauf (`vm_process_output` mit `id`,

@@ -65,6 +65,12 @@ OUTPUT_CHARS = 12_000
 MAX_WAIT_SECONDS = 60
 STOP_GRACE_SECONDS = 10
 ID = r"^[a-f0-9]{8}$"
+# Between the command's end and its exit code the supervisor sleeps up to a
+# second and may hold the VM a last time (curl, up to 5 s): a look in between
+# found neither and said "lost", and the agent ran a finished run again (bug
+# hunt P24, 2026-11-05). While the folder's own supervisor lives, a look waits
+# up to this long for its exit code (state_command).
+SETTLE_SECONDS = 8
 # The first line of every status: "consens-process <state> <bytes>", since
 # 2026-10-30 with the seconds it ran once it ended, the VM time it was
 # charged (seconds, day) and whether the rest was given back.
@@ -135,14 +141,30 @@ def launch_script(command, cwd, seconds):
     return "exec " + " ".join(shlex.quote(arg) for arg in argv) + "\n"
 
 
+def state_command():
+    """Sets ``code`` for the process folder ``$dir``: its exit code,
+    ``running``, ``lost`` or ``stopped``. A command that has ended (its pid
+    was written and is gone) without an exit code yet waits up to
+    SETTLE_SECONDS for it while the folder's supervisor lives: the pid in
+    ``sid`` (start_command), whose command line names this folder's run.sh,
+    so a pid the VM gave to another process since (a restart lost the
+    supervisor) is not waited for."""
+    return ("code=$(cat \"$dir/exit_code\" 2>/dev/null); "
+            "if [ -z \"$code\" ]; then pid=$(cat \"$dir/pid\" 2>/dev/null); "
+            "if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then code=running; "
+            "else sid=$(cat \"$dir/sid\" 2>/dev/null); "
+            f"for _ in $(seq {SETTLE_SECONDS * 5}); do [ -f \"$dir/exit_code\" ] && break; "
+            "[ -n \"$pid\" ] && [ -n \"$sid\" ] && tr '\\0' '\\n' < \"/proc/$sid/cmdline\" 2>/dev/null "
+            "| grep -qxF \"$dir/run.sh\" || break; sleep 0.2; done; "
+            "code=$(cat \"$dir/exit_code\" 2>/dev/null); [ -n \"$code\" ] || code=lost; fi; fi; "
+            "[ -f \"$dir/stopped\" ] && [ \"$code\" != running ] && code=stopped; ")
+
+
 def status_command(directory, chars=OUTPUT_CHARS, wait=0):
     """Prints STATUS_LINE, then the end of the output."""
     d = shlex.quote(directory)
     return (f"{f'sleep {int(wait)}; ' if wait else ''}dir={d}; [ -d \"$dir\" ] || exit 5; "
-            "code=$(cat \"$dir/exit_code\" 2>/dev/null); "
-            "if [ -z \"$code\" ]; then pid=$(cat \"$dir/pid\" 2>/dev/null); "
-            "if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then code=running; else code=lost; fi; fi; "
-            "[ -f \"$dir/stopped\" ] && [ \"$code\" != running ] && code=stopped; "
+            + state_command() +
             "size=$(stat -c %s \"$dir/output.log\" 2>/dev/null || echo 0); "
             "ran=-; if [ -f \"$dir/exit_code\" ]; then s=$(cat \"$dir/started\" 2>/dev/null); "
             "e=$(cat \"$dir/ended\" 2>/dev/null || date +%s); "
@@ -188,10 +210,7 @@ def list_command(root=PROCESSES_DIR, chat=""):
     temporary chat's (its file ``temporary``) only for ``chat`` itself."""
     return (f"chat={shlex.quote(chat)}; for d in {shlex.quote(root)}/*/; do [ -d \"$d\" ] || continue; "
             "if [ -f \"$d/temporary\" ] && [ \"$(head -c 100 \"$d/chat\" 2>/dev/null)\" != \"$chat\" ]; then "
-            "continue; fi; id=$(basename \"$d\"); "
-            "code=$(cat \"$d/exit_code\" 2>/dev/null); if [ -z \"$code\" ]; then pid=$(cat \"$d/pid\" 2>/dev/null); "
-            "if [ -n \"$pid\" ] && kill -0 \"$pid\" 2>/dev/null; then code=running; else code=lost; fi; fi; "
-            "[ -f \"$d/stopped\" ] && [ \"$code\" != running ] && code=stopped; "
+            "continue; fi; id=$(basename \"$d\"); dir=${d%/}; " + state_command() +
             "printf '%s\\t%s\\t%s\\n' \"$id\" \"$code\" \"$(head -c 200 \"$d/command\" 2>/dev/null | tr '\\n\\t' '  ')\"; "
             "done; true")
 
