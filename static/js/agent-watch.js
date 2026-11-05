@@ -250,10 +250,17 @@
 
   // This card's Watch: the one started from its turn, or the same task in its
   // chat (the Agent prepared it again: already_watched). End and resume act
-  // on the Watch the card shows (bug hunt 2026-11-04).
+  // on the Watch the card shows (bug hunt 2026-11-04). Only a running or
+  // paused one is taken by its task, and the card keeps it once seen (also
+  // when it ends): an ended Watch of the same task is no reason to withhold
+  // Start from a new proposal (bug hunt 2026-11-05).
   function ownWatch(view, watches) {
-    return watches.find(watch => watch.turn_id === view.turnId)
-      || watches.find(watch => watch.task === view.proposal.task && watch.chat_id === view.chatId) || null;
+    const own = watches.find(watch => watch.turn_id === view.turnId)
+      || (view.watchId && watches.find(watch => watch.id === view.watchId))
+      || watches.find(watch => watch.task === view.proposal.task && watch.chat_id === view.chatId
+        && ['active', 'paused'].includes(watch.status)) || null;
+    if (own) view.watchId = own.id;
+    return own;
   }
 
   function sync(view) {
