@@ -187,6 +187,36 @@ def test_an_update_nobody_waits_for_reports_its_failure():
     assert recorder.failures == [("a", "update refused")]
 
 
+def test_an_update_ahead_of_a_waiting_caller_still_reports_its_failure():
+    """Bug hunt: a caller that waits makes its session's earlier updates go
+    first (urgent), also the one being written at that moment. Nobody waits
+    for those: until 2026-11-05 their refusal went unreported, and a session
+    whose "working" was refused that way stayed on it without a word."""
+    def refused(job):
+        return job.patch.get("status") in {"working", "searching"}
+    recorder = Recorder(fail=refused)
+    log = journal(recorder)
+    busy = worker("busy")
+    release = hold_writer(log, recorder)
+    # Queued behind the write that runs, not merged with the message after it.
+    log.submit(busy, {"status": "searching"}, {"kind": "note", "text": "Looking."}, wait=False)
+    waiter = threading.Thread(target=log.submit, args=(busy, {}, {"kind": "result", "text": "x"}),
+                              kwargs={"wait": True})
+    waiter.start()
+
+    def waiting():
+        with log._condition:
+            return len(log._queues.get("busy", ())) == 3
+
+    until(waiting)
+    release()
+    waiter.join()
+    log.close()
+    # Both refused updates are reported; the one the caller waited for was saved.
+    assert recorder.failures == [("busy", "update refused"), ("busy", "update refused")]
+    assert [message for name, _, message in recorder.writes] == [{"kind": "result", "text": "x"}]
+
+
 def test_the_newest_line_replaces_a_waiting_one_and_rides_with_the_next_status():
     recorder = Recorder()
     log = journal(recorder, gap=10)

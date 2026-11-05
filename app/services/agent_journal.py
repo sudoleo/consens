@@ -42,14 +42,18 @@ BATCH_LIMIT = 32
 class JournalJob:
     """One session update: ``patch`` for the session, optional ``message``."""
 
-    __slots__ = ("worker", "patch", "message", "progress", "urgent", "started", "order", "key", "event", "error",
-                 "done")
+    __slots__ = ("worker", "patch", "message", "progress", "urgent", "awaited", "started", "order", "key", "event",
+                 "error", "done")
 
     def __init__(self, worker, patch, message, *, progress, urgent, order):
         self.worker, self.patch, self.message = worker, patch, message
         # The saved event's id: a retried write finds its own first commit.
         self.key = uuid4().hex
+        # ``urgent``: goes first, a caller waits for it or for an update
+        # behind it. ``awaited``: a caller receives this job's own result,
+        # and with it its error; only then is a refusal not reported.
         self.progress, self.urgent, self.order = progress, urgent, order
+        self.awaited = False
         self.started = False
         self.event = self.error = None
         self.done = threading.Event()
@@ -115,9 +119,10 @@ class AgentJournal:
                 queue.append(job)
             if wait:
                 # Everything this session queued before goes first, so all of
-                # it is urgent now.
+                # it is urgent now. Only this job's error reaches the caller.
                 for queued in queue:
                     queued.urgent = True
+                job.awaited = True
             self._start()
             self._condition.notify_all()
         return job.result() if wait else job
@@ -187,5 +192,7 @@ class AgentJournal:
             for job in jobs:
                 job.done.set()
             for job in jobs:
-                if job.error is not None and not job.urgent:
+                # An update ahead of a waiting caller is urgent but its own:
+                # until 2026-11-05 its refusal went unreported (bug hunt P0).
+                if job.error is not None and not job.awaited:
                     self._failed(job, job.error)
