@@ -2096,12 +2096,19 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
       `find` gefaltet, Groß/klein egal, ohne Frames), höchstens `seconds`
       (Vorgabe 30), und sagt nach wie vielen Sekunden; kommt er nicht, ist
       das eine Antwort, kein Fehler (`wait_for_text`). Statt fester Pausen
-      oder Screenshots zur Kontrolle.
+      oder Screenshots zur Kontrolle. Was im fokussierten Editor
+      (contenteditable) steht, zählt seit 2026-11-05 nicht (`SHOWS_JS`):
+      Der Text muss öfter auf der Seite stehen als dort, sonst erfüllte
+      nach `type … enter` der nicht gesendete Entwurf das Warten sofort.
   - *Download* (L5): Die Antwort von `download` ist die Datei: Name, Bytes,
     Content-Type und wohin eine Weiterleitung führte, kein Tab-Zustand
     mehr; eine leere Antwort ist `refused` mit dieser Tatsache, gespeichert
     wird nichts (vorher galten 0 Byte und eine Login-Seite als `report.pdf`
-    als Erfolg).
+    als Erfolg). Seit 2026-11-05 fragt `download` erst per HEAD: Nennt die
+    Content-Length mehr als `DOWNLOAD_BYTES` (25 MB, so viel nimmt der
+    Server), ist es `refused`, bevor der Körper in den Speicher kommt
+    (Playwrights Request-API liest ihn ganz). Ohne HEAD oder Länge läuft
+    der GET wie bisher, dann weiter ohne Obergrenze.
 - **Werkzeug `browser`** (`agent_browser.py`, statt des Shell-Befehls
   `browser`): `action` aus `open`, `read`, `text`, `find`, `click`, `type`,
   `select`, `key`, `scroll`, `back`, `forward`, `tabs`, `tab`, `screenshot`,

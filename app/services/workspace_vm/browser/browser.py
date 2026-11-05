@@ -1818,11 +1818,26 @@ def hidden_text(page):
 
 # wait with text (since 2026-11-03): whether the page in front shows the
 # text, its whitespace folded and in any case, as find looks for it (not in
-# its frames).
+# its frames). What the focused editor holds does not count (bug hunt P65,
+# 2026-11-05): after "type e40 Hello enter" the draft itself met "wait text
+# Hello" when Enter had sent nothing. The text must be on the page more
+# often than in that editor; a field's value is not in innerText anyway, and
+# an editor without focus or a body that is one counts as before.
 SHOWS_JS = r"""
 query => {
   const fold = text => (text || '').replace(/\s+/g, ' ').trim().toLowerCase();
-  return fold(document.body ? document.body.innerText : '').includes(fold(query));
+  const count = (text, part) => {
+    let found = 0;
+    for (let at = text.indexOf(part); at >= 0; at = text.indexOf(part, at + part.length)) found++;
+    return found;
+  };
+  const wanted = fold(query);
+  const shown = fold(document.body ? document.body.innerText : '');
+  if (!shown.includes(wanted)) return false;
+  const active = document.activeElement;
+  const editing = active && active !== document.body && active !== document.documentElement &&
+    (active.isContentEditable || ['', 'true', 'plaintext-only'].includes(active.getAttribute('contenteditable')));
+  return !wanted || !editing || count(shown, wanted) > count(fold(active.innerText), wanted);
 }
 """
 TEXT_POLL_SECONDS = 0.25
