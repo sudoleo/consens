@@ -758,6 +758,31 @@ def test_the_users_own_task_starts_in_its_chat_and_a_new_chat_runs_at_once(store
     assert error.value.code == "limit_reached" and len(store.db.chats(UID)) == chats
 
 
+def test_a_page_watch_ended_before_its_first_run_takes_its_empty_chat_along(store, monkeypatch):
+    """The chat the Watches page opened gets its sidebar entry with the first
+    run's answer. Ended before that run (its first time skipped, the day's
+    runs used up), it stayed hidden and held one of the account's chats for
+    good (bug hunt 2026-11-04)."""
+    monkeypatch.setattr("app.services.watch_scheduler.wake_watch_scheduler", lambda: None)
+    fresh = agent_watches.create(UID, tier="free", task="Tell me when the IRONMAN Hamburg 2027 registration opens.",
+                                 timezone_name="Europe/Berlin", db=store.db, now=NOW)
+    ended = agent_watches.stop(UID, fresh["id"], db=store.db, now=NOW)
+    assert ended["status"] == "done" and ended["ended"] == "user"
+    assert (store._chat_ref(UID, fresh["chat_id"]).get().to_dict() or {}).get("status") != "active"
+    assert record(store, fresh["id"]) is None
+    assert agent_watches.outlook(UID, fresh["chat_id"], "free", db=store.db)["active_count"] == 0
+    # A Watch that has run, or one in a chat of the user's own, leaves its chat as it is.
+    ran = agent_watches.create(UID, tier="free", task="Tell me when the Berlin marathon 2027 date is out.",
+                               timezone_name="Europe/Berlin", db=store.db, now=NOW)
+    run, _reason = agent_watches.claim(ran["id"], db=store.db, now=NOW)
+    assert run is not None
+    agent_watches.stop(UID, ran["id"], db=store.db, now=NOW)
+    assert store._chat_ref(UID, ran["chat_id"]).get().to_dict()["status"] == "active"
+    own = start(store, *proposed_chat(store))
+    agent_watches.stop(UID, own["id"], db=store.db, now=NOW)
+    assert store._chat_ref(UID, own["chat_id"]).get().to_dict()["status"] == "active"
+
+
 def test_pause_frees_the_slot_resume_takes_it_and_end_works_on_a_paused_one(store):
     first = start(store, *proposed_chat(store))
     second = start(store, *proposed_chat(store))

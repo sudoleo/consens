@@ -618,18 +618,42 @@ def stop(uid: str, watch_id: str, *, db=None, now: datetime | None = None) -> di
     db = _db(db)
     now = now or utcnow()
     ref = _ref(db, watch_id)
+    unrun = {}
 
     def operation(tx):
         snapshot = ref.get(transaction=tx)
         data = (snapshot.to_dict() or {}) if snapshot.exists else {}
         if data.get("uid") != uid:
             raise AgentWatchError("not_found", "This Watch no longer exists.", status=404)
+        # Never claimed (claim counts runs): no run can start in its chat any more.
+        unrun["ended"] = data.get("status") in {STATUS_ACTIVE, STATUS_PAUSED} and not int(data.get("runs") or 0)
         if data.get("status") in {STATUS_ACTIVE, STATUS_PAUSED}:
             _end(tx, db, watch_id, data, reason="user", now=now)
             data = {**data, "status": STATUS_DONE, "next_run_at": None, "ended": "user"}
         return data
 
-    return serialize(watch_id, watch_service._run_transaction(db, operation))
+    data = watch_service._run_transaction(db, operation)
+    if unrun.get("ended") and not data.get("turn_id"):
+        _drop_unused_chat(db, uid, str(data.get("chat_id") or ""))
+    return serialize(watch_id, data)
+
+
+def _drop_unused_chat(db, uid: str, chat_id: str) -> None:
+    """The chat the Watches page opened for a Watch that ended before its
+    first run: no message and no sidebar entry (the first run's answer writes
+    it), so nobody could see or delete it, and it held one of the account's
+    chats. It goes, and the Watch with it (chat_store._purge_chat), like a
+    refused create leaves no chat behind."""
+    from app.services.agent_runs import AgentRunStore
+    store = AgentRunStore(db)
+    try:
+        if not chat_id or _bookmark_id(db, uid, chat_id):
+            return
+        if int(store.get_chat(uid, chat_id).get("turn_count") or 0):
+            return
+        store.delete_chat(uid, chat_id)
+    except Exception as exc:
+        logging.warning("Unused agent watch chat not removed category=%s", safe_exception(exc))
 
 
 def delete_for_chat(db, uid: str, chat_id: str) -> int:
