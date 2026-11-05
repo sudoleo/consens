@@ -3670,6 +3670,21 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`executeConsensusRun`, `window.getConsensus`, `/consensus`-SSE,
   `recoverConsensusResult`, Follow-up-Kontext `offer`/`consume`) ist
   entfallen; gespeicherte Consensus-Chats werden nicht mehr fortgesetzt.
+  **Ein Watch-Chat als fortlaufendes Gespräch (seit 2026-11-05):**
+  `markWatchRun(question, turn)` schreibt über die Nachricht eines geplanten
+  Laufs „Scheduled Watch run · 08:00“ (Zeit aus `created_at`, auch mit
+  Mikrosekunden oder als Firestore-Teile) und merkt die Zeit jeder Nachricht
+  als `data-turn-at` an ihrem Frage-Element; für `#threadAsk` (agent-chat.js
+  ruft es bei jeder Projektion) arbeitet es nur bei geänderter Signatur und
+  ruft dann `syncThread()`, das auch `renderStoredTurns` und `clearHistory`
+  am Ende aufrufen. `syncThread` setzt `.is-watch-repeat` an jeden Lauf,
+  dessen Auftrag der Chat schon zeigt (Blase aus, nur die Zeile, zentriert),
+  und in einem Chat, in dem eine Watch lief, vor die erste Nachricht jedes
+  Tages `p.thread-day > time` („Today“, „Yesterday“, Wochentag, sonst Datum)
+  — in ihr Frage-Element bzw. `#threadAsk` oder in die Faltzeile, wenn die den
+  Tag beginnt; ein Chat ohne Watch bekommt keine. `foldQuietRuns` faltet
+  ruhige Läufe nur innerhalb eines Tages („… · last 16:00“) und nie den Lauf,
+  der einen Auftrag zum ersten Mal bringt.
 - **`run-view.js`** — einziger Projektor von `runRegistry.visibleRunId` in den
   gemeinsam genutzten Ergebnis-DOM und die Kompatibilitäts-Globals. Ein
   Agent-Lauf geht an `agent-chat.js` (`agentChat.project`); jeder andere Lauf

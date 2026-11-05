@@ -1116,8 +1116,11 @@ Server.
       Chat. Mit verbundenem Telegram kommt dieselbe Nachricht dort an.
 - [ ] Geplanter Lauf (nur in Prod, der Takt läuft lokal nicht): eine
       stündliche Watch (Pro/Admin) mit einem Auftrag, der sicher etwas findet;
-      nach dem Lauf steht im Chat „Scheduled Watch run“ über dem Auftrag, die
-      Antwort darunter, und eine Mail „Watch: …“ kommt mit Link zur Seite und
+      nach dem Lauf steht im Chat die Tageskapsel („Today“), darunter
+      „Scheduled Watch run · <Uhrzeit>“ (über dem Auftrag nur beim ersten
+      Lauf, danach allein), die Antwort darunter; ein Lauf am nächsten Tag
+      steht unter „Today“, der vorige unter „Yesterday“. Eine Mail „Watch: …“
+      kommt mit Link zur Seite und
       zur App, Prüfer-Satz unten. Ein Lauf ohne Befund mailt nichts und rückt
       den Chat nicht nach oben; Logzeile `Agent watch run ended outcome=quiet`.
       `finish_watch` beendet die Watch (Mail „Reached: …“, Karte „Watch

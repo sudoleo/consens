@@ -58,6 +58,77 @@
   // ein JS-Vertrag sind — hier darf nie eine davon ein zweites Mal auftauchen.
   let panelSequence = 0;
 
+  // ---- A Watch's chat, day by day (since 2026-11-05) ----------------------
+  // Max: a Watch's chat reads as one running conversation, its messages
+  // "wie bei WhatsApp mit Datum getrennt", so the reader sees which run is
+  // the newest and when each one ran. In a chat where a Watch ran, every day
+  // starts with its name (Today, Yesterday, Monday, Oct 19), a run's message
+  // carries its time, and a run that sends the task the chat already shows
+  // is only that line: its words stand once, where they first came
+  // (followup.syncThread).
+
+  // A saved time as a turn carries it: the server's ISO string (with
+  // microseconds), a number, or a Firestore timestamp as its parts.
+  function timeOf(value) {
+    if (value === null || value === undefined || value === "") return null;
+    if (typeof value === "number") return Number.isFinite(value) ? (value < 1e11 ? value * 1000 : value) : null;
+    if (typeof value === "object" && !(value instanceof Date)) {
+      const seconds = Number(value.seconds ?? value._seconds);
+      return Number.isFinite(seconds) ? seconds * 1000 : null;
+    }
+    // Safari reads three digits of a fraction, not six.
+    const time = value instanceof Date ? value.getTime()
+      : new Date(String(value).replace(/(\.\d{3})\d+/, "$1")).getTime();
+    return Number.isNaN(time) ? null : time;
+  }
+
+  function turnTime(turnData) {
+    return timeOf(turnData?.created_at) ?? timeOf(turnData?.updated_at);
+  }
+
+  // When a message on the page was sent (data-turn-at, set by markWatchRun
+  // and buildHistoryTurn); null when nobody knows.
+  function shownTime(question) {
+    const value = Number(question?.dataset.turnAt);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }
+
+  // Calendar days, so a summer-time change never moves a message a day.
+  function dayStart(ms) {
+    const day = new Date(ms);
+    return new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  }
+
+  // The day as a messenger names it: Today, Yesterday, the weekday within
+  // the week, then the date ("Oct 19", another year "Oct 19, 2025").
+  function dayLabel(ms, now = Date.now()) {
+    const days = Math.round((dayStart(now) - dayStart(ms)) / 86400000);
+    if (days === 0) return window.App.t("Today");
+    if (days === 1) return window.App.t("Yesterday");
+    const format = window.App.format;
+    if (days > 1 && days < 7 && format?.weekday) return format.weekday(ms);
+    return format?.date ? format.date(ms, { now }) : new Date(ms).toDateString();
+  }
+
+  // The line that starts a day: a quiet capsule across the column.
+  function dayDivider(ms) {
+    const line = document.createElement("p");
+    line.className = "thread-day";
+    // Written in the page's language already (App.t, App.format).
+    line.setAttribute("data-i18n-skip", "");
+    const label = document.createElement("time");
+    const day = new Date(ms);
+    label.dateTime = [day.getFullYear(), day.getMonth() + 1, day.getDate()]
+      .map((part, index) => String(part).padStart(index ? 2 : 4, "0")).join("-");
+    label.textContent = dayLabel(ms);
+    line.append(label);
+    return line;
+  }
+
+  function clockOf(ms) {
+    return ms === null ? "" : window.App.format?.time?.(ms) || "";
+  }
+
   const followup = {
     lastExchange: null, // {question, consensus, turn} der Antwort auf dem Schirm
 
@@ -165,14 +236,14 @@
         return heading;
       };
       question.append(turnHeading("Your message"), questionBubble);
+      // When it was sent: the days of a Watch's chat (syncThread).
+      const sentAt = turnTime(turnData);
+      if (sentAt !== null) question.dataset.turnAt = String(sentAt);
       // A Watch's scheduled run (agent_watches.py): its task came from the
       // Watch, not from the user typing it then. A run that found nothing
       // folds into one line with its quiet neighbours (foldQuietRuns).
       if (agentTurn) this.markWatchRun(question, turnData);
-      if (agentTurn && this.quietWatchRun(turnData)) {
-        turn.classList.add("is-watch-quiet");
-        turn.dataset.watchRunAt = String(turnData.created_at || turnData.updated_at || "");
-      }
+      if (agentTurn && this.quietWatchRun(turnData)) turn.classList.add("is-watch-quiet");
 
       // Anhaenge bleiben an ihrer Nachricht, auch wenn der Turn in den
       // Verlauf rutscht.
@@ -466,44 +537,109 @@
         && !(run && (run.finding || run.done));
     },
 
-    // The quiet line above a run's message: the Watch sent it, not the user.
-    // The live question (#threadAsk) gets it too (agent-chat.js).
+    // The quiet line above a run's message: the Watch sent it, not the user,
+    // at this time ("Scheduled Watch run · 08:00"). The live question
+    // (#threadAsk) gets it too (agent-chat.js), with every projection of the
+    // run; it then puts the chat's days in order again (syncThread).
     markWatchRun(question, turnData) {
       if (!question) return;
       const scheduled = Boolean(turnData?.agent_settings?.watch_run);
+      const sentAt = turnTime(turnData);
+      const live = question.id === "threadAsk";
+      // A streamed word projects the live turn again: only a change does work.
+      const signature = JSON.stringify([scheduled, sentAt,
+        question.querySelector("[data-question]")?.dataset.question || ""]);
+      if (live && question._watchRunSignature === signature) return;
+      if (live) question._watchRunSignature = signature;
+      // A run still on its way has no time yet: it is sent now.
+      if (sentAt !== null) question.dataset.turnAt = String(sentAt);
+      else if (live) delete question.dataset.turnAt;
       let label = question.querySelector(":scope > .thread-watch-run");
       question.classList.toggle("is-watch-run", scheduled);
+      const clock = clockOf(sentAt);
+      const words = scheduled && clock
+        ? window.App.t("Scheduled Watch run · {time}", { time: clock })
+        : window.App.t("Scheduled Watch run");
       // Screen readers hear it by its heading ("Your message" otherwise).
       const heading = question.querySelector(":scope > h2.visually-hidden");
-      if (heading) heading.textContent = window.App.t(scheduled ? "Scheduled Watch run" : "Your message");
-      if (!scheduled) {
-        label?.remove();
-        return;
+      if (heading) heading.textContent = scheduled ? words : window.App.t("Your message");
+      if (!scheduled) label?.remove();
+      else {
+        if (!label) {
+          label = document.createElement("p");
+          label.className = "thread-watch-run";
+          label.setAttribute("aria-hidden", "true");
+          label.setAttribute("data-i18n-skip", "");
+          question.insertBefore(label, question.querySelector(".thread-ask-bubble"));
+        }
+        label.textContent = words;
       }
-      if (!label) {
-        label = document.createElement("p");
-        label.className = "thread-watch-run";
-        label.setAttribute("aria-hidden", "true");
-        question.insertBefore(label, question.querySelector(".thread-ask-bubble"));
-      }
-      label.textContent = "Scheduled Watch run";
+      if (live) this.syncThread();
     },
 
-    // Runs of a Watch that found nothing, one after another, fold into one
-    // line ("Checked 4 times · nothing new · last today, 08:00"); a click
-    // shows them. What they found stays as it was, each a turn of its own.
+    // What the chat shows of its Watch, after anything changed it (the
+    // history rendered, the live question changed):
+    // * A run whose task the chat already shows is only its line, "Scheduled
+    //   Watch run · 08:00" (.is-watch-repeat): the same words in a bubble
+    //   every hour read as the user saying them again. A changed task, or
+    //   the first, keeps its bubble.
+    // * In a chat where a Watch ran, the first message of each day is led by
+    //   the day (.thread-day). A day whose first item is a folded line of
+    //   quiet runs has it on that line. A chat without a Watch has none.
+    syncThread() {
+      const history = document.getElementById("threadHistory");
+      const ask = document.getElementById("threadAsk");
+      const items = [];
+      for (const node of history?.children || []) {
+        if (node.classList?.contains("thread-watch-fold")) items.push({ host: node, at: shownTime(node), fold: true });
+        else if (node.classList?.contains("thread-history-turn")) {
+          const head = node.querySelector(":scope > .thread-history-question");
+          if (head) items.push({ host: head, at: shownTime(head), folded: node.classList.contains("is-watch-folded") });
+        }
+      }
+      if (ask && !ask.hidden) items.push({ host: ask, at: shownTime(ask) ?? Date.now(), live: true });
+      const seen = new Set();
+      for (const item of items) {
+        if (item.fold) continue;
+        const text = item.host.querySelector("[data-question]")?.dataset.question || "";
+        item.host.classList.toggle("is-watch-repeat",
+          item.host.classList.contains("is-watch-run") && Boolean(text) && seen.has(text));
+        if (text) seen.add(text);
+      }
+      history?.querySelectorAll(".thread-day").forEach(node => node.remove());
+      ask?.querySelectorAll(":scope > .thread-day").forEach(node => node.remove());
+      if (!items.some(item => item.host.classList.contains("is-watch-run"))) return;
+      let previous = null;
+      for (const item of items) {
+        // A folded run is under its line; a message without a time belongs
+        // to the day before it.
+        if (item.folded || item.at === null) continue;
+        const day = dayStart(item.at);
+        if (day === previous) continue;
+        previous = day;
+        item.host.prepend(dayDivider(item.at));
+      }
+    },
+
+    // Runs of a Watch that found nothing, one after another on the same day,
+    // fold into one line ("Checked 4 times · nothing new · last 08:00"); a
+    // click shows them. What they found stays as it was, each a turn of its
+    // own. A new day starts a new line under its own day (syncThread).
     foldQuietRuns(history) {
       history.querySelectorAll(":scope > .thread-watch-fold").forEach(node => node.remove());
       const open = history._unfoldedRuns || (history._unfoldedRuns = new Set());
+      const timeOfTurn = node => shownTime(node.querySelector(":scope > .thread-history-question"));
       let group = [];
+      let groupDay = null;
       const flush = () => {
         if (!group.length) return;
         const key = group[0].dataset.turnKey || "";
         const expanded = open.has(key);
-        const last = group[group.length - 1].dataset.watchRunAt;
-        const when = last && window.App.format?.relative ? window.App.format.relative(last) : "";
+        const first = timeOfTurn(group[0]);
+        const when = clockOf(timeOfTurn(group[group.length - 1]));
         const row = document.createElement("div");
         row.className = "thread-watch-fold";
+        if (first !== null) row.dataset.turnAt = String(first);
         const button = document.createElement("button");
         button.type = "button";
         button.className = "thread-watch-fold-button";
@@ -526,10 +662,24 @@
         group[0].before(row);
         group = [];
       };
-      for (const node of history.children) {
+      // The run that first brings a task stays open, even when it found
+      // nothing: the chat shows the task there and nowhere else (syncThread).
+      const seen = new Set();
+      for (const node of [...history.children]) {
         if (!node.classList?.contains("thread-history-turn")) continue;
-        if (node.classList.contains("is-watch-quiet")) group.push(node);
-        else flush();
+        const text = node.querySelector(":scope > .thread-history-question [data-question]")?.dataset.question || "";
+        const first = Boolean(text) && !seen.has(text);
+        if (text) seen.add(text);
+        if (!node.classList.contains("is-watch-quiet") || first) {
+          node.classList.remove("is-watch-folded");
+          flush();
+          continue;
+        }
+        const at = timeOfTurn(node);
+        const day = at === null ? groupDay : dayStart(at);
+        if (group.length && day !== groupDay) flush();
+        group.push(node);
+        groupDay = day;
       }
       flush();
     },
@@ -571,6 +721,7 @@
       history.hidden = !history.children.length;
       hooks.forEach(attached => attached());
       this.foldQuietRuns(history);
+      this.syncThread();
       return nodes.length;
     },
 
@@ -579,6 +730,7 @@
       if (!history) return;
       history.replaceChildren();
       history.hidden = true;
+      this.syncThread();
     },
 
     // The saved Consensus answer on screen (firebase.js). Nothing continues

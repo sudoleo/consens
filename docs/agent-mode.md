@@ -4098,8 +4098,9 @@ zur nächsten Fälligkeit auf (`next_tick_seconds`). Ein fälliger Lauf wird in
 einer Transaktion genommen (`claim`: nächster Termin gesetzt, `running`
 vermerkt, Tageszähler) und über `routers/agent.start_agent_turn(…, watch_run=…)`
 gestartet: dieselbe Route wie jede Nachricht, auf dem Hintergrund-Thread. Die
-Nachricht im Chat ist der Auftrag; der Verlauf sagt „Scheduled Watch run“
-darüber (`thread-history.js`).
+Nachricht im Chat ist der Auftrag; der Verlauf sagt „Scheduled Watch run ·
+08:00“ darüber und zeigt den Auftrag nur beim ersten Mal (`thread-history.js`,
+„Im Chat“ unten).
 
 Geprüft am Abend von 2026-11-03 (Review vor dem Deploy):
 - Der erste tägliche oder wöchentliche Lauf kommt zur nächsten passenden Zeit,
@@ -4184,10 +4185,17 @@ fortgesetzte; ihre öffentlichen Seiten bleiben, wie sie zuletzt waren
   Feld in einem Blatt (`watch-sheet.js`) und startet die Watch in diesem
   Chat. Eine Watch je Chat, deshalb keine Pille unter älteren Antworten und
   keine in temporären Chats.
-- **Im Chat**: Über einer geplanten Nachricht steht „Scheduled Watch run“;
-  Läufe ohne Befund hintereinander falten sich zu einer Zeile („4×
-  nachgesehen · nichts Neues · zuletzt …“), ein Klick zeigt sie. Öffnen des
-  Chats macht einen Befund gelesen.
+- **Im Chat** (seit 2026-11-05 ein fortlaufendes Gespräch, Max: „wie bei
+  WhatsApp … mit Datum getrennt“): Jeder Tag beginnt mit seinem Namen in
+  einer Kapsel („Heute“, „Gestern“, Wochentag, sonst Datum), nur in Chats,
+  in denen eine Watch lief. Über einer geplanten Nachricht steht „Scheduled
+  Watch run · 08:00“; den Auftrag zeigt nur der Lauf, der ihn zum ersten
+  Mal bringt, spätere sind nur diese Zeile mit der Antwort darunter (ein
+  geänderter Auftrag steht wieder einmal da). Läufe ohne Befund
+  hintereinander am selben Tag falten sich zu einer Zeile („4× nachgesehen ·
+  nichts Neues · zuletzt 16:00“), ein Klick zeigt sie; der erste Lauf eines
+  Auftrags faltet nie. Bilder und Dateien stehen wie in jeder Antwort unter
+  ihrem Lauf. Öffnen des Chats macht einen Befund gelesen.
 - **Nachrichten**: Mail mit „Stop emails“ (Link und `List-Unsubscribe`
   One-Click, schaltet nur die Mails dieser Watch aus) und, wo das Konto
   Telegram verbunden hat, dieselbe Nachricht in Telegram mit Knöpfen zur

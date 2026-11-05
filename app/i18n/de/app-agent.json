@@ -1184,6 +1184,7 @@
   "All your Watches are in use. End one in its chat first.": "Alle deine Watches sind belegt. Beende zuerst eine in ihrem Chat.",
   "Watch not started. {reason}": "Watch nicht gestartet. {reason}",
   "Scheduled Watch run": "Geplanter Lauf der Watch",
+  "Scheduled Watch run · {time}": "Geplanter Lauf der Watch · {time}",
   "This Watch no longer exists.": "Diese Watch gibt es nicht mehr.",
   "Watches are unavailable right now. Try again.": "Watches sind gerade nicht verfügbar. Versuch es noch mal.",
   "Choose how often the Watch runs.": "Wähle, wie oft die Watch läuft.",

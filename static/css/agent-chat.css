@@ -1446,8 +1446,25 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 .agent-watch-schedule :is(select, input):focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 /* A Watch's scheduled run in the chat (thread-history.js): one quiet line
-   above its task, which the Watch sent, not the user. */
-.thread-watch-run { margin: 0 0 4px; color: var(--ink-3); font-size: var(--font-size-xs); }
+   above its task, which the Watch sent, not the user, with its time. */
+.thread-watch-run { margin: 0 0 4px; color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
+/* A run whose task the chat already shows (syncThread): only that line,
+   centred like a messenger's notice; its words stand once, further up. */
+:is(.thread-ask, .thread-history-question).is-watch-repeat > :is(.thread-ask-bubble, .message-attachments) { display: none; }
+:is(.thread-ask, .thread-history-question).is-watch-repeat > .thread-watch-run { align-self: center; margin: 0; }
+/* The day that starts in a Watch's chat (syncThread), as a messenger
+   separates its days: one tinted capsule across the column, no rule. */
+.thread-day { align-self: stretch; margin: var(--space-2) 0 var(--space-5); text-align: center; }
+.thread-day > time {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--chat-surface);
+  color: var(--ink-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.4;
+}
 
 /* ---- A pull request the Agent prepared (agent-github.js) ------------------
    The Watch card's block: where it goes (repository, new branch -> base),
@@ -1756,7 +1773,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* Runs of a Watch that found nothing, folded into one line (thread-history.js
    foldQuietRuns); a click shows them, each as the turn it is. */
 .thread-history-turn.is-watch-folded { display: none; }
-.thread-watch-fold { display: flex; justify-content: center; margin: 0 0 var(--space-5); }
+.thread-watch-fold { display: flex; flex-direction: column; align-items: center; margin: 0 0 var(--space-5); }
+/* A day whose first item is the line has its day above it. */
+.thread-watch-fold > .thread-day { margin-bottom: var(--space-3); }
 .thread-watch-fold-button {
   display: inline-flex;
   align-items: center;

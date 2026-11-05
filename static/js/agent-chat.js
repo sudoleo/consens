@@ -563,6 +563,8 @@
       // A saved Consensus turn or a new chat: no check of a pasted text.
       App.passageCheck?.apply(document.getElementById("agentAnswerBody"), null);
       App.agentWatch?.render(document.getElementById("agentAnswerBody"), {});
+      // No Watch run on screen, and none of its days (thread-history.js).
+      App.followup?.markWatchRun?.(document.getElementById("threadAsk"), null);
       App.watch?.answerButton?.(document.getElementById("agentAnswerBody"), {});
       App.answerShare?.button?.(document.getElementById("agentAnswerBody"), {});
       App.agentSettings?.render(document.getElementById("agentAnswerBody"), {});
@@ -836,11 +838,10 @@
         pill.remove();
         if (row && !row.children.length) row.remove();
       });
-      // A Watch's quiet run folds with its neighbours, as a rebuilt history's does.
-      if (App.followup.quietWatchRun?.(turn)) {
-        node.classList.add("is-watch-quiet");
-        node.dataset.watchRunAt = String(turn.created_at || turn.updated_at || "");
-      }
+      // A Watch's quiet run folds with its neighbours, as a rebuilt history's
+      // does; its message keeps its line and time, the saved turn's.
+      App.followup.markWatchRun?.(ask, turn);
+      if (App.followup.quietWatchRun?.(turn)) node.classList.add("is-watch-quiet");
       node.append(ask, panel);
       return node;
     },
