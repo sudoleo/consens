@@ -103,6 +103,7 @@ SESSION_SHARE = .6
 LIVE_SHARE = .75
 SESSION_CHARS = 400_000
 # What one review may hold; longer fields are shortened, further marks dropped.
+# A reviewer's live marks of all its rounds keep to MAX_MARKS too (kept_marks).
 MAX_MARKS = 20
 QUOTE_CHARS = 400
 NOTE_CHARS = 600
@@ -303,12 +304,16 @@ REVIEW_PROMPT_BODY = (
 REVIEW_ASSIGNMENT = "Follow the agent's work log in rounds, then review the fixed answer."
 
 
-def review_system_prompt(reference_timezone=None):
-    """System prompt of every reviewer: the task, today's date, the rules."""
+def review_system_prompt(reference_timezone=None, device_timezone=None):
+    """System prompt of every reviewer: the task, today's date, the rules.
+    ``device_timezone``: the zone of the user's device for this message
+    (AnswerAudit.timezone), in which the agent counts its days too
+    (agent_runs.get_agent_turn_context); until 2026-11-05 the reviewers
+    counted them in the app's zone, a day ahead on an American evening."""
     from app.services import prompt_config
     from app.services.llm.base import get_date_context
-    zone = reference_timezone or prompt_config.get_config()["reference_timezone"]
-    return (REVIEW_PROMPT_HEAD + "\n" + get_date_context(zone) + "\n"
+    zone = device_timezone or reference_timezone or prompt_config.get_config()["reference_timezone"]
+    return (REVIEW_PROMPT_HEAD + "\n" + get_date_context(zone, device=bool(device_timezone)) + "\n"
             + REVIEW_PROMPT_BODY.format(live=LIVE_SEARCH_ROUNDS, final=REVIEW_SEARCH_ROUNDS))
 
 
@@ -1052,6 +1057,18 @@ def _marks(marks, known, final):
     return result
 
 
+def kept_marks(marks, limit=MAX_MARKS):
+    """``marks`` within ``limit``, like one review: the most severe, among
+    equals the newest, in their order. A reviewer's live marks: until
+    2026-11-05 they grew with every round of a long run, every new
+    conversation carried them all (from about 200 none held them) and the
+    review outgrew its storage (from about 1100, losing every reviewer's)."""
+    if len(marks) <= limit:
+        return marks
+    ranked = sorted(range(len(marks)), key=lambda index: (_SEVERITY[marks[index]["kind"]], index), reverse=True)
+    return [marks[index] for index in sorted(ranked[:limit])]
+
+
 def review_text(marks):
     """A round's marks as the agent panel shows them (Markdown)."""
     if not marks:
@@ -1477,7 +1494,7 @@ class ReviewerSession:
         self.audit, self.provider, self.model = audit, provider, model
         self.tools = audit.tools
         self.loop = audit.tools.loop
-        self.messages = [{"role": "system", "content": review_system_prompt()}]
+        self.messages = [{"role": "system", "content": review_system_prompt(device_timezone=audit.timezone)}]
         self.chars = len(self.messages[0]["content"])
         self.budget = session_budget(model)
         self.cursor = 0
@@ -1558,7 +1575,10 @@ class ReviewerSession:
         try:
             self.model = replace(self.model, max_output_tokens=min(self.model.max_output_tokens,
                                                                     audit.output_share(self.provider)))
-            self.budget = session_budget(self.model)
+            # The message's files follow the conversation in every request:
+            # their share of the window is not the conversation's.
+            window = max(0, self.model.context_length - audit.attached_tokens(self.model))
+            self.budget = session_budget(replace(self.model, context_length=window))
             while not audit.stopping:
                 if audit.final_answer is not None:
                     self._final(audit.final_answer)
@@ -1670,7 +1690,7 @@ class ReviewerSession:
         self.failures = 0
         self.cursor = entries[-1][0]["seq"]
         self.live_rounds += 1
-        self.live_marks.extend(mark for mark in marks if mark not in self.live_marks)
+        self._keep(marks)
         halt = parse_halt(value.text, known=known)
         if halt:
             self.audit.halt(self, halt)
@@ -1720,12 +1740,16 @@ class ReviewerSession:
         self.failures = 0
         self.cursor = last
         self.live_rounds += 1
-        self.live_marks.extend(mark for mark in marks if mark not in self.live_marks)
+        self._keep(marks)
         self.audit.gate_verdict(self, gate, verdict, halt)
         self._set(rounds=self.live_rounds)
         self.loop._publish(self.worker, text=review_text(marks)[:self.loop.policy.result_chars], kind="round",
                            sender=self.worker.id, recipient="orchestrator", wait=False)
         self.loop._state(self.worker, "waiting")
+
+    def _keep(self, marks):
+        """A round's new marks join the live ones, within MAX_MARKS (kept_marks)."""
+        self.live_marks = kept_marks(self.live_marks + [mark for mark in marks if mark not in self.live_marks])
 
     def _final(self, answer):
         log = self.audit.work_log
@@ -2027,6 +2051,10 @@ class AnswerAudit:
         self.allowance = None
         self._shares = None
         self._shares_lock = threading.Lock()
+        # The zone of the user's device for this message (AgentRequest.timezone),
+        # set by the route like ``allowance``: the reviewers' date is the
+        # agent's (review_system_prompt). None: the app's reference zone.
+        self.timezone = None
 
     def brief(self):
         """{seq, content}: the agent's instructions as the reviewers read them,
@@ -2242,6 +2270,26 @@ class AnswerAudit:
                                               name=f"agent-review-{provider}", daemon=True)
             self.sessions[provider] = session
             session.thread.start()
+
+    def attached_tokens(self, model):
+        """Tokens of the message's files that every request of a reviewer on
+        ``model`` carries after its conversation (DelegationLoop._step,
+        FileContext.messages: a PDF or a picture natively where the model
+        reads it), as the admission estimates them (input_estimate: 3,000 a
+        page of a PDF, 16,000 a picture). Until 2026-11-05 a reviewer's
+        budget counted its conversation alone, and with a scanned PDF on a
+        smaller window its rounds went past it (their search dropped, their
+        output cut, or no room at all). 0 without files, or when they cannot
+        be read: then its rounds fail on their own, never the run."""
+        file_context = getattr(self.tools.loop, "file_context", None)
+        if not self.file_ids or file_context is None:
+            return 0
+        from app.services.agent_tokens import input_estimate
+        try:
+            return input_estimate(file_context.messages([], model, file_ids=self.file_ids))
+        except Exception as exc:
+            logging.info("Agent reviewer files not estimated category=%s", safe_exception(exc))
+            return 0
 
     def output_share(self, provider):
         """A reviewer's output allowance (ComparisonTools._output_shares),

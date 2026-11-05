@@ -687,6 +687,8 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             agent_workspace.provision(store, uid)
         if loop.comparison is not None:
             loop.comparison.auditor.allowance = _read_or_none(reads["allowance"])
+            # The reviewers count "today" in the device's zone, as the agent does.
+            loop.comparison.auditor.timezone = payload.timezone
         # Every view follows the run through this buffer (POST tail, GET .../live).
         live, live_owned = agent_live.acquire(uid, payload.chat_id, payload.client_request_id)
     except Exception as exc:

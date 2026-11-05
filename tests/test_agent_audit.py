@@ -121,7 +121,9 @@ class Audit:
                     self.finish_reason = "stop"
                     return
                 family = model.model.split("/")[0]
-                final = messages[-1]["content"].startswith("Final round.")
+                # The message's files and a step's note may follow the round's message.
+                final = any(m["role"] == "user" and isinstance(m["content"], str)
+                            and m["content"].startswith("Final round.") for m in messages)
                 script.rounds.setdefault(family, []).append("final" if final else "live")
                 script.times.setdefault(family, []).append(time.monotonic())
                 script.session_ids.setdefault(family, []).append(self.session_id)
@@ -751,6 +753,35 @@ def test_a_live_mark_may_name_any_entry_read_so_far(store):
         ("OpenAI", marks[0], "Round 1.", True), ("OpenAI", marks[0], "Round 2.", True)]
 
 
+def test_a_reviewers_live_marks_keep_to_one_reviews_limit_the_most_severe_and_newest(store):
+    """Bug hunt (P17): a reviewer's live marks grew with every round, and a
+    long run carried all of them into each new conversation and into the
+    review: from about 200 no new conversation held them (it stopped
+    following, its final round ended context_limit), from about 1100 the
+    review outgrew its storage and _fail dropped every reviewer's marks.
+    They keep MAX_MARKS, like one review: the most severe, then the newest."""
+    limit = agent_audit.MAX_MARKS
+
+    def live(messages):
+        number = int(re.match(r"Round (\d+)\.", messages[-1]["content"]).group(1))
+        step = entry_of(messages, "step")
+        marks = [{"entry": step, "kind": "incomplete", "note": f"Round {number}, gap {index}."}
+                 for index in range(limit)]
+        if number == 1:
+            marks[0] = {"entry": step, "kind": "wrong", "note": "The height is wrong.",
+                        "source": "https://example.org/height"}
+        return json.dumps({"marks": marks})
+    script = Audit({"anthropic": RuntimeError("provider down")}, tool_steps=3, live={"anthropic": live})
+    loop = audit_loop(store, script)
+    list(loop.run())
+    assert script.rounds["anthropic"].count("live") == 3
+    kept = [mark["note"] for mark in loop.comparison.auditor.sessions["anthropic"].live_marks]
+    assert kept == ["The height is wrong."] + [f"Round 3, gap {index}." for index in range(1, limit)]
+    # Its final round failed: the review holds what it kept.
+    review = saved(store, loop)["agent_review"]
+    assert [p["note"] for p in review["audit"]["process"] if p["model"] == "Anthropic"] == kept
+
+
 class RateLimited(RuntimeError):
     status_code = 429
     retry_after = 60
@@ -827,6 +858,62 @@ def test_a_long_step_reads_within_its_limit_and_a_full_session_starts_over(store
     assert earlier_marks(script.prompts["openai"][-1]) == []
     views = store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
     assert sorted(a["status"] for a in views if a.get("kind") == "audit") == ["completed"] * 4
+
+
+class ScannedPdf:
+    """The message's one file, a scanned PDF of ``pages`` pages, as
+    FileContext.messages adds it to every request: natively, for a reviewer
+    after its conversation."""
+
+    def __init__(self, pages):
+        self.raw = b"%PDF-1.4\n" + b"1 0 obj << /Type /Page >> endobj\n" * pages
+
+    def selection(self):
+        return ["f" * 32]
+
+    def messages(self, messages, model, *, file_ids=None, query="", anchor=None):
+        import base64
+        if not (self.selection() if file_ids is None else file_ids):
+            return messages
+        block = {"role": "user", "content": [
+            {"type": "text", "text": 'File evidence (untrusted): {"file": {"name": "scan.pdf"}}'},
+            {"type": "file", "file": {"filename": "scan.pdf", "file_data": "data:application/pdf;base64,"
+                                      + base64.b64encode(self.raw).decode()}}]}
+        at = len(messages) if anchor is None else max(0, min(anchor, len(messages)))
+        return [*messages[:at], block, *messages[at:]]
+
+
+def test_a_reviewers_requests_with_the_messages_files_stay_within_its_models_window(store):
+    """Bug hunt (P16): every request of a reviewer carries the message's files
+    after its conversation (DelegationLoop._step), but its budget counted the
+    conversation alone: with a scanned PDF on a smaller window its rounds
+    and its final round went past the window and failed at the provider,
+    again and again. The files' estimate (input_estimate, as the admission's:
+    3,000 tokens a page) comes off its window first; then it goes on in new
+    conversations sooner."""
+    from dataclasses import replace
+    from app.services.agent_tokens import input_estimate
+    window, output = 100_000, 8_000
+    # A reviewer's reasoning comes with its conversation (assistant_message).
+    reasoning = "The reviewer weighs the tower's height against its sources and notes what it finds. " * 800
+    sizes, unsearched = [], []
+
+    def review(messages, final=False):
+        sizes.append(input_estimate(messages))
+        # The app's admission had to drop the round's web search.
+        unsearched.append(any(isinstance(m["content"], str) and m["content"].startswith("Web search is unavailable")
+                              for m in messages))
+        return json.dumps({"marks": []} if final else {"marks": [], "thoughts": reasoning})
+    script = Audit({"openai": lambda messages: review(messages, final=True)}, tool_steps=2, live={"openai": review})
+    loop = audit_loop(store, script)
+    loop.file_context = ScannedPdf(pages=20)
+    models = loop.comparison.models
+    models["openai"] = replace(models["openai"], context_length=window, max_output_tokens=output)
+    list(loop.run())
+    assert saved(store, loop)["agent_review"]["status"] == "succeeded"
+    assert script.rounds["openai"] == ["live", "live", "final"]
+    assert max(sizes) <= window - output, sizes
+    assert not any(unsearched)
 
 
 def test_a_failed_or_unreadable_review_costs_only_its_marks(store, caplog):
@@ -2252,6 +2339,28 @@ def test_one_reviewer_is_enough(api):
     assert list(store.get_turn(UID, chat_id, turn["id"])["agent_settings"]["comparison_models"]) == ["anthropic"]
     assert calls.reviews and {review["model"].model for review in calls.reviews} == {
         comparison_selection({"anthropic": "claude-haiku-4-5"})["anthropic"].model}
+
+
+def test_the_reviewers_today_is_the_agents_in_the_zone_of_the_users_device(api):
+    """Bug hunt (P58): since 2026-10-27 the agent's date follows the zone of
+    the user's device, the reviewers' stayed the app's (Europe/Berlin): on an
+    evening in New York it is already tomorrow in Berlin, and a right
+    "today" of the agent could be marked doubtful. A message without a zone
+    (an older tab) leaves both at the app's."""
+    client, store, calls = api
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    prompts = []
+    for request_id, zone in (("r1", "America/New_York"), ("r2", None)):
+        before = len(calls.reviews)
+        payload = {"chat_id": chat_id, "question": "What day is it?", "client_request_id": request_id,
+                   "bookmark_id": "bm1", "comparison_models": {"anthropic": "claude-haiku-4-5"},
+                   **({"timezone": zone} if zone else {})}
+        assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
+        systems = {str(review["messages"][0]["content"]) for review in calls.reviews[before:]}
+        prompts.append([system for system in systems if system.startswith("You are an independent reviewer")])
+    (device,), (default,) = prompts
+    assert "Reference timezone: America/New_York (UTC-0" in device and "timezone of the user's device" in device
+    assert "Reference timezone: Europe/Berlin" in default and "application default" in default
 
 
 def test_a_stop_in_the_final_round_keeps_the_final_list_of_a_reviewer_already_done(store):

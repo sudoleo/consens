@@ -6165,7 +6165,11 @@ Anfrage der Schlussrunde als `FinalRequest` auf eigenem Thread
 andere endet `superseded` (`agent-delegation.js` `reviewerRows` lässt sie
 nicht für den Prüfer sprechen); `FINAL_ROUND_SECONDS` begrenzt alles
 (`ReviewCancellation.overtime`, `no_time`). Runden passen in den Platz des Prüfergesprächs
-(`session_budget` aus dem Kontextfenster, `fitted_round`, `_fit` je Eintrag);
+(`session_budget` aus dem Kontextfenster, `fitted_round`, `_fit` je Eintrag;
+seit 2026-11-05 ohne den Anteil der Dateien der Nachricht, die jede Anfrage
+nach dem Gespräch trägt, `AnswerAudit.attached_tokens` mit `input_estimate`
+wie die Zulassung; die Live-Befunde eines Prüfers halten wie eine Prüfung
+`MAX_MARKS`, `kept_marks`: die schwersten, dann die neuesten);
 `review_entry` lässt den Verbrauch weg, nennt aber die Suchen eines Schritts
 (`searches`, seit 2026-10-27): GPT-6 Lunas Suchen kommen ohne Treffer an, und
 der Prüfer hielt den Schritt sonst für unrecherchiert (`AgentCompletion`
@@ -6839,8 +6843,9 @@ kein beim Serverstart eingefrorener Wert. Agent-Nachrichten nehmen seit
 2026-10-27 die Zeitzone des Geräts (`AgentRequest.timezone`, aus
 `Intl.DateTimeFormat` in `agent-chat.js`; ein unbekannter Name zählt als keiner)
 für den App-Kontext (`get_agent_turn_context(device_timezone=…)`,
-`get_date_context(device=True)`); Vergleichsmodelle und Prüfer bleiben bei der
-Referenzzeitzone. Eigene Client-Systemprompts behalten
+`get_date_context(device=True)`), die Prüfer seit 2026-11-05 ebenso (die Route
+setzt `AnswerAudit.timezone`, `review_system_prompt(device_timezone=…)`);
+Vergleichsmodelle (`compare_models`) bleiben bei der Referenzzeitzone. Eigene Client-Systemprompts behalten
 ihren bisherigen Vorrang; der Standard wird nicht ungefragt angehängt.
 Ohne persönliche Anweisungen sendet `query-send.currentSystemPrompt` einen leeren
 Wert; `/prepare` setzt den konfigurierten Einzelantwort-Standard und den frischen
