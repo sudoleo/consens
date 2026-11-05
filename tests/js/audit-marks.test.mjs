@@ -106,6 +106,25 @@ it("shows every reviewer's mark among the disagreements and only a wrong one amo
   }
 });
 
+// Bug hunt P21 (2026-11-05): a note the answer does not hold showed only
+// among the disagreements; one that calls the answer wrong went under
+// "Contradictions only" and "Critical", where its placed mark stays.
+it("lists a wrong note among the contradictions like its mark, the others only among the disagreements", () => {
+  const audit = { claims: [], unplaced: [
+    { model: "OpenAI", kind: "wrong", note: "Not in the answer.", quote: "It is 400 metres tall" },
+    { model: "Gemini", kind: "doubtful", note: "Unclear.", quote: "It has 3 floors" }] };
+  for (const [mode, shown] of [["concerns", ["wrong", "doubtful"]], ["all", ["wrong", "doubtful"]],
+    ["contradictions", ["wrong"]], ["critical", ["wrong"]]]) {
+    const { window, document } = boot(ANSWER, mode);
+    const fallback = document.getElementById("consensusClaimsFallback");
+    window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit, fallback, []);
+    const rows = [...fallback.querySelectorAll(".claims-fallback-row")];
+    expect(rows.filter(row => !row.classList.contains("is-marker-filtered")).map(row => row.dataset.kind), mode)
+      .toEqual(shown);
+    expect(fallback.classList.contains("is-marker-filtered"), mode).toBe(false);
+  }
+});
+
 it("never links a source that is no web address", () => {
   const { window, document } = boot(ANSWER);
   const audit = { claims: [{ ...AUDIT.claims[1], dissent: [{ model: "OpenAI", kind: "wrong", note: "Bad link.",

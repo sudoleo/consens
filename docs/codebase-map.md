@@ -5784,7 +5784,9 @@ Version markiert `window.renderStoredAuditMarks(body, review.audit, fallback,
 sources, {openNotes})` (consensus-insights.js) die Sätze mit `.is-audit` und
 `is-major`/`is-split`/`is-minor` je Art, die Karte (`auditCard`) zeigt je Prüfer
 Art, Anmerkung und Quelle, nicht platzierte Anmerkungen stehen in der
-Fallback-Liste („Other notes“). Die Leiste bietet Notes, Answers (nur mit
+Fallback-Liste („Other notes“; die Hervorhebungsfilter behandeln eine Zeile wie
+ihre Marke: „wrong“ auch unter Contradictions/Critical, seit 2026-11-05).
+Die Leiste bietet Notes, Answers (nur mit
 `compare_models`, öffnet den ersten Vergleich mit Antworten, `adviceContexts`:
 ein Leser-Kontext je Vergleich unter `agent-evidence:{id}`) und Sources; der
 Leser-Kontext der Prüfung (`agent-audit:<turn>:<answer_hash>`, seit 2026-11-02

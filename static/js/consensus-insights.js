@@ -64,19 +64,19 @@
           if (!lines.length) return md;
 
           const first = lines[0].toLowerCase();
+          // Ganze Woerter, auch zwischen ** (fett): "delivery" ist kein "very".
           const mapping = [
-            { key: " very ", cls: "cred-very" },
-            { key: " largely ", cls: "cred-largely" },
-            { key: " partially ", cls: "cred-partially" },
-            { key: " hardly ", cls: "cred-hardly" },
-            { key: " not ", cls: "cred-not" }
+            { key: /\bvery\b/, cls: "cred-very" },
+            { key: /\blargely\b/, cls: "cred-largely" },
+            { key: /\bpartially\b/, cls: "cred-partially" },
+            { key: /\bhardly\b/, cls: "cred-hardly" },
+            { key: /\bnot\b/, cls: "cred-not" }
           ];
 
-          // Robust: prüft auf vollständige Satzfragmente
           let cls = null;
           if (first.includes("the consensus answer is")) {
             for (const m of mapping) {
-              if (first.includes(m.key.trim())) { cls = m.cls; break; }
+              if (m.key.test(first)) { cls = m.cls; break; }
             }
           }
 
@@ -265,8 +265,11 @@
             fallbackBoxes.forEach(function (box) {
               const rows = Array.from(box.querySelectorAll(".claims-fallback-row"));
               rows.forEach(function (row) {
+                // A reviewer's note the answer does not hold counts like its
+                // mark (matchesHighlightFilter): "wrong" is a contradiction.
                 const include = highlightMode === "all"
-                  || (highlightMode === "concerns" && row.dataset.coverage === "split");
+                  || (highlightMode === "concerns" && row.dataset.coverage === "split")
+                  || (row.classList.contains("is-audit-note") && row.dataset.kind === "wrong");
                 row.classList.toggle("is-marker-filtered", !include);
               });
               box.classList.toggle("is-marker-filtered", rows.length > 0
@@ -1501,6 +1504,8 @@
           let leaveTimer = null;
           let hoverGroup = null;
           let hoverHiddenAt = 0;
+          // The pointer is in the card, which holds its sentence's light.
+          let pointerInCard = false;
 
           function ensureHoverCard() {
             if (hoverCard && hoverCard.isConnected) return hoverCard;
@@ -1513,8 +1518,12 @@
             // Maus-, nicht Pointer-Ereignisse wie an den Saetzen: pointerenter
             // kaeme vor dem mouseleave des Satzes, und der naehme die Karte
             // unter dem Zeiger wieder weg.
-            hoverCard.addEventListener("mouseenter", holdHoverPreview);
+            hoverCard.addEventListener("mouseenter", function () {
+              pointerInCard = true;
+              holdHoverPreview();
+            });
             hoverCard.addEventListener("mouseleave", function () {
+              pointerInCard = false;
               if (hoverGroup && !hoverCard.hidden) setPassageHover(hoverGroup, false);
             });
             document.body.appendChild(hoverCard);
@@ -1580,6 +1589,7 @@
             if (!hoverCard || hoverCard.hidden) return;
             hoverCard.classList.toggle("is-instant", options?.instant === true);
             hoverCard.hidden = true;
+            pointerInCard = false;
             hoverHiddenAt = Date.now();
           }
 
@@ -1591,6 +1601,9 @@
             const pinned = $("claimPopover");
             if (pinned && !pinned.hidden) return;
             event.preventDefault();
+            // The card held its sentence lit (holdHoverPreview): with the card
+            // gone, no mouseleave of the sentence would take that away.
+            if (pointerInCard && hoverGroup) hoverGroup.hover = false;
             hideHoverPreview();
           }, true);
 

@@ -437,6 +437,39 @@ describe("which devices get the card", () => {
     env.dom.window.close();
   });
 
+  // Bug hunt P22 (2026-11-05): Escape with the pointer in the card took the
+  // card away, but its sentence stayed lit until the next hover: the card had
+  // held it (holdHoverPreview), and no mouseleave of the sentence came.
+  it("lets Escape take the sentence's light along when the pointer was in the card", async () => {
+    const env = boot();
+    const mark = marked(env);
+    const escape = () => env.document.dispatchEvent(new env.window.KeyboardEvent("keydown",
+      { key: "Escape", bubbles: true, cancelable: true }));
+    env.hover(mark);
+    await wait(160);
+    const card = env.shown();
+    env.leave(mark);
+    env.hover(card);
+    expect(mark.classList.contains("is-hovered")).toBe(true);
+    escape();
+    expect(env.shown()).toBeNull();
+    expect(mark.classList.contains("is-hovered")).toBe(false);
+    env.leave(card);
+    await wait(300);
+    expect(mark.classList.contains("is-hovered")).toBe(false);
+    // The pointer on the sentence itself: it stays lit while it is there.
+    env.hover(mark);
+    await wait(160);
+    expect(env.shown()).not.toBeNull();
+    escape();
+    expect(env.shown()).toBeNull();
+    expect(mark.classList.contains("is-hovered")).toBe(true);
+    env.leave(mark);
+    await wait(50);
+    expect(mark.classList.contains("is-hovered")).toBe(false);
+    env.dom.window.close();
+  });
+
   it("does not bring it back on a scroll once there is no pointer any more", async () => {
     const env = boot();
     const mark = marked(env);

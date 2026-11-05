@@ -31,3 +31,25 @@ describe("agreement coverage", () => {
     expect(render({ score: 90 }).textContent).toContain("High agreement");
   });
 });
+
+// The judge's free text of saved Consensus turns without differences_data
+// (thread-history.js): its first line becomes a badge in the verdict's colour.
+describe("the credibility line of an old judge text", () => {
+  const badge = text => {
+    const app = loadScripts(["static/js/user-settings.js", "static/js/consensus-anchor.js", "static/js/consensus-insights.js"], {
+      before(window) {
+        window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+      }
+    });
+    return app.window.colorizeCredibility(text).match(/cred-badge (cred-\w+)/)?.[1] ?? null;
+  };
+
+  it("reads the verdict's word, never a word that only contains it", () => {
+    for (const level of ["very", "largely", "partially", "hardly", "not"]) {
+      expect(badge(`The consensus answer is **${level}** credible.\n\nDetails follow.`)).toBe(`cred-${level}`);
+    }
+    // Bug hunt P22 (2026-11-05): "delivery" read as "very".
+    expect(badge("The consensus answer is not credible about delivery dates.")).toBe("cred-not");
+    expect(badge("The consensus answer is credible about delivery dates.")).toBeNull();
+  });
+});
