@@ -273,8 +273,13 @@ def test_reasoning_lines_at_the_end_of_the_page_keep_the_chat_still(browser, pha
             # Past the height motion and the cross-fade of a changed line.
             page.wait_for_timeout(450)
             page.evaluate("""() => __ends.push(document.querySelector('.chat-scroll-reserve').getBoundingClientRect().bottom + scrollY)""")
+        # Since 2026-11-04 the calm view has one line: while the agent thinks,
+        # the status line is its newest heading, each standing its four
+        # seconds. The frames run on until the last one has faded in.
+        expect(page.locator("#agentAnswerActivity .agent-progress .agent-current-status")).to_have_text("Checking the numbers")
+        page.wait_for_timeout(450)
+        page.evaluate("""() => __ends.push(document.querySelector('.chat-scroll-reserve').getBoundingClientRect().bottom + scrollY)""")
         frames = page.evaluate("() => { window.__stop = true; return __frames; }")
-        expect(page.locator("#agentAnswerActivity .agent-progress p")).to_contain_text("Checking the numbers")
         # Not a pixel, in any frame: neither the scroll offset nor the question.
         assert len({scroll for scroll, _ in frames}) == 1, frames
         assert max(top for _, top in frames) - min(top for _, top in frames) < .01, frames
