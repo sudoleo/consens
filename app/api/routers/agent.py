@@ -679,7 +679,6 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                          chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
                          watch_run=watch_run, history_summary=history_summary or None,
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
-                         workspace_warm=bool(chat_data.get("agent_workspace_used")),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
         if loop.vm_tools is not None:
             # A new account's workspace is made while it talks to the agent,

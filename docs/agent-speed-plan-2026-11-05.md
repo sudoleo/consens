@@ -259,11 +259,32 @@ Denk-Zusammenfassung).
 | P1 | **Engine bleibt `auto`.** Die Probe mit Terra auf Exa brauchte 7,9 s für eine Suchrunde, war also nicht schneller als die eigene Suche (Prod-Median 6,2 s je Runde). `AGENT_SEARCH_ENGINE=exa` schaltet die eigenen Schritte des Agenten um, damit sich das im Betrieb messen lässt. Was die Suchzeit wirklich drückt: mehrere Suchen in einem Durchgang (P4) und schnell startende Endpunkte (P2) | `agent_tools.agent_search_engine` |
 | P2 | Agent-Aufrufe senden `preferred_max_latency` `{p50: 2, p90: 5}` zusätzlich zur Sortierung nach Durchsatz (weich, schließt nie aus) | `openrouter_contract.agent_provider_routing` |
 | P3 | Beleg eines Werkzeug-Schritts im Hintergrund (`_settle_later`), kein Chat-Read je Schritt mehr (`_chat_google_data`), der Live-Puffer weckt Leser statt 100-ms-Takt, eine dauerhafte HTTP-Verbindung zu OpenRouter. Der Kontingent-Read vor jedem Schritt eines VM-Laufs bleibt: Ein paralleler Lauf desselben Kontos kann das Kontingent jederzeit verbrauchen (`tests/test_agent_long_runs.py`) | `agent_delegation.py`, `agent_live.py`, `llm/provider_runtime.py` |
-| P4 | `parallel_tool_calls` in jedem Schritt; lesende Aufrufe eines Schritts laufen nebeneinander (`CONCURRENT_TOOLS`, `_prefetch`) | `agent_delegation.py` |
-| P5 | Folgenachricht nach Arbeitsplatz-Nutzung wärmt auch die Werkbank vor (`workspace_warm`). Der erste ändernde Aufruf wartet weiter auf den Checkpoint: Er ist der Stand vor der Nachricht, ein späterer Checkpoint wäre keiner. Er beginnt jetzt aber früher | `routers/agent.py`, `DelegationLoop.__init__` |
+| P4 | `parallel_tool_calls` in jedem Schritt; lesende Aufrufe eines Schritts laufen nebeneinander (`CONCURRENT_TOOLS`: `read_source`, `read_file`, `search_chats`, `_prefetch`). Die Bilder-Werkzeuge nicht: Ihre Budgets je Nachricht nimmt jeder Aufruf für sich, zwei auf einmal hätten dasselbe Budget zweimal verbraucht | `agent_delegation.py` |
+| P5 | **Zurückgenommen nach der Gegenprüfung.** Die Werkbank bei jeder Folgenachricht vorzuwärmen kostet eine Lease (VM-Zeit) und einen Checkpoint, der nie gelöscht wird, auch wenn die Nachricht den Arbeitsplatz nicht nutzt. Offen bleibt das Vorwärmen nach `open_workspace` | – |
 | P6 | Kurze Antworten erscheinen am Ende ihres Streams, nicht erst nach der Abrechnung. Die Übergabe (`handover`) läuft auch ohne Prüfer. Im Browser erscheint das erste Wort ohne 100-ms-Flush und ohne Wartezeit auf die ausblendende Live-Zeile, und der Stille-Timer startet erst mit den Antwort-Headern. Die 300-Zeichen-Sperre bleibt: Sie verhindert, dass Vorreden vor Toolcalls aufblitzen | `agent_delegation.py`, `static/js/*` |
 | P7 | Kein Unterschied messbar (2,3 s mit, 2,7 s ohne Zusammenfassung, beide ohne Reasoning-Tokens). `summary: "auto"` bleibt, denn sie speist die Gedankenzeile | – |
 
 Nach dem Deploy mit `scripts/agent_speed.py --days 2 --openrouter` nachmessen:
 Endpunkt und TTFT je Schritt, Rest je Lücke (Ziel ≤ 0,3 s), Suchen je
 Durchgang.
+
+**Gegenprüfung (2026-11-05 abends, Code-Review des Commits e04edc8a):**
+Behoben wurden fünf Punkte.
+- Die Bilder-Werkzeuge laufen nicht mehr gleichzeitig. Zwei Aufrufe
+  verbrauchten dasselbe Budget je Nachricht zweimal.
+- Das Vorwärmen der Werkbank (P5) ist zurückgenommen.
+- Ein vorgezogener Aufruf, den der Batch nicht mehr erreicht, bekommt sein
+  gelesenes Ergebnis statt „Not run“. Vorher zeigte die Zeitleiste ihn als
+  erledigt.
+- Die frühe kurze Antwort erscheint nur, wenn keine Worker-Ergebnisse mehr
+  offen sind. Sonst würde sie gleich wieder zurückgezogen.
+- Ein Beleg, den der Hintergrund-Thread gerade schreibt, schreibt die
+  Warteschleife der Zulassung nicht noch einmal.
+- Ein Leser, dessen Puffer verdrängt wird, wacht sofort auf.
+
+Bewusst gelassen wurden zwei Punkte.
+- Eine fehlgeschlagene Hintergrund-Abrechnung meldet sich erst beim nächsten
+  Claim. Das ist eine Transaktion später als vorher und liegt in einem Fall,
+  der selten vorkommt.
+- Die Übergabe kostet ohne Prüfer eine Transaktion mehr. Dafür ist die
+  Antwort etwa 2 s früher fertig.

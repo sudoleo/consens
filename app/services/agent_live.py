@@ -302,14 +302,18 @@ class AgentLiveBuffers:
     def _wake(self, run):
         """Wake the readers of ``run`` (from any thread)."""
         with self._lock:
-            waiters = list(run.waiters)
-        for loop, event in waiters:
+            self._notify(run)
+
+    @staticmethod
+    def _notify(run):
+        """_wake under the lock the caller holds (an eviction too): handing
+        the wake-up to each reader's loop never blocks."""
+        for loop, event in list(run.waiters):
             try:
                 loop.call_soon_threadsafe(event.set)
             except RuntimeError:
                 # Its loop closed: the reader is gone.
-                with self._lock:
-                    run.waiters.discard((loop, event))
+                run.waiters.discard((loop, event))
 
     def stats(self) -> dict:
         with self._lock:
@@ -384,6 +388,8 @@ class AgentLiveBuffers:
         run.base_parts = []
         run.sticky = {}
         run.evicted = True
+        # Its readers end now and fall back to the saved turn.
+        self._notify(run)
 
 
 agent_live = AgentLiveBuffers()

@@ -403,6 +403,30 @@ def test_a_reader_wakes_with_a_frame_from_another_thread():
     assert not run.waiters
 
 
+def test_a_reader_of_an_evicted_run_ends_at_once():
+    # Eviction wakes the reader too (review of the speed plan): it ends and
+    # falls back to the saved turn now, not at its next look.
+    import threading
+    import time as clock
+    buffers = AgentLiveBuffers(max_runs=1)
+    run = buffers.open("u", "c", "r")
+
+    def evict():
+        clock.sleep(.2)
+        buffers.open("u", "c", "other")
+
+    async def follow():
+        started = clock.monotonic()
+        chunks = [chunk async for chunk in buffers.tail_sse(run, interval=5, keepalive=30)]
+        return chunks, clock.monotonic() - started
+
+    thread = threading.Thread(target=evict)
+    thread.start()
+    chunks, took = anyio.run(follow)
+    thread.join()
+    assert chunks == [] and took < 1.5
+
+
 def test_reset_text_follows_cleared_answers():
     buffers = AgentLiveBuffers(max_events=1)
     run = buffers.open("u", "c", "r")

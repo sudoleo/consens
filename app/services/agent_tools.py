@@ -65,7 +65,8 @@ def search_tools(model, searches, *, agent=False):
     steps (``agent``) search on agent_search_engine(). See
     docs/agent-mode.md, "Websuche".
     """
-    engine = {"engine": agent_search_engine()} if agent and agent_search_engine() != "auto" else {}
+    engine = agent_search_engine() if agent else "auto"
+    engine = {"engine": engine} if engine != "auto" else {}
     return [web_search_tool(search_family(model), max_uses=searches, max_results=SEARCH_RESULTS,
                             max_total_results=SEARCH_RESULTS * searches,
                             max_characters=SEARCH_RESULT_CHARACTERS, **engine)] if searches else []

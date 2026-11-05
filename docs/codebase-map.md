@@ -4580,12 +4580,15 @@ Schritt des Agenten fragt mit `parallel_tool_calls` (`_parallel_calls`; seit
 Aufrufe laufen nacheinander, höchstens `TOOL_CALLS_PER_STEP` = 4, jeder mit
 genau einem Ergebnis (`CALL_OVER_LIMIT`, `CALL_AFTER_*`). Ausnahme seit
 2026-11-05: Besteht ein Schritt nur aus lesenden Werkzeugen
-(`CONCURRENT_TOOLS`: `read_source`, `find_pictures`, `search_pictures`,
-`read_file`, `search_chats`), startet `_prefetch` die späteren Aufrufe neben
-dem ersten (`_start_call`/`_await_call`); der Batch nimmt ihre Ergebnisse in
-Reihenfolge und prüft jeden wie sonst. Nicht vorgezogen werden Aufrufe, die
-der Wiederholungsschutz ablehnen wird, und dieselbe Seite ein zweites Mal
-(`url_key`, dann `already_read`). Nach jedem Batch einer
+(`CONCURRENT_TOOLS`: `read_source`, `read_file`, `search_chats`; die
+Bilder-Werkzeuge nicht, ihre Budgets je Nachricht nimmt jeder Aufruf für
+sich), startet `_prefetch` die späteren Aufrufe neben dem ersten
+(`_start_call`/`_await_call`); der Batch nimmt ihre Ergebnisse in
+Reihenfolge und prüft jeden wie sonst. Ein vorgezogener Aufruf, den der Batch
+danach nicht mehr erreicht (Pause, Steuern, Wiederholungsschutz), bekommt sein
+gelesenes Ergebnis, nie „Not run“. Nicht vorgezogen werden Aufrufe, die der
+Wiederholungsschutz ablehnen wird, dieselbe Seite ein zweites Mal (`url_key`,
+dann `already_read`) und Lesungen über den Grenzen (`SourceReader.room_for`). Nach jedem Batch einer
 Nachricht mit Arbeitsplatz steht eine Faktzeile (`_note_progress`: Schritt und
 wie lange der Nutzer wartet, die Grenzen erst ab `LIMITS_SHOWN_FROM` = 80 %,
 seit 2026-11-01; `open_workspace` nennt keine Grenzen mehr). Details und
@@ -6552,10 +6555,10 @@ reicht dem Browser; die Werkbank startet erst mit ihrem ersten Werkzeug
 (`VMSession.ready(bench=…)`, Teile `_lease` und `_bench` je als `_Job` auf
 eigenem Thread, `open_workspace` beginnt beide schon während des nächsten
 Modellschritts: `VMTools.prewarm`, aus `DelegationLoop._request_workspace`;
-eine offen beginnende Nachricht wärmt den Browser und seit 2026-11-05 auch die
-Werkbank, wenn die letzte Nachricht des Chats den Arbeitsplatz nutzte
-(`workspace_warm` aus `agent_workspace_used`, Tempo-Plan P5; nur den Browser,
-wenn ihn allein der Browser des Nutzers öffnete). Seit 2026-11-02
+eine offen beginnende Nachricht wärmt nur den Browser: Die Werkbank kostet eine
+Lease (VM-Zeit des Tages) und einen bleibenden Checkpoint, auch wenn die
+Nachricht sie nie nutzt; Tempo-Plan P5 wärmte sie am 2026-11-05 kurz mit vor,
+nach der Gegenprüfung am selben Tag zurückgenommen). Seit 2026-11-02
 richtet die erste Nachricht eines Kontos ohne Arbeitsplatz die VM im
 Hintergrund ein und startet Chrome einmal (`agent_workspace.provision` aus
 `routers/agent.py`, Notaus `AGENT_WORKSPACE_PROVISION=off`); jeder Start

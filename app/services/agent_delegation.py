@@ -167,8 +167,10 @@ CALL_OVER_LIMIT = f"Not run: a step runs at most {TOOL_CALLS_PER_STEP} calls."
 # of these: anything that writes, acts in the workspace or the browser, or
 # asks the user keeps the order above. The batch still hands out the results
 # in order and applies its checks to each call; a call it does not run after
-# all (a pause, a repeat) read for nothing, and its result is dropped.
-CONCURRENT_TOOLS = frozenset({"read_source", "find_pictures", "search_pictures", "read_file", "search_chats"})
+# all (a pause, a limit) still gets the result it read, never "Not run".
+# Not the picture tools: their per-message budgets (agent_web_images) are
+# taken call by call, so two at once could both spend the same room.
+CONCURRENT_TOOLS = frozenset({"read_source", "read_file", "search_chats"})
 CALL_AFTER_PAUSE = "Not run: the work was paused before this call; the user let it go on with your next step."
 CALL_AFTER_ASK = "Not run: this step asked the user first. Their answer is in the ask_user result above."
 CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile and has handed it back. The page "
@@ -387,7 +389,7 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
-                 workspace_warm=False, reviewers="always", temporary=False, watch_run=None, history_summary=None,
+                 reviewers="always", temporary=False, watch_run=None, history_summary=None,
                  **kwargs):
         super().__init__(**kwargs)
         # A scheduled run of a Watch (agent_watches.py, since 2026-11-03):
@@ -732,13 +734,12 @@ class DelegationLoop(AgentLoop):
                 if agent_vm.on_demand():
                     # Open because the chat's last message used it: the browser
                     # wakes while the model thinks (VMTools.prewarm, runtime
-                    # audit 2026-10-30 T1), and since 2026-11-05 the workbench
-                    # too (``workspace_warm``, P5 of
-                    # docs/agent-speed-plan-2026-11-05.md): its first call
-                    # waited 2.5 s at the median, 9.5 s at p90, for the lease,
-                    # the chat's folder and the checkpoint. Only the browser
-                    # where the user's browser opened it.
-                    self.vm_tools.prewarm(bench=bool(workspace_warm))
+                    # audit 2026-10-30 T1), nothing of the workbench: its start
+                    # takes a lease (the day's VM time) and a checkpoint that
+                    # stays, for a message that may not use it at all (P5 of
+                    # docs/agent-speed-plan-2026-11-05.md, taken back the same
+                    # day after the review).
+                    self.vm_tools.prewarm(bench=False)
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
         from app.services.agent_memory import orchestrator_prompt
@@ -1703,7 +1704,11 @@ class DelegationLoop(AgentLoop):
                         # A failed settlement must not strand sibling waiters.
                         with self.condition:
                             unsettled = list(self.unsettled.items())
+                        settling = self.settling
                         for pending_step, (value, status) in unsettled:
+                            if settling is not None and settling[2] == pending_step:
+                                # Its own thread writes it (_settle_later).
+                                continue
                             self._settle_step(pending_step, value, status)
                         if time.monotonic() - recovered_at >= 3:
                             self.store.recover_allowance(self.uid)
@@ -2002,7 +2007,8 @@ class DelegationLoop(AgentLoop):
             self._check(cancellation)
             status = "succeeded"
             if (stream_answer and self.merged and not value.tool_calls and not getattr(value, "_tool_parts", None)
-                    and value.finish_reason == "stop" and value.text.strip()):
+                    and value.finish_reason == "stop" and value.text.strip()
+                    and self._workers_ready() and not self.mailbox):
                 # The step wrote its answer: one too short to stream
                 # (ANSWER_HOLD_CHARS) shows now, not only after the step's
                 # settlement and _finish_merged (since 2026-11-05, P6).
@@ -2168,14 +2174,14 @@ class DelegationLoop(AgentLoop):
                 box["error"] = exc
         thread = threading.Thread(target=copy_context().run, args=(work,), daemon=True)
         thread.start()
-        self.settling = (thread, box)
+        self.settling = (thread, box, step)
 
     def _join_settling(self, *, raise_error=True):
         """Wait for _settle_later's receipt write; raise its failure."""
         settling, self.settling = self.settling, None
         if settling is None:
             return
-        thread, box = settling
+        thread, box, _ = settling
         thread.join()
         if raise_error and "error" in box:
             raise box["error"]
@@ -3545,6 +3551,12 @@ class DelegationLoop(AgentLoop):
                                 not_run(call, CALL_OVER_LIMIT)
                                 continue
                             if stopped is not None:
+                                started = prefetched.pop(call["id"], None)
+                                if started is not None:
+                                    # It already ran beside the first: its
+                                    # result, not "Not run" for what it did.
+                                    results[call["id"]] = yield from self._await_call(started)
+                                    continue
                                 not_run(call, stopped)
                                 continue
                             if browser_failed and name == "browser":
@@ -3560,6 +3572,10 @@ class DelegationLoop(AgentLoop):
                             paused = yield from self._hold_wait()
                             if paused == "steer" or (paused is not None and position):
                                 stopped = HOLD_STEERED if paused == "steer" else CALL_AFTER_PAUSE
+                                started = prefetched.pop(call["id"], None)
+                                if started is not None:
+                                    results[call["id"]] = yield from self._await_call(started)
+                                    continue
                                 not_run(call, stopped)
                                 continue
                             repeat = self._identical_call(call)
@@ -3617,6 +3633,12 @@ class DelegationLoop(AgentLoop):
                                 # Ignore speculative extra calls in the same batch
                                 # once the review has reached an end state.
                                 break
+                        for call_id, started in list(prefetched.items()):
+                            # Read beside the first but not reached (the repeat
+                            # guard stopped the batch): what it read is its result.
+                            if call_id not in results:
+                                results[call_id] = yield from self._await_call(started)
+                        prefetched.clear()
                         if limit:
                             # The repeat guard stopped the batch: the rest gets
                             # its result, as _close_open_calls would give it.
