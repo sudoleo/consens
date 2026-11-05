@@ -203,6 +203,32 @@ describe("The page: what wants the reader first, then what runs", () => {
     expect(document.querySelector('.aw-foot-link[data-key="ended"]').getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("keeps an unseen finding and question on their cards after a quiet look (bug hunt 2026-11-05)", async () => {
+    // A quiet run moves last_run on but leaves the Watch unread
+    // (agent_watches.turn_ended): the card still shows what it has not seen.
+    const quietAt = new Date(Date.now() - 600 * 1000).toISOString();
+    const told = (outcome, summary) => [
+      { at: new Date(Date.now() - 2 * DAY).toISOString(), outcome: "quiet", summary: "" },
+      { at: EARLIER, outcome, summary },
+      { at: quietAt, outcome: "quiet", summary: "" },
+    ];
+    const { window, document } = boot({ watches: [
+      watch({ id: "found", task: "A task that found something.", unread: true,
+        last_run: { at: quietAt, outcome: "quiet", summary: "" }, looks: told("finding", "The registration is open.") }),
+      watch({ id: "ask", task: "A task that needs the user.", unread: true,
+        last_run: { at: quietAt, outcome: "quiet", summary: "" }, looks: told("needs_you", "I need you to log in to the portal.") }),
+    ] });
+    await window.App.watchDashboard.render();
+    expect(cards(document)).toEqual(["ask", "found"]);
+    const found = document.querySelector('.aw-card[data-watch-id="found"]');
+    expect(found.querySelector(".aw-card-text").textContent).toBe("The registration is open.");
+    expect(found.querySelector(".aw-card-when").textContent).toBe(window.App.format.relative(EARLIER));
+    const ask = document.querySelector('.aw-card[data-watch-id="ask"]');
+    expect(ask.classList.contains("is-needs")).toBe(true);
+    expect(ask.querySelector(".aw-card-text").textContent).toBe("I need you to log in to the portal.");
+    expect(ask.querySelector(".aw-card-action").textContent).toBe("Decide");
+  });
+
   it("opens a card's chat and counts its finding as seen", async () => {
     const { window, document, server } = boot({ watches: [watch({ unread: true,
       last_run: { at: EARLIER, outcome: "finding", summary: "Open." } })] });

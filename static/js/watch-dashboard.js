@@ -93,8 +93,21 @@
 
   // --- what a Watch is right now ------------------------------------------
 
+  // The run a Watch is shown by: its last one, but for an unread Watch the
+  // newest that told something (a finding, a question, the goal). A quiet run
+  // after it moves last_run on and leaves `unread` set (agent_watches.turn_ended);
+  // the card read "Found something · Nothing new." and a question lost its
+  // Decide (bug hunt 2026-11-05).
+  const TELLS = ['finding', 'needs_you', 'done'];
+  function shownRun(watch) {
+    const last = watch.last_run;
+    if (!watch.unread || TELLS.includes(last?.outcome)) return last;
+    const told = (Array.isArray(watch.looks) ? watch.looks : []).filter(look => look?.at && TELLS.includes(look.outcome));
+    return told[told.length - 1] || last;
+  }
+
   function stateOf(watch) {
-    if (watch.unread && watch.last_run?.outcome === 'needs_you' && watch.status !== 'done') return 'needs';
+    if (watch.unread && shownRun(watch)?.outcome === 'needs_you' && watch.status !== 'done') return 'needs';
     if (watch.unread) return 'fresh';
     if (watch.status === 'active' || watch.status === 'paused') return 'watching';
     return 'ended';
@@ -125,7 +138,7 @@
 
   // The one line under the task: what its last run found, or where it stands.
   function lineOf(watch) {
-    const last = watch.last_run;
+    const last = shownRun(watch);
     const summary = last?.summary || '';
     if (watch.status === 'done') {
       if (watch.ended === 'goal') return summary || App.t('It reached its goal.');
@@ -145,7 +158,8 @@
 
   // A line that is the model's finding stays as written; ours is translated already.
   function isFinding(watch) {
-    return Boolean(watch.last_run?.summary) && (['finding', 'done', 'needs_you'].includes(watch.last_run?.outcome)
+    const shown = shownRun(watch);
+    return Boolean(shown?.summary) && (TELLS.includes(shown?.outcome)
       || (watch.status === 'done' && watch.ended === 'goal'));
   }
 
@@ -157,7 +171,7 @@
   }
 
   function whenOf(watch) {
-    const at = watch.last_run?.at;
+    const at = shownRun(watch)?.at;
     return at ? App.format.relative(at) : '';
   }
 
@@ -1042,7 +1056,7 @@
     const groups = { needs: [], fresh: [], watching: [], ended: [] };
     watches.forEach(watch => groups[stateOf(watch)].push(watch));
     // Newest finding first; a running Watch by its next run, the paused ones last.
-    const latest = (a, b) => String(b.last_run?.at || b.created_at || '').localeCompare(String(a.last_run?.at || a.created_at || ''));
+    const latest = (a, b) => String(shownRun(b)?.at || b.created_at || '').localeCompare(String(shownRun(a)?.at || a.created_at || ''));
     groups.needs.sort(latest);
     groups.fresh.sort(latest);
     groups.ended.sort(latest);
