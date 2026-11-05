@@ -168,6 +168,12 @@ PICTURE_SECONDS = 2
 DOWNLOADS = os.path.join(STATE, "downloads")
 CHROME_DOWNLOADS = os.path.join(HOME, "Downloads")
 DOWNLOAD_SECONDS = 60
+# What the server keeps of a download (agent_browser.DOWNLOAD_BYTES). The
+# action download asks with HEAD first (HEAD_SECONDS): Playwright's request
+# API holds the whole body in memory, and a file of some GB took the browser
+# down for the message (bug hunt P39, 2026-11-05).
+DOWNLOAD_BYTES = 25 * 1024 * 1024
+HEAD_SECONDS = 10
 # The picture of an opened page on its card in the chat (agent-activity.js,
 # since 2026-10-29): the viewport at this width, as a JPEG of this quality.
 # Since 2026-10-30 (audit V7) 720 px instead of 480 at 60: the card shows it
@@ -1913,10 +1919,15 @@ def fetch(context, page, url):
     alone (since 2026-10-30, audit L5: before, 4,000 characters of the tab
     followed, and a sign-in page saved as report.pdf, or 0 bytes, counted as
     a download): its name, its bytes, its Content-Type and where a redirect
-    led; an empty answer is refused."""
+    led; an empty answer is refused, and so is a file whose HEAD declares
+    more than the server keeps (declared_bytes), before it is fetched."""
     target = url or page.url
     if not public_address(target):
         raise Refused("download takes the address of a file on the web (or the current page's).")
+    declared = declared_bytes(context, target)
+    if declared is not None and declared > DOWNLOAD_BYTES:
+        raise Refused(f"The file is larger than the {DOWNLOAD_BYTES // (1024 * 1024)} MB a download keeps: "
+                      f"{declared // (1024 * 1024)} MB by its Content-Length. Nothing was saved.")
     response = context.request.get(target, timeout=DOWNLOAD_SECONDS * 1000, max_redirects=10)
     if not public_address(response.url):
         raise Refused("That download leads to the workspace itself or a private network.")
@@ -1937,6 +1948,20 @@ def fetch(context, page, url):
     with open(path, "wb") as handle:
         handle.write(body)
     return f"Downloaded {os.path.basename(path)}: {len(body)} bytes, {typed}{moved}."
+
+
+def declared_bytes(context, target):
+    """The size a HEAD request for ``target`` declares (its Content-Length,
+    with the browser's sign-ins), else None: a server that refuses HEAD,
+    fails it or names no length gets the GET as before. Without a length
+    the GET still reads it whole: Playwright's request API has no limit."""
+    try:
+        head = context.request.head(target, timeout=HEAD_SECONDS * 1000, max_redirects=10)
+        if not head.ok or not public_address(head.url):
+            return None
+        return int(str(head.headers.get("content-length") or "").strip())
+    except Exception:
+        return None
 
 
 def finished_downloads():

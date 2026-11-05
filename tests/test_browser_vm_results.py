@@ -185,6 +185,56 @@ def test_a_download_says_name_bytes_and_type_and_never_the_tab(tmp_path, monkeyp
     assert sorted(os.listdir(tmp_path / "downloads")) == ["login", "report.pdf"]
 
 
+class Sized(Fetching):
+    """A request API whose HEAD answers ``head`` (a response, or an exception
+    to raise) and that records which methods ran."""
+
+    def __init__(self, response, head):
+        super().__init__(response)
+        self.head_answer, self.calls = head, []
+
+    def head(self, url, **kwargs):
+        self.calls.append("head")
+        if isinstance(self.head_answer, Exception):
+            raise self.head_answer
+        return self.head_answer
+
+    def get(self, url, **kwargs):
+        self.calls.append("get")
+        return self.response
+
+
+def test_a_download_larger_than_the_server_keeps_is_never_read_into_memory(tmp_path, monkeypatch):
+    """Bug hunt P39: download read the whole file through Playwright's
+    request API into the VM's memory (the driver, then base64 into Python)
+    and only the server dropped it at 25 MB: a file of some GB took the
+    browser down for the message. A HEAD first: what declares more than the
+    server keeps is refused before the GET. A server without HEAD or without
+    a length gets the GET as before."""
+    browser = load()
+    monkeypatch.setattr(browser, "DOWNLOADS", str(tmp_path / "downloads"))
+    page = type("Page", (), {"url": "https://shop.example/orders"})()
+    target = "https://cdn.example/disk.iso"
+    head = Response(target, body=b"", kind="application/octet-stream")
+    head.headers["content-length"] = str(4 * 1024 ** 3)
+    big = Sized(Response(target), head)
+    with pytest.raises(browser.Refused) as refused:
+        browser.fetch(big, page, target)
+    assert big.calls == ["head"]
+    assert str(refused.value) == ("The file is larger than the 25 MB a download keeps: 4096 MB by its "
+                                  "Content-Length. Nothing was saved.")
+    assert not (tmp_path / "downloads").exists()
+    assert browser.DOWNLOAD_BYTES == agent_browser.DOWNLOAD_BYTES
+    # At the limit, or HEAD not allowed, failing or without a length: the GET as before.
+    fits = Response(target, body=b"", kind="application/pdf")
+    fits.headers["content-length"] = str(browser.DOWNLOAD_BYTES)
+    for answer in (fits, Response(target, body=b"", status=405), TimeoutError("HEAD timed out"),
+                   Response(target, body=b"", kind="")):
+        sized = Sized(Response(target), answer)
+        assert browser.fetch(sized, page, target).startswith("Downloaded disk")
+        assert sized.calls == ["head", "get"]
+
+
 # --- L4: a failure names its cause and the page -----------------------------------
 
 # As Playwright 1.64 words it (measured locally against Chromium).
