@@ -822,10 +822,16 @@ class PullRequests:
 
     def _claim(self, uid, chat_id, turn_id, expected_hash, target):
         from app.services import persistence_guard
-        ref = self.store._turn_ref(uid, chat_id, turn_id)
+        ref, chat_ref = self.store._turn_ref(uid, chat_id, turn_id), self.store._chat_ref(uid, chat_id)
 
         def operation(tx):
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
+            # Only an active chat's card, as every write of a message
+            # (agent_workspace.claim, GitHubTools._save): a card left open
+            # elsewhere pushed the files of a chat in deletion (bug hunt P29).
+            chat = chat_ref.get(transaction=tx)
+            if not chat.exists or (chat.to_dict() or {}).get("status") != "active":
+                raise GitHubUnavailable("This chat no longer exists.", 404)
             turn = ref.get(transaction=tx).to_dict() or {}
             proposal = turn.get("agent_pull_request")
             if not isinstance(proposal, dict) or proposal.get("hash") != expected_hash:

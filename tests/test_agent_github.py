@@ -510,6 +510,26 @@ def test_files_changed_after_the_preview_never_go_to_github(store, fake_vm, gith
     assert not [r for r in github.requests if r[0] == "POST" and "/repos/" in r[2]]
 
 
+def test_a_chat_in_deletion_sends_nothing_to_github(store, fake_vm, github):
+    """Bug hunt P29: the card's answer never asked whether its chat was still
+    there, so a card left open elsewhere pushed the files of a chat its user
+    had deleted (before 2026-10-28 it even made the VM again, vm.ensure; now
+    only vm.exists). As every write of a message (agent_workspace.claim,
+    GitHubTools._save): only an active chat's card is answered, before
+    anything reads the workspace or goes to GitHub."""
+    loop, _ = prepared(store, fake_vm, github)
+    proposal = turn_of(store, loop)["agent_pull_request"]
+    store._chat_ref(UID, loop.chat_id).update({"status": "deleting"})
+    calls = len(fake_vm.calls)
+    for answer in (PullRequests(store.db, vm_factory=fake_vm.backend).confirm,
+                   PullRequests(store.db, vm_factory=fake_vm.backend).discard):
+        with pytest.raises(agent_github.GitHubUnavailable, match="This chat no longer exists.") as refused:
+            answer(UID, loop.chat_id, loop.turn_id, proposal["hash"])
+        assert refused.value.status == 404
+    assert len(fake_vm.calls) == calls and not [r for r in github.requests if r[0] == "POST" and "/repos/" in r[2]]
+    assert turn_of(store, loop)["agent_pull_request"]["status"] == "pending"
+
+
 def test_a_discarded_or_altered_card_creates_nothing(gh_api, fake_vm, github):
     client, store, _ = gh_api
     loop, _ = prepared(store, fake_vm, github)
