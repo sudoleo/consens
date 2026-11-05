@@ -585,7 +585,9 @@ class BrowserTools:
         # Its own words name the operation, never data (agent_vm).
         logging.warning("Agent browser unavailable reason=%s failures=%s %s", str(exc)[:120] or type(exc).__name__,
                         self.failures, log_tag(self.vm.loop))
-        if self.failures >= MAX_FAILURES:
+        # The provider's gateway saying the VM does not respond: off at once
+        # (agent_vm.UNRESPONSIVE_STATUSES); each new try waited as long again.
+        if self.failures >= MAX_FAILURES or agent_vm.unresponsive(exc):
             self.off = True
             return ValueError(BROWSER_UNAVAILABLE)
         return ValueError(text)

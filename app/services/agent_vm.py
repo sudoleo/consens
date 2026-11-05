@@ -120,7 +120,26 @@ class VMUnavailable(Exception):
     """The provider cannot be reached or refused the request. The message
     names the operation and the kind of failure, never data, for logs and
     the turn's ``agent_vm.unavailable_reason``; the agent and the user get
-    agent_vm_tools' own words."""
+    agent_vm_tools' own words. ``status``: the HTTP status it answered with,
+    if any (unresponsive)."""
+
+    def __init__(self, reason="", status=None):
+        super().__init__(reason)
+        self.status = status
+
+
+# The provider's gateway answering for a VM that does not respond (prod
+# 2026-11-05 21:04 UTC: "read: HTTP 502" after about 42 s, three times in one
+# message, 136 s for nothing; 2026-10-29/30 the same VM-wide after a night).
+# Asked again in the same message it answers the same way after as long, so
+# the workspace goes off for the message at once (agent_vm_tools,
+# agent_browser); the chat's next message tries again.
+UNRESPONSIVE_STATUSES = frozenset({502, 503, 504})
+
+
+def unresponsive(exc):
+    """Whether ``exc`` is the provider saying the VM does not respond."""
+    return isinstance(exc, VMUnavailable) and getattr(exc, "status", None) in UNRESPONSIVE_STATUSES
 
 
 def _unavailable(reason):
@@ -427,7 +446,7 @@ class SpritesBackend(VMBackend):
         if response.is_success or (missing_ok and response.status_code == 404):
             return response
         logging.warning("Agent VM request refused operation=%s status=%s", operation, response.status_code)
-        raise VMUnavailable(f"{operation}: HTTP {response.status_code}")
+        raise VMUnavailable(f"{operation}: HTTP {response.status_code}", response.status_code)
 
     def _sprite(self, name):
         return f"/v1/sprites/{quote(name, safe='')}"
@@ -507,7 +526,7 @@ class SpritesBackend(VMBackend):
                     raise VMFileMissing(path)
                 if not response.is_success:
                     logging.warning("Agent VM request refused operation=read status=%s", response.status_code)
-                    raise VMUnavailable(f"read: HTTP {response.status_code}")
+                    raise VMUnavailable(f"read: HTTP {response.status_code}", response.status_code)
                 _touch(name)
                 data = bytearray()
                 for chunk in response.iter_bytes():
@@ -549,7 +568,7 @@ class SpritesBackend(VMBackend):
                                    timeout=CHECKPOINT_SECONDS) as response:
                 if not response.is_success:
                     logging.warning("Agent VM request refused operation=checkpoint status=%s", response.status_code)
-                    raise VMUnavailable(f"checkpoint: HTTP {response.status_code}")
+                    raise VMUnavailable(f"checkpoint: HTTP {response.status_code}", response.status_code)
                 done = False
                 for line in response.iter_lines():
                     try:
@@ -580,7 +599,7 @@ class SpritesBackend(VMBackend):
             with self._http.stream("POST", path, timeout=CHECKPOINT_SECONDS) as response:
                 if not response.is_success:
                     logging.warning("Agent VM request refused operation=restore status=%s", response.status_code)
-                    raise VMUnavailable(f"restore: HTTP {response.status_code}")
+                    raise VMUnavailable(f"restore: HTTP {response.status_code}", response.status_code)
                 done = False
                 for line in response.iter_lines():
                     try:
@@ -673,7 +692,7 @@ class SpritesBackend(VMBackend):
             except InvalidStatus as exc:
                 status = exc.response.status_code
                 logging.warning("Agent VM request refused operation=%s status=%s", operation, status)
-                raise VMUnavailable(f"{operation}: HTTP {status}") from None
+                raise VMUnavailable(f"{operation}: HTTP {status}", status) from None
             except TimeoutError as exc:
                 logging.warning("Agent VM request failed operation=%s attempt=%s category=%s", operation, attempt,
                                 safe_exception(exc))

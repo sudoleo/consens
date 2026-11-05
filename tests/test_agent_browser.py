@@ -555,7 +555,7 @@ def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypat
 
     def refuse(vm, uid, cancellation=None, **kwargs):
         opened.append(uid)
-        raise agent_vm.VMUnavailable("read: HTTP 502")
+        raise agent_vm.VMUnavailable("read: no connection")
     monkeypatch.setattr(agent_workspace, "open_workspace", refuse)
     loop, browser = tools(store)
     with pytest.raises(ValueError, match="did not start"):
@@ -563,6 +563,25 @@ def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypat
     # A fact for this call; the next one tries again (A1).
     assert len(opened) == 1 and browser.off is False and browser.failures == 1
     assert fake_vm.requests == [] and fake_vm.warmed == []
+
+
+def test_a_browser_vm_the_gateway_calls_unresponsive_is_off_for_the_message(store, fake_vm, monkeypatch):
+    """The provider's 502/503/504 for a VM that does not respond (prod
+    2026-11-05: about 42 s each time, three times in a message): the browser
+    goes off for the message at once instead of asking again."""
+    opened = []
+
+    def refuse(vm, uid, cancellation=None, **kwargs):
+        opened.append(uid)
+        raise agent_vm.VMUnavailable("read: HTTP 502", 502)
+    monkeypatch.setattr(agent_workspace, "open_workspace", refuse)
+    loop, browser = tools(store)
+    with pytest.raises(ValueError):
+        call(browser, action="read")
+    assert len(opened) == 1 and browser.off is True
+    with pytest.raises(ValueError):
+        call(browser, action="read")
+    assert len(opened) == 1
 
 
 def test_the_warm_up_brings_the_network_counters_before_the_agents_commands(store, fake_vm, monkeypatch):

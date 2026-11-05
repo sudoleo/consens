@@ -6583,7 +6583,10 @@ installiert `install.sh` des Browsers beim ersten Browser-Aufruf), legt den Chat
 Rest (nur ändernde Aufrufe warten darauf, `checkpoint_wait`) und kopiert ihre
 Anhänge danach in den `input`-Ordner des Chats. Ein Ausfall des Anbieters
 kostet den Aufruf, erst drei in Folge die VM (`VMSession.failed`,
-`MAX_FAILURES`); unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
+`MAX_FAILURES`). Antwortet das Gateway des Anbieters mit 502, 503 oder 504
+(`agent_vm.unresponsive`, `VMUnavailable.status`), ist die VM sofort für die
+Nachricht aus, die Werkbank wie der Browser (seit 2026-11-05: jeder neue Versuch
+wartete wieder rund 42 s). Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
 Aufrufs (`VMTools._guarded`). Das Nachrichtenende (`VMSession.close`) gibt die
 Sperre frei auf einem eigenen Thread (`_finish`, höchstens 2 s gewartet); die
 Netzregeln ändert keine Nachricht mehr (bis 2026-11-04 setzte sie sie zurück). Jeder

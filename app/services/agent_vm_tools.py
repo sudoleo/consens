@@ -158,7 +158,9 @@ VM_UNAVAILABLE = ("The VM is not available right now. Continue without it for th
 # turn the workspace off for the message (VM_UNAVAILABLE). Until 2026-10-30
 # the first one did, a waking VM's broken handshake included (runtime audit
 # A1). A read is tried once more first; for anything else whether it ran is
-# not known, and the agent is told that fact.
+# not known, and the agent is told that fact. The provider's gateway saying
+# the VM does not respond (agent_vm.unresponsive, HTTP 502/503/504) turns it
+# off at once (since 2026-11-05): each new try waited as long again.
 MAX_FAILURES = 3
 VM_INTERRUPTED = "The connection to your workspace broke off during this call, so whether it ran is unknown."
 VM_NOT_REACHED = "Your workspace did not answer just now; nothing was changed."
@@ -833,6 +835,9 @@ class VMSession:
         except agent_vm.VMUnavailable as exc:
             if str(exc) == "chat deleted":
                 raise self._off("bench: chat deleted") from None
+            if agent_vm.unresponsive(exc):
+                # Asked again it answers alike after as long (UNRESPONSIVE_STATUSES).
+                raise self._off(f"bench: {str(exc)[:80]}") from None
             raise _StartFailed(f"bench: {str(exc)[:80]}") from None
         except Exception as exc:
             _unexpected(exc, "start")
@@ -1341,13 +1346,16 @@ class VMTools:
                 raise ValueError(str(exc)) from None
             except Exception as exc:
                 _unexpected(exc, operation)
-                if idempotent and attempt == 1:
+                gone = agent_vm.unresponsive(exc)
+                if idempotent and attempt == 1 and not gone:
                     logging.info("Agent VM %s tried again category=%s %s", operation, safe_exception(exc),
                                  log_tag(self.loop))
                     continue
                 reason = f"{operation}: {str(exc)[:80]}" if isinstance(exc, agent_vm.VMUnavailable) \
                     else f"{operation}: {type(exc).__name__}"
-                raise self.session.failed(reason, VM_NOT_REACHED if idempotent else VM_INTERRUPTED) from None
+                # Unresponsive: off for the message at once (failed without text).
+                raise self.session.failed(reason, None if gone else
+                                          VM_NOT_REACHED if idempotent else VM_INTERRUPTED) from None
             self.session.succeeded()
             return result
 

@@ -1066,7 +1066,11 @@ Anbieters kostet nur den Aufruf, in dem er geschah, mit einer Tatsache für
 den Agenten (`VM_NOT_STARTED`, `VM_INTERRUPTED`: ob es lief, ist unbekannt,
 `VM_NOT_REACHED`); ein Lesen (Datei, Prozessstatus) wird vorher einmal
 wiederholt. Erst `MAX_FAILURES` = 3 in Folge schalten die VM für die
-Nachricht ab (`VM_UNAVAILABLE`); ein gescheitertes Setup sofort. Eine
+Nachricht ab (`VM_UNAVAILABLE`); ein gescheitertes Setup sofort, und seit
+2026-11-05 auch eine Antwort 502, 503 oder 504 des Anbieter-Gateways
+(`agent_vm.UNRESPONSIVE_STATUSES`). Eine VM, die so nicht antwortet, tat das in
+Prod auch beim nächsten Versuch nicht, nur wieder nach rund 42 s: drei Versuche
+kosteten einen Lauf am 2026-11-05 136 s. Die nächste Nachricht versucht es neu. Eine
 unerwartete Ausnahme eines Werkzeugs des Arbeitsplatzes (Dateiablage,
 Fehler im Code) wird zum Fehler des Aufrufs (`TOOL_FAILED`) und gemeldet
 (`report_server_exception`), nie zum Ende des Laufs (`VMTools._guarded`, A3).

@@ -610,6 +610,48 @@ def test_an_unreachable_vm_costs_its_tools_never_the_answer(store, fake_vm):
     assert turn["agent_vm"]["unavailable_reason"] == "bench: ensure"
 
 
+def test_a_vm_the_gateway_calls_unresponsive_is_off_after_the_first_try(store, fake_vm, monkeypatch):
+    """Prod 2026-11-05 21:04 UTC: the provider answered "read: HTTP 502" after
+    about 42 s, and each of three calls waited as long again before it said
+    so. A gateway's 502/503/504 turns the workspace off for the message at
+    once (agent_vm.unresponsive); the next message tries again."""
+    tried = []
+
+    def unresponsive(self, name, rules=None):
+        tried.append(name)
+        raise VMUnavailable("ensure: HTTP 502", 502)
+    monkeypatch.setattr(_FakeBackend, "ensure", unresponsive)
+    script = Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})],
+                    [("vm_exec", {"command": "whoami"})]])
+    loop = vm_loop(store, script)
+    list(loop.run())
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert results(loop) == [{"error": VM_UNAVAILABLE}] * 3
+    assert len(tried) == 1
+    assert turn["agent_vm"]["unavailable_reason"] == "bench: ensure: HTTP 502"
+
+
+def test_a_command_the_gateway_refuses_turns_the_workspace_off(store, fake_vm):
+    script = Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "make"})],
+                    [("vm_exec", {"command": "ls"})]])
+    loop = vm_loop(store, script)
+    original = _FakeBackend.exec
+
+    def gateway(self, name, command, **kwargs):
+        if command == "make":
+            self.vm.calls.append(("exec", name, command))
+            raise VMUnavailable("exec: HTTP 503", 503)
+        return original(self, name, command, **kwargs)
+    _FakeBackend.exec = gateway
+    try:
+        list(loop.run())
+    finally:
+        _FakeBackend.exec = original
+    assert [r.get("error") for r in results(loop)] == [None, VM_UNAVAILABLE, VM_UNAVAILABLE]
+    assert [call[2] for call in fake_vm.calls if call[0] == "exec" and call[2] != SETUP] == ["ls", "make"]
+
+
 def test_a_vm_failing_mid_command_costs_that_command_and_the_next_one_runs(store, fake_vm):
     script = Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "make"})],
                     [("vm_exec", {"command": "ls"})]])
