@@ -378,3 +378,31 @@ def test_a_failed_run_in_a_temporary_chat_still_hands_its_saved_answer_to_the_pa
     assert saved["temporary"] is True and saved["bookmark_meta"] is None and saved["turn"]["status"] == "failed"
     bookmark = store.db.collection("users").document(UID).collection("bookmarks").document("b_agent_temp")
     assert not bookmark.get().exists
+
+
+def test_a_temporary_chat_whose_turn_stays_pending_gets_no_saved_answer(api, monkeypatch):
+    """finish_run failed in the run's finally: the turn is still pending and
+    the server says "running". A saved_answer next to it made the page take
+    the pending turn as the answer instead of following it (bug hunt
+    2026-11-02); a normal chat gets none there either."""
+    from app.services.agent_runs import AgentRunStore
+    from app.services.llm.agent_client import AgentCompletion
+    from test_agent_runs import receipt
+    client, store, calls = api
+
+    def failed(self, **kwargs):
+        self.__dict__.update(receipt().__dict__)
+        self.text = "Partial"
+        yield {"type": "delta", "text": "Partial"}
+        raise RuntimeError("Provider failed")
+
+    def unsaved(self, *args, **kwargs):
+        raise RuntimeError("Firestore unavailable")
+    monkeypatch.setattr(AgentCompletion, "stream", failed)
+    monkeypatch.setattr(AgentRunStore, "finish_run", unsaved)
+    chat_id = client.post("/chats", json={"execution_mode": "agent", "temporary": True}, headers=AUTH).json()["chat"]["id"]
+    response = client.post("/agent", json={"chat_id": chat_id, "question": "Hi", "client_request_id": "temp-pending",
+                                           "bookmark_id": "b_agent_temp"}, headers=AUTH)
+    error = json.loads(response.text.split("event: error\ndata: ")[1].split("\n\n")[0])
+    assert error["recovery_state"] == "running"
+    assert "saved_answer" not in error
