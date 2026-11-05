@@ -474,7 +474,12 @@ class BrowserTools:
                 status = getattr(backend, "statuses", {}).get(self.name)
                 if status:
                     session.cold["browser"] = status == "cold"
-                self._helper({"action": "warm"}, CALL_SECONDS, cancellation, backend=backend)
+                answer = self._helper({"action": "warm"}, CALL_SECONDS, cancellation, backend=backend)
+                # The counters before the agent's commands: in a new boot the
+                # first reading is only where counting starts (merge_net), so
+                # an upload in a message that only ran commands, read at its
+                # end alone, counted nothing (bug hunt 2026-11-05).
+                workspace_guard.note_net(uid, answer.get("net"))
             except Exception as exc:
                 # Anything else: the call then opens it itself, as before.
                 logging.info("Agent browser warm-up failed category=%s", safe_exception(exc))

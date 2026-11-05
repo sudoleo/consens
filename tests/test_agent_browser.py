@@ -565,6 +565,29 @@ def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypat
     assert fake_vm.requests == [] and fake_vm.warmed == []
 
 
+def test_the_warm_up_brings_the_network_counters_before_the_agents_commands(store, fake_vm, monkeypatch):
+    """Bug hunt 2026-11-05: in a new boot the first reading of the counters
+    is only where counting starts (workspace_guard.merge_net). A message that
+    only ran commands was read once, at its end, so on a fresh VM an upload
+    with curl counted nothing. The warm-up's answer carries the counters
+    (browser.py): they are the reading before the commands."""
+    from app.services import workspace_guard
+    counters = {"rx": 10, "tx": 20, "boot": "0b5f0d1c-9c55-4c1e-9f4e-3a1d2b9e7c10"}
+    noted = []
+    monkeypatch.setattr(workspace_guard, "note_net", lambda uid, value: noted.append((uid, value)))
+    loop, browser = tools(store)
+    real = browser._helper
+
+    def helper(request, *args, **kwargs):
+        answer = real(request, *args, **kwargs)
+        return {**answer, "net": counters} if request.get("action") == "warm" else answer
+    monkeypatch.setattr(browser, "_helper", helper)
+    warming = browser._warm(ProviderCancellation())
+    warming.join(5)
+    assert warming.ok and fake_vm.warmed == [BROWSER]
+    assert noted == [(UID, counters)]
+
+
 def test_the_helpers_actions_are_the_tools():
     assert set(BrowserArgs.model_json_schema()["properties"]["action"]["enum"]) == set(agent_browser.ACTIONS)
 
