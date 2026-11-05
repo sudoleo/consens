@@ -985,6 +985,34 @@ describe("the workspace view after the runtime audit", () => {
     }
   });
 
+  // Bug hunt P45 (2026-11-05): the minute ran out between two tries after a
+  // dropped connection; the next try connected in the hidden tab and stayed
+  // open, its time counted as VM time until the tab came back.
+  it("lets go between two tries too, when the minute in a hidden tab ends there", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let env;
+    const visibility = state => Object.defineProperty(env.document, "visibilityState", { value: state, configurable: true });
+    try {
+      env = setup();
+      const socket = await watching(env);
+      visibility("hidden");
+      env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+      await vi.advanceTimersByTimeAsync(59_500);
+      // Dropped half a second before the minute: the next try is due after it.
+      socket.closedBy(1006);
+      expect(status(env).textContent).toBe("Reconnecting…");
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(FakeSocket.last).toBe(socket);
+      expect(status(env).textContent).toBe("Paused while this tab was in the background, to save your workspace time.");
+      visibility("visible");
+      env.document.dispatchEvent(new env.window.Event("visibilitychange"));
+      expect(FakeSocket.last).not.toBe(socket);
+      expect(status(env).textContent).toBe("Reconnecting…");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("says what is left of today's VM time while the view is open, also in the user's hands", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {

@@ -1036,9 +1036,7 @@
     if (view.pausing === socket) {
       // Let go on purpose while the tab was hidden (pause): back with the tab.
       view.pausing = null;
-      view.paused = true;
-      loading('browser', true);
-      say(STATES.paused);
+      letGo();
     } else if (FINAL[code]) {
       stop(FINAL[code]);
     } else {
@@ -1093,7 +1091,17 @@
   function pause() {
     if (!view) return;
     view.away = null;
-    if (view.holder === 'user' || document.visibilityState !== 'hidden' || !(view.rfb || view.connecting)) return;
+    if (view.holder === 'user' || document.visibilityState !== 'hidden') return;
+    // Between two tries (retryLater): the next one connected in the hidden
+    // tab and stayed (bug hunt P45). It waits for the tab instead.
+    if (!view.rfb && !view.connecting) {
+      if (!view.retry) return;
+      clearTimeout(view.retry);
+      view.retry = null;
+      letGo();
+      showHolder();
+      return;
+    }
     clearTimeout(view.retry);
     view.retry = null;
     const socket = view.socket;
@@ -1103,6 +1111,12 @@
       try { rfb.disconnect(); } catch (error) { /* already gone */ }
     }
     try { socket?.close(); } catch (error) { /* already gone */ }
+  }
+  // Paused: no connection and no try until the tab is back (nudge).
+  function letGo() {
+    view.paused = true;
+    loading('browser', true);
+    say(STATES.paused);
   }
 
   // ---- Terminal --------------------------------------------------------------

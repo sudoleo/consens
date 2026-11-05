@@ -204,7 +204,8 @@ down (`start-progress.js` / `App.startProgress`, bundled before
 since 2026-11-02);
 a drop without a server reason reconnects after 1/2/5/10 s and on
 `visibilitychange`/`online`, keeping the takeover and its bar; a tab hidden
-60 s while the agent has the browser lets go; "Keyboard" on touch screens and
+60 s while the agent has the browser lets go (since 2026-11-05 also between
+two of those tries, which then wait for the tab); "Keyboard" on touch screens and
 "100%" while the user has it, runtime audit V1–V7; window event
 `consensio:workspace-holder` on every change of holder, and since 2026-10-29
 `consensio:workspace-handback` only for the hand-back button, on which
