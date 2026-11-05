@@ -1834,6 +1834,26 @@ def test_a_view_opened_before_the_first_message_leaves_the_provisioning_nothing(
     assert fake_vm.vms[name]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
 
 
+def test_the_provisioning_leaves_a_running_message_its_hold(store, fake_vm, provisioning):
+    """Bug hunt P60: the provisioning runs beside the account's first
+    message, and its rest after the warm shortened the hold of that message's
+    browser calls to two minutes: a longer pause of the agent let the VM
+    sleep under it. While a message uses the workspace (in_use) the
+    provisioning leaves the rest to that message's end."""
+    from test_agent_vm import Agent, vm_loop
+    name = agent_vm.workspace_name(UID)
+    loop = vm_loop(store, Agent())
+    agent_workspace.claim(store, UID, loop.chat_id, loop.turn_id, provider="fake")
+    agent_workspace.provision(store, UID).join(10)
+    assert fake_vm.warmed == [name] and fake_vm.rested == []
+    # Without a message on it: warm, then rest, as before.
+    agent_workspace.release(store, UID, loop.turn_id)
+    del fake_vm.vms[name]
+    agent_workspace._provisioned.discard(UID)
+    agent_workspace.provision(store, UID).join(10)
+    assert fake_vm.warmed == [name, name] and fake_vm.rested == [name]
+
+
 def test_a_messages_start_waits_for_the_setup_running_and_runs_none_of_its_own(store, fake_vm):
     """The account's provisioning holds the VM's setup (setup_lock): the
     message's start waits for it, then finds the version there, so setup.sh

@@ -1137,7 +1137,11 @@ Kontos an den Agenten, das noch keinen Arbeitsplatz hat (der Datensatz nennt
 keine VM), sie im Hintergrund ein (`agent_workspace.provision`, aus
 `routers/agent.py`, sobald die Nachricht eine VM haben darf): Datensatz zuerst
 (die Kontolöschung findet sie), dann der Rechner mit `open_workspace` und
-Chrome mit `warm` und `rest`, einmal pro Prozess und Konto. Nennt der
+Chrome mit `warm` und `rest`, einmal pro Prozess und Konto; `rest` nur,
+wenn gerade keine Nachricht den Arbeitsplatz nutzt (`in_use`, seit
+2026-11-05: sonst kürzte es den Hold ihrer Browser-Aufrufe auf zwei Minuten,
+und eine längere Denkpause ließ die VM schlafen; die Nachricht ruht an
+ihrem Ende selbst). Nennt der
 Datensatz die VM schon, richtet sie sie nur ein, wenn es sie nicht gibt
 (`vm.exists`). Bis 2026-11-04 waren es zwei VMs (Browser-VM und Werkbank mit
 `open_workbench`), und die Prüfung lief je VM. Notaus

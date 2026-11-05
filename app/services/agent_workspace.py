@@ -589,7 +589,8 @@ def provision(store, uid, *, factory=None):
     """A new account's workspace before it is needed (since 2026-11-02, the
     module's docstring): the VM made and set up in the background, the
     browser's Chrome started once and then told to rest (the helper's warm
-    and rest, as after a message). Only a VM that is not there: where the
+    and rest, as after a message), unless a message uses it by then
+    (_provision). Only a VM that is not there: where the
     account's record names none yet nothing ever opened one, else it may be
     gone (deleted by hand). And only while the server's safety rules leave
     the workspace open. Called with the account's messages to the agent that
@@ -623,7 +624,7 @@ def _provision_new(store, uid, factory):
     except Exception as exc:
         logging.warning("Agent workspace provision not started category=%s", safe_exception(exc))
         return
-    _provision(uid, factory, store.db)
+    _provision(store, uid, factory)
 
 
 def _record_new(store, uid, provider):
@@ -645,18 +646,22 @@ def _record_new(store, uid, provider):
     return made["new"]
 
 
-def _provision(uid, factory, db=None):
+def _provision(store, uid, factory):
     """The VM set up and its browser started once, then told to rest;
     failures are only logged: the first call that needs it sets up what is
-    missing."""
+    missing. A message that uses the workspace by then keeps the hold of its
+    browser calls (bug hunt P60, 2026-11-05: the rest shortened it to two
+    minutes, and a longer pause of the agent let the VM sleep under it); the
+    message rests at its own end (agent_browser._rest)."""
     from app.services import agent_browser
     from app.services.llm.provider_runtime import ProviderCancellation
     start, vm, began = Start(uid, "browser").phase("setup"), None, time.monotonic()
     try:
         vm = factory()
-        name = open_workspace(vm, uid, db=db)
-        for action, timeout in (("warm", agent_browser.CALL_SECONDS), ("rest", agent_browser.REST_SECONDS)):
-            agent_browser.helper(vm, name, {"action": action}, timeout, ProviderCancellation())
+        name = open_workspace(vm, uid, db=store.db)
+        agent_browser.helper(vm, name, {"action": "warm"}, agent_browser.CALL_SECONDS, ProviderCancellation())
+        if not in_use(store, uid):
+            agent_browser.helper(vm, name, {"action": "rest"}, agent_browser.REST_SECONDS, ProviderCancellation())
         logging.info("Agent workspace provisioned seconds=%.1f", time.monotonic() - began)
     except Exception as exc:
         logging.warning("Agent workspace provision failed category=%s", safe_exception(exc))
