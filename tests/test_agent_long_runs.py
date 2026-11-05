@@ -144,6 +144,53 @@ def test_a_long_run_ends_with_its_answer_before_the_context_window_is_full(store
     assert loop._long_run_limit() == TURN_CONTEXT_LIMIT
 
 
+class _SeesImages(dict):
+    def get(self, key, default=None):
+        return {"architecture": {"input_modalities": ["image"]}}
+
+
+def test_the_context_limit_counts_the_files_every_step_sends(store, fake_vm, tmp_path, monkeypatch):
+    """Bug hunt P23: the long run's limit measured its conversation without
+    the file block every step of the agent sends with it (_step). A picture
+    or a native PDF filled the window before the limit did, and the run
+    ended on the admission's context error without its answer."""
+    import base64
+    import io
+    import math
+    from PIL import Image
+    from app.services.agent_delegation import LONG_RUN_CONTEXT_SHARE
+    from app.services.agent_files import AgentFiles, FileContext
+    from app.services.agent_tokens import IMAGE_VISUAL_TOKENS, input_estimate
+    from app.services.llm.agent_client import answer_output_limit
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    files = AgentFiles(store.db)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    out = io.BytesIO()
+    Image.new("RGB", (10, 10)).save(out, "PNG")
+    picture = files.upload(UID, chat_id, {"name": "plan.png", "data": base64.b64encode(out.getvalue()).decode()})
+    script = LongAgent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]])
+    loop = vm_loop(store, script, chat_id=chat_id, file_context=FileContext(files, UID, chat_id, [picture["id"]]))
+    monkeypatch.setattr("app.services.llm.agent_model_metadata.snapshot", lambda: _SeesImages())
+    list(loop.run())
+    # Every step carried the picture.
+    assert all(any(isinstance(m.get("content"), list) and m["content"][-1].get("type") == "image_url"
+                   for m in seen) for seen in script.seen)
+    model = loop.routing_lighter or loop.model
+    own = input_estimate(loop.messages, loop.registry.schemas, model.request_config) + answer_output_limit(model)
+    # A window the conversation alone fits within the limit, not with the picture.
+    loop.model = replace(loop.model, context_length=math.ceil((own + IMAGE_VISUAL_TOKENS // 2) / LONG_RUN_CONTEXT_SHARE))
+    assert loop._long_run_limit() == TURN_CONTEXT_LIMIT
+    assert not loop._answer_fits()
+    # The run's summary comes before that end, which the picture moves closer.
+    seen = []
+    monkeypatch.setattr(agent_compaction, "run_summary_due",
+                        lambda inputs, window, messages, start, end_at=None: seen.append(end_at))
+    loop._summary_due()
+    model = loop.routing_lighter or loop.model
+    assert loop.file_tokens >= IMAGE_VISUAL_TOKENS
+    assert seen == [model.context_length * LONG_RUN_CONTEXT_SHARE - answer_output_limit(model) - loop.file_tokens]
+
+
 def test_a_short_turn_never_reads_the_allowance_between_steps(store, fake_vm, monkeypatch):
     def unexpected(db, uid):
         raise AssertionError("read the allowance")

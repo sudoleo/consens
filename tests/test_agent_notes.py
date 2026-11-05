@@ -116,6 +116,11 @@ def test_the_agent_reads_the_message_before_its_next_step(store, fake_vm):
 
 
 def test_a_message_after_the_answer_is_said_to_be_unread(store, fake_vm):
+    """The line says what happened, not what to do: the page sends a waiting
+    message after the response itself, or puts it back into the field
+    (flushQueue in static/js/agent-chat.js). Until 2026-11-05 it asked the
+    user to send it again while the page was doing so (bug hunt P31)."""
+    assert "again" not in NOTES_UNREAD
     script = LongAgent()
     loop = vm_loop(store, script)
     original = script.factory

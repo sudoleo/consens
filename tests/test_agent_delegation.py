@@ -430,6 +430,44 @@ def test_worker_429_can_use_checked_fallback_without_retrying_worker(store):
     assert loop.completion.usage["cost_complete"] is True
 
 
+def test_one_update_the_database_refuses_costs_no_other_session_of_its_batch(store, monkeypatch):
+    """Bug hunt P4: a Firestore commit is all or nothing, so one update it
+    refuses for good (a document over 1 MiB) refused every session of the
+    journal's batch, until 2026-11-05 retried one by one only after an
+    outage. A closed run still refuses the batch at once, without a write per
+    update."""
+    from types import SimpleNamespace
+    from uuid import uuid4
+    from google.api_core.exceptions import InvalidArgument
+    from app.services.agent_journal import JournalJob
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
+    publish, calls, closed = store.publish_agents, [], []
+
+    def strict(*a, updates, **k):
+        calls.append(len(updates))
+        if closed:
+            raise TurnStatusConflict("Agent session is closed")
+        if any(patch.get("title") == "huge" for _, patch, _, _ in updates):
+            raise InvalidArgument("Document exceeds the maximum size")
+        return publish(*a, updates=updates, **k)
+    monkeypatch.setattr(store, "publish_agents", strict)
+
+    def jobs(*titles):
+        return [JournalJob(SimpleNamespace(id=uuid4().hex, state="waiting", session_seq=0),
+                           {"title": title, "assignment": assignment(title), "status": "waiting"}, None,
+                           progress=False, urgent=False, order=n) for n, title in enumerate(titles)]
+    first, huge, second = loop._journal_write(jobs("one", "huge", "two"))
+    assert isinstance(huge, InvalidArgument)
+    assert first["agent"]["title"] == "one" and second["agent"]["title"] == "two"
+    closed.append(True)
+    calls.clear()
+    with pytest.raises(TurnStatusConflict):
+        loop._journal_write(jobs("three", "four"))
+    assert calls == [2]
+
+
 def test_a_retried_session_update_is_saved_once_without_an_event_document(store):
     """A journal batch whose commit was ambiguous is sent again with the same
     event ids (_journal_write): the second time returns what the first saved,

@@ -179,7 +179,10 @@ PROGRESS_OPEN = "[consens.io, written by the app:"
 # read as time to spare, and a run that had its pictures after two minutes
 # went on for thirteen ("füg mal mehr bilder ein").
 LIMITS_SHOWN_FROM = 0.8
-NOTES_UNREAD = ("Your message arrived after the answer was written. Send it again as a new message.")
+# The user's line at the run's end for messages it did not read. What happens
+# to them is the page's (agent-chat.js flushQueue: sent as the next message,
+# or back into the field); until 2026-11-05 this line asked for a resend.
+NOTES_UNREAD = "Your message arrived after the answer was written, so this answer does not take it into account."
 # The run's end waits this long in all for its journal and its work log to
 # save what they hold (A-R3, since 2026-10-29); what they have not saved by
 # then is logged by its thread's name, and finish_run runs anyway. Until then
@@ -196,6 +199,14 @@ def _transient_store_error(error):
     transient = (Aborted, DeadlineExceeded, InternalServerError, ServiceUnavailable)
     # Firestore wraps exhausted transaction conflicts in ValueError.
     return isinstance(error, transient) or isinstance(error.__cause__, transient)
+
+
+def _run_closed_error(error):
+    """The run can no longer write at all: stopped elsewhere, its chat or
+    account deleted. Every session update is refused alike."""
+    from app.services.chat_store import ChatNotFound, TurnStatusConflict
+    from app.services.persistence_guard import AccountDeletionInProgress
+    return isinstance(error, (ProviderCancelled, ChatNotFound, TurnStatusConflict, AccountDeletionInProgress))
 
 
 def smaller_search(searches):
@@ -504,6 +515,10 @@ class DelegationLoop(AgentLoop):
         self.identical_calls = {}
         # The run's own size right after its last compaction (_compact).
         self.compacted_to = None
+        # Tokens of the file block the agent's last step sent beside the
+        # conversation (_step): the limits measure what the next step sends
+        # (_request_inputs). The block is the same in every step.
+        self.file_tokens = 0
         # The summary of the chat's history its first step writes, planned by
         # AgentRunStore.messages (``summary``), or None; the run's own steps are
         # summarized once they fill too much (_summarize, agent_compaction).
@@ -951,10 +966,9 @@ class DelegationLoop(AgentLoop):
         fills LONG_RUN_CONTEXT_SHARE of the model's window, instead of
         failing at the next admission without one."""
         from app.services import agent_quota
-        from app.services.agent_tokens import input_estimate
         model = self.routing_lighter or self.model
         answer = answer_output_limit(model)
-        inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
+        inputs = self._request_inputs(model)
         if inputs + answer > model.context_length * LONG_RUN_CONTEXT_SHARE:
             return TURN_CONTEXT_LIMIT
         try:
@@ -970,6 +984,15 @@ class DelegationLoop(AgentLoop):
         if remaining < steps + 2 * self._reviewer_step_charge():
             return TURN_ALLOWANCE_LIMIT
         return None
+
+    def _request_inputs(self, model):
+        """Input tokens of the agent's next step as _step sends it: the
+        conversation and the file block that goes with every step
+        (``file_tokens``). Until 2026-11-05 the limits measured the
+        conversation alone, and large attachments filled the window first
+        (bug hunt P23)."""
+        from app.services.agent_tokens import input_estimate
+        return input_estimate(self.messages, self.registry.schemas, model.request_config) + self.file_tokens
 
     def _reviewer_step_charge(self):
         """What the reviewers take per agent step, from their charge in this
@@ -1060,8 +1083,10 @@ class DelegationLoop(AgentLoop):
         model = self.routing_lighter or self.model
         inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
         # A long run ends once its answer no longer fits (_long_run_limit):
-        # its summary comes before that.
-        end_at = (model.context_length * LONG_RUN_CONTEXT_SHARE - answer_output_limit(model)
+        # its summary comes before that. The file block counts there, but no
+        # summary makes it smaller: it moves the end, not the share of the
+        # run's own steps.
+        end_at = (model.context_length * LONG_RUN_CONTEXT_SHARE - answer_output_limit(model) - self.file_tokens
                   if self._long_run() else None)
         return "run" if agent_compaction.run_summary_due(inputs, model.context_length, self.messages,
                                                          self.turn_start, end_at=end_at) else None
@@ -1069,10 +1094,8 @@ class DelegationLoop(AgentLoop):
     def _answer_fits(self):
         """Whether the answer still fits beside the run as it stands
         (LONG_RUN_CONTEXT_SHARE of the window, as _long_run_limit)."""
-        from app.services.agent_tokens import input_estimate
         model = self.routing_lighter or self.model
-        inputs = input_estimate(self.messages, self.registry.schemas, model.request_config)
-        return inputs + answer_output_limit(model) <= model.context_length * LONG_RUN_CONTEXT_SHARE
+        return self._request_inputs(model) + answer_output_limit(model) <= model.context_length * LONG_RUN_CONTEXT_SHARE
 
     def _summarize(self, index, steps, search):
         """Compaction as Claude Code and Codex do it (agent_compaction.py,
@@ -1216,7 +1239,9 @@ class DelegationLoop(AgentLoop):
         event ids, so an ambiguous first commit is not saved twice. One that
         outlasts it tries each update on its own: an outage costs a session
         its update, never every session in the batch (a new session's record,
-        which its model call waits for, among them)."""
+        which its model call waits for, among them). So does a commit refused
+        for good (since 2026-11-05: a document over Firestore's 1 MiB refused
+        the whole batch); only a closed run refuses every update at once."""
         # A line of a call that has ended since: its end record carries what counts.
         live = [job for job in jobs if not (job.progress and job.worker.state in {"completed", "failed", "stopped"})]
         if not live:
@@ -1224,7 +1249,7 @@ class DelegationLoop(AgentLoop):
         try:
             saved = self._journal_publish(live)
         except Exception as exc:
-            if len(live) == 1 or not _transient_store_error(exc):
+            if len(live) == 1 or _run_closed_error(exc):
                 raise
             saved = []
             for job in live:
@@ -1263,11 +1288,9 @@ class DelegationLoop(AgentLoop):
         record is missing, unless the run itself can no longer write (stopped
         elsewhere, chat or account deleted): then the run ends, as when a
         worker's end record could not be saved (_terminal)."""
-        from app.services.chat_store import ChatNotFound, TurnStatusConflict
-        from app.services.persistence_guard import AccountDeletionInProgress
         logging.warning("Agent session update not saved category=%s status=%s",
                         safe_exception(exc), job.patch.get("status") or ("line" if job.progress else "-"))
-        if isinstance(exc, (ProviderCancelled, ChatNotFound, TurnStatusConflict, AccountDeletionInProgress)):
+        if _run_closed_error(exc):
             self.cancellation.cancel()
 
     def _stream_progress(self, worker, progress, usage, *, streaming=True, force=False):
@@ -1744,6 +1767,12 @@ class DelegationLoop(AgentLoop):
             anchor = None if worker else min(self.turn_start, len(messages))
             question = messages[(len(messages) if anchor is None else anchor) - 1].get("content", "")
             messages = self.file_context.messages(messages, model, file_ids=ids, query=str(question)[-500:], anchor=anchor)
+            if worker is None:
+                # What the block adds to the agent's requests: the limits
+                # count it for the next step (_request_inputs).
+                from app.services.agent_tokens import input_estimate
+                self.file_tokens = (input_estimate([messages[anchor]]) - input_estimate([])
+                                    if messages is not conversation else 0)
         if note:
             messages = with_step_note(messages, note)
         if summary:

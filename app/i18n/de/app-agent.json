@@ -895,7 +895,7 @@
   "Your message can go into the response once it has started.": "Deine Nachricht kann in die Antwort, sobald sie begonnen hat.",
   "Your message could not go into the response.": "Deine Nachricht konnte nicht in die Antwort.",
   "Your message could not go into the response. Check your connection.": "Deine Nachricht konnte nicht in die Antwort. Prüf deine Verbindung.",
-  "Your message arrived after the answer was written. Send it again as a new message.": "Deine Nachricht kam erst nach der fertigen Antwort an. Schick sie noch einmal als neue Nachricht.",
+  "Your message arrived after the answer was written, so this answer does not take it into account.": "Deine Nachricht kam erst nach der fertigen Antwort an und ist darin nicht berücksichtigt.",
   "This response is no longer running. Send your message as a new one.": "Diese Antwort läuft nicht mehr. Schick deine Nachricht als neue.",
   "Messages during a response need the workspace.": "Nachrichten während einer Antwort gibt es nur mit dem Arbeitsplatz.",
   "This response already has the most messages it takes while it runs.": "Diese Antwort hat schon so viele Nachrichten bekommen, wie sie während des Laufs annimmt.",

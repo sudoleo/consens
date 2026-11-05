@@ -4584,7 +4584,10 @@ Umfang plus Antwort trägt, so teuer, wie ihre Zulassung sie reserviert
 Läufen; mit Prüfern seit 2026-10-29 zusätzlich zweimal deren bisheriger
 Verbrauch je Agent-Schritt, `_reviewer_step_charge` aus `reviewer_charge`:
 ihre Runde auf den nächsten Schritt und ihre Schlussrunde) und ob das Gespräch
-samt Antwort unter 80 % des Modellfensters bleibt (`LONG_RUN_CONTEXT_SHARE`); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
+samt Antwort unter 80 % des Modellfensters bleibt (`LONG_RUN_CONTEXT_SHARE`;
+seit 2026-11-05 mit dem Dateiblock, den jeder Schritt mitschickt,
+`_request_inputs`/`file_tokens`: große Bilder oder PDFs füllten das Fenster
+sonst vor der Grenze); sonst kommt der Wrap-up (`TURN_ALLOWANCE_LIMIT`,
 `TURN_CONTEXT_LIMIT`). Der Wrap-up eines langen Laufs schreibt die Antwort auch
 ohne Vergleich aus der eigenen Arbeit („Write the answer now from what you
 have, without tool calls.“), statt abzubrechen; die Prüfer prüfen sie wie
@@ -4648,7 +4651,7 @@ sagt es („Summarizing …“, `SUMMARY_TEXTS`), das Arbeitsprotokoll vermerkt
   weiter jeden Aufruf (`own_messages`). So endet ein langer Lauf nicht mehr bei
   80 % des Fensters, und jeder weitere Schritt sendet nur noch einen Bruchteil.
   Bei einem langen Lauf liegt die Marke höchstens dort, wo er sonst endete
-  (80 % des Fensters abzüglich der Antwort-Erlaubnis; ohne das endete Haiku 4.5
+  (80 % des Fensters abzüglich der Antwort-Erlaubnis und des Dateiblocks; ohne das endete Haiku 4.5
   bei 96k, vor seiner Zusammenfassung bei 100k). Erreicht ein Lauf seine Zeit-,
   Schritt- oder Kontingentgrenze, schreibt er die Antwort ohne Zusammenfassung
   vorab aus dem ganzen Lauf, solange sie in diese 80 % passt
