@@ -19,7 +19,8 @@ def receipt(account, turn, step, model, start, end, *, agent_id=None, status="su
             **extra):
     return {"account": account, "own": account.startswith("mWKgPU"), "chat": "c1", "turn": turn, "step": step,
             "agent_id": agent_id, "model": model, "created_at": at(start), "settled_at": at(end), "status": status,
-            "input": 1000, "cached": 800, "output": 50, "cost": cost, "quota_charged": quota, **extra}
+            "input": 1000, "cached": 800, "output": 50, "cost": cost, "quota_charged": quota,
+            "quota_day": "2026-10-29_eur", **extra}
 
 
 def log(*entries):
@@ -151,3 +152,21 @@ def test_old_and_new_turns_are_told_apart_by_their_frozen_preferences(preference
 def test_quantiles_by_nearest_rank():
     assert quantiles([]) == {"n": 0, "p50": None, "p90": None, "max": None}
     assert quantiles([5, 1, None, 3, 2, 4, 10, 9, 8, 7, 6]) == {"n": 10, "p50": 5.5, "p90": 9, "max": 10}
+
+
+def test_the_allowance_sums_only_euro_charges_and_counts_the_token_account_apart():
+    """quota_charged was tokens until 2026-10-31 and micro-euros since (the
+    receipt's quota_day ends in _eur); a window across the switch added both
+    (bug hunt 2026-10-31)."""
+    sample = data()
+    sample["receipts"] += [
+        receipt(OWN, "t1", "completion:2", TERRA, 29, 30, quota=900_000, cost=0, quota_day="2026-10-30"),
+        receipt(OWN, "t1", "agent:" + "a" * 32 + ":2", LUNA, 41, 42, agent_id="a" * 32, quota=50_000, cost=0,
+                quota_day="2026-10-30"),
+    ]
+    result = report(sample)
+    assert result["quota"]["reviewer_share"] == .364
+    assert result["quota"]["token_era_calls"] == 2
+    assert result["quota"]["reviewer_micro_eur"] == 400 and result["quota"]["agent_micro_eur"] == 700
+    assert result["tokens"]["agent"]["quota"] == 700
+    assert "token account" in render(result)

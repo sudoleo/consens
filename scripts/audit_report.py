@@ -6,7 +6,9 @@ Method as in that spec (section 8):
 
 - receipts ``users/{uid}/llm_calls`` (``purpose == "agent"``, ``created_at``
   in the window): calls, tokens, cost, the allowance charged
-  (``quota_charged``), the session's kind (``session_kind``, since
+  (``quota_charged``, micro-euros since 2026-10-31: only receipts whose
+  ``quota_day`` ends in ``_eur`` are summed, those of the token account
+  before are counted apart), the session's kind (``session_kind``, since
   2026-10-29) and a reviewer call's ``round`` where they exist;
 - turns ``users/{uid}/chats/{chat}/turns/{turn}`` in audit mode
   (``agent_review.mode == "audit"`` or the frozen preferences, is_audit;
@@ -82,7 +84,7 @@ def _usage(receipt):
             "input": usage.get("input_tokens"), "cached": usage.get("cached_input_tokens"),
             "output": usage.get("output_tokens"), "cost": usage.get("estimated_cost_nano_usd"),
             "searches": usage.get("web_search_requests"), "search_hits": receipt.get("search_hits"),
-            "quota_charged": receipt.get("quota_charged")}
+            "quota_charged": receipt.get("quota_charged"), "quota_day": receipt.get("quota_day")}
 
 
 def _log_entry(entry):
@@ -345,6 +347,21 @@ def _hold_label(hold):
     return f"gate:{hold.get('kind')}" if hold.get("gate") else str(hold.get("kind") or "?")
 
 
+# The euro account's ledger suffix (agent_quota.LEDGER_UNIT, since
+# 2026-10-31). A receipt's quota_day names its ledger; without the suffix it
+# charged tokens, which never add to micro-euros.
+EURO_LEDGER = "_eur"
+
+
+def _charged(receipt):
+    """What the call took from the account in micro-euros, or None (not
+    charged, or charged in tokens before the switch)."""
+    value = receipt.get("quota_charged")
+    if isinstance(value, int) and str(receipt.get("quota_day") or "").endswith(EURO_LEDGER):
+        return value
+    return None
+
+
 def _tokens(rows):
     out = defaultdict(Counter)
     for row in rows:
@@ -352,9 +369,11 @@ def _tokens(rows):
             for name in {role, "reviewer" if role.startswith("reviewer_") else role}:
                 item = out[name]
                 item["calls"] += 1
-                for field in ("input", "cached", "output", "cost", "quota_charged"):
+                for field in ("input", "cached", "output", "cost"):
                     if isinstance(receipt.get(field), int):
                         item[field] += receipt[field]
+                if _charged(receipt) is not None:
+                    item["quota_charged"] += _charged(receipt)
     return {role: {"calls": c["calls"], "input": c["input"], "cached_share": round(c["cached"] / c["input"], 3)
                    if c["input"] else None, "output": c["output"], "cost_usd": round(c["cost"] / 1e9, 2),
                    "quota": c["quota_charged"]} for role, c in sorted(out.items())}
@@ -477,16 +496,18 @@ def report(data):
                                 if item.get("failure"))
     review_status = Counter((r["info"]["review"] or {}).get("status") for r in completed)
     tokens = _tokens(rows)
-    quota_rows = [(role, receipt) for row in rows for role, receipt in row["calls"]
-                  if isinstance(receipt.get("quota_charged"), int)]
-    quota_all = sum(receipt["quota_charged"] for _, receipt in quota_rows)
-    quota_reviewers = sum(receipt["quota_charged"] for role, receipt in quota_rows if role.startswith("reviewer_"))
+    calls = [(role, receipt) for row in rows for role, receipt in row["calls"]]
+    quota_rows = [(role, receipt) for role, receipt in calls if _charged(receipt) is not None]
+    quota_all = sum(_charged(receipt) for _, receipt in quota_rows)
+    quota_reviewers = sum(_charged(receipt) for role, receipt in quota_rows if role.startswith("reviewer_"))
     cost_all = sum(receipt.get("cost") or 0 for _, receipt in quota_rows)
     cost_reviewers = sum(receipt.get("cost") or 0 for role, receipt in quota_rows if role.startswith("reviewer_"))
-    quota = {"turns": sum(1 for row in rows if any(isinstance(r.get("quota_charged"), int) for _, r in row["calls"])),
+    quota = {"turns": sum(1 for row in rows if any(_charged(r) is not None for _, r in row["calls"])),
              "reviewer_share": round(quota_reviewers / quota_all, 3) if quota_all else None,
              "reviewer_cost_share": round(cost_reviewers / cost_all, 3) if cost_all else None,
-             "reviewer_tokens": quota_reviewers, "agent_tokens": quota_all - quota_reviewers}
+             "reviewer_micro_eur": quota_reviewers, "agent_micro_eur": quota_all - quota_reviewers,
+             "token_era_calls": sum(1 for _, r in calls
+                                    if isinstance(r.get("quota_charged"), int) and _charged(r) is None)}
     succeeded = review_status.get("succeeded", 0)
     # "off": the user's reviewers setting had none for the turn (since
     # 2026-11-01): nobody reviewed, so it is no review that failed.
@@ -590,8 +611,10 @@ def render(result):
         add(f"  {role:<16} calls={item['calls']:<5} input={item['input']:<10} cached={share:<5} "
             f"output={item['output']:<8} cost=${item['cost_usd']:<6} allowance={item['quota']}")
     quota = result["quota"]
-    add(f"  allowance ({quota['turns']} turns with quota_charged): reviewers {quota['reviewer_share']} of it, "
-        f"{quota['reviewer_cost_share']} of the cost")
+    add(f"  allowance in micro-euros ({quota['turns']} turns with quota_charged): reviewers "
+        f"{quota['reviewer_share']} of it, {quota['reviewer_cost_share']} of the cost")
+    if quota["token_era_calls"]:
+        add(f"  {quota['token_era_calls']} calls charged the token account (before 2026-10-31), left out")
     add("\nSearch steps without a kept page")
     for item in result["search"] or [{"model": "no data", "source": "", "steps": 0, "without_hits": 0, "share": None}]:
         add(f"  {item['model']:<30} {item['source']:<9} {item['without_hits']}/{item['steps']} ({item['share']})")
