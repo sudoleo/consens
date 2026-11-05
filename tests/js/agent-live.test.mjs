@@ -6,6 +6,9 @@ const CHAT = "a".repeat(32);
 function boot() {
   const setup = loadScripts(["static/js/agent-live.js"]);
   setup.window.App.agentLive.SILENCE_MS = 20;
+  // Most tests here start silent without headers either (a proxy that holds
+  // everything back); the tests of the headers set their own.
+  setup.window.App.agentLive.UNANSWERED_MS = 20;
   setup.window.App.agentLive.POLL_MS = 10;
   setup.window.App.agentLive.RUNNING_ELSEWHERE_MS = 10;
   setup.window.App.agentLive.GONE_MS = 30;
@@ -91,6 +94,51 @@ describe("agent live fallback", () => {
     // Renewed silence on a network known to buffer resumes polling.
     await vi.waitFor(() => expect(w.fetch.mock.calls.length).toBeGreaterThan(calls));
     slow.live.stop();
+    dom.window.close();
+  });
+
+  // P6 (2026-11-05): the silence counted from before the POST, so a slow
+  // start on the server (its reads before the headers) polled for nothing
+  // and was counted as a buffering network.
+  it("counts the silence from the response's headers, not from the request", async () => {
+    const { window: w, dom } = boot();
+    w.App.agentLive.UNANSWERED_MS = 5000;
+    w.fetch = vi.fn(async () => reply({ known: true, done: false, last_seq: 0, events: [] }));
+    // A slow start: the headers come after more than the silence, the bytes right after them.
+    const slow = watcher(w);
+    await new Promise(resolve => setTimeout(resolve, 60));
+    expect(w.fetch).not.toHaveBeenCalled();
+    slow.live.responded();
+    slow.live.bytes();
+    await new Promise(resolve => setTimeout(resolve, 60));
+    expect(w.fetch).not.toHaveBeenCalled();
+    expect(slow.options.onEngage).not.toHaveBeenCalled();
+    slow.live.stop();
+
+    // A proxy that lets the headers through and holds the body back.
+    const held = watcher(w);
+    held.live.responded();
+    await vi.waitFor(() => expect(w.fetch).toHaveBeenCalled());
+    await vi.waitFor(() => expect(held.options.onEngage).toHaveBeenCalledTimes(1));
+    expect(held.live.polling).toBe(true);
+    held.live.stop();
+    dom.window.close();
+  });
+
+  it("polls after the longer wait when even the headers are held back", async () => {
+    const { window: w, dom } = boot();
+    w.App.agentLive.UNANSWERED_MS = 80;
+    const polled = [];
+    w.fetch = vi.fn(async () => { polled.push(Date.now()); return reply({ known: true, done: false, last_seq: 0, events: [] }); });
+    const started = Date.now();
+    const { live, options } = watcher(w);
+    await vi.waitFor(() => expect(options.onEngage).toHaveBeenCalledTimes(1));
+    // Not after the silence of 20 ms: only after the wait for the headers.
+    expect(polled[0] - started).toBeGreaterThanOrEqual(75);
+    // Headers that come late change nothing about the polling under way.
+    live.responded();
+    expect(live.polling).toBe(true);
+    live.stop();
     dom.window.close();
   });
 

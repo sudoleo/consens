@@ -113,7 +113,7 @@ def test_a_service_tier_of_the_model_config_reaches_the_request(store, monkeypat
                      cancellation=ProviderCancellation())
     list(loop.run())
     assert requests[0]["service_tier"] == "priority"
-    assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny"}
+    assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny", "preferred_max_latency": {"p50": 2, "p90": 5}}
 
 
 def recording_transport(monkeypatch, responses):
@@ -149,7 +149,7 @@ def test_every_step_of_a_chat_stays_on_the_endpoint_holding_its_cached_prefix(st
     assert session not in {provider_session_id(UID, "other-chat"), provider_session_id("other-user", chat_id)}
     assert all("session_id" not in request for request in requests)
     assert headers[0]["Authorization"] == "Bearer test"
-    assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny"}
+    assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny", "preferred_max_latency": {"p50": 2, "p90": 5}}
 
 
 def test_a_request_without_a_session_keeps_the_plain_routing(monkeypatch):
@@ -317,7 +317,7 @@ def test_native_search_stays_in_selected_model_request_with_real_citations(store
     assert request["tools"] == [{"type": "openrouter:web_search", "parameters": {
         "engine": "auto", "max_uses": 2, "max_results": 5, "max_total_results": 10, "max_characters": 2000}}]
     assert request["max_tool_calls"] == 2
-    assert request["provider"] == {"sort": "throughput", "data_collection": "deny"}
+    assert request["provider"] == {"sort": "throughput", "data_collection": "deny", "preferred_max_latency": {"p50": 2, "p90": 5}}
     assert "tool_choice" not in request
     assert "plugins" not in request
     assert "parallel_tool_calls" not in request

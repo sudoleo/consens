@@ -428,14 +428,17 @@
     }
     return true;
   }
-  // The answer takes the place of the live lines (2026-10-30): they fade out
-  // first, and the answer appears where they stood once they are gone: its
-  // letters wait for them (stream-reveal.js hold), or without the letters'
-  // pace the answer stands hidden meanwhile. Before, the lines vanished in
-  // the frame of the answer's first words and those stood where the lines
-  // had begun.
+  // The answer takes the place of the live lines (2026-10-30), and since
+  // 2026-11-05 (P6) in the same frame: the lines leave the flow where they
+  // stand (a negative bottom margin as tall as they are, so they add nothing
+  // to the height) and fade out over the answer's first words, which come in
+  // where they stood. Their going then moves nothing. From 2026-10-30 the
+  // answer waited for the fade (160 ms): its letters held (stream-reveal.js),
+  // or the answer hidden without them. Before, the lines vanished in the
+  // frame of the answer's first words and those stood where the lines had
+  // begun.
   const HANDOFF_MS = 160;
-  function handoff(view, answer) {
+  function handoff(view) {
     if (view.previewExit) return;
     const preview = view.preview;
     if (preview.hidden || !preview.childElementCount || offscreenUpdate || quietMotion?.matches || view.details.open
@@ -447,21 +450,20 @@
     view.previewExit = true;
     preview.setAttribute('aria-hidden', 'true');
     preview.inert = true;
-    if (answer && App.streamReveal?.active()) App.streamReveal.hold(answer, HANDOFF_MS);
-    else {
-      view.handoffAnswer = answer || null;
-      view.handoffAnswer?.classList.add('is-awaiting-trace');
-    }
+    // Its top margin (agent-chat.css .agent-progress) counts too: the answer
+    // stands exactly where it will stand once the lines are gone.
+    const height = preview.getBoundingClientRect().height;
+    const top = parseFloat(getComputedStyle(preview).marginTop) || 0;
+    preview.style.marginBottom = `${-(height + top)}px`;
     view.previewMotion = motion(preview, [{ opacity: 1 }, { opacity: 0 }], () => false, HANDOFF_MS);
     // A timer, not the animation's end: a cancelled motion must never leave
-    // the answer hidden.
+    // the faded lines in place.
     view.handoffTimer = setTimeout(() => clearPreview(view), HANDOFF_MS);
   }
   function endHandoff(view) {
     clearTimeout(view.handoffTimer);
     view.handoffTimer = null;
-    view.handoffAnswer?.classList.remove('is-awaiting-trace');
-    view.handoffAnswer = null;
+    view.preview.style.removeProperty('margin-bottom');
   }
   function hidePreview(view) {
     if (view.previewExit) return;
@@ -1703,10 +1705,6 @@
     const answering = running && (!activeTool || answerChecks.has(activeTool.name))
       && Boolean(String(answerText || '').trim());
     const showPreview = running && lines.length && !answering;
-    // Only an answer's first words wait for the lines (handoff); text that
-    // stood already (a preamble before a step) stays in view.
-    const firstWords = !view.answerShown;
-    view.answerShown = Boolean(String(answerText || '').trim());
     let previewChanged = false;
     const previewIds = new Set();
     const pinned = showPreview && plan ? 1 : 0;
@@ -1816,7 +1814,7 @@
           ], () => {}, SETTLE_MS);
         }
       }
-    } else if (answering) handoff(view, firstWords ? host.nextElementSibling : null);
+    } else if (answering) handoff(view);
     else hidePreview(view);
     const ids = new Set();
     // The plan stands once in the history, where it was first made, with its

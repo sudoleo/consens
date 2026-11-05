@@ -937,9 +937,11 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   color: var(--agent-trace-ink); font-size: var(--font-size-ui); line-height: var(--trace-lh);
 }
 .agent-progress > .agent-progress-ghost { position: absolute; left: 0; right: 0; margin: 0; pointer-events: none; }
-/* The answer waits, written but unseen, while the live lines fade out above
-   it (agent-activity.js handoff): it appears where they stood. */
-#agentAnswerBody.is-awaiting-trace { visibility: hidden; }
+/* When the answer begins, the lines fade out where they stand and add
+   nothing to the height meanwhile (agent-activity.js handoff sets a negative
+   bottom margin from their height and the top margin of .agent-progress):
+   the answer comes in under them, where they stood. Until 2026-11-05 it
+   waited, unseen, for the fade. */
 /* pre-line: the agent's note beside a tool call keeps its lines. */
 .agent-progress p { margin: 0 0 var(--trace-gap); overflow-wrap: anywhere; white-space: pre-line; }
 /* In the live lines a note stays three lines tall (the timeline has it

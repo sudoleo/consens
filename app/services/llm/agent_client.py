@@ -13,7 +13,7 @@ import uuid
 
 from app.core import config as cfg
 from app.core.observability import record_metric
-from app.core.openrouter_contract import provider_routing
+from app.core.openrouter_contract import agent_provider_routing
 from app.services.agent_provider_limits import ModelDeclined, ModelEmptyAnswer, ModelOutputLimit
 from app.services.agent_costs import provider_cost_nanos, search_cost_nanos, token_cost_nanos
 from app.services.llm import agent_model_metadata
@@ -1105,10 +1105,11 @@ class AgentCompletion:
         payload.update({k: v for k, v in model.request_config.items() if k != "provider" and not k.startswith("_agent_")})
         payload.update(model=model.model, messages=messages, max_tokens=model.max_output_tokens,
                        stream=True, stream_options={"include_usage": True})
-        # Fastest endpoint without prompt collection; the registry may pin a
+        # Quick to start, then fastest, without prompt collection
+        # (openrouter_contract.agent_provider_routing); the registry may pin a
         # host (Kimi), a chat with Google data adds zero data retention
         # (google_connections.restricted_model).
-        payload["provider"] = provider_routing(model.request_config.get("provider"))
+        payload["provider"] = agent_provider_routing(model.request_config.get("provider"))
         # All execution-affecting fields are owned by this adapter, never model
         # arguments, user settings or arbitrary registry configuration.
         for field in ("tools", "tool_choice", "plugins", "parallel_tool_calls", "max_tool_calls", "stop_server_tools_when",

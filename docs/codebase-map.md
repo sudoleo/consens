@@ -4205,6 +4205,11 @@ Aufrufart Anteil `cached_input_tokens/input_tokens`, Writes/Reads und für
 Anthropic die Netto-Ersparnis in vollen Input-Tokens; `--exclude-own` lässt
 Max' Konten weg; seit 2026-10-29 `--by model` je Modell und `--kind audit` nur
 die Prüfer, Art aus dem Beleg `session_kind`, sonst aus der Sitzung).
+Tempo je Schritt misst `scripts/agent_speed.py` (nur lesend, seit 2026-11-05,
+P0 in `docs/agent-speed-plan-2026-11-05.md`): je Turn die Chat-Schritte aus
+`REQUEST_TIMES` der Belege, Lücken minus `duration_ms` der Werkzeuge aus
+`agent_activity`, Vor-/Nachlauf und p50/p90 je Modell; `--openrouter` ergänzt
+Endpunkt und Latenz aus `/api/v1/generation` (kein Modellaufruf).
 Prüfer 25.–29.10. (A-K1): MiMo Pro 85 %, Qwen 74 %, Luna 66 %, GLM 61 %,
 MiMo Flash 51 %, DeepSeek 44 %. Innerhalb einer Prüfer-Sitzung liest jede
 Folgerunde im Median ihr ganzes vorheriges Präfix (Verhältnis 0,96–1,0, kein
@@ -4569,11 +4574,18 @@ Antworten), danach prüfen die Prüfer sie; mit ungeprüften Worker-Ergebnissen
 gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige
 Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`). Seit 2026-10-30
 nennt das Wrap-up dem Agenten die Grenze (`_limit_fact`), und der Turn hält sie
-fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Bei
-offenem Arbeitsplatz fragt jeder Schritt des Agenten mit `parallel_tool_calls`
-(`_parallel_calls`, schaltet nur mit `open_workspace` um); die Aufrufe laufen
-nacheinander, höchstens `TOOL_CALLS_PER_STEP` = 4, jeder mit genau einem
-Ergebnis (`CALL_OVER_LIMIT`, `CALL_AFTER_*`), und nach jedem Batch einer
+fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Jeder
+Schritt des Agenten fragt mit `parallel_tool_calls` (`_parallel_calls`; seit
+2026-11-05 immer, vorher nur bei offenem Arbeitsplatz, Tempo-Plan P4); die
+Aufrufe laufen nacheinander, höchstens `TOOL_CALLS_PER_STEP` = 4, jeder mit
+genau einem Ergebnis (`CALL_OVER_LIMIT`, `CALL_AFTER_*`). Ausnahme seit
+2026-11-05: Besteht ein Schritt nur aus lesenden Werkzeugen
+(`CONCURRENT_TOOLS`: `read_source`, `find_pictures`, `search_pictures`,
+`read_file`, `search_chats`), startet `_prefetch` die späteren Aufrufe neben
+dem ersten (`_start_call`/`_await_call`); der Batch nimmt ihre Ergebnisse in
+Reihenfolge und prüft jeden wie sonst. Nicht vorgezogen werden Aufrufe, die
+der Wiederholungsschutz ablehnen wird, und dieselbe Seite ein zweites Mal
+(`url_key`, dann `already_read`). Nach jedem Batch einer
 Nachricht mit Arbeitsplatz steht eine Faktzeile (`_note_progress`: Schritt und
 wie lange der Nutzer wartet, die Grenzen erst ab `LIMITS_SHOWN_FROM` = 80 %,
 seit 2026-11-01; `open_workspace` nennt keine Grenzen mehr). Details und
@@ -4683,6 +4695,10 @@ die Antwort im frei gebliebenen Schritt (`_closing_index`, Grund
 nach dem ersten bezahlten Vergleich jeder Steuer-Schritt bis `turn_steps`
 (Sicherheitsaudit). `_long_run_limit` hält zusätzlich zweimal den bisherigen
 Prüfer-Verbrauch je Schritt frei (`reviewer_charge`, `_reviewer_step_charge`).
+Den Beleg eines Agent-Schritts mit Toolcalls schreibt seit 2026-11-05 ein
+eigener Thread, während die Aufrufe laufen (`_settle_later`); der nächste
+Claim des Agenten und das Laufende warten darauf (`_join_settling`), ein
+Fehlschlag bleibt in `unsettled` für den Abschluss (Tempo-Plan P3).
 Jeder Schritt des Agenten im Kontomodus kann die Antwort schreiben und wird mit
 dem Steuer-Budget zugelassen (`_routing_model`); sein Antwortbudget darüber
 (`_answer_output`) reserviert er einmal statt pro Suchrunde
@@ -4690,7 +4706,9 @@ dem Steuer-Budget zugelassen (`_routing_model`); sein Antwortbudget darüber
 bezahlter Arbeit überziehen (`claim(overdraft=<Tokens>)` →
 `agent_quota.reserve`): eine Direktantwort kurz vor dem Limit wird nicht
 abgeschnitten, und Recherche geht nicht früher verloren. Suchkonfiguration
-(`search_tools`: eine für alle Modelle, Engine `auto`, nur Grok fest Exa),
+(`search_tools`: eine für alle Modelle, Engine `auto`, nur Grok fest Exa; die
+eigenen Schritte des Agenten seit 2026-11-05 per `AGENT_SEARCH_ENGINE=exa`
+umstellbar, Standard `auto`),
 Reservierung (`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte
 stehen ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“.
 Die Output-Grenze einer Vergleichsantwort ist die Completion-Grenze des
@@ -4711,7 +4729,8 @@ derselbe Aufruf, der die Ergebnisse liest, die Antwort. Streaming
 (`_orchestrate` → `_step(answer_candidate=True)`, `_candidate_delta`;
 Konstanten in `agent_answer_mode.py`): Text erscheint ab `ANSWER_HOLD_CHARS`
 (300) Zeichen und nie nach Beginn eines Toolcalls; kürzerer Text (Gruß,
-Rückfrage) erscheint, wenn der Schritt endet. `hold` (`_hold_answer`:
+Rückfrage) erscheint, sobald sein Stream ohne Toolcall endet (seit 2026-11-05
+in `_step` vor der Abrechnung, vorher erst in `_finish_merged`). `hold` (`_hold_answer`:
 ungeprüfte Worker oder Mailbox) blendet ihn ganz aus. Folgt doch ein
 Toolcall, nimmt `_retract` den Text per Status `retract` mit `clear_response`
 zurück und zeigt seit 2026-10-28 den ganzen Schritttext als Notiz `note` in der
@@ -5144,10 +5163,12 @@ OpenRouter-Katalogs, 2–3 s je Nachricht:
   nutzt), der Turn wird nicht zurückgelesen. `messages(first_page=…)` nimmt die
   vorab gelesene Seite nur, wenn `history_current` sie noch gelten lässt (kein
   früherer Turn darin `pending`, keiner fehlt), sonst liest es selbst.
-- Der erste Schritt des Agenten liest den Chat nicht noch einmal auf
-  Google-Daten (`DelegationLoop.google_data` aus der Route; `None`, wo niemand
-  es sagt, liest wie jeder Schritt); spätere Schritte schon (ein Gmail-Import
-  kann sie bringen). Die Route nimmt dafür, was die Transaktion von
+- Kein Schritt liest den Chat noch einmal auf Google-Daten
+  (`DelegationLoop._chat_google_data`, seit 2026-11-05; vorher jeder Schritt
+  nach dem ersten, auch die der Prüfer): Es gilt `google_data` aus der Route.
+  Nur eine Nachricht mit Google-Werkzeugen (`google_tools`, ein Gmail-Import
+  kann sie bringen) liest vor jedem Schritt neu, und `None`, wo niemand es
+  sagt, liest wie früher. Die Route nimmt dafür, was die Transaktion von
   `create_turn` am Chat sah (`chat_google_data`): Hat ein Turn eines anderen
   Tabs zwischen ihrem ersten Read und der Anlage Mail importiert, gelten
   Einwilligung (sonst 422, der Turn wird freigegeben) und das eingeschränkte
@@ -5181,8 +5202,9 @@ blieb ein Chat bis zum Ende der Schlussrunde der Prüfer reserviert, rund 10 s
 nach der fixierten Antwort; eine Nachricht dazwischen wartete im Browser
 („Send after this response“). Jetzt gibt der Lauf den Chat ab, sobald die
 Antwort fixiert ist:
-- `DelegationLoop._hand_over` (aus `_finish_merged` nach `capture`, nur mit
-  Prüfern): beendet den Arbeitsplatz-Teil (`_release_workspace`, einmal; sonst
+- `DelegationLoop._hand_over` (aus `_finish_merged` nach `capture`; seit
+  2026-11-05 auch ohne Prüfer, Tempo-Plan P6: das Laufende mit Arbeitsbericht,
+  Beleg und Bookmark hielt den Browser sonst noch ~2 s auf): beendet den Arbeitsplatz-Teil (`_release_workspace`, einmal; sonst
   am Laufende), schreibt nach einem langen Lauf den Arbeitsbericht und ruft
   `AgentRunStore.hand_over`. Diese Transaktion setzt am Turn
   `agent_answer_fixed_at` und schon, was die nächste Nachricht von ihm liest
@@ -5303,7 +5325,9 @@ Producer schreibt jedes Frame mit einer pro Lauf monotonen Nummer (SSE `id:`,
 `agent.py::pack`) in `app/services/agent_live.py` (`agent_live`); die
 POST-Antwort (`AgentStreamingResponse`, ein schlichter `StreamingResponse`) ist
 nur `agent_live.tail_sse(...)`: 2-KiB-Padding, dann die Frames aus dem Puffer
-(alle 100 ms nachgesehen, Keepalive nach 15 s Stille), Ende nach dem letzten
+(seit 2026-11-05 weckt jedes neue Frame den Leser, `LiveRun.waiters`/`_wake`
+über `call_soon_threadsafe`, vorher alle 100 ms nachgesehen; ein Blick
+spätestens nach `TAIL_INTERVAL_SECONDS` = 1 s, Keepalive nach 15 s Stille), Ende nach dem letzten
 Frame. Ein Verbindungsabbruch beendet nur diesen Tail; der Turn rechnet zu Ende,
 rechnet ab und speichert Antwort und Bookmark selbst. Kein Rückstau mehr: ein
 langsamer Leser kann einen Lauf nicht mehr abbrechen.
@@ -5382,8 +5406,13 @@ fiele auf `recover_only` zurück).
 *Client.* `agent-chat.js::follow` ist der eine Weg, einem Turn zu folgen
 (`send` mit POST-Stream, `resume` ohne). `agent-live.js`
 (`App.agentLive.watch`, vor `agent-chat.js` im Bundle) hat zwei Betriebsarten:
-Puffernetz (kein Byte 5 s nach dem Senden → Polling alle 1,5 s, Bytes pausieren
-es, 4× `known:false` legt es still, ohne den Watch zu beenden) und
+Puffernetz (kein Byte 5 s nach den Antwort-Headern des POST, `responded()` aus
+`streamSSERequest`s `onResponse`, oder gar keine Antwort 10 s nach dem Senden,
+`UNANSWERED_MS`, für Proxys, die auch die Header zurückhalten → Polling alle
+1,5 s, Bytes pausieren es, 4× `known:false` legt es still, ohne den Watch zu
+beenden; bis 2026-11-05 zählten die 5 s ab dem Senden, sodass ein langsamer
+Serverstart vor den Headern grundlos pollte und als `app_stream_buffered`
+zählte) und
 `reconnect()`: Stream mit `streamFailureKind`
 `request_failed`/`stream_read_failed`/`stream_incomplete` abgebrochen, 45 s
 ohne Byte (`withRequestDeadline` `onIdle`, statt der früheren
@@ -6523,7 +6552,10 @@ reicht dem Browser; die Werkbank startet erst mit ihrem ersten Werkzeug
 (`VMSession.ready(bench=…)`, Teile `_lease` und `_bench` je als `_Job` auf
 eigenem Thread, `open_workspace` beginnt beide schon während des nächsten
 Modellschritts: `VMTools.prewarm`, aus `DelegationLoop._request_workspace`;
-eine offen beginnende Nachricht wärmt nur den Browser). Seit 2026-11-02
+eine offen beginnende Nachricht wärmt den Browser und seit 2026-11-05 auch die
+Werkbank, wenn die letzte Nachricht des Chats den Arbeitsplatz nutzte
+(`workspace_warm` aus `agent_workspace_used`, Tempo-Plan P5; nur den Browser,
+wenn ihn allein der Browser des Nutzers öffnete). Seit 2026-11-02
 richtet die erste Nachricht eines Kontos ohne Arbeitsplatz die VM im
 Hintergrund ein und startet Chrome einmal (`agent_workspace.provision` aus
 `routers/agent.py`, Notaus `AGENT_WORKSPACE_PROVISION=off`); jeder Start
@@ -6924,6 +6956,25 @@ Consensus-Lauf danach (`/consensus`) kommt aus dem Browser nicht mehr.
    Browserabbruch beendet einen begonnenen SSE-Lauf: das Cancellation-Signal
    schließt aktive HTTP-/SDK-Streams, unterbindet weitere Provider-Retries und
    der abgebrochene Generator erreicht keine nachgelagerte Persistenz.
+   **Transport (seit 2026-11-05):** `cancellable_sse_lines` (Agent-Schritte,
+   `read_source`, budgetierte Streams) und `cancellable_post_json` (Judges,
+   Repairs) laufen über `ProviderHTTP` (`_provider_http`): eine Event-Loop in
+   einem Daemon-Thread `provider-http` je Prozess (lazy, neu bei totem Thread
+   oder nach `fork`) mit EINEM `httpx.AsyncClient` (HTTP/1.1, Keep-Alive-Pool
+   `PROVIDER_HTTP_LIMITS`: 20 Leerlauf-Verbindungen, 60 s, ohne
+   Verbindungsgrenze). Die synchronen Worker reichen ihre Aufrufe per
+   `run_coroutine_threadsafe` hinüber und warten; `_guard_provider_io` läuft
+   auf dieser Loop (Abbruch, Deadline, Fortschritt, `mark_not_dispatched`
+   unverändert), Zeitlimits gelten je Request. Ein Lesevorgang holt einen
+   Netzwerk-Chunk, die Zeilen teilt der Worker selbst (httpx-`LineDecoder`)
+   und prüft vor jeder Zeile wie der Guard. Nach `data: [DONE]` liest der Loop
+   den Rest des Bodys im Hintergrund (≤ 64 KiB, ≤ 2 s), damit die Verbindung
+   in den Pool zurückgeht; ein vorher geschlossener Stream schließt seine
+   Verbindung sofort. Tests ersetzen `_provider_http` durch
+   `ProviderHTTP(transport=httpx.MockTransport(...))` statt
+   `httpx.AsyncClient` zu patchen. Noch je Aufruf neu: `requests.post` in
+   `engines.query_model`/`streaming._openrouter_sse` (ohne Budget), der
+   Usage-Abgleich `/generation`, der Key-Check.
 4. **Compare:** `model-answer-reader.js` zeigt alle Originalantworten
    rahmenlos in zwei Spalten (bei schmaler Leseflaeche untereinander). Die
    Frage steht einmal als normale Chat-Nachricht darueber, der Composer
@@ -9387,7 +9438,7 @@ app/services/
   prompt_catalog.py          Schreibgeschützter Katalog aller Systemprompts aus dem Code für den Admin
   prompt_defaults.py         Code-eigene Systemprompts für Agent, Einzelantworten und Synthese
 app/services/llm/
-  provider_runtime.py        Zentrale Timeout-/Retry-Policy + Stream-Cancellation
+  provider_runtime.py        Zentrale Timeout-/Retry-Policy + Stream-Cancellation; ProviderHTTP (eine Loop + Keep-Alive-Client je Prozess)
   provider_transport.py      Kanonischer Provider-Fan-out, Labels, Key-/Transport-Dispatch
   base.py                    System-Prompt, Wortzählung, validate_model
   engines.py                 Gemeinsamer OpenRouter-Payload und query_model
@@ -10486,9 +10537,15 @@ entfernt. Gemini
 **Provider-Routing (seit 2026-10-17):** Jeder Modellaufruf sendet
 `openrouter_contract.provider_routing()` = `{"sort": "throughput",
 "data_collection": "deny"}`: der Endpunkt mit dem höchsten gemessenen Durchsatz
-unter denen, die Prompts nicht sammeln. Gesetzt in `AgentCompletion.stream`,
-`PageFetch.stream`, `build_provider_payload`, `_call_engine_text`, dem
-Consensus-Stream und `memory_edit`; Registry-Felder des Modells (Kimi
+unter denen, die Prompts nicht sammeln. Gesetzt in `build_provider_payload`,
+`_call_engine_text`, dem Consensus-Stream und `memory_edit`. Die Agent-Aufrufe
+(`AgentCompletion.stream`, `PageFetch.stream`) senden seit 2026-11-05
+`agent_provider_routing()`: dazu `preferred_max_latency` =
+`AGENT_PREFERRED_MAX_LATENCY` (`{"p50": 2, "p90": 5}` Sekunden), eine weiche
+Vorgabe, die langsam startende Endpunkte ans Ende der Liste schiebt; unter den
+übrigen gewinnt der Durchsatz. Grund: Ein Agent-Schritt schreibt meist ~200
+Tokens, Durchsatz allein legte jeden Schritt eines Terra-Laufs auf den Endpunkt
+mit 3,5 s statt 1,3 s bis zum ersten Token (docs/agent-speed-plan-2026-11-05.md); Registry-Felder des Modells (Kimi
 `only`) kommen obendrauf. Ein `service_tier` im `request_config` geht als
 Top-Level-Feld mit (bis 2026-10-31 nutzten das die Agent-Judges der
 OpenAI-Familie mit `priority`; heute setzt es kein Aufruf). Die Schritte des Chatmodells senden dazu eine
@@ -11606,7 +11663,9 @@ zählen nicht):
   `Anthropic`. Beim Verdrahten neuer Modelle Mapping in `app-core.js::modelPrefs`
   und Backend-`normalize_model_name` synchron halten.
 - **Provider-Laufzeitvertrag**: Neue LLM-Transporte verwenden ausschließlich
-  `llm/provider_runtime.py` für Timeout-/SDK-Retry-Konfiguration. Ein SSE-
+  `llm/provider_runtime.py` für Timeout-/SDK-Retry-Konfiguration; httpx-Aufrufe
+  zu OpenRouter gehen über dessen geteilten `ProviderHTTP`-Client, keinen
+  eigenen `AsyncClient` je Aufruf. Ein SSE-
   Disconnect bedeutet „Serverarbeit abbrechen“; aktive Responses müssen am
   normalen Ende und bei Cancellation geschlossen werden. Automatische
   Transport-Retries dürfen keinen zweiten kostenpflichtigen Versuch verstecken.
@@ -12094,6 +12153,9 @@ Seit 2026-10-20 (Apple-Audit D4) malt `follow()` gestreamten Text einmal pro
 Frame (`schedulePaint` → `renderAnswerBody(..., 'stream')`, nur in eine Antwort,
 die dieser sichtbare Lauf schon streamt), getrennt vom 100-ms-Takt der übrigen
 Projektion; ein Frame über 8 ms rückt den nächsten um das Doppelte hinaus.
+Die ersten Wörter einer Antwort (`#agentAnswerBody` noch ohne Text) projiziert
+derselbe Frame sofort ganz (`flush()`, seit 2026-11-05, P6); vorher warteten
+sie auf den 100-ms-Takt. Alle weiteren Wörter behalten ihn.
 Sobald die Review den gestreamten Text als Version hält („settled“), rendert
 `project` ihn vollständig (`morphMarkdown` mit `streamSourcePills`, in die
 gezeigten Knoten und mit `keepTextSelection`) – auch eine Antwort, die mit
@@ -12113,7 +12175,13 @@ eines laufenden Turns) wird sofort gezeigt. Ein Frame mit mehr als 8 ms
 Malzeit rückt den nächsten um das Doppelte hinaus (vorher in `follow()`).
 Ein gemaltes Wort steht sofort ganz im Layout (bricht nie halb um), seine
 Buchstaben kommen aber im Tempo des Texts nacheinander ins Bild, höchstens
-100 ms nach dem Malen: Jeder blendet weich ein und erscheint in
+100 ms nach dem Malen. Das erste Wort einer Antwort hat noch kein Tempo
+(seit 2026-11-05, P6): seine Buchstaben kommen binnen 40 ms
+(`FIRST_LEAD_MS`) im kürzesten Licht (380 ms), und ein allein angekommenes
+erstes Wort, das mit Buchstabe oder Ziffer beginnt, wartet nur 60 ms
+(`FIRST_IDLE_MS`) statt 250 ms auf seinen Rest; es steht am Zeilenanfang und
+kann nicht halb umbrechen. Vorher war es erst nach bis zu 0,15 s halb im
+Bild. Jeder Buchstabe blendet weich ein und erscheint in
 `--stream-light` (hell `--agree`, dunkel heller gemischt, `variables.css`), das
 in etwa sechs Wörtern zu Tinte abkühlt. Gezeichnet wird mit der CSS Custom
 Highlight API (`stream-light-<Farbe>-<Stufe>`, Regeln in einem
@@ -12225,13 +12293,17 @@ bis 2026-10-12 klappten sie dafür ein zweites Mal auf und zu. Seit 2026-10-30
 (Max: „das Bild springt die ganze Zeit, wenn das Reasoning erscheint“) übergeben
 sie an die Antwort (`handoff`): Sie blenden in `HANDOFF_MS` (160 ms) aus, und
 die Antwort erscheint dort, wo sie standen; vorher verschwanden sie im Frame
-der ersten Antwortwörter. Mit getaktetem Text wartet dafür ihr erster
-Buchstabe (`App.streamReveal.hold(body, ms)`: `advance` steht bis `holdUntil`,
-der Takt beginnt danach), ohne ihn steht sie derweil unsichtbar
-(`#agentAnswerBody.is-awaiting-trace`, `visibility: hidden`, ein Timer hebt das
-sicher auf). Nur die ersten Wörter warten (`view.answerShown`): eine schon
-sichtbare Vorrede bleibt im Bild. Am selben Tag verbarg die erste Fassung die
-Antwort auch mit Takt, und ihr erster Brocken (`ANSWER_HOLD_CHARS`, 300
+der ersten Antwortwörter. Seit 2026-11-05 (P6) geschieht beides zugleich
+(Überblenden statt Nacheinander): `handoff` nimmt die Zeilen aus dem Fluss,
+wo sie stehen (negativer `margin-bottom` aus ihrer Höhe und ihrem oberen Rand,
+`.agent-progress`), die ersten Wörter kommen sofort unter ihrem Ausblenden an
+ihre Stelle, und ihr Verschwinden (`clearPreview`, ein Timer) bewegt nichts
+mehr; kommen die Zeilen zurück (ein Werkzeug nach einer Vorrede), stellt
+`endHandoff` den Rand zurück. Vom 2026-10-30 bis 2026-11-05 wartete die
+Antwort die 160 ms ab: mit getaktetem Text ihr erster Buchstabe
+(`App.streamReveal.hold`), ohne ihn unsichtbar
+(`#agentAnswerBody.is-awaiting-trace`). Am 2026-10-30 verbarg die erste Fassung
+die Antwort auch mit Takt, und ihr erster Brocken (`ANSWER_HOLD_CHARS`, 300
 Zeichen) lief in 0,15 s ungesehen ein: das Licht schien zu fehlen.
 Jede andere Änderung der Live-Zeilen läuft durch `settle(view, change)`
 (FLIP): Höhe gleitet in `SETTLE_MS` (220 ms), bleibende Zeilen gleiten von

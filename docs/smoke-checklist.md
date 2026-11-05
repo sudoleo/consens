@@ -436,8 +436,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `tests/e2e/test_agent_comparison_frontend.py`,
       `tests/e2e/test_passage_check_frontend.py`.
 - [ ] Gepufferter Agent-Stream (2026-10-08, Prod, Firmennetz bzw. puffernder
-      Proxy/Virenscanner): Agent-Frage mit Reasoning senden. Nach etwa 5 s
-      erscheinen Reasoning-Auszüge, Aktivität und Text live (DevTools → Network:
+      Proxy/Virenscanner): Agent-Frage mit Reasoning senden. Etwa 5 s nach
+      den Antwort-Headern des POST (hält der Proxy auch sie zurück: etwa 10 s
+      nach dem Senden) erscheinen Reasoning-Auszüge, Aktivität und Text live (DevTools → Network:
       `GET /agent/chats/…/live` alle ~1,5 s, `known: true`), die fertige Antwort
       steht genau einmal da, ohne Minuten-Warten auf das Stream-Ende. Im
       Heimnetz kommt kein einziger `/live`-Aufruf. Umami: `app_stream_buffered`
@@ -1645,6 +1646,13 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   zieht sich bei Abschluss weich zusammen. Schnelles Auf-/Zuklappen und Turnwechsel
   hinterlassen keine fixierten Höhen oder unsichtbaren Fokusziele. Reduced Motion
   und Forced Colors zeigen alle Zustandswechsel unmittelbar ohne Animation.
+- [ ] Antwortbeginn (seit 2026-11-05, P6), hell und dunkel, 390 px und Desktop,
+  Letter animations an und aus: Das erste Wort steht ohne merkliche Pause im
+  Bild, dort, wo die Live-Zeilen standen, und kommt unter ihrem Ausblenden herein
+  (kurzes Überblenden, kein Nacheinander). Weder beim Erscheinen noch wenn die
+  Zeilen weg sind, rückt oder springt etwas; die Wörter danach kommen im
+  gewohnten Takt. Folgt nach einer Vorrede ein Werkzeug, stehen die Live-Zeilen
+  wieder an ihrem Platz.
 - [ ] Reasoning ist im Chatmodellmenü erreichbar (auch per Tastatur); der
   Composer enthält im laufenden Chat nur Chatmodell und Compare-Auswahl.
 - [ ] Sources enthält Chat-Recherche und zitierte Antwortlinks, auch wenn

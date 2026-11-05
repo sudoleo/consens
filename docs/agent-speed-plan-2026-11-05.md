@@ -10,7 +10,7 @@ Datengrundlage: Prod-Belege (`llm_calls`, Zeitstempel je Schritt), die
 Aktivität des Turns und OpenRouter `/api/v1/generation` sowie
 `/api/v1/models/{id}/endpoints`. Alles wurde nur gelesen, es gab keine
 Modellaufrufe. Dazu kommen die eigenen Läufe der letzten 7 Tage (75 Turns mit
-Chat-Schritten). Die Messskripte liegen noch nicht im Repo (siehe P0).
+Chat-Schritten). Das Messskript liegt inzwischen im Repo (siehe P0).
 
 ## 1. Wohin die 136 s gingen
 
@@ -85,6 +85,9 @@ dieselbe Arbeit parallel und auf schnelleren Wegen erledigen.
   `first_token_at`, `stream_ended_at`), die Lücken minus Werkzeugzeit, Suchen
   je Schritt, Endpunkt und TTFT laut OpenRouter (`/generation`) sowie
   Aggregate (p50/p90).
+- Stand 2026-11-05: Das Skript liegt im Repo (`scripts/agent_speed.py`,
+  Test `tests/test_agent_speed_script.py`) und gibt den Beispiellauf mit
+  denselben Zahlen wieder wie Abschnitt 1.
 - Jede der folgenden Maßnahmen wird nach dem Deploy damit nachgemessen.
 - Ein Wächtertest misst die Rundgänge zwischen zwei Schritten (Muster:
   `tests/test_agent_tempo.py`, `tests/test_agent_first_request.py`).
@@ -243,3 +246,24 @@ Umbau:
 - P1 bringt am meisten, berührt aber die Qualität der Recherche. Deshalb
   kommt erst der Prüfstand, dann entscheidet Max.
 - Deploys nur auf Max' Ansage. Nach jedem Deploy mit P0 nachmessen.
+
+## 4. Umsetzung (2026-11-05, auf `main`, noch nicht live)
+
+Max: „alles gerne, p1-p7“. Die Live-Proben waren drei Aufrufe für zusammen
+etwa 1,2 Cent (Terra: eine Recherche mit Exa, zwei Mini-Schritte mit und ohne
+Denk-Zusammenfassung).
+
+| Hebel | Umgesetzt | Wo |
+|---|---|---|
+| P0 | Messskript, dazu `took_ms` je Werkzeugaufruf in der Aktivität (vorher maßen nur `vm_exec` und `browser` sich selbst) | `scripts/agent_speed.py`, `DelegationLoop._execute` |
+| P1 | **Engine bleibt `auto`.** Die Probe mit Terra auf Exa brauchte 7,9 s für eine Suchrunde, war also nicht schneller als die eigene Suche (Prod-Median 6,2 s je Runde). `AGENT_SEARCH_ENGINE=exa` schaltet die eigenen Schritte des Agenten um, damit sich das im Betrieb messen lässt. Was die Suchzeit wirklich drückt: mehrere Suchen in einem Durchgang (P4) und schnell startende Endpunkte (P2) | `agent_tools.agent_search_engine` |
+| P2 | Agent-Aufrufe senden `preferred_max_latency` `{p50: 2, p90: 5}` zusätzlich zur Sortierung nach Durchsatz (weich, schließt nie aus) | `openrouter_contract.agent_provider_routing` |
+| P3 | Beleg eines Werkzeug-Schritts im Hintergrund (`_settle_later`), kein Chat-Read je Schritt mehr (`_chat_google_data`), der Live-Puffer weckt Leser statt 100-ms-Takt, eine dauerhafte HTTP-Verbindung zu OpenRouter. Der Kontingent-Read vor jedem Schritt eines VM-Laufs bleibt: Ein paralleler Lauf desselben Kontos kann das Kontingent jederzeit verbrauchen (`tests/test_agent_long_runs.py`) | `agent_delegation.py`, `agent_live.py`, `llm/provider_runtime.py` |
+| P4 | `parallel_tool_calls` in jedem Schritt; lesende Aufrufe eines Schritts laufen nebeneinander (`CONCURRENT_TOOLS`, `_prefetch`) | `agent_delegation.py` |
+| P5 | Folgenachricht nach Arbeitsplatz-Nutzung wärmt auch die Werkbank vor (`workspace_warm`). Der erste ändernde Aufruf wartet weiter auf den Checkpoint: Er ist der Stand vor der Nachricht, ein späterer Checkpoint wäre keiner. Er beginnt jetzt aber früher | `routers/agent.py`, `DelegationLoop.__init__` |
+| P6 | Kurze Antworten erscheinen am Ende ihres Streams, nicht erst nach der Abrechnung. Die Übergabe (`handover`) läuft auch ohne Prüfer. Im Browser erscheint das erste Wort ohne 100-ms-Flush und ohne Wartezeit auf die ausblendende Live-Zeile, und der Stille-Timer startet erst mit den Antwort-Headern. Die 300-Zeichen-Sperre bleibt: Sie verhindert, dass Vorreden vor Toolcalls aufblitzen | `agent_delegation.py`, `static/js/*` |
+| P7 | Kein Unterschied messbar (2,3 s mit, 2,7 s ohne Zusammenfassung, beide ohne Reasoning-Tokens). `summary: "auto"` bleibt, denn sie speist die Gedankenzeile | – |
+
+Nach dem Deploy mit `scripts/agent_speed.py --days 2 --openrouter` nachmessen:
+Endpunkt und TTFT je Schritt, Rest je Lücke (Ziel ≤ 0,3 s), Suchen je
+Durchgang.

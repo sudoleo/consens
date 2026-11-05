@@ -73,7 +73,9 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   wenn das Netz den Antwort-Stream zurückhält (Firmen-Proxy, Virenscanner) und
   die App den Fortschritt stattdessen per Polling holt (`agent-live.js`).
   Zählt, wie viele Läufe ohne diesen Fallback nur „Thinking…“ gezeigt hätten;
-  ins Verhältnis zu `ask` mit `mode=agent` setzen.
+  ins Verhältnis zu `ask` mit `mode=agent` setzen. Bis 2026-11-05 zählte auch
+  ein langsamer Serverstart mit (die 5 s Stille liefen ab dem Senden, seitdem
+  ab den Antwort-Headern): Werte davor sind zu hoch.
 - `app_stream_resumed` (seit 2026-10-08, ohne Daten): einmal pro Agent-Lauf,
   wenn der Antwort-Stream wirklich tot war (Fehler, 45 s ohne Byte oder Tab nach
   über 20 s Stille zurück), der Lauf aber auf dem Server weiterlief und die App

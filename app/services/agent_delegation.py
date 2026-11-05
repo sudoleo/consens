@@ -161,6 +161,14 @@ HOLD_STEERED = "Not run: the user paused your work and wrote to you. Read their 
 # step's later calls: they were planned before.
 TOOL_CALLS_PER_STEP = 4
 CALL_OVER_LIMIT = f"Not run: a step runs at most {TOOL_CALLS_PER_STEP} calls."
+# Read-only tools whose calls of one step run at the same time (since
+# 2026-11-05, docs/agent-speed-plan-2026-11-05.md P4): two page reads took
+# 6.3 s one after the other at the median. Only a step whose calls are all
+# of these: anything that writes, acts in the workspace or the browser, or
+# asks the user keeps the order above. The batch still hands out the results
+# in order and applies its checks to each call; a call it does not run after
+# all (a pause, a repeat) read for nothing, and its result is dropped.
+CONCURRENT_TOOLS = frozenset({"read_source", "find_pictures", "search_pictures", "read_file", "search_chats"})
 CALL_AFTER_PAUSE = "Not run: the work was paused before this call; the user let it go on with your next step."
 CALL_AFTER_ASK = "Not run: this step asked the user first. Their answer is in the ask_user result above."
 CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile and has handed it back. The page "
@@ -379,7 +387,7 @@ class DelegationLoop(AgentLoop):
     def __init__(self, *, delegation_config, worker_model_ids=None, cooldowns=None, comparison_models=None,
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
-                 reviewers="always", temporary=False, watch_run=None, history_summary=None,
+                 workspace_warm=False, reviewers="always", temporary=False, watch_run=None, history_summary=None,
                  **kwargs):
         super().__init__(**kwargs)
         # A scheduled run of a Watch (agent_watches.py, since 2026-11-03):
@@ -459,6 +467,8 @@ class DelegationLoop(AgentLoop):
         self.journal = AgentJournal(self._journal_write, failed=self._journal_failed,
                                     progress_gap=THINKING_UPDATE_SECONDS / 2)
         self.unsettled = {}
+        # The agent's step receipt being written in the background (_settle_later).
+        self.settling = None
         self.mailbox = deque()
         # The user's messages into this run (USER_NOTE_OPEN): seen ids, and
         # those not yet in the conversation.
@@ -619,6 +629,9 @@ class DelegationLoop(AgentLoop):
         # Read-only Google has nothing to prepare.
         from app.services.google_connections import writes_enabled as google_writes
         self.google_actions = bool(google_selection) and google_writes()
+        # Only a message with Google tools can bring Google data into the
+        # chat while it runs (a Gmail import, _chat_google_data).
+        self.google_tools = bool(google_selection)
         if google_selection:
             from app.services.google_connections import GoogleConnections, writes_enabled
             from app.services.agent_actions import AgentActions
@@ -719,8 +732,13 @@ class DelegationLoop(AgentLoop):
                 if agent_vm.on_demand():
                     # Open because the chat's last message used it: the browser
                     # wakes while the model thinks (VMTools.prewarm, runtime
-                    # audit 2026-10-30 T1), nothing of the workbench.
-                    self.vm_tools.prewarm(bench=False)
+                    # audit 2026-10-30 T1), and since 2026-11-05 the workbench
+                    # too (``workspace_warm``, P5 of
+                    # docs/agent-speed-plan-2026-11-05.md): its first call
+                    # waited 2.5 s at the median, 9.5 s at p90, for the lease,
+                    # the chat's folder and the checkpoint. Only the browser
+                    # where the user's browser opened it.
+                    self.vm_tools.prewarm(bench=bool(workspace_warm))
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
         from app.services.agent_memory import orchestrator_prompt
@@ -894,15 +912,35 @@ class DelegationLoop(AgentLoop):
             # Its reviewers start now, their brief written from these tools.
             self._review_from_here(None)
 
+    def _chat_google_data(self):
+        """Whether the chat holds Google data, for every step's routing.
+
+        The route read it a moment before the run (``google_data``). Google
+        data joins a running chat only through this message's own Google
+        tools (a Gmail import), and once there it stays, so only a message
+        with Google tools reads the chat again before each step. Until
+        2026-11-05 every step after the first read it, the reviewers' and
+        comparison answers' too (docs/agent-speed-plan-2026-11-05.md, P3). A
+        run started without the route's value reads it every time."""
+        if self.google_data:
+            return True
+        if self.google_data is not None and not self.google_tools:
+            return False
+        found = bool((self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data"))
+        if found and self.google_data is not None:
+            self.google_data = True
+        return found
+
     def _parallel_calls(self):
-        """Whether the agent's steps ask for several calls at once: while
-        its workspace is open (audit T2: plan and action, write and run,
-        three form fields were a step each, with the whole context every
-        time). The switch comes with open_workspace, whose tools rewrite the
-        prompt cache once anyway: Anthropic's tool_choice carries it, and a
-        change of it rewrites the cached messages. The workspace never
-        closes within a message, so it never switches back."""
-        return self.vm_tools is not None and not self.workspace_closed
+        """Whether the agent's steps ask for several calls at once: always,
+        since 2026-11-05 (docs/agent-speed-plan-2026-11-05.md, P4). Until then
+        only while its workspace was open (audit T2: plan and action, write
+        and run, three form fields were a step each, with the whole context
+        every time); in a chat every further search, page read or side tool
+        cost a step of its own. The same from the first step on: Anthropic's
+        tool_choice carries it, and a change of it rewrites the cached
+        messages."""
+        return True
 
     def _turn_seconds(self):
         if self.policy.vm_turn_seconds and self._long_run():
@@ -1190,19 +1228,27 @@ class DelegationLoop(AgentLoop):
         refused with a tool error, and one more ends the turn.
         """
         limit = self.policy.turn_identical_calls if self.policy.account_budget_only else None
+        key = self._identical_key(call) if limit else None
+        if key is None:
+            return None
+        seen = self.identical_calls[key] = self.identical_calls.get(key, 0) + 1
+        if seen <= limit:
+            return None
+        return "refuse" if seen == limit + 1 else "stop"
+
+    @staticmethod
+    def _identical_key(call):
+        """What _identical_call compares, or None for a call it never limits
+        (a repeatable tool, arguments that are no JSON)."""
         function = call.get("function") or {}
         name = function.get("name")
-        if not limit or name in REPEATABLE_TOOLS:
+        if name in REPEATABLE_TOOLS:
             return None
         try:
             args = json.loads(function.get("arguments") or "{}")
         except (TypeError, ValueError):
             return None  # Invalid JSON is the invalid-tool guard's case.
-        key = f"{name}\0{json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
-        seen = self.identical_calls[key] = self.identical_calls.get(key, 0) + 1
-        if seen <= limit:
-            return None
-        return "refuse" if seen == limit + 1 else "stop"
+        return f"{name}\0{json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(',', ':'))}"
 
     def _publish(self, worker, *, patch=None, text=None, kind="message", sender="orchestrator", recipient=None,
                  wait=True, progress=False):
@@ -1516,6 +1562,10 @@ class DelegationLoop(AgentLoop):
                         extra.update(tool.activity(args, None if status == "running" else result) or {})
                     except Exception:
                         logging.warning("Agent tool activity fields failed tool=%s", tool.name)
+                if status != "running":
+                    # How long the call took, for scripts/agent_speed.py: never
+                    # shown (the timeline shows a tool's own duration_ms).
+                    extra.setdefault("took_ms", max(0, int((time.monotonic() - began) * 1000)))
                 self.outgoing.put_nowait(self.tool_event(f"{value.step_id}:{call['id']}", tool.name, status, **extra))
         def report(fields):
             # A running tool's own update of its event; display only, so a
@@ -1603,7 +1653,7 @@ class DelegationLoop(AgentLoop):
         delay, recovered_at = .1, time.monotonic()
         while True:
             self._check(cancellation)
-            tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
+            tools = [*registry.schemas, *search_tools(model, searches, agent=worker is None), *server_tools]
             if not searches:
                 room = model.context_length - input_estimate(messages, tools, model.request_config)
                 if room < minimum_output(model):
@@ -1727,11 +1777,7 @@ class DelegationLoop(AgentLoop):
         if answer_output and not self.policy.account_budget_only:
             # Bounded runs keep their hard limits whole: no overdraft.
             model, answer_output = replace(model, max_output_tokens=max(model.max_output_tokens, answer_output)), 0
-        # Google data can join the chat during the turn (a Gmail import), so
-        # every step reads the chat again; the agent's first step starts with
-        # what the route read a moment ago, before any step could add some.
-        if (self.google_data if step == "completion:0" and worker is None and self.google_data is not None
-                else (self.store._chat_ref(self.uid, self.chat_id).get().to_dict() or {}).get("google_data")):
+        if self._chat_google_data():
             from app.services.google_connections import restricted_model, GoogleError
             if not self.google_data_consent:
                 raise GoogleError("Enable Google model-sharing consent for this chat before continuing.", 403)
@@ -1779,7 +1825,7 @@ class DelegationLoop(AgentLoop):
             from app.services import agent_compaction
             messages = with_step_note(messages, agent_compaction.HISTORY_SUMMARY_REQUEST if summary == "history"
                                       else agent_compaction.RUN_SUMMARY_REQUEST)
-        tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
+        tools = [*registry.schemas, *search_tools(model, searches, agent=worker is None), *server_tools]
         reservation = None
         try:
             if not self.policy.account_budget_only:
@@ -1818,6 +1864,9 @@ class DelegationLoop(AgentLoop):
         status = "failed"
         search_limited = False
         try:
+            if worker is None:
+                # The agent's previous step is settled before its next claim.
+                self._join_settling()
             claim_policy = {**self.policy.snapshot(), "worker_models": [m.snapshot() for m in self.models.values()]}
             try:
                 if self.policy.account_budget_only:
@@ -1952,6 +2001,12 @@ class DelegationLoop(AgentLoop):
                     yield closing
             self._check(cancellation)
             status = "succeeded"
+            if (stream_answer and self.merged and not value.tool_calls and not getattr(value, "_tool_parts", None)
+                    and value.finish_reason == "stop" and value.text.strip()):
+                # The step wrote its answer: one too short to stream
+                # (ANSWER_HOLD_CHARS) shows now, not only after the step's
+                # settlement and _finish_merged (since 2026-11-05, P6).
+                yield from self._show_answer(value)
             if (stream_answer and self._answer_check_follows(value)
                     and not self.comparison.auditor.unreviewed):
                 # The last word stands and the reviewers review exactly this
@@ -2022,7 +2077,12 @@ class DelegationLoop(AgentLoop):
                     if getattr(worker, "kind", None) == "audit":
                         from app.services import agent_quota
                         self.reviewer_charge += agent_quota.measured_charge(value.usage) or 0
-                self._settle_step(step, value, status)
+                if worker is None and status == "succeeded" and value.tool_calls:
+                    # The agent's step that called tools: its receipt is
+                    # written while the calls run, not before them.
+                    self._settle_later(step, value, status)
+                else:
+                    self._settle_step(step, value, status)
                 log_actor = self._log_actor(step, worker)
                 if log_actor == "agent" and status == "succeeded" and not summary:
                     self._review_from_here(value)
@@ -2089,6 +2149,36 @@ class DelegationLoop(AgentLoop):
         with self.condition:
             if self.step_halt is halt:
                 self.step_halt = None
+
+    def _settle_later(self, step, value, status):
+        """_settle_step in a thread of its own (since 2026-11-05,
+        docs/agent-speed-plan-2026-11-05.md P3): the receipt of an agent step
+        that called tools is written while its calls run. A transaction under
+        the account lock cost about 0.3 s between every two steps. The next
+        claim of the agent waits for it (_join_settling), and so does the
+        run's end; a failure surfaces there, and the step stays in
+        ``unsettled`` for the run's end to retry."""
+        from contextvars import copy_context
+        self._join_settling()
+        box = {}
+        def work():
+            try:
+                self._settle_step(step, value, status)
+            except BaseException as exc:
+                box["error"] = exc
+        thread = threading.Thread(target=copy_context().run, args=(work,), daemon=True)
+        thread.start()
+        self.settling = (thread, box)
+
+    def _join_settling(self, *, raise_error=True):
+        """Wait for _settle_later's receipt write; raise its failure."""
+        settling, self.settling = self.settling, None
+        if settling is None:
+            return
+        thread, box = settling
+        thread.join()
+        if raise_error and "error" in box:
+            raise box["error"]
 
     def _settle_step(self, step, value, status):
         """Retry only the idempotent receipt write, including ambiguous commits."""
@@ -2238,6 +2328,10 @@ class DelegationLoop(AgentLoop):
 
     def _execute_stream(self, value, call, registry=None):
         """Keep SSE live while a tool fans out or waits for the reviewers."""
+        return (yield from self._await_call(self._start_call(value, call, registry)))
+
+    def _start_call(self, value, call, registry=None):
+        """Run one call in a thread of its own: (thread, result queue)."""
         from contextvars import copy_context
         result = queue.Queue(maxsize=1)
         registry = registry or self.registry
@@ -2248,6 +2342,49 @@ class DelegationLoop(AgentLoop):
                 result.put((None, exc))
         worker = threading.Thread(target=copy_context().run, args=(work,), daemon=True)
         worker.start()
+        return worker, result
+
+    def _prefetch(self, value, over_limit):
+        """The later calls of a step whose calls are all CONCURRENT_TOOLS,
+        started now, while the batch runs the first: {call id: started}.
+        Nothing for a step with another tool, a gate or a pause open, and no
+        call that the repeat guard will refuse."""
+        calls = [call for call in value.tool_calls if call["id"] not in over_limit]
+        gate = getattr(value, "gate", None)
+        if (len(calls) < 2 or self.hold is not None or (gate is not None and gate.call_ids)
+                or not all((call.get("function") or {}).get("name") in CONCURRENT_TOOLS for call in calls)):
+            return {}
+        reads = sum(1 for call in calls if (call.get("function") or {}).get("name") == "read_source")
+        reader = getattr(self.comparison, "reader", None)
+        if reads and (reader is None or not reader.room_for(reads)):
+            # A read past a limit would be refused for whichever came last.
+            return {}
+        from app.services.agent_read_source import url_key
+        limit = self.policy.turn_identical_calls if self.policy.account_budget_only else None
+        seen, pages, started = dict(self.identical_calls), set(), {}
+        for position, call in enumerate(calls):
+            key = self._identical_key(call) if limit else None
+            if key is not None:
+                seen[key] = seen.get(key, 0) + 1
+                if seen[key] > limit:
+                    continue
+            if (call.get("function") or {}).get("name") == "read_source":
+                # The same page twice (another spelling too): the later call
+                # waits its turn and finds it read (already_read).
+                try:
+                    page = url_key(str(json.loads((call.get("function") or {}).get("arguments") or "{}").get("url") or ""))
+                except (TypeError, ValueError, AttributeError):
+                    page = None
+                if page in pages:
+                    continue
+                pages.add(page)
+            if position:
+                started[call["id"]] = self._start_call(value, call)
+        return started
+
+    def _await_call(self, started):
+        """The result of a call _start_call started; events keep flowing."""
+        worker, result = started
         try:
             while worker.is_alive():
                 yield from self._events()
@@ -3121,10 +3258,9 @@ class DelegationLoop(AgentLoop):
         and what the next message reads of this one go with it now. A failed
         hand-over keeps the chat until the run's end, as it was until
         2026-11-01, when a message sent in between waited for the review."""
-        # Only while reviewers review: without them (the setting "off", or
-        # "workspace" without a workspace step) the run ends right here anyway.
-        if not getattr(getattr(self.comparison, "auditor", None), "sessions", None):
-            return
+        # Without reviewers too (since 2026-11-05, P6): the run's end (the
+        # work log, the receipt, the bookmark) took another 2 s before the
+        # browser took the answer as done.
         self._release_workspace()
         if self._long_run():
             from app.services.agent_compaction import work_record
@@ -3393,6 +3529,10 @@ class DelegationLoop(AgentLoop):
                         # later browser calls do not run (CALL_AFTER_BROWSER_FAILURE).
                         browser_failed = False
                         over_limit = getattr(value, "over_limit_ids", None) or set()
+                        # Page reads and other read-only calls of the step run
+                        # side by side (CONCURRENT_TOOLS); the batch below
+                        # takes their results in order.
+                        prefetched = self._prefetch(value, over_limit)
 
                         def not_run(call, text):
                             unrun.add(call["id"])
@@ -3465,7 +3605,9 @@ class DelegationLoop(AgentLoop):
                                     stopped = CALL_AFTER_TAKEOVER
                                     not_run(call, stopped)
                                     continue
-                            result = yield from self._execute_stream(value, call)
+                            started = prefetched.pop(call["id"], None)
+                            result = yield from (self._await_call(started) if started is not None
+                                                 else self._execute_stream(value, call))
                             results[call["id"]] = result
                             content = json.loads(result["content"])
                             last_accepted = "error" not in content
@@ -3581,6 +3723,8 @@ class DelegationLoop(AgentLoop):
             close_wait = CLOSE_WAIT_SECONDS - (time.monotonic() - closing)
             # Provider threads are joined; retain and retry their original
             # measurements before finalizing. Never rerun a paid model step.
+            # A background receipt write first: a failed one stays unsettled.
+            self._join_settling(raise_error=False)
             for step, (value, step_status) in list(self.unsettled.items()):
                 self._settle_step(step, value, step_status)
             self.completion.usage = self.costs.total()

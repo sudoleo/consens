@@ -884,6 +884,8 @@ async function readSSEStream(response, onEvent, onProgress) {
 // Führt einen POST-Request aus, der wahlweise als SSE-Stream (stream:true)
 // oder als normales JSON beantwortet wird (z. B. Fehler/Limits vor Streamstart).
 // deltaRenderers: { eventName: streamRenderer } für die Live-Anzeige.
+// requestOptions: { headers, onResponse() (die Antwort-Header sind da),
+// onProgress() (je gelesenem Byte-Block) }.
 // Rückgabe: { ok, status, data, streamed } – data hat dieselbe Struktur wie
 // die bisherige JSON-Antwort (final-Event des Streams bzw. JSON-Body).
 async function streamSSERequest(url, payload, signal, deltaRenderers, requestOptions = {}) {
@@ -896,6 +898,7 @@ async function streamSSERequest(url, payload, signal, deltaRenderers, requestOpt
       body: JSON.stringify({ ...payload, stream: true }),
       signal
     });
+    requestOptions.onResponse?.();
 
     failureKind = "stream_read_failed";
     const contentType = (response.headers.get("content-type") || "").toLowerCase();

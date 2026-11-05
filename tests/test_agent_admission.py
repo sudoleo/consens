@@ -317,12 +317,19 @@ def test_google_chat_tells_the_model_that_web_search_is_unavailable(store):
     store._chat_ref(UID, loop.chat_id).update({"google_data": True})
     loop.google_data_consent = True
     # The first step goes by what the route read (google_data), not by
-    # another read of the chat; a later one reads it, after a Gmail import.
+    # another read of the chat; a later one of a message with Google tools
+    # reads it, after a Gmail import (_chat_google_data, since 2026-11-05
+    # only such a message: without them no Google data can join).
     loop.google_data = True
     exhaust(loop._step(loop.model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation, search_rounds=3))
-    loop.google_data = False
+    loop.google_data, loop.google_tools = False, True
     exhaust(loop._step(loop.model, loop.messages, "completion:1", ToolRegistry(), loop.cancellation, search_rounds=3))
     assert [call["native_searches"] for call in observed] == [0, 0]
+    assert loop.google_data is True
+    # Without Google tools the route's answer stands: no read of the chat.
+    loop.google_data, loop.google_tools = False, False
+    exhaust(loop._step(loop.model, loop.messages, "completion:2", ToolRegistry(), loop.cancellation, search_rounds=3))
+    assert observed[-1]["native_searches"] == 3
     # After the newest message: the system prompt, and with it the prefix the
     # chat's steps have cached, stays as it was (with_step_note).
     assert observed[0]["messages"][-1] == {"role": "user", "content": GOOGLE_NO_SEARCH}

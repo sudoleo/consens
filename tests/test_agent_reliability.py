@@ -213,16 +213,18 @@ def test_real_provider_socket_stall_releases_receipt_and_preserves_partial_text(
                     yield b': OPENROUTER PROCESSING\n\n'
         async def aclose(self):
             closed.append(True)
-    client_type = httpx.AsyncClient
     def respond(request):
         requests.append(request)
         return httpx.Response(200, stream=Body())
-    monkeypatch.setattr(runtime.httpx, "AsyncClient", lambda **kwargs:
-        client_type(transport=httpx.MockTransport(respond), **kwargs))
+    http = runtime.ProviderHTTP(transport=httpx.MockTransport(respond))
+    monkeypatch.setattr(runtime, "_provider_http", http)
     monkeypatch.setattr(runtime, "_bounded_env_float", lambda *args: .08)
     loop = chat_loop(store, AgentCompletion)
-    with pytest.raises(TimeoutError, match="no progress"):
-        list(loop.run())
+    try:
+        with pytest.raises(TimeoutError, match="no progress"):
+            list(loop.run())
+    finally:
+        http.shutdown()
     assert len(requests) == 1 and closed
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["consensus"] == "Partial answer" and saved["agent_failure"]["code"] == "provider_timeout"
@@ -237,13 +239,15 @@ def test_productive_stream_can_outlive_the_stall_interval(monkeypatch):
                 yield ('data: ' + json.dumps({"choices": [{"delta": {"content": text}}]}) + '\n\n').encode()
             yield b'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":4}}\n\n'
             yield b'data: [DONE]\n\n'
-    client_type = httpx.AsyncClient
-    monkeypatch.setattr(runtime.httpx, "AsyncClient", lambda **kwargs:
-        client_type(transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Body())), **kwargs))
+    http = runtime.ProviderHTTP(transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Body())))
+    monkeypatch.setattr(runtime, "_provider_http", http)
     monkeypatch.setattr(runtime, "_bounded_env_float", lambda *args: .12)
     value = AgentCompletion()
-    with runtime.bind_analysis_budget(runtime.AnalysisBudget(unlimited=True)):
-        list(value.stream(model=AgentModel(), messages=[], api_key="test"))
+    try:
+        with runtime.bind_analysis_budget(runtime.AnalysisBudget(unlimited=True)):
+            list(value.stream(model=AgentModel(), messages=[], api_key="test"))
+    finally:
+        http.shutdown()
     assert value.text == "Long answer with progress."
     assert value.usage["input_tokens"] + value.usage["output_tokens"] == 14
 

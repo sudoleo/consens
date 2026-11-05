@@ -25,6 +25,7 @@ partial answer.
 """
 from __future__ import annotations
 
+import asyncio
 import itertools
 import json
 import math
@@ -50,7 +51,11 @@ ENDED_TTL_SECONDS = 600.0
 # still sends.
 ACTIVE_TTL_SECONDS = 3 * 3600.0
 MAX_EVENTS_PER_READ = 500
-TAIL_INTERVAL_SECONDS = 0.1
+# A reader waits for its run's next frame and wakes with it (since
+# 2026-11-05: it looked every 0.1 s, so a frame waited 50 ms on average,
+# docs/agent-speed-plan-2026-11-05.md P3). It looks this often anyway, should
+# a wake-up go missing; without an asyncio loop (another backend) it polls.
+TAIL_INTERVAL_SECONDS = 1.0
 TAIL_KEEPALIVE_SECONDS = 15.0
 # Frames whose newest instance stays meaningful after it scrolled out of the
 # window: a late reader receives them with its reset (agent-chat.js handlers).
@@ -127,6 +132,9 @@ class LiveRun:
     base_bytes: int = 0
     # Evicted as a whole (global caps): its readers fall back to the saved turn.
     evicted: bool = False
+    # The readers waiting for its next frame: (their asyncio loop, event).
+    waiters: set = field(default_factory=set)
+
 
 
 class AgentLiveBuffers:
@@ -175,6 +183,7 @@ class AgentLiveBuffers:
             if self._runs.get(run.key) is run:
                 del self._runs[run.key]
             self._evict(run)
+        self._wake(run)
 
     def record(self, run: LiveRun, event_type: str, data) -> tuple[int, str]:
         """Assign the next sequence number and keep the frame; returns (seq, json)."""
@@ -193,6 +202,7 @@ class AgentLiveBuffers:
                 while len(run.events) > 1 and (len(run.events) > self.max_events or run.bytes > self.max_bytes):
                     self._drop_oldest(run)
                 self._enforce_caps()
+        self._wake(run)
         return seq, text
 
     def finish(self, run: LiveRun | None) -> None:
@@ -202,6 +212,7 @@ class AgentLiveBuffers:
             if not run.done:
                 run.done = True
                 run.ended_at = self._clock()
+        self._wake(run)
 
     def read(self, uid, chat_id, request_id, after: int = 0) -> dict:
         key = self.key(uid, chat_id, request_id)
@@ -236,9 +247,27 @@ class AgentLiveBuffers:
         """Follow a run as SSE until its last frame; leaving early stops nothing."""
         if lead:
             yield lead
-        cursor = int(after)
+        try:
+            wake = (asyncio.get_running_loop(), asyncio.Event())
+        except RuntimeError:
+            wake = None
+        if wake is not None:
+            with self._lock:
+                run.waiters.add(wake)
+        try:
+            async for frame in self._tail(run, int(after), wake, interval, keepalive):
+                yield frame
+        finally:
+            if wake is not None:
+                with self._lock:
+                    run.waiters.discard(wake)
+
+    async def _tail(self, run, cursor, wake, interval, keepalive):
         quiet_since = time.monotonic()
         while True:
+            if wake is not None:
+                # Before the read: a frame recorded after it sets it again.
+                wake[1].clear()
             chunk, reset, done, evicted = self.frames(run, cursor)
             if evicted:
                 # The frames are gone: end without a terminal frame, so the
@@ -261,7 +290,26 @@ class AgentLiveBuffers:
             if time.monotonic() - quiet_since >= keepalive:
                 yield ": keepalive\n\n"
                 quiet_since = time.monotonic()
-            await anyio.sleep(interval)
+            wait = max(0.0, min(interval, keepalive - (time.monotonic() - quiet_since)))
+            if wake is None:
+                await anyio.sleep(wait)
+                continue
+            try:
+                await asyncio.wait_for(wake[1].wait(), timeout=wait)
+            except asyncio.TimeoutError:
+                pass
+
+    def _wake(self, run):
+        """Wake the readers of ``run`` (from any thread)."""
+        with self._lock:
+            waiters = list(run.waiters)
+        for loop, event in waiters:
+            try:
+                loop.call_soon_threadsafe(event.set)
+            except RuntimeError:
+                # Its loop closed: the reader is gone.
+                with self._lock:
+                    run.waiters.discard((loop, event))
 
     def stats(self) -> dict:
         with self._lock:

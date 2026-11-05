@@ -192,9 +192,7 @@ def test_nonstream_request_is_cancelled_while_waiting_for_headers(stop):
         finally:
             stopped.set()
 
-    client_type = httpx.AsyncClient
-    def client(**kwargs):
-        return client_type(transport=httpx.MockTransport(waiting_transport), **kwargs)
+    http = runtime.ProviderHTTP(transport=httpx.MockTransport(waiting_transport))
     def stop_while_waiting():
         assert started.wait(2)
         if stop == "disconnect":
@@ -207,13 +205,14 @@ def test_nonstream_request_is_cancelled_while_waiting_for_headers(stop):
     worker = threading.Thread(target=stop_while_waiting)
     worker.start()
     try:
-        with mock.patch.object(runtime.httpx, "AsyncClient", side_effect=client):
+        with mock.patch.object(runtime, "_provider_http", http):
             with runtime.bind_provider_cancellation(cancellation), runtime.bind_analysis_budget(budget):
                 with pytest.raises((runtime.ProviderCancelled, runtime.AnalysisBudgetExceeded)):
                     runtime.cancellable_post_json("https://example.invalid/chat", json={}, headers={})
         assert stopped.is_set(), "the HTTP task itself must be cancelled, not abandoned"
     finally:
         worker.join(2)
+        http.shutdown()
 
 
 def test_paid_transport_is_not_called_after_budget_exhaustion():
@@ -241,10 +240,8 @@ def test_stream_body_read_is_cancelled_and_connection_closed(stop):
         async def aclose(self):
             closed.set()
 
-    client_type = httpx.AsyncClient
-    def client(**kwargs):
-        return client_type(transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Body())), **kwargs)
-    with mock.patch.object(runtime.httpx, "AsyncClient", side_effect=client):
+    http = runtime.ProviderHTTP(transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Body())))
+    with mock.patch.object(runtime, "_provider_http", http):
         with runtime.bind_provider_cancellation(cancellation), runtime.bind_analysis_budget(budget):
             lines = runtime.cancellable_sse_lines("https://example.invalid/chat", json={}, headers={})
             assert next(lines) == 'data: {"choices": []}'

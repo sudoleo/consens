@@ -20,10 +20,29 @@ OPENROUTER_TITLE = "consens.io"
 # adds it back (google_connections.restricted_model).
 DEFAULT_PROVIDER_ROUTING = {"sort": "throughput", "data_collection": "deny"}
 
+# Agent requests (since 2026-11-05) prefer, among those endpoints, the ones
+# that start to answer quickly, and of those the one with the highest
+# throughput. Most Agent steps write a tool call or a short answer (about 200
+# tokens), so the wait for the first token decides. Throughput alone put
+# every step of a GPT-6.1 Terra turn on the endpoint with the slowest start
+# (2026-11-05: 3.5 s at p50 and 8.7 s at p90; other endpoints of the same
+# model started in 1.3 s, docs/agent-speed-plan-2026-11-05.md). A preference
+# only: OpenRouter moves an endpoint over the limit to the end of its list
+# and never refuses a request for it. Seconds, measured over five minutes.
+AGENT_PREFERRED_MAX_LATENCY = {"p50": 2, "p90": 5}
+
 
 def provider_routing(overrides: dict | None = None) -> dict:
     """A fresh copy of the default routing, with a model's own settings on top."""
     return {**DEFAULT_PROVIDER_ROUTING, **(overrides or {})}
+
+
+def agent_provider_routing(overrides: dict | None = None) -> dict:
+    """The routing of an Agent request: the default routing preferring
+    endpoints that start quickly (AGENT_PREFERRED_MAX_LATENCY), with a
+    model's own settings on top."""
+    return {**DEFAULT_PROVIDER_ROUTING, "preferred_max_latency": dict(AGENT_PREFERRED_MAX_LATENCY),
+            **(overrides or {})}
 
 
 def provider_session_id(uid: str, chat_id: str, worker_id: str = "") -> str:

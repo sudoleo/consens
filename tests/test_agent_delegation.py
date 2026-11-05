@@ -251,7 +251,7 @@ def test_reasoning_continuation_preserves_signed_blocks_without_public_exposure(
     assert continuation["reasoning_details"] == [encrypted]
     assert "private-token" not in json.dumps(events)
     assert "private-token" not in json.dumps(store.get_turn(UID, loop.chat_id, loop.turn_id), default=str)
-    assert requests[0]["parallel_tool_calls"] is False
+    assert requests[0]["parallel_tool_calls"] is True
 
 
 def test_bounded_parallel_tool_batch_is_replayed_with_every_result(store, monkeypatch):

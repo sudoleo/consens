@@ -9,13 +9,14 @@ from __future__ import annotations
 
 from contextlib import contextmanager
 import asyncio
+import concurrent.futures
 import functools
 import inspect
 import logging
 import os
 import threading
 import time
-from typing import Callable, Iterator
+from typing import Callable, Iterator, NamedTuple
 
 import httpx
 import openai
@@ -344,6 +345,15 @@ class ProviderProgressWatchdog:
             raise TimeoutError("Provider stream made no progress")
 
 
+def _check_provider_io(cancellation, budget, progress=None):
+    if cancellation:
+        cancellation.raise_if_cancelled()
+    if budget:
+        budget.check()
+    if progress:
+        progress.check()
+
+
 async def _guard_provider_io(awaitable, cancellation, budget, progress=None, *, sends_request=False):
     """Await provider I/O while honouring cancellation, deadline and progress.
 
@@ -358,12 +368,7 @@ async def _guard_provider_io(awaitable, cancellation, budget, progress=None, *, 
     try:
         while True:
             try:
-                if cancellation:
-                    cancellation.raise_if_cancelled()
-                if budget:
-                    budget.check()
-                if progress:
-                    progress.check()
+                _check_provider_io(cancellation, budget, progress)
             except BaseException as exc:
                 # The task only runs once this coroutine yields to the loop.
                 if sends_request and not task_ran:
@@ -379,31 +384,222 @@ async def _guard_provider_io(awaitable, cancellation, budget, progress=None, *, 
         await asyncio.gather(task, return_exceptions=True)
 
 
+# Provider HTTP runs on one event loop per process with one pooled client.
+# Until 2026-11-05 every call built its own loop and AsyncClient: DNS, TCP, TLS
+# and the CA bundle again for each model step (prod: 50-560 ms from request
+# start to the provider's first byte). No connection limit: each concurrent
+# call gets its own connection as before, so a hung request never makes
+# another wait for the pool. 60 s idle stays below common server idle limits;
+# httpcore also drops a pooled connection the server already closed. HTTP/1.1
+# although h2 is installed: HTTP/2 would carry all parallel model streams on
+# one connection, so one stall or GOAWAY would hit all of them, and the pool
+# already saves the handshakes.
+PROVIDER_HTTP_LIMITS = httpx.Limits(max_connections=None, max_keepalive_connections=20, keepalive_expiry=60.0)
+# After ``data: [DONE]`` only the end of the chunked body is left. Reading it
+# (bounded, off the caller's path) returns the connection to the pool; a
+# response closed before its end takes its connection with it.
+_DRAIN_LIMIT_BYTES = 65_536
+_DRAIN_SECONDS = 2.0
+# How often a waiting caller checks that the loop thread still runs.
+_LIVENESS_SECONDS = 1.0
+
+
+class _HTTPSession(NamedTuple):
+    pid: int
+    loop: asyncio.AbstractEventLoop
+    thread: threading.Thread
+    client: httpx.AsyncClient
+
+
+def _serve_provider_loop(loop):
+    asyncio.set_event_loop(loop)
+    try:
+        loop.run_forever()
+    finally:
+        try:
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            loop.close()
+
+
+async def _close_stream(response, chunks):
+    try:
+        if chunks is not None:
+            await chunks.aclose()
+    finally:
+        await response.aclose()
+
+
+async def _drain_and_close(response, chunks):
+    async def drain():
+        received = 0
+        async for chunk in chunks:
+            received += len(chunk)
+            if received > _DRAIN_LIMIT_BYTES:
+                return
+    try:
+        await asyncio.wait_for(drain(), _DRAIN_SECONDS)
+    except Exception:
+        # Only the connection's reuse is at stake; closing below drops it.
+        pass
+    finally:
+        await _close_stream(response, chunks)
+
+
+class ProviderHTTP:
+    """One event loop thread and one pooled ``httpx.AsyncClient`` per process.
+
+    Synchronous provider workers hand awaitables to the loop (``call``) and
+    block on the result. ``_guard_provider_io`` runs there as it did on the
+    per-call loops, so cancellation, deadline and progress still end the
+    socket task itself. Started on first use; a dead loop thread or a forked
+    child gets a fresh one. ``transport`` is for tests (httpx.MockTransport).
+    """
+
+    def __init__(self, transport=None):
+        self._transport = transport
+        self._lock = threading.Lock()
+        self._session = None
+        # Background releases, referenced until done (the loop holds tasks weakly).
+        self._releasing = set()
+
+    def session(self) -> _HTTPSession:
+        with self._lock:
+            session = self._session
+            if (session is None or session.pid != os.getpid() or not session.thread.is_alive()
+                    or session.loop.is_closed()):
+                session = self._session = self._start()
+            return session
+
+    def _start(self) -> _HTTPSession:
+        loop = asyncio.new_event_loop()
+        try:
+            client = httpx.AsyncClient(
+                transport=self._transport, limits=PROVIDER_HTTP_LIMITS,
+                timeout=httpx.Timeout(PROVIDER_READ_TIMEOUT_SECONDS, connect=PROVIDER_CONNECT_TIMEOUT_SECONDS),
+            )
+            thread = threading.Thread(target=_serve_provider_loop, args=(loop,), name="provider-http", daemon=True)
+            thread.start()
+        except BaseException:
+            loop.close()
+            raise
+        return _HTTPSession(os.getpid(), loop, thread, client)
+
+    def call(self, session: _HTTPSession, make):
+        """Await ``make()`` on the loop and return its result in this thread.
+
+        ``make`` builds the awaitable on the loop thread itself. Waits as long
+        as the awaitable runs; the guard inside bounds that."""
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            pass
+        else:
+            # Waiting here would stall that loop (FastAPI's) or deadlock this one.
+            raise RuntimeError("provider HTTP called from a running event loop")
+
+        async def run():
+            return await make()
+        coroutine = run()
+        try:
+            future = asyncio.run_coroutine_threadsafe(coroutine, session.loop)
+        except BaseException:
+            coroutine.close()
+            raise
+        while True:
+            try:
+                return future.result(timeout=_LIVENESS_SECONDS)
+            except concurrent.futures.TimeoutError:
+                if future.done():
+                    return future.result()
+                if not session.thread.is_alive():
+                    try:
+                        future.cancel()
+                    except RuntimeError:
+                        pass
+                    raise RuntimeError("provider HTTP loop stopped")
+
+    def release(self, session: _HTTPSession, response, chunks=None, *, drain=False):
+        """Close a streamed response and its body iterator ``chunks``. After a
+        complete stream (``drain``) the tail is read first, in the background,
+        so the connection returns to the pool. Otherwise it is closed at once,
+        which drops an unfinished connection: the provider sees the
+        disconnect as before."""
+        on_loop = threading.current_thread() is session.thread
+        if drain or on_loop:
+            closing = _drain_and_close(response, chunks) if drain else _close_stream(response, chunks)
+            try:
+                future = asyncio.run_coroutine_threadsafe(closing, session.loop)
+            except RuntimeError:
+                closing.close()
+                if on_loop:
+                    raise
+            else:
+                self._releasing.add(future)
+                future.add_done_callback(self._releasing.discard)
+                return
+        self.call(session, lambda: _close_stream(response, chunks))
+
+    def shutdown(self, timeout: float = 5.0) -> None:
+        """Close the client and stop the loop thread (tests, scripts)."""
+        with self._lock:
+            session, self._session = self._session, None
+        if session is None or session.pid != os.getpid() or not session.thread.is_alive():
+            return
+        for future in list(self._releasing):
+            try:
+                future.result(timeout)
+            except Exception:
+                pass
+        try:
+            asyncio.run_coroutine_threadsafe(session.client.aclose(), session.loop).result(timeout)
+        except Exception:
+            pass
+        session.loop.call_soon_threadsafe(session.loop.stop)
+        session.thread.join(timeout)
+
+    def _after_fork(self) -> None:
+        # The parent's loop thread does not exist here; its lock may be held.
+        self._lock = threading.Lock()
+        self._session = None
+        self._releasing = set()
+
+
+_provider_http = ProviderHTTP()
+if hasattr(os, "register_at_fork"):
+    os.register_at_fork(after_in_child=lambda: _provider_http._after_fork())
+
+
 def cancellable_post_json(url, *, json, headers):
     """Cancel the actual socket task even while waiting for response headers.
 
-    Runs only in synchronous provider workers, never on FastAPI's event loop.
+    Runs only in synchronous provider workers, never on FastAPI's event loop;
+    the request itself runs on the shared provider loop (``ProviderHTTP``).
     No transport retries. Polling monitors cancellation, not provider results.
     """
     from app.services.llm import usage_meter
-    from app.services.llm.engines import _ProviderHTTPStatusError
+    from app.services.llm.engines import _ProviderHTTPStatusError, _raise_provider_http_status
+    from app.services.llm.provider_dispatch import mark_not_dispatched
 
     cancellation = current_provider_cancellation()
     budget = current_analysis_budget()
     connect, read = analysis_http_timeout()
     metered = usage_meter.start_call(json)
-
-    async def request():
-        async with httpx.AsyncClient(timeout=httpx.Timeout(read, connect=connect)) as client:
-            response = await _guard_provider_io(client.post(url, json=json, headers=headers), cancellation, budget,
-                                                sends_request=True)
-            # Keep the existing content-free HTTP status contract.
-            if response.status_code >= 400:
-                from app.services.llm.engines import _raise_provider_http_status
-                _raise_provider_http_status(response)
-            return response.json()
+    http = _provider_http
     try:
-        data = asyncio.run(request())
+        try:
+            session = http.session()
+        except BaseException as exc:
+            mark_not_dispatched(exc)
+            raise
+        timeout = httpx.Timeout(read, connect=connect)
+        response = http.call(session, lambda: _guard_provider_io(
+            session.client.post(url, json=json, headers=headers, timeout=timeout), cancellation, budget,
+            sends_request=True))
+        # Keep the existing content-free HTTP status contract.
+        if response.status_code >= 400:
+            _raise_provider_http_status(response)
+        data = response.json()
     except _ProviderHTTPStatusError:
         metered.rejected()
         raise
@@ -430,56 +626,64 @@ async def _bounded_error_body(response, limit=16_384):
 
 
 def cancellable_sse_lines(url, *, json, headers, progress=None):
-    """Drive async socket reads on the existing synchronous SSE worker.
+    """Read a provider's SSE lines one by one for a synchronous SSE worker.
 
-    A deadline/disconnect cancels header reads and idle body reads alike; no
+    Each socket read runs guarded on the shared provider loop
+    (``ProviderHTTP``); a deadline/disconnect cancels header reads and idle
+    body reads alike. One read hands over a whole network chunk, split here as
+    ``aiter_lines`` would: a round trip between threads per line would cost
+    more than the lines. The guard's checks still run before every line. No
     extra producer thread, abandoned request or hidden retry is introduced.
     """
+    from httpx._decoders import LineDecoder  # the decoder of Response.aiter_lines
+
     from app.services.llm.provider_dispatch import mark_not_dispatched
 
     cancellation = current_provider_cancellation()
     budget = current_analysis_budget()
+    http = _provider_http
     try:
         # Runs on the first next(), after the caller started metering.
         connect, read = analysis_http_timeout()
+        session = http.session()
+        request = session.client.build_request("POST", url, json=json, headers=headers,
+                                               timeout=httpx.Timeout(read, connect=connect))
     except BaseException as exc:
         mark_not_dispatched(exc)
         raise
-    loop = asyncio.new_event_loop()
-    client = httpx.AsyncClient(timeout=httpx.Timeout(read, connect=connect))
-    response = None
+    response = chunks = None
+    complete = False
 
-    def guarded(awaitable, *, sends_request=False):
-        return _guard_provider_io(awaitable, cancellation, budget, progress, sends_request=sends_request)
+    def guarded(make, *, sends_request=False):
+        return http.call(session, lambda: _guard_provider_io(make(), cancellation, budget, progress,
+                                                             sends_request=sends_request))
 
     try:
-        try:
-            request = client.build_request("POST", url, json=json, headers=headers)
-        except BaseException as exc:
-            mark_not_dispatched(exc)
-            raise
-        response = loop.run_until_complete(guarded(client.send(request, stream=True), sends_request=True))
+        response = guarded(lambda: session.client.send(request, stream=True), sends_request=True)
         if response.status_code >= 400:
             from app.services.llm.engines import _raise_provider_http_status
             body = None
             try:
                 # Small error bodies only feed a content-free diagnostic.
-                body = loop.run_until_complete(guarded(_bounded_error_body(response)))
+                body = guarded(lambda: _bounded_error_body(response))
             except (httpx.HTTPError, UnicodeError, ValueError):
                 body = None
             _raise_provider_http_status(response, body=body)
-        lines = response.aiter_lines()
-        while True:
+        chunks = response.aiter_text()
+        decoder = LineDecoder()
+        ended = False
+        while not ended:
             try:
-                line = loop.run_until_complete(guarded(lines.__anext__()))
+                lines = decoder.decode(guarded(chunks.__anext__))
             except StopAsyncIteration:
-                return
-            yield line
+                lines, ended = decoder.flush(), True
+            for line in lines:
+                # As before each guarded line read: a stop or an exhausted
+                # deadline/progress budget ends the stream between lines too.
+                _check_provider_io(cancellation, budget, progress)
+                if line.startswith("data:") and line[5:].strip() == "[DONE]":
+                    complete = True
+                yield line
     finally:
-        try:
-            if response is not None:
-                loop.run_until_complete(response.aclose())
-        finally:
-            loop.run_until_complete(client.aclose())
-            loop.run_until_complete(loop.shutdown_asyncgens())
-            loop.close()
+        if response is not None:
+            http.release(session, response, chunks, drain=complete)

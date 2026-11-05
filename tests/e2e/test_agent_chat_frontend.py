@@ -447,6 +447,10 @@ def test_buffering_proxy_shows_polled_progress_before_the_answer(browser, phase4
         expect(page.locator("#agentModelDropdown")).to_be_enabled()
         page.evaluate("""() => { window.__tracked = []; const track = window.trackUmamiEvent;
           window.trackUmamiEvent = (name, data) => { window.__tracked.push(name); return track?.(name, data); }; }""")
+        # This proxy holds back the headers too (a held route sends nothing):
+        # polling starts after the wait for them (agent-live.js UNANSWERED_MS,
+        # 10 s), shortened here; the silence after headers is unit-tested.
+        page.evaluate("() => { App.agentLive.UNANSWERED_MS = 2000; }")
         page.locator("#questionInput").fill("Answer behind a buffering proxy")
         page.locator("#sendButton").click()
 

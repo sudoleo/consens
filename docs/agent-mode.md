@@ -4527,8 +4527,11 @@ gespeicherter Turn (fertig oder fehlgeschlagen) beendet das Warten,
 Damit der Lauf auf solchen Netzen trotzdem live sichtbar ist: Jede SSE-Antwort
 beginnt mit 2 KiB Kommentar-Padding und trägt `Cache-Control: … no-transform`;
 das reicht für Proxys, die nur die ersten KiB sammeln. Hält ein Netz den ganzen
-Stream zurück, merkt der Browser das daran, dass 5 s nach dem Senden kein
-einziges Byte kam, und holt die Frames alle 1,5 s über denselben
+Stream zurück, merkt der Browser das daran, dass 5 s nach den Antwort-Headern
+kein einziges Byte kam (hält es auch die Header zurück: 10 s nach dem Senden
+ohne jede Antwort; bis 2026-11-05 zählten die 5 s ab dem Senden, und ein
+langsamer Serverstart vor den Headern galt als Puffernetz), und holt die
+Frames alle 1,5 s über denselben
 `/live`-Endpunkt. Jedes Frame trägt eine pro Lauf steigende Nummer (SSE `id:`);
 Stream und Poll laufen im Browser durch dieselbe Stelle, die bereits angewandte
 Nummern verwirft. Reasoning-Auszüge, Aktivität, Modell-Icons und Text erscheinen
@@ -4776,6 +4779,20 @@ Grok ist ausgenommen, weil xAIs eigene Suche jede Begrenzung ignoriert
 (gemessen 2026-08-31: 66k Prompt-Tokens, ≈ 0,10 $, 20 s bis zum ersten Token;
 im Betrieb bis zu 55 Quellen für eine Wetterfrage). Die Trefferbegrenzung wirkt
 sicher nur auf Exa; ob die eigene Suche der Anbieter sie beachtet, ist nicht garantiert.
+
+**Tempo der Suche (2026-11-05, docs/agent-speed-plan-2026-11-05.md).** Jede
+Suchrunde ist ein weiterer Durchgang des Modells bei OpenRouter: In einem
+Terra-Lauf standen 15 Runden nacheinander für 85 von 136 s. Im Median dauerte
+eine Runde mit der eigenen Suche des Anbieters 6,2 s (Terra) und 5,4 s (Haiku),
+eine auf Exa 2,4–4,4 s bei anderen Modellen. Eine Probe mit Terra auf Exa
+brauchte für eine Runde 7,9 s, war also nicht schneller. Deshalb bleibt `auto`
+der Standard; `AGENT_SEARCH_ENGINE=exa` stellt nur die eigenen Schritte des
+Agenten um (`agent_tools.agent_search_engine`), um das im Betrieb zu messen.
+Prüfer und Vergleichsantworten suchen immer mit `auto`, damit ihre Recherche
+unabhängig bleibt. Was die Suche wirklich verkürzt: Seit 2026-11-05 darf jeder
+Schritt mehrere Aufrufe auf einmal stellen (`parallel_tool_calls`), also auch
+mehrere Suchen in einem Durchgang. Und die Agent-Aufrufe bevorzugen Endpunkte,
+die schnell anfangen (`openrouter_contract.agent_provider_routing`).
 
 **Wer wie oft sucht.** Das ist die einzige Stellschraube, und sie ist eine
 Produktentscheidung, keine Modell-Sonderlösung:

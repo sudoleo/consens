@@ -373,6 +373,36 @@ def test_tail_streams_frames_until_the_end_and_resets_a_late_reader():
     assert [event["seq"] for event in data["events"]] == [3, 4, 5] and data["done"] is True
 
 
+def test_a_reader_wakes_with_a_frame_from_another_thread():
+    # A frame recorded on the run's thread reaches the waiting reader at once,
+    # not at its next look (TAIL_INTERVAL_SECONDS, 1 s; P3 of the speed plan).
+    import threading
+    import time as clock
+    buffers = AgentLiveBuffers()
+    run = buffers.open("u", "c", "r")
+    sent = {}
+
+    def producer():
+        clock.sleep(.2)
+        sent["at"] = clock.monotonic()
+        buffers.record(run, "delta", {"text": "x"})
+        buffers.finish(run)
+
+    async def follow():
+        arrived = []
+        async for chunk in buffers.tail_sse(run, interval=5, keepalive=30):
+            arrived.append((chunk, clock.monotonic()))
+        return arrived
+
+    thread = threading.Thread(target=producer)
+    thread.start()
+    arrived = anyio.run(follow)
+    thread.join()
+    assert [chunk.split("\n")[0] for chunk, _ in arrived] == ["id: 1"]
+    assert arrived[0][1] - sent["at"] < .5
+    assert not run.waiters
+
+
 def test_reset_text_follows_cleared_answers():
     buffers = AgentLiveBuffers(max_events=1)
     run = buffers.open("u", "c", "r")

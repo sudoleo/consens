@@ -549,6 +549,36 @@ def test_cited_spelling_variants_and_a_second_read_fetch_once(store, monkeypatch
     assert len(calls) == 1 and len(saved["agent_review"]["read_sources"]) == 1
 
 
+def test_the_reads_of_one_step_run_side_by_side_and_answer_in_order(store, monkeypatch, enabled):
+    # Two pages in one step read at the same time (speed plan P4,
+    # CONCURRENT_TOOLS), their results in the order of the calls.
+    import threading
+    import time as clock
+    urls = [f"https://example.org/page-{i}" for i in range(2)]
+    running, overlap = set(), []
+    lock = threading.Lock()
+    original = agent_read_source.SourceReader._fetch
+
+    def slow_fetch(self, record, limit):
+        with lock:
+            running.add(record["url"])
+            overlap.append(len(running))
+        clock.sleep(.3)
+        try:
+            return original(self, record, limit)
+        finally:
+            with lock:
+                running.discard(record["url"])
+
+    monkeypatch.setattr(agent_read_source.SourceReader, "_fetch", slow_fetch)
+    fake_fetch(monkeypatch)
+    loop, _, saved = run(store, Plan(steps=[[compare()], [read_call(u) for u in urls]], cited=urls))
+    assert max(overlap) == 2
+    assert [r["status"] for r in results(loop)] == ["completed", "completed"]
+    assert [r["url"] for r in results(loop)] == urls
+    assert saved["assistant_response"] == ANSWER
+
+
 def test_reads_stop_at_the_message_and_step_limits(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch)
     urls = [f"https://example.org/page-{i}" for i in range(READS_PER_MESSAGE + 2)]
@@ -819,7 +849,7 @@ def test_page_fetch_reads_the_page_and_usage_from_the_responses_stream(monkeypat
     completion = PageFetch()
     events = list(completion.stream(model=model, messages=[{"role": "user", "content": "x"}], api_key="k", tools=[tool]))
     assert sent["url"].endswith("/api/v1/responses")
-    assert sent["payload"]["provider"] == {"sort": "throughput", "data_collection": "deny"} and sent["payload"]["tools"] == [tool]
+    assert sent["payload"]["provider"] == {"sort": "throughput", "data_collection": "deny", "preferred_max_latency": {"p50": 2, "p90": 5}} and sent["payload"]["tools"] == [tool]
     assert sent["payload"]["input"] == [{"role": "user", "content": "x"}] and sent["payload"]["stream"] is True
     assert completion.page["status"] == "completed" and completion.page["text"] == PAGE
     assert completion.page["title"] == "Report" and completion.page["http_status"] == 200

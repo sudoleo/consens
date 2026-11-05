@@ -63,19 +63,52 @@ describe("stream-reveal: the pace of a streamed answer", () => {
     expect(app.reveal.active()).toBe(true);
   });
 
-  // 2026-10-30: the answer was hidden while the live lines above it faded
-  // out, and its first bundle came in unseen. Now its letters wait instead.
-  it("holds the first letter while the lines above fade, then comes in word by word", () => {
-    const { reveal, el, painted, paint, run } = boot();
+  // P6 (2026-11-05): the first word took the pace it had no history for yet,
+  // 25 ms a letter in the longest light, and from 2026-10-30 to 11-05 also
+  // waited 160 ms for the live lines above it (hold).
+  it("brings the first word into view within a tenth of a second, then comes in word by word", () => {
+    const { window, reveal, el, painted, paint, run } = boot();
+    // A first bundle of a few words: a slow pace to begin with.
+    reveal.stream(el, "Yes. For most", paint);
+    run(16);
+    expect(painted.at(-1)).toBe("Yes.");
+    // Each letter's highlight step (0: not in view yet, none: in ink).
+    const node = el.querySelector("p").firstChild;
+    const stepAt = offset => {
+      for (const [name, ranges] of window.CSS.highlights) {
+        for (const range of ranges) {
+          if (range.startContainer === node && range.startOffset <= offset && offset < range.endOffset) {
+            return Number(name.split("-").at(-1));
+          }
+        }
+      }
+      return null;
+    };
+    run(64);
+    // About 80 ms after it arrived, every letter is more than half in view
+    // (step 4 and on; the last two were at step 0 and 2 before).
+    expect([0, 1, 2, 3].map(stepAt).every(step => step >= 4)).toBe(true);
+    // The words after it keep the pace.
     reveal.stream(el, ANSWER, paint);
-    reveal.hold(el, 160);
-    run(144);
-    expect(painted.every(shown => shown === "")).toBe(true);
-    run(48);
-    expect(painted.at(-1).length).toBeGreaterThan(0);
+    run(16);
     expect(painted.at(-1).length).toBeLessThan(ANSWER.length);
     run(3000);
     expect(painted.at(-1)).toBe(ANSWER);
+  });
+
+  it("lets a lone first word stand soon, but not a mark its rest could change", () => {
+    const word = boot();
+    word.reveal.stream(word.el, "Walking", word.paint);
+    word.run(32);
+    expect(word.painted.at(-1)).toBe("");
+    word.run(48);
+    expect(word.painted.at(-1)).toBe("Walking");
+    const mark = boot();
+    mark.reveal.stream(mark.el, "**Walk", mark.paint);
+    mark.run(160);
+    expect(mark.painted.at(-1)).toBe("");
+    mark.run(160);
+    expect(mark.painted.at(-1)).toBe("**Walk");
   });
 
   it("paints a bundle that arrived at once word by word, never half a word", () => {

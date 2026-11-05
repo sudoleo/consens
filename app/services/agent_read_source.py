@@ -258,13 +258,14 @@ class PageFetch(AgentCompletion):
 
     def stream(self, *, model, messages, api_key, tools=None, native_searches=0, allow_tool_calls=False,
                prompt_cache=True, session_id=None):
-        # The same routing as AgentCompletion.stream: fastest endpoint without
-        # prompt collection, the registry's (or a Google chat's) settings on top.
-        # A page read is a helper step: it never gets the chat's session_id.
-        from app.core.openrouter_contract import provider_routing
+        # The same routing as AgentCompletion.stream: quick to start, then
+        # fastest, without prompt collection, the registry's (or a Google
+        # chat's) settings on top. A page read is a helper step: it never gets
+        # the chat's session_id.
+        from app.core.openrouter_contract import agent_provider_routing
         payload = {"model": model.model, "input": messages, "tools": list(tools or []), "stream": True,
                    "max_output_tokens": model.max_output_tokens,
-                   "provider": provider_routing((model.request_config or {}).get("provider"))}
+                   "provider": agent_provider_routing((model.request_config or {}).get("provider"))}
         reasoning = (model.request_config or {}).get("reasoning")
         if reasoning:
             payload["reasoning"] = reasoning
@@ -415,6 +416,15 @@ class SourceReader:
                              "what you have: write the answer.")
         if self._steps.get(loop.routing_steps, 0) >= READS_PER_STEP:
             raise ValueError(f"At most {READS_PER_STEP} sources per step. Continue with what you have.")
+
+    def room_for(self, count):
+        """Whether ``count`` more reads fit this step's and this message's
+        limits, so that reads run side by side (DelegationLoop._prefetch)
+        meet no limit that depends on which of them registers first."""
+        with self.lock:
+            attempted = sum(1 for r in self.reads if r["status"] in {"completed", "failed", "running"})
+            return (attempted + count <= READS_PER_MESSAGE
+                    and self._steps.get(self.loop.routing_steps, 0) + count <= READS_PER_STEP)
 
     def _time_budget(self):
         """Seconds this read may take, or a refusal close to the answer deadline."""

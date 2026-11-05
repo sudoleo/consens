@@ -7,6 +7,7 @@ server-owned registry; tools require a strict argument model and bounded executo
 from dataclasses import dataclass
 import functools
 import json
+import os
 import re
 from typing import Callable, Optional
 
@@ -32,17 +33,42 @@ def search_family(model):
 SEARCH_RESULTS, SEARCH_RESULT_CHARACTERS = 5, 2000
 
 
-def search_tools(model, searches):
+# The engine of the agent's own steps: "auto" as everywhere, or Exa with
+# AGENT_SEARCH_ENGINE=exa (since 2026-11-05, a switch to measure in normal
+# use, docs/agent-speed-plan-2026-11-05.md P1). A round of a publisher's own
+# search took 6.2 s (GPT-6.1 Terra) and 5.4 s (Claude Haiku 5.5) at the
+# median in prod, a round on Exa 2.4-4.4 s, but with other models; one Terra
+# step on Exa took 7.9 s for one round in a probe the same day, no faster.
+# Every round is another pass of the model on OpenRouter, whatever the
+# engine: what shortens the search is fewer passes (several searches in one,
+# DelegationLoop._parallel_calls) and endpoints that start quickly
+# (openrouter_contract.agent_provider_routing). Exa is the engine
+# privacy.html names. Reviewers and comparison answers stay on "auto": their
+# research stays independent of the agent's (docs/agent-mode.md, "Websuche").
+AGENT_SEARCH_ENGINE_ENV = "AGENT_SEARCH_ENGINE"
+AGENT_SEARCH_ENGINES = ("auto", "exa")
+
+
+def agent_search_engine():
+    """The engine of the agent's own searches (AGENT_SEARCH_ENGINE_ENV),
+    "auto" unless set to another of AGENT_SEARCH_ENGINES."""
+    value = os.environ.get(AGENT_SEARCH_ENGINE_ENV, "").strip().lower()
+    return value if value in AGENT_SEARCH_ENGINES else AGENT_SEARCH_ENGINES[0]
+
+
+def search_tools(model, searches, *, agent=False):
     """The one search configuration for every model, as in Consensus.
 
     Engine "auto" lets OpenRouter choose: the publisher's own search where one
     exists (Google grounding, OpenAI, Anthropic), Exa otherwise. The only
-    exception, Grok on Exa, lives in engines.web_search_tool. See
+    exception, Grok on Exa, lives in engines.web_search_tool. The agent's own
+    steps (``agent``) search on agent_search_engine(). See
     docs/agent-mode.md, "Websuche".
     """
+    engine = {"engine": agent_search_engine()} if agent and agent_search_engine() != "auto" else {}
     return [web_search_tool(search_family(model), max_uses=searches, max_results=SEARCH_RESULTS,
                             max_total_results=SEARCH_RESULTS * searches,
-                            max_characters=SEARCH_RESULT_CHARACTERS)] if searches else []
+                            max_characters=SEARCH_RESULT_CHARACTERS, **engine)] if searches else []
 
 
 def argument_schema(arguments):

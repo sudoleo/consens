@@ -59,10 +59,13 @@ describe("SSE completion and failure diagnostics", () => {
       new TextEncoder().encode('id: 8\nevent: final\ndata: {"response":"Hi"}\n\n')];
     const reader = { read: vi.fn(async () => ({ value: chunks.shift() })) };
     const { window, dom } = boot(reader);
-    const receive = vi.fn(), onProgress = vi.fn();
-    const result = await window.streamSSERequest("/agent", {}, undefined, { delta: { receive } }, { onProgress });
+    const receive = vi.fn(), onProgress = vi.fn(), onResponse = vi.fn();
+    const result = await window.streamSSERequest("/agent", {}, undefined, { delta: { receive } }, { onProgress, onResponse });
     expect(receive.mock.calls).toEqual([[{ text: "Hi" }, "7"]]);
     expect(onProgress).toHaveBeenCalledTimes(3); // the padding alone already counts as a live byte
+    // The headers come first (agent-live.js counts its silence from them).
+    expect(onResponse).toHaveBeenCalledOnce();
+    expect(onResponse.mock.invocationCallOrder[0]).toBeLessThan(onProgress.mock.invocationCallOrder[0]);
     expect(result.data).toEqual({ response: "Hi" });
     dom.window.close();
   });

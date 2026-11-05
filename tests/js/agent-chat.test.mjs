@@ -884,13 +884,18 @@ describe("single-model agent chat", () => {
   });
 
   // 2026-10-30: the lines vanished in the frame of the answer's first words,
-  // and those stood where the lines had begun. Now the lines fade out first
-  // and the answer, written meanwhile, appears where they stood.
-  it('lets the progress lines fade out before the answer appears in their place', async () => {
+  // and those stood where the lines had begun. Then the lines faded out
+  // first and the answer waited for them, unseen, 160 ms. Since 2026-11-05
+  // (P6) the answer comes in at once where they stood, under their fade:
+  // they add nothing to the height meanwhile, so their going moves nothing.
+  it('lets the answer come in where the progress lines stood while they fade out', async () => {
     const { window, document, dom } = boot();
+    const fades = [];
     window.Element.prototype.animate = function (frames) {
-      return { effect: { target: this, getKeyframes: () => frames }, playState: 'running',
+      const animation = { effect: { target: this, getKeyframes: () => frames }, playState: 'running',
         cancel() { this.playState = 'idle'; }, finish() {} };
+      if (frames[0]?.opacity === 1 && frames[1]?.opacity === 0) fades.push(animation);
+      return animation;
     };
     const activity = window.App.agentActivity;
     const host = document.getElementById('agentAnswerActivity');
@@ -898,16 +903,47 @@ describe("single-model agent chat", () => {
     const events = [];
     activity.receive(events, {version:1, id:'p1', kind:'progress', text:'Comparing the plans.'});
     activity.render(host, {events, running:true});
+    const preview = host.querySelector('.agent-progress');
+    // Two lines, 46 px, under the -8 px top margin (agent-chat.css).
+    preview.getBoundingClientRect = () => ({ top: 0, bottom: 46, height: 46, left: 0, right: 600, width: 600 });
+    preview.style.marginTop = '-8px';
     activity.receive(events, {version:1, id:'writing', kind:'status', status:'responding'});
     activity.render(host, {events, running:true, answerText:'The answer begins'});
-    const preview = host.querySelector('.agent-progress');
     expect(preview.hidden).toBe(false);
     expect(preview.getAttribute('aria-hidden')).toBe('true');
-    expect(body.classList.contains('is-awaiting-trace')).toBe(true);
+    expect(fades.some(animation => animation.effect.target === preview)).toBe(true);
+    // Out of the flow where it stands: the answer is neither hidden nor held.
+    expect(preview.style.marginBottom).toBe('-38px');
+    expect(body.style.visibility).toBe('');
+    expect(body.className).toBe('');
     await new Promise(resolve => window.setTimeout(resolve, 220));
     expect(preview.hidden).toBe(true);
     expect(preview.childElementCount).toBe(0);
-    expect(body.classList.contains('is-awaiting-trace')).toBe(false);
+    expect(preview.style.marginBottom).toBe('');
+    dom.window.close();
+  });
+
+  it('lets the live lines take their place again when a step follows the first words', () => {
+    const { window, document, dom } = boot();
+    window.Element.prototype.animate = function (frames) {
+      return { effect: { target: this, getKeyframes: () => frames }, playState: 'running',
+        cancel() { this.playState = 'idle'; }, finish() {} };
+    };
+    const activity = window.App.agentActivity;
+    const host = document.getElementById('agentAnswerActivity');
+    const events = [];
+    activity.receive(events, {version:1, id:'p1', kind:'progress', text:'Comparing the plans.'});
+    activity.render(host, {events, running:true});
+    const preview = host.querySelector('.agent-progress');
+    preview.getBoundingClientRect = () => ({ top: 0, bottom: 30, height: 30, left: 0, right: 600, width: 600 });
+    activity.render(host, {events, running:true, answerText:'Let me check'});
+    expect(preview.style.marginBottom).toBe('-30px');
+    // A tool after the preamble: the lines come back, in the flow again.
+    activity.receive(events, {version:1, id:'search', kind:'tool', name:'web_search', status:'running'});
+    activity.render(host, {events, running:true, answerText:'Let me check'});
+    expect(preview.hidden).toBe(false);
+    expect(preview.hasAttribute('aria-hidden')).toBe(false);
+    expect(preview.style.marginBottom).toBe('');
     dom.window.close();
   });
 
@@ -3104,6 +3140,41 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // P6 (2026-11-05): a frame paints only into an answer that streams
+  // already, so the first words waited for the 100-ms projection.
+  it('projects the first words of an answer in their frame, the words after them on the beat', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    const frames = [];
+    w.requestAnimationFrame = fn => frames.push(fn);
+    // As run-view.js: every update of the run on screen projects it.
+    w.App.runRegistry.setProjector(context => context && w.App.agentChat.project(context));
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const body = d.getElementById('agentAnswerBody');
+    const projections = vi.spyOn(w.App.agentChat, 'project');
+    handlers.delta.append('First words.');
+    expect(body.textContent).toBe('');
+    expect(frames).toHaveLength(1);
+    frames.shift()(16);
+    expect(body.textContent).toBe('First words.');
+    expect(projections).toHaveBeenCalledTimes(1);
+    handlers.delta.append(' More.');
+    frames.shift()(32);
+    expect(body.textContent).toBe('First words. More.');
+    expect(projections).toHaveBeenCalledTimes(1);
+    await vi.waitFor(() => expect(projections).toHaveBeenCalledTimes(2));
+    resolve({ ok: true, data: { response: 'First words. More.', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'First words. More.', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    dom.window.close();
+  });
+
   it('hands streamed text to stream-reveal where it can draw, and lets the full render follow its last word', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);
@@ -3751,10 +3822,34 @@ describe("agent stream behind a buffering proxy", () => {
       window.App.trackAppEvent = vi.fn();
     } });
     harness.window.App.agentLive.SILENCE_MS = 20;
+    // The proxies here let the headers through (onResponse) and hold the body.
+    harness.window.App.agentLive.UNANSWERED_MS = 5000;
     harness.window.App.agentLive.POLL_MS = 10;
     return harness;
   }
   const liveCalls = w => w.fetch.mock.calls.map(call => String(call[0])).filter(url => url.includes("/live?"));
+
+  // P6 (2026-11-05): the silence counted from before the POST, so a server
+  // slow to answer polled for nothing and was counted as a buffering network.
+  it("takes a slow start on the server for no buffering network", async () => {
+    const { window: w, document: d, dom } = bootLive([{ known: true, done: false, last_seq: 0, events: [] }]);
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, handlers, options) => new Promise(resolve => {
+      // The headers after 60 ms (three times the silence here), the bytes right after them.
+      setTimeout(() => {
+        options.onResponse();
+        options.onProgress();
+        handlers.delta.receive({ text: "Live" }, "1");
+        setTimeout(() => resolve({ ok: true, status: 200, streamed: true, data: finalData("Live") }), 40);
+      }, 60);
+    }));
+    d.querySelector("#questionInput").value = "Behind a fast network";
+    await w.App.agentChat.send();
+    expect(w.App.runRegistry.visible().status).toBe("succeeded");
+    expect(liveCalls(w)).toHaveLength(0);
+    expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_stream_buffered")).toHaveLength(0);
+    dom.window.close();
+  });
 
   it("shows polled progress first and skips the frames a late flush repeats", async () => {
     const { window: w, document: d, dom } = bootLive([
@@ -3765,8 +3860,9 @@ describe("agent stream behind a buffering proxy", () => {
     ]);
     await selectAgent(w);
     let handlers, release, signal;
-    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming, given) => {
+    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming, given, options) => {
       handlers = given; signal = incoming;
+      options.onResponse(); // the headers, then not a byte until the end
       return new Promise(resolve => { release = resolve; });
     });
     d.querySelector("#questionInput").value = "Behind a proxy";
@@ -3804,7 +3900,11 @@ describe("agent stream behind a buffering proxy", () => {
     ]);
     await selectAgent(w);
     let signal;
-    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming) => { signal = incoming; return new Promise(() => {}); });
+    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming, _handlers, options) => {
+      signal = incoming;
+      options.onResponse();
+      return new Promise(() => {});
+    });
     d.querySelector("#questionInput").value = "Behind a proxy";
     await w.App.agentChat.send();
     expect(signal.aborted).toBe(true); // the held-back stream is closed
@@ -3818,6 +3918,7 @@ describe("agent stream behind a buffering proxy", () => {
     const { window: w, document: d, dom } = bootLive([{ known: true, done: false, last_seq: 0, events: [] }]);
     await selectAgent(w);
     w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, handlers, options) => {
+      options.onResponse();
       options.onProgress(); // the padding arrived at once
       handlers.delta.receive({ text: "Live" }, "1");
       return new Promise(resolve => setTimeout(() => resolve({ ok: true, status: 200, streamed: true, data: finalData("Live") }), 60));
@@ -3828,7 +3929,11 @@ describe("agent stream behind a buffering proxy", () => {
     expect(w.App.trackAppEvent.mock.calls.filter(call => call[0] === "app_stream_buffered")).toHaveLength(0);
 
     let signal;
-    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming) => { signal = incoming; return new Promise(() => {}); });
+    w.streamSSERequest.mockImplementationOnce((_url, _body, incoming, _handlers, options) => {
+      signal = incoming;
+      options.onResponse();
+      return new Promise(() => {});
+    });
     d.querySelector("#questionInput").value = "Second question";
     const sending = w.App.agentChat.send();
     await vi.waitFor(() => expect(liveCalls(w).length).toBeGreaterThan(0));

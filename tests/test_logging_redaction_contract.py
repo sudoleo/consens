@@ -266,13 +266,14 @@ def test_streaming_http_error_carries_diagnostic_but_no_body(monkeypatch):
     body = {"error": {"code": 400, "message": "Provider returned error", "metadata": {
         "provider_name": "Google Vertex",
         "raw": json.dumps({"error": {"status": "INVALID_ARGUMENT", "message": f"Function call is missing a thought_signature {secret}"}})}}}
-    transport = httpx.MockTransport(lambda request: httpx.Response(400, json=body))
-    real_client = httpx.AsyncClient
-    monkeypatch.setattr(provider_runtime.httpx, "AsyncClient",
-                        lambda **kwargs: real_client(transport=transport, **kwargs))
+    http = provider_runtime.ProviderHTTP(transport=httpx.MockTransport(lambda request: httpx.Response(400, json=body)))
+    monkeypatch.setattr(provider_runtime, "_provider_http", http)
 
-    with pytest.raises(_ProviderHTTPStatusError) as caught:
-        list(provider_runtime.cancellable_sse_lines("https://openrouter.test/v1/chat", json={}, headers={}))
+    try:
+        with pytest.raises(_ProviderHTTPStatusError) as caught:
+            list(provider_runtime.cancellable_sse_lines("https://openrouter.test/v1/chat", json={}, headers={}))
+    finally:
+        http.shutdown()
 
     assert caught.value.status_code == 400
     assert provider_diagnostic(caught.value) == "provider=Google_Vertex upstream=INVALID_ARGUMENT reason=thought_signature"

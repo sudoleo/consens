@@ -5,8 +5,13 @@
 // frames as the POST stream). This module reads them in two situations:
 //
 // - Buffering networks: some company proxies and virus scanners hold a whole
-//   SSE response back until it ends. When no byte at all has arrived after
-//   SILENCE_MS, polling starts and hands every frame to the run's dispatcher.
+//   SSE response back until it ends. When no byte at all has arrived
+//   SILENCE_MS after the response's headers (`responded()`), or no response
+//   at all UNANSWERED_MS after the request (a proxy that holds the headers
+//   back too), polling starts and hands every frame to the run's dispatcher.
+//   Until 2026-11-05 SILENCE_MS counted from watch(), before the POST went
+//   out: a slow start on the server (its reads before the headers) polled
+//   for nothing and was counted as a buffering network.
 // - Reconnect (`reconnect()`): the stream broke or went silent (network drop,
 //   a phone that put the tab to sleep, a half-open connection, a server
 //   restart) or the page was reloaded while the turn ran. Polling then
@@ -29,7 +34,7 @@
 //           recover() -> Promise<result with data.turn | 'running' | 'offline' | null>,
 //           onEngage(), onState({ reconnecting, offline }),
 //           paused() -> boolean (a pause waits for the user: no follow limit) })
-//     -> { bytes(), stop(), reconnect(), finished: Promise<result|null> }
+//     -> { responded(), bytes(), stop(), reconnect(), finished: Promise<result|null> }
 // `finished` resolves when polling ended the run: with the terminal frame
 // (same shape as streamSSERequest's result) or recover()'s saved answer. After
 // reconnect() it also resolves with null when the turn is gone for good, the
@@ -40,6 +45,9 @@
   'use strict';
   const App = window.App = window.App || {};
   const SILENCE_MS = 5000;
+  // Far beyond the server's own start (reads, the turn, its history), which
+  // ends with the headers; a header that never comes is a proxy's.
+  const UNANSWERED_MS = 10000;
   const POLL_MS = 1500;
   const BUSY_POLL_MS = 5000;
   // A turn this server does not hold but that is still running elsewhere
@@ -94,11 +102,12 @@
     const cursorOf = typeof options.cursor === 'function' ? options.cursor : () => 0;
     const pausedOf = typeof options.paused === 'function' ? options.paused : () => false;
     // Read at watch time, so tests can shorten them on App.agentLive.
-    const silenceMs = api.SILENCE_MS, pollMs = api.POLL_MS, elsewhereMs = api.RUNNING_ELSEWHERE_MS;
+    const silenceMs = api.SILENCE_MS, unansweredMs = api.UNANSWERED_MS, pollMs = api.POLL_MS;
+    const elsewhereMs = api.RUNNING_ELSEWHERE_MS;
     const quietMs = api.STREAM_QUIET_MS, goneMs = api.GONE_MS, followMs = api.MAX_FOLLOW_MS;
     let resolveFinished;
     const finished = new Promise(resolve => { resolveFinished = resolve; });
-    let stopped = false, polling = false, engaged = false, bytesSeen = false, persistent = false;
+    let stopped = false, polling = false, engaged = false, bytesSeen = false, persistent = false, answered = false;
     let silenceTimer = null, pollTimer = null, controller = null;
     let unknown = 0, gone = 0, goneSince = 0, failures = 0, cursor = 0, inFlight = false, offline = false;
     let elsewhereDelay = elsewhereMs, followSince = 0, lastByte = 0;
@@ -141,14 +150,14 @@
       clearTimeout(pollTimer); pollTimer = null;
       poll();
     }
-    function armSilence() {
+    function armSilence(ms = silenceMs) {
       clearTimeout(silenceTimer);
       silenceTimer = setTimeout(() => {
         silenceTimer = null;
         if (stopped || persistent) return;
         polling = true;
         poll();
-      }, silenceMs);
+      }, ms);
     }
     function schedule(ms = pollMs) {
       clearTimeout(pollTimer);
@@ -281,11 +290,26 @@
     if (signal?.aborted) stopped = true;
     else {
       signal?.addEventListener?.('abort', stop, { once: true });
-      armSilence();
+      // Before the response's headers only a proxy that holds them back too
+      // polls; the silence counts from them (responded()).
+      armSilence(unansweredMs);
     }
     return {
       finished,
       stop,
+      // The POST's response headers arrived: its silence counts from now.
+      // The server sends its first bytes right after them (padding, then
+      // `accepted`), so only a network that holds the body back stays silent.
+      responded() {
+        if (answered || stopped || persistent || bytesSeen) return;
+        answered = true;
+        // The longer wait for the headers already started polling.
+        if (polling) return;
+        // Polls before the headers could not find the turn yet (the server
+        // makes its buffer just before them): they count for nothing now.
+        unknown = 0;
+        armSilence();
+      },
       // The stream broke, went silent or never existed (a reload): follow the
       // turn by polling until it ends, whatever the network does meanwhile.
       reconnect() {
@@ -329,6 +353,6 @@
     };
   }
 
-  const api = App.agentLive = { sequence, watch, SILENCE_MS, POLL_MS, RUNNING_ELSEWHERE_MS,
+  const api = App.agentLive = { sequence, watch, SILENCE_MS, UNANSWERED_MS, POLL_MS, RUNNING_ELSEWHERE_MS,
     STREAM_QUIET_MS, GONE_MS, MAX_FOLLOW_MS };
 })();

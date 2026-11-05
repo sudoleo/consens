@@ -17,7 +17,10 @@
 // Without that API, with reduced motion or with Letter animations switched
 // off in Settings, active() is false and the caller paints the answer as it
 // arrives.
-// Exports: App.streamReveal { active, stream, settle, hold }.
+// The first word of an answer comes into view at once, within about a tenth
+// of a second of its arrival (P6, 2026-11-05): its pace has no history yet,
+// so it has its own lead and the short end of the light.
+// Exports: App.streamReveal { active, stream, settle }.
 // =====================================================================
 (() => {
   const App = window.App = window.App || {};
@@ -34,6 +37,11 @@
   const MAX_CPS = 3000;
   // A word the stream cut in two waits for its rest this long, then stands.
   const IDLE_MS = 250;
+  // The first word, with nothing in view yet, waits only this long: it opens
+  // its line, so its rest cannot wrap it. Not a mark ("**", "`", "|"), which
+  // its rest could still turn into something else.
+  const FIRST_IDLE_MS = 60;
+  const FIRST_WORD = /^[\p{L}\p{N}]/u;
   // Further behind than this (a reload picks up a running answer): no pace.
   const JUMP_CHARS = 1200;
   // A paint that took longer (a long table or list still growing) spaces
@@ -44,8 +52,12 @@
   const STEPS = 20;
   const STEP_CURVE = 1.7;
   // Letters come into view at the pace of the text, never more than LEAD_MS
-  // after their word was painted.
+  // after their word was painted; the first word's within FIRST_LEAD_MS, in
+  // the shortest light. Until 2026-11-05 the first word took the pace it did
+  // not have yet: up to 25 ms a letter and the longest light (750 ms), so
+  // its last letter was half in view only up to 0.15 s after it was painted.
   const LEAD_MS = 100;
+  const FIRST_LEAD_MS = 40;
   // The light reaches back about six words however fast the answer streams,
   // within these bounds of time. A letter fades in over the first
   // LIGHT_APPEAR of it.
@@ -182,9 +194,12 @@
     state.spans = state.spans.filter(span => span.from < kept).map(span => ({ ...span, to: Math.min(span.to, kept) }));
     if (age && text.length > kept) {
       const length = text.length - kept;
+      // Nothing in view yet: the first word, whose pace has no history.
+      const first = !kept;
       const start = Math.max(now, state.nextLetterAt);
-      const letter = Math.min(1000 / Math.max(MIN_CPS, state.speed), Math.max(0, now + LEAD_MS - start) / length);
-      state.spans.push({ from: kept, to: text.length, start, letter, ms: lightMs(state.speed) });
+      const letter = Math.min(1000 / Math.max(MIN_CPS, state.speed),
+        Math.max(0, now + (first ? FIRST_LEAD_MS : LEAD_MS) - start) / length);
+      state.spans.push({ from: kept, to: text.length, start, letter, ms: first ? LIGHT_MIN_MS : lightMs(state.speed) });
       state.nextLetterAt = start + length * letter;
     }
     state.text = text;
@@ -269,8 +284,6 @@
   }
 
   function advance(state, now) {
-    // Held (hold()): nothing comes in, and the pace starts when it ends.
-    if (now < state.holdUntil) { state.last = 0; return; }
     const elapsed = state.last ? Math.min(50, now - state.last) : 16;
     state.last = now;
     const backlog = state.target.length - state.shown;
@@ -281,10 +294,11 @@
       state.shown = Math.min(state.target.length, state.shown + (state.speed * elapsed) / 1000);
     }
     if (now < state.paintAfter) return;
+    const idleMs = state.cut || !FIRST_WORD.test(state.target) ? IDLE_MS : FIRST_IDLE_MS;
     // A fixed answer paced to its end ends there, even on what looks like a
     // line mark ("42."): no word follows it that the mark could wait for.
     const cut = state.finish && state.shown >= state.target.length ? state.target.length
-      : wordEnd(state.target, Math.floor(state.shown), Boolean(state.finish) || now - state.grewAt > IDLE_MS);
+      : wordEnd(state.target, Math.floor(state.shown), Boolean(state.finish) || now - state.grewAt > idleMs);
     if (cut > state.cut) {
       const started = performance.now();
       show(state, cut, now, true);
@@ -351,7 +365,7 @@
       state = body._streamReveal = {
         body, target: text, paint, cut: 0, shown: 0, speed: 0, last: 0, grewAt: now, gap: 0,
         paintAfter: 0, nextLetterAt: 0, text: "", nodes: [], starts: [], spans: [],
-        writes: body._markdownWrites, settled: false, finish: null, holdUntil: body._revealHold || 0,
+        writes: body._markdownWrites, settled: false, finish: null,
       };
       body.classList.add(REVEALING);
       show(state, keep, now, false);
@@ -402,16 +416,8 @@
     schedule();
   }
 
-  // The answer's first letter waits `ms` (agent-activity.js handoff): the
-  // live lines above it fade out first, and the words then come in where
-  // they stood. Until 2026-10-30 the answer was hidden meanwhile, and the
-  // first bundle of an answer (300 characters and more) came in unseen.
-  function hold(body, ms) {
-    const until = performance.now() + ms;
-    body._revealHold = until;
-    const state = body._streamReveal;
-    if (state && !state.settled && !state.cut) state.holdUntil = until;
-  }
-
-  App.streamReveal = { active, stream, settle, hold };
+  // The answer's first letters come in while the live lines above them fade
+  // out (agent-activity.js handoff, since 2026-11-05). From 2026-10-30 they
+  // waited for that fade here (hold(body, ms), 160 ms).
+  App.streamReveal = { active, stream, settle };
 })();

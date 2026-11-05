@@ -167,8 +167,9 @@ def test_google_chat_request_keeps_zdr_on_top_of_the_fastest_route(google,monkey
     monkeypatch.setattr('app.services.llm.agent_client.cancellable_sse_lines',stream)
     for model in (AgentModel(),restricted_model(AgentModel())):
         list(AgentCompletion().stream(model=model,messages=[{'role':'user','content':'x'}],api_key='test'))
-    assert sent==[{'sort':'throughput','data_collection':'deny'},
-                  {'sort':'throughput','data_collection':'deny','zdr':True}]
+    latency={'preferred_max_latency':{'p50':2,'p90':5}}
+    assert sent==[{'sort':'throughput','data_collection':'deny',**latency},
+                  {'sort':'throughput','data_collection':'deny',**latency,'zdr':True}]
 
 
 def test_google_routing_reaches_the_agent_the_comparison_and_the_reviewers(google,monkeypatch):

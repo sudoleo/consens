@@ -2525,9 +2525,18 @@
       if (!registry.isExecuting(context.runId) || !registry.isVisible(context.runId)
           || !registry.isAuthCurrent(context) || context.consensus.text) return;
       const answer = document.getElementById("agentAnswerBody");
-      // Only into an answer this run already streams: its first text, errors
-      // and the activity line are projected (project()).
-      if (answer?.dataset.renderMode !== 'stream' || !answer.dataset.markdown) return;
+      if (!answer) return;
+      // The answer's first words are projected in this frame, not on the
+      // 100-ms beat (P6, 2026-11-05): with them the live lines hand over to
+      // the answer (project(), agent-activity.js handoff). Further words keep
+      // the beat for the rest of the projection.
+      if (!answer.dataset.markdown?.trim()) {
+        if (timer) { clearTimeout(timer); flush(); }
+        return;
+      }
+      // Only into an answer this run already streams: errors and the
+      // activity line are projected (project()).
+      if (answer.dataset.renderMode !== 'stream') return;
       const started = performance.now();
       renderAnswerBody(answer, context.consensus.streamText || "", 'stream');
       const cost = performance.now() - started;
@@ -2716,8 +2725,11 @@
         if (!followed) throw Object.assign(new Error("This response could not be followed. Check its saved answer."), { streamFailureKind: "stream_incomplete" });
         return followed;
       }
+      // The buffering fallback counts its silence from the response's
+      // headers (agent-live.js responded()), not from before the POST.
       const streaming = App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", body, requestSignal,
-        streamHandlers, { headers, onProgress: () => { lastByte = Date.now(); onProgress?.(); live?.bytes(); } }),
+        streamHandlers, { headers, onResponse: () => live?.responded(),
+          onProgress: () => { lastByte = Date.now(); onProgress?.(); live?.bytes(); } }),
         // 45 s without a byte (keepalives come every 15 s): with the live
         // follower the stream is given up for polling, never the turn.
         { signal: streamControl.signal, timeoutMs: 45000, onIdle: live

@@ -257,19 +257,20 @@ def ran(fake_vm, command):
     return any(call[0] == "exec" and call[2] == command for call in fake_vm.calls)
 
 
-def test_several_calls_per_step_only_while_the_workspace_is_open(store, fake_vm):
+def test_several_calls_per_step_in_every_step(store, fake_vm):
+    # Since 2026-11-05 (speed plan P4) every step of the agent may ask for
+    # several calls, from the first on: the switch never changes within a
+    # message, so it never breaks the prompt cache.
     script = Steps([[("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})]])
     list(vm_loop(store, script).run())
     assert script.parallel == [True, True]
-    # Closed: one call per step until open_workspace ran, from the next step
-    # on several, together with its tools (one cache break), never back.
     script = Steps([[("open_workspace", {"task": "Run the script"})], [("vm_exec", {"command": "ls"})]])
     list(vm_loop(store, script, request_id="two", workspace_closed=True).run())
-    assert script.parallel == [False, True, True]
-    # Without the workspace: one call per step, as before.
+    assert script.parallel == [True, True, True]
+    # Without the workspace too: a chat's searches and page reads.
     script = Steps([[("no_such_tool", {})]])
     list(vm_loop(store, script, request_id="three", vm="off").run())
-    assert script.parallel and set(script.parallel) == {False}
+    assert script.parallel and set(script.parallel) == {True}
 
 
 def test_the_calls_of_a_step_run_in_order_and_a_fifth_gets_a_result(store, fake_vm):

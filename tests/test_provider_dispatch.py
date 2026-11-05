@@ -153,20 +153,20 @@ def test_stream_cut_mid_body_stays_estimated(monkeypatch):
 
 @pytest.fixture
 def mock_httpx(monkeypatch):
-    """Route provider_runtime's AsyncClient through an in-process transport."""
-    calls = []
+    """Route provider_runtime's shared client through an in-process transport."""
+    calls, installed = [], []
 
     def install(handler):
-        real = httpx.AsyncClient
-
-        def client(*args, **kwargs):
-            def record(request):
-                calls.append(request)
-                return handler(request)
-            return real(*args, transport=httpx.MockTransport(record), **kwargs)
-        monkeypatch.setattr(provider_runtime.httpx, "AsyncClient", client)
+        def record(request):
+            calls.append(request)
+            return handler(request)
+        http = provider_runtime.ProviderHTTP(transport=httpx.MockTransport(record))
+        monkeypatch.setattr(provider_runtime, "_provider_http", http)
+        installed.append(http)
         return calls
-    return install
+    yield install
+    for http in installed:
+        http.shutdown()
 
 
 def _post_json(error_type=Exception):
