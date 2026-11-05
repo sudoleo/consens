@@ -254,6 +254,13 @@
     return !state.body.isConnected || state.body._markdownWrites !== state.writes;
   }
 
+  // The Markdown someone else's full render left in the answer, if that is
+  // still what it shows (markdown-stream.js noteMarkdownWrite).
+  function written(body) {
+    const plain = body._plainMarkdown;
+    return plain && plain.writes === body._markdownWrites ? plain.md : "";
+  }
+
   function show(state, cut, now, age) {
     state.cut = cut;
     state.shown = Math.max(state.shown, cut);
@@ -329,11 +336,15 @@
   function stream(body, text, paint) {
     const now = performance.now();
     let state = body._streamReveal;
-    const shown = state ? state.target.slice(0, state.cut) : "";
-    if (!state || state.settled || foreign(state) || !text.startsWith(shown)) {
+    const own = Boolean(state) && !foreign(state);
+    // Someone else's render stands (the review took its marks off by
+    // rendering the arrived text in full): its words stand too. Started from
+    // nothing, the answer went blank and ran in again (bug hunt P6).
+    const shown = own ? state.target.slice(0, state.cut) : written(body);
+    if (!own || state.settled || !text.startsWith(shown)) {
       // A new answer, or one that went on or took words back: the words it
       // shares with what stands stay, the rest comes in.
-      let keep = state && !foreign(state) ? sharedLength(shown, text) : 0;
+      let keep = sharedLength(shown, text);
       if (keep < text.length && !/\s/.test(text[keep])) keep = lastBreak(text, keep);
       keep = beforeMark(text, keep);
       if (state) drop(state);

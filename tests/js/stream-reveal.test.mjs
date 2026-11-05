@@ -201,6 +201,31 @@ describe("stream-reveal: the fixed answer", () => {
     expect(el.classList.contains("is-stream-revealing")).toBe(false);
     expect(lit()).toBe(0);
   });
+
+  // Bug hunt P6 (2026-11-05): back in a chat whose answer still streams,
+  // while the last answer's review marks stood, the review took them off by
+  // rendering the arrived text in full (agentReview.render → morphMarkdown).
+  // The look counted that as someone else's answer and started from nothing:
+  // the answer went blank and ran in from its first word again.
+  it("goes on from what someone else rendered into the answer instead of running it in again", () => {
+    const head = ANSWER.slice(0, ANSWER.indexOf(" about"));
+    // The next words arrive before or after the look noticed the other write.
+    for (const noticed of [false, true]) {
+      const { window, reveal, el, painted, paint, run } = boot();
+      reveal.stream(el, head, paint);
+      run(16);
+      expect(painted.at(-1).length).toBeLessThan(head.length);
+      window.morphMarkdown(el, head);
+      if (noticed) run(16);
+      const paints = painted.length;
+      reveal.stream(el, ANSWER, paint);
+      expect(painted.slice(paints).every(shown => shown.startsWith(head)), String(noticed)).toBe(true);
+      expect(el.textContent.trim().startsWith(head)).toBe(true);
+      run(3000);
+      expect(painted.slice(paints).every(shown => shown.startsWith(head))).toBe(true);
+      expect(painted.at(-1)).toBe(ANSWER);
+    }
+  });
 });
 
 describe("stream-reveal: the light", () => {

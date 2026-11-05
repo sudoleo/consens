@@ -12109,7 +12109,10 @@ gemessen hat). Bis 2026-10-23 blieben die `[S1]`-Pills einer Antwort ohne
 Vergleich so bis zum Reload aus. Ein Text, der nicht an
 den getakteten anschließt (anderer Chat), rendert sofort und beendet das Licht.
 Schreibt jemand anderes in die Antwort (`_markdownWrites`, etwa die Marken der
-Review), gibt das Modul sie ab. Der WAAPI-Fade des Antwortbeginns
+Review), gibt das Modul sie ab. Streamt sie danach weiter, bleiben die Wörter
+stehen, die dessen voller Render zeigt (`_plainMarkdown`); seit 2026-11-05,
+vorher wurde die Antwort beim Wechsel in einen laufenden Chat kurz leer und lief
+von vorn ein (Fehlersuche P6). Der WAAPI-Fade des Antwortbeginns
 (`agentActivity.reveal`) entfällt für getakteten Text.
 Die Ladehinweis-Zeile „Loading chat models…“ erscheint erst nach 1,2 s
 (`LOADING_NOTICE_DELAY_MS`); vorher schob ihr kurzes Aufblitzen den zentrierten
