@@ -2953,7 +2953,9 @@ des Agenten in der VM ausführt (`VMTools._exec`): auch das Warten in
 `github_import` und die offene Live-Ansicht. Endet ein Hintergrundprozess vor
 seinem Zeitlimit, kommt seit 2026-10-30 die ungenutzte Zeit zurück (K5,
 `agent_vm_time.refund`, siehe „Hintergrundprozesse“). Ein Befehl läuft nie
-über den Rest (`VMTools._timeout`); stoppt ihn das, sagt sein Ergebnis das
+über den Rest (`VMTools._timeout`; seit 2026-11-06 auch das Entpacken von
+`github_import` und das git eines PRs, vorher mit eigenem Limit bis
+`UNPACK_SECONDS`); stoppt ihn das, sagt sein Ergebnis das
 (`VM_DAY_CUT`, seit 2026-10-31, vorher las es sich wie sein eigenes Limit).
 Ein Hintergrundprozess reserviert seit 2026-10-31 höchstens die Hälfte des
 Rests (`agent_vm_processes.DAY_SHARE`): vorher nahm ein Dev-Server mit seinem

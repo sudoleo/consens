@@ -277,6 +277,22 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
     assert done["repo"] == "maxl/app" and done["path"] == "/home/agent/repos/app"
 
 
+def test_the_unpacking_never_runs_past_the_days_vm_time(store, fake_vm, github, monkeypatch):
+    """Bug hunt 2026-11-06: the unpacking (up to UNPACK_SECONDS) and the
+    pull request's git ran with their own limits, past what was left of
+    today's VM time and of the answer's time; the agent's commands never do
+    (VMTools._timeout)."""
+    from app.services import agent_github, agent_vm_time
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
+    agent_vm_time.charge(store, UID, 60)
+    connected(store, github)
+    loop = vm_loop(store, Agent([[("github_import", {"repo": "maxl/app"})]]))
+    list(loop.run())
+    assert results(loop)[0]["path"] == "/home/agent/repos/app"
+    [unpack] = [call for call in fake_vm.calls if call[0] == "exec" and call[2].startswith("set -e; dest=")]
+    assert unpack[4] <= 40 < agent_github.UNPACK_SECONDS
+
+
 def test_a_public_repository_comes_in_without_a_connection_or_a_token(store, fake_vm, github):
     """The workbench reaches github.com only on the user's card (since
     2026-11-02; closed from 2026-10-27): a public repository comes through
