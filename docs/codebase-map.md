@@ -1310,9 +1310,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     zu und verschwindet beim nächsten Tippen; ein neuer Hinweis während des
     Zufaltens dreht die Faltung um, statt mit ihr zu verschwinden.
   - **Bestätigung (`confirm-dialog.js`):** `App.confirm({title, body,
-    confirmLabel, cancelLabel, danger, link})` → `Promise<boolean>`; ein
-    `#appConfirmDialog`, bei `danger` Fokus auf Cancel, `link` (`{href,
-    label}`) als Verweis unter dem Text (`#appConfirmLink`, neuer Tab). Ersetzt jedes
+    confirmLabel, cancelLabel, danger, list, note, link})` → `Promise<boolean>`; ein
+    `#appConfirmDialog`, bei `danger` Fokus auf Cancel. Optional unter dem
+    Text: `list` (`[{text, icon, iconClass}]`, zwei Spalten mit Logo,
+    `#appConfirmList`, nicht übersetzt), `note` (Kleingedrucktes,
+    `#appConfirmNote`), `link` (`{href, label}`, `#appConfirmLink`, neuer Tab). Ersetzt jedes
     `confirm()`/`alert()` außerhalb des Admins (Logout, Konto löschen, Link
     widerrufen, Telegram trennen); öffentliche Formulare melden Fehler inline
     (`.share-form-error`). `tests/js/overlays.test.mjs` verbietet
@@ -8484,8 +8486,10 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   (Schlüssel stellt der Betreiber aus). `/user_status` liefert `ai_consent`. **Browser:**
   `static/js/ai-consent.js` (`App.aiConsent`, Gruppe `auth`): `firebase.js`
   setzt es aus `/user_status` und leert es beim Abmelden; `window.sendQuestion`
-  wartet vor Agent und Compare auf `ensure()` (`App.confirm` mit den Firmen aus
-  `window.MODEL_FAMILIES` `citationLabel`, Link `/privacy#providers`;
+  wartet vor Agent und Compare auf `ensure()` (`App.confirm` „A quick note“:
+  ein Satz, die Anbieter aus `window.MODEL_FAMILIES` als Liste mit Logo
+  (`citationLabel`, `icon`, `iconClass`), Kleingedrucktes, was über OpenRouter
+  an sie geht, Link `/privacy#providers`; bewusst ohne Warnton;
   „Not now“ lässt die Frage im Feld, „Agree“ → `POST /api/my/ai-consent`, dann
   geht sie raus). Ein unbekannter Stand (kein Status, Feld fehlt) fragt nicht:
   der Server ist die Schranke, seine Ablehnung (`agent-chat.js` `failRun`,

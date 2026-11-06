@@ -42,11 +42,14 @@
     return account.given === false && account.uid !== "" && account.uid === currentUid();
   }
 
-  // The companies behind the registry's model families (window.MODEL_FAMILIES,
-  // config.get_model_families): the dialog names what actually runs.
+  // The providers of the registry's model families with their logos
+  // (window.MODEL_FAMILIES, config.get_model_families): the dialog names
+  // what actually runs.
   function providers() {
     const families = Array.isArray(window.MODEL_FAMILIES) ? window.MODEL_FAMILIES : [];
-    return families.map(family => family.citationLabel || family.label).filter(Boolean).join(", ");
+    return families
+      .map(family => ({ text: family.citationLabel || family.label, icon: family.icon, iconClass: family.iconClass }))
+      .filter(item => item.text);
   }
 
   async function record() {
@@ -66,12 +69,15 @@
 
   async function ask() {
     const uid = account.uid;
+    // Calm and short: who answers, what goes to them, where to read more.
     const agreed = await App.confirm({
-      title: t("Before your first question"),
-      body: `${t("consens sends your question, your files, the chat so far and, if it is on, your memory through OpenRouter to AI models from these companies, which answer and check the work:")}\n${providers()}\n\n${t("Please don’t enter anything confidential.")}`,
+      title: t("A quick note"),
+      body: t("Your answers come from AI models by these providers:"),
+      list: providers(),
+      note: t("For that, consens sends them your question, attached files and the chat so far through OpenRouter, and your memory if it’s on."),
       confirmLabel: t("Agree"),
       cancelLabel: t("Not now"),
-      link: { href: "/privacy#providers", label: t("How your data is handled") },
+      link: { href: "/privacy#providers", label: t("More in the privacy notice") },
     });
     if (!agreed) return false;
     if (!(await record())) {

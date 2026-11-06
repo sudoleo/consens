@@ -533,12 +533,12 @@
   "Temporary chat": "Temporärer Chat",
   "Temporary chat. Gone when you leave it.": "Temporärer Chat. Weg, sobald du ihn verlässt.",
   "Gone when you leave it.": "Weg, sobald du ihn verlässt.",
-  "Before your first question": "Bevor deine erste Frage rausgeht",
-  "consens sends your question, your files, the chat so far and, if it is on, your memory through OpenRouter to AI models from these companies, which answer and check the work:": "consens schickt deine Frage, deine Dateien, den bisherigen Chat und, wenn es an ist, dein Gedächtnis über OpenRouter an KI-Modelle dieser Firmen, die antworten und die Arbeit prüfen:",
-  "Please don’t enter anything confidential.": "Gib bitte nichts Vertrauliches ein.",
   "Agree": "Einverstanden",
-  "How your data is handled": "So gehen wir mit deinen Daten um",
   "Your consent could not be saved. Try again.": "Deine Zustimmung ließ sich nicht speichern. Versuch es noch einmal.",
   "Your consent could not be saved. Please try again.": "Deine Zustimmung ließ sich nicht speichern. Versuch es bitte noch einmal.",
-  "Agree to sending your questions to the AI providers first.": "Stimm zuerst zu, dass deine Fragen an die KI-Anbieter gehen."
+  "Agree to sending your questions to the AI providers first.": "Stimm zuerst zu, dass deine Fragen an die KI-Anbieter gehen.",
+  "A quick note": "Kurz vorab",
+  "Your answers come from AI models by these providers:": "Deine Antworten kommen von KI-Modellen dieser Anbieter:",
+  "For that, consens sends them your question, attached files and the chat so far through OpenRouter, and your memory if it’s on.": "consens schickt ihnen dafür deine Frage, angehängte Dateien und den bisherigen Chat über OpenRouter, dazu dein Gedächtnis, wenn es an ist.",
+  "More in the privacy notice": "Mehr dazu in der Datenschutzerklärung"
 }

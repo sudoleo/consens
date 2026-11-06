@@ -11,6 +11,9 @@
 //     confirmLabel: "Delete account",   // default "OK"
 //     cancelLabel: "Cancel",            // default "Cancel"
 //     danger: true,                     // the confirm button says it destroys
+//     list: [{ text: "OpenAI", icon: "/static/…", iconClass: "mono-logo" }],
+//                                       // optional, two columns under the text
+//     note: "…",                        // optional, small print under the list
 //     link: { href: "/privacy", label: "Details" },  // optional, opens in a new tab
 //   });
 //
@@ -37,6 +40,8 @@
       <div class="modal-content confirm-modal-content">
         <h2 id="appConfirmTitle"></h2>
         <p id="appConfirmBody"></p>
+        <ul id="appConfirmList" class="confirm-modal-list" data-i18n-skip hidden></ul>
+        <p id="appConfirmNote" class="confirm-modal-note" hidden></p>
         <p id="appConfirmLink" class="confirm-modal-link" hidden><a target="_blank" rel="noopener"></a></p>
         <div class="confirm-modal-actions">
           <button type="button" class="btn-free confirm-cancel" data-answer="false"></button>
@@ -64,7 +69,29 @@
     resolve(Boolean(value));
   }
 
-  function confirm({ title = "", body = "", confirmLabel = "OK", cancelLabel = "Cancel", danger = false, link = null } = {}) {
+  // Names (of companies, products), not words: the list is not translated.
+  function fillList(element, items) {
+    const list = element.querySelector("#appConfirmList");
+    const rows = (Array.isArray(items) ? items : []).filter(item => item?.text).map(item => {
+      const row = document.createElement("li");
+      if (item.icon) {
+        const icon = document.createElement("img");
+        icon.src = String(item.icon);
+        icon.alt = "";
+        icon.className = ["confirm-modal-list-icon", item.iconClass].filter(Boolean).join(" ");
+        row.append(icon);
+      }
+      const name = document.createElement("span");
+      name.textContent = String(item.text);
+      row.append(name);
+      return row;
+    });
+    list.replaceChildren(...rows);
+    list.hidden = rows.length === 0;
+  }
+
+  function confirm({ title = "", body = "", confirmLabel = "OK", cancelLabel = "Cancel", danger = false,
+                     list = null, note = "", link = null } = {}) {
     const element = build();
     // A newer question replaces an unanswered one: that one is a "no".
     answer(false);
@@ -72,6 +99,10 @@
     const text = element.querySelector("#appConfirmBody");
     text.textContent = String(body);
     text.hidden = !body;
+    fillList(element, list);
+    const small = element.querySelector("#appConfirmNote");
+    small.textContent = String(note || "");
+    small.hidden = !note;
     const more = element.querySelector("#appConfirmLink");
     const anchor = more.querySelector("a");
     anchor.textContent = link?.label ? String(link.label) : "";

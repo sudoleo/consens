@@ -1287,9 +1287,10 @@ Server.
 ## Auth / Usage / Tier
 
 - [ ] KI-Zustimmung (seit 2026-11-06): ein Konto ohne `users/{uid}.ai_consent`
-      tippt eine Frage und sendet → Dialog „Before your first question“ nennt
-      OpenRouter und die Firmen aller Familien, Link öffnet `/privacy#providers`
-      im neuen Tab. „Not now“ lässt die Frage im Feld, nichts geht raus;
+      tippt eine Frage und sendet → Dialog „A quick note“ / „Kurz vorab“ listet
+      die Anbieter aller Familien mit Logo in zwei Spalten (Logos im Dark Mode
+      lesbar), darunter klein, was über OpenRouter an sie geht; Link öffnet
+      `/privacy#providers` im neuen Tab. „Not now“ lässt die Frage im Feld, nichts geht raus;
       „Agree“ schickt sie sofort, die nächste Frage fragt nicht mehr (auch nach
       Neuladen und auf einem zweiten Gerät). Auf Deutsch dieselben Sätze.
 - Mit Free mehrere gesperrte Funktionen anklicken (High Quality,

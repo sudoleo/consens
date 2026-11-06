@@ -364,3 +364,36 @@ describe("one tooltip (E12)", () => {
     expect(tip.textContent).toBe("Einstellungen");
   });
 });
+
+describe("App.confirm's optional parts", () => {
+  const contexts = [];
+  afterEach(() => contexts.splice(0).forEach(ctx => ctx.window.close()));
+
+  it("lists names with their logo, adds small print and a link, and drops them for the next question", async () => {
+    const ctx = loadScripts(["static/js/motion.js", "static/js/modal-dialog.js", "static/js/confirm-dialog.js"]);
+    contexts.push(ctx);
+    const { window, document } = ctx;
+    const answer = window.App.confirm({
+      title: "A quick note", body: "These:", note: "Small print.",
+      list: [{ text: "OpenAI", icon: "/logo.png", iconClass: "chatgpt-logo" }, { text: "Mistral" }, { text: "" }],
+      link: { href: "/privacy#providers", label: "More" },
+    });
+    const list = document.getElementById("appConfirmList");
+    expect(list.hidden).toBe(false);
+    expect([...list.querySelectorAll("li")].map(row => row.textContent)).toEqual(["OpenAI", "Mistral"]);
+    expect(list.querySelector("img").className).toBe("confirm-modal-list-icon chatgpt-logo");
+    expect(list.querySelector("img").getAttribute("alt")).toBe("");
+    // Names, not words: the German page leaves them alone.
+    expect(list.hasAttribute("data-i18n-skip")).toBe(true);
+    expect(document.getElementById("appConfirmNote").textContent).toBe("Small print.");
+    expect(document.getElementById("appConfirmLink").hidden).toBe(false);
+    document.querySelector("#appConfirmDialog .confirm-accept").click();
+    expect(await answer).toBe(true);
+
+    window.App.confirm({ title: "Sign out?" });
+    expect(list.hidden).toBe(true);
+    expect(list.children).toHaveLength(0);
+    expect(document.getElementById("appConfirmNote").hidden).toBe(true);
+    expect(document.getElementById("appConfirmLink").hidden).toBe(true);
+  });
+});

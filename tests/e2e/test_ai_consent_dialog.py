@@ -27,8 +27,11 @@ def test_the_first_question_names_the_providers_and_goes_out_after_the_yes(brows
         dialog = page.locator("#appConfirmDialog")
         expect(dialog).to_be_visible()
         expect(dialog).to_contain_text("through OpenRouter")
-        # The companies come from the registry (window.MODEL_FAMILIES).
-        expect(dialog).to_contain_text("Anthropic Claude")
+        # The providers come from the registry (window.MODEL_FAMILIES), each with its logo.
+        families = page.evaluate("() => window.MODEL_FAMILIES.length")
+        expect(dialog.locator("#appConfirmList li")).to_have_count(families)
+        expect(dialog.locator("#appConfirmList img")).to_have_count(families)
+        expect(dialog.locator("#appConfirmList")).to_contain_text("Anthropic Claude")
         expect(dialog.locator("#appConfirmLink a")).to_have_attribute("href", "/privacy#providers")
 
         # Not now: nothing leaves, the question stays in the field.

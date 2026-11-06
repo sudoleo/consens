@@ -11,8 +11,8 @@ function boot({ answer = true, saved = true, uid = "u1" } = {}) {
     before(window) {
       window.auth = { currentUser: uid ? { uid, getIdToken: async () => "token-" + uid } : null };
       window.MODEL_FAMILIES = [
-        { label: "OpenAI", citationLabel: "OpenAI" },
-        { label: "Anthropic", citationLabel: "Anthropic Claude" },
+        { label: "OpenAI", citationLabel: "OpenAI", icon: "/static/chatgpt.png", iconClass: "chatgpt-logo" },
+        { label: "Anthropic", citationLabel: "Anthropic Claude", icon: "/static/claude.png" },
         { label: "Qwen" },
       ];
       window.fetch = async (url, options) => {
@@ -41,12 +41,17 @@ describe("before the first question", () => {
     expect(calls.asked).toEqual([]);
   });
 
-  it("names the companies, saves the yes once and then sends without asking", async () => {
+  it("lists the providers with their logos, saves the yes once and then sends without asking", async () => {
     const { App, calls } = boot();
     App.aiConsent.set("u1", false);
     expect(await App.aiConsent.ensure()).toBe(true);
     expect(calls.asked).toHaveLength(1);
-    expect(calls.asked[0].body).toContain("OpenAI, Anthropic Claude, Qwen");
+    expect(calls.asked[0].list).toEqual([
+      { text: "OpenAI", icon: "/static/chatgpt.png", iconClass: "chatgpt-logo" },
+      { text: "Anthropic Claude", icon: "/static/claude.png", iconClass: undefined },
+      { text: "Qwen", icon: undefined, iconClass: undefined },
+    ]);
+    expect(calls.asked[0].note).toContain("through OpenRouter");
     expect(calls.asked[0].link.href).toBe("/privacy#providers");
     expect(calls.posts).toEqual([["/api/my/ai-consent", { method: "POST", headers: { Authorization: "Bearer token-u1" } }]]);
     expect(await App.aiConsent.ensure()).toBe(true);
