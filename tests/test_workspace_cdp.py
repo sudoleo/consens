@@ -125,6 +125,72 @@ def test_a_connection_that_ends_detaches_its_session_and_forgets_its_pages():
     assert client.sent == []
 
 
+def frames_from(sock, count):
+    """``count`` unmasked frames the hub sent on ``sock``: (opcode, payload)."""
+    def exact(size):
+        data = b""
+        while len(data) < size:
+            chunk = sock.recv(size - len(data))
+            assert chunk, "the hub closed the connection"
+            data += chunk
+        return data
+    found = []
+    for _ in range(count):
+        first, second = exact(2)
+        size = second & 0x7F
+        if size == 126:
+            size = struct.unpack("!H", exact(2))[0]
+        elif size == 127:
+            size = struct.unpack("!Q", exact(8))[0]
+        found.append((first & 0x0F, exact(size)))
+    return found
+
+
+def test_a_client_that_stops_reading_never_holds_what_chrome_sends_the_others(monkeypatch):
+    """Bug hunt 2026-11-05: send ran sendall on the one thread that reads
+    Chrome's pipe, and after the upgrade without a time limit. A client that
+    no longer read held that thread: no connection heard from Chrome, and
+    Chrome's pipe filled. Now each connection has its queue and its writer;
+    one that lets more than QUEUE_BYTES wait is dropped as one that left."""
+    cdp = load("cdp")
+    stuck, its_peer = socket.socketpair()
+    reading, peer = socket.socketpair()
+    try:
+        slow, fast = cdp.Connection(stuck), cdp.Connection(reading)
+        chunk = b"x" * (1 << 20)
+
+        def flood():
+            for _ in range(24):
+                slow.send(chunk, opcode=2)
+            fast.send({"id": 1, "result": {}})
+        reader = threading.Thread(target=flood, daemon=True)
+        reader.start()
+        reader.join(5)
+        assert not reader.is_alive(), "a client that does not read held the thread that reads Chrome"
+        # The other connection hears from Chrome all the same, in order.
+        peer.settimeout(5)
+        fast.send({"method": "Page.loadEventFired", "params": {}})
+        assert frames_from(peer, 2) == [(1, b'{"id":1,"result":{}}'),
+                                        (1, b'{"method":"Page.loadEventFired","params":{}}')]
+        # The stuck one keeps its messages in its queue, at most QUEUE_BYTES of them.
+        assert not slow.closed
+        monkeypatch.setattr(cdp, "QUEUE_BYTES", 4 << 20)
+        for _ in range(8):
+            slow.send(chunk, opcode=2)
+        assert slow.closed
+        # Its writer ends with it, and what comes after goes nowhere.
+        slow._writer.join(5)
+        assert not slow._writer.is_alive()
+        slow.send(chunk, opcode=2)
+        assert slow._queued == 0
+        # One message larger than QUEUE_BYTES still goes to a client that reads.
+        fast.send(b"y" * (5 << 20), opcode=2)
+        assert frames_from(peer, 1) == [(2, b"y" * (5 << 20))] and not fast.closed
+    finally:
+        for sock in (stuck, its_peer, reading, peer):
+            sock.close()
+
+
 FAKE_CHROME = textwrap.dedent('''
     import json, os, sys
     log = open(os.environ["FAKE_CHROME_LOG"], "a")

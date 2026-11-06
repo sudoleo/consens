@@ -1361,7 +1361,12 @@ mit den Mitteln des Rechners nicht:
   (`Target.attachToBrowserTarget`); `cdp.py` setzt ihre Session und eigene IDs
   ein, leitet Antworten und Ereignisse nur an die Verbindung zurück, deren
   Session sie nennen (auch die Seiten, die ihr Auto-Attach brachte), und löst
-  beim Ende ihre Session (`Target.detachFromTarget`). Lokal gegen echten Chrome
+  beim Ende ihre Session (`Target.detachFromTarget`). Was an eine Verbindung
+  geht, wartet seit 2026-11-06 in ihrer eigenen Schlange auf ihren eigenen
+  Schreib-Thread (`Connection`): Vorher lief `sendall` auf dem einen Thread,
+  der Chromes Pipe liest, und ein Client, der nicht mehr las, hielt damit alle
+  anderen auf. Wer mehr als `QUEUE_BYTES` (64 MB) warten lässt, wird getrennt;
+  eine einzelne größere Nachricht geht weiterhin durch. Lokal gegen echten Chrome
   und Playwright 1.63 geprüft (2026-11-04): Verbinden 0,05 s, zwei Verbindungen
   zugleich, nach dem Trennen lädt ein neuer Tab ohne wartenden Debugger, ein
   Dialog bleibt offen, ein Download landet in `~/Downloads` (wie nach einer

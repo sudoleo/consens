@@ -27,6 +27,7 @@ display.sh then starts both again). Standard library only.
     cdp.py <socket> <chrome> [chrome's arguments...]
 """
 import base64
+import collections
 import hashlib
 import json
 import os
@@ -42,6 +43,8 @@ MESSAGE_BYTES = 64 * 1024 * 1024
 HEADER_BYTES = 16 * 1024
 SEND_SECONDS = 30
 ANSWER_SECONDS = 10
+# What may wait for a connection that does not read (Connection).
+QUEUE_BYTES = 64 * 1024 * 1024
 
 
 class Hub:
@@ -183,13 +186,21 @@ SOCKET_PATH = [""]
 
 
 class Connection:
-    """One WebSocket client on the socket."""
+    """One WebSocket client on the socket. What goes to it waits in its own
+    queue for its own writer (since 2026-11-06): send runs on the one thread
+    that reads Chrome's pipe, and a client that stopped reading held it in
+    sendall, so no connection heard from Chrome any more and Chrome's pipe
+    filled (bug hunt 2026-11-05). A client that lets more than QUEUE_BYTES
+    wait is dropped, as one that left; one message of any size still goes."""
 
     def __init__(self, sock):
         self.sock = sock
         self.root = None
         self.sessions = set()
-        self._send_lock = threading.Lock()
+        self._ready = threading.Condition()
+        self._queue = collections.deque()
+        self._queued = 0
+        self._writer = None
         self.closed = False
 
     def send(self, message, opcode=1):
@@ -201,16 +212,42 @@ class Connection:
             head = struct.pack("!BBH", 0x80 | opcode, 126, size)
         else:
             head = struct.pack("!BBQ", 0x80 | opcode, 127, size)
-        with self._send_lock:
+        frame = head + data
+        with self._ready:
             if self.closed:
                 return
+            full = bool(self._queue) and self._queued + len(frame) > QUEUE_BYTES
+            if not full:
+                self._queue.append(frame)
+                self._queued += len(frame)
+                self._ready.notify()
+                if self._writer is None:
+                    self._writer = threading.Thread(target=self._write, daemon=True)
+                    self._writer.start()
+        if full:
+            self.close()
+
+    def _write(self):
+        while True:
+            with self._ready:
+                while not self._queue and not self.closed:
+                    self._ready.wait()
+                if self.closed:
+                    return
+                frame = self._queue.popleft()
+                self._queued -= len(frame)
             try:
-                self.sock.sendall(head + data)
+                self.sock.sendall(frame)
             except OSError:
                 self.close()
+                return
 
     def close(self):
-        self.closed = True
+        with self._ready:
+            self.closed = True
+            self._queue.clear()
+            self._queued = 0
+            self._ready.notify_all()
         try:
             self.sock.shutdown(socket.SHUT_RDWR)
         except OSError:
