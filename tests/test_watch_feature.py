@@ -2095,7 +2095,7 @@ class TelegramWatchTests(unittest.TestCase):
             telegram_watch.telegram_notifier, "send_bot_message",
             return_value={"status": "sent"},
         ) as send:
-            status = telegram_watch.send_watch_message("123", "w1", "change", watch, result)
+            status = telegram_watch.send("123", telegram_watch.watch_message("w1", "change", watch, result))
         self.assertEqual(status["status"], "sent")
         send.assert_called_once()
         markup = send.call_args.kwargs["reply_markup"]
@@ -2157,7 +2157,7 @@ class TelegramWatchTests(unittest.TestCase):
             side_effect=[{"status": "failed_http", "http_status": 400}, {"status": "sent"}],
         ) as send:
             self.assertEqual(
-                telegram_watch.send_watch_message("123", "w1", "change", watch, result)["status"],
+                telegram_watch.send("123", telegram_watch.watch_message("w1", "change", watch, result))["status"],
                 "sent",
             )
         self.assertEqual(send.call_count, 2)

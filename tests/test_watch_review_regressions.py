@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_watch_feature import FakeDb, share  # noqa: E402
 
 from app.services import (  # noqa: E402
+    notification_channels,
     notification_delivery,
     notification_outbox as outbox,
     persistence_guard,
@@ -315,7 +316,7 @@ def test_crash_after_result_commit_leaves_a_retryable_item():
     user = SimpleNamespace(email="owner@example.test", email_verified=True)
     with (
         patch.object(notification_delivery.mailer, "is_configured", return_value=True),
-        patch.object(notification_delivery.auth, "get_user", return_value=user),
+        patch.object(notification_channels.auth, "get_user", return_value=user),
         patch.object(
             notification_delivery.mailer, "send_message", new_callable=AsyncMock,
             side_effect=lambda message: sent.append(message["To"]) or True,
@@ -499,7 +500,7 @@ def test_brief_is_retried_after_a_crash_following_the_claim_and_honours_unsubscr
              "previous_score": None, "new_points": [], "next_run_at": "", "last_run_at": ""}]
     with (
         patch.object(notification_delivery.mailer, "is_configured", return_value=True),
-        patch.object(notification_delivery.auth, "get_user", return_value=user),
+        patch.object(notification_channels.auth, "get_user", return_value=user),
         patch.object(notification_delivery.watch_brief, "collect_brief_items",
                      return_value=(rows, 0)),
         patch.object(notification_delivery.mailer, "send_message",

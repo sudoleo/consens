@@ -223,8 +223,9 @@ def serialize(watch_id: str, data: dict) -> dict:
         "ended": data.get("ended") or "",
         # A finding, a question or the goal the user has not looked at yet (``seen``).
         "unread": data.get("unread") is True,
-        "email_enabled": data.get("email_enabled") is not False,
-        "telegram_enabled": data.get("telegram_enabled") is not False,
+        # email_enabled, telegram_enabled: the switch of every channel.
+        **{switch: outbox.channel_on(data, channel, defaults=outbox.AGENT_WATCH_CHANNEL_DEFAULTS)
+           for channel, switch in outbox.CHANNEL_SWITCHES.items()},
         "image": watch_images.image_view(watch_id, data),
     }
 
@@ -1131,9 +1132,7 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
             "goal_met": bool(details.get("done")),
             "goal_reason": _line((details.get("done") or {}).get("reason"), REASON_MAX_CHARS),
             "review": _review_line(turn), "bookmark_id": data.get("bookmark_id") or ""}
-        channels = [channel for channel, field in ((outbox.CHANNEL_EMAIL, "email_enabled"),
-                                                   (outbox.CHANNEL_TELEGRAM, "telegram_enabled"))
-                    if data.get(field) is not False]
+        channels = outbox.watch_channels(data, defaults=outbox.AGENT_WATCH_CHANNEL_DEFAULTS)
         items = [outbox.agent_watch_item(uid=uid, watch_id=watch_id, run_id=turn_id, now=now,
                                          payload=payload, channel=channel) for channel in channels]
         for item in items:

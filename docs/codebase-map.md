@@ -9544,10 +9544,11 @@ app/services/
   seo_pulse.py              Wöchentlicher deterministischer SEO-Puls (Lease, Bericht, Dormant-Noindex, Telegram-Notiz)
   telegram_notifier.py      Gemeinsamer Bot-API-Client, Critical-Alerts (Fingerprint, Budgets, fix-context) + Admin-Notiz (send_admin_note)
   error_alerts.py           report_server_exception: abgefangene Programmierfehler in Streams als Alert
-  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen (Bestätigung per editMessage* in der Meldung) + ein Watch-Nachrichtenversuch (send_watch_message)
+  telegram_watch.py         User-Link-Deep-Links/Webhook, Callback-Aktionen (Bestätigung per editMessage* in der Meldung); baut Nachrichten (watch_message, agent_watch_message → Message mit HTML, Klartext, Knöpfen) und sendet sie (send, HTML→Klartext-Rückfall)
   notification_markdown.py  Antwort-Markdown aus der Public-Pipeline neu geschrieben: Mail-HTML mit Inline-Stilen, Klartext, Telegram-Subset
-  notification_outbox.py     Dauerhafte Benachrichtigungs-Outbox (notification_outbox): stabile Delivery-IDs, Lease, Versuche, Terminalstatus
-  notification_delivery.py   Ein Zustellversuch je Outbox-Item mit Abmelde-/Pause-/Kanalprüfung + Retry-Pass run_outbox_tick
+  notification_outbox.py     Dauerhafte Benachrichtigungs-Outbox (notification_outbox): stabile Delivery-IDs, Lease, Versuche, Terminalstatus; Kanalschalter CHANNEL_SWITCHES/channel_on/watch_channels
+  notification_channels.py   Die Kanäle (EmailChannel, TelegramChannel): Empfänger erreichen, Stummschaltung, ein Sendeversuch → Outbox-Ergebnis; Stop beendet einen Versuch
+  notification_delivery.py   Die Arten (KINDS: load + render je Kanal) und ein Zustellversuch je Outbox-Item in fester Schrittfolge + Retry-Pass run_outbox_tick
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   favicons.py                Begrenzter Favicon-Fetch (sz=128, < 64 px = kein Icon), Singleflight, LRU-/Negativcache, cached_favicon ohne Abruf
   retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup + Outbox-Retention (30 Tage, nur Terminalstatus), Arbeitsplatz-Spuren (workspace_guard.cleanup_expired_trails)
@@ -11352,6 +11353,23 @@ Backoff 15 min … 6 h). Vor **jedem** Versuch prüft `notification_delivery`
 den aktuellen Zustand: Watch aktiv/nicht gelöscht, Kanal an, Telegram nicht
 stummgeschaltet und verbunden, Follower noch vorhanden, Brief noch aktiv,
 Konto nicht in Löschung, E-Mail verifiziert; sonst wird das Item `skipped`.
+**Art und Kanal getrennt (seit 2026-11-06):** Was eine Benachrichtigung sagt,
+gehört zu ihrer Art (`notification_delivery.KINDS`: `load` prüft, ob das
+Abonnement noch steht, `render[kanal]` baut die Nachricht, `switches` sind die
+Standardwerte der Kanalschalter einer Watch, `after_sent` z. B. die
+Brief-Marke). Wie sie ankommt, gehört zum Kanal (`notification_channels.CHANNELS`:
+`reach` findet den Empfänger, `muted` die Stummschaltung, `send` ist ein
+Versuch samt Ergebnis-Zuordnung, Telegram markiert einen blockierten Bot).
+`attempt` läuft immer gleich: `load` → Schalter des Kanals an und nicht
+stumm → `reach` → `render` → `send` → `after_sent`; jeder Schritt kann mit
+`Stop(status, grund)` enden. Eine Art ohne Nachricht für den Kanal des Items
+ist `failed`/`unknown_channel`. Staging und Zustellung lesen dieselbe
+Schaltertabelle (`notification_outbox.CHANNEL_SWITCHES`, `channel_on`,
+`watch_channels`; Consensus-Watch: Mail an, Telegram erst eingeschaltet;
+Agent-Watch: beide an). **Ein neuer Kanal** (z. B. Push in die App) ist eine
+Klasse in `notification_channels.py`, sein Schalter in `CHANNEL_SWITCHES`, ein
+Eintrag in den Schalter-Standards und je getragener Art ein Renderer;
+`tests/test_notification_channels.py` bricht ab, wenn etwas davon fehlt.
 Ein Kanal- oder Empfängerfehler blockiert andere Items nicht. Nach acht
 Versuchen oder nach `deliver_until` (3 Tage, Brief 12 Stunden) wird es
 `failed` und erscheint in `/health/metrics` unter `notification:<kind>` als

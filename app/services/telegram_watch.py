@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import secrets
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
@@ -476,28 +477,45 @@ def _watch_keyboard(watch_id: str, watch: dict, kind: str = "change") -> dict:
     return {"inline_keyboard": rows}
 
 
-def send_watch_message(chat_id, watch_id: str, kind: str, watch: dict,
-                       result: dict) -> dict:
-    """Send one Watch alert and return Telegram's structured status.
+@dataclass(frozen=True)
+class Message:
+    """One notification as a Telegram chat message: ``text`` in Telegram's
+    HTML, ``plain`` the same without markup, ``keyboard`` its buttons."""
+
+    text: str
+    plain: str
+    keyboard: dict
+
+
+def send(chat_id, message: Message) -> dict:
+    """One attempt to send a notification; returns Telegram's structured status.
 
     Delivery identity, retries and the unsubscribe/mute/connection checks
-    live in the durable notification outbox (``notification_delivery``);
-    this function is one attempt. ``DELIVERIES_COLLECTION`` only holds legacy
+    live in the durable notification outbox (``notification_delivery``,
+    ``notification_channels``). ``DELIVERIES_COLLECTION`` only holds legacy
     markers that the metadata cleanup removes.
     """
-    text = _notification_text(kind, watch, result)
-    keyboard = _watch_keyboard(watch_id, watch, kind)
     status = telegram_notifier.send_bot_message(
-        chat_id, text, reply_markup=keyboard, parse_mode="HTML",
+        chat_id, message.text, reply_markup=message.keyboard, parse_mode="HTML",
     )
-    # A rejected entity must never cost the user the alert itself: resend the
-    # same message as plain text if Telegram refuses the markup.
+    # A rejected entity must never cost the user the message itself: resend
+    # it as plain text if Telegram refuses the markup.
     if status.get("http_status") == 400 or status.get("error_code") == 400:
-        logging.warning("Telegram Watch message rejected as HTML; retrying as plain text")
+        logging.warning("Telegram notification rejected as HTML; retrying as plain text")
         status = telegram_notifier.send_bot_message(
-            chat_id, _notification_text(kind, watch, result, plain=True), reply_markup=keyboard,
+            chat_id, message.plain, reply_markup=message.keyboard,
         )
     return status
+
+
+def watch_message(watch_id: str, kind: str, watch: dict, result: dict) -> Message:
+    """One Consensus Watch alert. Its plain text is measured on its own
+    (``_notification_text``), so the question at the bottom survives there too."""
+    return Message(
+        text=_notification_text(kind, watch, result),
+        plain=_notification_text(kind, watch, result, plain=True),
+        keyboard=_watch_keyboard(watch_id, watch, kind),
+    )
 
 
 def _agent_watch_text(payload: dict, language: str) -> str:
@@ -530,22 +548,17 @@ def _agent_watch_text(payload: dict, language: str) -> str:
     return "\n\n".join(lines)
 
 
-def send_agent_watch_message(chat_id, payload: dict, *, chat_url: str, language: str = "") -> dict:
-    """One attempt to send an Agent Watch run's message (the outbox retries).
-    Link buttons only: the page it saw, its chat; nothing to call back."""
+def agent_watch_message(payload: dict, *, chat_url: str, language: str = "") -> Message:
+    """An Agent Watch run's message. Link buttons only: the page it saw, its
+    chat; nothing to call back."""
     from app.core import i18n
     rows = []
     evidence = str(payload.get("evidence_url") or "")
     if evidence.startswith(("https://", "http://")):
         rows.append([{"text": i18n.t("Open the page", language), "url": evidence}])
     rows.append([{"text": i18n.t("Open the chat in consens.io", language), "url": chat_url}])
-    keyboard = {"inline_keyboard": rows}
     text = _agent_watch_text(payload, language)
-    status = telegram_notifier.send_bot_message(chat_id, text, reply_markup=keyboard, parse_mode="HTML")
-    if status.get("http_status") == 400 or status.get("error_code") == 400:
-        logging.warning("Telegram Agent Watch message rejected as HTML; retrying as plain text")
-        status = telegram_notifier.send_bot_message(chat_id, _strip_markup(text), reply_markup=keyboard)
-    return status
+    return Message(text=text, plain=_strip_markup(text), keyboard={"inline_keyboard": rows})
 
 
 def send_test(uid: str, db=None) -> dict:

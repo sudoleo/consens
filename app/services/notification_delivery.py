@@ -5,16 +5,27 @@ who unsubscribed, paused the watch, switched a channel off or deleted the
 account after the item was written never receives a late retry. The message
 content comes from the item payload plus the immutable Watch version; no
 retry ever starts a new LLM pipeline.
+
+Each kind says what must still stand (``load``) and what its message says on
+each channel it carries (``render``). How a message reaches the recipient
+belongs to the channel (``notification_channels``). Every attempt takes the
+same steps, in this order, and any of them can end it with an outcome:
+
+1. ``load``: the subscription is still there (Watch, follower, Brief)
+2. the Watch's switch for this channel is on and the channel is not muted
+3. ``channel.reach``: the recipient can be reached on it
+4. ``render``: the message (a Brief with nothing in it ends here)
+5. ``channel.send``, then the kind's ``after_sent``
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Awaitable, Callable, Optional
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
-
-from firebase_admin import auth
 
 from app.core.observability import safe_exception
 from app.core.security import db_firestore
@@ -22,6 +33,7 @@ from app.core.site import SITE_URL
 from app.services import (
     account_language,
     mailer,
+    notification_channels as channels,
     notification_outbox as outbox,
     share_snapshots,
     telegram_watch,
@@ -30,9 +42,43 @@ from app.services import (
     watch_followers,
     watch_service,
 )
+from app.services.notification_channels import Stop
 
 
 OUTBOX_PASS_MAX_ITEMS = 100
+EMAIL = outbox.CHANNEL_EMAIL
+TELEGRAM = outbox.CHANNEL_TELEGRAM
+
+
+@dataclass(frozen=True)
+class Subject:
+    """What an attempt found still standing.
+
+    ``watch`` is the Watch whose channel switches and mute apply (None for a
+    kind without switches), ``address`` a fixed mail recipient (a follower;
+    empty means the account's own address), ``data`` what the renderer needs.
+    """
+
+    watch: Optional[dict] = None
+    address: str = ""
+    data: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class Kind:
+    """One kind of notification.
+
+    ``load(item, db, now)`` returns the Subject or raises Stop;
+    ``render[channel](item, subject, recipient, db=, now=)`` returns the
+    channel's message or raises Stop; ``switches`` are the defaults of the
+    Watch's channel switches (None: the kind has none); ``after_sent`` runs
+    once a message was accepted.
+    """
+
+    load: Callable[..., Awaitable[Subject]]
+    render: dict
+    switches: Optional[dict] = None
+    after_sent: Optional[Callable[..., Awaitable[None]]] = None
 
 
 def _doc(db, collection: str, doc_id: str):
@@ -49,24 +95,17 @@ def _share_path(payload: dict, *, private_aware: bool) -> str:
     return share_snapshots.share_path(slug, payload.get("share_id") or "")
 
 
-async def _verified_email(uid: str):
-    """(email, outcome) — outcome is None when the address may receive mail."""
-    try:
-        user = await asyncio.to_thread(auth.get_user, uid)
-    except auth.UserNotFoundError:
-        return None, (outbox.SKIPPED, "user_missing")
-    except Exception as exc:
-        logging.warning("Notification owner lookup failed category=%s", safe_exception(exc))
-        return None, (outbox.RETRY, "owner_lookup")
-    if not getattr(user, "email_verified", False) or not getattr(user, "email", None):
-        return None, (outbox.SKIPPED, "unverified")
-    return user.email, None
+def _delta(payload: dict) -> dict:
+    """The change log of an item; items queued before it existed (bounded by
+    their ``deliver_until``) only carry the summary."""
+    return payload.get("delta") or {
+        "summary": payload.get("change_summary") or payload.get("summary") or "",
+    }
 
 
-async def _send_mail(message) -> tuple:
-    accepted = await mailer.send_message(message)
-    return (outbox.SENT, "") if accepted else (outbox.RETRY, "smtp")
-
+# ---------------------------------------------------------------------------
+# Consensus Watch: the owner's alert and the paused-after-three-failures notice
+# ---------------------------------------------------------------------------
 
 def _watch_version_answer(payload: dict, run_id: str, db) -> tuple[str, list]:
     """The answer of the run's immutable version and the sources its [S1]
@@ -83,35 +122,25 @@ def _watch_version_answer(payload: dict, run_id: str, db) -> tuple[str, list]:
     return str(version.get("consensus_md") or ""), sources
 
 
-def _watch_gate(item: dict, watch: dict | None, *, channel_field: str):
-    """Return a terminal (status, reason) when the owner opted out meanwhile."""
+async def _load_watch(item: dict, db, now: datetime) -> Subject:
+    watch = await asyncio.to_thread(
+        _doc, db, watch_service.WATCHES_COLLECTION, item.get("resource_id") or "",
+    )
     if not watch:
-        return outbox.SKIPPED, "watch_deleted"
+        raise Stop(outbox.SKIPPED, "watch_deleted")
     if str(watch.get("owner_uid") or "") != str(item.get("uid") or ""):
-        return outbox.SKIPPED, "owner_changed"
+        raise Stop(outbox.SKIPPED, "owner_changed")
     if item.get("kind") == outbox.KIND_WATCH_PAUSED:
         if watch.get("status") != "paused_error":
-            return outbox.SKIPPED, "resumed"
+            raise Stop(outbox.SKIPPED, "resumed")
     elif watch.get("status") != "active" and not (
         watch.get("status") == watch_service.WATCH_STATUS_RESOLVED
         and (item.get("payload") or {}).get("alert") == "condition"
     ):
         # The unsubscribe link, the Telegram pause and the dashboard all pause.
         # The resolving check is the one alert a resolved watch still sends.
-        return outbox.SKIPPED, "paused"
-    if channel_field == "email_enabled" and watch.get("email_enabled") is False:
-        return outbox.SKIPPED, "channel_disabled"
-    if channel_field == "telegram_enabled" and watch.get("telegram_enabled") is not True:
-        return outbox.SKIPPED, "channel_disabled"
-    return None
-
-
-def _delta(payload: dict) -> dict:
-    """The change log of an item; items queued before it existed (bounded by
-    their ``deliver_until``) only carry the summary."""
-    return payload.get("delta") or {
-        "summary": payload.get("change_summary") or payload.get("summary") or "",
-    }
+        raise Stop(outbox.SKIPPED, "paused")
+    return Subject(watch=watch)
 
 
 def _owner_message(item: dict, payload: dict, recipient: str, answer: tuple, language: str = ""):
@@ -158,60 +187,19 @@ def _owner_message(item: dict, payload: dict, recipient: str, answer: tuple, lan
     )
 
 
-async def _deliver_watch_email(item: dict, db) -> tuple:
+async def _watch_mail(item: dict, subject: Subject, recipient: str, *, db, now):
     payload = item.get("payload") or {}
-    watch = await asyncio.to_thread(
-        _doc, db, watch_service.WATCHES_COLLECTION, item.get("resource_id") or "",
-    )
-    gate = _watch_gate(item, watch, channel_field="email_enabled")
-    if gate:
-        return gate
-    if not mailer.is_configured():
-        return outbox.SKIPPED, "smtp_not_configured"
-    recipient, blocked = await _verified_email(item["uid"])
-    if blocked:
-        return blocked
     answer = ("", [])
     if payload.get("alert") in {"every_run", "condition"}:
         answer = await asyncio.to_thread(
             _watch_version_answer, payload, item.get("run_id") or "", db,
         )
     language = await asyncio.to_thread(account_language.of, item["uid"], db=db)
-    return await _send_mail(_owner_message(item, payload, recipient, answer, language))
+    return _owner_message(item, payload, recipient, answer, language)
 
 
-def _telegram_outcome(status: dict) -> tuple:
-    if status.get("status") == "sent":
-        return outbox.SENT, ""
-    if status.get("status") == "skipped_not_configured":
-        return outbox.SKIPPED, "telegram_not_configured"
-    code = status.get("http_status") or status.get("error_code")
-    if code == 403:
-        return outbox.SKIPPED, "telegram_blocked"
-    if code == 429 or status.get("status") == "failed_network" or (
-        isinstance(code, int) and code >= 500
-    ):
-        return outbox.RETRY, "telegram_transient"
-    if isinstance(code, int) and 400 <= code < 500:
-        return outbox.FAILED, "telegram_rejected"
-    return outbox.RETRY, "telegram_unknown"
-
-
-def _deliver_watch_telegram_sync(item: dict, db, now: datetime) -> tuple:
+async def _watch_telegram(item: dict, subject: Subject, recipient, *, db, now):
     payload = item.get("payload") or {}
-    watch_id = item.get("resource_id") or ""
-    watch = _doc(db, watch_service.WATCHES_COLLECTION, watch_id)
-    gate = _watch_gate(item, watch, channel_field="telegram_enabled")
-    if gate:
-        return gate
-    muted_until = watch.get("telegram_muted_until")
-    if isinstance(muted_until, datetime) and muted_until > now:
-        return outbox.SKIPPED, "muted"
-    connection_ref = db.collection(telegram_watch.CONNECTIONS_COLLECTION).document(item["uid"])
-    snapshot = connection_ref.get()
-    connection = snapshot.to_dict() if snapshot.exists else None
-    if not connection or not connection.get("enabled") or not connection.get("chat_id"):
-        return outbox.SKIPPED, "telegram_not_linked"
     kind = "paused_error" if item["kind"] == outbox.KIND_WATCH_PAUSED else payload.get("alert")
     view = {
         "question": payload.get("question") or "",
@@ -228,29 +216,23 @@ def _deliver_watch_telegram_sync(item: dict, db, now: datetime) -> tuple:
         "condition_sources": payload.get("condition_sources") or [],
     }
     if kind in {"every_run", "condition"}:
-        result["consensus"], result["consensus_sources"] = _watch_version_answer(
-            payload, item.get("run_id") or "", db,
+        result["consensus"], result["consensus_sources"] = await asyncio.to_thread(
+            _watch_version_answer, payload, item.get("run_id") or "", db,
         )
-    status = telegram_watch.send_watch_message(
-        connection["chat_id"], watch_id, kind, view, result,
-    )
-    outcome = _telegram_outcome(status)
-    if outcome[1] == "telegram_blocked":
-        try:
-            connection_ref.update({"enabled": False, "blocked_at": outbox.utcnow()})
-        except Exception as exc:
-            logging.warning("Telegram connection block marker failed category=%s", safe_exception(exc))
-    return outcome
+    return telegram_watch.watch_message(item.get("resource_id") or "", kind, view, result)
 
 
-async def _deliver_watch_follower(item: dict, db) -> tuple:
-    payload = item.get("payload") or {}
-    share_id = payload.get("share_id") or ""
+# ---------------------------------------------------------------------------
+# Followers of a public Watch page or a Topic (mail only, no account)
+# ---------------------------------------------------------------------------
+
+async def _load_watch_follower(item: dict, db, now: datetime) -> Subject:
+    share_id = (item.get("payload") or {}).get("share_id") or ""
     follower = await asyncio.to_thread(
         _doc, db, watch_followers.FOLLOWERS_COLLECTION, item.get("recipient_id") or "",
     )
     if not follower or str(follower.get("share_id") or "") != share_id or not follower.get("email"):
-        return outbox.SKIPPED, "unsubscribed"
+        raise Stop(outbox.SKIPPED, "unsubscribed")
     watch = await asyncio.to_thread(
         _doc, db, watch_service.WATCHES_COLLECTION, item.get("resource_id") or "",
     )
@@ -261,60 +243,66 @@ async def _deliver_watch_follower(item: dict, db) -> tuple:
         or share.get("status") != "active"
         or str(share.get("visibility") or "public") != "public"
     ):
-        return outbox.SKIPPED, "page_unavailable"
-    if not mailer.is_configured():
-        return outbox.SKIPPED, "smtp_not_configured"
-    email = follower["email"]
-    token = watch_followers.make_follow_unsubscribe_token(share_id, email)
-    message = mailer.build_follower_change_message(
-        recipient=email, question=payload.get("question") or "",
-        language=follower.get("language") or "",
+        raise Stop(outbox.SKIPPED, "page_unavailable")
+    return Subject(address=follower["email"], data={"language": follower.get("language") or ""})
+
+
+async def _watch_follower_mail(item: dict, subject: Subject, recipient: str, *, db, now):
+    payload = item.get("payload") or {}
+    token = watch_followers.make_follow_unsubscribe_token(payload.get("share_id") or "", recipient)
+    return mailer.build_follower_change_message(
+        recipient=recipient, question=payload.get("question") or "",
+        language=subject.data["language"],
         delta=_delta(payload),
         share_url=SITE_URL + _share_path(payload, private_aware=False),
         unsubscribe_url=SITE_URL + "/watch/follow/unsubscribe?token=" + token,
     )
-    return await _send_mail(message)
 
 
-async def _deliver_topic_follower(item: dict, db) -> tuple:
-    payload = item.get("payload") or {}
+async def _load_topic_follower(item: dict, db, now: datetime) -> Subject:
     topic_id = item.get("resource_id") or ""
     follower = await asyncio.to_thread(
         _doc, db, topics.FOLLOWERS_COLLECTION, item.get("recipient_id") or "",
     )
     if not follower or str(follower.get("topic_id") or "") != topic_id or not follower.get("email"):
-        return outbox.SKIPPED, "unsubscribed"
+        raise Stop(outbox.SKIPPED, "unsubscribed")
     topic = await asyncio.to_thread(topics.get_topic, topic_id, db=db)
     if not topic or topic.get("status") == "archived":
-        return outbox.SKIPPED, "topic_unavailable"
-    if not mailer.is_configured():
-        return outbox.SKIPPED, "smtp_not_configured"
-    email = follower["email"]
-    message = mailer.build_topic_change_message(
-        recipient=email, language=follower.get("language") or "",
+        raise Stop(outbox.SKIPPED, "topic_unavailable")
+    return Subject(address=follower["email"],
+                   data={"language": follower.get("language") or "", "topic": topic})
+
+
+async def _topic_follower_mail(item: dict, subject: Subject, recipient: str, *, db, now):
+    payload = item.get("payload") or {}
+    topic = subject.data["topic"]
+    return mailer.build_topic_change_message(
+        recipient=recipient, language=subject.data["language"],
         title=payload.get("title") or topic.get("title") or "",
         question=payload.get("question") or "",
         delta=_delta(payload),
         topic_url=f"{SITE_URL}/topics/{payload.get('slug') or topic.get('slug') or ''}",
         unsubscribe_url=(
             SITE_URL + "/topic-follow/unsubscribe?token="
-            + topics.make_unsubscribe_token(topic_id, email)
+            + topics.make_unsubscribe_token(item.get("resource_id") or "", recipient)
         ),
     )
-    return await _send_mail(message)
 
 
-async def _deliver_brief(item: dict, db, now: datetime) -> tuple:
+# ---------------------------------------------------------------------------
+# Morning Brief
+# ---------------------------------------------------------------------------
+
+async def _load_brief(item: dict, db, now: datetime) -> Subject:
+    brief = await asyncio.to_thread(_doc, db, watch_brief.BRIEFS_COLLECTION, item.get("uid") or "")
+    if not brief or not brief.get("enabled"):
+        raise Stop(outbox.SKIPPED, "unsubscribed")
+    return Subject()
+
+
+async def _brief_mail(item: dict, subject: Subject, recipient: str, *, db, now):
     payload = item.get("payload") or {}
     uid = item.get("uid") or ""
-    brief = await asyncio.to_thread(_doc, db, watch_brief.BRIEFS_COLLECTION, uid)
-    if not brief or not brief.get("enabled"):
-        return outbox.SKIPPED, "unsubscribed"
-    if not mailer.is_configured():
-        return outbox.SKIPPED, "smtp_not_configured"
-    recipient, blocked = await _verified_email(uid)
-    if blocked:
-        return blocked
     baseline = payload.get("baseline")
     if not isinstance(baseline, datetime):
         baseline = now - watch_brief.FIRST_BRIEF_WINDOW
@@ -322,9 +310,9 @@ async def _deliver_brief(item: dict, db, now: datetime) -> tuple:
         watch_brief.collect_brief_items, uid, since=baseline, db=db,
     )
     if not items:
-        return outbox.SKIPPED, "no_watches"
+        raise Stop(outbox.SKIPPED, "no_watches")
     if payload.get("mode") == "changes_only" and changes == 0:
-        return outbox.SKIPPED, "no_changes"
+        raise Stop(outbox.SKIPPED, "no_changes")
     scheduled_at = payload.get("scheduled_at")
     label_time = scheduled_at if isinstance(scheduled_at, datetime) else now
     timezone_name = str(payload.get("timezone") or "UTC")
@@ -333,7 +321,7 @@ async def _deliver_brief(item: dict, db, now: datetime) -> tuple:
     except (ZoneInfoNotFoundError, ValueError):
         pass
     language = await asyncio.to_thread(account_language.of, uid, db=db)
-    message = mailer.build_brief_message(
+    return mailer.build_brief_message(
         recipient=recipient, language=language,
         date_label=mailer.brief_date_label(label_time, language=language), items=items,
         changes_count=changes, site_url=SITE_URL,
@@ -341,27 +329,30 @@ async def _deliver_brief(item: dict, db, now: datetime) -> tuple:
         + watch_brief.make_brief_unsubscribe_token(uid),
         brief_timezone=timezone_name,
     )
-    outcome = await _send_mail(message)
-    if outcome[0] == outbox.SENT:
-        try:
-            await asyncio.to_thread(watch_brief.mark_brief_sent, uid, now=now, db=db)
-        except Exception as exc:
-            # Display-only timestamp; it must never turn an accepted mail
-            # into a retry (and therefore a duplicate digest).
-            logging.warning("Morning brief sent marker failed category=%s", safe_exception(exc))
-    return outcome
 
 
-def _agent_watch_gate(item: dict, watch: dict | None, field: str):
-    """A terminal (status, reason) when the Watch, its owner or the channel is gone."""
+async def _brief_sent(item: dict, db, now: datetime) -> None:
+    try:
+        await asyncio.to_thread(watch_brief.mark_brief_sent, item.get("uid") or "", now=now, db=db)
+    except Exception as exc:
+        # Display-only timestamp; it must never turn an accepted mail
+        # into a retry (and therefore a duplicate digest).
+        logging.warning("Morning brief sent marker failed category=%s", safe_exception(exc))
+
+
+# ---------------------------------------------------------------------------
+# Agent Watch: a finding, a question or the goal of one run (agent_watches.turn_ended)
+# ---------------------------------------------------------------------------
+
+async def _load_agent_watch(item: dict, db, now: datetime) -> Subject:
+    """Its Watch or its owner gone: nothing."""
+    from app.services import agent_watches
+    watch = await asyncio.to_thread(_doc, db, agent_watches.COLLECTION, item.get("resource_id") or "")
     if not watch:
-        return outbox.SKIPPED, "watch_deleted"
+        raise Stop(outbox.SKIPPED, "watch_deleted")
     if str(watch.get("uid") or "") != str(item.get("uid") or ""):
-        return outbox.SKIPPED, "owner_changed"
-    if watch.get(field) is False:
-        # "Stop emails" in a mail, or the channel switched off on the Watches page.
-        return outbox.SKIPPED, "channel_disabled"
-    return None
+        raise Stop(outbox.SKIPPED, "owner_changed")
+    return Subject(watch=watch)
 
 
 def _agent_chat_url(payload: dict) -> str:
@@ -370,22 +361,11 @@ def _agent_chat_url(payload: dict) -> str:
     return SITE_URL + "/app" + (f"?chat={bookmark}" if bookmark.replace("_", "").isalnum() else "")
 
 
-async def _deliver_agent_watch(item: dict, db) -> tuple:
-    """A finding, a question or the goal of an Agent Watch run
-    (agent_watches.turn_ended), by mail. Its chat or account gone: nothing."""
+async def _agent_watch_mail(item: dict, subject: Subject, recipient: str, *, db, now):
     from app.services import agent_watches
     payload = item.get("payload") or {}
-    watch = await asyncio.to_thread(_doc, db, agent_watches.COLLECTION, item.get("resource_id") or "")
-    gate = _agent_watch_gate(item, watch, "email_enabled")
-    if gate:
-        return gate
-    if not mailer.is_configured():
-        return outbox.SKIPPED, "smtp_not_configured"
-    recipient, blocked = await _verified_email(item["uid"])
-    if blocked:
-        return blocked
     language = await asyncio.to_thread(account_language.of, item["uid"], db=db)
-    return await _send_mail(mailer.build_agent_watch_message(
+    return mailer.build_agent_watch_message(
         recipient=recipient, language=language, outcome=payload.get("outcome") or "finding",
         task=payload.get("task") or "", goal=payload.get("goal") or "",
         summary=payload.get("summary") or "", evidence_url=payload.get("evidence_url") or "",
@@ -394,52 +374,58 @@ async def _deliver_agent_watch(item: dict, db) -> tuple:
         review=payload.get("review") or {}, app_url=_agent_chat_url(payload),
         unsubscribe_url=SITE_URL + "/agent-watch/unsubscribe?token="
         + agent_watches.unsubscribe_token(item["resource_id"]),
-    ))
+    )
 
 
-def _deliver_agent_watch_telegram_sync(item: dict, db) -> tuple:
-    """The same message as a Telegram chat message, where the account linked one."""
-    from app.services import agent_watches
+async def _agent_watch_telegram(item: dict, subject: Subject, recipient, *, db, now):
     payload = item.get("payload") or {}
-    watch = _doc(db, agent_watches.COLLECTION, item.get("resource_id") or "")
-    gate = _agent_watch_gate(item, watch, "telegram_enabled")
-    if gate:
-        return gate
-    connection_ref = db.collection(telegram_watch.CONNECTIONS_COLLECTION).document(item["uid"])
-    snapshot = connection_ref.get()
-    connection = snapshot.to_dict() if snapshot.exists else None
-    if not connection or not connection.get("enabled") or not connection.get("chat_id"):
-        return outbox.SKIPPED, "telegram_not_linked"
-    language = account_language.of(item["uid"], db=db)
-    status = telegram_watch.send_agent_watch_message(
-        connection["chat_id"], payload, chat_url=_agent_chat_url(payload), language=language)
-    outcome = _telegram_outcome(status)
-    if outcome[1] == "telegram_blocked":
-        try:
-            connection_ref.update({"enabled": False, "blocked_at": outbox.utcnow()})
-        except Exception as exc:
-            logging.warning("Telegram connection block marker failed category=%s", safe_exception(exc))
-    return outcome
+    language = await asyncio.to_thread(account_language.of, item["uid"], db=db)
+    return telegram_watch.agent_watch_message(
+        payload, chat_url=_agent_chat_url(payload), language=language,
+    )
+
+
+# ---------------------------------------------------------------------------
+# One attempt
+# ---------------------------------------------------------------------------
+
+_WATCH = Kind(load=_load_watch, switches=outbox.WATCH_CHANNEL_DEFAULTS,
+              render={EMAIL: _watch_mail, TELEGRAM: _watch_telegram})
+
+KINDS = {
+    outbox.KIND_WATCH_ALERT: _WATCH,
+    outbox.KIND_WATCH_PAUSED: _WATCH,
+    outbox.KIND_WATCH_FOLLOWER: Kind(load=_load_watch_follower, render={EMAIL: _watch_follower_mail}),
+    outbox.KIND_TOPIC_FOLLOWER: Kind(load=_load_topic_follower, render={EMAIL: _topic_follower_mail}),
+    outbox.KIND_WATCH_BRIEF: Kind(load=_load_brief, render={EMAIL: _brief_mail}, after_sent=_brief_sent),
+    outbox.KIND_AGENT_WATCH: Kind(load=_load_agent_watch, switches=outbox.AGENT_WATCH_CHANNEL_DEFAULTS,
+                                  render={EMAIL: _agent_watch_mail, TELEGRAM: _agent_watch_telegram}),
+}
 
 
 async def attempt(item: dict, *, db, now: datetime) -> tuple:
-    kind = item.get("kind")
-    channel = item.get("channel")
-    if kind == outbox.KIND_AGENT_WATCH:
-        if channel == outbox.CHANNEL_TELEGRAM:
-            return await asyncio.to_thread(_deliver_agent_watch_telegram_sync, item, db)
-        return await _deliver_agent_watch(item, db)
-    if kind in {outbox.KIND_WATCH_ALERT, outbox.KIND_WATCH_PAUSED}:
-        if channel == outbox.CHANNEL_TELEGRAM:
-            return await asyncio.to_thread(_deliver_watch_telegram_sync, item, db, now)
-        return await _deliver_watch_email(item, db)
-    if kind == outbox.KIND_WATCH_FOLLOWER:
-        return await _deliver_watch_follower(item, db)
-    if kind == outbox.KIND_TOPIC_FOLLOWER:
-        return await _deliver_topic_follower(item, db)
-    if kind == outbox.KIND_WATCH_BRIEF:
-        return await _deliver_brief(item, db, now)
-    return outbox.FAILED, "unknown_kind"
+    kind = KINDS.get(item.get("kind"))
+    if kind is None:
+        return outbox.FAILED, "unknown_kind"
+    render = kind.render.get(item.get("channel"))
+    if render is None:
+        return outbox.FAILED, "unknown_channel"
+    channel = channels.CHANNELS[item["channel"]]
+    try:
+        subject = await kind.load(item, db, now)
+        if kind.switches is not None:
+            if not outbox.channel_on(subject.watch, channel.name, defaults=kind.switches):
+                return outbox.SKIPPED, "channel_disabled"
+            if channel.muted(subject.watch, now):
+                return outbox.SKIPPED, "muted"
+        recipient = await channel.reach(item, db=db, address=subject.address)
+        message = await render(item, subject, recipient, db=db, now=now)
+    except Stop as stop:
+        return stop.outcome
+    outcome = await channel.send(recipient, message)
+    if outcome[0] == outbox.SENT and kind.after_sent is not None:
+        await kind.after_sent(item, db, now)
+    return outcome
 
 
 async def deliver(item_id: str, *, db=None, now=None) -> str:

@@ -64,6 +64,16 @@ KINDS = {
 }
 CHANNEL_EMAIL = "email"
 CHANNEL_TELEGRAM = "telegram"
+# The switch a Watch keeps for each channel ("Stop emails", the Telegram
+# toggle on the Watches page). One table for staging and delivery: a new
+# channel (notification_channels.py) gets its switch here.
+CHANNEL_SWITCHES = {CHANNEL_EMAIL: "email_enabled", CHANNEL_TELEGRAM: "telegram_enabled"}
+CHANNELS = tuple(CHANNEL_SWITCHES)
+# What an unset switch means. A Consensus Watch mails by default and uses
+# Telegram only once it was switched on; an Agent Watch uses every channel the
+# account has (Telegram still needs a linked chat, checked at delivery).
+WATCH_CHANNEL_DEFAULTS = {CHANNEL_EMAIL: True, CHANNEL_TELEGRAM: False}
+AGENT_WATCH_CHANNEL_DEFAULTS = {CHANNEL_EMAIL: True, CHANNEL_TELEGRAM: True}
 
 STATUS_PENDING = "pending"
 SENT = "sent"
@@ -98,6 +108,17 @@ def delivery_id(kind: str, resource_id: str, run_id: str, channel: str,
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def channel_on(doc: dict, channel: str, *, defaults: dict) -> bool:
+    """A Watch's switch for one channel; unset (or not a bool) is the default."""
+    value = (doc or {}).get(CHANNEL_SWITCHES[channel])
+    return value if isinstance(value, bool) else bool(defaults.get(channel))
+
+
+def watch_channels(doc: dict, *, defaults: dict) -> list[str]:
+    """The channels a Watch messages its owner on, in delivery order."""
+    return [channel for channel in CHANNELS if channel_on(doc, channel, defaults=defaults)]
+
+
 def _clip(value, limit: int = TEXT_LIMIT) -> str:
     return str(value or "")[:limit]
 
@@ -130,7 +151,7 @@ def delta_view(result: dict, *, goal: str = "") -> dict:
 def new_item(*, kind: str, channel: str, resource_id: str, run_id: str,
              recipient_id: str, payload: dict, now: datetime, uid: str = "",
              deliver_within: Optional[timedelta] = None) -> dict:
-    if kind not in KINDS or channel not in {CHANNEL_EMAIL, CHANNEL_TELEGRAM}:
+    if kind not in KINDS or channel not in CHANNELS:
         raise ValueError("invalid notification kind or channel")
     return {
         "id": delivery_id(kind, resource_id, run_id, channel, recipient_id),
@@ -187,18 +208,7 @@ def watch_alert_items(watch_id: str, claimed: dict, result: dict, alert: str, *,
         payload["condition"] = _clip(claimed.get("condition"), 500)
         payload["condition_reason"] = _clip(result.get("condition_reason"), 800)
         payload["condition_sources"] = _sources(result.get("condition_sources"))
-    items = []
-    if email and claimed.get("email_enabled") is not False:
-        items.append(new_item(
-            kind=KIND_WATCH_ALERT, channel=CHANNEL_EMAIL, resource_id=watch_id,
-            run_id=run_id, recipient_id=uid, uid=uid, payload=payload, now=now,
-        ))
-    if claimed.get("telegram_enabled") is True:
-        items.append(new_item(
-            kind=KIND_WATCH_ALERT, channel=CHANNEL_TELEGRAM, resource_id=watch_id,
-            run_id=run_id, recipient_id=uid, uid=uid, payload=payload, now=now,
-        ))
-    return items
+    return _owner_items(KIND_WATCH_ALERT, watch_id, claimed, payload, now=now, email=email)
 
 
 def watch_paused_items(watch_id: str, claimed: dict, *, now: datetime,
@@ -208,18 +218,21 @@ def watch_paused_items(watch_id: str, claimed: dict, *, now: datetime,
     if not uid or not run_id:
         return []
     payload = {**_watch_view(claimed), "alert": "paused_error"}
-    items = []
-    if email and claimed.get("email_enabled") is not False:
-        items.append(new_item(
-            kind=KIND_WATCH_PAUSED, channel=CHANNEL_EMAIL, resource_id=watch_id,
-            run_id=run_id, recipient_id=uid, uid=uid, payload=payload, now=now,
-        ))
-    if claimed.get("telegram_enabled") is True:
-        items.append(new_item(
-            kind=KIND_WATCH_PAUSED, channel=CHANNEL_TELEGRAM, resource_id=watch_id,
-            run_id=run_id, recipient_id=uid, uid=uid, payload=payload, now=now,
-        ))
-    return items
+    return _owner_items(KIND_WATCH_PAUSED, watch_id, claimed, payload, now=now, email=email)
+
+
+def _owner_items(kind: str, watch_id: str, claimed: dict, payload: dict, *,
+                 now: datetime, email: bool) -> list[dict]:
+    """One item per channel the Consensus Watch has switched on; ``email``
+    False (no mail server configured) leaves the mail out."""
+    uid = str(claimed.get("owner_uid") or "")
+    run_id = str(claimed.get("current_run_id") or "")
+    return [
+        new_item(kind=kind, channel=channel, resource_id=watch_id, run_id=run_id,
+                 recipient_id=uid, uid=uid, payload=payload, now=now)
+        for channel in watch_channels(claimed, defaults=WATCH_CHANNEL_DEFAULTS)
+        if email or channel != CHANNEL_EMAIL
+    ]
 
 
 def watch_follower_items(watch_id: str, claimed: dict, result: dict,

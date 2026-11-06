@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 
 from app.core import i18n
 from app.core.i18n_middleware import request_language
-from app.services import account_language, mailer, notification_delivery, notification_outbox, persistence_guard
+from app.services import account_language, mailer, notification_channels, notification_delivery, notification_outbox, persistence_guard
 from app.services import watch_followers
 from scripts import i18n as i18n_tool
 from test_watch_feature import FakeDb, share
@@ -294,19 +294,20 @@ def test_owner_mails_go_out_in_the_accounts_language():
     db = FakeDb()
     db.stores["users"]["u1"] = {"language": "de"}
     db.stores["watches"]["w1"] = {"owner_uid": "u1", "status": "active"}
-    item = {"kind": notification_outbox.KIND_WATCH_ALERT, "uid": "u1", "resource_id": "w1",
+    item = {"kind": notification_outbox.KIND_WATCH_ALERT, "channel": notification_outbox.CHANNEL_EMAIL,
+            "uid": "u1", "resource_id": "w1",
             "payload": {"question": "Ist sie lieferbar?", "share_id": "A" * 16, "delta": DELTA}}
     sent = AsyncMock(return_value=True)
     user = SimpleNamespace(email="owner@example.test", email_verified=True)
     with (
         patch.object(notification_delivery.mailer, "is_configured", return_value=True),
         patch.object(notification_delivery.mailer, "send_message", sent),
-        patch.object(notification_delivery.auth, "get_user", return_value=user),
+        patch.object(notification_channels.auth, "get_user", return_value=user),
         patch.dict(os.environ, {"WATCH_UNSUBSCRIBE_SECRET": "test-secret"}),
     ):
-        outcome = asyncio.run(notification_delivery._deliver_watch_email(item, db))
+        outcome = asyncio.run(notification_delivery.attempt(item, db=db, now=datetime(2026, 11, 6, tzinfo=timezone.utc)))
         db.stores["users"]["u1"] = {}
-        asyncio.run(notification_delivery._deliver_watch_email(item, db))
+        asyncio.run(notification_delivery.attempt(item, db=db, now=datetime(2026, 11, 6, tzinfo=timezone.utc)))
     assert outcome == (notification_outbox.SENT, "")
     assert sent.await_args_list[0].args[0]["Subject"] == "Geändert: Ist sie lieferbar?"
     assert sent.await_args_list[1].args[0]["Subject"] == "Moved: Ist sie lieferbar?"
@@ -324,7 +325,8 @@ def test_a_follower_reads_in_the_language_of_the_confirming_click():
         (follower_id, follower), = db.stores[watch_followers.FOLLOWERS_COLLECTION].items()
         assert follower["language"] == "de"
 
-        item = {"kind": notification_outbox.KIND_WATCH_FOLLOWER, "resource_id": "w1", "recipient_id": follower_id,
+        item = {"kind": notification_outbox.KIND_WATCH_FOLLOWER, "channel": notification_outbox.CHANNEL_EMAIL,
+                "resource_id": "w1", "recipient_id": follower_id,
                 "payload": {"question": "Wird sich das ändern?", "share_id": share_id, "share_slug": "follow-me",
                             "delta": DELTA}}
         sent = AsyncMock(return_value=True)
@@ -332,5 +334,5 @@ def test_a_follower_reads_in_the_language_of_the_confirming_click():
             patch.object(notification_delivery.mailer, "is_configured", return_value=True),
             patch.object(notification_delivery.mailer, "send_message", sent),
         ):
-            asyncio.run(notification_delivery._deliver_watch_follower(item, db))
+            asyncio.run(notification_delivery.attempt(item, db=db, now=datetime(2026, 11, 6, tzinfo=timezone.utc)))
     assert sent.await_args.args[0]["Subject"] == "Der KI-Konsens hat sich geändert: Wird sich das ändern?"

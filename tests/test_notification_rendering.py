@@ -470,7 +470,8 @@ def test_the_plain_resend_never_cuts_the_question():
             return {"status": "failed", "http_status": 400} if len(calls) == 1 else {"status": "sent"}
 
         with patch.object(telegram_notifier, "call_bot_api", call_bot_api):
-            telegram_watch.send_watch_message("1", "w1", kind, {"question": question, "condition": "A date"}, result)
+            telegram_watch.send("1", telegram_watch.watch_message(
+                "w1", kind, {"question": question, "condition": "A date"}, result))
         plain = calls[1]["text"]
         assert "parse_mode" not in calls[1] and "<b>" not in plain, kind
         assert telegram_notifier.plain_length(plain) <= telegram_notifier.TEXT_LIMIT, kind

@@ -944,16 +944,22 @@ def test_telegram_gets_the_finding_where_the_account_linked_it(store, monkeypatc
     from app.services import notification_delivery as delivery, telegram_watch
     watch = start(store, *proposed_chat(store))
     sent = []
-    monkeypatch.setattr(telegram_watch, "send_agent_watch_message",
-                        lambda chat, payload, **kwargs: sent.append((chat, payload, kwargs)) or {"status": "sent"})
+    monkeypatch.setattr(telegram_watch, "send",
+                        lambda chat, message: sent.append((chat, message)) or {"status": "sent"})
     item = outbox.agent_watch_item(uid=UID, watch_id=watch["id"], run_id="t1", now=NOW, channel=outbox.CHANNEL_TELEGRAM,
                                    payload={"outcome": "finding", "summary": "Open.", "bookmark_id": BOOKMARK})["data"]
-    assert delivery._deliver_agent_watch_telegram_sync(item, store.db) == (outbox.SKIPPED, "telegram_not_linked")
+
+    def attempt():
+        return asyncio.run(delivery.attempt(item, db=store.db, now=NOW))
+
+    assert attempt() == (outbox.SKIPPED, "telegram_not_linked")
     store.db.collection(telegram_watch.CONNECTIONS_COLLECTION).document(UID).set({"enabled": True, "chat_id": 42})
-    assert delivery._deliver_agent_watch_telegram_sync(item, store.db) == (outbox.SENT, "")
-    assert sent[0][0] == 42 and sent[0][2]["chat_url"].endswith(f"/app?chat={BOOKMARK}")
+    assert attempt() == (outbox.SENT, "")
+    chat, message = sent[0]
+    buttons = [button["url"] for row in message.keyboard["inline_keyboard"] for button in row]
+    assert chat == 42 and buttons[-1].endswith(f"/app?chat={BOOKMARK}") and "Open." in message.text
     agent_watches.set_channels(UID, watch["id"], telegram=False, db=store.db)
-    assert delivery._deliver_agent_watch_telegram_sync(item, store.db) == (outbox.SKIPPED, "channel_disabled")
+    assert attempt() == (outbox.SKIPPED, "channel_disabled")
 
 
 def test_the_telegram_text_is_the_finding_in_the_readers_language():
