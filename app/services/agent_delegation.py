@@ -2540,12 +2540,26 @@ class DelegationLoop(AgentLoop):
         """The open card with a reviewer's halt that joined it: saved, sent
         again (the same id, a new ``revision`` redraws it) and in the log
         with the new reason. Nothing runs meanwhile: the open hold holds it.
-        Saved or not, its id is the one the root knows (or not) already."""
-        if self._save_hold(hold):
-            with self.condition:
+        Saved or not, its id is the one the root knows (or not) already.
+        A card the user's decision closed while it was saved stays closed:
+        the root gets back what is open now, and the page no card again
+        (until 2026-11-06 the save came after the card's end, and so did its
+        frame: a card nobody waited for, a click on it 409)."""
+        saved = self._save_hold(hold)
+        with self.condition:
+            current = self.hold
+            over = current is None or current["id"] != hold["id"]
+            if saved and not over:
                 # The root knows it now: decisions go through it again.
-                self.hold_unsaved = self.hold_unsaved and self.hold is not hold
-        self._send({"type": "hold", "hold": hold}, "hold")
+                self.hold_unsaved = self.hold_unsaved and current is not hold
+            if not over:
+                # Under the lock: the card's end (_one_hold) comes after it.
+                self._send({"type": "hold", "hold": hold}, "hold")
+        if over and saved:
+            try:
+                self.store.set_hold(self.uid, self.chat_id, self.turn_id, current, replaces=hold["id"])
+            except Exception as exc:
+                logging.info("Agent hold could not be cleared category=%s", safe_exception(exc))
         self._send(self.activity({"step_id": "hold", "id": f"hold-{hold['id']}", "kind": "hold",
                                   "reviewer": hold["reviewer"], "reasons": hold.get("reasons") or []}),
                    f"hold-{hold['id']}")

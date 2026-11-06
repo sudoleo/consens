@@ -2146,6 +2146,37 @@ def test_a_halt_as_the_user_decides_comes_right_after(store):
         None, second["id"], None]
 
 
+def test_a_halt_that_joins_a_card_as_it_closes_does_not_bring_the_card_back(store):
+    """Bug hunt 2026-11-06: a halt joined the open card, and while the
+    joined card was being saved the user's decision closed it. The save then
+    put it back on the run's root, after its end, and the stream sent it
+    again: a card nobody waits for (a click on it, 409)."""
+    loop = audit_loop(store, Audit())
+    root = store.receipt_ref(UID, loop.chat_id, loop.turn_id)
+    root.set({"run_status": "running"})
+    assert loop.request_hold(HALT) is True
+    hold_id = loop.hold["id"]
+    assert root.get().to_dict()["hold"]["id"] == hold_id
+    list(loop._events())
+    ended, set_hold = [], store.set_hold
+
+    def decided_meanwhile(uid, chat_id, turn_id, hold, **kwargs):
+        if hold is not None and hold.get("revision") and not ended:
+            # The decision reaches the run while the joined card is saved.
+            loop._receive_hold({"hold_decision": {"id": hold_id, "action": "continue"}})
+            ended.append(list(loop._hold_wait()))
+        return set_hold(uid, chat_id, turn_id, hold, **kwargs)
+    store.set_hold = decided_meanwhile
+    assert loop.request_hold({**HALT, "reviewer": "Claude Haiku 4.5", "provider": "anthropic", "entry": 2}) is True
+    later = list(loop._events())
+    assert ended and loop.hold is None
+    assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict().get("hold") is None
+    # The card's end stays the last word on it; the log keeps the halt.
+    assert not [frame for frame in later if frame.get("type") == "hold"]
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert any("also paused the work" in text for text in said)
+
+
 def test_a_halt_that_comes_as_the_decided_card_closes_holds_the_next_call(store):
     """Bug hunt 2026-11-06: the run closes a decided card after it let go of
     it (self.hold is None). A second reviewer's halt in that moment opened

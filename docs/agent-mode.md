@@ -675,6 +675,9 @@ Karte (`joined_halt`: jeder Grund mit seinem Prüfer in `reasons`, eine Karte
 ohne eigenen Grund übernimmt seinen, eine Domain-Karte zeigt dann `review:
 halt`; Frame `hold` mit derselben ID und neuer `revision`, die die Karte neu
 zeichnet, Protokoll `paused` „… also paused …“); vorher ging er verloren.
+Schließt die Entscheidung des Nutzers die Karte, während die angehängte noch
+gespeichert wird, bleibt sie zu: der Root bekommt zurück, was jetzt offen ist,
+und die Seite keine Karte mehr (`_show_joined`, seit 2026-11-06).
 Ist die Karte schon entschieden, aber noch nicht geschlossen, wartet er und
 öffnet danach als nächste Karte (`queued_hold`). `_hold_wait` kehrt erst
 zurück, wenn keine Karte mehr offen ist: auch eine, die so oder im Moment des
