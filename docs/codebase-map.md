@@ -3685,8 +3685,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Mikrosekunden oder als Firestore-Teile) und merkt die Zeit jeder Nachricht
   als `data-turn-at` an ihrem Frage-Element; für `#threadAsk` (agent-chat.js
   ruft es bei jeder Projektion) arbeitet es nur bei geänderter Signatur und
-  ruft dann `syncThread()`, das auch `renderStoredTurns` und `clearHistory`
-  am Ende aufrufen. `syncThread` setzt `.is-watch-repeat` an jeden Lauf,
+  ruft dann `syncThread()`, das auch `renderStoredTurns`, `clearHistory` und
+  `App.setThreadQuestion` (app-core.js; ein geöffneter Chat projiziert seinen
+  Lauf vor seiner Frage, seit 2026-11-06) am Ende aufrufen. `syncThread` setzt `.is-watch-repeat` an jeden Lauf,
   dessen Auftrag der Chat schon zeigt (Blase aus, nur die Zeile, zentriert),
   und in einem Chat, in dem eine Watch lief, vor die erste Nachricht jedes
   Tages `p.thread-day > time` („Today“, „Yesterday“, Wochentag, sonst Datum)

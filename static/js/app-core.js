@@ -212,6 +212,11 @@
     // direkt nach dem Senden ueber setThreadQuestionAttachments an.
     setThreadQuestionAttachments([]);
     renderThreadQuestion(wrap, text, question);
+    // A Watch's chat orders its days and repeated tasks by this question
+    // (thread-history.js syncThread). Opening a saved chat projects its run
+    // before its question comes (firebase.js loadSingleBookmarkUI), so they
+    // are ordered again here (bug hunt 2026-11-06).
+    window.App.followup?.syncThread?.();
   }
 
   // ---- Die gerade abgeschickte Nachricht -----------------------------------

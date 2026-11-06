@@ -127,6 +127,33 @@ describe("A Watch's runs in its chat", () => {
     expect(ask.querySelector(".thread-day")).toBeNull();
   });
 
+  // Opening a saved Watch chat (firebase.js loadSingleBookmarkUI) projects
+  // its run first (showSavedView -> agent-chat.js markWatchRun) and sets the
+  // chat's question after; until 2026-11-06 the days were ordered with the
+  // question of the chat shown before, or none (bug hunt): the newest run
+  // stood under Yesterday, or its task as a bubble again.
+  it("orders the days again once the opened chat's question is set", () => {
+    const { window, document } = loadScripts(["static/js/app-core.js", "static/js/thread-history.js"], {
+      body: '<div id="threadHistory" hidden></div>'
+        + '<div id="threadAsk" class="thread-ask" hidden><h2 class="visually-hidden">Your message</h2>'
+        + '<div class="thread-ask-bubble"><div class="thread-ask-text" id="threadAskText"></div></div></div>',
+    });
+    const ask = document.getElementById("threadAsk");
+    // From a new chat: the live message is still hidden.
+    window.App.followup.renderStoredTurns([quiet("a", at(1, 10))]);
+    window.App.followup.markWatchRun(ask, quiet("b", at(0, 8)));
+    window.App.setThreadQuestion(TASK);
+    expect(ask.querySelector(".thread-day")?.textContent).toBe("Today");
+    expect(ask.classList.contains("is-watch-repeat")).toBe(true);
+    // From another chat: its question was still on the live message.
+    window.App.setThreadQuestion("Plan my week.");
+    window.App.followup.renderStoredTurns([quiet("c", at(1, 10))]);
+    window.App.followup.markWatchRun(ask, quiet("d", at(0, 9)));
+    window.App.setThreadQuestion(TASK);
+    expect(ask.classList.contains("is-watch-repeat")).toBe(true);
+    expect(days(document)).toEqual(["Yesterday", "Today"]);
+  });
+
   it("reads the server's times with microseconds and Firestore's parts", () => {
     const { window, document } = boot();
     const ask = document.getElementById("threadAsk");
