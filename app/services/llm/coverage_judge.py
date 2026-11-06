@@ -320,7 +320,10 @@ def parse_coverage_payload(raw, labels, allowed_ids) -> dict | None:
 
         quotes: dict[str, str] = {}
         targets: dict[str, str] = {}
-        for item in entry.get("counter_quotes") or []:
+        # Anything but a list (a judge that ignores the schema: 1, true) has
+        # no quotes; iterating it raised and lost the whole round.
+        raw_quotes = entry.get("counter_quotes")
+        for item in raw_quotes if isinstance(raw_quotes, list) else []:
             if not isinstance(item, dict):
                 continue
             label = str(item.get("model") or "").strip()

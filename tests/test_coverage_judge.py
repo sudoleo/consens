@@ -191,6 +191,18 @@ class CoverageParsingTests(unittest.TestCase):
         }]}))
         self.assertEqual(parsed["s1"]["models"]["Model A"], "contradicts")
 
+    def test_counter_quotes_that_are_no_list_are_passed_over(self):
+        """Bug hunt 2026-11-06: ``"counter_quotes": 1`` (a judge on an endpoint
+        that ignores the schema) raised TypeError and ended the whole coverage
+        round, its retry and the fallback judge included: no marks at all."""
+        parsed = self.parse(json.dumps({"sentences": [
+            {"id": "s1", "classification": "claim", "models": {"Model A": "supports"}, "counter_quotes": 1},
+            {"id": "s2", "classification": "claim", "models": {"Model B": "supports"}, "counter_quotes": True},
+        ]}))
+        self.assertEqual(list(parsed), ["s1", "s2"])
+        self.assertEqual(parsed["s1"]["quotes"], {})
+        self.assertEqual(parsed["s2"]["models"]["Model B"], "supports")
+
     def test_structurally_broken_output_is_none(self):
         self.assertIsNone(self.parse("not json at all"))
         self.assertIsNone(self.parse(json.dumps({"sentences": "s1"})))
