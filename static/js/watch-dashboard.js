@@ -126,10 +126,20 @@
       && (watch.looking === true || Date.parse(watch.next_run_at || '') <= Date.now() + 60000);
   }
 
-  // A chat the page opened for its Watch (no turn_id) is in the sidebar only
-  // once its first run has ended; a chat's own Watch has its chat already.
+  // A chat the page opened for its Watch (agent_watches.create names its
+  // sidebar entry "agent_watch_…") is in the sidebar once a run of it
+  // answered, a failed one too (routers/agent.py _save_interrupted); a run
+  // that did not start (a busy chat's retry, a refusal) wrote none. A Watch
+  // started in a chat (the agent's proposal, the pill's sheet) has its chat
+  // already. Until 2026-11-06 "no turn_id" stood for the page's own chat,
+  // and the sheet's Watch, which has none either, opened no chat during its
+  // first look (bug hunt 2026-11-05).
+  const ANSWERED = ['finding', 'needs_you', 'done', 'quiet', 'failed'];
   function chatPending(watch) {
-    return !watch.bookmark_id || (!watch.turn_id && firstRunPending(watch));
+    if (!watch.bookmark_id) return true;
+    if (!String(watch.bookmark_id).startsWith('agent_watch_')) return false;
+    const runs = [...(Array.isArray(watch.looks) ? watch.looks : []), watch.last_run];
+    return !runs.some(run => ANSWERED.includes(run?.outcome));
   }
 
   function looking(watch) {
@@ -1251,7 +1261,9 @@
       draw();
     }
     if (chatPending(watch)) {
-      App.toast?.({ message: App.t('Its first look is under way. Its chat appears in a moment.') });
+      App.toast?.({ message: App.t(firstRunPending(watch) ? 'Its first look is under way. Its chat appears in a moment.'
+        : watch.status === 'done' ? 'It ended before its first look, so it has no chat.'
+          : 'Its chat appears once it has looked for the first time.') });
       return;
     }
     closeDetail();

@@ -3249,7 +3249,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   „Done when“ und „How often“ zum Ändern (`PATCH`, der Picker aus
   `watch-composer.js`; die Zeitzone ist die der Watch, die des Browsers nur
   für eine ohne), Email/Telegram als Schalter, Open chat (bleibt beim
-  Scrollen stehen), Pause/Resume, End Watch (`App.confirm`). Ist ihre Zeile
+  Scrollen stehen; der Chat einer Watch, die die Seite mit eigenem Chat
+  anlegte, Seitenleisten-Eintrag `agent_watch_…`, öffnet erst nach ihrem
+  ersten beantworteten Lauf, davor ein Hinweis, seit 2026-11-06),
+  Pause/Resume, End Watch (`App.confirm`). Ist ihre Zeile
   beim Schließen weg (beendet in die zugeklappte „Ended“-Lade, mit dem Chat
   gelöscht), geht der Fokus auf „Ended“, die erste Watch oder das Feld, nie
   auf die Seite. Eine Watch von vor den `looks` mit mehr als einem Lauf

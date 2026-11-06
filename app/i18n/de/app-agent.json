@@ -1324,6 +1324,8 @@
   "All your Watches are paused.": "Alle deine Watches sind pausiert.",
   "{count} of {limit} running": "{count} von {limit} laufen",
   "Its first look is under way. Its chat appears in a moment.": "Sie sieht gerade zum ersten Mal nach. Ihr Chat erscheint gleich.",
+  "Its chat appears once it has looked for the first time.": "Ihr Chat erscheint, sobald sie zum ersten Mal nachgesehen hat.",
+  "It ended before its first look, so it has no chat.": "Sie endete vor ihrem ersten Blick und hat deshalb keinen Chat.",
   "It stops looking. Its chat and what it found stay.": "Sie sieht nicht mehr nach. Ihr Chat und was sie gefunden hat, bleiben.",
   "The Agent looks again in this chat and tells you only when something changes.": "Der Agent sieht in diesem Chat regelmäßig nach und meldet sich nur, wenn sich etwas ändert.",
   "The Agent looks for you on a schedule and tells you only when something changes.": "Der Agent sieht regelmäßig für dich nach und meldet sich nur, wenn sich etwas ändert.",

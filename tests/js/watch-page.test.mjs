@@ -257,8 +257,11 @@ describe("The page: what wants the reader first, then what runs", () => {
     expect(document.getElementById("watchDashStatus").textContent).toBe("Looking now");
   });
 
+  // A Watch the page started has a chat of its own, whose sidebar entry
+  // (agent_watches.create: "agent_watch_…") its first run's answer writes.
   it("says a first look is under way and opens no chat that is not there yet", async () => {
-    const { window, document } = boot({ watches: [watch({ last_run: null, runs: 0, next_run_at: new Date().toISOString() })] });
+    const { window, document } = boot({ watches: [watch({ bookmark_id: "agent_watch_b1", last_run: null, runs: 0,
+      next_run_at: new Date().toISOString() })] });
     await window.App.watchDashboard.render();
     expect(document.querySelector(".aw-line").textContent).toBe("Its first look is under way.");
     document.querySelector(".aw-open").click();
@@ -273,7 +276,8 @@ describe("The page: what wants the reader first, then what runs", () => {
     try {
       // claim() sets next_run_at to tomorrow at the start; last_run comes at the end.
       const tomorrow = new Date(Date.now() + 86400000).toISOString();
-      const { window, document, server } = boot({ watches: [watch({ last_run: null, runs: 1, looking: true, next_run_at: tomorrow })] });
+      const { window, document, server } = boot({ watches: [watch({ bookmark_id: "agent_watch_b1", last_run: null, runs: 1,
+        looking: true, next_run_at: tomorrow })] });
       await window.App.watchDashboard.render();
       document.getElementById("watchDashboard").hidden = false;
       expect(document.querySelector(".aw-line").textContent).toBe("Its first look is under way.");
@@ -307,6 +311,47 @@ describe("The page: what wants the reader first, then what runs", () => {
     document.querySelector(".aw-open").click();
     [...detail(document).querySelectorAll(".wd-detail-actions button")].find(button => button.textContent === "Open chat").click();
     expect(window.openBookmark).toHaveBeenCalledWith("agent_b1");
+  });
+
+  // Bug hunt 2026-11-05: the page read "no turn_id" as "its own chat", but
+  // a Watch from the pill's sheet has no turn_id either and its chat all
+  // along; a page-made one whose first run did not start (a busy chat's
+  // retry, a refusal) opened a sidebar entry that was not there yet.
+  it("opens the chat of a Watch from the pill's sheet during its first look", async () => {
+    const tomorrow = new Date(Date.now() + 86400000).toISOString();
+    const { window, document } = boot({ watches: [watch({ last_run: null, runs: 1, looking: true, next_run_at: tomorrow })] });
+    await window.App.watchDashboard.render();
+    document.querySelector(".aw-open").click();
+    [...detail(document).querySelectorAll(".wd-detail-actions button")].find(button => button.textContent === "Open chat").click();
+    expect(window.openBookmark).toHaveBeenCalledWith("agent_b1");
+  });
+
+  it("opens no chat of a page-made Watch before a run of it answered", async () => {
+    const soon = new Date(Date.now() + 600000).toISOString();
+    const { window, document } = boot({ watches: [
+      // The chat was busy: its first run comes again in ten minutes.
+      watch({ id: "busy", bookmark_id: "agent_watch_busy", last_run: null, runs: 0, next_run_at: soon }),
+      // Its first run did not start.
+      watch({ id: "refused", bookmark_id: "agent_watch_refused", runs: 1, next_run_at: LATER,
+        last_run: { at: EARLIER, outcome: "not_started", summary: "" }, looks: [{ at: EARLIER, outcome: "not_started", summary: "" }] }),
+      // Its first run answered, even if it failed: the entry is there.
+      watch({ id: "ran", bookmark_id: "agent_watch_ran", runs: 2, last_run: { at: EARLIER, outcome: "not_started", summary: "" },
+        looks: [...looks("x"), { at: EARLIER, outcome: "not_started", summary: "" }] }),
+    ] });
+    await window.App.watchDashboard.render();
+    const openChat = id => {
+      document.querySelector(`.aw-row[data-watch-id="${id}"] .aw-open`).click();
+      [...detail(document).querySelectorAll(".wd-detail-actions button")].find(button => button.textContent === "Open chat").click();
+    };
+    openChat("busy");
+    expect(window.openBookmark).not.toHaveBeenCalled();
+    expect(document.querySelector("#appToasts .toast.is-shown").textContent).toBe("Its chat appears once it has looked for the first time.");
+    window.App.modalDialog.close(detail(document));
+    openChat("refused");
+    expect(window.openBookmark).not.toHaveBeenCalled();
+    window.App.modalDialog.close(detail(document));
+    openChat("ran");
+    expect(window.openBookmark).toHaveBeenCalledWith("agent_watch_ran");
   });
 
   it("looks again until a new Watch's first look is there", async () => {
