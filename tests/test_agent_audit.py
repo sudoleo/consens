@@ -1308,11 +1308,13 @@ def test_the_agents_prompt_has_its_writing_reading_and_memory_facts(store, monke
     # Since 2026-10-28 the blocks name no comparison at all (no limit, no
     # memory field, no free-mode text): compare_models' description says what
     # it does. Since 2026-11-02 no memory change waits for the reviewers, and
-    # the block says what is worth keeping.
+    # the block says what is worth keeping; since 2026-11-06 what memory is
+    # for and when to save, with no rule on what not to keep.
     assert "comparison" not in system.lower() and "compare_models" not in system
     assert agent_memory.AUDIT_MEMORY_WRITE_PROMPT in system and "FREE" not in system
     flat = " ".join(system.split())
-    assert "Worth keeping is what the user tells you about themselves" in flat and "call it first" not in system
+    assert "the way a good personal assistant would" in flat and "call it first" not in system
+    assert "same step as your answer" in flat and "merely ask" not in flat
     assert "reviewers let it" not in flat
     # One mode since 2026-10-31: no mode named, no answer check to switch off.
     assert "agent mode with audit" not in system and "answer check" not in system

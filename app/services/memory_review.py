@@ -262,7 +262,9 @@ def changes(raw, items) -> list[dict]:
         try:
             normalized = normalize_change(shaped, origin="agent")
         except AgentMemoryError as exc:
-            logging.info("memory review change dropped code=%s", exc.code)
+            # The refusal's fixed code only, never its message.
+            code = exc.code
+            logging.info("memory review change dropped code=%s", code)
             continue
         if normalized["op"] != "add":
             if normalized["id"] not in known or normalized["id"] in touched:
