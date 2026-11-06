@@ -249,7 +249,8 @@ def probe(name, factory=None, on_unresponsive=None):
                 if reach is not None:
                     reach(name)
             except VMUnavailable as exc:
-                logging.info("Agent VM probe failed reason=%s", str(exc)[:80])
+                # The operation and its status are in _request's own line.
+                logging.info("Agent VM probe failed category=%s", safe_exception(exc))
                 if unresponsive(exc) and on_unresponsive is not None:
                     try:
                         on_unresponsive()

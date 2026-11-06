@@ -1166,7 +1166,9 @@ def heal(db, uid, *, factory=None, sleep=time.sleep, clock=time.monotonic):
                 return False
             sleep(HEAL_POLL_SECONDS)
         current = record(db, uid)
-        latest = current.get("checkpoint") if isinstance(current.get("checkpoint"), dict) else {}
+        latest = current.get("checkpoint") if isinstance(current.get("checkpoint"), dict) else None
+        if latest is None:
+            latest = _newest_turn_checkpoint(db, uid, current.get("name")) or {}
         point = {"checkpoint": latest.get("id"), "checkpoint_at": latest.get("at"), "name": current.get("name")}
         if not restorable(current, point):
             logging.warning("Agent workspace stuck without a checkpoint it may go back to")
@@ -1178,6 +1180,38 @@ def heal(db, uid, *, factory=None, sleep=time.sleep, clock=time.monotonic):
         return False
     logging.warning("Agent workspace was stuck and went back to its newest checkpoint")
     return True
+
+
+HEAL_CHATS = 20
+HEAL_TURNS = 5
+
+
+def _newest_turn_checkpoint(db, uid, name):
+    """The newest checkpoint a message took in the workspace ``name``, for a
+    record from before record_checkpoint (2026-11-06; a stuck workspace
+    takes none): from the chats that used it, newest first, the first whose
+    newest HEAL_TURNS turns name one, at most HEAL_CHATS chats (the newest
+    are those that met the stuck VM and took none: prod 2026-11-06, three
+    of them), only their ``agent_vm``. None without one."""
+    from google.cloud import firestore
+    from google.cloud.firestore_v1.base_query import FieldFilter
+    if not name:
+        return None
+    chats = db.collection("users").document(uid).collection("chats")
+    used = []
+    # Only the chats that used it (a field's own index): reads, not the whole chat list.
+    for snapshot in chats.where(filter=FieldFilter("agent_vm.name", "==", name)).select(["agent_vm"]).stream():
+        vm = (snapshot.to_dict() or {}).get("agent_vm")
+        if isinstance(vm, dict) and vm.get("name") == name and isinstance(vm.get("used_at"), datetime):
+            used.append((vm["used_at"], snapshot.id))
+    for _, chat_id in sorted(used, reverse=True)[:HEAL_CHATS]:
+        turns = (chats.document(chat_id).collection("turns").order_by("position", direction=firestore.Query.DESCENDING)
+                 .limit(HEAL_TURNS).select(["agent_vm"]))
+        for snapshot in turns.stream():
+            vm = (snapshot.to_dict() or {}).get("agent_vm")
+            if isinstance(vm, dict) and vm.get("checkpoint") and vm.get("name") == name:
+                return {"id": str(vm["checkpoint"]), "at": str(vm.get("checkpoint_at") or "")}
+    return None
 
 
 def raise_restore_floor(store, uid):

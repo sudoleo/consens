@@ -735,6 +735,16 @@ def test_a_stuck_workspace_goes_back_to_its_newest_checkpoint_and_the_next_messa
     assert agent_workspace.heal(store.db, UID, factory=fake_vm.backend) is True
     assert [call for call in fake_vm.calls if call[0] == "restore"] == [("restore", NAME, turn_vm["checkpoint"])]
     assert agent_vm.unresponsive_status(NAME) is None
+    # A record from before 2026-11-06 names none: the newest message's own
+    # goes, past newer chats whose messages met the stuck VM and took none.
+    from google.cloud import firestore
+    agent_workspace.ref(store.db, UID).update({"checkpoint": firestore.DELETE_FIELD})
+    failed, _ = pending(store, request_id="met-the-stuck-vm")
+    agent_workspace.claim(store, UID, failed, "failed", provider="fake")
+    agent_workspace.release(store, UID, "failed")
+    assert "checkpoint" not in agent_workspace.record(store.db, UID)
+    assert agent_workspace.heal(store.db, UID, factory=fake_vm.backend) is True
+    assert [call for call in fake_vm.calls if call[0] == "restore"][-1] == ("restore", NAME, turn_vm["checkpoint"])
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=loop.chat_id, request_id="two")
     list(loop.run())
     assert results(loop)[0]["workspace_note"] == agent_workspace.HEALED_NOTE
