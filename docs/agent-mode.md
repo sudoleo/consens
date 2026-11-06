@@ -676,7 +676,11 @@ ohne eigenen Grund übernimmt seinen, eine Domain-Karte zeigt dann `review:
 halt`; Frame `hold` mit derselben ID und neuer `revision`, die die Karte neu
 zeichnet, Protokoll `paused` „… also paused …“); vorher ging er verloren.
 Ist die Karte schon entschieden, aber noch nicht geschlossen, wartet er und
-öffnet danach als nächste Karte (`queued_hold`).
+öffnet danach als nächste Karte (`queued_hold`). `_hold_wait` kehrt erst
+zurück, wenn keine Karte mehr offen ist: auch eine, die so oder im Moment des
+Schließens aufging, wird abgewartet, eine Nachricht darauf macht das Ergebnis
+zu „steer“ (seit 2026-11-06; vorher lief der erste Aufruf der Runde an ihr
+vorbei).
 Gezählt wird ein Halt in `AnswerAudit.halts` erst, wenn der Lauf ihn
 angezeigt, angehängt oder hinter die Karte des Nutzers gestellt hat. Der
 Lauf hält vor seinem nächsten Schritt oder Aufruf (`_hold_wait`, auch

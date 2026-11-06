@@ -2765,8 +2765,9 @@ class DelegationLoop(AgentLoop):
     def _user_hold(self, details, poll=None):
         """Opens the user's own card (agent_ask.hold) once no reviewer's halt
         is open and waits for its answer, then for a reviewer's halt that came
-        meanwhile (request_hold queues it): the agent's next call never runs
-        past it. A message to the agent on either card is "steer"."""
+        meanwhile (request_hold queues it; _hold_wait waits for it too): the
+        agent's next call never runs past it. A message to the agent on
+        either card is "steer"."""
         while True:
             # A reviewer's halt may be open: it comes first.
             decision = yield from self._hold_wait()
@@ -2775,10 +2776,7 @@ class DelegationLoop(AgentLoop):
                 return "steer"
             if self.request_hold(details):
                 break
-        decision = yield from self._hold_wait(poll)
-        if decision != "steer" and self.hold is not None and (yield from self._hold_wait()) == "steer":
-            return "steer"
-        return decision
+        return (yield from self._hold_wait(poll))
 
     def _handed_back(self, *, had):
         """``_hold_wait``'s poll for a browser card: "handed_back" once the
@@ -2834,7 +2832,19 @@ class DelegationLoop(AgentLoop):
         works. Returns the decision ("continue", "steer") or None without a
         hold; "stop" and the timeout end the response like the Stop button.
         On the user's own card (``ask``, _user_hold) ``poll()`` may answer
-        too ("handed_back"), and the timeout lets the agent finish instead."""
+        too ("handed_back"), and the timeout lets the agent finish instead.
+        Returns only once no card is open: a reviewer's halt that opened as
+        the decided card closed (queued behind it, or in that very moment)
+        is waited for too, and a message on it makes the result "steer".
+        Until 2026-11-06 the step's next call ran while that card stood."""
+        decision = yield from self._one_hold(poll)
+        while decision is not None and self.hold is not None:
+            if (yield from self._one_hold()) == "steer":
+                decision = "steer"
+        return decision
+
+    def _one_hold(self, poll=None):
+        """_hold_wait for the card open now, or None without one."""
         if self.hold is None:
             return None
         while True:

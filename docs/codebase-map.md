@@ -6390,7 +6390,9 @@ Befehl als Nutzer-Stop, `step_halt` den streamenden Agentenschritt
 (`_halt_scope`; nach der Entscheidung neu, `_past_halts`), `store.set_hold` schreibt `hold` an den Lauf-Root,
 SSE-Frame `hold` (sticky; bei voller Queue in `live_progress`, `_send`) und Aktivität `kind: "hold"`. `_hold_wait` hält vor
 jedem Schritt, zwischen den Aufrufen einer Runde und vor dem Fixieren der
-Antwort, auch im Schlussschritt nach einem Limit (`_merged_wrap_up`); `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
+Antwort, auch im Schlussschritt nach einem Limit (`_merged_wrap_up`), und kehrt erst ohne offene Karte zurück
+(`_one_hold` je Karte; ein Halt, der beim Schließen der entschiedenen Karte aufging, wird mit abgewartet, seit
+2026-11-06); `_turn_elapsed` zieht `paused_seconds` ab. Der Wächter liest
 `hold_decision` (`_receive_hold`, nach `_receive_notes`); läuft der Lauf im
 selben Prozess, geben `POST …/hold` und `…/notes` das Gespeicherte sofort an
 ihn (`agent_background.run_loop` → `DelegationLoop.receive`, seit

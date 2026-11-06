@@ -2107,7 +2107,8 @@ def test_from_the_fixed_answer_on_no_reviewer_halts_the_work(store):
 def test_a_halt_as_the_user_decides_comes_right_after(store):
     """A-S2: the card was decided, the run had not closed it yet; the halt
     that came in that moment would have joined a card nobody reads again.
-    It waits and opens as the next card, before the next step."""
+    It waits and opens as the next card, before the next step; since
+    2026-11-06 the wait goes on until that card is decided too."""
     loop = audit_loop(store, Audit())
     assert loop.request_hold(HALT) is True
     first = loop.hold["id"]
@@ -2115,10 +2116,79 @@ def test_a_halt_as_the_user_decides_comes_right_after(store):
     assert loop.request_hold({**HALT, "reviewer": "Claude Haiku 4.5", "provider": "anthropic", "entry": 2}) is True
     assert loop.hold["id"] == first and "reasons" not in loop.hold
     list(loop._events())
-    frames = [*loop._hold_wait(), *loop._events()]
-    assert loop.hold["id"] != first and loop.hold["provider"] == "anthropic" and loop.hold["entry"] == 2
+    seen = []
+
+    def decide_the_next():
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            hold = loop.hold
+            if hold is not None and hold["id"] != first:
+                seen.append(dict(hold))
+                loop._receive_hold({"hold_decision": {"id": hold["id"], "action": "steer"}})
+                return
+            time.sleep(.01)
+    thread = threading.Thread(target=decide_the_next, daemon=True)
+    thread.start()
+    gen = loop._hold_wait()
+    frames = []
+    try:
+        while True:
+            frames.append(next(gen))
+    except StopIteration as stop:
+        decision = stop.value
+    frames += list(loop._events())
+    thread.join(5)
+    [second] = seen
+    assert second["id"] != first and second["provider"] == "anthropic" and second["entry"] == 2
+    # A message on the card that followed is the wait's answer.
+    assert decision == "steer" and loop.hold is None
     assert [frame["hold"]["id"] if frame["hold"] else None for frame in frames if frame.get("type") == "hold"] == [
-        None, loop.hold["id"]]
+        None, second["id"], None]
+
+
+def test_a_halt_that_comes_as_the_decided_card_closes_holds_the_next_call(store):
+    """Bug hunt 2026-11-06: the run closes a decided card after it let go of
+    it (self.hold is None). A second reviewer's halt in that moment opened
+    the next card, yet the wait returned "continue" for the first, and the
+    step's first call ran while that card stood."""
+    second = {**HALT, "reviewer": "Claude Haiku 4.5", "provider": "anthropic", "entry": 2}
+    during = []
+    script = Audit(tool_steps=1, on_lookup=lambda count: during.append(script.loop.hold is not None))
+    loop = audit_loop(store, script)
+    prefetch, end = loop._prefetch, loop._end_hold
+
+    def halt_before_the_calls(value, over_limit):
+        if not loop.holds and loop.hold is None:
+            assert loop.request_hold(HALT) is True
+        return prefetch(value, over_limit)
+
+    def halt_as_it_closes(hold, decision, seconds, picked=None):
+        if hold["provider"] == "openai":
+            assert loop.request_hold(second) is True
+        return end(hold, decision, seconds, picked)
+    loop._prefetch, loop._end_hold = halt_before_the_calls, halt_as_it_closes
+    decided = []
+
+    def decide():
+        first = open_hold(loop)
+        loop._receive_hold({"hold_decision": {"id": first["id"], "action": "continue"}})
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline:
+            hold = loop.hold
+            if hold is not None and hold["id"] != first["id"]:
+                decided.append(hold["provider"])
+                loop._receive_hold({"hold_decision": {"id": hold["id"], "action": "continue"}})
+                return
+            time.sleep(.01)
+    thread = threading.Thread(target=decide, daemon=True)
+    thread.start()
+    events = list(loop.run())
+    thread.join(5)
+    assert decided == ["anthropic"]
+    # The call ran once both cards were decided, never while one stood.
+    assert during == [False]
+    assert [e["decision"] for e in events if e.get("type") == "hold" and not e.get("hold")] == ["continue", "continue"]
+    assert saved(store, loop)["status"] == "completed"
 
 
 def test_deny_is_taken_only_where_it_answers_the_pause(api):
