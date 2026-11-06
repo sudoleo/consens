@@ -50,7 +50,7 @@ def add_items(db, *texts):
 
 def chat(db, chat_id, *, updated=NOW - timedelta(hours=5), **fields):
     db.collection("users").document(UID).collection("chats").document(chat_id).set(
-        {"status": "active", "title": f"Chat {chat_id}", "updated_at": updated, **fields})
+        {"status": "active", "execution_mode": "agent", "title": f"Chat {chat_id}", "updated_at": updated, **fields})
 
 
 def turn(db, chat_id, turn_id, question, *, at, answer="Here you go.", status="completed", **settings):
@@ -119,6 +119,8 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
     turn(db, "temp", "x1", "Something private", at=NOW - timedelta(hours=8))
     chat(db, "gone", status="deleting")
     turn(db, "gone", "d1", "Deleted chat question", at=NOW - timedelta(hours=8))
+    chat(db, "compare", execution_mode="consensus")
+    turn(db, "compare", "k1", "A Compare question", at=NOW - timedelta(hours=8))
 
     service, prompts = review(db, [{"changes": [
         {"op": "add", "id": "", "text": "Will neben der Arbeit in KI/Wirtschaft promovieren; kommt aus Hannover."},
@@ -134,7 +136,8 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
     assert ("User: ja gerne\n(The user quoted the assistant's earlier answer: “Soll ich dir Lehrstühle"
             in prompt)
     assert "Assistant (end of the answer): Gute Idee." in prompt
-    for left_out in ("still running", "Watch task", "last month", "inbox", "Something private", "Deleted chat"):
+    for left_out in ("still running", "Watch task", "last month", "inbox", "Something private", "Deleted chat",
+                     "Compare question"):
         assert left_out not in prompt
     assert "m000001" in prompt and "Builds consens.io" in prompt and f"Today is {NOW.date().isoformat()}." in prompt
 
@@ -222,6 +225,18 @@ def test_a_failed_model_call_saves_nothing_and_frees_the_account(db):
     assert [item["text"] for item in FirestoreAgentMemoryRepository(db).get(UID)[0]] == ["Prefers short answers."]
 
 
+def test_a_reply_cut_off_mid_json_is_a_failure_not_a_quiet_day(db):
+    set_profile(db, auto_memory=True)
+    memory_review.mark_due(db, UID, now=NOW - memory_review.IDLE)
+    chat(db, "c1")
+    turn(db, "c1", "t1", "I live in Hannover.", at=NOW - timedelta(hours=5))
+    service, _ = review(db, [])
+    service.query_fn = lambda *args, **kwargs: '{"changes": [{"op": "add", "id": "", "text": "Lives in Hann'
+    service.run()
+    result = db.collection(memory_review.COLLECTION).document(UID).get().to_dict()["last_result"]
+    assert result == {"status": "unreadable", "added": 0, "updated": 0, "deleted": 0, "messages": 1}
+
+
 def test_never_further_back_than_the_lookback_and_the_newest_messages_first(db, monkeypatch):
     set_profile(db, auto_memory=True)
     chat(db, "c1")
@@ -293,4 +308,9 @@ def test_settings_name_the_latest_review_and_undo_it(items_api, db):
 def test_the_agent_is_told_what_memory_is_for_not_what_to_leave_out():
     prompt = agent_memory.AUDIT_MEMORY_WRITE_PROMPT
     assert "personal" in prompt and "working on" in prompt and "same step as your answer" in prompt
-    assert "merely ask" not in prompt
+    assert "merely ask" not in prompt and "need not mention it" in prompt
+    # Apply silently, name rarely (Max 2026-10-04); lost with comparison mode
+    # on 2026-10-31, back with the review that fills the memory.
+    use = " ".join(agent_memory.AUDIT_MEMORY_USE_PROMPT.split())
+    assert "apply it without saying why" in use and "never build a bridge" in use
+    assert "one short clause" in use and "the question and the evidence decide" in use

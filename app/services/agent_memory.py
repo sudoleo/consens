@@ -787,7 +787,17 @@ def render_memory_block(snapshot: MemorySnapshot, *, with_ids: bool = True) -> s
 # cheaper models (most runs: DeepSeek Flash, Luna, MiMo) need the moment
 # named, so the paragraph says when. The daily review (memory_review.py)
 # catches what a run lets pass.
-AUDIT_MEMORY_USE_PROMPT = """Where a memory conflicts with the question or the evidence, the question and the
+# Use: apply silently, name rarely (Max 2026-10-04: "nothing bothers me more
+# than an agent that ALWAYS references some random memory"). That principle
+# stood in comparison mode's MEMORY_RELEVANCE_RULES (6d4c6a65) and went with
+# it on 2026-10-31 (474a953e); with an empty memory nobody noticed. Back since
+# 2026-11-06, as one principle, now that the review fills the memory.
+AUDIT_MEMORY_USE_PROMPT = """Use what you know about the user the way a good assistant does: where it changes
+what a good answer for them is, apply it without saying why; otherwise leave it
+out, and never build a bridge to it. Name a memory only when they ask what you
+know, when it explains a choice they could not follow otherwise, or when it
+conflicts with the request or may be out of date, and then in one short clause.
+Where a memory conflicts with the question or the evidence, the question and the
 evidence decide."""
 
 AUDIT_MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user lets you keep their memory across chats with
@@ -798,7 +808,8 @@ for them. Keep what a later chat should know and could not read from its
 question, also when it shows only in a correction, in a yes to your offer for
 next time or across this chat, and update or delete a memory that turns out
 outdated or wrong. When this message gave you such a thing, save it in the
-same step as your answer. The user sees every change and can undo it. Health,
+same step as your answer. The user sees every change while you work and in
+Settings and can undo it, so the answer itself need not mention it. Health,
 religion, political views and other sensitive details only when the user asks
 you to remember them."""
 

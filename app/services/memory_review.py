@@ -70,7 +70,10 @@ ANSWER_TAIL_CHARS = 600
 # messages give way.
 CHATS_CHARS = 60_000
 MAX_CHANGES = MAX_CHANGES_PER_TURN
-MAX_TOKENS = 2_500
+# Output and reasoning together (the judge's "low" effort counts here for
+# OpenAI models): twelve changes are about 1,500 tokens, the rest is room so
+# a long day is not cut off mid-JSON.
+MAX_TOKENS = 8_000
 
 SYSTEM = ("You keep the memory a personal AI assistant has of one user. "
           "You return only the JSON object you are asked for.")
@@ -167,7 +170,10 @@ def collect_chats(store, uid: str, since: datetime) -> list[dict]:
     found = []
     for chat in query.stream():
         data = chat.to_dict() or {}
-        if data.get("status") != "active" or data.get("google_data") or data.get("temporary"):
+        # Agent chats only: the opt-in is the agent's ("Let Agent update
+        # memory"), and the privacy policy names those.
+        if (data.get("status") != "active" or data.get("execution_mode") != "agent" or data.get("google_data")
+                or data.get("temporary")):
             continue
         turns = []
         turns_query = (chat.reference.collection("turns")
@@ -399,15 +405,22 @@ class MemoryReview:
         if not chats:
             return {"status": "no_chats"}
         text = prompt(snapshot, chats, today=now.date())
-        found = changes(self._query(text), snapshot.items)
+        messages = sum(len(chat["turns"]) for chat in chats)
+        raw = self._query(text)
+        try:
+            json.loads(raw)
+        except (TypeError, ValueError):
+            # Cut off or not JSON: a failure to see in last_result, not a
+            # day with nothing to keep.
+            return {"status": "unreadable", "messages": messages}
+        found = changes(raw, snapshot.items)
         if not found:
-            return {"status": "unchanged", "messages": sum(len(chat["turns"]) for chat in chats)}
+            return {"status": "unchanged", "messages": messages}
         applied = self.repository.apply(uid, found, origin="agent", source=SOURCE, now=now)
         counts = {op: sum(1 for entry in applied.get("changes", []) if entry["op"] == op)
                   for op in ("add", "update", "delete")}
         return {"status": applied.get("status", "unchanged"), "added": counts["add"],
-                "updated": counts["update"], "deleted": counts["delete"],
-                "messages": sum(len(chat["turns"]) for chat in chats)}
+                "updated": counts["update"], "deleted": counts["delete"], "messages": messages}
 
     def _query(self, text: str) -> str:
         from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys

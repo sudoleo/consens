@@ -2272,7 +2272,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   121 Nachrichten seit 2026-10-20 auf Max' Konto, kein einziger
   `update_memory`-Aufruf seit der Entsperrung, obwohl Werkzeug und Prompt da
   waren. Geblieben: Opt-in, Secret-Filter, Längen-/Anzahlgrenzen, temporäre
-  Chats und der Art.-9-Satz.
+  Chats und der Art.-9-Satz. Der Satz dazu: die Antwort muss eine Änderung
+  nicht erwähnen (der Nutzer sieht sie mit Undo). **Anwenden:**
+  `AUDIT_MEMORY_USE_PROMPT` trägt seit 2026-11-06 wieder den Grundsatz „still
+  anwenden, selten nennen“ (wo es die gute Antwort für ihn ändert, ohne
+  Begründung; sonst weglassen, keine Brücke; nennen nur auf Nachfrage, wenn
+  es eine sonst unverständliche Wahl erklärt oder widerspricht/veraltet sein
+  kann, dann ein kurzer Halbsatz). Er stand in `MEMORY_RELEVANCE_RULES` des
+  Vergleichsmodus (6d4c6a65) und fiel mit ihm am 2026-10-31 (474a953e) weg;
+  bei leerem Gedächtnis fiel das nicht auf.
 - **Tägliche Gedächtnis-Pflege (`app/services/memory_review.py`, seit
   2026-11-06)** — nach Anthropics „components of agent memory“ („dreaming“):
   ein Durchgang außerhalb jedes Laufs, der auf die Chats zurückblickt und das
@@ -2290,7 +2298,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `review_after` dorthin. Gelesen werden die Chats mit `updated_at >= since`
   und darin die Turns mit `created_at >= since` (since = letzte Pflege, nie
   weiter als `LOOKBACK` 14 Tage, kein Nachholen von Rückstau), nur
-  `completed`/`succeeded`, ohne Google-Daten-Chats, temporäre und nicht aktive
+  `completed`/`succeeded`, nur Agent-Chats (`execution_mode`, wie Opt-in und
+  Datenschutztext), ohne Google-Daten-Chats, temporäre und nicht aktive
   Chats und ohne Watch-Läufe; je Turn die Worte des Nutzers
   (`agent_memory.user_words`, ein per „Ask about this“ zitierter Absatz steht
   getrennt als Assistententext daneben) bis 1.000 Zeichen und das Ende der
@@ -2307,7 +2316,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Tombstone, Undo-Log) als **eine** Änderung. `_finish` schreibt
   `reviewed_at`, gibt die Lease frei und löscht `review_after`, außer eine
   Nachricht kam während der Pflege; `last_result` hält nur Status und Zahlen.
-  Fehler (Modell, Opt-in aus, Konto gelöscht) speichern nichts. Nicht auf das
+  Fehler (Modell, Opt-in aus, Konto gelöscht) speichern nichts; eine
+  abgeschnittene oder unlesbare Antwort heißt `unreadable`, nicht `unchanged`
+  (`MAX_TOKENS` 8.000, weil die Reasoning-Tokens von „low“ bei OpenAI
+  mitzählen). Nicht auf das
   Tageskonto des Nutzers gebucht (wie Chat-Titel). **Sichtbar** nur in
   Settings › Memory: `GET /api/my/memory` (und jede Schreibantwort) liefert
   `last_review` (`get_with_review` → `memory_review.last_review`:
