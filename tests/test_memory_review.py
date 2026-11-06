@@ -70,9 +70,10 @@ def queued(db):
 def review(db, replies, *, clock=lambda: NOW):
     prompts = []
 
-    def query(model, keys, *, system, prompt, max_tokens, json_schema):
+    def query(model, keys, *, system, prompt, max_tokens, json_schema, effort):
         prompts.append(prompt)
         assert json_schema == memory_review.SCHEMA and max_tokens == memory_review.MAX_TOKENS
+        assert effort == memory_review.EFFORT == "medium"
         return json.dumps(replies.pop(0)) if replies else '{"changes": []}'
 
     service = memory_review.MemoryReview(db, store=ChatStore(db), clock=clock, query_fn=query,
@@ -131,7 +132,8 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
     # Sent before the user let the agent update the memory.
     turn(db, "c1", "t5", "Said while it was off", at=NOW - timedelta(hours=10), auto=False)
 
-    service, prompts = review(db, [{"changes": [
+    service, prompts = review(db, [{"observations": ["OBSERVED: plans a PhD next to work, from Hannover"],
+                                    "changes": [
         {"op": "add", "id": "", "text": "Will neben der Arbeit in KI/Wirtschaft promovieren; kommt aus Hannover."},
         {"op": "delete", "id": "m000000", "text": ""},
         {"op": "update", "id": "m999999", "text": "An unknown memory"},
@@ -163,6 +165,8 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
     # The message still running is read again next time: read up to its start.
     assert record["reviewed_through"] == NOW - timedelta(hours=7) and record["attempts"] == 0
     assert record["last_result"] == {"status": "applied", "added": 1, "updated": 0, "deleted": 1, "messages": 2}
+    # The observations only help the model decide: kept nowhere.
+    assert not any("OBSERVED" in json.dumps(data, default=str) for data in db.documents.values())
 
     repository.undo(UID, last["change_id"])
     items, _, last = repository.get_with_review(UID)

@@ -237,13 +237,15 @@ def query_engine_json(
     prompt: str,
     max_tokens: int,
     json_schema: dict | None = None,
+    effort: str | None = None,
 ) -> str:
     """Run one non-streaming structured task through a configured judge engine.
 
     This deliberately shares the exact credential and model-resolution path
     used by Consensus/Differences. Callers remain responsible for parsing and
     validating the returned JSON in addition to OpenRouter's structured-output
-    schema enforcement.
+    schema enforcement. ``effort``: the reasoning effort, by default the
+    judges' (the daily memory review asks for more, memory_review.EFFORT).
     """
     resolved = _resolve_engine(engine_model)
     if resolved is None:
@@ -259,7 +261,7 @@ def query_engine_json(
         max_tokens=max_tokens,
         temperature=0,
         json_mode=True,
-        effort=cfg.judge_reasoning_effort(provider),
+        effort=effort or cfg.judge_reasoning_effort(provider),
         json_schema=json_schema,
     )
 

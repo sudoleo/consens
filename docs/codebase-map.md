@@ -2316,10 +2316,20 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   getrennt als Assistententext daneben) bis 1.000 Zeichen und das Ende der
   Antwort (600), zusammen höchstens `CHATS_CHARS` 60.000 (die ältesten fallen
   zuerst). Ein strukturierter Aufruf (`query_engine_json`, Modell
-  `memory_edit_model` = Luna wie Remember/Correct memory) bekommt Grundsätze +
-  Fakten (wofür Memory da ist, Datum von heute, Antworten sind Kontext, ein
-  Fakt über den Nutzer braucht seine Worte oder sein Ja, Art. 9) und
-  `render_memory_block` mit IDs; `changes()` verwirft unbrauchbare Änderungen
+  `memory_edit_model` = Luna wie Remember/Correct memory, Reasoning `EFFORT`
+  „medium“ statt des Judge-„low“) bekommt eine Arbeitsanleitung: erst
+  `observations` nach Bereichen (wer er ist, Vorhaben mit Datum, wie er
+  arbeiten will, wiederkehrende Themen, was geklappt hat), dann der Abgleich
+  mit dem Gedächtnis; dazu Datum von heute, Antworten sind Kontext, ein Fakt
+  über den Nutzer braucht seine Worte oder sein Ja, nichts, was eine Watch
+  oder Einstellung schon hält, Art. 9, und `render_memory_block` mit IDs.
+  Eine Anleitung statt nur „wofür“, weil der Artikel zeigt, dass schwächere
+  Modelle viel vom „wie“ gewinnen: der erste echte Lauf (2026-11-07, Luna
+  „low“, alter Prompt mit „Often little or nothing needs to change“) machte
+  aus 85 Nachrichten eine überflüssige Erinnerung; der Trockenlauf mit
+  Anleitung und „medium“ schlug 8 vor, darunter Projekt, Promotion samt Ort
+  und Diagramm-Wunsch. `observations` werden nie gespeichert oder geloggt.
+  `changes()` verwirft unbrauchbare Änderungen
   einzeln (unbekannte ID, zweite Änderung derselben Erinnerung, Secret, zu
   lang) statt den Durchgang, ordnet Löschungen vor Hinzufügungen und hält die
   100er-Grenze. Angewandt wird über `FirestoreAgentMemoryRepository.apply`
