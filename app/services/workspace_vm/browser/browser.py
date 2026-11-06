@@ -221,7 +221,7 @@ el => {
 # snapshot after "type e40 ... enter" rewrote the key of a chat row the send
 # had moved, and the same step's "click e17" reached another chat without a
 # StaleRef (bug hunt 2026-11-04). A request without a step: the key of the
-# last snapshot, as before.
+# last snapshot the agent was shown the element in (SHOWN_JS).
 KEY_CHECK_JS = r"""
 (el, step) => {
   const at = el.getAttribute('data-consens-step');
@@ -324,18 +324,8 @@ arg => {
       el.setAttribute('data-consens-ref', ref);
     }
     given.add(ref);
-    // What it says now: an action on the ref checks it is still this (located).
-    if (step) {
-      // Within a step its key stays as the agent saw it before; what it says
-      // now becomes its key at its first snapshot in a later step.
-      const at = el.getAttribute('data-consens-step');
-      if (at !== null && at !== step) el.setAttribute('data-consens-key', el.getAttribute('data-consens-next') || '');
-      el.setAttribute('data-consens-next', key(el));
-      el.setAttribute('data-consens-step', step);
-    } else {
-      el.setAttribute('data-consens-key', key(el));
-      el.removeAttribute('data-consens-step');
-    }
+    // What it says now; it becomes its key only if the answer shows its line (SHOWN_JS).
+    el.setAttribute('data-consens-seen', key(el));
     const kind = role(el);
     let label = name(el) || clean(el.value && el.type !== 'password' ? el.value : '');
     if (!label && el.tagName === 'A') label = clip(clean(el.getAttribute('href')), 60);
@@ -360,6 +350,37 @@ arg => {
   return {lines: front.length ? ['(over the page:)', ...front, ...lines, ...outside] : lines.concat(outside), count};
 }
 """.replace("%KEY_JS%", KEY_JS)
+
+# What the agent was shown of an element becomes its key (since 2026-11-06).
+# A snapshot lists every element, but an answer shows only a part of the
+# list: READ_CHARS from an offset, AFTER_ACTION_CHARS after an action, or only
+# the lines that changed. Until then every snapshot wrote the key of every
+# element, so a row out of the part shown that the list drew another chat
+# into got that chat as its key, and the agent's click on the ref it had
+# read before reached that chat without a StaleRef (bug hunt 2026-11-05).
+# Now the snapshot leaves what an element says in data-consens-seen, and the
+# elements whose lines the answer shows (shown_to_agent) take it as their
+# key: within a step of the agent as data-consens-next (KEY_CHECK_JS).
+SHOWN_JS = r"""
+([refs, step]) => {
+  for (const ref of refs) {
+    const el = /^e\d+$/.test(ref) ? document.querySelector('[data-consens-ref="' + ref + '"]') : null;
+    const said = el ? el.getAttribute('data-consens-seen') : null;
+    if (said === null) continue;
+    if (step) {
+      // Within a step its key stays as the agent saw it before; what it was
+      // shown now becomes its key in a later step.
+      const at = el.getAttribute('data-consens-step');
+      if (at !== null && at !== step) el.setAttribute('data-consens-key', el.getAttribute('data-consens-next') || '');
+      el.setAttribute('data-consens-next', said);
+      el.setAttribute('data-consens-step', step);
+    } else {
+      el.setAttribute('data-consens-key', said);
+      el.removeAttribute('data-consens-step');
+    }
+  }
+}
+"""
 
 # find: what the page shows as one string, its whitespace folded. A text
 # counts where its element is shown; a new block or a line break starts with
@@ -1184,7 +1205,41 @@ def read_text(page, offset=0, limit=READ_CHARS, frames="front", keep=False):
     lines = page_lines(page, frames)
     if keep:
         remember(page, lines)
-    return listed_text(page, lines, offset, limit)
+    return shown_to_agent(page, listed_text(page, lines, offset, limit))
+
+
+# An element's line in an answer: read's line, a frame's element indented
+# under its frame, a find's place or a change marked + or ~ (or unmarked,
+# where it is). Gone lines (-) name an element as it was.
+SHOWN_REF = re.compile(r"^(?:[+~ ] )? *\[(e\d+)\] ", re.M)
+
+
+def shown_to_agent(page, text):
+    """``text``, once the elements whose lines it shows have what the
+    snapshot saw of them as their key (SHOWN_JS): in the page's own document
+    or in the frame read found them in (remember_frames). Elements out of the
+    part shown keep the key of the last answer that showed them."""
+    refs = list(dict.fromkeys(SHOWN_REF.findall(text)))
+    if not refs:
+        return text
+    known, groups = frame_refs(), {}
+    for ref in refs:
+        groups.setdefault(known.get(ref), []).append(ref)
+    for address, group in groups.items():
+        try:
+            documents = [page] if address is None else [
+                frame for frame in page.frames
+                if frame != page.main_frame and str(frame.url or "") == address and not frame_hidden(frame)]
+        except Exception:
+            continue
+        for document in documents:
+            try:
+                document.evaluate(SHOWN_JS, [group, STEP])
+            except Exception:
+                # A page or frame going away keeps its keys: an action then
+                # finds its ref stale or gone, never another element.
+                continue
+    return text
 
 
 def listed_text(page, lines, offset, limit):
@@ -1385,6 +1440,11 @@ def after_text(page, action):
     over the page with its elements (page_lines)."""
     if hidden(page):
         return hidden_text(page)
+    return shown_to_agent(page, changed_text(page, action))
+
+
+def changed_text(page, action):
+    """after_text's answer, before its elements' keys are kept."""
     lines = page_lines(page)
     before = None if action in FULL_AFTER else remembered(page)
     remember(page, lines)
@@ -1502,7 +1562,7 @@ def find_text(page, query):
     if named:
         out.append(f'Elements whose name holds "{query}":')
         out.extend(named)
-    return "\n".join(out)
+    return shown_to_agent(page, "\n".join(out))
 
 
 def element(page, ref):

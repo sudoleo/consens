@@ -2092,7 +2092,16 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
       Schritt; `KEY_CHECK_JS`). Vorher schrieb das Lesen nach
       `type … enter` den Schlüssel einer Zeile neu, die das Senden verschoben
       hatte, und `click e17` im selben Schritt traf ohne `StaleRef` einen
-      anderen Chat.
+      anderen Chat. Seit 2026-11-06 bekommt ein Element nur dann einen neuen
+      Schlüssel, wenn die Antwort an den Agenten seine Zeile zeigt: Das
+      Lesen legt ab, was das Element jetzt sagt (`data-consens-seen`), und
+      `shown_to_agent` übernimmt es per `SHOWN_JS` für die Refs der Zeilen in
+      der Antwort (Lesung ab `offset`, die `AFTER_ACTION_CHARS` nach einer
+      Aktion, nur die geänderten Zeilen, Treffer von `find`), im Frame, in
+      dem `read` sie fand. Vorher schrieb jede Lesung den Schlüssel aller
+      Elemente; eine Zeile außerhalb des gezeigten Teils, in die die Liste
+      einen anderen Chat zeichnete, bekam dessen Schlüssel, und der Klick
+      auf die früher gelesene Ref traf ihn ohne `StaleRef`.
     - *Aktion auf einem Element:* gibt nach `ACT_MS` = 3 s mit Grund auf
       (Klick, Tippen, Auswahl; vorher 10 s bzw. 5 s).
     - *Ein gescheiterter Browser-Aufruf beendet die Browser-Aufrufe seines

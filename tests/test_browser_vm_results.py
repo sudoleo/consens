@@ -871,6 +871,90 @@ def test_after_an_action_the_diff_holds_to_the_frames_read_listed(browser):
         "+   [e50] button \"Accept all\"\n+   [e51] button \"Settings\"\n+ (the page under it:)")
 
 
+def test_only_the_elements_an_answer_shows_take_their_key(browser, tmp_path, monkeypatch):
+    """Bug hunt 2026-11-05: every snapshot wrote the key of every element,
+    also of those out of the part the answer showed (READ_CHARS from an
+    offset, AFTER_ACTION_CHARS, only what changed). A row the list drew
+    another chat into out of that part took the other chat as its key, and
+    the agent's click on the ref it had read reached that chat without a
+    StaleRef. Now only the elements whose lines the answer shows take what
+    the snapshot saw (SHOWN_JS; tests/js/workspace-browser-keys.test.mjs)."""
+    monkeypatch.setattr(browser, "FRAME_REFS", str(tmp_path / "frame-refs.json"))
+    page = Shop(browser)
+    shown, real = [], page.evaluate
+
+    def evaluate(script, arg=None):
+        if script == browser.SHOWN_JS:
+            shown.append(arg)
+            return None
+        return real(script, arg)
+    page.evaluate = evaluate
+    # A read from an offset: the lines it shows, with the request's step.
+    monkeypatch.setattr(browser, "STEP", "t.1")
+    said = browser.on_page(None, page, "read", {"action": "read", "offset": 30}, "", [])["text"]
+    assert said.endswith('[e37] link "Product number 37 with a longer name"\n'
+                         '[e38] link "Product number 38 with a longer name"\n'
+                         '[e39] link "Product number 39 with a longer name"\n[e5] button "Pay"')
+    assert shown == [[["e37", "e38", "e39", "e5"], "t.1"]]
+
+    # An action that changes two lines: only those two, not the 32 the answer leaves out.
+    shown.clear()
+    monkeypatch.setattr(browser, "STEP", None)
+
+    def drawn(tab):
+        tab.lines[1] = '[e1] button "Account" expanded'
+        tab.lines[13] = '[e20] link "Another product the list drew into this row"'
+    page.effect = drawn
+    clicked = acting(browser, page, "click", ref="e1")
+    assert clicked.endswith('~ [e1] button "Account" expanded\n'
+                            '~ [e20] link "Another product the list drew into this row"')
+    assert shown == [[["e1", "e20"], None]]
+    # A line that went names an element as it was: no key to keep.
+    shown.clear()
+    page.effect = lambda tab: tab.lines.remove('[e5] button "Pay"')
+    assert acting(browser, page, "key", key="Escape").endswith('- [e5] button "Pay"')
+    page.effect = None
+    assert acting(browser, page, "key", key="Escape").endswith("as at your last look (33 lines; read lists them).")
+    assert shown == []
+
+
+def test_the_keys_of_a_frames_elements_are_kept_in_that_frame(browser, tmp_path, monkeypatch):
+    """shown_to_agent: an element's line of read, of a frame (indented under
+    it), of find (a place) and a change (+, ~) keep their keys, each in the
+    document read found it in; a gone line (-) and the rest of the text do not."""
+    monkeypatch.setattr(browser, "FRAME_REFS", str(tmp_path / "frame-refs.json"))
+    browser.remember_frames({"e50": "https://consent.example/c", "e51": "https://consent.example/c"})
+    asked = []
+
+    class Frame:
+        def __init__(self, url):
+            self.url = url
+
+        def evaluate(self, script, arg=None):
+            assert script == browser.SHOWN_JS
+            asked.append((self.url, arg))
+            if self.url.startswith("https://ads."):
+                raise RuntimeError("Frame was detached")
+    main, consent, ads = Frame("https://news.example/"), Frame("https://consent.example/c"), Frame("https://ads.example/a")
+    page = type("Page", (), {"main_frame": main, "frames": [main, ads, consent],
+                             "evaluate": lambda self, script, arg=None: main.evaluate(script, arg)})()
+    monkeypatch.setattr(browser, "STEP", "t.7")
+    text = "\n".join([
+        'Page: "News"', "URL: https://news.example/", '[e1] link "Home"',
+        "(over the page:)", "frame https://consent.example/c, its elements:", '  [e50] button "Accept all"',
+        '+ [e2] link "New story"', '~   [e51] button "Settings" expanded', '- [e3] link "Gone story"',
+        '[e4] "…a match in the text…"', "(… 12 more lines: read with offset 40)"])
+    assert browser.shown_to_agent(page, text) == text
+    assert asked == [("https://news.example/", [["e1", "e2", "e4"], "t.7"]),
+                     ("https://consent.example/c", [["e50", "e51"], "t.7"])]
+    # A frame that went away on the way keeps the others' keys and the answer.
+    browser.remember_frames({"e60": "https://ads.example/a"})
+    asked.clear()
+    assert browser.shown_to_agent(page, '  [e60] link "Ad"\n[e1] link "Home"') == '  [e60] link "Ad"\n[e1] link "Home"'
+    assert asked == [("https://ads.example/a", [["e60"], "t.7"]), ("https://news.example/", [["e1"], "t.7"])]
+    assert browser.shown_to_agent(page, 'Page: "News"\nURL: https://news.example/') and len(asked) == 2
+
+
 def test_an_action_that_ran_never_fails_because_the_page_cannot_be_read(browser):
     """The click ran; reading the page after it failed (it was going away):
     read again once it loaded, else the address and why."""
