@@ -1187,15 +1187,22 @@
   // their next message: at once, or once its running message has succeeded,
   // unless that message used the workspace after the hand-back. Closing the
   // view or a lapsed takeover hands back without a word.
+  // The run it concerns may be another chat's than the one on screen: the
+  // workspace serves one chat at a time (agent_workspace.claim), the one
+  // whose running message used it. Until 2026-11-06 only the visible run
+  // counted, and a hand-back from chat B sent the words into B.
   const WORKSPACE_TOOL = /^(vm_|browser$|ask_user$|request_domain$|github_)/;
+  const usedWorkspace = (items = []) => items.some(item => item?.kind === "tool" && WORKSPACE_TOOL.test(String(item.name || "")));
   let handback = null;
   function continueAfterHandback() {
     if (!looksAgent()) return;
     const context = registry.visible();
-    const hold = openHold(context);
-    if (hold?.ask === "browser" || hold?.ask === "takeover") return;
-    if (context && registry.isExecuting(context.runId)) {
-      handback = { runId: context.runId, seen: (context.metadata.agentActivity || []).length };
+    const running = registry.list().filter(run => registry.isExecuting(run.runId) && registry.isAuthCurrent(run));
+    if (running.some(run => ["browser", "takeover"].includes(openHold(run)?.ask))) return;
+    const owner = context && registry.isExecuting(context.runId) ? context
+      : running.find(run => usedWorkspace(run.metadata.agentActivity));
+    if (owner) {
+      handback = { runId: owner.runId, seen: (owner.metadata.agentActivity || []).length };
       return;
     }
     handback = null;
@@ -1219,7 +1226,7 @@
     // own words say more. Until 2026-11-04 the hand-back went first, and the
     // waiting message, which then found a response running, was lost.
     if (context?.status !== "succeeded" || registry.visible()?.runId !== runId || queueOf(context).length
-        || later.some(item => item?.kind === "tool" && WORKSPACE_TOOL.test(String(item.name || "")))) return;
+        || usedWorkspace(later)) return;
     // After the run's own completion code: its saved turn becomes the chat's
     // basis first. A message that went out meanwhile is the next one.
     setTimeout(() => { if (!registry.isExecuting(registry.visible()?.runId)) sendHandback(); }, 0);

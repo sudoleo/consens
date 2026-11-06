@@ -2473,13 +2473,17 @@ mit `audit_access`). Die
   Nur der Knopf meldet `consensio:workspace-handback` (`workspace-view.js
   handBack`, auch über die Karte im Chat). Schließen und eine abgelaufene
   Übernahme melden nichts. `agent-chat.js continueAfterHandback` entscheidet:
-  Wartet der sichtbare Lauf auf den Browser (`ask_user` `browser` oder
-  `takeover`), geht er von selbst weiter. Läuft er noch, ohne zu warten (er
-  schreibt etwa die Antwort), schickt der Chat nach dessen Ende „Done in the
+  Wartet ein Lauf auf den Browser (`ask_user` `browser` oder `takeover`), geht
+  er von selbst weiter; seit 2026-11-06 auch einer in einem anderen Chat als
+  dem sichtbaren. Läuft der sichtbare noch, ohne zu warten (er schreibt etwa
+  die Antwort), oder ist der sichtbare Chat still, während die laufende
+  Nachricht eines anderen den Arbeitsplatz benutzt hat (er dient einem Chat
+  zur Zeit), schickt der Chat dieses Laufs nach dessen Ende „Done in the
   browser.“ (deutsch „Fertig im Browser.“) als nächste Nachricht des Nutzers,
   außer der Lauf rief nach der Rückgabe selbst ein Werkzeug des Arbeitsplatzes
-  auf oder endete nicht erfolgreich. Läuft keiner, geht die Nachricht sofort
-  raus; ein Entwurf im Feld bleibt stehen. Der Server
+  auf, endete nicht erfolgreich oder steht dann nicht auf dem Schirm. Läuft
+  keiner, geht die Nachricht sofort im sichtbaren Chat raus; ein Entwurf im
+  Feld bleibt stehen. Der Server
   (`routers/agent.py browser_turn`) lässt jede Nachricht innerhalb von
   `RECENT_HANDBACK_SECONDS` (10 min) nach einer Rückgabe mit offenem
   Arbeitsplatz beginnen und schreibt `agent_vm.HANDED_BACK_NOTE` („… handed it

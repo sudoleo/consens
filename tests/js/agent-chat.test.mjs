@@ -2649,6 +2649,53 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // Bug hunt 2026-11-05: the hand-back went to the chat on screen. Whoever
+  // took the browser over for chat A's run and handed it back from chat B
+  // sent "Done in the browser." into B, a run there that found the
+  // workspace held by A, while A went on by itself or wanted the words.
+  it("sends no \"Done in the browser.\" into another chat than the one whose run has the browser", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const resolves = [];
+    const handlers = [];
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => {
+      handlers.push(received);
+      return new Promise(r => resolves.push(r));
+    });
+    const handBack = () => window.dispatchEvent(new window.CustomEvent("consensio:workspace-handback"));
+    const other = () => window.App.runRegistry.showSavedView({ type: "bookmark" }, { chatId: "c".repeat(32),
+      turnId: "d".repeat(32), bookmarkId: "other", question: "Q", consensus: "Saved answer", executionMode: "agent",
+      currentTurn: { id: "d".repeat(32), question: "Q", consensus: "Saved answer", status: "completed" } });
+    document.getElementById("questionInput").value = "Melde dich bei DHL an";
+    const first = window.App.agentChat.send();
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalledTimes(1));
+    const runId = window.App.runRegistry.visible().runId;
+    // A waits for the user in the browser: its run goes on by itself.
+    handlers[0].hold.receive({ hold: { id: "a1b2c3d4e5f6", kind: "ask", ask: "browser", request: "Log in.",
+      reviewer: "", provider: "", reason: "", entry: null, at: new Date().toISOString(), timeout_seconds: 1800 } });
+    other();
+    handBack();
+    await new Promise(r => setTimeout(r, 20));
+    expect(window.streamSSERequest).toHaveBeenCalledTimes(1);
+    // A works in the browser: the words are A's, after its answer, in A.
+    handlers[0].hold.receive({ hold: null, id: "a1b2c3d4e5f6", decision: "handed_back" });
+    handlers[0].activity.receive({ version: 1, step_id: "completion:0", kind: "tool", id: "c1", name: "browser",
+      status: "succeeded", action: "read" });
+    other();
+    handBack();
+    await new Promise(r => setTimeout(r, 20));
+    expect(window.streamSSERequest).toHaveBeenCalledTimes(1);
+    window.App.runRegistry.show(runId);
+    resolves[0]({ ok: true, data: { response: "Bitte melde dich an.", chat_id: "a".repeat(32), turn_id: "1".repeat(32),
+      turn: { id: "1".repeat(32), question: "Melde dich bei DHL an", consensus: "Bitte melde dich an.", mode: "Agent",
+        execution_mode: "agent" } } });
+    await first;
+    await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalledTimes(2));
+    expect([window.streamSSERequest.mock.calls[1][1].question, window.streamSSERequest.mock.calls[1][1].chat_id])
+      .toEqual(["Done in the browser.", "a".repeat(32)]);
+    dom.window.close();
+  });
+
   // Bug hunt 2026-10-30: a hand-back during a response with a waiting
   // message sent "Done in the browser." first, and the waiting message,
   // whose own send then saw a running response, was neither sent nor put

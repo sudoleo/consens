@@ -210,7 +210,8 @@ two of those tries, which then wait for the tab); "Keyboard" on touch screens an
 `consensio:workspace-holder` on every change of holder, and since 2026-10-29
 `consensio:workspace-handback` only for the hand-back button, on which
 `agent-chat.js continueAfterHandback` sends "Done in the browser." unless a run
-waits for the browser; `routers/agent.py browser_turn` then starts the message
+(since 2026-11-06 any chat's) waits for the browser, into the chat whose running
+message used the workspace, else the chat on screen; `routers/agent.py browser_turn` then starts the message
 with the workspace open and `agent_vm.HANDED_BACK_NOTE`) renders the panel with the tabs
 Browser and Terminal and a pulsing skeleton while a tab loads (a calm
 "first start" line after 6 s), imports noVNC from `static/vendor/novnc/1.7.0`
