@@ -6569,7 +6569,7 @@ richtet die erste Nachricht eines Kontos ohne Arbeitsplatz die VM im
 Hintergrund ein und startet Chrome einmal (`agent_workspace.provision` aus
 `routers/agent.py`, Notaus `AGENT_WORKSPACE_PROVISION=off`); jeder Start
 wartet auf ein laufendes Setup (`agent_workspace.setup_lock`). Wartende Schritte melden `starting_until`
-(`agent_workspace.Start`/`start_until`, Schätzung `START_SECONDS`), die
+(`agent_workspace.Start`/`start_until`, Schätzung `START_SECONDS`, seit 2026-11-06 aus Browser- und Werkbank-Starts, `START_KINDS`), die
 Live-Ansicht `until` (auch `waking` während des Weckens, `_waking`); `start-progress.js` (`App.startProgress`) zeigt daraus
 Balken und Restzeit, seit 2026-11-04 darüber den echten Schritt der Phase (`steps`, Live-Ansicht `STEPS`, Chat `START_STEPS`). Das Bild der Live-Ansicht kommt seit 2026-11-02 von TigerVNCs X-Server
 (`display.sh`, continuous updates, 30 Bilder/s statt rund 13 bei x11vnc;

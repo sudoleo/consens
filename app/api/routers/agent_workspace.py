@@ -313,8 +313,10 @@ async def _waking(websocket, uid, seconds, start):
 
 def _until(uid):
     """About when the browser's start ends (agent_workspace.start_until), for
-    the view's progress bar (since 2026-11-02): {"until": ISO time} or {}."""
-    until = agent_workspace.start_until(uid, ("browser",))
+    the view's progress bar (since 2026-11-02): {"until": ISO time} or {}.
+    A message's workbench start counts too: the view waits for its setup
+    (one computer since 2026-11-04)."""
+    until = agent_workspace.start_until(uid, agent_workspace.START_KINDS)
     return {"until": until.isoformat()} if until is not None else {}
 
 

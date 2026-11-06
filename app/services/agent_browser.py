@@ -509,7 +509,8 @@ class BrowserTools:
         try:
             while warming.is_alive():
                 cancellation.raise_if_cancelled()
-                until = agent_workspace.start_until(self.vm.loop.uid, ("browser",))
+                # A workbench's start too: the warm-up waits for its setup (one computer).
+                until = agent_workspace.start_until(self.vm.loop.uid, agent_workspace.START_KINDS)
                 if until is not None and until != told:
                     told = until
                     report({"starting_until": until.isoformat()})

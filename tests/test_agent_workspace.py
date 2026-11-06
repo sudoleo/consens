@@ -1887,6 +1887,52 @@ def test_a_messages_start_waits_for_the_setup_running_and_runs_none_of_its_own(s
         stop.cancel()
 
 
+def test_a_first_workbench_call_counts_down_the_setup_it_waits_for(store, fake_vm):
+    """Bug hunt 2026-11-06: since the one computer (2026-11-04) every start
+    of the account's VM waits for the same setup (setup_lock), but a waiting
+    call asked only for starts of its own kind. A new account's first
+    vm_exec waited for the provisioning (a start of the browser's) without a
+    bar; the browser and the live view during a workbench's start alike."""
+    import threading
+    from test_agent_vm import Agent, vm_loop
+    from app.api.routers import agent_workspace as workspace_router
+    from app.services.agent_vm_tools import VmExecArgs
+    from app.services.llm.provider_runtime import ProviderCancellation
+    lock = agent_workspace.setup_lock(agent_vm.workspace_name(UID))
+    lock.acquire()
+    provisioning = agent_workspace.Start(UID, "browser").phase("setup")
+    stop, reports, done = ProviderCancellation(), [], threading.Event()
+    try:
+        loop = vm_loop(store, Agent())
+        tool = next(tool for tool in loop.vm_tools.tools() if tool.name == "vm_exec")
+
+        def run():
+            try:
+                tool.execute(VmExecArgs(command="ls"), cancellation=stop, report=reports.append)
+            finally:
+                done.set()
+        threading.Thread(target=run, daemon=True).start()
+        end = time.monotonic() + 5
+        while time.monotonic() < end and not any(fields.get("starting_until") for fields in reports):
+            time.sleep(.05)
+        assert any(fields.get("starting_until") for fields in reports)
+    finally:
+        provisioning.end()
+        lock.release()
+    try:
+        assert done.wait(5)
+        assert reports[-1].get("exit_code") == 0 and {"starting_until": None} in reports
+    finally:
+        stop.cancel()
+    # The live view, while a message's workbench wakes the VM.
+    bench = agent_workspace.Start(UID, "workbench").phase("cold")
+    try:
+        assert workspace_router._until(UID).get("until")
+    finally:
+        bench.end()
+    assert workspace_router._until(UID) == {}
+
+
 def test_starts_say_about_when_they_end_and_the_latest_counts():
     """What the chat and the live view count down (START_SECONDS, measured
     in Prod): the latest of the account's starts of a VM; a start never says

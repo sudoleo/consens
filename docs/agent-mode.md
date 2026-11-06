@@ -1158,7 +1158,10 @@ der Ansicht 8 s; `Start`, `start_until`): Ein Schritt, der auf den Start wartet,
 meldet `starting_until` (`BrowserTools._await_warm`, `VMSession._wait`) und
 endet bei Stop, der Start läuft weiter (beim Warten auf den Browser seit
 2026-11-06; vorher wartete Stop bis zu `CALL_SECONDS` auf ihn), die
-Live-Ansicht `until`, schon während der Server die VM weckt (Zustand `waking` ab 1 s,
+Live-Ansicht `until`, beide seit 2026-11-06 aus den Starts beider Arten
+(`START_KINDS`: Browser und Werkbank starten denselben Rechner und warten auf
+dasselbe Setup; vorher wartete das erste `vm_exec` eines neuen Kontos auf die
+Bereitstellung, einen Start des Browsers, ohne Balken), schon während der Server die VM weckt (Zustand `waking` ab 1 s,
 `routers/agent_workspace._waking`; vorher stand Max' Ansicht einer schlafenden VM
 ohne Balken bei „Starting your workspace…“). Chat und Live-Ansicht zählen das als schmalen Balken mit
 „Noch etwa 40 Sekunden“ herunter (`start-progress.js`); er erscheint erst nach

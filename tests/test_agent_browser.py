@@ -696,6 +696,35 @@ def test_the_first_call_says_about_when_the_browsers_start_ends_while_it_waits(s
                                                           if "started_at" in fields)
 
 
+def test_a_call_waiting_for_the_workbenchs_start_counts_it_down_too(store, fake_vm, monkeypatch):
+    """One computer since 2026-11-04: a message's workbench start holds the
+    setup the browser's warm-up waits for, and the call says its estimate."""
+    import threading
+    monkeypatch.setattr(agent_browser, "WARM_POLL_SECONDS", .05)
+    loop, browser = tools(store)
+    bench = agent_workspace.Start(UID, "workbench").phase("setup")
+    release = threading.Event()
+
+    class Warming:
+        ok, refused = True, None
+
+        def is_alive(self):
+            return not release.is_set()
+
+        def join(self, seconds=None):
+            release.wait(seconds)
+    browser.warming = Warming()
+    threading.Timer(.3, lambda: (bench.end(), release.set())).start()
+    reports = []
+    try:
+        browser.call(BrowserArgs(action="read"), cancellation=ProviderCancellation(), report=reports.append)
+    finally:
+        bench.end()
+        release.set()
+    told = [fields["starting_until"] for fields in reports if "starting_until" in fields]
+    assert told[0] and told[-1] is None
+
+
 def test_stop_ends_a_call_that_waits_for_the_browsers_start(store, fake_vm, monkeypatch):
     """Bug hunt 2026-11-06: the first call waited for the warm-up whatever
     happened, up to its whole time (CALL_SECONDS): a slow provider (a gateway

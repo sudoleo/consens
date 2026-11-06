@@ -187,7 +187,9 @@ class Start:
     """One running start of an account's VM (``kind`` "browser" or
     "workbench"): ``phase`` says what it does now, ``end`` that it is over.
     Several may run for one VM (a message and the account's provisioning);
-    start_until says the latest."""
+    start_until says the latest. Since the one computer (2026-11-04) both
+    kinds start the same VM and wait for one setup (setup_lock): whoever
+    waits asks for both (START_KINDS)."""
 
     def __init__(self, uid, kind):
         self.key = (uid, kind)
@@ -209,7 +211,10 @@ class Start:
                     _starts.pop(self.key, None)
 
 
-def start_until(uid, kinds=("browser", "workbench"), besides=None):
+START_KINDS = ("browser", "workbench")
+
+
+def start_until(uid, kinds=START_KINDS, besides=None):
     """About when the starts of the account's ``kinds`` still running end
     (the latest), or None when none runs; ``besides``: a Start left out."""
     now = _now()

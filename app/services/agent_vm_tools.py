@@ -617,10 +617,13 @@ class VMSession:
         most until the answer must start; a provider failure is this call's
         (VM_NOT_STARTED) and the next one tries again, until MAX_FAILURES in
         a row turn the workspace off for the message."""
+        from app.services.agent_workspace import START_KINDS
         job = self._job("bench" if bench else "lease", cancellation)
         if job is None:
             return
-        self._wait(job, cancellation, kinds=("workbench",) if bench else ())
+        # The workbench waits for whichever start holds the VM's setup (one
+        # computer since 2026-11-04: the provisioning's is the browser's).
+        self._wait(job, cancellation, kinds=START_KINDS if bench else ())
         error = job.error
         if error is None:
             self.succeeded()
