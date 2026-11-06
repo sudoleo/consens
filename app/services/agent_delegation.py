@@ -471,6 +471,8 @@ class DelegationLoop(AgentLoop):
         self.unsettled = {}
         # The agent's step receipt being written in the background (_settle_later).
         self.settling = None
+        # The calls of the batch at hand started beside its first (_prefetch).
+        self.prefetched = {}
         self.mailbox = deque()
         # The user's messages into this run (USER_NOTE_OPEN): seen ids, and
         # those not yet in the conversation.
@@ -3587,7 +3589,7 @@ class DelegationLoop(AgentLoop):
                         # Page reads and other read-only calls of the step run
                         # side by side (CONCURRENT_TOOLS); the batch below
                         # takes their results in order.
-                        prefetched = self._prefetch(value, over_limit)
+                        prefetched = self.prefetched = self._prefetch(value, over_limit)
 
                         def not_run(call, text):
                             unrun.add(call["id"])
@@ -3780,6 +3782,16 @@ class DelegationLoop(AgentLoop):
                 self.condition.notify_all()
             for worker in self.workers.values():
                 worker.thread.join()
+            started = [thread for thread, _ in self.prefetched.values()]
+            if any(thread.is_alive() for thread in started):
+                # The batch broke off with calls it started beside its first
+                # (_prefetch) still running: they end as one does there
+                # (_await_call), and a page read settles its paid step
+                # before finish_run (since 2026-11-06; until then the run
+                # ended without them and finish_run found it unsettled).
+                self.cancellation.cancel()
+            for thread in started:
+                thread.join()
             watcher.join()
             if self.comparison:
                 self.comparison.close()

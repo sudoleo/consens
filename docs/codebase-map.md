@@ -4601,7 +4601,10 @@ sich), startet `_prefetch` die späteren Aufrufe neben dem ersten
 (`_start_call`/`_await_call`); der Batch nimmt ihre Ergebnisse in
 Reihenfolge und prüft jeden wie sonst. Ein vorgezogener Aufruf, den der Batch
 danach nicht mehr erreicht (Pause, Steuern, Wiederholungsschutz), bekommt sein
-gelesenes Ergebnis, nie „Not run“. Nicht vorgezogen werden Aufrufe, die der
+gelesenes Ergebnis, nie „Not run“. Bricht der Batch mit einer Ausnahme ab,
+wartet das Laufende auf seine vorgezogenen Aufrufe (`self.prefetched`; noch
+laufende enden wie in `_await_call` per Cancellation), bevor es abrechnet und
+`finish_run` schreibt (seit 2026-11-06). Nicht vorgezogen werden Aufrufe, die der
 Wiederholungsschutz ablehnen wird, dieselbe Seite ein zweites Mal (`url_key`,
 dann `already_read`) und Lesungen über den Grenzen (`SourceReader.room_for`). Nach jedem Batch einer
 Nachricht mit Arbeitsplatz steht eine Faktzeile (`_note_progress`: Schritt und

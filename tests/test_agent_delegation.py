@@ -527,3 +527,50 @@ def test_a_receipt_the_runs_end_cannot_write_still_closes_the_workspace(store, m
     with pytest.raises(ChatNotFound):
         list(loop.run())
     assert closed == [True] and loop.completion.vm == {"seconds": 0}
+
+
+def test_a_batch_that_breaks_off_waits_for_the_reads_it_started_beside(store):
+    """Bug hunt 2026-11-06, Tempo-Plan P4: a step's read-only calls run side
+    by side (_prefetch). When the batch broke off at its first call, the run
+    ended without the later ones: a page read still claiming or settling its
+    paid step met finish_run ("Agent step has not settled"), and the turn
+    stayed pending until the reaper."""
+    from pydantic import BaseModel, ConfigDict
+    from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+
+    class Args(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+        n: int = 0
+    beside, release, reads = threading.Event(), threading.Event(), []
+
+    def read(args, *, cancellation):
+        if args.n == 0:
+            beside.wait(5)
+            raise RuntimeError("The first read broke.")
+        reads.append(threading.current_thread())
+        beside.set()
+        # Until the run's end looks (finish_run), at most a second.
+        release.wait(1)
+        return {"text": "read"}
+
+    class Reads(AgentCompletion):
+        def stream(self, *, model, messages, **kwargs):
+            self.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 2, "cost": .0001}, model)
+            self.tool_calls = [{"id": f"read_{n}", "type": "function",
+                                "function": {"name": "read_file", "arguments": json.dumps({"n": n})}} for n in (0, 1)]
+            self.finish_reason = "tool_calls"
+            return
+            yield
+    loop = make_loop(store, Reads)
+    loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool("read_file", "Read.", Args, read)],
+                                 argument_limit=loop.registry.argument_limit)
+    finish, running = store.finish_run, []
+
+    def looked(*args, **kwargs):
+        running.append(reads[0].is_alive())
+        release.set()
+        return finish(*args, **kwargs)
+    store.finish_run = looked
+    with pytest.raises(RuntimeError):
+        list(loop.run())
+    assert running == [False]
