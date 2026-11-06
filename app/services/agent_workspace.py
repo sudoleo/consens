@@ -132,6 +132,9 @@ VM_BUSY = ("Your workspace is in use by another chat of this account right now (
 RESTORED_NOTE = ("The user restored the workspace to how it was before an earlier message since this chat last used "
                  "it: whatever later commands changed there is gone, in every chat's folder. Check the files before "
                  "you rely on them.")
+HEALED_NOTE = ("The workspace's provider could not start it, so consens.io restored it to how it was before an "
+               "earlier message since this chat last used it: whatever later commands changed there is gone, in "
+               "every chat's folder. Check the files before you rely on them.")
 
 
 class WorkspaceBusy(Exception):
@@ -149,6 +152,8 @@ class Claim:
     # Since 2026-10-29: the names of the keys the user gave the agent
     # (agent_secrets.py), kept on the account's record across restarts.
     secrets: tuple = ()
+    # Since 2026-11-06: the newest of those restores was the workspace's own (heal).
+    healed: bool = False
 
 
 def tool_files():
@@ -290,6 +295,7 @@ def claim(store, uid, chat_id, turn_id, *, provider):
         # Restores of the workspace so far, and how many this chat was told of.
         restores = int(record.get("restores") or 0)
         outcome["restored"] = bool(used.get("workspace")) and restores > int(used.get("restores_seen") or 0)
+        outcome["healed"] = outcome["restored"] and record.get("restored_by") == "heal"
         started = chat_data.get("created_at")
         outcome["title"] = str(chat_data.get("title") or "")
         outcome["started"] = started.date().isoformat() if isinstance(started, datetime) else ""
@@ -309,7 +315,7 @@ def claim(store, uid, chat_id, turn_id, *, provider):
     store._transaction(operation)
     return Claim(restored=outcome.get("restored", False), title=outcome.get("title", ""),
                  started=outcome.get("started", ""), folder=outcome.get("folder", ""),
-                 secrets=outcome.get("secrets", ()))
+                 secrets=outcome.get("secrets", ()), healed=outcome.get("healed", False))
 
 
 def listed(record, field, kind):
@@ -455,16 +461,17 @@ def in_use(store, uid, now=None):
     return isinstance(lock, datetime) and lock > now
 
 
-def mark_restored(store, uid):
+def mark_restored(store, uid, by="user"):
     """The workspace went back to a checkpoint: every chat's next message
-    that uses it is told (claim)."""
+    that uses it is told (claim), who did it too (``by``: "user", or "heal"
+    when it was stuck)."""
     workspace = ref(store.db, uid)
 
     def operation(tx):
         snapshot = workspace.get(transaction=tx)
         if snapshot.exists:
             tx.update(workspace, {"restores": int((snapshot.to_dict() or {}).get("restores") or 0) + 1,
-                                  "restored_at": _now()})
+                                  "restored_at": _now(), "restored_by": by})
     store._transaction(operation)
 
 
@@ -526,22 +533,30 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     goes once the workspace is ready (retire_old_browser). ``timeout``: at
     most this long for a setup (prepare). A VM the gateway called
     unresponsive before raises at once, or once its probe did not reach it
-    (reachable)."""
+    (reachable); one that does so now is asked again a minute later, and
+    restores itself when it is stuck (heal_later, with ``db``)."""
     name = agent_vm.workspace_name(uid)
+    stuck = None if db is None else (lambda: heal_later(db, uid))
     lock = setup_lock(name)
     while not lock.acquire(timeout=.2):
         if cancellation is not None:
             cancellation.raise_if_cancelled()
     try:
-        reachable(name, cancellation, timeout)
-        # A VM made just now has no version yet: prepare sets its rules.
-        created = vm.ensure(name)
-        if start is not None:
-            phase = "setup" if created else {"cold": "cold", "warm": "warm"}.get(getattr(vm, "statuses", {}).get(name))
-            if phase:
-                start.phase(phase)
-        prepare(vm, name, cancellation, timeout=timeout,
-                on_setup=None if start is None else (lambda: start.phase("setup" if created else "update")))
+        reachable(name, cancellation, timeout, on_unresponsive=stuck)
+        try:
+            # A VM made just now has no version yet: prepare sets its rules.
+            created = vm.ensure(name)
+            if start is not None:
+                phase = "setup" if created else {"cold": "cold", "warm": "warm"}.get(
+                    getattr(vm, "statuses", {}).get(name))
+                if phase:
+                    start.phase(phase)
+            prepare(vm, name, cancellation, timeout=timeout,
+                    on_setup=None if start is None else (lambda: start.phase("setup" if created else "update")))
+        except agent_vm.VMUnavailable as exc:
+            if stuck is not None and agent_vm.unresponsive(exc):
+                agent_vm.watch(name, stuck)
+            raise
     finally:
         lock.release()
     if db is not None:
@@ -549,16 +564,17 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     return name
 
 
-def reachable(name, cancellation=None, timeout=None):
+def reachable(name, cancellation=None, timeout=None, on_unresponsive=None):
     """Raises VMUnavailable with the gateway's status while ``name`` is
     marked unresponsive (agent_vm.mark_unresponsive): the browser's warm-up
     and the workbench of one message, and every message after, each waited
     about 48 s for the same 502 before (prod 2026-11-06, turn bb633b). Waits
     only for the VM's probe, at most PROBE_WAIT_SECONDS (and ``timeout``),
-    so a VM that woke again is used again by the start that asked."""
+    so a VM that woke again is used again by the start that asked.
+    ``on_unresponsive``: what the probe calls when the VM answers so again."""
     if agent_vm.unresponsive_status(name) is None:
         return
-    probe = agent_vm.probe(name)
+    probe = agent_vm.probe(name, on_unresponsive=on_unresponsive)
     if probe is not None:
         limit = agent_vm.PROBE_WAIT_SECONDS if timeout is None else min(agent_vm.PROBE_WAIT_SECONDS, timeout)
         deadline = time.monotonic() + max(0.0, limit)
@@ -1091,6 +1107,77 @@ def close_restore_gap(store, uid, since):
         else:
             tx.update(workspace, {"restore_gaps": [*kept, {"from": start, "to": now + GAP_GRACE}]})
     store._transaction(operation)
+
+
+def record_checkpoint(db, uid, checkpoint, taken):
+    """The workspace's newest checkpoint on the account's record (a
+    message's, VMSession._take_checkpoint): what a stuck workspace goes back
+    to (heal). ``taken``: when it began, ISO 8601 as the turn's
+    ``checkpoint_at``. Best effort: without it the workspace only cannot heal."""
+    at = taken.isoformat() if isinstance(taken, datetime) else str(taken)
+    try:
+        ref(db, uid).update({"checkpoint": {"id": str(checkpoint), "at": at}})
+    except Exception as exc:
+        logging.warning("Agent workspace checkpoint not recorded category=%s", safe_exception(exc))
+
+
+# A stuck workspace (agent_vm.PROBE_SECONDS: the gateway answered 502, 503
+# or 504 twice, a minute or more apart) goes back to its newest checkpoint
+# by itself (since 2026-11-06): before, it stayed so until Max asked for a
+# restore by hand, several times since 2026-10-29. It loses what changed
+# after that checkpoint, which a message takes before its own commands, so
+# at most that message's changes; the files it shared stay in the chat.
+# Only a checkpoint that may still bring the workspace back (restorable),
+# never under a message (in_use: waited for, at most HEAL_WAIT_SECONDS),
+# at most once per HEAL_SECONDS and account in this process.
+HEAL_SECONDS = 3600
+HEAL_WAIT_SECONDS = 600
+HEAL_POLL_SECONDS = 5
+_heals: dict[str, float] = {}
+_heals_lock = threading.Lock()
+
+
+def heal_later(db, uid, *, factory=None):
+    """heal on a thread of its own, unless one began within HEAL_SECONDS.
+    Returns the thread, or None."""
+    now = time.monotonic()
+    with _heals_lock:
+        began = _heals.get(uid)
+        if began is not None and now - began < HEAL_SECONDS:
+            return None
+        _heals[uid] = now
+    thread = threading.Thread(target=heal, args=(db, uid), kwargs={"factory": factory}, name="agent-workspace-heal",
+                              daemon=True)
+    thread.start()
+    return thread
+
+
+def heal(db, uid, *, factory=None, sleep=time.sleep, clock=time.monotonic):
+    """Restores the account's stuck workspace to its newest checkpoint
+    (record_checkpoint) once no message uses it; every chat's next message
+    is told (mark_restored, HEALED_NOTE). Returns whether it restored."""
+    from app.services.agent_runs import AgentRunStore
+    store = AgentRunStore(db)
+    try:
+        deadline = clock() + HEAL_WAIT_SECONDS
+        while in_use(store, uid):
+            if clock() >= deadline:
+                logging.warning("Agent workspace stuck, still in use")
+                return False
+            sleep(HEAL_POLL_SECONDS)
+        current = record(db, uid)
+        latest = current.get("checkpoint") if isinstance(current.get("checkpoint"), dict) else {}
+        point = {"checkpoint": latest.get("id"), "checkpoint_at": latest.get("at"), "name": current.get("name")}
+        if not restorable(current, point):
+            logging.warning("Agent workspace stuck without a checkpoint it may go back to")
+            return False
+        agent_vm.restore_workspace(uid, point["checkpoint"], factory=factory)
+        mark_restored(store, uid, by="heal")
+    except Exception as exc:
+        logging.warning("Agent workspace stuck, restore failed category=%s", safe_exception(exc))
+        return False
+    logging.warning("Agent workspace was stuck and went back to its newest checkpoint")
+    return True
 
 
 def raise_restore_floor(store, uid):

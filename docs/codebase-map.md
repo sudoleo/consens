@@ -6618,7 +6618,13 @@ VM prozessweit (`agent_vm.mark_unresponsive`). Weitere Starts der Nachricht und
 späterer Nachrichten treffen die Markierung sofort (`agent_workspace.reachable`
 in `open_workspace`) und warten nur auf eine Probe im Hintergrund, höchstens
 15 s (`agent_vm.probe`, `SpritesBackend.reach`). Eine Anfrage, die die VM
-erreicht, ein Restore oder das Löschen der VM heben die Markierung auf. Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
+erreicht, ein Restore oder das Löschen der VM heben die Markierung auf. Eine
+VM, die eine Minute später (`agent_vm.watch`) wieder so antwortet, gilt als
+festgefahren und setzt sich selbst zurück (`agent_workspace.heal_later`/`heal`).
+Ziel ist der neueste Checkpoint aus dem Datensatz (`checkpoint`, geschrieben
+von `VMSession._take_checkpoint` über `record_checkpoint`). Es gelten
+`restorable` und `in_use`, und das höchstens einmal je Stunde. Die nächste
+Nachricht liest `HEALED_NOTE` (`restored_by`, `Claim.healed`). Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
 Aufrufs (`VMTools._guarded`). Das Nachrichtenende (`VMSession.close`) gibt die
 Sperre frei auf einem eigenen Thread (`_finish`, höchstens 2 s gewartet); die
 Netzregeln ändert keine Nachricht mehr (bis 2026-11-04 setzte sie sie zurück). Jeder

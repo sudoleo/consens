@@ -864,6 +864,11 @@ class VMSession:
             checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
             with self._lock:
                 self.checkpoint, self.checkpoint_at = checkpoint, began
+            # What a stuck workspace goes back to (agent_workspace.heal).
+            db = getattr(getattr(self.loop, "store", None), "db", None)
+            if db is not None:
+                from app.services import agent_workspace
+                agent_workspace.record_checkpoint(db, self.loop.uid, checkpoint, began)
         except agent_vm.VMUnavailable:
             # Works on without it: the checkpoint only marks a state to return to.
             logging.warning("Agent VM checkpoint unavailable %s", log_tag(self.loop))
@@ -999,7 +1004,8 @@ class VMSession:
             extra["workspace_keys"] = {"names": list(self.claim.secrets), "folder": agent_secrets.DIR,
                                        "note": agent_secrets.KEYS_NOTE}
         if self.claim is not None and self.claim.restored:
-            extra["workspace_note"] = agent_workspace.RESTORED_NOTE
+            extra["workspace_note"] = (agent_workspace.HEALED_NOTE if getattr(self.claim, "healed", False)
+                                       else agent_workspace.RESTORED_NOTE)
         left = self.left()
         if left is not None and left < DAY_NOTE_SECONDS:
             extra["vm_time_left_today"] = {"minutes": max(0, int(left // 60)),

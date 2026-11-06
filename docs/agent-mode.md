@@ -1101,7 +1101,33 @@ Jetzt gilt:
   danach noch den Handshake abzuwarten.
 
 Die Markierung lebt im Prozess (eine Instanz auf Render); nach einem Neustart
-wird die VM wieder normal gefragt. Eine
+wird die VM wieder normal gefragt.
+
+Seit 2026-11-06 heilt sich eine festgefahrene VM auch selbst
+(`agent_workspace.heal`). Bis dahin blieb so eine Sprite hängen, bis Max von
+Hand zurücksetzen ließ, mehrmals seit 2026-10-29. Am 2026-11-06 waren drei von
+20 Sprites betroffen, darunter ein Arbeitsplatz, den seit dem 30.10. niemand
+benutzt hatte, und eine alte Chat-VM. Platte, Speicher (`sbd`) und unser Setup
+waren unauffällig, die Ursache liegt beim Anbieter. Ein Restore auf einen
+Checkpoint startete Max' Arbeitsplatz sofort wieder (v9: 58 s, danach 0,1 s je
+Anfrage). Der Ablauf:
+
+- Der erste Ausfall eines Starts plant eine Nachprüfung nach einer Minute
+  (`agent_vm.watch`), auch ohne nächste Nachricht.
+- Antwortet die VM auch dann mit 502/503/504, gilt sie als festgefahren:
+  `heal_later` setzt sie auf ihren neuesten Checkpoint zurück. Der steht seit
+  2026-11-06 im Datensatz des Kontos (`checkpoint`, `record_checkpoint`).
+- Zurückgesetzt wird nur auf einen Checkpoint, der nach `restorable` noch
+  zurückführen darf. Gelöschte Chats und ein „Überall abmelden“ kommen also
+  nie zurück.
+- Nie unter einer Nachricht (`in_use`, höchstens 10 min gewartet), höchstens
+  einmal je Stunde und Konto.
+- Verloren geht, was sich nach dem Checkpoint änderte, also höchstens die
+  Arbeit der letzten Nachricht in der VM. Geteilte Dateien bleiben im Chat.
+- Die nächste Nachricht jedes Chats, der den Arbeitsplatz benutzt hat, liest
+  `HEALED_NOTE` (`restored_by: "heal"` im Datensatz).
+
+Eine
 unerwartete Ausnahme eines Werkzeugs des Arbeitsplatzes (Dateiablage,
 Fehler im Code) wird zum Fehler des Aufrufs (`TOOL_FAILED`) und gemeldet
 (`report_server_exception`), nie zum Ende des Laufs (`VMTools._guarded`, A3).

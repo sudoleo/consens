@@ -721,6 +721,75 @@ def test_a_start_waits_for_a_probe_that_does_not_reach_the_vm_only_briefly(fake_
     assert not [call for call in fake_vm.calls if call[0] == "ensure"]
 
 
+def test_a_stuck_workspace_goes_back_to_its_newest_checkpoint_and_the_next_message_is_told(store, fake_vm):
+    """Prod 2026-10-29 to 2026-11-06: a stuck sprite stayed so until Max asked
+    for a restore by hand, which started it at once. The record names the
+    newest checkpoint (record_checkpoint), and a stuck workspace goes back to
+    it by itself (agent_workspace.heal); the chat's next message hears why."""
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    turn_vm = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_vm"]
+    assert agent_workspace.record(store.db, UID)["checkpoint"] == {"id": turn_vm["checkpoint"],
+                                                                   "at": turn_vm["checkpoint_at"]}
+    agent_vm.mark_unresponsive(NAME, 502)
+    assert agent_workspace.heal(store.db, UID, factory=fake_vm.backend) is True
+    assert [call for call in fake_vm.calls if call[0] == "restore"] == [("restore", NAME, turn_vm["checkpoint"])]
+    assert agent_vm.unresponsive_status(NAME) is None
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), chat_id=loop.chat_id, request_id="two")
+    list(loop.run())
+    assert results(loop)[0]["workspace_note"] == agent_workspace.HEALED_NOTE
+
+
+def test_a_stuck_workspace_waits_for_its_message_and_never_brings_back_what_left_for_good(store, fake_vm,
+                                                                                          monkeypatch):
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    agent_workspace.claim(store, UID, loop.chat_id, "running", provider="fake")
+    waits = []
+
+    def sleep(seconds):
+        # The message that holds the workspace ends while the heal waits.
+        waits.append(seconds)
+        agent_workspace.release(store, UID, "running")
+    assert agent_workspace.heal(store.db, UID, factory=fake_vm.backend, sleep=sleep) is True
+    assert waits == [agent_workspace.HEAL_POLL_SECONDS]
+    # A chat deleted after the newest checkpoint: its folder never comes back.
+    agent_workspace.raise_restore_floor(store, UID)
+    restores = len([call for call in fake_vm.calls if call[0] == "restore"])
+    assert agent_workspace.heal(store.db, UID, factory=fake_vm.backend) is False
+    assert len([call for call in fake_vm.calls if call[0] == "restore"]) == restores
+    # Once per hour and account at most (heal_later).
+    monkeypatch.setattr(agent_workspace, "heal", lambda *args, **kwargs: None)
+    assert agent_workspace.heal_later(store.db, UID) is not None
+    assert agent_workspace.heal_later(store.db, UID) is None
+
+
+def test_a_first_unresponsive_answer_is_checked_again_a_minute_later_and_a_stuck_vm_heals(store, fake_vm,
+                                                                                         monkeypatch):
+    watched, healed = [], []
+    monkeypatch.setattr(agent_vm, "watch", lambda name, stuck, factory=None: watched.append((name, stuck)))
+    monkeypatch.setattr(agent_workspace, "heal_later", lambda db, uid, **kwargs: healed.append(uid))
+
+    def unresponsive(self, name, rules=None):
+        agent_vm.mark_unresponsive(name, 502)
+        raise VMUnavailable("read: HTTP 502", 502)
+    monkeypatch.setattr(_FakeBackend, "ensure", unresponsive)
+    for _ in range(2):
+        with pytest.raises(VMUnavailable):
+            agent_workspace.open_workspace(fake_vm.backend(), UID, db=store.db)
+    # Only the answer that marked it; the second start met the mark.
+    assert [name for name, _ in watched] == [NAME]
+
+    def still(self, name):
+        agent_vm.mark_unresponsive(name, 502)
+        raise VMUnavailable("wake: HTTP 502", 502)
+    monkeypatch.setattr(_FakeBackend, "reach", still, raising=False)
+    agent_vm._probe_began[NAME] -= agent_vm.PROBE_SECONDS
+    probe = agent_vm.probe(NAME, on_unresponsive=watched[0][1])
+    probe.join(5)
+    assert healed == [UID]
+
+
 def test_a_command_the_gateway_refuses_turns_the_workspace_off(store, fake_vm):
     script = Agent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "make"})],
                     [("vm_exec", {"command": "ls"})]])

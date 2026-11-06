@@ -155,7 +155,12 @@ def unresponsive(exc):
 # thread of its own (probe: one at a time, a new one at most every
 # PROBE_SECONDS), at most PROBE_WAIT_SECONDS, about a cold VM's wake
 # (measured 2026-11-05/06: 10-11 s). The mark lives in this process (one
-# instance on Render); a restart asks the VM anew.
+# instance on Render); a restart asks the VM anew. Such a VM did not come
+# back by itself (three of 20 sprites on 2026-11-06, one idle since
+# 2026-10-30, one an old chat VM), while a restore to a checkpoint started
+# it again at once (Max's workspace, v9: 58 s, then 0.1 s per request):
+# a VM that answers so again a minute later (watch, probe) restores itself
+# (agent_workspace.heal_later).
 PROBE_SECONDS = 60
 PROBE_WAIT_SECONDS = 15
 # Name -> the status the gateway answered; when each VM's last probe began
@@ -163,6 +168,7 @@ PROBE_WAIT_SECONDS = 15
 _unresponsive: dict[str, int] = {}
 _probe_began: dict[str, float] = {}
 _probes: dict[str, threading.Thread] = {}
+_watches: dict[str, threading.Timer] = {}
 
 
 def _unavailable(reason):
@@ -214,13 +220,15 @@ def unresponsive_status(name):
         return _unresponsive.get(name)
 
 
-def probe(name, factory=None):
+def probe(name, factory=None, on_unresponsive=None):
     """The probe of ``name`` while it is marked unresponsive: the one that
     runs, or a new one on a thread of its own when the last began
     PROBE_SECONDS ago or more, else None. It asks the VM with a request the
     VM itself answers (SpritesBackend.reach) on a backend of its own
     (``factory``, the configured provider by default); an answer clears the
-    mark, a gateway's 502/503/504 renews it."""
+    mark, a gateway's 502/503/504 renews it and calls ``on_unresponsive``:
+    the VM answered so twice, a minute or more apart, and is stuck
+    (agent_workspace.heal_later)."""
     now = time.monotonic()
     with _contact_lock:
         if name not in _unresponsive:
@@ -240,6 +248,13 @@ def probe(name, factory=None):
                 reach = getattr(vm, "reach", None)
                 if reach is not None:
                     reach(name)
+            except VMUnavailable as exc:
+                logging.info("Agent VM probe failed reason=%s", str(exc)[:80])
+                if unresponsive(exc) and on_unresponsive is not None:
+                    try:
+                        on_unresponsive()
+                    except Exception as error:
+                        logging.warning("Agent VM stuck, not handled category=%s", safe_exception(error))
             except Exception as exc:
                 logging.info("Agent VM probe failed category=%s", safe_exception(exc))
             finally:
@@ -254,6 +269,24 @@ def probe(name, factory=None):
         thread = _probes[name] = threading.Thread(target=run, name="agent-vm-probe", daemon=True)
         thread.start()
     return thread
+
+
+def watch(name, on_unresponsive, factory=None):
+    """Probes ``name`` once PROBE_SECONDS after it was marked, whether or not
+    a start asks for it then: a stuck VM is known to be stuck (and its
+    ``on_unresponsive`` runs) without the user's next message. One pending
+    per VM; returns the timer, or None when one is pending."""
+    def run():
+        with _contact_lock:
+            _watches.pop(name, None)
+        probe(name, factory=factory, on_unresponsive=on_unresponsive)
+    with _contact_lock:
+        if name in _watches:
+            return None
+        timer = _watches[name] = threading.Timer(PROBE_SECONDS + 1, run)
+        timer.daemon = True
+        timer.start()
+    return timer
 
 
 def _asleep(name):
@@ -725,8 +758,6 @@ class SpritesBackend(VMBackend):
             raise VMUnavailable("restore: no connection") from None
         if not done:
             raise _unavailable("restore: no completion")
-        # Restarted from the checkpoint: the next start asks it anew.
-        forget_unresponsive(name)
 
     def delete(self, name):
         self._request("delete", "DELETE", self._sprite(name), missing_ok=True)
@@ -1033,6 +1064,8 @@ def restore_workspace(uid, checkpoint, *, factory=None):
         vm.restore(workspace_name(uid), checkpoint)
     finally:
         vm.close()
+    # Started anew from the checkpoint (a stuck VM too): the next start asks it anew.
+    forget_unresponsive(workspace_name(uid))
 
 
 def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):

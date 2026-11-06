@@ -66,7 +66,9 @@ def _no_workspace_provisioning(monkeypatch):
     The starts' estimates (agent_workspace.start_until) begin empty and the
     setup locks new, also after a test whose view, warm-up or start still
     ran on a thread of its own when it ended (every test's account is UID).
-    No VM begins marked unresponsive (agent_vm.mark_unresponsive) either."""
+    No VM begins marked unresponsive (agent_vm.mark_unresponsive) either,
+    no later probe of an earlier test runs into this one (agent_vm.watch),
+    and no account restored itself before (agent_workspace.heal_later)."""
     monkeypatch.setenv("AGENT_WORKSPACE_PROVISION", "off")
     from app.services import agent_vm, agent_workspace
     agent_workspace._starts.clear()
@@ -75,6 +77,11 @@ def _no_workspace_provisioning(monkeypatch):
         agent_vm._unresponsive.clear()
         agent_vm._probe_began.clear()
         agent_vm._probes.clear()
+        for timer in agent_vm._watches.values():
+            timer.cancel()
+        agent_vm._watches.clear()
+    with agent_workspace._heals_lock:
+        agent_workspace._heals.clear()
 
 
 @pytest.fixture
