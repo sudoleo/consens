@@ -10,6 +10,8 @@ WebSocket.
 import base64
 from datetime import datetime
 import json
+import threading
+import time
 
 import httpx
 import pytest
@@ -651,6 +653,72 @@ def test_a_vm_the_gateway_calls_unresponsive_is_off_after_the_first_try(store, f
     assert results(loop) == [{"error": VM_UNAVAILABLE}] * 3
     assert len(tried) == 1
     assert turn["agent_vm"]["unavailable_reason"] == "bench: ensure: HTTP 502"
+
+
+def test_a_vm_the_gateway_called_unresponsive_is_asked_once_across_browser_bench_and_messages(store, fake_vm,
+                                                                                              monkeypatch):
+    """Prod 2026-11-06 (turn bb633b): the browser's warm-up and then the
+    workbench each waited about 48 s for the same 502 under the setup lock,
+    and every message after waited as long again. The backend marks the VM
+    (agent_vm.mark_unresponsive); a start meets the mark at once while no
+    probe reaches the VM (agent_workspace.reachable)."""
+    tried = []
+
+    def unresponsive(self, name, rules=None):
+        tried.append(name)
+        agent_vm.mark_unresponsive(name, 502)  # as SpritesBackend does
+        raise VMUnavailable("read: HTTP 502", 502)
+    monkeypatch.setattr(_FakeBackend, "ensure", unresponsive)
+    loop = vm_loop(store, Agent([[("browser", {"action": "read"})], [("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    assert len(tried) == 1 and results(loop)[1] == {"error": VM_UNAVAILABLE}
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="two")
+    list(loop.run())
+    assert len(tried) == 1 and results(loop) == [{"error": VM_UNAVAILABLE}]
+    turn = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert turn["agent_vm"]["unavailable_reason"] == "bench: unresponsive: HTTP 502"
+
+
+def test_a_start_uses_the_vm_again_once_its_probe_reaches_it(store, fake_vm, monkeypatch):
+    agent_vm.mark_unresponsive(NAME, 502)
+    agent_vm._probe_began[NAME] -= agent_vm.PROBE_SECONDS
+    reached = []
+
+    def reach(self, name):
+        reached.append(name)
+        agent_vm._touch(name)
+    monkeypatch.setattr(_FakeBackend, "reach", reach, raising=False)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    assert reached == [NAME] and "error" not in results(loop)[0]
+    assert agent_vm.unresponsive_status(NAME) is None
+
+
+def test_a_start_waits_for_a_probe_that_does_not_reach_the_vm_only_briefly(fake_vm, monkeypatch):
+    agent_vm.mark_unresponsive(NAME, 502)
+    agent_vm._probe_began[NAME] -= agent_vm.PROBE_SECONDS
+    monkeypatch.setattr(agent_vm, "PROBE_WAIT_SECONDS", .3)
+    release = threading.Event()
+
+    def reach(self, name):
+        release.wait(5)
+        agent_vm.mark_unresponsive(name, 502)
+        raise VMUnavailable("wake: HTTP 502", 502)
+    monkeypatch.setattr(_FakeBackend, "reach", reach, raising=False)
+    started = time.monotonic()
+    try:
+        with pytest.raises(VMUnavailable, match="unresponsive: HTTP 502"):
+            agent_workspace.open_workspace(fake_vm.backend(), UID)
+        assert time.monotonic() - started < 2
+        # The second start waits for the same probe, it starts none of its own.
+        probe = agent_vm._probes[NAME]
+        assert agent_vm.probe(NAME) is probe
+    finally:
+        release.set()
+    probe.join(5)
+    assert agent_vm.unresponsive_status(NAME) == 502 and agent_vm.probe(NAME) is None
+    assert not [call for call in fake_vm.calls if call[0] == "ensure"]
 
 
 def test_a_command_the_gateway_refuses_turns_the_workspace_off(store, fake_vm):

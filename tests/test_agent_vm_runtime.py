@@ -435,6 +435,85 @@ def test_sprites_exec_counts_from_the_open_socket_and_wakes_a_quiet_vm_first(mon
     assert paths == ["/v1/sprites/quiet-vm/fs/list"]
 
 
+def gateway(status):
+    from websockets.datastructures import Headers
+    from websockets.exceptions import InvalidStatus
+    from websockets.http11 import Response
+    return InvalidStatus(Response(status, "Bad Gateway", Headers()))
+
+
+def test_a_gateways_502_marks_the_vm_until_a_request_reaches_it():
+    """Prod 2026-11-05/06: a wedged sprite answered every request with 502
+    after about 48 s. The backend marks it (agent_vm.mark_unresponsive), any
+    request that reaches it clears the mark; the API's own answers about
+    the VM (ensure) and other failures mark nothing."""
+    statuses = {"/v1/sprites/vm": 502, "/v1/sprites/vm/fs/list": 200}
+
+    def handler(request):
+        return httpx.Response(statuses.get(request.url.path, 200), json={})
+
+    def connect(url, token):
+        raise gateway(502)
+    backend = agent_vm.SpritesBackend("t", transport=httpx.MockTransport(handler), connect=connect)
+    with pytest.raises(agent_vm.VMUnavailable):
+        backend.ensure("vm")
+    assert agent_vm.unresponsive_status("vm") is None
+    with pytest.raises(agent_vm.VMUnavailable, match="exec: HTTP 502") as refused:
+        backend.exec("vm", "ls", cwd="/home/agent", timeout=60, on_output=lambda *a: None,
+                     cancellation=ProviderCancellation())
+    assert agent_vm.unresponsive(refused.value) and agent_vm.unresponsive_status("vm") == 502
+    backend.reach("vm")
+    assert agent_vm.unresponsive_status("vm") is None
+    agent_vm.mark_unresponsive("vm", 503)
+    statuses["/v1/sprites/vm"] = 204
+    backend.delete("vm")
+    assert agent_vm.unresponsive_status("vm") is None
+
+
+def test_a_wake_the_gateway_calls_unresponsive_is_the_commands_answer_without_a_handshake():
+    """The wake waited about 48 s for a 502, the handshake after it as long
+    again: it ends the command at once."""
+    paths, handshakes = [], []
+
+    def handler(request):
+        paths.append(request.url.path)
+        return httpx.Response(502)
+
+    def connect(url, token):
+        handshakes.append(url)
+        return FakeSocket([b"\x03\x00"])
+    backend = agent_vm.SpritesBackend("t", transport=httpx.MockTransport(handler), connect=connect)
+    agent_vm._contact["quiet-vm"] = time.monotonic() - agent_vm.WAKE_AFTER_SECONDS - 1
+    with pytest.raises(agent_vm.VMUnavailable, match="wake: HTTP 502"):
+        backend.exec("quiet-vm", "ls", cwd="/home/agent", timeout=60, on_output=lambda *a: None,
+                     cancellation=ProviderCancellation())
+    assert paths == ["/v1/sprites/quiet-vm/fs/list"] and handshakes == []
+    assert agent_vm.unresponsive_status("quiet-vm") == 502
+
+
+def test_one_probe_at_a_time_and_at_most_one_a_minute():
+    agent_vm.mark_unresponsive("vm", 502)
+    asked, release = [], threading.Event()
+
+    class Probing:
+        def reach(self, name):
+            asked.append(name)
+            release.wait(5)
+            agent_vm._touch(name)
+
+        def close(self):
+            pass
+    # The answer that marked it took as long as a probe: none before a minute.
+    assert agent_vm.probe("vm", factory=Probing) is None
+    agent_vm._probe_began["vm"] -= agent_vm.PROBE_SECONDS
+    first = agent_vm.probe("vm", factory=Probing)
+    assert first is not None and agent_vm.probe("vm", factory=Probing) is first
+    release.set()
+    first.join(5)
+    assert asked == ["vm"] and agent_vm.unresponsive_status("vm") is None
+    assert agent_vm.probe("vm", factory=Probing) is None
+
+
 def test_a_handshake_that_ran_out_of_time_is_not_tried_again():
     """Whether the provider starts the command before its answer is not
     known: a second try could run it twice (A4)."""

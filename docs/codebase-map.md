@@ -6613,7 +6613,12 @@ kostet den Aufruf, erst drei in Folge die VM (`VMSession.failed`,
 `MAX_FAILURES`). Antwortet das Gateway des Anbieters mit 502, 503 oder 504
 (`agent_vm.unresponsive`, `VMUnavailable.status`), ist die VM sofort für die
 Nachricht aus, die Werkbank wie der Browser (seit 2026-11-05: jeder neue Versuch
-wartete wieder rund 42 s). Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
+wartete wieder rund 42 s). Seit 2026-11-06 merkt sich `SpritesBackend` so eine
+VM prozessweit (`agent_vm.mark_unresponsive`). Weitere Starts der Nachricht und
+späterer Nachrichten treffen die Markierung sofort (`agent_workspace.reachable`
+in `open_workspace`) und warten nur auf eine Probe im Hintergrund, höchstens
+15 s (`agent_vm.probe`, `SpritesBackend.reach`). Eine Anfrage, die die VM
+erreicht, ein Restore oder das Löschen der VM heben die Markierung auf. Unerwartete Ausnahmen eines Werkzeugs werden zum Fehler des
 Aufrufs (`VMTools._guarded`). Das Nachrichtenende (`VMSession.close`) gibt die
 Sperre frei auf einem eigenen Thread (`_finish`, höchstens 2 s gewartet); die
 Netzregeln ändert keine Nachricht mehr (bis 2026-11-04 setzte sie sie zurück). Jeder

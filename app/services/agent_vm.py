@@ -133,13 +133,36 @@ class VMUnavailable(Exception):
 # message, 136 s for nothing; 2026-10-29/30 the same VM-wide after a night).
 # Asked again in the same message it answers the same way after as long, so
 # the workspace goes off for the message at once (agent_vm_tools,
-# agent_browser); the chat's next message tries again.
+# agent_browser), and later starts wait only for its probe (below).
 UNRESPONSIVE_STATUSES = frozenset({502, 503, 504})
 
 
 def unresponsive(exc):
     """Whether ``exc`` is the provider saying the VM does not respond."""
     return isinstance(exc, VMUnavailable) and getattr(exc, "status", None) in UNRESPONSIVE_STATUSES
+
+
+# A VM the gateway called unresponsive stays so until a request reaches it
+# again (prod 2026-11-05 21:04 UTC to 2026-11-06 at least: Max's workspace
+# answered every request, a listing of its root and its own address too,
+# with 502 after about 48 s and stayed "cold", while another sprite of the
+# organization woke in 10 s; Fly's "wedged sprites"). The browser's warm-up
+# and the workbench of one message each asked it under the setup lock, 97 s
+# for one 502 (turn bb633b), and every further message waited as long
+# again. Since then the backend marks such a VM (mark_unresponsive), any
+# request that reaches it clears the mark (_touch), and a start that meets
+# the mark (agent_workspace.open_workspace) waits only for a probe on a
+# thread of its own (probe: one at a time, a new one at most every
+# PROBE_SECONDS), at most PROBE_WAIT_SECONDS, about a cold VM's wake
+# (measured 2026-11-05/06: 10-11 s). The mark lives in this process (one
+# instance on Render); a restart asks the VM anew.
+PROBE_SECONDS = 60
+PROBE_WAIT_SECONDS = 15
+# Name -> the status the gateway answered; when each VM's last probe began
+# (time.monotonic) and the probe running, under _contact_lock.
+_unresponsive: dict[str, int] = {}
+_probe_began: dict[str, float] = {}
+_probes: dict[str, threading.Thread] = {}
 
 
 def _unavailable(reason):
@@ -157,8 +180,80 @@ _contact_lock = threading.Lock()
 
 
 def _touch(name):
+    """``name`` was reached just now: also no longer unresponsive."""
     with _contact_lock:
         _contact[name] = time.monotonic()
+        cleared = _unresponsive.pop(name, None) is not None
+    if cleared:
+        logging.info("Agent VM reached again after it was unresponsive")
+
+
+def mark_unresponsive(name, status):
+    """The gateway answered ``status`` (UNRESPONSIVE_STATUSES) for ``name``:
+    starts meet it at once until a request reaches the VM again. A probe
+    counts as begun now, since this answer took as long as one."""
+    with _contact_lock:
+        new = name not in _unresponsive
+        _unresponsive[name] = int(status)
+        if new:
+            _probe_began[name] = time.monotonic()
+    if new:
+        logging.warning("Agent VM unresponsive status=%s", status)
+
+
+def forget_unresponsive(name):
+    """``name`` restored or deleted: whatever runs under it next is asked anew."""
+    with _contact_lock:
+        _unresponsive.pop(name, None)
+        _probe_began.pop(name, None)
+
+
+def unresponsive_status(name):
+    """The status the gateway answered for ``name`` while it is marked unresponsive, else None."""
+    with _contact_lock:
+        return _unresponsive.get(name)
+
+
+def probe(name, factory=None):
+    """The probe of ``name`` while it is marked unresponsive: the one that
+    runs, or a new one on a thread of its own when the last began
+    PROBE_SECONDS ago or more, else None. It asks the VM with a request the
+    VM itself answers (SpritesBackend.reach) on a backend of its own
+    (``factory``, the configured provider by default); an answer clears the
+    mark, a gateway's 502/503/504 renews it."""
+    now = time.monotonic()
+    with _contact_lock:
+        if name not in _unresponsive:
+            return None
+        running = _probes.get(name)
+        if running is not None:
+            return running
+        began = _probe_began.get(name)
+        if began is not None and now - began < PROBE_SECONDS:
+            return None
+        _probe_began[name] = now
+
+        def run():
+            vm = None
+            try:
+                vm = (factory or backend)()
+                reach = getattr(vm, "reach", None)
+                if reach is not None:
+                    reach(name)
+            except Exception as exc:
+                logging.info("Agent VM probe failed category=%s", safe_exception(exc))
+            finally:
+                with _contact_lock:
+                    _probes.pop(name, None)
+                if vm is not None:
+                    try:
+                        vm.close()
+                    except Exception:
+                        pass
+        # Started under the lock: whoever finds it in _probes may join it.
+        thread = _probes[name] = threading.Thread(target=run, name="agent-vm-probe", daemon=True)
+        thread.start()
+    return thread
 
 
 def _asleep(name):
@@ -435,9 +530,12 @@ class SpritesBackend(VMBackend):
 
     # --- REST -----------------------------------------------------------------
 
-    def _request(self, operation, method, path, *, missing_ok=False, **kwargs):
+    def _request(self, operation, method, path, *, missing_ok=False, vm=None, **kwargs):
         """One REST call; any 2xx is success (the API answers 200, 201 or
-        204 depending on the operation, the policy for instance with 204)."""
+        204 depending on the operation, the policy for instance with 204).
+        ``vm``: the VM's name where the VM itself answers the call (its
+        files, its rules), which a gateway's 502/503/504 marks unresponsive;
+        the API's own answers about it (ensure) never do."""
         try:
             response = self._http.request(method, path, **kwargs)
         except httpx.HTTPError as exc:
@@ -446,7 +544,17 @@ class SpritesBackend(VMBackend):
         if response.is_success or (missing_ok and response.status_code == 404):
             return response
         logging.warning("Agent VM request refused operation=%s status=%s", operation, response.status_code)
+        if vm is not None and response.status_code in UNRESPONSIVE_STATUSES:
+            mark_unresponsive(vm, response.status_code)
         raise VMUnavailable(f"{operation}: HTTP {response.status_code}", response.status_code)
+
+    def reach(self, name):
+        """One request the VM itself answers (a listing of its root), which
+        waits WAKE_SECONDS for its wake; raises VMUnavailable when it does
+        not answer (probe, _wake)."""
+        self._request("wake", "GET", self._sprite(name) + "/fs/list", vm=name, params={"path": "/"},
+                      timeout=WAKE_SECONDS)
+        _touch(name)
 
     def _sprite(self, name):
         return f"/v1/sprites/{quote(name, safe='')}"
@@ -481,12 +589,12 @@ class SpritesBackend(VMBackend):
 
     def set_policy(self, name, rules):
         self._request("policy", "POST", self._sprite(name) + "/policy/network", json={"rules": list(rules)},
-                      timeout=WAKE_SECONDS)
+                      vm=name, timeout=WAKE_SECONDS)
         _touch(name)
 
     def get_policy(self, name):
         # {"rules": [...]}, [] on a sprite whose policy was never set (measured 2026-10-28).
-        response = self._request("policy", "GET", self._sprite(name) + "/policy/network")
+        response = self._request("policy", "GET", self._sprite(name) + "/policy/network", vm=name)
         try:
             rules = response.json().get("rules")
         except (ValueError, AttributeError):
@@ -568,6 +676,8 @@ class SpritesBackend(VMBackend):
                                    timeout=CHECKPOINT_SECONDS) as response:
                 if not response.is_success:
                     logging.warning("Agent VM request refused operation=checkpoint status=%s", response.status_code)
+                    if response.status_code in UNRESPONSIVE_STATUSES:
+                        mark_unresponsive(name, response.status_code)
                     raise VMUnavailable(f"checkpoint: HTTP {response.status_code}", response.status_code)
                 done = False
                 for line in response.iter_lines():
@@ -615,9 +725,13 @@ class SpritesBackend(VMBackend):
             raise VMUnavailable("restore: no connection") from None
         if not done:
             raise _unavailable("restore: no completion")
+        # Restarted from the checkpoint: the next start asks it anew.
+        forget_unresponsive(name)
 
     def delete(self, name):
         self._request("delete", "DELETE", self._sprite(name), missing_ok=True)
+        # A VM made later under this name is a new one.
+        forget_unresponsive(name)
 
     def delete_path(self, name, path, *, agent=True):
         if agent:
@@ -678,13 +792,14 @@ class SpritesBackend(VMBackend):
                        ("max_run_after_disconnect", TERMINAL_AFTER_DISCONNECT)]
         return "wss://" + self._base.split("://", 1)[-1] + self._sprite(name) + "/exec?" + urlencode(params)
 
-    def _connect_exec(self, url, operation="exec"):
+    def _connect_exec(self, url, operation="exec", name=None):
         """The exec socket; a handshake that broke off (a sprite waking from
         its sleep, seen 2026-10-27) is tried once more. A handshake that ran
         out of time is not: the command is in the request, and whether the
         provider starts it before its answer is not known, so a second try
         might run it twice (runtime audit 2026-10-30, A4). The wake before
-        it (_wake) keeps that case rare."""
+        it (_wake) keeps that case rare. A gateway's 502/503/504 marks
+        ``name`` unresponsive."""
         from websockets.exceptions import InvalidHandshake, InvalidStatus
         for attempt in (1, 2):
             try:
@@ -692,6 +807,8 @@ class SpritesBackend(VMBackend):
             except InvalidStatus as exc:
                 status = exc.response.status_code
                 logging.warning("Agent VM request refused operation=%s status=%s", operation, status)
+                if name is not None and status in UNRESPONSIVE_STATUSES:
+                    mark_unresponsive(name, status)
                 raise VMUnavailable(f"{operation}: HTTP {status}", status) from None
             except TimeoutError as exc:
                 logging.warning("Agent VM request failed operation=%s attempt=%s category=%s", operation, attempt,
@@ -706,16 +823,17 @@ class SpritesBackend(VMBackend):
 
     def _wake(self, name):
         """A VM not reached for WAKE_AFTER_SECONDS is woken by a REST request
-        that waits WAKE_SECONDS (a listing of its root, which the VM itself
-        answers), before a command's handshake meets its sleep. Best effort:
-        what it cannot do the handshake still tries."""
+        that waits WAKE_SECONDS (reach), before a command's handshake meets
+        its sleep. Best effort: what it cannot do the handshake still tries,
+        except where the gateway called the VM unresponsive, whose handshake
+        would only wait as long again for the same answer."""
         if not _asleep(name):
             return
         try:
-            self._http.request("GET", self._sprite(name) + "/fs/list", params={"path": "/"}, timeout=WAKE_SECONDS)
-            _touch(name)
-        except httpx.HTTPError as exc:
-            logging.info("Agent VM wake failed category=%s", safe_exception(exc))
+            self.reach(name)
+        except VMUnavailable as exc:
+            if unresponsive(exc):
+                raise
 
     def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
         from websockets.exceptions import ConnectionClosed
@@ -723,7 +841,7 @@ class SpritesBackend(VMBackend):
         cancellation.raise_if_cancelled()
         self._wake(name)
         cancellation.raise_if_cancelled()
-        ws = self._connect_exec(url)
+        ws = self._connect_exec(url, name=name)
         # The command's time runs from the open socket: a handshake that
         # waited for the VM never eats its limit (runtime audit 2026-10-30, A4).
         started = self._clock()
@@ -793,7 +911,7 @@ class SpritesBackend(VMBackend):
         return ExecOutcome(exit_code=None if killed else exit_code, timed_out=timed_out, seconds=seconds)
 
     def open_stream(self, name, argv, *, cwd):
-        return _ExecStream(self._connect_exec(self.exec_url(name, argv, cwd=cwd, stdin=True)))
+        return _ExecStream(self._connect_exec(self.exec_url(name, argv, cwd=cwd, stdin=True), name=name))
 
     def _kill(self, name, session):
         try:

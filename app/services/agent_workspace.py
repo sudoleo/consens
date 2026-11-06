@@ -524,13 +524,16 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     made just now, else how it wakes (the provider's status, a hint only: a
     VM that just ran may say "cold" too). ``db``: the browser VM of before
     goes once the workspace is ready (retire_old_browser). ``timeout``: at
-    most this long for a setup (prepare)."""
+    most this long for a setup (prepare). A VM the gateway called
+    unresponsive before raises at once, or once its probe did not reach it
+    (reachable)."""
     name = agent_vm.workspace_name(uid)
     lock = setup_lock(name)
     while not lock.acquire(timeout=.2):
         if cancellation is not None:
             cancellation.raise_if_cancelled()
     try:
+        reachable(name, cancellation, timeout)
         # A VM made just now has no version yet: prepare sets its rules.
         created = vm.ensure(name)
         if start is not None:
@@ -544,6 +547,28 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     if db is not None:
         retire_old_browser(db, uid, vm)
     return name
+
+
+def reachable(name, cancellation=None, timeout=None):
+    """Raises VMUnavailable with the gateway's status while ``name`` is
+    marked unresponsive (agent_vm.mark_unresponsive): the browser's warm-up
+    and the workbench of one message, and every message after, each waited
+    about 48 s for the same 502 before (prod 2026-11-06, turn bb633b). Waits
+    only for the VM's probe, at most PROBE_WAIT_SECONDS (and ``timeout``),
+    so a VM that woke again is used again by the start that asked."""
+    if agent_vm.unresponsive_status(name) is None:
+        return
+    probe = agent_vm.probe(name)
+    if probe is not None:
+        limit = agent_vm.PROBE_WAIT_SECONDS if timeout is None else min(agent_vm.PROBE_WAIT_SECONDS, timeout)
+        deadline = time.monotonic() + max(0.0, limit)
+        while probe.is_alive() and time.monotonic() < deadline:
+            if cancellation is not None:
+                cancellation.raise_if_cancelled()
+            probe.join(.2)
+    status = agent_vm.unresponsive_status(name)
+    if status is not None:
+        raise agent_vm.VMUnavailable(f"unresponsive: HTTP {status}", status)
 
 
 # Accounts whose browser VM of before is gone (or never was), in this process.

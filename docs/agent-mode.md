@@ -1077,7 +1077,31 @@ Nachricht ab (`VM_UNAVAILABLE`); ein gescheitertes Setup sofort, und seit
 2026-11-05 auch eine Antwort 502, 503 oder 504 des Anbieter-Gateways
 (`agent_vm.UNRESPONSIVE_STATUSES`). Eine VM, die so nicht antwortet, tat das in
 Prod auch beim nächsten Versuch nicht, nur wieder nach rund 42 s: drei Versuche
-kosteten einen Lauf am 2026-11-05 136 s. Die nächste Nachricht versucht es neu. Eine
+kosteten einen Lauf am 2026-11-05 136 s.
+
+Seit 2026-11-06 merkt sich der Server so eine VM (`agent_vm.mark_unresponsive`).
+Max' Arbeitsplatz antwortete ab 2026-11-05 abends auf jede Anfrage nach rund
+48 s mit 502 und blieb „cold“, auch bei einem Verzeichnis-Listing und der
+eigenen Adresse. Eine andere Sprite derselben Organisation wachte in 10 s auf;
+Fly nennt das „wedged Sprites“. In einer Nachricht warteten zuerst der Start
+des Browsers und danach die Werkbank je 48 s auf dieselbe 502 (Turn bb633b,
+83 s für einen `vm_exec`), und jede weitere Nachricht wartete wieder so lange.
+Jetzt gilt:
+
+- Jeder Start trifft die Markierung sofort (`agent_workspace.reachable` in
+  `open_workspace`): Nachricht, Browser, Live-Ansicht, Terminal.
+- Eine Probe fragt die VM im Hintergrund wieder an (`agent_vm.probe`,
+  `SpritesBackend.reach`). Es läuft immer nur eine, eine neue frühestens nach
+  `PROBE_SECONDS` = 60 s.
+- Der Start wartet höchstens `PROBE_WAIT_SECONDS` = 15 s auf die Probe, etwa
+  so lange wie das Aufwachen einer kalten VM.
+- Jede Anfrage, die die VM erreicht, löscht die Markierung (`_touch`), ebenso
+  ein Restore oder das Löschen der VM.
+- Ein Aufwecken (`_wake`), das 502 bekommt, beendet den Befehl sofort, statt
+  danach noch den Handshake abzuwarten.
+
+Die Markierung lebt im Prozess (eine Instanz auf Render); nach einem Neustart
+wird die VM wieder normal gefragt. Eine
 unerwartete Ausnahme eines Werkzeugs des Arbeitsplatzes (Dateiablage,
 Fehler im Code) wird zum Fehler des Aufrufs (`TOOL_FAILED`) und gemeldet
 (`report_server_exception`), nie zum Ende des Laufs (`VMTools._guarded`, A3).
