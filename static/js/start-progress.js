@@ -19,8 +19,17 @@
 // by the same estimate as the bar (steps(list) for each phase the server
 // reports). Never made-up work, and never back to an earlier step.
 //
+// The estimate is the server's time, and a device's clock may run beside it
+// (a phone set by hand): until 2026-11-06 a phone three minutes behind said
+// "About 4 minutes left" for a minute's start. The Date header of the
+// agent's own answer (agent-chat.js, serverDate) says how far, to the
+// second; a clear difference (SKEW_MS) moves every estimate onto this clock.
+// It is the device's, the same for the chat's step and the live view, and
+// unlike a time sent with each frame it holds for a frame replayed later.
+//
 // App.startProgress.create() → { node, set(until), steps(list), done(), stop() };
-// set takes an ISO time or epoch milliseconds, the node shows itself.
+// set takes the server's ISO time or epoch milliseconds, the node shows itself.
+// App.startProgress.serverDate(header) takes a response's Date header.
 (function () {
   'use strict';
   const App = window.App = window.App || {};
@@ -29,6 +38,16 @@
   const SHOW_MS = 1200;
   const DONE_MS = 400;
   const AT_ESTIMATE = 0.9, CEILING = 0.98;
+  // The server's clock minus this one, once they differ clearly.
+  const SKEW_MS = 5000;
+  let skew = 0;
+  function serverDate(header) {
+    const server = Date.parse(header || '');
+    if (!Number.isFinite(server)) return;
+    // The header counts whole seconds: on average half of one more.
+    const offset = server + 500 - Date.now();
+    skew = Math.abs(offset) >= SKEW_MS ? offset : 0;
+  }
 
   // What is left, in whole sentences (docs/i18n.md: never words in a ${…}).
   function leftText(ms) {
@@ -99,7 +118,7 @@
       draw();
     }
     function set(time) {
-      const next = typeof time === 'number' ? time : Date.parse(time);
+      const next = (typeof time === 'number' ? time : Date.parse(time)) - skew;
       if (!Number.isFinite(next) || finished) return;
       if (next === until) return;
       const now = Date.now();
@@ -134,5 +153,5 @@
     return { node, set, steps, done, stop, get value() { return value; } };
   }
 
-  App.startProgress = { create, leftText };
+  App.startProgress = { create, leftText, serverDate };
 })();

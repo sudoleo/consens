@@ -2733,9 +2733,14 @@
         return followed;
       }
       // The buffering fallback counts its silence from the response's
-      // headers (agent-live.js responded()), not from before the POST.
+      // headers (agent-live.js responded()), not from before the POST. Their
+      // Date says how far this device's clock runs beside the server's, on
+      // which the workspace's start is estimated (start-progress.js).
       const streaming = App.withRequestDeadline((requestSignal, onProgress) => window.streamSSERequest("/agent", body, requestSignal,
-        streamHandlers, { headers, onResponse: () => live?.responded(),
+        streamHandlers, { headers, onResponse: response => {
+          App.startProgress?.serverDate?.(response?.headers?.get?.("date"));
+          live?.responded();
+        },
           onProgress: () => { lastByte = Date.now(); onProgress?.(); live?.bytes(); } }),
         // 45 s without a byte (keepalives come every 15 s): with the live
         // follower the stream is given up for polling, never the turn.

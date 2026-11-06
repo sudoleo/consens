@@ -84,6 +84,33 @@ describe("the start's bar", () => {
     expect(left(bar)).toBe("About 35 seconds left");
   });
 
+  // Bug hunt 2026-11-05: the server's estimate was read on the device's
+  // clock. A phone three minutes behind said "About 4 minutes left" for a
+  // minute's start, three minutes ahead "Almost done…" at once.
+  it("reads the server's estimate on the server's clock once its Date header says they differ", () => {
+    for (const offset of [180_000, -180_000]) {
+      const { App, host, advance } = setup();
+      // The agent's answer came with the server's time (agent-chat.js onResponse).
+      App.startProgress.serverDate(new Date(NOW + offset).toUTCString());
+      const bar = App.startProgress.create();
+      host.append(bar.node);
+      bar.set(new Date(NOW + offset + 60_000).toISOString());
+      advance(1_500);
+      expect(left(bar)).toBe("About a minute left");
+      advance(30_000);
+      expect(left(bar)).toBe("About 30 seconds left");
+    }
+    // A clock a second or two off is the device's own: the estimate stays as it came.
+    const { App, host, advance } = setup();
+    App.startProgress.serverDate(new Date(NOW + 2_000).toUTCString());
+    App.startProgress.serverDate("not a date");
+    const bar = App.startProgress.create();
+    host.append(bar.node);
+    bar.set(NOW + 13_500);
+    advance(1_500);
+    expect(left(bar)).toBe("About 10 seconds left");
+  });
+
   it("names minutes as whole sentences, and a bar off the page stops counting", () => {
     const { App, host, advance } = setup();
     expect(App.startProgress.leftText(150_000)).toBe("About 3 minutes left");

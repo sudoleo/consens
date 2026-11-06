@@ -14,6 +14,18 @@ function boot(reader, fetchError) {
 }
 
 describe("SSE completion and failure diagnostics", () => {
+  // The answer's headers go to the caller as they come: their Date sets the
+  // clock of the workspace's start (agent-chat.js, start-progress.js).
+  it("hands the response with its headers to onResponse", async () => {
+    const reader = { read: vi.fn().mockResolvedValueOnce({ value: frame("final", { consensus_response: "Done" }) })
+      .mockResolvedValue({ done: true }), releaseLock: vi.fn() };
+    const { window, dom } = boot(reader);
+    const onResponse = vi.fn();
+    await window.streamSSERequest("/agent", {}, undefined, {}, { onResponse });
+    expect(onResponse).toHaveBeenCalledOnce();
+    expect(onResponse.mock.calls[0][0].headers.get("content-type")).toBe("text/event-stream");
+    dom.window.close();
+  });
   it.each(["\r\n", "\r", "\n"])("recognizes final frames with %j line endings across byte boundaries", async (newline) => {
     const bytes = new TextEncoder().encode(`: keepalive${newline}${newline}event: final${newline}data: {"consensus_response":"Grüße"}${newline}${newline}`);
     let index = 0;

@@ -201,7 +201,10 @@ agent's step for the status line, from `agent-activity.js`, since 2026-10-30);
 while the browser starts, a bar over the skeleton counts the server's estimate
 down (`start-progress.js` / `App.startProgress`, bundled before
 `agent-activity.js`; the relay's states `setup` and `starting` carry `until`,
-since 2026-11-02);
+since 2026-11-02; since 2026-11-06 read on the server's clock:
+`App.startProgress.serverDate` takes the Date header of the agent's answer,
+`agent-chat.js` via `streamSSERequest`'s `onResponse(response)`, and moves
+the estimate by a difference of 5 s and more);
 a drop without a server reason reconnects after 1/2/5/10 s and on
 `visibilitychange`/`online`, keeping the takeover and its bar; a tab hidden
 60 s while the agent has the browser lets go (since 2026-11-05 also between
@@ -6578,7 +6581,7 @@ Hintergrund ein und startet Chrome einmal (`agent_workspace.provision` aus
 wartet auf ein laufendes Setup (`agent_workspace.setup_lock`). Wartende Schritte melden `starting_until`
 (`agent_workspace.Start`/`start_until`, Schätzung `START_SECONDS`, seit 2026-11-06 aus Browser- und Werkbank-Starts, `START_KINDS`), die
 Live-Ansicht `until` (auch `waking` während des Weckens, `_waking`); `start-progress.js` (`App.startProgress`) zeigt daraus
-Balken und Restzeit, seit 2026-11-04 darüber den echten Schritt der Phase (`steps`, Live-Ansicht `STEPS`, Chat `START_STEPS`). Das Bild der Live-Ansicht kommt seit 2026-11-02 von TigerVNCs X-Server
+Balken und Restzeit (seit 2026-11-06 auf der Uhr des Servers, die der Date-Header der Agent-Antwort nennt, `serverDate`), seit 2026-11-04 darüber den echten Schritt der Phase (`steps`, Live-Ansicht `STEPS`, Chat `START_STEPS`). Das Bild der Live-Ansicht kommt seit 2026-11-02 von TigerVNCs X-Server
 (`display.sh`, continuous updates, 30 Bilder/s statt rund 13 bei x11vnc;
 `docs/agent-mode.md`, „Flüssigere Live-Ansicht“); Render trägt es ohne
 permessage-deflate (Startbefehl `--ws-per-message-deflate false`). Der Start der

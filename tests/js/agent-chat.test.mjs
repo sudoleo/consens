@@ -3876,6 +3876,26 @@ describe("agent stream behind a buffering proxy", () => {
   }
   const liveCalls = w => w.fetch.mock.calls.map(call => String(call[0])).filter(url => url.includes("/live?"));
 
+  // The workspace's start is counted down on the server's clock
+  // (start-progress.js serverDate): the answer's Date header says how far
+  // this device's runs beside it (bug hunt 2026-11-05).
+  it("hands the server's Date header of the answer to the start's bar", async () => {
+    const { window: w, document: d, dom } = bootLive([{ known: true, done: false, last_seq: 0, events: [] }]);
+    await selectAgent(w);
+    w.App.startProgress = { serverDate: vi.fn() };
+    const date = "Fri, 06 Nov 2026 16:40:02 GMT";
+    w.streamSSERequest.mockImplementationOnce(async (_url, _body, _signal, handlers, options) => {
+      options.onResponse({ headers: { get: name => (name.toLowerCase() === "date" ? date : null) } });
+      options.onProgress();
+      handlers.delta.receive({ text: "Live" }, "1");
+      return { ok: true, status: 200, streamed: true, data: finalData("Live") };
+    });
+    d.querySelector("#questionInput").value = "Open the shop";
+    await w.App.agentChat.send();
+    expect(w.App.startProgress.serverDate).toHaveBeenCalledWith(date);
+    dom.window.close();
+  });
+
   // P6 (2026-11-05): the silence counted from before the POST, so a server
   // slow to answer polled for nothing and was counted as a buffering network.
   it("takes a slow start on the server for no buffering network", async () => {
