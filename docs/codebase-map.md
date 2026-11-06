@@ -516,7 +516,8 @@ Maintenance-, 5-Minuten-Account-Cleanup-, stündlichen Retention- und
 (lokal geteilte) Produktions-Firestore schreibt, dort löscht oder Jobs claimt,
 nur wo er hingehört, und meldet ihn sonst in `GET /health/maintenance` als
 `disabled`: Consensus-Watch-, Topic-, SEO-Puls-Scheduler (`seo-pulse-scheduler`),
-Consensus-API-Maintenance, Retention-Maintenance,
+Consensus-API-Maintenance, Retention-Maintenance, die tägliche
+Gedächtnis-Pflege (`memory-review`, schreibt Erinnerungen echter Konten),
 beide Account-Cleanups (`consensus-api-account-cleanup`,
 `full-account-deletion-cleanup`: löschen Daten echter Tombstone-Konten und
 Firebase-Auth-User) sowie die Einmal-Tasks (`_run_once`, `restart=False`)
@@ -2173,7 +2174,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Antwort und Settings › Memory. `AUDIT_MEMORY_WRITE_PROMPT` nennt seitdem
   auch, was sich zu merken lohnt (Selbstaussagen und Arbeitsweise über den
   Auftrag hinaus, auch eine Korrektur oder ein Ja auf ein Angebot für
-  nächstes Mal; nicht, wonach der Nutzer nur fragt): Ohne das sparte der
+  nächstes Mal; nicht, wonach der Nutzer nur fragt; seit 2026-11-06 ersetzt,
+  siehe „Merk-Grundsatz“ unten): Ohne das sparte der
   Agent auch ungesperrt jede Erinnerung aus, und er ist für jede
   Prüfer-Einstellung gleich. `outside_in_view` bleibt nur für das
   Einstellungs-Werkzeug (Belegzitat). `evidence_matches` und `user_words`
@@ -2262,6 +2264,60 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `consensio:memory-changed` lässt eine geladene Settings-Liste nachladen.
   `MOCK_LLM`: eine Agent-Frage „Remember: <Fakt>“ speichert den Fakt, damit der
   Ablauf ohne Provider im Browser prüfbar ist.
+  **Merk-Grundsatz seit 2026-11-06:** `AUDIT_MEMORY_WRITE_PROMPT` sagt, wofür
+  Memory da ist (ihn wie ein persönlicher Assistent kennen: wer er ist, woran
+  er arbeitet oder was er plant, wie er arbeiten will, was geklappt hat), und
+  wann (im selben Schritt wie die Antwort), statt was nicht zählt („what they
+  merely ask about is not“ ist raus, Max: keine Sonderregeln). Befund davor:
+  121 Nachrichten seit 2026-10-20 auf Max' Konto, kein einziger
+  `update_memory`-Aufruf seit der Entsperrung, obwohl Werkzeug und Prompt da
+  waren. Geblieben: Opt-in, Secret-Filter, Längen-/Anzahlgrenzen, temporäre
+  Chats und der Art.-9-Satz.
+- **Tägliche Gedächtnis-Pflege (`app/services/memory_review.py`, seit
+  2026-11-06)** — nach Anthropics „components of agent memory“ („dreaming“):
+  ein Durchgang außerhalb jedes Laufs, der auf die Chats zurückblickt und das
+  Gedächtnis ergänzt, korrigiert, zusammenführt und Veraltetes löscht. Kein
+  Schreiber neben jeder Nachricht (921ff52b, am 2026-11-02 revertiert): einmal
+  am Tag, keine Wartezeit für den Nutzer. **Fällig:** `start_agent_turn`
+  (routers/agent.py) markiert bei `memory.writable` (Opt-in, nicht pausiert,
+  nicht temporär) und ohne `watch_run` über `_TURN_READS` neben dem Lauf
+  `memory_reviews/{uid}` (`mark_due`: `last_turn_at`, `review_after` =
+  jetzt + `IDLE` 3 h; fail-open). **Lauf:** Lifespan-Task `memory-review`
+  (`_scheduler_task`, nur Produktion) tickt alle 15 min, fragt nur
+  `review_after <= jetzt` ab (Einzelfeld-Index, ruhige Nacht = eine leere
+  Query), höchstens 20 Konten je Tick. `_claim` nimmt transaktional eine
+  10-min-Lease; war die letzte Pflege jünger als `INTERVAL` (20 h), schiebt er
+  `review_after` dorthin. Gelesen werden die Chats mit `updated_at >= since`
+  und darin die Turns mit `created_at >= since` (since = letzte Pflege, nie
+  weiter als `LOOKBACK` 14 Tage, kein Nachholen von Rückstau), nur
+  `completed`/`succeeded`, ohne Google-Daten-Chats, temporäre und nicht aktive
+  Chats und ohne Watch-Läufe; je Turn die Worte des Nutzers
+  (`agent_memory.user_words`, ein per „Ask about this“ zitierter Absatz steht
+  getrennt als Assistententext daneben) bis 1.000 Zeichen und das Ende der
+  Antwort (600), zusammen höchstens `CHATS_CHARS` 60.000 (die ältesten fallen
+  zuerst). Ein strukturierter Aufruf (`query_engine_json`, Modell
+  `memory_edit_model` = Luna wie Remember/Correct memory) bekommt Grundsätze +
+  Fakten (wofür Memory da ist, Datum von heute, Antworten sind Kontext, ein
+  Fakt über den Nutzer braucht seine Worte oder sein Ja, Art. 9) und
+  `render_memory_block` mit IDs; `changes()` verwirft unbrauchbare Änderungen
+  einzeln (unbekannte ID, zweite Änderung derselben Erinnerung, Secret, zu
+  lang) statt den Durchgang, ordnet Löschungen vor Hinzufügungen und hält die
+  100er-Grenze. Angewandt wird über `FirestoreAgentMemoryRepository.apply`
+  (`origin="agent"`, `source="review"`: Opt-in in derselben Transaktion,
+  Tombstone, Undo-Log) als **eine** Änderung. `_finish` schreibt
+  `reviewed_at`, gibt die Lease frei und löscht `review_after`, außer eine
+  Nachricht kam während der Pflege; `last_result` hält nur Status und Zahlen.
+  Fehler (Modell, Opt-in aus, Konto gelöscht) speichern nichts. Nicht auf das
+  Tageskonto des Nutzers gebucht (wie Chat-Titel). **Sichtbar** nur in
+  Settings › Memory: `GET /api/my/memory` (und jede Schreibantwort) liefert
+  `last_review` (`get_with_review` → `memory_review.last_review`:
+  `change_id`, `at`, `added`, `updated`, `deleted`, `undone`, keine Texte);
+  `user-memory.js` zeigt eine Woche lang eine Zeile `#memoryReviewLine`
+  („Last tidy-up from your chats: …“, Zahlen je Teil als eigener Span für die
+  Übersetzung) mit einem Undo über `/changes/{id}/undo`. Im Chat nie
+  (feedback Balance). `memory_reviews/{uid}` geht mit dem Konto
+  (account_deletion `memory_review`). Datenschutzerklärung (EN/DE) nennt den
+  Durchgang; der Produktfakt `memory` in `agent_settings.py` auch.
 - **Agent-Watch (`app/services/agent_watch.py`, `agent_watches.py`,
   `agent-watch.js`; seit 2026-10-11 vorbereitet, seit 2026-11-03 läuft eine
   Watch den Agenten)**: Der Agent legt keine Watch an, er bereitet sie vor,
@@ -9499,6 +9555,7 @@ app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Anlage und -Lesen (Antwortdokumente gespeicherter Consensus-Turns), Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, update_memory ohne Belegzitat (AuditMemoryChange; seit 2026-10-28 im Audit, seit 2026-10-31 überall, evidence_matches/user_words nur noch für Einstellungen und Links), Secret-Prüfung, Undo-Log, Prompt-Fakten AUDIT_MEMORY_*
+  memory_review.py           Tägliche Gedächtnis-Pflege (seit 2026-11-06): memory_reviews/{uid} fällig per mark_due, Lifespan-Task memory-review, ein Luna-Aufruf über die Chats seit der letzten Pflege, eine Änderung mit source="review", last_review für Settings
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompt-Block AUDIT_PROMPT, Hinweise im Toolergebnis (INSTRUCTIONS); startet nie eine Watch. Im geplanten Lauf WatchRunTools: report_finding (nur mit Beleg aus diesem Lauf) und finish_watch, RUN_PROMPT/RUN_NOTE (seit 2026-11-03)
   agent_watches.py           Watches, die den Agenten laufen lassen (seit 2026-11-03): Limits/Intervalle je Stufe, Zeitplan (next_run, daily/weekly über watch_service), create aus dem gespeicherten Vorschlag, stop, due/claim (verspätet > 2 h = übersprungen, Tagesgrenzen für Server und Konto, ein Intervall, das die Stufe nicht mehr erlaubt, wird beim Lauf angepasst), start_run (routers/agent.start_agent_turn mit watch_run; 409/429/503 = in 10 min noch mal als derselbe Lauf (`retry_of`, zählt nicht, verschiebt nichts), 404 = Chat weg, 403/422 = Watch endet mit `google_data`/`cannot_run`), run_tick (aus watch_scheduler_loop, je Konto ein Lauf, höchstens 3 parallel, liest bis zu 100 fällige, Gleichstand nach längster Wartezeit seit dem letzten Lauf; jedes Laufende weckt den Takt, wartende Läufe sonst nach BLOCKED_RECHECK = 5 min), turn_ended (last_run, Ende beim Ziel, ungelesen, Mail und Telegram über notification_outbox je nach email_enabled/telegram_enabled), pause/resume/seen/set_channels, Anlegen mit eigenem Auftrag auch in einem eigenen Chat (chat_title), unsubscribe_token/stop_emails (Link „Stop emails“), PICTURES (Bild der Watch: beim Anlegen ein Foto des Gegenstands über watch_scheduler.picture_words → consensus_engine.pick_watch_picture_words und picture_search (Brave), sonst die Seiten des Chats; nach Läufen die Seiten, die sie öffneten, über watch_images.find_image; gespeichert unter watch_images/{id}, eigener Thread, höchstens 3 Versuche), Löschen mit Chat/Konto samt Bild
   agent_chat_search.py       search_chats (seit 2026-10-28): frühere Chats des Kontos nach Titel, Startdatum, letzter Frage finden (mit erster Frage) und einen per chat_id mit Fragen und Antworten lesen; nie der aktuelle Chat, nie Chats mit Google-Daten; Ergebnis ist Fremdinhalt
@@ -10137,6 +10194,10 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   Retention nach 30 Tagen; Kontolöschung entfernt alle Items der UID. Die alten
   Marker in `telegram_watch_deliveries` und `topic_follower_deliveries` werden
   vom Versandpfad nicht mehr geschrieben und laufen über die bestehenden Cleanups aus.
+- `memory_reviews/{uid}` — wann die tägliche Gedächtnis-Pflege fällig ist
+  (`last_turn_at`, `review_after`, `reviewed_at`, `lease_until`, `lease_id`,
+  `last_result` nur mit Status und Zahlen; seit 2026-11-06, §3 „Tägliche
+  Gedächtnis-Pflege“). Keine Texte; gelöscht mit dem Konto.
 - `watch_briefs/{uid}` — user-level Morning-Brief-Einstellungen (`enabled`,
   `send_time` `HH:MM`, IANA-`timezone`, `mode` = `always|changes_only`,
   `next_send_at`, `last_evaluated_at`, `last_sent_at`, `enabled_at`). Reine

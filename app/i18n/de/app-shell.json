@@ -144,7 +144,7 @@
   "Account": "Konto",
   "What consens.io remembers about you across chats. You decide what goes in, and you can change or delete it any time.": "Was sich consens.io über alle Chats hinweg über dich merkt. Du entscheidest, was hineinkommt, und kannst es jederzeit ändern oder löschen.",
   "<0>Use my memory</0> <1>Pause it without deleting it.</1>": "<0>Gedächtnis verwenden</0> <1>Pausieren, ohne etwas zu löschen.</1>",
-  "<0>Let Agent update memory</0> <1>Agent saves, updates and forgets details you share in chats. Review, edit or undo every change below.</1>": "<0>Agent darf das Gedächtnis aktualisieren</0> <1>Agent speichert, aktualisiert und vergisst Details, die du in Chats teilst. Jede Änderung kannst du unten prüfen, bearbeiten oder rückgängig machen.</1>",
+  "<0>Let Agent update memory</0> <1>Agent saves, updates and forgets what’s worth keeping from your chats, also in a daily tidy-up. Review, edit or undo every change below.</1>": "<0>Agent darf das Gedächtnis aktualisieren</0> <1>Agent speichert, aktualisiert und vergisst, was aus deinen Chats wichtig ist, auch beim täglichen Aufräumen. Jede Änderung kannst du unten prüfen, bearbeiten oder rückgängig machen.</1>",
   "Saved memories": "Gespeicherte Erinnerungen",
   "Short facts and preferences, saved by Agent or by you. They go with your questions while Memory is on.": "Kurze Fakten und Vorlieben, gespeichert von Agent oder von dir. Sie gehen mit deinen Fragen mit, solange das Gedächtnis an ist.",
   "Nothing saved yet.": "Noch nichts gespeichert.",

@@ -285,3 +285,80 @@ describe("memory save conflicts", () => {
     expect(ctx.document.getElementById("memoryStatus").querySelector("[data-memory-conflict]")).toBeTruthy();
   });
 });
+
+/**
+ * The daily review (memory_review.py) tidies the memory from the chats.
+ * Nothing of it shows in a chat; Settings names its latest change for a
+ * week in one line, with one Undo for all of it.
+ */
+describe("daily tidy-up line", () => {
+  const ITEMS = `
+    <p id="memoryReviewLine" hidden></p>
+    <ul id="memoryItemsList"></ul>
+    <p id="memoryItemsEmpty"></p>
+    <span id="memoryItemsCount"></span>
+    <span id="memoryItemsStatus"></span>
+  `;
+
+  function bootWithReview(review) {
+    const calls = [];
+    let current = review;
+    const { window, document } = loadScripts(["static/js/user-memory.js"], {
+      body: SETTINGS + ITEMS,
+      before(win) {
+        win.auth = { currentUser: { uid: "uid-1", getIdToken: async () => "token" } };
+        win.fetch = async (url, options = {}) => {
+          calls.push({ url, method: options.method || "GET" });
+          if (String(url).includes("/undo")) current = { ...current, undone: true };
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({
+              memory: storedProfile(true), revision: 4, limits: { notes_chars: 800, items: 100, item_chars: 300 },
+              items: [{ id: "m000001", text: "Lives in Hannover.", origin: "agent", created_at: null, updated_at: null }],
+              items_revision: 2, last_review: current
+            })
+          };
+        };
+      }
+    });
+    return { window, document, calls };
+  }
+
+  async function open(ctx) {
+    ctx.document.dispatchEvent(new ctx.window.Event("DOMContentLoaded"));
+    ctx.document.getElementById("editSystemPromptBtn").click();
+    await settle();
+  }
+
+  it("names the latest review and undoes it in one step", async () => {
+    const ctx = bootWithReview({ change_id: "0123456789abcdef", at: new Date().toISOString(),
+                                 added: 2, updated: 0, deleted: 1, undone: false });
+    await open(ctx);
+    const line = ctx.document.getElementById("memoryReviewLine");
+    expect(line.hidden).toBe(false);
+    const parts = [...line.querySelectorAll("span")].map(span => span.textContent);
+    expect(parts[0]).toMatch(/^Last tidy-up from your chats: /);
+    expect(parts.slice(1)).toEqual(["2 added", "1 removed"]);
+    line.querySelector("button").click();
+    await settle();
+    await settle();
+    expect(ctx.calls.some(call => call.method === "POST" && call.url.endsWith("/changes/0123456789abcdef/undo")))
+      .toBe(true);
+    expect(line.hidden).toBe(true);
+    expect(ctx.document.getElementById("memoryItemsStatus").textContent).toBe("Tidy-up undone.");
+  });
+
+  it("stays away when there was none, nothing changed or it is older than a week", async () => {
+    for (const review of [
+      null,
+      { change_id: "0123456789abcdef", at: new Date().toISOString(), added: 0, updated: 0, deleted: 0, undone: false },
+      { change_id: "0123456789abcdef", at: new Date(Date.now() - 8 * 86400000).toISOString(),
+        added: 1, updated: 0, deleted: 0, undone: false },
+    ]) {
+      const ctx = bootWithReview(review);
+      await open(ctx);
+      expect(ctx.document.getElementById("memoryReviewLine").hidden).toBe(true);
+    }
+  });
+});

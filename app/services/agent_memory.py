@@ -427,9 +427,16 @@ class FirestoreAgentMemoryRepository:
 
     # Reads ------------------------------------------------------------------
     def get(self, uid: str) -> tuple[list[dict], int]:
+        items, revision, _ = self.get_with_review(uid)
+        return items, revision
+
+    def get_with_review(self, uid: str) -> tuple[list[dict], int, dict | None]:
+        """Items, revision and the latest daily review (memory_review.last_review), one read."""
+        from app.services.memory_review import last_review
         snapshot = user_memory._bounded_get(self.entries_ref(uid))
         data = (snapshot.to_dict() or {}) if snapshot.exists else {}
-        return _clean_items(data.get("items")), max(0, int(data.get("revision") or 0))
+        review = last_review(_clean_changes(data.get("changes"), _utcnow()))
+        return _clean_items(data.get("items")), max(0, int(data.get("revision") or 0)), review
 
     def snapshot(self, uid: str, *, max_notes_chars: int = user_memory.MAX_NOTES_CHARS) -> MemorySnapshot:
         """Profile, switches and entries in one batched read. Fail-open."""
@@ -455,12 +462,14 @@ class FirestoreAgentMemoryRepository:
     # Writes -----------------------------------------------------------------
     def apply(self, uid: str, changes: list[dict], *, origin: str, expected_revision: int | None = None,
               chat_ref=None, turn_ref=None, chat_id: str = "", turn_id: str = "",
-              now: datetime | None = None) -> dict:
+              source: str = "", now: datetime | None = None) -> dict:
         """Apply normalized changes atomically. All or nothing.
 
         ``origin="agent"`` requires the opt-in in the same transaction and,
         with ``turn_ref``, a turn that is still running; the change summary is
         appended to that turn so the answer can show it with Undo.
+        ``source="review"``: the daily review (memory_review.py), named in
+        the change log for Settings (``last_review``).
         """
         if origin not in ORIGINS:
             raise ValueError("Invalid memory origin")
@@ -499,7 +508,8 @@ class FirestoreAgentMemoryRepository:
             change_id = secrets.token_hex(8)
             log = _clean_changes(data.get("changes"), now)
             log.append({"id": change_id, "at": now, "origin": origin, "chat_id": chat_id or None,
-                        "turn_id": turn_id or None, "ops": ops, "undone_at": None})
+                        "turn_id": turn_id or None, "ops": ops, "undone_at": None,
+                        **({"source": source} if source else {})})
             log = log[-CHANGE_LOG_LIMIT:]
             next_revision = revision + 1
             tx.set(entries_ref, {
@@ -768,17 +778,29 @@ def render_memory_block(snapshot: MemorySnapshot, *, with_ids: bool = True) -> s
 # keep their clause: GDPR art. 9. Until 2026-10-31 comparison mode had its
 # own rules here (MEMORY_*_PROMPT). Since 2026-11-02 one principle of what is
 # worth keeping: with facts alone the agent kept nothing, not even a yes to
-# its own "Shall I make a real PPTX next time?".
+# its own "Shall I make a real PPTX next time?". Since 2026-11-06 what memory
+# is for instead of what not to keep (Max: "no special rules why he can't
+# save; if he wants to make a memory of it, go for it"): "what they merely
+# ask about is not" kept out the projects and plans a personal assistant
+# knows, and even then the agent saved nothing in 121 messages. Anthropic's
+# "components of agent memory": say what memory is for, not how to use it;
+# cheaper models (most runs: DeepSeek Flash, Luna, MiMo) need the moment
+# named, so the paragraph says when. The daily review (memory_review.py)
+# catches what a run lets pass.
 AUDIT_MEMORY_USE_PROMPT = """Where a memory conflicts with the question or the evidence, the question and the
 evidence decide."""
 
 AUDIT_MEMORY_WRITE_PROMPT = """MEMORY UPDATES. The user lets you keep their memory across chats with
-update_memory: what you save shapes later answers, and the user sees every
-change and can undo it. Worth keeping is what the user tells you about
-themselves and how they want you to work beyond this task, also in a
-correction or in a yes to your offer for next time; what they merely ask
-about is not. Health, religion, political views and other sensitive details
-only when the user asks you to remember them."""
+update_memory, so that in a later chat you know them the way a good personal
+assistant would: who they are and their situation, what they are working on,
+planning or following, how they want you to work, and what worked or failed
+for them. Keep what a later chat should know and could not read from its
+question, also when it shows only in a correction, in a yes to your offer for
+next time or across this chat, and update or delete a memory that turns out
+outdated or wrong. When this message gave you such a thing, save it in the
+same step as your answer. The user sees every change and can undo it. Health,
+religion, political views and other sensitive details only when the user asks
+you to remember them."""
 
 AUDIT_MEMORY_READ_ONLY_PROMPT = """Memory is read-only for you: Agent memory updates are switched off (Settings >
 Memory, "Let Agent update memory")."""

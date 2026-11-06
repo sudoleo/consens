@@ -142,6 +142,7 @@ def test_a_temporary_chat_does_what_any_chat_does_and_keeps_nothing_beyond_itsel
     assert not bookmark.get().exists
     final = client.post("/agent", json=payload, headers=AUTH).json()
     assert final["bookmark_meta"] is None and final["temporary"] is True
+    assert not store.db.collection("memory_reviews").document(UID).get().exists
     turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Something private")
     settings = store.get_turn(UID, chat_id, turn["id"])["agent_settings"]
     # The account's workspace, as in its other chats; memory read, not written.
@@ -166,6 +167,14 @@ def test_a_temporary_chat_does_what_any_chat_does_and_keeps_nothing_beyond_itsel
     assert prompt_defaults.AGENT_TEMPORARY_CHAT_PROMPT not in normal_system
     normal_names = {tool["function"]["name"] for tool in calls[-1].get("tools") or [] if tool.get("type") == "function"}
     assert "update_memory" in normal_names
+    # Only the normal chat brings the daily memory review due (memory_review.py,
+    # marked beside the run, so wait for it briefly).
+    import time
+    review = store.db.collection("memory_reviews").document(UID)
+    deadline_at = time.monotonic() + 5
+    while not review.get().exists and time.monotonic() < deadline_at:
+        time.sleep(0.02)
+    assert set(review.get().to_dict()) == {"last_turn_at", "review_after"}
 
 
 def test_its_memory_is_read_and_never_written():

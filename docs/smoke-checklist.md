@@ -66,6 +66,15 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Hannover?“) → „Memory updated“ unter der Antwort, ohne Prüferkarte, mit
       Prüfern an und „off“. Im Usage-Panel der zweiten Nachricht
       eines Claude-Chats sollten `cached_input_tokens` > 0 sein.
+- [ ] Tägliche Gedächtnis-Pflege (2026-11-06, Prod): nach einer Agent-Nachricht
+      eines Kontos mit „Let Agent update memory“ steht `memory_reviews/{uid}`
+      mit `review_after` ≈ jetzt + 3 h; in einem temporären Chat nicht. Etwa
+      3–3¼ h nach der letzten Nachricht: `GET /health/maintenance` →
+      `memory-review` mit `changed`/`reviewed`, `memory_reviews/{uid}` trägt
+      `reviewed_at` und `last_result` (nur Zahlen). Settings › Memory zeigt
+      „Last tidy-up from your chats: …“ mit den Zahlen; Undo stellt den
+      vorigen Stand wieder her und blendet die Zeile aus. In keinem Chat
+      erscheint ein Hinweis darauf.
 - [ ] Agent-Einstellungen (2026-10-17, echter Provider, Free-Konto auf Auto):
       „Denk ab jetzt maximal gründlich“ → kurze Antwort ohne `compare_models`: Max ist
       auf Pro, Medium (= Auto ohne Pro) gilt schon, keine Karte. „Prüf mit

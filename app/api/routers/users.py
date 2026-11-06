@@ -295,8 +295,11 @@ def _memory_tier(uid: str) -> str:
 
 
 def _memory_items(uid: str) -> dict:
-    items, revision = agent_memory_repository.get(uid)
-    return {"items": [agent_memory.public_item(item) for item in items], "items_revision": int(revision)}
+    # last_review: the daily review's latest change (memory_review.py), for
+    # its one line with Undo in Settings › Memory; counts only, no texts.
+    items, revision, review = agent_memory_repository.get_with_review(uid)
+    return {"items": [agent_memory.public_item(item) for item in items], "items_revision": int(revision),
+            "last_review": review}
 
 
 def _memory_response(profile: dict, *, tier, revision: int, items: Optional[dict] = None) -> dict:

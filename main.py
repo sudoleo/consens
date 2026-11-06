@@ -82,6 +82,7 @@ from app.services.api_consensus_runner import (
 )
 from app.services.llm.mock_llm import mock_llm_enabled
 from app.services.retention_maintenance import retention_maintenance_loop
+from app.services.memory_review import TASK_NAME as memory_review_task_name, memory_review_loop_factory
 from app.services.topic_runner import topic_scheduler_loop
 from app.services.watch_scheduler import watch_scheduler_loop
 from app.services.seo_pulse import seo_pulse_scheduler_loop
@@ -239,6 +240,11 @@ async def lifespan(app: FastAPI):
     retention_task = _scheduler_task(
         retention_maintenance_loop, "retention-maintenance"
     )
+    # The agent's memory, tidied up once a day per opted-in account
+    # (memory_review.py): writes memories, so production only.
+    memory_review_task = _scheduler_task(
+        memory_review_loop_factory(), memory_review_task_name
+    )
     api_account_cleanup_task = _scheduler_task(
         api_account_cleanup.retry_loop, "consensus-api-account-cleanup"
     )
@@ -251,6 +257,7 @@ async def lifespan(app: FastAPI):
         seo_pulse_task,
         api_maintenance_task,
         retention_task,
+        memory_review_task,
         api_account_cleanup_task,
         account_deletion_task,
         model_config_backfill_task,

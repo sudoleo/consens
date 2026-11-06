@@ -113,6 +113,8 @@ class FirestoreAccountDeletion:
             ("agent_watches", lambda: self._delete_agent_watches(uid)),
             ("watch_indexes", lambda: self._delete_watch_indexes(uid)),
             ("watch_brief", lambda: self._db.collection("watch_briefs").document(uid).delete()),
+            # When the daily memory review is due (memory_review.py): times only.
+            ("memory_review", lambda: self._db.collection("memory_reviews").document(uid).delete()),
             # Pending notifications carry the owner's question/summary text.
             ("notification_outbox", lambda: self._delete_notification_outbox(uid)),
             ("persistence_guards", lambda: self._delete_persistence_guards(uid, email)),

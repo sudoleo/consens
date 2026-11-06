@@ -276,6 +276,7 @@ def test_lifespan_gates_prod_writers_behind_mock_llm(monkeypatch):
         "seo-pulse-scheduler",
         "consensus-api-maintenance",
         "retention-maintenance",
+        "memory-review",
         "consensus-api-account-cleanup",
         "full-account-deletion-cleanup",
         "model-configuration-backfill",

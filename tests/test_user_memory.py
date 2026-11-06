@@ -373,7 +373,7 @@ def memory_api(monkeypatch):
     monkeypatch.setattr(users_router, "user_memory_repository", stub)
     # Saved memories have their own tests (test_agent_memory.py); here: none.
     monkeypatch.setattr(users_router, "agent_memory_repository", type("NoItems", (), {
-        "get": lambda self, uid: ([], 0)})())
+        "get_with_review": lambda self, uid: ([], 0, None)})())
     monkeypatch.setattr(users_router, "verify_user_token", lambda token, **kw: UID)
     monkeypatch.setattr(users_router, "get_user_tier", lambda uid: "free")
     app = FastAPI()

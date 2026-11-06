@@ -680,6 +680,11 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                          watch_run=watch_run, history_summary=history_summary or None,
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)
+        if memory.writable and not watch_run:
+            # The daily memory review comes a few hours after the account's
+            # last message (memory_review.py); one small write beside the run.
+            from app.services import memory_review
+            _TURN_READS.submit(memory_review.mark_due, db_firestore, uid)
         if loop.vm_tools is not None:
             # A new account's workspace is made while it talks to the agent,
             # before a call needs it (agent_workspace.provision).

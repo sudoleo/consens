@@ -39,7 +39,8 @@
     itemsBusy: false,
     editingId: null,
     confirmClear: false,
-    maxItems: 100
+    maxItems: 100,
+    lastReview: null    // letzte taegliche Aufraeum-Runde (memory_review.py), nur Zahlen
   };
 
   function emptyProfile() {
@@ -65,6 +66,7 @@
       itemsCount: document.getElementById("memoryItemsCount"),
       itemsClear: document.getElementById("clearMemoryItemsBtn"),
       itemsStatus: document.getElementById("memoryItemsStatus"),
+      reviewLine: document.getElementById("memoryReviewLine"),
       saveBtn: document.getElementById("saveMemoryBtn"),
       clearBtn: document.getElementById("clearMemoryBtn"),
       status: document.getElementById("memoryStatus"),
@@ -464,7 +466,63 @@
     const { itemInput } = els();
     if (itemInput && Number.isInteger(result.limits?.item_chars)) itemInput.maxLength = result.limits.item_chars;
     if (state.editingId && !state.items.some(item => item.id === state.editingId)) state.editingId = null;
+    if ("last_review" in result) state.lastReview = result.last_review || null;
     renderItems();
+    renderReview();
+  }
+
+  // The daily review (memory_review.py) tidies the memory from the chats a
+  // few hours after the last message. Nothing of it shows in a chat; here
+  // one line names its latest change for a week, with one Undo for all of it.
+  const REVIEW_SHOWN_DAYS = 7;
+
+  function renderReview() {
+    const { reviewLine } = els();
+    if (!reviewLine) return;
+    const review = state.lastReview;
+    const stamp = Date.parse(review?.at || "");
+    const changed = review ? (review.added || 0) + (review.updated || 0) + (review.deleted || 0) : 0;
+    const fresh = Number.isFinite(stamp) && Date.now() - stamp < REVIEW_SHOWN_DAYS * 86400000;
+    if (!review?.change_id || review.undone || !changed || !fresh) {
+      reviewLine.hidden = true;
+      reviewLine.replaceChildren();
+      return;
+    }
+    const date = window.App.format.date(stamp);
+    const parts = [`Last tidy-up from your chats: ${date}`];
+    let n = review.added || 0;
+    if (n) parts.push(`${n} added`);
+    n = review.updated || 0;
+    if (n) parts.push(`${n} updated`);
+    n = review.deleted || 0;
+    if (n) parts.push(`${n} removed`);
+    const nodes = [];
+    parts.forEach((text, index) => {
+      if (index) nodes.push(document.createTextNode("·"));
+      const span = document.createElement("span");
+      span.textContent = text;
+      nodes.push(span);
+    });
+    const undo = itemButton("Undo", () => undoReview(review.change_id), "Undo the latest tidy-up");
+    undo.disabled = !currentUser() || state.itemsBusy;
+    reviewLine.replaceChildren(...nodes, undo);
+    reviewLine.hidden = false;
+  }
+
+  async function undoReview(changeId) {
+    if (!currentUser() || state.itemsBusy) return;
+    state.itemsBusy = true;
+    syncItemControls();
+    try {
+      const restored = await api("POST", null, `/api/my/memory/changes/${encodeURIComponent(changeId)}/undo`);
+      await acceptItems(restored);
+      setItemsStatus("Tidy-up undone.", "ok");
+    } catch (error) {
+      setItemsStatus(window.App.userError(error, { fallback: "Memory couldn’t be restored. Try again." }), "error");
+    } finally {
+      state.itemsBusy = false;
+      syncItemControls();
+    }
   }
 
   function itemDate(item) {
@@ -553,6 +611,7 @@
       itemsClear.dataset.confirm = state.confirmClear ? "true" : "";
     }
     itemsList?.querySelectorAll("button, input").forEach(control => { control.disabled = disabled; });
+    els().reviewLine?.querySelectorAll("button").forEach(control => { control.disabled = disabled; });
   }
 
   async function changeItems(changes, successMessage) {
@@ -717,7 +776,9 @@
       state.items = [];
       state.itemsRevision = null;
       state.editingId = null;
+      state.lastReview = null;
       renderItems();
+      renderReview();
       // Nur den Stand verwerfen, NICHT nachladen: dieses Ereignis feuert bei
       // jedem Seitenaufruf eines eingeloggten Kontos. Ein Fetch hier haette den
       // Read, den der Modal-Oeffner bewusst aufschiebt, an jeden Aufruf

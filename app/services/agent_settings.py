@@ -563,9 +563,11 @@ class SettingsTools:
                        "user can revoke a link in the share dialog; a revoked share is deleted for good after "
                        f"{REVOKED_RETENTION_DAYS} days.",
             "memory": "Memory (Settings > Memory) holds what the user writes there about themselves and goes with "
-                      "their questions while it is on; they can edit, pause or delete it. The agent saves details "
-                      "from the user's own messages only once they turn on \"Let Agent update memory\" (off by "
-                      "default).",
+                      "their questions while it is on; they can edit, pause or delete it. Only once they turn on "
+                      "\"Let Agent update memory\" (off by default) does the agent save, update and forget what is "
+                      "worth keeping from their chats: while it answers, and in a daily tidy-up a few hours after "
+                      "their last message that goes over the chats since the previous one. Settings > Memory "
+                      "shows every change with Undo.",
             "watches": "A Watch reruns a question on a schedule and tracks how the answer changes; readers can follow "
                        "public Watches and Topics by email.",
             "data": "Chats can be deleted one by one, and Settings > Account > Delete account deletes the account and "

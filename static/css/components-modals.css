@@ -1081,8 +1081,21 @@ body:not(.viewer-has-workspace) .settings-group.workspace-only + .settings-group
 }
 
 .settings-memory-items-empty[hidden],
-.settings-memory-items-footer [hidden] {
+.settings-memory-items-footer [hidden],
+.settings-memory-review[hidden] {
   display: none;
+}
+
+/* The daily review's latest change: one quiet line with its Undo. */
+.settings-memory-review {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  margin: 0;
+  color: var(--sidebar-text-muted);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
 }
 
 .settings-memory-item-add {

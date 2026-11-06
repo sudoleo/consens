@@ -1177,7 +1177,7 @@
                 <label for="memoryAutoSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>
                     <strong>Let Agent update memory</strong>
-                    <small>Agent saves, updates and forgets details you share in chats. Review, edit or undo every change below.</small>
+                    <small>Agent saves, updates and forgets what’s worth keeping from your chats, also in a daily tidy-up. Review, edit or undo every change below.</small>
                   </span>
                   <input type="checkbox" id="memoryAutoSwitch">
                 </label>
@@ -1188,6 +1188,7 @@
                   <h4>Saved memories</h4>
                   <p>Short facts and preferences, saved by Agent or by you. They go with your questions while Memory is on.</p>
                 </div>
+                <p id="memoryReviewLine" class="settings-memory-review" hidden></p>
                 <ul id="memoryItemsList" class="settings-memory-items-list" aria-label="Saved memories"></ul>
                 <p id="memoryItemsEmpty" class="settings-memory-items-empty">Nothing saved yet.</p>
                 <form id="memoryItemAddForm" class="settings-memory-item-add" method="post" action="/app" novalidate>

@@ -162,7 +162,7 @@ class FakeQuery:
             field = getattr(condition, "field_path", None)
             op = getattr(condition, "op_string", None)
             value = getattr(condition, "value", None)
-            if op not in {"==", "<="}:
+            if op not in {"==", "<=", ">="}:
                 raise AssertionError(f"unsupported fake filter operator: {op}")
             actual = data
             for part in field.split('.'):
@@ -170,6 +170,8 @@ class FakeQuery:
             if op == "==" and actual != value:
                 return False
             if op == "<=" and (actual is None or actual > value):
+                return False
+            if op == ">=" and (actual is None or actual < value):
                 return False
         return True
 
