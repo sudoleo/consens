@@ -233,6 +233,23 @@ def test_the_chats_folder_notes_and_keys_come_in_one_command(store, fake_vm):
     assert not [call for call in fake_vm.calls if call[0] == "run" and call[1] == NAME]
 
 
+def test_a_key_whose_file_ends_with_a_line_break_is_masked_without_it(store, fake_vm, monkeypatch):
+    """Bug hunt 2026-11-06: open_chat took the place of agent_secrets.load,
+    which trimmed each value; a key file edited since (an editor's line
+    break at its end) was masked only as value plus line break, and the key
+    in a header or JSON went out as it was."""
+    from app.services import agent_secrets
+    monkeypatch.setattr(agent_secrets, "_seen", {})
+    key = "sk-edited-987654321"
+    fake_vm.vms[NAME] = {"files": {agent_secrets.path("OPENAI_API_KEY"): key.encode() + b"\n"}, "checkpoints": []}
+    agent_workspace.ref(store.db, UID).set({"secret_names": ["OPENAI_API_KEY"]})
+    fake_vm.commands["python3 call.py"] = ([("stdout", f'{{"api_key": "{key}"}}\n'.encode())], 0, .1)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "python3 call.py"})]]))
+    list(loop.run())
+    assert key not in json.dumps(results(loop)[0])
+    assert agent_secrets.scrub(UID, f"Bearer {key}") == "Bearer [secret ~/.secrets/OPENAI_API_KEY, hidden from you]"
+
+
 def test_the_takeover_is_read_once_per_call_and_a_takeover_forgets_it(store, monkeypatch):
     reads = []
     real = agent_workspace.control_state

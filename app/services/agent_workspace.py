@@ -805,7 +805,10 @@ class ChatOpened:
 
 def parse_chat(raw):
     """``(state, keys, notes)`` of CHAT_SCRIPT's output: the folder's
-    state, ``(name, value)`` pairs and the notes' bytes (None: no notes)."""
+    state, ``(name, value)`` pairs and the notes' bytes (None: no notes).
+    A value loses its surrounding whitespace, as agent_secrets.save and load
+    take it: a key file edited since (an editor's line break at its end)
+    was masked only together with that line break (bug hunt 2026-11-06)."""
     head, _, rest = raw.partition(b"\n")
     if not head.startswith(b"folder "):
         raise agent_vm.VMUnavailable("chat: unreadable")
@@ -813,7 +816,7 @@ def parse_chat(raw):
     while rest.startswith(b"key "):
         name, _, rest = rest[4:].partition(b"\0")
         value, _, rest = rest.partition(b"\0")
-        keys.append((name.decode("ascii", "replace"), value.decode("utf-8", "replace")))
+        keys.append((name.decode("ascii", "replace"), value.decode("utf-8", "replace").strip()))
     if rest.startswith(b"notes +\n"):
         return state, keys, rest[8:]
     if rest.startswith(b"notes -"):
