@@ -1155,7 +1155,9 @@ anzustoßen (`agent_workspace.setup_lock`); der Browser hat dafür seine Sperre
 auf der VM. Was ein Start noch braucht, schätzt der Server aus Prod-Werten
 (`START_SECONDS`: Setup 65 s, neue Version 10 s, kalt 15 s, warm 5 s, Chrome in
 der Ansicht 8 s; `Start`, `start_until`): Ein Schritt, der auf den Start wartet,
-meldet `starting_until` (`BrowserTools._await_warm`, `VMSession._wait`), die
+meldet `starting_until` (`BrowserTools._await_warm`, `VMSession._wait`) und
+endet bei Stop, der Start läuft weiter (beim Warten auf den Browser seit
+2026-11-06; vorher wartete Stop bis zu `CALL_SECONDS` auf ihn), die
 Live-Ansicht `until`, schon während der Server die VM weckt (Zustand `waking` ab 1 s,
 `routers/agent_workspace._waking`; vorher stand Max' Ansicht einer schlafenden VM
 ohne Balken bei „Starting your workspace…“). Chat und Live-Ansicht zählen das als schmalen Balken mit

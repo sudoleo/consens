@@ -495,17 +495,20 @@ class BrowserTools:
         thread.start()
         return thread
 
-    def _await_warm(self, warming, deadline, report):
-        """Waits for the warm-up, at most until ``deadline`` (monotonic).
-        Meanwhile the step says about when the browser's start ends
-        (``starting_until``, the latest of the account's starts:
-        agent_workspace.start_until), and the chat counts it down (since
-        2026-11-02; before, it said "Starting the workspace…" for up to a
-        minute and more)."""
+    def _await_warm(self, warming, deadline, report, cancellation):
+        """Waits for the warm-up, at most until ``deadline`` (monotonic), and
+        never past Stop (since 2026-11-06: the run waits for its running
+        call, and a slow provider kept Stop waiting up to CALL_SECONDS; the
+        warm-up goes on by itself). Meanwhile the step says about when the
+        browser's start ends (``starting_until``, the latest of the account's
+        starts: agent_workspace.start_until), and the chat counts it down
+        (since 2026-11-02; before, it said "Starting the workspace…" for up
+        to a minute and more)."""
         from app.services import agent_workspace
         told = None
         try:
             while warming.is_alive():
+                cancellation.raise_if_cancelled()
                 until = agent_workspace.start_until(self.vm.loop.uid, ("browser",))
                 if until is not None and until != told:
                     told = until
@@ -676,7 +679,7 @@ class BrowserTools:
         try:
             if not self.ready:
                 if warming is not None:
-                    self._await_warm(warming, deadline, report)
+                    self._await_warm(warming, deadline, report, cancellation)
                     if warming.refused is not None:
                         raise self._unavailable(warming.refused, BROWSER_NOT_STARTED)
                 if deadline - time.monotonic() < MIN_COMMAND_SECONDS:

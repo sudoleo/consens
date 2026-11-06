@@ -696,6 +696,40 @@ def test_the_first_call_says_about_when_the_browsers_start_ends_while_it_waits(s
                                                           if "started_at" in fields)
 
 
+def test_stop_ends_a_call_that_waits_for_the_browsers_start(store, fake_vm, monkeypatch):
+    """Bug hunt 2026-11-06: the first call waited for the warm-up whatever
+    happened, up to its whole time (CALL_SECONDS): a slow provider (a gateway
+    answering after 42 s, a setup) made Stop wait as long, since the run
+    waits for its running call. The warm-up goes on; the call ends at Stop."""
+    import threading
+    import time
+    from app.services.llm.provider_runtime import ProviderCancelled
+    monkeypatch.setattr(agent_browser, "WARM_POLL_SECONDS", .05)
+    loop, browser = tools(store)
+    release = threading.Event()
+
+    class Warming:
+        ok, refused = True, None
+
+        def is_alive(self):
+            return not release.is_set()
+
+        def join(self, seconds=None):
+            release.wait(seconds)
+    browser.warming = Warming()
+    stop = ProviderCancellation()
+    threading.Timer(.2, stop.cancel).start()
+    threading.Timer(8, release.set).start()
+    began = time.monotonic()
+    try:
+        with pytest.raises(ProviderCancelled):
+            browser.call(BrowserArgs(action="read"), cancellation=stop)
+        assert time.monotonic() - began < 3
+    finally:
+        release.set()
+    assert fake_vm.requests == []
+
+
 # --- Where the browser is logged in (note_sign_in, since 2026-11-02) ---------------------
 
 def test_the_agent_notes_where_the_browser_is_logged_in_without_the_browsers_vm(store, fake_vm):
