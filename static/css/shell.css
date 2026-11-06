@@ -2224,7 +2224,14 @@ body:not(.is-hero) .input-section {
 
      Nur waehrend der Bewegung aktiv: dauerhaft wuerde overflow:hidden die
      Menues ueber dem Composer abschneiden, und jede Zeile, die das Feld beim
-     Tippen waechst, wuerde hinterherfedern. */
+     Tippen waechst, wuerde hinterherfedern.
+
+     clip statt hidden: hidden macht den Block zum Scroll-Container, und der
+     Browser scrollte ihn zum Cursor, sobald Text in das gerade fokussierte
+     Feld kam (40-70px). Am Ende der Bewegung fiel das Scrollen mit
+     overflow:hidden weg und Senden sprang um so viel nach unten; ein Tipp in
+     diesem Moment ging ins Leere (Nachtlauf Gmail bei 320px, 2026-11-06).
+     hidden bleibt nur der Rueckfall fuer Browser ohne clip. */
   body.composer-animating:not(.is-hero) .input-section {
     transition:
       height var(--dur-state) var(--ease-out),
@@ -2232,6 +2239,7 @@ body:not(.is-hero) .input-section {
       padding-bottom var(--dur-state) var(--ease-out),
       transform var(--dur-light) var(--ease-out);
     overflow: hidden;
+    overflow: clip;
   }
 
   /* Der innere Rahmen der Box gehoert zur selben Bewegung; sonst rueckt der

@@ -40,11 +40,14 @@
   // Muss zur Transition-Dauer in shell.css passen (Notbremse, falls
   // transitionend ausbleibt, weil die Bewegung unterbrochen wurde).
   const ANIMATION_MS = 240;
+  // So oft gleitet der Block hoechstens nach (settleAnimation).
+  const SETTLE_LIMIT = 2;
 
   const mediaQuery = window.matchMedia(COLLAPSE_QUERY);
   const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
   let lastScrollY = window.scrollY;
   let animationTimer = null;
+  let settles = 0;
 
   // Animiert wird der ganze Composer-Block, nicht nur das Eingabefeld: zum
   // eingeklappten Zustand gehoert auch der Disclaimer-Fuss, und der ist auf
@@ -120,10 +123,42 @@
   function endAnimation() {
     window.clearTimeout(animationTimer);
     animationTimer = null;
+    settles = 0;
     const box = composerBox();
     if (box) box.style.height = "";
     document.body.classList.remove(ANIMATING_CLASS);
     document.body.classList.remove(COLLAPSING_CLASS);
+  }
+
+  // Was der Block haelt, kann sich waehrend der Bewegung aendern: ein Tipp
+  // fokussiert das Feld zuerst und der Text kommt danach (Einfuegen, Diktat,
+  // der Autosizer ein Bild spaeter), ein Hinweis kommt oder geht. Die am
+  // Anfang gemessene Zielhoehe stimmt dann nicht mehr, und das Freigeben der
+  // Inline-Hoehe liess den Block, und Senden mit ihm, in einem Bild auf die
+  // neue Hoehe springen. Das letzte Stueck gleitet deshalb auch, hoechstens
+  // SETTLE_LIMIT-mal; danach nimmt der Block seine Hoehe, wie sie ist.
+  function settleAnimation() {
+    const box = composerBox();
+    if (!box || !box.style.height || settles >= SETTLE_LIMIT) {
+      endAnimation();
+      return;
+    }
+    const current = box.getBoundingClientRect().height;
+    // Hoehe auto ist nicht animierbar: der Block steht fuer diese Messung
+    // ohne Uebergang auf seiner natuerlichen Hoehe und gleich wieder auf
+    // der aktuellen, gezeichnet wird keins von beiden.
+    box.style.height = "";
+    const natural = box.getBoundingClientRect().height;
+    if (!natural || Math.abs(natural - current) < 1) {
+      endAnimation();
+      return;
+    }
+    settles += 1;
+    box.style.height = `${current}px`;
+    void box.offsetHeight;
+    box.style.height = `${natural}px`;
+    window.clearTimeout(animationTimer);
+    animationTimer = window.setTimeout(settleAnimation, ANIMATION_MS + 80);
   }
 
   function animateToggle(applyState, collapsing) {
@@ -169,8 +204,9 @@
     void box.offsetHeight;
     box.style.height = `${to}px`;
 
+    settles = 0;
     window.clearTimeout(animationTimer);
-    animationTimer = window.setTimeout(endAnimation, ANIMATION_MS + 80);
+    animationTimer = window.setTimeout(settleAnimation, ANIMATION_MS + 80);
   }
 
   function collapse(options) {
@@ -347,7 +383,7 @@
   document.addEventListener("transitionend", function (event) {
     if (event.propertyName !== "height") return;
     if (event.target !== composerBox()) return;
-    endAnimation();
+    settleAnimation();
   });
 
   window.App.composer = {

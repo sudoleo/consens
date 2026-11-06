@@ -3822,7 +3822,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   und der Startbildschirm (`App.composer.isStartScreen()`: Hero oder
   Compare-Start) sind bewusst ausgenommen. Ein
   stehendes Zitat (`#composerQuote`) zählt wie ein Anhang als „Angefangenes“
-  und verhindert das automatische Zuklappen.
+  und verhindert das automatische Zuklappen. Die Bewegung dazwischen animiert
+  die Höhe der `.input-section` (`body.composer-animating`, `shell.css`); der
+  Block clippt dabei mit `overflow: clip`, nicht `hidden`, damit der Browser
+  ihn nicht zum Cursor scrollt. Ändert sich sein Inhalt unterwegs (der Text
+  kommt erst nach dem Fokus), gleitet er am Ende zur echten Höhe
+  (`settleAnimation`) statt zu springen (2026-11-06: der Sprung ließ einen
+  Tipp auf Senden ins Leere gehen).
 - **`composer-invite.js`** (seit 2026-10-15, vor `app-init.js`, nur zur Laufzeit
   gerufen) — lädt zur ersten Frage ein. `window.App.composerInvite`:
   `sendAsGuest()` (erste Prüfung in `window.sendQuestion`, `query-send.js`):
