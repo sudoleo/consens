@@ -3081,7 +3081,9 @@ fertiger Lauf `lost`, und der Agent startete ihn neu. **Erstattung**
 dem UTC-Tag nach `reserve`; der Aufseher schreibt Start und Ende (`started`,
 `ended`). Findet ein Blick darauf (`vm_process_output` mit `id`,
 `vm_stop_process`) den Prozess beendet, kommt die ungenutzte Zeit einmal
-zurück (`refunded` wird zuerst geschrieben): an die Nachricht, die ihn
+zurück (`refunded` wird zuerst angelegt, seit 2026-11-06 exklusiv in einem
+Befehl, `claim_command`: lasen Chat-Löschung und der Abschluss der gestoppten
+Nachricht den Prozess beide als nicht erstattet, erstatteten beide): an die Nachricht, die ihn
 startete, sonst an den Tag, an dem sie gebucht wurde (nur heute). Vorher
 verbrauchten vier Dev-Server-Starts die 2 h eines Pro-Kontos. Das Modell bekommt das Ende der Ausgabe wie bei
 `vm_exec` (12.000 Zeichen, Kürzung im Text), die Anzeige zeigt den Start wie

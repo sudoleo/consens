@@ -219,6 +219,30 @@ def task_name(process_id):
     return f"consens-{process_id}"
 
 
+def claim_command(directory):
+    """Makes the mark ``refunded`` only where there is none yet, in one step
+    (noclobber, an exclusive create) and prints ``claimed`` when this command
+    made it. Two looks that both read the process as not given back (the
+    chat's deletion and its stopped message's sweep, each with a status of
+    its own) give its time back once: the one that claimed it."""
+    return (f"dir={shlex.quote(directory)}; [ -d \"$dir\" ] || exit 5; "
+            "if (set -C; printf 1 > \"$dir/refunded\") 2>/dev/null; then echo claimed; fi; true")
+
+
+def claim_refund(vm, name, directory):
+    """Whether this look may give back the process's unused VM time
+    (claim_command), as the server's own step: it counts no VM time."""
+    from app.services.llm.provider_runtime import ProviderCancellation
+    out = bytearray()
+
+    def keep(stream, chunk):
+        if stream == "stdout" and len(out) < 64:
+            out.extend(chunk)
+    outcome = vm.exec(name, claim_command(directory), cwd=agent_vm.SERVER_HOME, timeout=30, on_output=keep,
+                      cancellation=ProviderCancellation(), agent=False)
+    return outcome.exit_code == 0 and out.decode("utf-8", "replace").strip() == "claimed"
+
+
 def chat_command(chat_id, root=PROCESSES_DIR):
     """The processes ``chat_id`` started (their ``chat`` file), one per
     line: the id, then ``running`` or ``ended`` (also one the VM lost)."""
@@ -265,10 +289,10 @@ def delete_for_chat(vm, name, chat_id, *, refund=None):
         found = spent(text)
         if refund is not None and found is not None:
             ran, reserved, day, refunded = found
-            if not refunded and reserved > ran and day == agent_vm_time.day_key():
-                # Marked first, as _refund does: the deletion and a stopped
-                # message's sweep never both give it back.
-                vm.write_file(name, posixpath.join(directory, "refunded"), b"1", agent=False)
+            # Claimed first, as _refund does: the deletion and a stopped
+            # message's sweep never both give it back (claim_command).
+            if not refunded and reserved > ran and day == agent_vm_time.day_key() \
+                    and claim_refund(vm, name, directory):
                 refund(reserved - ran, day)
         vm.delete_path(name, directory, agent=False)
 
@@ -329,7 +353,8 @@ class ProcessTools:
 
     def _refund(self, process_id, text):
         """A process found ended gives back the VM time it did not run, once:
-        ``refunded`` is written first, so a failed write never gives twice."""
+        only the look that claimed ``refunded`` (claim_refund) gives it, so a
+        failed claim never gives twice and neither do two looks at once."""
         from app.services import agent_vm_time
         found = spent(text)
         if found is None:
@@ -343,8 +368,8 @@ class ProcessTools:
         if not mine and day != agent_vm_time.day_key():
             return
         try:
-            session.backend.write_file(session.name, posixpath.join(process_dir(process_id), "refunded"), b"1",
-                                       agent=False)
+            if not claim_refund(session.backend, session.name, process_dir(process_id)):
+                return
         except Exception as exc:
             logging.info("Agent VM process refund not marked category=%s", type(exc).__name__)
             return

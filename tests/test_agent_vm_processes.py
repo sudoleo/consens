@@ -392,3 +392,69 @@ def test_a_process_that_ends_early_gives_its_unused_time_back_once(store, fake_v
     assert agent_vm_time.used(store.db, UID) == 103 + 1800 - 1500 + 2
     # A process from before 2026-10-30 says nothing of its time.
     assert spent("consens-process 0 4\nbye") is None and spent("consens-process running 4 - 1800 2026-10-30 0") is None
+
+
+def test_the_mark_that_gives_a_process_time_back_is_claimed_once(shell, tmp_path):
+    """claim_command makes ``refunded`` only where there is none: of two
+    looks, one claims it."""
+    run, root = shell
+    directory = prepare(root, "77777771", "true", tmp_path.as_posix())
+    assert run(agent_vm_processes.claim_command(directory)) == (0, "claimed\n")
+    assert run(agent_vm_processes.claim_command(directory)) == (0, "")
+    assert Path(directory, "refunded").read_text() == "1"
+    code, text = run(status_command(directory, chars=0))
+    assert code == 0 and text.split("\n")[0].endswith(" 1")
+    assert run(agent_vm_processes.claim_command(f"{root}/77777772"))[0] == 5
+
+
+def test_a_look_that_read_a_process_before_another_claimed_it_gives_nothing_back(store, monkeypatch):
+    """Bug hunt 2026-11-06: the chat's deletion (agent_vm.delete_chat_vm) and
+    its stopped message's sweep (VMSession._sweep_deleted) each read the
+    status first, both read it not given back, and each gave the unused time
+    back: the mark was a plain write. Only the look that claims it gives it."""
+    from app.services import agent_vm_time
+    from test_agent_vm import FakeVM
+    fake = FakeVM()
+    name = agent_vm.workspace_name(UID)
+    directory = process_dir(PID)
+    day = agent_vm_time.day_key()
+    fake.commands[agent_vm_processes.chat_command("c1")] = ([("stdout", f"{PID} ended\n".encode())], 0, .1)
+    # Ended after 100 of the 1800 seconds it was charged, not given back when read.
+    fake.commands[status_command(directory, chars=0)] = (
+        [("stdout", f"consens-process 0 0 100 1800 {day} 0\n".encode())], 0, .1)
+    refunds = []
+
+    def delete(files):
+        fake.vms[name] = {"files": {f"{directory}/chat": b"c1", **files}, "checkpoints": []}
+        agent_vm_processes.delete_for_chat(fake.backend(), name, "c1",
+                                           refund=lambda seconds, given: refunds.append((seconds, given)))
+    # The sweep claimed it between this look's status and its mark.
+    delete({f"{directory}/refunded": b"1"})
+    assert refunds == []
+    # Alone, the look claims it and gives the 1700 s back.
+    delete({})
+    assert refunds == [(1700, day)]
+    assert agent_vm_processes.claim_command(directory) in fake.server
+
+
+def test_a_process_another_look_gave_back_meanwhile_is_not_given_back_again(store, fake_vm, fixed_id, monkeypatch):
+    """The same for vm_stop_process and vm_process_output (ProcessTools._refund):
+    a status read before another look's claim gives nothing back."""
+    from app.services import agent_vm_time
+    monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 7200)
+    day = agent_vm_time.day_key()
+    directory = process_dir(PID)
+    fake_vm.commands[start_command(directory, task_name(PID))] = (status("running", "Listening\n"), 0, 2.0)
+    loop = vm_loop(store, Agent([[("vm_start_process", {"command": "npm run dev"})]]))
+    list(loop.run())
+    assert agent_vm_time.used(store.db, UID) == 1800 + 2
+    files = fake_vm.vms[agent_vm.workspace_name(UID)]["files"]
+    # The chat's deletion gave it back after this status was read.
+    files[f"{directory}/refunded"] = b"1"
+    fake_vm.commands[stop_command(directory, task_name(PID))] = (
+        [("stdout", f"consens-process 0 4 100 1800 {day} 0\nbye\n".encode())], 0, 1.0)
+    later = vm_loop(store, Agent([[("vm_stop_process", {"id": PID})]]), chat_id=loop.chat_id, request_id="later")
+    list(later.run())
+    assert results(later)[0]["status"] == "exited"
+    # Only the stop's own second: nothing given back twice.
+    assert agent_vm_time.used(store.db, UID) == 1800 + 2 + 1

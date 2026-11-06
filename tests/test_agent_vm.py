@@ -105,11 +105,32 @@ class _FakeBackend(VMBackend):
         self._call("exec", name, command, cwd, timeout)
         if not agent:
             self.vm.server.append(command)
+        claimed = self._claim(name, command)
+        if claimed is not None:
+            on_output("stdout", claimed)
+            return ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
         chunks, exit_code, seconds = self.vm.commands.get(command, ([("stdout", b"ok\n")], 0, .5))
         for stream, chunk in chunks:
             self.vm.clock.now += seconds / max(1, len(chunks))
             on_output(stream, chunk)
         return ExecOutcome(exit_code=exit_code, timed_out=exit_code is None, seconds=seconds)
+
+    def _claim(self, name, command):
+        """agent_vm_processes.claim_command for a process folder with files:
+        makes ``refunded`` only where there is none, ``claimed`` when it did;
+        None for any other command."""
+        import posixpath
+        from app.services import agent_vm_processes
+        files = self.vm.vms.get(name, {}).get("files", {})
+        folders = {posixpath.dirname(path) for path in files
+                   if path.startswith(agent_vm_processes.PROCESSES_DIR + "/")}
+        for folder in folders:
+            if command == agent_vm_processes.claim_command(folder):
+                if f"{folder}/refunded" in files:
+                    return b""
+                files[f"{folder}/refunded"] = b"1"
+                return b"claimed\n"
+        return None
 
     def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
         """The browser VM's helper (agent_browser.py) runs this way, and the
