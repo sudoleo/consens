@@ -3743,29 +3743,34 @@ class DelegationLoop(AgentLoop):
             closing = time.monotonic()
             self.journal.close(timeout=CLOSE_WAIT_SECONDS)
             close_wait = CLOSE_WAIT_SECONDS - (time.monotonic() - closing)
-            # Provider threads are joined; retain and retry their original
-            # measurements before finalizing. Never rerun a paid model step.
-            # A background receipt write first: a failed one stays unsettled.
-            self._join_settling(raise_error=False)
-            for step, (value, step_status) in list(self.unsettled.items()):
-                self._settle_step(step, value, step_status)
-            self.completion.usage = self.costs.total()
-            if self.hold is not None:
-                # Still open as the run ended: stopped while it waited (the
-                # card's Stop is the Stop button), or the run broke off.
-                # Nothing waits for it any more.
-                hold, self.hold = self.hold, None
-                decision = "stop" if status == "cancelled" else "ended"
-                self._end_hold(hold, decision, self.clock() - self.hold_started)
-            # Saved with the turn (agent_runs.finish_run: agent_holds).
-            self.completion.holds = self.holds
-            if self.notes:
-                # Arrived after the answer was written: said, not lost silently.
-                self.outgoing.put_nowait(self.activity({"step_id": "run", "id": "notes-unread", "kind": "progress",
-                                                        "text": NOTES_UNREAD}))
-            # Saved with the turn (agent_runs.finish_run): its checkpoint and
-            # the commands' summed run time; where the next message starts.
-            self._release_workspace()
+            try:
+                # Provider threads are joined; retain and retry their original
+                # measurements before finalizing. Never rerun a paid model step.
+                # A background receipt write first: a failed one stays unsettled.
+                self._join_settling(raise_error=False)
+                for step, (value, step_status) in list(self.unsettled.items()):
+                    self._settle_step(step, value, step_status)
+                self.completion.usage = self.costs.total()
+                if self.hold is not None:
+                    # Still open as the run ended: stopped while it waited (the
+                    # card's Stop is the Stop button), or the run broke off.
+                    # Nothing waits for it any more.
+                    hold, self.hold = self.hold, None
+                    decision = "stop" if status == "cancelled" else "ended"
+                    self._end_hold(hold, decision, self.clock() - self.hold_started)
+                # Saved with the turn (agent_runs.finish_run: agent_holds).
+                self.completion.holds = self.holds
+                if self.notes:
+                    # Arrived after the answer was written: said, not lost silently.
+                    self.outgoing.put_nowait(self.activity({"step_id": "run", "id": "notes-unread",
+                                                            "kind": "progress", "text": NOTES_UNREAD}))
+            finally:
+                # Saved with the turn (agent_runs.finish_run): its checkpoint
+                # and the commands' summed run time; where the next message
+                # starts. Also when a receipt above could not be written (its
+                # chat deleted meanwhile): until 2026-11-06 the session then
+                # stayed open, its VM time uncharged.
+                self._release_workspace()
             if self._long_run() or status != "succeeded":
                 # What the next message is told this one did (agent_compaction):
                 # after a VM run, and since 2026-10-27 after any run that broke

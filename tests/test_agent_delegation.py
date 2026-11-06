@@ -499,3 +499,31 @@ def test_a_retried_session_update_is_saved_once_without_an_event_document(store)
         store.publish_agent(*args, run_token=loop.run_token, agent_id=agent_id, event_id=f"{index:032x}",
                             patch={"status": "working"})
     assert store.agent_ref(*args, agent_id).get().to_dict()["event_ids"] == [f"{index:032x}" for index in range(2, 10)]
+
+
+def test_a_receipt_the_runs_end_cannot_write_still_closes_the_workspace(store, monkeypatch):
+    """Bug hunt 2026-11-06, the rest of f1a5b70d: a step's receipt that could
+    not be written at the run's end (its chat deleted meanwhile, the account
+    being deleted) broke off the cleanup before VMSession.close(): the
+    message's VM seconds were never charged and the tunnel counted the run
+    as working until a restart."""
+    from types import SimpleNamespace
+    closed = []
+
+    class Session:
+        started = False
+
+        def summary(self):
+            return {"seconds": 0}
+
+        def close(self):
+            closed.append(True)
+    loop = make_loop(store, mock_answer="Answer")
+    loop.vm_tools = SimpleNamespace(session=Session(), take_pictures=lambda: [], interrupt=lambda: None)
+
+    def refused(*args, **kwargs):
+        raise ChatNotFound("Agent receipt not found")
+    monkeypatch.setattr(store, "settle", refused)
+    with pytest.raises(ChatNotFound):
+        list(loop.run())
+    assert closed == [True] and loop.completion.vm == {"seconds": 0}
