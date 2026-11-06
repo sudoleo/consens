@@ -942,7 +942,11 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
     try:
         if name == workspace_name(uid) and vm.exists(name):
             from app.services import agent_vm_processes, agent_workspace
-            agent_workspace.prepare(vm, name)
+            # Under the setup lock like every start of the computer: after a
+            # new VERSION its setup.sh never runs beside a message's start,
+            # the browser's warm-up or the live view (bug hunt 2026-11-06).
+            with agent_workspace.setup_lock(name):
+                agent_workspace.prepare(vm, name)
             # Its processes first: they run in its folder. ``store``: the VM
             # time they did not use comes back (agent_vm_time.refund).
             refund = None

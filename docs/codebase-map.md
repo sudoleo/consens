@@ -6542,7 +6542,8 @@ Agenten ein eigenes `/tmp`, keine User-Namespaces (seccomp,
 `agent_domains.py` und der localhost-Tunnel `agent_tunnel.py` sind entfernt).
 Details: `docs/agent-mode.md` „Ein Rechner“. Die VM wird beim ersten Aufruf
 (`agent_workspace.open_workspace` unter `setup_lock`, für Nachricht,
-Browser-Warmlauf, Ansicht, Terminal und Bereitstellung) angelegt und über
+Browser-Warmlauf, Ansicht, Terminal und Bereitstellung; die Chat-Löschung nimmt
+die Sperre seit 2026-11-06 für ihr `prepare`, `agent_vm.delete_chat_vm`) angelegt und über
 Nachrichten und Chats wiederverwendet, jeder Chat in seinem Ordner
 `/home/agent/chats/<chat>` (`agent_vm.chat_dir`: Startordner der Befehle, Ziel
 relativer Pfade; seit 2026-10-28 nach dem Titel benannt, `agent_vm.chat_folder`,

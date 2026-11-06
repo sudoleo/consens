@@ -1775,6 +1775,33 @@ def test_a_chats_folder_goes_as_the_agent_and_from_where_it_lay_before(store, fa
     assert not [call for call in fake_vm.calls if call[0] in {"ensure", "exec", "write"}]
 
 
+def test_a_chats_deletion_brings_the_tools_up_to_date_only_under_the_setup_lock(store, fake_vm):
+    """Bug hunt 2026-11-06: the deletion ran prepare without the setup lock;
+    after a new VERSION its setup.sh could run beside a message's start, the
+    browser's warm-up or the live view on the same computer. It waits for a
+    setup running and then finds the version there."""
+    import threading
+    from test_agent_vm import SETUP
+    name = agent_vm.workspace_name(UID)
+    fake_vm.vms[name] = {"files": {"/home/agent/chats/c1/a.txt": b"a"}, "checkpoints": []}
+    lock = agent_workspace.setup_lock(name)
+    lock.acquire()
+    done = threading.Event()
+    try:
+        threading.Thread(target=lambda: (agent_vm.delete_chat_vm(UID, "c1", {"name": name, "workspace": True},
+                                                                  factory=fake_vm.backend), done.set()),
+                         daemon=True).start()
+        assert not done.wait(.6)
+        assert SETUP not in fake_vm.server
+        # The setup that held the lock ends: the VM is at this version.
+        agent_workspace.prepare(fake_vm.backend(), name)
+    finally:
+        lock.release()
+    assert done.wait(5)
+    assert fake_vm.server.count(SETUP) == 1
+    assert "/home/agent/chats/c1/a.txt" not in fake_vm.vms[name]["files"]
+
+
 # --- A new account's workspace before it is needed (2026-11-02) --------------------
 
 @pytest.fixture
