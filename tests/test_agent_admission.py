@@ -352,3 +352,45 @@ def test_a_search_that_does_not_fit_is_noted_after_the_newest_message(store):
     assert observed[0]["messages"][0] == loop.messages[0]
     assert observed[0]["messages"][-1]["role"] == "user"
     assert observed[0]["messages"][-1]["content"].startswith("Web search is unavailable for this step")
+
+
+@pytest.mark.parametrize("answer", ["lost", "retried"])
+def test_a_claim_that_landed_while_its_answer_was_lost_goes_on_as_claimed(store, monkeypatch, answer):
+    """Bug hunt 2026-11-06: the claim's commit landed, but the client saw a
+    Firestore error (an ambiguous commit), or the SDK's retry then found the
+    receipt it had just written. The step was never settled: the turn stayed
+    pending until the reaper, which charged half the reservation for a call
+    that was never sent. A claim found under this run is taken as claimed."""
+    from google.api_core.exceptions import DeadlineExceeded
+    streamed = []
+
+    class Counted(Completion):
+        def stream(self, **kwargs):
+            streamed.append(self.step_id)
+            yield from super().stream(**kwargs)
+    loop = chat_loop(store, Counted)
+    claim = type(store).claim
+
+    def landed(self, *args, **kwargs):
+        claim(self, *args, **kwargs)
+        if answer == "retried":
+            return claim(self, *args, **kwargs)
+        raise DeadlineExceeded("The commit's answer was lost.")
+    monkeypatch.setattr(type(store), "claim", landed)
+    list(loop.run())
+    assert streamed == ["completion:0"]
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+    ledger = agent_quota.snapshot(store.db, UID)
+    assert ledger["reserved"] == 0 and ledger["estimated"] == 0 and ledger["used"] > 0
+
+
+def test_a_claim_that_did_not_land_still_fails_the_step(store, monkeypatch):
+    from google.api_core.exceptions import DeadlineExceeded
+    loop = chat_loop(store, Completion)
+
+    def refused(self, *args, **kwargs):
+        raise DeadlineExceeded("Firestore did not answer.")
+    monkeypatch.setattr(type(store), "claim", refused)
+    with pytest.raises(DeadlineExceeded):
+        list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "failed"

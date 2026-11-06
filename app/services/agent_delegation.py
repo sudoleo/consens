@@ -1672,9 +1672,16 @@ class DelegationLoop(AgentLoop):
                 reservation = self.costs.reserve(model, messages, tools, native_searches=searches, soft_search=soft,
                                                  answer_output=answer_output)
                 request = replace(model, max_output_tokens=model.max_output_tokens + extra)
-                claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, request, step=step,
-                    run_token=self.run_token, policy=claim_policy, reservation=reservation,
-                    **({"overdraft": beyond} if beyond else {}))
+                try:
+                    claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, request, step=step,
+                        run_token=self.run_token, policy=claim_policy, reservation=reservation,
+                        **({"overdraft": beyond} if beyond else {}))
+                except Exception as exc:
+                    if not _transient_store_error(exc) or not self._claim_landed(step):
+                        raise
+                    claimed = True
+                else:
+                    claimed = claimed or self._claim_landed(step)
                 return request, messages, tools, searches, reservation, claimed, search_limited
             except BaseException as exc:
                 if reservation is not None:
@@ -1739,6 +1746,24 @@ class DelegationLoop(AgentLoop):
                 messages = with_step_note(messages,
                     "Web search is unavailable for this step within the available token/context allowance. "
                     "Use existing evidence, state uncertainty, and do not imply new web research.")
+
+    def _claim_landed(self, step):
+        """Whether this run's claim of ``step`` stands on its root after all:
+        its commit landed while the client saw a Firestore error (an
+        ambiguous commit), or the SDK's retry found the receipt it had just
+        written. A step index is this run's alone, so a running step under
+        its run token is its own claim. Until 2026-11-06 such a step was
+        never settled: the turn stayed pending until the reaper, which
+        charged half the reservation for a call never sent."""
+        try:
+            root = self.store.receipt_ref(self.uid, self.chat_id, self.turn_id).get().to_dict() or {}
+        except Exception as exc:
+            logging.warning("Agent claim could not be checked category=%s", safe_exception(exc))
+            return False
+        landed = root.get("run_token") == self.run_token and (root.get("step_states") or {}).get(step) == "running"
+        if landed:
+            logging.warning("Agent claim landed despite its error step=%s", step)
+        return landed
 
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
               search_rounds=1, retry_rate_limit=False, retry_passing=False, retry_empty=False, check_cooldown=True,

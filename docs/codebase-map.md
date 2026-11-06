@@ -6058,6 +6058,11 @@ führt zu abbrechbarem Warten mit lokalem Settlement-Signal und Poll-Backoff
 Lease-Recovery bereinigt verwaiste Produzenten; fehlgeschlagene idempotente
 Settlement-Schreibvorgänge werden vor weiterem Warten nachgeholt. Wartende
 Aufrufe halten keine eigene Reservierung und erzeugen keinen bezahlten Beleg.
+Meldet der Claim einen Firestore-Fehler (oder findet der SDK-Retry den eben
+geschriebenen Beleg), prüft `_claim_landed` den Root: steht der Schritt unter
+dem eigenen `run_token` auf `running`, ist der Commit angekommen und der
+Schritt läuft als geclaimt weiter (seit 2026-11-06; vorher blieb er bis zum
+Reaper offen, der die halbe Reserve als Schätzung buchte).
 Wenn auch ohne Konkurrenz zu wenig Budget für die optionale Suche bleibt,
 entfällt sie mit ausdrücklichem Hinweis an das Modell. Anschließend passt sich
 `max_tokens` an Restbudget/Modellfenster an; ein Minimum für sichtbare Antwort
