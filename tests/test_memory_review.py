@@ -53,11 +53,18 @@ def chat(db, chat_id, *, updated=NOW - timedelta(hours=5), **fields):
         {"status": "active", "execution_mode": "agent", "title": f"Chat {chat_id}", "updated_at": updated, **fields})
 
 
-def turn(db, chat_id, turn_id, question, *, at, answer="Here you go.", status="completed", **settings):
+def turn(db, chat_id, turn_id, question, *, at, answer="Here you go.", status="completed", auto=True, **settings):
+    # agent_settings.memory as MemorySnapshot.settings() saves it: auto is
+    # whether the agent could update the memory when the message was sent.
     (db.collection("users").document(UID).collection("chats").document(chat_id)
      .collection("turns").document(turn_id).set({
          "question": question, "assistant_response": answer, "status": status, "created_at": at,
-         "agent_settings": settings}))
+         "agent_settings": {"memory": {"used": True, "auto": auto, "hint": False}, **settings}}))
+
+
+def queued(db):
+    snapshot = db.collection(memory_review.COLLECTION).document(UID).get()
+    return snapshot.to_dict() if snapshot.exists else None
 
 
 def review(db, replies, *, clock=lambda: NOW):
@@ -121,6 +128,8 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
     turn(db, "gone", "d1", "Deleted chat question", at=NOW - timedelta(hours=8))
     chat(db, "compare", execution_mode="consensus")
     turn(db, "compare", "k1", "A Compare question", at=NOW - timedelta(hours=8))
+    # Sent before the user let the agent update the memory.
+    turn(db, "c1", "t5", "Said while it was off", at=NOW - timedelta(hours=10), auto=False)
 
     service, prompts = review(db, [{"changes": [
         {"op": "add", "id": "", "text": "Will neben der Arbeit in KI/Wirtschaft promovieren; kommt aus Hannover."},
@@ -128,7 +137,7 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
         {"op": "update", "id": "m999999", "text": "An unknown memory"},
         {"op": "add", "id": "", "text": "Password: hunter22"},
     ]}])
-    assert service.run() == {"reviewed": 0, "changed": 1, "skipped": 0, "failed": 0}
+    assert service.run() == {"reviewed": 0, "changed": 1, "skipped": 0, "failed": 0, "retry": 0}
 
     prompt = prompts[0]
     assert "promovieren" in prompt and "Hannover" in prompt and "Lehrstühle" in prompt
@@ -137,7 +146,7 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
             in prompt)
     assert "Assistant (end of the answer): Gute Idee." in prompt
     for left_out in ("still running", "Watch task", "last month", "inbox", "Something private", "Deleted chat",
-                     "Compare question"):
+                     "Compare question", "while it was off"):
         assert left_out not in prompt
     assert "m000001" in prompt and "Builds consens.io" in prompt and f"Today is {NOW.date().isoformat()}." in prompt
 
@@ -149,9 +158,11 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
     assert last == {"change_id": last["change_id"], "at": NOW.isoformat(), "added": 1, "updated": 0,
                     "deleted": 1, "undone": False}
 
-    queued = db.collection(memory_review.COLLECTION).document(UID).get().to_dict()
-    assert queued["reviewed_at"] == NOW and queued["review_after"] is None and queued["lease_id"] is None
-    assert queued["last_result"] == {"status": "applied", "added": 1, "updated": 0, "deleted": 1, "messages": 2}
+    record = queued(db)
+    assert record["reviewed_at"] == NOW and record["review_after"] is None and record["lease_id"] is None
+    # The message still running is read again next time: read up to its start.
+    assert record["reviewed_through"] == NOW - timedelta(hours=7) and record["attempts"] == 0
+    assert record["last_result"] == {"status": "applied", "added": 1, "updated": 0, "deleted": 1, "messages": 2}
 
     repository.undo(UID, last["change_id"])
     items, _, last = repository.get_with_review(UID)
@@ -160,24 +171,29 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
     assert last["undone"] is True
 
 
-def test_the_review_needs_the_opt_in_and_runs_at_most_once_a_day(db):
+def test_without_the_opt_in_the_review_reads_nothing_and_its_record_goes(db):
     set_profile(db, auto_memory=False)
     memory_review.mark_due(db, UID, now=NOW - memory_review.IDLE)
     chat(db, "c1")
     turn(db, "c1", "t1", "I live in Hannover.", at=NOW - timedelta(hours=5))
     service, prompts = review(db, [])
     assert service.run()["reviewed"] == 1 and prompts == []
-    assert db.collection(memory_review.COLLECTION).document(UID).get().to_dict()["last_result"]["status"] == \
-        "auto_memory_off"
+    # The next message that may update the memory brings it back; also what
+    # cleans up a mark that landed after the account's deletion.
+    assert queued(db) is None
 
+
+def test_the_review_runs_at_most_once_a_day(db):
     set_profile(db, auto_memory=True)
+    db.collection(memory_review.COLLECTION).document(UID).set({"reviewed_at": NOW, "reviewed_through": NOW})
     later = NOW + timedelta(hours=5)
     memory_review.mark_due(db, UID, now=later - memory_review.IDLE)
+    chat(db, "c1", updated=later - timedelta(hours=4))
+    turn(db, "c1", "t1", "I live in Hannover.", at=later - timedelta(hours=4))
     service, prompts = review(db, [], clock=lambda: later)
     assert service.run()["skipped"] == 1 and prompts == []
     # Reviewed five hours ago: the next one waits for its day.
-    assert db.collection(memory_review.COLLECTION).document(UID).get().to_dict()["review_after"] == \
-        NOW + memory_review.INTERVAL
+    assert queued(db)["review_after"] == NOW + memory_review.INTERVAL
 
 
 def test_a_message_during_the_review_keeps_its_own_due_time(db):
@@ -193,9 +209,9 @@ def test_a_message_during_the_review_keeps_its_own_due_time(db):
 
     service.query_fn = query
     service.run()
-    queued = db.collection(memory_review.COLLECTION).document(UID).get().to_dict()
-    assert queued["review_after"] == NOW + timedelta(minutes=1) + memory_review.IDLE
-    assert queued["reviewed_at"] == NOW
+    record = queued(db)
+    assert record["review_after"] == NOW + timedelta(minutes=1) + memory_review.IDLE
+    assert record["reviewed_at"] == NOW
 
 
 def test_a_held_lease_keeps_a_second_process_out(db):
@@ -207,22 +223,38 @@ def test_a_held_lease_keeps_a_second_process_out(db):
     assert service.run()["skipped"] == 1 and prompts == []
 
 
-def test_a_failed_model_call_saves_nothing_and_frees_the_account(db):
+def test_a_failed_review_keeps_its_messages_and_comes_again_then_gives_up(db):
     set_profile(db, auto_memory=True)
     add_items(db, "Prefers short answers.")
     memory_review.mark_due(db, UID, now=NOW - memory_review.IDLE)
     chat(db, "c1")
     turn(db, "c1", "t1", "I live in Hannover.", at=NOW - timedelta(hours=5))
-    service, _ = review(db, [])
+    clock = {"now": NOW}
+    service, _ = review(db, [], clock=lambda: clock["now"])
+    calls = []
 
     def broken(*args, **kwargs):
+        calls.append(kwargs["prompt"])
         raise RuntimeError("provider down")
 
     service.query_fn = broken
-    assert service.run()["reviewed"] == 1
-    queued = db.collection(memory_review.COLLECTION).document(UID).get().to_dict()
-    assert queued["last_result"]["status"] == "failed" and queued["lease_id"] is None
+    assert service.run()["retry"] == 1
+    record = queued(db)
+    assert record["last_result"]["status"] == "failed" and record["lease_id"] is None
+    assert record["attempts"] == 1 and record["review_after"] == NOW + memory_review.RETRY_AFTER
+    assert "reviewed_at" not in record and "reviewed_through" not in record
     assert [item["text"] for item in FirestoreAgentMemoryRepository(db).get(UID)[0]] == ["Prefers short answers."]
+    # Not yet due again; then the same messages again.
+    clock["now"] = NOW + timedelta(hours=1)
+    assert service.run()["retry"] == 0 and len(calls) == 1
+    clock["now"] = NOW + memory_review.RETRY_AFTER
+    assert service.run()["retry"] == 1 and "I live in Hannover." in calls[1]
+    # The third failure in a row gives the window up (no backlog).
+    clock["now"] = NOW + 2 * memory_review.RETRY_AFTER
+    assert service.run()["reviewed"] == 1 and len(calls) == 3
+    record = queued(db)
+    assert record["attempts"] == 0 and record["review_after"] is None
+    assert record["reviewed_through"] == NOW + 2 * memory_review.RETRY_AFTER
 
 
 def test_a_reply_cut_off_mid_json_is_a_failure_not_a_quiet_day(db):
@@ -232,9 +264,68 @@ def test_a_reply_cut_off_mid_json_is_a_failure_not_a_quiet_day(db):
     turn(db, "c1", "t1", "I live in Hannover.", at=NOW - timedelta(hours=5))
     service, _ = review(db, [])
     service.query_fn = lambda *args, **kwargs: '{"changes": [{"op": "add", "id": "", "text": "Lives in Hann'
+    assert service.run()["retry"] == 1
+    assert queued(db)["last_result"] == {"status": "unreadable", "added": 0, "updated": 0, "deleted": 0,
+                                         "messages": 1}
+
+
+def test_the_users_own_edit_during_the_call_wins_and_the_review_comes_again(db):
+    set_profile(db, auto_memory=True)
+    items = add_items(db, "Lives in Hanover.")
+    memory_review.mark_due(db, UID, now=NOW - memory_review.IDLE)
+    chat(db, "c1")
+    turn(db, "c1", "t1", "I moved to Berlin.", at=NOW - timedelta(hours=5))
+    service, _ = review(db, [])
+    repository = FirestoreAgentMemoryRepository(db)
+
+    def query(*args, **kwargs):
+        repository.apply(UID, [{"op": "update", "id": items[0]["id"], "text": "Lives in Berlin since November."}],
+                         origin="user")
+        return json.dumps({"changes": [{"op": "update", "id": items[0]["id"], "text": "Lives in Berlin."}]})
+
+    service.query_fn = query
+    assert service.run()["retry"] == 1
+    assert [item["text"] for item in repository.get(UID)[0]] == ["Lives in Berlin since November."]
+    assert queued(db)["last_result"]["status"] == "revision_conflict"
+
+
+def test_a_message_still_running_at_the_review_is_read_the_next_time(db):
+    set_profile(db, auto_memory=True)
+    memory_review.mark_due(db, UID, now=NOW - memory_review.IDLE)
+    chat(db, "c1")
+    turn(db, "c1", "t1", "I live in Hannover.", at=NOW - timedelta(hours=5))
+    turn(db, "c1", "t2", "I run marathons.", at=NOW - timedelta(hours=4), status="pending")
+    service, prompts = review(db, [])
     service.run()
-    result = db.collection(memory_review.COLLECTION).document(UID).get().to_dict()["last_result"]
-    assert result == {"status": "unreadable", "added": 0, "updated": 0, "deleted": 0, "messages": 1}
+    assert "marathons" not in prompts[0] and queued(db)["reviewed_through"] == NOW - timedelta(hours=4)
+    later = NOW + memory_review.INTERVAL + timedelta(hours=1)
+    turn(db, "c1", "t2", "I run marathons.", at=NOW - timedelta(hours=4))
+    chat(db, "c1", updated=NOW - timedelta(hours=3))
+    memory_review.mark_due(db, UID, now=later - memory_review.IDLE)
+    service, prompts = review(db, [], clock=lambda: later)
+    service.run()
+    assert "marathons" in prompts[0] and "Hannover" not in prompts[0]
+
+
+def test_a_claim_from_an_aborted_transaction_attempt_is_not_kept(db):
+    """Firestore runs the transaction's function again after an aborted
+    commit; another process took the lease in between."""
+    memory_review.mark_due(db, UID, now=NOW - memory_review.IDLE)
+    ref = db.collection(memory_review.COLLECTION).document(UID)
+
+    class Retrying:
+        def __init__(self, inner):
+            self.inner = inner
+
+        def _transaction(self, operation):
+            from test_chat_history import FakeTransaction
+            operation(FakeTransaction(db))  # aborted: nothing committed
+            ref.set({"lease_until": NOW + timedelta(minutes=5), "lease_id": "other"}, merge=True)
+            return db.run_transaction(operation)
+
+    service, prompts = review(db, [])
+    service.repository = Retrying(service.repository)
+    assert service._claim(UID, NOW) is None and queued(db)["lease_id"] == "other"
 
 
 def test_never_further_back_than_the_lookback_and_the_newest_messages_first(db, monkeypatch):
@@ -244,7 +335,7 @@ def test_never_further_back_than_the_lookback_and_the_newest_messages_first(db, 
     for hour in range(6):
         turn(db, "c1", f"t{hour}", f"question {hour} " + "x" * 300, at=NOW - timedelta(hours=10 - hour))
     monkeypatch.setattr(memory_review, "CHATS_CHARS", 1_200)
-    chats = memory_review.collect_chats(ChatStore(db), UID, NOW - memory_review.LOOKBACK)
+    chats, _ = memory_review.collect_chats(ChatStore(db), UID, NOW - memory_review.LOOKBACK)
     questions = [turn["question"][:10] for turn in chats[0]["turns"]]
     assert questions == ["question 3", "question 4", "question 5"]
 

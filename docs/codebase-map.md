@@ -2293,14 +2293,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   jetzt + `IDLE` 3 h; fail-open). **Lauf:** Lifespan-Task `memory-review`
   (`_scheduler_task`, nur Produktion) tickt alle 15 min, fragt nur
   `review_after <= jetzt` ab (Einzelfeld-Index, ruhige Nacht = eine leere
-  Query), höchstens 20 Konten je Tick. `_claim` nimmt transaktional eine
-  10-min-Lease; war die letzte Pflege jünger als `INTERVAL` (20 h), schiebt er
-  `review_after` dorthin. Gelesen werden die Chats mit `updated_at >= since`
-  und darin die Turns mit `created_at >= since` (since = letzte Pflege, nie
-  weiter als `LOOKBACK` 14 Tage, kein Nachholen von Rückstau), nur
-  `completed`/`succeeded`, nur Agent-Chats (`execution_mode`, wie Opt-in und
-  Datenschutztext), ohne Google-Daten-Chats, temporäre und nicht aktive
-  Chats und ohne Watch-Läufe; je Turn die Worte des Nutzers
+  Query), höchstens 20 Konten je Tick, jedes mit eigener Uhrzeit. `_claim`
+  nimmt transaktional eine 10-min-Lease, und zwar aus dem Rückgabewert des
+  letzten Transaktionsversuchs (Firestore führt die Funktion nach einem
+  Abbruch erneut aus; ein Anspruch aus dem ersten Versuch ließ zwei Prozesse
+  prüfen); war die letzte Pflege jünger als `INTERVAL` (20 h) und läuft keine
+  Wiederholung, schiebt er `review_after` dorthin. Gelesen werden die Chats
+  mit `updated_at >= since` und darin die Turns mit `created_at >= since`
+  (je neueste zuerst; since = `reviewed_through`, nie weiter als `LOOKBACK`
+  14 Tage, kein Nachholen von Rückstau), nur `completed`/`succeeded`, nur
+  Agent-Chats (`execution_mode`, wie Opt-in und Datenschutztext) und nur
+  Nachrichten, die mit „Let Agent update memory“ gesendet wurden
+  (`agent_settings.memory.auto` des Turns: nicht vor dem Opt-in, nicht
+  pausiert, nicht temporär), ohne Google-Daten-Chats, nicht aktive Chats und
+  ohne Watch-Läufe. Eine noch laufende Nachricht (`pending`) setzt
+  `reviewed_through` auf ihren Start, damit die nächste Pflege sie liest. Je
+  Turn die Worte des Nutzers
   (`agent_memory.user_words`, ein per „Ask about this“ zitierter Absatz steht
   getrennt als Assistententext daneben) bis 1.000 Zeichen und das Ende der
   Antwort (600), zusammen höchstens `CHATS_CHARS` 60.000 (die ältesten fallen
@@ -2313,13 +2321,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   lang) statt den Durchgang, ordnet Löschungen vor Hinzufügungen und hält die
   100er-Grenze. Angewandt wird über `FirestoreAgentMemoryRepository.apply`
   (`origin="agent"`, `source="review"`: Opt-in in derselben Transaktion,
-  Tombstone, Undo-Log) als **eine** Änderung. `_finish` schreibt
-  `reviewed_at`, gibt die Lease frei und löscht `review_after`, außer eine
-  Nachricht kam während der Pflege; `last_result` hält nur Status und Zahlen.
-  Fehler (Modell, Opt-in aus, Konto gelöscht) speichern nichts; eine
-  abgeschnittene oder unlesbare Antwort heißt `unreadable`, nicht `unchanged`
-  (`MAX_TOKENS` 8.000, weil die Reasoning-Tokens von „low“ bei OpenAI
-  mitzählen). Nicht auf das
+  Tombstone, Undo-Log) als **eine** Änderung, gegen die gelesene Revision
+  (`expected_revision`): eine eigene Bearbeitung des Nutzers während des
+  Aufrufs gewinnt (`revision_conflict`). `_finish`: fertig (`applied`,
+  `unchanged`, `no_chats`) schreibt `reviewed_at`, `reviewed_through`, gibt
+  die Lease frei und löscht `review_after`, außer eine Nachricht kam während
+  der Pflege. Gescheitert (Modell, `unreadable`, `unavailable`,
+  `revision_conflict`) bleibt das Fenster offen, `attempts` + 1 und
+  `review_after` = jetzt + `RETRY_AFTER` 2 h; nach `MAX_ATTEMPTS` 3 gilt das
+  Fenster als geprüft. Opt-in aus (oder Konto weg) löscht den Datensatz;
+  die nächste Nachricht mit Opt-in legt ihn neu an. `last_result` hält nur
+  Status und Zahlen. Eine abgeschnittene oder unlesbare Antwort heißt
+  `unreadable`, nicht `unchanged` (`MAX_TOKENS` 8.000, weil die
+  Reasoning-Tokens von „low“ bei OpenAI mitzählen). Nicht auf das
   Tageskonto des Nutzers gebucht (wie Chat-Titel). **Sichtbar** nur in
   Settings › Memory: `GET /api/my/memory` (und jede Schreibantwort) liefert
   `last_review` (`get_with_review` → `memory_review.last_review`:
@@ -10207,9 +10221,10 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   Marker in `telegram_watch_deliveries` und `topic_follower_deliveries` werden
   vom Versandpfad nicht mehr geschrieben und laufen über die bestehenden Cleanups aus.
 - `memory_reviews/{uid}` — wann die tägliche Gedächtnis-Pflege fällig ist
-  (`last_turn_at`, `review_after`, `reviewed_at`, `lease_until`, `lease_id`,
-  `last_result` nur mit Status und Zahlen; seit 2026-11-06, §3 „Tägliche
-  Gedächtnis-Pflege“). Keine Texte; gelöscht mit dem Konto.
+  (`last_turn_at`, `review_after`, `reviewed_at`, `reviewed_through`,
+  `attempts`, `lease_until`, `lease_id`, `last_result` nur mit Status und
+  Zahlen; seit 2026-11-06, §3 „Tägliche Gedächtnis-Pflege“). Keine Texte;
+  gelöscht mit dem Konto und bei ausgeschaltetem Opt-in.
 - `watch_briefs/{uid}` — user-level Morning-Brief-Einstellungen (`enabled`,
   `send_time` `HH:MM`, IANA-`timezone`, `mode` = `always|changes_only`,
   `next_send_at`, `last_evaluated_at`, `last_sent_at`, `enabled_at`). Reine

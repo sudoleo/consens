@@ -19,11 +19,17 @@ same transaction, secret filter, limits, Undo log) as one change with
 ``source="review"``; Settings › Memory names the latest review with one Undo
 (``last_review``). Nothing about it is said in a chat.
 
-Left out: chats with Google data (consented to for that chat alone, as
-search_chats), temporary chats, Watch runs (their words are the Watch's task,
-not the user talking) and unfinished turns. Never further back than LOOKBACK:
-a review that did not run (deploy, outage) is not made up for night by night
-(no backlog costs), the next one simply covers the days since.
+Read are Agent chats only, and in them only messages sent while the agent
+could update the memory (the turn's ``agent_settings.memory.auto``): not
+before the opt-in or while memory was paused. Left out: chats with Google
+data (consented to for that chat alone, as search_chats), temporary chats,
+Watch runs (their words are the Watch's task, not the user talking). A
+message still running is read the next time (``reviewed_through``). A failed
+review (provider, a cut-off reply, the user's own edit during the call) keeps
+its window and comes again after RETRY_AFTER; after MAX_ATTEMPTS it gives the
+window up. Never further back than LOOKBACK: a review that did not run is
+not made up night by night (no backlog costs), the next one covers the days
+since.
 
 Which accounts are due: an agent message of an account whose memory the
 agent may write marks ``memory_reviews/{uid}`` (``mark_due``) with
@@ -59,6 +65,12 @@ IDLE = timedelta(hours=3)
 INTERVAL = timedelta(hours=20)
 LOOKBACK = timedelta(days=14)
 LEASE = timedelta(minutes=10)
+# A failed review (provider, a cut-off reply, the user's edit during the
+# call) comes again after RETRY_AFTER; after MAX_ATTEMPTS in a row its
+# messages count as reviewed (no backlog).
+RETRY_AFTER = timedelta(hours=2)
+MAX_ATTEMPTS = 3
+DONE = frozenset({"applied", "unchanged", "no_chats"})
 TICK_SECONDS = 15 * 60
 ACCOUNTS_PER_TICK = 20
 CHATS = 80
@@ -158,16 +170,28 @@ def review_model() -> str:
 
 # --- What the review reads --------------------------------------------------
 
-def collect_chats(store, uid: str, since: datetime) -> list[dict]:
+def _counts(settings: dict) -> bool:
+    """A message the review may read: sent while the agent could update the
+    memory (the turn's own ``agent_settings.memory.auto``, saved from
+    ``MemorySnapshot.settings()``: opt-in on, memory not paused, no temporary
+    chat), by the user (no Watch run), without Google data."""
+    memory = settings.get("memory") if isinstance(settings.get("memory"), dict) else {}
+    return (memory.get("auto") is True and not settings.get("watch_run") and not settings.get("temporary")
+            and not settings.get("google_data"))
+
+
+def collect_chats(store, uid: str, since: datetime) -> tuple[list[dict], datetime | None]:
     """The account's messages since ``since``, oldest first, by chat:
-    ``[{title, day, turns: [{question, answer}]}]``, within CHATS_CHARS."""
+    ``[{title, turns: [{at, question, quoted, answer}]}]`` within
+    CHATS_CHARS, and when the oldest message that may still finish started
+    (the next review reads again from there)."""
     from google.cloud import firestore
     from google.cloud.firestore_v1.base_query import FieldFilter
     newest = firestore.Query.DESCENDING
     chats_ref = store._chats_ref(uid)
     query = (chats_ref.where(filter=FieldFilter("updated_at", ">=", since))
              .order_by("updated_at", direction=newest).limit(CHATS))
-    found = []
+    found, running = [], None
     for chat in query.stream():
         data = chat.to_dict() or {}
         # Agent chats only: the opt-in is the agent's ("Let Agent update
@@ -182,10 +206,15 @@ def collect_chats(store, uid: str, since: datetime) -> list[dict]:
         for snapshot in turns_query.stream():
             turn = snapshot.to_dict() or {}
             settings = turn.get("agent_settings") if isinstance(turn.get("agent_settings"), dict) else {}
-            if (turn.get("status") not in {"completed", "succeeded"} or settings.get("watch_run")
-                    or settings.get("temporary") or settings.get("google_data")):
-                continue
             created = _as_utc(turn.get("created_at"))
+            if not _counts(settings):
+                continue
+            if turn.get("status") == "pending":
+                if created and (running is None or created < running):
+                    running = created
+                continue
+            if turn.get("status") not in {"completed", "succeeded"}:
+                continue
             raw = str(turn.get("question") or "")
             own = user_words(raw)
             question = _clip(own, QUESTION_CHARS)
@@ -201,7 +230,7 @@ def collect_chats(store, uid: str, since: datetime) -> list[dict]:
             turns.sort(key=lambda turn: turn["at"])
             found.append({"title": _clip(data.get("title"), 120) or "(untitled)", "turns": turns})
     found.sort(key=lambda chat: chat["turns"][-1]["at"])
-    return _within_budget(found)
+    return _within_budget(found), running
 
 
 def _within_budget(chats: list[dict]) -> list[dict]:
@@ -315,12 +344,13 @@ class MemoryReview:
         return [snapshot.id for snapshot in query.stream()]
 
     def run(self) -> dict:
-        """One tick: every due account, one after the other."""
-        now = self.clock()
-        counts = {"reviewed": 0, "changed": 0, "skipped": 0, "failed": 0}
-        for uid in self.due(now):
+        """One tick: every due account, one after the other, each on its own
+        clock reading (a lease taken minutes into the tick must not start
+        out expired)."""
+        counts = {"reviewed": 0, "changed": 0, "skipped": 0, "failed": 0, "retry": 0}
+        for uid in self.due(self.clock()):
             try:
-                outcome = self.review(uid, now=now)
+                outcome = self.review(uid)
             except Exception as exc:
                 counts["failed"] += 1
                 logging.warning("memory review failed category=%s", safe_exception(exc))
@@ -329,52 +359,75 @@ class MemoryReview:
         return counts
 
     def _claim(self, uid: str, now: datetime):
-        """``(lease_id, since)`` when this process reviews ``uid`` now, else None."""
-        ref, claimed = self._ref(uid), {}
+        """``(lease_id, since)`` when this process reviews ``uid`` now, else None.
 
-        def operation(tx):
-            snapshot = ref.get(transaction=tx)
-            if not snapshot.exists:
-                return
-            data = snapshot.to_dict() or {}
-            due = _as_utc(data.get("review_after"))
-            lease = _as_utc(data.get("lease_until"))
-            if due is None or due > now or (lease and lease > now):
-                return
-            reviewed = _as_utc(data.get("reviewed_at"))
-            if reviewed and reviewed + INTERVAL > now:
-                # Reviewed today already: the next one waits for its day.
-                tx.update(ref, {"review_after": reviewed + INTERVAL})
-                return
-            lease_id = secrets.token_hex(8)
-            tx.update(ref, {"lease_until": now + LEASE, "lease_id": lease_id})
-            claimed.update(lease_id=lease_id, since=max(reviewed or now - LOOKBACK, now - LOOKBACK))
-
-        self.repository._transaction(operation)
-        return (claimed["lease_id"], claimed["since"]) if claimed else None
-
-    def _finish(self, uid: str, lease_id: str, started: datetime, result: dict) -> None:
+        The claim is what the transaction's last attempt returns: Firestore
+        runs ``operation`` again after an aborted commit, and a claim kept
+        from an earlier attempt would let two processes review the account."""
         ref = self._ref(uid)
 
         def operation(tx):
             snapshot = ref.get(transaction=tx)
             if not snapshot.exists:
-                return
+                return None
+            data = snapshot.to_dict() or {}
+            due = _as_utc(data.get("review_after"))
+            lease = _as_utc(data.get("lease_until"))
+            if due is None or due > now or (lease and lease > now):
+                return None
+            reviewed = _as_utc(data.get("reviewed_at"))
+            if reviewed and reviewed + INTERVAL > now and not data.get("attempts"):
+                # Reviewed today already: the next one waits for its day.
+                tx.update(ref, {"review_after": reviewed + INTERVAL})
+                return None
+            lease_id = secrets.token_hex(8)
+            tx.update(ref, {"lease_until": now + LEASE, "lease_id": lease_id})
+            through = _as_utc(data.get("reviewed_through"))
+            return lease_id, max(through or now - LOOKBACK, now - LOOKBACK)
+
+        return self.repository._transaction(operation) or None
+
+    def _finish(self, uid: str, lease_id: str, started: datetime, result: dict, through: datetime) -> str:
+        """Close the review. Done (or given up after MAX_ATTEMPTS): the
+        messages up to ``through`` count as reviewed. Failed: the window
+        stays open and the review comes again after RETRY_AFTER. Agent
+        memory off (or the account gone): the record goes; the next message
+        that may update the memory brings it back."""
+        ref = self._ref(uid)
+        status = result["status"]
+
+        def operation(tx):
+            snapshot = ref.get(transaction=tx)
+            if not snapshot.exists:
+                return "reviewed"
             data = snapshot.to_dict() or {}
             if data.get("lease_id") != lease_id:
-                return
-            updates = {"reviewed_at": started, "lease_until": None, "lease_id": None, "last_result": result}
+                return "reviewed"
             last_turn = _as_utc(data.get("last_turn_at"))
-            if last_turn is None or last_turn <= started:
-                # A message during the review set its own review_after.
-                updates["review_after"] = None
-            tx.update(ref, updates)
+            quiet = last_turn is None or last_turn <= started
+            if status == "auto_memory_off" and quiet:
+                tx.delete(ref)
+                return "reviewed"
+            attempts = int(data.get("attempts") or 0) + 1
+            if status in DONE or status == "auto_memory_off" or attempts >= MAX_ATTEMPTS:
+                updates = {"reviewed_at": started, "reviewed_through": through, "attempts": 0,
+                           "lease_until": None, "lease_id": None, "last_result": result}
+                if quiet:
+                    # A message during the review set its own review_after.
+                    updates["review_after"] = None
+                tx.update(ref, updates)
+                return "changed" if status == "applied" else "reviewed"
+            later = _as_utc(data.get("review_after")) or started
+            tx.update(ref, {"attempts": attempts, "review_after": max(started + RETRY_AFTER, later),
+                            "lease_until": None, "lease_id": None, "last_result": result})
+            return "retry"
 
         try:
-            self.repository._transaction(operation)
+            return self.repository._transaction(operation)
         except Exception as exc:
             # The lease runs out by itself; the next tick tries again.
             logging.warning("memory review finish failed category=%s", safe_exception(exc))
+            return "failed"
 
     def review(self, uid: str, *, now: datetime | None = None) -> str:
         now = (now or self.clock()).astimezone(timezone.utc)
@@ -383,27 +436,33 @@ class MemoryReview:
             return "skipped"
         lease_id, since = claim
         result = {"status": "unchanged", "added": 0, "updated": 0, "deleted": 0}
+        through = now
         try:
-            result.update(self._review(uid, since, now))
+            outcome, through = self._review(uid, since, now)
+            result.update(outcome)
         except AgentMemoryError as exc:
-            # Off, paused or deleted meanwhile, a race with the user's own
-            # edit: nothing saved, nothing to retry before the next message.
-            result["status"] = exc.code
+            # Off or paused meanwhile, the user's own edit during the call
+            # (revision_conflict): nothing saved; _finish decides on a retry.
+            code = exc.code
+            result["status"] = code
         except Exception as exc:
             result["status"] = "failed"
             logging.warning("memory review call failed category=%s", safe_exception(exc))
-        self._finish(uid, lease_id, now, result)
-        return "changed" if result["status"] == "applied" else "reviewed"
+        return self._finish(uid, lease_id, now, result, through)
 
-    def _review(self, uid: str, since: datetime, now: datetime) -> dict:
+    def _review(self, uid: str, since: datetime, now: datetime) -> tuple[dict, datetime]:
+        """The review's result and the time up to which it read every message
+        that could still count (one still running when it read is read again
+        next time)."""
         snapshot = self.repository.snapshot(uid)
         if not snapshot.available:
-            return {"status": "unavailable"}
+            return {"status": "unavailable"}, now
         if not snapshot.writable:
-            return {"status": "auto_memory_off"}
-        chats = collect_chats(self.store, uid, since)
+            return {"status": "auto_memory_off"}, now
+        chats, running = collect_chats(self.store, uid, since)
+        through = min(now, running) if running else now
         if not chats:
-            return {"status": "no_chats"}
+            return {"status": "no_chats"}, through
         text = prompt(snapshot, chats, today=now.date())
         messages = sum(len(chat["turns"]) for chat in chats)
         raw = self._query(text)
@@ -412,15 +471,18 @@ class MemoryReview:
         except (TypeError, ValueError):
             # Cut off or not JSON: a failure to see in last_result, not a
             # day with nothing to keep.
-            return {"status": "unreadable", "messages": messages}
+            return {"status": "unreadable", "messages": messages}, through
         found = changes(raw, snapshot.items)
         if not found:
-            return {"status": "unchanged", "messages": messages}
-        applied = self.repository.apply(uid, found, origin="agent", source=SOURCE, now=now)
+            return {"status": "unchanged", "messages": messages}, through
+        # Against the memory the call was built from: the user's own edit
+        # during the call wins, and the review comes again.
+        applied = self.repository.apply(uid, found, origin="agent", source=SOURCE, now=now,
+                                        expected_revision=snapshot.revision)
         counts = {op: sum(1 for entry in applied.get("changes", []) if entry["op"] == op)
                   for op in ("add", "update", "delete")}
         return {"status": applied.get("status", "unchanged"), "added": counts["add"],
-                "updated": counts["update"], "deleted": counts["delete"], "messages": messages}
+                "updated": counts["update"], "deleted": counts["delete"], "messages": messages}, through
 
     def _query(self, text: str) -> str:
         from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
