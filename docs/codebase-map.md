@@ -3258,7 +3258,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   auf die Seite. Eine Watch von vor den `looks` mit mehr als einem Lauf
   (`runs`) nennt ihren einen Blick „Its last look“, nicht „Its first look“.
   `focusWatch(id)` (die Pille „Watching“) öffnet das Panel einer laufenden
-  Watch. Der Fuß: wohin Funde gehen, „Change“ öffnet **Notifications**
+  Watch; seit 2026-11-06 klappt es für eine anderswo beendete „Ended“ auf,
+  und eine, die nicht mehr da ist, vergisst es, sobald die Liste gezeichnet
+  ist (vorher öffnete ein späteres Aufklappen ihr Panel von selbst). Der Fuß: wohin Funde gehen, „Change“ öffnet **Notifications**
   (`dialog.wd-notify`: Mailadresse, Telegram koppeln/testen/trennen über
   `App.watchUi.connectTelegram`), „Ended“ und „Earlier Watches“ klappen auf
   (die archivierten Consensus-Watches mit Link auf ihre Seite). Gäste:

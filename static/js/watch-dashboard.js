@@ -1194,14 +1194,28 @@
 
   // A Watch to show: its card stands out, its row opens its panel (the pill
   // under an answer says "Watching" and comes here).
+  // The wish waits only for the list's first drawing: once it is drawn, a
+  // Watch ended elsewhere (the pill still says "Watching") shows in the
+  // opened "Ended" drawer, and one that is gone is forgotten. Until
+  // 2026-11-06 it stayed, and opening the drawer later opened its panel by
+  // itself (bug hunt 2026-11-05).
   function focusWatch(id, { open = true } = {}) {
     const wanted = String(id || '');
     page.focus = wanted ? { id: wanted, open } : null;
     const host = body();
     const target = wanted && (host?.querySelector(`.aw-card[data-watch-id="${cssId(wanted)}"]`)
       || host?.querySelector(`.aw-row[data-watch-id="${cssId(wanted)}"] .aw-open`));
-    if (!target) return;
     const watch = watchById(wanted);
+    if (!target) {
+      if (!page.data || !host) return;
+      if (watch && stateOf(watch) === 'ended' && !page.showEnded) {
+        page.showEnded = true;
+        draw();
+        return;
+      }
+      page.focus = null;
+      return;
+    }
     page.focus = null;
     target.scrollIntoView({ block: 'center', behavior: App.motion?.reduced?.() ? 'auto' : 'smooth' });
     target.focus({ preventScroll: true });

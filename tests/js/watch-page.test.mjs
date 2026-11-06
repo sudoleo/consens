@@ -609,6 +609,36 @@ describe("One Watch's panel (instead of the … menu)", () => {
     window.App.watchDashboard.focusWatch("w1");
     expect(detail(document).open).toBe(true);
   });
+
+  // Bug hunt 2026-11-05: a pill still saying "Watching" for a Watch ended
+  // elsewhere found no row (it sits in the closed "Ended" drawer), and the
+  // wish stayed: opening the drawer later opened its panel by itself.
+  it("shows a Watch the pill names that ended elsewhere under Ended, once", async () => {
+    const { window, document } = boot({ watches: [watch({ id: "run" }),
+      watch({ id: "w1", task: "Watch the ferry timetable for changes.", status: "done", ended: "user", next_run_at: null })] });
+    await window.App.watchDashboard.render();
+    window.App.watchDashboard.focusWatch("w1");
+    const toggle = () => document.querySelector('.aw-foot-link[data-key="ended"]');
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(detail(document).open).toBe(true);
+    expect(detail(document).querySelector(".wd-sheet-title").textContent).toBe("Watch the ferry timetable for changes.");
+    window.App.modalDialog.close(detail(document));
+    toggle().click();
+    toggle().click();
+    expect(toggle().getAttribute("aria-expanded")).toBe("true");
+    expect(detail(document).open).toBe(false);
+  });
+
+  it("forgets a Watch the pill names that is no longer there", async () => {
+    const { window, document } = boot({ watches: [watch({ id: "run" })] });
+    await window.App.watchDashboard.render();
+    window.App.watchDashboard.focusWatch("gone");
+    expect(document.querySelector("dialog.wd-detail[open]")).toBeNull();
+    // The same id drawn later (another tab's start) opens nothing by itself.
+    window.dispatchEvent(new window.CustomEvent("consensio:agent-watches-changed", { detail: { watch: watch({ id: "gone" }) } }));
+    expect(rows(document)).toContain("gone");
+    expect(document.querySelector("dialog.wd-detail[open]")).toBeNull();
+  });
 });
 
 describe("The field that starts a Watch (watch-composer.js)", () => {
