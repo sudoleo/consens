@@ -443,6 +443,17 @@ dialog.modal > .modal-content > .close-button {
   white-space: pre-line;
 }
 
+/* An optional "more" link right under the text (App.confirm link). */
+.confirm-dialog .confirm-modal-link {
+  margin-top: -10px;
+}
+
+.confirm-dialog .confirm-modal-link a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
 .confirm-dialog .confirm-accept.is-danger {
   border-color: var(--dispute);
   background: var(--dispute);

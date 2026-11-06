@@ -49,6 +49,19 @@ def _no_real_telegram_alerts(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _accounts_agreed_to_the_ai_providers(monkeypatch, request):
+    """Every test account agreed once that its questions go to the AI
+    providers (security.has_ai_consent, since 2026-11-06). Unit fakes have
+    no users/{uid} document; without this seam every run would be refused.
+    Tests of the consent itself are marked ``real_ai_consent``."""
+    if request.node.get_closest_marker("real_ai_consent"):
+        return
+    from app.core import security
+
+    monkeypatch.setattr(security, "has_ai_consent", lambda uid: True)
+
+
+@pytest.fixture(autouse=True)
 def _consensus_watches_as_before(monkeypatch):
     """The Consensus Watches are archived in production since 2026-11-03
     (cfg.consensus_watches_archived); their pipeline's tests still run it.

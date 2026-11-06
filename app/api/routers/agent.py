@@ -16,7 +16,9 @@ from app.core.observability import provider_diagnostic, safe_exception, safe_tra
 from app.services.error_alerts import report_server_exception
 from app.core import config as cfg
 from app.core.rate_limit import limiter, api_uid_limiter, ApiUidRateLimitExceeded
-from app.core.security import TierStatusUnavailable, db_firestore, get_user_tier, is_user_admin, is_user_pro
+from app.core.security import (
+    TierStatusUnavailable, db_firestore, get_user_tier, is_user_admin, is_user_pro, require_ai_consent,
+)
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta, prepare_agent_share_result
 from app.services import persistence_guard, prompt_config
@@ -514,6 +516,10 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         if payload.recover_only:
             return JSONResponse({"error": "No saved answer is available for this request.",
                 "code": "answer_unavailable", "recoverable": False}, status_code=404)
+        # A new message of the account goes to the AI providers: only with its
+        # consent. A Watch's run was set up from a chat that had it.
+        if watch_run is None:
+            require_ai_consent(uid)
         # Only a new turn counts: a browser following a running turn asks
         # with recover_only (above) and must not use up the send limit. A
         # Watch's runs are bounded by their schedule (agent_watches.py).

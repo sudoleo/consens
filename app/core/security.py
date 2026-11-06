@@ -371,6 +371,20 @@ _tier_cache_lock = threading.Lock()
 
 _TIER_FLAGS_DEFAULT = {"tier": TIER_FREE, "pro": False, "admin": False}
 
+# --- Zustimmung zur Weitergabe an KI-Anbieter (seit 2026-11-06) --------------
+# Bevor eine Frage eines Kontos an einen KI-Anbieter geht, hat das Konto einmal
+# zugestimmt (users/{uid}.ai_consent = {version, at}, geschrieben von
+# app/services/ai_consent.py). Gilt nur in der aktuellen Fassung: eine neue
+# Version fragt jedes Konto beim naechsten Senden noch einmal.
+AI_CONSENT_FIELD = "ai_consent"
+AI_CONSENT_VERSION = "2026-11-06"
+AI_CONSENT_REQUIRED = "ai_consent_required"
+
+
+def _ai_consent_given(data: dict) -> bool:
+    record = data.get(AI_CONSENT_FIELD)
+    return isinstance(record, dict) and record.get("version") == AI_CONSENT_VERSION
+
 
 def _compute_tier_flags(data: dict) -> dict:
     tier = normalize_tier(data.get("tier"))
@@ -381,6 +395,8 @@ def _compute_tier_flags(data: dict) -> dict:
         # fuer Plus bewusst False (siehe app/core/entitlements.py).
         "pro": tier == TIER_PRO,
         "admin": role == "admin",
+        # Im selben Dokument wie die Stufe: die Pruefung kostet keinen Read.
+        "ai_consent": _ai_consent_given(data),
     }
 
 
@@ -446,6 +462,39 @@ def is_user_admin(uid: str) -> bool:
         # des Admin-Dashboards; ohne das Flag bleibt der Mock-User Non-Admin.
         return os.environ.get("MOCK_ADMIN") == "1"
     return _get_tier_flags(uid)["admin"]
+
+def has_ai_consent(uid: str) -> bool:
+    """Ob das Konto der Weitergabe seiner Fragen an KI-Anbieter zugestimmt hat.
+
+    Liest die gecachten Konto-Flags. Ein Nein wird einmal frisch gelesen:
+    eine eben in einem anderen Prozess gegebene Zustimmung gilt so sofort,
+    und nur ein Konto ohne Zustimmung zahlt den Read. Der E2E-Mock-Nutzer
+    hat zugestimmt. Wirft TierStatusUnavailable.
+    """
+    if _mock_auth_enabled() and uid == E2E_MOCK_UID:
+        return True
+    if _get_tier_flags(uid)["ai_consent"]:
+        return True
+    invalidate_tier_cache(uid)
+    return _get_tier_flags(uid)["ai_consent"]
+
+
+def require_ai_consent(uid: str) -> None:
+    """Schranke vor jeder Arbeit, die eine Eingabe des Kontos an einen
+    KI-Anbieter schickt: 403 ``ai_consent_required`` ohne Zustimmung (der
+    Browser fragt dann), 503 wenn das Konto gerade nicht lesbar ist."""
+    try:
+        consented = has_ai_consent(uid)
+    except TierStatusUnavailable:
+        raise HTTPException(
+            status_code=503, detail="Account tier is temporarily unavailable. Please retry.",
+        ) from None
+    if not consented:
+        raise HTTPException(status_code=403, detail={
+            "error": "Agree to sending your questions to the AI providers first.",
+            "code": AI_CONSENT_REQUIRED,
+        })
+
 
 def is_valid_session(token: str) -> bool:
     """

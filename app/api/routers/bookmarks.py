@@ -25,7 +25,9 @@ from app.core.rate_limit import (
 from app.core.security import (
     verify_user_token, extract_id_token, db_firestore,
     AuthenticationUnavailable, auth_unavailable_error,
+    TierStatusUnavailable,
 )
+from app.core import security
 from app.services.llm.attachments import normalize_attachment_meta
 from app.services import persistence_guard, share_snapshots
 from app.services.chat_store import (
@@ -489,6 +491,17 @@ def load_bookmark_detail(request: Request, bookmark_id: str):
     return {"status": "success", "bookmark": bookmark}
 
 
+def _consented(uid: str) -> bool:
+    """The account's chats go to a model only with its consent
+    (app/services/ai_consent.py). These routes are asked on their own, not on
+    Send, so without it (or while the account is unreadable) they answer
+    without the model instead of refusing."""
+    try:
+        return security.has_ai_consent(uid)
+    except TierStatusUnavailable:
+        return False
+
+
 @router.post("/bookmarks/{bookmark_id}/title")
 @limiter.limit("20/minute")
 # Sync like the other bookmark routes: the LLM call and the Firestore writes
@@ -520,6 +533,8 @@ def name_bookmark(request: Request, bookmark_id: str):
     # Named already, by the model or by the person (rename in the sidebar).
     if data.get("title_source") in persistence_guard.KEPT_TITLE_SOURCES:
         return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, data)}
+    if not _consented(uid):
+        return {"status": "skipped", "bookmark": _bookmark_meta(bookmark_id, data)}
 
     try:
         api_uid_limiter.check(
@@ -693,6 +708,8 @@ def predict_starter_questions(request: Request):
     """
     uid = _bookmark_uid(request)
     skipped = {"status": "skipped", "questions": []}
+    if not _consented(uid):
+        return skipped
     try:
         api_uid_limiter.check(
             uid, "starter:predict", STARTER_PREDICTIONS_PER_HOUR, window_seconds=3600

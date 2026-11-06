@@ -323,6 +323,7 @@ function clearAuthenticatedUiState() {
   window.App?.usageRun?.clear?.();
   window.App.state.set("isUserPro", false, "userTier");
   window.App.tokenBudget?.clear?.();
+  window.App?.aiConsent?.clear?.();
 
   ["watchUsageDisplay", "countdownDisplay"]
     .forEach(id => {
@@ -449,6 +450,8 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
       // Plus-Konto beim Laden ein Free-Konto. /user_status liefert "tier".
       const tier = data.tier ?? data.is_pro;
       window.App.agentAccess = { uid: user.uid, allowed: data.agent_access === true };
+      // Whether its questions may go to the AI providers yet (ai-consent.js).
+      window.App.aiConsent?.set?.(user.uid, data.ai_consent);
       window.App.agentChat?.render?.();
 
       // A) Der saubere Weg (falls vorhanden):

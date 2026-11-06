@@ -11,6 +11,7 @@
 //     confirmLabel: "Delete account",   // default "OK"
 //     cancelLabel: "Cancel",            // default "Cancel"
 //     danger: true,                     // the confirm button says it destroys
+//     link: { href: "/privacy", label: "Details" },  // optional, opens in a new tab
 //   });
 //
 // Resolves true for the confirm button, false for Cancel, Escape, the
@@ -36,6 +37,7 @@
       <div class="modal-content confirm-modal-content">
         <h2 id="appConfirmTitle"></h2>
         <p id="appConfirmBody"></p>
+        <p id="appConfirmLink" class="confirm-modal-link" hidden><a target="_blank" rel="noopener"></a></p>
         <div class="confirm-modal-actions">
           <button type="button" class="btn-free confirm-cancel" data-answer="false"></button>
           <button type="button" class="btn-pro confirm-accept" data-answer="true"></button>
@@ -62,7 +64,7 @@
     resolve(Boolean(value));
   }
 
-  function confirm({ title = "", body = "", confirmLabel = "OK", cancelLabel = "Cancel", danger = false } = {}) {
+  function confirm({ title = "", body = "", confirmLabel = "OK", cancelLabel = "Cancel", danger = false, link = null } = {}) {
     const element = build();
     // A newer question replaces an unanswered one: that one is a "no".
     answer(false);
@@ -70,6 +72,12 @@
     const text = element.querySelector("#appConfirmBody");
     text.textContent = String(body);
     text.hidden = !body;
+    const more = element.querySelector("#appConfirmLink");
+    const anchor = more.querySelector("a");
+    anchor.textContent = link?.label ? String(link.label) : "";
+    if (link?.href) anchor.setAttribute("href", String(link.href));
+    else anchor.removeAttribute("href");
+    more.hidden = !(link?.href && link?.label);
     const cancel = element.querySelector(".confirm-cancel");
     const accept = element.querySelector(".confirm-accept");
     cancel.textContent = cancelLabel;

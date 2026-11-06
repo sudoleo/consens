@@ -532,5 +532,13 @@
   "Nobody checks the Agent’s work: mistakes in its answers stay unmarked, and nothing pauses it when a step goes against your goal or a page tries to steer it. What remains are the model’s own safeguards, consens.io’s fixed limits and your Stop button. Uses less of your allowance.": "Niemand prüft die Arbeit des Agenten: Fehler in seinen Antworten bleiben unmarkiert, und nichts pausiert ihn, wenn ein Schritt gegen dein Ziel geht oder eine Seite ihn zu lenken versucht. Es bleiben die eigenen Schutzmechanismen des Modells, die festen Grenzen von consens.io und dein Stopp-Knopf. Verbraucht weniger von deinem Kontingent.",
   "Temporary chat": "Temporärer Chat",
   "Temporary chat. Gone when you leave it.": "Temporärer Chat. Weg, sobald du ihn verlässt.",
-  "Gone when you leave it.": "Weg, sobald du ihn verlässt."
+  "Gone when you leave it.": "Weg, sobald du ihn verlässt.",
+  "Before your first question": "Bevor deine erste Frage rausgeht",
+  "consens sends your question, your files, the chat so far and, if it is on, your memory through OpenRouter to AI models from these companies, which answer and check the work:": "consens schickt deine Frage, deine Dateien, den bisherigen Chat und, wenn es an ist, dein Gedächtnis über OpenRouter an KI-Modelle dieser Firmen, die antworten und die Arbeit prüfen:",
+  "Please don’t enter anything confidential.": "Gib bitte nichts Vertrauliches ein.",
+  "Agree": "Einverstanden",
+  "How your data is handled": "So gehen wir mit deinen Daten um",
+  "Your consent could not be saved. Try again.": "Deine Zustimmung ließ sich nicht speichern. Versuch es noch einmal.",
+  "Your consent could not be saved. Please try again.": "Deine Zustimmung ließ sich nicht speichern. Versuch es bitte noch einmal.",
+  "Agree to sending your questions to the AI providers first.": "Stimm zuerst zu, dass deine Fragen an die KI-Anbieter gehen."
 }

@@ -130,7 +130,7 @@
         </p>
       </section>
 
-      <section class="legal-panel">
+      <section class="legal-panel" id="providers">
         <h2>4. Provider routing</h2>
         <p>Use of information received from Google Workspace APIs adheres to the
           <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
@@ -143,6 +143,9 @@
           Available model families include OpenAI, Anthropic/Claude, Google/Gemini, Mistral, xAI/Grok,
           DeepSeek, Moonshot AI/Kimi, Z.ai/GLM, Meta/Muse, Alibaba/Qwen and Xiaomi/MiMo. A model developer is not necessarily the company
           hosting the endpoint: OpenRouter can route the same model to different infrastructure providers.</p>
+        <p>Before your first question, the app names these providers and asks once whether you agree that your
+          questions go to them. We store with your account that and when you agreed; until then, the app sends
+          none of your questions to a model.</p>
         <p>Depending on the feature, requests include your question, instructions, enabled Memory, attachments,
           earlier conversation context, model answers and sources. Consensus, Differences, coverage checks,
           dispute resolution, context preparation and explicit Memory edits can involve additional configured

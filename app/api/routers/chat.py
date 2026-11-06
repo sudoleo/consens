@@ -18,6 +18,7 @@ from app.core.security import (
     verify_user_token,
     AuthenticationUnavailable,
     auth_unavailable_error,
+    require_ai_consent,
 )
 import app.core.config as cfg
 from app.services.llm.attachments import parse_attachments
@@ -528,6 +529,9 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
                 detail="Account tier is temporarily unavailable. Please retry.",
             ) from None
         entitlements = entitlements_for(tier)
+        # Here too, not only at /prepare: a run may skip it (own key, or a
+        # run key admitted at this step).
+        require_ai_consent(uid)
 
     # is_pro_user heisst weiterhin "darf Frontier-Modelle".
     # Plus ist hier False und faehrt damit exakt die Free-Modellauswahl.
@@ -735,6 +739,8 @@ def prepare(request: Request, data: dict = Body(...)):
     except Exception as exc:
         logging.error("Auth failed in /prepare category=%s", safe_exception(exc))
         raise HTTPException(status_code=401, detail="Authentication failed.")
+    # Before the run is admitted: the answers come from the AI providers.
+    require_ai_consent(uid)
     try:
         api_uid_limiter.check(uid, "prepare", PREPARES_PER_MINUTE)
     except ApiUidRateLimitExceeded as exc:

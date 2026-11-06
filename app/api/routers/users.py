@@ -21,7 +21,9 @@ from app.core.security import (
     invalidate_tier_cache,
     db_firestore,
     auth_unavailable_error,
+    require_ai_consent,
 )
+from app.core import security
 from app.services import agent_quota, agent_vm
 from app.services.usage_repository import (
     FirestoreUsageRepository,
@@ -29,7 +31,7 @@ from app.services.usage_repository import (
     UsageTransitionError,
 )
 from app.services.account_deletion import FirestoreAccountDeletion
-from app.services import account_language, agent_memory, memory_edit, persistence_guard, user_memory, user_settings
+from app.services import account_language, ai_consent, agent_memory, memory_edit, persistence_guard, user_memory, user_settings
 from app.services.user_memory import FirestoreUserMemoryRepository
 
 router = APIRouter()
@@ -88,6 +90,7 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
         # 2. Status aus Firestore holen
         try:
             tier = get_user_tier(uid)
+            consented = security.has_ai_consent(uid)
         except TierStatusUnavailable:
             raise HTTPException(
                 status_code=503,
@@ -119,6 +122,9 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             # Its VM time today (agent_vm_time.py), for the settings; only
             # where the account's messages have a VM, which the settings then promise.
             **({"vm_time": _vm_time(uid)} if vm_access and agent_vm.configured() else {}),
+            # Whether its questions may go to the AI providers yet; without
+            # it the browser asks before the first one (ai-consent.js).
+            "ai_consent": consented,
         }
 
     except HTTPException:
@@ -476,11 +482,29 @@ def _raise_memory_edit_error(exc: memory_edit.MemoryEditError):
     ) from None
 
 
+@router.post("/api/my/ai-consent")
+@limiter.limit("10/minute")
+def agree_to_ai_providers(request: Request):
+    """The account agrees, once, that its questions go to the AI providers
+    (app/services/ai_consent.py). Agreeing again only renews the date."""
+    uid = _account_uid(request)
+    try:
+        ai_consent.record(uid, db=db_firestore)
+    except persistence_guard.AccountDeletionInProgress:
+        raise HTTPException(status_code=403, detail="This account is being deleted.") from None
+    except Exception as exc:
+        logging.error("AI consent not recorded category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Your consent could not be saved. Please try again.") from None
+    return {"ai_consent": True}
+
+
 @router.post("/api/my/memory/edit")
 @limiter.limit("10/minute")
 def edit_user_memory(request: Request, payload: UserMemoryEditRequest):
     uid = _account_uid(request)
     tier = _memory_tier(uid)
+    # The selected text and the correction go to a model.
+    require_ai_consent(uid)
     try:
         result = memory_edit_service.edit(
             uid,

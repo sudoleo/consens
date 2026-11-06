@@ -88,6 +88,10 @@
           "note": "App.confirm: the app's own question before something final, instead of window.confirm. Uses App.modalDialog."
         },
         {
+          "file": "static/js/ai-consent.js",
+          "note": "App.aiConsent: the one question before an account's first question goes to the AI providers. Uses App.confirm; firebase.js sets it from /user_status, query-send.js awaits it before a run."
+        },
+        {
           "file": "static/js/auth-bootstrap.js",
           "note": "Same-origin watchdog: stays active even when the Firebase CDN modules cannot be imported. Must run before firebase.js."
         },

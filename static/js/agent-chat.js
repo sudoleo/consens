@@ -2894,6 +2894,8 @@
     // Flat ({error, code}) or wrapped ({error: {error, error_code}}, {detail}).
     const failure = App.errorFields?.(error.failure) || error.failure || {};
     const code = failure.code || failure.error_code;
+    // Refused for want of the consent: the next Send asks (ai-consent.js).
+    App.aiConsent?.refused?.(failure);
     const notSent = Boolean(error.notDispatched || !context.metadata.requestSent);
     const reason = App.userError(error, { context: notSent ? "send" : undefined,
       fallback: notSent ? undefined : "The answer couldn’t be completed. Try again." });

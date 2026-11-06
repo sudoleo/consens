@@ -373,6 +373,8 @@
 
   function finishFailed(context, message, data = null) {
     if (!registry.isExecuting(context.runId)) return;
+    // Refused for want of the consent: the next Send asks (ai-consent.js).
+    window.App.aiConsent?.refused?.(unwrapApiError(data || {}));
     const failedBeforeFanout = context.phase === "prepare";
     context.phase = "failed";
     context.error = { code: "run_failed", message: String(message || "The run failed.") };
@@ -633,6 +635,8 @@
     if (window.App.agentChat?.isSelected?.()) {
       if (window.updateQuestionInputAccess && !window.updateQuestionInputAccess()) return;
       if (window.validateInputText && !window.validateInputText()) return;
+      // The account's first question asks once where it goes (ai-consent.js).
+      if (window.App.aiConsent && !(await window.App.aiConsent.ensure())) return;
       await window.App.agentChat.send();
       return;
     }
@@ -667,6 +671,7 @@
       return;
     }
     window.App.usageLimit?.hide?.();
+    if (window.App.aiConsent && !(await window.App.aiConsent.ensure())) return;
 
     const context = beginContext(String(question).trim(), draftQuestion, quotedContext);
     if (!context) return;

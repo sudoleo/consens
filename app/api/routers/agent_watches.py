@@ -23,7 +23,7 @@ from app.api.routers.chat_history import _chat_uid
 from app.core.notice_page import WATCHES_LINK, notice_page
 from app.core.observability import safe_exception
 from app.core.rate_limit import limiter
-from app.core.security import db_firestore, get_user_tier
+from app.core.security import db_firestore, get_user_tier, require_ai_consent
 from app.services import agent_watches
 from app.services.agent_documents import Strict
 
@@ -81,6 +81,8 @@ def _watch_id(value: str) -> str:
 def start_watch(request: Request, payload: StartWatch):
     uid = _chat_uid(request)
     require_agent_access(uid)
+    # Its task goes to a model for the picture and, without a chat, its first run.
+    require_ai_consent(uid)
     try:
         watch = agent_watches.create(
             uid, chat_id=payload.chat_id, turn_id=payload.turn_id, task=payload.task, goal=payload.goal,

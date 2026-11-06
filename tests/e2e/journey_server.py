@@ -37,7 +37,7 @@ auth.revoke_refresh_tokens = lambda uid: None
 
 from main import app
 from fastapi import Header, HTTPException
-from app.core.security import db_firestore as db
+from app.core.security import AI_CONSENT_VERSION, db_firestore as db
 from app.api.routers import agent
 from app.services.llm.agent_client import AgentCompletion, measured_usage
 from app.services.llm import mock_llm
@@ -137,7 +137,9 @@ def tree(ref):
 @app.post('/_journey/{uid}/seed')
 def seed(uid: str, body: dict, x_journey_secret: str = Header(default='')):
     guard(uid, x_journey_secret)
-    db.collection('users').document(uid).set({'tier': 'pro', 'email': uid+'@example.invalid'})
+    # The account agreed once that its questions go to the AI providers (ai_consent.py).
+    db.collection('users').document(uid).set({'tier': 'pro', 'email': uid+'@example.invalid', 'ai_consent': {
+        'version': AI_CONSENT_VERSION, 'at': datetime.now(timezone.utc)}})
     if body.get('gate'):
         gates[uid] = threading.Event()
     if body.get('storage_full'):
