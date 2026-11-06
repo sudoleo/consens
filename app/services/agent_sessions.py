@@ -307,7 +307,11 @@ class AgentSessionStore:
                 raise AnalysisBudgetExceeded("The shared agent budget was reached.")
             states[step] = "running"
             reservations = {**data["reservations"], step: list(reservation)}
-            patch = {**data, "step_states": states, "reservations": reservations, "quota_day": day,
+            # No ``quota_day`` here: the root is completion:0's own receipt,
+            # and its day is the one that step reserved from (the record
+            # below, once). Until 2026-11-06 each claim wrote its own day, and
+            # a claim past midnight or a reset settled completion:0 there.
+            patch = {**data, "step_states": states, "reservations": reservations,
                      "reserved_tokens": data["reserved_tokens"] + tokens, "reserved_cost": data["reserved_cost"] + cost}
             if agent_id == "orchestrator":
                 patch["last_step"] = step

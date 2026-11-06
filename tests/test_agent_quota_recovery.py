@@ -166,3 +166,29 @@ def test_unreported_reservation_cannot_leak_across_day_or_reset(store, monkeypat
     store.repair_quota_period(UID, '2026-09-18')
     assert old.get().to_dict()['reserved'] == 0 and old.get().to_dict()['used'] == 100
     assert agent_quota.snapshot(store.db, UID)['remaining'] == 250000
+
+
+def test_the_first_step_settles_into_the_day_it_was_claimed_on(store, monkeypatch):
+    """Bug hunt 2026-11-06: every claim wrote its ledger day into the run's
+    root, and the root is completion:0's own receipt. A reviewer's round
+    claimed after midnight (or a reset) while completion:0 still ran, whose
+    receipt is written beside its calls since 2026-11-05: completion:0 then
+    settled into the new day, took its reservation from the reviewer's there
+    and left its own in the old day."""
+    loop = make_loop(store)
+    args = (UID, loop.chat_id, loop.turn_id)
+    policy = loop.policy.snapshot()
+    monkeypatch.setattr(agent_quota, 'day_key', lambda: '2026-11-05')
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=policy, reservation=(500, priced(500)))
+    monkeypatch.setattr(agent_quota, 'day_key', lambda: '2026-11-06')
+    aid = 'a' * 32
+    store.publish_agent(*args, run_token=loop.run_token, agent_id=aid,
+                        patch={'assignment': {'goal': 'Review'}, 'status': 'working', 'kind': 'audit'})
+    store.claim(*args, loop.model, run_token=loop.run_token, policy=policy, step=f'agent:{aid}:0',
+                reservation=(300, priced(300)))
+    store.settle(*args, completion=receipt(), status='succeeded', final=False)
+    ledger = lambda day: agent_quota.quota_ref(store.db, UID, day + agent_quota.LEDGER_UNIT).get().to_dict()
+    old, new = ledger('2026-11-05'), ledger('2026-11-06')
+    assert old['reserved'] == 0 and old['used'] > 0
+    assert new['reserved'] == 300 and not new.get('used')
+    assert store.receipt_ref(*args).get().to_dict()['quota_day'] == '2026-11-05' + agent_quota.LEDGER_UNIT
