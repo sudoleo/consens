@@ -45,6 +45,7 @@ from app.services.usage_repository import (
     RunKind,
     RunStatus,
     TokenAdmission,
+    UsageCapacityExceeded,
     UsageLimitExceeded,
     UsageRunConflict,
     UsageRunExpired,
@@ -164,6 +165,10 @@ def usage_key_for_run(run: dict) -> str:
 class AcceptedRunUnrecoverable(Exception):
     """An accepted run can no longer obtain its usage authorization."""
 
+    def __init__(self, run_id: str, reason: str):
+        super().__init__(run_id)
+        self.reason = reason
+
 
 def fail_unrecoverable_accepted_run(run: dict) -> dict:
     """Terminalize an accepted run whose usage receipt cannot be used anymore.
@@ -210,12 +215,20 @@ def reserve_run(run: dict):
 
 
 def reserve_or_terminalize(run: dict):
-    """Reserve an accepted run; terminalize it if its receipt has expired."""
+    """Reserve an accepted run; terminalize it if its receipt has expired.
+
+    A run the account refuses (allowance, too many starting runs, released
+    key) is deleted as the POST path does (``api_v1``): nothing started, and
+    the key is free for a later attempt instead of a retry every minute.
+    """
     try:
         return reserve_run(run)
     except UsageRunExpired:
         failed = fail_unrecoverable_accepted_run(run)
-        raise AcceptedRunUnrecoverable(str(failed.get("run_id") or "")) from None
+        raise AcceptedRunUnrecoverable(str(failed.get("run_id") or ""), "reservation_expired") from None
+    except (UsageLimitExceeded, UsageCapacityExceeded, UsageRunConflict) as exc:
+        api_run_repository.delete_accepted(str(run["run_id"]))
+        raise AcceptedRunUnrecoverable(str(run["run_id"]), type(exc).__name__) from None
 
 
 def release_run_reservation(run: dict) -> None:
@@ -334,9 +347,9 @@ def recover_persisted_runs() -> int:
         for run in [run for run in runs if run.get("status") == "accepted"]:
             try:
                 reserved, _usage = reserve_or_terminalize(run)
-            except AcceptedRunUnrecoverable:
+            except AcceptedRunUnrecoverable as exc:
                 logging.warning(
-                    "Consensus API accepted run terminalized after reservation expiry"
+                    "Consensus API accepted run terminalized reason=%s", exc.reason
                 )
                 continue
             except Exception as exc:

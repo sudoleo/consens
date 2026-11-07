@@ -30,6 +30,8 @@ from app.services.usage_repository import (
     RunKind,
     RunStatus,
     TokenAdmission,
+    UsageCapacityExceeded,
+    UsageRunConflict,
     UsageRunExpired,
     canonical_request_fingerprint,
 )
@@ -383,6 +385,33 @@ def test_a_young_queued_run_starts_without_asking_the_account_again(env):
 
     assert env.api.get(run["run_id"])["status"] == "succeeded"
     assert "pipeline_readmissions" not in env.db.documents[LEDGER]
+
+
+@pytest.mark.parametrize("refusal", ["limit", "capacity", "conflict"])
+def test_recovery_ends_an_accepted_run_the_account_refuses_like_the_post_path(env, monkeypatch, refusal):
+    # The process died between accepting the run and reserving its usage.
+    # Recovery used to log the refusal every minute and retry the run until
+    # its 30-day retention; POST deletes it at once (429/409).
+    run, _ = env.api.create_or_get(**ARGS)
+    if refusal == "limit":
+        env.db.documents[LEDGER] = {"used": LIMITS.limit}
+    else:
+        error = (UsageCapacityExceeded("Too many runs are starting at once") if refusal == "capacity"
+                 else UsageRunConflict("Idempotency-Key belongs to a released usage run"))
+        monkeypatch.setattr(env.usage, "reserve", lambda *args, **kwargs: (_ for _ in ()).throw(error))
+    monkeypatch.setattr(runner, "mock_llm_enabled", lambda: False)
+    monkeypatch.setattr(runner, "_retention_backfilled", True)
+    monkeypatch.setattr(runner, "_last_retention", None)
+    monkeypatch.setattr(runner, "schedule_run", lambda run_id: pytest.fail("must not schedule"))
+
+    assert runner.recover_persisted_runs() == 0
+
+    with pytest.raises(ApiRunNotFound):
+        env.api.get(run["run_id"])
+    assert env.api.list_by_status(("accepted",)) == []
+    assert reserved(env) == 0 and env.executions == []
+    # As after the POST path's refusal, the key is free for a later attempt.
+    assert env.api.create_or_get(**ARGS)[1] is True
 
 
 def test_route_terminalizes_an_accepted_run_whose_reservation_expired(env, monkeypatch):

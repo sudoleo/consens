@@ -9051,6 +9051,11 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   gibt `fail_unrecoverable_accepted_run` einen noch reservierten Slot frei und
   beendet den Run als `failed` mit `error.code=reservation_expired`
   (Recovery und erneuter POST); kein Endlos-Retry, keine Providerarbeit.
+  Lehnt das Konto einen `accepted` Run ab (`UsageLimitExceeded`,
+  `UsageCapacityExceeded`, `UsageRunConflict`), löscht die Recovery
+  (`reserve_or_terminalize`) ihn wie der POST-Pfad per `delete_accepted`; der
+  Key ist danach frei. Bis 2026-11-07 versuchte sie ihn jede Minute erneut,
+  bis zur 30-Tage-Aufbewahrung.
 - `api_consensus_runner.py` übergibt die Ausführung an die neutrale
   `consensus_pipeline.py`: `provider_transport.py` führt den deterministischen
   parallelen Provider-Fan-out aus, danach laufen unverändert `query_consensus`
