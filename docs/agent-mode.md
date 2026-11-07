@@ -1703,9 +1703,20 @@ ohne Passwort aus; ein Nutzer-Parameter fehlt. Deshalb:
   `/etc/profile.d/languages_env` und `languages_paths` (gehören `sprite`) und
   brechen ab, wenn das nicht geht: `setup.sh` ruft jeden Shim einmal als
   `sprite` auf, statt die Dateien für den Agenten beschreibbar zu machen (die
-  Shells des Anbieters lesen sie). Scheitert `setup.sh`, ist die VM für die
-  Nachricht aus (`VM_UNAVAILABLE`), damit nie ein Befehl mit den Rechten des
-  Anbieters läuft.
+  Shells des Anbieters lesen sie). Die Python-Laufzeiten dort (`python`,
+  `python3`, `pip`, `pip3`, `pipenv`, `poetry`, `virtualenv`, `pyenv`) reichen
+  an die pyenv-Shims über deren vollen Pfad weiter. Nennt eine
+  `.python-version` im Ordner eine Version, die fehlt (das Repo von consens.io
+  sagt `3.12`, die Sprite hat 3.13.17), sucht pyenv das System-Python im PATH,
+  findet wieder `/.sprite/bin/python3` und ruft sich selbst bis zum Zeitlimit
+  auf: Jeder Python-Befehl im Repo lief in den Timeout. `setup.sh` schreibt
+  deshalb `/etc/profile.d/consens-pyenv.sh` mit
+  `_PYENV_SHIM_PATHS_<NAME>=/.sprite/bin` für jede Laufzeit, die an pyenv
+  weiterreicht (pyenvs eigener Weg, solche Ordner beim System-Lookup
+  auszulassen). Dann antwortet dort `/usr/bin/python3`, oder pyenv meldet
+  sofort „version `3.12' is not installed“. Scheitert `setup.sh`, ist die VM
+  für die Nachricht aus (`VM_UNAVAILABLE`), damit nie ein Befehl mit den
+  Rechten des Anbieters läuft.
 - **Werkzeuge jeder Werkbank (seit 2026-10-28).** `setup.sh` installiert,
   wo sie fehlen, **ripgrep** und **poppler-utils** (`pdftotext` & Co., seit
   dem DeepSeek-Feedback vom 2026-10-28; apt aus den Ubuntu-Spiegeln) und **headless

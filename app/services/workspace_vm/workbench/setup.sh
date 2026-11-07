@@ -111,6 +111,23 @@ for shim in /.sprite/bin/*; do
 done
 wait
 
+# The runtimes there that hand a command to pyenv (python, pip, poetry and
+# the like) call its shims by their full path, so pyenv never learns of
+# /.sprite/bin. Where a project's .python-version names a version that is
+# not installed, pyenv looks for the system's command on PATH without its
+# own shims, finds the runtime in /.sprite/bin again and calls itself until
+# the command's time limit: every python command in such a repository hung.
+# pyenv leaves the folders in _PYENV_SHIM_PATHS_<NAME> out of that look:
+# then the system's python3 answers, or pyenv says at once that the version
+# is not installed. In every login shell, the agent's and the user's terminal.
+runtimes=/.sprite/bin
+for shim in "$runtimes"/*; do
+  grep -qs 'PYENV_ROOT/shims' "$shim" || continue
+  name=$(basename -- "$shim" | tr 'a-z-' 'A-Z_' | sed 's/[^A-Z0-9_]/_/g')
+  printf 'export _PYENV_SHIM_PATHS_%s=%s\n' "$name" "$runtimes"
+done > /etc/profile.d/consens-pyenv.sh
+chmod 644 /etc/profile.d/consens-pyenv.sh
+
 # Tools every workspace has: ripgrep and poppler-utils (pdftotext and the
 # like, for the PDFs the agent reads) from the Ubuntu mirrors, and Chrome,
 # Google's package. The browser the user shares with the agent runs it as

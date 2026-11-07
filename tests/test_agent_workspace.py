@@ -194,6 +194,35 @@ def test_the_move_onto_one_computer_happens_once_and_never_ends_the_browser_agai
                 and ("browser.py" in line or "display.sh" in line or "cdp.py" in line)]
 
 
+def test_pyenv_skips_the_providers_runtimes_where_a_project_names_a_missing_python(tmp_path):
+    """A repository's .python-version naming a Python the workspace lacks
+    (3.12 beside its 3.13) sent pyenv in a loop through /.sprite/bin/python3
+    until the command's limit (measured on a Sprite: every python, pip and
+    pytest in that folder timed out). Every login shell gets
+    _PYENV_SHIM_PATHS_<NAME> for each runtime there that hands over to pyenv,
+    and only for those; with them python3 answered in 0.3 s. In a real bash."""
+    setup = agent_workspace.tool_files()["setup.sh"].decode()
+    block = setup[setup.index("runtimes=/.sprite/bin\n"):setup.index("chmod 644 /etc/profile.d/consens-pyenv.sh")]
+    assert block.rstrip().endswith("done > /etc/profile.d/consens-pyenv.sh")
+    found = shutil.which("bash")
+    if not found:
+        pytest.skip("no bash")
+    runtimes = tmp_path / "bin"
+    runtimes.mkdir()
+    pyenv_shim = '#!/bin/bash\nexec "$PYENV_ROOT/shims/$(basename "$0")" "$@"\n'
+    for name in ("python3", "pip", "pipenv"):
+        (runtimes / name).write_text(pyenv_shim)
+    (runtimes / "node").write_text('#!/bin/bash\nexec "$NVM_DIR/node" "$@"\n')
+    profile = tmp_path / "consens-pyenv.sh"
+    script = (block.replace("/.sprite/bin", runtimes.as_posix())
+              .replace("/etc/profile.d/consens-pyenv.sh", profile.as_posix()))
+    subprocess.run([found, "-euc", script], check=True)
+    folder = runtimes.as_posix()
+    assert sorted(profile.read_text().splitlines()) == [f"export _PYENV_SHIM_PATHS_PIP={folder}",
+                                                        f"export _PYENV_SHIM_PATHS_PIPENV={folder}",
+                                                        f"export _PYENV_SHIM_PATHS_PYTHON3={folder}"]
+
+
 def test_every_workspace_gets_ripgrep_and_chrome_and_loses_the_old_screen():
     """setup.sh (ran on a test Sprite 2026-10-28, docs/agent-mode.md):
     ripgrep from the Ubuntu mirrors and Chrome from Google's server, each only
