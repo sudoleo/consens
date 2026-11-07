@@ -166,7 +166,8 @@
 
   window.App.modalDialog = { bind, open, close, isOpen };
 
-  // The one close cross (foundation.css .close-button/.close-icon): a drawn X, never the "×"/"✕" glyphs of two different fonts.
+  // The one close cross (foundation.css .close-button/.close-icon): a drawn
+  // X, never the "×"/"✕" glyphs of two different fonts.
   const CLOSE_ICON = '<svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
     + '<path d="M4 4l8 8M12 4l-8 8"/></svg>';
   window.App.closeIcon = () => CLOSE_ICON;
