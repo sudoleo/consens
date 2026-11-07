@@ -8892,7 +8892,7 @@ keinen Titel und sagt, dass andere Chats ihn in Ruhe lassen
 (`agent_workspace.wanted_folder`, `TEMPORARY_MARKER`); samt `downloads/` und
 `input/`. Seine Prozesse tragen die Dateien `chat` und `temporary` im
 Prozessordner; `vm_process_output` ohne ID anderer Chats listet sie nicht
-(`list_command(chat=…)`). Beides geht mit jeder Chat-Löschung
+(`list_command(chat=…)`), sie zählen aber bei `MAX_RUNNING`: Die Absage am Limit sagt seit 2026-11-07, wie viele davon einem temporären Chat gehören und dass sie mit ihm oder an ihrem Zeitlimit enden (`start_command` meldet `temporary <chat>`, `agent_vm_processes.at_cap`). Beides geht mit jeder Chat-Löschung
 (`agent_vm.delete_chat_vm` → `delete_for_chat`: ein laufender wird gestoppt wie
 mit `vm_stop_process`; nicht verbrauchte VM-Zeit von heute kommt zurück; dann
 geht der Ordner mit `output.log`; eine nicht vollständig gelesene Liste lässt

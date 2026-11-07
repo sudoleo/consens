@@ -177,13 +177,19 @@ def status_command(directory, chars=OUTPUT_CHARS, wait=0):
 
 
 def start_command(directory, task, *, wait=2, root=PROCESSES_DIR):
-    """Refuses (exit 4) at MAX_RUNNING running processes, else starts the
+    """Refuses (exit 4) at MAX_RUNNING running processes, with a line
+    ``temporary <chat>`` for each of a temporary chat (other chats' lists
+    leave those out, list_command; since 2026-11-07), else starts the
     supervisor detached from this command (its own session, ``sid``) and
     reports after ``wait``."""
     d = shlex.quote(directory)
-    count = (f"running=0; for p in {shlex.quote(root)}/*/; do [ -f \"$p/pid\" ] && [ ! -f \"$p/exit_code\" ] "
-             "&& kill -0 \"$(cat \"$p/pid\")\" 2>/dev/null && running=$((running+1)); done; "
-             f"if [ \"$running\" -ge {MAX_RUNNING} ]; then exit 4; fi; ")
+    count = (f"running=0; temporary=; for p in {shlex.quote(root)}/*/; do [ -f \"$p/pid\" ] "
+             "&& [ ! -f \"$p/exit_code\" ] && kill -0 \"$(cat \"$p/pid\")\" 2>/dev/null || continue; "
+             "running=$((running+1)); [ -f \"$p/temporary\" ] && { "
+             "c=$(head -c 100 \"$p/chat\" 2>/dev/null | tr -cd 'A-Za-z0-9_-'); temporary=\"$temporary ${c:--}\"; }; "
+             "done; "
+             f"if [ \"$running\" -ge {MAX_RUNNING} ]; then for c in $temporary; do printf 'temporary %s\\n' \"$c\"; "
+             "done; exit 4; fi; ")
     return (count + f"setsid nohup bash {d}/run.sh {d} {shlex.quote(task)} >/dev/null 2>&1 "
             f"< /dev/null & echo $! > {d}/sid; " + status_command(directory, wait=wait))
 
@@ -203,6 +209,28 @@ def stop_command(directory, task):
             "2>/dev/null; fi; date +%s > \"$dir/ended\"; echo 137 > \"$dir/exit_code\"; "
             "curl -s --max-time 5 --unix-socket /.sprite/api.sock -X DELETE "
             f"http://sprite/v1/tasks/{shlex.quote(task)} >/dev/null 2>&1; fi; " + status_command(directory))
+
+
+AT_CAP = f"{MAX_RUNNING} background processes are already running. Stop one with vm_stop_process first."
+# Some of them run for another, temporary chat: its processes stay out of
+# this chat's list (list_command), so the agent saw fewer than MAX_RUNNING
+# and could not tell why (bug hunt 2026-11-06). They end with that chat.
+AT_CAP_TEMPORARY = (f"{MAX_RUNNING} background processes are already running, {{some}} for a temporary chat: "
+                    "vm_process_output does not list those here, and they end when the user leaves that chat or "
+                    f"at their time limit (at most {MAX_SECONDS // 60} minutes after their start). {{then}}")
+
+
+def at_cap(text, chat_id):
+    """The refusal at MAX_RUNNING, from start_command's ``temporary <chat>``
+    lines: how many of the running processes this chat cannot see."""
+    hidden = sum(1 for line in text.splitlines()
+                 if line.startswith("temporary ") and line[len("temporary "):].strip() != chat_id)
+    if not hidden:
+        return AT_CAP
+    if hidden >= MAX_RUNNING:
+        return AT_CAP_TEMPORARY.format(some="all of them", then="Tell the user if this one cannot wait.")
+    return AT_CAP_TEMPORARY.format(some=f"{hidden} of them",
+                                   then="Stop one of the others with vm_stop_process first.")
 
 
 def list_command(root=PROCESSES_DIR, chat=""):
@@ -429,8 +457,7 @@ class ProcessTools:
             except agent_vm.VMUnavailable:
                 logging.warning("Agent VM process folder not removed")
         if code == 4:
-            raise ValueError(f"{MAX_RUNNING} background processes are already running. Stop one with "
-                             "vm_stop_process first.")
+            raise ValueError(at_cap(text, self.vm.loop.chat_id))
         if code != 0:
             raise ValueError("The background process could not be started.")
         with session._lock:

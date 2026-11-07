@@ -3137,7 +3137,10 @@ jede Minute erneuert) wach, solange der Befehl läuft, schreibt danach
 Sperre von selbst aus. Deckel gegen Kosten: höchstens `MAX_RUNNING` = 3
 gleichzeitig (der vierte Start sagt es dem Agenten und löscht seine schon
 geschriebenen Dateien wieder, seit 2026-10-28: vorher stand er als `lost` in der
-Liste, ohne je gelaufen zu sein), jeder endet spätestens nach
+Liste, ohne je gelaufen zu sein; seit 2026-11-07 sagt die Absage auch, wie
+viele der laufenden einem anderen, temporären Chat gehören, denn dessen
+Prozesse fehlen in der Liste dieses Chats: `start_command` meldet je einen
+mit `temporary <chat>`, `at_cap` formuliert), jeder endet spätestens nach
 `max_seconds`, die Sprite bleibt nach dem Ende einer Nachricht also höchstens
 3 × 1 h wach. Ein Prozess überlebt seine Nachricht (der Arbeitsstand nennt
 seine ID). Status: `running`, `exited` mit `exit_code`, `stopped` (seit

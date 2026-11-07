@@ -178,6 +178,29 @@ def test_the_number_of_processes_and_their_time_are_capped(store, fake_vm, fixed
     assert "max_seconds" in too_long["error"] or "3600" in too_long["error"]
 
 
+@pytest.mark.parametrize("temporary,said", [
+    ([], None),
+    (["mine"], None),
+    (["temp-chat"], "1 of them for a temporary chat"),
+    (["temp-chat", "temp-chat", "temp-other"], "all of them for a temporary chat")])
+def test_a_refusal_at_the_cap_counts_the_temporary_chats_processes(store, fake_vm, fixed_id, temporary, said):
+    """Bug hunt 2026-11-06: a temporary chat's processes count toward
+    MAX_RUNNING but other chats' lists leave them out; the agent heard "3
+    are running", listed fewer and could not tell why. The refusal says how
+    many of them it cannot see and when they end."""
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    lines = "".join(f"temporary {chat_id if chat == 'mine' else chat}\n" for chat in temporary).encode()
+    fake_vm.commands[start_command(process_dir(PID), task_name(PID))] = ([("stdout", lines)], 4, .1)
+    loop = vm_loop(store, Agent([[("vm_start_process", {"command": "npm run dev"})]]), chat_id=chat_id)
+    list(loop.run())
+    error = results(loop)[0]["error"]
+    assert f"{MAX_RUNNING} background processes are already running" in error
+    if said is None:
+        assert "temporary" not in error
+    else:
+        assert said in error and "when the user leaves that chat" in error
+
+
 def test_without_an_id_the_processes_are_listed(store, fake_vm):
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     fake_vm.commands[list_command(chat=chat_id)] = ([("stdout", b"abcd1234\trunning\tnpm run dev\n"
@@ -304,6 +327,24 @@ def test_a_temporary_chats_processes_are_left_out_of_other_chats_lists(shell, tm
     listed = lambda chat: sorted(line.split("\t")[0] for line in run(list_command(root=root, chat=chat))[1].splitlines())
     assert listed("temp-chat") == ["55555551", "55555552"]
     assert listed("other") == ["55555552"]
+
+
+def test_a_refusal_at_the_cap_names_the_chats_of_running_temporary_processes(shell, tmp_path):
+    """start_command at MAX_RUNNING: exit 4 with a line for each running
+    process of a temporary chat (its chat), which the list leaves out for
+    other chats. Running here: the pid of the shell itself."""
+    run, root = shell
+    directories = [prepare(root, f"6666666{n}", "true", tmp_path.as_posix()) for n in range(MAX_RUNNING + 2)]
+    Path(directories[0], "chat").write_text("temp-chat", newline="\n")
+    Path(directories[0], "temporary").write_text("1", newline="\n")
+    # An ended temporary one takes no place.
+    Path(directories[1], "chat").write_text("temp-ended", newline="\n")
+    Path(directories[1], "temporary").write_text("1", newline="\n")
+    Path(directories[1], "exit_code").write_text("0", newline="\n")
+    alive = "".join(f"echo $$ > {shlex.quote(directory)}/pid; " for directory in directories[:MAX_RUNNING + 1])
+    code, text = run(alive + start_command(directories[-1], "consens-x", wait=0, root=root))
+    assert code == 4 and text.splitlines() == ["temporary temp-chat"]
+    assert not Path(directories[-1], "sid").exists()
 
 
 def test_the_supervisor_ends_a_process_at_its_time_limit(shell, tmp_path):
