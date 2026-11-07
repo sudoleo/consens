@@ -61,7 +61,9 @@
 
   function openSettings() {
     document.getElementById('editSystemPromptBtn')?.click();
-    // Memory is the first Settings tab; bring the saved list into view.
+    // Settings always open on their first tab (Agent): switch to Memory, with
+    // focus on its tab, and bring the saved list into view.
+    App.settingsTabs?.activate('memorySettingsSection', { focus: true });
     requestAnimationFrame(() => document.getElementById('memoryItemsSection')?.scrollIntoView({ block: 'nearest' }));
   }
 

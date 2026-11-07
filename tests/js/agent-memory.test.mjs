@@ -451,4 +451,42 @@ describe("Memory updated under an answer", () => {
     expect(list).toHaveLength(1);
     dom.window.close();
   });
+
+  // Settings always open on their first tab (app-ui.js), which is Agent.
+  it("Manage memory opens Settings on the Memory tab with the saved list in view", () => {
+    const scrolled = [];
+    const { window: w, document: d, dom } = loadScripts(["static/js/modal-dialog.js", "static/app-ui.js", "static/js/agent-memory.js"], {
+      body: `
+        <button id="editSystemPromptBtn" type="button">Settings</button>
+        <dialog id="systemPromptModal">
+          <div class="settings-nav" role="tablist">
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabAgent" data-settings-tab="agentSettingsSection">Agent</button>
+            <button type="button" class="settings-nav-item" role="tab" id="settingsTabMemory" data-settings-tab="memorySettingsSection">Memory</button>
+          </div>
+          <div class="settings-body">
+            <section id="agentSettingsSection"></section>
+            <section id="memorySettingsSection"><div id="memoryItemsSection"></div></section>
+          </div>
+          <textarea id="systemPromptInput"></textarea>
+        </dialog>
+        <div><div id="answer"></div></div>`,
+      before(win) {
+        win.App = { userSettings: { get: () => undefined, onChange() {}, accepts: () => true } };
+        win.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
+        win.Element.prototype.scrollIntoView = function () { scrolled.push(this.id); };
+      },
+    });
+    d.dispatchEvent(new w.Event("DOMContentLoaded"));
+    const body = d.getElementById("answer");
+    w.App.agentMemory.render(body, { key: "turn", running: true, changes: [
+      { change_id: CHANGE, op: "add", item_id: "m1a2b3c", text: "Likes tea.", undone: false }] });
+    [...body.nextElementSibling.querySelectorAll("button")].find(button => button.textContent === "Manage memory").click();
+    expect(d.getElementById("systemPromptModal").open).toBe(true);
+    expect(d.getElementById("settingsTabMemory").getAttribute("aria-selected")).toBe("true");
+    expect(d.getElementById("memorySettingsSection").hidden).toBe(false);
+    expect(d.getElementById("agentSettingsSection").hidden).toBe(true);
+    expect(d.activeElement.id).toBe("settingsTabMemory");
+    expect(scrolled).toContain("memoryItemsSection");
+    dom.window.close();
+  });
 });

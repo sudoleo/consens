@@ -2239,8 +2239,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   „Delete all“ (Löschen zeigt „Memory deleted · Undo“ über `App.toast` und
   nimmt es über `/changes/{change_id}/undo` zurück; ein geleertes Feld löscht
   nicht, „Save“ wartet auf Text, Apple-Audit E9); `agent-memory.js` (`App.agentMemory.render/receive`) zeigt
-  „Memory updated“ mit Undo und „Manage memory“ (öffnet Settings, Memory ist
-  der erste Reiter) nur WÄHREND des laufenden Agent-Laufs; `render` ohne
+  „Memory updated“ mit Undo und „Manage memory“ (öffnet Settings und wechselt
+  per `App.settingsTabs.activate` auf den Reiter Memory) nur WÄHREND des laufenden Agent-Laufs; `render` ohne
   `running` (fertige, wiedergeöffnete, Verlaufsantwort) entfernt den Hinweis,
   die Aktivitätszeile „Updated memory“ und Settings behalten den Nachweis.
   Seit 2026-10-07 zeigt `App.agentMemory.nudge` Konten ohne „Let Agent update
