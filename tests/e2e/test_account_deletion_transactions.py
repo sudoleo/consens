@@ -9,7 +9,7 @@ from test_file_storage_transactions import cloud_files, save
 
 
 AREAS = {"api_access", "agent_workspace", "user_subcollections", "chats", "waitlist_feedback", "tier_audit", "owned_shares", "pending_results",
-    "answer_receipts", "orphan_watches", "agent_watches", "watch_indexes", "watch_brief", "notification_outbox",
+    "answer_receipts", "orphan_watches", "agent_watches", "watch_indexes", "watch_brief", "memory_review", "notification_outbox",
     "persistence_guards", "email_follows", "profile", "firebase_auth"}
 
 
@@ -41,6 +41,9 @@ def seed(db, uid):
     brief = db.tracked("watch_briefs", uid)
     brief.set({"private": "summary"})
     refs.append(brief)
+    review = db.tracked("memory_reviews", uid)
+    review.set({"last_turn_at": 1, "review_after": 2})
+    refs.append(review)
     for kind in ("bookmarks", "feedback"):
         ref = db.tracked(persistence_guard.USAGE_COLLECTION, persistence_guard._owner_key(kind, uid))
         ref.set({"used": 1})
