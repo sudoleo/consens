@@ -26,7 +26,7 @@ class Completion(AgentCompletion):
 
 def quota(store, remaining):
     ref = agent_quota.quota_ref(store.db, UID, agent_quota.day_key() + agent_quota.LEDGER_UNIT)
-    # The calls counted so far stay (agent_quota.count_claim, since 2026-11-01).
+    # The calls counted so far stay (agent_quota.count_claim).
     counted = (ref.get().to_dict() or {}).get("agent_usage")
     ref.set({"used": 250000 - remaining, **({"agent_usage": counted} if counted else {})})
     return ref
@@ -213,8 +213,8 @@ def test_the_code_prompt_is_the_agents_one_mode_and_disabled_workers_are_not_adv
     script = Script()
     loop = make_loop(store, script)
     system = loop.messages[0]["content"]
-    # The agent's instructions are code-owned, one mode for every account
-    # (since 2026-10-31); a prompt without the app's facts gets them appended,
+    # The agent's instructions are code-owned, one mode for every account;
+    # a prompt without the app's facts gets them appended,
     # and the loop adds no second protocol and no worker catalog while
     # delegation is off.
     from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION, AGENT_AUDIT_SYSTEM_PROMPT, DEFAULT_PROMPTS
@@ -230,9 +230,8 @@ def test_the_code_prompt_is_the_agents_one_mode_and_disabled_workers_are_not_adv
 
 def test_a_reply_after_the_steps_own_search_stands_and_every_step_may_research(store):
     """The agent researches itself in every step, up to AGENT_SEARCH_ROUNDS
-    (since 2026-10-31 for every account): a reply written from its own
-    search is the answer, never sent back for a comparison (until then
-    comparison mode handed it back with a note, _consensus_search_handoff)."""
+    for every account: a reply written from its own search is the answer,
+    never sent back for a comparison."""
     from app.services.agent_audit import AGENT_SEARCH_ROUNDS
     script = Script()
     base = type(script.factory())
@@ -318,8 +317,8 @@ def test_google_chat_tells_the_model_that_web_search_is_unavailable(store):
     loop.google_data_consent = True
     # The first step goes by what the route read (google_data), not by
     # another read of the chat; a later one of a message with Google tools
-    # reads it, after a Gmail import (_chat_google_data, since 2026-11-05
-    # only such a message: without them no Google data can join).
+    # reads it, after a Gmail import (_chat_google_data, only such a
+    # message: without them no Google data can join).
     loop.google_data = True
     exhaust(loop._step(loop.model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation, search_rounds=3))
     loop.google_data, loop.google_tools = False, True
@@ -356,11 +355,11 @@ def test_a_search_that_does_not_fit_is_noted_after_the_newest_message(store):
 
 @pytest.mark.parametrize("answer", ["lost", "retried"])
 def test_a_claim_that_landed_while_its_answer_was_lost_goes_on_as_claimed(store, monkeypatch, answer):
-    """Bug hunt 2026-11-06: the claim's commit landed, but the client saw a
-    Firestore error (an ambiguous commit), or the SDK's retry then found the
-    receipt it had just written. The step was never settled: the turn stayed
-    pending until the reaper, which charged half the reservation for a call
-    that was never sent. A claim found under this run is taken as claimed."""
+    """The claim's commit can land while the client sees a Firestore error
+    (an ambiguous commit), or the SDK's retry then finds the receipt it had
+    just written. Unsettled, the turn would stay pending until the reaper,
+    which charges half the reservation for a call that was never sent. A
+    claim found under this run is taken as claimed."""
     from google.api_core.exceptions import DeadlineExceeded
     streamed = []
 

@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// consensus-footer.js: what a saved Consensus answer (a chat from before
-// 2026-10-25) needs on screen once the browser no longer runs the pipeline:
+// consensus-footer.js: what a saved Consensus answer (an older chat) needs
+// on screen now that the browser does not run the pipeline:
 // show and hide the answer area, and the footer's drawers with their counts.
 const BODY = `
   <div id="consensusOutput" class="consensus-output is-hidden">

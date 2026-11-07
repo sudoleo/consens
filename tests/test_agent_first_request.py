@@ -1,4 +1,4 @@
-"""From Send to the agent's first model request (since 2026-11-01).
+"""From Send to the agent's first model request.
 
 Prod 2026-11-01: a casual question ("wo ist Zach Bryan aufgewachsen?") had
 its answer after 9 s, of which the model took 6. Before its request left, the
@@ -143,12 +143,12 @@ def test_a_run_builds_the_model_catalog_once(api, trips, monkeypatch):  # noqa: 
     monkeypatch.setattr(agent_delegation, "agent_models", counted)
     send(api, trips, monkeypatch, "Hi", "catalog")
     # The route resolves the chat model and the reviewers' models; the loop
-    # builds its worker catalog once (until 2026-11-01: twice per model).
+    # builds its worker catalog once.
     assert sum(built.values()) <= 1 + 1 + len(COMPARISON_MODELS), built
 
 
 def test_a_chat_that_gained_google_data_after_the_first_read_keeps_its_rules(api, monkeypatch):  # noqa: F811
-    """Review 2026-11-01: the route reads the chat before the turn exists. A
+    """The route reads the chat before the turn exists. A
     turn in another tab may import mail in between and end; the turn's
     creation sees the chat as it is, and its rules hold for this message."""
     from app.services.chat_store import ChatStore
@@ -170,7 +170,7 @@ def test_a_chat_that_gained_google_data_after_the_first_read_keeps_its_rules(api
 
 
 def test_a_refused_message_sweeps_nothing(api, monkeypatch):  # noqa: F811
-    """Review 2026-11-01: the sweep of abandoned turns may fail a turn, so it
+    """The sweep of abandoned turns may fail a turn, so it
     runs only for a message that passed the route's checks."""
     from app.api.routers import agent as route
     from app.services.chat_store import ChatStore

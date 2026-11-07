@@ -231,6 +231,6 @@ def test_only_owner_can_delete_terminal_run_and_mapping():
     with pytest.raises(ApiRunNotFound):
         repo.get(run["run_id"])
 
-    # R03: the deleted logical run keeps its Idempotency-Key fenced.
+    # The deleted logical run keeps its Idempotency-Key fenced.
     with pytest.raises(ApiRunDeleted):
         create(repo)

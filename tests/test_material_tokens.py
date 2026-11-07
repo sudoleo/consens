@@ -1,4 +1,4 @@
-"""The material contract (Apple-Audit G5, G7, G13, G15): measured, not guessed.
+"""The material contract: measured, not guessed.
 
 The surface and text steps are checked with real colour math (OKLab distance
 x100, WCAG contrast) so a later tweak cannot quietly bring back a bluish app
@@ -164,7 +164,7 @@ def test_the_sidebar_is_one_quiet_step_off_the_page():
 
 
 def test_text_has_two_tones_and_the_grey_stays_readable():
-    """The ink and one grey (Max, 2026-10-26: fewer greys in the text);
+    """The ink and one grey (Max: fewer greys in the text);
     --ink-2 is only a name for the grey. No tint in either."""
     for theme, tokens in THEMES.items():
         ink, ink3 = tokens["--ink"], tokens["--ink-3"]
@@ -213,7 +213,7 @@ def tint_over(value: str, surface: str) -> str:
 
 def test_traffic_light_text_reads_on_its_own_tint():
     """Badges, error lines and the API-key status set the colour on its -bg
-    tint; --dispute on its tint was 4.24:1 (a11y audit V3)."""
+    tint; --dispute on its tint was 4.24:1."""
     for theme, tokens in THEMES.items():
         for name in ("agree", "partial", "dispute"):
             for surface in (tokens["--ground"], tokens["--raise"]):
@@ -229,7 +229,7 @@ def test_the_start_field_keeps_its_placeholder_readable():
 
 
 MARKS = {
-    # mark: (token, lightness, chroma, alpha in dark or None)
+    # mark: (token, lightness, chroma)
     "--cx-mark-agree": ("--agree", 0.962, 0.017),
     "--cx-mark-agree-strong": ("--agree", 0.941, 0.031),
     "--cx-mark-split": ("--partial", 0.931, 0.051),
@@ -271,7 +271,7 @@ def test_no_text_takes_its_tone_from_transparency():
     assert "opacity" not in guest
 
 
-# --- the parts, built once (Apple-Audit G2, G4, G5, G6, G8-G12, G17, C3, C9) --
+# --- the parts, built once ---------------------------------------------------
 
 ROOT_TEMPLATES = ROOT / "templates"
 SKIP_SHEETS = {"admin.css", "admin-benchmark.css"}
@@ -330,7 +330,7 @@ def test_the_filled_button_is_one_component():
                         "box-shadow: none"):
         assert declaration in material
     assert "var(--button-bg-hover)" in inputs and "min-height: 44px" in inputs
-    # No variant paints its own gloss, shadow or lift any more.
+    # No variant paints its own gloss, shadow or lift.
     for name, text in sheets():
         for selector, body in rules(text):
             if not any(p in selector for p in primaries) or ":disabled" in selector:
@@ -387,7 +387,7 @@ def test_sources_are_one_component_in_the_app_and_on_public_pages():
 
 def test_no_text_is_smaller_than_the_12px_floor():
     """typography.css: 12px is the floor. Anything below was an 8-px "PDF"
-    plaque, a 10-px file size and 9-px fallback letters (Apple-Audit G10)."""
+    plaque, a 10-px file size and 9-px fallback letters."""
     offenders = []
     for name, text in sheets():
         for selector, body in rules(text):
@@ -414,7 +414,7 @@ def test_no_text_is_smaller_than_the_12px_floor():
 
 def test_every_chevron_is_the_one_drawn_symbol():
     """52 rotated CSS borders, a unicode "›", a "▸/▾" from a fallback font and
-    a CSS triangle used to draw the same arrow (Apple-Audit G11). Left are the
+    a CSS triangle used to draw the same arrow. Left are the
     check marks, which are not chevrons."""
     checks = ("custom-checkbox-label input", "model-picker-option.is-selected::after", "model-picker-row-check")
     for name, text in sheets():
@@ -454,7 +454,7 @@ def test_every_text_field_focuses_the_same_way():
 
 
 def test_switches_show_the_choice_without_a_bolder_label():
-    """A bolder label grew 1-3 px and pushed its neighbours (Apple-Audit C9)."""
+    """A bolder label grew 1-3 px and pushed its neighbours."""
     for name, selector in (("components-watch.css", ".view-switch-btn.is-active"),
                            ("auth-modal.css", '#loginModal .auth-tab[aria-selected="true"]'),
                            ("model-answer-reader.css", '.answer-reader-sections button[aria-pressed="true"]'),
@@ -468,9 +468,8 @@ def test_switches_show_the_choice_without_a_bolder_label():
 
 
 def test_sidebar_rows_are_one_component():
-    """New chat and Models are one row part (Apple-Audit G2). Chats was one
-    too until 2026-10-29; since then it is the section word over the list
-    (test_sidebar_head_stands_on_one_grid)."""
+    """New chat and Models are one row part; Chats is the section word over
+    the list (test_sidebar_head_stands_on_one_grid)."""
     shell = strip_comments(read("shell.css"))
     for selector in (".sidebar-new-run", ".sidebar-model-entry"):
         body = rule_body(shell, selector)
@@ -482,7 +481,7 @@ def test_sidebar_rows_are_one_component():
 
 
 def test_sidebar_head_stands_on_one_grid():
-    """Max, 2026-10-29: the desktop head looked out of place, its spacing
+    """Max: the desktop head looked out of place, its spacing
     unlike everything else (the mark at 18px, the row glyphs at 25, the
     wordmark at 47, the words at 51; four right edges). Now one glyph column
     at 22px, one word column at 50px, one right edge, steps of 4 and 8, and
@@ -511,8 +510,7 @@ def test_sidebar_head_stands_on_one_grid():
 
 def test_logo_toggle_and_switch_move_with_the_sidebar():
     """Opening the sidebar the switch jumped 130 px in one frame and the logo
-    vanished; closing it two logos and two toggles stood side by side
-    (Apple-Audit C3)."""
+    vanished; closing it two logos and two toggles stood side by side."""
     watch = strip_comments(read("components-watch.css"))
     switch = rule_body(watch, ".view-switch")
     assert "left: 50vw" in switch
@@ -530,7 +528,7 @@ def test_logo_toggle_and_switch_move_with_the_sidebar():
 
 
 def test_the_phone_menu_mark_is_bare():
-    """Max: rahmenlos wie am Desktop (Apple-Audit G17)."""
+    """Max: rahmenlos wie am Desktop."""
     shell = strip_comments(read("shell.css"))
     toggle = rule_body(shell, ".app-mobile-header .sidebar-toggle")
     assert "background: transparent" in toggle and "box-shadow: none" in toggle

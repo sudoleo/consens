@@ -28,7 +28,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         # hangs under the field on the start screen.
         expect(bar).to_be_hidden()
         expect(mode).to_have_value('compare')
-        # Daily compares two since 2026-11-01. A phone leaves the count to
+        # Daily compares two. A phone leaves the count to
         # the chip's words; the marks are drawn all the same.
         picker = page.locator('.composer-models #composerModelPicker')
         if width > 700:
@@ -38,7 +38,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
         expect(page.locator('#composerModelIcons img')).to_have_count(2)
         expect(page.locator('#composerModelCount')).to_have_count(0)
         expect(page.locator('#composerAttachButton')).to_have_count(0)
-        # Reasoning has no button in the row (since 2026-10-31): Compare's
+        # Reasoning has no button in the row: Compare's
         # switch is in the (+) menu at every width.
         expect(page.locator('.chat-input-container .composer-models svg path[d^="M12 5.5a3 3"]')).to_have_count(0)
         if width > 700:
@@ -59,7 +59,7 @@ def test_composer_mode_bar(browser, phase4_server, width, dark):
             assert second['x'] < first['x'] + first['width']
         expect(page.locator('#modeNotice')).to_have_count(0)
         # On the start screen the tools are simply there: no rise on the first
-        # paint or a mode change (Apple-Audit B1) ...
+        # paint or a mode change ...
         assert tools.evaluate("el => getComputedStyle(el).animationName") == 'none'
         tools.evaluate("el => { el.hidden = true; App.renderComposerMode(); }")
         if width > 700:

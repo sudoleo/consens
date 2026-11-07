@@ -173,7 +173,7 @@ ADVICE = [("openai", "OpenAI", LUNA, "The Colosseum opened in 80 AD; a standard 
 
 
 def test_a_reviewed_answer_with_a_comparison_offers_the_models_answers(browser, phase4_server):
-    """compare_models in audit mode (2026-10-31): the models the agent asked
+    """compare_models in audit mode: the models the agent asked
     stand beside the reviewers' notes, their answers to read, no check."""
     events = finished_events()
     advised = review()
@@ -238,7 +238,7 @@ def test_the_review_runs_under_a_fixed_answer(browser, phase4_server):
 
 @pytest.mark.parametrize("width", [1280, 390])
 def test_the_next_message_goes_while_the_reviewers_review(browser, phase4_server, width):
-    """2026-11-01: once the answer stands the server frees the chat (frame
+    """Once the answer stands the server frees the chat (frame
     handover). The answer stays still, the reviewers' marks breathe in the
     row under it, and a message typed now is a message of its own."""
     handed = {"id": TURN, "question": QUESTION, "status": "pending", "execution_mode": "agent", "mode": "Agent",
@@ -336,7 +336,7 @@ def test_a_reviewers_pause_asks_the_user_above_the_field(browser, phase4_server,
             _snapshot(page, f"audit-vm-open-{width}")
         if dark:
             # A table file reads as a table in the preview beside the chat
-            # (file-viewer.js, 2026-11-01), in the dark theme's colours.
+            # (file-viewer.js), in the dark theme's colours.
             page.evaluate("""() => {
                 const file = async () => ({
                     blob: new Blob(['Datum;Posten;Betrag\\n2026-10-01;Miete;950\\n2026-10-03;Strom;84\\n'], {type: 'text/plain'}),
@@ -357,7 +357,7 @@ def test_a_reviewers_pause_asks_the_user_above_the_field(browser, phase4_server,
 
 @pytest.mark.parametrize("dark", [False, True])
 def test_the_folded_sidebars_brand_fades_the_thread_beneath_it(browser, phase4_server, dark):
-    """2026-10-27: with the sidebar folded, an Agent answer scrolled straight
+    """With the sidebar folded, an Agent answer scrolled straight
     through the floating toggle and brand (an Agent chat never hides them
     while reading). Once the page moves beneath them, the top fades out in
     the page's ground, under the side panels."""

@@ -1,8 +1,7 @@
 """One mode selector: Agent / Compare (run-mode.js + agent-mode.js).
 
-The Consensus mode left the browser on 2026-10-25 (the pipeline runs on the
-server for Watches, the API and topics); a stored "consensus" reads as
-unchosen.
+The Consensus mode runs only on the server (for Watches, the API and
+topics); a stored "consensus" reads as unchosen.
 
 The composer around it is the same in every mode (composer.css).
 
@@ -29,7 +28,7 @@ def _shot(page, name):
 
 
 def choose(page, mode):
-    # The mode is the first group in the (+) menu since 2026-10-02.
+    # The mode is the first group in the (+) menu.
     page.locator("#attachTrigger").click()
     page.locator(f'#runModeControl [data-value="{mode}"]').click()
     expect(page.locator("#runModeSelect")).to_have_value(mode)
@@ -101,7 +100,7 @@ def test_one_selector_drives_mode_tools_and_settings(browser, phase4_server, wid
         expect(options).to_have_count(2)
         expect(control.locator('[data-value="consensus"]')).to_have_count(0)
         expect(control.locator('[data-value="compare"]')).to_have_attribute("aria-pressed", "true")
-        # No "Beta" badge since 2026-11-02: the Agent is the product.
+        # No "Beta" badge: the Agent is the product.
         expect(control.locator('[data-value="agent"] .attach-menu-label')).to_have_text("Agent")
         expect(control.locator('[data-value="compare"] .attach-menu-hint')).to_contain_text("side by side")
         menu = page.locator("#attachMenu").bounding_box()
@@ -230,10 +229,10 @@ def test_stored_agent_choice_waits_for_access_instead_of_sending_compare(browser
 
 @pytest.mark.parametrize("moment", [503, 429])
 def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser, phase4_server, moment):
-    """Apple-Audit B8: a status check that fails for a moment (5xx, network,
+    """A status check that fails for a moment (5xx, network,
     the rate limit) does not swap Agent for Compare; it is said in the
     composer and asked again. Only a refusal (4xx) settles the account
-    without Agent. A 429 counted as a refusal until 2026-11-01 (bug hunt)."""
+    without Agent. A 429 once counted as a refusal."""
     context, page = _real_firebase_page(browser, phase4_server, initial_uid=None,
         init_script="if (!sessionStorage.seeded) { localStorage.setItem('runMode', 'agent'); localStorage.setItem('consensio.settingsReset','2026-10-12'); sessionStorage.seeded = 1; }")
     try:
@@ -261,7 +260,7 @@ def test_failed_status_check_keeps_agent_and_only_a_refusal_releases_it(browser,
 
 @pytest.mark.parametrize("width", [1280, 390])
 def test_a_guest_has_the_agent_menu_and_each_choice_asks_for_the_login(browser, phase4_server, width):
-    """Apple-Audit H3 (Max): a guest's composer is an account's by default.
+    """A guest's composer is an account's by default.
     The (+) menu shows Agent chosen with Compare beside it; whatever needs an
     account opens the login dialog with a line that says what for, never a
     dead click; a chosen Compare holds."""
@@ -298,7 +297,7 @@ def test_a_guest_has_the_agent_menu_and_each_choice_asks_for_the_login(browser, 
 
         page.locator("#attachUploadOption").click()
         asks("Log in to add files.", "#attachTrigger")
-        # Reasoning is the (+) menu's at every width (since 2026-10-31).
+        # Reasoning is the (+) menu's at every width.
         page.locator("#attachTrigger").click()
         page.locator("#agentReasoningMenuOption").click()
         asks("Log in to choose the reasoning.", "#attachTrigger")

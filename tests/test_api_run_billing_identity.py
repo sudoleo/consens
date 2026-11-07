@@ -1,4 +1,4 @@
-"""R03/R05: every paid API run owns exactly one non-reusable usage receipt.
+"""Every paid API run owns exactly one non-reusable usage receipt.
 
 Uses the real API-run and usage repositories on one in-memory transactional
 fake, so delete/recreate, retries and midnight crossings exercise the same
@@ -226,7 +226,7 @@ def test_route_returns_stable_410_for_a_deleted_key(env, monkeypatch):
     assert consumed(env) == 1
 
 
-# --- R05: billing day and execution validity are separate -------------------
+# --- Billing day and execution validity are separate ------------------------
 
 
 BEFORE_MIDNIGHT = datetime(2026, 9, 26, 23, 59, 59, tzinfo=timezone.utc)
@@ -273,7 +273,7 @@ def test_execution_validity_stays_bounded(env):
             now=BEFORE_MIDNIGHT + MIN_EXECUTION_WINDOW + timedelta(seconds=1),
         )
     # Midday reservations keep the whole remaining billing day, but their
-    # admission lapses with its hold (audit 2026-10-28): a later operation is
+    # admission lapses with its hold: a later operation is
     # admitted against the account again, which the bare claim cannot do.
     noon = datetime(2026, 9, 26, 12, tzinfo=timezone.utc)
     late = datetime(2026, 9, 26, 23, 59, tzinfo=timezone.utc)
@@ -347,7 +347,7 @@ def queued_past_its_hold(env):
 
 
 def test_a_run_queued_past_its_hold_does_not_start_on_a_spent_account(env):
-    # Probe 2026-11-07: queued API runs kept their admission after their holds
+    # A probe found queued API runs keeping their admission after their holds
     # lapsed, so the account admitted new runs beside them and in the end all
     # of them booked (used 300000 at a limit of 100000).
     run, receipt = queued_past_its_hold(env)
@@ -390,8 +390,8 @@ def test_a_young_queued_run_starts_without_asking_the_account_again(env):
 @pytest.mark.parametrize("refusal", ["limit", "capacity", "conflict"])
 def test_recovery_ends_an_accepted_run_the_account_refuses_like_the_post_path(env, monkeypatch, refusal):
     # The process died between accepting the run and reserving its usage.
-    # Recovery used to log the refusal every minute and retry the run until
-    # its 30-day retention; POST deletes it at once (429/409).
+    # Recovery ends it as POST does (429/409); otherwise it would log the
+    # refusal every minute and retry the run until its 30-day retention.
     run, _ = env.api.create_or_get(**ARGS)
     if refusal == "limit":
         env.db.documents[LEDGER] = {"used": LIMITS.limit}

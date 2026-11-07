@@ -10,8 +10,8 @@ import { ROOT } from "./helpers/appWindow.mjs";
  * onIdTokenChanged): the handler rechecks once with User.reload(), then
  * shows the verification strip. Firebase's reload() fires onIdTokenChanged
  * again (User.reload -> _notifyListenersIfCurrent, the observer a microtask
- * later, before reload resolves); until 2026-10-30 that run reloaded once
- * more, without end: the composer was cleared and refilled, the strip drawn
+ * later, before reload resolves); that run reloading once more went on
+ * without end: the composer was cleared and refilled, the strip drawn
  * anew and DELETE /auth/session sent several times a second. The handler and
  * the recheck are cut out of firebase.js (an ES module with Firebase
  * imports) and run against stand-ins, like the logout harness.

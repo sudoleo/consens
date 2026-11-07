@@ -1,7 +1,7 @@
 """The benchmark charts and the tables that speak for them (a11y audit P1).
 
 The bars draw their numbers from CSS variables and name their models in a
-separate row, so a screen reader got neither. Each chart is aria-hidden now
+separate row, so a screen reader would get neither. Each chart is aria-hidden
 and a visually hidden table carries the same numbers. This test keeps the two
 from drifting apart when the numbers change.
 """
@@ -52,8 +52,7 @@ def test_each_chart_reads_as_a_table_with_its_own_numbers(title_id):
         assert cells == [f"{value}%", f"{low}–{high}%"], (name, cells)
 
 
-# The landing page carried the same small chart until 2026-11-01; the app no
-# longer builds a consensus, so only /benchmark shows it.
+# Only /benchmark shows the small chart; the app builds no consensus.
 @pytest.mark.parametrize("template,title_id", [("benchmark.html", "benchMiniTitle")])
 def test_the_small_chart_reads_as_a_table_too(template, title_id):
     page = (TEMPLATES / template).read_text(encoding="utf-8")

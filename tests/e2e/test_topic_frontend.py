@@ -1,6 +1,6 @@
 """Public Topic interactions with the original JS and a controlled fixture.
 
-Since 2026-10-15 a Topic page is built from the Watch page parts; its scripts
+A Topic page is built from the Watch page parts; its scripts
 are check-page.js (shared) and topic-page.js (the follow form).
 """
 import json

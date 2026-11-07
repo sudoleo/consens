@@ -1,4 +1,4 @@
-"""Auto reasoning without Pro runs as Medium (Max, 2026-10-08)."""
+"""Auto reasoning without Pro runs as Medium."""
 from __future__ import annotations
 
 import pytest
@@ -28,9 +28,9 @@ def test_auto_stands_for_medium_only_where_the_model_offers_it_unpinned():
 
 
 def test_a_migrated_model_id_has_the_free_default_of_its_successor(monkeypatch):
-    """Bug hunt 2026-10-31: free_default_effort compared the raw ID, unlike
-    resolve_agent_model, so a saved migrated ID ran Auto at the model's own
-    level for a Free account."""
+    """free_default_effort resolves the ID like resolve_agent_model: compared
+    raw, a saved migrated ID would run Auto at the model's own level for a
+    Free account."""
     import app.core.config as cfg
     models = agent_client.agent_models()
     target = models[0][0].selection_id

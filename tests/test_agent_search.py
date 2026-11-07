@@ -243,7 +243,7 @@ def test_cooldown_is_bounded_and_isolated_by_key_and_model():
 
 def test_a_google_chats_rate_limit_does_not_block_the_fastest_route():
     """A chat with Google data runs the model only on zero-retention
-    endpoints (since 2026-10-17); a 429 there must not lock every other
+    endpoints; a 429 there must not lock every other
     chat out of the same model on its own, faster route."""
     from app.services.google_connections import restricted_model
     gate = ProviderCooldowns(clock=lambda: 100)

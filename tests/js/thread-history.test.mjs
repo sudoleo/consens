@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// The conversation history never shrinks under the reader (Apple audit A1):
-// a follow-up only appends, and the turn on screen moves up as it is (A4).
+// The conversation history never shrinks under the reader: a follow-up only
+// appends, and the turn on screen moves up as it is.
 
 function historyApp() {
   const app = loadScripts(["static/js/thread-history.js"], {

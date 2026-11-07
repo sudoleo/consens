@@ -162,7 +162,7 @@ def test_stop_by_request_cancels_the_run_and_tells_every_follower(api, runs, liv
 def test_deleting_the_chat_ends_its_running_response_at_once(api, runs, live, monkeypatch):
     """A temporary chat left mid-answer, a chat deleted: the run in this
     process ends now, not at its watcher's next look, which comes every
-    WATCH_SECONDS = 10 since 2026-11-01 (every 3 s, two reads each, before)."""
+    WATCH_SECONDS = 10."""
     from app.api.routers import chat_history
     monkeypatch.setattr(chat_history, "_chat_uid", lambda request, *args: UID)
     monkeypatch.setattr(chat_history, "_store", lambda: store)
@@ -182,7 +182,7 @@ def test_deleting_the_chat_ends_its_running_response_at_once(api, runs, live, mo
 
 
 def test_deleting_a_chat_from_the_sidebar_ends_its_running_response_at_once(api, runs, live, monkeypatch):
-    """Review 2026-11-01: the sidebar deletes through DELETE /bookmark, which
+    """The sidebar deletes through DELETE /bookmark, which
     tombstones the chat itself (request_chat_deletion, then the cascade);
     the stop sits there, before the cascade removes files and folders."""
     client, store, _ = api
@@ -375,7 +375,7 @@ def test_tail_streams_frames_until_the_end_and_resets_a_late_reader():
 
 def test_a_reader_wakes_with_a_frame_from_another_thread():
     # A frame recorded on the run's thread reaches the waiting reader at once,
-    # not at its next look (TAIL_INTERVAL_SECONDS, 1 s; P3 of the speed plan).
+    # not at its next look (TAIL_INTERVAL_SECONDS, 1 s).
     import threading
     import time as clock
     buffers = AgentLiveBuffers()
@@ -404,7 +404,7 @@ def test_a_reader_wakes_with_a_frame_from_another_thread():
 
 
 def test_a_reader_of_an_evicted_run_ends_at_once():
-    # Eviction wakes the reader too (review of the speed plan): it ends and
+    # Eviction wakes the reader too: it ends and
     # falls back to the saved turn now, not at its next look.
     import threading
     import time as clock
@@ -558,11 +558,11 @@ def test_following_a_turn_never_uses_up_the_send_limit(api, runs, monkeypatch):
 
 
 def test_a_request_that_did_not_make_the_buffer_never_starts_the_run(api, runs, live, monkeypatch):
-    """Two identical requests at once (bug hunt 2026-11-01): the one that did
-    not make the live buffer could start first; the maker's start then found
-    a duplicate and discarded the buffer the run fed (both tails without an
-    end), and with a Stop the second one used up the stop mark without
-    releasing the turn. Only the buffer's maker starts the run."""
+    """Two identical requests at once: were the one that did not make the
+    live buffer to start first, the maker's start would find a duplicate and
+    discard the buffer the run fed (both tails without an end), and with a
+    Stop the second one would use up the stop mark without releasing the
+    turn. Only the buffer's maker starts the run."""
     client, store, calls = api
     chat_id = _chat(client)
     # The maker of the buffer, about to start its run.

@@ -31,8 +31,7 @@ def with_agent_access(page):
     page.route('**/agent/models', lambda route: _json(route, CATALOG))
 
 
-# The composer is the raised field (--field = --well, Apple-Audit G8).
-# Dark: --well since the black/white palette (79778ccd, 2026-10-26).
+# The composer is the raised field (--field = --well).
 COMPOSER_SURFACE = {'light': 'rgb(255, 255, 255)', 'dark': 'rgb(22, 22, 22)'}
 
 # iPhone Safari (iOS 26; WebKit LocalFrameView::fixedContainerEdges) paints
@@ -85,7 +84,7 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
         assert menu.bounding_box()['height'] >= 44
         assert header.bounding_box()['height'] == 56
         # No bar: the menu and the actions are bare glyphs, as on the
-        # desktop (Apple-Audit G17); the strip between them belongs to the
+        # desktop; the strip between them belongs to the
         # thread.
         expect(header).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
         islands = page.locator('#toggleSidebarButton, #mobileConversationActions')
@@ -98,7 +97,7 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
         expect(header.locator('#mobileNewRunButton')).to_be_visible()
         expect(header.locator('#mobileNewRunButton')).to_have_css('background-color', 'rgba(0, 0, 0, 0)')
         assert header.locator('#mobileNewRunButton svg').bounding_box()['width']>=20
-        # Share moved into the ... menu; New chat and the menu stay.
+        # Share lives in the ... menu; New chat and the menu stay.
         expect(header.locator('#consensusShareButton')).to_be_hidden()
         toggle = header.locator('.consensus-actions-toggle')
         expect(toggle).to_be_visible()
@@ -126,7 +125,7 @@ def test_mobile_islands_float_over_the_thread_and_yield_while_reading(browser, p
 
         fade = "() => getComputedStyle(document.querySelector('.app-mobile-header'), '::before').opacity"
         # Back at the top the fade leaves with a transition; wait for its
-        # end instead of reading it mid-way (nightly 2026-10-27: 0.0018).
+        # end instead of reading it mid-way (a nightly run read 0.0018).
         page.wait_for_function(f"() => ({fade})() === '0'")
         page.evaluate('window.scrollTo(0, 900)')
         expect(header).to_be_hidden()
@@ -184,7 +183,7 @@ def test_guest_navigation_fits_and_auth_dialogs_open(browser, phase4_server, wid
         assert all(item['y'] >= 0 and item['y'] + item['height'] <= header.bounding_box()['height'] for item in bounds)
         assert all(item['height'] >= 44 and item['width'] >= 44 for item in bounds)
         reader_screenshot(page, f'mobile-header-guest-{width}')
-        # A guest opens no saved chat and, since 2026-10-25, runs no
+        # A guest opens no saved chat and runs no
         # Consensus demo: no answer actions join the auth buttons here.
         signup.click()
         expect(page.locator('#loginModal')).to_be_visible()
@@ -226,7 +225,7 @@ def test_watch_navigation_uses_the_same_mobile_surface(browser, phase4_server, n
           document.getElementById('watchDashBody').append(text);
           window.scrollTo(0, 500);
         }""")
-        # Watches scroll the document like every page (F14).
+        # Watches scroll the document like every page.
         expect(header).to_be_hidden()
         page.evaluate('window.scrollBy(0, -80)')
         expect(header).to_be_visible()
@@ -262,7 +261,7 @@ def test_watches_take_the_place_of_an_open_chat(browser, phase4_server, width):
         if width < 1100:
             # Reading down hides the menu island; a little way back shows it.
             # Wait for the hide first: two scrolls in one frame arrive as a
-            # single event 520 px down, which hides it (CI watcher 2026-10-28).
+            # single event 520 px down, which hides it.
             expect(page.locator('.app-mobile-header')).to_be_hidden()
             page.evaluate('window.scrollBy(0, -80)')
             expect(page.locator('.app-mobile-header')).to_be_visible()
@@ -282,7 +281,7 @@ def test_watches_take_the_place_of_an_open_chat(browser, phase4_server, width):
 
 def test_a_chat_opened_without_a_click_leaves_watches(browser, phase4_server):
     # Enter or Space on a chat row and Share in its "…" menu open the chat
-    # through openBookmark only; it loaded unseen behind Watches (2026-10-23).
+    # through openBookmark only; it once loaded unseen behind Watches.
     context, page = _real_firebase_page(browser, phase4_server)
     saved_id = 'saved_from_watches'
     turn = {'id': 'c' * 32, 'status': 'completed', 'position': 1, 'question': 'Saved question',
@@ -543,8 +542,8 @@ def test_mobile_composer_hangs_from_the_keyboard_edge(browser, phase4_server):
 
 
 def test_mobile_composer_follows_a_visible_part_safari_left_panned(browser, phase4_server):
-    """2026-11-01 (Max, a screenshot shared to WhatsApp): without a keyboard
-    the fixed composer stood about 170px too high and drifted with the text.
+    """After a screenshot was shared to WhatsApp, without a keyboard the
+    fixed composer stood about 170px too high and drifted with the text.
     WebKit likely keeps subtracting the other app's keyboard (a shorter
     visual viewport) and pans the visible part within the layout viewport;
     the composer then stands offsetTop too high. Held for PANNED_HOLD_MS it
@@ -599,7 +598,7 @@ def test_mobile_composer_follows_a_visible_part_safari_left_panned(browser, phas
 
 
 def test_mobile_composer_rises_with_a_known_keyboard_before_safari_reports_it(browser, phase4_server):
-    """F9: Safari reports the keyboard once it stands. A height this device
+    """Safari reports the keyboard once it stands. A height this device
     reported before moves the composer up with the keyboard at the tap and
     down with it when the field is left; the report only corrects."""
     context, page = _real_firebase_page(browser, phase4_server, has_touch=True, init_script=FAKE_VISUAL_VIEWPORT)

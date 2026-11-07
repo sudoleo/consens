@@ -70,7 +70,7 @@ describe("untrusted model markup cannot load remote resources on render", () => 
     expect(output.querySelector('img[src="/static/own.png"]')).not.toBeNull();
   });
 
-  // Bug hunt 2026-10-24: DOMPurify keeps SVG's url(...) references.
+  // DOMPurify keeps SVG's url(...) references.
   it("drops SVG paint, mask and filter references outside the answer, keeps its own", () => {
     const output = render([
       '<svg><rect fill="url(https://evil.example/fill.svg#p)" stroke="url(#own)"></rect></svg>',
@@ -98,7 +98,7 @@ describe("untrusted model markup cannot load remote resources on render", () => 
     expect(output.querySelector("img")).toBeNull();
   });
 
-  // 2026-10-31: the agent places a picture it showed in its text.
+  // The agent places a picture it showed in its text.
   it("turns a placed picture into an empty place that loads nothing", () => {
     const output = render("Intro.\n\n![The tower at night](picture:p2)\n\nText ![x](picture:f1) on.\n\n![y](picture:bad:ref)");
     const line = output.querySelector(".md-picture-line");
@@ -146,8 +146,8 @@ describe("untrusted model markup cannot load remote resources on render", () => 
     expect([...output.querySelectorAll("p")].map(line => line.textContent)).toEqual(["Intro.", "At"]);
   });
 
-  // 2026-10-31: drawn picture by picture, a collage jumped from one large
-  // picture to two, then to three; its lines now come at once.
+  // Drawn picture by picture, a collage jumped from one large picture to
+  // two, then to three: its lines come at once.
   it("holds a line of pictures until it is written whole, then shows it as one", () => {
     const { window, document } = boot();
     const output = document.createElement("div");

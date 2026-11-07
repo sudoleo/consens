@@ -1,8 +1,8 @@
 /**
  * Die vier Anzeigezustaende einer belegten Aussage.
  *
- * Seit der Coverage-Judge JEDEN pruefbaren Satz beurteilt (2026-08-31), darf
- * eine duenn belegte Aussage nicht mehr verschwinden: unmarkiert saehe sie aus
+ * Der Coverage-Judge beurteilt JEDEN pruefbaren Satz, also darf eine duenn
+ * belegte Aussage nicht verschwinden: unmarkiert saehe sie aus
  * wie ungepruefter Fliesstext. Sie bekommt deshalb eine eigene, leiseste Stufe
  * - und ausdruecklich KEINE Quote, weil "1/1" wie Einstimmigkeit liest.
  */

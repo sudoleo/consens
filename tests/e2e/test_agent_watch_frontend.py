@@ -1,6 +1,6 @@
 """A Watch the Agent prepared, in the built /app: card under the answer, Change, Start, End.
 
-Since 2026-11-03 a Watch runs the Agent again in its chat (agent_watches.py).
+A Watch runs the Agent again in its chat (agent_watches.py).
 Writer-free like the other Phase-4 browser tests: every API response comes
 from the route handlers below. The server's rules (the task from the saved
 turn, limits, intervals, runs) are covered in tests/test_agent_watch.py and

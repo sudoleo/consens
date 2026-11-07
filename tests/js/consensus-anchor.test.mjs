@@ -176,7 +176,7 @@ describe("consensusAnchor.locateAnchor", () => {
 
     expect(hit).not.toBeNull();
     // The "1" of the source chip is not part of the flat view, so the anchor
-    // matches straight across it -- that is the whole point of MARK_SKIP.
+    // matches straight across it -- that is the whole point of MARK_SKIP_SELECTOR.
     expect(hit.flat).toBe("The tower is 330 m tall today.");
     expect(hit.flat.slice(hit.start, hit.end)).toBe(
       "The tower is 330 m tall today."

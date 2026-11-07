@@ -170,8 +170,8 @@ describe("i18n.js on a German page", () => {
       "{remaining} slots free": "{remaining} Plätze frei",
       "Standard access": "Standard-Zugang",
     });
-    // The old plan line of /app/watches: the whole
-    // line once matched "{answered} of {length}" and stayed English.
+    // A line of nested elements (as the Watches page's plan line was): the
+    // whole line matched "{answered} of {length}" and stayed English.
     const line = document.createElement("div");
     line.innerHTML = '<span>Standard access</span> <strong>2 of 20 active</strong> '
       + '<span aria-hidden="true">·</span> <span>18 slots free</span> '

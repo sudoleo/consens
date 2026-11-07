@@ -296,7 +296,7 @@ class QueryConsensusFallbackTests(unittest.TestCase):
         self.assertIn("gemini", calls)
 
     def test_a_synthesis_out_of_time_says_so_instead_of_empty_response(self):
-        """Audit C3: the phase deadline used to read as an empty response."""
+        """Audit C3: the phase deadline does not read as an empty response."""
         def engine(*args, **kwargs):
             raise AnalysisBudgetExceeded("analysis deadline exceeded")
 

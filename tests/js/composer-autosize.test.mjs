@@ -192,7 +192,7 @@ describe('composer autosize', () => {
   });
 
   // Chrome brings the caret of the sticky composer into view as if it stood
-  // at the page's end: 42px further down with every key (2026-10-26).
+  // at the page's end: 42px further down with every key.
   it('keeps the page where it was while the composer in view is typed in', () => {
     const app = boot(); app.tick();
     const { window } = app;

@@ -1,4 +1,4 @@
-"""A shared Agent answer shows its reviewers' notes (since 2026-10-31).
+"""A shared Agent answer shows its reviewers' notes.
 
 The snapshot is written to the emulator as the server would publish it
 (share_snapshots.build_agent_pending_result → _build_share_document); the

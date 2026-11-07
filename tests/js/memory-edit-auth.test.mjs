@@ -1,5 +1,5 @@
 /**
- * R23: the Remember/Correct dialog belongs to the account that selected the
+ * The Remember/Correct dialog belongs to the account that selected the
  * text. The full memory-edit.js module runs with the real auth generation
  * owner (auth-session-state.js); Firebase identity and fetch are stubs.
  */

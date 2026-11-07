@@ -1,9 +1,9 @@
-"""Word attachments (audit 2026-10-28): a parser that refuses every DTD, run in
-the disposable subprocess like PDF, once per file content.
+"""Word attachments: a parser that refuses every DTD, run in the disposable
+subprocess like PDF, once per file content.
 
-Before, a byte search for "<!doctype"/"<!entity" guarded ElementTree in the
-web process: a UTF-16 document.xml passed it, expat expanded its entities, and
-every family request of a Compare run parsed the file again.
+A byte search for "<!doctype"/"<!entity" that guarded ElementTree in the web
+process was not enough: a UTF-16 document.xml passed it, expat expanded its
+entities, and every family request of a Compare run parsed the file again.
 """
 
 import io

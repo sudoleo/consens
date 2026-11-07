@@ -16,7 +16,7 @@ def test_app_renders_markdown_and_math_without_jsdelivr(browser, phase4_server):
         page.on("pageerror", lambda error: errors.append(str(error)))
         context.route("https://cdn.jsdelivr.net/**", lambda route: (cdn_requests.append(route.request.url), route.abort()))
         page.reload(wait_until="networkidle")
-        # KaTeX comes with the first formula, not with the page (Apple-Audit B12).
+        # KaTeX comes with the first formula, not with the page.
         assert page.evaluate("typeof window.renderMathInElement") == "undefined"
         page.evaluate(r"""() => {
             const target = document.createElement('div');

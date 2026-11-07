@@ -1,5 +1,5 @@
 """The workbench's seccomp filter against user namespaces
-(workspace_vm/workbench/nouserns.py, since 2026-11-04, docs/agent-mode.md
+(workspace_vm/workbench/nouserns.py, docs/agent-mode.md
 "Ein Rechner"): the filter's program run through a small classic-BPF
 interpreter on every platform, and on Linux installed for real in a child
 process (the CI runs there)."""

@@ -42,7 +42,7 @@ def test_bookmark_writes_and_views_are_bound_to_auth_and_intent_generations():
     open_bookmark = section(firebase, "window.openBookmark =", "window.loadAllBookmarkMetadata")
 
     # The browser saves model answers only; a consensus bookmark is written
-    # by the server since 2026-10-25.
+    # by the server.
     assert "saveBookmarkConsensus" not in firebase
     assert "requestUid" in model_save and "requestGeneration" in model_save
     assert model_save.count("isCurrentAuthenticatedUser(requestUid, requestGeneration)") >= 3
@@ -66,7 +66,7 @@ def test_bookmark_save_failures_are_visible_and_deduplicated():
     assert "Your chat storage is full" in notice
     assert "600_000" in notice
     assert "window.App?.showPopup?.(message)" in notice
-    # The server's sentence comes as `error` (flat, Apple-Audit H6).
+    # The server's sentence comes as `error` (flat).
     assert 'window.App?.errorFields?.(data)?.error' in model_save
     assert 'showBookmarkSaveError(res.status, errorDetail, `${bookmarkId}:${question}`)' in model_save
 
@@ -126,7 +126,7 @@ def test_usage_snapshot_can_recover_pro_tier_after_status_failure():
     usage = section(firebase, "async function fetchUsageData", "window.refreshUsageData")
 
     assert 'window.App.state.set("isUserPro", isPro, "userTier")' in usage
-    # Die Stufe, nicht das Flag: "is_pro" ist seit Plus nur noch "darf teure
+    # Die Stufe, nicht das Flag: "is_pro" ist nur "darf teure
     # Modelle" und false fuer Plus. Wer es hier als Stufe durchreicht, macht
     # aus jedem Plus-Konto ein Free-Konto -- genau so sind die Anhaenge
     # verschwunden.
@@ -214,10 +214,10 @@ def test_login_dialog_accessibility_and_current_landing_marker_vocabulary():
     assert "keepOpen: authDialogHasTyping" in firebase
     assert "function trapTab(dialog, event)" in modal_dialog
     assert "opener.focus({ preventScroll: true })" in modal_dialog
-    # Seit 2026-08-15 sind die Marken farbige Textmarker statt Linien unter
-    # dem Satz (User-Vorgabe: eine Unterstreichung liest sich wie ein Link).
-    # Die Legende muss von Farben sprechen, nicht mehr von Linienstaerken.
-    # Seit 2026-10-31 (ein Modus) sind es die Arten der Pruefer-Anmerkungen.
+    # Die Marken sind farbige Textmarker statt Linien unter dem Satz
+    # (User-Vorgabe: eine Unterstreichung liest sich wie ein Link). Die
+    # Legende spricht von Farben, nicht von Linienstaerken, und nennt die
+    # Arten der Pruefer-Anmerkungen.
     assert "red · wrong" in landing and "amber · doubtful" in landing and "grey · incomplete" in landing
     assert "fine rule" not in landing
     assert "heavier amber rule" not in landing

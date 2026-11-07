@@ -7,8 +7,7 @@ import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
 import { ENGLISH_QUESTION, GERMAN_SCRIPTS, settleGerman, useGerman } from "./helpers/german.mjs";
 
 /**
- * The layers above the page are one family (Apple audit C1, C4, E1, E6,
- * E10, G1, G3):
+ * The layers above the page are one family:
  *   - no browser alert()/confirm() outside the admin, no blur anywhere;
  *   - every modal window is a native <dialog> opened through App.modalDialog,
  *     with the one scrim, the one surface and a way in and out;
@@ -73,7 +72,7 @@ describe("no browser windows and no glass (E1, G1)", () => {
     expect(overlays).toContain(".answer-reader-dialog::backdrop {\n  background: var(--scrim");
     expect(read("static/css/shell.css")).toMatch(/body::after \{[^}]*background: var\(--scrim\)/);
     // The landing page's sentence card dims with the same token (it has no
-    // overlays.css of its own); it used to carry a raw, darker rgba.
+    // overlays.css of its own), not a raw, darker rgba.
     expect(read("static/css/landing.css")).toMatch(/\.claim-sheet-backdrop \{[^}]*background: var\(--scrim\);/);
     // So does the Agent activity sheet; an --ink tint turned pale in dark mode.
     expect(read("static/css/agent-chat.css")).toMatch(/\.agent-sidebar-scrim \{[^}]*background: var\(--scrim\);/);
@@ -151,7 +150,7 @@ describe("App.modalDialog", () => {
     expect(window.App.popover.isOpen(menu)).toBe(false);
   });
 
-  // Review F (2026-10-21): a dialog chosen in a menu ("Shared links", "Log
+  // A dialog chosen in a menu ("Shared links", "Log
   // out") gave focus back to nothing, as its menu item was gone by then.
   it("gives focus back to the menu's control after a dialog chosen in that menu", () => {
     const { window, document } = boot(`
@@ -336,7 +335,7 @@ describe("one tooltip (E12)", () => {
   });
 
   // A cut-off chat title is shown whole as it was asked; a title that is the
-  // page's own word arrives translated from its element (bug hunt 2026-10-23).
+  // page's own word arrives translated from its element.
   it("shows a chat title as asked on a German page, and the page's words in German", async () => {
     const ctx = loadScripts([...GERMAN_SCRIPTS, "static/js/tooltip.js"], {
       body: `<div class="bookmark"><p id="chat" data-tooltip-overflow></p></div><button id="gear"></button>`,

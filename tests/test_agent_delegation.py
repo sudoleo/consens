@@ -367,7 +367,7 @@ def test_message_during_active_generation_is_delivered_at_next_boundary(store):
 
 def test_remote_stop_cancels_a_worker_with_an_active_stream(store, monkeypatch):
     """A stop saved by another process reaches the run at its watcher's next
-    look (WATCH_SECONDS, 10 s since 2026-11-01; shortened here)."""
+    look (WATCH_SECONDS, 10 s; shortened here)."""
     from app.services import agent_delegation
     from app.services.llm.provider_runtime import current_provider_cancellation
     monkeypatch.setattr(agent_delegation, "WATCH_SECONDS", .2)
@@ -431,11 +431,10 @@ def test_worker_429_can_use_checked_fallback_without_retrying_worker(store):
 
 
 def test_one_update_the_database_refuses_costs_no_other_session_of_its_batch(store, monkeypatch):
-    """Bug hunt P4: a Firestore commit is all or nothing, so one update it
-    refuses for good (a document over 1 MiB) refused every session of the
-    journal's batch, until 2026-11-05 retried one by one only after an
-    outage. A closed run still refuses the batch at once, without a write per
-    update."""
+    """A Firestore commit is all or nothing, so one update it refuses for
+    good (a document over 1 MiB) would refuse every session of the journal's
+    batch: the others are written one by one. A closed run still refuses the
+    batch at once, without a write per update."""
     from types import SimpleNamespace
     from uuid import uuid4
     from google.api_core.exceptions import InvalidArgument
@@ -471,9 +470,9 @@ def test_one_update_the_database_refuses_costs_no_other_session_of_its_batch(sto
 def test_a_retried_session_update_is_saved_once_without_an_event_document(store):
     """A journal batch whose commit was ambiguous is sent again with the same
     event ids (_journal_write): the second time returns what the first saved,
-    moves no sequence and adds no message. Since 2026-11-01 the session keeps
-    the ids itself; the event documents (agent_events), read by nothing else,
-    cost a write and a read per update."""
+    moves no sequence and adds no message. The session keeps the ids itself:
+    event documents (agent_events), read by nothing else, would cost a write
+    and a read per update."""
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(100, priced(100)))
@@ -502,11 +501,10 @@ def test_a_retried_session_update_is_saved_once_without_an_event_document(store)
 
 
 def test_a_receipt_the_runs_end_cannot_write_still_closes_the_workspace(store, monkeypatch):
-    """Bug hunt 2026-11-06, the rest of f1a5b70d: a step's receipt that could
-    not be written at the run's end (its chat deleted meanwhile, the account
-    being deleted) broke off the cleanup before VMSession.close(): the
-    message's VM seconds were never charged and the tunnel counted the run
-    as working until a restart."""
+    """A step's receipt that cannot be written at the run's end (its chat
+    deleted meanwhile, the account being deleted) does not break off the
+    cleanup before VMSession.close(): else the message's VM seconds would
+    never be charged."""
     from types import SimpleNamespace
     closed = []
 
@@ -530,11 +528,11 @@ def test_a_receipt_the_runs_end_cannot_write_still_closes_the_workspace(store, m
 
 
 def test_a_batch_that_breaks_off_waits_for_the_reads_it_started_beside(store):
-    """Bug hunt 2026-11-06, Tempo-Plan P4: a step's read-only calls run side
-    by side (_prefetch). When the batch broke off at its first call, the run
-    ended without the later ones: a page read still claiming or settling its
-    paid step met finish_run ("Agent step has not settled"), and the turn
-    stayed pending until the reaper."""
+    """A step's read-only calls run side by side (_prefetch). When the batch
+    breaks off at its first call, the run waits for the later ones: else a
+    page read still claiming or settling its paid step would meet finish_run
+    ("Agent step has not settled"), and the turn would stay pending until the
+    reaper."""
     from pydantic import BaseModel, ConfigDict
     from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 
@@ -577,11 +575,11 @@ def test_a_batch_that_breaks_off_waits_for_the_reads_it_started_beside(store):
 
 
 def test_a_waiting_helper_writes_the_receipt_whose_own_thread_already_failed(store, monkeypatch):
-    """Bug hunt 2026-11-07: the agent's step receipt is written in a thread
-    of its own (_settle_later). When that write had already failed, a helper
-    waiting for allowance (_admit_chat_step) still left the step to that
-    thread, and waited until the turn's time limit ("Waiting for active
-    model calls"). A thread still writing keeps it; a failed one does not."""
+    """The agent's step receipt is written in a thread of its own
+    (_settle_later). When that write has already failed, a helper waiting for
+    allowance (_admit_chat_step) must not leave the step to that thread and
+    wait until the turn's time limit ("Waiting for active model calls"). A
+    thread still writing keeps it; a failed one does not."""
     from types import SimpleNamespace
     from app.services.agent_quota import AgentTokenBudgetExceeded
     loop = make_loop(store)
@@ -659,10 +657,10 @@ def tool_results(messages):
 
 
 def test_a_read_started_beside_that_breaks_gets_not_run_once_the_batch_stopped(store):
-    """Bug hunt 2026-11-07: a read the batch started beside its first
-    (_prefetch) and then took on its stopped path (a pause after a call of
-    the step) raised its error out of the run. Before reads ran side by side
-    it would not have run at all: it gets "Not run" again, the run goes on."""
+    """A read the batch started beside its first (_prefetch) and then takes
+    on its stopped path (a pause after a call of the step) does not raise its
+    error out of the run: it gets "Not run", as if it had not run at all, and
+    the run goes on."""
     from app.services.agent_delegation import CALL_AFTER_PAUSE
     first_read = threading.Event()
 

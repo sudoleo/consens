@@ -1,7 +1,4 @@
-"""Watch, share and hub pages after the Apple audit (2026-10-20).
-
-Each test names its finding; each would fail on the code before it.
-"""
+"""Watch, share and hub pages: each test names the flaw it guards against."""
 
 import re
 from datetime import datetime, timedelta, timezone
@@ -70,7 +67,7 @@ PAUSED = {"status": "paused", "interval": "weekly", "last_run_at": datetime(2026
 VERSION = {"consensus_md": "The standing answer.", "sources": []}
 
 
-# --- L2: a paused Watch says so ------------------------------------------
+# --- a paused Watch says so ------------------------------------------
 
 def test_a_paused_watch_leads_with_paused_not_with_a_green_unchanged(client):
     body = page(client, doc(), meta=PAUSED, points=[point(24, 64, "r1"), point(1, 66, "r2", month=10)],
@@ -79,12 +76,12 @@ def test_a_paused_watch_leads_with_paused_not_with_a_green_unchanged(client):
     assert 'class="wp-state is-paused"' in body
     assert "Paused · last checked Oct 1" in body
     assert "Unchanged since" not in body
-    # The facts no longer repeat it.
+    # The facts do not repeat it.
     assert "Checked 2 times since Sep 24</p>" in body
 
 
 def test_a_paused_watch_neither_waits_nor_scores_in_its_search_line(client):
-    # Zweitprüfung 16: nobody is checking, so the goal is what it WAS waiting
+    # Nobody is checking, so the goal is what it WAS waiting
     # for, and the description leads with the state, never with a score.
     differences = {"differences": [{"claim": "When", "type": "contradiction", "positions": [
         {"stance": "May", "models": ["OpenAI"]}, {"stance": "June", "models": ["Gemini"]}]}],
@@ -125,7 +122,7 @@ def test_watch_summary_is_the_page_headline_for_list_and_card():
         "headline"] == "Resolved on Oct 2"
 
 
-# --- L4: no self-citations -------------------------------------------------
+# --- no self-citations -------------------------------------------------
 
 OWN = "https://www.consens.io/s/what-models-b1kPgI7ycak4oLjC"
 
@@ -160,7 +157,7 @@ def test_the_watch_judge_never_sees_own_pages():
     assert "new_sources=sources" not in scheduler
 
 
-# --- L12: direct links without doubles and signatures -------------------------
+# --- direct links without doubles and signatures -------------------------
 
 def test_direct_links_drop_site_signatures_and_doubled_titles():
     entries = source_links.source_entries([
@@ -177,7 +174,7 @@ def test_direct_links_drop_site_signatures_and_doubled_titles():
     assert titles.count("amp/CHANGELOG.md at main · sourcegraph/amp") == 1
 
 
-# --- L8: titles at a word boundary -----------------------------------------------
+# --- titles at a word boundary -----------------------------------------------
 
 def test_titles_end_at_a_word_and_say_they_were_cut(client):
     question = "Does the new ChatGPT-linked Amp subscription actually include GPT-6 Astra in High mode for agents?"
@@ -189,7 +186,7 @@ def test_titles_end_at_a_word_and_say_they_were_cut(client):
     assert share_router.clip_words("a" * 30 + " " + "b" * 50, 60) == "a" * 30 + "…"
 
 
-# --- I11, L15: model names ------------------------------------------------------------
+# --- model names ------------------------------------------------------------
 
 def test_the_consensus_chip_names_the_model_not_its_id():
     view = snapshots.consensus_model_view("gpt-5.6-luna")
@@ -221,7 +218,7 @@ def test_judge_letters_become_the_families_the_page_names():
 
 
 def test_judge_letters_are_never_paired_by_list_order():
-    # Zweitprüfung 14: the judge listed A=DeepSeek and B=OpenAI as
+    # The judge listed A=DeepSeek and B=OpenAI as
     # ["OpenAI", "DeepSeek"]; pairing by order made the next difference say
     # "DeepSeek claims it ships in May" although OpenAI did.
     differences = [
@@ -261,7 +258,7 @@ def test_judge_letters_are_never_paired_by_list_order():
     assert named["positions"][2]["stance"] == "It says July, unlike Model C."
 
 
-# --- L13: the card of a Watch -----------------------------------------------------------
+# --- the card of a Watch -----------------------------------------------------------
 
 def test_a_watch_card_tells_its_state_not_a_score(monkeypatch):
     drawn = {}
@@ -299,7 +296,7 @@ def test_long_questions_and_source_lists_arrive_folded():
     share = read("templates/share.html")
     assert 'class="share-sources{% if sources | length > 8 %} is-collapsed{% endif %}"' in share
     assert "asset_url('/static/js/check-page.js')" in share
-    # The duplicated inline copies are gone from the share page.
+    # The share page carries no duplicated inline copies.
     assert "function measure()" not in share and ".share-source-favicon\").forEach" not in share
 
 
@@ -337,7 +334,7 @@ def test_the_phone_layout_puts_direct_links_in_a_row_and_targets_at_44px():
     assert ".topic-shell .wp-links-list" not in css
 
 
-# --- L17: a live Watch from the landing, only if there is one ----------------------
+# --- a live Watch from the landing, only if there is one ----------------------
 
 class _Snap:
     def __init__(self, data):
@@ -386,7 +383,7 @@ def test_the_landing_links_a_live_watch_and_never_a_paused_one():
          "last_run_at": datetime(2026, 10, 15, tzinfo=UTC)},
     ]
     assert snapshots.live_watch_path(db=_Db(watches, shares)) == snapshots.share_path("live-question", live)
-    # All paused, as right now: no link at all, no stand-in.
+    # All paused: no link at all, no stand-in.
     watches[1]["status"] = "paused"
     assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
 
@@ -396,7 +393,7 @@ def test_the_landing_links_a_live_watch_and_never_a_paused_one():
 
 def test_the_landing_never_links_a_watch_page_nobody_curated():
     # "Public" means anyone with the link; only an indexed page may stand on
-    # the start page (Zweitprüfung B1). An uncurated live Watch is no stand-in.
+    # the start page. An uncurated live Watch is no stand-in.
     curated, uncurated = snapshots.generate_share_id(), snapshots.generate_share_id()
     shares = [
         {"_id": curated, "status": "active", "visibility": "public", "slug": "curated-question", "indexed": True},
@@ -420,7 +417,7 @@ def test_the_landing_never_links_a_watch_page_nobody_curated():
     assert snapshots.live_watch_path(db=_Db(watches, shares)) == ""
 
 
-# --- I14, I4: one grid, one material, no sideways panning ---------------------------
+# --- one grid, one material, no sideways panning ---------------------------
 
 def test_every_public_page_sits_on_one_grid_of_one_material():
     tokens = read("static/css/public-tokens.css")
@@ -441,7 +438,7 @@ def test_every_public_page_sits_on_one_grid_of_one_material():
 
 
 def test_share_page_differences_are_the_apps_cards():
-    # check_page.difference_cards mirrors buildDifferenceCards (2026-10-16):
+    # check_page.difference_cards mirrors buildDifferenceCards:
     # critical first, two or more smaller ones folded behind them, the
     # answer's side first, one side per claim, Markdown rendered.
     from app.services.public_markdown import render_inline_markdown
@@ -481,7 +478,7 @@ def test_share_page_differences_are_the_apps_cards():
 
 
 def test_a_quote_cut_from_a_bold_run_shows_no_stray_stars():
-    # Live 2026-10-22: "Dr. Sebastian Reddemann**, CEO" -- the judge cut the
+    # Seen live: "Dr. Sebastian Reddemann**, CEO" -- the judge cut the
     # quote inside "**…**", and the closing mark stood in the card.
     from app.services.public_markdown import render_inline_markdown
 

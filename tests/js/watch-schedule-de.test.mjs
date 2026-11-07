@@ -57,7 +57,7 @@ describe("Watch schedules in German", () => {
       .toBe("Jeden Freitag um 08:30 (UTC)");
   });
 
-  // Since 2026-11-03 the Agent card starts a Watch that runs the Agent
+  // The Agent card starts a Watch that runs the Agent
   // (agent-watch.js): its schedule, the line around the goal and its state
   // are German, the task and the goal stay as the model wrote them.
   it("writes the Agent card's schedule and state as German lines", async () => {

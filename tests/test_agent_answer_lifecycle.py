@@ -3,8 +3,7 @@
 The agent writes the answer itself, in the step after its comparison
 (agent_answer_mode). The app starts the reviewers' final round
 (agent_audit.AnswerAudit.run) only once that step has ended with a complete
-text, and has exactly what the user saw reviewed. Until 2026-10-31 the
-judges of comparison mode followed the same rule.
+text, and has exactly what the user saw reviewed.
 """
 import json
 
@@ -162,8 +161,7 @@ def test_the_review_is_announced_the_moment_the_last_word_stands(store):
 
 
 def test_a_direct_answer_announces_its_review_too(store):
-    """Every answer is reviewed: until 2026-10-31 a direct answer was never
-    checked, and with the answer check off nothing was announced."""
+    """Every answer is reviewed and its review announced, a direct one too."""
     script = Script(compares=0)
     loop = make_loop(store, script)
     loop.factory = answer_factory(script, direct=True)
@@ -203,7 +201,7 @@ def _empty_over_http(script, monkeypatch):
 
     class Completion(base):
         def stream(self, **kwargs):
-            # The answer step and its one retry after an empty stop (since 2026-10-27).
+            # The answer step and its one retry after an empty stop.
             if self.step_id in {"completion:1", "completion:2"}:
                 yield from AgentCompletion.stream(self, **kwargs)
             else:

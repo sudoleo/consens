@@ -1,6 +1,6 @@
 """What /prepare and /ask_* put into a Compare answer's system prompt.
 
-Since 2026-10-25 a question asked through /ask_* continues no chat: the
+A question asked through /ask_* continues no chat: the
 browser asks these endpoints only for Compare, and follow-ups run in Agent.
 A context a cached page still sends (``context``, chat or context ids) never
 reaches the prompt.

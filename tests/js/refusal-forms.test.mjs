@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// Review 2 (2026-10-21): main.py wraps a route's detail object as
-// {error: {error, error_code, …}}. Consensus and Compare read only {detail},
+// main.py lays a route's detail object flat; an older server nested it as
+// {error: {error, error_code, …}}. Consensus and Compare then read only {detail},
 // so an empty daily allowance said "You don’t have access to this." and the
 // allowance card never came. Every form of a refusal reads the same; the
 // agreed flat form {error: "<sentence>", code, retry_after} too.

@@ -4,10 +4,9 @@ Der Fehler, den diese Datei festhaelt, war kein fehlender Text, sondern ein
 fehlender Ort: der gefuehrte Lauf startet schon bei /prepare, und der
 Limit-Pfad meldete danach setAgentModeStatus("error") — was den Block per
 dismiss() wieder wegnahm. Die eigentliche Meldung landete in den
-Antwortboxen, die im Agent Mode (Default seit 2026-07-27) hinter "Compare
-answers" liegen. Ergebnis: eine Sekunde Fortschritt, dann eine leere Seite.
-Seit 2026-10-25 laufen im Browser nur noch Agent und Compare; die Karte
-bleibt der eine Ort der Absage.
+Antwortboxen, die im Agent Mode hinter "Compare answers" liegen. Ergebnis:
+eine Sekunde Fortschritt, dann eine leere Seite. Im Browser laufen nur Agent
+und Compare; die Karte bleibt der eine Ort der Absage.
 """
 
 from pathlib import Path
@@ -66,10 +65,9 @@ def test_blocked_card_sits_where_the_answer_would_be():
 
 
 def test_server_error_codes_are_actually_matched():
-    """chat.py sendet seit dem gemeinsamen Tokenkonto "token_budget_exhausted".
-    Ein Vergleich auf einen anderen festen Code traefe NIE — genau so ein
-    Vergleich stand bis 2026-08-01 in consensus-run.js und machte die Absage
-    dort stumm."""
+    """chat.py sendet "token_budget_exhausted". Ein Vergleich auf einen
+    anderen festen Code traefe NIE — genau so ein Vergleich machte die Absage
+    schon einmal stumm."""
     chat = read("app/api/routers/chat.py")
     assert '"error_code": "token_budget_exhausted"' in chat
 
@@ -102,7 +100,7 @@ def test_run_is_blocked_before_it_appears_to_start():
 
 def test_a_blocked_run_takes_nothing_with_it():
     """Die Karte sagt "nichts wurde gesendet": dann darf der Lauf auch nichts
-    verbraucht haben. Compare setzt keinen Chat fort (2026-10-25), also gibt
+    verbraucht haben. Compare setzt keinen Chat fort, also gibt
     es keinen Kontext, der verloren gehen koennte; zurueck kommt der Entwurf."""
     query = read("static/js/query-send.js")
 
@@ -172,11 +170,10 @@ def test_reasoning_exhaustion_offers_the_cheaper_run():
 
 
 def test_css_cache_busting_needs_no_manual_bump(monkeypatch):
-    """Frueher trug jede Teildatei eine handgepflegte ?v= und style.css musste
-    bei JEDER Aenderung neu versioniert werden -- vergass man es, lieferte der
-    Server altes CSS aus und die Karte erschien ungestylt. Die Marke kommt
-    jetzt aus dem Inhalt (app/core/assets.py), also kann sie nicht mehr
-    vergessen werden."""
+    """Die Marke kommt aus dem Inhalt (app/core/assets.py), also kann sie
+    nicht vergessen werden: mit einer handgepflegten ?v= lieferte der Server
+    nach einer vergessenen Marke altes CSS aus, und die Karte erschien
+    ungestylt."""
     template = read("templates/index.html")
     shell = ROOT / "static" / "css" / "shell.css"
 

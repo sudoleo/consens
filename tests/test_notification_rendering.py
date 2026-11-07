@@ -1,4 +1,4 @@
-"""Watch mails and Telegram read like the app (Apple audit K1, K2, K4-K9).
+"""Watch mails and Telegram read like the app.
 
 The answer is rendered, never escaped Markdown; mails use the app's tokens
 with a dark mode; the success mail names goal and question; Telegram
@@ -168,7 +168,7 @@ def test_telegram_every_check_and_goal_reached_carry_the_rendered_answer():
         assert quote_block.startswith("<blockquote expandable><b>GPT-6 was released")
         assert "**" not in text and "##" not in text and "|---" not in text
         assert len(text) < 4_096
-    # K4: the one success message names its sources like the mail does.
+    # The one success message names its sources like the mail does.
     condition = telegram_watch._notification_text("condition", view, result)
     assert condition.count("<b>Why</b>") == 1
     assert '<a href="https://example.com/press">Press</a>' in condition
@@ -375,8 +375,8 @@ def test_an_expired_source_is_never_linked_from_the_answer():
 
 
 def test_mails_call_the_thing_a_watch():
-    # Zweitprüfung (Namen): "Consensus" names a mode, never the product
-    # (Apple-Audit H3); the mails said "Your Consensus Watch ...".
+    # "Consensus" names a mode, never the product; the mails said
+    # "Your Consensus Watch ...".
     mails = dict(_all_mails(), test=mailer.build_test_message(recipient="admin@example.test"))
     for name, message in mails.items():
         markup, plain = _parts(message)
@@ -398,7 +398,7 @@ def _balanced(markup):
 
 
 def test_a_long_telegram_message_is_never_cut_inside_its_markup():
-    # Zweitprüfung (Telegram): the text was sliced at 4,096 characters of
+    # The text was sliced at 4,096 characters of
     # HTML -- mid-tag. Telegram refused it and the plain resend lost the links.
     from app.services import telegram_notifier
 
@@ -442,9 +442,9 @@ def test_the_plain_resend_keeps_its_links():
 
 
 def test_the_plain_resend_never_cuts_the_question():
-    """Review 2 N3: the plain resend writes every link as "title (url)",
+    """The plain resend writes every link as "title (url)",
     longer than the link was; the message then ran over Telegram's limit and
-    the cut took the question at the bottom. Now the answer and the news
+    the cut took the question at the bottom. The answer and the news
     make room for it, measured on the plain text."""
     from app.services import telegram_notifier
 

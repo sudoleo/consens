@@ -114,7 +114,7 @@ def test_nested_synthesis_and_judges_do_not_reset_budget():
 
 
 def test_a_run_gives_each_phase_its_own_budget_and_totals_them():
-    """Audit C3: synthesis and judges no longer share one deadline and count."""
+    """Audit C3: synthesis and judges do not share one deadline and count."""
     @runtime.analysis_budgeted(seconds=30, max_calls=1)
     def phase():
         runtime.claim_analysis_call()
@@ -134,7 +134,7 @@ def test_a_run_gives_each_phase_its_own_budget_and_totals_them():
 
 def test_a_pro_runs_judges_keep_their_whole_plan_after_a_synthesis_fallback():
     """Audit C3: synthesis (2 failures + fallback) plus the pro judge plan need
-    more than the former shared 8 calls; the judges lost their fallbacks."""
+    more than a shared 8 calls, under which the judges lost their fallbacks."""
     from app.services.consensus_pipeline import analyze_provider_answers
     keys = {"OpenRouter": "sk-or"}
     seen, lock = [], threading.Lock()
@@ -200,7 +200,7 @@ def test_nonstream_request_is_cancelled_while_waiting_for_headers(stop):
         else:
             # The deadline passes while the request waits for headers. A fixed
             # 0.15 s budget could run out on a slow runner before the request
-            # even started, leaving no HTTP task to cancel (CI 2026-10-29).
+            # even started, leaving no HTTP task to cancel.
             budget.deadline = time.monotonic()
     worker = threading.Thread(target=stop_while_waiting)
     worker.start()
@@ -292,8 +292,8 @@ def test_coverage_worker_counts_against_the_shared_budget():
 def test_a_coverage_result_past_the_deadline_is_stopped_not_awaited():
     """Agent judges run through a task transport, whose calls are not bound
     by the analysis deadline, and the collector waits for the thread. A
-    result the run no longer uses must be stopped, not awaited (prod
-    2026-10-15: 64 s of waiting for a Coverage result that was then dropped)."""
+    result the run no longer uses must be stopped, not awaited (in prod:
+    64 s of waiting for a Coverage result that was then dropped)."""
     from app.services.llm.task_transport import bind_task_transport
     context = engine._build_judge_context({"openai": "one", "gemini": "two"}, "A claim with enough words.")
     stopped = threading.Event()

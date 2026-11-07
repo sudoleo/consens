@@ -1,6 +1,6 @@
 """Unknown pages answer with HTML, HEAD works wherever GET does.
 
-Audit 2026-10-05, P10/P11: unknown paths answered browsers with raw JSON,
+Unknown paths answered browsers with raw JSON,
 /impressum and /datenschutz were 404s, and HEAD on /, /benchmark or the
 sitemap was a 405 (uptime monitors and link checkers use HEAD).
 """

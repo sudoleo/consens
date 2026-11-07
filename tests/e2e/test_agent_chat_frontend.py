@@ -39,8 +39,8 @@ def _snapshot(page, name):
 
 
 def _detailed_progress(page):
-    """The live lines in full (Display switch "Detailed progress", since
-    2026-11-01), for cases that look at the trace line by line: every account
+    """The live lines in full (Display switch "Detailed progress"), for cases
+    that look at the trace line by line: every account
     starts with the calm line (agent-activity.js)."""
     page.evaluate("() => App.userSettings.set('detailed_progress', true)")
 
@@ -328,7 +328,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         expect(page.locator('#questionInput')).to_have_attribute('placeholder', 'Ask a follow-up')
         expect(page.locator('#sendButton')).to_be_disabled()
-        # Agent answers carry no Copy control (removed 2026-10-04).
+        # Agent answers carry no Copy control.
         expect(page.locator('#agentAnswer .agent-answer-actions')).to_have_count(0)
         expect(page.locator('#agentAnswer').get_by_role('button', name='Follow up')).to_have_count(0)
         page.locator('#questionInput').click()
@@ -393,7 +393,7 @@ def test_single_agent_send_followup_restore_and_layout(browser, phase4_server, w
         expect(page.locator('#runModeSelect option[value="compare"]')).to_be_enabled()
         _choose_mode(page, "compare")
         expect(page.locator("#agentAnswer")).not_to_be_visible()
-        # One name in every mode (Apple-Audit H3/B10): the pill keeps its word.
+        # One name in every mode: the pill keeps its word.
         expect(page.locator("#viewSwitchConsensus")).to_have_text("Chat")
         expect(page.locator("#newRunButton")).to_have_text("New chat")
         assert not errors
@@ -520,7 +520,7 @@ def test_live_reasoning_disclosure_and_stop(browser, phase4_server, width, dark)
         expect(page.locator("#agentAnswerActivity .agent-progress")).to_be_visible()
         expect(page.locator("#agentAnswerActivity details")).not_to_have_attribute('open', '')
         expect(page.locator("#agentAnswerBody")).to_be_empty()
-        # Model and reasoning stay open while it answers (2026-10-26): the pick
+        # Model and reasoning stay open while it answers: the pick
         # is for the next message, which the menu says once.
         expect(page.locator("#agentModelDropdown")).to_be_enabled()
         expect(page.locator("#agentModelDropdown")).to_have_attribute("data-running", "true")
@@ -714,7 +714,7 @@ def test_model_catalog_retry_and_failed_stream(browser, phase4_server):
 
 @pytest.mark.parametrize("width", [1280, 390])
 def test_failure_actions_still_work_after_a_follow_up(browser, phase4_server, width):
-    """Review B2: once a follow-up moved the first turn into the history, the
+    """Once a follow-up moved the first turn into the history, the
     live answer is a fresh copy of its surface. Retry, "Choose another model"
     and "Check saved answer" under a failed follow-up still act; the turn in
     the history keeps its look and no buttons of the live surface."""
@@ -987,8 +987,8 @@ def test_native_search_sources_in_chat_and_saved_activity(browser, phase4_server
         page.evaluate("turn => { App.agentActivity.renderTurn(document.getElementById('agentAnswerActivity'), turn); }", turn)
         expect(details.locator('.agent-activity-title')).to_have_text('Thought for 18s')
         expect(details.locator("a")).to_have_count(2)
-        # One locale whatever the browser's (App.format, Apple-Audit H8); the
-        # figure is the operator's and hidden from a reader (H4).
+        # One locale whatever the browser's (App.format); the figure is the
+        # operator's and hidden from a reader.
         expect(details.locator(".agent-usage")).to_contain_text("1,400 tokens")
         expect(details.locator(".agent-usage")).to_be_hidden()
     finally:
@@ -1051,7 +1051,7 @@ def test_removed_preference_and_legacy_phantom_search(browser, phase4_server, wi
         details.locator("summary").click()
         expect(details.locator(".agent-activity-reasoning")).to_have_text("A casual greeting.")
         expect(details.locator(".agent-activity-tool")).to_have_count(0)
-        # Tokens and cost are the operator's figures (Apple-Audit H4): in the DOM, hidden for a reader.
+        # Tokens and cost are the operator's figures: in the DOM, hidden for a reader.
         expect(details.locator(".agent-usage")).to_have_text("862 tokens · $0.0004 provider cost")
         expect(details.locator(".agent-usage")).to_be_hidden()
         _snapshot(page, f"agent-greeting-without-search-{width}")

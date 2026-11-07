@@ -63,8 +63,8 @@ def test_text_is_one_clean_prompt_safe_line():
 
 
 def test_evidence_must_be_the_users_own_words():
-    # A memory change needs no quote since 2026-10-28; the settings tool
-    # still checks its evidence with this (agent_settings.py).
+    # A memory change needs no quote; the settings tool
+    # checks its evidence with this (agent_settings.py).
     said = ["Ich bin Vegetarier und wohne in Köln.", "Thanks!"]
     assert agent_memory.evidence_matches("ich bin  VEGETARIER", said)
     assert agent_memory.evidence_matches("“wohne in Köln.”", said)
@@ -292,8 +292,7 @@ class MemoryScript(Script):
 
 def memory_loop(store, script, *, snapshot=None, question="I moved to Munich last week. Which bike shop?",
                 model="claude-haiku-4-5"):
-    """A turn of the agent whose reviewers never start (agent_reviewers.py):
-    with outside content in view, memory locks."""
+    """A turn of the agent whose reviewers never start (agent_reviewers.py)."""
     chat, turn = pending(store, question=question)
     config = {**defaults(), "enabled": False, "max_searches": 0, "context_chars": 120_000}
     loop = DelegationLoop(store=store, uid=UID, chat_id=chat, turn_id=turn["id"],
@@ -383,11 +382,10 @@ def test_changes_sent_as_json_text_are_saved(store):
 
 
 def test_memory_changes_also_once_outside_content_is_in_view(store):
-    """Outside content locked memory for the rest of the message (review
-    2026-10-14; with reviewers their gate since 2026-10-28). The agent
-    searches in nearly every first step, and an opted-in account got not a
-    single memory in a month. Max, 2026-11-02: the agent decides what to
-    keep; the user sees every change under the answer and can undo it."""
+    """Outside content in view does not lock memory: the agent searches in
+    nearly every first step, and a lock would leave an opted-in account
+    without a single memory. The agent decides what to keep; the user sees
+    every change under the answer and can undo it."""
     snapshot = writable_snapshot(store)
     first = {"op": "add", "text": "Compares bike shops."}
     later = {"op": "add", "text": "Commutes by bike in Munich."}
@@ -403,13 +401,12 @@ def test_memory_changes_also_once_outside_content_is_in_view(store):
     assert [event["changes"][0]["text"] for event in memory] == ["Compares bike shops.", "Commutes by bike in Munich."]
 
 
-# Since the workspace's security audit (2026-10-27) every tool's result puts
-# outside content in view, an error too, except a call the app refused before
-# it ran and the few tools that return only the user's or the app's own
-# content. A settings change then needs the user's words (agent_settings);
-# until 2026-11-02 memory locked on it. Before, a list named such tools and
-# missed the VM's writes, shares and GitHub, whose first result carries the
-# workspace's notes.
+# Every tool's result puts outside content in view, an error too, except a
+# call the app refused before it ran and the few tools that return only the
+# user's or the app's own content. A settings change then needs the user's
+# words (agent_settings). A list of the tools that bring outside content
+# would miss the VM's writes, shares and GitHub, whose first result carries
+# the workspace's notes.
 @pytest.mark.parametrize("name,content,locks", [
     ("vm_write_file", {"path": "/x", "workspace_notes": {"text": "notes"}}, True),
     ("vm_share_file", {"files": []}, True),
@@ -494,8 +491,8 @@ def test_anthropic_requests_carry_automatic_cache_control(monkeypatch):
 
 @pytest.mark.parametrize("one_off,searches,cached", [(False, 0, True), (True, 0, False), (True, 2, True)])
 def test_a_one_off_call_caches_only_for_its_own_search_rounds(monkeypatch, one_off, searches, cached):
-    """A cache write costs a quarter more than plain input. A judge's prompt
-    is never sent again; a comparison answer's search rounds re-read its own
+    """A cache write costs a quarter more than plain input. A reviewer's final
+    round is never sent again; a comparison answer's search rounds re-read its own
     (DelegationLoop.worker_completion)."""
     from app.services.llm import agent_client
     from app.services.llm.agent_client import AgentCompletion
@@ -600,7 +597,7 @@ def test_agent_memory_frame_markers_cannot_close_the_block_early():
     assert "Saved memories" in text
 
 
-# --- Fixes 2026-10-08 -----------------------------------------------------------
+# --- Refusals ---------------------------------------------------------------------
 
 class BrokenRepository(FirestoreAgentMemoryRepository):
     def apply(self, *args, **kwargs):
@@ -664,7 +661,7 @@ def test_the_memory_schema_still_guides_the_model():
     assert "description" not in schema
 
 
-# --- update_memory's form, 2026-11-02 ---------------------------------------
+# --- update_memory's form ---------------------------------------------------
 # Max to DeepSeek V4.1 Flash 1017: "merk dir mal dass du mit meinem whatsapp
 # verbunden bist". It read ``changes`` as a bare object ({}), guessed
 # {"add": [...]} ("changes: Input should be a valid list"), then items with

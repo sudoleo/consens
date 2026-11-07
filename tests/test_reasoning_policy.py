@@ -143,8 +143,8 @@ def _load(document):
 
 
 def test_a_retired_override_never_blocks_the_model_config():
-    """grok-4.3 was a savings model until it became the free base Grok
-    (2026-10-11). A stored override for it must not leave prod on code
+    """grok-4.3 was a savings model until it became the free base Grok.
+    A stored override for it must not leave prod on code
     defaults; admin saves still refuse unknown models."""
     stale = {"profile": "economy", "models": {"grok-4.3": "existing", cfg.OPENAI_PRO_MODEL: "existing"}}
     _load({**model_document(), "reasoning_policy": stale})

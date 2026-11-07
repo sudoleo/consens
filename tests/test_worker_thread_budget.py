@@ -1,6 +1,6 @@
 """The synchronous SSE endpoints must not run out of worker threads.
 
-``/ask_*`` and ``/consensus`` return sync generators, so Starlette holds one
+``/ask_*`` returns sync generators, so Starlette holds one
 anyio worker thread per in-flight provider stream. With anyio's default of 40
 threads a single consensus run (six providers) let roughly six concurrent users
 saturate the pool. These tests pin the raised budget and its bounds.

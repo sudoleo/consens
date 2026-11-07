@@ -71,7 +71,7 @@ def transport(monkeypatch, responses):
 
 
 def reviewed_transport(monkeypatch, answer, *, searches=0):
-    """The provider for POST /agent in the one mode (2026-10-31): the
+    """The provider for POST /agent in the one mode: the
     agent's request (it offers compare_models) streams ``answer``, each
     reviewer's request a review without marks. Returns both lists of
     requests, the agent's and the reviewers'."""
@@ -103,7 +103,6 @@ def loop_for(store, **kwargs):
 
 
 def test_a_service_tier_of_the_model_config_reaches_the_request(store, monkeypatch):
-    # The way judges ask for OpenAI's priority lane (ComparisonTools.judge_transport).
     requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}), packet(finish="stop", usage=usage())]])
     chat_id, turn = pending(store)
     model = configured_model(resolve_agent_model("claude-haiku-4-5"))
@@ -153,7 +152,7 @@ def test_every_step_of_a_chat_stays_on_the_endpoint_holding_its_cached_prefix(st
 
 
 def test_a_request_without_a_session_keeps_the_plain_routing(monkeypatch):
-    # Helper steps (comparison answers, judges, page reads) keep the plain
+    # Helper steps (comparison answers, page reads) keep the plain
     # fastest-endpoint routing.
     requests, headers = recording_transport(monkeypatch, [
         [packet({"content": "Hi"}, finish="stop", usage=usage())]])
@@ -187,7 +186,7 @@ def marked(content):
 
 
 def test_the_next_message_finds_the_system_prompt_and_history_cached(store, monkeypatch):
-    # 2026-10-22: with only the top-level marker on the last block, no first
+    # With only the top-level marker on the last block, no first
     # step of a message read the cache (Sonnet, 20 of 20), because the next
     # message never reaches a point an earlier one had written.
     requests, _, _ = transport(monkeypatch, [
@@ -374,9 +373,9 @@ def test_invalid_or_unapproved_tool_never_executes_or_spawns_another_paid_call(s
 @pytest.mark.parametrize("fragment,error", [([{**call(), "index": -1}], RuntimeError),
                                             ([call(arguments="x" * 2049)], ValueError)])
 def test_malformed_streamed_tool_calls_close_transport(store, monkeypatch, fragment, error):
-    # Since 2026-10-27 a fragment no call of ours stands behind is skipped and
-    # an oversized call reaches the registry, which refuses it with its limit;
-    # neither executes, and the transport closes as before.
+    # A fragment no call of ours stands behind is skipped and an oversized
+    # call reaches the registry, which refuses it with its limit; neither
+    # executes, and the transport closes.
     _, _, closed = transport(monkeypatch, [[packet({"tool_calls": fragment}, finish="tool_calls", usage=usage())]])
     executed = []
     loop = loop_for(store, registry=client_registry(executed))
@@ -395,8 +394,8 @@ def tool_fragments(*chunks, limit=4, argument_limit=2048):
 
 
 def test_a_call_after_the_providers_own_searches_keeps_its_stream_index():
-    """2026-10-27: after five web searches inside its step DeepSeek's next
-    call arrived as index 5, and the whole turn failed as a provider error."""
+    """After five web searches inside its step DeepSeek's next call arrives
+    as index 5: the turn does not fail on it as a provider error."""
     value = tool_fragments([{"index": 5, "id": "call_a", "type": "function", "function": {"name": "double", "arguments": ""}}],
                            [{"index": 5, "function": {"arguments": '{"number":'}}], [{"function": {"arguments": "2}"}}])
     assert value._completed_tool_calls() == [{"id": "call_a", "type": "function",
@@ -768,9 +767,9 @@ def test_text_beyond_the_storage_limit_is_kept_as_truncated_instead_of_failing(m
 
 
 def test_a_container_argument_sent_as_json_text_is_decoded():
-    # Claude Sonnet sent compare_models' memory as "[]" (a field until
-    # 2026-10-31): strict validation rejected every call and the turn ended
-    # (2026-10-07). Every list or object argument is decoded alike.
+    # Claude Sonnet sent a list argument as the text "[]": strict validation
+    # rejected every call and the turn ended. Every list or object argument
+    # is decoded alike.
     from pydantic import BaseModel, ConfigDict
     from app.services.agent_comparison import AuditCompareArgs
     from app.services.agent_memory import AuditUpdateMemoryArgs
@@ -805,7 +804,7 @@ def test_a_container_argument_sent_as_json_text_is_decoded():
 def test_refused_tool_calls_say_what_to_change(caplog):
     # A bare "Tool is not authorized" and pydantic's input echo + docs URL
     # (cut after two errors) gave Claude nothing to correct: it repeated the
-    # call until "repeated invalid tool requests" ended the turn (2026-10-09).
+    # call until "repeated invalid tool requests" ended the turn.
     from app.services.agent_comparison import AuditCompareArgs
     from app.services.agent_delegation import DelegationLoop
     registry = ToolRegistry([ReadOnlyTool("compare_models", "Compare", AuditCompareArgs, lambda a, **kw: {}),

@@ -1,4 +1,4 @@
-"""Messages into a running response (since 2026-10-26, with Agent VM): the
+"""Messages into a running response: the
 user presses Enter while the agent works, the message lands on the run's root
 receipt (routers/agent.py add_agent_note, AgentSessionStore.add_user_note),
 the watcher reads it with the lease check, and the agent gets it before its
@@ -118,8 +118,7 @@ def test_the_agent_reads_the_message_before_its_next_step(store, fake_vm):
 def test_a_message_after_the_answer_is_said_to_be_unread(store, fake_vm):
     """The line says what happened, not what to do: the page sends a waiting
     message after the response itself, or puts it back into the field
-    (flushQueue in static/js/agent-chat.js). Until 2026-11-05 it asked the
-    user to send it again while the page was doing so (bug hunt P31)."""
+    (flushQueue in static/js/agent-chat.js)."""
     assert "again" not in NOTES_UNREAD
     script = LongAgent()
     loop = vm_loop(store, script)

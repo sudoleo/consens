@@ -1,8 +1,8 @@
 """Review R06: typed completion of model answers and syntheses.
 
-R09 (answers bound to the server as receipts for the browser's /consensus)
-ended on 2026-10-25 with that endpoint; the server pipeline (Watches, API,
-Topics) collects its answers itself.
+The browser binds no answer receipts to a run (R09, retired with its
+/consensus); the server pipeline (Watches, API, Topics) collects its answers
+itself.
 """
 
 from __future__ import annotations
@@ -58,7 +58,7 @@ def test_provider_fan_out_drops_interrupted_and_marks_truncated_answers():
 
 def test_browser_flow_carries_completion_state():
     """Compare, the browser's own run besides Agent, keeps typed answer
-    states. It runs no Consensus since 2026-10-25, so it binds no answer
+    states. It runs no Consensus, so it binds no answer
     receipts to a run either."""
     from pathlib import Path
     root = Path(__file__).resolve().parents[1] / "static" / "js"

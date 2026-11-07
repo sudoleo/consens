@@ -33,7 +33,7 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         starters = page.locator("#composerStarters")
         expect(field).to_be_enabled()
         expect(field).to_have_attribute("placeholder", "Ask anything")
-        # Agent's composer of a new chat, as an account has it (H3): its chip
+        # Agent's composer of a new chat, as an account has it: its chip
         # names the default model; choosing one asks for the login.
         expect(page.locator("#agentModelControls .model-picker-display")).to_be_visible()
         expect(page.locator(".consensus-model")).to_be_hidden()
@@ -43,7 +43,7 @@ def test_a_guest_picks_an_example_and_send_asks_for_the_sign_in(browser, phase4_
         gap_below_field = page.evaluate(NOTE_BELOW_FIELD)
 
         # Three curated questions per page load (starter_questions.py), in one
-        # row, without "Check an AI answer" since 2026-10-31.
+        # row, without "Check an AI answer".
         expect(starters.locator(".composer-starter")).to_have_count(3)
         expect(starters.locator('[data-starter="check"]')).to_have_count(0)
         tops = {round(box["y"]) for box in (starters.locator(".composer-starter").nth(i).bounding_box() for i in range(3))}
@@ -121,7 +121,7 @@ def test_an_account_with_chats_gets_predicted_questions_from_the_first_frame(bro
     try:
         chats = [{"id": f"chat_{index}", "query": f"Question {index}?", "title": f"Topic {index}"} for index in range(4)]
         # The examples belong to Agent's start screen; an account without
-        # Agent starts in Compare (2026-10-25).
+        # Agent starts in Compare.
         page.route("**/user_status", lambda route: _json(route, {"tier": "free", "is_pro": False, "agent_access": True}))
         page.route("**/agent/models", lambda route: _json(route, AGENT_CATALOG))
         page.route("**/bookmarks?*", lambda route: _json(route, {"bookmarks": chats, "next_cursor": None}))
@@ -130,8 +130,7 @@ def test_an_account_with_chats_gets_predicted_questions_from_the_first_frame(bro
         page.reload(wait_until="domcontentloaded")
 
         visible = page.locator("#composerStarters .composer-starter:visible")
-        # Two predicted and the check: three in one row (2026-10-31).
-        # Three predicted, in one row, without "Check an AI answer" (2026-10-31).
+        # Three predicted, in one row, without "Check an AI answer".
         expect(visible).to_have_text([item["label"] for item in PREDICTED])
         assert asked == ["POST"]
         page.locator('[data-starter="predicted"]').first.click()
@@ -232,7 +231,7 @@ AGENT_CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
 
 @pytest.mark.parametrize("chose", [None, "compare"])
 def test_a_guest_question_runs_after_the_sign_in_in_the_mode_the_guest_saw(browser, phase4_server, chose):
-    """Apple-Audit H3 (Max): a guest sees Agent, so the question sent as a
+    """A guest sees Agent, so the question sent as a
     guest goes out in Agent after the sign-in. A guest who chose Compare
     gets Compare, also from an account that kept Agent, and the account
     keeps that choice."""

@@ -38,7 +38,7 @@ def seed_reader(page, direct=False, *, insights=False, question=None, difference
                 consensus=None, answers=None):
     """A Compare result (direct) or a saved Consensus chat of two turns.
 
-    The browser runs no Consensus since 2026-10-25; a Consensus answer on
+    The browser runs no Consensus; a Consensus answer on
     screen is a saved chat, opened through the real bookmark path.
     ``answers`` replaces the newer turn's model answers ({provider: answer})."""
     page.route('**/api/topics/favicon?*', lambda route: route.fulfill(content_type='image/svg+xml', body=FAVICON))
@@ -141,7 +141,7 @@ def test_wide_reader_centering_and_source_cards(browser, phase4_server, width, t
         page.locator('#answerReaderSections [data-section="differences"]').click()
         reader_screenshot(page, f'finished-differences-{width}-{theme}')
         page.locator('#answerReaderExpand').click()
-        # Every finding starts folded (Max 2026-10-23); the weightiest opens on a click.
+        # Every finding starts folded; the weightiest opens on a click.
         first = page.locator('#answerReaderInspector .diff-card').first
         expect(first).not_to_have_attribute('open', '')
         first.locator('summary').click()
@@ -286,14 +286,14 @@ def test_differences_and_sources_share_turn_scoped_sidebar(browser, phase4_serve
         expect(page.locator('#answerReaderTitle')).to_have_text('Differences')
         cards = page.locator('#answerReaderInspector .diff-card')
         expect(cards).to_have_count(2)
-        # Every finding starts folded to one line (Max 2026-10-23).
+        # Every finding starts folded to one line.
         expect(cards.first).not_to_have_attribute('open','')
         expect(cards.nth(1)).not_to_have_attribute('open','')
         reader_screenshot(page, f'differences-overview-{width}-{theme}')
         cards.first.locator('summary').click()
         expect(cards.first).to_have_attribute('open','')
         expect(cards.nth(1)).not_to_have_attribute('open','')
-        # A saved answer starts no Resolve round (2026-10-25).
+        # A saved answer starts no Resolve round.
         expect(cards.first.locator('.diff-resolve-btn')).to_have_count(0)
         reader_screenshot(page, f'differences-detail-{width}-{theme}')
         expect(page.locator('#answerReaderInspector .diff-card').first).to_have_attribute('open','')
@@ -631,7 +631,7 @@ def test_demo_uses_all_daily_models_and_never_displays_spinner_markup(browser, p
         expect(page.locator('#modelAnswerReader')).to_be_visible(timeout=30000)
         # The first demo answer starts 500 ms after the question; check the
         # waiting state in one atomic poll instead of four round trips.
-        # Daily compares two models since 2026-11-01.
+        # Daily compares two models.
         page.wait_for_function("""() =>
           document.getElementById('answerReaderStatus')?.textContent.trim() === '0 of 2 ready'
           && document.querySelectorAll('.is-direct .answer-reader-answer').length === 2

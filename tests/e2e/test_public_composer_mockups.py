@@ -39,7 +39,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         page.goto(phase4_server + '/', wait_until='networkidle')
         page.evaluate('() => document.fonts.ready')
         # No chat model chip in the mockups, so no reasoning level either: in
-        # /app it stands beside the model's name (since 2026-10-31).
+        # /app it stands beside the model's name.
         expect(page.locator('.lp-composer-preview .lp-composer-models')).to_have_count(2)
         expect(page.locator('.lp-composer-preview svg path[d^="M12 5.5a3 3"]')).to_have_count(0)
         # The field opens the app with the caret in the composer; only the demo
@@ -56,7 +56,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         assert hit == 'heroAskField'
         previews = page.locator('.lp-composer-preview:has(.lp-composer-models)')
         # The hero and the demo's scene show Daily's two reviewers (Claude
-        # and DeepSeek since 2026-11-01, the app's default and the demo's lineup).
+        # and DeepSeek, the app's default and the demo's lineup).
         for preview, marks in zip(previews.all(), (2, 2), strict=True):
             field = preview.locator(':scope > :is(.lp-prompt, .lp-composer)')
             # The mode lives in the (+) menu, as in /app.
@@ -122,7 +122,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
 
 @pytest.mark.parametrize('width,dark', [(1440, False), (390, True)])
 def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
-    """Since 2026-10-31 the Agent has one mode: one AI does the work, the AIs
+    """The Agent has one mode: one AI does the work, the AIs
     you choose check it. The page says so and shows no score or judge."""
     context = browser.new_context(viewport={'width': width, 'height': 900}, reduced_motion='reduce')
     context.add_init_script("localStorage.setItem('theme', '" + ('dark' if dark else 'light') + "')")
@@ -139,8 +139,7 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         for gone in ('/100', 'agreement score', 'separate judge', 'Partial agreement', '6 AIs', '3 AIs',
                      'Live from real runs'):
             expect(main).not_to_contain_text(gone)
-        # The Model Pulse strip left the page on 2026-11-01; the benchmark
-        # came back on 2026-11-02 and says what it measures.
+        # No Model Pulse strip; the benchmark says what it measures.
         expect(page.locator('#benchmark')).to_contain_text('not the agent’s answers')
         expect(page.locator('#benchmark a[href="/benchmark"]')).to_have_text('See the full benchmark')
         expect(page.locator('.lp-live-pulse')).to_have_count(0)
@@ -153,8 +152,8 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         # Daily's two reviewers beside the clock, and the two AIs it asked.
         expect(run.locator('[data-reviewer]')).to_have_count(2)
         expect(run.locator('[data-run-count]')).to_have_text('2 answers')
-        # Since 2026-11-01 the run shows its search, its workspace and the
-        # files it shared, as the demo does.
+        # The run shows its search, its workspace and the files it shared,
+        # as the demo does.
         expect(run.locator('[data-run-item="search"]')).to_have_text(
             'Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de')
         expect(run.locator('[data-run-item="workspace"]')).to_have_text(
@@ -207,7 +206,7 @@ def test_landing_never_pans_sideways_while_scrolling(browser, phase4_server, wid
 @pytest.mark.parametrize('width', [1440, 900])
 def test_landing_bar_holds_still_when_it_marks_another_section(browser, phase4_server, width):
     # Semibold is wider: when the bar marked Watches instead of Product while
-    # scrolling, Product and Watches moved by up to 1.8 px. Every link now keeps
+    # scrolling, Product and Watches moved by up to 1.8 px. Every link keeps
     # the width of its semibold self.
     context = browser.new_context(viewport={'width': width, 'height': 900})
     context.route('https://cloud.umami.is/**', lambda route: route.fulfill(body=''))

@@ -1,6 +1,5 @@
-"""The workspace from the browser (routers/agent_workspace.py, since
-2026-10-27): the live view's WebSocket through to the relay on the
-workspace's VM (a browser VM of its own until 2026-11-04) over the
+"""The workspace from the browser (routers/agent_workspace.py): the live
+view's WebSocket through to the relay on the workspace's VM over the
 provider's exec API, the user's takeover and signing its browser out.
 The VMs are FakeVM (test_agent_vm.py), the exec socket a fake; nothing calls
 Sprites.
@@ -85,9 +84,8 @@ def test_the_view_signs_in_with_its_first_message_and_carries_vnc_both_ways(view
         banner = ws.receive_bytes()
         ws.send_bytes(b"RFB 003.008\n")
     assert states == ["connecting", "starting", "ready"] and banner == b"RFB 003.008\n"
-    # The relay on the provider's exec API (security audit 2026-10-27,
-    # finding 1): the token goes to api.sprites.dev only, never to an address
-    # of the VM; the view's bytes reach its stdin (0x00), which ends (0x04).
+    # The relay on the provider's exec API: the token goes to
+    # api.sprites.dev only, never to an address of the VM; the view's bytes reach its stdin (0x00), which ends (0x04).
     assert gateway.url.startswith(f"wss://api.sprites.dev/v1/sprites/{NAME}/exec?") and gateway.closed
     assert b"\x00RFB 003.008\n" in gateway.received and gateway.received[-1] == b"\x04"
     # The view opens the workspace even before a chat used it: recorded
@@ -100,7 +98,7 @@ def test_the_view_signs_in_with_its_first_message_and_carries_vnc_both_ways(view
 
 
 def test_the_views_start_says_about_when_it_ends_and_ends_with_ready(view_api, fake_vm):
-    """Since 2026-11-02 the view counts the browser's start down over its
+    """The view counts the browser's start down over its
     skeleton (start-progress.js): a VM made just now needs its setup
     (agent_workspace.START_SECONDS), and the relay's starting carries the
     estimate. Once ready, the start is over for everyone who waits."""
@@ -118,10 +116,10 @@ def test_the_views_start_says_about_when_it_ends_and_ends_with_ready(view_api, f
 
 
 def test_the_view_counts_down_while_the_server_wakes_the_vm(view_api, fake_vm, monkeypatch):
-    """Max, 2026-11-02: a VM that slept took its wake before the relay's
-    first state, and the view showed "Starting your workspace…" without a
-    bar. While opening takes longer than WAKE_FIRST_SECONDS, "waking"
-    carries the estimate, once per new one."""
+    """A VM that sleeps takes its wake before the relay's first state, and
+    the view would show "Starting your workspace…" without a bar. While
+    opening takes longer than WAKE_FIRST_SECONDS, "waking" carries the
+    estimate, once per new one."""
     import time as clock
     from datetime import datetime, timezone
     opened = workspace_router._open
@@ -145,8 +143,8 @@ def test_the_view_counts_down_while_the_server_wakes_the_vm(view_api, fake_vm, m
 
 
 def test_a_view_or_terminal_gone_before_its_first_state_ends_quietly():
-    """A tab closed while it connected (Prod 2026-11-02): the first state
-    found no socket, and the terminal's start ended in an error in the log."""
+    """A tab closed while it connects: the first state finds no socket, and
+    the terminal's start ends without an error in the log."""
     import asyncio
 
     class Gone:
@@ -160,7 +158,7 @@ def test_a_view_or_terminal_gone_before_its_first_state_ends_quietly():
     assert asyncio.run(workspace_router._state(Gone(RuntimeError("closed")), "connecting")) is False
 
 
-# --- The user's terminal in the workspace (since 2026-10-28) --------------------------
+# --- The user's terminal in the workspace ---------------------------------------------
 
 def terminal_api(view_api, monkeypatch, frames):
     """The view API with the terminal's exec socket: a fake TTY that sends
@@ -196,7 +194,7 @@ def test_the_terminal_is_a_shell_with_the_agents_rights_in_the_users_size(view_a
     assert argv[:5] == ("sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "--terminal")
     assert argv[-3:] == (agent_vm.HOME, "bash", "-l")
     # One terminal per account, apart from the browser's view (its time counts
-    # like the view's: _carry, test_an_account_has_one_view_and_...).
+    # like the view's: _carry, test_an_account_has_one_view_and_its_time_counts_as_vm_time).
     record = agent_workspace.record(store.db, UID)
     assert record["terminal"]["id"] and "view" not in record
 
@@ -245,9 +243,9 @@ def open_view(client):
 
 
 def test_an_account_has_one_view_and_its_time_counts_as_vm_time(view_api, fake_vm, monkeypatch):
-    """Security audit 2026-10-27: any number of views stayed open for an hour
-    each and kept the VM awake without counting. Now the newest view wins,
-    an older one ends with its reason, and the open time is VM time."""
+    """The newest view wins, an older one ends with its reason, and the open
+    time is VM time: else any number of views could stay open for an hour
+    each and keep the VM awake without counting."""
     client, store, _, _ = view_api
     monkeypatch.setattr(agent_workspace, "VIEW_CHECK_SECONDS", 0.05)
     ws = open_view(client)
@@ -364,11 +362,11 @@ def test_signing_the_browser_out_waits_for_the_agent_and_deletes_its_profile(vie
 
 
 def test_logging_out_everywhere_also_deletes_the_browser_vm_from_before_the_move(view_api, fake_vm):
-    """Review 2026-11-04: until 2026-11-04 the browser had a VM of its own
-    with its own profile. An account that had not opened its workspace since
-    the move (retire_old_browser) kept that VM and every sign-in in it after
-    "Log out everywhere"; one that only used the live view had no workspace
-    VM at all, and nothing ran."""
+    """Before it moved into the workspace the browser had a VM of its own
+    with its own profile. An account that has not opened its workspace since
+    the move (retire_old_browser) still has that VM and every sign-in in it:
+    "Log out everywhere" deletes it, also for one that only used the live
+    view and has no workspace VM, where nothing runs."""
     from app.services import agent_vm
     client, store, _, _ = view_api
     old = agent_vm.old_browser_name(UID)
@@ -441,14 +439,14 @@ def test_a_views_end_is_logged_with_its_code_and_counted_without_the_account(vie
     deadline = clock.monotonic() + 5
     # Until everything asserted below happened: the view's own line (a line of
     # another kind with "closed" in it ended the wait too early) and its end
-    # counter, which the server writes after the line (CI 2026-10-30, twice).
+    # counter, which the server writes after the line (twice on CI).
     def ended():
         return any("Agent workspace view closed" in record.getMessage() for record in caplog.records)             and any(outcome.startswith("end_") for _, outcome, _ in counted)
     while not ended() and clock.monotonic() < deadline:
         clock.sleep(0.02)
     # Only then the test client's session ends: leaving it cancels the
     # server's task wherever it is, and the line or the counter went missing
-    # (push CI 2026-10-31, 1 of 3 local runs).
+    # (on a push's CI, and in 1 of 3 local runs).
     ws.__exit__(None, None, None)
     [line] = [record.getMessage() for record in caplog.records if "Agent workspace view closed" in record.getMessage()]
     assert "code=1000 by=browser browser_code=1001" in line and UID not in line

@@ -863,7 +863,7 @@ def test_topic_templates_expose_timeline_evidence_follow_and_admin_controls():
              'id="topicFollowForm"', "check.history(", "check.models_compared("]
     positions = [detail.index(marker) for marker in order]
     assert positions == sorted(positions)
-    # The apparatus that hid the answer until 2026-10-15 stays gone.
+    # No apparatus hides the answer.
     for gone in ("topicStrip", "claim-lifeline", "topic-finding", "topic-deep", "watch-position"):
         assert gone not in detail
     assert "/static/js/check-page.js" in detail
@@ -1138,7 +1138,7 @@ def test_topic_page_leads_with_the_state_line_and_the_answer(monkeypatch):
     assert "Topic started" in text
     assert "<span>How the 3 models compared</span> &middot; <span>1 contradiction</span>" in text
     # Title and answer are English content: never translated, marked as English
-    # for a screen reader on a German page (a11y audit L1).
+    # for a screen reader on a German page.
     assert "<h1 id=\"shareQuestion\" class=\"wp-question share-question\" data-i18n-skip lang=\"en\">GPT-6</h1>" in text
     assert '<div class="share-md" data-i18n-skip lang="en">' in text
     assert "What is the current evidence about GPT-6?" in text

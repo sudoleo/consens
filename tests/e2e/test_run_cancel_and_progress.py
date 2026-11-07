@@ -4,10 +4,6 @@
    wird danach wieder zum Senden.
 2. Ein Klick waehrend der Antworten bricht genau diesen Lauf ab.
 3. Die Antworten des zweiten Laufs starten leer, nicht mit denen des ersten.
-
-Bis 2026-10-25 prueften diese Tests den Consensus-Durchlauf im Browser
-(Consensus/Differences nach den Antworten, Modellzeilen im gefuehrten Lauf);
-den startet der Browser nicht mehr.
 """
 
 import re

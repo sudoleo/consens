@@ -7,7 +7,7 @@ import { ROOT } from "./helpers/appWindow.mjs";
 
 /**
  * A deletion still offering its Undo when the reader logs out happens before
- * the account's token goes (Apple-Audit second review 8): chats did, a watch
+ * the account's token goes: chats did, a watch
  * kept running. performLogout is cut out of firebase.js (an ES module with
  * Firebase imports) and run against stand-ins, like the bookmark write queue.
  */

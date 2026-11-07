@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 /**
- * One notice system (Apple audit E3) and the app's own confirmation (E1):
+ * One notice system and the app's own confirmation:
  *   - App.toast queues instead of stacking, is read out (role=status), stays
  *     as long as it takes to read, keeps an error until it is closed, and
  *     pauses under the pointer;
- *   - App.undoNotice (chat deletion, Apple audit E2) is a thin forward: the
+ *   - App.undoNotice (chat deletion) is a thin forward: the
  *     way back first, the step itself only once the line ran out;
  *   - App.composerNotice says an input mistake at the composer;
  *   - App.confirm answers with a promise instead of window.confirm.
@@ -95,7 +95,7 @@ describe("App.toast", () => {
     expect(document.getElementById("appToasts").parentElement.id).toBe("settings");
   });
 
-  // Review 7: an Undo cut in while two lines were waiting; the one that
+  // An Undo cut in while two lines were waiting; the one that
   // stepped up behind it was never taken away again.
   it("lets an Undo cut in without leaving a line behind for good", () => {
     vi.useFakeTimers();
@@ -125,10 +125,10 @@ describe("App.toast", () => {
     expect(document.querySelectorAll("#appToasts .toast")).toHaveLength(0);
   });
 
-  // Apple audit E3 (review): an error stays until it is closed, also when
-  // another line comes. Review 2 N2: it does not block that line either
-  // ("Link copied" waited unseen until the error was closed): the line
-  // shows now for its full time, then the error is back and stays.
+  // An error stays until it is closed, also when another line comes. It
+  // does not block that line either ("Link copied" waited unseen until the
+  // error was closed): the line shows for its full time, then the error is
+  // back and stays.
   it("keeps an error when another line comes, which shows first", () => {
     vi.useFakeTimers();
     const { window, document } = boot();
@@ -184,7 +184,7 @@ describe("App.toast", () => {
     expect(line(document).dataset.tone).toBe("error");
   });
 
-  // Review (E3): a line on screen when a dialog opens goes into it, and back
+  // A line on screen when a dialog opens goes into it, and back
   // out when it closes; it never sits under the open dialog.
   it("follows a dialog that opens or closes while it is on screen", async () => {
     const { window, document } = boot('<dialog id="help" class="modal"><button>x</button></dialog>');
@@ -284,7 +284,7 @@ describe("App.composerNotice", () => {
 });
 
 describe("App.composerNotice while it folds", () => {
-  // Review 6: a second notice that came while the first was folding away
+  // A second notice that came while the first was folding away
   // was taken away with it a moment later.
   it("keeps a second notice that comes while the first one closes", () => {
     const animations = [];

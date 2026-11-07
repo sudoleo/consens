@@ -1,4 +1,4 @@
-"""The Agent's default chat model: Claude Sonnet 5.5 since 2026-10-07 (blind
+"""The Agent's default chat model: Claude Sonnet 5.5 (blind
 writer test), open to every tier as "Early access" and resolvable from the
 built-in catalogue even when OpenRouter's live catalogue is unreachable."""
 from app.services.llm import agent_model_metadata as metadata
@@ -65,7 +65,7 @@ def test_free_accounts_may_chat_with_the_default_but_not_compare_against_it(monk
 
 
 def test_a_migrated_id_does_not_open_its_premium_successor(monkeypatch):
-    # kimi-k3 became Kimi K3.1 Pro (2026-10-25): the old ID is no longer in
+    # kimi-k3 became Kimi K3.1 Pro: the old ID is no longer in
     # the premium list itself, but comparison_selection runs its Pro successor.
     import pytest
     from fastapi import HTTPException

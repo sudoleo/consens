@@ -63,9 +63,9 @@ describe("stream-reveal: the pace of a streamed answer", () => {
     expect(app.reveal.active()).toBe(true);
   });
 
-  // P6 (2026-11-05): the first word took the pace it had no history for yet,
-  // 25 ms a letter in the longest light, and from 2026-10-30 to 11-05 also
-  // waited 160 ms for the live lines above it (hold).
+  // The first word has no pace history: taking 25 ms a letter in the longest
+  // light, and held for the live lines above it, it was slow to come into
+  // view.
   it("brings the first word into view within a tenth of a second, then comes in word by word", () => {
     const { window, reveal, el, painted, paint, run } = boot();
     // A first bundle of a few words: a slow pace to begin with.
@@ -235,7 +235,7 @@ describe("stream-reveal: the fixed answer", () => {
     expect(lit()).toBe(0);
   });
 
-  // Bug hunt P6 (2026-11-05): back in a chat whose answer still streams,
+  // Back in a chat whose answer still streams,
   // while the last answer's review marks stood, the review took them off by
   // rendering the arrived text in full (agentReview.render → morphMarkdown).
   // The look counted that as someone else's answer and started from nothing:

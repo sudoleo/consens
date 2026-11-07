@@ -1,4 +1,4 @@
-"""String contracts for the source pills in chat prose (2026-10-01).
+"""String contracts for the source pills in chat prose.
 
 Behaviour is covered in tests/js/agent-citations.test.mjs and
 tests/js/source-teaser.test.mjs; these checks guard the parts a DOM test
@@ -23,7 +23,7 @@ def _rule(css: str, selector: str) -> str:
 
 def test_source_pill_sits_on_the_baseline_not_raised():
     css = read("static/css/source-pill.css")
-    # One pill for /app and the public pages (Apple-Audit G9).
+    # One pill for /app and the public pages.
     pill = _rule(css, '.src-ref,\n.source-link,\n.share-md a[href^="#src-"]')
     assert "vertical-align: baseline" in pill
     assert "vertical-align: super" not in pill

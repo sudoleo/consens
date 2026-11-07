@@ -362,7 +362,7 @@ def test_reasoning_is_open_to_free_accounts_and_accepts_the_legacy_alias(monkeyp
         headers={"X-API-Key": "cns_test", "Idempotency-Key": "reasoning-" + "-".join(sorted(body))},
         json={"question": "Why?", **body},
     )
-    # No Pro gate any more: a Free account gets the run.
+    # No Pro gate: a Free account gets the run.
     assert response.status_code == 202
     assert captured == [{"deep_think": True, "is_pro": False}]
     # Stored under the compatibility key, exposed under both names.

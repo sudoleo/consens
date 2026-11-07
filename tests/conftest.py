@@ -51,7 +51,7 @@ def _no_real_telegram_alerts(monkeypatch):
 @pytest.fixture(autouse=True)
 def _accounts_agreed_to_the_ai_providers(monkeypatch, request):
     """Every test account agreed once that its questions go to the AI
-    providers (security.has_ai_consent, since 2026-11-06). Unit fakes have
+    providers (security.has_ai_consent). Unit fakes have
     no users/{uid} document; without this seam every run would be refused.
     Tests of the consent itself are marked ``real_ai_consent``."""
     if request.node.get_closest_marker("real_ai_consent"):
@@ -63,7 +63,7 @@ def _accounts_agreed_to_the_ai_providers(monkeypatch, request):
 
 @pytest.fixture(autouse=True)
 def _consensus_watches_as_before(monkeypatch):
-    """The Consensus Watches are archived in production since 2026-11-03
+    """The Consensus Watches are archived in production
     (cfg.consensus_watches_archived); their pipeline's tests still run it.
     Tests of the archive turn it on themselves."""
     from app.core import config as cfg
@@ -101,7 +101,7 @@ def _no_workspace_provisioning(monkeypatch):
 def deepseek_default_agent(monkeypatch):
     """Agent mechanics tests (costs, replay, ordering) were written against
     DeepSeek V4.1 Flash as the chat model and keep it pinned; the real default
-    (Claude Sonnet 5.5 since 2026-10-07) has its own test in test_agent_default_model.py."""
+    (Claude Sonnet 5.5) has its own test in test_agent_default_model.py."""
     monkeypatch.setenv("AGENT_MODEL", "deepseek/deepseek-v4.1-flash")
 
 
@@ -112,7 +112,7 @@ FLAT_PRICE = "0.00000115"
 
 @pytest.fixture(autouse=True)
 def flat_agent_prices(request, monkeypatch):
-    """Since 2026-10-31 the daily account counts micro-euros. Agent tests run
+    """The daily account counts micro-euros. Agent tests run
     whole loops against the suite's allowance (250,000, see below) and were
     written in tokens: reservations shrinking to fit, waiting siblings,
     overdrafts, long runs. At one flat price for input, cached input, cache
@@ -191,7 +191,7 @@ def _default_token_account_tier(monkeypatch):
 
     Unit fakes have no users/{uid} document; without this seam every ledger
     read would wait for the closed loopback endpoint. Agent tests run as Pro
-    (Agent is Pro/Admin only); tier-specific tests patch these themselves.
+    (premium models are Pro/Admin only); tier-specific tests patch these themselves.
     Routes pass their already resolved tier, so only the role is read there.
     """
     from app.services import agent_budget_config, agent_quota
@@ -222,12 +222,12 @@ def _fresh_token_account_read_throttles():
 
 @pytest.fixture(autouse=True)
 def _neutral_user_memory_profile():
-    """Jeder authentifizierte /ask_* liest jetzt das User-Memory-Profil.
+    """Jeder authentifizierte /ask_* liest das User-Memory-Profil.
 
     Ohne diesen Ersatz liefe der Read gegen den geschlossenen Loopback-Endpunkt
     aus UNIT_TEST_MODE und jeder /ask_*-Test wartete das Firestore-Budget ab.
-    Der Default ist ein leeres Profil -- also exakt das Verhalten vor dem
-    Feature. tests/test_user_memory.py setzt bewusst eigene Stubs darueber."""
+    Der Default ist ein leeres Profil. tests/test_user_memory.py setzt bewusst
+    eigene Stubs darueber."""
     from app.api.routers import chat as chat_router
     from app.services.user_memory import empty_profile
 
@@ -243,7 +243,7 @@ def _neutral_user_memory_profile():
 
 @pytest.fixture(autouse=True)
 def _clear_rendered_topic_pages():
-    """Gerenderte Topic-Seiten und der Hub leben 120 s im Prozess (Audit I12)
+    """Gerenderte Topic-Seiten und der Hub leben 120 s im Prozess
     -- ohne Reset saehe ein Test die Seite aus dem Speicher des vorigen."""
     from app.api.routers import topics as topics_router
 

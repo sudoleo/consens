@@ -480,8 +480,8 @@ def test_a_citation_mark_without_a_web_url_leaves_nothing(monkeypatch):
 
 def test_a_url_mark_still_open_when_the_stream_ends_becomes_a_link(monkeypatch):
     """Luna ends an answer with a URL-only mark and no closing mark: held for
-    its end, it went with the stream and the answer lost its source
-    (review 2026-10-14)."""
+    its end, it would go with the stream and the answer would lose its
+    source."""
     from test_agent_loop import packet, usage
     completion, events = stream_answer(monkeypatch, [
         packet({"content": "Der Einlagesatz bleibt bei 2,00 %. "}),

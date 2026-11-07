@@ -1,9 +1,8 @@
 """compare_models and the paid-step accounting of a turn of the agent.
 
-Since 2026-10-31 the agent has one mode: it answers itself, compare_models
+The agent has one mode: it answers itself, compare_models
 asks the user's chosen models its question, and those models review its work
-and its answer (agent_audit.py, test_agent_audit.py). The judges of the
-former comparison mode are gone. Script/make_loop build such turns for many
+and its answer (agent_audit.py, test_agent_audit.py). Script/make_loop build such turns for many
 suites; their reviewers never start unless a test asks for them
 (agent_reviewers.py), so a script's replies stay the agent's and the
 comparison models'.
@@ -141,7 +140,7 @@ def test_only_the_chat_models_steps_share_the_chats_provider_session(store):
 
 @pytest.mark.parametrize("compares", [1, 2])
 def test_reviewed_exact_version_context_sources_and_all_usage(store, compares, monkeypatch):
-    """One mode since 2026-10-31: the agent compares, writes the answer, and
+    """One mode: the agent compares, writes the answer, and
     the user's models review that exact version. No judge runs, no
     differences stats and no Model Pulse vote come from an agent turn."""
     from app.services import differences_stats
@@ -554,7 +553,7 @@ def test_a_run_past_midnight_settles_the_old_day_and_reserves_on_the_new_one(sto
     assert store.claim(*args, loop.model, step="completion:1", run_token=loop.run_token, reservation=(50, priced(50)))
     previous = agent_quota.quota_ref(store.db, UID, '2026-09-19' + agent_quota.LEDGER_UNIT).get().to_dict()
     assert previous['reserved'] == 0 and previous['unknown'] == previous['unknown_released'] == 100
-    # Only the new step's own reservation: no hold moves along (since 2026-10-31).
+    # Only the new step's own reservation: no hold moves along.
     assert agent_quota.quota_ref(store.db, UID, "2026-09-20" + agent_quota.LEDGER_UNIT).get().to_dict()["reserved"] == 50
 
 
@@ -568,7 +567,7 @@ def test_disconnect_during_review_settles_every_paid_call_and_marks_stopped(stor
     source.close()
     saved = saved_turn(store, loop)
     # The answer stood before the review (agent_runs.hand_over): it stays the
-    # answer, only its review is cut off (since 2026-11-01).
+    # answer, only its review is cut off.
     assert saved["status"] == "completed" and saved["assistant_response"] == "The first option costs 100."
     assert "agent_failure" not in saved
     # A review still running when the run closes is marked stopped; one that
@@ -594,7 +593,7 @@ def test_later_run_failure_keeps_finished_review_result(store):
         list(loop.run())
     saved = saved_turn(store, loop)
     # Its answer stood before the review (hand_over): a failure after it
-    # leaves the turn answered (since 2026-11-01).
+    # leaves the turn answered.
     assert saved["status"] == "completed"
     assert saved["agent_review"]["status"] == "succeeded"
     assert [row["status"] for row in saved["agent_review"]["audit"]["reviewers"]] == ["completed", "completed"]
@@ -892,8 +891,8 @@ def test_the_comparison_models_are_told_an_agent_weighs_their_answers():
 
 
 def test_compare_models_offers_only_question_context_files_and_depth():
-    """No progress paragraph, model choice or memory field (since
-    2026-10-31): the schema refuses them."""
+    """No progress paragraph, model choice or memory field: the schema
+    refuses them."""
     from pydantic import ValidationError
     from app.services.agent_comparison import AuditCompareArgs
     assert set(AuditCompareArgs.model_json_schema()["properties"]) == {"question", "context", "file_ids", "depth"}
@@ -918,7 +917,7 @@ def test_a_failed_run_does_not_leave_a_model_shown_as_still_answering(store):
             base = type(super().factory())
             class Completion(base):
                 def stream(self, *, model, messages, **kwargs):
-                    # The step that writes the answer, and its one retry (since 2026-10-27).
+                    # The step that writes the answer, and its one retry.
                     if self.step_id in {"completion:1", "completion:2"}:
                         raise RuntimeError("answer step failed")
                     yield from super().stream(model=model, messages=messages, **kwargs)
@@ -943,8 +942,7 @@ def test_answer_allowance_respects_the_saved_review_size(store):
 
 @pytest.mark.parametrize("depth", ["quick", "full"])
 def test_every_comparison_waits_for_the_slowest_model(store, depth):
-    """Since 2026-10-31 always (until then the default of the setting "Answer
-    start"): the most careful model is often the slowest, and it is never cut
+    """The most careful model is often the slowest, and it is never cut
     while there is time."""
     import threading
     script = Straggler(release_on_answer=False, depth=depth)
@@ -1015,8 +1013,8 @@ def orchestrator_steps(script):
 
 
 def test_a_long_reply_after_own_research_is_the_answer(store):
-    """The agent's own research is the way to its answer (since 2026-10-31
-    for every account): a reply after its search stands and is reviewed, it
+    """The agent's own research is the way to its answer (for every
+    account): a reply after its search stands and is reviewed, it
     is not sent back for a comparison."""
     script = Plan([{"sources": FOUND, "text": LONG_REPLY}])
     loop = make_loop(store, script)
@@ -1056,8 +1054,7 @@ def test_a_greeting_is_sent_as_plain_text(store):
 
 
 def test_text_next_to_a_failed_comparison_is_never_the_answer(store):
-    """Review 2026-10-11/12, then [compare_models, answer] in one batch: an
-    answer written in the same step as a comparison that fails validation is
+    """An answer written in the same step as a comparison that fails validation is
     no answer. The text is taken back, the agent reads the error, compares,
     and writes the answer from the comparison."""
     script = Plan([{"text": LONG_REPLY, "tools": [compare(depth="deep")]}, {"tools": [compare()]}, {"text": ANSWER}])
@@ -1077,9 +1074,9 @@ def test_text_next_to_a_failed_comparison_is_never_the_answer(store):
 
 @pytest.mark.parametrize("outage", [1, 2])
 def test_a_database_outage_while_saving_a_failed_answer_does_not_stop_the_turn(store, monkeypatch, outage):
-    """Audit A12: a transient error while recording one model's failure
-    cancelled the whole turn ("This response was stopped"). Since 2026-10-22
-    the record can share its write with other sessions' updates (the run's
+    """A transient error while recording one model's failure must not cancel
+    the whole turn ("This response was stopped", audit 2026-10-05, A12). The
+    record can share its write with other sessions' updates (the run's
     journal batches them): an outage that outlasts the retry still costs no
     other answer, each update then tries on its own."""
     from google.api_core.exceptions import ServiceUnavailable
@@ -1104,9 +1101,9 @@ def test_a_database_outage_while_saving_a_failed_answer_does_not_stop_the_turn(s
 
 
 def test_a_comparison_with_one_answer_names_the_missing_one(store):
-    """Review 2026-10-12: one model failed and the answer rested on the
-    single other answer, unseen. The agent reads that only one answered and
-    which one is missing before it writes; the comparison is partial."""
+    """When one model fails, the answer must not rest on the single other
+    answer unseen: the agent reads that only one answered and which one is
+    missing before it writes; the comparison is partial."""
     script = Plan([{"tools": [compare()]}, {"text": ANSWER}], fail_model=True)
     loop = make_loop(store, script)
     list(loop.run())

@@ -30,7 +30,7 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert 'id="modelInsights"' not in template
     assert 'class="faq-answer faq-model-insights"' not in template
     assert 'id="leaderboardContent"' not in template
-    # The Model Pulse is an archive since 2026-10-31 (no judge's pick in the
+    # The Model Pulse is an archive (no judge's pick in the
     # one mode): the landing page links it neither from the hero nor from a
     # live strip; /model-pulse and the footer keep it.
     assert 'class="lp-hero-pulse"' not in landing
@@ -68,7 +68,7 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     assert 'id="modelSelectionArea" hidden' in template
     # The sidebar opens it at the chip, the composer's own controls as its anchor.
     assert "window.App.openModelPicker(consensusSelect, { anchor })" in app_init
-    # Die Modellwahl kennt keinen Follow-up-Choice-State mehr, der sie sperren
+    # Die Modellwahl kennt keinen Follow-up-Choice-State, der sie sperren
     # koennte: eine Folgefrage ist der Default, kein Zwischenschritt.
     assert "isAwaitingChoice" not in app_init
     assert "before changing models" not in app_init
@@ -76,7 +76,7 @@ def test_sidebar_navigation_is_self_contained_and_guest_login_is_top_only():
     # The solid button look is opt-in (`.btn`), so sidebar controls start
     # neutral instead of needing an entry in an exception chain.
     assert "button:not(" not in input_css
-    # One rule for the filled button and the older primaries (Apple-Audit G4).
+    # One rule for the filled button and the older primaries.
     assert ".button,\n.btn," in input_css
 
 
@@ -88,7 +88,7 @@ def test_public_navigation_is_compact_and_learning_links_live_in_footer():
     assert 'href="/ai-model-comparison">Model guide</a>' in footer
     assert 'href="/model-pulse">Model pulse</a>' in footer
     assert 'href="/about">About</a>' in footer
-    # One CTA in the bar on every public page (Apple-Audit I14); the share
+    # One CTA in the bar on every public page; the share
     # page keeps its own, contextual one in the content.
     assert ">Open app</a>" in nav and "public_nav_cta_label" not in nav
     assert "public_nav_cta" not in read("templates/share.html")
@@ -100,14 +100,14 @@ def test_demo_and_dedicated_model_pulse_match_the_product_contract():
     misc_css = read("static/css/components-misc.css")
     leaderboard = read("static/js/model-pulse.js")
     pulse_page = read("templates/model-pulse.html")
-    # The demo plays the Agent's one mode (2026-10-31): the reviewers' notes,
+    # The demo plays the Agent's one mode: the reviewers' notes,
     # no agreement score.
     assert 'mode: "audit"' in demo and "score:" not in demo
     # Zwei Beschriftungen, eine sichtbar: in der Knopfzeile des Composers ist
     # auf dem Handy kein Platz fuer den ganzen Satz, sonst faellt der
     # Senden-Knopf in eine zweite Zeile.
     # The chip stands in the template, before Send, so the first frame
-    # already decides between the two (app-bootstrap.js, Apple-Audit B1/B2).
+    # already decides between the two (app-bootstrap.js).
     template = read("templates/index.html")
     assert '<span class="demo-chip-label demo-chip-label-full">Try the demo</span>' in template
     assert '<span class="demo-chip-label demo-chip-label-short">Demo</span>' in template
@@ -117,7 +117,7 @@ def test_demo_and_dedicated_model_pulse_match_the_product_contract():
     assert 'container?.querySelector(".demo-chip")' in demo
     # The demo takes the send slot while it is offered (one filled control),
     # and leaves the flow entirely once the guest types: it fades out where it
-    # stood while Send fades in (Apple-Audit B13).
+    # stood while Send fades in.
     assert "> .demo-chip:not([hidden], .is-leaving)) > #sendButton[data-icon=\"send\"]" in misc_css
     assert ".chat-input-container.has-question-input .demo-chip:not(.is-leaving)" in misc_css
     assert ".demo-chip.is-leaving {" in misc_css
@@ -225,12 +225,11 @@ def test_consensus_run_requires_two_selected_models_before_starting():
 
 
 def test_cross_check_greeting_speaks_in_the_app_and_is_absent_from_the_landing_mock():
-    """Die Begruessung lebt nur noch in der App.
+    """Die Begruessung lebt nur in der App.
 
-    Seit dem Feinschliff (2026-10-02) spricht sie in der Stimme der Landing-H1
-    (halbfett, eng gesetzt) statt in leichter Schrift.
+    Sie spricht in der Stimme der Landing-H1 (halbfett, eng gesetzt).
 
-    Die Landing-Szene 01 hat sie am 04.09.2026 verloren: das Feld tippt sich
+    Die Landing-Szene 01 zeigt sie nicht: das Feld tippt sich
     eine echte Frage selbst hinein und sagt damit dasselbe, ohne eine Zeile
     Text dafuer auszugeben. Der Test haelt beide Haelften fest - die
     gesetzte Schrift in der App, und dass das Mock die Zeile nicht wieder einsammelt.
@@ -362,7 +361,7 @@ def test_hero_greeting_requires_agent_mode_and_available_space():
     )
     assert "@media (min-width: 680px) and (min-height: 620px)" in input_css
     # The start screen alone never shows it; a rule for every hero only
-    # paces its fade back in (Apple-Audit C2).
+    # paces its fade back in.
     for rule in re.findall(r"body\.is-hero \.hero-greeting\s*\{([^}]*)\}", input_css):
         assert [line.split(":")[0].strip() for line in rule.split(";") if line.strip()] == ["transition"], rule
     assert "body.is-hero:not(.agent-mode-enabled) .hero-greeting" not in input_css
@@ -414,7 +413,7 @@ def test_every_settings_category_is_a_tab_panel_with_a_nav_item():
     assert 'role="tablist"' in template
 
     # Der Account-Reiter startet versteckt; firebase.js gibt ihn frei. Das
-    # Panel selbst traegt kein u-display-none mehr — sonst kaempften der
+    # Panel selbst traegt kein u-display-none — sonst kaempften der
     # Tab-Controller und der Auth-Code um dieselbe Sichtbarkeit.
     account = template.index('id="settingsTabAccount"')
     assert "hidden>Account<" in template[account:account + 400]
@@ -424,9 +423,8 @@ def test_every_settings_category_is_a_tab_panel_with_a_nav_item():
 def test_settings_tabs_read_as_navigation_not_as_buttons():
     """Die Reiter rendern als Navigation, nicht als gefuellte Aktionsknoepfe.
 
-    Frueher musste dafuer jede Klasse in einer globalen `button:not(...)`-Kette
-    stehen. Seit der Button-Stil opt-in ist (`.btn`), darf es diese Kette nicht
-    mehr geben, und die Reiter tragen `.btn` nicht.
+    Der Button-Stil ist opt-in (`.btn`): eine globale `button:not(...)`-Kette
+    darf es nicht geben, und die Reiter tragen `.btn` nicht.
     """
     input_css = read("static/css/components-input.css")
     modals_css = read("static/css/components-modals.css")
@@ -442,7 +440,7 @@ def test_settings_tabs_read_as_navigation_not_as_buttons():
 
     # Die Tints sind die Ink-Waschungen --hover/--selected (foundation.css):
     # im Dark Mode ist `--raise` exakt der Modalhintergrund, ein Hover darauf
-    # waere unsichtbar (Apple-Audit G5).
+    # waere unsichtbar.
     assert "background: var(--hover);" in nav_item
     assert "background: var(--selected);" in nav_item
     assert "var(--raise)" not in nav_item
@@ -464,10 +462,9 @@ def test_settings_visibility_is_owned_by_the_tab_controller():
 
 
 def test_the_agent_is_the_first_settings_category_and_memory_the_second():
-    """Die Reihenfolge ist die Aussage: zuerst, wie der Agent arbeitet (Max,
-    2026-11-02: Einstellungen auf den Agenten ausgerichtet, Runs, Agent · Beta
-    und Model behavior in einem Reiter), dann was er ueber dich weiss, Konto
-    zuletzt. Was nur Compare betrifft, steht unter seinem eigenen Titel."""
+    """Die Reihenfolge ist die Aussage: zuerst, wie der Agent arbeitet (Max:
+    Einstellungen auf den Agenten ausgerichtet), dann was er ueber dich weiss,
+    Konto zuletzt. Was nur Compare betrifft, steht unter seinem eigenen Titel."""
     template = read("templates/index.html")
 
     # Ueber die Heading-IDs, nicht ueber die Beschriftung: ">Agent<" steht
@@ -491,7 +488,7 @@ def test_the_agent_is_the_first_settings_category_and_memory_the_second():
     agent_tab = template.index('id="settingsTabAgent"')
     assert "hidden>Agent<" not in template[agent_tab:agent_tab + 300]
 
-    # The Agent is no Beta any more (Max, 2026-11-02).
+    # The Agent carries no Beta label (Max).
     settings = template[template.index('class="settings-layout"'):template.index('id="helpModal"')]
     assert "Beta" not in settings
     agent_panel = settings[settings.index('id="agentSettingsSection"'):settings.index('id="memorySettingsSection"')]
@@ -558,8 +555,8 @@ def test_the_memory_profile_is_only_fetched_when_the_settings_open():
     # Geladen wird nur bei offenem Fenster oder beim Logout (dann ohne Netz).
     assert "if (settingsModalIsOpen() || !uid) {" in listener
     assert "state.saved = null;" in listener
-    # Der einzige Auslöser fuer einen Read im Normalfall. Seit 2026-10-08 liest
-    # jedes Oeffnen frisch (ein anderer Tab oder der Hinweis unter einer
+    # Der einzige Auslöser fuer einen Read im Normalfall. Jedes Oeffnen liest
+    # frisch (ein anderer Tab oder der Hinweis unter einer
     # Antwort kann Schalter und Revision geaendert haben); ein Entwurf bleibt.
     assert ('getElementById("editSystemPromptBtn")?.addEventListener("click", '
             '() => load(true, { keepDraft: true, quiet: true }))') in memory
@@ -582,7 +579,7 @@ def test_memory_selection_has_explicit_add_and_correct_flows():
     assert 'state.intent === "add" ? state.selection.text.slice(0, 500) : ""' in memory_edit
     assert "Firma" not in memory_edit
     assert "For example: I live in Hanover." in memory_edit
-    # Der Composer-Shortcut ("Save to Memory instead of asking") ist entfallen:
+    # Kein Composer-Shortcut ("Save to Memory instead of asking"):
     # Memory-Aktionen brauchen eine markierte Aussage, sonst nichts.
     assert "rememberDraftButton" not in memory_edit
     assert "rememberDraftButton" not in index
@@ -610,7 +607,7 @@ def test_selecting_answer_text_offers_asking_about_it():
     assert position("composer-quote.js") >= 0
 
     # Das Zitat ist beim Senden Teil der Frage -- genau ein Text fuer Thread,
-    # Bookmark, Chat-Kontext und die sechs Modelle. Die getippte Frage steht
+    # Bookmark, Chat-Kontext und die Modelle. Die getippte Frage steht
     # vorn: Thread-Kopf, Seitentitel und Bookmark-Name zeigen den Anfang
     # dieser Zeichenkette als reinen Text.
     assert "`${typed}${FORMAT.typedMarker}${state.text}${FORMAT.close}`" in quote

@@ -151,8 +151,7 @@ def test_reaped_session_preserves_confirmed_duration_without_growing_after_reloa
 def test_a_reviewers_call_counts_what_it_cost_like_a_comparison_answer(store):
     """A reviewer's reservation, its charge and its receipt are those of any
     other session, a comparison answer's here; its receipt keeps the
-    session's kind. Until 2026-10-31 a reviewer's call counted at half weight
-    (A-K2), cache reads at a quarter."""
+    session's kind."""
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))

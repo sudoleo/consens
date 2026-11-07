@@ -63,7 +63,7 @@ def test_gmail_draft_revision_document_download_and_restoration(browser,phase4_s
         expect(consent).to_be_hidden()
         # Send once the first run has ended and nothing holds the message back:
         # the revision is a new message, never steering or a refusal. Nightly
-        # runs kept showing only v1 here (2026-10-30, 2026-11-01).
+        # runs kept showing only v1 here.
         page.wait_for_function('() => !window.isRunActive() && !App.agentChat.sendBlocker()')
         with page.expect_request(lambda r: r.url.endswith('/agent') and r.method == 'POST'):
             page.locator('#sendButton').click()

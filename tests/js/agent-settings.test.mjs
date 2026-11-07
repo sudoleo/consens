@@ -87,7 +87,7 @@ describe("Agent settings card", () => {
       { settings: "agent_model,consensus_highlights", failed: 0 });
   });
 
-  // A proposal saved before 2026-10-31 may name the Agent's comparison
+  // An older proposal may name the Agent's comparison
   // options (agent_preferences, gone with its comparison mode): the card
   // leaves them out, and with nothing else it does not show.
   it("leaves out the retired Agent choices of an older proposal", () => {

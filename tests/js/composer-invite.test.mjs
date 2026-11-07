@@ -107,7 +107,7 @@ describe("the send after sign-in", () => {
 
 
   // A guest sees Agent; one who chose Consensus or Compare sends in that
-  // mode, also into an account that kept another one (H3). The choice is
+  // mode, also into an account that kept another one. The choice is
   // made before the send waits for the session to be able to run it.
   it("runs the question in the mode the guest chose, and leaves an unchosen one to the account", async () => {
     const pending = { at: Date.now(), source: "typed", text: "Do I charge VAT?", mode: "consensus" };

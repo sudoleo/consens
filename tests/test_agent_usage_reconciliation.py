@@ -92,8 +92,7 @@ def test_reconciliation_replaces_the_estimate_exactly_once(store):
 
 
 def test_a_reviewers_estimate_is_reconciled_at_its_cost(store):
-    """Since 2026-10-31 a reviewer's call counts what it cost, like any other
-    (until then at half weight, A-K2)."""
+    """A reviewer's call counts what it cost, like any other."""
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(),
@@ -169,7 +168,7 @@ def test_generation_stats_charge_their_total_cost_and_reject_garbage():
 
 
 def test_every_call_counts_what_it_cost_in_the_account():
-    """Max, 2026-10-31: the account counts money. A call takes its cost
+    """The account counts money. A call takes its cost
     (cache discount, reasoning and search included) in micro-euros, whatever
     kind it is; no weights. A cost that is not final is no measurement."""
     usage = {"input_tokens": 10_000, "output_tokens": 500, "cached_input_tokens": 8_000, "cache_write_tokens": 1_000,
@@ -229,10 +228,10 @@ def test_a_settled_empty_yesterday_is_not_read_on_every_snapshot(store, monkeypa
 
 
 def test_only_estimates_that_can_still_be_measured_have_snapshots_look_for_it(store, monkeypatch):
-    """Bug hunt 2026-11-02: an estimate kept as final (no generation id, or
-    no measurement after MAX_ATTEMPTS) stayed in ``estimated`` for good, and
-    every snapshot of the day (the 60-s poll of an open chat) scheduled a
-    reconciliation pass: a Firestore query a minute, all day."""
+    """An estimate kept as final (no generation id, or no measurement after
+    MAX_ATTEMPTS) must not stay in ``estimated`` for good: every snapshot of
+    the day (the 60-s poll of an open chat) would schedule a reconciliation
+    pass, a Firestore query a minute, all day."""
     scheduled = []
     monkeypatch.setattr(reconciliation, "schedule", lambda db, uid: scheduled.append(uid) or True)
     unknown_call(store, generation_id="")

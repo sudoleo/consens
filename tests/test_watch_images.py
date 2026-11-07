@@ -1,9 +1,9 @@
 """Watch-Bilder: ein echtes Bild aus den Quellen -- oder keins.
 
-Produktentscheidung 2026-10-10/11: kein KI-Bild, kein Stockfoto; der
-Gegenstand selbst, sonst das Vorschaubild eines passenden Artikels. Seit
-2026-10-12 sonst die Logos der Seiten, um die es geht (nie die einer Seite,
-die nur berichtet), und ohne Bild ein Symbol aus fester Liste.
+Produktentscheidung: kein KI-Bild, kein Stockfoto; der Gegenstand selbst,
+sonst das Vorschaubild eines passenden Artikels, sonst die Logos der Seiten,
+um die es geht (nie die einer Seite, die nur berichtet), und ohne Bild ein
+Symbol aus fester Liste.
 """
 
 import asyncio
@@ -1051,7 +1051,7 @@ class JudgeTests(unittest.TestCase):
 class SymbolTests(unittest.TestCase):
     def test_every_symbol_has_a_drawing_and_every_drawing_a_symbol(self):
         # Topic pages draw them without script; the app's Watches page shows
-        # an Agent Watch's picture or the eye since 2026-11-03.
+        # an Agent Watch's picture or the eye.
         self.assertEqual(list(watch_symbols.SYMBOL_PATHS), list(watch_symbols.SYMBOLS))
         self.assertIn(watch_symbols.DEFAULT_SYMBOL, watch_symbols.SYMBOLS)
         self.assertEqual(watch_symbols.clean_symbol("nope"), watch_symbols.DEFAULT_SYMBOL)

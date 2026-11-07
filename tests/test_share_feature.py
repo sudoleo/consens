@@ -1251,8 +1251,8 @@ class ModerationAndCleanupTests(unittest.TestCase):
 
     def test_hub_watch_rows_carry_the_state_their_page_leads_with(self):
         """/questions said "39/100 · 5 models · Tracked" for Watches whose
-        pages said "Unchanged since ..." -- and all of them were paused
-        (Apple-Audit L2, L3). A Watch row now carries its page's headline."""
+        pages said "Unchanged since ..." -- and all of them were paused.
+        A Watch row carries its page's headline."""
         def point(day, score, run_id, **extra):
             return {"run_id": run_id, "ts": datetime(2026, 9, day, tzinfo=timezone.utc),
                     "agreement_score": score, "changed": False, "severity": "", **extra}
@@ -1533,7 +1533,7 @@ class SharePageRouteTests(unittest.TestCase):
     def test_question_and_answer_carry_their_language_and_stay_untranslated(self):
         # A German page translates the frame; the English answer keeps its
         # words and says it is English, so a screen reader switches voice
-        # (a11y audit L1). Too little text to tell names no language.
+        # Too little text to tell names no language.
         doc = self._share_doc(
             question="Is it safe to take ibuprofen with blood pressure medication?",
             consensus_md="It is usually fine for a few days, but it can raise blood pressure and it"
@@ -1643,7 +1643,7 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn("across 3 models", body)
         self.assertIn("Worth verifying: Offizielle Quelle prüfen.", body)
         # The app's card: the sides under one another, the other one after
-        # "In contrast" (no more "vs", 2026-10-23).
+        # "In contrast" (no "vs").
         self.assertIn('<div class="diff-position-lead">In contrast</div>', body)
         self.assertNotIn('diff-versus-mark', body)
         self.assertIn("Report this page", body)
@@ -1813,7 +1813,7 @@ class SharePageRouteTests(unittest.TestCase):
 
     def test_a_rephrased_check_reads_as_stable_on_the_watch_page(self):
         """Every completed check used to raise the change badge, because the
-        Judge flags a rewritten qualification as `changed` too. The badge now
+        Judge flags a rewritten qualification as `changed` too. The badge
         follows the grade, and the Judge's sentence moves into a quiet line."""
         doc = self._share_doc(
             consensus_md="Original immutable answer.",
@@ -2125,8 +2125,7 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertIn('rel="canonical" href="https://www.consens.io/questions"', body)
         self.assertIn('"@type": "CollectionPage"', body)
         # Only a Watch that is still checked counts as tracked, and a Watch
-        # row says what its page leads with instead of an old score
-        # (Apple-Audit L2, L3).
+        # row says what its page leads with instead of a score.
         self.assertIn("1 tracked over time", body)
         self.assertNotIn("Tracked<", body)
         self.assertIn("Unchanged since Sep 24", body)
@@ -2479,7 +2478,7 @@ class ApiRunPublishingServiceTests(unittest.TestCase):
         self.assertFalse(self.db.stores[snapshots.SHARES_COLLECTION])
 
     def test_api_runs_never_receive_publisher_lineage(self):
-        # The scheduled publisher is gone; a stale publisher_mode flag on an
+        # There is no scheduled publisher; a stale publisher_mode flag on an
         # old run must not mark a new page as automation content.
         run = self._run(request={"question": "Why?", "publisher_mode": True})
         published = snapshots.create_share_from_api_run(

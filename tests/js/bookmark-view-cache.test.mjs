@@ -10,9 +10,8 @@ import { ROOT } from "./helpers/appWindow.mjs";
  * A chat seen a moment ago is back at once and checked in the background
  * (firebase.js openBookmark, bookmarkViewCache). A check whose transcript
  * request fails says nothing new about the chat: the full view on screen
- * stays (bug hunt 2026-11-04: the fallback without the transcript was drawn
- * over it, the earlier messages vanished and a popup said they could not be
- * displayed).
+ * stays (the fallback without the transcript, drawn over it, made the earlier
+ * messages vanish and a popup say they could not be displayed).
  */
 const FIREBASE = readFileSync(path.join(ROOT, "static/firebase.js"), "utf8");
 

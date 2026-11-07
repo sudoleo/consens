@@ -162,7 +162,7 @@ def test_the_answer_is_written_from_the_actual_document_results(setup):
 
 def test_the_file_list_travels_with_the_message_not_the_system_prompt(setup):
     """The chat's file list changes with every upload. In the system prompt it
-    rewrote the prompt cache of everything after it, the history included;
+    would rewrite the prompt cache of everything after it, the history included;
     in the message's app context the system prompt stays the same."""
     import base64
     from test_agent_runs import UID, pending
@@ -280,9 +280,9 @@ def test_document_schema_is_flat_and_refusals_name_the_section_fields():
     text = str(refused.value)
     assert "sections.0.blocks: Extra inputs are not permitted (allowed here: heading, paragraphs, table)" in text
     assert "sections.1.text: Extra inputs are not permitted" in text and text.count("allowed here") == 1
-    # Ten slides with "bullets" are one problem: the cut of a tool error
-    # (500 characters until then) dropped "subtitle" and the sources
-    # behind them (a deck about cats, same day).
+    # Ten slides with "bullets" are one problem: listed one by one, they
+    # would push "subtitle" and the sources behind them past the cut of a
+    # tool error.
     slides = [{"heading": f"Slide {i}", "bullets": ["a"]} for i in range(10)]
     with pytest.raises(ValueError) as refused:
         registry.validate(call({"title": "Cats", "subtitle": "x", "sections": slides,
@@ -290,7 +290,7 @@ def test_document_schema_is_flat_and_refusals_name_the_section_fields():
     text = str(refused.value)
     assert "sections.0.bullets: Extra inputs are not permitted (allowed here: heading, paragraphs, table) (and 9 more like it)" in text
     assert "allowed here: label, file_id, locator, url" in text and "allowed here: title, summary, sections" in text
-    # The problems stay short; the form after them (since 2026-11-02) fits the
+    # The problems stay short; the form after them fits the
     # 2000-character cut of a tool error with room to spare.
     problems, form = text.split(". Expected arguments: ")
     assert len(problems) < 600 and len(text) < 1000 and form.startswith("{document: {title: string")
@@ -344,9 +344,8 @@ def test_file_list_is_chronological_and_carries_document_titles(setup):
 
 
 def test_create_document_names_no_model_comparisons():
-    """Opus in audit mode, 2026-10-28: create_document asked for model
-    comparisons first, a rule it could not follow. The description says what
-    the tool does (comparison mode kept the rule until 2026-10-31)."""
+    """The description says what the tool does: a rule to ask for model
+    comparisons first was one Opus could not follow."""
     from app.services.agent_documents import DocumentTools
     tools = object.__new__(DocumentTools)
     description = next(tool.description for tool in tools.tools() if tool.name == "create_document")

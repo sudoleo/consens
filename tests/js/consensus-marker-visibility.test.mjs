@@ -267,7 +267,7 @@ describe("sentence highlight filters", () => {
 
 describe("highlight defaults", () => {
   it("defaults new browsers to disagreements only while preserving an explicit choice", () => {
-    // Since 2026-10-19 a mark means "the models disagree here": red, amber
+    // A mark means "the models disagree here": red, amber
     // and every contradiction the footer counts, the minor one included;
     // agreement and emphasis stay unmarked until the reader picks "All checks".
     const fresh=boot(); renderMixed(fresh);
@@ -282,7 +282,7 @@ describe("highlight defaults", () => {
 });
 
 describe("lines under the marks", () => {
-  // Account setting mark_lines (2026-10-25): a line whose shape names the
+  // Account setting mark_lines: a line whose shape names the
   // verdict, for readers who cannot tell the tints apart. The lines are CSS
   // (components-consensus-visuals.css); this checks the switch and the class.
   it("are off until switched on, follow the account, and keep the marks themselves", () => {

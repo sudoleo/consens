@@ -1,7 +1,7 @@
 import {describe, it, expect} from 'vitest';
 import {loadScripts} from './helpers/appWindow.mjs';
 
-// Apple audit F6: what a pill announces can be opened, on every device.
+// What a pill announces can be opened, on every device.
 const sources = [
   {id: 'S1', title: 'UCI regulations', url: 'https://www.uci.org/rules', snippet: 'Article 2.3'},
   {id: 'S2', title: 'Analysis', url: 'https://example.org/analysis'},
@@ -63,7 +63,7 @@ describe('source sheet', () => {
 });
 
 describe('source sheet in the answer reader', () => {
-  // Review 5: the reader is a modal <dialog>; a list on <body> lay under it,
+  // The reader is a modal <dialog>; a list on <body> lay under it,
   // inert and out of sight, so a tap on a pill there did nothing at all.
   it('opens inside the open dialog of its pill, and on the page again for a pill there', () => {
     const env = boot('Monaco [S1][S2][S3].', {markup:

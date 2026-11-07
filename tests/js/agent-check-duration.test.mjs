@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// Two differences passes (and Coverage windows) run side by side since
-// 2026-10-07: the Answer check lasts from its first start to its last end.
+// Two differences passes (and Coverage windows) run side by side: the
+// Answer check lasts from its first start to its last end.
 const chatId = "c".repeat(32), turnId = "d".repeat(32);
 const start = "2026-10-07T12:00:00.000Z";
 const judge = (id, title, startedAt, ms) => ({ id: id.repeat(32), seq: id.charCodeAt(0), status: "completed", kind: "judge", title,

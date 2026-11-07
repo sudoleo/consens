@@ -1,6 +1,6 @@
 /**
  * The workspace browser's watch on the page for every action (browser.py
- * HIT_JS and QUIET_JS, since 2026-10-30, runtime audit T4 and L2): it says
+ * HIT_JS and QUIET_JS): it says
  * how long the page has not changed since the action, so the answer comes
  * once the action's effect is there (a menu a timer opens), and the changes
  * near the element a ref names come first.

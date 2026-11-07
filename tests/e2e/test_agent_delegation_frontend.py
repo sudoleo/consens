@@ -51,7 +51,7 @@ def test_agent_live_counter_uses_streamed_progress_and_stops_animation(browser, 
         }""", {"chat": chat, "turn": turn, "agent": agent})
         page.locator('#questionInput').fill('Check sources')
         page.locator('#sendButton').click()
-        # The panel opens only on request, on every width (2026-10-31, Max);
+        # The panel opens only on request, on every width;
         # on a narrow screen as a sheet with its scrim.
         expect(page.locator('.agent-sidebar-toggle')).to_be_visible()
         expect(page.locator('#agentSidebar')).to_be_hidden()

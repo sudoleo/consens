@@ -1,7 +1,7 @@
 """Buchstabenwolken (letter-clouds.js): nur auf dem leeren Startbildschirm.
 
 Sie laufen im Hero, eine freie Stelle löst eine Welle aus, mit der ersten
-Frage blenden sie aus und die Schleife hält an; „New comparison“ holt sie zurück.
+Frage blenden sie aus und die Schleife hält an; „New chat“ holt sie zurück.
 """
 
 FREE_POINT = """() => {

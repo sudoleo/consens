@@ -205,7 +205,7 @@ class Sized(Fetching):
 
 
 def test_a_download_larger_than_the_server_keeps_is_never_read_into_memory(tmp_path, monkeypatch):
-    """Bug hunt P39: download read the whole file through Playwright's
+    """Download once read the whole file through Playwright's
     request API into the VM's memory (the driver, then base64 into Python)
     and only the server dropped it at 25 MB: a file of some GB took the
     browser down for the message. A HEAD first: what declares more than the
@@ -350,7 +350,7 @@ def test_a_ref_no_element_has_any_more_brings_the_page_as_it_is_now(tmp_path, mo
         "heading \"Cart\"\n[e40] button \"Pay now\"")
     # It is the agent's look at the page now: the next action's answer goes from it.
     assert browser.remembered(page) == page.lines
-    # To the server a refusal and a failure as before, now with the page.
+    # To the server a refusal and a failure, each with the page.
     for error in (refused, browser.on_failure(tabs(page), page, "click", RuntimeError(INTERCEPTED))):
         monkeypatch.setattr(browser, "run", lambda request, error=error: (_ for _ in ()).throw(error))
         answer = browser.answer_for({"action": "click", "ref": "e12"})
@@ -480,8 +480,8 @@ def test_a_navigation_loads_as_before(monkeypatch):
     assert settle(browser, clock, page) == 0.4 and page.waited == ["domcontentloaded", "networkidle"]
     # A form sent with Enter answers with a redirect: its request finishes
     # (302) and the next one asks for the new document, which commits later.
-    # Before, the finished 302 counted as the navigation's end, and the new
-    # page was read before it loaded (half its elements, bug hunt 2026-10-31).
+    # Counting the finished 302 as the navigation's end once read the new
+    # page before it loaded (half its elements).
     page = Settling(browser, clock)
     posted = Request("document", navigation=True, frame=page.main_frame)
     redirected = Request("document", navigation=True, frame=page.main_frame)
@@ -748,7 +748,7 @@ def test_lines_change_by_their_refs():
     assert browser.changes(['heading "A"', 'heading "A"'], ['heading "A"']) == [("-", 'heading "A"')]
 
 
-# read's frames and what lies over the page (4c8c2b8d): read lists every
+# read's frames and what lies over the page: read lists every
 # frame's elements, the read after an action only those of a frame over the page.
 CONSENT = ["(over the page:)", "frame https://consent.example/c, its elements:", '  [e50] button "Accept all"',
            '  [e51] button "Settings"', "(the page under it:)"]
@@ -834,7 +834,7 @@ class ConsentFrame:
 
 
 def test_an_action_on_a_ref_in_a_frame_is_watched_in_that_frame(browser, tmp_path, monkeypatch):
-    """A consent dialog in a frame (4c8c2b8d): its changes are no change of
+    """A consent dialog in a frame: its changes are no change of
     the page's own document, which said "No element of the page changed
     after it." while the dialog had opened its settings."""
     monkeypatch.setattr(browser, "FRAME_REFS", str(tmp_path / "frame-refs.json"))
@@ -872,7 +872,7 @@ def test_after_an_action_the_diff_holds_to_the_frames_read_listed(browser):
 
 
 def test_only_the_elements_an_answer_shows_take_their_key(browser, tmp_path, monkeypatch):
-    """Bug hunt 2026-11-05: every snapshot wrote the key of every element,
+    """Every snapshot once wrote the key of every element,
     also of those out of the part the answer showed (READ_CHARS from an
     offset, AFTER_ACTION_CHARS, only what changed). A row the list drew
     another chat into out of that part took the other chat as its key, and

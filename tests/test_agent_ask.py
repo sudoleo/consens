@@ -1,4 +1,4 @@
-"""ask_user and the takeover wait (agent_ask.py, since 2026-10-29): the run
+"""ask_user and the takeover wait (agent_ask.py): the run
 pauses on the user's own card. Handing the browser back answers a browser
 card, allow and deny a confirmation, a message on the card is the user's
 answer; the agent hears only that. While the user took over the browser on
@@ -189,9 +189,9 @@ CHOICE = "Gegen einen Menschen oder gegen einen Bot?"
 
 
 def test_a_choice_card_returns_the_answer_the_user_picked(store, monkeypatch):
-    """2026-10-30, chess.com: DeepSeek asked "against a person or a bot?"
-    on a card that said Allow or Don't allow, and guessed the person from
-    "allowed". Now its answers are the card's buttons, and it hears the pick."""
+    """On chess.com DeepSeek asked "against a person or a bot?" on a card
+    that said Allow or Don't allow, and guessed the person from "allowed".
+    A choice card's answers are its buttons, and the agent hears the pick."""
     browser = Browser(monkeypatch)
     script, loop, ran = asking(store, args={"request": CHOICE, "choices": ["Mensch", " Bot "]})
 
@@ -222,9 +222,9 @@ def test_a_choice_card_returns_the_answer_the_user_picked(store, monkeypatch):
 
 
 def test_a_pick_reaches_the_agent_also_when_the_user_writes_on_a_halt_behind_the_card(store, monkeypatch):
-    """Review 2026-10-30: a reviewer's halt waited behind the choice card,
-    the user picked, then wrote on the halt; the agent heard only of the
-    message, never of the pick (the activity and the log said it)."""
+    """A reviewer's halt waits behind the choice card, the user picks, then
+    writes on the halt: the agent hears of the pick as well as of the
+    message."""
     Browser(monkeypatch)
     script, loop, ran = asking(store, args={"request": CHOICE, "choices": ["Mensch", "Bot"]})
     halt = {"reviewer": "GPT-5.4 mini", "provider": "openai", "kind": "injection", "reason": "Obeys the page.",
@@ -309,8 +309,8 @@ def test_an_ask_with_invalid_arguments_needs_no_card(store, monkeypatch):
 
 
 def test_a_call_into_the_workspace_waits_while_the_user_has_the_browser(store, monkeypatch):
-    """Max, 2026-10-29: he had taken over, the agent waited 120 s per call
-    and then gave up. Now the call waits on a card until he hands it back."""
+    """While the user has taken over, a call waits on a card until the
+    browser is handed back, instead of giving up after 120 s."""
     browser = Browser(monkeypatch, holding=True)
     script = Audit(tool_steps=1, step_tools={0: "browser"}, step_args={0: {"action": "read"}}, live={})
     loop = audit_loop(store, script)
@@ -382,8 +382,8 @@ def test_a_reviewers_halt_during_the_users_card_comes_before_the_next_call(store
 
 
 def test_a_hand_back_brings_the_browser_as_the_user_left_it():
-    """Prod 2026-10-29: after every hand-back the agent's next step only asked
-    for a screenshot. Now the answer brings the page, and the picture follows."""
+    """The answer to a hand-back brings the page, and the picture follows,
+    so the agent's next step need not ask for a screenshot."""
     looked = []
 
     class Browser:
@@ -413,7 +413,7 @@ def test_the_tool_is_offered_with_the_workspace_and_returns_only_the_answer():
         "request": "Darf ich?", "ask": "browser", "ask_status": "handed_back"}
 
 
-# --- A key the agent needs (secret, agent_secrets.py, since 2026-10-29) ---------------
+# --- A key the agent needs (secret, agent_secrets.py) ---------------------------------
 
 KEY = "sk-test-0123456789abcdef"
 

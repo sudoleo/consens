@@ -14,7 +14,7 @@ def settle(page):
     page.wait_for_function("() => !document.body.classList.contains('comparison-layout-changing')")
     # Only motion in time settles: the phone's starter row fades with its own
     # scroll (composer.css, scroll timeline), and such an animation never
-    # finishes; waiting for it hung the nightly suite (2026-10-25).
+    # finishes; waiting for it hung the nightly suite.
     page.locator('.input-section').evaluate(
         "el => Promise.all(el.getAnimations({subtree:true}).filter(a => a.timeline === document.timeline && "
         "a.effect.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => {})))")
@@ -40,8 +40,8 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
         intro = page.locator('#answerReaderPreviewIntro')
         cards = page.locator('.is-preview .answer-reader-answer')
         expect(intro).to_be_visible()
-        # Daily, the default preset, compares two models since 2026-11-01
-        # (Claude Haiku and DeepSeek).
+        # Daily, the default preset, compares two models (Claude Haiku and
+        # DeepSeek).
         expect(cards).to_have_count(2)
         expect(page.locator('#composerComparisonStatus')).to_be_hidden()
         expect(page.locator('.is-preview [aria-busy="true"], .is-preview .skeleton')).to_have_count(0)
@@ -55,7 +55,7 @@ def test_preview_toggle_layout_and_real_result(browser, phase4_server, width, he
             sidebar = page.locator('.sidebar').bounding_box()
             assert first['x'] >= sidebar['x'] + sidebar['width'] + 23
             # Compare's start is a start screen: the way to Watches stays,
-            # above the heading (it was hidden here until 2026-10-26).
+            # above the heading.
             expect(page.locator('#viewSwitchWatches')).to_be_visible()
             switch = page.locator('#viewSwitch').bounding_box()
             assert switch['y'] + switch['height'] < page.locator('#answerReaderPreviewIntro h2').bounding_box()['y']
@@ -107,7 +107,7 @@ def test_persisted_off_new_comparison_and_model_selection(browser, phase4_server
         intro = page.locator('#answerReaderPreviewIntro')
         cards = page.locator('.is-preview .answer-reader-answer')
         expect(intro).to_be_visible()
-        # Daily's two models (since 2026-11-01); one left out shows one card.
+        # Daily's two models; one left out shows one card.
         expect(cards).to_have_count(2)
         page.evaluate("""() => {
           const pref = App.modelPrefs.find(p => document.getElementById(p.checkId).checked);

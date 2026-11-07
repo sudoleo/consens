@@ -1,4 +1,4 @@
-"""A finger's selection gets the same menu (Apple audit F7): on a phone a
+"""A finger's selection gets the same menu: on a phone a
 selection in the answer shows "Ask about this" without any mouseup, under the
 selection handle and clear of the system's own menu above it."""
 from playwright.sync_api import expect

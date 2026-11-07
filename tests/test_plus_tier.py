@@ -1,7 +1,7 @@
 """Die Plus-Stufe: mehr Kontingent und die Komfortfunktionen, aber exakt die
 Free-Modellauswahl.
 
-Der Kern ist die Kostengrenze. Plus existiert, damit Tester Anhaenge und
+Der Kern ist die Kostengrenze. Plus existiert, damit Tester
 Resolve ausprobieren koennen, ohne einen Frontier-Lauf ausloesen zu koennen --
 deshalb pruefen diese Tests vor allem, was Plus NICHT darf.
 """
@@ -75,7 +75,7 @@ def test_plus_gets_the_features_but_not_the_expensive_models():
 
 def test_free_gets_attachments_only_and_pro_gets_everything():
     free = entitlements_for(TIER_FREE)
-    # Files are open to every account since 2026-10-02 (paid from the token account).
+    # Files are open to every account (paid from the token account).
     assert free.attachments is True
     assert not any([free.resolve, free.premium_models])
     pro = entitlements_for(TIER_PRO)
@@ -85,7 +85,7 @@ def test_free_gets_attachments_only_and_pro_gets_everything():
 # --- Limits ----------------------------------------------------------------
 
 def test_plus_has_a_larger_token_allowance_than_free():
-    # Seit 2026-10-01 teilen alle Modi ein Tokenkonto pro Stufe; Plus faehrt
+    # Alle Modi teilen ein Tokenkonto pro Stufe; Plus faehrt
     # die guenstigen Modelle und bekommt mehr als Free.
     from app.services import agent_budget_config
     limits = agent_budget_config.snapshot({})["tier_limits"]
@@ -94,7 +94,7 @@ def test_plus_has_a_larger_token_allowance_than_free():
 
 
 def test_reasoning_is_not_an_entitlement():
-    # Deep Think (Pro-only) is gone; the Reasoning switch is open to every tier.
+    # No Deep Think entitlement; the Reasoning switch is open to every tier.
     from app.core.entitlements import entitlements_for
     for tier in (TIER_FREE, TIER_PLUS, TIER_PRO):
         assert not hasattr(entitlements_for(tier), "deep_think")

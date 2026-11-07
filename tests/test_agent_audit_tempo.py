@@ -1,4 +1,4 @@
-"""Tempo, long runs and load of the reviewers (spec A-L1 to A-L3, 2026-10-29).
+"""Tempo, long runs and load of the reviewers (spec A-L1 to A-L3).
 
 In Prod (25.-29.10., docs/agent-audit-readiness-2026-10-29.md section 2) the
 marks stood a median 10 s after the answer's last word (p90 35 s, max 74 s)
@@ -20,7 +20,7 @@ measure what the server adds to the models' own time:
   the review counts all of it. It also measures what the work log holds in
   memory (docs/agent-work-log.md).
 - A-L3: three turns with three reviewers each at once in one process.
-- Advisers (compare_models, 2026-10-31): the same three
+- Advisers (compare_models): the same three
   models answer the agent's question while they review its run.
 
 Measured times are printed (pytest -s), with their Prod equivalent; the
@@ -47,8 +47,8 @@ from app.services.agent_tools import ReadOnlyTool, ToolRegistry
 from app.services.agent_vm_tools import MODEL_STREAM_CHARS
 from app.services.llm.agent_client import AgentCompletion, measured_usage, resolve_agent_model
 
-# Ratios of wall-clock times: next to three busy test workers they failed
-# (2026-10-31), so the CI runs them in a job of their own (pytest.ini).
+# Ratios of wall-clock times: next to three busy test workers they failed,
+# so the CI runs them in a job of their own (pytest.ini).
 pytestmark = pytest.mark.tempo
 from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_audit import ANSWER, LookupArgs, earlier_marks, entry_of
@@ -81,13 +81,13 @@ FINAL = {"openai": (13, 40), "xiaomi": (9, 14), "qwen": (20, 25), "glm": (8, 15)
 # docs/agent-mode.md "Tempo"): Luna 29, Haiku 28, DeepSeek V4.1 Flash 18.
 ADVICE = {"openai": 29, "anthropic": 28, "deepseek": 18}
 THREE = {"openai": "gpt-5.6-luna", "xiaomi": "mimo-v2.6-pro", "qwen": "qwen3.8-27b"}
-# Daily's three reviewers from 2026-10-28 to 2026-11-01 (two since): the load case.
+# Three reviewers, as the Daily preset once had (it has two now): the load case.
 DAILY = {"openai": "gpt-5.6-luna", "anthropic": "claude-haiku-4-5", "deepseek": "deepseek-v4.1-flash"}
 SIX = {**THREE, "glm": "glm-5.3-flash", "deepseek": "deepseek-v4.1-flash", "anthropic": "claude-haiku-4-5"}
 STEPS = 40
 # The step that changes memory: it waits for the reviewers' gate as the
 # stand-in for a call that waits (test_agent_gate.stand_in; memory itself
-# has not waited since 2026-11-02).
+# does not wait).
 GATE_STEP = 20
 # Every thread a turn starts by name: run, watcher, journal, work log,
 # reviewers and their final requests (agent-review-<provider>[-<kind>]).
@@ -96,7 +96,7 @@ TURN_THREADS = "agent-"
 
 @pytest.fixture(autouse=True)
 def _admin_allowance(monkeypatch):
-    """Audit mode is for admins (5M tokens a day, test_agent_audit)."""
+    """The agent's search rounds need an admin's 5,000,000 micro-euros a day (test_agent_audit)."""
     from app.services import agent_budget_config
     monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 5_000_000)
 
@@ -593,11 +593,10 @@ def test_final_requests_that_all_hang_end_at_the_final_rounds_time(slow_store, s
     assert alive == []
 
 
-# --- Advisers beside the reviewers (compare_models, 2026-10-31) ------------------
+# --- Advisers beside the reviewers (compare_models) ------------------------------
 
 def test_three_advisers_beside_three_reviewers_keep_their_tempo(slow_store, scaled, measured):
-    """Package 1 of one mode for comparison and audit: the Daily preset's
-    three models answer the agent's question while the same three review the
+    """DAILY's three models answer the agent's question while the same three review the
     run, six sessions of one account at once behind its lock (spec A-T5: 60 %
     of the turn with three reviewers, 85 % with six). The advisers' requests
     and the reviewers' rounds keep the server's share they have without

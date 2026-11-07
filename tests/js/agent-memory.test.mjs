@@ -228,10 +228,10 @@ describe("Hint under an Agent answer", () => {
     ctx.dom.window.close();
   });
 
-  // Bug hunt 2026-10-24: with an unsaved draft in Settings, Turn on failed
-  // ("Could not turn it on"), though the draft is meant to stay and only the
-  // switch to be set. Now it writes the switch with the saved texts, and the
-  // draft's Save still meets what changed elsewhere meanwhile.
+  // With an unsaved draft in Settings, Turn on failed ("Could not turn it
+  // on"), though the draft is meant to stay and only the switch to be set.
+  // It writes the switch with the saved texts, and the draft's Save still
+  // meets what changed elsewhere meanwhile.
   it("Turn on beside an unsaved draft sets only the switch and keeps the draft", async () => {
     const ctx = boot();
     await open(ctx);
@@ -307,7 +307,7 @@ describe("Settings: fresh state", () => {
 
 describe("Settings: saved memories", () => {
   // A memory is the reader's own sentence: a German page labels it, and
-  // leaves the words alone (docs/i18n.md, bug hunt 2026-10-23).
+  // leaves the words alone (docs/i18n.md).
   it("shows a memory as written on a German page", async () => {
     const ctx = bootSettings(undefined, "", { german: true });
     ctx.server.items = [{ id: "m1a2b3c", text: ENGLISH_QUESTION, origin: "user" }];

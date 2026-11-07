@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 // "Working for 9s" ticks in a field of fixed width: the chevron and the
-// model icons after it stay put while it counts and when it ends (Apple
-// audit A7). The words themselves do not change.
+// model icons after it stay put while it counts and when it ends. The words
+// themselves do not change.
 describe("activity clock", () => {
   it("keeps its words and sizes its time slot by unit, with the other verb reserved", () => {
     vi.useFakeTimers();
@@ -29,7 +29,7 @@ describe("activity clock", () => {
     activity.render(host, { running: false, elapsedMs: 72000, status: "succeeded", events: [] });
     expect(title.textContent).toBe("Thought for 1m 12s");
     expect(time.dataset.unit).toBe("minutes");
-    // Its clock is still: the field takes its own words, no double gap (B14).
+    // Its clock is still: the field takes its own words, no double gap.
     expect(verb.dataset.ghost).toBeUndefined();
     activity.render(host, { running: false, elapsedMs: 72000, status: "failed", events: [] });
     expect(title.textContent).toBe("Failed after 1m 12s");
@@ -66,7 +66,7 @@ describe("activity clock", () => {
   });
 });
 
-// One state everywhere (UX audit E1): while the reviewers check the answer
+// One state everywhere: while the reviewers check the answer
 // the head said "Working for", and while the run waited for the user its
 // clock ran on.
 describe("activity head while the run reviews or waits", () => {
@@ -84,8 +84,8 @@ describe("activity head while the run reviews or waits", () => {
       review: { mode: "audit", status: "running" }, answerText: "The answer." });
     expect(title()).toBe("Reviewing · 2m 19s");
     expect(host.querySelector(".agent-activity-verb").dataset.ghost).toBeUndefined();
-    // The comparison mode's answer check is gone (2026-10-31): a review
-    // without the reviewers' mode is no phase of its own.
+    // The comparison mode has no answer check: a review without the
+    // reviewers' mode is no phase of its own.
     activity.render(host, { running: true, elapsedMs: 139000, status: "running", events: [],
       review: { status: "running" }, answerText: "The answer." });
     expect(title()).toBe("Working for 2m 19s");
@@ -123,7 +123,7 @@ describe("activity head while the run reviews or waits", () => {
 });
 
 // On the German page "{0} reasoning" took the whole line, model name
-// included, and the line was written anew on every render (2026-10-23).
+// included, and the line was written anew on every render.
 describe("run details on a German page", () => {
   it("translates the reasoning on its own, keeps the model's name and the line", async () => {
     const app = loadScripts(["static/js/i18n.js", "static/js/app-text.js", "static/js/agent-activity.js"], {

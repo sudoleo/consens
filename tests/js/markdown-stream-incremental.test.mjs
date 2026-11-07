@@ -106,7 +106,7 @@ describe("incremental streamed Markdown", () => {
     for (let end = 61; end <= text.length; end += 3) window.renderMarkdownStream(el, text.slice(0, end));
     window.renderMarkdownStream(el, text);
     // Rebuilding the block for every chunk dropped the link under the finger
-    // and the selection with it (Apple audit D4).
+    // and the selection with it.
     expect(el.querySelector("p")).toBe(paragraph);
     expect(el.querySelector("a")).toBe(link);
     expect(link.nextSibling).toBe(words);
@@ -120,7 +120,7 @@ describe("incremental streamed Markdown", () => {
     const head = "Intro.\n\n| Plan | Typical cost | Funding |\n|---|---|---|\n";
     window.renderMarkdownStream(el, `${head}| Small | 20 | none |\n| Lar`);
     // A table growing row by row changed its column widths with every row,
-    // so its header slid sideways under the reader's eye (Apple audit A5).
+    // so its header slid sideways under the reader's eye.
     expect(el.querySelector("table")).toBeNull();
     const pending = el.querySelector(".stream-table-pending");
     expect(pending.getAttribute("aria-hidden")).toBe("true");

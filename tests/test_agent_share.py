@@ -1,9 +1,7 @@
-"""Sharing an Agent answer (since 2026-10-21).
+"""Sharing an Agent answer.
 
-Agent Mode is the default for everyone; its answers had no way onto a public
-page (the chat menu ended at "Saved consensus unavailable"). The snapshot is
-built from the saved turn alone, keeps one link per answer, and the page
-leaves out what a direct answer does not have.
+The snapshot is built from the saved turn alone, keeps one link per answer,
+and the page leaves out what a direct answer does not have.
 """
 import hashlib
 import html
@@ -271,9 +269,9 @@ def test_sharing_the_same_answer_again_keeps_its_one_link(share_app):
 
 
 def test_an_answer_shared_again_after_a_day_keeps_its_one_link(share_app):
-    # A prepared answer lives PENDING_TTL_HOURS. After that the first Share
-    # answered 404 (and the server dropped the expired result), and preparing
-    # the answer again made a second public link (bug hunt 2026-10-25).
+    # A prepared answer lives PENDING_TTL_HOURS. After that its Share
+    # answers 404 (and the server drops the expired result), and preparing
+    # the answer again keeps its one public link.
     client, database, store = share_app
     chat_id, turn_id = _saved_turn(database, store)
     result_id, first = _share(client, chat_id, turn_id)
@@ -320,7 +318,7 @@ def test_another_account_cannot_prepare_someone_elses_answer(share_app):
 
 
 def test_the_chat_list_share_of_an_agent_chat_shares_its_latest_answer(share_app):
-    """Pages opened before this change still ask the bookmark endpoint."""
+    """Older pages still ask the bookmark endpoint."""
     client, database, store = share_app
     chat_id, turn_id = _saved_turn(database, store)
     bookmark = {"query": QUESTION, "mode": "Agent", "execution_mode": "agent", "chat_id": chat_id,
@@ -379,7 +377,7 @@ def test_a_german_page_keeps_the_shared_question_in_its_titles(share_app):
 
 
 # ---------------------------------------------------------------------------
-# One mode (since 2026-10-31): the reviewers' notes on the answer
+# One mode: the reviewers' notes on the answer
 # ---------------------------------------------------------------------------
 
 SENTENCE = "It sends science data every day. [S1]"

@@ -114,7 +114,7 @@ describe("asking for a prediction", () => {
   });
 
   it("reads the newest chats by time, with a pinned chat at its own place", async () => {
-    // Bug hunt 2026-10-23: pinned chats come first in bookmarksData, so the
+    // Pinned chats come first in bookmarksData, so the
     // basis changed with the order the pins arrived in and twelve pins hid
     // every new chat.
     vi.useFakeTimers();

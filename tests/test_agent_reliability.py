@@ -45,7 +45,7 @@ def test_api_comparison_selection_uses_the_same_six_family_cap_as_the_picker():
 
 def test_one_chosen_model_is_enough():
     """The models review the agent's work and answer compare_models: one is
-    enough (until 2026-10-31 comparison mode needed two sides)."""
+    enough."""
     assert list(comparison_selection({'anthropic': 'claude-haiku-4-5'})) == ['anthropic']
     with pytest.raises(ValueError, match='between one and'):
         comparison_selection({})
@@ -236,7 +236,7 @@ def test_productive_stream_can_outlive_the_stall_interval(monkeypatch, gap, stal
     """The stall bound is silence, not the call's total: four chunks 80 ms
     apart (320 ms in all) outlast a 120 ms bound, one gap longer than it
     does not. On the watchdog's own clock, which only the stream moves:
-    real 40 ms sleeps against 120 ms went red under load (2026-11-06)."""
+    real 40 ms sleeps against 120 ms went red under load."""
     now = [0.0]
 
     class Body(httpx.AsyncByteStream):
@@ -272,12 +272,10 @@ def test_productive_stream_can_outlive_the_stall_interval(monkeypatch, gap, stal
 def test_only_the_closing_answer_after_paid_comparisons_starts_at_once(store, monkeypatch, comparison, closing):
     """Once a comparison holds paid answers, the closing step that writes the
     answer without tools starts at once with its whole allowance (overdraft:
-    the next message is refused instead). A routing step does not overdraw
-    (audit 2026-10-28), nor does a closing step after a comparison whose
-    answers found no allowance: like a step without a comparison, they wait
-    for sibling reservations. Until 2026-10-31 comparison mode started a step
-    after a comparison with what still fit; the agent's steps search, and
-    one waits for its search as before."""
+    the next message is refused instead). A routing step does not overdraw,
+    nor does a closing step after a comparison whose answers found no
+    allowance: like a step without a comparison, they wait for sibling
+    reservations. The agent's steps search, and one waits for its search."""
     from dataclasses import replace
     from test_agent_turn_limits import chat_loop as comparison_chat_loop
     limits = []

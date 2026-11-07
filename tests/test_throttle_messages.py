@@ -1,4 +1,4 @@
-"""A rate limit speaks plainly and is no upgrade offer (Apple audit H6).
+"""A rate limit speaks plainly and is no upgrade offer.
 
 Every slowapi limit answers with an everyday sentence, `code: "rate_limited"`
 and `retry_after` (also as Retry-After); a browser form gets the same as a

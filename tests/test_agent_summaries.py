@@ -1,4 +1,4 @@
-"""Summaries (agent_compaction.py "Summaries", since 2026-11-03), as Claude
+"""Summaries (agent_compaction.py "Summaries"), as Claude
 Code and Codex compact a session whose context fills up: the chat model
 summarizes a long chat's older history in the first step of the next
 message, and a long run's earlier steps before its next one. The summary is
@@ -341,11 +341,11 @@ def test_a_run_summary_that_does_not_work_out_is_not_tried_again(store, fake_vm,
 
 
 def test_a_run_is_summarized_before_it_would_end_at_the_window():
-    """Before summaries a long run at LONG_RUN_CONTEXT_SHARE of the window
-    wrote its answer (TURN_CONTEXT_LIMIT); the summary comes first."""
+    """A long run at LONG_RUN_CONTEXT_SHARE of the window writes its answer
+    (TURN_CONTEXT_LIMIT); the summary comes before that."""
     assert agent_compaction.RUN_SUMMARY_WINDOW_SHARE < LONG_RUN_CONTEXT_SHARE
     # Also where the answer's allowance is large: a long run of Haiku 4.5
-    # ends at 0.8 x 200k less its answer, before 100k (bug hunt 2026-11-04).
+    # ends at 0.8 x 200k less its answer, before 100k.
     model = resolve_agent_model("claude-haiku-4-5")
     end_at = model.context_length * LONG_RUN_CONTEXT_SHARE - answer_output_limit(model)
     assert end_at < agent_compaction.RUN_SUMMARY_ABOVE_TOKENS
@@ -371,8 +371,8 @@ def test_a_long_run_tells_its_summary_where_it_would_end(store, fake_vm, monkeyp
 
 
 def test_a_run_ending_at_its_step_limit_answers_without_a_summary_first(store, fake_vm, monkeypatch):
-    """The summary of a run that ends anyway cost time and money and the
-    answer came from the shorter version (bug hunt 2026-11-04)."""
+    """A summary of a run that ends anyway would cost time and money, and
+    the answer would come from the shorter version."""
     calls = [[("vm_exec", {"command": f"make step{n}"})] for n in range(3)]
     script = Summarizer(calls)
     loop = vm_loop(store, script)
@@ -394,7 +394,7 @@ def test_a_run_ending_at_its_step_limit_answers_without_a_summary_first(store, f
     assert len(script.summary_requests()) == 1
 
 
-# --- As Claude Code and Codex keep it (2026-11-03) --------------------------------
+# --- As Claude Code and Codex keep it ---------------------------------------------
 
 def test_the_app_adds_the_plan_and_the_processes_to_a_run_summary():
     state = agent_compaction.run_state([{"content": "Write the parser", "status": "completed"},

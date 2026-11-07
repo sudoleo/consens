@@ -1,4 +1,4 @@
-"""The daily account in euros (Max, 2026-10-31).
+"""The daily account in euros.
 
 Every call takes what it cost from the account, in whole micro-euros at the
 fixed NANO_USD_PER_MICRO_EUR: a cheap model goes further than a dear one, a

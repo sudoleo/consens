@@ -43,7 +43,7 @@ def test_public_styles_share_the_app_aligned_token_layer():
 
     # The surface scale is the contract between /app and the public pages:
     # the marketing mockups are supposed to be made of the same material as
-    # the product, so these five values have to be identical in both files —
+    # the product, so these values have to be identical in both files —
     # in light AND dark. Everything else is derived from them.
     for contract in (
         "--radius-lg: 16px;",
@@ -85,7 +85,7 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
 
     # Three Inter parts per style plus two metric-matched local fallbacks (no
     # download): regular/medium against Arial, semibold/bold against Arial
-    # Bold. The full source files are no longer referenced.
+    # Bold. The full source files are not referenced.
     assert typography.count('@font-face {') == 8
     assert typography.count("url(") == 6
     assert typography.count('font-family: "Inter Fallback";') == 2 and "size-adjust:" in typography
@@ -111,7 +111,7 @@ def test_typography_is_self_hosted_and_shared_by_every_surface():
     for template_path in (ROOT / "templates").rglob("*.html"):
         assert "fonts.googleapis.com" not in template_path.read_text(encoding="utf-8")
     # Every page fetches Inter with the HTML, at the exact URL @font-face
-    # resolves to (B3): /app and each public template include the partial.
+    # resolves to: /app and each public template include the partial.
     assert '{% include "partials/font_preload.html" %}' in read("templates/index.html")
     for template_name in PUBLIC_TEMPLATES + ("not_found.html", "questions.html", "watch_share.html", "notice.html"):
         template = read(f"templates/{template_name}")
@@ -153,8 +153,8 @@ def test_inter_parts_have_disjoint_ranges_and_a_small_latin_file():
 
 
 def test_font_files_are_named_by_their_content_and_cached_for_good():
-    """B3: the font used to be revalidated (no-cache, a 304) on every visit,
-    arrived after the first paint and swapped every headline. Its name now
+    """The font used to be revalidated (no-cache, a 304) on every visit,
+    arrived after the first paint and swapped every headline. Its name
     carries its hash, so it can be immutable -- and a stale name is caught
     here, without fonttools."""
     import hashlib
@@ -211,8 +211,8 @@ def test_interface_text_never_needs_more_than_the_latin_font_file():
 
 
 def test_product_result_mockup_is_reused():
-    # The landing hero is demo-first (input field CTA) since 2026-07-17 and no
-    # longer embeds the result mockup; the consensus-engine page still does.
+    # The landing hero is demo-first (input field CTA) and does not embed the
+    # result mockup; the consensus-engine page does.
     include = '{% include "partials/product_result_mockup.html" %}'
     assert include in read("templates/consensus-engine.html")
 
@@ -267,7 +267,7 @@ def test_landing_watch_example_uses_the_live_watch_wording_and_no_scores():
 
     assert "/100" not in section
     assert "materially" not in section
-    # An Agent Watch since 2026-11-03: the words its page, sheet, chat,
+    # An Agent Watch: the words its page, sheet, chat,
     # mail and Telegram message use.
     dashboard = read("static/js/watch-dashboard.js")
     field = read("static/js/watch-composer.js")
@@ -287,7 +287,7 @@ def test_landing_watch_example_uses_the_live_watch_wording_and_no_scores():
 
 
 def test_landing_heights_in_the_page_flow_ignore_the_browser_bar():
-    """F1: dvh follows Safari's bar, so every band grew on the first swipe and
+    """dvh follows Safari's bar, so every band grew on the first swipe and
     the text slid away under the finger. In-flow heights use svh."""
     landing = read("static/css/landing.css")
     assert "dvh" not in re.sub(r"/\*.*?\*/", "", landing, flags=re.S)
@@ -295,7 +295,7 @@ def test_landing_heights_in_the_page_flow_ignore_the_browser_bar():
 
 
 def test_smooth_scrolling_starts_only_after_the_page_has_arrived():
-    """L1: html { scroll-behavior: smooth } also animated the jump to /#watch
+    """html { scroll-behavior: smooth } also animated the jump to /#watch
     after loading a page: 8,000 px through every scene. The glide is switched
     on by public-nav.js once the page has loaded; anchors land under the bar."""
     nav = read("templates/partials/public_nav.html")
@@ -318,8 +318,8 @@ def test_every_bar_link_keeps_the_width_of_its_semibold_self():
     nav = read("templates/partials/public_nav.html")
     bar = nav.split('<div class="nav-links', 1)[1].split("<details", 1)[0]
     links = re.findall(r"<a ([^>]*)>([^<]+)</a>", bar)
-    # Product, Watches, Topics, Questions: the Benchmark left the bar for the
-    # footer on 2026-11-01 (it measures the engine, not how the app answers).
+    # Product, Watches, Topics, Questions: the Benchmark stands in the footer
+    # (it measures the engine, not how the app answers).
     assert len(links) == 4
     for attributes, text in links:
         assert f'data-label="{text}"' in attributes, text
@@ -331,7 +331,7 @@ def test_every_bar_link_keeps_the_width_of_its_semibold_self():
 
 
 def test_public_pages_keep_the_page_grid_and_the_bar_on_a_phone():
-    """I14: one grid and one bar. The phone block of public-pages.css set its
+    """One grid and one bar. The phone block of public-pages.css set its
     own 12 px column, a 50 px bar with 14 px padding and a smaller mark."""
     css = re.sub(r"/\*.*?\*/", "", read("static/css/public-pages.css"), flags=re.S)
     assert "100% - 24px" not in css

@@ -153,7 +153,7 @@ def test_model_routing_requires_zdr_without_collection_and_keeps_optional_allowl
 
 
 def test_google_chat_request_keeps_zdr_on_top_of_the_fastest_route(google,monkeypatch):
-    # Since 2026-10-17 ordinary requests drop zero data retention and take the
+    # Ordinary requests drop zero data retention and take the
     # fastest endpoint; a chat with Google data must still send it.
     from app.services.google_connections import restricted_model
     from app.services.llm.agent_client import AgentCompletion, AgentModel
@@ -275,7 +275,7 @@ def test_httpx_request_urls_are_not_logged_at_info():
     assert not logging.getLogger("httpx").isEnabledFor(logging.INFO)
 
 
-# ---- Read-only installation (default since 2026-10-03) -------------------
+# ---- Read-only installation (the default) -------------------------------
 
 def test_read_only_installation_never_requests_prepares_or_executes_writes(google, monkeypatch):
     from queue import Queue
@@ -316,7 +316,7 @@ def test_read_only_installation_never_requests_prepares_or_executes_writes(googl
 
 
 def test_a_guest_gets_the_google_entries_only_where_every_account_has_them(google, monkeypatch):
-    """Apple-Audit H3: a guest's (+) menu is an account's. Listed test users
+    """A guest's (+) menu is an account's. Listed test users
     are not every account, so a guest sees what an unlisted account sees."""
     from app.services.google_connections import entries_for_everyone
     monkeypatch.setenv("GOOGLE_PICKER_API_KEY", "AIzaSyExampleExampleExample0123")

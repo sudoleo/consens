@@ -37,7 +37,7 @@ def _photo_png(width, height):
 
 
 def test_a_large_photo_is_shrunk_in_the_browser_under_the_apps_csp(app_page, get_console_errors):
-    """2026-10-28: the shrink decoded the file in an <img> from a blob: URL,
+    """The shrink once decoded the file in an <img> from a blob: URL,
     which the CSP (img-src) blocks. Every photo went out unshrunk, and one
     over 5 MB the server refused. jsdom has no CSP; only a real browser shows it."""
     photo = _photo_png(1800, 600)
@@ -130,7 +130,7 @@ def test_each_image_of_a_message_gets_its_own_preview_also_after_reopening(brows
         expect(page.locator('#attachmentBar .attachment-chip')).to_have_count(2)
         page.locator('#questionInput').fill('What do these two screenshots show?')
         page.locator('#sendButton').click()
-        # 2026-10-29: the tiles over the message wait in the skeleton while
+        # The tiles over the message wait in the skeleton while
         # the files upload, not a row per file under the message.
         page.wait_for_function("() => document.querySelectorAll('.message-attachments .attachment-chip.is-image-tile.is-uploading').length === 2")
         for _ in range(100):
@@ -155,7 +155,7 @@ def test_each_image_of_a_message_gets_its_own_preview_also_after_reopening(brows
         page.wait_for_function('() => typeof window.openBookmark === "function" && window.__consensioAuthState?.uid')
         page.evaluate('id => window.openBookmark(id)', bookmarks[0]['id'])
         expect(page.locator('#agentAnswerBody')).to_contain_text('Two pictures.')
-        # 2026-10-22: while the files load, a tile is a quiet placeholder. An
+        # While the files load, a tile is a quiet placeholder. An
         # <img> with the file name as alt and no source drew the browser's
         # broken-image glyph and "image.png" for that second.
         page.wait_for_function("() => document.querySelectorAll('#threadAskAttachments .attachment-chip.is-thumb-loading').length === 2")

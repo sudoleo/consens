@@ -1,6 +1,6 @@
 """What /app says: one name for the thing, one style, no internal names.
 
-Apple-Audit H3, H4, H5, H10 (2026-10-20). The copy rules, in short:
+The copy rules, in short:
 
 - The thing is a **chat** (New chat · Chats · Chat | Watches), for guests too.
   "Bookmark" stays an internal name (ids, classes, API fields), never a word on
@@ -122,7 +122,7 @@ def test_tokens_and_costs_are_for_admins_only():
 
 
 def test_dates_and_numbers_have_one_locale():
-    # Apple-Audit H8: a German browser read "19. Okt. 2026" and "48.213 tokens"
+    # A German browser read "19. Okt. 2026" and "48.213 tokens"
     # next to "Oct 19". Every date, time, number and span goes through
     # App.format (app-text.js), which has the one locale of the interface.
     browser_locale = re.compile(r"\.toLocale(?:Date|Time)?String\(\s*(?:\)|\[\]|undefined\b)")
@@ -141,7 +141,7 @@ def test_dates_and_numbers_have_one_locale():
 
 def test_the_account_menu_says_log_out():
     # One-word labels in markup built by a script are no prose for the
-    # scanner above; the account menu's entry is checked directly (review F).
+    # scanner above; the account menu's entry is checked directly.
     firebase = (ROOT / "static/firebase.js").read_text(encoding="utf-8")
     assert ">Log out</button>" in firebase
     assert not re.search(r">\s*Log(in|out)\s*<", firebase)

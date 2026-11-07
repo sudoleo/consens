@@ -1,9 +1,7 @@
 """What a Watch page lists of its history.
 
-The public Watch page used to stack one card per check, each with its score
-and "No meaningful movement detected". A Watch is worth reading for the
-checks that moved the answer, so only those stand alone; the quiet ones in
-between fold into one entry.
+A Watch is worth reading for the checks that moved the answer, so only those
+stand alone; the quiet ones in between fold into one entry.
 """
 
 import os
@@ -67,7 +65,7 @@ def test_day_label_has_no_leading_zero():
 
 
 def test_chart_ends_name_the_year_only_when_the_history_crosses_one():
-    # Apple-Audit H8: the timeline says "Aug 4"; the axis said "Jul 21, 2026".
+    # The timeline says "Aug 4"; the axis once said "Jul 21, 2026".
     same_year = build_history_view([_point(0), _point(1), _point(2)])
     assert (same_year["start_label"], same_year["end_label"]) == ("Jul 21", "Aug 4")
 

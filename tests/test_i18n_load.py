@@ -1,8 +1,8 @@
-"""The German page costs the server little (audit 2026-10-28).
+"""The German page costs the server little.
 
-Until then ``I18nMiddleware._page`` translated on the event loop, every word of
-a shared answer was parsed into a tree first, and a long share page held all
-other requests, SSE streams included, for 0.5-2 s.
+``I18nMiddleware._page`` runs off the event loop, and a shared answer's words
+are not parsed into a tree first: translated on the loop, a long share page
+held all other requests, SSE streams included, for 0.5-2 s.
 """
 
 import asyncio

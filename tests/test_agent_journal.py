@@ -54,7 +54,7 @@ def journal(recorder, gap=0.0):
 def hold_writer(log, recorder):
     """The writer saves session "busy" and stays inside that write until the
     returned release is called: what is submitted meanwhile queues behind it
-    whatever the threads' timing (CI 2026-10-22: a slow runner wrote a line
+    whatever the threads' timing (on CI a slow runner wrote a line
     before the status it was meant to join)."""
     recorder.gate.clear()
     recorder.entered.clear()
@@ -99,7 +99,7 @@ def test_two_messages_are_never_merged():
 
 def test_updates_of_several_sessions_that_queue_during_a_write_are_saved_together():
     """Six comparison answers start at once: their sessions are one write
-    after the one already running, not six in a row (since 2026-10-22)."""
+    after the one already running, not six in a row."""
     recorder = Recorder()
     log = journal(recorder)
     release = hold_writer(log, recorder)
@@ -188,10 +188,10 @@ def test_an_update_nobody_waits_for_reports_its_failure():
 
 
 def test_an_update_ahead_of_a_waiting_caller_still_reports_its_failure():
-    """Bug hunt: a caller that waits makes its session's earlier updates go
+    """A caller that waits makes its session's earlier updates go
     first (urgent), also the one being written at that moment. Nobody waits
-    for those: until 2026-11-05 their refusal went unreported, and a session
-    whose "working" was refused that way stayed on it without a word."""
+    for those, so their refusal is reported: unreported, a session whose
+    "working" was refused that way would stay on it without a word."""
     def refused(job):
         return job.patch.get("status") in {"working", "searching"}
     recorder = Recorder(fail=refused)
@@ -282,7 +282,7 @@ def test_close_saves_everything_and_later_updates_are_dropped():
 
 
 def test_close_waits_at_most_its_limit_and_names_the_writer(caplog):
-    """A-R3 (2026-10-29): a hung write held the run's end until its lease expired."""
+    """A-R3: a hung write does not hold the run's end until its lease expires."""
     import logging
     recorder = Recorder()
     log = journal(recorder)

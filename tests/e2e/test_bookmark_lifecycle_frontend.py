@@ -19,7 +19,7 @@ def _open_row_menu(page, row):
 
 @pytest.mark.parametrize('width,status,reduced', [(1280, 200, False), (390, 403, False), (390, 500, True)])
 def test_delete_leaves_at_once_offers_undo_and_restores_on_failure(browser, phase4_server, width, status, reduced):
-    """Apple audit E2: "…" is a menu; Delete hides the chat at once and only
+    """The row's "…" is a menu; Delete hides the chat at once and only
     deletes it once "Chat deleted · Undo" ran out."""
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
     requests, errors = [], []
@@ -38,7 +38,7 @@ def test_delete_leaves_at_once_offers_undo_and_restores_on_failure(browser, phas
         page.evaluate('() => window.loadBookmarks()')
         if width < 1100:
             page.locator('#toggleSidebarButton').click()
-        # Agent answers are shared like Consensus ones (since 2026-10-21).
+        # Agent answers are shared like Consensus ones.
         agent_menu = _open_row_menu(page, page.locator('.bookmark[data-id="second"]'))
         expect(agent_menu.locator('.bookmark-menu-item')).to_have_text(['Pin', 'Rename', 'Share', 'Delete'])
         page.keyboard.press('Escape')
@@ -91,7 +91,7 @@ def test_delete_leaves_at_once_offers_undo_and_restores_on_failure(browser, phas
 
 @pytest.mark.parametrize('width', [1280, 390])
 def test_chat_rows_open_by_keyboard_and_rename_in_place(browser, phase4_server, width):
-    """Apple audit E5/E2: the title is the row's keyboard control; the menu
+    """The title is the row's keyboard control; the menu
     is a real menu (keys, Escape, a press elsewhere); Rename edits in place."""
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
     renames, opened, errors = [], [], []
@@ -160,7 +160,6 @@ def test_chat_rows_open_by_keyboard_and_rename_in_place(browser, phase4_server, 
 
 
 def test_chat_search_without_a_match_says_so(browser, phase4_server):
-    """Apple audit H11."""
     context, page = _real_firebase_page(browser, phase4_server)
     try:
         bookmarks = [{'id': 'first', 'title': 'Heat pump', 'query': 'Question', 'mode': 'Agent'}]
@@ -177,8 +176,7 @@ def test_chat_search_without_a_match_says_so(browser, phase4_server):
 
 
 def test_chats_stand_in_date_groups_and_pin_to_the_top(browser, phase4_server):
-    """2026-10-22: the list had no groups, no pin and a search nobody found.
-    Pinned chats lead (the first page brings them whatever their age), the
+    """Pinned chats lead (the first page brings them whatever their age), the
     rest stand under Today / Yesterday / Previous 7 days / …, Pin and Unpin
     move a chat at once, and Ctrl+K searches the names and the questions."""
     context, page = _real_firebase_page(browser, phase4_server)
@@ -250,7 +248,7 @@ LANDING = """() => { const column = document.querySelector('.container'); const 
 
 @pytest.mark.parametrize('mode,width,reduced', [('Agent', 1280, False), ('Standard', 390, False), ('Agent', 390, True)])
 def test_open_bookmark_stands_at_its_newest_question_without_a_ride(browser, phase4_server, mode, width, reduced):
-    """Apple audit A2/A3: an opened chat shows its newest question at once,
+    """An opened chat shows its newest question at once,
     before its first frame, and never cut off under the phone header."""
     context, page = _real_firebase_page(browser, phase4_server)
     errors = []
@@ -299,7 +297,7 @@ def test_open_bookmark_stands_at_its_newest_question_without_a_ride(browser, pha
 
 
 def test_choosing_a_chat_answers_at_once_and_loads_detail_and_transcript_together(browser, phase4_server):
-    """Apple audit D2: the row is marked and the thread shows the chat's
+    """The row is marked and the thread shows the chat's
     question with a skeleton at once; detail and transcript load side by
     side; a chat seen a moment ago is back at once."""
     context, page = _real_firebase_page(browser, phase4_server)
@@ -385,7 +383,7 @@ def test_choosing_a_chat_answers_at_once_and_loads_detail_and_transcript_togethe
 
         # Back from another chat to one that changed meanwhile: its check
         # draws it anew, and what was typed before the check returned stays
-        # (bug hunt 2026-10-22: the redraw emptied it).
+        # (a redraw once emptied it).
         page.locator('.bookmark[data-id="second"]').click()
         page.wait_for_timeout(150)
         release('detail', 'second'); release('conversation', 'second')

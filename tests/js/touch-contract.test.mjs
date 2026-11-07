@@ -7,7 +7,7 @@ import { ROOT } from "./helpers/appWindow.mjs";
 import { ancestors, declaredProperties, lineOf, parseCss, splitSelectors, walkRules } from "./helpers/css-rules.mjs";
 
 /**
- * A finger is not a mouse (Apple audit F3, F4, F15):
+ * A finger is not a mouse:
  *   - a tap leaves :hover stuck on touch screens until the next tap
  *     elsewhere; a knob looked switched on, a row stayed grey. Every :hover
  *     rule of /app and the public pages therefore lives inside the one guard
@@ -61,8 +61,8 @@ describe("hover only where a pointer hovers (F4)", () => {
         }
       };
       visit(tree);
-      // "A tap leaves :hover stuck" resets under (hover: none) are obsolete:
-      // no hover fill reaches a touch screen any more.
+      // "A tap leaves :hover stuck" resets under (hover: none) are pointless:
+      // no hover fill reaches a touch screen.
       for (const rule of walkRules(tree)) {
         if (rule.selector.includes(":hover") && ancestors(rule).some(at => /hover:\s*none/.test(at.prelude))) {
           offenders.push(`${file}:${lineOf(css, rule.start)}: ${rule.selector} (touch reset)`);

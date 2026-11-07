@@ -200,7 +200,7 @@ def test_an_unknown_tool_refusal_says_only_what_holds():
     # A direct call of the browser while the workspace is closed names open_workspace.
     text = _refusal(["read_source", "open_workspace"])
     assert "open_workspace ran" in text and "unknown tool" in text
-    # Without any way to a page, as before.
+    # Without any way to a page.
     assert "There is no tool that opens web pages." in _refusal(["compare_models"], called="open_url")
     # With the browser listed, nothing more to say.
     assert _refusal(["browser", "vm_exec"], called="fetch").endswith("Available tools: browser, vm_exec.")
@@ -258,7 +258,7 @@ def ran(fake_vm, command):
 
 
 def test_several_calls_per_step_in_every_step(store, fake_vm):
-    # Since 2026-11-05 (speed plan P4) every step of the agent may ask for
+    # Every step of the agent may ask for
     # several calls, from the first on: the switch never changes within a
     # message, so it never breaks the prompt cache.
     script = Steps([[("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})]])
@@ -428,8 +428,8 @@ def test_each_batch_ends_with_the_step_and_how_long_the_user_has_waited(store, f
     assert [line.fullmatch(request[-1]["content"]).group(1) for request in (second, third)] == ["1", "2"]
     # New content at the end only: each request continues the one before.
     assert second[:len(first)] == first and third[:len(second)] == second
-    # The limits only once they come near (2026-11-01, Max: "2.2 of 120
-    # minutes" read as time to spare, and the run went on for thirteen).
+    # The limits only once they come near ("2.2 of 120 minutes" read as
+    # time to spare, and the run went on for thirteen).
     loop.workspace_opened = True
     assert (loop._turn_steps(), loop._turn_seconds()) == (200, 7200)
     loop._turn_elapsed, loop.routing_steps = (lambda: 95 * 60), 159
@@ -479,7 +479,7 @@ def test_pictures_of_this_batch_stay_and_older_ones_leave_together(store, fake_v
         return [m["content"][1].get("text") or "image" for m in loop.messages[loop.turn_start:]
                 if agent_compaction.is_picture(m)]
     web = [INTRO.format(id=f"p{n}", url="https://example.com") for n in range(1, 7)]
-    # find_pictures' six pictures all reach the agent (before: three left at once).
+    # find_pictures' six pictures all reach the agent.
     batch(*web)
     assert shown() == ["image"] * 6
     # Up to PICTURES_SHOWN nothing earlier changes: the cached prefix stays.
@@ -561,8 +561,8 @@ def test_a_step_claimed_on_another_ledger_day_reads_its_own(monkeypatch):
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     store.claim(*args, loop.model, run_token=loop.run_token, policy=loop.policy.snapshot(), reservation=(500, priced(500)))
-    # A day that is never today: until 2026-10-31 this read "2026-10-31", and
-    # at midnight UTC that day was the claim's own (CI 2026-10-31, 00:0x UTC).
+    # A day that is never today: a recent date would be the claim's own day
+    # at its midnight UTC.
     monkeypatch.setattr(AgentRunStore, "_expected_daily",
                         lambda self, uid: agent_quota.quota_ref(store.db, uid, "1999-12-31"))
     del trips[:]
@@ -580,8 +580,7 @@ def test_a_workspace_turn_counts_its_times_without_any_name(store, fake_vm, monk
     script = Steps([[("vm_exec", {"command": "ls"})], [("browser", {"action": "read"})]])
     loop = vm_loop(store, script)
     list(loop.run())
-    # Every turn counts (until 2026-10-31 one outside audit mode only for its
-    # workspace): this one used the workspace.
+    # Every turn counts: this one used the workspace.
     assert recorded == [loop]
     captured = agent_audit_metrics.capture(loop)
     run = captured["workspace_run"]

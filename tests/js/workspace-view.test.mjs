@@ -146,7 +146,7 @@ describe("the workspace's loading and terminal (2026-10-28)", () => {
       await vi.advanceTimersByTimeAsync(300);
       expect(bar.hidden).toBe(false);
       expect(bar.querySelector(".start-progress-left").textContent).toBe("About a minute left");
-      // Over the bar, the step the setup is at (Max, 2026-11-04): the real ones, in order.
+      // Over the bar, the step the setup is at: the real ones, in order.
       expect(bar.querySelector(".start-progress-step").textContent).toBe("Installing the browser’s screen…");
       // Chrome starts: the estimate stands.
       socket.deliver(JSON.stringify({ state: "starting", until: new Date(now + 63_000).toISOString() }));
@@ -164,7 +164,7 @@ describe("the workspace's loading and terminal (2026-10-28)", () => {
   });
 
   it("counts down while the server wakes the VM, before the relay says anything (2026-11-02)", async () => {
-    // Max's view of a VM that slept: "Starting your workspace…" with a bare
+    // A VM that slept: "Starting your workspace…" with a bare
     // skeleton, because the first estimate came only with the relay.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
@@ -297,7 +297,7 @@ describe("the workspace view", () => {
       expect(env.document.querySelector(".workspace-view-cover").hidden).toBe(true);
       await vi.advanceTimersByTimeAsync(30_000);
       expect(controls(env.window)).toEqual(["user", "user"]);
-      // A double click hands back once (bug hunt 2026-10-30: twice "Done in the browser.").
+      // A double click hands back once (not twice "Done in the browser.").
       back.click();
       back.click();
       await vi.waitFor(() => expect(rfb.viewOnly).toBe(true));
@@ -314,8 +314,8 @@ describe("the workspace view", () => {
   });
 
   it("says above the picture that the agent waits while the user has the browser, and reminds them after a minute", async () => {
-    // Max, 2026-10-29: he waited for the agent while it waited for him; only
-    // a small toggle in the head said he still had the browser.
+    // The user waited for the agent while it waited for them; only a small
+    // toggle in the head said they still had the browser.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const env = setup();
@@ -362,14 +362,14 @@ describe("the workspace view", () => {
     expect(env.workspace.holder()).toBe("user");
     // Opening says so too: the chat's card steps aside while the view is open.
     expect(holders).toEqual(["agent", "user"]);
-    // The user has the browser, and what the agent asked for stays in view
-    // (UX audit 2026-10-29 G2); the hint gives way to the bar (G5).
+    // The user has the browser, and what the agent asked for stays in view;
+    // the hint gives way to the bar.
     const bar = env.document.querySelector(".workspace-view-turn");
     expect(bar.querySelector(".workspace-view-turn-says").textContent).toBe("You have the browser");
     expect(bar.querySelector(".workspace-view-turn-request").textContent).toBe("Bitte melde dich bei der Post an.");
     expect(bar.querySelector(".workspace-view-turn-note:not(.workspace-view-turn-request)").hidden).toBe(true);
     expect(env.document.querySelector(".workspace-view-hint").hidden).toBe(true);
-    // In the terminal the bar stays while the user has the browser (G4).
+    // In the terminal the bar stays while the user has the browser.
     env.workspace.showTab("terminal");
     expect(bar.hidden).toBe(false);
     env.workspace.showTab("browser");
@@ -404,7 +404,7 @@ describe("the workspace view", () => {
     expect(handbacks).toBe(1);
   });
 
-  // A-S6 (docs/agent-audit-readiness-2026-10-29.md): a phone in the 2FA app
+  // A phone in the 2FA app
   // ran no interval, the takeover lapsed after 90 s and the agent went on
   // mid-login. Back in front, the page refreshes it at once.
   it("refreshes the takeover the moment the page is in front again", async () => {
@@ -438,7 +438,7 @@ describe("the workspace view", () => {
   it("stops refreshing the takeover once another window has the view", async () => {
     // The old view kept posting holder "user" every 30 s and on every return
     // of its tab: a hand-back in the new window was overwritten, and the
-    // agent waited for the user for good (bug hunt 2026-10-31).
+    // agent waited for the user for good.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const env = setup();
@@ -483,7 +483,7 @@ describe("the workspace view", () => {
     }
   });
 
-  // A logout does not reload the page: until 2026-10-30 the view of the
+  // A logout does not reload the page: the view of the
   // account that left stayed open, its Chrome in the next person's hands,
   // and its refresh claimed the browser of whoever signed in next.
   it("closes when its account logs out or another signs in, not when the same one refreshes", async () => {
@@ -537,7 +537,7 @@ describe("the workspace view", () => {
     expect(FakeRFB.made[0].disconnected).toBe(true);
     expect(socket.closed).toBe(true);
     expect(env.workspace.isOpen()).toBe(false);
-    // It leaves the way it came (Apple audit C5), inert, then it is gone.
+    // It leaves the way it came, inert, then it is gone.
     const leaving = env.document.querySelector(".workspace-view");
     expect(leaving.classList.contains("is-leaving")).toBe(true);
     expect(leaving.inert).toBe(true);
@@ -565,7 +565,7 @@ describe("the workspace view", () => {
   });
 
   it("says why the server closed a view, also over the picture", async () => {
-    // One view per account, its time counts as VM time (security audit 2026-10-27).
+    // One view per account, its time counts as VM time.
     const env = setup();
     const socket = await opened(env);
     socket.deliver(JSON.stringify({ state: "ready" }));
@@ -581,7 +581,7 @@ describe("the workspace view", () => {
   });
 
   it("says the server's safety rules closed the workspace, with nothing to try again", async () => {
-    // routers/agent_workspace.py CLOSE_GUARDED (until tomorrow) and CLOSE_LOCKED (until looked at), 2026-10-30.
+    // routers/agent_workspace.py CLOSE_GUARDED (until tomorrow) and CLOSE_LOCKED (until looked at).
     for (const [code, text] of [
       [4423, "The workspace is closed on this account until tomorrow: it was used in a way consens.io’s safety rules do not allow."],
       [4424, "The workspace is closed on this account by consens.io’s safety rules until we have looked at it."],
@@ -611,8 +611,8 @@ describe("the workspace view", () => {
       .toBe("The workspace browser is logged out everywhere."));
   });
 
-  // Settings › Agent ends with the workspace's row (since 2026-11-02; the
-  // tab is there for everyone): the row is there for an account with Agent
+  // Settings › Agent ends with the workspace's row (the tab is there for
+  // everyone): the row is there for an account with Agent
   // that has the workspace (/user_status vm_time) and says today's
   // workspace time.
   it("shows the workspace row in Settings › Agent and says today's workspace time", () => {
@@ -802,7 +802,7 @@ describe("the workspace beside the chat", () => {
   });
 
   it("lies over the Agent activity panel where beside it would leave it too narrow", async () => {
-    // UX audit 2026-10-29 G1: at 1280px beside the activity it was 155px wide.
+    // At 1280px beside the activity it was 155px wide.
     const env = setup();
     wide(env, 1200);
     env.document.body.classList.add("agent-sidebar-open");
@@ -828,7 +828,7 @@ describe("the workspace beside the chat", () => {
   });
 });
 
-// Runtime audit 2026-10-30 (docs/agent-workspace-runtime-audit-2026-10-30.md).
+// The findings: docs/agent-workspace-runtime-audit-2026-10-30.md.
 describe("the workspace view after the runtime audit", () => {
   async function watching(env) {
     const socket = await opened(env);
@@ -985,7 +985,7 @@ describe("the workspace view after the runtime audit", () => {
     }
   });
 
-  // Bug hunt P45 (2026-11-05): the minute ran out between two tries after a
+  // The minute ran out between two tries after a
   // dropped connection; the next try connected in the hidden tab and stayed
   // open, its time counted as VM time until the tab came back.
   it("lets go between two tries too, when the minute in a hidden tab ends there", async () => {
@@ -1030,7 +1030,7 @@ describe("the workspace view after the runtime audit", () => {
       await vi.advanceTimersByTimeAsync(150_500);
       expect(time.textContent).toBe("1h 10m left today");
       // Taking over keeps it: the user's own time in the view counts as
-      // well (until 2026-10-31 it hid, and the view closed mid-login unannounced).
+      // well (hidden, the view closed mid-login unannounced).
       env.document.querySelector(".workspace-view-cover").click();
       await vi.waitFor(() => expect(controls(env.window)).toEqual(["user"]));
       expect(time.hidden).toBe(false);

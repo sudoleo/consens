@@ -86,8 +86,8 @@ def test_the_answer_step_writes_from_full_answers_in_its_own_conversation(store,
             assert [missing["family"] for missing in result["missing_answers"]] == ["anthropic"]
         else:
             assert len(result["answers"]) == 2 and result["missing_answers"] == []
-    # No app note after the evidence (until 2026-10-31 AGENT_WRITE_NOTE): the
-    # answers advise, the agent goes on from them.
+    # No app note after the evidence: the answers advise, the agent goes on
+    # from them.
     assert messages[-1]["role"] == "tool"
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     # What the step wrote is what the user saw, what was saved and reviewed.

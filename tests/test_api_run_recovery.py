@@ -201,7 +201,7 @@ def test_restart_after_a_finished_backfill_reads_its_marker_not_the_collection(
     recovery, monkeypatch
 ):
     """Audit C12: the backfill once scanned every API run after each daily
-    restart; a finished scan now leaves a marker the next process reads."""
+    restart; a finished scan leaves a marker the next process reads."""
     h = recovery
     assert runner.recover_persisted_runs() == 0 and runner._retention_backfilled
     monkeypatch.setattr(
@@ -242,8 +242,8 @@ def test_recovery_backfill_failure_is_retryable_and_queue_submission_unwinds(
 
 
 def test_an_idle_api_is_scanned_less_and_less_often_until_a_run_comes(monkeypatch):
-    """2026-11-01: four queries a minute (about 5,800 reads a day) on an API
-    nobody called. Without an open run the pause doubles up to
+    """Four queries a minute (about 5,800 reads a day) on an API nobody
+    called. Without an open run the pause doubles up to
     API_MAINTENANCE_IDLE_MAX_SECONDS; a run scheduled in between ends it
     within a minute."""
     import asyncio
@@ -293,7 +293,7 @@ def test_one_query_finds_every_open_run_and_retention_runs_hourly(recovery, monk
 
 
 def test_a_run_scheduled_during_a_scan_is_not_lost(monkeypatch):
-    """Review 2026-11-01: the scan's own "no open run" overwrote a wake-up
+    """The scan's own "no open run" once overwrote a wake-up
     that came while it ran; the next look could be ten minutes away."""
     import asyncio
 

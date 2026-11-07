@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// Each code block of a rendered answer carries a copy button (2026-10-26):
+// Each code block of a rendered answer carries a copy button:
 // an icon without text, copied through one listener on the document, so it
 // survives the morph of a streamed answer.
 const CODE_HTML = "<p>Run this:</p><pre><code>npm ci\nnpm run build\n</code></pre><p>Then <code>ls</code>.</p>";

@@ -1,10 +1,10 @@
 """The demo behind the landing's hero (/app?demo=1) plays the Agent's one mode.
 
-Since 2026-10-31 the Agent has one mode for every account: one AI does the
+The Agent has one mode for every account: one AI does the
 work, the AIs of the Daily lineup follow it and review its answer. The demo
 (static/demo.js) plays that turn on the live surfaces, locally, without a
 request: the reviewers beside the clock, the agent's plan, its search and its
-workspace (since 2026-11-01), the agent asking the AIs once, the review of the
+workspace, the agent asking the AIs once, the review of the
 written answer ("Reviewing the answer…", Notes waiting), then their marks,
 Notes and Answers, with the chart it shared in the text and its spreadsheet
 under it, opening beside the chat. No score, no judge.
@@ -28,7 +28,7 @@ def test_the_demo_plays_a_reviewed_agent_turn(browser, phase4_server, width):
         page.set_viewport_size({"width": width, "height": 900})
         expect(page.locator("#threadAskText")).to_contain_text("buy the flat", timeout=30000)
         # The reviewers follow from the first step: their marks stand beside
-        # the clock while the agent works (Daily's two since 2026-11-01).
+        # the clock while the agent works (Daily's two).
         page.wait_for_function("""() => document.querySelectorAll(
             '#agentAnswerActivity .agent-inline-models .agent-inline-model').length === 2""", timeout=15000)
         # It works where the reader sees it: its plan, its search with the
@@ -73,7 +73,7 @@ def test_the_demo_plays_a_reviewed_agent_turn(browser, phase4_server, width):
         expect(page.locator("#fileViewer")).to_contain_text("buy-vs-rent.xlsx")
         page.keyboard.press("Escape")
         expect(page.locator("#fileViewer")).to_be_hidden()
-        # No score and no judge any more.
+        # No score and no judge.
         expect(page.locator(".agent-agreement")).to_have_count(0)
         expect(page.locator("#agentAnswer")).not_to_contain_text("/100")
         expect(page.locator("#agentAnswerActivity")).not_to_contain_text("Answer check")

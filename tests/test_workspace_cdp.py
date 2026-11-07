@@ -1,11 +1,10 @@
 """Chrome's protocol on a socket only the provider's user opens
-(workspace_vm/browser/cdp.py, since 2026-11-04): the browser runs on the
+(workspace_vm/browser/cdp.py): the browser runs on the
 workbench next to the agent's user, so Chrome gets no debugging port. cdp.py
 holds Chrome's pipe and gives every connection a browser session of its own;
 its ids and sessions never meet another connection's, and its end detaches
-what it set up. A stand-in Chrome speaks the pipe here (fd 3 in, fd 4 out);
-the real one ran against Playwright in the review of 2026-11-04
-(docs/agent-mode.md "Ein Rechner").
+what it set up (docs/agent-mode.md "Ein Rechner"). A stand-in Chrome speaks
+the pipe here (fd 3 in, fd 4 out).
 
 And browser.py reads a localhost page only where the agent's user listens
 (agent_ports): the kernel's socket table, not what a page says.
@@ -147,10 +146,10 @@ def frames_from(sock, count):
 
 
 def test_a_client_that_stops_reading_never_holds_what_chrome_sends_the_others(monkeypatch):
-    """Bug hunt 2026-11-05: send ran sendall on the one thread that reads
+    """send ran sendall on the one thread that reads
     Chrome's pipe, and after the upgrade without a time limit. A client that
     no longer read held that thread: no connection heard from Chrome, and
-    Chrome's pipe filled. Now each connection has its queue and its writer;
+    Chrome's pipe filled. Each connection has its queue and its writer;
     one that lets more than QUEUE_BYTES wait is dropped as one that left."""
     cdp = load("cdp")
     stuck, its_peer = socket.socketpair()
@@ -364,7 +363,7 @@ def test_browser_reads_localhost_only_where_the_agents_user_listens(tmp_path):
     """agent_ports: the TCP ports uid 1500 listens on (state 0A), from 1024
     up, from the kernel's tables; another user's port, a connection that is
     no listener and a low port do not count, nor a port another user listens
-    on at another address (review 2026-11-04: 127.0.0.2 next to 127.0.0.1)."""
+    on at another address (127.0.0.2 next to 127.0.0.1)."""
     browser = load("browser")
     tcp, tcp6 = tmp_path / "tcp", tmp_path / "tcp6"
     head = "  sl  local_address rem_address   st tx_queue rx_queue tr tm->when retrnsmt   uid  timeout inode\n"

@@ -178,7 +178,7 @@ describe("critical resource reporting", () => {
   });
 
   // A browser extension's own error, with an Error object or as a rejection,
-  // raised an alert without a place (2026-10-22).
+  // raised an alert without a place.
   it("drops errors thrown by browser extensions, not those passing through the app", () => {
     const { window, dom, reports } = boot();
     window.dispatchEvent(new window.ErrorEvent("error", {

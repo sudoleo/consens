@@ -134,7 +134,7 @@ def test_compare_runs_are_admitted_against_the_compare_estimate(run_api):
                                               (99, FREE_RUN["compare"] - 3_000), ("2", FREE_RUN["compare"] - 3_000)])
 def test_the_last_announced_answer_frees_what_a_compare_run_still_holds(run_api, operations, held):
     # The sidebar read a finished Compare run's leftover hold as "held for a
-    # message still running" until it expired (nightly 2026-10-27).
+    # message still running" until it expired.
     client, _repository, db = run_api
     assert _prepare(client, "compare-run", mode="compare", operations=operations).status_code == 200
     for route, provider in [("/ask_openai", "openai"), ("/ask_mistral", "mistral")]:
@@ -359,7 +359,7 @@ def test_admitted_run_finishes_and_may_overdraw_the_account(run_api):
 
 
 def test_prepare_is_throttled_per_account_across_addresses(run_api):
-    # Audit 2026-10-28: /prepare admits a run and had no limit at all.
+    # /prepare admits a run, so it is limited per account too.
     client, _repository, _db = run_api
     for index in range(chat_router.PREPARES_PER_MINUTE):
         response = client.post("/prepare", headers={**AUTH, "CF-Connecting-IP": f"203.0.113.{index}"},

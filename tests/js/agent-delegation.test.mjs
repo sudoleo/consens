@@ -64,7 +64,7 @@ describe("Agent sidebar", () => {
     const {window:w,document:d,dom} = boot(async () => ({ok:true,json:async () => ({agents:[agent(1,'completed')],status:'succeeded'})}));
     receive(w, agent(1, 'completed'));
     w.App.agentDelegation.project({chatId,turnId,running:false});
-    // Only on request (2026-10-31): the reader opens it.
+    // Only on request: the reader opens it.
     const sidebar = d.getElementById('agentSidebar');
     expect(sidebar.hidden).toBe(true);
     d.querySelector('.agent-sidebar-toggle').click();
@@ -80,8 +80,6 @@ describe("Agent sidebar", () => {
     expect(sidebar.classList.contains('is-leaving')).toBe(false);
     dom.window.close();
   });
-  // 2026-10-31, Max: it opened by itself a moment after Send (from Send on
-  // in audit mode) and should open only when the reader clicks its icon.
   it('never opens by itself: not on Send, not when the turn arrives', () => {
     const {window:w,document:d,dom} = boot();
     w.App.agentDelegation.project({chatId,running:true,workLog:true});
@@ -133,7 +131,7 @@ describe("Agent sidebar", () => {
     expect(scrim.hidden).toBe(false);
     scrim.click();
     expect(d.activeElement).toBe(toggle);
-    // It slides out first (C5), then is hidden.
+    // It slides out first, then is hidden.
     await new Promise(resolve => setTimeout(resolve, 260));
     expect(sidebar.hidden).toBe(true);
     expect(scrim.hidden).toBe(true);
@@ -319,7 +317,7 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  // The comparison mode's answer check of a saved turn (before 2026-10-31).
+  // The comparison mode's answer check of an older saved turn.
   it('opens judge details immediately from the snapshot without detail reads', async () => {
     const {window: w, document: d, dom} = boot(async () => ({ok:true, json:async () => ({agents:[],status:'succeeded'})}));
     const judge = {...agent(1, 'completed'), kind:'judge', title:'Coverage judge'};
@@ -369,7 +367,7 @@ describe("Agent sidebar", () => {
   it("opens on a wide screen only on request, shares state with inline icons and respects manual close and duplicate events", async () => {
     const { window: w, document: d, dom } = boot();
     receive(w, agent()); w.App.agentDelegation.project({ chatId, turnId, running: true });
-    // Closed until the reader clicks its icon, also with room beside the column (2026-10-31, Max).
+    // Closed until the reader clicks its icon, also with room beside the column.
     expect(d.getElementById("agentSidebar").hidden).toBe(true);
     d.querySelector(".agent-sidebar-toggle").click();
     expect(d.getElementById("agentSidebar").hidden).toBe(false);
@@ -385,7 +383,7 @@ describe("Agent sidebar", () => {
     expect(d.activeElement).toBe(focused);
     d.querySelector(".agent-sidebar-close").click();
     receive(w, agent(2, "question")); receive(w, agent(1));
-    // It slides out first (Apple audit C5).
+    // It slides out first.
     await new Promise(resolve => setTimeout(resolve, 260));
     expect(d.getElementById("agentSidebar").hidden).toBe(true);
     expect(d.querySelector(".agent-session").dataset.status).toBe("question");
@@ -586,8 +584,8 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  // One overview and one timeline (2026-10-26): rounds without objection
-  // fold into one line; before, each round stood under its own heading.
+  // One overview and one timeline: rounds without objection fold into one
+  // line.
   it("shows a reviewer's rounds as one timeline with its notes, never its whole task (Agent audit)", async () => {
     const reviewer = { ...agent(1, "completed"), kind: "audit", title: "Review · Haiku", created_at: "2026-10-26T08:00:00Z" };
     const round = "- **doubtful** · #4: The lookup is unchecked. (https://www.example.org/a)";
@@ -607,10 +605,10 @@ describe("Agent sidebar", () => {
     expect(d.querySelector(".agent-session-role").textContent).toBe("Reviewer");
     d.querySelector(".agent-session summary").click();
     await vi.waitFor(() => expect(d.querySelector(".agent-review-round")).not.toBeNull());
-    // One quiet line, no table between rules (UX audit F7).
+    // One quiet line, no table between rules.
     expect(d.querySelector(".agent-review-stats").textContent).toBe("5 rounds · 1 note · Final review: 1 note");
-    // Each round's time counts from the reviewers' start (F6: every round
-    // read the same clock minute); the clock time stays on hover.
+    // Each round's time counts from the reviewers' start (as clock times
+    // every round read the same minute); the clock time stays on hover.
     expect([...d.querySelectorAll(".agent-review-round-time")].map(time => time.textContent))
       .toEqual(["1:00", "4:00", "5:00", "6:00"]);
     expect(d.querySelector(".agent-review-round-time").dateTime).toBe("2026-10-26T08:01:00Z");
@@ -635,7 +633,7 @@ describe("Agent sidebar", () => {
 
   // A reviewer goes on in a new session after a failed round
   // (agent_audit.ReviewerSession): one row per reviewer, never a third one
-  // beside the two chosen (2026-10-26).
+  // beside the two chosen.
   it("shows a reviewer that went on in a new session as one row", async () => {
     const second = "b".repeat(32), other = "e".repeat(32);
     const reviewer = (id, status, at, usage) => ({ ...agent(1, status, id), kind: "audit", title: "Review · Qwen",
@@ -672,7 +670,7 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  // The final round's hedge (agent_audit, since 2026-10-29): a second
+  // The final round's hedge (agent_audit): a second
   // request on a new session; the one another reply overtook stops.
   it("shows a reviewer whose hedge was overtaken by its own reply as one completed row", async () => {
     const hedge = "c".repeat(32);
@@ -756,7 +754,7 @@ describe("Agent sidebar", () => {
     const segments = [...d.querySelectorAll(".agent-sidebar-segments i")];
     expect(segments.map(s => s.dataset.state)).toEqual(["done", "busy", "out"]);
     expect(d.querySelector(".agent-sidebar-segments").getAttribute("aria-hidden")).toBe("true");
-    // The detail is no focusable scroll region of its own any more.
+    // The detail is no focusable scroll region of its own.
     expect(d.querySelector(".agent-session-detail").hasAttribute("tabindex")).toBe(false);
     receive(w, answer("b".repeat(32), 4, "completed"));
     expect(d.querySelector(".agent-sidebar-progress").textContent).toBe("3 of 3 done · 1 without result");
@@ -824,7 +822,7 @@ describe("Agent sidebar", () => {
   });
   // The demo plays the one mode (demo.js): a reviewer follows the work in
   // rounds and closes with its final review, its answer to the agent's
-  // question shares its icon. No judge works any more.
+  // question shares its icon. No judge works in it.
   it("shows the demo's reviewer following the work, then its final review", () => {
     const { window: w, document: d, dom } = boot();
     d.getElementById("agentAnswerActivity").innerHTML = "<details><summary></summary></details>";
@@ -866,7 +864,7 @@ describe('the workspace shortcut in the run header (workspace-view.js)', () => {
     const shortcut = row.querySelector('.agent-workspace-toggle');
     // agent-chat.css shows it once a VM step stands in the run; style.css hides it without a workspace.
     expect(shortcut.classList.contains('workspace-only')).toBe(true);
-    // Both controls sit apart from the model stack, the panel last (2026-10-28).
+    // Both controls sit apart from the model stack, the panel last.
     expect(shortcut.parentElement.classList.contains('agent-inline-controls')).toBe(true);
     expect(shortcut.nextElementSibling).toBe(row.querySelector('.agent-sidebar-toggle'));
     expect(shortcut.getAttribute('aria-label')).toBe('Open the workspace');

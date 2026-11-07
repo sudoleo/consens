@@ -177,7 +177,7 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     assert all(set(entry) == {"key", "label", "used_for", "source", "text"} for entry in entries)
     assert all(entry["label"] and entry["used_for"] and entry["source"] and entry["text"].strip() for entry in entries)
     texts = {entry["key"]: entry["text"] for entry in entries}
-    # One Agent prompt for every chat (since 2026-10-31): it works and writes
+    # One Agent prompt for every chat: it works and writes
     # the answer itself (no answer step), and the user's models review it.
     assert texts["agent"] == AGENT_AUDIT_SYSTEM_PROMPT and texts["agent"].endswith(AGENT_AUDIT_ANSWER_SECTION)
     assert "call answer" not in texts["agent"] and "answer step" not in texts["agent"]
@@ -196,7 +196,7 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     assert prompt_catalog.DATE_PLACEHOLDER in comparison and "Current date:" not in comparison
     assert "up to 3 search rounds" in comparison
     assert comparison.endswith(agent_comparison.DEPTH_GUIDANCE["full"])
-    # Since 2026-10-28 the agent's texts and their tool blocks name no comparison:
+    # The agent's texts and their tool blocks name no comparison:
     # compare_models' description says what it is (AUDIT_COMPARE).
     from app.services import agent_memory, agent_watch
     assert "comparison" not in texts["agent"].lower()
@@ -211,7 +211,7 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     # Agent VM: its own section, appended when the agent has the workspace.
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     assert texts["agent_vm"] == AGENT_VM_PROMPT and "vm_exec" in texts["agent_vm"]
-    # The open web for every account since 2026-11-04: no request_domain, no second version.
+    # The open web for every account: no request_domain, no second version.
     assert "request_domain" not in AGENT_VM_PROMPT and "agent_vm_no_domains" not in texts
     assert "Your commands in the workspace reach the web too" in AGENT_VM_PROMPT
     from app.services.prompt_defaults import AGENT_PLAN_PROMPT
@@ -219,11 +219,11 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     # GitHub: only with credentials in the backend (agent_github.py).
     from app.services.prompt_defaults import AGENT_GITHUB_PROMPT
     assert texts["agent_github"] == AGENT_GITHUB_PROMPT and "github_import" in texts["agent_github"]
-    # The workspace on demand: its short block until open_workspace (2026-10-29).
+    # The workspace on demand: its short block until open_workspace.
     from app.services.prompt_defaults import AGENT_WORKSPACE_CLOSED_PROMPT
     assert texts["agent_workspace_closed"] == AGENT_WORKSPACE_CLOSED_PROMPT
     assert "open_workspace" in texts["agent_workspace_closed"]
-    # Who reviews, by the user's setting (2026-11-01), and the temporary chat.
+    # Who reviews, by the user's setting, and the temporary chat.
     from app.services.prompt_defaults import AGENT_REVIEW_FACTS, AGENT_TEMPORARY_CHAT_PROMPT
     assert all(f"[{setting}] {fact}" in texts["agent_review_facts"] for setting, fact in AGENT_REVIEW_FACTS.items())
     assert texts["agent_temporary_chat"] == AGENT_TEMPORARY_CHAT_PROMPT
@@ -236,7 +236,7 @@ def test_code_prompts_fit_the_prepare_round_trip():
 
 
 def test_agent_counts_consens_io_among_the_ai_options():
-    # Chat review 2026-10-25: asked which AI suits a trip with live data, the
+    # Asked which AI suits a trip with live data, an
     # answer named only other services, although consens.io searches live.
     assert "When the user asks which AI or tool suits a task, consens.io is one option among others." in (
         AGENT_AUDIT_SYSTEM_PROMPT)

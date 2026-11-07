@@ -83,7 +83,7 @@ def test_explicit_turn_catalog_cannot_override_provider_local_mapping():
 
 
 def test_browser_turn_sources_cannot_add_a_document_or_rename_one():
-    """Audit S3: a client-sent turn source must not reach the turn or a share."""
+    """A client-sent turn source must not reach the turn or a share."""
     provided = {"id": "S1", "url": "https://real.test/report", "title": "Real report", "provider": "OpenAI"}
     normalized, per_model, catalog = normalize_source_catalog(
         # The question can make a model print any tag, here [S9].
@@ -209,7 +209,7 @@ def test_stored_model_answer_and_turn_normalization_roundtrip_entire_source_cata
     from app.services.chat_store import model_answer_metadata, normalize_turn_sources, sanitize_sources
 
     sources = [source(f"S{i}", f"https://example.test/{i}") for i in range(1, 101)]
-    # A model answer as a saved Consensus turn stores it (written until 2026-10-25).
+    # A model answer as a saved Consensus turn stores it.
     stored = {"schema_version": 1, "provider": "OpenAI", "model_label": "OpenAI",
               "answer": "Last reference [S100]", "sources": sanitize_sources(sources)}
     assert len(stored["sources"]) == 100

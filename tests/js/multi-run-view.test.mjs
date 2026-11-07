@@ -227,7 +227,7 @@ describe("selected RunContext projection", () => {
     dom.window.close();
   });
   it("keeps a saved answer's footer when a run ends in the background", () => {
-    // Bug hunt 2026-10-26: renderVisible with the saved chat still on
+    // renderVisible with the saved chat still on
     // screen cleared the footer firebase.js drew (chips, share, watch).
     const { registry, window, dom } = boot();
     const run = createRunning(registry, "Background");
@@ -270,7 +270,7 @@ describe("selected RunContext projection", () => {
     }));
   });
 
-  // A-B2 (docs/agent-audit-readiness-2026-10-29.md): a paused Agent run of a
+  // A paused Agent run of a
   // chat not on screen read "Working" with its pulse while the pause ran
   // into its timeout.
   it("says in the row of a chat not on screen that its run waits for the user", () => {
@@ -293,7 +293,7 @@ describe("selected RunContext projection", () => {
     registry.update(agent.runId, context => { context.metadata.hold = null; });
     expect(status.textContent).toBe("Working");
     expect(row.classList.contains("is-paused")).toBe(false);
-    // The word of the activity's head (UX audit E2): thinking, a command or
+    // The word of the activity's head: thinking, a command or
     // the answer being written is "Working", the reviewers' check "Reviewing".
     registry.update(agent.runId, context => {
       context.metadata.agentActivity = [{ version: 1, kind: "reasoning", id: "r", format: "summary", text: "Weighing it." }];
@@ -302,8 +302,8 @@ describe("selected RunContext projection", () => {
     expect(status.textContent).toBe("Working");
     registry.update(agent.runId, context => { context.metadata.agentReview = { mode: "audit", status: "running" }; });
     expect(status.textContent).toBe("Reviewing");
-    // The comparison mode's answer check has no word of its own any more
-    // (2026-10-31): a review of another mode is work.
+    // The comparison mode's answer check has no word of its own: a review
+    // of another mode is work.
     registry.update(agent.runId, context => { context.metadata.agentReview = { status: "running" }; });
     expect(status.textContent).toBe("Working");
     dom.window.close();
@@ -348,8 +348,8 @@ describe("projection re-entrancy", () => {
     const { registry, window, document, dom } = boot();
     let tierCalls = 0;
     // The real chain is updateUserTierUI -> restoreModelSelections ->
-    // setModelSelectionState -> renderVisible. Any such feedback used to
-    // recurse until "Maximum call stack size exceeded", which the run then
+    // setModelSelectionState -> renderVisible. Any such feedback loop
+    // recursed until "Maximum call stack size exceeded", which the run then
     // reported as a failure right after /prepare.
     window.updateUserTierUI = () => {
       tierCalls += 1;

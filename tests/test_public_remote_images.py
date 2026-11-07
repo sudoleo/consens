@@ -1,10 +1,10 @@
-"""Public pages load no other site's images (audit 2026-10-28).
+"""Public pages load no other site's images.
 
-Until then render_public_markdown (nh3) let an answer's <img> with any https
-source through, and the CSP allowed every https image: a shared, Topic, Watch
-or Check page made its readers' browsers fetch a model's (or an injected)
-picture, which told its host who read the page. The app had blocked them all
-along (markdown-stream.js neutralizeRemoteMedia).
+An answer's <img> with an https source on a shared, Topic, Watch or Check
+page would make its readers' browsers fetch a model's (or an injected)
+picture, which tells its host who read the page. render_public_markdown (nh3)
+and the CSP keep them out, as the app does (markdown-stream.js
+neutralizeRemoteMedia).
 """
 
 import re
@@ -37,8 +37,8 @@ def test_a_file_name_of_the_agent_is_a_local_note_and_own_images_stay():
 
 
 def test_a_picture_the_agent_placed_leaves_nothing_on_a_public_page():
-    """The picture is a file of the private chat (agent_web_images,
-    2026-10-31): neither it nor a note or an empty paragraph shows."""
+    """The picture is a file of the private chat (agent_web_images):
+    neither it nor a note or an empty paragraph shows."""
     html = render_public_markdown("Intro.\n\n![Jeef](picture:p2)\n\nText ![x](picture:f1) on.")
     assert "picture:" not in html and "Jeef" not in html and "Image not loaded" not in html
     assert html.count("<p>") == 2 and "<p></p>" not in html and "Text  on." in html

@@ -3,9 +3,9 @@
  *
  * Sobald eine Follow-up-Frage gestellt wird, rutscht die fertige Antwort in
  * #threadHistory und wird aus differences_data neu verankert. Der Widerspruch
- * muss diesen Umzug ueberleben: bis 2026-08-22 bekam der strittige Satz dort
- * nur noch sein Claim-Badge ("1 of 6 models support this", bernstein) und las
- * sich damit als blosse Stuetzungsquote statt als roter Widerspruch.
+ * muss diesen Umzug ueberleben: mit nur seinem Claim-Badge ("1 of 6 models
+ * support this", bernstein) las sich der strittige Satz dort als blosse
+ * Stuetzungsquote statt als roter Widerspruch.
  */
 
 import { beforeEach, describe, expect, it } from "vitest";
@@ -105,8 +105,7 @@ describe("renderStoredConsensusClaims", () => {
   });
 
   // A button's name replaces its text: without the sentence in it, a screen
-  // reader heard only the verdict, right where the models disagree (B1 in
-  // docs/a11y-audit-2026-10-23.md).
+  // reader heard only the verdict, right where the models disagree.
   it("names the disputed sentence before its verdict", () => {
     expect(ctx.body.querySelector("[role='button']").getAttribute("aria-label"))
       .toBe("“A ticket costs 29 euros.” – The models contradict each other here: the ticket price — open details");
@@ -194,7 +193,7 @@ describe("renderStoredConsensusClaims without differences", () => {
   });
 
   // The answer is never translated (data-i18n-skip), so i18n.js never sees
-  // these labels: each goes through App.t itself (L3 in the a11y audit).
+  // these labels: each goes through App.t itself.
   it("builds its labels through App.t", () => {
     const ctx = boot();
     const asked = [];
@@ -233,7 +232,7 @@ describe("difference cards in the detail panel", () => {
     ctx.window.renderStoredDifferenceCards(cards, MIXED);
     const all = [...cards.querySelectorAll(".diff-card")];
     expect(all.map(card => card.dataset.differenceIndex)).toEqual(["2", "0", "1"]);
-    // No severity line above the topics (Max 2026-10-23): a red dot before
+    // No severity line above the topics: a red dot before
     // the critical one's topic is the only colour, the order says the rest.
     expect(cards.querySelector(".diff-type-tag, .diff-card-tags")).toBe(null);
     expect(all.map(card => [...card.querySelectorAll(".sev-dot")].map(dot => dot.className)))
@@ -285,7 +284,7 @@ describe("difference cards in the detail panel", () => {
     data.differences[0].positions[1].in_answer = true;
     ctx.window.renderStoredDifferenceCards(cards, data);
     const card = cards.querySelector(".diff-card");
-    // The reader shows no answer (Max 2026-10-23: first the situation, then
+    // The reader shows no answer (first the situation, then
     // the rival claim, then who says what): its sentence, as marked in the
     // text, is the card's head, under its quiet topic; no dot.
     const summary = card.querySelector(".diff-card-summary");
@@ -339,7 +338,7 @@ describe("difference cards in the detail panel", () => {
   });
 
   it("shows the same claim once, with every model on its first side only", () => {
-    // Live 2026-10-21: the answer's claim for Luna, the same claim again for
+    // A judge's output seen live: the answer's claim for Luna, the same claim again for
     // two models, then the rival claim. Saved chats still carry that shape.
     const ctx = boot();
     const cards = ctx.document.createElement("div");
@@ -465,7 +464,7 @@ describe("difference cards in the detail panel", () => {
   });
 
   it("folds a yellow sentence with a named spot into the smaller differences", () => {
-    // Max 2026-10-23: what the text marks yellow is in the list too, among
+    // What the text marks yellow is in the list too, among
     // the smaller differences; a sentence a difference already carries, or
     // one without a named spot, is not.
     const MAIL = "Mail judith-c.schneider@uni.de for an appointment.";

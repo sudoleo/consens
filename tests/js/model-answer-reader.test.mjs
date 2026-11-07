@@ -169,7 +169,7 @@ describe("model answer reader", () => {
     expect(ctx.document.getElementById('answerReaderTitle').textContent).toBe('Differences');
     expect(button('differences').textContent).toBe('Differences');
   });
-  // The question line is the reader's words (bug hunt 2026-10-23).
+  // The question line is the reader's words.
   it("shows the question as asked on a German page, the tabs in German", async () => {
     const ctx = boot({ german: true }); ctx.project(run());
     const context = { key: 'tool:de', question: ENGLISH_QUESTION, answers: [], sections: ['differences', 'sources'],
@@ -190,7 +190,7 @@ describe("model answer reader", () => {
         return panel;
       } };
     ctx.reader.openContext(snapshot, { section: 'differences' });
-    // Max 2026-10-23: the differences always start folded, the weightiest first.
+    // The differences always start folded, the weightiest first.
     expect([...ctx.document.querySelectorAll('#answerReaderInspector .diff-card')].map(card => card.open))
       .toEqual([false, false, false]);
   });
@@ -333,7 +333,7 @@ describe("model answer reader", () => {
   it("preserves an untouched direct answer while another model streams", () => {
     const ctx = boot(); const state = run(); state.config.agentMode = false; ctx.project(state);
     const first = ctx.document.querySelector('.answer-reader-answer');
-    // A Compare answer ends in the row of an Agent answer: Sources opens its list (UX audit B12).
+    // A Compare answer ends in the row of an Agent answer: Sources opens its list.
     const sources = first.querySelector('.answer-reader-evidence [data-section="sources"]');
     sources.click();
     expect(sources.getAttribute('aria-expanded')).toBe('true');

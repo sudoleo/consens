@@ -1,4 +1,4 @@
-"""Pictures in the answer text (2026-10-31): built /app, isolated fixtures, no paid calls.
+"""Pictures in the answer text: built /app, isolated fixtures, no paid calls.
 
 The agent places a picture it showed with ![caption](picture:p1)
 (agent_web_images.picture_markdown); the app puts the stored picture there
@@ -152,7 +152,7 @@ def test_a_placed_picture_stands_in_the_text_and_the_others_under_it_after_the_r
         assert page.evaluate("el => el.isConnected && !!el.closest('.md-picture[data-picture=\"p1\"]')", placed)
         assert "picture:" not in body.inner_text()
         assert page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
-        # The activity panel stays closed until its icon is clicked (2026-10-31).
+        # The activity panel stays closed until its icon is clicked.
         assert not page.locator("#agentSidebar:visible").count()
         body.scroll_into_view_if_needed()
         _snapshot(page, f"agent-inline-picture-{width}-{'dark' if dark else 'light'}")
@@ -163,7 +163,7 @@ def test_a_placed_picture_stands_in_the_text_and_the_others_under_it_after_the_r
 
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, True)])
 def test_a_picture_in_the_viewer_zooms_about_the_finger_or_cursor_and_never_the_page(browser, phase4_server, width, dark):
-    """2026-11-02, Max: zoom into a picture's preview, Apple-like and without
+    """Zoom into a picture's preview, Apple-like and without
     a toolbar (image-zoom.js): Ctrl + wheel or a pinch about the point under
     it, a double click or tap toggles, an enlarged picture drags to its edges
     and a swipe does not page it, + / - / 0, and the page's own zoom stays."""
@@ -310,7 +310,7 @@ def test_a_picture_in_the_viewer_zooms_about_the_finger_or_cursor_and_never_the_
 
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, True)])
 def test_pictures_on_one_line_are_a_collage_the_viewer_pages_through(browser, phase4_server, width, dark):
-    """2026-10-31, Max: ChatGPT's collage to click through. One large picture,
+    """ChatGPT's collage to click through. One large picture,
     two beside it, "+1" for the fourth; a click opens the viewer, whose arrows
     and keys page through the line (agent-workspace.js markGalleries,
     attachments.js pageGallery)."""

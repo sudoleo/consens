@@ -14,7 +14,7 @@ from test_agent_chat_frontend import CATALOG, _choose_mode
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json, _route_account_settings  # noqa: F401 (fixture)
 
 NOTE = "DeepSeek V4.1 Flash offers Low (High, Max on Pro); Low is the closest."
-# A proposal saved before 2026-10-31 may still name the Agent's comparison
+# An older saved proposal may still name the Agent's comparison
 # options (agent_preferences, gone with its comparison mode): the card leaves
 # them out.
 PROPOSAL = {"settings": {"agent_model": {"model_id": CATALOG["default_model_id"], "reasoning_effort": "low"},

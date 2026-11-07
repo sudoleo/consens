@@ -65,9 +65,9 @@ def test_a_due_refresh_never_holds_up_a_snapshot(monkeypatch):
 
 
 def test_a_snapshot_copies_only_the_entries_it_reads(monkeypatch):
-    """Until 2026-11-01 every snapshot copied OpenRouter's whole catalog
-    (about 550 models, ~20 ms), some 45 times before a message's first
-    request, mostly to read one entry."""
+    """A snapshot does not copy OpenRouter's whole catalog (about 550
+    models, ~20 ms): a message's first request takes some 45 snapshots,
+    mostly to read one entry."""
     many = {f'vendor/model-{i}': metadata._normalize({**TERRA, 'id': f'vendor/model-{i}'}) for i in range(500)}
     monkeypatch.setattr(metadata, 'fetch_models', Mock(return_value=many))
     copies = []
@@ -119,7 +119,7 @@ def test_admin_db_additions_order_removals_and_replay_without_a_code_allowlist(a
     catalog[TERRA['id']] = {**metadata._normalize(TERRA), '_version': 'provider-test'}
     monkeypatch.setattr(metadata, 'snapshot', lambda: deepcopy(catalog))
     try:
-        # Requests no longer reload the catalog; the sync loop / admin save do,
+        # Requests do not reload the catalog; the sync loop / admin save do,
         # exactly once per published revision.
         cfg.load_models_from_db(strict=True, persist_backfill=False)
         response = client.get('/agent/models', headers=AUTH)

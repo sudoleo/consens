@@ -1,11 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// The calm view every account starts with (2026-11-01, Max: "a casual user
-// sees far too much, and no console commands by default"): under the head
-// one line says in everyday words what the agent does now, or while it
-// thinks what it is after (since 2026-11-04 one line, Max: the thin thought
-// under the status "does not fit there"), each held a while. The Display switch
+// The calm view every account starts with (a casual user sees far too much,
+// and no console commands by default): under the head one line says in
+// everyday words what the agent does now, or while it thinks what it is
+// after, each held a while. The Display switch
 // "Detailed progress" (account setting detailed_progress) brings back the
 // lines in full; the history under the head keeps everything either way.
 function setup() {
@@ -22,7 +21,7 @@ function setup() {
   const render = (spec = {}) => activity.render(host, { running: true, status: "running", events, ...spec });
   const preview = () => host.querySelector(".agent-progress");
   const status = () => preview().querySelector(".agent-current-status")?.textContent;
-  // Since 2026-11-04 the thought is the status line itself while no step runs.
+  // The thought is the status line itself while no step runs.
   const thought = () => status();
   // Time passes, and the timers whose time came run.
   const wait = ms => {
@@ -55,7 +54,7 @@ describe("the calm live view", () => {
     expect(preview().querySelector(".agent-vm, code, pre, .agent-vm-fold")).toBeNull();
     expect(preview().textContent).not.toContain("pip");
     expect(preview().textContent).not.toContain("Collecting");
-    // One line of what it does, nothing under it (no thin subtitle since 2026-11-04).
+    // One line of what it does, nothing under it (no thin subtitle).
     expect([...preview().children].map(child => child.className)).toEqual([
       "agent-progress-step agent-current-status"]);
     expect(preview().querySelector(".agent-current-status").getAttribute("role")).toBe("status");
@@ -144,7 +143,7 @@ describe("the calm live view", () => {
     reasoning("r2", "The user wants the 2026 rates. I should check the official site first. Then", "text");
     render();
     expect(thought()).toBe("I should check the official site first.");
-    // A scrap of deliberation says nothing to the user (Max, 2026-11-04): the line keeps its thought.
+    // A scrap of deliberation says nothing to the user: the line keeps its thought.
     wait(5000);
     reasoning("r2", " Also maybe share nothing.", "text");
     render();

@@ -353,8 +353,7 @@ def test_a_service_sentence_that_reaches_a_card_is_found():
 def test_a_progress_line_of_the_run_is_found():
     """The run's own progress lines reach the activity as they are (UX audit
     2026-10-29 I6: the domain review's line stood in English in a German
-    run; the domain review went on 2026-11-04 with request_domain); the work
-    log's notes beside them are no text for the page."""
+    run); the work log's notes beside them are no text for the page."""
     keys = {item.key for item in i18n_tool.server_keys("app/services/agent_delegation.py")}
     assert "The reviewers check this step before it runs." in keys
     assert not any(key.startswith("The reviewers let the calls") for key in keys)
@@ -486,7 +485,7 @@ def test_content_in_a_skipped_region_keeps_its_words(small_catalog):
 
 def test_the_app_shell_marks_what_scripts_fill_with_content():
     # The tab title becomes the question and the composer quotes an answer;
-    # i18n.js rewrote both on a German page (bug hunt 2026-10-23).
+    # i18n.js once rewrote both on a German page.
     shell = (ROOT / "templates/index.html").read_text(encoding="utf-8")
     assert "<title data-i18n-skip>" in shell
     assert re.search(r'<blockquote id="composerQuoteText"[^>]*data-i18n-skip', shell)

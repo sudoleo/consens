@@ -267,7 +267,7 @@ def _open(browser, server, view, *, uid="visual-tour", path="/app", init_script=
     page.route("**/agent/google/connections", lambda route: _json(route, {"configured": False, "connections": []}))
     page.route("**/api/my/watches", lambda route: _json(route, {
         "status": "success", "watches": [], "limits": {"plan": "free", "active_count": 0, "active_limit": 3}}))
-    # The Agent's Watches (since 2026-11-03): the page and an answer's pill read them.
+    # The Agent's Watches: the page and an answer's pill read them.
     agent_watches = lambda route: _json(route, {"watches": [], "intervals": ["daily", "weekly"],  # noqa: E731
                                                 "active_count": 0, "active_limit": 2})
     page.route("**/agent/watches", agent_watches)

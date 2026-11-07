@@ -32,8 +32,8 @@ SETTINGS_PATH = ("users", UID, "settings", "app")
 def test_sanitize_keeps_valid_fields_and_drops_each_invalid_one_alone():
     stored = {
         "run_mode": "bogus",
-        # Settings the app no longer has (the source check until 2026-10-15,
-        # the Agent's own settings until its one mode, 2026-10-31).
+        # Settings the app no longer has (the source check, the Agent's own
+        # settings from before its one mode).
         "check_sources": True,
         "agent_model": {"model_id": "openai/gpt-6-luna", "reasoning_effort": "low"},
         "agent_preferences": {"depth": "quick", "quorum": None},
@@ -120,8 +120,8 @@ def test_update_changes_only_the_named_settings_and_notes_when(repository, datab
 
 
 def test_the_retired_agent_preferences_vanish_from_a_stored_account(repository, database):
-    """The Agent's own settings until its one mode (2026-10-31): a stored
-    value and its revision are no longer read, and the next change of the
+    """The Agent's own settings from before its one mode: a stored
+    value and its revision are not read, and the next change of the
     account leaves them out."""
     database.documents[SETTINGS_PATH] = {
         "values": {"agent_preferences": {"depth": "quick", "quorum": "fast", "autonomy": "free", "judges": "off",
@@ -276,7 +276,7 @@ def test_patch_refuses_a_value_outside_the_rules_and_keeps_the_others(settings_a
 
 
 def test_an_older_page_still_sending_the_agent_preferences_saves_the_rest(settings_api):
-    """Until the Agent's one mode (2026-10-31) a page sent answer depth,
+    """Before the Agent's one mode a page sent answer depth,
     answer start, Agent freedom, answer check, audit and VM as
     agent_preferences: rejected alone, the other settings are saved."""
     client, stub = settings_api

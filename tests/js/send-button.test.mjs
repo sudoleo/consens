@@ -44,7 +44,7 @@ it("keeps its icon across repeated syncs and launches once per run", () => {
   expect(button.querySelector("path")).not.toBeNull();
   expect(button.classList.contains("is-cancel-action")).toBe(false);
   expect(button.classList.contains("is-launching")).toBe(false);
-  // The arrow comes back with the stop square's own short entry (Apple audit C12).
+  // The arrow comes back with the stop square's own short entry.
   expect(button.classList.contains("is-returning")).toBe(true);
   w.App.syncSendButtonRunning();
   expect(button.classList.contains("is-returning")).toBe(true);

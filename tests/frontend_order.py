@@ -1,10 +1,8 @@
 """Load-order helper for the frontend source contracts.
 
-Script order used to be asserted by comparing ``str.index()`` positions inside
-templates/index.html. The template no longer lists the files -- the order lives
-in static/js/bundles.json, which is what both the build and the renderer read.
-Asserting against that file checks the actual contract instead of the byte
-offsets of a rendering detail.
+The order lives in static/js/bundles.json, which is what both the build and
+the renderer read. Asserting against that file checks the actual contract
+instead of the byte offsets of a rendering detail.
 """
 
 from __future__ import annotations

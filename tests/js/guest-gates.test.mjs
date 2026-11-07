@@ -4,7 +4,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 // A guest at a door that needs an account gets the login dialog with a line
 // that says what for, the same everywhere; no hint dot points a guest at
-// something that can only ask for an account (Apple-Audit H2).
+// something that can only ask for an account.
 describe("App.askToLogIn", () => {
   it("opens the login dialog with the reason", () => {
     const { window } = loadScripts(["static/js/app-core.js"], {
@@ -24,7 +24,7 @@ describe("App.askToLogIn", () => {
   });
 });
 
-// Max, Apple-Audit H3: a guest has Agent's composer; what in it needs an
+// A guest has Agent's composer; what in it needs an
 // account opens the login with a line that says what for, never a dead click.
 describe("A guest at the composer's doors", () => {
   const COMPOSER = `<div class="input-section"><div class="chat-input-container">

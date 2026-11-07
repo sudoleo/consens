@@ -1,4 +1,4 @@
-"""The keyboard's edge for every layer with fields (Apple audit F8): with the
+"""The keyboard's edge for every layer with fields: with the
 iOS keyboard up, a dialog covers only what is visible, so the button under
 the field is never behind the keyboard. Chromium opens no keyboard; the
 visual viewport Safari reports is stood in (test_mobile_navigation)."""

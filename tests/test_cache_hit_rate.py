@@ -36,7 +36,7 @@ def test_counts_reads_and_writes_per_day_family_and_kind():
 
 def test_reviewers_per_model_from_the_receipts_session_kind():
     """A-K1: the reviewers' hit rate per model. A receipt names its session's
-    kind since 2026-10-29 (session_kind), also once the chat is deleted."""
+    kind (session_kind), also once the chat is deleted."""
     receipts = [
         {**receipt("agent:" + "a" * 32 + ":0", "openai/gpt-6-luna", 1000, agent_id="a" * 32), "session_kind": "audit"},
         {**receipt("agent:" + "a" * 32 + ":1", "openai/gpt-6-luna", 1200, read=1000, agent_id="a" * 32),

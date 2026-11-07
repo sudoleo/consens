@@ -3,7 +3,7 @@ docs/agent-workspace-runtime-audit-2026-10-30.md): its start while the
 model thinks (T1), the browser on the lease alone (T5), the rules only when
 they change (T6), a failure that costs one call (A1, A3), the lease kept
 while the message waits (A2), the end that never waits on the network
-(A6), the localhost tunnel only while someone may look (K1, T7), the browser
+(A6), the browser
 told to rest (K2), and what the turn and the log keep of it (I2-I5, V3).
 The VMs are FakeVM (test_agent_vm.py); nothing calls Sprites.
 """
@@ -24,7 +24,7 @@ from test_agent_runs import UID, store  # noqa: F401  (fixture)
 from test_agent_vm import (ANSWER, NAME, Agent, FakeSocket, _admin_allowance, _FakeBackend, fake_vm,  # noqa: F401
                            results, tool_events, vm_loop)
 
-# The browser runs in the workspace since 2026-11-04.
+# The browser runs in the workspace.
 BROWSER = NAME
 # The real start before the first call; the shared fixture turns it off.
 PREWARM = VMTools.prewarm
@@ -47,7 +47,7 @@ def browse(loop, **arguments):
 def bench_calls(fake_vm):
     """What only the agent's side does: the chat's folder (its marker), the
     message's checkpoint and the agent's own commands. The VM and its tools
-    the browser's warm-up opens too (one VM since 2026-11-04)."""
+    the browser's warm-up opens too (one VM)."""
     return [call for call in fake_vm.calls if call[0] in {"checkpoint", "move_path"}
             or (call[0] == "write" and str(call[2]).startswith(agent_vm.HOME))
             or (call[0] == "run" and str(call[2]).startswith(agent_vm.HOME))]
@@ -205,9 +205,9 @@ def recorded_rules(monkeypatch):
 
 
 def test_the_rules_go_out_only_with_a_new_version_and_no_message_changes_them(store, fake_vm, monkeypatch):
-    """Since 2026-11-04 the workspace's rules are the open web for every
+    """The workspace's rules are the open web for every
     chat (agent_vm.RULES): set with a new version of its tools, never by a
-    message's start or end (until then a chat's domains came and went)."""
+    message's start or end."""
     seen = recorded_rules(monkeypatch)
     first = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     list(first.run())
@@ -229,15 +229,14 @@ def test_the_chats_folder_notes_and_keys_come_in_one_command(store, fake_vm):
     first = results(loop)[0]
     assert first["workspace_notes"]["text"] == "# notes\n" and first["workspace_keys"]["names"] == ["OPENAI_API_KEY"]
     assert agent_secrets.scrub(UID, "key sk-test-123456789") == "key [secret ~/.secrets/OPENAI_API_KEY, hidden from you]"
-    # The agent's own commands only: no separate read of the keys (agent_secrets.load until 2026-10-30).
+    # The agent's own commands only: no separate read of the keys.
     assert not [call for call in fake_vm.calls if call[0] == "run" and call[1] == NAME]
 
 
 def test_a_key_whose_file_ends_with_a_line_break_is_masked_without_it(store, fake_vm, monkeypatch):
-    """Bug hunt 2026-11-06: open_chat took the place of agent_secrets.load,
-    which trimmed each value; a key file edited since (an editor's line
-    break at its end) was masked only as value plus line break, and the key
-    in a header or JSON went out as it was."""
+    """A key file edited with an editor's line break at its end is masked
+    as the trimmed value: masked only as value plus line break, the key in a
+    header or JSON would go out as it is."""
     from app.services import agent_secrets
     monkeypatch.setattr(agent_secrets, "_seen", {})
     key = "sk-edited-987654321"
@@ -251,10 +250,10 @@ def test_a_key_whose_file_ends_with_a_line_break_is_masked_without_it(store, fak
 
 
 def test_a_key_the_record_no_longer_names_is_masked_too(store, fake_vm, monkeypatch):
-    """Bug hunt 2026-11-06: the record keeps the newest 32 names
-    (agent_secrets.KEEP_NAMES); from the 33rd key on, the oldest fell out of
-    it, and after a day or a restart of the server its value, still in
-    ~/.secrets, went to the model as it was. Every key file there is read."""
+    """The record keeps the newest 32 names (agent_secrets.KEEP_NAMES): from
+    the 33rd key on, the oldest falls out of it, and after a day or a restart
+    of the server its value, still in ~/.secrets, would go to the model as it
+    is. Every key file there is read."""
     from app.services import agent_secrets
     monkeypatch.setattr(agent_secrets, "_seen", {})
     old = "sk-oldest-1234567890"
@@ -329,9 +328,10 @@ def test_the_lease_is_kept_while_the_message_waits(store, fake_vm, monkeypatch):
 
 def test_a_message_whose_end_broke_off_lets_the_lease_run_out(store, fake_vm, monkeypatch):
     # The run's end closes the session late in its cleanup; when a step before
-    # it raised (a receipt of a chat deleted meanwhile), the keeper renewed
-    # the lease for up to LEASE_KEEP_MAX_SECONDS and every other chat of the
-    # account got VM_BUSY. The run's end (DelegationLoop.closed) stops it.
+    # it raises (a receipt of a chat deleted meanwhile), the keeper would
+    # renew the lease for up to LEASE_KEEP_MAX_SECONDS and every other chat of
+    # the account would get VM_BUSY. The run's end (DelegationLoop.closed)
+    # stops it.
     monkeypatch.setattr(agent_vm_tools, "LEASE_KEEP_SECONDS", .05)
     keepers = []
 

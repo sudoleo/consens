@@ -107,7 +107,7 @@ def test_dates_are_read_the_way_answers_write_them():
     assert topic_figures.parse_date("October 2026") == (date(2026, 10, 1), "month")
     assert topic_figures.parse_date("in 2027") == (date(2027, 1, 1), "year")
     assert topic_figures.parse_date("soon") is None
-    # A span of days sits at its first day (gpt-6-release-date, 2026-10-15:
+    # A span of days sits at its first day (gpt-6-release-date:
     # "October 7–8, 2026" was read as the bare year and led the timeline).
     assert topic_figures.parse_date("October 7–8, 2026") == (date(2026, 10, 7), "days")
     assert topic_figures.parse_date("7-8 October 2026") == (date(2026, 10, 7), "days")
@@ -238,7 +238,7 @@ def test_figure_lists_do_not_inherit_the_answer_list_indent():
 
 
 def test_years_are_drawn_on_a_timeline_not_as_bars():
-    """when-will-agi-arrive, 2026-10-15: the Judge filled the numbers template
+    """when-will-agi-arrive: the Judge filled the numbers template
     with forecast years; 2026, 2031 and 2047 as bars are three bars of almost
     the same length."""
     answer = ("Lab leaders say roughly 2026–2030. Metaculus: weakly general AI around 2027, "

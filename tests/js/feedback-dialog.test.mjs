@@ -1,12 +1,11 @@
 /**
- * The "Send feedback" dialog (audit F7).
+ * The "Send feedback" dialog.
  *
- * Before: the button opened a form for guests too, whose submit then failed
- * with a German alert(); a failed request was read as success-shaped JSON
- * (no response.ok check), and a double click sent the message twice.
- * Now a guest sees a login hint and the contact address, a member's send
+ * A guest sees a login hint and the contact address, a member's send
  * reports in the dialog's own status line in English, and the button stays
- * locked while a send is in flight.
+ * locked while a send is in flight. A form for guests failed on submit with
+ * a German alert(); a failed request was read as success-shaped JSON (no
+ * response.ok check), and a double click sent the message twice.
  */
 
 import { describe, expect, it, vi } from "vitest";

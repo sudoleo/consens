@@ -13,7 +13,7 @@ def create_turn(store, uid, chat, request="first"):
 
 def finish(store, uid, chat, turn, error_code="consensus_failed"):
     # The terminal write a stored turn still takes (the Consensus completion
-    # left with the browser's Consensus run on 2026-10-25).
+    # left with the browser's Consensus run).
     return store.fail_turn(uid, chat, turn, error_code=error_code)
 
 

@@ -127,7 +127,7 @@ describe("ticks of a saved turn", () => {
   });
 
   // An outage used up the retries; every later tick of the turn then failed
-  // once and was dropped unsaved, its box still ticked (2026-10-24).
+  // once and was dropped unsaved, its box still ticked.
   it("gives a tick after an outage its own retries", async () => {
     const { window, document, fetch, timers } = boot();
     const el = document.createElement("div");

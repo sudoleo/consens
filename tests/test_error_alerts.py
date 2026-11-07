@@ -81,8 +81,8 @@ def test_alert_fires_when_the_stream_had_already_started(alert_app):
     client, captured, _records = alert_app
     response = client.get("/stream")
 
-    # Der Status war schon gesendet; frueher hing der Alert als BackgroundTask
-    # an einem 500er, der in diesem Fall nie ausgeliefert wurde.
+    # Der Status war schon gesendet; als BackgroundTask an einem 500er, der in
+    # diesem Fall nie ausgeliefert wird, ginge der Alert verloren.
     assert response.status_code == 200
     assert len(captured) == 1
     assert captured[0]["path"] == "GET /stream"

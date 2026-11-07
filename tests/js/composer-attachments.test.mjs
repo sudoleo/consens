@@ -85,9 +85,9 @@ describe("composer attachment tray", () => {
     expect(window.App.composer.expand).toHaveBeenCalled();
   });
 
-  // Since 2026-10-29: an Agent message's files wait on the message itself
-  // until stored (agent-workspace.js upload), a picture as its tile in the
-  // skeleton, per run; before, a row per file stood under the message.
+  // An Agent message's files wait on the message itself until stored
+  // (agent-workspace.js upload), a picture as its tile in the skeleton, per
+  // run.
   it("holds a sent file's tile as uploading until its run says it is stored", () => {
     const { window, document } = boot();
     const PICTURE = { name: "image.png", mime: "image/png", size: 7, data: "iVBORw0K" };
@@ -118,8 +118,8 @@ describe("composer attachment tray", () => {
   });
 
   // Excel, Word and LibreOffice put a picture of what was copied next to its
-  // text; Chromium hands it over as image.png. Before, the paste took the
-  // picture and dropped the text (bug hunt 2026-10-24).
+  // text; Chromium hands it over as image.png. Taking the picture dropped
+  // the text.
   it("pastes cells from an office program as text, a screenshot as a picture", () => {
     const { window, document } = boot();
     const field = document.getElementById("questionInput");
@@ -223,7 +223,7 @@ describe("composer attachment tray", () => {
     const body = document.getElementById("attachmentViewerBody");
     expect(body.textContent).toContain("Loading preview");
     // A text file reads in the app's own colours, not in a frame whose white
-    // page took the dark theme's light text (2026-10-27).
+    // page took the dark theme's light text.
     await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-text")?.textContent).toBe("hello"));
     expect(body.querySelector("iframe")).toBeNull();
     const actions = body.querySelector(".attachment-viewer-actions");
@@ -247,7 +247,7 @@ describe("composer attachment tray", () => {
     expect(body.querySelector(".attachment-viewer-actions")).toBeNull();
   });
 
-  // 2026-10-31: the pictures of a collage page through like a gallery.
+  // The pictures of a collage page through like a gallery.
   it("pages through a gallery of pictures with the arrows and the keys", async () => {
     const { window, document } = boot();
     const picture = (id, host) => ({ fileId: id.repeat(32), name: `picture-${id}.webp`, mime: "image/webp", size: 9,
@@ -292,7 +292,7 @@ describe("composer attachment tray", () => {
     await vi.waitFor(() => expect(body.querySelector(".attachment-viewer-image")).not.toBeNull());
   });
 
-  // 2026-11-02: a picture in the viewer zooms (image-zoom.js).
+  // A picture in the viewer zooms (image-zoom.js).
   it("zooms into a picture, starts each picture fitted and pages by swipe only when it is fitted", async () => {
     const { window, document } = boot();
     const picture = id => ({ fileId: id.repeat(32), name: `picture-${id}.webp`, mime: "image/webp", size: 9, title: `Picture ${id}` });

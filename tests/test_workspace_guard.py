@@ -1,5 +1,5 @@
-"""The workspace's safety rules on the server (workspace_guard.py, since
-2026-10-30): the trail of hosts and bytes, the rules that close or lock the
+"""The workspace's safety rules on the server (workspace_guard.py): the
+trail of hosts and bytes, the rules that close or lock the
 workspace, and every way into the workspace that asks them first (the
 agent's tools, open_workspace, the live view, the terminal, the takeover).
 The database is the suites' fake, the resolvers a MockTransport; nothing
@@ -92,7 +92,7 @@ def test_the_trail_counts_hosts_by_host_hour_source_and_typing_never_more():
 
 
 def test_flagged_hosts_count_once_per_site_and_by_who_steered():
-    """The review of 2026-10-31: a page could ask the agent to open
+    """A page could ask the agent to open
     a1 to a15.evil.example and lock its user out. Subdomains are one site,
     and only what the user opened while steering counts towards a lock."""
     visits = [(f"a{n}.evil.example", "agent", False, AT) for n in range(15)] + [
@@ -344,7 +344,7 @@ class SdkTransaction(FakeTransaction):
 
 
 def test_counts_and_unlocks_read_documents_as_firestores_transactions_answer(guard, monkeypatch):
-    """Render log 2026-11-01: every count failed with an AttributeError
+    """Every count failed with an AttributeError
     (tx.get(document) is a generator in Firestore), so nothing was counted
     and no rule could close the workspace; the admin's unlock failed alike."""
     store, alerts, _, _ = guard
@@ -370,7 +370,7 @@ def test_counts_and_unlocks_read_documents_as_firestores_transactions_answer(gua
 
 
 def test_a_page_that_talks_the_agent_into_flagged_sites_closes_a_day_never_locks(guard):
-    """The review of 2026-10-31: injected instructions, two days in a row."""
+    """Injected instructions, two days in a row."""
     store, _, clock, _ = guard
     for day in (0, 2):
         clock["now"] = DAY + timedelta(days=day)
@@ -577,7 +577,7 @@ def test_an_open_view_counts_its_bytes_and_hosts_and_ends_once_the_rules_close(v
 
 def test_an_open_terminal_ends_once_the_rules_close_and_its_bytes_never_count(view_api, fake_vm, monkeypatch):
     """A runaway loop in the user's own terminal prints gigabytes: that is no
-    misuse of the browser (the review of 2026-10-31)."""
+    misuse of the browser."""
     client, store, shell = terminal_api(view_api, monkeypatch, [b"agent@workbench:~$ "])
     workspace_guard.use_db(store.db)
     counted = []
@@ -629,7 +629,7 @@ def test_a_closed_workspace_takes_no_restore_and_no_key(monkeypatch, store):
 
 
 def test_only_verified_accounts_reach_the_workspace(monkeypatch):
-    """The workspace needs a confirmed e-mail address (Max, 2026-10-30): the
+    """The workspace needs a confirmed e-mail address (Max): the
     view and terminal sign in through verify_user_token's default, which
     refuses an unverified token (security.py), never allow_unverified."""
     seen = []
@@ -671,7 +671,7 @@ def test_chromes_policy_blocks_what_the_test_sprite_showed_and_keeps_playwright_
     assert policy["PasswordManagerEnabled"] is False and policy["PrintingEnabled"] is False
     assert {"file://*", "devtools://*", "chrome://flags", "chrome://restart", "chrome://quit"} <= set(
         policy["URLBlocklist"])
-    # No debugging port since 2026-11-04 (cdp.py holds Chrome's pipe): nothing
+    # No debugging port (cdp.py holds Chrome's pipe): nothing
     # to block, and the agent's server may use 9222 like any port.
     assert not [url for url in policy["URLBlocklist"] if "9222" in url]
     assert "DeveloperToolsAvailability" not in policy and not any(key.startswith("DnsOverHttps") for key in policy)
@@ -681,7 +681,7 @@ def test_chrome_starts_only_under_its_rules_and_restarts_once_for_new_ones():
     display, harden = browser_file("display.sh"), browser_file("harden.sh")
     rules = display.index('bash "$here/harden.sh"')
     failed = display[rules:display.index("fi", rules)]
-    # A Chrome that runs under older rules ends too (the review of 2026-10-31).
+    # A Chrome that runs under older rules ends too.
     assert rules < display.index('setsid nohup python3 "$here/cdp.py"') and "stop_chrome" in failed \
         and "exit 1" in failed
     assert 'flags="webgl-1 pipe-1 rules-$(cat "$dir/hardened" 2>/dev/null)"' in display
@@ -697,7 +697,7 @@ def test_openbox_starts_no_program_and_shows_no_menu():
         assert action not in rc
     assert "<item" not in menu and "<execute>" not in menu
     # Every normal window fills the screen, whoever started first (Max's live
-    # view 2026-11-04: Chrome ran below the screen's edge).
+    # view: Chrome ran below the screen's edge).
     import xml.etree.ElementTree as ElementTree
     space = {"ob": "http://openbox.org/3.4/rc"}
     [rule] = ElementTree.fromstring(rc).findall("ob:applications/ob:application", space)
@@ -732,7 +732,7 @@ def test_the_relay_names_each_tabs_host_once_it_changes(monkeypatch):
             return False
 
     def cdp_get(path, timeout=3):
-        # Chrome's targets through cdp.py's socket (since 2026-11-04, no port).
+        # Chrome's targets through cdp.py's socket (no port).
         assert path == "/json/list"
         try:
             return Response(next(lists)).read()
@@ -751,8 +751,8 @@ def test_the_relay_names_each_tabs_host_once_it_changes(monkeypatch):
 
 
 def test_the_relays_watch_outlives_a_failed_look(monkeypatch):
-    """A Chrome that restarts mid-answer (IncompleteRead) cost the watch the
-    rest of the view before (the review of 2026-10-31); now one look."""
+    """A Chrome that restarts mid-answer (IncompleteRead) costs the watch one
+    look, not the rest of the view."""
     import http.client
     import threading
     from test_agent_workspace import load
@@ -783,7 +783,7 @@ def test_the_relays_watch_outlives_a_failed_look(monkeypatch):
     assert {"visit": "after.example"} in said and len(looks) == 2
 
 
-# --- One computer (2026-11-04) ----------------------------------------------------------
+# --- One computer ----------------------------------------------------------------------
 
 class _Backend:
     """A provider that knows one VM and keeps what ran there."""
@@ -804,7 +804,7 @@ class _Backend:
 
 
 def test_a_close_ends_every_process_of_the_agents_user(monkeypatch):
-    """Review 2026-11-04: the network is open to the whole computer, and a
+    """The network is open to the whole computer, and a
     background process of the agent would go on sending for up to an hour
     after the guard closed the workspace. A close ends them all, as the
     provider's user with sudo, before the browser rests."""
@@ -851,7 +851,7 @@ def test_the_network_counters_read_from_the_vm_like_relay_and_browser_read_them(
 
 
 def test_a_message_that_only_ran_commands_brings_the_network_counters(store, fake_vm, monkeypatch):
-    """Review 2026-11-04: only the browser's answers and the live view
+    """Only the browser's answers and the live view
     brought the counters, so an upload with curl in a message without the
     browser went uncounted. At the message's end, once its commands ran,
     the server reads them; and only where the guard counts."""

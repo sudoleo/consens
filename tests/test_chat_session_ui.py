@@ -1,6 +1,6 @@
 """Chat contracts that outlive the browser's Consensus chat session.
 
-Since 2026-10-25 the browser neither creates nor continues a Consensus chat
+The browser neither creates nor continues a Consensus chat
 (chat-session.js is gone; the pipeline runs on the server for Watches, the
 API and topics). What stays: the Agent creates its own chats with the same
 limit wording (App.chatPersistenceErrorMessage, app-text.js, covered in
@@ -26,13 +26,13 @@ def test_the_browser_session_for_consensus_chats_is_gone():
 
 
 def test_agent_chat_creation_reports_the_chat_limit_like_consensus():
-    """Lokaler Test 2026-10-11: POST /chats endete im Agent mit 403
+    """Ein lokaler Test fand: POST /chats endete im Agent mit 403
     chat_limit_reached, der Lauf zeigte nur "At most 200 chats per account"."""
     agent = (ROOT / "static" / "js" / "agent-chat.js").read_text(encoding="utf-8")
     creation = agent.split('fetch("/chats", {', 1)[1].split("chatId = data.chat.id;", 1)[0]
 
     # The limit's own words win over the server's ("Delete one…"), carried
-    # as the refusal's sentence (App.httpError, Apple-Audit H1).
+    # as the refusal's sentence (App.httpError).
     assert "const limit = App.chatPersistenceErrorMessage?.(data);" in creation
     assert "if (limit) refusal.message = refusal.serverMessage = limit;" in creation
 
@@ -87,7 +87,7 @@ def test_archived_difference_cards_carry_no_live_run_controls():
         (ROOT / "static" / "js" / "thread-history.js").read_text(encoding="utf-8")
     )
 
-    # Eine Resolve-Runde startet der Browser nicht mehr (2026-10-25): eine
+    # Eine Resolve-Runde startet der Browser nicht: eine
     # Karte zeigt nur ein gespeichertes Ergebnis, ohne Knopf.
     resolve = insights.split("function buildResolveSection(diff)", 1)[1].split(
         "\n          }", 1

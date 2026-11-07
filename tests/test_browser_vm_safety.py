@@ -1,4 +1,4 @@
-"""The workspace browser's safety and pace (2026-11-03): a ref whose element
+"""The workspace browser's safety and pace: a ref whose element
 the page filled with other content is stale (KEY_JS), an action on an element
 gives up after ACT_MS with its reason, a step's later browser calls do not
 run once one failed, and wait waits for a text instead of a fixed time.
@@ -82,7 +82,7 @@ def test_a_ref_whose_element_the_page_filled_anew_is_stale(browser):
 def test_a_ref_is_checked_as_the_agent_saw_it_before_its_step(browser, monkeypatch):
     """[type e40 Hallo enter, click e17] in one step: the snapshot after the
     type noted the row the send had moved as it is now, and the click reached
-    another chat (bug hunt 2026-11-04). The request's step goes to the check
+    another chat. The request's step goes to the check
     and to every snapshot (KEY_CHECK_JS, SNAPSHOT_JS; the page scripts in
     tests/js/workspace-browser-keys.test.mjs)."""
     monkeypatch.setattr(browser, "run", lambda request: {"text": "ok"})

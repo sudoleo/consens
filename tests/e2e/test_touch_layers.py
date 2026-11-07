@@ -1,4 +1,4 @@
-"""Layers under a finger (Apple audit F2, F11): what covers the page holds it
+"""Layers under a finger: what covers the page holds it
 still, and the phone menu follows a swipe to close. Chromium has no real
 finger here; CDP touch events stand in for one (pointerType "touch")."""
 import re
@@ -128,7 +128,7 @@ def test_open_menu_holds_the_page_and_follows_the_finger(browser, phase4_server)
 
 
 def test_a_second_finger_never_leaves_the_menu_hanging(browser, phase4_server):
-    """Review 13: a second finger during the swipe dropped it; the menu hung
+    """A second finger during the swipe dropped it; the menu hung
     half way out, dimmed, with no finger left to end it."""
     context, page, cdp = _reading_page(browser, phase4_server)
     try:
@@ -192,7 +192,7 @@ def test_every_covering_layer_holds_the_page(browser, phase4_server):
 
 
 def test_a_dialog_holds_the_desktop_page_without_moving_its_composer(browser, phase4_server):
-    """Review point 4: the lock is on the root only. With body locked too, body
+    """The lock is on the root only. With body locked too, body
     became a scroll box and the sticky composer left the window's bottom edge
     for the end of the thread behind the dialog (y 806 -> 1882) and came back
     when it closed."""

@@ -404,8 +404,7 @@ def test_the_agent_is_told_what_memory_is_for_not_what_to_leave_out():
     prompt = agent_memory.AUDIT_MEMORY_WRITE_PROMPT
     assert "personal" in prompt and "working on" in prompt and "same step as your answer" in prompt
     assert "merely ask" not in prompt and "need not mention it" in prompt
-    # Apply silently, name rarely (Max 2026-10-04); lost with comparison mode
-    # on 2026-10-31, back with the review that fills the memory.
+    # Apply silently, name rarely (Max).
     use = " ".join(agent_memory.AUDIT_MEMORY_USE_PROMPT.split())
     assert "apply it without saying why" in use and "never build a bridge" in use
     assert "one short clause" in use and "the question and the evidence decide" in use

@@ -2,10 +2,10 @@
 
 Drei Dinge sind hier Vertrag und keine Implementierungsdetails:
 
-* Der Profiltext ist hart gedeckelt. Er geht allen sechs Modellen identisch
-  voran; jedes zusaetzliche Zeichen zieht die Antworten aneinander und hebt den
-  Agreement-Score, ohne dass die Modelle sich einiger waeren.
-* Injiziert wird ausschliesslich in ``handle_ask``. Watch-Reruns, Publisher- und
+* Der Profiltext ist hart gedeckelt. Er geht allen Modellen identisch
+  voran; jedes zusaetzliche Zeichen zieht die Antworten aneinander, ohne dass
+  die Modelle sich einiger waeren.
+* Injiziert wird ausschliesslich in ``handle_ask``. Watch-Reruns und
   Topic-Laeufe gehen an ``engines.py`` vorbei an diesem Code.
 * Das Profil ueberlebt die Kontoloeschung nicht.
 """
@@ -93,8 +93,8 @@ def test_enabled_defaults_to_true_and_only_false_turns_it_off():
 
 
 def test_empty_or_paused_profile_renders_nothing():
-    # "" ist der Normalfall. Ein leerer Rahmen waere teurer Ballast in sechs
-    # Prompts und wuerde die Modelle auf ein Profil hinweisen, das es nicht gibt.
+    # "" ist der Normalfall. Ein leerer Rahmen waere teurer Ballast in jedem
+    # Prompt und wuerde die Modelle auf ein Profil hinweisen, das es nicht gibt.
     assert render_profile(empty_profile()) == ""
     assert render_profile({"role": "Doctor", "enabled": False}) == ""
     assert render_profile(None) == ""
@@ -542,7 +542,7 @@ def test_paused_or_empty_profile_still_gets_the_non_persistence_boundary(monkeyp
 
 
 def test_a_sent_conversation_context_stays_out_and_the_profile_keeps_its_place(monkeypatch):
-    # Seit 2026-10-25 setzt /ask_* keinen Chat fort (Compare ist ein eigener
+    # /ask_* setzt keinen Chat fort (Compare ist ein eigener
     # Chat); ein mitgeschickter Kontext erreicht den Prompt nicht. Das Profil
     # bleibt bei der Anweisung vor der Memory-Grenze.
     prompt = run_ask(

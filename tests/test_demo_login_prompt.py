@@ -45,7 +45,7 @@ class DemoLoginPromptContractTests(unittest.TestCase):
         )
 
     def test_demo_plays_the_one_mode_without_a_score(self):
-        # Since 2026-10-31 the Agent has one mode: the reviewers' notes on the
+        # The Agent has one mode: the reviewers' notes on the
         # answer, no judges and no agreement score.
         demo_module = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
 

@@ -59,8 +59,8 @@ it("marks a sentence that starts with inline code on its own, from its first wor
     "<p>The CLI is fast. <code>npm</code> installs packages quickly.</p>",
     ["The CLI is fast.", "`npm` installs packages quickly."]
   );
-  // Before, the second sentence was never found and the first one's mark ran
-  // on over it: two claims, one mark.
+  // Otherwise the second sentence is never found and the first one's mark
+  // runs on over it: two claims, one mark.
   expect(sentences).toEqual(["The CLI is fast.", "installs packages quickly."]);
   expect(body.querySelector("code .cx-claim, .cx-claim code")).toBeNull();
   expect(body.querySelector("code").outerHTML).toBe("<code>npm</code>");

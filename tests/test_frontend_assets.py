@@ -1,7 +1,7 @@
 """Asset URLs must be content-addressed, in both modes.
 
-The 30 hand-maintained ``?v=`` marks these replace had one failure mode:
-editing a file and forgetting the bump served a stale copy to returning users.
+Hand-maintained ``?v=`` marks have one failure mode: editing a file and
+forgetting the bump serves a stale copy to returning users.
 Nothing here may depend on a human remembering to change a string.
 """
 
@@ -164,9 +164,8 @@ def test_no_manual_version_marks_are_left_in_the_app_template():
 
 
 def test_no_manual_version_marks_hide_inside_app_javascript_imports():
-    """A nested ESM import used to retain an old hand-written ``?v=`` even
-    after index.html moved to content hashes. Such an import stays stale in
-    source mode because changing the dependency does not change its URL."""
+    """A nested ESM import with a hand-written ``?v=`` stays stale in source
+    mode because changing the dependency does not change its URL."""
 
     config = json.loads(assets.BUNDLES_FILE.read_text(encoding="utf-8"))
     sources = []
@@ -215,9 +214,9 @@ def test_nested_import_change_changes_the_entry_url(entry, nested, source_mode):
 
 
 def test_public_stylesheets_are_served_as_their_bundle_while_it_is_current(monkeypatch):
-    """B3: landing.css and public-pages.css reached typography.css through a
-    three-level @import chain, every nested file revalidated on each visit,
-    before the first paint could happen. In built mode asset_url hands out
+    """landing.css and public-pages.css reach typography.css through a
+    three-level @import chain, every nested file revalidated on each visit
+    before the first paint can happen. In built mode asset_url hands out
     the one inlined, hashed bundle -- but only while it still matches its
     sources, so an edit without `npm run build` serves the live sheet rather
     than stale CSS."""

@@ -1,6 +1,5 @@
-"""The agent's ``browser`` tool (agent_browser.py, since 2026-10-27): typed
-actions in the Chrome of the account's workspace (a browser VM of its own
-until 2026-11-04), through one fixed program there
+"""The agent's ``browser`` tool (agent_browser.py): typed
+actions in the Chrome of the account's workspace, through one fixed program there
 (workspace_vm/browser/browser.py) run as the provider's user with JSON on
 stdin, never a shell command of the agent's. The VMs are FakeVM (test_agent_vm.py),
 whose ``browser`` answers for the program; nothing calls Sprites.
@@ -16,7 +15,7 @@ from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 from test_agent_vm import chat_path, NAME, Agent, _admin_allowance, fake_vm, results, tool_events, vm_loop  # noqa: F401
 
-# The browser runs in the workspace since 2026-11-04.
+# The browser runs in the workspace.
 BROWSER = NAME
 PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 64
 
@@ -38,9 +37,9 @@ def call(browser, **arguments):
 
 
 def test_the_browser_goes_on_once_the_days_vm_time_is_used_up(store, fake_vm, monkeypatch):
-    """Its actions are steps of the agent's model, not VM time: until
-    2026-10-31 a used-up day (a dev server's reserve, the user watching the
-    view) turned the browser off with the commands."""
+    """Its actions are steps of the agent's model, not VM time: a used-up
+    day (a dev server's reserve, the user watching the view) does not turn
+    the browser off with the commands."""
     from app.services import agent_vm_time
     monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
     agent_vm_time.charge(store, UID, 100)
@@ -71,7 +70,7 @@ def test_the_agent_uses_the_browser_through_typed_actions_on_its_own_vm(store, f
     assert fake_vm.vms[BROWSER]["files"][agent_workspace.VERSION_PATH] == agent_workspace.VERSION.encode()
     assert fake_vm.vms[BROWSER]["checkpoints"] == [] and fake_vm.calls.count(("ensure", BROWSER)) == 1
     # The first call woke the VM and its Chrome once, on a backend of its own,
-    # while the lease was taken (since 2026-10-29).
+    # while the lease was taken.
     assert fake_vm.warmed == [BROWSER]
     # The workspace's lease covers it; the page comes back as text.
     read = results(loop)[0]
@@ -101,11 +100,9 @@ def test_the_browser_never_opens_its_own_computer(url):
 
 
 def test_localhost_with_a_port_is_the_workspaces():
-    """DeepSeek, 2026-10-28, and Max's tic-tac-toe runs, 2026-10-29: models
-    opened their dev server in the browser first, and got a refusal. Since
-    2026-10-29 localhost:<port> is the agent's server on that port (a tunnel
-    to the workbench until 2026-11-04, the same computer since), a bare one
-    over http; a refusal names the way."""
+    """Models open their dev server in the browser first:
+    localhost:<port> is the agent's server on that port (the same computer),
+    a bare one over http; a refusal names the way."""
     assert check_url("http://localhost:8765/") == "http://localhost:8765/"
     assert check_url("localhost:3000") == "http://localhost:3000"
     assert check_url("127.0.0.1:5173/app") == "http://127.0.0.1:5173/app"
@@ -114,7 +111,7 @@ def test_localhost_with_a_port_is_the_workspaces():
         8765, 3000, None, None]
     with pytest.raises(ValueError, match="name the port"):
         check_url("http://localhost/")
-    # No debugging port any more (cdp.py): 9222 is a port like any other.
+    # Chrome has no debugging port (cdp.py): 9222 is a port like any other.
     assert check_url("http://127.0.0.1:9222/json") == "http://127.0.0.1:9222/json"
     with pytest.raises(ValueError, match="localhost:<port> where your server listens"):
         check_url("file:///tmp/t.html")
@@ -124,15 +121,15 @@ def test_localhost_with_a_port_is_the_workspaces():
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     assert "http://localhost:<port> there is your server on that port" in AGENT_VM_PROMPT
     assert "clock runs on UTC" in AGENT_VM_PROMPT
-    # Checks the user need not see: Playwright with the workbench's Chrome (test Sprite 2026-10-28).
+    # Checks the user need not see: Playwright with the workbench's Chrome.
     assert 'launch(channel="chrome")' in AGENT_VM_PROMPT
-    # Where both computers run (2026-11-02): asked for Claude Code "lokal", the
-    # agent asked whether the user meant their own computer, as if it reached that.
+    # Where both computers run: asked for Claude Code "lokal", the agent
+    # asked whether the user meant their own computer, as if it reached that.
     from app.services.prompt_defaults import AGENT_WORKSPACE_CLOSED_PROMPT
     for prompt in (AGENT_VM_PROMPT, AGENT_WORKSPACE_CLOSED_PROMPT):
         assert "the user's own devices are out of your reach" in prompt
-    # A chart of prices came as # characters in a code block (2026-11-02):
-    # with the workspace a chart is a picture.
+    # A chart of prices came as # characters in a code block: with the
+    # workspace a chart is a picture.
     assert "one drawn in a code block stays text" in AGENT_VM_PROMPT and "vm_share_file" in AGENT_VM_PROMPT
     assert "charts and diagrams as pictures" in AGENT_WORKSPACE_CLOSED_PROMPT
 
@@ -172,7 +169,7 @@ def test_acting_goes_out_as_typed_fields(store, fake_vm):
 
 
 def test_find_looks_up_a_text_and_only_reads(store, fake_vm):
-    """find (since 2026-10-28): the text goes out as a typed field, 1 to 200
+    """find: the text goes out as a typed field, 1 to 200
     characters; it never waits for the reviewers, and the activity and the
     work record say what it looked for."""
     from app.services import agent_gate
@@ -229,7 +226,7 @@ def downloaded(fake_vm, *files):
 
 
 def test_a_download_comes_into_the_chat_folder_and_leaves_the_browser(store, fake_vm, monkeypatch):
-    """Since 2026-10-28: what the browser downloaded (a click, the action
+    """What the browser downloaded (a click, the action
     download, the user in the view) lands in the chat's downloads folder as
     the agent's user, never over an existing file, and is deleted on the
     browser's folder; larger than DOWNLOAD_BYTES is skipped and deleted too."""
@@ -258,8 +255,8 @@ def test_a_download_comes_into_the_chat_folder_and_leaves_the_browser(store, fak
 def test_a_download_that_cannot_be_copied_is_skipped_never_the_answer(store, fake_vm, monkeypatch):
     """A provider hiccup reading the download, a folder of its name in the way
     or a file named downloads on the workbench cost that one file, as
-    downloads_skipped; before 2026-10-30 the click itself failed and with it
-    the turn (VMUnavailable and VMFileRefused are no ValueError)."""
+    downloads_skipped, never the click and with it the turn (VMUnavailable
+    and VMFileRefused are no ValueError)."""
     from test_agent_vm import _FakeBackend
     loop, browser = tools(store)
     folder = chat_path(loop.chat_id)
@@ -319,7 +316,7 @@ def test_download_takes_a_public_address_or_the_current_page(store, fake_vm):
 
 
 def test_click_at_a_place_and_drag_go_out_as_typed_points(store, fake_vm):
-    """Since 2026-10-28 (a paint site in Laura's test): click also at x,y of
+    """For a paint site: click also at x,y of
     the screenshot, drag along strokes of points; checked before anything
     runs, the work record names the place or the strokes, not the points."""
     loop, browser = tools(store)
@@ -338,8 +335,8 @@ def test_click_at_a_place_and_drag_go_out_as_typed_points(store, fake_vm):
     assert describe("browser", json.dumps({"action": "click", "x": 640, "y": 300}), "{}") == "browser click at 640,300"
     assert describe("browser", json.dumps({"action": "drag", "strokes": [[[1, 1], [2, 2]]] * 3}), "{}") == (
         "browser drag 3 strokes")
-    # The action's description says it (since 2026-10-28 only there, not also
-    # in the prompt), and the prompt that a check for a human is never the agent's.
+    # The action's description says it (only there, not also in the
+    # prompt), and the prompt that a check for a human is never the agent's.
     from app.services.agent_browser import BrowserArgs
     from app.services.prompt_defaults import AGENT_VM_PROMPT
     assert "at x,y of your last screenshot" in BrowserArgs.model_json_schema()["properties"]["action"]["description"]
@@ -367,7 +364,7 @@ def test_a_screenshot_comes_as_a_picture_only_for_a_model_that_takes_them(store,
 
 
 def test_an_action_brings_the_picture_after_it_when_asked(store, fake_vm, monkeypatch):
-    """Prod 2026-10-29, tic-tac-toe on a canvas: 15 of 45 model steps only
+    """In Prod, tic-tac-toe on a canvas: 15 of 45 model steps only
     asked for the screenshot after a click. screenshot_after brings it with
     the action, in the same call."""
     loop, browser = tools(store)
@@ -394,8 +391,8 @@ JPEG = b"\xff\xd8\xff\xe0" + b"1" * 64
 
 
 def test_an_opened_page_brings_its_picture_to_the_card_never_to_the_agent(store, fake_vm):
-    """The card of an open step in the chat shows the page (agent-activity.js,
-    since 2026-10-29): the helper's small JPEG stays in the activity."""
+    """The card of an open step in the chat shows the page (agent-activity.js):
+    the helper's small JPEG stays in the activity."""
     script = Agent([[("browser", {"action": "open", "url": "https://kfw.de/"})], [("browser", {"action": "read"})]])
     fake_vm.browser = lambda request: {"status": "ok", "text": 'Opened https://kfw.de/\nPage: "KfW"',
                                        "preview": base64.b64encode(JPEG).decode()}
@@ -411,7 +408,7 @@ def test_an_opened_page_brings_its_picture_to_the_card_never_to_the_agent(store,
 
 def test_a_screenshot_the_agent_shows_lands_under_its_answer_with_the_page_as_its_source(
         store, fake_vm, tmp_path, monkeypatch):
-    """Prod 2026-10-30: asked "can I see it?", DeepSeek tried for 9 minutes to
+    """In Prod, asked "can I see it?", DeepSeek tried for 9 minutes to
     make a picture of bild.de in its workbench, as its screenshots reached
     only itself. With show the screenshot goes under the answer, as a
     picture from the web does (kind web_image, its page as the source)."""
@@ -458,8 +455,8 @@ def test_a_screenshot_the_agent_shows_lands_under_its_answer_with_the_page_as_it
 
 
 def test_the_pages_card_gets_a_new_picture_now_and_then_as_the_agent_works(store, fake_vm, monkeypatch):
-    """2026-10-30, Max: the card kept the page as it opened, so nobody saw
-    where the agent was. An action that can change the page asks for a new
+    """A card that kept the page as it opened would show nobody where the
+    agent is. An action that can change the page asks for a new
     picture once the last is PREVIEW_SECONDS old; the card takes the title
     and address of that step's page; the agent never sees the picture."""
     monkeypatch.setattr(agent_browser, "PREVIEW_AFTER", agent_browser.PICTURE_AFTER - {"open"})
@@ -496,8 +493,8 @@ def test_anything_but_a_small_jpeg_is_no_page_picture(value):
 
 
 def test_look_shows_the_browser_as_a_picture_or_as_text(store, fake_vm, monkeypatch):
-    """ask_user brings the browser back with the user's hand-back (since
-    2026-10-29): a picture for a model that takes them, else the page as text."""
+    """ask_user brings the browser back with the user's hand-back: a picture
+    for a model that takes them, else the page as text."""
     loop, browser = tools(store)
     fake_vm.browser = lambda request: {"status": "ok", "text": 'Page: "Board"\nURL: https://game.example/',
                                        "png": base64.b64encode(PNG).decode()}
@@ -524,8 +521,8 @@ def test_the_programs_refusals_and_the_users_takeover_reach_the_agent(store, fak
 
 
 def test_a_failing_browser_vm_costs_only_the_browser(store, fake_vm):
-    """A failure costs its call; three in a row the browser for the message
-    (runtime audit 2026-10-30, A1: before, the first one did)."""
+    """A failure costs its call; three in a row, not the first one, the
+    browser for the message (runtime audit 2026-10-30, A1)."""
     # One browser call per step: a failed one leaves its step's later browser
     # calls unrun (CALL_AFTER_BROWSER_FAILURE, test_browser_vm_safety.py). A
     # command between them keeps the steps from counting as three invalid
@@ -548,9 +545,9 @@ def test_a_failing_browser_vm_costs_only_the_browser(store, fake_vm):
 
 
 def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypatch):
-    """Prod 2026-10-29 10:30: the browser VM did not start, the provider
-    answered 502 after 40 s to the warm-up, and the call asked the same VM
-    again for another 40 s before it said so. Now it says so at once."""
+    """A browser VM that does not start (in Prod the provider answered 502
+    after 40 s to the warm-up) is not asked again for another 40 s: the call
+    says so at once."""
     opened = []
 
     def refuse(vm, uid, cancellation=None, **kwargs):
@@ -585,11 +582,11 @@ def test_a_browser_vm_the_gateway_calls_unresponsive_is_off_for_the_message(stor
 
 
 def test_the_warm_up_brings_the_network_counters_before_the_agents_commands(store, fake_vm, monkeypatch):
-    """Bug hunt 2026-11-05: in a new boot the first reading of the counters
-    is only where counting starts (workspace_guard.merge_net). A message that
-    only ran commands was read once, at its end, so on a fresh VM an upload
-    with curl counted nothing. The warm-up's answer carries the counters
-    (browser.py): they are the reading before the commands."""
+    """In a new boot the first reading of the counters is only where
+    counting starts (workspace_guard.merge_net): read once, at the end of a
+    message that only ran commands, an upload with curl on a fresh VM would
+    count nothing. The warm-up's answer carries the counters (browser.py):
+    they are the reading before the commands."""
     from app.services import workspace_guard
     counters = {"rx": 10, "tx": 20, "boot": "0b5f0d1c-9c55-4c1e-9f4e-3a1d2b9e7c10"}
     noted = []
@@ -628,9 +625,8 @@ def test_a_long_runs_older_pages_shrink_and_the_work_record_names_each_step():
 
 
 def test_localhost_opens_the_agents_server_on_the_same_computer(store, fake_vm):
-    """Since 2026-11-04 the browser runs in the workspace: localhost:<port>
-    is the agent's server there, without a tunnel (2026-10-29 to
-    2026-11-04 every request named the ports the tunnel held). Which
+    """The browser runs in the workspace: localhost:<port>
+    is the agent's server there, without a tunnel. Which
     localhost pages it reads browser.py decides from the kernel's table of
     the agent's user's listening ports (agent_ports)."""
     loop, browser = tools(store)
@@ -661,7 +657,7 @@ def test_a_refused_download_names_the_way_a_picture_comes_without_the_browser(st
 
 
 def test_the_first_call_says_about_when_the_browsers_start_ends_while_it_waits(store, fake_vm, monkeypatch):
-    """Since 2026-11-02 the chat counts a start down (start-progress.js)
+    """The chat counts a start down (start-progress.js)
     instead of one word for a minute and more: the waiting call's step
     carries the latest estimate of the account's starts, a new one when it
     changes, and none once the browser runs."""
@@ -697,7 +693,7 @@ def test_the_first_call_says_about_when_the_browsers_start_ends_while_it_waits(s
 
 
 def test_a_call_waiting_for_the_workbenchs_start_counts_it_down_too(store, fake_vm, monkeypatch):
-    """One computer since 2026-11-04: a message's workbench start holds the
+    """One computer: a message's workbench start holds the
     setup the browser's warm-up waits for, and the call says its estimate."""
     import threading
     monkeypatch.setattr(agent_browser, "WARM_POLL_SECONDS", .05)
@@ -726,10 +722,10 @@ def test_a_call_waiting_for_the_workbenchs_start_counts_it_down_too(store, fake_
 
 
 def test_stop_ends_a_call_that_waits_for_the_browsers_start(store, fake_vm, monkeypatch):
-    """Bug hunt 2026-11-06: the first call waited for the warm-up whatever
-    happened, up to its whole time (CALL_SECONDS): a slow provider (a gateway
-    answering after 42 s, a setup) made Stop wait as long, since the run
-    waits for its running call. The warm-up goes on; the call ends at Stop."""
+    """A first call that waited for the warm-up whatever happened, up to its
+    whole time (CALL_SECONDS), would make Stop wait as long with a slow
+    provider (a gateway answering after 42 s, a setup), since the run waits
+    for its running call. The warm-up goes on; the call ends at Stop."""
     import threading
     import time
     from app.services.llm.provider_runtime import ProviderCancelled
@@ -759,7 +755,7 @@ def test_stop_ends_a_call_that_waits_for_the_browsers_start(store, fake_vm, monk
     assert fake_vm.requests == []
 
 
-# --- Where the browser is logged in (note_sign_in, since 2026-11-02) ---------------------
+# --- Where the browser is logged in (note_sign_in) ---------------------------------------
 
 def test_the_agent_notes_where_the_browser_is_logged_in_without_the_browsers_vm(store, fake_vm):
     """The list on the account's record (agent_workspace.note_sign_in): a

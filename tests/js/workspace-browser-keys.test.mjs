@@ -1,5 +1,5 @@
 /**
- * The workspace browser's element keys (browser.py KEY_JS, since 2026-11-03):
+ * The workspace browser's element keys (browser.py KEY_JS):
  * read keeps on each element what it says of itself, an action on its ref
  * compares that first. A list that draws its rows anew (WhatsApp's chats)
  * gives a row's element, ref and all, another row's content; a click on the
@@ -18,7 +18,7 @@ const KEY_JS = SOURCE.match(/\nKEY_JS = r"""\n([\s\S]*?)\n"""/)[1];
 const SNAPSHOT_JS = SOURCE.match(/SNAPSHOT_JS = r"""\n([\s\S]*?)\n"""/)[1].replace("%KEY_JS%", KEY_JS);
 // browser.py's KEY_CHECK_JS: the key read kept and the key now.
 const CHECK_JS = SOURCE.match(/KEY_CHECK_JS = r"""\n([\s\S]*?)\n"""/)[1].replace("%KEY_JS%", KEY_JS);
-// browser.py's SHOWN_JS (since 2026-11-06): the elements an answer shows
+// browser.py's SHOWN_JS: the elements an answer shows
 // take what the snapshot saw of them as their key.
 const SHOWN_JS = (SOURCE.match(/\nSHOWN_JS = r"""\n([\s\S]*?)\n"""/) || [])[1];
 const REF = /^ *\[(e\d+)\] /;
@@ -103,7 +103,7 @@ describe("workspace browser element keys", () => {
   it("checks a ref within a step against the element as the agent saw it before that step", () => {
     // One step: [type e40 Hallo enter, click e17]. The send moves the chat to
     // the top and the list draws Clara into Anna's row; the snapshot after the
-    // type must not make that row's key Clara's (bug hunt 2026-11-04).
+    // type must not make that row's key Clara's.
     const { document, look, check } = page(
       '<div role="listbox"><div role="option">Anna Weber</div><div role="option">Ben Kraus</div></div>');
     look({ start: 0, step: "t.1" });
@@ -128,7 +128,7 @@ describe("workspace browser element keys", () => {
   });
 
   it("keeps a row's key as the agent last saw it while the answers show other lines", () => {
-    // Bug hunt 2026-11-05: the answer after an action shows 4,000 characters
+    // The answer after an action shows 4,000 characters
     // of the list (or only what changed), a read 6,000 from its offset. The
     // list drew Clara into Ben's row out of the part shown; the snapshot made
     // Clara that row's key, and the next step's click on e2, meant for Ben,

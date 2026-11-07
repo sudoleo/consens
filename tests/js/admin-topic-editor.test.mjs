@@ -1,5 +1,5 @@
 /**
- * R20: the Topic editor must never save A's form as B.
+ * The Topic editor must never save A's form as B.
  *
  * selectAdminTopic used to switch the global id before the GET; a failed or
  * overtaken load left A's form under B's id, and Save then PUT A's content to

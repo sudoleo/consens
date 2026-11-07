@@ -112,7 +112,7 @@ def test_app_loads_without_console_errors(app_page, get_console_errors):
         'known': True, 'uid': 'e2e-mock-user', 'generation': 1,
     }
     assert app_page.evaluate("() => window.App.state.get('userTier')") == 'free'
-    # The Consensus run left the browser on 2026-10-25; a saved answer keeps
+    # The browser runs no Consensus; a saved answer keeps
     # its footer (consensus-footer.js).
     assert app_page.evaluate("() => typeof window.App.consensusFooter") == "object"
     assert app_page.evaluate("() => typeof window.getConsensus") == "undefined"
@@ -147,7 +147,7 @@ def test_sidebar_header_hover_search_and_provider_picker(app_page):
     )
     assert abs(metrics["brandCenter"] - metrics["toggleCenter"]) <= 1
     assert metrics["newRunTop"] >= metrics["headerBottom"]
-    # One grid since 2026-10-29: New chat's tint spans the sidebar's inner
+    # One grid: New chat's tint spans the sidebar's inner
     # width, like the chat rows and the head (shell.css, "Desktop head on one grid").
     assert abs(metrics["newRunWidth"] - metrics["sidebarInnerWidth"]) <= 1
 
@@ -183,7 +183,7 @@ def test_sidebar_header_hover_search_and_provider_picker(app_page):
     picker = app_page.locator("#consensusModelDropdown").locator("xpath=..")
     expect(picker.locator(".model-picker-menu")).to_have_class(re.compile(r"\bis-open\b"))
     assert sidebar.evaluate("element => element.scrollTop") == 0
-    # Daily compares two models since 2026-11-01; Compare needs two, so one
+    # Daily compares two models; Compare needs two, so one
     # left out asks for another.
     expect(app_page.locator("#sidebarModelCount")).to_have_text("2 providers selected")
     picker.locator(".model-picker-custom-option").click()
@@ -246,7 +246,7 @@ def test_question_input_grows_and_caps_on_desktop_and_mobile(app_page):
     assert reset["overflowY"] == "hidden"
 
     # A new line with a keyboard is Shift+Enter at every width; Enter alone
-    # sends (Apple-Audit E7: the device decides, not the window's width).
+    # sends (the device decides, not the window's width).
     input_box.fill("First line")
     input_box.press("Shift+Enter")
     expect(input_box).to_have_value("First line\n")
@@ -359,9 +359,8 @@ def _desktop_row_geometry(page):
 
 
 def test_desktop_composer_is_one_row_without_a_collapsed_state(app_page):
-    """User-Vorgabe 2026-08-14: auf dem Desktop ist die eine Zeile ab der ersten
-    Frage einfach die Form des Composers — sie klappt NICHT mehr auf, weil sie
-    dort reicht. Kein `composer-collapsed`, keine Bewegung: reines CSS. Und das
+    """Auf dem Desktop ist die eine Zeile ab der ersten Frage einfach die
+    Form des Composers — sie klappt NICHT auf, weil sie dort reicht. Kein `composer-collapsed`, keine Bewegung: reines CSS. Und das
     (+) steht ganz links, vor dem Feld."""
     app_page.set_viewport_size({"width": 1440, "height": 900})
     app_page.evaluate("() => window.exitHeroMode()")
@@ -377,7 +376,7 @@ def test_desktop_composer_is_one_row_without_a_collapsed_state(app_page):
     assert row["fieldInline"] == "34px"
     assert row["footerVisible"] is True
 
-    # (+) ganz links (der Modus steckt seit 2026-10-02 in seinem Menue),
+    # (+) ganz links (der Modus steckt in seinem Menue),
     # dann das Feld, dann Lauf-Schalter und Senden.
     assert row["attach"]["x"] < row["field"]["x"] < row["picker"]["x"] < row["send"]["x"]
     # Und alle wirklich auf EINER Zeile, auf derselben Mittellinie.
@@ -410,7 +409,7 @@ LONG_QUESTION = (
 
 
 def test_desktop_long_question_takes_the_full_width_and_drops_the_buttons(app_page):
-    """User-Befund 2026-08-14: eine lange Frage wurde in eine schmale Spalte
+    """Eine lange Frage wurde in eine schmale Spalte
     neben (+), Modellwahl und Senden gequetscht. Ab der zweiten Zeile gilt
     deshalb die Chat-Client-Form — Text ueber die ganze Breite, Knopfzeile
     darunter. Kein "\\n" tippen: Enter sendet hier."""
@@ -428,10 +427,10 @@ def test_desktop_long_question_takes_the_full_width_and_drops_the_buttons(app_pa
     assert grown["field"]["h"] > one_row["field"]["h"]
     # Der Text nimmt die ganze Breite ...
     assert grown["field"]["w"] > one_row["field"]["w"] + 100
-    # ... und jeder Knopf steht UNTER ihm, nicht mehr daneben.
+    # ... und jeder Knopf steht UNTER ihm, nicht daneben.
     for name in ("attach", "picker", "send"):
         assert grown[name]["y"] >= grown["field"]["bottom"] - 2, name
-    # (+) bleibt links (der Modus steckt seit 2026-10-02 in seinem Menue);
+    # (+) bleibt links (der Modus steckt in seinem Menue);
     # Modelle und Senden stehen rechts.
     assert grown["attach"]["x"] < grown["picker"]["x"] < grown["send"]["x"]
 
@@ -541,7 +540,7 @@ def test_desktop_one_row_keeps_the_run_switch_and_attachments_usable(app_page):
 
 
 def test_mobile_composer_stays_small_when_scrolling_back_up(app_page):
-    """User-Befund 2026-08-07: das Aufklappen beim Hochscrollen hat den
+    """Das Aufklappen beim Hochscrollen hat den
     Composer beim Zurueckblaettern wieder vor die Antwort geschoben. Nach
     unten zuklappen bleibt, nach oben passiert nichts."""
     app_page.set_viewport_size({"width": 390, "height": 844})
@@ -574,7 +573,7 @@ def test_mobile_composer_stays_small_when_scrolling_back_up(app_page):
 
 
 def test_typing_into_the_collapsed_composer_keeps_the_cursor_in_the_field(app_page):
-    """User-Befund 2026-08-07: das Feld wuchs beim Antippen, der Cursor sprang
+    """Das Feld wuchs beim Antippen, der Cursor sprang
     aber sichtbar heraus. Ursache war die INLINE-Hoehe des Autosizers, die
     nach dem Umschalten stehenblieb — plus `parseFloat(minHeight) || 52`, das
     eine 0 als falsy verwirft. Beide Zustaende muessen zur Feldhoehe passen."""
@@ -734,7 +733,7 @@ def test_usage_display_is_stable_and_updates_visible_quota_panel(app_page):
     box = app_page.locator("#quotaTrigger .quota-ring").bounding_box()
     assert box is not None and box["width"] <= 20.5
     expect(app_page.locator("#quotaPercent")).to_have_text("62%")
-    # The reader sees the allowance; the token figures are for admins only (Apple-Audit H4).
+    # The reader sees the allowance; the token figures are for admins only.
     expect(app_page.locator("#quotaDetail")).to_contain_text("A Compare run uses about")
     expect(app_page.locator("#quotaDetail .admin-only")).to_be_hidden()
 
@@ -748,7 +747,7 @@ def test_empty_app_and_consensus_picker_do_not_scroll_unnecessarily(app_page):
     _wait_for_composer_width(app_page)
     # Measured at rest, as for Compare below: for the first frames of the
     # mode change the page is 866px high (22px too many, also locally), and
-    # the nightly runner measured just then (2026-10-30/31). Only motion in
+    # the nightly runner measured just then. Only motion in
     # time settles: the starters' fade runs on their own scroll timeline and
     # never finishes.
     app_page.wait_for_function("() => !document.body.classList.contains('agent-mode-transitioning')"
@@ -1000,7 +999,7 @@ def test_claim_anchor_with_markdown_syntax_marks_the_rendered_sentence(app_page)
     class:** about 1,300 watts"), markiert und angezeigt wird aber der
     GERENDERTE Text. Ohne Entfernen der Auszeichnung fand der Anker seine
     Stelle nie und landete mitsamt sichtbarer Sternchen in der Fallback-Liste
-    "Key claims" (User-Befund 2026-07-29)."""
+    "Key claims"."""
     app_page.evaluate(
         """() => {
           document.getElementById("consensusAnswerBody").innerHTML =
@@ -1063,7 +1062,7 @@ def test_key_claim_fallback_renders_source_tags_as_citations(app_page):
     """Ein Anker ist woertlicher Konsenstext und traegt dessen Quellentags. In
     der Fallback-Liste "Key claims" stand die rohe Klammer "[S2]" mitten im
     Satz, waehrend derselbe Tag im Fliesstext laengst eine hochgestellte
-    Fussnote ist (User-Befund 2026-08-15)."""
+    Fussnote ist."""
     app_page.evaluate(
         """() => {
           window.App.state.set("currentEvidenceSources", [
@@ -1097,7 +1096,7 @@ def test_key_claim_fallback_renders_source_tags_as_citations(app_page):
 
 
 def test_two_claims_in_one_paragraph_mark_their_own_sentence(app_page):
-    """Der Anker ist seit dem Satz-Index ein GANZER Satz. sentenceBounds dehnte
+    """Mit dem Satz-Index ist der Anker ein GANZER Satz. sentenceBounds dehnte
     ihn trotzdem bis zum naechsten Satzende weiter - der erste Satz verschluckte
     damit den zweiten, beide Claims landeten auf derselben Markierung und im
     Absatz blieb nur ein Badge stehen."""
@@ -1127,11 +1126,11 @@ def test_two_claims_in_one_paragraph_mark_their_own_sentence(app_page):
 
 
 def test_contradiction_keeps_the_visible_control_on_a_shared_sentence(app_page):
-    """Seit die Claims jeden pruefbaren Satz abdecken, traegt ein strittiger
+    """Da die Claims jeden pruefbaren Satz abdecken, traegt ein strittiger
     Satz fast immer AUCH ein Claim-Badge. Solange dort das Badge gewann,
     verschwand praktisch jeder Widerspruch aus dem Text: der strittige
     Satz sah aus wie jeder andere und der Klick darauf oeffnete "4 of 6 models
-    agree" statt der Widerspruchs-Karte (User-Befund 2026-08-07)."""
+    agree" statt der Widerspruchs-Karte."""
     _show_insight_fixture(app_page)
     app_page.evaluate(
         """() => {
@@ -1267,7 +1266,7 @@ def test_claim_anchor_with_source_tag_still_marks_its_sentence(app_page):
 
 
 def _agent_watch_routes(page, *, watches, active_count=0, active_limit=2, created=None):
-    """The Watches page's reads (since 2026-11-03 a Watch runs the Agent):
+    """The Watches page's reads (a Watch runs the Agent):
     the account's Watches, the archive and Telegram, all answered here."""
     import json as _json
 
@@ -1299,7 +1298,7 @@ def _agent_watch_routes(page, *, watches, active_count=0, active_limit=2, create
 
 
 def test_the_empty_watches_page_is_the_field_and_it_starts_a_watch_of_its_own(app_page):
-    """Watches page since 2026-11-04: with no Watch the page is one question
+    """With no Watch the Watches page is one question
     and one field (no button of its own), which asks for a sentence before
     it sends anything; the started Watch is on the page at once, its first
     look under way in a chat of its own."""
@@ -1552,7 +1551,7 @@ def test_attachment_pauses_deepseek_and_restores_previous_selection(app_page):
     assert result["whileAttached"]["disabled"] is True
     assert result["whileAttached"]["notice"] == "DeepSeek paused · No attachment support"
     assert result["whileAttached"]["responseExcluded"] is True
-    # Daily's two models (since 2026-11-01) without DeepSeek.
+    # Daily's two models without DeepSeek.
     assert result["whileAttached"]["pickerText"].startswith("1 model")
     assert result["afterTierRefresh"] == {
         "checked": False,

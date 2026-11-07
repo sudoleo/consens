@@ -98,7 +98,7 @@ class CoverageSchemaTests(unittest.TestCase):
         self.assertEqual(item["properties"]["id"]["enum"], ["s1", "s2"])
 
     def test_every_counter_quote_names_the_disputed_words(self):
-        """Nur die Stelle des Streits wird markiert (2026-10-19): jedes
+        """Nur die Stelle des Streits wird markiert: jedes
         Gegenzitat nennt die Worte des Satzes, denen es widerspricht."""
         schema = coverage.build_coverage_schema(["Model A"], ["s1"])
         quote = schema["properties"]["sentences"]["items"]["properties"]["counter_quotes"]["items"]
@@ -192,8 +192,8 @@ class CoverageParsingTests(unittest.TestCase):
         self.assertEqual(parsed["s1"]["models"]["Model A"], "contradicts")
 
     def test_counter_quotes_that_are_no_list_are_passed_over(self):
-        """Bug hunt 2026-11-06: ``"counter_quotes": 1`` (a judge on an endpoint
-        that ignores the schema) raised TypeError and ended the whole coverage
+        """``"counter_quotes": 1`` (a judge on an endpoint that ignores the
+        schema) once raised TypeError and ended the whole coverage
         round, its retry and the fallback judge included: no marks at all."""
         parsed = self.parse(json.dumps({"sentences": [
             {"id": "s1", "classification": "claim", "models": {"Model A": "supports"}, "counter_quotes": 1},
@@ -378,7 +378,7 @@ class CoverageJudgePolicyTests(unittest.TestCase):
         self.assertFalse(is_retry)
 
     def test_coverage_judge_starts_with_openai_for_every_engine(self):
-        # No cross-family constraint since 2026-10-04: OpenAI first, Gemini next.
+        # No cross-family constraint: OpenAI first, Gemini next.
         for engine in ("Gemini", "OpenAI"):
             attempts = _coverage_attempts(engine, ALL_KEYS)
             self.assertEqual([e[0] for e, _ in attempts], ["openai", "openai", "gemini"])
@@ -469,7 +469,7 @@ class CoverageRunTests(unittest.TestCase):
 
     def test_a_stalled_attempt_hands_the_window_to_the_next_family(self):
         """Prod 2026-10-15: a Luna Coverage call took 243 s, past the analysis
-        deadline; the answer lost every green mark. A stalled attempt now
+        deadline; the answer lost every green mark. A stalled attempt
         stops after its own limit and the fallback family covers the answer;
         the stalled engine's retry is skipped."""
         providers = []
@@ -594,8 +594,7 @@ if __name__ == "__main__":
 
 class CoverageSentenceIndexTests(unittest.TestCase):
     """A Consensus answer is indexed up to MAX_CONSENSUS_SENTENCES, and one
-    Coverage call covers all of them (until 2026-10-31 the Agent's longer
-    answers were split into parallel windows)."""
+    Coverage call covers all of them."""
 
     def test_a_full_answer_is_covered_in_one_call(self):
         from app.services.llm.consensus_engine import MAX_CONSENSUS_SENTENCES

@@ -1,6 +1,6 @@
 """The Agent's Watch tools (agent_watch.py): it prepares a Watch the user
 starts from a card, and in a scheduled run it reports a finding with
-evidence or ends the Watch (since 2026-11-03, a Watch runs the Agent)."""
+evidence or ends the Watch (a Watch runs the Agent)."""
 import json
 
 import pytest
@@ -139,7 +139,7 @@ def test_a_requested_watch_is_prepared_saved_and_handed_to_the_answer(store):
     assert saved["agent_review"]["mode"] == "audit" and saved["agent_review"]["status"] == "succeeded"
     steps = [event for event in saved["agent_activity"] if event.get("name") == "prepare_watch"]
     assert steps and steps[-1]["status"] == "succeeded"
-    # An ordinary turn waits for the user on a card as before.
+    # An ordinary turn waits for the user on a card.
     assert loop.hold_timeout == HOLD_TIMEOUT_SECONDS
 
 
@@ -199,8 +199,8 @@ def test_a_watch_only_message_ends_with_an_acknowledgement(store):
 
 class WatchWithReply(WatchScript):
     """The acknowledgement and prepare_watch in one step: the text is the
-    answer, with no comparison and no further step (2026-10-11, "kannst du
-    den Watch für mich starten?" ran six models)."""
+    answer, with no comparison and no further step ("kannst du den Watch
+    für mich starten?" once ran six models)."""
 
     REPLY = "Here is the Watch again: start it from the card below."
 
@@ -251,7 +251,7 @@ def watch_outage(uid, chat_id):
 def test_a_reply_next_to_a_watch_that_was_not_prepared_is_written_again(store, watch_outlook, reply):
     """The reply pointed to a card that offers no new Watch: it goes back and
     the next step writes the answer with the result in view
-    (DelegationLoop._side_results_accepted, review 2026-10-14)."""
+    (DelegationLoop._side_results_accepted)."""
     script = WatchWithReply(direct_reply=reply)
     loop = watch_loop(store, script, question="Kannst du den Watch bitte für mich starten?",
                       watch_outlook=watch_outlook)
@@ -265,9 +265,9 @@ def test_a_reply_next_to_a_watch_that_was_not_prepared_is_written_again(store, w
 
 
 def test_the_watch_block_says_what_a_watch_does_as_facts():
-    """Since 2026-11-03 a Watch runs the agent again; the block still says it
-    is the one way to reach the user later (2026-10-11: GPT-6 Luna answered
-    "kannst du mich erinnern …" with "consens.io cannot notify you")."""
+    """A Watch runs the agent; the block says it is the one way to reach
+    the user later (GPT-6 Luna once answered "kannst du mich erinnern …"
+    with "consens.io cannot notify you")."""
     prompt = agent_watch.AUDIT_PROMPT
     assert "is consens.io's only way to reach the user later" in prompt
     assert "runs you again on a schedule in this chat" in prompt

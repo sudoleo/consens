@@ -1,7 +1,7 @@
 """A pasted AI answer the Agent checked: a result card above the answer, built frontend, no providers.
 
-Only turns saved before 2026-10-31 have one: the comparison mode checked a
-pasted text (check_text); the one mode since has no such check."""
+Only turns of the former comparison mode have one: it checked a pasted text
+(check_text); the one mode has no such check."""
 import hashlib
 import re
 
@@ -77,8 +77,8 @@ GREY = r"""el => { const value = getComputedStyle(el).backgroundColor;
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
 def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, width, dark):
-    # The card starts folded under every Highlights setting (since
-    # 2026-10-21); "Disagreements & issues" is the default since 2026-10-19.
+    # The card starts folded under every Highlights setting; "Disagreements &
+    # issues" is the default.
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700,
         init_script="localStorage.setItem('consensio.consensusHighlightMode.v1','concerns')")
     requests, errors = [], []
@@ -89,7 +89,7 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, "agent")
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
-        # No hint at the feature any more: a new chat just asks.
+        # No hint at the feature: a new chat just asks.
         expect(page.locator("#questionInput")).to_have_attribute("placeholder", "Ask anything")
 
         # The saved chat, opened (bookmark path), the thread question set again
@@ -132,8 +132,8 @@ def test_pasted_answer_check_is_a_card_above_the_answer(browser, phase4_server, 
         expect(quotes).to_have_text("You always need underfloor heating for that.")
         assert quotes.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
         # Under the sentence: who disagrees and what one of them says instead,
-        # readable, not a footnote; no grey rows between the quotes. Since the
-        # palette of 2026-10-26 there is one grey for text: the verdict stands
+        # readable, not a footnote; no grey rows between the quotes. There is
+        # one grey for text: the verdict stands
         # out from the note by its size and the name in ink.
         verdict = card.locator(".passage-check-verdict")
         expect(verdict).to_have_text("2 of 3 models disagree – OpenAI: “Larger radiators are often enough.”")
@@ -238,8 +238,8 @@ def test_overlong_agent_message_is_stopped_with_a_clear_reason(browser, phase4_s
         }""")
         page.locator("#sendButton").click()
         page.wait_for_timeout(300)
-        # Said under the field, not in a browser window (Apple audit E1), and
-        # exactly once: the click and the send path no longer both check.
+        # Said under the field, not in a browser window, and exactly once:
+        # the click and the send path do not both check.
         expect(page.locator("#composerInputNotice")).to_contain_text("longer than 8,000 characters (it has 8,001)")
         assert page.evaluate("window.__composerNotices") == 1
         assert dialogs == []

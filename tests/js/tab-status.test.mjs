@@ -42,7 +42,7 @@ describe("tab status", () => {
     expect(app.title()).toBe("Paused · consens.io");
     app.run("running", { hold: null });
     expect(app.title()).toBe("Working… · consens.io");
-    // The reviewers' check of the answer, in the word of the activity's head (E2).
+    // The reviewers' check of the answer, in the word of the activity's head.
     app.run("running", { agentReview: { mode: "audit", status: "running" } });
     expect(app.title()).toBe("Reviewing… · consens.io");
   });
@@ -54,7 +54,7 @@ describe("tab status", () => {
     expect(app.title()).toBe("Waiting for you · consens.io");
   });
 
-  // A-B2 (docs/agent-audit-readiness-2026-10-29.md): a pause of a chat not
+  // A pause of a chat not
   // on screen ran into its timeout while the tab said nothing.
   it("says that a run of another chat waits for the user", () => {
     let runs = [];

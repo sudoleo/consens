@@ -1,11 +1,11 @@
-"""find_pictures and show_image (agent_web_images.py, since 2026-10-28): a
+"""find_pictures and show_image (agent_web_images.py): a
 picture from the web under the agent's answer. The server fetches it (a
 picture, or the preview picture a page names for itself), only bytes that
-are a picture, encoded anew; the agent looks at it first (since 2026-10-29),
+are a picture, encoded anew; the agent looks at it first,
 and only one it shows is kept in the chat's private store as the turn's
 ``web_image`` with its source. Asked for a picture of the best Hearthstone
-Battlegrounds player on 2026-10-28, the agent could only say where one was;
-asked for the face of Delay Sports on 2026-10-29, it put a placeholder and a
+Battlegrounds player, the agent could only say where one was;
+asked for the face of Delay Sports, it put a placeholder and a
 site's icon under the answer before it had seen them.
 """
 import asyncio
@@ -59,7 +59,7 @@ def test_only_a_picture_comes_through_and_encoded_anew():
         assert image.format == "WEBP"
     # A name or a type never makes something a picture: the bytes decide.
     assert encode(b"<svg onload=alert(1)>") is None
-    # No smallest size (Max, 2026-10-28): a small logo or chart comes as it
+    # No smallest size: a small logo or chart comes as it
     # is, and the agent learns its size.
     assert encode(png((70, 70)))[2:] == (70, 70)
 
@@ -88,10 +88,10 @@ def test_a_page_brings_its_preview_picture_with_the_page_as_referer():
 
 
 def test_find_pictures_fetches_no_more_addresses_at_once_than_the_dns_gate_leaves(monkeypatch):
-    """Bug hunt 2026-10-30: six addresses side by side met the source DNS gate
-    (four lookups, dns_busy beyond, source_documents.pinned_target); the fifth
-    and sixth failed as "it could not be fetched", and a full gate let other
-    users' lookups fail. Three at a time, like agent_source_evidence; each
+    """Six addresses side by side would meet the source DNS gate (four
+    lookups, dns_busy beyond, source_documents.pinned_target): the fifth and
+    sixth would fail as "it could not be fetched", and a full gate would let
+    other users' lookups fail. Three at a time, like agent_source_evidence; each
     address still gets its own CALL_SECONDS once it starts."""
     running, peak = 0, 0
 
@@ -110,9 +110,8 @@ def test_find_pictures_fetches_no_more_addresses_at_once_than_the_dns_gate_leave
 
 
 def test_stop_ends_the_fetches_at_once(monkeypatch):
-    """Bug hunt 2026-11-01: Stop or the answer's deadline waited for the
-    running wave of fetches, up to CALL_SECONDS each (60-90 s for six slow
-    sites)."""
+    """Stop or the answer's deadline does not wait for the running wave of
+    fetches, up to CALL_SECONDS each (60-90 s for six slow sites)."""
     import threading
     import time
     from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
@@ -183,9 +182,9 @@ def test_the_agent_looks_first_and_only_what_it_shows_lands_under_the_answer(sto
                               4: {"picture": "p9"}}, live={})
     script.live.update(anthropic=replies(script, "anthropic", go), openai=replies(script, "openai", go))
     loop = audit_loop(store, script)
-    # No block of their own (2026-10-28): the descriptions say what they do,
-    # and the answer section that a picture shows only where the agent places
-    # one it showed (2026-10-31).
+    # No block of their own: the descriptions say what they do, and the
+    # answer section that a picture shows only where the agent places one it
+    # showed.
     assert {"find_pictures", "show_image"} <= set(loop.registry.tools)
     assert "PICTURES" not in loop.messages[0]["content"]
     assert "a picture shows in it only where you place one you showed" in prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT
@@ -268,8 +267,8 @@ def test_the_picture_tools_come_only_with_page_reading(store, monkeypatch):
     assert not {"read_source", "find_pictures", "show_image"} & set(loop.registry.tools)
 
 
-# --- The image search (search_pictures, picture_search.py, since 2026-10-31) ---
-# Max, 2026-10-31: ChatGPT shows image results as a collage to click through,
+# --- The image search (search_pictures, picture_search.py) ---------------------
+# ChatGPT shows image results as a collage to click through,
 # its model hardly looks first. Brave's image search answers with pictures,
 # each with its page and title, and the agent chooses by those.
 PAGE_A, PIC_A = "https://www.rbb24.de/sport/delay-sports.html", "https://www.rbb24.de/img/nerlich.jpg"
@@ -456,7 +455,7 @@ def test_the_picture_search_has_a_bound_and_says_when_it_is_down(store, monkeypa
 
 
 def test_the_same_picture_found_twice_shows_once_with_its_page(store, monkeypatch, tmp_path):
-    """Review 2026-10-31: a picture looked at by its own address, then
+    """A picture looked at by its own address, then
     found by the image search, keeps its id and gains the search's page; the
     same picture under two addresses shows once."""
     from app.services.agent_files import AgentFiles

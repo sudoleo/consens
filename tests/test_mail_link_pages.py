@@ -1,4 +1,4 @@
-"""The pages behind mail links are pages of the site (Apple audit K3, K6).
+"""The pages behind mail links are pages of the site.
 
 They name the watch, act only on the button (a GET only asks) and offer the
 way on: after pausing "Resume watch" with its own token, and "Open Watches".
@@ -104,7 +104,6 @@ def test_resume_link_respects_the_owner_limit_and_a_reached_goal(watch_http, mon
 
 
 def test_the_mail_link_pages_call_the_thing_a_watch(watch_http):
-    # Zweitprüfung (Namen): the head of every page was "Consensus Watch".
     h = watch_http
     pages = [
         h.client.get("/watch/unsubscribe", params={"token": watch_service.make_unsubscribe_token(h.watch["id"])}),

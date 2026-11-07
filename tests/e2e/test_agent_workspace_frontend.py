@@ -64,7 +64,7 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
         expect(chip).to_contain_text('offer.txt')
         chip.click()
         # A text file reads in the preview beside the chat, in the app's
-        # colours (file-viewer.js, 2026-11-01; before, the picture dialog).
+        # colours (file-viewer.js).
         viewer = page.locator('#fileViewer')
         expect(viewer.locator('.file-viewer-plain')).to_have_text('Price 42 EUR')
         expect(viewer.locator('iframe')).to_have_count(0)
@@ -78,7 +78,7 @@ def test_upload_restoration_and_private_download(browser, phase4_server, width):
 
 
 def test_a_file_without_words_is_sent_under_its_name(browser, phase4_server):
-    """Live (2026-10-22) a user typed "." to send a screenshot: Send waited for words."""
+    """Live, a user typed "." to send a screenshot: Send waited for words."""
     context, page = _real_firebase_page(browser, phase4_server)
     files, calls, errors = [], [], []
     page.on('pageerror', lambda e: errors.append(str(e)))
@@ -166,7 +166,7 @@ def test_saved_document_versions_follow_the_answer_and_remove_needs_confirmation
         card = page.locator('#agentAnswerBody ~ .agent-answer-documents .agent-doc-card')
         expect(card).to_have_count(1)
         expect(card).to_contain_text('Decision brief')
-        # One quiet row in the answer (Max, 2026-10-31): no badge, no hint.
+        # One quiet row in the answer: no badge, no hint.
         # Its kind and version under the title; the pages follow once its PDF is read.
         expect(card.locator('.agent-doc-meta')).to_have_text('Document · Version 2')
         expect(card.locator('.agent-files-badge')).to_have_count(0)
@@ -182,7 +182,7 @@ def test_saved_document_versions_follow_the_answer_and_remove_needs_confirmation
         expect(page.locator('#agentWorkspace')).to_have_count(0)
         panel = page.locator('#agentAnswerBody ~ .agent-answer-documents')
         # The mail attachment fetched in this turn is part of its answer, with
-        # its documents above the evidence row (2026-11-01).
+        # its documents above the evidence row.
         expect(panel).to_contain_text('From email: Offer 2026 (Jens)')
         expect(page.locator('#agentAnswerResources')).not_to_contain_text('invoice-attachment.pdf')
         expect(panel).not_to_contain_text('18c2f0a1b2c3d4e5')

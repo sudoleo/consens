@@ -1,4 +1,4 @@
-"""compare_models (since 2026-10-31, in every chat run of the agent's one
+"""compare_models (in every chat run of the agent's one
 mode): the agent may ask the user's chosen models its question. They answer
 as advisers, each in a fresh conversation of its own, never the reviewers'
 sessions; no judge runs; the reviewers read every answer in the work log;
@@ -24,14 +24,14 @@ from test_agent_runs import UID, pending, store  # noqa: F401  (fixtures)
 
 @pytest.fixture(autouse=True)
 def _admin_allowance(monkeypatch):
-    """The agent's five search rounds need an admin's 5M tokens a day (test_agent_audit)."""
+    """The agent's five search rounds need an admin's 5,000,000 micro-euros a day (test_agent_audit)."""
     from app.services import agent_budget_config
     monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 5_000_000)
 
 
 QUESTION = "How tall is the Eiffel Tower today, antennas included?"
 # Longer together than one log entry (ENTRY_CHARS): cut as one text, the
-# reviewers saw the first answer only.
+# reviewers would see the first answer only.
 ADVICE = {"anthropic": "Claude says 330 metres since the 2022 antenna. " + "C" * 7_000 + " END-CLAUDE",
           "openai": "GPT says 324 metres; the antenna is not counted. " + "G" * 7_000 + " END-GPT"}
 
@@ -119,7 +119,7 @@ def test_the_agent_asks_the_models_works_on_and_the_reviewers_read_their_answers
     assert turn["status"] == "completed" and turn["consensus"] == ANSWER
 
     # Offered in every step of the agent, without a progress paragraph or a
-    # memory field (comparison mode's, until 2026-10-31), and no check_text.
+    # memory field, and no check_text.
     assert script.offered and all("compare_models" in names and "check_text" not in names for names in script.offered)
     schema = loop.registry.tools["compare_models"].schema()["function"]
     assert set(schema["parameters"]["properties"]) == {"question", "context", "file_ids", "depth"}
@@ -171,10 +171,9 @@ def test_the_agent_asks_the_models_works_on_and_the_reviewers_read_their_answers
 
 
 def test_a_comparison_past_the_answers_time_stops_waiting_even_for_one_model(store):
-    """Until 2026-10-31 comparison mode waited at its deadline until two
-    models answered (its check needed two); now nothing needs them, and one
-    model may be all the user chose: it stops waiting at once, and the turn
-    still ends with its answer instead of running into its hard stop."""
+    """Nothing needs two answers, and one model may be all the user chose:
+    at its deadline the comparison stops waiting at once, and the turn still
+    ends with its answer instead of running into its hard stop."""
     script = Advised(advice={"anthropic": "wait", "openai": "wait"})
     loop = advised_loop(store, script)
     left = {"seconds": 10_000.0}
@@ -196,7 +195,7 @@ def test_a_comparison_past_the_answers_time_stops_waiting_even_for_one_model(sto
 def test_a_stop_after_the_comparison_ends_the_reviewers_as_stopped(store):
     """Stopped before the answer, without live marks: the comparison saved
     the review with its reviewers at work; they end "stopped", not "failed,
-    run_interrupted" (review 2026-10-31)."""
+    run_interrupted"."""
     script = Advised(then=True)
     loop = advised_loop(store, script, on_note=lambda: script.loop.cancellation.cancel())
     with pytest.raises(ProviderCancelled):
@@ -218,8 +217,7 @@ def test_one_answer_is_said_and_the_work_goes_on(store):
 
 
 def test_the_agent_may_still_compare_after_it_read_a_page(store):
-    """Until 2026-10-31 comparison mode ended comparing after a read page
-    (the models had to stay independent); the agent searches and reads in
+    """A read page does not end comparing: the agent searches and reads in
     every step, and the models see only its question."""
     script = Advised()
     loop = advised_loop(store, script)
@@ -256,7 +254,7 @@ def test_a_failed_save_while_stopping_stragglers_costs_neither_the_review_nor_th
 
 def test_the_share_of_a_turn_with_comparisons_shows_no_comparison():
     """The models the agent asked answered its own question, not the user's:
-    a share keeps saying only who answered (share_snapshots, review 2026-10-31)."""
+    a share keeps saying only who answered (share_snapshots)."""
     from app.services import share_snapshots
     review = {"mode": "audit", "answer_hash": "h", "checks": [], "comparisons": [
         {"id": "c1", "answers": [{"provider": "openai", "text": "330 metres."},
@@ -277,10 +275,10 @@ def answer_shape(n):
 
 
 def test_a_round_too_long_for_its_conversation_shortens_the_other_entries_before_the_answers():
-    """Review 2026-10-31: one tier for every entry cut a 60,000-character
-    comparison to 1,500 characters, and with its pages to the start of its
-    first answer. Now the other entries give way first, then the pages'
-    excerpts; every answer stays in the round."""
+    """The other entries give way first, then the pages' excerpts; every
+    answer stays in the round. One tier for every entry would cut a
+    60,000-character comparison to 1,500 characters, and with its pages to
+    the start of its first answer."""
     from app.services.agent_audit import fitted_round
     compare = ({"seq": 4, "actor": "agent", "kind": "tool", "name": "compare_models", "data": "agent",
                 "format": "text"}, json.dumps(answer_shape(5)))
@@ -298,9 +296,9 @@ def test_a_round_too_long_for_its_conversation_shortens_the_other_entries_before
 
 
 def test_a_comparison_entry_shows_every_answer_to_the_reviewers():
-    """One log entry of the agent's compare_models result: its JSON text was
-    cut at ENTRY_CHARS, so the second and third answers never reached the
-    reviewers. It is read as structure now, each answer shortened alike."""
+    """One log entry of the agent's compare_models result is read as
+    structure, each answer shortened alike: its JSON text cut at ENTRY_CHARS,
+    the second and third answers would never reach the reviewers."""
     answers = [{"text": f"Answer {n}: " + "x" * 9_000 + f" END-{n}", "sources": []} for n in range(3)]
     text = json.dumps({"comparison": 1, "question": QUESTION, "answers": answers, "missing_answers": [],
                        "sources": [], "instruction": "..."})
@@ -316,6 +314,6 @@ def test_a_comparison_entry_shows_every_answer_to_the_reviewers():
     # A round that must read its entries short still lists every answer.
     read = review_entry(entry, text, agent_audit.TIGHT_ENTRY_CHARS)
     assert len(read["content"]["answers"]) == 3
-    # Other tool results stay one text, as before.
+    # Other tool results stay one text.
     other = review_entry({**entry, "name": "vm_exec"}, text)
     assert isinstance(other["content"], str) and len(other["content"]) < len(text)

@@ -45,8 +45,8 @@ function reordered(value) {
 }
 
 // The app always sets the Highlights mode (consensus-insights.js, default
-// "concerns" since 2026-10-19); it decides what the full text paints, the
-// card starts folded under every mode (since 2026-10-21). `anchor` loads the
+// "concerns"); it decides what the full text paints, the
+// card starts folded under every mode. `anchor` loads the
 // text search that finds the disputed words of a sentence (consensus-anchor.js).
 function boot({ mode = "concerns", anchor = false } = {}) {
   const popover = vi.fn();
@@ -234,7 +234,7 @@ describe("result card of a checked pasted text", () => {
     expect(options).toMatchObject({ section: "answers", model: "Claude", quote: "Radiators work." });
   });
 
-  // No run checks a text since 2026-10-31: a check saved while it still ran
+  // No run checks a text: a check saved while it still ran
   // (its run ended first) says it did not finish, and nothing else.
   it("says that a check saved while it still ran did not finish", () => {
     const { window, body, card } = boot();
@@ -480,7 +480,7 @@ describe("result card of a checked pasted text", () => {
     const { window, document, body, card } = boot({ mode: "all" });
     const tick = () => new Promise(resolve => setTimeout(resolve, 0));
     window.App.passageCheck.apply(body, review());
-    // The differences count first (Max 2026-10-21), also under All checks.
+    // The differences count first, also under All checks.
     expect(card().classList.contains("is-full")).toBe(false);
     expect(card().querySelector(".passage-check-text")).toBeNull();
     expect(card().querySelectorAll(".passage-check-quote")).toHaveLength(1);

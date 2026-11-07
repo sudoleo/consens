@@ -317,7 +317,7 @@ def test_action_expiry_and_account_deletion_cannot_restore_a_send(gmail):
     assert len(google.wire.calls)==1
 
 
-# Reuse the real HTTP fixture to verify persisted PR-3 settings across upgrade.
+# Reuse the real HTTP fixture to verify a turn's persisted Google settings across the Gmail schema extension.
 from test_agent_runs import api,store
 
 

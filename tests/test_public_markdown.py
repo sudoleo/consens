@@ -137,7 +137,7 @@ def test_a_shared_agent_answer_cites_its_sources_as_pills_like_the_app():
 
 # A long group of markers without a point was tried again from each marker
 # and each blank before it: 4,000 markers took 5.7 s on a share page, which
-# renders without a cache (2026-10-22). The point is optional now, the
+# renders without a cache. The point is optional now, the
 # matches are those of the old pattern.
 _OLD_TERMINAL_SOURCE_ORDER = (
     r"[ \t]*((?:\[(?:S?\d+)(?:\s*,\s*S?\d+)*\][ \t]*)*\[(?:S?\d+)(?:\s*,\s*S?\d+)*\])"

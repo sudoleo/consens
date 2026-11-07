@@ -70,7 +70,7 @@ def receipt(*, measured=True):
 
 def totals(store):
     """The account's Agent sums as the admin sees them: the day ledgers'
-    (since 2026-11-01) plus what the user document counted before."""
+    plus what the user document counted before them."""
     from app.services import agent_quota
     user = store.db.collection("users").document(UID).get().to_dict() or {}
     return agent_quota.usage_totals(store.db, UID, legacy=user.get("agent_usage"))
@@ -254,7 +254,7 @@ def api(monkeypatch, store):
     def stream(self, **kwargs):
         if not self.step_id.startswith("completion:"):
             # Every account's turn is reviewed by its comparison models (the
-            # one mode, 2026-10-31): they mark nothing and cost nothing here,
+            # one mode): they mark nothing and cost nothing here,
             # so ``calls`` and the ledger's cost are the agent's own.
             calls.reviews.append(kwargs)
             self.usage = measured_usage({"prompt_tokens": 0, "completion_tokens": 0}, kwargs["model"])
@@ -282,9 +282,9 @@ def api(monkeypatch, store):
 
 
 def test_the_date_follows_the_users_device_and_an_unknown_zone_the_apps(api):
-    """Harness review 2026-10-27: the date was always Berlin's, wherever the
-    user was. The browser sends its zone; one the server does not know (or
-    none, an older tab) leaves the app's reference zone."""
+    """The date is the user's, not always Berlin's: the browser sends its
+    zone; one the server does not know (or none, an older tab) leaves the
+    app's reference zone."""
     client, _, calls = api
     chat_id = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]["id"]
     contexts = []
@@ -374,7 +374,7 @@ def test_agent_is_open_to_every_account_and_premium_models_stay_pro(api, monkeyp
     assert len(calls) == (3 if pro or admin else 1)
 
 
-# What a page from before the one mode (2026-10-31) sends as agent_preferences.
+# What a page from before the one mode sends as agent_preferences.
 LEGACY_PREFERENCES = {"depth": "quick", "quorum": "fast", "autonomy": "free", "judges": "off", "audit": "off",
                       "vm": "on"}
 
@@ -385,7 +385,7 @@ def test_old_preferences_read_in_todays_form():
 
 
 def test_every_account_runs_the_one_mode_whatever_an_older_page_sends(api, monkeypatch):
-    """Since 2026-10-31 the Agent has one mode for every account, Free
+    """The Agent has one mode for every account, Free
     included: the comparison models follow the work and review the answer. A
     page from before still sends its comparison-mode preferences: accepted
     and ignored, the turn keeps what the route set."""
@@ -476,8 +476,9 @@ def test_recovery_never_starts_a_new_call(api):
 
 
 def test_full_bookmark_storage_says_so_and_recovers_after_space_is_freed(api):
-    """Local run 2026-10-19: the answer finished, the bookmark cap refused its
-    sidebar entry and "Recover saved answer" ended in a 500 Chat storage error."""
+    """The bookmark cap refuses a finished answer's sidebar entry: the error
+    says the chats are full, and "Recover saved answer" works once space is
+    freed, never a 500 Chat storage error."""
     client, store, calls = api
     usage = store.db.collection(persistence_guard.USAGE_COLLECTION).document(
         persistence_guard._owner_key("bookmarks", UID))
@@ -502,10 +503,10 @@ def test_full_bookmark_storage_says_so_and_recovers_after_space_is_freed(api):
 
 
 def test_an_unreadable_allowance_at_the_end_still_delivers_the_saved_answer(api, monkeypatch):
-    """Bug hunt 2026-11-01: the allowance read after the chat entry was the
-    only one without a guard. A brief Firestore failure there turned the
-    finished answer into "couldn't be added to your chats", and its recovery
-    into a 503, though answer and chat entry were saved."""
+    """The allowance read after the chat entry has its guard: a brief
+    Firestore failure there must not turn the finished answer into "couldn't
+    be added to your chats", nor its recovery into a 503, as answer and chat
+    entry are saved."""
     client, store, calls = api
 
     def unreadable(db, uid, **kwargs):
@@ -548,8 +549,8 @@ def test_provider_error_after_usage_still_records_cost(api, monkeypatch):
         "client_request_id": "failed", "bookmark_id": "bm1"}, headers=AUTH)
     assert "event: error" in response.text and "event: final" not in response.text
     assert "event: delta" not in response.text
-    # The step broke off before the user saw a word, so it ran once more
-    # (since 2026-10-27); both attempts are paid.
+    # The step broke off before the user saw a word, so it ran once more;
+    # both attempts are paid.
     assert totals(store)["measured_calls"] == 2
     assert totals(store)["estimated_cost_nano_usd"] == 2 * 132000
     assert store.list_turns(UID, chat_id)["turns"][0]["status"] == "failed"
@@ -637,7 +638,7 @@ def test_catalog_reuses_allowlist_and_restricts_reasoning(api, monkeypatch):
     assert response.headers["cache-control"] == "private, no-store"
     models = {item["id"]: item for item in response.json()["models"]}
     # The pinned default (deepseek_default_agent) is the registry's DeepSeek
-    # Flash since 2026-10-15, so it is listed once, by its registry ID.
+    # Flash, so it is listed once, by its registry ID.
     assert models[cfg.DEEPSEEK_FLASH_MODEL]["reasoning_efforts"] == ["default", "low", "high", "max"]
     assert "none" not in models[cfg.DEFAULT_GEMINI_MODEL]["reasoning_efforts"]
     # Grok 4.3 is one entry whose level the menu sets (no "No reasoning" variant).
@@ -779,7 +780,7 @@ def test_context_check_precedes_paid_claim_for_small_model(api, monkeypatch):
     # Exceed the token window, not just its byte count, while the history
     # still fits the character budget that would cut it (history_start):
     # sized from that budget, not a fixed count. 10000 repeats stood within
-    # 20 characters of it, and a longer prompt (2026-10-30) cut the history.
+    # 20 characters of it, and a longer prompt cut the history.
     from app.services import prompt_config
     budget = agent_runs.CONTEXT_CHAR_LIMIT - len(prompt_config.get_config()["prompts"]["agent"]) - len("Continue")
     value.text = "Old answer " * ((budget - 2000) // len("Old answer "))
@@ -814,8 +815,9 @@ def _answered(store, chat_id, request_id, answer):
 
 
 def test_a_long_chat_keeps_its_newest_messages_instead_of_failing(store, monkeypatch):
-    """Audit A9: past CONTEXT_CHAR_LIMIT every further message failed, and
-    the failed turn was saved as "provider_error, trying again usually works"."""
+    """Audit A9: past CONTEXT_CHAR_LIMIT the oldest messages leave the
+    history; a further message does not fail as "provider_error, trying
+    again usually works"."""
     from app.services import agent_runs
     system = "Answer."
     monkeypatch.setattr(agent_runs.prompt_config, "get_config", lambda: {

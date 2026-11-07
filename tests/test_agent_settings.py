@@ -192,7 +192,7 @@ def test_an_unclear_or_unavailable_model_is_refused_with_the_choices(store, name
 @pytest.mark.parametrize("setting", ["depth", "answer_start", "agent_freedom", "answer_check"])
 def test_the_agents_own_settings_are_gone_with_its_one_mode(store, setting):
     """Answer depth, answer start, Agent freedom and the answer check ended
-    with the comparison mode (2026-10-31): no setting of the tools, none
+    with the comparison mode: no setting of the tools, none
     the agent reads or the help names."""
     loop = settings_loop(store)
     with pytest.raises(ValueError, match="setting"):
@@ -342,7 +342,7 @@ def test_read_settings_says_what_is_set_the_defaults_and_the_choices_of_the_acco
 
 
 def test_read_settings_names_the_models_of_this_message_and_of_each_lineup(store, monkeypatch):
-    """Live (2026-10-22) the agent could not say how many models "Daily" asks."""
+    """Live, the agent could not say how many models "Daily" asks."""
     from app.core import config as cfg
     monkeypatch.setitem(cfg.CONSENSUS_PRESET_MODELS, "fast",
                         {"answers": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}, "consensus": "Gemini"})
@@ -359,7 +359,7 @@ def test_read_settings_names_the_models_of_this_message_and_of_each_lineup(store
 
 def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforces_them(store, monkeypatch):
     """Asked about consens.io itself, the agent reads the facts instead of
-    guessing (2026-11-01); the system prompt only says where they are."""
+    guessing; the system prompt only says where they are."""
     from app.services import agent_budget_config, agent_quota
     from app.services.chat_store import MAX_CHATS_PER_OWNER, MAX_TURNS_PER_CHAT
     from app.services.share_snapshots import REVOKED_RETENTION_DAYS
@@ -370,8 +370,8 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
     about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
     limits = agent_budget_config.get_config(store.db)["tier_limits"]
     allowance = about["allowance"]
-    # Shares as the sidebar ring shows them, never amounts of money (Max
-    # 2026-11-01: the agent said "5,00 € Tagesbudget, noch 4,27 € übrig").
+    # Shares as the sidebar ring shows them, never amounts of money (the
+    # agent once said "5,00 € Tagesbudget, noch 4,27 € übrig").
     assert allowance["per_day"] == {"Free": "the base allowance",
                                     "Plus": f"{limits['plus'] / limits['free']:g} times Free's",
                                     "Pro": f"{limits['pro'] / limits['free']:g} times Free's"}
@@ -531,7 +531,7 @@ def test_saved_turns_keep_the_proposal():
 
 def test_auto_stays_auto_when_the_model_changes(store):
     """Free on Haiku (Auto) to Sonnet: Auto there is Medium, nothing was
-    dropped, so no "does not offer" reason and no rewritten reply (review)."""
+    dropped, so no "does not offer" reason and no rewritten reply."""
     loop = settings_loop(store, model="haiku", effort="default")
     result = prepare(loop, chat_model="Claude Sonnet 5.5")
     assert result["status"] == "prepared" and "reason" not in change(result, "Reasoning")
@@ -671,7 +671,7 @@ def test_auto_counts_with_the_level_it_runs_at(store, effort, wanted, expected, 
 def test_a_model_list_outage_is_a_readable_refusal(store):
     loop = settings_loop(store)
     loop.settings_tools.catalog = lambda: (_ for _ in ()).throw(RuntimeError("metadata down"))
-    # The facts of consens.io do not need the model list (review 2026-11-01).
+    # The facts of consens.io do not need the model list.
     read = loop.settings_tools.read(agent_settings.ReadSettings())
     assert "model list is unavailable" in read["settings"] and read["consens_io"]["contact"] == "contact@consens.io"
     with pytest.raises(ValueError, match="model list is unavailable"):
@@ -691,8 +691,8 @@ def test_the_words_the_app_shows_count_as_values(name, value, expected):
 
 
 def test_the_allowance_the_agent_names_is_the_rings_not_less_what_running_calls_hold(store):
-    """Review 2026-11-01: the agent said less than the sidebar ring while a
-    reviewer or a comparison held part of the allowance."""
+    """The agent names what the sidebar ring shows, not less while a
+    reviewer or a comparison holds part of the allowance."""
     from app.services import agent_budget_config, agent_quota
     config = agent_budget_config.get_config(store.db)
     limit = agent_budget_config.limit_for(config, "free")

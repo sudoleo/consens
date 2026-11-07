@@ -297,7 +297,7 @@ def test_agent_loop_step_that_never_connected_is_free(store, monkeypatch):  # no
 
 
 def test_delegation_step_that_never_connected_is_free(store, monkeypatch):  # noqa: F811
-    # The step that never connected runs once more (since 2026-10-27); both are free.
+    # The step that never connected runs once more; both are free.
     transport(monkeypatch, [[httpx.ConnectTimeout("connect")], [httpx.ConnectTimeout("connect")]])
     loop = make_loop(store)
     with pytest.raises(httpx.ConnectTimeout):

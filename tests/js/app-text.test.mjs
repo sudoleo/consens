@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// One locale for dates and numbers, one sentence per failure (Apple-Audit H1, H8, H9).
+// One locale for dates and numbers, one sentence per failure.
 function boot({ online = true } = {}) {
   const { window } = loadScripts(["static/js/app-text.js"], {
     before(window) {
@@ -51,7 +51,7 @@ describe("App.format", () => {
     expect(App.format.relative(now - 12 * 60_000, now)).toBe("12m ago");
     expect(App.format.relative(now - 3 * 3_600_000, now)).toBe("3h ago");
     expect(App.format.relative(new Date(2026, 9, 19, 9, 0), now)).toBe("yesterday");
-    // Earlier the same day is never "yesterday" (review F, 2026-10-21).
+    // Earlier the same day is never "yesterday".
     const lateEvening = new Date(2026, 9, 20, 23, 50).getTime();
     expect(App.format.relative(new Date(2026, 9, 20, 0, 10), lateEvening)).toBe("23h ago");
     expect(App.format.relative(new Date(2026, 9, 19, 23, 40), new Date(2026, 9, 20, 1, 0).getTime())).toBe("1h ago");
@@ -124,9 +124,9 @@ describe("App.userError", () => {
       .toBe("This couldn’t be saved. Try again.");
   });
 
-  // Review 2 (2026-10-21): main.py wraps a route's detail object, so a
-  // refusal arrives as {error: {error, error_code, …}}; the agreed flat form
-  // {error: "<sentence>", code, retry_after} reads the same.
+  // main.py lays a route's detail object flat ({error: "<sentence>", code,
+  // retry_after}); the nested {error: {error, error_code, …}} of an older
+  // server reads the same.
   it("reads a refusal whose error is an object as well as the flat form", () => {
     const { App } = boot();
     const sentence = "Today’s allowance doesn’t cover another run. It resets at 00:00 UTC.";
@@ -151,7 +151,7 @@ describe("App.userError", () => {
     expect(App.userError.kind(wait)).toBe("rate_limited");
   });
 
-  // Review F: a 5xx label from the server's log ("Error updating watch") is
+  // A 5xx label from the server's log ("Error updating watch") is
   // no sentence for a reader; a coded refusal or a real sentence still is.
   it("never shows a server error label as the sentence", () => {
     const { App } = boot();
@@ -202,7 +202,7 @@ describe("App.chatPersistenceErrorMessage", () => {
     expect(App.chatPersistenceErrorMessage({ detail: { error_code: "chat_limit_reached" } }))
       .toMatch(/maximum number of saved chats/);
     expect(App.chatPersistenceErrorMessage({ error_code: "turn_limit_reached" })).toMatch(/maximum length/);
-    // main.py wraps the detail in {error: …}.
+    // An older server nested the detail in {error: …}.
     expect(App.chatPersistenceErrorMessage({
       error: { error: "At most 200 chats per account", error_code: "chat_limit_reached" },
     })).toMatch(/maximum number of saved chats/);

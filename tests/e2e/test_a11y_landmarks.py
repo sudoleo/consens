@@ -1,9 +1,9 @@
 """Landmarks, Sprungmarke und Fertig-Ansage in /app
 (docs/a11y-audit-2026-10-23.md, B2, B3 und B4).
 
-Vor der Eingabe lagen bei voller Chatliste rund 80 Tab-Stopps; die
-Sprungmarke ist deshalb der erste und landet in der Frage. Das Ende eines
-Laufs sagte bisher nur der Tab-Titel einer verborgenen Seite.
+Vor der Eingabe liegen bei voller Chatliste rund 80 Tab-Stopps; die
+Sprungmarke ist deshalb der erste und landet in der Frage. Ohne die Ansage
+meldete das Ende eines Laufs nur der Tab-Titel einer verborgenen Seite.
 """
 
 from playwright.sync_api import expect

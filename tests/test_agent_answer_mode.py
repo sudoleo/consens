@@ -3,9 +3,7 @@ message without tool calls is the answer; after a comparison the step that
 reads the answers may write it, a direct answer is one call. The user's
 chosen models review it (agent_audit.py, test_agent_audit.py).
 
-Until 2026-10-14 this was the merged path behind AGENT_MERGED_ANSWER next to
-a separate, tool-free answer step (git tag agent-separate-answer-last); now
-it is the only path. test_agent_comparison covers compare_models and its
+test_agent_comparison covers compare_models and its
 accounting with the shared Script; these tests cover streaming, holding back
 and retracting the answer text, memory and Watch replies, and limits. Their
 reviewers never start (agent_reviewers.py) unless a test asks for them.
@@ -174,8 +172,8 @@ def tool_result(loop, call_id):
 # --- Prompts and tools -----------------------------------------------------------
 
 def test_every_turn_with_comparison_tools_writes_its_own_answer(store):
-    """No switch any more: chat turns and bounded runs alike have no answer
-    tool and get the facts of the app (AGENT_AUDIT_ANSWER_SECTION)."""
+    """Chat turns and bounded runs alike have no answer tool and get the
+    facts of the app (AGENT_AUDIT_ANSWER_SECTION)."""
     from test_agent_comparison import make_loop
     for loop in (merged_loop(store, Merged([{}])), make_loop(store, Script())):
         assert loop.merged and "answer" not in loop.registry.tools
@@ -193,7 +191,7 @@ def test_no_prompt_points_to_the_removed_answer_step():
 
 
 def test_the_agent_prompt_and_its_tools_in_every_chat(store, monkeypatch):
-    """One mode since 2026-10-31: the facts of the app once, compare_models
+    """One mode: the facts of the app once, compare_models
     with only what the models are asked, no check_text, and memory changes
     through update_memory alone."""
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
@@ -241,8 +239,8 @@ def test_the_step_that_reads_the_answers_writes_the_reviewed_answer(store):
     assert not any("text_shortened_for_routing" in a for a in result["answers"])
     # The depth that steered the comparison models is not shown.
     assert "depth" not in result
-    # No app note follows the evidence (until 2026-10-31 AGENT_WRITE_NOTE):
-    # the answers advise, and the work goes on.
+    # No app note follows the evidence: the answers advise, and the work
+    # goes on.
     request = script.requests[1]
     assert request[-1]["role"] == "tool" and request[-1]["tool_call_id"] == "call_0_0"
     # The answer streamed and was complete before the review started.
@@ -255,8 +253,7 @@ def test_the_step_that_reads_the_answers_writes_the_reviewed_answer(store):
 
 
 def test_a_direct_answer_is_one_call_and_reviewed(store):
-    """Without a comparison too: until 2026-10-31 a direct answer went
-    unchecked in comparison mode."""
+    """Without a comparison too: a direct answer is reviewed."""
     script = Merged([{"text": ANSWER}])
     loop = merged_loop(store, script, reviewers=True)
     events = list(loop.run())
@@ -288,7 +285,7 @@ def test_a_short_preamble_never_shows_as_the_answer_but_stands_as_a_note(store):
     loop = merged_loop(store, script)
     events = list(loop.run())
     assert deltas(events) == ANSWER and not retractions(events)
-    # Since 2026-10-28 also a text too short to have streamed (Max: in the trace).
+    # Also a text too short to have streamed.
     assert notes(events) == ["I'll compare the options."]
 
 
@@ -325,8 +322,7 @@ def test_only_a_call_that_needs_results_moves_the_shown_text_when_it_begins(stor
 
 def test_a_reply_after_the_agents_own_search_is_the_answer(store):
     """The agent researches the answer itself: what it writes after its own
-    search streams and stands. Until 2026-10-31 comparison mode held such a
-    reply back once and sent the question through a comparison."""
+    search streams and stands."""
     research = "From my search: the first option is cheaper. " * 20
     found = [{"url": "https://example.org/found", "title": "Found"}]
     script = Merged([{"text": research, "sources": found}])
@@ -354,7 +350,7 @@ def test_a_free_429_after_paid_comparisons_is_retried_once(store, monkeypatch):
 
 
 # A short one was held back for its length and never streamed: it is shown
-# whole and saved too (DelegationLoop._keep_cut_answer, review 2026-10-14).
+# whole and saved too (DelegationLoop._keep_cut_answer).
 # The turn keeps it (agent_runs.finish_run), not a version for the reviewers.
 @pytest.mark.parametrize("text", [ANSWER, "The first option is cheaper over two years."])
 def test_an_answer_cut_at_its_limit_is_kept_unreviewed(store, text):
@@ -392,11 +388,10 @@ def free_account(store, monkeypatch, remaining):
 
 
 def test_a_free_account_keeps_its_research_after_a_first_message(store, monkeypatch):
-    """Until 2026-10-14 a first step that may write the answer reserved the
-    answer allowance for every search round (~460k tokens here): a Free
-    account (660k a day) got one research round instead of three once ~190k
-    were used. It is admitted like a routing step now, with every search
-    round the agent has in a step (here with 60 % of the day left)."""
+    """A first step that may write the answer is admitted like a routing
+    step, with every search round the agent has in a step (here with 60 % of
+    the day left): reserving the answer allowance for every search round
+    would cut a Free account's research short."""
     from app.services.agent_audit import AGENT_SEARCH_ROUNDS
     ref = free_account(store, monkeypatch, 600_000)
     script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}])
@@ -444,11 +439,10 @@ def test_a_turn_limit_lets_the_agent_write_without_tools(store, monkeypatch):
 
 
 def test_after_paid_comparisons_a_refused_routing_step_closes_the_turn(store, monkeypatch):
-    """Audit 2026-10-28: after the first paid comparison every further
-    routing step overdrew the daily allowance and was never refused before
-    turn_steps. Now only the closing answer (no tools) and the reviewers'
-    final rounds may: a routing step the allowance refuses leaves its step to
-    that answer."""
+    """After a paid comparison a routing step must not overdraw the daily
+    allowance until turn_steps; only the closing answer (no tools) and the
+    reviewers' final rounds may: a routing step the allowance refuses leaves
+    its step to that answer."""
     ref = free_account(store, monkeypatch, 400_000)
     script = Merged([{"tools": [COMPARE]}, {"text": ANSWER}])
     loop = merged_loop(store, script)
@@ -497,8 +491,7 @@ def test_an_answer_followed_only_by_a_memory_save_stands(store):
 
 def test_a_short_reply_with_a_memory_save_is_the_whole_answer(store):
     """The usual memory request: a short confirmation, held only for its
-    length, plus update_memory. Not a preamble: no second step writes "Saved."
-    (review 2026-10-14)."""
+    length, plus update_memory. Not a preamble: no second step writes "Saved." after it."""
     set_profile(store.db, auto_memory=True)
     save = ("update_memory", {"changes": [{"op": "add", "text": "Leads a team of ten."}]})
     short = "Got it, I will keep in mind that you lead a team of ten."
@@ -519,7 +512,7 @@ REFUSED_SAVE = ("update_memory", {"changes": [{"op": "add", "id": "m1a2b3c", "te
 def test_a_reply_next_to_a_refused_memory_save_is_written_again(store, reply):
     """The reply may confirm a change that was refused: it goes back (a shown
     one stays as a note) and the next step writes the answer with the
-    refusal in view (_side_results_accepted, review 2026-10-14)."""
+    refusal in view (_side_results_accepted)."""
     set_profile(store.db, auto_memory=True)
     retry = "I could not save that memory."
     script = Merged([{"text": reply, "tools": [REFUSED_SAVE]}, {"text": retry}])
@@ -531,8 +524,8 @@ def test_a_reply_next_to_a_refused_memory_save_is_written_again(store, reply):
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["assistant_response"] == retry
     assert shown(events) == retry
-    # Since 2026-10-28 also a reply too short to have been on screen leaves
-    # its note: the agent's words stay in the timeline.
+    # Also a reply too short to have been on screen leaves its note: the
+    # agent's words stay in the timeline.
     notes = [e for e in events if e.get("kind") == "progress" and e.get("id", "").endswith("/note")]
     assert len(notes) == 1 and notes[0]["text"] == reply.strip()
 
@@ -541,9 +534,9 @@ def test_a_reply_next_to_a_refused_memory_save_is_written_again(store, reply):
 def test_a_reply_with_a_side_tool_at_the_invalid_round_limit_leaves_one_answer_on_screen(store, monkeypatch,
                                                                                          accepted):
     """A comparison, two invalid rounds, then the answer with a side tool.
-    Refused (a memory save), the wrap-up wrote a second answer under the
-    first, which stayed on screen (review 2026-10-14); accepted (a prepared
-    Watch), the answer stands without another step. Either way the browser
+    Refused (a memory save), the wrap-up writes a second answer, which
+    replaces the first on screen; accepted (a prepared Watch), the answer
+    stands without another step. Either way the browser
     shows exactly the saved answer."""
     from app.services import watch_service
     from test_agent_watch import WATCH, outlook
@@ -613,9 +606,9 @@ def searched_midway(before, after, end):
 
 def test_an_answer_that_searches_midway_keeps_its_shown_opening(store, monkeypatch):
     """After a comparison the agent writes, settles a point with its own
-    search and writes on. The client's pre-search cut took the opening the
-    user had seen off the screen and out of the saved answer
-    (AgentCompletion._drop_presearch_text, review 2026-10-14)."""
+    search and writes on. The client's pre-search cut
+    (AgentCompletion._drop_presearch_text) leaves the opening the user has
+    seen on the screen and in the saved answer."""
     from test_agent_loop import packet, transport, usage
     opening = "Summary: the first option is cheaper over two years for a team of ten. " * 6
     rest = "After checking the fee table: the second option adds 20 euros per seat. " * 10
@@ -632,9 +625,8 @@ def test_an_answer_that_searches_midway_keeps_its_shown_opening(store, monkeypat
 def test_a_step_that_breaks_off_after_its_own_search_saves_what_was_shown(store, monkeypatch):
     """A first step shows its opening, gets its own search results, writes on
     and its stream breaks: the partial answer saved is what the user saw
-    (DelegationLoop._step, review 2026-10-14). Since 2026-10-31 the text after
-    the search shows too: the agent researches the answer itself (until then
-    comparison mode held it back as research)."""
+    (DelegationLoop._step). The text after the search shows too: the agent
+    researches the answer itself."""
     from test_agent_loop import transport
     opening = "Let me look into the current prices of both options carefully. " * 6
     research = "From the results: the first option costs 100 and the second 80 a month. " * 12
@@ -697,7 +689,7 @@ def test_a_watch_is_prepared_and_the_agent_points_to_its_card(store, monkeypatch
 def test_over_http_a_direct_answer_is_one_streamed_request(api, monkeypatch):
     """The whole path: POST /agent, the real stream client, the saved turn
     and the recovered answer. The comparison models review it (every
-    account's turn since 2026-10-31) and mark nothing."""
+    account's turn) and mark nothing."""
     from test_agent_loop import REAL_STREAM, reviewed_transport
     from test_agent_runs import AUTH
     from app.services.llm.agent_client import AgentCompletion

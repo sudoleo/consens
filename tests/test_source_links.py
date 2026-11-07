@@ -1,4 +1,4 @@
-"""Watch-Seiten führen direkt zu den Quellen (source_links.py, seit 2026-10-12).
+"""Watch-Seiten führen direkt zu den Quellen (source_links.py).
 
 Direktlinks über der Antwort und die Namen der Quellen im Text als Links:
 Navigation, kein Satz-für-Satz-Beleg -- die Synthese schreibt bewusst keine

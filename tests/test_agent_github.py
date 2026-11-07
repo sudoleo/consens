@@ -229,7 +229,7 @@ def test_without_the_app_github_is_not_set_up(gh_api, fake_vm, monkeypatch):
     loop = vm_loop(store, script)
     list(loop.run())
     # The import comes with the VM (public repositories need no app) and says
-    # it calmly; a pull request is not offered at all (since 2026-10-29).
+    # it calmly; a pull request is not offered at all.
     assert "github_import" in script.offered[0] and "prepare_pull_request" not in script.offered[0]
     assert prompt_defaults.AGENT_GITHUB_IMPORT_PROMPT in script.systems[0]
     assert "prepare_pull_request" not in script.systems[0]
@@ -268,7 +268,7 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
     assert command == unpack_command(archive, "/home/agent/repos/app", "maxl/app", "main", SHA)
     # Written and unpacked as the agent's user, never through the provider's file API.
     assert ("write", archive) not in fake_vm.server_files and command not in fake_vm.server
-    # The unpacking ran in the VM: its time counts (security audit 2026-10-27).
+    # The unpacking ran in the VM: its time counts.
     assert loop.vm_tools.session.seconds == .5
     everything = repr(fake_vm.calls) + repr(fake_vm.vms)
     assert "ghs_" not in everything and "ghu_" not in everything and "client-secret" not in everything
@@ -278,10 +278,9 @@ def test_an_import_gets_a_token_for_that_repository_alone_and_none_reaches_the_v
 
 
 def test_the_unpacking_never_runs_past_the_days_vm_time(store, fake_vm, github, monkeypatch):
-    """Bug hunt 2026-11-06: the unpacking (up to UNPACK_SECONDS) and the
-    pull request's git ran with their own limits, past what was left of
-    today's VM time and of the answer's time; the agent's commands never do
-    (VMTools._timeout)."""
+    """The unpacking (up to UNPACK_SECONDS) and the pull request's git run
+    within what is left of today's VM time and of the answer's time, as the
+    agent's commands do (VMTools._timeout)."""
     from app.services import agent_github, agent_vm_time
     monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
     agent_vm_time.charge(store, UID, 60)
@@ -294,8 +293,7 @@ def test_the_unpacking_never_runs_past_the_days_vm_time(store, fake_vm, github, 
 
 
 def test_a_public_repository_comes_in_without_a_connection_or_a_token(store, fake_vm, github):
-    """The workbench reaches github.com only on the user's card (since
-    2026-11-02; closed from 2026-10-27): a public repository comes through
+    """The workbench reaches github.com only on the user's card: a public repository comes through
     github_import too, without the user's
     connection; a private or missing one says how to connect."""
     script = Agent([[("github_import", {"repo": "pub/lib"})], [("github_import", {"repo": "nobody/missing"})]])
@@ -322,9 +320,8 @@ def test_an_app_removed_on_github_shows_as_not_connected(store, fake_vm, github)
 
 
 def test_the_way_to_connect_again_is_where_settings_show_github(store, fake_vm, github):
-    """Bug hunt 2026-11-03: GitHub moved to Settings › Connections on
-    2026-11-02, but the agent still sent the user to Settings, Agent, GitHub,
-    a place that no longer has it."""
+    """GitHub lives in Settings › Connections: the agent sends the user
+    there, not to Settings, Agent, GitHub."""
     template = (Path(__file__).resolve().parents[1] / "templates" / "index.html").read_text(encoding="utf-8")
     connections = template.split('id="connectionsSettingsSection"', 1)[1].split("</section>", 1)[0]
     assert 'id="agentGithubSettings"' in connections
@@ -340,9 +337,9 @@ def test_the_way_to_connect_again_is_where_settings_show_github(store, fake_vm, 
 @pytest.mark.parametrize("status, error", [(422, NO_ACCESS.format(repo="maxl/app")),
                                            (403, agent_github.UNAVAILABLE), (401, agent_github.UNAVAILABLE)])
 def test_a_refused_token_keeps_the_connection(store, fake_vm, github, status, error):
-    """Bug hunt 2026-10-27: a repository taken out of the app's selection
-    (422), a rate limit (403) or the app's own key (401) forgot the user's
-    whole connection, and they read that the app was removed."""
+    """A repository taken out of the app's selection (422), a rate limit
+    (403) or the app's own key (401) does not forget the user's whole
+    connection, nor tell them that the app was removed."""
     connected(store, github)
     github.refused[9] = status
     loop = vm_loop(store, Agent([[("github_import", {"repo": "maxl/app"})]]))
@@ -352,9 +349,9 @@ def test_a_refused_token_keeps_the_connection(store, fake_vm, github, status, er
 
 
 def test_an_unexpected_answer_or_key_fails_the_tool_not_the_turn(store, fake_vm, github, monkeypatch):
-    """Bug hunt 2026-10-26: GitHub calls do not go through VMTools._provider,
+    """GitHub calls do not go through VMTools._provider,
     and an answer without the expected field (KeyError) or an invalid app key
-    (InvalidKeyError) is no ValueError. VMTools._guarded (since 2026-10-30)
+    (InvalidKeyError) is no ValueError. VMTools._guarded
     makes it the call's error, reported to the operator, never the turn's."""
     connected(store, github)
     real = FakeGitHub.__call__
@@ -527,10 +524,9 @@ def test_files_changed_after_the_preview_never_go_to_github(store, fake_vm, gith
 
 
 def test_a_chat_in_deletion_sends_nothing_to_github(store, fake_vm, github):
-    """Bug hunt P29: the card's answer never asked whether its chat was still
-    there, so a card left open elsewhere pushed the files of a chat its user
-    had deleted (before 2026-10-28 it even made the VM again, vm.ensure; now
-    only vm.exists). As every write of a message (agent_workspace.claim,
+    """A card left open elsewhere must not push the files of a chat its user
+    has deleted, nor make the VM again (only vm.exists). As every write of a
+    message (agent_workspace.claim,
     GitHubTools._save): only an active chat's card is answered, before
     anything reads the workspace or goes to GitHub."""
     loop, _ = prepared(store, fake_vm, github)
@@ -567,11 +563,10 @@ def test_account_deletion_removes_the_connection():
 
 
 def test_the_card_shows_what_goes_up_whatever_the_vms_git_says(store, fake_vm, github):
-    """Security audit 2026-10-27: the card's diff came from git in the VM,
-    the upload from the files. A filter, a moved ref or another git showed
-    a harmless change while more went up. Now the VM's git only names the
-    paths; their bytes, the kind of change and the diff come from the file
-    API and GitHub."""
+    """The VM's git only names the paths; their bytes, the kind of change
+    and the diff come from the file API and GitHub. With the card's diff from
+    git in the VM and the upload from the files, a filter, a moved ref or
+    another git could show a harmless change while more went up."""
     raw = ("consens-raw\0:100644 100644 a b M\0src/main.py\0:100644 100644 a b M\0README.md\0"
            ":100644 000000 a 0 D\0old.txt\0consens-numstat\0")
     loop, files = prepared(store, fake_vm, github, raw=raw,

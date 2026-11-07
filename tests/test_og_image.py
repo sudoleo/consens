@@ -55,7 +55,7 @@ def test_card_draws_question_brand_score_and_facts(drawn):
     assert "consens.io" in drawn
     assert "71" in drawn and "/100 agreement" in drawn
     assert {"3 AI models", "2 contradictions", "Answered Oct 12, 2026"} <= set(drawn)
-    # The light ground of the brand card, not the old dark scoreboard.
+    # The light ground of the brand card.
     assert image.getpixel((5, 5)) == og_image.BG
     for box in (QUESTION_BOX, FOOTER_BOX):
         assert len(image.crop(box).getcolors(1_000_000)) > 20

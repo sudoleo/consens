@@ -13,7 +13,7 @@ from native_support import native_db, race_with_worker_retry, tree
 @pytest.mark.parametrize("kind,capability", [("gmail_send", "gmail_send"), ("calendar_event", "calendar_write")])
 def test_native_google_confirmation_one_attempt_and_unknown_never_retries(native_db, monkeypatch, kind, capability):
     db, uid = native_db, native_db.owner()
-    # Writes stay behind their own switch since Google became read-only by default.
+    # Writes stay behind their own switch; Google is read-only by default.
     for key, value in {"GOOGLE_INTEGRATIONS_ENABLED": "1", "GOOGLE_WRITES_ENABLED": "1", "GOOGLE_CLIENT_ID": "fixture-client",
         "GOOGLE_CLIENT_SECRET": "fixture-secret", "GOOGLE_REDIRECT_URI": "https://fixture.invalid/agent/google/callback",
         "GOOGLE_TOKEN_KEYS": Fernet.generate_key().decode()}.items():

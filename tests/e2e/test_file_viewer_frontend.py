@@ -1,4 +1,4 @@
-"""The preview beside the chat (file-viewer.js, 2026-11-01): a deck the agent
+"""The preview beside the chat (file-viewer.js): a deck the agent
 shared, a created document, code and an uploaded PDF open in it; desktop
 docks it beside the chat, a phone shows it over everything. All APIs mocked,
 real PDFs drawn by pdf.js."""
@@ -99,7 +99,7 @@ def test_a_shared_deck_shows_its_first_slide_and_opens_beside_the_chat(browser, 
         expect(viewer).to_be_visible()
         assert page.evaluate("document.body.classList.contains('file-viewer-docked')")
         # Measured once the preview has slid in and the chat has narrowed:
-        # both move, and a busy machine measured them halfway (2026-11-01).
+        # both move, and a busy machine measured them halfway.
         for moving in (viewer, page.locator('.container').first):
             moving.evaluate("el => Promise.all(el.getAnimations().map(a => a.finished.catch(() => {})))")
         expect(viewer.locator('.file-viewer-name')).to_have_text('Der_Weg_zur_AGI.pptx')

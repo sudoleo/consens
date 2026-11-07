@@ -26,7 +26,7 @@ function boot({ mode = 'compare' } = {}) {
 }
 
 const estimates = { compare: 32000, consensus: 55000, deep_think: 150000 };
-// The account in micro-euros (since 2026-10-31): Free 1 EUR a day.
+// The account in micro-euros: Free 1 EUR a day.
 const euroEstimates = { compare: 60000, consensus: 100000, deep_think: 200000 };
 
 it('shows one quiet ring for the shared account, the value only in label and panel', () => {
@@ -49,7 +49,7 @@ it('shows one quiet ring for the shared account, the value only in label and pan
   expect(d.getElementById('quotaPercent').textContent).toBe('62%');
   expect(d.getElementById('quotaReset').textContent).toMatch(/^Resets at .+ · in /);
   // The euro figures are the operator's: they stand in an admin-only part
-  // (style.css hides .admin-only without body.viewer-is-admin, Apple-Audit H4).
+  // (style.css hides .admin-only without body.viewer-is-admin).
   expect(d.getElementById('quotaDetail').textContent).toBe('€0.62 of €1.00 · A Compare run uses about 6%.');
   expect(d.querySelector('#quotaDetail .admin-only').textContent).toBe('€0.62 of €1.00 · ');
   expect(d.querySelector('#quotaDetail .quota-detail-words').textContent).toBe('A Compare run uses about 6%.');
@@ -101,7 +101,7 @@ it('orders concurrent snapshots and fences other accounts', () => {
   expect(api.apply({ limit: 0, used: 1 })).toBe(false);
   expect(api.fromResponse({ detail: { token_budget: { limit: 1000, used: 20, revision: 2, day: '2026-10-02' } } })).toBe(true);
   expect(api.current().used).toBe(20);
-  // The account in euros (2026-10-31) is a new account: its revisions start
+  // The account in euros is a new account: its revisions start
   // again, and its first snapshot replaces the token one of the same day.
   expect(api.apply({ limit: 1000000, used: 5, revision: 1, day: '2026-10-02', unit: 'micro_eur' })).toBe(true);
   expect(api.current().unit).toBe('micro_eur');
@@ -127,7 +127,7 @@ it('admits a run like the server: available tokens against the mode estimate', (
 
 it('writes nothing when the account has not changed', () => {
   // sync() follows every tick of the hidden reset countdown; rewriting the
-  // same values invalidated style and layout each time (Apple audit D10).
+  // same values invalidated style and layout each time.
   const { d, w, dom } = boot();
   w.App.tokenBudget.apply({ limit: 660000, used: 250800, estimated: 10000, reserved: 55000, remaining: 344200,
     revision: 3, day: '2026-10-01', run_estimates: estimates });

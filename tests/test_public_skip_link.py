@@ -1,7 +1,7 @@
-"""The skip link of the public pages (a11y audit P3).
+"""The skip link of the public pages.
 
 The bar of the public pages put 7-8 tab stops before the content of every
-page. Its partial now opens with a skip link to #main, which only works if
+page. Its partial opens with a skip link to #main, which only works if
 every page that includes the bar names its <main> that way.
 """
 
@@ -35,8 +35,8 @@ def _rule(css, selector):
 
 def test_the_parked_skip_link_casts_no_shadow_over_the_page():
     """Parked above the top edge, its lift reached about 30 px into the page
-    and lay as a grey smudge over the wordmark (base.css until 0b2ad6ae, the
-    public bar until 2026-11-07). The shadow comes with the focus."""
+    and lay as a grey smudge over the wordmark. The shadow comes with the
+    focus."""
     static = TEMPLATES.parent / "static" / "css"
     for name in ("public-nav.css", "base.css"):
         css = (static / name).read_text(encoding="utf-8")

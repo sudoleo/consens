@@ -25,7 +25,7 @@ def test_six_answers_leave_room_to_read_and_keep_touch_targets(browser, phase4_s
         init_script=f"localStorage.setItem('theme','{theme}')")
     try:
         page.set_viewport_size({'width':1920, 'height':912})
-        # The browser runs no Consensus since 2026-10-25: six answers behind
+        # The browser runs no Consensus: six answers behind
         # "Compare answers" are a saved Consensus chat.
         keys = page.evaluate("() => App.modelPrefs.slice(0, 6).map(p => p.key)")
         seed_reader(page, question=QUESTION, consensus=TEXT * 3, answers={
@@ -48,7 +48,7 @@ def test_six_answers_leave_room_to_read_and_keep_touch_targets(browser, phase4_s
             assert 520 <= round(metrics['width']) <= 720
             # Narrowest case 1400px: open 260px sidebar and 520px reader leave
             # the chat 546px since the column is measured from the body's real
-            # content box instead of 100vw (sidebar resize, 2026-10-08).
+            # content box instead of 100vw.
             assert metrics['chatWidth'] >= 540
             assert metrics['chatRight'] < metrics['readerLeft']
             assert metrics['headerHeight'] <= 36

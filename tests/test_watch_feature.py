@@ -1822,7 +1822,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(asyncio.CancelledError):
                 await watch_scheduler.watch_scheduler_loop()
         self.assertEqual(calls, 2)
-        # The wait knows when the tick looked for due watches (Zweitprüfung 10).
+        # The wait knows when the tick looked for due watches.
         self.assertIsInstance(next_tick.call_args.kwargs["scanned_at"], datetime)
 
     def _tick_patches(self, claimed, result=None, *, execute=None, db=None):
@@ -1978,7 +1978,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             await watch_scheduler.run_watch_tick()
             await watch_scheduler.run_watch_tick()
 
-        # execute_watch bekommt jetzt die Stufe, nicht mehr ein Pro-Bool.
+        # execute_watch bekommt die Stufe, kein Pro-Bool.
         self.assertEqual(execute.call_args_list[0].args[-1], "free")
         self.assertEqual(execute.call_args_list[1].args[-1], "pro")
 
@@ -1987,7 +1987,7 @@ class SchedulerLoopTests(unittest.IsolatedAsyncioTestCase):
             "owner_uid": "u1", "share_id": "A" * 16, "interval": "weekly",
             "model_tier": "free", "email_mode": "changes_only",
             # Legacy field from the era of the hardcoded Publisher exclusion.
-            # A stale document must no longer silence a provider.
+            # A stale document must not silence a provider.
             "excluded_providers": ["deepseek"],
         }
         result = {
@@ -2221,11 +2221,11 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn("window.openWatchDashboard?.()", source)
 
     def test_every_way_to_start_a_watch_opens_the_one_field(self):
-        """Since 2026-11-04 one field starts a Watch (watch-composer.js): on
+        """One field starts a Watch (watch-composer.js): on
         the Watches page its own (compose), from the pill under an answer
         and anywhere else the sheet with the same field. The public page's
         invitation (?create=1) and a sign-in in between go the same way. The
-        page has no button of its own any more (two said the same, Max)."""
+        page has no button of its own (two said the same, Max)."""
         source = Path("static/js/watch.js").read_text(encoding="utf-8")
         sheet = Path("static/js/watch-sheet.js").read_text(encoding="utf-8")
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
@@ -2241,10 +2241,9 @@ class WatchFrontendContractTests(unittest.TestCase):
 
     def test_watch_empty_state_explains_the_difference_to_a_scheduled_prompt(self):
         """The empty page is where the mental model is set: a Watch runs the
-        Agent on a schedule and speaks only when something changes. Since
-        2026-11-04 the field is the empty page: one question, one field, the
-        page head only for screen readers, so still one heading and one
-        action (J24)."""
+        Agent on a schedule and speaks only when something changes. The
+        field is the empty page: one question, one field, the page head only
+        for screen readers, so still one heading and one action."""
         source = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
         self.assertIn("What should the Agent keep an eye on?", source)
@@ -2260,7 +2259,7 @@ class WatchFrontendContractTests(unittest.TestCase):
         css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
 
         self.assertIn('consensio.watchViewSwitchHint.seen.v1', watch_source)
-        # Two beats of the one tempo that repeats (Apple audit C13).
+        # Two beats of the one tempo that repeats.
         self.assertIn('animation: watchSwitchPulse var(--dur-beat) var(--ease-out) 2', css)
         self.assertIn('prefers-reduced-motion: reduce', css)
 
@@ -2273,7 +2272,7 @@ class WatchFrontendContractTests(unittest.TestCase):
         html_source = Path("templates/index.html").read_text(encoding="utf-8")
         modal_css = Path("static/css/components-modals.css").read_text(encoding="utf-8")
         self.assertIn("max-height: calc(100dvh - 32px)", modal_css)
-        # The page behind stays still through the one scroll lock (F2).
+        # The page behind stays still through the one scroll lock.
         foundation_css = Path("static/css/foundation.css").read_text(encoding="utf-8")
         self.assertIn("html:has(:is(dialog:modal,", foundation_css)
         self.assertIn("#shareModalBody", modal_css)
@@ -2306,15 +2305,16 @@ class WatchFrontendContractTests(unittest.TestCase):
         bundles = Path("static/js/bundles.json").read_text(encoding="utf-8")
         self.assertLess(bundles.index("static/js/watch.js"), bundles.index("static/js/watch-dashboard.js"))
         # Der View-Switch ist immer sichtbar (auch ausgeloggt): kein hidden im
-        # Markup, firebase.js blendet ihn nicht mehr um.
+        # Markup, firebase.js blendet ihn nicht um.
         self.assertNotIn('id="viewSwitch" class="view-switch" hidden', html_source)
         firebase_source = Path("static/firebase.js").read_text(encoding="utf-8")
         self.assertEqual(firebase_source.count('getElementById("viewSwitch")'), 0)
 
     def test_long_questions_collapse_on_the_page_like_in_the_app(self):
         """Eine lange Frage darf die Seite nicht aufblaehen: drei Zeilen plus
-        Aufklapp-Link auf Share-/Watch-Seiten, zwei Zeilen in einer Zeile
-        von /app/watches — dieselbe Geste wie #threadAsk in /app."""
+        Aufklapp-Link auf Share-/Watch-Seiten, in /app/watches vier Zeilen in
+        einer Karte und eine in einer Zeile — dieselbe Geste wie #threadAsk in
+        /app."""
         share_html = Path("templates/share.html").read_text(encoding="utf-8")
         public_css = Path("static/css/public-pages.css").read_text(encoding="utf-8")
         watch_css = Path("static/css/components-watch.css").read_text(encoding="utf-8")
@@ -2323,8 +2323,8 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn('id="shareQuestionMore"', share_html)
         self.assertIn('aria-controls="shareQuestion"', share_html)
         # Der Link startet versteckt und erscheint erst, wenn wirklich etwas
-        # abgeschnitten ist; ohne JS bleibt die Frage vollstaendig. Seit dem
-        # Apple-Audit (I2) kommt die Klammer schon vom Server, damit nichts
+        # abgeschnitten ist; ohne JS bleibt die Frage vollstaendig. Die
+        # Klammer kommt schon vom Server, damit nichts
         # nach dem ersten Bild zusammenklappt; die Klammer selbst gilt nur
         # mit Skript, das gemeinsame Skript ist check-page.js.
         check_js = Path("static/js/check-page.js").read_text(encoding="utf-8")
@@ -2335,7 +2335,7 @@ class WatchFrontendContractTests(unittest.TestCase):
         self.assertIn(".share-question.is-clamped", public_css)
         self.assertIn("-webkit-line-clamp: 3", public_css)
         self.assertRegex(public_css, r"@media \(scripting: enabled\) \{\s*\.share-question\.is-clamped")
-        # /app/watches since 2026-11-04: a finding's card shows up to four
+        # /app/watches: a finding's card shows up to four
         # lines, a running Watch's row one; its chat shows all.
         self.assertIn("-webkit-line-clamp: 4", watch_css.split(".aw-card-text {", 1)[1].split("}", 1)[0])
         self.assertIn("text-overflow: ellipsis", watch_css.split(".aw-line {", 1)[1].split("}", 1)[0])
@@ -2343,12 +2343,12 @@ class WatchFrontendContractTests(unittest.TestCase):
     def test_watch_cards_open_their_settings_in_place_and_keep_their_styles(self):
         dashboard = Path("static/js/watch-dashboard.js").read_text(encoding="utf-8")
         input_css = Path("static/css/components-input.css").read_text(encoding="utf-8")
-        # A row's settings are its panel since 2026-11-04 (no "…" menu).
+        # A row's settings are its panel (no "…" menu).
         self.assertIn("open.setAttribute('aria-haspopup', 'dialog')", dashboard)
         self.assertIn("open.addEventListener('click', () => openDetail(watch.id, open));", dashboard)
         # No global button rule may repaint any button on the page: the solid
         # look is opt-in via `.btn`, one rule for it and the older primaries
-        # such as `.wd-button.is-primary` (Apple-Audit G4).
+        # such as `.wd-button.is-primary`.
         self.assertNotIn("button:not(", input_css)
         self.assertIn(".button,\n.btn,", input_css)
         self.assertIn(".wd-button.is-primary,", input_css)

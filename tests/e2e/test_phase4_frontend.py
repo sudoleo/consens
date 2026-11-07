@@ -310,7 +310,7 @@ def test_auth_module_failure_exposes_usable_login_dialog(browser, phase4_server)
 def test_a_status_that_answers_before_the_app_starts_keeps_the_pro_tier(browser, phase4_server):
     """firebase.js runs before the deferred app bundle, whose start sets the
     tier to Free. A /user_status that answered first was overwritten there:
-    the Pro account stayed Free in that tab (nightly run 2026-10-28)."""
+    the Pro account stayed Free in that tab."""
     held = []
     released = []
 
@@ -475,11 +475,11 @@ def test_logged_out_watch_deep_link_survives_and_late_login_renders(browser, pha
             }),
         )
         page.route("**/api/my/telegram", lambda route: _json(route, {"telegram": {}}))
-        # Since 2026-11-03 the page lists the Agent's Watches (watch-dashboard.js).
+        # The page lists the Agent's Watches (watch-dashboard.js).
         page.route("**/agent/watches", lambda route: _json(route, {
             "watches": [], "intervals": ["daily", "weekly"], "active_count": 0, "active_limit": 2}))
 
-        # A guest sees what a Watch does, the field and the way in (J3).
+        # A guest sees what a Watch does, the field and the way in.
         expect(page.locator(".aw-hero-title")).to_have_text("What should the Agent keep an eye on?")
         expect(page.locator(".aw-hero-login")).to_have_text("Log in")
         assert page.url.endswith("/app/watches")
@@ -527,7 +527,7 @@ def test_all_model_failures_end_in_error_without_consensus(browser, phase4_serve
 
 
 # Holds every /ask_* request in the page until the test releases it. Compare
-# is the browser's run besides Agent since 2026-10-25: no chat, no turn, no
+# is the browser's run besides Agent: no chat, no turn, no
 # /consensus; each finished answer is saved to its run's bookmark.
 RUN_GATE = """() => {
   const included = new Set(["OpenAI", "Mistral"]);
@@ -803,7 +803,7 @@ def test_compare_is_direct_answers_only(browser, phase4_server):
         page.fill("#questionInput", "Give me direct answers only.")
         page.evaluate("() => window.sendQuestion()")
 
-        # The families of the default preset Daily (two since 2026-11-01).
+        # The families of the default preset Daily (two).
         for response_id in ("claudeResponse", "deepseekResponse"):
             expect(page.locator(f"#{response_id}")).to_contain_text(
                 "Direct answer from", timeout=10000
@@ -833,8 +833,8 @@ def test_compare_is_direct_answers_only(browser, phase4_server):
             " && el.classList.contains('direct-comparison-active')"
             " && !el.classList.contains('agent-mode-enabled')"
         )
-        # Direct comparison still has no consensus pipeline, but since the
-        # 2026-08-31 thread contract it keeps the submitted question visible.
+        # Direct comparison has no consensus pipeline, but the thread
+        # contract keeps the submitted question visible.
         expect(page.locator("#threadAsk")).to_be_visible()
         expect(page.locator("#threadAskText")).to_contain_text(
             "Give me direct answers only."

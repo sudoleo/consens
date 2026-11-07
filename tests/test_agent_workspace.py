@@ -1,6 +1,6 @@
-"""The account's workspace (agent_workspace.py, since 2026-10-27): its lease,
-its tools in its VM (workspace_vm/workbench, workspace_vm/browser; two VMs
-until 2026-11-04) and the Sprites calls behind them. The loop's use of it is in test_agent_vm.py
+"""The account's workspace (agent_workspace.py): its lease,
+its tools in its VM (workspace_vm/workbench, workspace_vm/browser)
+and the Sprites calls behind them. The loop's use of it is in test_agent_vm.py
 and test_agent_browser.py; nothing here calls Sprites or starts a browser:
 the relay runs against a local echo server, browser.py's helpers without
 Playwright, agent-run and setup.sh are checked as text (they ran on a test
@@ -115,7 +115,7 @@ def test_the_list_of_sign_ins_keeps_the_first_day_and_the_newest_sites(store, mo
 # --- Tools in the VMs -----------------------------------------------------------------
 
 def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes_and_rules(monkeypatch):
-    """One VM since 2026-11-04: the agent's tools and the browser's in one
+    """One VM: the agent's tools and the browser's in one
     folder, one version, which the network rules are part of."""
     tools = agent_workspace.tool_files()
     assert set(tools) == {"agent-run", "nouserns.py", "setup.sh", "browser.py", "cdp.py", "display.sh", "harden.sh",
@@ -132,9 +132,9 @@ def test_the_vms_tools_are_lf_and_their_version_follows_their_bytes_and_rules(mo
 
 
 def test_the_agent_runs_as_its_own_user_without_the_providers_socket():
-    """agent-run (security audit 2026-10-27, findings 1 to 3): a mount
+    """agent-run: a mount
     namespace of its own hides the management socket, the checkpoints and
-    the logs, and since 2026-11-04 gives the agent a /tmp of its own; then
+    the logs, and gives the agent a /tmp of its own; then
     the agent's user with no way back to root. Checked as text here; on a
     test Sprite it ran (docs/agent-mode.md)."""
     run = agent_workspace.tool_files()["agent-run"].decode()
@@ -147,7 +147,7 @@ def test_the_agent_runs_as_its_own_user_without_the_providers_socket():
     assert '[ -d "$tmp" ] && [ ! -L "$tmp" ] || exit 125' in run and 'mount --bind "$tmp" /tmp || exit 125' in run
     assert run.index('mount --bind "$tmp" /tmp') < run.index("setpriv --reuid")
     assert '--reuid="$user" --regid="$user" --init-groups --no-new-privs' in run
-    # Since 2026-11-04: no user namespaces (the seccomp filter execs setpriv,
+    # No user namespaces (the seccomp filter execs setpriv,
     # so it holds from before the agent's user on), and the user's browser
     # goes first when memory or the processor run short.
     assert 'exec /usr/bin/python3 -I "$here/nouserns.py" \\\n    setpriv --reuid=' in run
@@ -171,11 +171,11 @@ def test_the_agent_runs_as_its_own_user_without_the_providers_socket():
 
 
 def test_the_move_onto_one_computer_happens_once_and_never_ends_the_browser_again():
-    """Since 2026-11-04 the browser runs here, as the provider's user: what
+    """The browser runs here, as the provider's user: what
     older layouts left (a browser and its screen, the gateway, the tunnel,
     the agent's processes that share the real /tmp) goes once, behind a
-    marker on the VM's disk. Before, every new version ended Chrome and
-    openbox by name, which would now end the user's browser at each deploy."""
+    marker on the VM's disk. Ending Chrome and openbox by name with every new
+    version would end the user's browser at each deploy."""
     setup = agent_workspace.tool_files()["setup.sh"].decode()
     once = setup[setup.index('if [ ! -e "$merged" ]; then'):setup.index('  touch "$merged"\nfi')]
     assert "merged=$state/one-computer" in setup
@@ -195,16 +195,16 @@ def test_the_move_onto_one_computer_happens_once_and_never_ends_the_browser_agai
 
 
 def test_every_workspace_gets_ripgrep_and_chrome_and_loses_the_old_screen():
-    """setup.sh (Paket 4, ran on a test Sprite 2026-10-28, docs/agent-mode.md):
+    """setup.sh (ran on a test Sprite 2026-10-28, docs/agent-mode.md):
     ripgrep from the Ubuntu mirrors and Chrome from Google's server, each only
     when missing and without questions; the old layout's screen and VNC
     server purged where installed, Chrome and the window manager kept (the
-    browser runs here since 2026-11-04). A failed install never fails the
+    browser runs here). A failed install never fails the
     setup (the agent's user does not depend on it)."""
     setup = agent_workspace.tool_files()["setup.sh"].decode()
     assert "export DEBIAN_FRONTEND=noninteractive" in setup and " -y -qq " in setup
     assert "if ! command -v rg " in setup and "apt_get install --no-install-recommends ripgrep poppler-utils" in setup
-    # pdftotext for the PDFs the agent reads (DeepSeek's feedback 2026-10-28).
+    # pdftotext for the PDFs the agent reads (DeepSeek's feedback).
     assert "! command -v pdftotext" in setup
     assert "if ! command -v google-chrome " in setup
     # Google's apt source never stays: an apt run for the agent never updates the browser's Chrome.
@@ -222,7 +222,7 @@ def test_every_workspace_gets_ripgrep_and_chrome_and_loses_the_old_screen():
 
 
 def test_a_new_version_opens_the_network_writes_the_tools_and_runs_the_setup(fake_vm):
-    """prepare (since 2026-11-04): the VM's rules are the open web without
+    """prepare: the VM's rules are the open web without
     Fly.io's network, set with each new version before the setup, which
     needs them for Chrome's download; up to date it touches nothing. A
     failed setup leaves the version unwritten, so it runs again."""
@@ -316,7 +316,7 @@ def test_every_call_holds_the_browser_vm_awake_for_ten_minutes(monkeypatch, caps
 
 
 def test_the_helper_adds_the_picture_after_an_action_only_when_asked():
-    """screenshot_after (since 2026-10-29): the action's answer and then the
+    """screenshot_after: the action's answer and then the
     picture of the page, with its size for click and drag."""
     browser = load("browser")
 
@@ -334,7 +334,7 @@ def test_the_helper_adds_the_picture_after_an_action_only_when_asked():
 
 
 def test_the_helpers_page_picture_is_chromes_scaled_viewport_or_nothing():
-    """An opened page's card (since 2026-10-29): Chrome scales the visible
+    """An opened page's card: Chrome scales the visible
     part of the page to PREVIEW_WIDTH itself; a browser that gives none
     costs the card its picture, never the step."""
     browser = load("browser")
@@ -369,10 +369,10 @@ def test_the_helpers_page_picture_is_chromes_scaled_viewport_or_nothing():
 
 
 def test_opening_the_workspace_sets_its_network_rules_with_a_new_version_only(fake_vm, store):
-    """Prod 2026-10-29: every opening of the browser set the rules anew, a
-    request that waits while the VM wakes; once it ran into its limit and
-    the browser was off for the message. They only change with a new
-    version, which sets them (the rules are part of VERSION)."""
+    """Setting the rules at every opening of the browser is a request that
+    waits while the VM wakes; in Prod one ran into its limit and the browser
+    was off for the message. They only change with a new version, which
+    sets them (the rules are part of VERSION)."""
     backend = fake_vm.backend()
     name = agent_workspace.open_workspace(backend, UID, db=store.db)
     assert name == agent_vm.workspace_name(UID)
@@ -385,8 +385,8 @@ def test_opening_the_workspace_sets_its_network_rules_with_a_new_version_only(fa
 
 
 def test_the_browser_vm_of_before_goes_once_with_its_sign_ins(fake_vm, store, monkeypatch):
-    """Max, 2026-11-04: the sign-ins are made again once. A record that
-    names the browser VM of 2026-10-27 to 2026-11-04 has it deleted when the
+    """The sign-ins are made again once: a record that names the old
+    browser VM (agent_vm.old_browser_name) has it deleted when the
     workspace opens, then forgets it and the list of sign-ins; a record
     without one costs no deletion."""
     monkeypatch.setattr(agent_workspace, "_retired", set())
@@ -412,7 +412,7 @@ def test_the_browser_vm_of_before_goes_once_with_its_sign_ins(fake_vm, store, mo
 
 
 def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_has_it(tmp_path, monkeypatch, capsys):
-    """browser.py on the browser VM: JSON in, JSON out, no shell. While the
+    """browser.py in the workspace: JSON in, JSON out, no shell. While the
     user has the browser it acts on nothing; an upload takes only a file the
     server put into its folder for the call."""
     browser = load("browser")
@@ -426,7 +426,7 @@ def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_ha
     assert run_helper(browser, monkeypatch, capsys, {"action": "rm -rf /"}) == {
         "status": "refused", "text": "Unknown action rm -rf /."}
     # "warm" is the server's own start of the browser (agent_browser._warm),
-    # "rest" its end of a message (since 2026-10-30): never one of the
+    # "rest" its end of a message: never one of the
     # agent's actions, and neither reads anything of the pages.
     assert browser.ACTIONS == set(agent_browser.ACTIONS) | {"warm", "rest"} and "warm" not in browser.ACTING
     assert browser.SERVER_ACTIONS == {"warm", "rest"} and not browser.SERVER_ACTIONS & browser.ACTING
@@ -440,11 +440,9 @@ def test_the_browser_helper_takes_one_typed_action_and_refuses_while_the_user_ha
 
 
 def test_the_workbench_no_longer_freezes_at_a_takeover():
-    """From 2026-10-27 to 2026-10-29 pause.py froze the agent's processes
-    while the user had the browser. Since the browser has a VM of its own,
-    nothing of the workbench sees it, and the agent's dev server must answer
-    the browser meanwhile (agent_tunnel.py): setup.sh ends a pause still
-    running and thaws what it froze; agent-run joins no cgroup any more."""
+    """A takeover freezes nothing of the workbench: the agent's dev server
+    must answer the browser meanwhile. setup.sh ends a pause.py of an older
+    layout still running and thaws what it froze; agent-run joins no cgroup."""
     setup = (agent_workspace._FILES / "workbench" / "setup.sh").read_text()
     assert 'pkill -KILL -f "$legacy/.consens/workspace/pause.py"' in setup
     assert 'echo 0 > "$group/cgroup.freeze"' in setup and 'pkill -CONT -u "$user"' in setup
@@ -511,7 +509,7 @@ class FakePage:
 
 
 def test_typing_with_enter_presses_it_on_the_keyboard_not_on_the_field():
-    """2026-10-28: pressed on the field, Enter waited 30 s while Wikipedia's
+    """Pressed on the field, Enter waited 30 s while Wikipedia's
     suggestion list covered it; the keyboard presses it at once, the field
     has the focus after fill."""
     browser = load("browser")
@@ -554,7 +552,7 @@ SESSION_COOKIE = {"name": "sid", "value": "s3cr3t-session-value", "domain": "sho
 
 
 def test_the_page_head_says_whether_the_browser_holds_sign_in_data_for_the_site(tmp_path, monkeypatch):
-    """Since 2026-10-28: yes or no from the context's cookies for the page's
+    """Yes or no from the context's cookies for the page's
     address, never a cookie's name, value or their number."""
     browser = load("browser")
     monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
@@ -576,7 +574,7 @@ def test_the_page_head_says_whether_the_browser_holds_sign_in_data_for_the_site(
 
 
 def test_find_lists_the_places_of_a_text_with_reads_refs(tmp_path, monkeypatch):
-    """find (since 2026-10-28): read numbers the page first, with the same
+    """find: read numbers the page first, with the same
     counter, so a ref find names is the one read gives; up to FIND_MATCHES
     places, each with the page around it."""
     browser = load("browser")
@@ -627,9 +625,9 @@ class FakeFrame:
 
 
 def test_read_lists_the_elements_of_a_frame_with_refs_of_their_own(tmp_path, monkeypatch):
-    """2026-10-30, bild.de: the consent dialog was a frame, read said only
+    """On bild.de the consent dialog was a frame, read said only
     "open its address" (which leaves the page), and three clicks at x,y
-    missed its button. Now its elements come under its line, numbered on;
+    missed its button. A frame's elements come under its line, numbered on;
     a tracking pixel, a frame of the browser's own computer and frames past
     FRAMES_READ are not read. The action read reads every frame; the read
     after an action only one over the page, as a frame that hangs would hold
@@ -714,8 +712,8 @@ def test_a_frames_ref_is_looked_for_in_its_frame_only(tmp_path, monkeypatch):
 
 
 def test_find_names_elements_whose_name_holds_the_text(tmp_path, monkeypatch):
-    """A search box named only by its label is in no page text (feedback
-    2026-10-28): find lists it from read's lines, by its name alone."""
+    """A search box named only by its label is in no page text: find lists
+    it from read's lines, by its name alone."""
     browser = load("browser")
     monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
     lines = ['[e1] searchbox "Wikipedia durchsuchen" (empty)', '[e2] button "Suchen"', '[e3] link "Spenden"',
@@ -734,7 +732,7 @@ def test_find_names_elements_whose_name_holds_the_text(tmp_path, monkeypatch):
 
 
 def test_downloads_are_saved_by_their_name_and_handed_over_once_finished(tmp_path, monkeypatch):
-    """The helper's side of downloads (since 2026-10-28): what an action
+    """The helper's side of downloads: what an action
     started is saved in DOWNLOADS under a safe, free name; Chrome's own
     finished files (the user's in the view) move there too, unfinished ones
     stay; main names them all for the server."""
@@ -807,7 +805,7 @@ def test_download_fetches_with_the_browsers_sign_ins_but_never_its_own_computer(
 
 def test_drag_presses_the_mouse_along_each_stroke_and_click_takes_a_place():
     """A canvas gets lines (small steps between points), each stroke its own
-    press; bad points never reach the mouse (2026-10-28)."""
+    press; bad points never reach the mouse."""
     browser = load("browser")
     moves = []
 
@@ -885,9 +883,9 @@ class BoardPage:
 
 
 def test_a_click_or_drag_at_a_place_says_what_lay_there_and_what_changed():
-    """2026-10-30, chess.com: "Clicked at 337,623." and nothing more, and
-    DeepSeek V4.1 Flash spent 20 steps on one move, guessing the squares
-    from screenshots. Now the answer says what lay at each point (looked at
+    """On chess.com "Clicked at 337,623." and nothing more made
+    DeepSeek V4.1 Flash spend 20 steps on one move, guessing the squares
+    from screenshots. The answer says what lay at each point (looked at
     with the mouse there, before the press) with its box and the board's,
     and what changed after it, nearest first."""
     browser = load("browser")
@@ -931,7 +929,7 @@ def test_a_click_or_drag_at_a_place_says_what_lay_there_and_what_changed():
         "At 1500,300: nothing, it lies outside the page's view (1280x720).\n"
         "Changed after it: 1 element: element changed.")
     # Infinity and NaN come as floats, lists as anything: never a failed click
-    # (review 2026-10-30: the click ran, and the agent heard "failed").
+    # (the click ran, and the agent would hear "failed").
     endless = {**PIECE, "box": [float("inf"), 0, 10, float("nan")], "in": {"tag": 5, "box": None}}
     page = BoardPage(browser, [endless], {"count": float("inf"), "changed": 5, "removed": True})
     seen = []
@@ -983,7 +981,7 @@ def test_a_click_on_the_browsers_own_computer_looks_at_nothing():
     assert browser.hit_report(seen[0], page).splitlines()[0] == "At 10,10: nothing, no element there."
 
 
-# --- The resident helper (browser.py --serve, since 2026-10-30) ---------------
+# --- The resident helper (browser.py --serve) ---------------------------------
 
 def helper_end(browser, said, answer=b"", free=True):
     """A resident helper on the other end of a socket pair: FREE (unless
@@ -1098,9 +1096,9 @@ def test_the_resident_helper_acts_only_on_the_calls_go(monkeypatch):
 
 
 def test_a_call_that_ends_before_its_answer_ends_the_action_with_the_helper(monkeypatch):
-    """Review 2026-10-30: the server's limit or Stop ended the call, and the
-    helper went on with the action (a type and Enter still sent). Before,
-    the action was the call's own process and ended with it."""
+    """When the server's limit or Stop ends the call, the helper ends with
+    it, as the call's own process would, instead of going on with the
+    action (a type and Enter still sent)."""
     import socket
     import threading
     browser = load("browser")
@@ -1132,8 +1130,8 @@ def test_a_call_that_ends_before_its_answer_ends_the_action_with_the_helper(monk
 
 def test_the_resident_helper_connects_for_each_call_and_lets_go_after_it(monkeypatch):
     """Connected, Playwright makes Chrome save downloads into its own folder
-    and closes every dialog, also the user's in the live view (review
-    2026-10-30): the helper keeps only the driver and holds Chrome for a
+    and closes every dialog, also the user's in the live view: the helper
+    keeps only the driver and holds Chrome for a
     call; what run refuses before a page needs no connection."""
     browser = load("browser")
     made, closed = [], []
@@ -1147,7 +1145,7 @@ def test_the_resident_helper_connects_for_each_call_and_lets_go_after_it(monkeyp
     monkeypatch.setitem(browser.KEPT, "playwright", type("Playwright", (), {"chromium": Chromium()})())
     monkeypatch.setattr(browser, "ensure_browser", lambda: None)
     monkeypatch.setattr(browser, "user_control", lambda: False)
-    # A Chrome that takes no connection restarts once (since 2026-10-30), never here.
+    # A Chrome that takes no connection restarts once, never here.
     monkeypatch.setattr(browser, "restart_browser", lambda: None)
     fail = False
     assert browser.ready({"action": "read"}) is True and made == [browser.CDP] and browser.KEPT["prepared"]
@@ -1169,7 +1167,7 @@ def test_the_resident_helper_connects_for_each_call_and_lets_go_after_it(monkeyp
 
 
 def test_the_resident_helper_answers_over_its_socket(tmp_path, monkeypatch):
-    """The whole way on a real unix socket (Linux, as on the browser VM): it
+    """The whole way on a real unix socket (Linux, as on the VM): it
     starts, answers its own version and ends at another one."""
     import socket
     import threading
@@ -1210,9 +1208,9 @@ def test_the_resident_helper_answers_over_its_socket(tmp_path, monkeypatch):
 
 
 def test_chrome_starts_with_software_webgl_and_an_old_one_restarts_once():
-    """No graphics card on the browser VM, and Chrome no longer falls back to
+    """No graphics card on the VM, and Chrome no longer falls back to
     software WebGL by itself: maps, design tools and canvas apps failed in
-    Laura's test (2026-10-28). A Chrome running without it restarts once."""
+    a test. A Chrome running without it restarts once."""
     display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
     assert "--use-gl=angle --use-angle=swiftshader --enable-unsafe-swiftshader" in display
     restart = display[display.index("# WebGL without a graphics card"):display.index('if [ -z "$(browser_pid)" ]')]
@@ -1261,8 +1259,8 @@ def test_the_screen_is_tigervnc_on_a_unix_socket_only():
 
 
 def test_the_agents_user_reaches_neither_chromes_protocol_nor_its_screen():
-    """Since 2026-11-04 the browser runs on the workbench, next to the
-    agent's user (Max: the computer's own users instead of bridges). Chrome
+    """The browser runs on the workbench, next to the
+    agent's user (the computer's own users instead of bridges). Chrome
     has no debugging port, which any user of the computer could have steered
     (cdp.py holds its pipe, display.sh starts Chrome only through it); the X
     server asks for a cookie only the provider's user reads, new with each
@@ -1300,7 +1298,7 @@ def test_the_agents_user_reaches_neither_chromes_protocol_nor_its_screen():
     harden = (VM_FILES / "browser" / "harden.sh").read_text(encoding="utf-8")
     assert 'XAUTHORITY="$dir/xauthority" openbox --reconfigure' in harden
     assert 'pgrep -u "$(id -u)" -x openbox' in harden
-    # No port, so Chrome's policy blocks none any more.
+    # No port, so Chrome's policy blocks none.
     assert "9222" not in (VM_FILES / "browser" / "policy.json").read_text(encoding="utf-8")
 
 
@@ -1326,10 +1324,9 @@ def _diag_answer(*sockets, done=True):
 
 def test_only_the_users_own_stream_sockets_on_xs_name_count():
     """x_ours asks the kernel whose the stream sockets bound to
-    @/tmp/.X11-unix/X1 are (xsocket.py, sock_diag). Until 2026-11-04 it
-    looked for them among the X server's descriptors, which Ubuntu 26.04's
-    Xtigervnc keeps from its own user: no Chrome ever started on the test
-    Sprite. Connections count for nothing (they carry the connecting user's
+    @/tmp/.X11-unix/X1 are (xsocket.py, sock_diag), not the X server's
+    descriptors, which Ubuntu 26.04's Xtigervnc keeps from its own user (a
+    look there let no Chrome start on the test Sprite). Connections count for nothing (they carry the connecting user's
     uid, and anyone may connect without the cookie: a loop of the agent's
     connections ended the user's Chrome), nor do datagram or seqpacket
     sockets (Linux keeps abstract names apart by type), nor another display."""
@@ -1363,9 +1360,9 @@ def test_only_the_users_own_stream_sockets_on_xs_name_count():
 
 
 def test_display_sh_waits_at_most_fifteen_seconds_and_asks_only_a_chrome_it_started():
-    """Review 2026-11-04: the last wait asked Chrome 150 times with 5 s each,
-    so a hung Chrome under the live view's --keep held the lock for almost
-    13 minutes and browser.py's own restart waited in vain."""
+    """The last wait asks Chrome for at most 15 s: 150 times with 5 s each,
+    a hung Chrome under the live view's --keep would hold the lock for
+    almost 13 minutes, and browser.py's own restart would wait in vain."""
     display = (VM_FILES / "browser" / "display.sh").read_text(encoding="utf-8")
     wait = display[display.index("# A Chrome started here is ready once it answers"):]
     assert "until=$((SECONDS + 15))" in wait and 'while [ "$SECONDS" -lt "$until" ]' in wait
@@ -1375,7 +1372,7 @@ def test_display_sh_waits_at_most_fifteen_seconds_and_asks_only_a_chrome_it_star
 
 
 def test_a_chrome_that_no_longer_answers_starts_anew():
-    """Max's browser VM, 2026-10-28: a page load and the next connection ran
+    """On a browser VM a page load and the next connection ran
     into their limits, Chrome died two minutes later, and the open view stayed
     black. display.sh tells Chrome's browser process from its children and
     from cdp.py, restarts one whose debugging pipe does not answer (or that is
@@ -1534,7 +1531,7 @@ def test_find_takes_one_to_200_characters_and_reads_while_the_user_has_the_brows
 
 
 def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, capfd):
-    """The live view's way in since 2026-10-27, over the provider's exec API:
+    """The live view's way in, over the provider's exec API:
     states as JSON lines on stderr while the browser is set up and started,
     then the VNC bytes between stdin and stdout."""
     import io
@@ -1586,7 +1583,7 @@ def test_the_relay_reports_its_states_then_carries_vnc_both_ways(monkeypatch, ca
 
 
 def test_the_open_view_starts_a_chrome_that_ended_again(monkeypatch):
-    """2026-10-28: Chrome died while Max watched, and the screen stayed black
+    """A Chrome that died while the user watched left the screen black
     until the agent's next call. While the view is open the relay asks
     display.sh every KEEP_SECONDS to start a Chrome that is gone, never to
     end one (--keep)."""
@@ -1642,7 +1639,7 @@ def test_the_old_gateway_service_and_the_servers_paths_go_through_the_api():
 
 
 def test_a_chat_folder_moves_as_the_agent_and_never_over_another(monkeypatch, tmp_path):
-    """move_path (since 2026-10-28, a chat's folder after a new title): as
+    """move_path (a chat's folder after a new title): as
     the agent's user through agent-run, "missing" and "taken" by exit code;
     the script itself, in a real bash, never moves over what exists."""
     backend = sprites(lambda request: httpx.Response(200, json={}))
@@ -1674,10 +1671,10 @@ def test_a_chat_folder_moves_as_the_agent_and_never_over_another(monkeypatch, tm
 
 
 def test_a_messages_start_reads_every_key_file_the_records_first(monkeypatch, tmp_path):
-    """Bug hunt 2026-11-06: CHAT_SCRIPT read only the keys the record names
-    (the newest agent_secrets.KEEP_NAMES); an older key still in ~/.secrets
-    went to the model unmasked after a day or a restart. Now every key file
-    there, the record's names first, at most agent_secrets.READ_KEYS; a
+    """CHAT_SCRIPT reads every key file in ~/.secrets, the record's names
+    first, at most agent_secrets.READ_KEYS: by the record's names alone (the
+    newest agent_secrets.KEEP_NAMES), an older key still there would go to
+    the model unmasked after a day or a restart. A
     half-written key, another name and a folder are no key. In a real bash."""
     from app.services import agent_secrets
     found = shutil.which("bash")
@@ -1710,8 +1707,8 @@ def test_a_messages_start_reads_every_key_file_the_records_first(monkeypatch, tm
 
 def test_a_folder_the_agent_made_read_only_is_deleted_too(tmp_path):
     """DELETE_SCRIPT runs as the agent's user: a folder it made read-only
-    (chmod -R a-w, Go's module cache) failed rm -rf, and a chat's deletion
-    retried for ever with the chat left on "deleting" (bug hunt 2026-10-30)."""
+    (chmod -R a-w, Go's module cache) would fail rm -rf, and a chat's
+    deletion would retry for ever with the chat left on "deleting"."""
     found = shutil.which("bash")
     locked = tmp_path / "chat" / "cache"
     locked.mkdir(parents=True)
@@ -1732,8 +1729,8 @@ def test_a_folder_the_agent_made_read_only_is_deleted_too(tmp_path):
 @pytest.mark.parametrize("mode", [0o644, 0o000])
 def test_a_folder_the_agent_closed_to_itself_is_deleted_too(tmp_path, mode):
     """A folder without its search bit (chmod -R 644 to "fix" a site's
-    rights, chmod -R 000): u+w alone left rm and chmod outside it, and a
-    chat's deletion retried for ever (bug hunt 2026-11-02)."""
+    rights, chmod -R 000): u+w alone would leave rm and chmod outside it,
+    and a chat's deletion would retry for ever."""
     found = shutil.which("bash")
     locked = tmp_path / "chat" / "site"
     (locked / "assets").mkdir(parents=True)
@@ -1781,8 +1778,8 @@ def test_a_chat_folder_is_only_ever_a_folder_of_its_own():
 # --- Deletion ------------------------------------------------------------------------------
 
 def test_the_accounts_deletion_deletes_its_vm_and_the_browser_vm_of_before_by_their_names(store, fake_vm):
-    """Also without a record (security audit 2026-10-27): the names follow
-    from the account, the browser VM of 2026-10-27 to 2026-11-04 too."""
+    """Also without a record: the names follow from the account, the old
+    browser VM's too (agent_vm.old_browser_name)."""
     fake_vm.vms[agent_vm.workspace_name(UID)] = {"files": {}, "checkpoints": []}
     fake_vm.vms[agent_vm.old_browser_name(UID)] = {"files": {}, "checkpoints": []}
     agent_workspace.delete_for_account(store.db, UID, factory=fake_vm.backend)
@@ -1811,10 +1808,10 @@ def test_a_chats_folder_goes_as_the_agent_and_from_where_it_lay_before(store, fa
 
 
 def test_a_chats_deletion_brings_the_tools_up_to_date_only_under_the_setup_lock(store, fake_vm):
-    """Bug hunt 2026-11-06: the deletion ran prepare without the setup lock;
-    after a new VERSION its setup.sh could run beside a message's start, the
-    browser's warm-up or the live view on the same computer. It waits for a
-    setup running and then finds the version there."""
+    """The deletion runs prepare under the setup lock: else after a new
+    VERSION its setup.sh could run beside a message's start, the browser's
+    warm-up or the live view on the same computer. It waits for a setup
+    running and then finds the version there."""
     import threading
     from test_agent_vm import SETUP
     name = agent_vm.workspace_name(UID)
@@ -1837,7 +1834,7 @@ def test_a_chats_deletion_brings_the_tools_up_to_date_only_under_the_setup_lock(
     assert "/home/agent/chats/c1/a.txt" not in fake_vm.vms[name]["files"]
 
 
-# --- A new account's workspace before it is needed (2026-11-02) --------------------
+# --- A new account's workspace before it is needed ---------------------------------
 
 @pytest.fixture
 def provisioning(monkeypatch):
@@ -1847,9 +1844,9 @@ def provisioning(monkeypatch):
 
 
 def test_a_new_accounts_first_message_makes_its_vm_in_the_background(store, fake_vm, provisioning):
-    """Prod 2026-11-02: a colleague of Max's signed up, talked to the agent,
-    then waited for the setup (57 s for the workbench alone). Now the
-    account's first message makes the VM in the background, under its
+    """In Prod a new account talked to the agent, then waited for the setup
+    (57 s for the workbench alone). The account's first message makes the
+    VM in the background, under its
     rules, with its Chrome started once and told to rest; the record names
     it first, so the account's deletion finds it."""
     thread = agent_workspace.provision(store, UID)
@@ -1897,18 +1894,18 @@ def test_a_view_opened_before_the_first_message_leaves_the_provisioning_nothing(
 
 
 def test_the_provisioning_leaves_a_running_message_its_hold(store, fake_vm, provisioning):
-    """Bug hunt P60: the provisioning runs beside the account's first
-    message, and its rest after the warm shortened the hold of that message's
-    browser calls to two minutes: a longer pause of the agent let the VM
-    sleep under it. While a message uses the workspace (in_use) the
-    provisioning leaves the rest to that message's end."""
+    """The provisioning runs beside the account's first message, and a rest
+    after its warm-up would shorten the hold of that message's browser calls
+    to two minutes: a longer pause of the agent would let the VM sleep under
+    it. While a message uses the workspace (in_use) the provisioning leaves
+    the rest to that message's end."""
     from test_agent_vm import Agent, vm_loop
     name = agent_vm.workspace_name(UID)
     loop = vm_loop(store, Agent())
     agent_workspace.claim(store, UID, loop.chat_id, loop.turn_id, provider="fake")
     agent_workspace.provision(store, UID).join(10)
     assert fake_vm.warmed == [name] and fake_vm.rested == []
-    # Without a message on it: warm, then rest, as before.
+    # Without a message on it: warm, then rest.
     agent_workspace.release(store, UID, loop.turn_id)
     del fake_vm.vms[name]
     agent_workspace._provisioned.discard(UID)
@@ -1950,11 +1947,11 @@ def test_a_messages_start_waits_for_the_setup_running_and_runs_none_of_its_own(s
 
 
 def test_a_first_workbench_call_counts_down_the_setup_it_waits_for(store, fake_vm):
-    """Bug hunt 2026-11-06: since the one computer (2026-11-04) every start
-    of the account's VM waits for the same setup (setup_lock), but a waiting
-    call asked only for starts of its own kind. A new account's first
-    vm_exec waited for the provisioning (a start of the browser's) without a
-    bar; the browser and the live view during a workbench's start alike."""
+    """Every start of the account's one VM waits for the same setup
+    (setup_lock), so a waiting call counts down any start of the account,
+    not only those of its own kind: else a new account's first vm_exec would
+    wait for the provisioning (a start of the browser's) without a bar, and
+    the browser and the live view during a workbench's start alike."""
     import threading
     from test_agent_vm import Agent, vm_loop
     from app.api.routers import agent_workspace as workspace_router

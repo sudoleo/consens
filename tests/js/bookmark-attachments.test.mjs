@@ -1,11 +1,12 @@
 /**
  * Ein Anhang gehoert zu der Frage, mit der er rausgegangen ist.
  *
- * Frueher stand er nur am Bookmark-DOKUMENT, das nur eine Fassung kennt: die
- * naechste Frage ohne Datei ueberschrieb sie, und der geladene Chat behauptete
- * anschliessend, es sei nie eine Datei dabei gewesen. Seit die Anhaenge am Turn
- * haengen, muessen zwei Dinge stimmen: der Turn schlaegt das Dokument, und ein
- * Chat von VOR dieser Aenderung faellt weiterhin auf das Dokument zurueck.
+ * Am Bookmark-DOKUMENT allein, das nur eine Fassung kennt, ueberschrieb die
+ * naechste Frage ohne Datei sie, und der geladene Chat behauptete
+ * anschliessend, es sei nie eine Datei dabei gewesen. Die Anhaenge haengen
+ * deshalb am Turn, und zwei Dinge muessen stimmen: der Turn schlaegt das
+ * Dokument, und ein aelterer Chat ohne Anhaenge am Turn faellt weiterhin auf
+ * das Dokument zurueck.
  */
 
 import { readFileSync } from "node:fs";
@@ -138,7 +139,7 @@ describe("attachments of a saved question", () => {
 
   it("gives a .csv the type the server also knows", async () => {
     const { window, document } = appWindow();
-    // Anhaenge brauchen seit 2026-10-02 nur ein Konto, keine Stufe.
+    // Anhaenge brauchen nur ein Konto, keine Stufe.
     window.auth = { currentUser: { uid: "u1" } };
 
     const input = document.getElementById("attachFileInput");

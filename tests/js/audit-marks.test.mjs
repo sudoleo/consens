@@ -1,5 +1,5 @@
 /**
- * Audit instead of comparison (Agent, admins): the comparison models review
+ * Audit instead of comparison (Agent): the comparison models review
  * the finished answer and mark passages with notes (agent_audit.py). The page
  * shows them with the shared markers (renderStoredAuditMarks): wrong red,
  * doubtful amber, incomplete grey, the quoted words carrying the colour, the
@@ -106,7 +106,7 @@ it("shows every reviewer's mark among the disagreements and only a wrong one amo
   }
 });
 
-// Bug hunt P21 (2026-11-05): a note the answer does not hold showed only
+// A note the answer does not hold showed only
 // among the disagreements; one that calls the answer wrong went under
 // "Contradictions only" and "Critical", where its placed mark stays.
 it("lists a wrong note among the contradictions like its mark, the others only among the disagreements", () => {
@@ -138,7 +138,7 @@ it("never links a source that is no web address", () => {
 
 // One mark over several sentences (agent_audit.place_marks: the same mark
 // number on each) the page cannot find on every sentence: the note shows once,
-// on a sentence it marks or else once in the list (bug hunt 2026-11-02).
+// on a sentence it marks or else once in the list.
 it("lists a note over several sentences once, and not at all where one of its sentences shows it", () => {
   const note = { model: "OpenAI", kind: "doubtful", note: "Both sentences are doubtful.", mark: 7 };
   const audit = (first, second) => ({ unplaced: [], claims: [first, second].map(anchor =>

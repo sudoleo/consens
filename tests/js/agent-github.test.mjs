@@ -46,7 +46,7 @@ describe("the pull request card", () => {
   });
 
   it("lists every file when the diff is cut, otherwise the first 20", () => {
-    // Security audit 2026-10-27: nothing goes up unseen.
+    // Nothing goes up unseen.
     const { document, github } = setup();
     const answer = document.getElementById("answer");
     const files = Array.from({ length: 25 }, (_, n) => ({ path: `docs/${n}.md`, change: "added" }));
@@ -123,7 +123,7 @@ describe("GitHub in Settings", () => {
   });
 
   it("forgets the previous account's connection when another one signs in", async () => {
-    // Bug hunt 2026-10-27: Settings went on showing the login and up to 12
+    // Settings went on showing the login and up to 12
     // repositories of the account before, until a reload.
     const { window, document, github } = setup();
     // Settings may read it more than once while the page loads.

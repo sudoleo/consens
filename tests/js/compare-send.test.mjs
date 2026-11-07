@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// query-send.js runs Compare only since 2026-10-25: the chosen models answer
+// query-send.js runs Compare only: the chosen models answer
 // side by side, each finished answer is saved to the comparison's bookmark,
 // and nothing continues a chat or writes a consensus (that pipeline runs on
 // the server for Watches, the API and topics).
@@ -104,7 +104,7 @@ describe("Compare: the one run the browser starts besides Agent", () => {
     expect(run.modelResults.Gemini.status).toBe("incomplete");
     expect(run.modelResults.Gemini.error).toBe("This answer was interrupted and is incomplete.");
     expect(run.status).toBe("succeeded");
-    // Only a complete answer is saved as finished (R06).
+    // Only a complete answer is saved as finished.
     expect(window.saveBookmark).not.toHaveBeenCalled();
 
     window.streamSSERequest.mockImplementation(async () => ({ ok: false, status: 502, data: {} }));

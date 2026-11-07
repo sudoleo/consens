@@ -1,8 +1,7 @@
 /**
  * The workspace browser's refs (app/services/workspace_vm/browser/browser.py,
  * SNAPSHOT_JS): a ref stays with its element and is never given twice, so a
- * ref from an older read names its element or none, never another one. Until
- * 2026-10-27 every read numbered the page from e1 again.
+ * ref from an older read names its element or none, never another one.
  */
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -175,8 +174,8 @@ describe("workspace browser find", () => {
     expect(match.snippet.length).toBeLessThan(140);
   });
 
-  // DeepSeek, 2026-10-28: a Wikipedia read was mostly navigation. The main
-  // content comes first now, the rest after a line, all of it still there.
+  // A Wikipedia read (DeepSeek's run) was mostly navigation. The main
+  // content comes first, the rest after a line, all of it still there.
   it("lists the main content first and the header and navigation after it", () => {
     const { read, find } = page(
       '<header><a href="/">Home</a></header><nav><a href="/a">Menu A</a></nav>' +
@@ -195,7 +194,7 @@ describe("workspace browser find", () => {
     expect(read(0).lines).toEqual(['[e1] link "Menu"', '[e2] link "Body"']);
   });
 
-  // 2026-10-30, bild.de: the consent dialog's "Alle akzeptieren" stood 600
+  // On bild.de the consent dialog's "Alle akzeptieren" stood 600
   // lines down, after the page it covered, and it was a frame read said only
   // "open its address" of.
   it("lists what lies over the page first, and marks each frame with its size for page_lines", () => {
@@ -215,7 +214,7 @@ describe("workspace browser find", () => {
   });
 });
 
-// HIT_JS (since 2026-10-30): what a click or drag at x,y met and what changed
+// HIT_JS: what a click or drag at x,y met and what changed
 // after it. jsdom lays nothing out: each element's box and what lies at a
 // point are given here, as Chrome would measure them.
 const HIT_JS = SOURCE.match(/HIT_JS = r"""\n([\s\S]*?)\n"""/)[1];

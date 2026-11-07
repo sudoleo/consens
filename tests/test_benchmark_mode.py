@@ -7,8 +7,8 @@ from app.services.llm.engines import build_provider_payload
 from benchmark.audit import assert_no_web_tools, find_web_tool_violations
 
 PROVIDERS = ["openai", "mistral", "anthropic", "gemini", "deepseek", "grok"]
-# Provider, die in der normalen App ein Web-Tool injizieren – seit DeepSeek die
-# serverseitige Suche auf dem Anthropic-Endpoint anbietet, sind das alle sechs.
+# Provider, die in der normalen App ein Web-Tool injizieren – mit der
+# OpenRouter-Websuche sind das alle sechs.
 TOOL_PROVIDERS = PROVIDERS
 
 

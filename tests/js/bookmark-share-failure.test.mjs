@@ -7,8 +7,8 @@ import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
 
 /**
  * Share and Watch of a saved chat never end at a dead "Saved consensus
- * unavailable" button (Apple-Audit follow-up): the sidebar menu offers Share
- * only for a chat with a saved answer (a Consensus or, since 2026-10-21, an
+ * unavailable" button: the sidebar menu offers Share
+ * only for a chat with a saved answer (a Consensus or an
  * Agent answer), and a preparation the server refuses is shown with the
  * server's reason.
  */

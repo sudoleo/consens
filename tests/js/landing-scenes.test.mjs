@@ -48,12 +48,11 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
     const wrapper = document.querySelector("[data-run-log] > .lp-agent-log-items");
     expect(wrapper).not.toBeNull();
     expect(document.querySelectorAll("[data-run-log] > :not(.lp-agent-log-items)")).toHaveLength(0);
-    // Plan, search, workspace, comparison, its note and the status row
-    // (search and workspace since 2026-11-01).
+    // Plan, search, workspace, comparison, its note and the status row.
     expect(wrapper.querySelectorAll("[data-run-item]").length).toBe(6);
   });
 
-  // Since 2026-11-01 the run shows its search and its workspace in /app's
+  // The run shows its search and its workspace in /app's
   // words, and the files it shared under the verdict.
   it("shows the search, the workspace and the shared files once done", async () => {
     const { document } = await stillFrame();
@@ -66,7 +65,7 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
     expect(files.textContent).toContain("Excel · 2 sheets");
   });
 
-  // The one mode (2026-10-31): the reviewers follow beside the clock, their
+  // The one mode: the reviewers follow beside the clock, their
   // marks are on the answer, and the row under it has Notes and Answers. No
   // score, no judge.
   it("ends on the reviewers' marks and Notes, without a score", async () => {
@@ -90,7 +89,7 @@ describe("landing scene 02 (Apple-Audit I1)", () => {
     expect(SCENE).not.toMatch(/agreement|\/100|judge|claim-badge/i);
   });
 
-  // a11y audit P2: the run is a function of the scroll position, so a screen
+  // The run is a function of the scroll position, so a screen
   // reader read whatever frame the page stood on.
   it("speaks the finished turn to screen readers instead of a frame", async () => {
     const { document } = await stillFrame();

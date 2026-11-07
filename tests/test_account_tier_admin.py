@@ -1,7 +1,6 @@
 """Kontostufen aus dem Admin-Dashboard setzen.
 
-Vorher wurde ``users/{uid}.tier`` von Hand in der Firebase-Konsole gesetzt.
-Diese Tests halten die drei Dinge fest, die daran wichtig sind: nur Admins
+Diese Tests halten die drei Dinge fest, die dabei wichtig sind: nur Admins
 duerfen es, die Aenderung wird protokolliert, und der TTL-Cache wird verworfen
 (sonst greift die neue Stufe erst nach einer Minute).
 """
@@ -326,7 +325,7 @@ def test_unknown_account_has_structured_error_in_real_main_app(http_adapter, mon
         "/api/admin/account-tier?identifier=missing", headers=login("admin")
     )
     assert response.status_code == 404
-    # One flat shape (Zweitprüfung 2): the sentence in "error", the code beside it.
+    # One flat shape: the sentence in "error", the code beside it.
     body = response.json()
     assert body["code"] == body["error_code"] == "not_found"
     assert isinstance(body["error"], str) and body["error"]

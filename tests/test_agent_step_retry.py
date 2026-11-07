@@ -1,7 +1,7 @@
 """A chat model step that breaks off in passing runs once more, and a turn
-that still breaks off leaves its work for "Retry" (since 2026-10-27).
+that still breaks off leaves its work for "Retry".
 
-Twice on 2026-10-27 a step of DeepSeek V4.1 Flash broke off
+Twice in one day a step of DeepSeek V4.1 Flash broke off
 after minutes of paid work in the VM and on the web (a call after its own
 searches carried a stream index the client refused), and the whole turn
 ended as "The model provider could not finish this request".
@@ -85,11 +85,11 @@ def test_a_turn_that_still_breaks_off_leaves_its_work_for_retry(store):
     with pytest.raises(ValueError):
         list(loop.run())
     turn = saved(store, loop)
-    # Once more is all: the second break ends the turn as before.
+    # Once more is all: the second break ends the turn.
     assert turn["status"] == "failed" and turn["agent_failure"]["code"] == "provider_error"
     assert [step for step, _ in script.calls if step.startswith("completion:")] == [
         "completion:0", "completion:1", "completion:2"]
-    # Its calls are saved (before 2026-10-27 only after a VM run) ...
+    # Its calls are saved, also without a VM run ...
     record = raw_turn(store, loop)["agent_work_record"]
     assert "1. note" in record
     # ... and "Retry", the same question again, builds on them.

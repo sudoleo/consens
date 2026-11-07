@@ -15,7 +15,7 @@ PRODUCT_TIER_LIMITS = dict(budgets.DEFAULT_TIER_LIMITS)
 
 
 def test_product_tier_limits_are_the_real_defaults():
-    # Micro-euros per day since 2026-10-31 (Max): 1 / 2.50 / 5 / 5 EUR.
+    # Micro-euros per day: 1 / 2.50 / 5 / 5 EUR.
     assert PRODUCT_TIER_LIMITS == {"free": 1_000_000, "plus": 2_500_000, "pro": 5_000_000, "admin": 5_000_000}
     assert budgets.MICRO_EUR == 1_000_000 and budgets.NANO_USD_PER_MICRO_EUR == 1_150
     # A dollar cost in micro-euros, rounded up; and back.
@@ -46,9 +46,9 @@ def test_defaults_cover_every_tier_and_mode_and_ignore_the_legacy_agent_limit():
 
 
 def test_limits_saved_in_tokens_give_way_to_the_euro_defaults():
-    # Until 2026-10-31 every save and every reset wrote the whole table, in
-    # tokens. Read as micro-euros, Free's 660,000 tokens were 0.66 EUR a day
-    # and Pro's 40,000-token Compare run 0.04 EUR.
+    # Tables saved in tokens (every save and every reset wrote the whole
+    # table) stay in the database. Read as micro-euros, Free's 660,000 tokens
+    # would be 0.66 EUR a day and a 32,000-token Compare run 0.032 EUR.
     tokens = {"revision": 3,
               "tier_limits": {"free": 660_000, "plus": 1_650_000, "pro": 5_000_000, "admin": 5_000_000},
               "run_estimates": {tier: {"compare": 32_000, "consensus": 55_000, "deep_think": 150_000}

@@ -1,4 +1,4 @@
-"""Restoring the VM from the app (since 2026-10-26, admins): the checkpoint
+"""Restoring the VM from the app (admins): the checkpoint
 each message takes before its first VM call (VMSession.ready) brings the VM
 back to how it was before that message (routers/agent.py restore_agent_vm),
 never while a response runs, and the next message is told. Sprites is
@@ -97,7 +97,7 @@ def test_restore_is_refused_while_a_response_runs_without_a_checkpoint_or_for_ot
 
 
 def test_the_workspace_is_restored_only_while_no_chat_uses_it_and_every_chat_hears_of_it(admin_api, fake_vm):
-    """Since 2026-10-27 the VM is the account's workspace: restoring it
+    """The VM is the account's workspace: restoring it
     reaches every chat's folder, so no other chat's message may be running,
     and the other chats' next messages are told too (agent_workspace)."""
     from datetime import datetime, timedelta, timezone
@@ -139,11 +139,10 @@ def test_the_next_message_is_told_once(admin_api, fake_vm):
 
 
 def test_only_a_recent_checkpoint_of_the_workspace_after_the_last_sign_out_goes_back(admin_api, fake_vm):
-    """Security audit 2026-10-27: a chat's checkpoint from its own VM went to
-    the workspace, and a restore brought back sign-ins after "Log out
-    everywhere" and folders of deleted chats. Now a checkpoint must be the
-    workspace's, at most RESTORE_DAYS old and taken after the last sign-out
-    everywhere or chat deletion (agent_workspace.restorable)."""
+    """A checkpoint must be the workspace's, at most RESTORE_DAYS old and
+    taken after the last sign-out everywhere or chat deletion
+    (agent_workspace.restorable): else a restore would bring back sign-ins
+    after "Log out everywhere" and folders of deleted chats."""
     from datetime import datetime, timedelta, timezone
     from app.services import agent_workspace
     client, store, _ = admin_api

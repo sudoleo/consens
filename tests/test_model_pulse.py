@@ -1,4 +1,4 @@
-"""Model Pulse as a rate: picks per run a family was in (since 2026-10-03)."""
+"""Model Pulse as a rate: picks per run a family was in."""
 
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
@@ -147,8 +147,8 @@ def test_ledger_loads_once_then_reads_only_new_votes(monkeypatch):
 
 
 def test_agent_choice_names_the_widest_compared_field():
-    """Until 2026-10-31 a checked Agent answer added this pick as a vote;
-    scripts/backfill_model_pulse.py still reads it from saved reviews."""
+    """scripts/backfill_model_pulse.py reads this pick from saved reviews of
+    checked Agent answers."""
     review = {"status": "succeeded",
               "comparisons": [{"id": "a", "answers": [{"provider_label": "OpenAI"}, {"provider_label": "Grok"}]},
                               {"id": "b", "answers": [{"provider_label": "Gemini"}, {"provider_label": "Kimi"},
@@ -233,10 +233,10 @@ def test_pulse_api_and_failure_are_honest(client):
 
 
 def test_landing_has_the_benchmark_but_not_the_pulse_strip(client, monkeypatch):
-    # Since 2026-11-01 the pulse is an archive, so the landing page shows no
-    # live strip and does not read the ledger (a broken ledger cannot touch
-    # it). The benchmark came back on 2026-11-02 (Max): it is static and says
-    # it tests the consensus engine, not the agent's answers.
+    # The pulse is an archive, so the landing page shows no live strip and
+    # does not read the ledger (a broken ledger cannot touch it). The
+    # benchmark stays (Max): it is static and says it tests the consensus
+    # engine, not the agent's answers.
     http, state = client
     import app.services.llm.agent_client as agent_client
     monkeypatch.setattr(agent_client, "agent_model_label", lambda: "Agent")

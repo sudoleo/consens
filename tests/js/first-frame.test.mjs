@@ -1,9 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// The first frame of /app is the composer the app settles on (Apple-Audit
-// B1, B2, B4, B6, B11, B13): app-bootstrap.js draws it from what this
-// browser stored, before any deferred module runs.
+// The first frame of /app is the composer the app settles on:
+// app-bootstrap.js draws it from what this browser stored, before any
+// deferred module runs.
 const FAMILIES = [
   { provider: "openai", label: "OpenAI", title: "OpenAI", checkboxId: "openaiCheck", icon: "/static/openai.svg", iconClass: "chatgpt-logo" },
   { provider: "gemini", label: "Gemini", title: "Gemini", checkboxId: "geminiCheck", icon: "/static/gemini.svg", iconClass: "" },
@@ -76,7 +76,7 @@ describe("the session a first frame expects (B4)", () => {
     expect(window.App.isGuest()).toBe(true);
     expect(document.body.classList.contains("is-guest")).toBe(true);
     expect(document.getElementById("authTopActions").hidden).toBe(false);
-    // What an account sees by default (Max, Apple-Audit H3): Agent's chip
+    // What an account sees by default: Agent's chip
     // with the default chat model, what the reviewers do, its greeting; no
     // Compare chip, no account placeholders. A guest's model list never
     // loads, so no reasoning level stands beside the model.
@@ -124,7 +124,7 @@ describe("the session a first frame expects (B4)", () => {
     expect(document.documentElement.classList.contains("agent-shell-expected")).toBe(true);
     expect(document.body.classList.contains("single-agent-active")).toBe(true);
     expect(document.querySelector(".hero-greeting").textContent).toBe("Get a second opinion. And a third.");
-    // The account's placeholders are there from the first frame (B11).
+    // The account's placeholders are there from the first frame.
     expect(document.querySelectorAll("#bookmarksContainer .skeleton-bookmark")).toHaveLength(4);
     expect(document.getElementById("loginContainer").hidden).toBe(false);
   });
@@ -142,9 +142,8 @@ describe("the session a first frame expects (B4)", () => {
 });
 
 describe("the composer's first frame (B1, B2, B13)", () => {
-  // The chip names the chat model, its reasoning level quiet beside it
-  // (Max, 2026-10-31); the reviewers say their words next to their marks
-  // (agent-mode.js; Max, 2026-10-27).
+  // The chip names the chat model, its reasoning level quiet beside it;
+  // the reviewers say their words next to their marks (agent-mode.js).
   it("draws Agent's chip with the remembered chat model and its level, the reviewers' words, and no Compare chip", () => {
     const look = JSON.stringify({ uid: "u1", agentModel: "Claude Opus 5.5", agentEffort: "High" });
     const { document } = paint({ storage: { id_token: token("u1"), "consensio.firstFrame.v1": look,

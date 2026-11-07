@@ -212,7 +212,7 @@ def test_later_saves_of_the_run_keep_the_generated_name():
 
 
 def test_a_renamed_chat_keeps_its_name_on_the_chat_through_later_saves_and_title_requests():
-    """Rename in the sidebar row menu (Apple audit E2)."""
+    """Rename in the sidebar row menu."""
     chat_id = "c" * 32
     bookmark_ref = FakeBookmarkRef("renamed_bookmark", {
         "query": "First question", "title": "Opening topic", "title_source": "generated",
@@ -261,7 +261,7 @@ def test_renaming_a_missing_chat_creates_nothing():
 
 
 def test_a_rename_while_the_title_is_generated_keeps_the_persons_name():
-    # Zweitprüfung (Umbenennen): the model takes seconds; a rename in that
+    # The model takes seconds; a rename in that
     # time was overwritten by the generated name, on the chat and the bookmark.
     chat_id = "c" * 32
     bookmark_ref = FakeBookmarkRef("racing_bookmark", {

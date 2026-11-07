@@ -167,7 +167,7 @@ describe("conversation scroll", () => {
 
   // A reader at the end of a long working turn while the activity above
   // grows: the floor that held a taller moment of the run took the growth
-  // into the reserve below, and the text in view moved down (2026-10-30).
+  // into the reserve below, and the text in view moved down.
   it('lets the floor grow with what grows above a reader at the end', () => {
     const app = boot({ askAt: 100, executing: true });
     app.grow(60); app.scroll(2460); app.grow(-60);
@@ -191,7 +191,7 @@ describe("conversation scroll", () => {
   // Every taller moment of a long run (an answer taken back for a tool
   // call, a command's open output, the steps before they fold) held its
   // height to the end of the run: under the turn a screen of white to
-  // scroll into (Max, 2026-11-01). The floor holds the reader's window only.
+  // scroll into. The floor holds the reader's window only.
   it('lets the floor of a working run go below the reader\'s window', () => {
     const app = boot({ askAt: 100, executing: true });
     app.grow(0);
@@ -215,7 +215,7 @@ describe("conversation scroll", () => {
 
   // After the run the turn changes no more: what the floor held below a
   // reader at the end stayed, and scrolling up and back found a screen of
-  // white under the turn again (2026-11-01). Scrolling itself lets it go.
+  // white under the turn again. Scrolling itself lets it go.
   it('lets go of the room below the window when the reader scrolls up after the run', () => {
     const app = boot({ askAt: 100, executing: true });
     app.grow(0);
@@ -293,8 +293,8 @@ describe("conversation scroll", () => {
     const app = boot();
     app.window.App.revealSentMessage(); app.tick();
     const button = app.document.querySelector(".chat-scroll-latest");
-    // It comes once the end stays out of reach for half a second (2026-10-28:
-    // live lines that grew and folded made it flash), not in the jump's frames.
+    // It comes once the end stays out of reach for half a second (live lines
+    // that grew and folded made it flash), not in the jump's frames.
     expect(button.hidden).toBe(true);
     app.tick();
     expect(button.hidden).toBe(false); // 2000 of 2400: more than the near-end band.
@@ -334,8 +334,8 @@ describe("conversation scroll", () => {
     button.click(); app.tick(80);
     expect(button.hidden).toBe(true);
     // 120px above the end: past the near-end band, not far enough for the
-    // button. Idle, no frame stays scheduled (bug hunt 2026-10-30: one per
-    // frame, 3750 in a minute).
+    // button. Idle, no frame stays scheduled (one per frame made 3750 in a
+    // minute).
     app.scroll(2280); app.tick(80);
     expect(button.hidden).toBe(true);
     expect(app.frames.size).toBe(0);

@@ -1,10 +1,8 @@
 /**
- * Timers rest in a hidden tab (audit F18).
+ * Timers rest in a hidden tab.
  *
- * The allowance countdown in app-init.js ticked every second, also in
- * background tabs. Now it pauses while document.hidden and catches up at
- * once when the tab comes back. (The guided Consensus run block had the
- * same rule; it left the browser on 2026-10-25.)
+ * The allowance countdown in app-init.js ticks every second, but pauses
+ * while document.hidden and catches up at once when the tab comes back.
  */
 
 import { describe, expect, it } from "vitest";
@@ -63,7 +61,7 @@ describe("allowance countdown", () => {
 
     // The hidden countdown wakes the allowance panel through a
     // MutationObserver (sidebar-quota.js). It changes once a minute, so the
-    // ticks in between write nothing (Apple audit D10); a minute boundary
+    // ticks in between write nothing; a minute boundary
     // may fall between these ticks once.
     const observer = new window.MutationObserver(() => {});
     observer.observe(display, { childList: true, characterData: true, subtree: true });

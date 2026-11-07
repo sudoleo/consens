@@ -102,7 +102,7 @@ def test_user_status_uses_real_tier_and_role_payload(
         data["agent_access"],
         data["attachments"],
         data["resolve"],
-    ) == (tier, is_pro, agent, True, resolve)  # attachments: every tier since 2026-10-02
+    ) == (tier, is_pro, agent, True, resolve)  # attachments: every tier
     assert data["uid"] == "owner" and data["token_budget"]["used"] == 0
     # The browser leaves analytics for operators (analytics-opt-out.js excludeOperator).
     assert data["is_admin"] is (role == "admin")
@@ -120,7 +120,7 @@ def test_user_status_rejects_auth_and_tier_outage(http_adapter, identity, expect
 
 
 def test_a_structured_refusal_reaches_the_app_flat(http_adapter):
-    # Zweitprüfung 2: {"error": {"error_code", "message"}} hid the sentence
+    # {"error": {"error_code", "message"}} hid the sentence
     # and the code from every client reader; the app gets {error, code, ...}.
     h = http_adapter
     response = h.client.post("/api/my/memory/changes/not-an-id/undo", headers=login("owner"))
@@ -158,7 +158,7 @@ def test_the_flat_shape_keeps_every_field_and_spares_the_public_api():
 @pytest.mark.parametrize("method,path,body", [
     ("GET", "/user_status", None),
     ("POST", "/usage", {"id_token": "owner"}),
-    # Nachprüfung 2: every other router still answered 401 (signed out).
+    # The other routers once answered 401 (signed out) as well.
     ("GET", "/api/admin/agent-budget", None),                     # admin
     ("POST", "/confirm-registration", {"id_token": "owner"}),     # auth
     ("GET", "/bookmarks", None),                                  # bookmarks
@@ -172,8 +172,8 @@ def test_the_flat_shape_keeps_every_field_and_spares_the_public_api():
     ("GET", "/api/my/watches", None),                             # watch
 ])
 def test_an_account_check_outage_is_no_rejected_login(http_adapter, monkeypatch, method, path, body):
-    # Zweitprüfung 12: the deletion check could not be read. A 401 made the
-    # browser turn Agent off for the session; a 503 makes it ask again.
+    # The deletion check could not be read: a 401 made the browser turn
+    # Agent off for the session; a 503 makes it ask again.
     from app.core import security
 
     h = http_adapter
@@ -239,7 +239,7 @@ def test_the_account_limiter_says_how_long_to_wait(monkeypatch):
     ("POST", "/chats", {}, "chat_rate_limited"),
 ])
 def test_every_account_throttle_names_its_wait(http_adapter, monkeypatch, method, path, body, code):
-    # Nachprüfung 2: a per-account 429 came without code, retry_after and
+    # A per-account 429 once came without code, retry_after and
     # Retry-After, unlike every per-address limit (main.handle_rate_limit).
     from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter
 

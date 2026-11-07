@@ -1,4 +1,4 @@
-"""Watches that run the Agent (agent_watches.py, since 2026-11-03): the
+"""Watches that run the Agent (agent_watches.py): the
 schedule, starting one from the card, the runs the scheduler takes, how a
 run ends (the mail of a finding, the end at the goal), the routes, the
 mail, and a run through the Agent route itself."""
@@ -71,13 +71,13 @@ def test_daily_runs_at_its_local_time_and_the_short_ones_by_the_hour():
     # From a run that was due long ago: the next slot after now, not a backlog.
     assert agent_watches.next_run(hourly, now=NOW, previous=NOW - timedelta(hours=5, minutes=30)) == NOW + timedelta(minutes=30)
     # A new Watch comes at the next such time, today while it is still ahead,
-    # not one interval after now (review 2026-11-03).
+    # not one interval after now.
     morning = datetime(2026, 11, 3, 6, 0, tzinfo=timezone.utc)
     assert agent_watches.next_run(schedule, now=morning) == datetime(2026, 11, 3, 7, 0, tzinfo=timezone.utc)
     weekly = agent_watches.validate_schedule("weekly", "08:00", "", "Europe/Berlin")
     assert agent_watches.next_run(weekly, now=morning) == datetime(2026, 11, 3, 7, 0, tzinfo=timezone.utc)
     assert agent_watches.next_run(weekly, now=NOW) == datetime(2026, 11, 4, 7, 0, tzinfo=timezone.utc)
-    # After a run, the interval as before.
+    # After a run, the interval.
     assert agent_watches.next_run(weekly, now=datetime(2026, 11, 3, 7, 1, tzinfo=timezone.utc),
                                   previous=datetime(2026, 11, 3, 7, 0, tzinfo=timezone.utc)) == datetime(2026, 11, 10, 7, 0, tzinfo=timezone.utc)
     with pytest.raises(agent_watches.AgentWatchError) as error:
@@ -162,8 +162,7 @@ def test_ending_frees_the_slot_and_a_chats_deletion_takes_its_watch(store):
 
 def test_day_counts_keep_no_deleted_account_and_no_old_day(store, monkeypatch):
     """agent_watch_days/{date} holds each account's UID for the day's caps; a
-    deleted account's UID went nowhere and old days stayed for good (bug hunt
-    2026-11-04)."""
+    deleted account's UID goes with it, and old days do not stay for good."""
     days = store.db.collection(agent_watches.DAYS_COLLECTION)
     for back in (0, 1, 2, 9):
         day = (NOW - timedelta(days=back)).date().isoformat()
@@ -207,7 +206,7 @@ def test_a_due_run_moves_the_watch_on_and_is_taken_once(store):
 def test_watches_due_at_the_same_time_take_turns(store):
     # Many Watches at the default 08:00: the one that has waited longest goes
     # first, so a full morning skips another one each day, not always the same
-    # (bug hunt 2026-11-04: the tie went by document id).
+    # (the tie does not go by document id).
     scheduled = NOW - timedelta(minutes=5)
 
     def due_pro(when):
@@ -329,8 +328,8 @@ def test_a_busy_chat_tries_again_soon_and_a_deleted_one_ends_the_watch(store, ro
 
 
 def test_a_busy_run_keeps_its_time_its_count_and_its_end(store, router):
-    """Review 2026-11-03: each retry counted as a run and as its own late
-    start, so retries never ended, and an hourly Watch moved 10 min a time."""
+    """A retry counts neither as a run nor as its own late start: else
+    retries would never end, and an hourly Watch would move 10 min a time."""
     watch_id = due_watch(store, next_run_at=NOW, interval="hourly", run_time="", run_weekday="")
     router(HTTPException(status_code=409, detail="Turn state conflict"))
     at = NOW
@@ -359,7 +358,7 @@ def test_a_busy_run_keeps_its_time_its_count_and_its_end(store, router):
 def test_pausing_during_a_busy_retry_never_skips_the_run_after_the_resume(store, router):
     """A retry measures its lateness from its first time (retry_of): paused
     in between and resumed later, the Watch's next run is a new one, and it
-    ran instead of being skipped as two hours late."""
+    runs instead of being skipped as two hours late."""
     watch_id = due_watch(store, next_run_at=NOW)
     router(HTTPException(status_code=409, detail="Turn state conflict"))
     run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)
@@ -525,7 +524,7 @@ def test_a_watch_from_before_the_looks_keeps_its_last_run_as_its_first_look(stor
 
 def test_a_legacy_run_that_had_run_already_is_no_look(store):
     """A run that had run already is no look of its own, and a Watch from
-    before the looks whose last run was one has none from it (review 2026-11-04)."""
+    before the looks whose last run was one has none from it."""
     watch = start(store, *proposed_chat(store))
     ref = store.db.collection(agent_watches.COLLECTION).document(watch["id"])
     data = record(store, watch["id"])
@@ -592,7 +591,7 @@ def test_a_paused_watch_keeps_a_new_schedule_for_its_resume_and_an_ended_one_kee
 
 
 def test_a_schedule_saved_as_it_stands_moves_nothing(store):
-    """The panel's Save without a change (review 2026-11-04): the next run
+    """The panel's Save without a change: the next run
     and a pending retry stay; a 6-hourly Watch is not pushed out by 6 hours."""
     watch = start(store, *proposed_chat(store), tier="plus", interval="every_6_hours")
     ref = store.db.collection(agent_watches.COLLECTION).document(watch["id"])
@@ -619,7 +618,7 @@ def test_a_schedule_saved_as_it_stands_moves_nothing(store):
 
 
 def test_a_new_schedule_without_a_plan_gets_the_lowest_plans_intervals(store):
-    """update() fails closed (review 2026-11-04): a reschedule without a tier
+    """update() fails closed: a reschedule without a tier
     is held to Free's intervals, never the account's best."""
     watch = start(store, *proposed_chat(store), tier="pro", interval="hourly")
     with pytest.raises(agent_watches.AgentWatchError) as error:
@@ -761,8 +760,8 @@ def test_the_users_own_task_starts_in_its_chat_and_a_new_chat_runs_at_once(store
 def test_a_page_watch_ended_before_its_first_run_takes_its_empty_chat_along(store, monkeypatch):
     """The chat the Watches page opened gets its sidebar entry with the first
     run's answer. Ended before that run (its first time skipped, the day's
-    runs used up), it stayed hidden and held one of the account's chats for
-    good (bug hunt 2026-11-04)."""
+    runs used up), its chat goes along instead of staying hidden and holding
+    one of the account's chats for good."""
     monkeypatch.setattr("app.services.watch_scheduler.wake_watch_scheduler", lambda: None)
     fresh = agent_watches.create(UID, tier="free", task="Tell me when the IRONMAN Hamburg 2027 registration opens.",
                                  timezone_name="Europe/Berlin", db=store.db, now=NOW)
@@ -978,7 +977,7 @@ def test_the_consensus_watches_are_archived(monkeypatch):
     assert asyncio.run(watch_scheduler.run_watch_tick()) == 0
     assert asyncio.run(watch_scheduler.run_brief_tick()) == 0
     # Their last times stay in the past for good: the loop sleeps until the
-    # next Agent Watch, not half an hour (review 2026-11-03).
+    # next Agent Watch, not half an hour.
     monkeypatch.setattr(watch_service, "earliest_next_run_at", lambda: NOW - timedelta(days=3))
     monkeypatch.setattr(agent_watches, "earliest_next_run_at", lambda: NOW + timedelta(minutes=5))
     assert watch_scheduler.next_tick_seconds(now=NOW) == 305

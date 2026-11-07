@@ -1,6 +1,6 @@
 """Test-only reviewers that never start (agent_audit.AnswerAudit).
 
-Since 2026-10-31 every chat run of the agent has reviewers: the user's
+Every chat run of the agent has reviewers: the user's
 chosen models follow its work log and review its fixed answer. There is no
 production switch without them, and none for tests either. A test about
 something else (the workspace, quotas, memory, a tool) whose completion

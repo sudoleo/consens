@@ -169,12 +169,11 @@ def test_unreported_reservation_cannot_leak_across_day_or_reset(store, monkeypat
 
 
 def test_the_first_step_settles_into_the_day_it_was_claimed_on(store, monkeypatch):
-    """Bug hunt 2026-11-06: every claim wrote its ledger day into the run's
-    root, and the root is completion:0's own receipt. A reviewer's round
-    claimed after midnight (or a reset) while completion:0 still ran, whose
-    receipt is written beside its calls since 2026-11-05: completion:0 then
-    settled into the new day, took its reservation from the reviewer's there
-    and left its own in the old day."""
+    """The run's root is completion:0's own receipt, written beside its
+    calls. A reviewer's round claimed after midnight (or a reset) while
+    completion:0 still runs must not write its ledger day there: completion:0
+    would settle into the new day, take its reservation from the reviewer's
+    there and leave its own in the old day."""
     loop = make_loop(store)
     args = (UID, loop.chat_id, loop.turn_id)
     policy = loop.policy.snapshot()

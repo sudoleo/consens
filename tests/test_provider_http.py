@@ -356,7 +356,7 @@ def test_a_dead_loop_thread_is_replaced(provider_http):
 
 
 def test_a_call_from_a_running_event_loop_is_refused(provider_http):
-    """As asyncio.run/run_until_complete refused before: blocking would stall
+    """Refused like asyncio.run/run_until_complete: blocking would stall
     FastAPI's loop, or deadlock on the provider loop itself."""
     http = provider_http(mock(lambda request: httpx.Response(200)))
     session = http.session()

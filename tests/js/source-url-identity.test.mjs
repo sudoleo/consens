@@ -1,5 +1,5 @@
 /**
- * Source merge identity (R31).
+ * Source merge identity.
  *
  * Merging sources across runs must not collapse two different documents into
  * one because their path or query differ only in case, and citation numbers

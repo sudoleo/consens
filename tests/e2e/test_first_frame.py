@@ -1,6 +1,6 @@
 """The first frame of /app is the settled app, and the start field stays put.
 
-Apple-Audit B1, B2, B4, B5, B8, B10, B13, C2, F10: per animation frame the
+Per animation frame the
 composer's visible state is sampled after the frame (a message posted from
 requestAnimationFrame), from the reload until the app has settled. What the
 reader sees in the first frame must be what the app ends on.
@@ -126,15 +126,15 @@ def test_a_reload_paints_the_composer_it_settles_on(browser, phase4_server, widt
         frames = _frames(page)
         # One face from the first frame to the end: Agent's chip with the
         # chat model and its level "Auto" (from 701px), no demo, no Consensus
-        # chip, a quiet Send (B1); "Chat" and "New chat" (B10).
+        # chip, a quiet Send; "Chat" and "New chat".
         assert len(frames) == 1, frames
         first = frames[0]
         assert first["agent"] == "chip:DeepSeek V4.1 Flash", first
         assert first["consensus"] == "hidden" and first["demo"] == "-" and first["send"] == "disabled", first
-        # Daily's two reviewers (Claude, DeepSeek since 2026-11-01).
+        # Daily's two reviewers (Claude, DeepSeek).
         assert first["level"] == ("" if mobile else "Auto") and first["marks"] == 2, first
         assert first["tab"] == "Chat" and first["newChat"] == "New chat", first
-        # On a phone the switch lives in the menu, never cut off in the bar (B2);
+        # On a phone the switch lives in the menu, never cut off in the bar;
         # on a desktop the bar is only a wrapper (display: contents) around it.
         assert first["switchInHeader"] is not mobile
     finally:
@@ -142,7 +142,7 @@ def test_a_reload_paints_the_composer_it_settles_on(browser, phase4_server, widt
 
 
 def test_a_session_firebase_keeps_paints_the_account_before_firebase_answers(browser, phase4_server):
-    """B4: no guest page first after a sign-in that stored only Firebase's own user."""
+    """No guest page first after a sign-in that stored only Firebase's own user."""
     html = urllib.request.urlopen(phase4_server + "/app").read().decode("utf-8")
     api_key = re.search(r'data-firebase-api-key="([^"]*)"', html).group(1)
     stored = json.dumps({"uid": "account-a", "emailVerified": True})
@@ -162,7 +162,7 @@ def test_a_session_firebase_keeps_paints_the_account_before_firebase_answers(bro
 
 
 def test_a_failed_status_check_keeps_agent_says_so_and_asks_again(browser, phase4_server):
-    """B8: no silent switch to the old comparison view on one failed request."""
+    """No silent switch to the old comparison view on one failed request."""
     calls = []
 
     def status(route):
@@ -192,13 +192,13 @@ def test_a_failed_status_check_keeps_agent_says_so_and_asks_again(browser, phase
 
 @pytest.mark.parametrize("width,height,mobile", [(1400, 900, False), (390, 844, True)], ids=["desktop", "mobile"])
 def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser, phase4_server, width, height, mobile):
-    """Review 1 (regression of B4): this browser remembers an account, but
+    """This browser remembers an account, but
     Firebase answers that the session has ended (password changed elsewhere,
     account disabled, a Google sign-in that came back without a user). The
     page turns into the guest page: the field takes typing, the guest buttons
     stand, and neither the account's model nor a Watches dot waits for an
     account that is not coming. A guest has Agent's chip with the default
-    model (Apple-Audit H3)."""
+    model."""
     look = json.dumps({"uid": "account-a", "agentModel": "GPT-5.6 Sol", "agentEffort": "High"})
     context = _context(browser, width, height, uid=None, mobile=mobile,
                        init_script=f"localStorage.setItem('id_token', 'cached'); localStorage.setItem('consensio.firstFrame.v1', {json.dumps(look)});")
@@ -240,10 +240,10 @@ def test_an_ended_session_becomes_the_guest_page_with_a_field_that_types(browser
 
 @pytest.mark.parametrize("width,height,mobile", [(1400, 900, False), (390, 844, True)], ids=["desktop", "mobile"])
 def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades_once(browser, phase4_server, width, height, mobile):
-    """H3 (Max): a guest sees Agent's composer of a new chat as an account
+    """A guest sees Agent's composer of a new chat as an account
     does by default, from the first frame to the end: the chip with the
     default chat model (no level: a guest's model list never loads),
-    Agent's greeting; the demo offer stays a guest's (B13). One face, also
+    Agent's greeting; the demo offer stays a guest's. One face, also
     on reload."""
     context = _context(browser, width, height, uid=None, mobile=mobile)
     page = context.new_page()
@@ -271,10 +271,10 @@ def test_a_guest_sees_agent_and_the_demo_offer_from_the_first_frame_and_it_fades
         # Nothing a guest cannot have is asked for (the model list needs an account).
         assert agent_calls == [], agent_calls
         expect(page.locator("#agentComposerNotice")).to_be_hidden()
-        # No Watches dot for a guest, on the phone's menu button neither (H2, review 3).
+        # No Watches dot for a guest, on the phone's menu button neither.
         assert not page.evaluate("document.getElementById('viewSwitchWatches').classList.contains('has-watch-pulse')")
         # The first keystroke retires the offer for good: it fades where it
-        # stood while Send comes in (B13), then it is gone.
+        # stood while Send comes in, then it is gone.
         page.evaluate("""() => { window.__leaving = false; const chip = document.querySelector('.demo-chip');
           new MutationObserver(() => { if (chip.classList.contains('is-leaving')) window.__leaving = true; })
             .observe(chip, { attributes: true, attributeFilter: ['class'] }); }""")
@@ -298,7 +298,7 @@ TRACK_FIELD = r"""() => {
 
 
 def test_the_start_field_stays_put_and_grows_downward(browser, phase4_server):
-    """B5: notices, the mail strip and new lines never move the field's top."""
+    """Notices, the mail strip and new lines never move the field's top."""
     context = _context(browser, 1400, 900)
     page = context.new_page()
     try:
@@ -336,7 +336,7 @@ def test_the_start_field_stays_put_and_grows_downward(browser, phase4_server):
 
 
 def test_the_empty_start_screen_fits_a_phone_on_its_side(browser, phase4_server):
-    """F10: nothing to scroll on the empty start screen."""
+    """Nothing to scroll on the empty start screen."""
     context = _context(browser, 667, 375, mobile=True)
     page = context.new_page()
     try:
@@ -359,7 +359,7 @@ NEVER_ENDING_AGENT = r"""() => {
 
 @pytest.mark.parametrize("width,height,mobile", [(1400, 900, False), (390, 844, True)], ids=["desktop", "mobile"])
 def test_the_first_send_moves_the_field_in_one_movement(browser, phase4_server, width, height, mobile):
-    """C2: the box glides and changes its shape together; it never stands at
+    """The box glides and changes its shape together; it never stands at
     its end first, and nothing in it jumps before it moves."""
     context = _context(browser, width, height, mobile=mobile)
     page = context.new_page()

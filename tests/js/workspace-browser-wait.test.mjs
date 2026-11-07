@@ -1,8 +1,8 @@
 /**
- * The workspace browser's wait with text (browser.py SHOWS_JS, since
- * 2026-11-03): whether the page in front shows the text. "type e40 Hello
+ * The workspace browser's wait with text (browser.py SHOWS_JS): whether
+ * the page in front shows the text. "type e40 Hello
  * enter, wait text Hello" was met at once by the draft itself when Enter
- * had sent nothing (bug hunt P65): what is in the focused editor does not
+ * had sent nothing: what is in the focused editor does not
  * count, only the text elsewhere on the page.
  */
 import { readFileSync } from "node:fs";

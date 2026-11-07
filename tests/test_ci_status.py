@@ -20,8 +20,8 @@ def note(message, title=""):
 
 
 def test_a_job_over_its_time_limit_is_red_and_a_cancelled_one_is_not():
-    # Both end "cancelled"; only the time limit is a failure (nightly
-    # browser suite 2026-10-25, unseen by the CI watcher).
+    # Both end "cancelled"; only the time limit is a failure (a nightly
+    # browser suite cut off by it went unseen by the CI watcher).
     script = load({
         "/actions/runs/1/jobs": {"jobs": [job(10, "cancelled"), job(11, "cancelled"), job(12, "success")]},
         "/check-runs/10/annotations": [

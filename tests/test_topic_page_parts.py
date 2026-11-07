@@ -1,4 +1,4 @@
-"""Topic pages built from the Watch page parts (2026-10-15): picture, hub
+"""Topic pages built from the Watch page parts: picture, hub
 card, the standing answer's opening, and Google redirects kept off the page."""
 
 from datetime import timedelta

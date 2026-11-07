@@ -23,7 +23,7 @@ def test_unicode_quote_offsets_preserve_original_spans(original, quote, expected
 
 
 def test_fuzzy_unicode_match_is_not_evidence():
-    # R08: the fuzzy fallback above is navigation only; evidence stays exact.
+    # The fuzzy fallback above is navigation only; evidence stays exact.
     assert _span_finder()("A", "İ İ İstanbul çok güzel bir şehir.", "İstanbul çok güzel bir şehir!") is None
 
 
@@ -107,7 +107,7 @@ def test_differences_prompt_treats_disputed_events_as_facts():
     assert "Reference timezone: Europe/Berlin" in prompt
     assert "Whether an event happened" in prompt
     assert "Do not infer a fictional user scenario" in prompt
-    # The source check and its checkability field were removed (2026-10-15).
+    # No source check and no checkability field.
     assert "factual_check" not in prompt
 
 

@@ -97,9 +97,9 @@ describe("agent live fallback", () => {
     dom.window.close();
   });
 
-  // P6 (2026-11-05): the silence counted from before the POST, so a slow
-  // start on the server (its reads before the headers) polled for nothing
-  // and was counted as a buffering network.
+  // Counted from before the POST, the silence made a slow start on the
+  // server (its reads before the headers) poll for nothing and count as a
+  // buffering network.
   it("counts the silence from the response's headers, not from the request", async () => {
     const { window: w, dom } = boot();
     w.App.agentLive.UNANSWERED_MS = 5000;
@@ -347,7 +347,7 @@ describe("agent live fallback", () => {
     dom.window.close();
   });
 
-  // A-B1 (docs/agent-audit-readiness-2026-10-29.md): the follow limit counted
+  // The follow limit counted
   // from the start of following, so a healthy run followed for 40 minutes
   // ended with the next tab switch ("Connection lost"), its pause card too.
   // The page's clock is faked; the timers stay real and short.

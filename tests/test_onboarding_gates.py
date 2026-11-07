@@ -1,11 +1,10 @@
-"""Die drei Schranken, die neue Nutzer vor dem ersten echten Lauf verloren.
+"""Die Schranken, die neue Nutzer vor dem ersten echten Lauf verloren.
 
 1. Der Verifizierungs-Rauswurf: unbestaetigte Sessions wurden sofort
    ausgeloggt. Wer den Link nicht im selben Moment fand, stand wieder vor der
    Login-Maske - mit verlorener Frage.
 2. Das Follow-up-Schloss: die zweite Frage einer Sitzung war Pro. Damit endete
    jede Session nach genau einer Antwort.
-3. Der Watch-Hinweis erklaerte eine Funktion, statt sie anzubieten.
 
 Diese Datei haelt die Gegenrichtung fest, damit sie nicht versehentlich
 zurueckgedreht wird.
@@ -32,9 +31,9 @@ def test_unverified_sessions_are_not_signed_out_anymore():
 
     start = firebase.index("if (!user.emailVerified) {")
     branch = firebase[start:firebase.index("hideEmailVerificationGate();", start)]
-    # Der Rauswurf ist weg; stattdessen erscheint der Streifen. Der einzige
-    # verbliebene signOut ist der, den der Nutzer selbst ausloest
-    # ("Use a different address") - kein automatischer mehr.
+    # Kein Rauswurf; stattdessen erscheint der Streifen. Der einzige
+    # signOut ist der, den der Nutzer selbst ausloest
+    # ("Use a different address").
     assert branch.count("signOut(auth)") == 1
     assert "onSignOut:" in branch
     assert "showEmailVerificationGate(" in branch
@@ -84,8 +83,8 @@ def test_verification_link_returns_to_the_app_with_the_typed_question():
     assert "consensio.questionDraft.v1" in app_init
     # Nur echte Tastenanschlaege sind ein Entwurf: der Auth-Callback leert den
     # Composer per clearResponseBoxes und feuert dabei ein programmatisches
-    # input-Event - das hat den Entwurf frueher geloescht, bevor er gebraucht
-    # wurde.
+    # input-Event - das wuerde den Entwurf sonst loeschen, bevor er gebraucht
+    # wird.
     assert "if (!event.isTrusted) return;" in app_init
     # Und weil derselbe Callback das Feld leert, muss der Entwurf danach
     # wieder hinein - nicht nur einmal beim Start.
@@ -114,21 +113,21 @@ def test_followups_are_no_longer_pro_gated():
     agent_chat = read("static/js/agent-chat.js")
     chat_router = read("app/api/routers/chat.py")
 
-    # Folgefragen laufen seit 2026-10-25 im Agent weiter: kein Tier, kein
+    # Folgefragen laufen im Agent weiter: kein Tier, kein
     # Badge, keine Zwischenentscheidung vor der naechsten Frage.
     assert "require_pro_for_followup" not in agent_chat
     assert "followup-pro" not in agent_chat
     assert not (ROOT / "static" / "js" / "consensus-run.js").exists()
 
-    # Serverseitig gibt es kein Follow-up-Gate mehr - der Kontext kostet ueber
+    # Serverseitig gibt es kein Follow-up-Gate - der Kontext kostet ueber
     # das normale Tagesbudget, nicht ueber ein Tier.
     assert "require_pro_for_followup" not in chat_router
 
 
 def test_free_daily_runs_allow_more_than_a_single_try():
     # Drei Runs waren ein Test, keine Gewohnheit - und mit freien Follow-ups
-    # waere ein Limit von drei sofort wieder die alte Sackgasse. Seit dem
-    # Tokenkonto: das Free-Konto deckt mindestens zehn typische Laeufe.
+    # waere ein Limit von drei sofort wieder die alte Sackgasse. Das
+    # Free-Konto deckt mindestens zehn typische Laeufe.
     from app.services import agent_budget_config
     config = agent_budget_config.snapshot({})
     assert config["tier_limits"]["free"] >= 10 * config["run_estimates"]["free"]["consensus"]

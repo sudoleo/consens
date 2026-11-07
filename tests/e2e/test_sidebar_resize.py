@@ -138,7 +138,7 @@ def test_keyboard_resizing_and_collapsed_or_narrow_sidebars(app_page):
     assert _geometry(page)["sidebar"] == 480
 
 
-# Apple audit C3: opening the sidebar, the Chat | Watches switch jumped 130 px
+# Opening the sidebar, the Chat | Watches switch once jumped 130 px
 # in one frame and the logo vanished; closing it, two logos and two panel
 # glyphs stood side by side for about 200 ms. Sampled per frame: the switch
 # glides with the column, and there is only ever one logo and one toggle.

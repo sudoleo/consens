@@ -1,9 +1,7 @@
 """Where a reviewer's quote stands in the answer (agent_audit.locate_quote).
 
 Every mark of every turn goes through it: a quote it cannot find leaves its
-mark unplaced (agent_audit.place_marks). Until 2026-10-31 the same search
-form located a pasted text for check_text (tests/test_agent_passage_check.py,
-removed with it); these are its cases on the quote locator.
+mark unplaced (agent_audit.place_marks).
 """
 import pytest
 

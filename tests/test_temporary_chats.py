@@ -1,7 +1,6 @@
-"""Temporary chats (since 2026-11-01): an Agent chat that keeps nothing
-beyond itself. Since 2026-11-01 evening it does what the account's other
-chats do (Max): the workspace, Watches, the search of other chats and the
-memory, read. What would outlast it stays out: no bookmark (the sidebar's
+"""Temporary chats: an Agent chat that keeps nothing beyond itself. It
+does what the account's other chats do (Max): the workspace, Watches, the
+search of other chats and the memory, read. What would outlast it stays out: no bookmark (the sidebar's
 handle), nothing written to memory or the workspace's notes, no share, and
 no other chat's search finds it. Its folder and background processes in the
 workspace go with it. The browser deletes it when the user leaves it; a
@@ -49,7 +48,7 @@ def test_a_temporary_chat_carries_its_deadline_from_its_creation_and_each_messag
 
 def test_a_message_during_the_sweep_moves_its_deadline_on(store):
     """The query found the deadline due, a message renewed it before the
-    sweep came to it: the chat stays (review 2026-11-01)."""
+    sweep came to it: the chat stays."""
     from app.services.chat_store import ChatStore, _expire_temporary_chat
     chat = store.create_chat(UID, execution_mode="agent", temporary=True)
     due = deadline(store, chat["id"])["expires_at"]
@@ -392,8 +391,8 @@ def test_a_failed_run_in_a_temporary_chat_still_hands_its_saved_answer_to_the_pa
 def test_a_temporary_chat_whose_turn_stays_pending_gets_no_saved_answer(api, monkeypatch):
     """finish_run failed in the run's finally: the turn is still pending and
     the server says "running". A saved_answer next to it made the page take
-    the pending turn as the answer instead of following it (bug hunt
-    2026-11-02); a normal chat gets none there either."""
+    the pending turn as the answer instead of following it; a normal chat
+    gets none there either."""
     from app.services.agent_runs import AgentRunStore
     from app.services.llm.agent_client import AgentCompletion
     from test_agent_runs import receipt

@@ -125,7 +125,7 @@ def test_reasoning_switch_is_open_to_every_tier_and_keeps_the_selected_model(tie
 
 @pytest.mark.parametrize("legacy", ["grok-4.3-no-reasoning", "grok-4.20-non-reasoning", "grok-4.20"])
 def test_a_migrated_grok_id_runs_as_grok_43_instead_of_failing_the_allowlist(legacy):
-    """Requests may still carry the former Grok variants (2026-10-11)."""
+    """Requests may still carry the former Grok variants."""
     client = make_client()
     p1, p2 = auth_patches(tier="free")
     with p1, p2, patch.object(chat_router, "_run_ask", return_value={"ok": True}) as run:
@@ -193,7 +193,7 @@ def test_glm_attachment_support_depends_on_the_selected_model():
                 "attachments": [PNG_ATTACHMENT],
             },
         )
-        # Reasoning no longer swaps in GLM 5.3 (text-only): the selected
+        # Reasoning does not swap in GLM 5.3 (text-only): the selected
         # multimodal Flash model keeps reading the attachment.
         reasoning = client.post(
             "/ask_glm",

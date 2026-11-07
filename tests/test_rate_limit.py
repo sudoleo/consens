@@ -109,7 +109,7 @@ class ClientIpKeyTests(unittest.TestCase):
         limiter.check("other-user", "create", 1)
 
     def test_a_crowd_of_favicon_visitors_never_resets_an_hourly_limit(self):
-        # Zweitprüfung 15: more than MAX_KEYS one-minute favicon buckets made
+        # More than MAX_KEYS one-minute favicon buckets made
         # the next check sweep every bucket with ITS one-minute window, and
         # an hourly limit two minutes old was gone.
         from unittest.mock import patch

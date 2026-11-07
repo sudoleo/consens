@@ -102,7 +102,7 @@ def test_enter_submits_the_login_and_wrong_credentials_read_as_such(browser, pha
 
 
 # The field was marked only when the text on screen equalled the German
-# message, which the page translates a moment after it is set (2026-10-23).
+# message, which the page translates a moment after it is set.
 def test_a_wrong_password_marks_the_field_on_the_german_page_too(browser, phase4_server):
     context, page = _guest_page(browser, phase4_server)
     try:

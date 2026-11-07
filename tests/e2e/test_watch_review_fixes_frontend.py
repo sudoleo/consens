@@ -1,5 +1,4 @@
-"""The Watches page and the Watch pill in the built /app, since 2026-11-03
-(redrawn 2026-11-04).
+"""The Watches page and the Watch pill in the built /app.
 
 A Watch runs the Agent on a schedule in its chat (agent_watches.py). Writer-
 free like the other Phase-4 browser tests: every API answer comes from the
@@ -150,7 +149,7 @@ def test_the_field_above_the_list_starts_a_watch_in_a_chat_of_its_own(browser, p
 
 
 def test_the_watch_page_opened_directly_loads_once(browser, phase4_server):
-    # Review 2: the route's wait and the auth state both rendered the page.
+    # The route's wait and the auth state once both rendered the page.
     state = {"calls": [], "watches": [_watch("w1", "Check the Garmin 965 price on bike-discount.de.")]}
     counts = {}
 

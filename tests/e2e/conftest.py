@@ -48,7 +48,7 @@ def filter_console_errors(errors):
 
 
 # Ueberschreitet die Suite das Zeitlimit des CI-Jobs, bricht GitHub sie ab,
-# bevor pytest den JUnit-Bericht schreibt (Nachtlaeufe 2026-10-25). Dieses
+# bevor pytest den JUnit-Bericht schreibt. Dieses
 # Protokoll entsteht waehrend des Laufs und nennt danach den Test, der noch
 # lief, und die langsamen davor (scripts/ci_annotate_failures.py).
 PROGRESS_LOG = os.environ.get("E2E_PROGRESS_LOG")
@@ -163,9 +163,9 @@ def context(browser):
 
     ctx.route("**/static/firebase.js*", fulfill_firebase_stub)
     ctx.route("**/static/dist/firebase.*.js", fulfill_firebase_stub)
-    # Diese Suiten pruefen den Compare-Pfad (Consensus laeuft seit 2026-10-25
-    # nur noch auf dem Server); Agent ist seit 2026-10-02 der Default und hat
-    # eigene Dateien (test_agent_*). Einmal pro Tab setzen, damit ein Test,
+    # Diese Suiten pruefen den Compare-Pfad (Consensus laeuft nur noch auf
+    # dem Server); Agent ist der Default und hat eigene Dateien
+    # (test_agent_*). Einmal pro Tab setzen, damit ein Test,
     # der den Modus wechselt und neu laedt, seine Wahl behaelt.
     ctx.add_init_script(
         "if (!sessionStorage.getItem('e2eRunModeSeeded')) {"

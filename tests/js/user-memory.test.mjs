@@ -131,7 +131,7 @@ describe("memory switch", () => {
 });
 
 /**
- * R12: a stale editor (second tab, or Memory changed by Remember/Correct)
+ * A stale editor (second tab, or Memory changed by Remember/Correct)
  * gets 409 from the server. The draft must survive, and the user chooses
  * between loading the newer Memory and keeping the draft deliberately.
  */
@@ -150,8 +150,8 @@ describe("memory save conflicts", () => {
               return {
                 ok: false,
                 status: 409,
-                // Production envelope: main.py lays the detail flat (since
-                // Zweitprüfung 2); older servers nested it under "error".
+                // Production envelope: main.py lays the detail flat; older
+                // servers nested it under "error".
                 json: async () => (flat ? {
                   error: "Memory changed in another tab or through Remember/Correct memory. Your draft was not saved.",
                   code: "revision_conflict",
@@ -229,7 +229,7 @@ describe("memory save conflicts", () => {
     expect(ctx.server.profile.role).toBe("My unsaved draft");
   });
 
-  // Bug hunt 2026-10-24: "Keep my draft" moved the revision for everything,
+  // "Keep my draft" moved the revision for everything,
   // so a switch afterwards sent the OLD saved texts with the NEW revision and
   // silently replaced the newer Memory, and the draft was never saved.
   it("lets only Save use the kept draft's revision, never a switch", async () => {

@@ -1,6 +1,6 @@
 """The agent's work log (agent_work_log.py, docs/agent-work-log.md): written
-live by the app in every chat run of the agent (since 2026-10-31; before, in
-audit mode only), what the agent sees and does, never the reviewers; saved in
+live by the app in every chat run of the agent, what the agent sees and
+does, never the reviewers; saved in
 order, long content in the object store; deleted with the chat and after its
 retention."""
 from datetime import datetime, timedelta, timezone
@@ -202,8 +202,8 @@ def test_the_runs_end_waits_for_the_log_at_most_its_limit(caplog):
 
 
 def test_the_journal_and_the_log_wait_at_most_fifteen_seconds_together(store, monkeypatch):
-    """A-R3 (2026-10-29): the journal had no limit and the work log alone 20 s;
-    the run's end and finish_run waited for both."""
+    """A-R3: the run's end and finish_run wait for the journal and the work
+    log together at most CLOSE_WAIT_SECONDS."""
     from app.services import agent_delegation
     assert agent_delegation.CLOSE_WAIT_SECONDS == 15
     monkeypatch.setattr(agent_delegation, "CLOSE_WAIT_SECONDS", 1)
@@ -253,7 +253,7 @@ def test_an_audit_turn_logs_what_the_agent_sees_and_does_but_not_its_reviewers(s
     assert (step["actor"], step["step"], body["status"], body["text"]) == ("agent", "completion:0", "succeeded", ANSWER)
     assert body["sources"] == [{"url": "https://www.toureiffel.paris/en", "title": "Official site"}]
     apps = [e["name"] for e in entries if e["kind"] == "app"]
-    # The agent's own search no longer locks memory (since 2026-11-02).
+    # The agent's own search does not lock memory.
     assert apps == ["answer_fixed"]
     # The reviewers (both comparison models) are not the agent's work.
     assert {e["actor"] for e in entries} == {"agent", "app"}
@@ -307,7 +307,7 @@ def test_tool_results_are_logged_for_the_agent_but_not_for_the_apps_own_review(s
 # --- Reading, deleting, retention ---------------------------------------------------
 
 def test_every_account_reads_the_log_of_its_own_turns_only(api, monkeypatch):
-    """Every turn writes one since the Agent's one mode (2026-10-31): its
+    """Every turn writes one: its
     owner reads it whatever the tier, another account finds nothing."""
     from app.api.routers import agent as agent_router
     client, store, _ = api
@@ -425,11 +425,11 @@ def test_retention_removes_logs_past_their_expiry_and_keeps_the_others(monkeypat
     assert list(objects.items) == [f"work-log/{UID}/{new_chat}/{new_turn['id']}/000001"]
 
 
-# --- Chunks (since 2026-11-01) ------------------------------------------------
+# --- Chunks -------------------------------------------------------------------
 
 def test_entries_within_the_flush_window_are_saved_together():
     """A step brings several entries one after another: they go out as one
-    write, not one each (687 writes on a day of 15 messages before)."""
+    write, not one each (that made 687 writes on a day of 15 messages)."""
     store = LogStore()
     log = work_log(store, flush_seconds=0.3)
     for index in range(4):
@@ -456,7 +456,7 @@ def test_a_chunk_stays_within_a_documents_size():
 def test_the_reader_takes_chunks_and_single_entries_alike(api, store):
     """A turn written in chunks (work_log_chunks) pages after any entry,
     also one in the middle of a chunk, a few chunks at a time; a turn
-    written before 2026-11-01 (one document per entry) reads as before."""
+    written before 2026-11-01 (one document per entry) still reads."""
     client, store, _ = api
     chat_id, turn = pending(store)
     store._turn_ref(UID, chat_id, turn["id"]).update({"work_log_chunks": True})
@@ -490,8 +490,8 @@ def test_the_reader_takes_chunks_and_single_entries_alike(api, store):
 
 
 def test_a_reader_that_saw_the_turn_before_its_first_chunk_unfolds_it(store, monkeypatch):
-    """Bug hunt 2026-11-02: the turn read without work_log_chunks, the chunks
-    saved before the query ran: a chunk came back as one entry."""
+    """A turn read without work_log_chunks, its chunks saved before the
+    query runs: a chunk does not come back as one entry."""
     chat_id, turn = pending(store)
     log = store._turn_ref(UID, chat_id, turn["id"]).collection("work_log")
     log.document("000001").set({"seq": 1, "last_seq": 3, "entries": [

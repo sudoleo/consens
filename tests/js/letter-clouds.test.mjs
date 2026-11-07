@@ -181,7 +181,7 @@ describe("letter clouds", () => {
     expect(app.document.querySelector(".letter-clouds")).toBeNull();
   });
 
-  // Apple audit D11: an Android keyboard or a turned phone shuffled every
+  // An Android keyboard or a turned phone shuffled every
   // glyph at once, and the hidden layer kept repainting and its ~30 MB of
   // canvas behind every chat.
   function resizeTo(app, width, height) {
@@ -220,7 +220,7 @@ describe("letter clouds", () => {
     expect(app.state()).toMatchObject({ active: true, running: true });
   });
 
-  // Apple audit G16: capped at 2x, the glyphs were scaled up 1.5 times on a
+  // Capped at 2x, the glyphs were scaled up 1.5 times on a
   // 3x iPhone and looked softer than the text in front of them. The fog stays
   // coarse at every density.
   it("draws the glyphs at the full density of a 3x screen and keeps the fog coarse", () => {

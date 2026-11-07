@@ -1,6 +1,6 @@
-"""What the independent review of 2026-11-01 found in the reviewers setting
-and the temporary chats, each as it must hold now: an unreviewed answer has
-no "Reviewed the answer" step and may still close after paid work, the
+"""What must hold in the reviewers setting and the temporary chats: an
+unreviewed answer has no "Reviewed the answer" step and may still close after
+paid work, the
 "workspace" reviewers start once the workspace opened with its rules (never
 for ask_user alone), the comparison result names no reviewers that do not
 exist; a temporary chat survives the chat cap's reclaim, its deadline keeps

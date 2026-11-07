@@ -1,11 +1,10 @@
-"""The next message while the reviewers review (since 2026-11-01).
+"""The next message while the reviewers review.
 
-Until then a chat stayed reserved for a turn until its reviewers were done,
-about 10 s after its answer stood: a message sent in between waited in the
-browser ("Send after this response"). Now the run hands the chat over once
-its answer is fixed (agent_runs.hand_over): the next message starts at once,
-reads the fixed answer, and the reviewers' marks still land on the turn they
-review.
+The run hands the chat over once its answer is fixed (agent_runs.hand_over):
+the next message starts at once, reads the fixed answer, and the reviewers'
+marks still land on the turn they review. Kept until its reviewers were done,
+about 10 s after its answer stood, the chat would make a message sent in
+between wait in the browser ("Send after this response").
 """
 import json
 from datetime import datetime, timedelta, timezone
@@ -78,8 +77,8 @@ def test_without_a_hand_over_the_chat_stays_reserved_until_the_end(store, monkey
 
 def test_the_next_message_s_sweep_leaves_a_long_turn_under_review_alone(store, monkeypatch):  # noqa: F811
     """A two-hour workspace turn is older than the abandoned-turn cutoff
-    when its answer stands; the next message's sweep came right after the
-    hand-over and failed it while its reviewers worked (review 2026-11-01)."""
+    when its answer stands; the next message's sweep right after the
+    hand-over must not fail it while its reviewers work."""
     script = Audit()
     loop = audit_loop(store, script)
     handed_over = AgentRunStore.hand_over

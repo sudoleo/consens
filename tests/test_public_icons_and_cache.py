@@ -1,4 +1,4 @@
-"""Public pages look the same every time and come quickly (Apple audit I7, I12, I13).
+"""Public pages look the same every time and come quickly.
 
 Cached favicons are never throttled, only sharp icons are kept, and rendered
 Topic pages are kept for a short while. No request leaves the process.

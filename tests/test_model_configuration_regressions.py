@@ -96,7 +96,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         )
 
     def test_grok_43_is_one_free_model_whose_reasoning_the_switch_sets(self):
-        """Seit 2026-10-11 kein "Grok 4.3 · No reasoning"/"· Reasoning" mehr:
+        """Kein "Grok 4.3 · No reasoning"/"· Reasoning":
         die Stufe ist eine Einstellung, kein eigenes Modell. Alte IDs migrieren."""
         for legacy in (cfg.GROK_NO_REASONING_MODEL, "grok-4.20-non-reasoning", "grok-4.20"):
             with self.subTest(model=legacy):
@@ -126,12 +126,12 @@ class ExistingModelFlowTests(unittest.TestCase):
             max_output_tokens=123,
         )
         self.assertEqual(reasoning_request["payload"]["reasoning"], {"effort": cfg.REASONING_EFFORT_ON})
-        # The Pro alias moved to the current Pro Grok.
+        # The Pro alias is the current Pro Grok.
         self.assertEqual(cfg.PROVIDERS["grok"].pro_model, "grok-4.7")
         self.assertIn("grok-4.7", cfg.PREMIUM_MODELS)
 
     def test_deepseek_v4_flash_migrates_to_v41_flash(self):
-        """Seit 2026-10-15: V4 Flash war als Vergleichsantwort in Prod dreimal
+        """V4 Flash war als Vergleichsantwort in Prod (gemessen 2026-10-15) dreimal
         so langsam wie V4.1 Flash. Gespeicherte Auswahlen, Presets und
         Admin-Listen mit der alten ID laufen auf V4.1 Flash."""
         legacy, current = "deepseek-v4-flash", "deepseek-v4.1-flash"
@@ -160,7 +160,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(normalized["defaults"]["deepseek"], current)
 
     def test_deepseek_v4_pro_migrates_to_v41_flash_1017(self):
-        """Seit 2026-10-29: V4.1 Flash 1017 liegt bei Artificial Analysis klar
+        """V4.1 Flash 1017 liegt bei Artificial Analysis (Stand 2026-10-29) klar
         vor V4 Pro und kostet weniger. Prod speichert V4 Pro in High Quality,
         in der Familienliste und als Premium; alles laeuft ohne Firestore-Write
         auf 1017. Daily und Open Models bleiben bei V4.1 Flash."""
@@ -197,7 +197,7 @@ class ExistingModelFlowTests(unittest.TestCase):
                              cfg.DEEPSEEK_FLASH_MODEL)
 
     def test_kimi_k3_migrates_to_k31_pro(self):
-        """Seit 2026-10-25: K3.1 Pro kostet auf der Moonshot-Route 2/10 $
+        """K3.1 Pro kostet auf der Moonshot-Route (Stand 2026-10-25) 2/10 $
         statt 3/15 $ und suchte mit "low" jedes Mal. Gespeicherte Auswahlen
         und die Prod-Liste mit K3 laufen auf K3.1 Pro, das Premium bleibt."""
         legacy, current = "kimi-k3", "kimi-k3.1-pro"
@@ -254,8 +254,8 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertNotIn("pixtral-large-latest", cfg.PROVIDERS["mistral"].models)
 
     def test_no_engine_is_forced_into_the_consensus_list_for_deep_think(self):
-        # Deep Think (removed 2026-10-02) used to force its own engine into
-        # every Consensus list; only preset engines are kept now.
+        # No Deep Think engine is forced into the Consensus list; only preset
+        # engines are kept.
         self.assertFalse(hasattr(cfg, "DEEP_THINK_CONSENSUS_MODEL"))
         self.assertFalse(hasattr(cfg, "apply_deep_think_model"))
         self.assertFalse(hasattr(cfg, "DEEP_THINK_PROMPT"))
@@ -274,11 +274,11 @@ class ExistingModelFlowTests(unittest.TestCase):
             self.assertLessEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
             self.assertTrue(preset["consensus_model"])
         # Daily: two fast reviewers from two labs other than the default chat
-        # model's (2026-11-01, before that also Luna).
+        # model's.
         self.assertEqual(presets["fast"]["models"], {
             "anthropic": cfg.DEFAULT_ANTHROPIC_MODEL, "deepseek": cfg.DEEPSEEK_FLASH_MODEL,
         })
-        # Open Models (ID balanced): only open-weight models, same writer as Daily.
+        # Open Models (ID balanced): only open-weight models, Luna writes the consensus.
         self.assertEqual(presets["balanced"]["label"], "Open Models")
         self.assertEqual(presets["balanced"]["models"], {
             "qwen": cfg.QWEN_BASE_MODEL, "deepseek": cfg.DEEPSEEK_FLASH_MODEL,
@@ -289,7 +289,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(cfg.DEFAULT_CONSENSUS_PRESET, "fast")
         # The API keeps three answers: one failed model must not fail its run.
         self.assertEqual(cfg.API_CONSENSUS_PRESET, "balanced")
-        # High Quality: three strong reviewers from three labs (2026-11-01, six before).
+        # High Quality: three strong reviewers from three labs.
         self.assertEqual(presets["thorough"]["models"], {
             "anthropic": cfg.ANTHROPIC_PRO_MODEL, "gemini": cfg.GEMINI_PRO_MODEL, "grok": cfg.GROK_PRO_MODEL,
         })
@@ -298,7 +298,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertTrue(presets["thorough"]["pro_only"])
 
     def test_saved_open_models_trade_gpt_oss_for_qwen(self):
-        """Prod still stores Open Models with gpt-oss-120b (until 2026-10-22).
+        """Prod still stores Open Models with gpt-oss-120b.
         The family leaves the preset and Qwen takes its place, without a
         write to Firestore; an OpenAI model chosen on purpose stays."""
         stored = {
@@ -358,7 +358,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             cfg.OPENAI_LUNA_MODEL,
         )
         self.assertIn(cfg.OPENAI_LUNA_MODEL, normalized["consensus"])
-        # Fehlende Basis-Pro-Modelle werden nicht mehr heimlich in die
+        # Fehlende Basis-Pro-Modelle werden nicht heimlich in die
         # Providerlisten/DB eingefuegt. Legacy-Daten fallen auf bereits
         # konfigurierte Modelle zurueck.
         thorough_answers = normalized["preset_models"]["thorough"]["answers"]
@@ -393,7 +393,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         all_keys = {"OpenRouter": "key"}
         try:
             # Auto prefers OpenAI for every engine, its own included
-            # (no cross-family constraint since 2026-10-04).
+            # (no cross-family constraint).
             cfg.apply_judge_families({})
             for provider in cfg.PROVIDERS:
                 families = consensus_engine._judge_families(provider, all_keys, count=len(cfg.PROVIDERS))
@@ -481,8 +481,7 @@ class ExistingModelFlowTests(unittest.TestCase):
     def test_judge_engines_resolve_virtual_ids_to_their_api_model(self):
         """Judge-IDs sind interne IDs; der Request muss das API-Modell tragen.
 
-        claude-haiku-4-5 heisst bei OpenRouter claude-haiku-4.5 (frueher auch
-        grok-4.3-no-reasoning). Wurde die interne ID ungeprueft als api_model
+        claude-haiku-4-5 heisst bei OpenRouter claude-haiku-4.5. Wurde die interne ID ungeprueft als api_model
         durchgereicht, quittierte der Provider das mit HTTP 400 "Model not
         found" und der komplette Differences-Schritt (und damit ein
         Publisher-Run) schlug fehl.
@@ -517,7 +516,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             cfg.apply_pro_judge_models(pro_snapshot)
 
     def test_grok_labels_name_the_model_not_a_reasoning_setting(self):
-        """"Grok 4.3 · No reasoning" neben dem Reasoning-Menue (Max, 2026-10-11)."""
+        """"Grok 4.3 · No reasoning" neben dem Reasoning-Menue (Max)."""
         for model_id in ("grok-4.3", cfg.GROK_NO_REASONING_MODEL, "grok-4.20-non-reasoning"):
             with self.subTest(model=model_id):
                 self.assertEqual(cfg.get_model_label(model_id), "Grok 4.3")
@@ -697,7 +696,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertNotIn("DEEP_THINK_CONSENSUS_MODEL", module)
         # One Reasoning switch for every tier, no Pro badge on its menu row.
         self.assertIn('id="reasoningToggle"', template)
-        # No button of its own in the row since 2026-10-31: the level stands
+        # No button of its own in the row: the level stands
         # beside the chat model in its chip, the switch in the (+) menu.
         self.assertNotIn('id="composerReasoningToggle"', template)
         row = template[template.index('for="reasoningToggle"'):]
@@ -707,10 +706,10 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertNotIn('showProFeatureModal("Deep Think")', module)
 
     def test_saved_preferences_are_not_overwritten_when_present(self):
-        # applyTierDefaultModels lebt seit dem index.html-Refactor in
-        # static/js/model-picker.js. Der Guard (gespeicherte Auswahl wird nicht
-        # von Tier-Defaults ueberschrieben) muss dort erhalten bleiben; die
-        # Auswahl ist seit 2026-10-12 die Kontoeinstellung compare_models.
+        # applyTierDefaultModels lebt in static/js/model-picker.js. Der Guard
+        # (gespeicherte Auswahl wird nicht von Tier-Defaults ueberschrieben)
+        # muss dort erhalten bleiben; die Auswahl ist die Kontoeinstellung
+        # compare_models.
         module = (ROOT / "static" / "js" / "model-picker.js").read_text(encoding="utf-8")
         apply_defaults = module.split("function applyTierDefaultModels", 1)[1].split("\n  }\n", 1)[0]
         self.assertIn("if (storedFamily(pref).model !== undefined) return;", apply_defaults)

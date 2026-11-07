@@ -28,8 +28,8 @@ def test_a_library_error_names_the_line_of_the_test_that_waited(tmp_path, capsys
 
 
 def test_a_suite_cut_off_by_the_time_limit_names_the_test_still_running(tmp_path, capsys):
-    # The job's time limit ends pytest before its JUnit report (nightly runs
-    # 2026-10-25); the progress log of tests/e2e/conftest.py still names it.
+    # The job's time limit ends pytest before its JUnit report; the progress
+    # log of tests/e2e/conftest.py still names it.
     progress = tmp_path / "browser-progress.log"
     progress.write_text(
         "100.0 start tests/e2e/test_a.py::test_quick\n"

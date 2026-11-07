@@ -59,7 +59,7 @@ class Completion(AgentCompletion):
         owner = re.search(r'journey-[a-f0-9]+', content)
         uid = owner.group() if owner else 'unknown'
         calls.append({'uid': uid, 'model': model.model, 'step': self.step_id})
-        # The account counts micro-euros since 2026-10-31. Like OpenRouter's
+        # The account counts micro-euros. Like OpenRouter's
         # usage.cost, every call reports its price: 0.0001725 $ = 150 µ€, so
         # journeys count calls without depending on catalog prices.
         self.usage = measured_usage({'prompt_tokens': 100, 'completion_tokens': 50, 'cost': '0.0001725'}, model)

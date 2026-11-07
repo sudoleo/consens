@@ -1,4 +1,4 @@
-"""Every source behind a pill can be opened (Apple audit F6): on a phone the
+"""Every source behind a pill can be opened: on a phone the
 first tap shows them all as a card, with a mouse a grouped pill lists them at
 the pill, a single one still opens its source."""
 import re
@@ -67,7 +67,7 @@ def test_a_tap_on_a_phone_lists_every_source_of_the_pill(browser, phase4_server)
 def _reader_with_sources(page):
     """The answer reader open on a model answer with a grouped pill, behind
     "Compare answers" of a saved Consensus chat (the browser runs no
-    Consensus since 2026-10-25)."""
+    Consensus)."""
     sources = [{'id': 'S1', 'title': 'UCI regulations', 'url': 'https://www.uci.org/rules'},
                {'id': 'S2', 'title': 'Analysis', 'url': 'https://example.org/analysis'},
                {'id': 'S3', 'title': 'Race report', 'url': 'https://news.example.com/report'}]
@@ -86,7 +86,7 @@ LOCKED = "getComputedStyle(document.documentElement).overflowY === 'hidden'"
 
 
 def test_the_list_in_the_reader_goes_with_the_reader(browser, phase4_server):
-    # Review 2 N1: the list hung in the reader's <dialog>; when the reader
+    # The list hung in the reader's <dialog>; when the reader
     # closed under it (Android's back, a layout change), it stayed open out
     # of sight and its backdrop held the page still for good.
     context, page = _real_firebase_page(browser, phase4_server, has_touch=True)

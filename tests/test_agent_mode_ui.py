@@ -36,7 +36,7 @@ def test_compare_mode_is_a_direct_six_answer_flow():
     input_css = (ROOT / "static" / "css" / "components-input.css").read_text(encoding="utf-8")
 
     # config.agentMode/autoConsensus are the persisted run fields "the
-    # consensus pipeline ran"; the browser's own run is Compare (2026-10-25).
+    # consensus pipeline ran"; the browser's own run is Compare.
     assert "      agentMode: false,\n      autoConsensus: false," in query
     assert "runMode.pipeline" not in query
     assert "executeConsensusRun" not in query
@@ -48,7 +48,7 @@ def test_compare_mode_is_a_direct_six_answer_flow():
     assert 'document.body.classList.add("direct-comparison-active")' in core
     # Die Frage bleibt stehen: der Direktvergleich fuehrt keinen Thread, aber
     # ohne sie steht auf dem Schirm nur noch die Antwort auf etwas, das
-    # nirgends mehr geschrieben steht (User-Befund 2026-08-31).
+    # nirgends mehr geschrieben steht.
     enter_view = core.split("function enterDirectComparisonView()", 1)[1].split("}", 1)[0]
     assert 'setThreadQuestion("")' not in enter_view
     assert 'followup?.reset?.();' in view
@@ -64,10 +64,10 @@ def test_compare_mode_is_a_direct_six_answer_flow():
 
 
 def test_one_mode_selector_replaces_every_old_switch():
-    """Agent / Compare is ONE choice with one owner (run-mode.js).
-    Before 2026-10 six controls and two storage keys decided it: a composer
-    chip, a (+) menu switch, a Settings switch, a Pro-only dropdown, a
-    read-only Auto Consensus mirror and a keyboard helper."""
+    """Agent / Compare is ONE choice with one owner (run-mode.js), not six
+    controls and two storage keys: a composer chip, a (+) menu switch, a
+    Settings switch, a Pro-only dropdown, a read-only Auto Consensus mirror
+    and a keyboard helper."""
     template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
     bundles = (ROOT / "static" / "js" / "bundles.json").read_text(encoding="utf-8")
     # run-mode.js itself reads the legacy key exactly once, to migrate it.
@@ -91,8 +91,7 @@ def test_the_switch_shows_the_setting_not_the_run_on_screen():
     """Der Schalter sagt, was der NAECHSTE Lauf tut. Solange er den
     projizierten Lauf spiegelte, sprang er nach jeder Antwort in die alte
     Stellung zurueck: die Einstellung war umgestellt, zu sehen war davon
-    nichts — erst eine neue Sitzung zeigte die Wirkung (User-Befund
-    2026-08-31). Die Body-Klassen beschreiben weiterhin den Lauf auf dem
+    nichts — erst eine neue Sitzung zeigte die Wirkung. Die Body-Klassen beschreiben weiterhin den Lauf auf dem
     Schirm, sonst risse das Umlegen ein fertiges Ergebnis ein."""
     script = (ROOT / "static" / "js" / "agent-mode.js").read_text(encoding="utf-8")
     ui = script.split("function updateAgentModeUI()", 1)[1]

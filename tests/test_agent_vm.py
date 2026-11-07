@@ -1,6 +1,6 @@
-"""Agent VM (AgentPreferences.vm): since 2026-10-27 the account's
-workspace, a workbench VM for all of its chats (agent_workspace.py) and a
-browser VM next to it, created at the first VM call and reused across
+"""Agent VM (AgentPreferences.vm): the account's
+workspace, one VM for all of its chats with the browser on it
+(agent_workspace.py), created at the first VM call and reused across
 messages and chats, each chat in its own folder, with shell commands and
 files as the agent's own user (agent_vm_tools.py) over a small provider
 interface (agent_vm.py). These tests never call Sprites: the loop runs
@@ -32,8 +32,8 @@ from test_agent_runs import AUTH, UID, api, pending, store  # noqa: F401  (fixtu
 
 @pytest.fixture(autouse=True)
 def _admin_allowance(monkeypatch):
-    """The VM is for admins, whose daily account (5M tokens) holds the
-    agent's search rounds; the suites' 250k (conftest) would not."""
+    """The VM is for admins, whose daily account (5,000,000 micro-euros)
+    holds the agent's search rounds; the suites' 250,000 (conftest) would not."""
     from app.services import agent_budget_config
     monkeypatch.setitem(agent_budget_config.DEFAULT_TIER_LIMITS, "pro", 5_000_000)
 
@@ -53,7 +53,7 @@ class FakeVM:
     ``server`` collects the commands the server ran as the provider's user,
     ``server_files`` the paths it read or wrote that way (every other file
     operation is the agent's, agent_vm.agent_argv). ``browser`` answers the
-    browser VM's helper: request -> answer (agent_browser.py); the server's
+    browser's helper: request -> answer (agent_browser.py); the server's
     own start of the browser (action warm) is in ``warmed``, not ``requests``."""
 
     def __init__(self, clock=None):
@@ -135,7 +135,7 @@ class _FakeBackend(VMBackend):
         return None
 
     def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
-        """The browser VM's helper (agent_browser.py) runs this way, and the
+        """The browser's helper (agent_browser.py) runs this way, and the
         keys the user gives the agent (agent_secrets.py): saved to and read
         from the workbench's files, as the agent's user. The chat's folder,
         marker, keys and notes in one command (agent_workspace.open_chat)
@@ -371,7 +371,7 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     folder = chat_path(loop.chat_id)
     assert folder == f"/home/agent/chats/question-one-{loop.chat_id[:6]}"
     # The account and the chat name the workspace before the provider creates it; it reaches the open web
-    # (since 2026-11-04, with the browser on it), never Fly.io's private network.
+    # (with the browser on it), never Fly.io's private network.
     chat = store._chat_ref(UID, loop.chat_id).get().to_dict()
     assert chat["agent_vm"]["name"] == NAME and chat["agent_vm"]["provider"] == "fake"
     assert chat["agent_vm"]["workspace"] is True
@@ -411,7 +411,7 @@ def test_the_agent_runs_commands_in_its_vm_live_and_the_turn_keeps_the_summary(s
     taken = datetime.fromisoformat(turn["agent_vm"].pop("checkpoint_at"))
     assert taken.tzinfo is not None
     # How long each part of the start took (runtime audit 2026-10-30, I5;
-    # the VM's rules come with its tools since 2026-11-04).
+    # the VM's rules come with its tools).
     assert set(turn["agent_vm"].pop("phases")) == {"lease", "tools", "chat", "checkpoint"}
     assert turn["agent_vm"] == {"provider": "fake", "name": NAME, "checkpoint": "v1", "calls": 3, "commands": 1,
                                 "seconds": 3.0}
@@ -493,9 +493,9 @@ def test_the_vm_is_created_once_and_each_message_takes_its_own_checkpoint(store,
 
 def test_a_checkpoint_counts_from_when_it_began(store, fake_vm, monkeypatch):
     """A chat deleted while the message's checkpoint is taken (up to 120 s)
-    raises the restore floor. Stamped when it was done, the checkpoint counted
-    as newer than the floor and could bring the deleted chat's folder back
-    (bug hunt 2026-10-30); stamped when it began, it never can."""
+    raises the restore floor. Stamped when it was done, the checkpoint would
+    count as newer than the floor and could bring the deleted chat's folder
+    back; stamped when it began, it never can."""
     clock = {"now": "2026-11-02T08:00:00+00:00"}
     monkeypatch.setattr(agent_vm_tools, "_now", lambda: clock["now"])
     plain = _FakeBackend.checkpoint
@@ -609,9 +609,9 @@ def test_the_messages_attachments_are_in_the_input_folder_at_first_use(store, fa
 
 
 def test_an_unreachable_vm_costs_its_tools_never_the_answer(store, fake_vm):
-    """A provider failure costs the call it happened in; three in a row turn
-    the workspace off for the message (runtime audit 2026-10-30, A1: before,
-    the first one did, also a waking VM's broken handshake)."""
+    """A provider failure costs the call it happened in, also a waking VM's
+    broken handshake; three in a row, not the first one, turn the workspace
+    off for the message (runtime audit 2026-10-30, A1)."""
     fake_vm.fail.add("ensure")
     # Two calls a step: three failed steps in a row would end the run (TURN_INVALID_LIMIT).
     script = Agent([[("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})],
@@ -721,10 +721,10 @@ def test_a_start_waits_for_a_probe_that_does_not_reach_the_vm_only_briefly(fake_
 
 
 def test_a_stuck_workspace_goes_back_to_its_newest_checkpoint_and_the_next_message_is_told(store, fake_vm):
-    """Prod 2026-10-29 to 2026-11-06: a stuck sprite stayed so until Max asked
-    for a restore by hand, which started it at once. The record names the
-    newest checkpoint (record_checkpoint), and a stuck workspace goes back to
-    it by itself (agent_workspace.heal); the chat's next message hears why."""
+    """A stuck sprite stays so until a restore, which starts it at once. The
+    record names the newest checkpoint (record_checkpoint), and a stuck
+    workspace goes back to it by itself (agent_workspace.heal); the chat's
+    next message hears why."""
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     list(loop.run())
     turn_vm = store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_vm"]
@@ -890,7 +890,7 @@ def test_a_read_that_breaks_off_is_tried_once_more(store, fake_vm):
 
 @pytest.mark.parametrize("operation", ["ensure", "exec"])
 def test_an_unexpected_vm_failure_also_costs_only_the_tools(store, fake_vm, monkeypatch, operation):
-    """A broken install (live 2026-10-25: websockets missing in the server's
+    """A broken install (live: websockets missing in the server's
     Python) or a bug is no provider refusal, yet it must not fail the answer."""
     reported = []
     monkeypatch.setattr(agent_vm_tools, "report_server_exception",
@@ -946,7 +946,7 @@ def test_installing_never_removes_a_package(store, fake_vm):
     assert installed["packages"] == ["g++", "python3.12-venv"] and installed["exit_code"] == 0
     [command] = [c for c in fake_vm.server if "apt-get install" in c]
     assert command.endswith("apt-get install -y -q --no-remove -- g++ python3.12-venv")
-    # Since 2026-11-04 the user's browser runs on the same computer: no
+    # The user's browser runs on the same computer: no
     # removal through a conflict either (-y would agree to it), and each
     # name only as a package apt knows, never as a pattern (e.e).
     assert "--no-remove" in command
@@ -958,8 +958,8 @@ def test_installing_never_removes_a_package(store, fake_vm):
 def test_an_install_cut_off_before_is_finished_before_the_next_one(store, fake_vm):
     """An install its time limit or Stop ended mid-dpkg leaves dpkg half
     done, and every later apt-get refuses until dpkg --configure -a ran,
-    which the agent cannot run without sudo (as the browser and office VMs'
-    setups do it for themselves)."""
+    which the agent cannot run without sudo (as the browser's setup and the
+    office VM's do it for themselves)."""
     loop = vm_loop(store, Agent([[("vm_install_packages", {"packages": ["jq"]})]]))
     list(loop.run())
     [command] = [c for c in fake_vm.server if "apt-get install" in c]
@@ -1042,8 +1042,8 @@ def test_reading_a_missing_or_long_file(store, fake_vm):
 
 def test_lines_are_numbered_as_the_shell_numbers_them(store, fake_vm):
     """Only \\n ends a line, as for sed -n, grep -n and vm_edit_file's
-    snippet: a form feed or U+2028 inside a line used to start a new one, and
-    every line number after it was off. Windows line endings show as \\n."""
+    snippet: a form feed or U+2028 inside a line would start a new one, and
+    every line number after it would be off. Windows line endings show as \\n."""
     script = Agent([[("vm_read_file", {"path": "page.py"})], [("vm_read_file", {"path": "page.py", "offset": 3})]])
     loop = vm_loop(store, script)
     D = chat_path(loop.chat_id)
@@ -1056,7 +1056,7 @@ def test_lines_are_numbered_as_the_shell_numbers_them(store, fake_vm):
 
 
 def test_an_edit_replaces_exact_text_and_shows_the_changed_lines(store, fake_vm):
-    """vm_edit_file (2026-10-26), like Claude Code's Edit: the agent changes a
+    """vm_edit_file, like Claude Code's Edit: the agent changes a
     file without writing it whole again, and sees the changed lines."""
     source = "".join(f"line {n}\n" for n in range(1, 11)).replace("line 5\n", "total = a - b\n")
     script = Agent([[("vm_edit_file", {"path": "calc.py", "old_string": "total = a - b",
@@ -1068,7 +1068,7 @@ def test_an_edit_replaces_exact_text_and_shows_the_changed_lines(store, fake_vm)
     files[f"{D}/calc.py"] = source.encode()
     events = list(loop.run())
     assert "vm_edit_file" in script.offered[0]
-    # What it does stands in its description, once (since 2026-10-28 not also in the prompt).
+    # What it does stands in its description, once (not also in the prompt).
     assert "replacing exact text" in loop.registry.tools["vm_edit_file"].description
     assert "vm_edit_file" not in prompt_defaults.AGENT_VM_PROMPT
     assert files[f"{D}/calc.py"].decode() == source.replace("total = a - b\n", "total = a + b\nprint(total)\n")
@@ -1118,8 +1118,8 @@ def test_a_reviewers_halt_ends_the_running_command_as_if_the_user_stopped_it(sto
 
 def test_a_command_the_users_stop_ends_counts_its_time(store, fake_vm, monkeypatch):
     """Stop (or the response's time limit) mid vm_exec: the command ran in the
-    VM until then, but its seconds were never booked, up to 300 per stop
-    and past the day's VM time (bug hunt 2026-10-27)."""
+    VM until then, and its seconds are booked; unbooked, they would be up to
+    300 per stop and past the day's VM time."""
     loop = vm_loop(store, Agent())
     tools, cancellation = loop.vm_tools, ProviderCancellation()
     tools.session.clock = fake_vm.clock
@@ -1259,8 +1259,8 @@ def test_an_edit_must_find_its_text_exactly_once_or_replace_all(store, fake_vm):
     done = edit(old_string="= 1", new_string="= 2", replace_all=True)
     assert done["replacements"] == 2 and files[f"{D}/a.txt"] == b"x = 2\r\ny = 2\r\n\xff\xfe raw\r\n"
     # Lines as vm_read_file shows them (joined by \n) find their text in a
-    # file with Windows line endings, and what replaces it keeps them: before,
-    # every edit over more than one line of such a file was "not found".
+    # file with Windows line endings, and what replaces it keeps them: else
+    # every edit over more than one line of such a file would be "not found".
     files[f"{D}/c.py"] = b"def f():\r\n    return 1\r\n\r\nprint(f())\r\n"
     done = edit(path="c.py", old_string="def f():\n    return 1", new_string="def f():\n    return 2\n# two")
     assert done["replacements"] == 1
@@ -1273,8 +1273,9 @@ def test_an_edit_must_find_its_text_exactly_once_or_replace_all(store, fake_vm):
 
 
 def test_a_line_longer_than_a_page_is_read_cut_and_reading_goes_on(store, fake_vm):
-    """One line over READ_CHARS (minified JSON) used to come back empty with
-    "read on with offset=<the same offset>": the agent read it again and again."""
+    """One line over READ_CHARS (minified JSON) comes back cut, not empty
+    with "read on with offset=<the same offset>", which the agent would read
+    again and again."""
     long_line = "x" * (agent_vm_tools.READ_CHARS + 500)
     script = Agent([[("vm_read_file", {"path": "data.json"})],
                     [("vm_read_file", {"path": "data.json", "offset": 2})]])
@@ -1293,7 +1294,7 @@ def test_a_line_longer_than_a_page_is_read_cut_and_reading_goes_on(store, fake_v
 
 
 def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, fake_vm, tmp_path, monkeypatch):
-    """vm_share_file (2026-10-26): the file goes into the chat's private store
+    """vm_share_file: the file goes into the chat's private store
     as the turn's ``vm_file``; a picture only by its bytes, never by its name."""
     from app.services.agent_files import AgentFiles, FileContext
     monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
@@ -1314,7 +1315,7 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
     chart, notes, again, fake, big, missing = results(loop)
     assert "vm_share_file" in script.offered[0]
     assert chart["shown_as"] == "picture" and chart["file"]["mime"] == "image/png" and chart["file"]["name"] == "chart.png"
-    # A picture is placed in the answer text by its ref (2026-10-31), like show_image's.
+    # A picture is placed in the answer text by its ref, like show_image's.
     assert chart["markdown"] == "![chart.png](picture:f1)" and "ref" not in chart["file"]
     assert "the app shows it there" in chart["note"] and "markdown" not in notes
     assert notes["shown_as"] == "download" and notes["file"]["name"] == "Results.txt"
@@ -1340,7 +1341,7 @@ def test_a_shared_file_reaches_the_user_under_the_answer_never_as_a_link(store, 
 
 
 def test_a_shared_office_file_brings_the_pdf_the_app_previews_it_by(store, fake_vm, tmp_path, monkeypatch):
-    """file-viewer.js (2026-11-01): a presentation, document or spreadsheet
+    """file-viewer.js: a presentation, document or spreadsheet
     the agent shares goes to the converter all accounts share
     (agent_office.py), and its PDF is stored beside it; one the agent
     rendered in this message is not converted again. A refusal, a failure
@@ -1417,8 +1418,8 @@ def test_a_share_without_the_answers_time_or_renders_goes_on_without_a_preview(s
 
 
 def test_a_command_in_a_refused_folder_still_shows_what_it_ran(store, fake_vm):
-    """Bug hunt 2026-10-26: a cwd with NUL made the activity fields fail, and
-    the event came without its command."""
+    """A cwd with NUL does not make the activity fields fail: the event
+    comes with its command."""
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls", "cwd": "a\x00b"})]]))
     events = list(loop.run())
     assert "NUL" in results(loop)[0]["error"]
@@ -1427,8 +1428,8 @@ def test_a_command_in_a_refused_folder_still_shows_what_it_ran(store, fake_vm):
 
 
 def test_a_message_keeps_only_its_newest_rendered_pdfs(store, fake_vm, monkeypatch):
-    """Bug hunt 2026-11-02: every render of a long run stayed in memory (up
-    to 10 MB each) until the message ended."""
+    """A long run's renders (up to 10 MB each) do not all stay in memory
+    until the message ends."""
     from app.services import agent_office
     monkeypatch.setattr(agent_office, "render", lambda data, extension, **kwargs: agent_office.Rendered(
         pdf=b"%PDF-1.7 " + data, overview=b"", pages=1))
@@ -1446,8 +1447,8 @@ def test_a_message_keeps_only_its_newest_rendered_pdfs(store, fake_vm, monkeypat
 
 
 def test_a_render_with_too_little_time_left_says_so_and_counts_no_render(store, fake_vm, monkeypatch):
-    """Bug hunt 2026-11-02: LibreOffice got 1 s, the agent read that the file
-    took too long, and the hour's renders counted it."""
+    """Else LibreOffice would get 1 s, the agent would read that the file
+    took too long, and the hour's renders would count it."""
     from app.core.rate_limit import api_uid_limiter
     from app.services import agent_office
     monkeypatch.setattr(agent_office, "render", lambda *args, **kwargs: pytest.fail("no conversion"))
@@ -1466,7 +1467,7 @@ def test_a_render_with_too_little_time_left_says_so_and_counts_no_render(store, 
 
 
 def test_the_days_vm_time_caps_commands_and_is_charged_when_the_message_ends(store, fake_vm, monkeypatch):
-    """agent_vm_time.py (2026-10-26, with Audit for Pro): a command never runs
+    """agent_vm_time.py: a command never runs
     past what is left today, a background process counts with its whole time
     limit, and a message charges its time once it ends."""
     from app.services import agent_vm_time
@@ -1488,8 +1489,7 @@ def test_the_days_vm_time_caps_commands_and_is_charged_when_the_message_ends(sto
     assert listing["exit_code"] == 0
     assert agent_vm_time.used(store.db, UID) == 70 + 20 + .5
     # Used up: the next message works on without commands. Files count
-    # nothing and go on (since 2026-10-31: before, every call of the
-    # workspace was refused, the browser's too).
+    # nothing and go on, and so does the browser.
     agent_vm_time.charge(store, UID, 20)
     script = Agent([[("vm_exec", {"command": "ls"})], [("vm_write_file", {"path": "notes.txt", "content": "a\n"})],
                     [("vm_read_file", {"path": "notes.txt"})]])
@@ -1504,8 +1504,8 @@ def test_the_days_vm_time_caps_commands_and_is_charged_when_the_message_ends(sto
 
 
 def test_a_command_stopped_by_the_days_vm_time_says_so(store, fake_vm, monkeypatch):
-    """Until 2026-10-31 a command cut at the day's VM time read as stopped at
-    its own limit: the agent tried again with a longer one."""
+    """A command cut at the day's VM time says so: read as stopped at its
+    own limit, it would make the agent try again with a longer one."""
     from app.services import agent_vm_time
     monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
     agent_vm_time.charge(store, UID, 70)
@@ -1521,9 +1521,8 @@ def test_a_command_stopped_by_the_days_vm_time_says_so(store, fake_vm, monkeypat
 
 # --- Admins only ------------------------------------------------------------------
 
-# The VM: admins only since the workspace's security audit (2026-10-27),
-# every account with AGENT_VM_ACCESS=all ("pro", its value before the one
-# mode of 2026-10-31, means the same). The route decides, never the page.
+# The VM: admins only, every account with AGENT_VM_ACCESS=all ("pro", an
+# older value, means the same). The route decides, never the page.
 @pytest.mark.parametrize("is_admin,access,vm", [
     (True, "", True), (False, "", False), (False, "all", True), (False, "pro", True), (False, "admins", False)])
 def test_only_an_allowed_account_gets_the_vm(api, monkeypatch, is_admin, access, vm):
@@ -1542,7 +1541,7 @@ def test_only_an_allowed_account_gets_the_vm(api, monkeypatch, is_admin, access,
     settings = store.get_turn(UID, chat_id, turn["id"])["agent_settings"]
     assert settings["agent_preferences"] == {"vm": "on" if vm else "off"}
     names = {tool["function"]["name"] for tool in calls[0].get("tools") or [] if tool.get("type") == "function"}
-    # The workspace on demand (since 2026-10-29): it opens with open_workspace.
+    # The workspace on demand: it opens with open_workspace.
     assert ("open_workspace" in names) is vm and "vm_exec" not in names
     assert (prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT in calls[0]["messages"][0]["content"]) is vm
     assert prompt_defaults.AGENT_VM_PROMPT not in calls[0]["messages"][0]["content"]
@@ -1552,10 +1551,9 @@ def test_only_an_allowed_account_gets_the_vm(api, monkeypatch, is_admin, access,
 
 # A server without a VM provider (no SPRITES_TOKEN): messages run without the
 # VM, and the agent is not told of one that answers every call with "not
-# available" (2026-10-26).
-# The settings promise the VM only with its time (agent-preferences.js
-# renderVmTime): an account whose messages run without VM gets none. Since
-# the one mode (2026-10-31) there is no audit access to report.
+# available".
+# The settings promise the VM only with its time (workspace-view.js
+# syncSettings): an account whose messages run without VM gets none.
 @pytest.mark.parametrize("tier,is_admin,access,shown", [
     ("pro", False, "", False), ("free", True, "", True), ("pro", False, "all", True), ("free", False, "pro", True),
     ("plus", False, "all", True), ("free", False, "", False), ("free", False, "admins", False)])
@@ -1620,7 +1618,7 @@ def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, m
             "github_import", "update_plan"} <= set(loop.registry.tools)
 
 
-# --- The workspace on demand (AGENT_WORKSPACE_ON_DEMAND, 2026-10-29) ----------------
+# --- The workspace on demand (AGENT_WORKSPACE_ON_DEMAND) ----------------------------
 
 WORKSPACE_TOOLS = {"vm_exec", "vm_write_file", "browser", "ask_user", "github_import", "update_plan"}
 
@@ -1644,7 +1642,7 @@ def test_a_message_opens_its_workspace_on_demand_and_goes_on_as_if_it_had_it_fro
     assert script.systems[1] == from_start.messages[0]["content"]
     assert list(loop.registry.tools) == list(from_start.registry.tools)
     # What the agent reads: open, and what it took so far. The long run's
-    # limits come only once they are near (since 2026-11-01, _note_progress).
+    # limits come only once they are near (_note_progress).
     opened, ran = results(loop)
     assert opened["workspace"] == "open" and opened["note"] == agent_vm_tools.WORKSPACE_OPENED
     assert opened["steps_so_far"] == 1 and not {"step_limit", "time_limit_minutes"} & set(opened)
@@ -1675,8 +1673,8 @@ def test_a_message_without_the_workspace_keeps_the_short_limits_and_never_starts
     ("", False, None, True), ("off", False, None, False), ("", True, None, False), ("", False, "now", False),
     ("", False, "handed_back", False), ("", False, "handed_back_long_ago", True)])
 def test_where_a_message_starts(api, monkeypatch, setting, used, browser, closed):
-    """Closed for every account with the VM (since 2026-10-29, Pro and
-    admins), open where the chat's last message used the workspace or the
+    """Closed for every account with the VM, open where the chat's last
+    message used the workspace or the
     user has its browser right now or handed it back within ten minutes,
     and everywhere with the emergency off."""
     import time
@@ -1708,7 +1706,7 @@ def test_where_a_message_starts(api, monkeypatch, setting, used, browser, closed
 def test_every_message_says_where_the_browser_is_logged_in(api, monkeypatch, vm_on):
     """The list the agent keeps (note_sign_in) comes with the question, also
     while the workspace is still closed: the agent knows WhatsApp is there
-    before it opens anything (since 2026-11-02)."""
+    before it opens anything."""
     from app.api.routers import agent
     client, store, calls = api
     monkeypatch.setattr(agent, "vm_allowed", lambda uid: vm_on)
@@ -1739,9 +1737,9 @@ def test_deleting_the_chat_deletes_its_folder_and_keeps_the_workspace(store, fak
 
 
 def test_a_chats_own_vm_from_before_goes_with_it_after_the_move_to_the_workspace(store, fake_vm):
-    """Security audit 2026-10-27: a chat that had its own VM lost its name
-    when it moved to the workspace, and the VM was never deleted. Its name
-    follows from the chat (vm_name), not from the record."""
+    """A chat's own VM from before the workspace goes with the chat: its
+    name follows from the chat (vm_name), not from the record, which lost it
+    in the move to the workspace."""
     chat_id, _ = pending(store)
     legacy = agent_vm.vm_name(UID, chat_id)
     fake_vm.vms[legacy] = {"files": {}, "checkpoints": []}
@@ -1781,10 +1779,10 @@ def test_deleting_the_account_deletes_its_workspace(store, fake_vm):
 
 
 def test_the_workspace_is_deleted_by_its_name_even_once_its_record_is_gone(store, fake_vm):
-    """Security audit 2026-10-27: one failed provider call, then a later area
-    of the account's deletion removed the record, and the next try found
-    nothing to do: the VM stayed for good. Now the name follows from the
-    account, and the record goes only after the VM."""
+    """The name follows from the account, and the record goes only after
+    the VM: else one failed provider call, then a later area of the account's
+    deletion removing the record, would leave the next try nothing to do and
+    the VM for good."""
     from app.services.account_deletion import FirestoreAccountDeletion as AccountDeletion
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     list(loop.run())
@@ -1860,10 +1858,10 @@ def test_sprites_creates_a_missing_vm_and_applies_its_network_rules():
 
 
 def test_sprites_ensure_without_rules_leaves_them_and_a_waking_call_gets_time():
-    """Prod 2026-10-29 09:56: every opening of the browser VM set its rules
-    anew; the request waited while the VM woke and ran into REQUEST_SECONDS,
-    and the browser was off for the message. Without rules ensure only looks;
-    what may wake a VM waits WAKE_SECONDS."""
+    """Without rules ensure only looks; what may wake a VM waits
+    WAKE_SECONDS. Rules set anew at every opening made the request wait while
+    the VM woke and run into REQUEST_SECONDS, and the browser was off for the
+    message."""
     seen, timeouts = [], {}
 
     def handler(request):
@@ -1933,7 +1931,7 @@ def test_the_agents_files_go_through_its_own_user_never_the_file_api():
     """The file API runs as the provider's user, which may sudo: a path the
     agent named would reach the server's own files (agent-run among them).
     So the agent's reads and writes run as its user, the path an argument of
-    a fixed script and the bytes on stdin (security audit 2026-10-27)."""
+    a fixed script and the bytes on stdin."""
     sockets, sent = [], []
 
     class Socket(FakeSocket):
@@ -2091,13 +2089,13 @@ def test_the_provider_is_configured_by_its_token_only(monkeypatch):
         vm.close()
 
 
-# --- Folders by name and the workspace's notes (2026-10-27) -------------------------
+# --- Folders by name and the workspace's notes --------------------------------------
 
 def test_each_chat_folder_names_its_chat(store, fake_vm):
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     store._chat_ref(UID, loop.chat_id).update({"title": "CSV-Auswertung\nder Umsätze"})
     list(loop.run())
-    # Since 2026-10-28 named after the title (umlauts spelled out) and the id's start.
+    # Named after the title (umlauts spelled out) and the id's start.
     folder = f"/home/agent/chats/csv-auswertung-der-umsaetze-{loop.chat_id[:6]}"
     assert chat_path(loop.chat_id, "CSV-Auswertung\nder Umsätze") == folder
     marker = fake_vm.vms[NAME]["files"][f"{folder}/{agent_workspace.CHAT_MARKER}"].decode()
@@ -2158,7 +2156,7 @@ def test_the_workspaces_notes_come_with_the_first_vm_result_as_data(store, fake_
     assert first["workspace_notes"] == {"path": "/home/agent/NOTES.md", "text": notes}
     assert "workspace_notes" not in second
     # Kept as the agent's notebook, apart from the user's memory; that it is
-    # information, never instruction, says the constitution (2026-10-28).
+    # information, never instruction, says the constitution.
     prompt = prompt_defaults.AGENT_VM_PROMPT
     assert "/home/agent/NOTES.md" in prompt and "Facts about the user themselves belong in memory" in prompt
     assert "never instruction" in prompt_defaults.AGENT_AUDIT_SYSTEM_PROMPT
@@ -2174,7 +2172,7 @@ def test_long_notes_come_cut_with_the_way_to_the_rest(store, fake_vm):
 
 
 def test_notes_that_cannot_be_read_cost_nothing_else(store, fake_vm, monkeypatch):
-    """Since 2026-10-30 the notes come in one command with the chat's folder
+    """The notes come in one command with the chat's folder
     (agent_workspace.open_chat): notes the agent's user cannot read are no
     notes, and the rest goes on."""
     original = _FakeBackend.read_file
@@ -2190,10 +2188,10 @@ def test_notes_that_cannot_be_read_cost_nothing_else(store, fake_vm, monkeypatch
     assert first["exit_code"] == 0 and first["workspace_notes"]["text"] == ""
 
 
-# --- Every account (2026-10-30) --------------------------------------------------------
+# --- Every account -------------------------------------------------------------------
 
 def test_one_switch_opens_the_vm_to_every_account(monkeypatch):
-    """AGENT_VM_ACCESS=all ("pro" before 2026-10-31, the same now): the VM
+    """AGENT_VM_ACCESS=all ("pro", an older value, the same): the VM
     and its browser for every account, else for admins only."""
     from app.api.routers import agent
     from app.core.security import TierStatusUnavailable
@@ -2217,8 +2215,8 @@ def test_one_switch_opens_the_vm_to_every_account(monkeypatch):
 
 
 def test_the_workspace_has_the_browser_and_the_open_web_but_no_request_domain(store, fake_vm):
-    """Since 2026-11-04 the workspace reaches the open web (agent_vm.RULES):
-    no account asks for a domain any more."""
+    """The workspace reaches the open web (agent_vm.RULES): no account asks
+    for a domain."""
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
     names = set(loop.registry.tools)
     assert {"vm_exec", "browser", "ask_user"} <= names and "request_domain" not in names
@@ -2227,7 +2225,7 @@ def test_the_workspace_has_the_browser_and_the_open_web_but_no_request_domain(st
     list(loop.run())
     assert results(loop)[0]["exit_code"] == 0
     # A model that calls it anyway gets "unknown tool", and the user no
-    # card whose yes would end in it (bug hunt 2026-10-31).
+    # card whose yes would end in it.
     asked = vm_loop(store, Agent([[("request_domain", {"domain": "api.example.com", "reason": "Docs"})]]),
                     request_id="three")
     events = list(asked.run())

@@ -2,7 +2,7 @@
 
 ``tests/test_ui_copy.py`` checks one name for the thing (a chat), one style
 (sentence case, "Log in", "email", typographic ’ and …) and no internal names
-in what a reader can see (Apple-Audit H3, H5, H10). This module finds those
+in what a reader can see. This module finds those
 strings:
 
 - ``template_texts()``: text and the readable attributes (title, aria-label,

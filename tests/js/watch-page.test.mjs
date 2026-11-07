@@ -4,7 +4,7 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 import { ENGLISH_QUESTION, GERMAN_SCRIPTS, settleGerman, useGerman } from "./helpers/german.mjs";
 
 /**
- * The Watches page since the redesign of 2026-11-04 (watch-dashboard.js,
+ * The Watches page (watch-dashboard.js,
  * watch-composer.js): one field that takes a sentence and starts a Watch
  * (the page itself while there is none, a slim field above the list once
  * there are some); what wants the reader first ("Since you last looked":
@@ -13,8 +13,7 @@ import { ENGLISH_QUESTION, GERMAN_SCRIPTS, settleGerman, useGerman } from "./hel
  * instead of the "…" menu (its looks, what they found, goal, how often,
  * channels, Open chat, Pause, End); a quiet foot (Notifications, the ended
  * ones, the archive). The pill under an answer opens the same field in a
- * sheet (watch-sheet.js). The page's routing stays as Apple-Audit package J
- * asked for it.
+ * sheet (watch-sheet.js).
  */
 const SHELL = `
   <nav id="viewSwitch" class="view-switch" data-active="chat">
@@ -313,7 +312,7 @@ describe("The page: what wants the reader first, then what runs", () => {
     expect(window.openBookmark).toHaveBeenCalledWith("agent_b1");
   });
 
-  // Bug hunt 2026-11-05: the page read "no turn_id" as "its own chat", but
+  // The page read "no turn_id" as "its own chat", but
   // a Watch from the pill's sheet has no turn_id either and its chat all
   // along; a page-made one whose first run did not start (a busy chat's
   // retry, a refusal) opened a sidebar entry that was not there yet.
@@ -610,7 +609,7 @@ describe("One Watch's panel (instead of the … menu)", () => {
     expect(detail(document).open).toBe(true);
   });
 
-  // Bug hunt 2026-11-05: a pill still saying "Watching" for a Watch ended
+  // A pill still saying "Watching" for a Watch ended
   // elsewhere found no row (it sits in the closed "Ended" drawer), and the
   // wish stayed: opening the drawer later opened its panel by itself.
   it("shows a Watch the pill names that ended elsewhere under Ended, once", async () => {
@@ -935,7 +934,7 @@ describe("The page beside the chat (J1, J6)", () => {
   });
 
   // openBookmark calls it: Enter on a row and a Watch's card open the chat
-  // without a click, and it loaded unseen behind Watches (2026-10-23).
+  // without a click, and it loaded unseen behind Watches.
   it("leaves Watches for a chat opened without a click", () => {
     const { window, document } = boot({ watches: [] });
     const page = document.getElementById("watchDashboard");

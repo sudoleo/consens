@@ -1,5 +1,5 @@
 /**
- * R21: a file that is still being read belongs to the draft it was added to.
+ * A file that is still being read belongs to the draft it was added to.
  *
  * Resetting the draft (opening a saved chat, sending, Agent upload) or an
  * account change must discard the late FileReader result instead of letting

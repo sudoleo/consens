@@ -1,10 +1,10 @@
 /**
- * Bookmark search in the sidebar (audit F6).
+ * Bookmark search in the sidebar.
  *
  * The first non-empty term loads the remaining bookmark metadata pages before
- * it filters. The handler used to filter by the term it read BEFORE that
- * await, so a slow first load finishing after the person had typed on left
- * the list filtered by an older term. It reads the field after the await now.
+ * it filters. The handler reads the field after that await: filtering by the
+ * term read BEFORE it, a slow first load finishing after the person had typed
+ * on left the list filtered by an older term.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -85,7 +85,7 @@ describe("bookmark search", () => {
   });
 
   // On a Mac, Ctrl+K deletes to the end of the line in any text field; the
-  // search took it, in the rename field with half a name saved (2026-10-23).
+  // search took it, in the rename field with half a name saved.
   it.each([
     ["MacIntel", { metaKey: true }, { ctrlKey: true }, "Meta+K"],
     ["Win32", { ctrlKey: true }, { metaKey: true }, "Control+K"],

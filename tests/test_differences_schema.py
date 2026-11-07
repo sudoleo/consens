@@ -110,7 +110,7 @@ class ParseDifferencesPayloadTests(unittest.TestCase):
         self.assertEqual(flags, [True, None, None])
 
     def test_the_same_claim_twice_is_one_side(self):
-        # Live 2026-10-21: the answer's claim once for one model and once,
+        # Seen live: the answer's claim once for one model and once,
         # differently cased and punctuated, for two others, then the rival.
         payload = valid_payload()
         payload["differences"][0]["positions"] = [
@@ -340,7 +340,7 @@ class QuoteVerificationTests(unittest.TestCase):
         return data["differences"][0]["positions"][0]
 
     def test_changed_number_unit_negation_or_condition_is_never_a_verified_quote(self):
-        """R08: a partial/fuzzy overlap never keeps the quote."""
+        """A partial/fuzzy overlap never keeps the quote."""
         original = "The annual operating cost for this complete configuration is 400 euros."
         forged = [
             original.replace("400", "4000"),
@@ -469,8 +469,8 @@ class QuoteVerificationTests(unittest.TestCase):
 
 
 class JudgePolicyTests(unittest.TestCase):
-    """Judge-Familie folgt der Prioritaetsliste (OpenAI zuerst), seit
-    2026-10-04 auch fuer Engines derselben Familie; die Judge-Stufe
+    """Judge-Familie folgt der Prioritaetsliste (OpenAI zuerst), auch fuer
+    Engines derselben Familie; die Judge-Stufe
     (standard/pro) folgt der gewählten Engine."""
 
     ALL_KEYS = {"OpenRouter": "sk-or"}
@@ -690,7 +690,7 @@ FOUR_MODELS = ["OpenAI", "Gemini", "Grok", "Mistral"]
 
 
 class LegacyTextSynthesisTests(unittest.TestCase):
-    """Der Credibility-Satz leitet sich jetzt aus dem Agreement-Score ab."""
+    """Der Credibility-Satz leitet sich aus dem Agreement-Score ab."""
 
     def test_no_differences_is_very_credible(self):
         legacy = _legacy_differences_text({
@@ -829,8 +829,8 @@ class DifferencesPromptTests(unittest.TestCase):
         self.assertIn('"s"', prompt)
 
     def test_follow_up_reading_reaches_the_judge_without_touching_single_runs(self):
-        """Der Judge sah die Frage bisher gar nicht und wertete Antworten auf
-        verschiedene Lesarten derselben Frage als inhaltlichen Widerspruch."""
+        """Ohne die Frage wertete der Judge Antworten auf verschiedene
+        Lesarten derselben Frage als inhaltlichen Widerspruch."""
         # Gleiche Anonymisierungs-Reihenfolge fuer beide Prompts erzwingen.
         random.seed(7)
         base = _build_differences_prompt(

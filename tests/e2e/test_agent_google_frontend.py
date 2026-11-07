@@ -69,8 +69,8 @@ def test_selected_calendar_and_exact_confirmation(browser,phase4_server,width):
         sheet.get_by_role('button',name='Done',exact=True).click()
         expect(sheet).to_be_hidden()
         page.locator('#questionInput').fill('Prepare a meeting to review the offers')
-        # Selected without consent: blocked with a reason (package C shows it as the
-        # composer notice and disables Send); the selection is never dropped.
+        # Selected without consent: blocked with a reason (the composer shows it
+        # as its notice and disables Send); the selection is never dropped.
         assert page.evaluate("App.agentGoogle.blocker().action")=='google-consent'
         chips=page.locator('#agentGoogleChips')
         expect(chips).to_contain_text('Personal calendar')

@@ -433,7 +433,7 @@ class ModelConfigurationTests(unittest.TestCase):
             self.assertEqual(cfg.get_output_token_limit("plus", True), 8192)
             # A tier limit above the reasoning cap is never lowered.
             self.assertEqual(cfg.get_output_token_limit("pro", True), 16384)
-            # The word limit no longer depends on the switch.
+            # The word limit does not depend on the switch.
             self.assertEqual(cfg.get_word_limit("free", True), cfg.get_word_limit("free"))
         finally:
             cfg.apply_limits(original)
@@ -457,7 +457,7 @@ class ModelConfigurationTests(unittest.TestCase):
         )
 
     def test_limits_below_their_minimum_fall_back_to_the_default(self):
-        """Audit C16: an admin typo of 0 (or 8 for 8192) no longer silences
+        """An admin typo of 0 (or 8 for 8192) never silences
         every synthesis; counters keep 0 as a real setting."""
         normalized = cfg.normalize_limits_config({
             "consensus_max_tokens": 0,
@@ -493,7 +493,7 @@ class ModelConfigurationTests(unittest.TestCase):
         )
 
     def test_reload_never_shows_lock_free_readers_an_empty_or_free_premium_state(self):
-        """Audit C8: requests read the model sets, LIMITS and the Consensus
+        """Requests read the model sets, LIMITS and the Consensus
         list without the config lock while a reload runs. Every state a reader
         can see in between keeps what stays, and a new Pro model is never
         allowed while still Free."""
@@ -613,7 +613,7 @@ class ModelConfigurationTests(unittest.TestCase):
         })
         self.assertEqual(normalized["grok"], ["grok-4.3"])
         self.assertNotIn("grok-4-fast-reasoning-latest", normalized["grok"])
-        # The former reasoning variants of 4.3 and 4.20 (2026-10-11) as well.
+        # The former reasoning variants of 4.3 and 4.20 as well.
         normalized = normalize_models_document({
             "grok": [cfg.GROK_NO_REASONING_MODEL, "grok-4.20-non-reasoning", "grok-4.20", "grok-4.3"],
             "premium": ["grok-4.20"],
@@ -740,8 +740,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(denied.exception.status_code, 403)
         validate_model("gpt-5.5", cfg.PROVIDERS["openai"].models, "OpenAI", is_pro=True)
 
-        # Nach Entfernen des Early-Gates darf DeepSeek Pro nicht ueber das
-        # fruehere is_free-Override am Backend-Gate vorbeikommen.
+        # Auch DeepSeek Pro kommt ohne Pro nicht am Backend-Gate vorbei.
         with self.assertRaises(HTTPException) as deepseek_denied:
             validate_model(
                 cfg.DEEPSEEK_PRO_MODEL,
@@ -759,7 +758,7 @@ class ModelConfigurationTests(unittest.TestCase):
             self.assertLessEqual(len(preset["models"]), cfg.MAX_RUN_FAMILIES)
             self.assertLessEqual(set(preset["models"]), set(cfg.DEFAULT_MODEL_BY_PROVIDER))
         # The presets choose the Agent's reviewers, and outward steps wait for
-        # all of them: Daily two (2026-11-01), Open Models and High Quality three.
+        # all of them: Daily two, Open Models and High Quality three.
         self.assertEqual(len(presets["fast"]["models"]), 2)
         self.assertEqual(len(presets["balanced"]["models"]), 3)
         self.assertEqual(len(presets["thorough"]["models"]), 3)

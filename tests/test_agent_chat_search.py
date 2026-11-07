@@ -1,5 +1,5 @@
 """The agent finds the user's earlier chats and reads one (search_chats,
-agent_chat_search.py, since 2026-10-28): by words of title, start date or
+agent_chat_search.py): by words of title, start date or
 latest question, with the first question; opened by its id with questions
 and answers, bounded. Never the current chat, never a chat with Google data
 (consented and routed for that chat alone), and its result is outside content

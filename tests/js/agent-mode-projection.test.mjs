@@ -75,8 +75,8 @@ describe("agent mode panel projection", () => {
     expect(select.value).toBe('agent');
     // An open Agent chat names its fixed mode on the (+) trigger only.
     expect(document.getElementById('attachTrigger').title).toBe('Chat options');
-    // The (+) menu's entry, the only Reasoning button (since 2026-10-31; the
-    // chip shows the level beside a chat model it names). The control that
+    // The (+) menu's entry, the only Reasoning button (the chip shows the
+    // level beside a chat model it names). The control that
     // asked travels along (a guest's login dialog gives the focus back to it).
     document.getElementById('agentReasoningMenuOption').click();
     expect(window.App.openModelPicker).toHaveBeenCalledWith(document.getElementById('agentModelDropdown'),
@@ -94,7 +94,7 @@ describe("agent mode panel projection", () => {
     const rows = [...document.querySelectorAll('#runModeControl .attach-menu-mode')];
     expect(rows.map(row => row.dataset.value)).toEqual(['agent', 'compare']);
     expect(rows.find(row => row.dataset.value === 'compare').getAttribute('aria-pressed')).toBe('true');
-    // No "Beta" badge since 2026-11-02: the Agent is the product.
+    // No "Beta" badge: the Agent is the product.
     expect(rows.find(row => row.dataset.value === 'agent').querySelector('.attach-menu-label').textContent).toBe('Agent');
     expect(document.getElementById('attachTrigger').title).toBe('Mode, files and options');
     rows.find(row => row.dataset.value === 'agent').click();
@@ -193,7 +193,7 @@ describe("agent mode panel projection", () => {
   });
 
   // The narrow form came out of the words with an English pattern: on the
-  // German page it stayed the whole sentence, cut off (2026-10-23).
+  // German page it stayed the whole sentence, cut off.
   it("builds the narrow comparison status from numbers, in any language", () => {
     const {window, document, dom} = boot();
     window.App.answerReader = {directSummary: () => '5 von 6 bereit · 1 nicht verfügbar',
@@ -208,7 +208,7 @@ describe("agent mode panel projection", () => {
     expect(status.dataset.compact).toBe('2/2');
     dom.window.close();
   });
-  // With Agent (Max, 2026-10-27) the reviewers say what they do next to their
+  // With Agent the reviewers say what they do next to their
   // marks under the field; in a chat, where the bar steps aside, their marks
   // stand before the chip, which names the chat model (model-picker.js).
   it("gives the reviewers their own control with Agent", () => {
@@ -252,9 +252,9 @@ describe("agent mode panel projection", () => {
     expect(picker.hidden).toBe(true);
     expect(reviewers.hidden).toBe(false);
     expect(reviewers.getAttribute("aria-label")).toBe("1 AI cross-checks");
-    // In words beside the marks, and what they do in the tooltip (2026-10-28).
+    // In words beside the marks, and what they do in the tooltip.
     expect(document.getElementById("composerReviewersLabel").textContent).toBe("1 AI cross-checks");
-    // Its short form for a narrow field, the same on the start screen (UX audit E4, E5).
+    // Its short form for a narrow field, the same on the start screen.
     expect(document.getElementById("composerReviewersLabel").dataset.short).toBe("1 AI");
     expect(label.dataset.short).toBe("1 AI");
     expect(reviewers.title).toBe("Independent reviewers follow the agent’s work and pause it when in doubt. Choose them here.");
@@ -315,7 +315,7 @@ describe("agent mode panel projection", () => {
     expect(syncPreview.mock.lastCall[0]).toBe(true);
     expect(document.body.classList.contains("agent-mode-enabled")).toBe(true);
     // Before that, while the sign-in itself is unknown (neither account nor
-    // guest): Agent's start screen too, no grid for that second (2026-10-26).
+    // guest): Agent's start screen too, no grid for that second.
     state.pending = false;
     window.__consensioAuthState = { known: false, uid: null, generation: 0 };
     window.updateAgentModeUI();
@@ -347,10 +347,10 @@ describe("agent mode panel projection", () => {
   });
 
   it("keeps a saved Consensus answer behind its footer from the moment it is revealed", () => {
-    // firebase.js reveals the answer and draws the view right after. Until
-    // 2026-11-07 the answer counted as shown only two frames later, so the
-    // first open of an old chat drew Compare's view for that moment, about
-    // 20 px of blank space until the next redraw.
+    // firebase.js reveals the answer and draws the view right after. Had the
+    // answer counted as shown only two frames later, the first open of an old
+    // chat would draw Compare's view for that moment, about 20 px of blank
+    // space until the next redraw.
     const { window, document, dom } = boot({ mode: "compare", files: ["static/js/consensus-footer.js"] });
     document.body.insertAdjacentHTML("beforeend", '<div id="consensusOutput" class="consensus-output is-hidden"></div>');
     // Frames as in a browser: they come later, not inside the call.

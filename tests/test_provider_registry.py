@@ -40,7 +40,7 @@ class RegistryCoverageTests(unittest.TestCase):
                 self.assertEqual(set(mapping), families)
 
     def test_dead_config_aliases_stay_gone(self):
-        """Audit C16: the registry set (PROVIDERS[key].models) is the one name
+        """The registry set (PROVIDERS[key].models) is the one name
         for a family's models, LIMITS the one source for limits, and a model
         ID literal stands in config.py once."""
         for name in (
@@ -194,7 +194,7 @@ class ConsumerCoverageTests(unittest.TestCase):
 
     def test_engine_model_maps_cover_every_family(self):
         self.assertEqual(set(engines._DEFAULT_MODEL_BY_PROVIDER), set(cfg.PROVIDERS))
-        # The Reasoning switch no longer has its own model map (no Pro swap).
+        # The Reasoning switch has no model map of its own (no Pro swap).
         self.assertFalse(hasattr(engines, "_DEEP_SEARCH_MODEL_BY_PROVIDER"))
 
     def test_product_surfaces_cover_every_family(self):

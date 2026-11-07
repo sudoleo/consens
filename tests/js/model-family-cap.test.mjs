@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 // Vier Familien in der Konfiguration, aber ein Lauf vergleicht hoechstens drei:
-// genau die Lage, die es mit Kimi/GLM geben wird.
+// genau die Lage mit Kimi/GLM.
 const FAMILIES = [
   { key: "OpenAI", label: "ChatGPT", dom: "openai" },
   { key: "Mistral", label: "Mistral", dom: "mistral" },

@@ -1,7 +1,7 @@
 """Built Agent comparison controls, markers and saved projection without providers.
 
-Since 2026-10-31 the Agent has one mode (its reviewers review); the comparison
-mode's check, score and marks are tested here only as saved turns show them."""
+The Agent has one mode (its reviewers review); the comparison mode's check,
+score and marks are tested here only as saved turns show them."""
 import hashlib
 import json
 import re
@@ -44,7 +44,7 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         page.locator('#questionInput').click()
         page.locator('#questionInput').press('Control+End')
         page.locator('#questionInput').press('Enter')
-        # With a keyboard Enter sends at every width (Apple-Audit E7); the send
+        # With a keyboard Enter sends at every width; the send
         # is blocked here, so the draft stays as it was.
         draft = 'Keep this draft while I choose the models.'
         expect(page.locator('#questionInput')).to_have_value(draft)
@@ -119,7 +119,7 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         page.locator('#attachTrigger').tap()
         expect(page.locator('#attachMenu')).to_be_visible()
         assert page.evaluate("document.body.classList.contains('composer-collapsed')")
-        # The (+) menu no longer carries a mode switch; the mode stays Agent.
+        # The (+) menu carries no mode switch; the mode stays Agent.
         expect(page.locator('#attachMenu .attach-menu-toggle[for="agentModeMenuSwitch"]')).to_have_count(0)
         expect(page.locator('#runModeSelect')).to_have_value('agent')
         # Agent Beta uploads into the private chat store, so upload stays available.
@@ -177,7 +177,7 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
 
 @pytest.mark.parametrize("width,dark", [(1440, False), (390, True), (320, False)])
 def test_comparison_review_and_saved_projection(browser, phase4_server, width, dark):
-    """A turn of the comparison mode (before 2026-10-31): its review comes only
+    """A turn of the former comparison mode: its review comes only
     with the finished turn, as a saved one, never live; score, marks, the
     Answer check row and the activity's insights read as they did."""
     context, page = _real_firebase_page(browser, phase4_server, has_touch=width < 700)
@@ -249,7 +249,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert page.evaluate("App.runMode.preference()") == 'agent'
         assert page.evaluate("localStorage.getItem('agentMode')") is None
         expect(page.locator('#composerSourcesToggle')).to_have_count(0)
-        # Reasoning has no button in the row (since 2026-10-31): the (+) menu
+        # Reasoning has no button in the row: the (+) menu
         # opens its level, on the start screen too, and the chip shows it
         # quietly beside the chat model (from 701px).
         page.locator('#attachTrigger').click()
@@ -298,7 +298,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert page.locator('.chat-input-container').bounding_box()['height'] <= 60
         expect(page.locator('#attachTrigger')).to_be_visible()
         assert 'check_sources' not in requests[0]
-        # The comparison mode's options are gone (2026-10-31).
+        # The request carries no comparison-mode options.
         assert 'agent_preferences' not in requests[0]
         assert requests[0]['reasoning_effort'] == 'high'
         expect(page.locator('#quotaTrigger')).to_have_attribute('aria-label', re.compile(r'^56% of today'))
@@ -309,7 +309,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#agentAnswer').get_by_role('button', name='Follow up')).to_have_count(0)
         assert evidence_links.first.evaluate('el => getComputedStyle(el).backgroundImage') == 'none'
         if width <= 540:
-            # One toolbar row (2026-10-22): the evidence links and the
+            # One toolbar row: the evidence links and the
             # answer's Watch and Share, from the answer's left edge to its
             # right, side by side, each a finger wide.
             expect(page.locator('#agentAnswer .agent-share-pill')).to_be_visible()
@@ -349,7 +349,7 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         assert any('meta.svg' in src for src in icons)
         # A model's row in the agent panel opens its answer in the reader;
         # the answer check opens the differences.
-        # Only on request, also on a wide screen (2026-10-31).
+        # Only on request, also on a wide screen.
         expect(page.locator('#agentSidebar')).not_to_be_visible()
         page.locator('#agentAnswer .agent-sidebar-toggle').click()
         expect(page.locator('#agentSidebar')).to_be_visible()
@@ -599,8 +599,8 @@ def test_differences_reader_stays_calm_with_missing_models(browser, phase4_serve
         expect(cards.locator('.diff-card-meaning')).to_have_text([
             'Critical contradiction:', 'Minor contradiction about a detail:', 'Different emphasis, not a contradiction:'])
         expect(page.locator('#answerReaderInspector')).not_to_contain_text('positions')
-        # Every finding starts folded to its head, the weightiest first
-        # (Max 2026-10-23); the head of the critical one is its sentence.
+        # Every finding starts folded to its head, the weightiest first;
+        # the head of the critical one is its sentence.
         for index in range(3):
             expect(cards.nth(index)).not_to_have_attribute('open', '')
         expect(cards.first.locator('.diff-card-summary .diff-card-topic')).to_be_visible()
@@ -727,8 +727,8 @@ def test_green_agent_passages_hover_after_scrolling_and_reprojection(browser, ph
 def test_phone_closing_the_sentence_sheet_brings_no_hover_card(browser, phase4_server):
     """On a phone a tap on a disputed sentence opens its card as a sheet from
     the bottom edge; closing it gives the focus back to the sentence. That
-    focus is no request for the hover card (Apple audit follow-up
-    2026-10-21): it used to pop up on its own 130 ms later. The hover card
+    focus is no request for the hover card: it used to pop up on its own
+    130 ms later. The hover card
     exists only for a real mouse."""
     from app.services.chat_store import turn_detail
 

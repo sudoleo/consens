@@ -23,7 +23,7 @@ export function useGerman(window) {
 }
 
 // A question the dictionary's open patterns rewrote: "Remove {name}" made it
-// "Entfernen: background noise" (bug hunt 2026-10-23).
+// "Entfernen: background noise".
 export const ENGLISH_QUESTION = "Remove background noise";
 
 export async function settleGerman(window) {

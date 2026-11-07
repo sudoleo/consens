@@ -152,7 +152,7 @@ def test_static_cache_policy_revalidates_unversioned_and_pins_content_hashes():
 
 
 def test_a_font_under_its_name_from_before_the_hash_still_loads():
-    # Zweitprüfung (Schriften): a tab opened before the deploy runs the old
+    # A tab opened before the deploy runs the old
     # stylesheet and fetches italic or latin-ext at its first such letter,
     # under the old name. It gets the same bytes, revalidated, never a 404.
     from app.core.static_delivery import legacy_font_target

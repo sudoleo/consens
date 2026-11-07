@@ -28,8 +28,8 @@ function boot(status = "succeeded") {
 }
 const settle = () => new Promise(resolve => setTimeout(resolve, 0));
 const logCalls = w => w.fetch.mock.calls.filter(([url]) => url.includes("/work-log"));
-// Without a matchMedia the window counts as wide, where the panel stands open
-// by itself (2026-10-28); the toggle opens it only where it is not.
+// The panel opens only on request: the toggle opens it unless it already
+// stands open.
 function openPanel(d) {
   const toggle = d.querySelector(".agent-sidebar-toggle");
   if (toggle.getAttribute("aria-expanded") !== "true") toggle.click();
@@ -47,7 +47,7 @@ describe("Agent work log", () => {
     openPanel(d);
     const host = d.querySelector(".agent-work-log-host");
     expect(host.hidden).toBe(false);
-    // The raw log is the operator's (UX audit F5, style.css .admin-only):
+    // The raw log is the operator's (style.css .admin-only):
     // the activity tells a Pro account the same run in words.
     expect(host.classList.contains("admin-only")).toBe(true);
     // The rows go above it: it stays the list's last section.
@@ -80,7 +80,7 @@ describe("Agent work log", () => {
   });
 
   // A turn whose only content in the panel is its log (audit, answer check
-  // off) opens no empty panel for an account that cannot see the log (F5).
+  // off) opens no empty panel for an account that cannot see the log.
   it("keeps the panel of a turn with only a log to the admins who see it", async () => {
     const { window: w, document: d } = loadScripts(["static/js/request-deadline.js", "static/js/agent-work-log.js", "static/js/agent-delegation.js"], {
       body: '<div id="agentAnswerActivity"></div>', before(win) {

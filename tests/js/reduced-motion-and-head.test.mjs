@@ -1,15 +1,15 @@
 /**
- * Three small /app guards from the audit's frontend section.
+ * Three small /app guards.
  *
- * F15: smooth scrolling honours prefers-reduced-motion. Every scroll with a
- *      `behavior` takes it from App.scrollBehavior() (app-core.js) or checks
- *      the preference itself; a hard-coded "smooth" may not come back.
- * F8:  marked and DOMPurify no longer block the first paint. They load
- *      deferred and still before the Firebase module and the app bundle that
- *      call them (deferred scripts and modules run in document order).
- * F10: the footer note and the dialogs' close mark use --ink-3, which keeps
- *      text contrast (4.5:1) on the canvas in both themes and at least the
- *      3:1 of a graphical control on the raised dialog surface.
+ * - Smooth scrolling honours prefers-reduced-motion. Every scroll with a
+ *   `behavior` takes it from App.scrollBehavior() (app-core.js) or checks
+ *   the preference itself; a hard-coded "smooth" may not come back.
+ * - marked and DOMPurify do not block the first paint. They load deferred
+ *   and still before the Firebase module and the app bundle that call them
+ *   (deferred scripts and modules run in document order).
+ * - The footer note and the dialogs' close mark use --ink-3, which keeps
+ *   text contrast (4.5:1) on the canvas in both themes and at least the
+ *   3:1 of a graphical control on the raised dialog surface.
  */
 
 import { readdirSync, readFileSync } from "node:fs";
@@ -89,13 +89,13 @@ describe("contrast of the footer note and the close mark (F10)", () => {
   const variables = read("static/css/variables.css");
   const [lightInk3, darkInk3] = [...variables.matchAll(/--ink-3:\s*(#[0-9a-f]{6})/gi)].map((m) => m[1]);
   const [lightGround, darkGround] = [...variables.matchAll(/--ground:\s*(#[0-9a-f]{6})/gi)].map((m) => m[1]);
-  // Dialogs and menus sit on --raise; /app no longer paints its own surface
-  // in shell.css (Apple-Audit G7).
+  // Dialogs and menus sit on --raise; /app paints no surface of its own in
+  // shell.css.
   const [lightSurface, darkSurface] = [...variables.matchAll(/--raise:\s*(#[0-9a-f]{6})/gi)].map((m) => m[1]);
 
   it("colours both with --ink-3", () => {
     const consensus = read("static/css/components-consensus.css");
-    // The one close cross of every dialog (Apple audit G3) lives in foundation.css.
+    // The one close cross of every dialog lives in foundation.css.
     const foundation = read("static/css/foundation.css");
     expect(rule(consensus, ".feedback-note")).toContain("color: var(--ink-3)");
     expect(rule(foundation, ".close-button")).toContain("color: var(--ink-3)");

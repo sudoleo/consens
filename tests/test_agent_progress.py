@@ -123,7 +123,7 @@ TERRA_SUMMARY = (
 
 def test_an_opened_step_keeps_the_sentences_under_its_headings():
     """UX audit 2026-10-29 A2: a Terra summary kept only "Checking the
-    numbers"; the history now holds its paragraphs under their headings."""
+    numbers"; the history holds its paragraphs under their headings."""
     now = [0.0]
     progress = ReasoningProgress(unlimited=True, min_seconds=3, clock=lambda: now[0])
     lines = []
@@ -234,9 +234,9 @@ def test_live_and_saved_activity_never_contain_full_reasoning(store):
 
 def test_a_reasoning_line_the_journal_leaves_out_stays_with_the_end_record(store):
     """The journal leaves out a line of a call that has ended by the time it
-    writes (_journal_write). CI 2026-11-01 caught a comparison answer that
-    ended between the journal taking its line and writing it, and kept no
-    line at all: its end record now carries the latest one."""
+    writes (_journal_write). A comparison answer that ends between the
+    journal taking its line and writing it would keep no line at all (CI
+    caught one): its end record carries the latest one."""
     from app.services.agent_delegation import Worker
     loop = make_loop(store, Script())
     submitted = []
@@ -255,10 +255,9 @@ def test_a_reasoning_line_the_journal_leaves_out_stays_with_the_end_record(store
 
 
 def test_the_agents_words_beside_its_calls_are_its_progress(store):
-    """Since 2026-10-28 the agent's own text beside a call stands as its note
-    in the activity; until 2026-10-31 compare_models also carried a
-    status_update argument for it. Neither adds a model call, and neither
-    reaches the comparison models."""
+    """The agent's own text beside a call stands as its note in the
+    activity. It adds no model call and never reaches the comparison
+    models."""
     # Two comparisons, a sentence beside each; the third step writes the answer.
     script = Script(compares=2)
     loop = make_loop(store, script)
@@ -282,9 +281,8 @@ def test_the_agents_words_beside_its_calls_are_its_progress(store):
 
 
 def test_a_call_with_a_progress_argument_is_refused_without_a_progress_line(store):
-    """status_update is no argument of compare_models any more (until
-    2026-10-31), and check_text is gone: both calls are refused before
-    anything runs or shows."""
+    """status_update is no argument of compare_models, and check_text is no
+    tool: both calls are refused before anything runs or shows."""
     loop = make_loop(store, Script())
     from app.services.llm.agent_client import AgentCompletion
     value = AgentCompletion()
@@ -347,7 +345,7 @@ def test_live_usage_replaces_step_snapshots_without_extra_receipts_or_transcript
         assert updates[-1]["usage"]["input_tokens"] == agent["usage"]["input_tokens"] == 50
         assert updates[-1]["usage"]["output_tokens"] == agent["usage"]["output_tokens"] == 20
         assert "stream_chars" not in agent
-    # Nothing of the live frames is saved: since 2026-11-01 not even the
+    # Nothing of the live frames is saved: not even the
     # session events (publish_agents keeps their ids on the session).
     assert not list(store._turn_ref(loop.uid, loop.chat_id, loop.turn_id).collection("agent_events").stream())
     assert loop.completion.usage["input_tokens"] + loop.completion.usage["output_tokens"] == 70 * len(script.calls)

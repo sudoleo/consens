@@ -2,8 +2,8 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// A start the user waits for, counted down the Apple way (start-progress.js,
-// since 2026-11-02): a thin bar toward the server's estimate and the time
+// A start the user waits for, counted down the Apple way (start-progress.js):
+// a thin bar toward the server's estimate and the time
 // left under it; the chat's step and the live view show it.
 const NOW = Date.parse("2026-11-02T15:37:02Z");
 
@@ -84,7 +84,7 @@ describe("the start's bar", () => {
     expect(left(bar)).toBe("About 35 seconds left");
   });
 
-  // Bug hunt 2026-11-05: the server's estimate was read on the device's
+  // The server's estimate was read on the device's
   // clock. A phone three minutes behind said "About 4 minutes left" for a
   // minute's start, three minutes ahead "Almost done…" at once.
   it("reads the server's estimate on the server's clock once its Date header says they differ", () => {
@@ -153,7 +153,7 @@ describe("the bar where the user waits", () => {
   });
 
   it("stands flush under a tool's line in the detailed lines, after the mark only under the calm one (2026-11-03)", () => {
-    // Max's screenshot: under "Listing the tabs" the bar stood a mark's
+    // Under "Listing the tabs" the bar stood a mark's
     // width in, though a tool's line has no mark.
     const { App, host } = setup(["static/js/user-settings.js", "static/js/start-progress.js",
       "static/js/agent-activity.js"]);

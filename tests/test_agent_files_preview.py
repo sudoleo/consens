@@ -60,7 +60,7 @@ def test_a_small_picture_or_a_gif_comes_as_it_is(client, name, size, fmt, mime):
 
 
 def test_an_office_file_previews_as_its_pdf_and_downloads_as_itself(client):
-    """file-viewer.js (2026-11-01): the PDF of a shared Office file is a
+    """file-viewer.js: the PDF of a shared Office file is a
     second object beside the file; it counts in the account's storage and
     goes with the file."""
     client, (files, chat) = client
@@ -87,7 +87,7 @@ def test_an_office_file_previews_as_its_pdf_and_downloads_as_itself(client):
 
 def test_a_file_that_fits_without_its_preview_is_saved_without_it(client):
     """The preview only shows the file: an account near its storage limit
-    gets the file, not "File storage limit reached" (review 2026-11-01)."""
+    gets the file, not "File storage limit reached"."""
     _, (files, chat) = client
     meta = files.save('owner', chat, raw=b'PK deck', name='deck.pptx', mime='application/octet-stream',
                       extraction={'status': 'ready', 'parts': [], 'warnings': []}, extra={'kind': 'vm_file'},
@@ -123,7 +123,7 @@ def test_a_word_file_without_a_pdf_previews_as_its_text_and_a_pdf_as_itself(clie
 def test_a_preview_reads_the_file_record_no_more_often_than_its_download(client, monkeypatch):
     """A picture under every answer loads as ?preview=1: its branch and its
     bytes come from one read of the record, plus the read after the bytes
-    that every download makes (2026-11-01, review of the file preview)."""
+    that every download makes."""
     from app.services.agent_files import AgentFiles
     client, where = client
     file_id, _ = stored(client, where, 'screen.png', (3200, 1800), 'PNG', 'image/png')

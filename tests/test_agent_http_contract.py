@@ -149,7 +149,7 @@ def test_stop_fences_only_bound_turn_repeatedly_and_rejects_late_worker(agent_ht
 
 @pytest.mark.parametrize("tier,role", [("free", ""), ("plus", ""), ("pro", ""), ("free", "admin")])
 def test_detail_and_stop_are_open_to_every_account(agent_http, tier, role):
-    # Agent is open to every signed-in account since 2026-10-02; only the
+    # Agent is open to every signed-in account; only the
     # owner binding of chat and turn guards details and stop.
     h = agent_http
     h.db.collection("users").document("owner").update({"tier": tier, "role": role})

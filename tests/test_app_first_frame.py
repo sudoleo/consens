@@ -1,4 +1,4 @@
-"""What /app's HTML carries for its first frame (Apple-Audit B1, B5, B9, B12).
+"""What /app's HTML carries for its first frame.
 
 The browser behaviour is measured in tests/e2e/test_first_frame.py and
 tests/js/first-frame.test.mjs; this checks the markup contract they rely on.
@@ -17,7 +17,7 @@ def read(path):
 
 
 def test_no_form_of_the_app_puts_its_fields_into_the_address():
-    """2026-10-29: the login form had no method; sent before its script took
+    """The login form once had no method; sent before its script took
     it over, it went out as a GET and put an address and a password into the
     address bar, the history and Render's access log. Every form of the app
     shell posts to /app, which only loads the app again."""
@@ -56,7 +56,7 @@ def test_the_composer_decides_demo_and_send_in_the_template():
     assert actions.index('class="demo-chip demo-action send-glow"') < actions.index('id="sendButton"')
     send = re.search(r'<button id="sendButton"[^>]*>', actions).group(0)
     assert " disabled" in send and 'aria-disabled="true"' in send
-    # The words the app keeps: one name for the thing (H3).
+    # The words the app keeps: one name for the thing.
     assert "<span>New chat</span>" in html and "New comparison" not in html.split("<body", 1)[1].split("</nav>", 1)[0]
     assert 'data-agent-default-label="{{ agent_default_label | e }}"' in html
 
@@ -73,7 +73,7 @@ def test_the_app_names_the_default_chat_model_without_the_catalog(monkeypatch):
 
 
 def test_a_guest_gets_the_google_entries_every_account_has(monkeypatch):
-    """Apple-Audit H3: a guest's composer is Agent's; the page says which
+    """A guest's composer is Agent's; the page says which
     Google entries every account has (app-bootstrap.js GOOGLE_FOR_EVERYONE)."""
     from fastapi.testclient import TestClient
     import main

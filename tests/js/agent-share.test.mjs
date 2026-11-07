@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 /**
- * Sharing an Agent answer (since 2026-10-21): every finished answer has a
+ * Sharing an Agent answer: every finished answer has a
  * Share pill beside its Watch pill, the dialog prepares that exact turn on
  * the server, and a refusal is said in the dialog in the server's words
  * instead of a dead "Saved consensus unavailable" button.
@@ -109,7 +109,7 @@ describe("Share under an Agent answer", () => {
   });
 
   // A tab left open for more than a day: the first click got 404 and every
-  // later one too, until a reload (bug hunt 2026-10-25).
+  // later one too, until a reload.
   it("prepares an answer again whose prepared ID expired, and publishes it", async () => {
     const { window, document, dom } = agentApp();
     window.App.runMode.set("agent");
@@ -140,7 +140,7 @@ describe("Share under an Agent answer", () => {
     dom.window.close();
   });
 
-  // Bug hunt 2026-10-25: Share from the chat list while the chat's run was
+  // Share from the chat list while the chat's run was
   // still going had no turn; "Try again" asked with that same missing turn,
   // also after the run had ended.
   it("offers no Try again for an answer that is not finished", async () => {

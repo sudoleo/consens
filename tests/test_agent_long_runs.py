@@ -150,10 +150,10 @@ class _SeesImages(dict):
 
 
 def test_the_context_limit_counts_the_files_every_step_sends(store, fake_vm, tmp_path, monkeypatch):
-    """Bug hunt P23: the long run's limit measured its conversation without
-    the file block every step of the agent sends with it (_step). A picture
-    or a native PDF filled the window before the limit did, and the run
-    ended on the admission's context error without its answer."""
+    """The long run's limit measures its conversation with the file block
+    every step of the agent sends with it (_step): else a picture or a
+    native PDF would fill the window before the limit did, and the run would
+    end on the admission's context error without its answer."""
     import base64
     import io
     import math
@@ -257,9 +257,9 @@ def test_compaction_never_cuts_for_a_small_gain_or_twice(monkeypatch):
 
 
 def test_after_a_cut_the_next_waits_until_the_run_has_grown_again(monkeypatch):
-    """Bug hunt 2026-10-26: a run whose own calls and answers stay above the
-    mark after a cut was cut again every third step, each cut a new cache
-    write; the doc says rarely and large."""
+    """A run whose own calls and answers stay above the mark after a cut is
+    not cut again every third step, each cut a new cache write: cuts come
+    rarely and large."""
     monkeypatch.setattr(agent_compaction, "COMPACT_ABOVE_CHARS", 30_000)
     monkeypatch.setattr(agent_compaction, "KEEP_RECENT_CHARS", 10_000)
     monkeypatch.setattr(agent_compaction, "MIN_GAIN_CHARS", 5_000)
@@ -310,8 +310,7 @@ def test_a_long_run_compacts_old_output_and_the_work_log_says_so(store, fake_vm,
     assert json.loads(first)["stdout"].startswith("step 0\n")
     compactions = [json.loads(text) for entry, text in entries if entry["kind"] == "app" and entry["name"] == "compacted"]
     assert compactions and compactions[0]["tool_call_ids"][0] == "call_0_0"
-    # Once: the run does not grow by REGROW_CHARS after it (until
-    # 2026-11-03 it cut every second step here, each a new cache write).
+    # Once: the run does not grow by REGROW_CHARS after it.
     assert len(compactions) == 1
 
 
@@ -356,8 +355,8 @@ def test_opened_pages_lose_their_picture_before_any_step_loses_its_output():
     assert "preview" in events[0]
 
 
-# Counted in characters, "━" and "✓" (3 bytes each) took three times the
-# room they were given; plan steps were never shortened.
+# Counted in characters, "━" and "✓" (3 bytes each) would take three times
+# the room they were given; plan steps are shortened too.
 def test_the_saved_activity_is_measured_in_bytes_and_shortens_plans_too():
     output = [{"id": f"completion:{n}:call/tool", "kind": "tool", "name": "vm_exec", "status": "succeeded",
                "command": f"make {n}", "output": "━" * 1_000, "output_truncated": False} for n in range(300)]
@@ -519,8 +518,8 @@ def test_a_stopped_vm_turn_still_tells_the_next_message(store, fake_vm):
 
 def test_a_call_with_malformed_arguments_does_not_cost_the_answer(store, fake_vm):
     """The record is written in run's finally, before finish_run: a call the
-    registry refused for its arguments (packages as an object) broke it with
-    a TypeError until 2026-10-28, and the finished answer was never saved."""
+    registry refused for its arguments (packages as an object) must not
+    break it with a TypeError, or the finished answer would never be saved."""
     script = LongAgent([[("vm_exec", {"command": "make"})],
                         [("vm_install_packages", {"packages": {"pip": ["numpy"]}})]])
     loop = vm_loop(store, script)

@@ -1,8 +1,7 @@
-"""Who checks the Agent's work: the account setting ``reviewers`` (since
-2026-11-01). "always" has the reviewers from the run's start (the one mode,
+"""Who checks the Agent's work: the account setting ``reviewers``.
+"always" has the reviewers from the run's start (the one mode,
 test_agent_audit), "workspace" from the agent's first step that reaches for
-its workspace on, "off" never. Without reviewers no halt and no gate: memory
-locks once outside content is in view, a domain is the user's alone, and the
+its workspace on, "off" never. Without reviewers no halt and no gate, and the
 answer's review ends "off", not "failed"."""
 import json
 
@@ -97,7 +96,7 @@ def test_the_answer_check_is_off_also_when_the_run_ends_before_the_review(store)
 
 def test_an_always_review_without_reviewers_still_fails(store):
     """The setting is the only reason for "off": reviewers that never started
-    under "always" are a failure, as before."""
+    under "always" are a failure."""
     script = Audit()
     loop = audit_loop(store, script)
     audit = AnswerAudit(loop.comparison)
@@ -109,7 +108,7 @@ def test_an_always_review_without_reviewers_still_fails(store):
 
 @pytest.mark.parametrize("setting", ["always", "workspace", "off"])
 def test_the_plan_says_who_checks_and_memory_is_the_same_for_every_setting(setting):
-    """Memory said who checks a change until 2026-11-02; no change waits now."""
+    """Memory is the same for every setting: no change waits for anyone."""
     writable = MemorySnapshot(available=True, enabled=True, auto=True)
     assert agent_memory.orchestrator_prompt(writable).endswith(agent_memory.AUDIT_MEMORY_WRITE_PROMPT)
     description = PlanTools(reviewed=setting != "off").tools()[0].description
@@ -128,7 +127,7 @@ def test_the_route_runs_a_message_with_the_setting_its_page_sent(api):
     assert saved_turn["agent_settings"]["reviewers"] == "off"
     assert saved_turn["agent_review"]["status"] == "off" and not calls.reviews
     assert prompt_defaults.AGENT_REVIEW_FACTS["off"] in calls[0]["messages"][0]["content"]
-    # A page from before sends none: the reviewers follow, as they did.
+    # A page from before the setting sends none: the reviewers follow ("always").
     old = {**payload, "client_request_id": "old-1", "question": "Again"}
     old.pop("reviewers")
     assert client.post("/agent", json=old, headers=AUTH).status_code == 200

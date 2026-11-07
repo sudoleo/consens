@@ -141,7 +141,7 @@ def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the
         page.wait_for_function("() => !!window.__streamHandlers")
         page.wait_for_function(f"() => scrollY > 500 && Math.abs(__askTop() - {landing}) < 3")
         # The ride passes the landing on its way up; where it stops counts.
-        # Below the history the question lost its top margin (2026-10-29) and
+        # Below the history the question once lost its top margin and
         # stopped 8px higher than the first one.
         page.wait_for_function("() => !document.body.classList.contains('chat-scroll-following')")
         assert abs(page.evaluate("__askTop()") - landing) < 3, (page.evaluate("__askTop()"), landing)
@@ -178,8 +178,8 @@ def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the
         assert abs(page.evaluate("scrollY") - before) < 3
         expect(latest).to_be_visible()
         # The jump keeps the end it was pressed for; on a slow runner the text
-        # was still landing then and ran past the near-end band (nightly
-        # 2026-10-28). Press once all of it is there.
+        # was still landing then and ran past the near-end band. Press once
+        # all of it is there.
         page.wait_for_function("() => document.getElementById('agentAnswerBody').textContent.split('Additional material.').length > 20")
         latest.focus()
         latest.press("Enter")
@@ -200,8 +200,8 @@ def test_agent_send_brings_the_question_to_the_top_and_streaming_never_moves_the
 # A later question stands at the end of the page. The live lines are 20.8px
 # tall and grow in a height motion; with a reserve in whole pixels the end of
 # the page followed their fraction, and whenever it rounded a pixel lower the
-# browser pulled the chat 1px down, and back with the next line (2026-10-29,
-# Max: the chat jiggled as reasoning came in).
+# browser pulled the chat 1px down, and back with the next line (the chat
+# jiggled as reasoning came in).
 @pytest.mark.parametrize("width,height,scale", [(1280, 900, 1), (1536, 730, 1.25), (390, 800, 3)])
 def test_reasoning_lines_at_the_end_of_the_page_keep_the_chat_still(browser, phase4_server, width, height, scale):
     class Scaled:
@@ -273,7 +273,7 @@ def test_reasoning_lines_at_the_end_of_the_page_keep_the_chat_still(browser, pha
             # Past the height motion and the cross-fade of a changed line.
             page.wait_for_timeout(450)
             page.evaluate("""() => __ends.push(document.querySelector('.chat-scroll-reserve').getBoundingClientRect().bottom + scrollY)""")
-        # Since 2026-11-04 the calm view has one line: while the agent thinks,
+        # The calm view has one line: while the agent thinks,
         # the status line is its newest heading, each standing its four
         # seconds. The frames run on until the last one has faded in.
         expect(page.locator("#agentAnswerActivity .agent-progress .agent-current-status")).to_have_text("Checking the numbers")
@@ -294,7 +294,7 @@ def test_reasoning_lines_at_the_end_of_the_page_keep_the_chat_still(browser, pha
 # A long run has taller moments that pass: a command's output open while it
 # runs, the activity opened once to look back. Each held its height to the
 # end of the run, and under the turn lay a screen of white to scroll into
-# (Max, 2026-11-01: a run with a plan and 39 steps; measured 36px after a
+# (a run with a plan and 39 steps; measured 36px after a
 # command's output, 778px after the activity was opened and closed again).
 def test_a_taller_moment_of_a_working_run_leaves_no_white_to_scroll_into(browser, phase4_server):
     context, page = _real_firebase_page(browser, phase4_server)

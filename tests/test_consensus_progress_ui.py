@@ -1,9 +1,8 @@
 """Thread and footer contracts of the app page.
 
-Since 2026-10-25 the browser runs Agent and Compare only; the guided
-Consensus run (#consensusRun, consensus-progress.js, consensus-lifecycle.js)
-left with the pipeline, which runs on the server for Watches, the API and
-topics. A saved Consensus answer still shows its footer drawers
+The browser runs Agent and Compare only; the guided Consensus run
+(#consensusRun, consensus-progress.js, consensus-lifecycle.js) is gone, and
+the pipeline runs on the server for Watches, the API and topics. A saved Consensus answer still shows its footer drawers
 (consensus-footer.js) and its earlier turns (thread-history.js).
 """
 
@@ -46,7 +45,7 @@ def test_a_saved_answer_hands_over_to_a_footer_of_drawers():
     assert 'id="consensusFooterTabs"' in template
     assert ".run-provenance" in css
     assert "App.consensusFooter = Object.freeze({ render, clear })" in footer
-    # The live run's styles went with it.
+    # No styles of the live run either.
     assert ".run-step" not in css
     assert ".run-replay" not in css
 
@@ -116,8 +115,8 @@ def test_saved_turns_render_as_a_static_history_above_the_active_one():
 def test_the_sent_message_leaves_the_field_before_prepare_runs():
     """Zwischen Klick und dem Moment, in dem der Lauf den neuen Turn aufmacht,
     liegt /prepare. Das dauerte so lange, dass es aussah, als sei der Klick
-    ins Leere gegangen: die Frage stand unveraendert im Feld (User-Befund
-    2026-08-15). Sie geht deshalb SOFORT raus und steht als eigene Blase im
+    ins Leere gegangen: die Frage stand unveraendert im Feld. Sie geht
+    deshalb SOFORT raus und steht als eigene Blase im
     Thread."""
     template = read("templates/index.html")
     query = read("static/js/query-send.js")
@@ -176,8 +175,7 @@ def test_a_run_that_never_happens_gives_the_message_back():
 
 
 def test_archived_questions_clamp_like_the_active_one():
-    """Eine lange Frage bleibt auch im Verlauf eingeklappt (acht Zeilen)
-    (User-Befund 2026-08-14)."""
+    """Eine lange Frage bleibt auch im Verlauf eingeklappt (acht Zeilen)."""
     css = read("static/css/shell.css")
     history = read("static/js/thread-history.js")
     core = read("static/js/app-core.js")
@@ -264,10 +262,9 @@ def test_sidebar_header_groups_brand_and_toggle_before_new_comparison():
 def test_consensus_loader_matches_the_run_visual_language():
     """Die synthetisierende Box bleibt still, der Loader sind die Punkte.
 
-    Frueher lief hier eine wandernde Linie (.is-synthesizing::after mit
-    @keyframes consensusLoadingLine) und davor ein Sweep-Verlauf. Beides wurde
-    bewusst entfernt: die Antwortflaeche selbst zappelt nicht. Der Test haelt
-    genau diese Entscheidung fest, statt die geloeschte Animation zu fordern.
+    Keine wandernde Linie (.is-synthesizing::after mit @keyframes
+    consensusLoadingLine) und kein Sweep-Verlauf: die Antwortflaeche selbst
+    zappelt nicht.
     """
     consensus_css = read("static/css/components-consensus.css")
     feedback_css = read("static/css/components-feedback.css")
@@ -275,8 +272,8 @@ def test_consensus_loader_matches_the_run_visual_language():
     # Die Box waehrend der Synthese: rahmenlos und ohne eigene Bewegung.
     assert ".consensus-box.is-synthesizing" in consensus_css
     assert "background: transparent" in consensus_css
-    # Keine wandernde Linie und kein Sweep mehr - weder als Regel noch als
-    # Keyframe, sonst kaeme die alte Unruhe durch die Hintertuer zurueck.
+    # Keine wandernde Linie und kein Sweep - weder als Regel noch als
+    # Keyframe, sonst kaeme die Unruhe durch die Hintertuer zurueck.
     assert ".consensus-box.is-synthesizing::after" not in consensus_css
     assert "consensusLoadingLine" not in consensus_css
     assert "consensusLoadingLine" not in feedback_css

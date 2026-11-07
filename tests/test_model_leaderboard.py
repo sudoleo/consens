@@ -38,7 +38,7 @@ class LeaderboardCollection:
         return transaction.catalog if transaction else self.db.catalog
 
 
-# Since 2026-10-03 the /model-pulse page shows rates (tests/test_model_pulse.py);
+# The /model-pulse page shows rates (tests/test_model_pulse.py);
 # the all-time pick totals stay available through the API below.
 @pytest.mark.parametrize("period,total", [("all", 24), ("since-2026-08-31", 3)])
 def test_leaderboard_api_serves_cached_totals(monkeypatch, period, total):

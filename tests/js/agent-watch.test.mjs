@@ -1,6 +1,6 @@
 /**
- * The Watch card under an Agent answer (agent-watch.js): since 2026-11-03 a
- * Watch runs the Agent again in its chat. The card shows the task the Agent
+ * The Watch card under an Agent answer (agent-watch.js): a Watch runs the
+ * Agent again in its chat. The card shows the task the Agent
  * prepared, starts it through POST /agent/watches with only the chat, the
  * turn and the schedule, and reads what runs from the chat's Watches.
  */
@@ -168,7 +168,7 @@ describe("Agent Watch card", () => {
 
   it("ends the Watch from a card the Agent prepared again for the same task", async () => {
     // A later turn proposed the same task (already_watched): the card shows the
-    // running Watch, and its End acts on it too (bug hunt 2026-11-04).
+    // running Watch, and its End acts on it too.
     const watch = { id: "w1", chat_id: CHAT, turn_id: "t0", task: TASK, goal: "", status: "active", interval: "daily",
       next_run_at: "2026-11-04T07:00:00+00:00", last_run: null };
     const { server, render, card } = boot({ watches: [watch], active_count: 1 });
@@ -214,7 +214,7 @@ describe("Agent Watch card", () => {
     await settle();
     expect(server.calls.some(call => call.url === "/agent/watches/w1/resume" && call.method === "POST")).toBe(true);
     expect(card().dataset.state).toBe("watching");
-    // A run's line no longer hides why the end did not go through.
+    // A run's line does not hide why the end did not go through.
     server.refuse = true;
     card().querySelector(".agent-watch-end").click();
     await settle();

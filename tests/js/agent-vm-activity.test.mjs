@@ -29,7 +29,7 @@ describe("VM calls in the activity", () => {
     const live = host.querySelector(".agent-progress .agent-vm");
     expect(live.dataset.status).toBe("running");
     expect(live.querySelector(".agent-vm-target").textContent).toBe("pip install pandas");
-    // Before its call began, the workspace starts (runtime audit V3).
+    // Before its call began, the workspace starts.
     expect(live.querySelector(".agent-vm-meta").textContent).toBe("Starting the workspace…");
     expect(live.open).toBe(true);
     expect(live.querySelector(".agent-vm-output").textContent).toBe("Collecting pandas\nDownloading…\n");
@@ -43,7 +43,7 @@ describe("VM calls in the activity", () => {
     activity.receive(events, vm({ status: "succeeded", command: "pip install pandas", cwd: "/home/sprite" }));
     activity.render(host, { running: true, status: "running", events, elapsedMs: 16000 });
     expect(live.open).toBe(false);
-    // A command that failed says so in words and in the dispute tone (UX audit F1).
+    // A command that failed says so in words and in the dispute tone.
     expect(live.querySelector(".agent-vm-meta").textContent).toBe("Failed · code 1 · 12s");
     expect(live.dataset.outcome).toBe("failed");
     // A cut output says so before its end.
@@ -85,7 +85,7 @@ describe("VM calls in the activity", () => {
       path: "/home/sprite/images/cafe.jpg" });
     activity.renderTurn(host, { status: "completed", agent_activity: events, assistant_response: "Done." });
     const [write, failed, edit, imported, picture] = host.querySelectorAll(".agent-activity-content .agent-vm");
-    // A picture of the web the server put into the VM (vm_save_picture, 2026-11-01).
+    // A picture of the web the server put into the VM (vm_save_picture).
     expect(picture.querySelector(".agent-vm-verb").textContent).toBe("Saved the picture as");
     expect(picture.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/images/cafe.jpg");
     // A repository the backend brought into the VM (agent_github.py).
@@ -93,7 +93,7 @@ describe("VM calls in the activity", () => {
     expect(imported.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/repos/app");
     expect(write.querySelector(".agent-vm-verb").textContent).toBe("Wrote the file");
     expect(write.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/stats.py");
-    // An exact replacement (vm_edit_file, 2026-10-26) says so with its file.
+    // An exact replacement (vm_edit_file) says so with its file.
     expect(edit.querySelector(".agent-vm-verb").textContent).toBe("Edited the file");
     expect(edit.querySelector(".agent-vm-target").textContent).toBe("/home/sprite/calc.py");
     // Nothing to open without output.
@@ -102,7 +102,7 @@ describe("VM calls in the activity", () => {
     expect(failed.textContent).not.toMatch(/error|exception|HTTP/i);
   });
 
-  // Runtime audit 2026-10-30 (A1): a broken connection is no failed command.
+  // A broken connection is no failed command.
   it("says the connection was lost, not that the step failed, and shows no clock", () => {
     const { host, activity } = setup();
     const events = [];
@@ -117,7 +117,7 @@ describe("VM calls in the activity", () => {
   });
 
   // Like Claude Code: the earlier steps fold into one line, the latest note
-  // and command stay in view (2026-10-26; before, a screen of commands).
+  // and command stay in view.
   it("folds the earlier steps of a VM run into one line while it works", () => {
     const { host, activity } = setup();
     const events = [];
@@ -153,7 +153,7 @@ describe("VM calls in the activity", () => {
     expect(host.querySelectorAll(".agent-activity-content .agent-vm")).toHaveLength(5);
   });
 
-  // update_plan (2026-10-26), like Claude Code's todo list.
+  // update_plan, like Claude Code's todo list.
   it("pins the latest plan above the live progress and keeps it once in the timeline", () => {
     const { host, activity } = setup();
     const events = [];
@@ -183,7 +183,7 @@ describe("VM calls in the activity", () => {
     activity.render(host, { running: true, status: "running", events });
     expect(preview.querySelector(".agent-plan summary").textContent).toBe("Plan · 1 of 3 done");
     // The timeline keeps the plan once, folded, where it was first made, with
-    // its latest state (UX audit A5); a failed update keeps its own line.
+    // its latest state; a failed update keeps its own line.
     const saved = host.querySelectorAll(".agent-activity-content .agent-plan");
     expect(saved).toHaveLength(2);
     expect([...saved].map(node => node.open)).toEqual([false, false]);
@@ -192,7 +192,7 @@ describe("VM calls in the activity", () => {
     expect(saved[1].querySelector("summary").textContent).toBe("Plan not updated");
   });
 
-  // vm_start_process & co. (2026-10-26): a dev server or a long test run.
+  // vm_start_process & co.: a dev server or a long test run.
   it("shows a background process with its command, then by its id", () => {
     const { host, activity } = setup();
     const events = [];
@@ -211,7 +211,7 @@ describe("VM calls in the activity", () => {
     expect(stopped.querySelector(".agent-vm-meta").textContent).toBe("Exit 143");
   });
 
-  // A message the user sent into the running response (2026-10-26).
+  // A message the user sent into the running response.
   it("shows the user's message in their own words, live and in the timeline", () => {
     const { host, activity } = setup();
     const events = [];
@@ -231,7 +231,7 @@ describe("VM calls in the activity", () => {
     expect(saved.textContent).toBe("Done");
   });
 
-  // A-B7 (docs/agent-audit-readiness-2026-10-29.md): the 63 entries beside
+  // The 63 entries beside
   // the steps counted the pauses too, so a long run's status and reasoning
   // pushed earlier pauses out of the live activity.
   it("keeps the earlier pauses of a long run in the live activity", () => {
@@ -260,7 +260,7 @@ describe("VM calls in the activity", () => {
     expect(holds.at(-1).id).toBe("hold-30");
   });
 
-  // A reviewer's halt (agent_audit.py, 2026-10-26): who paused, why, and the
+  // A reviewer's halt (agent_audit.py): who paused, why, and the
   // user's decision, live and in the saved timeline.
   it("shows a reviewer's pause with its reason, then the user's decision", () => {
     const { host, activity } = setup();
@@ -281,7 +281,7 @@ describe("VM calls in the activity", () => {
     // the current line says so.
     expect(host.querySelector(".agent-vm-fold summary").textContent).toBe("Ran 2 commands");
     expect(live.closest(".agent-vm-fold")).toBeNull();
-    // The entry says it waits; no status line repeats it (UX audit C9).
+    // The entry says it waits; no status line repeats it.
     expect(host.querySelector(".agent-current-status")).toBeNull();
     activity.receive(events, { version: 1, kind: "hold", step_id: "hold", id: "hold-a1b2c3d4e5f6", state: "steer" });
     activity.render(host, { running: true, status: "running", events });
@@ -293,7 +293,7 @@ describe("VM calls in the activity", () => {
 
   // The answer stands and its check is over: the run only saves. "Writing
   // answer…" came back for that moment in the open history and left with the
-  // end, a row in and out just as the marks arrived (2026-10-26).
+  // end, a row in and out just as the marks arrived.
   it("shows no status line while a checked answer is being saved", () => {
     const { host, activity } = setup();
     const events = [{ version: 1, kind: "status", id: "s1", status: "responding" }];
@@ -338,13 +338,12 @@ describe("VM calls in the activity", () => {
 });
 
 describe("a step in the workspace's browser", () => {
-  // Since 2026-10-27 the browser tool (agent_browser.py) with typed actions,
-  // no longer a browser command in the shell.
+  // The browser tool (agent_browser.py) with typed actions, not a browser
+  // command in the shell.
   const step = fields => vm({ name: "browser", ...fields });
   const PREVIEW = "data:image/jpeg;base64,/9j/4AAQ";
-  // Since 2026-10-29 an opened page is a card (agent_browser.preview_url):
-  // its picture, title and site, and Open for the live view; before, every
-  // browser step ended in a "Watch live" link.
+  // An opened page is a card (agent_browser.preview_url): its picture, title
+  // and site, and Open for the live view.
   it("shows an opened page as a card that waits for its picture and opens the live view", () => {
     const { app, host, activity } = setup();
     const opened = [];
@@ -383,11 +382,11 @@ describe("a step in the workspace's browser", () => {
     const saved = host.querySelector(".agent-activity-content .agent-page-card");
     expect(saved.classList.contains("agent-activity-tool")).toBe(true);
     expect(saved.querySelector(".agent-page-shot img").getAttribute("src")).toBe(PREVIEW);
-    // No step ends in a "Watch live" link any more.
+    // No step ends in a "Watch live" link.
     expect(host.querySelector(".agent-vm-watch")).toBeNull();
   });
 
-  // 2026-10-29, Max: the card folded away with the earlier steps while the
+  // The card folded away with the earlier steps while the
   // browser was still open. It stays, changed in place, also after the run.
   it("keeps the page the browser shows pinned while the run goes on, and after it", () => {
     const { host, activity } = setup();
@@ -424,8 +423,8 @@ describe("a step in the workspace's browser", () => {
     expect(other.host.querySelector(".agent-page-pin").hidden).toBe(true);
   });
 
-  // 2026-10-30, Max: the card kept the page as it opened. A later step's
-  // picture (agent_browser.PREVIEW_SECONDS) takes its place, with the title
+  // The card does not keep the page as it opened: a later step's picture
+  // (agent_browser.PREVIEW_SECONDS) takes its place, with the title
   // and address of that step's page, and without the waiting light between.
   it("shows the page as it is now on the pinned card, from the newest picture a later step brought", () => {
     const { host, activity } = setup();
@@ -499,7 +498,7 @@ describe("a step in the workspace's browser", () => {
     activity.render(host, { running: true, status: "running", events });
     const find = host.querySelectorAll(".agent-activity-content .agent-vm")[2];
     expect(find.querySelector(".agent-vm-verb").textContent).toBe("Searched the page for");
-    // A search term is a quote in the text's type (agent-chat.css adds the marks, A8).
+    // A search term is a quote in the text's type (agent-chat.css adds the marks).
     expect(find.querySelector(".agent-vm-target").textContent).toBe("price");
     expect(find.dataset.target).toBe("quote");
     expect(find.querySelector(".agent-vm-output").textContent).toContain('[e4] "Sort by price"');
@@ -533,7 +532,7 @@ describe("installing and asking for a domain", () => {
     const step = host.querySelector(".agent-activity-content .agent-hold-step");
     expect(step.querySelector("strong").textContent).toBe("The agent asked to reach api.example.com");
     expect(step.querySelector(".agent-hold-step-state").textContent).toBe("Network access · You did not allow it");
-    // Undecided, it stays closed and the work goes on: never "Stopped" (UX audit 2026-10-29 C8).
+    // Undecided, it stays closed and the work goes on: never "Stopped".
     activity.receive(events, { version: 1, kind: "hold", id: "hold-def", step_id: "hold", halt: "domain",
       domain: "api.example.org", reviewer: "", reason: "", entry: 6, gate: true, state: "timeout" });
     activity.render(host, { running: false, status: "completed", events });
@@ -543,8 +542,8 @@ describe("installing and asking for a domain", () => {
 
   // A step that acts outside the workspace that not every reviewer could
   // check (agent_audit.gate_hold, GATE_UNCHECKED): no reviewer, no reason,
-  // yet the run waits for the user like on any pause (2026-10-28: it was
-  // filtered out, the heading said "Thinking…" and the history lost it).
+  // yet the run waits for the user like on any pause (filtered out, the
+  // heading said "Thinking…" and the history lost it).
   it("shows a pause before an unchecked step and keeps the decision", () => {
     const { host, activity } = setup();
     const events = [];
@@ -561,7 +560,7 @@ describe("installing and asking for a domain", () => {
     expect(saved.querySelector(".agent-hold-step-state").textContent).toBe("Not checked · You let the work go on");
   });
 
-  // The agent's own question (ask_user, 2026-10-29): it waits for the user,
+  // The agent's own question (ask_user): it waits for the user,
   // not for a decision on a pause, and the history keeps what it asked.
   it("waits for the user on the agent's question and keeps how it ended", () => {
     const { host, activity } = setup();
@@ -571,7 +570,7 @@ describe("installing and asking for a domain", () => {
       entry: null, state: "waiting" });
     activity.render(host, { running: true, status: "running", events });
     const live = host.querySelector(".agent-progress .agent-hold-step");
-    // In the present while it waits (UX audit 2026-10-29 C14), in the past once over.
+    // In the present while it waits, in the past once over.
     expect(live.querySelector("strong").textContent).toBe("The agent asks you to take over the browser");
     expect(live.querySelector(".agent-hold-step-state").textContent).toBe("Waiting for you");
     expect(host.querySelector(".agent-current-status")).toBeNull();
@@ -584,7 +583,7 @@ describe("installing and asking for a domain", () => {
   });
 });
 
-// Since 2026-10-28 the agent's text beside a tool call stands whole in the
+// The agent's text beside a tool call stands whole in the
 // timeline (agent_answer_mode.NOTE_CHARS), its lines kept.
 describe("The agent's note beside a tool call", () => {
   it("keeps the whole text and its lines in the live progress", () => {
@@ -599,8 +598,8 @@ describe("The agent's note beside a tool call", () => {
   });
 });
 
-// 2026-10-28 (Max): a long run without a VM step grew its live lines down
-// the screen. Every run folds its earlier steps; the step at work and the
+// A long run without a VM step grew its live lines down the screen: every
+// run folds its earlier steps; the step at work and the
 // note leading into it stay, a long note three lines tall.
 describe("Live lines of a long run", () => {
   it("fold every earlier step, not only commands", () => {
@@ -621,7 +620,7 @@ describe("Live lines of a long run", () => {
   });
 });
 
-// The thinking stays visible (UX audit 2026-10-29, package A).
+// The thinking stays visible.
 describe("the agent's thinking in the activity", () => {
   it("keeps the reasoning beside a note, live and in the history (A1)", () => {
     const { host, activity } = setup();
@@ -633,7 +632,7 @@ describe("the agent's thinking in the activity", () => {
     activity.receive(events, { version: 1, kind: "progress", step_id: "completion:1", id: "completion:1/note",
       text: "The calculation is done: gas costs more than the heat pump." });
     activity.render(host, { running: false, status: "completed", events });
-    // Before, one note hid every thought of the run.
+    // One note does not hide every thought of the run.
     expect([...host.querySelectorAll(".agent-activity-reasoning")].map(node => node.textContent))
       .toEqual(["Clarifying the question", "Checking the numbers"]);
     // A step's thought its own note repeats word for word stands back.
@@ -670,7 +669,7 @@ describe("the agent's thinking in the activity", () => {
   });
 });
 
-// Runtime audit 2026-10-30 (docs/agent-workspace-runtime-audit-2026-10-30.md).
+// The findings: docs/agent-workspace-runtime-audit-2026-10-30.md.
 describe("workspace steps after the runtime audit", () => {
   // The window's clock, set by the test (jsdom's Date is its own).
   function clocked() {
@@ -734,7 +733,7 @@ describe("workspace steps after the runtime audit", () => {
     at("2026-10-30T10:00:03Z");
     activity.render(host, { running: true, status: "running", events });
     expect(meta(live).textContent).toBe("Running · 3s");
-    // Saved before 2026-10-30: no started_at, no duration, no clock.
+    // An older saved step: no started_at, no duration, no clock.
     const saved = setup();
     saved.activity.renderTurn(saved.host, { status: "completed", assistant_response: "Done.", agent_activity: [
       { version: 1, kind: "tool", id: "s:1/tool", name: "browser", action: "click", ref: "e12", status: "succeeded" }] });

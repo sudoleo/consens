@@ -182,11 +182,11 @@ describe("the local copy", () => {
     const { settings } = open();
     expect(() => settings.set("theme", "dark")).toThrow(/Unknown account setting/);
     expect(() => settings.onChange("theme", () => {})).toThrow(/Unknown account setting/);
-    // The Agent's comparison options left with its comparison mode (2026-10-31).
+    // The Agent's comparison options left with its comparison mode.
     expect(() => settings.get("agent_preferences")).toThrow(/Unknown account setting/);
   });
 
-  // agent_preferences is no setting any more: what a browser stored of it
+  // agent_preferences is no setting: what a browser stored of it
   // goes, in both of its formats, and nothing else does.
   it("drops the retired Agent choices this browser still holds", () => {
     const { settings, local } = open({ storage: {
@@ -348,7 +348,7 @@ describe("sync with the account", () => {
   });
 
   it("ignores the retired Agent choices an account still holds", async () => {
-    // Saved before 2026-10-31 (agent_preferences, the comparison mode's
+    // Saved by an older version (agent_preferences, the comparison mode's
     // options), or still pending from a page of the version before: neither
     // reaches this browser nor goes back to the account.
     const server = fakeServer({ settings: { agent_preferences: { autonomy: "free", judges: "off" }, claim_counts: true },

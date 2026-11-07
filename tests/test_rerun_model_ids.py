@@ -3,7 +3,7 @@
 Ein Topic speichert beim Anlegen seinen Modellplan (run_config.provider_models).
 Wird ein Modell danach aus den Providerlisten entfernt, ging die gespeicherte
 ID unverändert an OpenRouter und fiel dort bei jedem Lauf aus; der Lauf
-überlebte nur, solange noch zwei Familien antworteten. Seitdem hebt
+überlebte nur, solange noch zwei Familien antworteten. Deshalb hebt
 cfg.runnable_model_id eine migrierte ID auf ihre aktuelle Form und ersetzt ein
 entferntes Modell durch das Standardmodell seiner Familie, ohne das Topic oder
 frühere Läufe umzuschreiben. Watches speichern keinen Modellplan.

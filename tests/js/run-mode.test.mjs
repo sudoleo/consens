@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 // run-mode.js is the single source of truth for Agent / Compare (Consensus
-// left the browser on 2026-10-25). The value is the account setting
+// does not run in the browser). The value is the account setting
 // "run_mode" (user-settings.js, whose own tests cover storage, migration and
 // sync).
 function boot(storage = {}) {
@@ -82,7 +82,7 @@ describe("run mode", () => {
     dom.window.close();
   });
 
-  // Max, Apple-Audit H3: a guest sees Agent as an account does by default;
+  // A guest sees Agent as an account does by default;
   // the login comes on Send (composer-invite.js), nothing runs without it.
   it("gives a guest Agent and Compare beside it, and an account without access only Compare", () => {
     const {window, dom} = boot();

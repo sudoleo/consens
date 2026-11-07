@@ -1,5 +1,5 @@
 /**
- * The chat list in groups (static/js/chat-list.js, 2026-10-22).
+ * The chat list in groups (static/js/chat-list.js).
  *
  * Pinned chats lead; the others stand under Today, Yesterday, Previous 7
  * days, Previous 30 days, the month, the year. Rows arrive from several

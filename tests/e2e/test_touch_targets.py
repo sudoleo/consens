@@ -1,4 +1,4 @@
-"""A finger is not a mouse (Apple audit F5): on a touch phone every control
+"""A finger is not a mouse: on a touch phone every control
 of the composer, the drawer, an answer and the login dialog takes a 44 x 44 px
 tap, measured with elementFromPoint, while what is drawn keeps its size."""
 import json

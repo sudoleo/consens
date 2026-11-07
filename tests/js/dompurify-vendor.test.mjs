@@ -1,5 +1,5 @@
 /**
- * The DOMPurify copy the app actually ships (R02).
+ * The DOMPurify copy the app actually ships.
  *
  * The version is read from package.json, so the vendored path under
  * static/vendor cannot drift from the pin, and the vendor regression payloads

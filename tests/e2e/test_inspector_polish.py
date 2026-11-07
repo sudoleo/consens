@@ -11,7 +11,7 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
     context, page = _real_firebase_page(browser, phase4_server,
         init_script=f"localStorage.setItem('theme','{theme}')")
     try:
-        # A saved Consensus answer: since 2026-10-25 the browser runs none,
+        # A saved Consensus answer: the browser runs none,
         # so its footer carries no run facts or "Run again".
         seed_insights(page, differences=DIFFERENCES[:1],
                       agreement={'score': 64, 'model_count': 3, 'scored_claims': 7, 'total_claims': 10, 'coverage_percent': 70},
@@ -68,14 +68,14 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
                 expect(settings).to_be_hidden()
                 expect(inspector).to_be_visible()
             page.locator('#answerReaderSections [data-section="differences"]').click()
-            # The card starts folded (Max 2026-10-23) and keeps its state
+            # The card starts folded and keeps its state
             # when it comes back into the reader on the next width.
             card = inspector.locator('.diff-card[data-reader-ready]')
             expect(card).to_have_count(1)
             if card.get_attribute('open') is None:
                 card.locator('summary').click()
             expect(card).to_have_attribute('open', '')
-            # A saved answer starts no Resolve round (2026-10-25).
+            # A saved answer starts no Resolve round.
             expect(inspector.locator('.diff-resolve-btn')).to_have_count(0)
             reader_screenshot(page, f'polished-differences-{width}-{theme}')
             page.locator('#answerReaderClose').click()
@@ -88,7 +88,7 @@ def test_inspector_density_disclosures_and_footer(browser, phase4_server, theme)
             expect(page.locator('#consensusFooterTabs .consensus-evidence-action:visible')).to_have_count(3)
             reader_screenshot(page, f'footer-{mode}-320-{theme}')
         # Missing sections must collapse the existing equal-column grid, even
-        # though the visible controls now use their own internal grid.
+        # though the visible controls use their own internal grid.
         for selector in ['#consensusSourcesTab', '#consensusDifferencesTab']:
             page.locator(selector).evaluate('button => button.hidden = true')
             expect(page.locator(selector)).to_be_hidden()

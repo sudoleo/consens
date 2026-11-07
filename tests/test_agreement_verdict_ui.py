@@ -43,7 +43,7 @@ def test_settings_offer_three_agreement_display_levels_persistently():
 
 def test_footer_status_is_separate_from_navigation_and_tools_follow_it():
     template = (ROOT / "templates" / "index.html").read_text(encoding="utf-8")
-    # The source-check status beside the Sources tab went with the check (2026-10-15).
+    # No source-check status beside the Sources tab: the check is gone.
     assert 'consensusSourceCheckStatus' not in template
     assert template.index('id="consensusFooterTabs"') < template.index('id="consensusFooterActions"')
     assert 'id="consensusMarkerLegend"' not in template
@@ -94,7 +94,7 @@ def test_public_mockups_use_the_same_score_semantics():
     assert "Agreement on the core" not in product
     assert '<div class="consensus-verdict is-calm">' in product
     assert '<span class="verdict-headline">Strong agreement</span>' in product
-    # Seit 2026-10-31 hat der Agent einen Modus: Die Pruefer markieren die
+    # Der Agent hat einen Modus: Die Pruefer markieren die
     # Antwort, es gibt keinen Score. Die Landing zeigt denselben Lauf wie die
     # Demo in /app, also weder Verdict noch Zahl.
     for gone in ("consensus-verdict", "/100 agreement", "Agreement score", "verdict-gauge"):

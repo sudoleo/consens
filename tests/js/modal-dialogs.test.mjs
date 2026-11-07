@@ -1,12 +1,10 @@
 /**
- * Settings, Help and Feedback as real dialogs (audit F3, F5).
- *
- * The three windows used to be <div>s that a click set to display:block:
- * no dialog role, no Escape, no focus handling, a <span> as close button,
- * and a backdrop listener on window that also fired when a text selection
- * started in a field and ended over the backdrop. They are native <dialog>s
- * now, opened through App.modalDialog. The markup is cut from
- * templates/index.html and the real /app scripts run in their load order.
+ * Settings, Help and Feedback as real dialogs: native <dialog>s opened
+ * through App.modalDialog, with a dialog role, Escape, focus handling and a
+ * real close button, and no backdrop listener on window that also fires when
+ * a text selection starts in a field and ends over the backdrop. The markup
+ * is cut from templates/index.html and the real /app scripts run in their
+ * load order.
  *
  * jsdom has HTMLDialogElement but no showModal(), so the helper's fallback
  * path runs here; one test stubs showModal/close like a browser to cover the
@@ -67,7 +65,7 @@ describe("dialog markup", () => {
       expect(close.getAttribute("type")).toBe("button");
       expect(close.getAttribute("aria-label")).toMatch(/^Close /);
     }
-    // Help is no longer nested in Settings: closing one must not hide the other.
+    // Help is not nested in Settings: closing one must not hide the other.
     expect(document.getElementById("systemPromptModal").contains(document.getElementById("helpModal"))).toBe(false);
     expect(errors).toEqual([]);
     window.close();

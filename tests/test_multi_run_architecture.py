@@ -47,7 +47,7 @@ def test_query_callbacks_use_their_bound_context_not_visible_dom():
     assert "window.currentEvidenceSources =" not in query
     assert "prepareResponseSourcesForEvidence" in sources
 
-    # The Consensus pipeline left the browser on 2026-10-25: no script
+    # The Consensus pipeline does not run in the browser: no script
     # starts it, and no bridge reaches it from the visible DOM.
     scripts = "\n".join(
         path.read_text(encoding="utf-8")
@@ -82,7 +82,7 @@ def test_bookmark_view_and_logout_keep_run_ownership_explicit():
     assert "window.App.consensusFooter?.clear?.()" in view
     assert 'row.dataset.runId = context.runId' in view
     # One delegated listener opens every run row, also one that became a
-    # saved row in place (Apple audit C7/A11).
+    # saved row in place.
     assert "registry.show(row.dataset.runId);\n    window.App.chatScroll?.opened?.();" in view
     assert '"#bookmarksContainer .bookmark.run-entry[data-run-id]"' in view
     assert "if (registry.isVisible(context.runId))" not in view  # projector is already selected-only
@@ -95,6 +95,6 @@ def test_bookmark_view_and_logout_keep_run_ownership_explicit():
     assert "clearResponseBoxes" in new_comparison
 
     # A saved contradiction shows its stored Resolve result; the browser
-    # starts no new round against the visible run (2026-10-25).
+    # starts no new round against the visible run.
     assert "function runResolveRound" not in insights
     assert "resolutionBindingIsWritable" not in insights

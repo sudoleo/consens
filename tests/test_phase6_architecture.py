@@ -104,7 +104,7 @@ def test_all_server_product_paths_delegate_to_neutral_pipeline():
     chat = source("app/api/routers/chat.py")
     assert "run_consensus_pipeline(" in api
     assert "run_consensus_pipeline(" in watch
-    # The browser runs no Consensus since 2026-10-25: /ask_* answers Compare.
+    # The browser runs no Consensus: /ask_* answers Compare.
     assert "analyze_provider_answers(" not in chat and "query_consensus" not in chat
     assert "topic_pipeline.execute_topic" in topic
     assert "watch_scheduler" not in topic
@@ -204,15 +204,10 @@ def test_consensus_visuals_are_shared_and_dead_dom_contracts_are_gone():
     assert ".consensus-verdict" in shared
     assert ".claim-badge" in shared
     assert ".cx-claim.is-major" in shared
-    # Die Punkte neben den Marken sind seit 2026-08-15 ersatzlos weg
-    # (User-Vorgabe); nichts darf sie unbemerkt wieder einfuehren.
+    # Keine Punkte neben den Marken (User-Vorgabe); nichts darf sie
+    # unbemerkt wieder einfuehren.
     assert ".cx-marker" not in shared
-    # Beide Blaetter binden das gemeinsame ein, und zwar mit DEMSELBEN
-    # Cache-Key. Das Datum steht hier bewusst nicht mehr fest verdrahtet: ob
-    # ein Token aktuell ist, prueft
-    # test_all_active_local_assets_have_current_consistent_cache_keys, und ein
-    # hartes Datum machte aus jedem faelligen Bump einen Testfehler an einer
-    # Stelle, die davon gar nicht handelt.
+    # Beide Blaetter binden das gemeinsame ein.
     # Nested imports carry no version: asset_url folds their bytes into the
     # entry stylesheet's hash (see test_frontend_assets).
     for path in ("static/css/landing.css", "static/css/components-consensus-insights.css"):

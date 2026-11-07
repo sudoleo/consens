@@ -59,8 +59,8 @@ it('marks pages read for an answer without a comparison in its sources', () => {
   expect(panel.textContent).toContain('Read by the agent');
   dom.window.close();
 });
-// A comparison-mode turn saved before 2026-10-31 that ended while its
-// answers were still pending keeps saying so.
+// An older comparison-mode turn that ended while its answers were still
+// pending keeps saying so.
 it('shows the comparison purpose while its answers and checks are still pending', () => {
   const {window: w, document: d, dom} = setup();
   const host = d.createElement('div');
@@ -299,7 +299,7 @@ it('opens a fully answered, finished check on its findings, without a status lin
   w.App.agentReview.render(body, review);
   d.querySelector('[data-section="differences"]').click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  // "1 model answered · Checked" said nothing the findings don't (Max 2026-10-23).
+  // "1 model answered · Checked" said nothing the findings don't.
   expect(panel.querySelector('.agent-evidence-status')).toBeNull();
   expect(panel.textContent).not.toContain('Checked');
   const order = [...panel.children].map(child => child.className);
@@ -457,7 +457,7 @@ it('leaves marks hidden by the highlight setting out of the reveal', () => {
 });
 
 const claim = (anchor, extra = {}) => ({ anchor, agree: ['GPT'], dissent: [], coverage: 'supported', ...extra });
-// Marks are laid over the text on screen (Apple audit A6): the real
+// Marks are laid over the text on screen: the real
 // Markdown renderer, and a marker that wraps its anchor where it stands.
 it('keeps the text, and a selection in it, while the marks arrive', () => {
   const text = 'The first paragraph stays plain.\n\nThe tower is 330 m tall. A ticket costs 29 euros.';
@@ -687,7 +687,7 @@ it('says calmly that the answer check was off for a saved answer and offers answ
   dom.window.close();
 });
 it('keeps the comparison cards and their buttons while the answer streams and model answers grow', () => {
-  // Rebuilding them on every 100-ms tick swallowed clicks (Apple audit D7).
+  // Rebuilding them on every 100-ms tick swallowed clicks.
   const {window: w, document: d, dom} = setup();
   const details = d.createElement('div');
   const review = snapshot();
@@ -719,7 +719,7 @@ it('keeps the comparison cards and their buttons while the answer streams and mo
 });
 it('parses each answer text for its links once, not on every render', () => {
   // Opening a chat ran marked and DOMPurify over every model answer again
-  // for each render and review update (Apple audit D5).
+  // for each render and review update.
   const {window: w, document: d, dom} = setup();
   const parse = vi.fn(text => marked.parse(text));
   w.marked = { parse };
@@ -738,7 +738,7 @@ it('parses each answer text for its links once, not on every render', () => {
   dom.window.close();
 });
 
-// --- Audit instead of comparison (admins, since 2026-10-25) --------------------------
+// --- Audit instead of comparison ---------------------------------------------------
 function auditReview(status = 'partial') {
   return { mode: 'audit', status, answer_version: 1, answer_hash: 'audit-hash', comparisons: [],
     versions: [{ id: 1, text: 'Exact answer.', hash: 'audit-hash', status, comparison_ids: [] }],
@@ -761,13 +761,13 @@ it('marks a reviewed answer with its reviewers\' notes, without a score or diffe
   expect(w.renderStoredConsensusClaims).not.toHaveBeenCalled();
   expect(w.renderStoredDifferenceCards).not.toHaveBeenCalled();
   expect(d.querySelector('.agent-agreement')).toBeNull();
-  // A partial review: a quiet word at the end of the row, no line of its own (D13).
+  // A partial review: a quiet word at the end of the row, no line of its own.
   const status = d.querySelector('.agent-review > .agent-review-status');
   expect(status.textContent).toBe('2 of 3 reviewed');
   expect(status.classList.contains('visually-hidden')).toBe(false);
   const buttons = [...d.querySelectorAll('.agent-evidence-link')];
   expect(buttons.map(b => b.getAttribute('aria-label'))).toEqual(['Notes 2', 'Sources 1']);
-  // The reviewers' own glyph, not the comparison's fork (B10).
+  // The reviewers' own glyph, not the comparison's fork.
   expect(buttons[0].querySelector('path').getAttribute('d')).toContain('M4 5h16v11');
   buttons[0].click();
   const [context, options] = w.App.answerReader.openContext.mock.calls.at(-1);
@@ -780,7 +780,7 @@ it('marks a reviewed answer with its reviewers\' notes, without a score or diffe
   expect(panel.textContent).toContain('Missing context.');
   expect(panel.textContent).toContain('No objections from Claude.');
   expect(panel.textContent).toContain('No review from Gemini: its review could not be read.');
-  // The tally in the order of seriousness, one phrase each (D5).
+  // The tally in the order of seriousness, one phrase each.
   expect([...panel.querySelectorAll('.agent-audit-tally > span')].map(span => span.textContent)).toEqual(['1 wrong', '1 incomplete']);
   expect(panel.querySelector('a.agent-audit-source').href).toBe('https://example.org/proof');
   // Opening the notes from a mark's card leads to the same panel.
@@ -822,7 +822,7 @@ it('strokes the reviewers\' marks on when a live answer is first reviewed', () =
   vi.useRealTimers();
   dom.window.close();
 });
-// 2026-11-01: the answer stays still while it is reviewed; the reviewers'
+// The answer stays still while it is reviewed; the reviewers'
 // marks stand before "Reviewing the answer…", each at work until its final
 // round is in.
 it('shows each reviewer at work before the word while the review runs, and nothing of it once it ended', () => {
@@ -855,7 +855,7 @@ it('waits with the marks until every reviewer is done, and never marks another t
   w.App.agentReview.render(body, auditReview('running'));
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
   // The row stands while the reviewers work, as it will: Notes waiting in
-  // grey, the state where Watch and Share will stand (B3).
+  // grey, the state where Watch and Share will stand.
   const row = d.querySelector('.agent-review');
   expect(row.hidden).toBe(false);
   const waiting = row.querySelector('.agent-evidence-link');
@@ -869,7 +869,7 @@ it('waits with the marks until every reviewer is done, and never marks another t
   body.dataset.markdown = 'Exact answer.';
   w.App.agentReview.render(body, auditReview('succeeded'));
   expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
-  // The same live region says the result, for screen readers only (H5).
+  // The same live region says the result, for screen readers only.
   expect(row.querySelector('.agent-review-status')).toBe(status);
   expect(status.textContent).toBe('Review finished: 2 notes');
   expect([status.hidden, status.classList.contains('visually-hidden')]).toEqual([false, true]);
@@ -881,17 +881,17 @@ it('shows the review in the duration disclosure and opens its notes', () => {
   w.App.agentReview.renderActivity(details, auditReview('running'), 'Exact answer.');
   expect(details.textContent).toContain('Reviewing the answer…');
   // "Read the notes" holds its place, hidden and disabled, so the open
-  // history does not grow under the arriving marks (2026-10-26).
+  // history does not grow under the arriving marks.
   const reserved = details.querySelector('.agent-activity-insight-actions.is-reserved');
   expect(reserved.getAttribute('aria-hidden')).toBe('true');
   expect(reserved.querySelector('button').disabled).toBe(true);
   w.App.agentReview.renderActivity(details, auditReview(), 'Exact answer.');
   expect(details.querySelector('.is-reserved')).toBeNull();
-  // One line: who reviewed (UX audit A6), not a label and a list.
+  // One line: who reviewed, not a label and a list.
   expect(details.textContent).toContain('Reviewed by GPT, Claude, Gemini');
   expect(details.textContent).not.toContain('Review · ');
   expect(details.textContent).toContain('No review: Gemini');
-  // The row's number, and "marked" only for what is coloured in the text (B5).
+  // The row's number, and "marked" only for what is coloured in the text.
   expect(details.querySelector('.agent-activity-check').textContent).toBe('2 notes · 1 passage marked in the text');
   expect(details.querySelector('button .agent-evidence-icon')).not.toBeNull();
   details.querySelector('button').click();
@@ -900,7 +900,7 @@ it('shows the review in the duration disclosure and opens its notes', () => {
   expect(options.section).toBe('differences');
   dom.window.close();
 });
-// compare_models in audit mode (since 2026-10-31): the models the agent asked
+// compare_models in audit mode: the models the agent asked
 // advise it, no judge checks their answers, the reviewers review the answer.
 function advisedReview(status = 'succeeded') {
   const review = auditReview(status);
@@ -1069,7 +1069,7 @@ it('lists the notes on the work with their log entry, also those of a failed fin
   expect(buttons[0].getAttribute('aria-label')).toBe('Notes 4');
   buttons[0].click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  // Passage by passage, then the notes elsewhere, then those on the work (D5).
+  // Passage by passage, then the notes elsewhere, then those on the work.
   const groups = [...panel.querySelectorAll('.agent-audit-group')];
   expect(groups.map(group => group.querySelector('.agent-audit-work-head').textContent)).toEqual(['Other notes', 'On the work']);
   const work = groups[1].querySelectorAll('.agent-audit-note');
@@ -1110,7 +1110,7 @@ it('ends the review in the disclosure when it was stopped or never started, and 
   expect(w.App.agentReview.failureNote({ error: 'stopped' }, auditReview('running'), 'Exact answer.')).not.toBe('');
   dom.window.close();
 });
-// B8 / A-M7 (docs/agent-audit-readiness-2026-10-29.md): a review stopped
+// A review stopped
 // before its final round keeps what the reviewers found while the agent
 // worked (`live`); the row offers Notes and the disclosure "Read the notes".
 it('offers the notes of a stopped review that kept findings from the run', () => {
@@ -1133,11 +1133,11 @@ it('offers the notes of a stopped review that kept findings from the run', () =>
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
   buttons[0].click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  // Stopped: said once, above; a reviewer's own reason only where it differs (D7).
+  // Stopped: said once, above; a reviewer's own reason only where it differs.
   expect(panel.querySelector('.agent-evidence-status').textContent).toBe('Stopped – these notes came while the agent was working.');
   expect(panel.textContent).not.toContain('the review was stopped');
   expect(panel.textContent).toContain('The command deleted more than asked.');
-  // A reply without its review has its own words (A-M6).
+  // A reply without its review has its own words.
   expect(panel.textContent).toContain('No review from MiMo: its reply was empty.');
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, stopped, 'Partial text');
@@ -1157,7 +1157,7 @@ it('offers the notes of a stopped review that kept findings from the run', () =>
   expect(d.querySelector('.agent-review:not([hidden])')).toBeNull();
   dom.window.close();
 });
-// G7 (2026-10-29): a run stopped before it wrote a word keeps its reviewers'
+// A run stopped before it wrote a word keeps its reviewers'
 // live marks, in the shape the server saves (AnswerAudit._stopped_early):
 // no version, no answer, rows "stopped", the marks on the work only.
 it('offers the notes of a run stopped before it wrote any answer', () => {
@@ -1171,7 +1171,7 @@ it('offers the notes of a run stopped before it wrote any answer', () => {
       claims: [], unplaced: [],
       process: [{ model: 'OpenAI', kind: 'doubtful', note: 'The lookup names no source.', entry: 7,
         entry_kind: 'step', entry_name: 'openai/gpt', mark: 1, live: true }] } };
-  // The stop notice and Retry first, the notes after them (B8).
+  // The stop notice and Retry first, the notes after them.
   const notice = d.createElement('p'); notice.className = 'agent-answer-error'; notice.textContent = 'Stopped.';
   body.after(notice);
   w.App.agentReview.render(body, stopped, { key: 't1', question: 'Q' });
@@ -1190,7 +1190,7 @@ it('offers the notes of a run stopped before it wrote any answer', () => {
   expect(panel.textContent).toContain('The lookup names no source.');
   expect(panel.textContent).not.toContain('the review was stopped');
   // Without an answer the turn's own stop notice stands, not "may be incomplete";
-  // a stop of the user's says once what the reviewers found by then (B8).
+  // a stop of the user's says once what the reviewers found by then.
   expect(w.App.agentReview.failureNote({ error: 'Response stopped.' }, stopped, '')).toBe('Response stopped.');
   expect(w.App.agentReview.failureNote({ code: 'cancelled', error: 'Response stopped.' }, stopped, ''))
     .toBe('Stopped. The reviewers had 1 note by then.');
@@ -1200,7 +1200,7 @@ it('offers the notes of a run stopped before it wrote any answer', () => {
   expect(details.querySelector('.agent-activity-insight-actions button').disabled).toBe(false);
   dom.window.close();
 });
-// Bug hunt 2026-11-02: every answer stopped before it was fixed has the hash
+// Every answer stopped before it was fixed has the hash
 // of "" (agent_comparison.snapshot); two such turns in one chat opened each
 // other's notes, and the reader on one turn's notes swapped to the other's.
 it('keeps the notes of two turns stopped before their answers apart', () => {
@@ -1232,7 +1232,7 @@ it('keeps the notes of two turns stopped before their answers apart', () => {
   expect(refreshed.every(context => context.key !== fromActivity.key)).toBe(true);
   dom.window.close();
 });
-// UX audit B4: a review without a single note says so in the row itself;
+// A review without a single note says so in the row itself;
 // a failed one offers its reasons under Notes, without a number.
 it('says "No objections" in the row when the reviewers found nothing, and no number for a failed review', () => {
   const {window: w, document: d, dom} = setup();
@@ -1258,7 +1258,7 @@ it('says "No objections" in the row when the reviewers found nothing, and no num
     .toEqual(['No review from GPT, Claude, Gemini: it ran out of time.']);
   dom.window.close();
 });
-// UX audit B1: the row of an answer with sources only is the same part as a
+// The row of an answer with sources only is the same part as a
 // review's row (its phone grid needs .agent-evidence-grid).
 it('builds the sources-only row like every other row under an answer', () => {
   const {window: w, document: d, dom} = setup();
@@ -1269,7 +1269,7 @@ it('builds the sources-only row like every other row under an answer', () => {
   expect(d.querySelector('.agent-review').getAttribute('aria-label')).toBe('Answer evidence');
   dom.window.close();
 });
-// UX audit B6: an audited turn in the history keeps its reviewers beside
+// An audited turn in the history keeps its reviewers beside
 // "Thought for …", as the live turn shows them; each opens the notes.
 it('puts the reviewers of an audited turn in the history beside its "Thought for" line', () => {
   const {window: w, document: d, dom} = setup();
@@ -1289,7 +1289,7 @@ it('puts the reviewers of an audited turn in the history beside its "Thought for
   expect(activity.querySelectorAll('.agent-history-models')).toHaveLength(1);
   dom.window.close();
 });
-// Bug hunt 2026-11-02: a turn in the history whose review still ran (the
+// A turn in the history whose review still ran (the
 // chat opened again within its seconds) had clickable reviewers, whose notes
 // said "no complete answer arrived". They wait as its Notes do.
 it('keeps the reviewers of a history turn shut while its review runs', () => {

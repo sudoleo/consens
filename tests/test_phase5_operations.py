@@ -126,7 +126,7 @@ class Collection:
 
 class Transaction:
     def get(self, ref):
-        # Match google-cloud-firestore 2.20.x: Transaction.get() is a
+        # Match google-cloud-firestore: Transaction.get() is a
         # generator, not a DocumentSnapshot.  Production code must use
         # DocumentReference.get(transaction=transaction) for single-document
         # reads.
@@ -160,7 +160,7 @@ def test_bookmark_quota_counts_merges_and_rejects_oversize(monkeypatch):
     assert persistence_guard.MAX_BOOKMARKS_PER_USER == 500
     # The chat cap is the limit users meet, before a run. The bookmark cap
     # refuses only after it, so it leaves as much room again for bookmarks
-    # without a chat (2026-10-19: 181 chats + 87 older bookmarks hit 250).
+    # without a chat (181 chats + 87 older bookmarks hit 250).
     from app.services import chat_store
     assert persistence_guard.MAX_BOOKMARKS_PER_USER >= 2 * chat_store.MAX_CHATS_PER_OWNER
     db = Database()
@@ -707,8 +707,7 @@ def test_due_brief_query_filters_and_limits_in_firestore():
 def test_phase5_frontend_vote_binding_and_deployment_contracts():
     root = Path(__file__).resolve().parents[1]
     firebase_js = (root / "static" / "firebase.js").read_text(encoding="utf-8")
-    # The browser casts no vote since 2026-10-25: Model Pulse counts the
-    # server's own runs (agent_runs.py, the pipeline for Watches and topics).
+    # The browser casts no vote; Model Pulse is an archive of earlier picks.
     assert "recordModelVote" not in firebase_js
     assert not (root / "static" / "js" / "consensus-run.js").exists()
 

@@ -114,10 +114,9 @@ def test_the_spec_tables_and_targets_from_turns_receipts_and_counters():
 
 
 def test_the_turns_that_asked_the_models_and_the_clean_ones():
-    """compare_models (in audit mode since 2026-10-31): clean are turns that
-    completed, were reviewed and got at least two answers in every
-    comparison; a "partial" one with a single answer is not (it counted as
-    clean before 2026-11-01)."""
+    """compare_models in audit mode: clean are turns that completed, were
+    reviewed and got at least two answers in every comparison; a "partial"
+    one with a single answer is not."""
     source = data()
     asked = {**turn(reviewers=[LUNA, FLASH]), "comparisons": ["succeeded", "partial"], "comparison_answers": [2, 2]}
     source["turns"].update({
@@ -156,8 +155,8 @@ def test_quantiles_by_nearest_rank():
 
 def test_the_allowance_sums_only_euro_charges_and_counts_the_token_account_apart():
     """quota_charged was tokens until 2026-10-31 and micro-euros since (the
-    receipt's quota_day ends in _eur); a window across the switch added both
-    (bug hunt 2026-10-31)."""
+    receipt's quota_day ends in _eur); a window across the switch once added
+    both."""
     sample = data()
     sample["receipts"] += [
         receipt(OWN, "t1", "completion:2", TERRA, 29, 30, quota=900_000, cost=0, quota_day="2026-10-30"),

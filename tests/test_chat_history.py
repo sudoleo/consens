@@ -414,17 +414,16 @@ UIDS = {AUTH_OWNER["Authorization"]: "owner-uid", AUTH_OTHER["Authorization"]: "
 
 
 def create_chat(client, *, title=None, headers=AUTH_OWNER):
-    """A Consensus chat as it is stored, for the turns below. Since
-    2026-11-07 POST /chats makes Agent chats only (the browser runs no
-    Consensus chat since 2026-10-25); reading, listing and deleting still
-    meet the older chats."""
+    """A Consensus chat as it is stored, for the turns below. POST /chats
+    makes Agent chats only (the browser runs no Consensus chat); reading,
+    listing and deleting still meet the older chats."""
     store = chat_store.ChatStore(chat_history_router.db_firestore)
     return store.create_chat(UIDS[headers["Authorization"]], title=title or "", execution_mode="consensus")
 
 
 def create_turn(client, chat_id, payload=None, *, headers=AUTH_OWNER):
-    """A Consensus turn as it is stored. Since 2026-10-25 no route creates one
-    (the browser runs no Consensus chat); the store method stays the Agent's."""
+    """A Consensus turn as it is stored. No route creates one (the browser
+    runs no Consensus chat); the store method stays the Agent's."""
     store = chat_store.ChatStore(chat_history_router.db_firestore)
     return store.create_turn(UIDS[headers["Authorization"]], chat_id, **(payload or TURN_PAYLOAD))
 
@@ -432,7 +431,7 @@ def create_turn(client, chat_id, payload=None, *, headers=AUTH_OWNER):
 def complete_turn(store, uid, chat_id, turn_id, *, question, model_answers, consensus,
                   differences="", differences_data=None, sources=None, result_id=None):
     """Writes a completed Consensus turn in the shape the retired completion
-    left (until 2026-10-25): one document per family, the result on the turn."""
+    left: one document per family, the result on the turn."""
     turn_ref = store._turn_ref(uid, chat_id, turn_id)
     included = []
     for name, item in model_answers.items():
@@ -557,9 +556,9 @@ def test_chat_creation_uses_server_id_and_storage_allowlist(chat_api):
 
 
 def test_a_new_chat_is_always_an_agent_chat(chat_api):
-    """Since 2026-10-25 nothing adds a turn to a new Consensus chat, yet one
-    made by an old tab or a direct call counted toward the chat cap. Since
-    2026-11-07 POST /chats makes Agent chats only."""
+    """Nothing adds a turn to a new Consensus chat, yet one made by an old
+    tab or a direct call counted toward the chat cap. POST /chats makes Agent
+    chats only."""
     client, database = chat_api
 
     plain = client.post("/chats", json={}, headers=AUTH_OWNER)
@@ -1023,7 +1022,7 @@ def test_list_turn_details_checks_the_chat_once_for_the_whole_page(chat_api):
 
 
 def test_list_turn_details_batches_model_answers_instead_of_one_query_per_turn(chat_api, monkeypatch):
-    # Audit C6: a chat page used to run one model_answers query per turn.
+    # Audit C6: one batched read per page, not one model_answers query per turn.
     client, database = chat_api
     chat = create_chat(client)
     store = chat_store.ChatStore(database)
@@ -1357,7 +1356,7 @@ def test_account_deletion_fences_normal_chat_delete_but_cleanup_can_continue(cha
 
 
 # ---------------------------------------------------------------------------
-# R11: Eine bestaetigte Chat-Loeschung ist ein dauerhafter, idempotenter Auftrag.
+# Eine bestaetigte Chat-Loeschung ist ein dauerhafter, idempotenter Auftrag.
 # Scheitert die Kaskade (auch zwischen zwei Batches) oder stirbt der Prozess,
 # beendet der stuendliche Retention-Loop sie; der Zaehler sinkt genau einmal.
 # ---------------------------------------------------------------------------
@@ -1608,7 +1607,7 @@ def test_chat_count_is_capped_per_owner_and_scoped_to_that_owner(chat_api, monke
 
 
 def test_chat_limit_first_frees_chats_no_bookmark_leads_to(chat_api, monkeypatch):
-    """Lokaler Test 2026-10-11: POST /chats endete mit 403 chat_limit_reached.
+    """Ein lokaler Test fand: POST /chats endete mit 403 chat_limit_reached.
 
     Der Browser legt den Chat vor dem ersten Turn an; wird die Nachricht dann
     abgelehnt, bekommt der Chat nie ein Bookmark. Solche Chats sieht und
@@ -1752,9 +1751,9 @@ def test_a_failing_sweep_never_blocks_turn_creation(chat_api, monkeypatch):
 def test_turn_keeps_the_attachment_meta_of_its_own_question(chat_api):
     """Ein Anhang gehoert zu der Frage, mit der er rausgegangen ist.
 
-    Vorher hing er am Bookmark-Dokument, das nur EINE Fassung kennt: die
-    naechste Frage ohne Datei ueberschrieb sie und der Anhang war aus dem
-    gespeicherten Chat verschwunden. Am Turn ueberlebt er jede Folgefrage.
+    Am Bookmark-Dokument, das nur EINE Fassung kennt, ueberschriebe die
+    naechste Frage ohne Datei sie und der Anhang waere aus dem gespeicherten
+    Chat verschwunden. Am Turn ueberlebt er jede Folgefrage.
     """
     client, database = chat_api
     chat = create_chat(client)
@@ -1948,7 +1947,7 @@ def test_turn_detail_names_how_long_an_agent_turn_waited_for_the_user():
 
 def test_a_transaction_aborted_while_reading_starts_again(monkeypatch):
     # The SDK repeats a transaction only when its commit is aborted; under
-    # contention Firestore may already abort a read (CI 2026-10-24).
+    # contention Firestore may already abort a read.
     from google.api_core.exceptions import Aborted
 
     transactions, reads = [], []

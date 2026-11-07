@@ -169,7 +169,7 @@ it('replaces a failed favicon with the globe box instead of a broken image', () 
   expect(body.querySelector('.src-ref img')).toBeNull();
   const glyph = body.querySelector('.src-ref .src-ref-glyph');
   // The globe is drawn by source-pill.css, the same as on the public pages;
-  // no 8-px letter is left in it (Apple-Audit G9, G10).
+  // no 8-px letter is left in it.
   expect(glyph.textContent).toBe('');
   expect(glyph.getAttribute('aria-hidden')).toBe('true');
   dom.window.close();

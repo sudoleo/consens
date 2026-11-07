@@ -1,14 +1,14 @@
 /**
- * Jedes Konto darf Dateien anhaengen (seit 2026-10-02, die Dateien kosten
- * Tokens aus dem eigenen Kontingent); ein Gast wird zur Anmeldung geschickt.
+ * Jedes Konto darf Dateien anhaengen (die Dateien kosten Tokens aus dem
+ * eigenen Kontingent); ein Gast wird zur Anmeldung geschickt.
  *
  * Die Stufe entsteht am Ende einer Kette: /user_status -> updateUserTierUI ->
  * App.state -> window-Getter. Getestet wird deshalb die ECHTE Kette
  * (app-state.js + user-tier.js + attachments.js), nicht ein gesetztes Flag.
  *
  * Der zweite Teil sichert die Stelle, an der die Stufe wieder verloren gehen
- * kann: `is_pro_user: false` bedeutet seit Plus nur noch "nicht Pro" und
- * unterscheidet Free nicht mehr von Plus. Ein Lauf ohne ausdrueckliches `tier`
+ * kann: `is_pro_user: false` bedeutet nur "nicht Pro" und unterscheidet
+ * Free nicht von Plus. Ein Lauf ohne ausdrueckliches `tier`
  * darf die Anzeige deshalb nur anheben, nie senken.
  */
 
@@ -102,7 +102,7 @@ describe("attachment gate per tier", () => {
   });
 
   // The login dialog with its reason, as at every door a guest meets
-  // (App.askToLogIn, Apple-Audit H2, H3); the focus goes back to (+).
+  // (App.askToLogIn); the focus goes back to (+).
   it("asks a guest to sign in instead of opening the picker", () => {
     const harness = boot();
     const asked = [];
@@ -134,7 +134,7 @@ describe("attachment gate per tier", () => {
   it("keeps Plus when a run reports only is_pro_user: false", () => {
     // Genau der Rueckfall, der Plus-Konten die Anhaenge wieder wegnimmt: eine
     // Antwort ohne "tier" (aelterer Server, Tab von vor einem Deploy) trug
-    // frueher ein blankes false in updateUserTierUI und setzte damit Free.
+    // ein blankes false in updateUserTierUI und setzte damit Free.
     const harness = boot();
     signIn(harness);
     harness.window.updateUserTierUI("plus", true);
@@ -171,8 +171,8 @@ function tierSignalFor(usage) {
  * Plus-Konto direkt nach dem Laden wieder auf Free: kein Anhang, kein Resolve.
  *
  * firebase.js laedt das Firebase-SDK von gstatic und laesst sich deshalb nicht
- * in jsdom booten. Geprueft wird darum die Quelle: kein Aufruf der beiden
- * Tier-Senken darf ein is_pro-Flag als Stufe uebergeben.
+ * in jsdom booten. Geprueft wird darum die Quelle: kein Aufruf der
+ * Tier-Senke darf ein is_pro-Flag als Stufe uebergeben.
  */
 describe("firebase.js feeds the tier, not the pro flag", () => {
   const source = readFileSync(
@@ -180,8 +180,8 @@ describe("firebase.js feeds the tier, not the pro flag", () => {
     "utf8"
   );
 
-  // setCurrentUsageLimits gibt es seit dem gemeinsamen Tokenkonto nicht
-  // mehr: das Konto kommt fertig als token_budget vom Server.
+  // Die einzige Tier-Senke: das Konto kommt fertig als token_budget vom
+  // Server.
   const TIER_SINKS = ["updateUserTierUI"];
 
   // Das erste Argument jedes Aufrufs. Die Pruefungen auf die Existenz der

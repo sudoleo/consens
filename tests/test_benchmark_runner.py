@@ -107,8 +107,7 @@ class ManifestModelConfigTests(unittest.TestCase):
         self.assertIsNone(models["gemini"]["reasoning_settings"])
         self.assertFalse(models["gemini"]["alias_status"]["preview"])
         self.assertEqual(models["grok"]["internal_id"], "grok-4.3")
-        # The pin says provider_default; until 2026-10-11 the registry entry
-        # grok-4.3 ("· Reasoning") pinned "high". Runs record it in the manifest.
+        # The pin says provider_default; runs record it in the manifest.
         self.assertIsNone(models["grok"]["reasoning_settings"])
 
         self.assertEqual(manifest["sample_role"], "smoke")

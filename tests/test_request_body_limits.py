@@ -238,7 +238,7 @@ def _declared(path, size):
 @pytest.mark.parametrize("path", ["/chats", "/agent", "/api/watch", "/register", "/api/v1/consensus",
                                   "/__/auth/handler", "/bookmarks/b1/title", "/unknown-route"])
 def test_only_upload_routes_accept_large_bodies(path):
-    # Audit 2026-10-28: 16 MB were allowed everywhere, parsed before auth and
+    # 16 MB were allowed everywhere, parsed before auth and
     # rate limits (about a second of CPU and 380 MB per request).
     from app.core.request_limits import SMALL_REQUEST_BODY_BYTES
     assert _declared(path, SMALL_REQUEST_BODY_BYTES) == 204

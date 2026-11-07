@@ -1,4 +1,4 @@
-"""Notch and home indicator (Apple audit F12, F13). /app reaches under them
+"""Notch and home indicator. /app reaches under them
 (viewport-fit=cover) and keeps its controls clear of them; behind the phone
 bar the answer does not read through between the buttons. Chromium stands in
 an iPhone's safe areas through CDP (Emulation.setSafeAreaInsetsOverride)."""

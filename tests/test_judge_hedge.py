@@ -1,10 +1,10 @@
 """A judge call that hangs gets an identical second request (_hedged_judge_call),
 and later the next family's judge alongside.
 
-Chat review 2026-10-18: Luna judge attempts ran into their 90 s limit in prod.
-A stall now costs JUDGE_HEDGE_SECONDS: the duplicate answers, the first one is
-stopped. Fast calls never pay for a duplicate. Since 2026-10-21 a judge that
-hangs for every request (Luna via Azure on 2026-10-17) costs
+Luna judge attempts ran into their 90 s limit in prod. A stall costs
+JUDGE_HEDGE_SECONDS: the duplicate answers, the first one is stopped. Fast
+calls never pay for a duplicate. A judge that hangs for every request (Luna
+via Azure on 2026-10-17) costs
 JUDGE_FALLBACK_SECONDS instead of the attempt's 90 s: the next family's judge
 checks alongside and the first answer wins. A Differences attempt that stalls
 stops after JUDGE_ATTEMPT_SECONDS and the next family answers, like Coverage

@@ -2,9 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 /**
- * The Watch pill under a finished Agent answer (Max, Apple-Audit J20, second
- * review 9). Since 2026-11-03 a Watch runs the Agent in its chat
- * (agent_watches.py): the pill stands under the newest answer only, carries
+ * The Watch pill under a finished Agent answer. A Watch runs the Agent in
+ * its chat (agent_watches.py): the pill stands under the newest answer only, carries
  * the question of its own turn and opens the sheet that starts a Watch in
  * this chat (watch-sheet.js); a chat with a Watch reads "Watching".
  */
@@ -69,9 +68,9 @@ function agentApp({ watches = [] } = {}) {
 const agentTurn = (id, question, extra = {}) => ({ id: id.repeat(32), turn_id: id.repeat(32), question,
   consensus: `Answer to ${question}`, status: "completed", mode: "Agent", execution_mode: "agent", ...extra });
 
-// What the pill opens since 2026-11-03: the sheet that starts a Watch in
-// this chat (watch-sheet.js, since 2026-11-04 the Watch field of
-// watch-composer.js), its task prefilled with the answer's question.
+// What the pill opens: the sheet that starts a Watch in this chat
+// (watch-sheet.js, with the Watch field of watch-composer.js), its task
+// prefilled with the answer's question.
 function sheetTask(document) {
   const sheet = document.querySelector(".watch-sheet");
   return sheet?.open ? sheet.querySelector(".wc-task").value : null;

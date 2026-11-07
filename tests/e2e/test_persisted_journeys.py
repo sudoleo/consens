@@ -73,8 +73,8 @@ class Journey:
         self.uid = uid or 'journey-' + uuid.uuid4().hex
         self.context = browser.new_context(viewport={'width': 1440, 'height': 950})
         self.context.add_init_script('window.__E2E_INITIAL_UID = sessionStorage.getItem("journey_uid") || ' + json.dumps(self.uid))
-        # Agent is the default since 2026-10-02; these journeys start from a
-        # Compare run (the browser runs no Consensus since 2026-10-25) and
+        # Agent is the default; these journeys start from a
+        # Compare run (the browser runs no Consensus) and
         # pick Agent explicitly where they need it. Seeded once per tab so a
         # reload keeps the mode the journey chose.
         self.context.add_init_script(
@@ -196,15 +196,15 @@ def test_j02_stop_reload_recover_preserves_partial_and_charges_only_started_step
         j.page.click('#sendButton')
     original_request = started.value.post_data_json
     expect(j.page.locator('#agentAnswerBody')).to_contain_text('Saved partial answer', timeout=30000)
-    # The composer stop sends the explicit request Stop (a closed connection no
-    # longer ends a turn); the native receipt/settlement proves it took effect.
+    # The composer stop sends the explicit request Stop (a closed connection
+    # does not end a turn); the native receipt/settlement proves it took effect.
     j.page.wait_for_function('() => Date.now() - App.runRegistry.visible().startedAt > 800')
     j.page.locator('#sendButton').click()
     j.page.wait_for_function('() => App.runRegistry.visible()?.status === "canceled"')
     j.control('release', {})
     state = j.settled(bookmark=True)
     Path(f'test-results/{j.uid}-state.json').write_text(json.dumps(state, indent=2), encoding='utf-8')
-    # Comparison call + the two providers of Daily (since 2026-11-01) +
+    # Comparison call + the two providers of Daily +
     # the agent's partial answer.
     assert len(state['calls']) == 4
     chat_id, chat = next(iter(state['collections']['chats'].items()))
@@ -261,7 +261,7 @@ def test_j02b_agent_turn_survives_a_reload_and_is_followed_to_its_answer(journey
 
 
 def test_j04b_agent_answer_shares_from_under_it_and_from_the_chat_list(journey):
-    """An Agent answer (the default since October) gets a public page: the
+    """An Agent answer (the default mode) gets a public page: the
     Share pill under the answer and Share in the chat menu publish the saved
     turn, both the same link, and the page shows the answer."""
     j = journey
@@ -316,7 +316,7 @@ def test_j04b_agent_answer_shares_from_under_it_and_from_the_chat_list(journey):
     j.page.goto(j.base + share['path'])
     expect(j.page.locator('.share-header .eyebrow')).to_have_text('Shared answer')
     expect(j.page.locator('#consensusView .share-md')).to_contain_text('Saved partial answer for ' + j.uid)
-    # The agent's one mode (since 2026-10-31): the share names who answered
+    # The agent's one mode: the share names who answered
     # and shows no comparison, also where the agent asked other models
     # (share_snapshots._agent_share_basis); its reviewers instead, when they
     # finished (_agent_review_notes, tests/e2e/test_share_review_notes.py).
@@ -349,15 +349,15 @@ def test_j05_delete_during_agent_work_fences_late_writes_and_owner_switch(journe
         # Deletion finished while the producer is still inside the gated
         # provider step, so everything it writes after release is a late
         # write. Whether the HTTP response already ended is timing: the run
-        # watcher polls saved state every 3 s, sees the deleted account and
+        # watcher polls saved state every WATCH_SECONDS (10 s), sees the deleted account and
         # cancels the shared stream, while the producer only unwinds (and
         # releases its lease) once the gate opens.
         [stream] = j.control('state')['streams']
         assert stream['lease'] == 'running'
         j.page.evaluate('async uid => {sessionStorage.setItem("journey_uid", uid); await window.__switchE2EUser(uid);}', other.uid)
         j.control('release', {})
-        # The real stream_events finally releases capacity only after the
-        # producer and its settlement/cleanup stack have unwound.
+        # The run's real produce() (agent.py) releases capacity in its finally,
+        # only after the producer and its settlement/cleanup stack have unwound.
         assert j.producer_finished() == [{'lease': 'released', 'response_ended': True}]
         expect(j.page.locator('#agentAnswerBody')).to_be_hidden()
         assert j.page.evaluate('() => window.__consensioAuthState.uid') == other.uid
@@ -416,7 +416,7 @@ def test_persistence_quota_failure_keeps_answer_visible_and_never_claims_saved(j
     j.page.wait_for_function('() => App.runRegistry.visible()?.status === "succeeded"', timeout=60000)
     j.page.wait_for_function('() => App.runRegistry.visible()?.persistence.status === "error"', timeout=30000)
     expect(j.page.locator('.is-direct .answer-reader-body').first).to_contain_text('mock answer')
-    # The notice line names the limit in the chat's own words (Apple-Audit H3).
+    # The notice line names the limit in the chat's own words.
     expect(j.page.locator('#appToasts')).to_contain_text(re.compile('chats are full|chat storage is full|couldn.t be saved', re.I))
     native = j.control('state')
     assert native['collections'].get('bookmarks', {}) == {}

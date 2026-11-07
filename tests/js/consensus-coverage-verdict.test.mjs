@@ -48,7 +48,7 @@ describe("the credibility line of an old judge text", () => {
     for (const level of ["very", "largely", "partially", "hardly", "not"]) {
       expect(badge(`The consensus answer is **${level}** credible.\n\nDetails follow.`)).toBe(`cred-${level}`);
     }
-    // Bug hunt P22 (2026-11-05): "delivery" read as "very".
+    // "delivery" must not read as "very".
     expect(badge("The consensus answer is not credible about delivery dates.")).toBe("cred-not");
     expect(badge("The consensus answer is credible about delivery dates.")).toBeNull();
   });

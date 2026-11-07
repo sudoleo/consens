@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
-// Enter follows the device, not the window's width (Apple-Audit E7), and an
-// Enter that confirms an input method's word is never a send (E8).
+// Enter follows the device, not the window's width, and an Enter that
+// confirms an input method's word is never a send.
 function boot({ touch = false } = {}) {
   return loadScripts(["static/js/app-core.js"], {
     before(window) {

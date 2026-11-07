@@ -20,9 +20,9 @@ from app.services.chat_store import TurnStatusConflict
 from dataclasses import replace
 
 
-# One micro-euro per token (1 EUR = 1.15 USD): the account counts money since
-# 2026-10-31, and at this price the ledger arithmetic of these races stays in
-# the whole numbers of the token account it was written for.
+# One micro-euro per token (1 EUR = 1.15 USD): the account counts money, and
+# at this price the ledger arithmetic of these races stays in whole numbers,
+# one per token.
 FLAT = AgentModel(input_usd_per_million="1.15", output_usd_per_million="1.15",
                   cache_read_usd_per_million="1.15", cache_write_usd_per_million="1.15")
 
@@ -305,7 +305,7 @@ def test_delegation_budget_journal_and_receipts_are_atomic_in_firestore():
 
 def test_a_journal_batch_is_one_transaction_with_its_own_refusals_in_firestore(monkeypatch):
     """The run's journal saves several sessions in one transaction
-    (publish_agents, since 2026-10-22): one refused update leaves the others
+    (publish_agents): one refused update leaves the others
     saved, a retried batch finds its first commit, and two batches racing
     without the process lock still number every event exactly once."""
     assert_safe_e2e_environment()
@@ -337,7 +337,7 @@ def test_a_journal_batch_is_one_transaction_with_its_own_refusals_in_firestore(m
         assert saved["assignment"] == {"goal": "Answer"} and saved["status"] == "completed"
         again = store.publish_agents(*args, run_token=uid, updates=updates)
         # A retried id returns the session as the first commit left it (its
-        # event_ids, since 2026-11-01): both updates of ids[0] report its end.
+        # event_ids): both updates of ids[0] report its end.
         assert [again[i] for i in (2, 3)] == [first[i] for i in (2, 3)]
         assert again[0] == {**first[3], "id": first[0]["id"]}
         root = store.receipt_ref(*args).get().to_dict()

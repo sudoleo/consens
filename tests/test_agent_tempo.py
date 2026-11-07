@@ -1,4 +1,4 @@
-"""Tempo of a whole Agent turn on a slow database (since 2026-10-21).
+"""Tempo of a whole Agent turn on a slow database.
 
 Prod 2026-10-21: a packing-list question took 7:18 min. OpenRouter answered
 every model call in seconds, but our server wrote each status line of each
@@ -9,8 +9,7 @@ instead of reading their streams: requests left up to 77 s late, finished
 judge answers were cancelled after 90 s.
 
 This test plays a turn with six comparison models, which also review the
-agent's work and answer (agent_audit.py; the judges of comparison mode until
-2026-10-31), on a database where each round trip (a read, a batched read, a
+agent's work and answer (agent_audit.py), on a database where each round trip (a read, a batched read, a
 commit) takes ROUND_TRIP, one transaction of the account at a time, and
 measures what the server adds to the models' own time. It fails when a change puts database work back between
 a model's stream and the server reading it, or lets the bookkeeping queue grow
@@ -160,7 +159,7 @@ def run_turn(store):
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=timeline.factory,
         # The most a run asks (Custom, MAX_RUN_FAMILIES): six families answer in
-        # parallel. High Quality had six until 2026-11-01, now three.
+        # parallel. High Quality has three.
         comparison_models=comparison_selection(SIX_FAMILIES))
     started = time.monotonic()
     events = list(loop.run())

@@ -8,10 +8,10 @@
  * Getestet wird der echte Weg (Dateifeld -> addFiles -> pendingAttachments)
  * gegen gestellte Browser-Bausteine: jsdom hat weder Bilddekoder noch Canvas.
  *
- * Dekodiert wird mit createImageBitmap. Bis 2026-10-28 lud ein <img> die Datei
- * ueber eine blob:-URL, die die CSP (img-src) blockt: jede Verkleinerung
- * scheiterte still. jsdom kennt keine CSP, deshalb darf der Test hier gar
- * keine Objekt-URL sehen.
+ * Dekodiert wird mit createImageBitmap. Ein <img> laedt die Datei ueber eine
+ * blob:-URL, die die CSP (img-src) blockt: jede Verkleinerung scheiterte
+ * still. jsdom kennt keine CSP, deshalb darf der Test hier gar keine
+ * Objekt-URL sehen.
  */
 
 import { describe, expect, it } from "vitest";
@@ -96,7 +96,7 @@ function boot({ withCanvas = true, withBitmap = true, decodes = true } = {}) {
     }
   );
 
-  // Files need an account (every tier since 2026-10-02).
+  // Files need an account (every tier).
   harness.window.auth = { currentUser: { uid: "u1" } };
   harness.alerts = alerts;
   harness.drawn = drawn;

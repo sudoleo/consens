@@ -1,11 +1,10 @@
 """Soft per-turn guards of account-mode Agent chat (AgentPolicy.for_chat).
 
-The daily token ledger stays the spending limit. A turn that loops on valid
+The daily ledger stays the spending limit. A turn that loops on valid
 calls still ends: at most four comparisons, a step cap and a deadline, and no
 identical calls. A limit ends in one last step whose tools are listed but
 not callable: the agent writes the answer from what it has (_merged_wrap_up),
-its own work carries it. Until 2026-10-31 comparison mode stopped instead
-when no comparison had two answers.
+its own work carries it.
 """
 from dataclasses import replace
 import json
@@ -129,7 +128,7 @@ def test_step_cap_answers_from_existing_comparisons(store):
 
 def test_step_cap_with_single_answers_still_ends_in_an_answer(store):
     """One answer per comparison is advice like two: the agent's own work
-    carries the answer (until 2026-10-31 the turn stopped without one)."""
+    carries the answer."""
     script = Script(compares=10, fail_model=True)
     loop = chat_loop(store, script)
     loop.policy = replace(loop.policy, turn_steps=2, turn_comparisons=10)
@@ -177,7 +176,7 @@ def test_hard_deadline_stops_inside_a_step_only_in_account_mode(store):
 @pytest.mark.parametrize("fail_model", [False, True])
 def test_identical_calls_are_refused_then_end_the_turn(store, fail_model):
     """With two answers or one per comparison alike, the turn ends in its
-    answer (until 2026-10-31 single answers ended it without one)."""
+    answer."""
     script = Script(fail_model=fail_model)
     base = type(script.factory())
 
@@ -250,9 +249,8 @@ def test_an_answer_after_rejected_calls_is_no_repeat_and_completes_the_turn(stor
 
 @pytest.mark.parametrize("fail_model", [False, True])
 def test_three_invalid_rounds_still_end_in_an_answer(store, fail_model):
-    """Review 2026-10-12: three rejected calls (a malformed field) ended a
-    turn whose comparisons were paid, without an answer. Since 2026-10-31
-    also a comparison with a single answer leads to one."""
+    """Three rejected calls (a malformed field) after paid comparisons end
+    the turn with an answer, also when a comparison had a single answer."""
     script = Script(fail_model=fail_model)
     requests = []
     compare = ("compare_models", {"question": "Evaluate option 1", "context": "Budget is 100."})
@@ -292,7 +290,7 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
     # Reading a background process's output again is waiting for it, and
     # rendering the same deck again after an edit is checking the edit.
     # The same plan between work steps says where the agent stands; refusing
-    # it ended a long VM run at its fourth unchanged plan.
+    # it would end a long VM run at its fourth unchanged plan.
     assert agent_delegation.REPEATABLE_TOOLS == {"wait_agents", "vm_exec", "vm_read_file", "vm_write_file",
                                                  "vm_edit_file", "vm_share_file", "vm_start_process",
                                                  "vm_process_output", "vm_stop_process", "vm_view_image",

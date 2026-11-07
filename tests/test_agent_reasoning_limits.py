@@ -198,7 +198,7 @@ def test_answer_step_thinking_excerpts_keep_updating_past_the_stored_bound(store
     loop.factory = _AnswerOverHttp.factory(script)
     events = list(loop.run())
     thinking = [e for e in events if e.get("kind") == "progress" and e["id"].endswith("/thinking")]
-    # Previously the line froze at 32,000 characters while the model kept thinking.
+    # The line does not freeze at 32,000 characters while the model keeps thinking.
     assert any(e["text"] == f"Thought number {late + 1} checks one more source." for e in thinking)
     assert saved(store, loop)["consensus"] == "The first option costs 100."
 
@@ -431,7 +431,7 @@ def test_waiting_for_every_model_stops_when_only_the_answer_time_is_left(store):
     # Once two answers of the comparison are in, the turn is just past the
     # answer's reserve (before the soft limit and well before the hard stop).
     # Without a check that needs two sides the wait ends at that time with
-    # whatever is in (until 2026-10-31 comparison mode waited for two).
+    # whatever is in.
     late = hard - loop._answer_reserve() + 1
     assert late < loop.policy.turn_seconds
 

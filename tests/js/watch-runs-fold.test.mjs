@@ -1,9 +1,9 @@
 /**
- * A Watch's runs in its chat (thread-history.js, since 2026-11-03): a run's
+ * A Watch's runs in its chat (thread-history.js): a run's
  * message says the Watch sent it and when, runs that found nothing, one
  * after another on the same day, fold into one line, and what a run found
- * stays a turn of its own. Since 2026-11-05 the chat reads as one running
- * conversation (Max: "wie bei WhatsApp mit Datum getrennt"): each day starts
+ * stays a turn of its own. The chat reads as one running
+ * conversation ("wie bei WhatsApp mit Datum getrennt"): each day starts
  * with its name, and a run that sends the task the chat already shows is
  * only its line.
  */
@@ -129,9 +129,9 @@ describe("A Watch's runs in its chat", () => {
 
   // Opening a saved Watch chat (firebase.js loadSingleBookmarkUI) projects
   // its run first (showSavedView -> agent-chat.js markWatchRun) and sets the
-  // chat's question after; until 2026-11-06 the days were ordered with the
-  // question of the chat shown before, or none (bug hunt): the newest run
-  // stood under Yesterday, or its task as a bubble again.
+  // chat's question after; ordered with the question of the chat shown
+  // before, or none, the newest run stood under Yesterday, or its task as a
+  // bubble again.
   it("orders the days again once the opened chat's question is set", () => {
     const { window, document } = loadScripts(["static/js/app-core.js", "static/js/thread-history.js"], {
       body: '<div id="threadHistory" hidden></div>'

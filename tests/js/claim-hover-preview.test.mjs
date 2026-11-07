@@ -5,7 +5,7 @@ import DOMPurify from "dompurify";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 // The hover card of a marked sentence (consensus-insights.js): where it opens,
-// on which devices, and on which marks (Apple audit follow-up, 2026-10-21).
+// on which devices, and on which marks.
 const MOUSE = "(hover: hover) and (pointer: fine)";
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -97,7 +97,7 @@ describe("where the hover card opens", () => {
 });
 
 describe("where the card stands beside its sentence", () => {
-  // Max 2026-10-23: a disputed sentence split by **bold** into three spans,
+  // A disputed sentence split by **bold** into three spans,
   // its first word at the end of a line. The card took the first span for
   // the disputed words: it stood above the sentence, over the paragraph
   // before, and hung out of the text to the right, with room to spare below.
@@ -259,7 +259,7 @@ describe("reaching the card with the pointer", () => {
     env.dom.window.close();
   });
 
-  // A long card scrolls in itself: its scrollbar ran under the pin (2026-10-26).
+  // A long card scrolls in itself: its scrollbar ran under the pin.
   it("moves the pin left of a scrolling card's scrollbar", async () => {
     const env = boot();
     const [mark] = marked(env, [launch], { focusDifference() {} });
@@ -417,7 +417,7 @@ describe("which devices get the card", () => {
   });
 
   it("lets Escape take the preview away while focus and pointer stay", async () => {
-    // WCAG 1.4.13 (a11y audit K6): dismissable without moving either.
+    // WCAG 1.4.13: dismissable without moving either.
     const env = boot();
     const mark = marked(env);
     env.document.dispatchEvent(new env.window.KeyboardEvent("keydown", { key: "Tab" }));
@@ -437,7 +437,7 @@ describe("which devices get the card", () => {
     env.dom.window.close();
   });
 
-  // Bug hunt P22 (2026-11-05): Escape with the pointer in the card took the
+  // Escape with the pointer in the card took the
   // card away, but its sentence stayed lit until the next hover: the card had
   // held it (holdHoverPreview), and no mouseleave of the sentence came.
   it("lets Escape take the sentence's light along when the pointer was in the card", async () => {
@@ -488,7 +488,7 @@ describe("which devices get the card", () => {
 });
 
 describe("reaching the pinned card with the keyboard", () => {
-  // a11y audit K1: on a desktop the pinned card hangs at the end of <body>
+  // On a desktop the pinned card hangs at the end of <body>
   // and the focus stayed on the sentence, so Tab never reached its ways.
   const launch = { models_compared: ["OpenAI", "Gemini"], claims: [],
     differences: [{ claim: "the launch date", consensus_anchor: "The launch is on Monday.", type: "contradiction",

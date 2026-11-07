@@ -17,7 +17,7 @@ def test_owner_limit_is_atomic_across_different_chats(store):
     def claim(item):
         # The timeout only turns a stuck thread into a failure instead of a
         # hang; 3 s broke the barrier on a loaded machine (full suite next to
-        # browser runs, 2026-10-21) before all twelve threads had started.
+        # browser runs) before all twelve threads had started.
         gate.wait(timeout=30)
         chat_id, turn = item
         try:
@@ -110,8 +110,8 @@ def test_owner_capacity_failure_unlocks_unclaimed_turn_and_does_not_call_model(a
 
 
 def test_the_per_account_turn_limit_says_how_long_to_wait(api, monkeypatch):
-    # Nachprüfung 2: the 429 came without Retry-After; main.error_body turns
-    # the header into code "rate_limited" and retry_after for the app.
+    # The 429 carries Retry-After; main.error_body turns the header into
+    # code "rate_limited" and retry_after for the app.
     from app.core.rate_limit import ApiUidRateLimitExceeded
 
     client, store, _calls = api

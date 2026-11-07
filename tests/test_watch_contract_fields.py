@@ -1,4 +1,4 @@
-"""What the watch endpoints deliver (Apple audit J5, J7, J17, J33).
+"""What the watch endpoints deliver.
 
 `checking`/`due` instead of a next check in the past, the whole question,
 one watch per question and owner with the existing watch named in the
@@ -152,7 +152,7 @@ def test_a_watch_that_runs_the_agent_wakes_the_scheduler_too():
 
 @pytest.mark.usefixtures("no_agent_watches")
 def test_a_watch_that_fell_due_during_a_long_tick_runs_on_the_next_short_one():
-    # Zweitprüfung 10: the tick scanned at 08:00 and ran for 20 minutes; a
+    # The tick scanned at 08:00 and ran for 20 minutes; a
     # check due at 08:10 was never seen and must not wait until 08:50.
     scanned_at = datetime(2026, 10, 20, 8, 0, tzinfo=timezone.utc)
     now = scanned_at + timedelta(minutes=20)

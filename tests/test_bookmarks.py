@@ -146,7 +146,7 @@ def test_bookmark_uid_throttle_remains_a_429():
         except bookmarks_router.HTTPException as exc:
             assert exc.status_code == 429
             assert exc.detail == "Too many bookmark saves. Please slow down."
-            # Nachprüfung 2: the wait, as every throttle says it (main.error_body
+            # The wait, as every throttle says it (main.error_body
             # adds code "rate_limited" and retry_after from it).
             assert exc.headers == {"Retry-After": "12"}
         else:
@@ -257,8 +257,8 @@ def test_a_legacy_bookmark_without_a_title_falls_back_to_its_question():
 
 
 def test_the_browser_writes_no_consensus_bookmark_since_the_pipeline_left_it():
-    """Seit 2026-10-25 startet der Browser keinen Consensus mehr, und
-    POST /bookmark/consensus ist weg; das Bookmark eines Agent-Turns schreibt
+    """Der Browser startet keinen Consensus, und POST /bookmark/consensus
+    gibt es nicht; das Bookmark eines Agent-Turns schreibt
     der Server (agent_runs.py) und der Browser uebernimmt nur dessen Meta."""
     paths = {(route.path, method) for route in bookmarks_router.router.routes
              for method in getattr(route, "methods", set())}
@@ -392,7 +392,7 @@ def test_agent_bookmark_returns_failed_turn_without_synthesis():
 
 def test_agent_bookmark_shows_a_turn_under_review_in_its_place():
     # A reload while the reviewers of the previous answer still work and the
-    # next message already runs (agent_runs.hand_over, 2026-11-01): the
+    # next message already runs (agent_runs.hand_over): the
     # answered turn stands in the transcript, the next one is followed.
     bookmark_id, chat_id = "review_tail", "c" * 32
     fake_db = FakeBookmarkDatabase({"uid-1": {bookmark_id: {
@@ -428,8 +428,8 @@ def test_agent_bookmark_shows_a_turn_under_review_in_its_place():
         body = client.get(f"/bookmarks/{bookmark_id}/conversation", headers={"Authorization": "Bearer token"}).json()
         assert body["turns"] == [] and body["running"]["id"] == "1" * 32
         # Last on a page with later messages on the next one: not the chat's
-        # newest, so it stands in its place (bug hunt 2026-11-04: it was
-        # followed as running and missing from the transcript).
+        # newest, so it stands in its place (it was once followed as running
+        # and missing from the transcript).
         pages.update(turns=[reviewing], has_more=True, next_cursor="next-page")
         body = client.get(f"/bookmarks/{bookmark_id}/conversation", headers={"Authorization": "Bearer token"}).json()
         assert body["turns"] == [reviewing] and body["running"] is None
@@ -449,7 +449,7 @@ def test_agent_bookmark_names_its_running_turn_for_another_tab_to_follow():
                "attachments": [{"name": "a.csv", "mime": "text/csv", "size": 3}],
                "agent_settings": {"selection": {"model_id": "m", "reasoning_effort": "default"},
                                   "comparison_selection": {"openai": "gpt"},
-                                  # Frozen with the turn, never repeated by a request (2026-10-31).
+                                  # Frozen with the turn, never repeated by a request.
                                   "agent_preferences": {"vm": "off"},
                                   "file_ids": [], "google_selection": None, "google_data_consent": False,
                                   "policy": {"delegation": True}},
@@ -772,8 +772,7 @@ def test_a_model_save_cannot_put_a_forged_question_or_sources_on_a_share():
         patch.object(share_snapshots, "db_firestore", database),
         patch.object(share_snapshots, "schedule_share_cleanup"),
     ):
-        # The consensus bookmark as the server saved it with the run (until
-        # 2026-10-25 through POST /bookmark/consensus).
+        # The consensus bookmark as the server saved it with the run.
         database.documents[("users", "uid-1", "bookmarks", bookmark_id)] = {
             "query": question, "title": question,
             "responses": {"consensus": "Short wavelengths scatter most. [S1]",
@@ -916,17 +915,17 @@ def test_bookmark_frontend_restores_every_turn_and_keeps_a_context_fallback():
     assert "function bookmarkDisplayQuestion(bookmark)" in firebase
     # Auch ein Direktvergleich-Bookmark laedt mit seiner Frage zurueck.
     assert "window.App?.setThreadQuestion?.(displayQuestion);" in firebase
-    # One step, never emptied first (Apple audit A1).
+    # One step, never emptied first.
     assert "renderStoredTurns?.(materialized.historyTurns.length" in firebase
     assert '"/conversation?limit=50"' in firebase
-    # By bookmark ID, beside the detail request (Apple audit D2).
+    # By bookmark ID, beside the detail request.
     assert "function loadBookmarkConversationOnce(bookmarkId)" in firebase
     assert "This chat’s conversation was incomplete." in firebase
     assert "This chat’s conversation repeated a page." in firebase
     assert "function bookmarkFallbackTurn(bookmark)" in firebase
     assert "continuationTurn.turn_id" in firebase
     # Only an Agent chat continues from its saved basis; a saved Consensus
-    # chat is read-only (2026-10-25) and its message promises nothing more.
+    # chat is read-only and its message promises nothing more.
     assert "Follow-ups still use the saved chat context" in firebase
     assert "Some earlier messages of this chat could not be displayed." in firebase
     assert "followup?.offer?.(" not in firebase
@@ -967,8 +966,8 @@ def test_bookmark_restore_uses_historical_model_labels_without_mutating_picker_s
 def test_bookmark_restores_the_view_the_run_had_not_the_current_toggle():
     """Ein Direktvergleich (kein Consensus) laedt als Direktvergleich zurueck.
 
-    Vorher entschied allein der heutige Agent-Mode-Schalter ueber die Ansicht:
-    war er inzwischen wieder an, verschwanden die gespeicherten Modellantworten
+    Entschied allein der Agent-Mode-Schalter ueber die Ansicht und war er
+    inzwischen wieder an, verschwanden die gespeicherten Modellantworten
     hinter "Compare answers" und das Bookmark zeigte nur noch die Frage.
     """
     root = Path(__file__).resolve().parents[1]
@@ -987,14 +986,14 @@ def test_bookmark_restores_the_view_the_run_had_not_the_current_toggle():
     # Der Ausstieg in den Thread raeumt die Marke wieder ab.
     assert 'classList.remove("is-hero", "direct-comparison-active", "direct-comparison-preview")' in core
 
-    # Auch das Umlegen behaelt jetzt den sichtbaren Direktvergleich. Die neue
+    # Auch das Umlegen behaelt den sichtbaren Direktvergleich. Die
     # Composer-Leiste erklaert dessen urspruenglichen Modus separat; erst die
     # naechste Frage ersetzt das Ergebnis (Browser-Test: test_composer_mode_bar).
     strip = 'document.body.classList.remove("direct-comparison-active");'
     assert strip not in agent
 
-    # Das fruehere Modell-Panel ist samt Markup entfernt; es kann nicht mehr
-    # ueber den wiederhergestellten Antworten auftauchen.
+    # Kein Modell-Panel samt Markup: es kann nicht ueber den
+    # wiederhergestellten Antworten auftauchen.
     assert "agent-mode-panel" not in consensus_css
     assert 'id="agentModePanel"' not in (root / "templates" / "index.html").read_text(encoding="utf-8")
 
@@ -1057,7 +1056,7 @@ def _write_bookmark(database, bookmark_id, patch_data, *, uid="uid-1"):
 def test_bookmark_list_reads_only_the_sidebar_fields_of_summarized_bookmarks():
     """Audit C4: the sidebar read every full bookmark (up to 750 kB with all
     answers) for a title and four counts. Written bookmarks carry those counts
-    in list_summary, so listing them reads no full document anymore."""
+    in list_summary, so listing them reads no full document."""
     database = FakeChatDatabase()
     _write_bookmark(database, "big_id", {
         "query": "Big", "timestamp": LIST_START,
@@ -1134,7 +1133,7 @@ def test_backfill_gives_legacy_bookmarks_their_summary_only_with_apply():
 
 
 def test_next_bookmark_page_survives_its_boundary_row_being_deleted():
-    """Lokaler Test 2026-10-11: "Load more" antwortete 400 "Bookmark cursor
+    """Ein lokaler Test fand: "Load more" antwortete 400 "Bookmark cursor
     expired", weil der Cursor nur das Dokument der letzten Zeile nannte und
     genau dieses Bookmark inzwischen geloescht war."""
     database = FakeChatDatabase()
@@ -1177,9 +1176,9 @@ def test_bookmark_pages_split_equal_timestamps_without_losing_a_row():
 @pytest.mark.parametrize("micros", [222220, 100000, 0])
 def test_the_next_page_starts_after_a_firestore_timestamp_ending_in_zero(micros):
     """Firestore hands timestamps back as DatetimeWithNanoseconds, whose
-    rfc3339() drops trailing zeros (…20.22222Z). Until 2026-11-04 a cursor
-    accepted only 6 or 9 digits, so about every tenth page boundary answered
-    "Load more" and the chat search with 400 for good."""
+    rfc3339() drops trailing zeros (…20.22222Z). A cursor that accepted only
+    6 or 9 digits answered "Load more" and the chat search with 400 for good
+    at about every tenth page boundary."""
     from google.api_core.datetime_helpers import DatetimeWithNanoseconds
     from google.protobuf import timestamp_pb2
 
@@ -1232,9 +1231,9 @@ def test_a_pinned_chat_comes_with_the_first_page_whatever_its_age():
 
 
 def test_every_pinned_chat_comes_along_the_latest_pin_first_beyond_fifty():
-    """Pinning has no cap below the bookmark cap. Until 2026-11-07 the first
-    page brought 50 pinned chats in document order (no order_by), so with more
-    pins a fresh one could be missing after a reload."""
+    """Pinning has no cap below the bookmark cap. A first page of 50 pinned
+    chats in document order (no order_by) could miss a fresh pin after a
+    reload once there were more."""
     database = FakeChatDatabase()
     count = 60
     for index in range(count):
@@ -1324,7 +1323,7 @@ def test_bookmark_detail_is_owner_scoped_and_frontend_loads_on_open():
     assert 'fetch("/bookmarks/" + encodeURIComponent(bookmarkId)' in firebase
     assert 'const path = "/bookmarks?limit=35"' in firebase
     assert "bookmarkDetailCache.clear()" in firebase
-    # One delegated listener opens every saved row (Apple audit E2/E5).
+    # One delegated listener opens every saved row.
     assert "window.openBookmark(row.dataset.id)" in firebase
 
 

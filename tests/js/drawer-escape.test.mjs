@@ -3,8 +3,8 @@
  *
  * The drawer closes on a plain Escape (capture handler on window), but what
  * lives in it takes its own Escape first: the chat search clears and closes
- * itself, and only the next Escape closes the drawer (bug hunt 2026-10-30,
- * app-init.js:644: the search's Escape closed the whole drawer).
+ * itself, and only the next Escape closes the drawer (the search's Escape
+ * closed the whole drawer).
  */
 
 import { readFileSync } from "node:fs";

@@ -169,8 +169,8 @@ def test_the_app_starts_the_review_without_more_agent_requests(store):
 
 def test_repeated_invalid_tools_end_with_the_answer_without_exhausting_daily_allowance(store):
     """Three rounds of invalid tool calls end the agent's work: one last step
-    without tools writes the answer from what it has (since 2026-10-31 in
-    every turn; until then a turn without a comparison failed here)."""
+    without tools writes the answer from what it has, in every turn, with
+    or without a comparison."""
     from app.services import agent_quota
     script = Script()
     base = type(script.factory())
@@ -245,7 +245,7 @@ def test_late_worker_results_reach_the_answer_only_after_review_without_private_
                     # Like a model, review only a result that reached the
                     # conversation: the worker's state flips before its result
                     # is delivered (wait_agents), and a review sent in between
-                    # put the rework request ahead of the result it reworks.
+                    # would put the rework request ahead of the result it reworks.
                     latest = (None if mode == "fallback" else
                               "OUTDATED_FINDING" if mode == "rework" and not did_rework else "VERIFIED_CURRENT_FINDING")
                     if (worker.state in {"review", "failed"} and not worker.reviewed

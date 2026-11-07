@@ -1,5 +1,5 @@
 /**
- * Only the point of dispute carries the colour (2026-10-19): in a disputed
+ * Only the point of dispute carries the colour: in a disputed
  * sentence the words a model contradicts (claims[].dissent[].target, named by
  * the Coverage judge and checked by the server) are wrapped in .cx-spot; the
  * sentence span stays the control and loses its own surface (.has-spot).

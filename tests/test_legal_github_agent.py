@@ -1,8 +1,8 @@
-"""The legal pages name GitHub and the Agent workspace (audit 2026-10-28).
+"""The legal pages name GitHub and the Agent workspace.
 
-Until then the Privacy Notice did not mention the GitHub App (what is stored,
-where repository contents go, pull requests, disconnecting), and the Terms
-had no rules for the Agent's VM and browser.
+The Privacy Notice covers the GitHub App (what is stored, where repository
+contents go, pull requests, disconnecting), and the Terms set the rules for
+the Agent's VM and browser.
 """
 
 import re

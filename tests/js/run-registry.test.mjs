@@ -104,7 +104,7 @@ describe("App.runRegistry", () => {
     dom.window.close();
   });
 
-  // Review F (2026-10-21): a renamed chat showed its old name in the sidebar
+  // A renamed chat showed its old name in the sidebar
   // while a follow-up ran, because the next run took it from the basis.
   it("gives the open chat's bases the new name of a renamed chat", () => {
     const { registry, dom } = bootRegistry();
@@ -124,7 +124,7 @@ describe("App.runRegistry", () => {
     dom.window.close();
   });
 
-  // Review 2: retitle left a running follow-up its old name; its sidebar
+  // Retitle left a running follow-up its old name; its sidebar
   // row showed it while it ran, and on success it handed the old name on
   // to the next basis (agent-chat.js setCompletedBasis
   // take context.bookmark.title).

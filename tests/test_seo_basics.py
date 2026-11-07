@@ -115,13 +115,13 @@ class SeoBasicsTests(unittest.TestCase):
         with patch.object(pages_router.model_pulse.LEDGER, "entries", return_value=[]):
             response = self.client.get("/model-pulse")
         self.assertEqual(response.status_code, 200)
-        # An archive since 2026-10-31: no "live" anywhere on the page.
+        # An archive: no "live" anywhere on the page.
         self.assertIn("Model pulse · archive", response.text)
         self.assertNotIn("Live model pulse", response.text)
         self.assertNotIn("pulse-live-dot", response.text)
 
     def test_public_nav_and_footer_link_to_questions_hub(self):
-        # SEO-Kern des Hubs: indexierte Shares hängen nicht mehr nur in der
+        # SEO-Kern des Hubs: indexierte Shares hängen nicht nur in der
         # Sitemap, sondern sind aus Nav + Footer jeder Public-Seite erreichbar.
         nav = (ROOT / "templates" / "partials" / "public_nav.html").read_text(encoding="utf-8")
         footer = (ROOT / "templates" / "partials" / "public_footer.html").read_text(encoding="utf-8")

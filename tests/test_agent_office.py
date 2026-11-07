@@ -1,5 +1,5 @@
-"""The converter VM all accounts share (app/services/agent_office.py, since
-2026-11-01): LibreOffice once for every account instead of on each
+"""The converter VM all accounts share (app/services/agent_office.py):
+LibreOffice once for every account instead of on each
 workbench. The VM's scripts are checked as text here and sheet.py with
 Pillow; on a Sprite they have not run yet (docs/smoke-checklist.md)."""
 import io
@@ -96,7 +96,7 @@ def test_the_converter_is_set_up_once_per_version_and_reaches_only_ubuntus_mirro
         assert vm.files[f"{agent_office.DIR}/{name}"] == agent_office.tool_files()[name]
     assert vm.setups == [f"sudo -n bash {agent_office.DIR}/setup.sh {agent_office.VERSION}"]
     # The setup runs to its end whatever the message does: a Stop halfway
-    # through apt would leave dpkg broken for every account (review 2026-11-01).
+    # through apt would leave dpkg broken for every account.
     assert vm.setup_cancellations[0] is not stop
     assert vm.policy == agent_office.RULES and all(rule["action"] == "allow" and "ubuntu.com" in rule["domain"]
                                                    for rule in vm.policy)
@@ -163,7 +163,7 @@ def test_a_file_libreoffice_cannot_read_is_the_agents_and_a_failure_the_converte
 
 def test_a_stop_ends_the_wait_for_a_place(monkeypatch):
     """All places taken: the wait looks at Stop every WAIT_STEP_SECONDS
-    instead of sitting out CONVERT_SECONDS (review 2026-11-01)."""
+    instead of sitting out CONVERT_SECONDS."""
     import threading
     import time
     monkeypatch.setattr(agent_office, "_slots", threading.BoundedSemaphore(1))
@@ -179,7 +179,7 @@ def test_a_stop_ends_the_wait_for_a_place(monkeypatch):
 
 def test_what_a_conversion_the_server_ended_left_goes_right_after(monkeypatch):
     """Stop or the server's timeout end convert.sh with SIGKILL, and its own
-    clean-up never runs (review 2026-11-01): a sweep (convert.sh clean)
+    clean-up never runs: a sweep (convert.sh clean)
     follows in the background, and runs as root without the file."""
     later = []
     monkeypatch.setattr(agent_office, "_sweep_later", lambda backend=None: later.append(backend))
@@ -218,8 +218,7 @@ def test_what_a_conversion_the_server_ended_left_goes_right_after(monkeypatch):
 
 def test_a_conversion_takes_no_longer_than_the_answer_has_left():
     """A file shared late in a long run: the conversion ate the answer's
-    reserve and the hard stop took the share down with it (review
-    2026-11-01). ``seconds`` cuts the run and LibreOffice's own limit; a
+    reserve and the hard stop took the share down with it. ``seconds`` cuts the run and LibreOffice's own limit; a
     converter still to set up is left to a later call, one set up is used."""
     class Timed(Converter):
         def run(self, name, argv, *, timeout, **kwargs):
@@ -234,14 +233,14 @@ def test_a_conversion_takes_no_longer_than_the_answer_has_left():
     [(_, argv, _)] = warm.runs
     assert warm.setups == [] and warm.timeout <= 100
     assert int(argv[5]) == warm.timeout - (agent_office.RUN_SECONDS - agent_office.CONVERT_SECONDS)
-    # Without a limit, as before.
+    # Without a limit.
     agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=warm)
     assert warm.timeout == agent_office.RUN_SECONDS and warm.runs[1][1][5] == str(agent_office.CONVERT_SECONDS)
 
 
 def test_too_little_time_is_no_conversion_rather_than_one_second_of_libreoffice():
-    """Bug hunt 2026-11-02: with under ~76 s left LibreOffice got 1 s, ended
-    with exit 5 and the file was blamed (OfficeRefused)."""
+    """With under ~76 s left LibreOffice would get 1 s, end with exit 5 and
+    the file would be blamed (OfficeRefused)."""
     warm = Converter(marker=agent_office.VERSION.encode() + b"\n")
     with pytest.raises(agent_office.OfficeUnavailable, match="no time"):
         agent_office.render(b"PK", "pptx", cancellation=ProviderCancellation(), backend=warm,
@@ -266,8 +265,8 @@ def test_without_a_provider_the_converter_is_unavailable_and_its_own_backend_clo
 def test_each_conversion_runs_alone_without_rights_and_leaves_nothing():
     """convert.sh: LibreOffice as its place's own user (no sudo, no home, no
     shell) in a folder of its own with a profile of its own; afterwards that
-    user's processes and files go. One user per place: on the live probe of
-    2026-11-01 three conversions shared one user, and the first to finish
+    user's processes and files go. One user per place: on a live probe
+    three conversions shared one user, and the first to finish
     ended the other two."""
     files = agent_office.tool_files()
     convert, setup = files["convert.sh"].decode(), files["setup.sh"].decode()
@@ -282,7 +281,7 @@ def test_each_conversion_runs_alone_without_rights_and_leaves_nothing():
     # The locks stay with the script, never with LibreOffice.
     assert '"$@" 8>&- 9>&-' in convert
     # What a conversion killed with SIGKILL left goes before the next file:
-    # on every free place (their lock held for the moment, 2026-11-01: the
+    # on every free place (their lock held for the moment: the
     # places beyond the first are seldom used) and on its own, then again
     # at the end. Every process of the user goes, also one that keeps forking.
     assert convert.index("user=office$slot") < convert.index("\nclean_free\ncleanup\ntrap cleanup EXIT") \
@@ -326,8 +325,7 @@ def test_each_conversion_runs_alone_without_rights_and_leaves_nothing():
 
 def test_the_overview_stays_within_what_the_providers_take(tmp_path):
     """sheet.py: a poster or many large pages never make an overview over
-    LONGEST pixels (review 2026-11-01: 12 pages of a big custom size passed
-    8000 px)."""
+    LONGEST pixels (12 pages of a big custom size would pass 8000 px)."""
     Image = pytest.importorskip("PIL.Image")
     script = agent_office._FILES / "sheet.py"
     for number in range(1, 13):

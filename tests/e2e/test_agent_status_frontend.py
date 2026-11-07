@@ -196,7 +196,7 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
             if width == 320:
                 # The lines gave way at once when the answer began, also while
                 # the check still ran: no second, animated collapse at the end
-                # (2026-10-12: they came back for the check and left again).
+                # (they once came back for the check and left again).
                 assert not page.evaluate("__agentMotion.some(m => m.target.matches('.agent-progress') && m.frames.at(-1).height === '0px')")
         else:
             assert page.evaluate("__agentMotion.length") == 0
@@ -234,10 +234,9 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
 
 @pytest.mark.parametrize("width,dark", [(1280, False), (390, True), (320, False)])
 def test_the_calm_line_says_what_the_agent_does_without_its_console(browser, phase4_server, width, dark):
-    """Every account starts calm (2026-11-01, Max: "no console commands by
-    default"): one line in everyday words, while it thinks its newest thought
-    (one line since 2026-11-04), the command and its output only in the
-    history under the head."""
+    """Every account starts calm (no console commands by default): one line
+    in everyday words, while it thinks its newest thought, the command and its
+    output only in the history under the head."""
     context, page = _real_firebase_page(browser, phase4_server)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -274,8 +273,8 @@ def test_the_calm_line_says_what_the_agent_does_without_its_console(browser, pha
             text:'I build the game first. Then I open it in the browser.'});
         }""")
         status = preview.locator(".agent-current-status")
-        # One line (since 2026-11-04, Max: the thin thought under the status
-        # did not fit): while it thinks, the line is its newest thought; the
+        # One line (a thin thought under the status did not fit): while it
+        # thinks, the line is its newest thought; the
         # note may follow the summary's heading by a moment, which then stands
         # its four seconds first.
         expect(status).to_have_text("I build the game first.", timeout=8000)

@@ -61,7 +61,7 @@ def _asset_sources():
 def test_no_hand_maintained_cache_marks_remain():
     """Cache identity comes from content: asset_url() in templates (with the
     transitive @import/ESM closure folded in) and static/dist for /app. A
-    hand-written ?v= is exactly the stale-cache trap this replaced."""
+    hand-written ?v= is exactly the stale-cache trap this avoids."""
 
     offenders = [
         f"{source.relative_to(ROOT)}: {match.group(0)}"
@@ -96,9 +96,9 @@ def test_mobile_enter_keeps_the_textarea_newline_behavior():
         'document.getElementById("questionInput").addEventListener("keydown"', 1
     )[1].split("// Es gibt genau EINEN sichtbaren Sidebar-Toggle", 1)[0]
 
-    # The device decides, not the window's width (Apple-Audit E7): a touch
-    # keyboard makes a paragraph, a real one sends; App.enterSends also
-    # leaves an Enter that an input method is still composing alone (E8).
+    # The device decides, not the window's width: a touch keyboard makes a
+    # paragraph, a real one sends; App.enterSends also leaves an Enter that
+    # an input method is still composing alone.
     assert "window.App.enterSends(event)" in keydown
     assert keydown.index("enterSends") < keydown.index("event.preventDefault()")
     assert "max-width: 768px" not in keydown

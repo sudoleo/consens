@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadScripts, ROOT } from "./helpers/appWindow.mjs";
 
 /**
- * Motion is one system (Apple audit C8, C10, C11, C13, C14, E4, E11):
+ * Motion is one system:
  *   - every transition and animation of /app names a duration and a curve
  *     from foundation.css; script reads the same values through App.motion;
  *   - one spinner, one beat for what repeats;

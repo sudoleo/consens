@@ -174,7 +174,7 @@ def test_run_reports_moves_noindexes_dormant_pages_and_releases_the_lease(monkey
 
 
 def test_a_process_with_a_stale_due_read_does_not_sweep_or_notify_again(monkeypatch):
-    """Audit C14: in a deploy overlap the second process read "due" before the
+    """In a deploy overlap the second process read "due" before the
     first one finished. Its lease claim must read due-ness again."""
     db, notes, moderated = Db(), [], []
     client = Client(seo_pulse.report_window(NOW.date()))

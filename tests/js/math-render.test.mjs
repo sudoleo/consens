@@ -111,7 +111,7 @@ y^2
   });
 
   it("typesets bare TeX scripts written without any delimiter", () => {
-    // Antwort vom 2026-10-31 (ETH-Frage): kein einziges "$", Exponenten in
+    // Eine echte Antwort (ETH-Frage): kein einziges "$", Exponenten in
     // TeX-Klammern, dazwischen Unicode und ein Link mit Unterstrich.
     const { window, document } = bootRenderPipeline();
     const answer = document.getElementById("answer");
@@ -343,7 +343,7 @@ describe("ConsensusMath.render", () => {
   });
 });
 
-// Oeffentliche Seiten ohne Formel binden KaTeX nicht mehr ein
+// Oeffentliche Seiten ohne Formel binden KaTeX nicht ein
 // (partials/katex.html). Uebersieht der Server eine Formel, laedt
 // math-render.js die Dateien aus dem Meta-Tag nach und setzt danach.
 describe("ConsensusMath.render ohne geladenes KaTeX", () => {

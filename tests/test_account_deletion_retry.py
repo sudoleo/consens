@@ -189,7 +189,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert calls["watches"] == 1
     # Watches that run the Agent (agent_watches.py) carry their task: once too.
     assert calls["agent_watches"] == 1
-    # R09: stored /ask answers are owner data and go with the account.
+    # Stored /ask answers are owner data and go with the account.
     assert calls["receipts"] == 1
     assert calls["watch_indexes"] == 1
     assert calls["guards"] == 1

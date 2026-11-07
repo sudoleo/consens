@@ -95,7 +95,7 @@ def test_every_file_the_manifest_points_at_exists():
 def test_bundling_actually_reduced_the_request_count_and_bytes():
     built = assets.frontend_assets()
     # Compare the same bytes on Windows and Linux. CRLF checkout expansion
-    # previously made this pass locally while the committed LF sources failed.
+    # would make this pass locally while the committed LF sources fail.
     def source_size(url):
         return len((assets.ROOT / url.split("?")[0].lstrip("/")).read_bytes().replace(b"\r\n", b"\n"))
 
@@ -128,8 +128,6 @@ def test_the_bundle_keeps_the_window_contracts_addressable():
 
     for global_name in (
         "sendQuestion",
-        # getConsensus is gone (one mode, 2026-10-31); its name stood here
-        # and passed only inside getConsensusPresets.
         "streamSSERequest",
         "injectMarkdown",
         "morphMarkdown",
@@ -148,7 +146,7 @@ def test_css_bundle_keeps_relative_asset_paths_resolvable():
     point at the same files. If the output ever moves, the fonts vanish."""
 
     manifest = json.loads(assets.MANIFEST_FILE.read_text(encoding="utf-8"))
-    # Since B3 the public entry sheets are bundled the same way.
+    # The public entry sheets are bundled the same way.
     assert {"app", "landing", "public"} <= set(manifest["styles"])
     fonts = re.findall(r"\.\./fonts/inter/InterVariable-(?:latin|Italic-rest)\.[0-9a-f]{12}\.woff2", (
         assets.ROOT / "static/css/typography.css").read_text(encoding="utf-8"))
@@ -182,7 +180,7 @@ def test_app_vendor_assets_are_local_versioned_and_include_fonts_and_licenses():
 
 
 def test_public_pages_load_math_from_the_same_vendor_copy_as_the_app():
-    """No page loads from jsDelivr any more (CSP no longer allows it), and the
+    """No page loads from jsDelivr (the CSP does not allow it), and the
     public pages pin the same KaTeX folder package.json vendors."""
     pins = json.loads((assets.ROOT / 'package.json').read_text())['devDependencies']
     for template_path in sorted((assets.ROOT / "templates").rglob("*.html")):

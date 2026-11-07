@@ -229,7 +229,7 @@ def test_bookings_shrink_the_hold_and_final_drops_the_rest(usage_repo):
 
 
 def test_a_compare_run_drops_its_hold_with_its_last_planned_answer(usage_repo):
-    # A Compare run has no closing Consensus since 2026-10-25: the answer that
+    # A Compare run has no closing Consensus: the answer that
     # completes the models announced at /prepare ends it, not the expiry.
     repo, db = usage_repo
     repo.reserve("comparer", "run", RunKind.REGULAR, ADMISSION, planned_operations=2, now=UTC_NOON)
@@ -267,7 +267,7 @@ def test_expired_holds_stop_blocking_admissions(usage_repo):
 
 
 def test_a_run_cannot_bank_its_admission_beyond_its_hold(usage_repo):
-    # Audit 2026-10-28: holds lapsed after ten minutes, but a prepared run
+    # Holds lapsed after ten minutes, but a prepared run
     # stayed authorized for its whole execution window (hours). An account
     # prepared run after run while its holds expired, then started all of
     # them on an empty account.
@@ -316,7 +316,7 @@ def test_a_run_cannot_bank_its_admission_beyond_its_hold(usage_repo):
 
 def test_consume_with_an_admission_admits_a_lapsed_run_again(usage_repo):
     # The Consensus API consumes when a queued run's worker starts, which can
-    # be after its hold (probe 2026-11-07: used 300000 at a limit of 100000).
+    # be after its hold (a probe used 300000 at a limit of 100000).
     repo, db = usage_repo
     for key in ("young", "spent", "funded"):
         repo.reserve("queue", key, RunKind.REGULAR, ADMISSION, now=UTC_NOON)

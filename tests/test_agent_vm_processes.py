@@ -50,7 +50,7 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     assert started["id"] == PID and started["status"] == "running" and started["output"] == "Listening on :3000\n"
     assert started["max_seconds"] == 1800 and "vm_stop_process" in started["note"]
     assert read == {"id": PID, "status": "running", "output": "GET / 200\n"}
-    # Ended by the agent: "stopped", no exit code (timeout's 124 read as its limit, 2026-10-28).
+    # Ended by the agent: "stopped", no exit code (timeout's 124 would read as its limit).
     assert stopped == {"id": PID, "status": "stopped", "output": "GET / 200\nbye\n"}
     # The supervisor in the server's own folder, the command as the agent's
     # user in its folder and login environment, the command for listing.
@@ -62,7 +62,7 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     assert shlex.split(launch)[1:7] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN, "1800",
                                         chat_path(loop.chat_id) + "/app"]
     assert files[f"{directory}/command"] == b"npm run dev"
-    # Its chat: the process goes with it (delete_for_chat, since 2026-11-01).
+    # Its chat: the process goes with it (delete_for_chat).
     assert files[f"{directory}/chat"] == loop.chat_id.encode()
     assert {path for _, path in fake_vm.server_files if path.startswith(directory)} == {
         f"{directory}/run.sh", f"{directory}/launch.sh", f"{directory}/command", f"{directory}/reserve",
@@ -87,8 +87,8 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
 
 def test_a_process_counts_with_its_whole_time_limit_against_the_days_vm_time(store, fake_vm, fixed_id, monkeypatch):
     """It holds the VM awake up to its limit, after the message too: that limit
-    is charged, at most half of what is left today (DAY_SHARE, since
-    2026-10-31), so the commands around it still run (agent_vm_time.py)."""
+    is charged, at most half of what is left today (DAY_SHARE), so the
+    commands around it still run (agent_vm_time.py)."""
     from app.services import agent_vm_time
     monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 1000)
     directory = process_dir(PID)
@@ -99,15 +99,15 @@ def test_a_process_counts_with_its_whole_time_limit_against_the_days_vm_time(sto
     assert started["status"] == "running" and started["max_seconds"] == 500
     assert "at most half of what is left of today's VM time" in started["note"]
     # Its limit, and the start's own 2 s: every command the server runs for
-    # the agent counts (VMTools._exec, security audit 2026-10-27).
+    # the agent counts (VMTools._exec).
     assert agent_vm_time.used(store.db, UID) == 502
 
 
 def test_a_dev_server_leaves_an_account_without_pro_its_commands_output_and_stop(store, fake_vm, fixed_id,
                                                                                monkeypatch):
-    """Bug 2026-10-31: at its default limit (30 minutes) a dev server reserved
-    all 20 minutes of an account without Pro, and its own agent could then
-    neither read its output, nor stop it, nor run a command."""
+    """At its default limit (30 minutes) a dev server must not reserve all
+    20 minutes of an account without Pro: its own agent could then neither
+    read its output, nor stop it, nor run a command."""
     from app.services import agent_vm_time
     monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: agent_vm_time.BASE_DAILY_SECONDS)
     directory = process_dir(PID)
@@ -149,8 +149,8 @@ def test_a_process_can_be_read_and_stopped_once_the_days_vm_time_is_used_up(stor
 
 
 def test_waiting_for_a_process_counts_and_never_runs_past_the_days_vm_time(store, fake_vm, fixed_id, monkeypatch):
-    """Security audit 2026-10-27: vm_process_output with wait_seconds ran in
-    the VM without counting. The wait is VM time now, capped by what is left."""
+    """vm_process_output's wait_seconds run in the VM: the wait is VM time,
+    capped by what is left."""
     from app.services import agent_vm_time
     monkeypatch.setattr(agent_vm_time, "daily_limit", lambda uid: 100)
     agent_vm_time.charge(store, UID, 70)
@@ -171,7 +171,7 @@ def test_the_number_of_processes_and_their_time_are_capped(store, fake_vm, fixed
     list(loop.run())
     capped, missing, too_long = results(loop)
     assert f"{MAX_RUNNING} background processes are already running" in capped["error"]
-    # Its files go again: the list never shows it as "lost" (2026-10-28).
+    # Its files go again: the list never shows it as "lost".
     assert ("delete_path", NAME, directory) in fake_vm.calls
     assert not [path for path in fake_vm.vms[NAME]["files"] if path.startswith(directory + "/")]
     assert "No background process ffffffff" in missing["error"]
@@ -184,9 +184,9 @@ def test_the_number_of_processes_and_their_time_are_capped(store, fake_vm, fixed
     (["temp-chat"], "1 of them for a temporary chat"),
     (["temp-chat", "temp-chat", "temp-other"], "all of them for a temporary chat")])
 def test_a_refusal_at_the_cap_counts_the_temporary_chats_processes(store, fake_vm, fixed_id, temporary, said):
-    """Bug hunt 2026-11-06: a temporary chat's processes count toward
-    MAX_RUNNING but other chats' lists leave them out; the agent heard "3
-    are running", listed fewer and could not tell why. The refusal says how
+    """A temporary chat's processes count toward MAX_RUNNING but other
+    chats' lists leave them out: told "3 are running", the agent would list
+    fewer and could not tell why. The refusal says how
     many of them it cannot see and when they end."""
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     lines = "".join(f"temporary {chat_id if chat == 'mine' else chat}\n" for chat in temporary).encode()
@@ -371,9 +371,9 @@ def ending(directory, seconds=2):
 def test_a_process_whose_supervisor_is_still_ending_has_exited_and_is_not_lost(shell, tmp_path):
     """Between the command's end and its exit code the supervisor sleeps up
     to a second, or holds the VM a last time (curl, up to 5 s): a look then
-    found neither the command nor its exit code, said "lost" ("the VM
-    stopped it, start it again") and the agent ran a finished run again
-    (bug hunt P24). While this folder's supervisor lives, a look waits for
+    would find neither the command nor its exit code, say "lost" ("the VM
+    stopped it, start it again") and the agent would run a finished run
+    again. While this folder's supervisor lives, a look waits for
     its exit code, in the list too."""
     run, root = shell
     single = prepare(root, "66666661", "true", tmp_path.as_posix())
@@ -449,10 +449,10 @@ def test_the_mark_that_gives_a_process_time_back_is_claimed_once(shell, tmp_path
 
 
 def test_a_look_that_read_a_process_before_another_claimed_it_gives_nothing_back(store, monkeypatch):
-    """Bug hunt 2026-11-06: the chat's deletion (agent_vm.delete_chat_vm) and
-    its stopped message's sweep (VMSession._sweep_deleted) each read the
-    status first, both read it not given back, and each gave the unused time
-    back: the mark was a plain write. Only the look that claims it gives it."""
+    """The chat's deletion (agent_vm.delete_chat_vm) and its stopped
+    message's sweep (VMSession._sweep_deleted) each read the status first,
+    and both may read it not given back: with a plain write as the mark each
+    would give the unused time back. Only the look that claims it gives it."""
     from app.services import agent_vm_time
     from test_agent_vm import FakeVM
     fake = FakeVM()

@@ -1,5 +1,5 @@
-"""The Telegram webhook checks its secret before it reads the update (audit
-2026-10-28): FastAPI parsed anyone's JSON body first, and a header with a
+"""The Telegram webhook checks its secret before it reads the update:
+FastAPI parsed anyone's JSON body first, and a header with a
 non-ASCII character made the secret check raise (500 and an alert)."""
 
 import os
