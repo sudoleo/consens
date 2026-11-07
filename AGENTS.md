@@ -85,6 +85,13 @@ Text-, Stil- oder Dokumentationskorrekturen genügt der betroffene Kontext.
 (siehe Abschnitt „Bei Änderungen aktualisieren" dort). Die Karte muss zum Code
 passen — bei Abweichung gilt der Code, und die Karte wird korrigiert.
 
+**Kommentare:** Der Code ist die Doku. Kommentare und Docstrings nur fürs
+*Warum* (Vertrag, Randfall, Browser- oder Anbieter-Eigenheit, Sicherheitsgrund),
+nicht fürs *Was* und nie als Verlauf („früher“, „neu seit …“, Daten,
+Ticket-Bezüge; das steht in git). Wer Code ändert, prüft die Kommentare
+daneben und in den Tests mit und passt sie im selben Commit an oder löscht sie.
+Ein falscher Kommentar ist schlimmer als keiner.
+
 **Schnell-Hinweise:**
 - Frontend-Module reden über `window.*` / `window.App` (keine ES-Imports). Die
   Script-Ladereihenfolge ist ein Vertrag — für `/app` steht sie in
