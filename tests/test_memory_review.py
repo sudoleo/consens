@@ -148,6 +148,8 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
     assert ("User: ja gerne\n(The user quoted the assistant's earlier answer: “Soll ich dir Lehrstühle"
             in prompt)
     assert "Assistant (end of the answer): Gute Idee." in prompt
+    # Tidying the saved memories is its own step, not part of the comparison.
+    assert "look over the saved memories themselves" in prompt and "one change per saved memory" in prompt
     for left_out in ("still running", "Watch task", "last month", "inbox", "Something private", "Deleted chat",
                      "Compare question", "while it was off"):
         assert left_out not in prompt

@@ -98,7 +98,10 @@ SYSTEM = ("You keep the memory a personal AI assistant has of one user. "
 # A task procedure, not the agent's constitution: a model gains from being
 # told how to go through the chats before it decides ("observations" first,
 # never stored or logged). No "little needs to change": a model takes that
-# literally on a near-empty memory and keeps almost nothing.
+# literally on a near-empty memory and keeps almost nothing. Tidying the saved
+# memories is a step of its own: folded into the comparison with the chats, a
+# model adds and updates but leaves overlapping memories side by side, and the
+# memory fills up with near-duplicates.
 PROMPT = """Once a day you look back over the user's chats with the assistant since the last
 time and keep the saved memories up to date, the way a good personal assistant
 thinks back over the day. The saved memories are what the assistant knows about the
@@ -119,17 +122,22 @@ preference. A one-off question (a song, a single lookup) says little about them.
 The assistant's answers give context, but a fact about the user needs their own
 words or their yes.
 
-Then compare the observations with the saved memories and return the changes: add
-what is missing, update a memory the chats show to be outdated or wrong, merge
-memories on the same thing, and delete one whose time has passed or that the user
-dropped. Leave out what a scheduled Watch or a setting already keeps, what only the
-assistant did, and what the user wrote about themselves in their profile or note.
+Then look over the saved memories themselves, as a whole. Where two or more say the
+same thing or overlap, keep one, update it so it holds what each of them said, and
+delete the others. Delete a memory that a scheduled Watch or a setting already
+keeps, whose time has passed, or that the user dropped.
+
+Then compare the observations with the saved memories: update the memory an
+observation belongs to rather than adding a second one on the same topic, update a
+memory the chats show to be outdated or wrong, and add what is still missing. Leave
+out what a scheduled Watch or a setting already keeps, what only the assistant did,
+and what the user wrote about themselves in their profile or note.
 Health, religion, political views and other sensitive details only when the user
 asked to remember them. Each memory is one specific fact in the user's language, at
 most {max_chars} characters, with a date where time matters ("Works night shifts as
 a nurse in Hamburg" rather than "has a job").
 
-Return JSON with at most {max_observations} observations and at most {max_changes} changes: {{"observations": ["<one line>"], "changes": [{{"op": "add" | "update" | "delete", "id": "<saved memory id for update or delete, else empty>", "text": "<the memory for add or update, else empty>"}}]}}
+Return JSON with at most {max_observations} observations and at most {max_changes} changes, one change per saved memory: {{"observations": ["<one line>"], "changes": [{{"op": "add" | "update" | "delete", "id": "<saved memory id for update or delete, else empty>", "text": "<the memory for add or update, else empty>"}}]}}
 
 <MEMORY>
 {memory}
