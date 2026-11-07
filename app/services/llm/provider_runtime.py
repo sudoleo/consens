@@ -331,17 +331,23 @@ def claim_analysis_call():
 
 
 class ProviderProgressWatchdog:
-    """Bound silence, not the total duration of a productive model call."""
+    """Bound silence, not the total duration of a productive model call.
+    ``clock``: time.monotonic unless a test brings its own, which only its
+    stream moves (a real sleep against a short bound is a race under load)."""
 
-    def __init__(self, seconds):
+    def __init__(self, seconds, clock=None):
         self.seconds = seconds
+        self.clock = clock
         self.touch()
 
+    def _now(self):
+        return (self.clock or time.monotonic)()
+
     def touch(self):
-        self.deadline = time.monotonic() + self.seconds
+        self.deadline = self._now() + self.seconds
 
     def check(self):
-        if time.monotonic() >= self.deadline:
+        if self._now() >= self.deadline:
             raise TimeoutError("Provider stream made no progress")
 
 

@@ -231,24 +231,39 @@ def test_real_provider_socket_stall_releases_receipt_and_preserves_partial_text(
     assert agent_quota.snapshot(store.db, UID)["reserved"] == 0
 
 
-def test_productive_stream_can_outlive_the_stall_interval(monkeypatch):
+@pytest.mark.parametrize("gap,stalls", [(.08, False), (.13, True)])
+def test_productive_stream_can_outlive_the_stall_interval(monkeypatch, gap, stalls):
+    """The stall bound is silence, not the call's total: four chunks 80 ms
+    apart (320 ms in all) outlast a 120 ms bound, one gap longer than it
+    does not. On the watchdog's own clock, which only the stream moves:
+    real 40 ms sleeps against 120 ms went red under load (2026-11-06)."""
+    now = [0.0]
+
     class Body(httpx.AsyncByteStream):
         async def __aiter__(self):
             for text in ["Long ", "answer ", "with ", "progress."]:
-                await asyncio.sleep(.04)
+                now[0] += gap
                 yield ('data: ' + json.dumps({"choices": [{"delta": {"content": text}}]}) + '\n\n').encode()
             yield b'data: {"choices":[{"delta":{},"finish_reason":"stop"}],"usage":{"prompt_tokens":10,"completion_tokens":4}}\n\n'
             yield b'data: [DONE]\n\n'
     http = runtime.ProviderHTTP(transport=httpx.MockTransport(lambda _: httpx.Response(200, stream=Body())))
     monkeypatch.setattr(runtime, "_provider_http", http)
     monkeypatch.setattr(runtime, "_bounded_env_float", lambda *args: .12)
+    watchdog = runtime.ProviderProgressWatchdog
+    monkeypatch.setattr(runtime, "ProviderProgressWatchdog", lambda seconds: watchdog(seconds, clock=lambda: now[0]))
     value = AgentCompletion()
     try:
         with runtime.bind_analysis_budget(runtime.AnalysisBudget(unlimited=True)):
-            list(value.stream(model=AgentModel(), messages=[], api_key="test"))
+            if stalls:
+                with pytest.raises(TimeoutError, match="no progress"):
+                    list(value.stream(model=AgentModel(), messages=[], api_key="test"))
+            else:
+                list(value.stream(model=AgentModel(), messages=[], api_key="test"))
     finally:
         http.shutdown()
-    assert value.text == "Long answer with progress."
+    if stalls:
+        return
+    assert now[0] > .12 and value.text == "Long answer with progress."
     assert value.usage["input_tokens"] + value.usage["output_tokens"] == 14
 
 
