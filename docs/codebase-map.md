@@ -7304,7 +7304,9 @@ Firebase bleibt ein externer gstatic-Import; öffentliche Seiten bleiben unverä
 **Quellen in der Synthese (seit 2026-09-11):** Neue Consensus-Antworten enthalten keine
 S-Quellenverweise. `llm/consensus_citations.py` entfernt unerwartete S-Zitate
 inkrementell vor Streaming-Ausgabe, nachgelagerter Analyse und Speicherung;
-literaler Code und Mathematik bleiben erhalten. Synthese-Prompts behalten die
+literaler Code und Mathematik bleiben erhalten. Ein nicht geschlossener
+Code-Span oder eine offene Formel endet wie in CommonMark mit dem Absatz
+(Leerzeile), Fenced-Code-Blöcke dagegen erst an ihrem Zaun. Synthese-Prompts behalten die
 Quelleninformationen der Modellantworten. Bestehende Antworten werden beim
 Laden nicht umgeschrieben. `source_catalog.py` vereinheitlicht weiterhin lokale
 Modell-IDs, dedupliziert URLs mit Modellprovenienz und erhält unbekannte oder

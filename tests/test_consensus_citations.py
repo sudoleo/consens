@@ -65,6 +65,18 @@ def test_unicode_differences_payload_keeps_verified_anchors_and_quotes():
     ("Cost $5.[S1] Revenue 10 $. [S2]", "Cost $5. Revenue 10 $. "),
     (r"Literal \[S1]. Fact.[S2]", r"Literal \[S1]. Fact."),
     ("Unclosed code ```[S1]", "Unclosed code ```[S1]"),
+    # A blank line ends the paragraph and with it an unclosed code span or
+    # formula (CommonMark); later markers are prose again.
+    ("Open `code [S1]\n\nNext.[S2]", "Open `code [S1]\n\nNext."),
+    ("Open $$x [S1]\n\nNext.[S2]", "Open $$x [S1]\n\nNext."),
+    (r"Open \(x [S1]" + "\n \t\nNext.[S2]", r"Open \(x [S1]" + "\n \t\nNext."),
+    ("Open `x\r\n\r\nNext.[S1]", "Open `x\r\n\r\nNext."),
+    ("Open `x\n\n```\n[S1]\n```\nNext.[S2]", "Open `x\n\n```\n[S1]\n```\nNext."),
+    # Within one paragraph a span continues over a line break, and fenced
+    # blocks keep their blank lines.
+    ("Code `a\n[S1]` b.[S2]", "Code `a\n[S1]` b."),
+    ("Code `a\r\n[S1]` b.[S2]", "Code `a\r\n[S1]` b."),
+    ("```\n[S1]\n\n[S2]\n```\nNext.[S3]", "```\n[S1]\n\n[S2]\n```\nNext."),
 ])
 def test_complete_and_every_chunk_boundary_agree(text, expected):
     assert strip_consensus_source_markers(text) == expected

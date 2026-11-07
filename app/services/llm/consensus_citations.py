@@ -45,9 +45,10 @@ class ConsensusCitationFilter:
             if self.line_start:
                 self.indented_line = False
         if self.pending:
-            # A fence/indent prefix needs its line context. Other prose can
-            # flow immediately, keeping only a potentially incomplete token.
-            if self.fence or (self.line_start and re.match(r"^ {0,3}(?:$|[`~])", self.pending)):
+            # A fence/indent prefix and a possibly blank line need their line
+            # context. Other prose can flow immediately, keeping only a
+            # potentially incomplete token.
+            if self.fence or (self.line_start and re.match(r"^(?:[ \t]*$| {0,3}[`~])", self.pending)):
                 return "".join(out)
             cutoff = len(self.pending)
             for pattern in (_PARTIAL_SOURCE, _PARTIAL_ESCAPE, _PARTIAL_RUN):
@@ -81,6 +82,12 @@ class ConsensusCitationFilter:
                     and len(marker[1]) >= len(self.fence) and not marker[2].strip()):
                 self.fence = ""
             return line
+        if (self.literal and self.line_start and line.endswith(("\n", "\r"))
+                and not line.strip(" \t\r\n") and not (line == "\n" and self.previous_char == "\r")):
+            # A blank line ends the paragraph, and with it an unclosed code
+            # span or formula (CommonMark): later markers are prose again.
+            # A "\r\n" split between two chunks is no blank line.
+            self.literal = ""
         if not self.literal and marker and not (marker[1][0] == "`" and "`" in marker[2]):
             self.fence = marker[1]
             return line
