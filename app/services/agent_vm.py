@@ -668,6 +668,9 @@ class SpritesBackend(VMBackend):
                     raise VMFileMissing(path)
                 if not response.is_success:
                     logging.warning("Agent VM request refused operation=read status=%s", response.status_code)
+                    # The VM's own answer (every start reads its version here, prepare).
+                    if response.status_code in UNRESPONSIVE_STATUSES:
+                        mark_unresponsive(name, response.status_code)
                     raise VMUnavailable(f"read: HTTP {response.status_code}", response.status_code)
                 _touch(name)
                 data = bytearray()
@@ -693,7 +696,7 @@ class SpritesBackend(VMBackend):
                 return int(out.decode().strip())
             except ValueError:
                 return len(data)
-        response = self._request("write", "PUT", self._sprite(name) + "/fs/write", content=data,
+        response = self._request("write", "PUT", self._sprite(name) + "/fs/write", content=data, vm=name,
                                  params={"path": path, "workingDir": SERVER_HOME, "mkdir": "true"},
                                  headers={"Content-Type": "application/octet-stream"})
         _touch(name)
@@ -772,7 +775,7 @@ class SpritesBackend(VMBackend):
             if code != 0:
                 raise _unavailable(f"delete path: exit {code}")
             return
-        self._request("delete path", "DELETE", self._sprite(name) + "/fs/delete", missing_ok=True,
+        self._request("delete path", "DELETE", self._sprite(name) + "/fs/delete", missing_ok=True, vm=name,
                       json={"path": path, "workingDir": SERVER_HOME, "recursive": True, "asRoot": False})
 
     def move_path(self, name, source, target):

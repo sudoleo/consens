@@ -488,6 +488,41 @@ def test_a_gateways_502_marks_the_vm_until_a_request_reaches_it():
     assert agent_vm.unresponsive_status("vm") is None
 
 
+def test_a_gateways_502_on_the_servers_own_file_requests_marks_the_vm():
+    """Every start first reads the workspace's version with the file API
+    (agent_workspace.prepare: read_file with agent=False), which the VM
+    itself answers. A wedged sprite answered it with 502 after about 48 s;
+    unmarked, every later start waited as long again, and the watch's probe
+    found no mark and never healed the VM."""
+    status = {"code": 502}
+
+    def handler(request):
+        return httpx.Response(status["code"], json={})
+    backend = agent_vm.SpritesBackend("t", transport=httpx.MockTransport(handler))
+    with pytest.raises(agent_vm.VMUnavailable, match="read: HTTP 502") as refused:
+        backend.read_file("vm", "/home/sprite/.consens/version", limit=64, agent=False)
+    assert agent_vm.unresponsive(refused.value) and agent_vm.unresponsive_status("vm") == 502
+    agent_vm.forget_unresponsive("vm")
+    status["code"] = 503
+    with pytest.raises(agent_vm.VMUnavailable, match="write: HTTP 503"):
+        backend.write_file("vm", "/home/sprite/.consens/version", b"v1", agent=False)
+    assert agent_vm.unresponsive_status("vm") == 503
+    agent_vm.forget_unresponsive("vm")
+    status["code"] = 504
+    with pytest.raises(agent_vm.VMUnavailable, match="delete path: HTTP 504"):
+        backend.delete_path("vm", "/home/sprite/.consens/old", agent=False)
+    assert agent_vm.unresponsive_status("vm") == 504
+    agent_vm.forget_unresponsive("vm")
+    # A file the VM does not have, or a refusal that is not the gateway's, marks nothing.
+    status["code"] = 404
+    with pytest.raises(agent_vm.VMFileMissing):
+        backend.read_file("vm", "/home/sprite/.consens/version", limit=64, agent=False)
+    status["code"] = 500
+    with pytest.raises(agent_vm.VMUnavailable, match="read: HTTP 500"):
+        backend.read_file("vm", "/home/sprite/.consens/version", limit=64, agent=False)
+    assert agent_vm.unresponsive_status("vm") is None
+
+
 def test_a_wake_the_gateway_calls_unresponsive_is_the_commands_answer_without_a_handshake():
     """The wake waited about 48 s for a 502, the handshake after it as long
     again: it ends the command at once."""
