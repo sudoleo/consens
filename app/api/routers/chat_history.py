@@ -39,21 +39,20 @@ router = APIRouter()
 # would execute those blocking reads and transactions directly ON the event
 # loop and stall every concurrent request for their whole duration.
 #
-# Since 2026-10-25 the browser runs no Consensus chat: the routes that created
-# Consensus turns and built their follow-up memory are gone. The Agent writes
-# its turns through /agent; a saved Consensus chat is read from its bookmark.
+# The browser runs no Consensus chat: no route here creates Consensus turns
+# or builds their follow-up memory. The Agent writes its turns through
+# /agent; a saved Consensus chat is read from its bookmark.
 
 
 class ChatCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = None
-    # Agent chats only (since 2026-11-07): no route adds a turn to a new
-    # Consensus chat any more, yet one made by an old tab or a direct call
-    # counted toward the chat cap. The field stays for the browser, which
-    # names the mode.
+    # Agent chats only: no route adds a turn to a new Consensus chat, yet
+    # one made by an old tab or a direct call would count toward the chat
+    # cap. The field stays for the browser, which names the mode.
     execution_mode: Literal["agent"] = "agent"
-    # A temporary Agent chat (since 2026-11-01): no bookmark, nothing written
+    # A temporary Agent chat: no bookmark, nothing written
     # to memory, no share; deleted with its workspace folder when the user
     # leaves it, at the latest chat_store.TEMPORARY_CHAT_TTL after its last
     # message.
@@ -202,8 +201,8 @@ def delete_chat(request: Request, chat_id: str):
     """Delete one owner-bound chat and everything nested beneath it.
 
     Without this the only handle on a chat is its bookmark, so deleting the
-    bookmark stranded the whole transcript with no way to ever reach or remove
-    it. Repeating the call on an already deleted chat returns 404, matching
+    bookmark would strand the whole transcript with no way to ever reach or
+    remove it. Repeating the call on an already deleted chat returns 404, matching
     every other unknown or foreign chat id.
     """
     uid = _chat_uid(request, "delete_chat")

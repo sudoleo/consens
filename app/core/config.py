@@ -31,11 +31,10 @@ class ModelConfig:
     request_config: dict[str, Any] = field(default_factory=dict)
 
 DEFAULT_LIMITS = {
-    # Die frueheren Run-Kontingente (free/plus/pro_consensus_run_limit,
-    # *_deep_think_run_limit) gibt es seit 2026-10-01 nicht mehr: Compare,
-    # Consensus, Reasoning-Laeufe und Agent teilen ein Tokenkonto pro Stufe
-    # (app/services/agent_budget_config.py, Admin-Tab Limits). Gespeicherte
-    # Altwerte faellt normalize_limits_config beim naechsten Backfill weg.
+    # Keine Run-Kontingente: Compare, Consensus, Reasoning-Laeufe und Agent
+    # teilen ein Tokenkonto pro Stufe (app/services/agent_budget_config.py,
+    # Admin-Tab Limits). Gespeicherte Altwerte (free/plus/pro_consensus_run_limit,
+    # *_deep_think_run_limit) laesst normalize_limits_config weg.
     "free_max_words": 500,
     "plus_max_words": 500,
     "pro_max_words": 500,
@@ -43,10 +42,9 @@ DEFAULT_LIMITS = {
     "plus_max_tokens": 4096,
     "pro_max_tokens": 4096,
     # Output-Cap eines Laufs mit eingeschaltetem Reasoning-Schalter, fuer
-    # alle Stufen gleich: max(normales Stufenlimit, dieser Wert). Ersetzt seit
-    # 2026-10-02 die vier free_/pro_deep_search_max_words|tokens-Felder von
-    # Deep Think; ein altes pro_deep_search_max_tokens in Firestore wird
-    # einmalig hierher uebernommen (normalize_limits_config).
+    # alle Stufen gleich: max(normales Stufenlimit, dieser Wert). Ein altes
+    # pro_deep_search_max_tokens in Firestore wird einmalig hierher
+    # uebernommen (normalize_limits_config).
     "reasoning_max_tokens": 8192,
     "consensus_max_tokens": 8192,
     "differences_max_tokens": 8192,
@@ -63,7 +61,7 @@ DEFAULT_LIMITS = {
     # Die vorherige Frage, die ein Compare-Bookmark mitspeichert
     # (previousQuestion kommt vom Client).
     "followup_max_question_chars": 4_000,
-    # Qualitätsfilter für index_eligible von Share-Snapshots (Etappe 3):
+    # Qualitätsfilter für index_eligible von Share-Snapshots:
     # steuert nur die Eligibility-Anzeige, indexed setzt weiterhin der Admin.
     "share_min_consensus_chars": 600,
     "share_min_sources": 2,
@@ -74,7 +72,7 @@ DEFAULT_LIMITS = {
     "watch_plus_active_limit": 3,
     "watch_pro_active_limit": 5,
     "watch_max_runs_per_day": 50,
-    # Watches that run the Agent (agent_watches.py, since 2026-11-03): active
+    # Watches that run the Agent (agent_watches.py): active
     # ones per tier and the shortest interval in hours (Max: Free 2 daily,
     # Plus 5 every 6 hours, Pro 20 hourly). Each run books on the account's
     # own allowance; the runs per day are a safety net for the whole server.
@@ -89,9 +87,9 @@ DEFAULT_LIMITS = {
     # hourly = 480).
     "agent_watch_max_runs_per_day": 3000,
     "agent_watch_max_runs_per_account_day": 500,
-    # 1 = the Consensus Watches from before (watch_service.py) are archived
-    # (Max, 2026-11-03): none is made or checked, nothing more is sent, their
-    # pages stay as they last were. New Watches run the Agent.
+    # 1 = the Consensus Watches (watch_service.py) are archived: none is
+    # made or checked, nothing more is sent, their pages stay as they last
+    # were. New Watches run the Agent.
     "consensus_watches_archived": 1,
     # Daily evidence probes between two full checks (one cheap model with web
     # search each, see app/services/watch_probe.py). 0 switches them off.
@@ -149,7 +147,7 @@ DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
 OPENAI_SOL_MODEL = "gpt-5.6-sol"
 # Offene Modelle (Gewichte auf Hugging Face) fuer das Preset "Open Models".
 # gpt-oss-120b liest nur Text und denkt zwingend (Stufe "low", siehe
-# MODEL_REQUEST_CONFIG); seit 2026-10-22 steht dort Qwen3.8 27B statt seiner,
+# MODEL_REQUEST_CONFIG); im Preset steht Qwen3.8 27B statt seiner,
 # waehlbar bleibt es. Gemma 4 31B nimmt Text und Bilder.
 OPENAI_OSS_MODEL = "gpt-oss-120b"
 GEMMA_MODEL = "gemma-4-31b-it"
@@ -162,14 +160,14 @@ GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
 GEMINI_36_FLASH_MODEL = "gemini-3.6-flash"
 GEMINI_35_FLASH_MODEL = "gemini-3.5-flash"
 GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
-# Seit 2026-10-15 V4.1 Flash. Prod-Receipts 2026-09-30 bis 10-14: V4 Flash
+# V4.1 Flash statt V4 Flash. Prod-Receipts 2026-09-30 bis 10-14: V4 Flash
 # brauchte als Vergleichsantwort im Median 63 s (bis 299 s) und war in 10 von
 # 16 Laeufen das langsamste Modell; V4.1 Flash 18 s (hoechstens 39 s), pro
 # Antwort gleich teuer (~1,4 Cent, die Suche dominiert). Alte Auswahlen,
 # Presets und Admin-Listen migrieren hierher (DEEPSEEK_MODEL_MIGRATIONS).
 DEEPSEEK_FLASH_MODEL = "deepseek-v4.1-flash"
 DEEPSEEK_V4_FLASH_MODEL = "deepseek-v4-flash"  # alte ID, migriert
-# Seit 2026-10-29 V4.1 Flash 1017 statt V4 Pro als DeepSeek-Pro. Artificial
+# V4.1 Flash 1017 statt V4 Pro als DeepSeek-Pro. Artificial
 # Analysis: 45 statt 39 Punkte gegenueber V4.1 Flash (Index v5: 32, mit GLM 5.3
 # bestes offenes Modell), Nicht-Halluzinationsrate 33 statt 4 %; schon V4.1
 # Flash lag dort vor V4 Pro 0813. Ueber die schnellste Route (Together) kostet
@@ -180,22 +178,17 @@ DEEPSEEK_V4_FLASH_MODEL = "deepseek-v4-flash"  # alte ID, migriert
 # hierher (DEEPSEEK_MODEL_MIGRATIONS).
 DEEPSEEK_PRO_MODEL = "deepseek-v4.1-flash-1017"
 DEEPSEEK_V4_PRO_MODEL = "deepseek-v4-pro"  # alte ID, migriert
-# Basis-Default wie bei jeder anderen Familie das guenstige Modell. Stand hier
-# als einzige Familie auf dem Pro-Modell, was drei Stellen still verteuert hat:
-# die Consensus-Engine "DeepSeek" (als free ausgewiesen, lief aber auf Pro und
-# damit auf demselben Modell wie "DeepSeek-Pro"), den Standard-Judge der
-# Differences-Engine und den Fallback in engines.py fuer Aufrufe ohne
-# ausdrueckliche Modellwahl. Die Antwortmodelle waren nie betroffen: Presets
-# fast/balanced und der Free-Default zeigen laengst auf Flash. Wo Pro gewollt
-# ist, steht es ausdruecklich da -- Preset "thorough", Alias "DeepSeek-Pro",
-# judge_models_pro und die Benchmark-Matrix.
+# Basis-Default wie bei jeder anderen Familie das guenstige Modell: daran
+# haengen die Consensus-Engine "DeepSeek" (als free ausgewiesen), der
+# Standard-Judge der Differences-Engine und der Fallback in engines.py fuer
+# Aufrufe ohne ausdrueckliche Modellwahl. Wo Pro gewollt ist, steht es
+# ausdruecklich da -- Alias "DeepSeek-Pro" und judge_models_pro.
 DEFAULT_DEEPSEEK_MODEL = DEEPSEEK_FLASH_MODEL
 # Grok 4.3 ist ein Eintrag wie jedes andere Modell: es denkt von sich aus
 # ("low"), der Reasoning-Schalter und das Reasoning-Menue des Agenten setzen
-# die Stufe. Die frueheren Varianten "Grok 4.3/4.20 · No reasoning" und
-# "· Reasoning" stellten eine Einstellung als eigenes Modell dar (Max,
-# 2026-10-11: "No reasoning" hinter dem Namen ist nicht mehr zeitgemaess);
-# ihre IDs migrieren hierher (GROK_MODEL_MIGRATIONS).
+# die Stufe. Die alten Varianten "Grok 4.3/4.20 · No reasoning" und
+# "· Reasoning" stellten eine Einstellung als eigenes Modell dar; ihre IDs
+# migrieren hierher (GROK_MODEL_MIGRATIONS).
 GROK_BASE_MODEL = "grok-4.3"
 GROK_NO_REASONING_MODEL = "grok-4.3-no-reasoning"  # alte ID, migriert
 GROK_FAST_MODEL = GROK_BASE_MODEL
@@ -206,10 +199,10 @@ DEFAULT_GROK_MODEL = GROK_BASE_MODEL
 OPENAI_PRO_MODEL = "gpt-5.5"
 GROK_PRO_MODEL = "grok-4.7"
 KIMI_BASE_MODEL = "kimi-k2.6"
-# Seit 2026-10-25 K3.1 Pro statt K3: auf der Moonshot-Route, die Kimi faehrt,
+# K3.1 Pro statt K3: auf der Moonshot-Route, die Kimi faehrt,
 # kostet es 2/10 $ je Mio. Token statt 3/15 $. Live-Probe mit Suche je 6
 # Antworten: mit "low" suchte es jedes Mal und brauchte fuer die kurze
-# Zinsfrage 19 s (K3 mit dem bisherigen enabled=true 26 s); mit enabled=true
+# Zinsfrage 19 s (K3 mit enabled=true 26 s); mit enabled=true
 # (Moonshot denkt dann auf "max") blieben 2 von 6 Antworten leer, weil das
 # Denken das Output-Limit aufbrauchte. Gespeicherte K3-Auswahlen migrieren
 # hierher (KIMI_MODEL_MIGRATIONS).
@@ -226,7 +219,7 @@ GLM_PRO_MODEL = "glm-5.3"
 # Anbieter Prompts sammelt (Routing data_collection=deny).
 MUSE_BASE_MODEL = "muse-glimmer-30b"
 MUSE_PRO_MODEL = "muse-spark-1.3"
-# Alibabas Qwen (zehnte Familie seit 2026-10-22). Basis ist das offene, dichte
+# Alibabas Qwen. Basis ist das offene, dichte
 # Qwen3.8 27B (0,04/1,35 $ je Mio. Token, Text und Bilder, 20 Anbieter, am
 # schnellsten bei Cerebras). Pro ist Qwen3.8 Max Prime (4/12 $), die schnellere
 # Variante des Flaggschiffs; alle Max-Modelle laufen nur bei Alibaba und
@@ -234,21 +227,20 @@ MUSE_PRO_MODEL = "muse-spark-1.3"
 # 2.4T-A95B brach zwei von drei Antworten am Output-Limit ab).
 QWEN_BASE_MODEL = "qwen3.8-27b"
 QWEN_PRO_MODEL = "qwen3.8-max-prime"
-# Xiaomis MiMo (elfte Familie seit 2026-10-26). Beide Modelle haben offene
+# Xiaomis MiMo. Beide Modelle haben offene
 # Gewichte, lesen Text, Bilder, Video und Audio. Basis ist MiMo V2.6 Flash
 # (0,14/0,28 $ je Mio. Token, zehn Anbieter), Pro MiMo V2.6 Pro (0,43/0,87 $).
 # Live-Probe mit Suche: Flash 5-11 s, Pro 53-127 s (DeepInfra).
 MIMO_BASE_MODEL = "mimo-v2.6-flash"
 MIMO_PRO_MODEL = "mimo-v2.6-pro"
 
-# Modelle, die OpenRouter unter der frueheren Pflicht-Regel provider.zdr=true
-# (bis 2026-10-17) nicht bedienen konnte: kein Endpunkt in GET
-# /api/v1/endpoints/zdr, jeder Aufruf endete mit 404 "No endpoints found
-# matching your data policy" (Muse Spark vorher mit 403 wegen der fehlenden
-# 18+-Bestaetigung). Live-Probe 2026-10-08. Sie bleiben Tombstones
+# Modelle, die OpenRouter mit provider.zdr=true nicht bedienen konnte: kein
+# Endpunkt in GET /api/v1/endpoints/zdr, jeder Aufruf endete mit 404 "No
+# endpoints found matching your data policy" (Muse Spark mit 403 wegen der
+# fehlenden 18+-Bestaetigung). Live-Probe 2026-10-08. Sie bleiben Tombstones
 # (REMOVED_MODEL_IDS): nicht waehlbar, auch wenn die Firestore-Modellliste sie
-# noch fuehrt. ZDR gilt heute nur noch in Chats mit Google-Daten; wieder
-# aufnehmen erst nach einem echten Aufruf mit dem heutigen Routing
+# noch fuehrt. ZDR gilt nur in Chats mit Google-Daten; wieder aufnehmen erst
+# nach einem echten Aufruf mit dem heutigen Routing
 # (openrouter_contract.DEFAULT_PROVIDER_ROUTING).
 ZDR_UNAVAILABLE_MODEL_IDS = frozenset({
     "gpt-3.5-turbo",                  # nur OpenAI direkt, kein Azure-Endpunkt
@@ -262,7 +254,7 @@ ZDR_UNAVAILABLE_MODEL_IDS = frozenset({
 # Eine neue Familie ist ein Eintrag hier plus ihre Modelle in der Admin-DB --
 # nicht ein Dutzend paralleler Dicts. Die abgeleiteten Strukturen darunter
 # (Defaults, Labels, OpenRouter-Praefixe, Judge-Basis, Consensus-Aliasse)
-# behalten ihre bisherigen Namen, weil Module und Tests sie direkt importieren.
+# behalten ihre Namen, weil Module und Tests sie direkt importieren.
 # ---------------------------------------------------------------------------
 @dataclass(frozen=True)
 class ProviderConfig:
@@ -457,8 +449,8 @@ FREE_DEFAULT_MODEL_BY_PROVIDER = dict(DEFAULT_MODEL_BY_PROVIDER)
 _BASE_FREE_DEFAULTS = dict(FREE_DEFAULT_MODEL_BY_PROVIDER)
 
 # Antwortmodelle fuer geplante Consensus-Watches. Pro Tier kann je Provider
-# genau ein Modell aktiv sein; fehlende Legacy-Konfiguration behaelt das
-# bisherige Verhalten mit drei guenstigen Modellen bei.
+# genau ein Modell aktiv sein; ohne gespeicherte Konfiguration gelten diese
+# drei guenstigen Modelle.
 _BASE_WATCH_MODELS_BY_TIER = {
     "free": {
         "openai": DEFAULT_OPENAI_MODEL,
@@ -487,8 +479,8 @@ def provider_label(provider: str | None) -> str:
 # Separate Synthese-Engine fuer Consensus-Watches. Sie ist bewusst nicht an
 # eines der Antwortmodelle gebunden: der konfigurierte Provider kann den
 # Consensus aus den unabhaengigen Antworten erzeugen, ohne selbst eine
-# Antwortposition beizusteuern. Legacy-Dokumente behalten mit OpenAI die
-# bisherige bevorzugte Engine, solange der Provider verfuegbar ist.
+# Antwortposition beizusteuern. Dokumente ohne gespeicherten Wert nehmen
+# OpenAI, solange der Provider verfuegbar ist.
 _BASE_WATCH_CONSENSUS_MODELS_BY_TIER = {
     "free": "OpenAI",
     "pro": "OpenAI",
@@ -507,7 +499,7 @@ MODEL_ORDER_BY_PROVIDER: dict[str, list[str]] = {
 # "judge_models") umstellbar; ungueltige Werte fallen je Provider auf die
 # Basis zurueck (siehe apply_judge_models). WICHTIG: das dict wird in-place
 # mutiert, damit der Modul-Alias in consensus_engine live bleibt.
-# OpenAI-Standard-Judge ist Luna (Max-Entscheidung 2026-10-04/07), nicht das
+# OpenAI-Standard-Judge ist Luna (Max-Entscheidung), nicht das
 # guenstige Basis-Antwortmodell.
 _BASE_DIFFERENCES_JUDGE_BY_PROVIDER = {**DEFAULT_MODEL_BY_PROVIDER, "openai": OPENAI_LUNA_MODEL}
 DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_DIFFERENCES_JUDGE_BY_PROVIDER)
@@ -541,7 +533,7 @@ DEFAULT_CONSENSUS_MODELS = [
 ]
 
 ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
-# Produktdefinition der Model-Set-Presets. Die sechs Antwortmodelle plus
+# Produktdefinition der Model-Set-Presets. Die Antwortmodelle plus
 # Consensus-Engine koennen getrennt davon aus Firestore ueberschrieben werden;
 # "Custom" oeffnet weiterhin die volle Engine-Liste.
 # High Quality (interne ID: thorough) bleibt als Produktregel Pro-only; Daily
@@ -549,15 +541,13 @@ ALLOWED_CONSENSUS_MODELS = list(DEFAULT_CONSENSUS_MODELS)
 # Admin-Normalisierung strikt auf Free-faehige Modelle begrenzt.
 # Die IDs sind Vertrag (Firestore-Overrides, gespeicherte Nutzerauswahl) und
 # bleiben deshalb unveraendert, auch wenn sich das Label aendert.
-# Open Models (seit 2026-10-15, vorher "Balanced" und deckungsgleich mit
-# Daily): Modelle mit offenen Gewichten als zweite Meinung. Free-Presets
+# Open Models: Modelle mit offenen Gewichten als zweite Meinung. Free-Presets
 # haben je Familie praktisch nur ein aktuelles Modell, ein zweites Free-Preset
-# kann sich also nur in der Aufstellung unterscheiden. Der Schreiber bleibt
-# derselbe wie in Daily, damit nur das Panel wechselt.
-# Seit 2026-10-28 haben Daily und Open Models drei Modelle statt sechs (Max):
-# im Audit-Modus pruefen sie die Arbeit des Agenten, und jede Aktion mit
-# Aussenwirkung wartet, bis alle "go" sagen; sechs Pruefer machten das zaeh.
-# Seit dem einen Modus (2026-10-31) waehlt ein Preset die Pruefer des Agenten
+# kann sich also nur in der Aufstellung unterscheiden.
+# Daily und Open Models haben wenige Modelle statt sechs (Max): sie pruefen
+# die Arbeit des Agenten, und jede Aktion mit Aussenwirkung wartet, bis alle
+# "go" sagen; sechs Pruefer machten das zaeh.
+# Ein Preset waehlt die Pruefer des Agenten
 # (und die Modelle, die compare_models fragt); die Hinweise sagen, wie sie
 # pruefen, keine Zahl, denn die Aufstellung kommt aus Firestore.
 # Ein Preset hat so viele Modelle wie seine Basis (_normalize_preset_answers).
@@ -583,9 +573,9 @@ CONSENSUS_PRESET_DEFINITIONS = [
 ]
 
 _BASE_CONSENSUS_PRESET_MODELS = {
-    # Haiku und DeepSeek Flash seit 2026-11-01 (Max): zwei Pruefer aus zwei
+    # Haiku und DeepSeek Flash (Max): zwei Pruefer aus zwei
     # Laboren, die nicht das des Standard-Chatmodells sind (GPT-6.1 Terra).
-    # Luna fiel raus: OpenAI wie Terra, und in der Schlussrunde der Langsamste
+    # Nicht Luna: OpenAI wie Terra, und in der Schlussrunde der Langsamste
     # (Prod 14 Tage: p90 40 s gegen 15 s Haiku und 13 s DeepSeek); die Marken
     # unter der Antwort und jede Aktion mit Aussenwirkung warten auf alle.
     "fast": {
@@ -595,12 +585,12 @@ _BASE_CONSENSUS_PRESET_MODELS = {
         },
         "consensus": "Gemini",
     },
-    # Qwen statt gpt-oss-120b seit 2026-10-22: gpt-oss kam vom selben Labor wie
+    # Qwen statt gpt-oss-120b: gpt-oss kam vom selben Labor wie
     # der Schreiber (Luna), las nur Text und nannte in der Live-Probe trotz
     # Suche den EZB-Einlagezins von 2024 und die Foerderung von 2024.
     # Qwen, DeepSeek Flash und GLM Flash: offene Gewichte aus drei Laboren,
-    # alle guenstig (Kimi, Gemma und Muse seit 2026-10-28 draussen: drei
-    # Pruefer reichen, Kimi kostet ein Vielfaches).
+    # alle guenstig (ohne Kimi, Gemma und Muse: drei Pruefer reichen, Kimi
+    # kostet ein Vielfaches).
     "balanced": {
         "answers": {
             "qwen": QWEN_BASE_MODEL,
@@ -609,7 +599,7 @@ _BASE_CONSENSUS_PRESET_MODELS = {
         },
         "consensus": OPENAI_LUNA_MODEL,
     },
-    # Drei starke Pruefer aus drei Laboren statt sechs seit 2026-11-01: sechs
+    # Drei starke Pruefer aus drei Laboren statt sechs: sechs
     # teure Modelle pruefen jeden Schritt und jede Aktion wartet auf alle; ohne
     # OpenAI, aus dem das Standard-Chatmodell kommt.
     "thorough": {
@@ -637,16 +627,14 @@ CONSENSUS_PRESET_MODELS = {
     }
     for preset_id, models in _BASE_CONSENSUS_PRESET_MODELS.items()
 }
-# The Agent's reviewers when a message names none. Daily since 2026-10-15:
-# "balanced" became Open Models, a second opinion rather than a default, and
-# Daily carried the same models as the old Balanced.
+# The Agent's reviewers when a message names none: Daily. Open Models is a
+# second opinion rather than a default.
 DEFAULT_CONSENSUS_PRESET = "fast"
-# The lineup of the consensus API. Open Models since 2026-11-01, when Daily
-# went to two reviewers: a consensus needs two finished answers, and with
-# three one failed model does not fail the run.
+# The lineup of the consensus API: Open Models, not Daily with its two
+# reviewers: a consensus needs two finished answers, and with three one
+# failed model does not fail the run.
 API_CONSENSUS_PRESET = "balanced"
-# The preset the app's model picker starts from. Daily since 2026-10-12, when
-# every browser was reset once to Agent + Daily (static/js/user-settings.js).
+# The preset the app's model picker starts from (static/js/user-settings.js).
 APP_DEFAULT_CONSENSUS_PRESET = "fast"
 
 VALID_LEADERBOARD_MODELS = {
@@ -678,8 +666,7 @@ _BASE_PRO_JUDGE_BY_PROVIDER = {
 }
 PRO_JUDGE_MODEL_BY_PROVIDER = dict(_BASE_PRO_JUDGE_BY_PROVIDER)
 
-# Kleines Modell je Familie fuer Chat-Titel (app/services/chat_titles.py; bis
-# 2026-10-25 auch fuer die Chat-Memory der Consensus-Folgefragen). Der eine
+# Kleines Modell je Familie fuer Chat-Titel (app/services/chat_titles.py). Der eine
 # OpenRouter-Key gilt fuer alle Familien. Das Modell
 # INNERHALB der Familie ist vom Admin ueber Firestore (Feld
 # "chat_memory_models") umstellbar. Basis sind bewusst die guenstigen
@@ -689,9 +676,9 @@ _BASE_CHAT_MEMORY_MODEL_BY_PROVIDER = dict(DEFAULT_MODEL_BY_PROVIDER)
 CHAT_MEMORY_MODEL_BY_PROVIDER = dict(_BASE_CHAT_MEMORY_MODEL_BY_PROVIDER)
 
 # Familien-Prioritaet der Judge-Wahl: primaerer und Fallback-Judge nehmen die
-# erste Familie mit verfuegbarem Key. OpenAI (Standard-Judge Luna) geht seit
-# 2026-10-04 immer vor, auch fuer OpenAI-Engines (kein Fremd-Familien-Zwang
-# mehr, siehe consensus_engine._judge_families).
+# erste Familie mit verfuegbarem Key. OpenAI (Standard-Judge Luna) geht
+# immer vor, auch fuer OpenAI-Engines (kein Fremd-Familien-Zwang, siehe
+# consensus_engine._judge_families).
 _JUDGE_FAMILY_PRIORITY_BASE = [
     "openai", "gemini", "deepseek", "grok", "anthropic", "mistral"
 ]
@@ -720,7 +707,7 @@ DEPRECATED_MISTRAL_MODELS = {
 }
 
 # Alte xAI-Aliasse, die seit Mai 2026 ohnehin auf Grok 4.3 umgeleitet werden,
-# und seit 2026-10-11 die Reasoning-Varianten von Grok 4.3 und 4.20 (gleicher
+# und die Reasoning-Varianten von Grok 4.3 und 4.20 (gleicher
 # Preis, 4.20 ist aelter). Beim Laden bestehender Admin-Daten und gespeicherter
 # Auswahlen werden sie auf Grok 4.3 migriert, damit keine doppelten Zeilen im
 # Picker und in der Admin-DB verbleiben.
@@ -744,7 +731,7 @@ _PRE_MERGE_GROK_IDS = frozenset({GROK_NO_REASONING_MODEL, "grok-4.20-non-reasoni
 
 
 def predates_grok_merge(document) -> bool:
-    """Whether a stored models document still lists a pre-2026-10-11 Grok variant."""
+    """Whether a stored models document still lists a Grok variant from before the merge."""
     data = document if isinstance(document, dict) else {}
     defaults = data.get("defaults") if isinstance(data.get("defaults"), dict) else {}
     stored = [*(data.get("grok") or []), *(data.get("premium") or []), defaults.get("grok")]
@@ -771,14 +758,13 @@ REMOVED_MODEL_IDS = {
     "gpt-5.5-frontier-low",
     "claude-opus-4-8-frontier-low",
     "gemini-3.1-pro-preview-frontier-low",
-    # Diese beiden IDs waren bereits vor der Early-Bereinigung als nicht
-    # aufrufbar bekannt. Neue Gemini-Modelle werden direkt ueber die Admin-
-    # Konfiguration zugelassen; bekannte tote Preview-IDs bleiben Tombstones.
+    # Neue Gemini-Modelle werden direkt ueber die Admin-Konfiguration
+    # zugelassen; bekannte tote Preview-IDs bleiben Tombstones.
     "gemini-3.1-flash-preview",
     "gemini-3-pro-preview",
     "grok-4.3-frontier-low",
     "grok-4.3-low-reasoning",
-    # Unter der frueheren ZDR-Regel nicht bedienbar (ZDR_UNAVAILABLE_MODEL_IDS).
+    # Mit provider.zdr=true nicht bedienbar (ZDR_UNAVAILABLE_MODEL_IDS).
     *ZDR_UNAVAILABLE_MODEL_IDS,
 }
 
@@ -807,12 +793,12 @@ def canonical_model_ids(models, provider: str) -> list[str]:
         if canonical_model_id(model, provider)
     ))
 
-# V4 Flash -> V4.1 Flash (2026-10-15, Begruendung bei DEEPSEEK_FLASH_MODEL),
-# V4 Pro -> V4.1 Flash 1017 (2026-10-29, Begruendung bei DEEPSEEK_PRO_MODEL).
+# V4 Flash -> V4.1 Flash (Begruendung bei DEEPSEEK_FLASH_MODEL),
+# V4 Pro -> V4.1 Flash 1017 (Begruendung bei DEEPSEEK_PRO_MODEL).
 DEEPSEEK_MODEL_MIGRATIONS = {DEEPSEEK_V4_FLASH_MODEL: DEEPSEEK_FLASH_MODEL,
                              DEEPSEEK_V4_PRO_MODEL: DEEPSEEK_PRO_MODEL}
 DEPRECATED_DEEPSEEK_MODELS = {"deepseek-chat", "deepseek-reasoner", *DEEPSEEK_MODEL_MIGRATIONS}
-# K3 -> K3.1 Pro (2026-10-25, Begruendung bei KIMI_PRO_MODEL).
+# K3 -> K3.1 Pro (Begruendung bei KIMI_PRO_MODEL).
 KIMI_MODEL_MIGRATIONS = {KIMI_K3_MODEL: KIMI_PRO_MODEL}
 DEPRECATED_KIMI_MODELS = set(KIMI_MODEL_MIGRATIONS)
 
@@ -1036,7 +1022,7 @@ def _fallback_label(model_id: str) -> str:
 
 
 def _replace_set(target: set, values) -> None:
-    """Gives a shared set new members without an empty moment (audit C8).
+    """Gives a shared set new members without an empty moment.
 
     Requests read the model sets without the config lock, and modules hold
     them by reference, so they change in place: first add, then drop what
@@ -1128,8 +1114,8 @@ def reasoning_savings_models() -> set[str]:
 def validate_reasoning_policy(value, *, drop_retired: bool = False) -> dict:
     """``drop_retired`` (stored documents): an override of a model that is no
     savings model any more is dropped instead of failing the whole load. The
-    admin table offered one for grok-4.3 until it became the free base Grok
-    (2026-10-11); a stale entry must not leave prod on code defaults."""
+    admin table offered one for grok-4.3 until it became the free base Grok;
+    a stale entry must not leave prod on code defaults."""
     if not isinstance(value, dict) or set(value) != {"profile", "models"}:
         raise ValueError("reasoning_policy requires profile and models")
     if value["profile"] not in ("existing", "economy"):
@@ -1297,9 +1283,9 @@ def get_consensus_preset_models() -> dict[str, dict]:
 def _preset_answer_mapping(value) -> dict:
     """Liest das neue ``answers``-Mapping und das alte Provider-Key-Schema.
 
-    Altbestand hatte je Registry-Familie einen Top-Level-Key. Seit mehr als
-    sechs Familien existieren, speichert ein Preset nur noch die hoechstens
-    sechs tatsaechlich gewaehlten Familien unter ``answers``.
+    Altbestand hat je Registry-Familie einen Top-Level-Key. Ein Preset
+    speichert die hoechstens sechs tatsaechlich gewaehlten Familien unter
+    ``answers``.
     """
     supplied = value if isinstance(value, dict) else {}
     nested = supplied.get("answers")
@@ -1333,7 +1319,7 @@ def _normalize_preset_answers(
         *PROVIDERS,
     ]))
     # As many models as the stored set has (2 to 6, the admin's choice), else
-    # as its base: three for Daily and Open Models since 2026-10-28.
+    # as many as its base (_BASE_CONSENSUS_PRESET_MODELS).
     size = len(supplied_answers) if MIN_PRESET_FAMILIES <= len(supplied_answers) <= MAX_RUN_FAMILIES \
         else len(base_answers)
     target_count = min(MAX_RUN_FAMILIES, len(PROVIDERS), size)
@@ -1765,7 +1751,7 @@ def _coerce_limit(value, fallback: int, minimum: int = 0) -> int:
     return parsed if parsed >= minimum else fallback
 
 
-# Below these values a limit no longer tunes runs, it breaks them (audit C16):
+# Below these values a limit no longer tunes runs, it breaks them:
 # an admin typo of 0 or 8 for 8192 output tokens silences every synthesis. A
 # smaller value falls back to the default, like a negative one. Counters such
 # as the Watch limits keep 0 as a real setting, and the follow-up caps only
@@ -1787,7 +1773,7 @@ def _sync_limit_constants():
     COVERAGE_MAX_TOKENS = LIMITS["coverage_max_tokens"]
 
 
-# Frueheres Deep-Think-Feld -> heutiges Reasoning-Feld. Greift nur, solange
+# Altes Deep-Think-Feld -> Reasoning-Feld. Greift nur, solange
 # das neue Feld im gespeicherten Dokument noch fehlt (einmalige Uebernahme);
 # die uebrigen free_/pro_deep_search_*-Felder werden ignoriert.
 _LEGACY_LIMIT_ALIASES = {"reasoning_max_tokens": "pro_deep_search_max_tokens"}
@@ -1867,10 +1853,9 @@ def get_memory_edit_config() -> dict:
 
 
 # --- Tier-abhaengige Limits ------------------------------------------------
-# Die Getter hiessen frueher alle ``is_pro: bool``. Sie heissen jetzt ``tier``
-# und nehmen weiterhin einen Bool entgegen (True -> Pro, False -> Free), damit
-# bestehende Aufrufer und Tests unveraendert funktionieren; normalize_tier
-# uebersetzt beides auf "free"/"plus"/"pro".
+# Die Getter nehmen ``tier`` und auch einen Bool (True -> Pro, False -> Free),
+# damit Aufrufer und Tests mit ``is_pro: bool`` weiter funktionieren;
+# normalize_tier uebersetzt beides auf "free"/"plus"/"pro".
 
 
 def _tier_limit(tier, keys: dict[str, str]) -> int:
@@ -1907,8 +1892,8 @@ def get_memory_ai_edit_limit(tier) -> int:
 
 
 def get_word_limit(tier, reasoning: bool = False) -> int:
-    """Wortlimit der Frage. Haengt seit 2026-10-02 nicht mehr vom
-    Reasoning-Schalter ab; der Parameter bleibt fuer bestehende Aufrufer."""
+    """Wortlimit der Frage. Haengt nicht vom Reasoning-Schalter ab; der
+    Parameter bleibt fuer bestehende Aufrufer."""
     del reasoning
     return _tier_limit(tier, {
         TIER_FREE: "free_max_words",
@@ -2068,12 +2053,12 @@ def _restore_runtime_config(state: dict) -> None:
 
 
 # Revision of the Firestore model document this process last activated. Admin
-# saves increment ``revision`` with a compare-and-swap (R25); every process
+# saves increment ``revision`` with a compare-and-swap; every process
 # compares it periodically and reloads a newer published revision. The
 # process that saves applies it at once (routers/admin.py); the look serves
 # the others (a deploy's overlap, a local server against the same database),
-# every 5 minutes: each look is a read, also on every local server, about
-# 1,440 a day per process at 60 s (until 2026-11-01).
+# every 5 minutes: each look is a read, also on every local server (at 60 s
+# about 1,440 a day per process).
 ACTIVE_MODEL_CONFIG_REVISION: int | None = None
 MODEL_CONFIG_SYNC_SECONDS = 300
 
@@ -2151,7 +2136,7 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             # Modellliste je Familie: Firestore ist autoritativ, danach
             # Migration alter IDs und Abzug der stillgelegten. Neue Mengen
             # werden erst berechnet und dann ohne leeren Moment getauscht
-            # (_replace_set): Requests lesen sie ohne Lock (Audit C8).
+            # (_replace_set): Requests lesen sie ohne Lock.
             models_by_provider = {}
             for provider in PROVIDERS.values():
                 incoming = data.get(provider.key)
@@ -2204,8 +2189,8 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
             # Consensus-Engines sicher im nativen Picker landen.
             apply_consensus_preset_models(data.get("preset_models"))
 
-            # Ein altes Feld "deep_think_model" (Deep Think bis 2026-10-02)
-            # wird bewusst ignoriert und nicht mehr geschrieben.
+            # Ein altes Feld "deep_think_model" wird bewusst ignoriert und
+            # nicht geschrieben.
 
             # Judges (Differences/Resolve) je Provider; braucht die
             # aktualisierten Provider-Listen fuer die Validierung.
@@ -2229,9 +2214,8 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
 
             apply_limits(data.get("limits"))
             apply_memory_edit_config(data.get("memory_edit"))
-            # Schema-Backfill: neue Limitfelder (z. B. die run-basierten UTC-
-            # Tageslimits) nicht nur im Prozess defaulten, sondern im Admin-
-            # Dokument persistieren. Bestehende gueltige Adminwerte bleiben
+            # Schema-Backfill: neue Limitfelder nicht nur im Prozess
+            # defaulten, sondern im Admin-Dokument persistieren. Bestehende gueltige Adminwerte bleiben
             # durch apply_limits/get_limits_config erhalten.
             normalized_limits = get_limits_config()
             if persist_backfill and data.get("limits") != normalized_limits:
@@ -2280,7 +2264,6 @@ def load_models_from_db(*, strict: bool = False, persist_backfill: bool = True) 
                 doc_ref.set(
                     schema_backfill, merge=True, timeout=5.0, retry=None,
                 )
-            # Update ALL_ALLOWED_MODELS
             ALL_ALLOWED_MODELS = _all_allowed_models()
             rebuild_model_configs()
             ACTIVE_MODEL_CONFIG_REVISION = model_config_revision_of(data)

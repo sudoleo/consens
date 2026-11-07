@@ -566,8 +566,7 @@ def parse(source: str) -> _Element:
         if closing is not None:
             # Words the page marks as the reader's (a shared answer): never
             # translated, so not parsed either; they pass byte for byte.
-            # Until 2026-10-28 a long answer was parsed into a tree first,
-            # 0.5-2 s per page (audit).
+            # Parsing a long answer into a tree cost 0.5-2 s per page.
             if closing.start() > position:
                 element.children.append(_Raw(source[position:closing.start()]))
             element.end = closing.group(0)
@@ -1083,7 +1082,7 @@ def content_language(text: str) -> str | None:
 
     Content keeps its language while the frame around it is translated (an
     English Topic on a German page). Its container says so (``lang``), and a
-    screen reader reads it in the right voice (a11y audit L1). ``None`` for
+    screen reader reads it in the right voice. ``None`` for
     short text, other languages and anything mixed: the page's ``lang`` holds.
     """
     words = _CONTENT_WORD.findall(str(text or "")[:4000].lower())

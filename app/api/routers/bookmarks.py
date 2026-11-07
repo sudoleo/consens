@@ -78,9 +78,8 @@ class BookmarkModelRequest(BaseModel):
     response: StrictStr = Field(min_length=1, max_length=40_000)
     modelName: BookmarkModelName
     modelLabel: StrictStr | None = Field(default=None, max_length=80)
-    # New runs always send "Standard". "Deep Think" stays accepted so bookmarks
-    # saved before the Reasoning switch replaced Deep Think (2026-10-02) can
-    # still be re-saved; the value no longer changes anything.
+    # New runs always send "Standard". "Deep Think" stays accepted so older
+    # bookmarks can still be re-saved; the value changes nothing.
     mode: Literal["Standard", "Deep Think"]
     bookmarkId: StrictStr | None = Field(default=None, max_length=100)
     previousQuestion: StrictStr = Field(default="", max_length=4_000)
@@ -321,8 +320,8 @@ _BOOKMARK_LIST_FIELDS = [
 
 # Pinned chats lead the sidebar list whatever their age, so the first page
 # brings them along instead of leaving an old one on a later page. Pinning has
-# no cap of its own, so this is the bookmark cap: until 2026-11-07 it was 50,
-# read in document order, and with more pins a fresh one went missing.
+# no cap of its own, so this is the bookmark cap: a smaller one, read in
+# document order, would leave out a fresh pin.
 MAX_PINNED_BOOKMARKS = persistence_guard.MAX_BOOKMARKS_PER_USER
 
 
@@ -742,7 +741,7 @@ def predict_starter_questions(request: Request):
     return {"status": "success", "questions": questions} if questions else skipped
 
 
-# Not agent_preferences: since the Agent's one mode (2026-10-31) the route
+# Not agent_preferences: since the Agent's one mode the route
 # sets them itself, they are no part of a request (routers/agent.py run_agent).
 _RUNNING_SETTINGS = ("selection", "comparison_selection", "file_ids", "google_selection", "google_data_consent")
 
@@ -751,13 +750,12 @@ def _running_agent_turn(turns: list[dict], *, more: bool = False) -> dict | None
     """The chat's Agent turn that still runs (started in another tab or on
     another device), with what a browser needs to follow it: its request
     identity for GET /agent/chats/{chat}/live and the settings its
-    recover_only request must repeat (agent-chat.js followRunning, A-B2).
+    recover_only request must repeat (agent-chat.js followRunning).
     The newest only; a stale one is settled by recover_only itself. A turn
     whose answer stands while its reviewers work (hand_over) is followed only
     as the chat's newest; under a later message it stands in the transcript
     (_transcript_turn). ``more``: later turns follow on the next page, so the
-    page's last one is not the chat's newest (until 2026-11-04 it was taken
-    for it)."""
+    page's last one is not the chat's newest."""
     for index in range(len(turns) - 1, -1, -1):
         turn = turns[index]
         request_id = turn.get("client_request_id")
@@ -780,8 +778,8 @@ def _running_agent_turn(turns: list[dict], *, more: bool = False) -> dict | None
 def _transcript_turn(turn: dict, agent_history: bool, running: dict | None) -> bool:
     """Whether the conversation page shows ``turn``: finished, or (Agent)
     failed, or answered with its review still going (hand_over) unless it is
-    the turn the browser follows as running. Until 2026-11-01 a reload in
-    that review left such a turn out, or drew it below the next message."""
+    the turn the browser follows as running, so a reload in that review
+    keeps it above the next message."""
     if turn.get("status") == "completed":
         return True
     if not agent_history:
@@ -874,7 +872,7 @@ def load_bookmark_conversation(
         raise HTTPException(status_code=400, detail="Invalid chat cursor") from exc
     except ChatCursorUnavailable as exc:
         # Missing cursor-signing configuration is a server problem. Reporting it
-        # as 400 made a deployment error look like a bad client request.
+        # as 400 would make a deployment error look like a bad client request.
         logging.error("bookmark conversation failed: chat cursor signing is not configured")
         raise HTTPException(
             status_code=503, detail="Conversation pagination unavailable"
@@ -939,7 +937,6 @@ def save_bookmark(request: Request, payload: BookmarkModelRequest):
     if chat_binding:
         dataToMerge.update(chat_binding)
 
-    # <--- NEU: Quellen hinzufügen, falls vorhanden
     if sources is not None:
         dataToMerge["sources"] = sources
 
@@ -948,7 +945,6 @@ def save_bookmark(request: Request, payload: BookmarkModelRequest):
         dataToMerge["attachments"] = attachments
     
     try:
-        # Speichern (merge)
         doc_ref = (
             db_firestore
             .collection("users")
@@ -1067,7 +1063,7 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     consensus_text = str(responses.get("consensus") or "").strip()
     if bookmark.get("execution_mode") == "agent" or bookmark.get("mode") == "Agent":
         # An Agent chat's entry names its latest turn; the share is that
-        # turn's answer (pages still open from before 2026-10-21 ask here).
+        # turn's answer (older pages still open ask here).
         binding = _stored_chat_binding(bookmark)
         if not binding:
             raise HTTPException(status_code=409, detail=AGENT_SHARE_UNAVAILABLE)
@@ -1083,7 +1079,7 @@ def prepare_bookmark_share_result(request: Request, data: dict = Body(...)):
     if share_snapshots.pending_result_is_available(uid, existing_id, db=db_firestore):
         return {"status": "success", "result_id": existing_id, "created": False}
 
-    # A public share must never show what a browser claimed (audit S3). The
+    # A public share must never show what a browser claimed. The
     # model save (POST /bookmark) still writes `query`, `sources` and model
     # labels of this document, so a new share is built from the completed
     # chat turn the consensus was saved from instead. A legacy bookmark

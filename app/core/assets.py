@@ -8,9 +8,9 @@ Two modes, one source of truth (``static/js/bundles.json``):
   individual files in the same order, each with a ``?v=<content hash>`` query.
   Editing a file changes its hash, so a stale cached copy is impossible.
 
-Either way no version mark is maintained by hand. The 30 ``?v=20260817-...``
-strings this replaces had to be bumped manually on every edit, and forgetting
-one served stale JS or CSS to returning users.
+Either way no version mark is maintained by hand: a hand-bumped ``?v=``
+string has to change on every edit, and forgetting one serves stale JS or CSS
+to returning users.
 """
 
 from __future__ import annotations
@@ -293,7 +293,7 @@ def font_preload_urls() -> list[str]:
 
     Without the preload the request starts only after the stylesheet chain
     has arrived and been parsed, so the first paint used the fallback face and
-    the headline re-wrapped when Inter came in (Apple-Audit B3).
+    the headline re-wrapped when Inter came in.
     """
 
     def read() -> list[str]:

@@ -1,7 +1,7 @@
 """The public HTML 404 for page navigations.
 
-Unknown paths used to answer browsers and crawlers with FastAPI's raw
-``{"detail": "Not Found"}``. A navigation now gets templates/not_found.html;
+A browser or crawler navigating to an unknown path gets
+templates/not_found.html instead of FastAPI's raw ``{"detail": "Not Found"}``;
 scripts calling the API keep their JSON errors.
 """
 

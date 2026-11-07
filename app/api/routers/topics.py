@@ -57,7 +57,7 @@ HUB_DESCRIPTION = (
 templates = Jinja2Templates(directory="templates")
 register_asset_globals(templates)
 
-# Rendered public Topic pages are kept for a short while (Audit I12): a page
+# Rendered public Topic pages are kept for a short while: a page
 # reads up to TOPIC_PAGE_RUNS runs, which made /topics/... the slowest public
 # page (400-700 ms server time) and cost Firestore reads on every view. The
 # admin routes below drop the cache on every change; a scheduled run shows
@@ -173,7 +173,7 @@ def _sources_view(evidence, preferred_domains):
             title=str(item.get("title") or ""),
             publisher=str(item.get("publisher") or ""),
         )
-        # A link back to consens.io is no source either (Apple-Audit L4).
+        # A link back to consens.io is no source either.
         if classification["is_indirect"] or source_links.is_own_page(classification["url"]):
             hidden.append(item)
             continue
@@ -665,7 +665,7 @@ _GLOBE_SVG = (
 # Only a lookup the cache cannot answer costs anything (one outbound call),
 # so only those count against a visitor. A cached icon is served without a
 # limit: one shared page shows ~13 domains, and a per-request limit left
-# visitors behind one IP without icons after a few pages (Audit I7).
+# visitors behind one IP without icons after a few pages.
 FAVICON_LOOKUPS_PER_MINUTE = 60
 
 
@@ -928,7 +928,7 @@ async def admin_create_topic_run(
         if not topic_before:
             raise topics.TopicError("not_found", "Topic not found.")
         # Same bar as the Watch pages: only what moved on evidence reaches a
-        # follower (docs/watch-evidence-model.md). Items commit with the run (R17).
+        # follower (docs/watch-evidence-model.md). Items commit with the run.
         staged = await asyncio.to_thread(
             topic_runner.topic_notification_builder, topic_id,
         )

@@ -1,8 +1,8 @@
 """Die im UI sichtbare Build-Kennung.
 
-Vorher stand dort eine handgepflegte Versionsnummer ("v1.11.1"), die niemand
-aktualisiert hat und die deshalb nur noch behauptet hat, aktuell zu sein.
-Jetzt zeigt die Fusszeile den Commit, der tatsaechlich laeuft.
+Die Fusszeile zeigt den Commit, der tatsaechlich laeuft: eine handgepflegte
+Versionsnummer aktualisiert niemand, und sie behauptet dann nur noch, aktuell
+zu sein.
 
 Aufloesungsreihenfolge (erste nicht-leere Quelle gewinnt):
 
@@ -79,7 +79,7 @@ def _from_git_dir(root: Path = _REPO_ROOT) -> str:
         return _clean(head)  # detached HEAD
 
     # Ein Worktree hat nur sein HEAD; die Zweige liegen im gemeinsamen
-    # Verzeichnis des Haupt-Checkouts ("commondir"). Ohne diesen Schritt war
+    # Verzeichnis des Haupt-Checkouts ("commondir"). Ohne diesen Schritt waere
     # die Kennung in jedem Worktree mit Zweig leer (und app-update.js fragte
     # nie nach einem neuen Build).
     common = _read(git_dir / "commondir")

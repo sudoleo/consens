@@ -1,13 +1,13 @@
 """Worker-thread budget for the synchronous streaming endpoints.
 
-``/ask_*`` and ``/consensus`` are declared ``def`` (not ``async def``) and hand
+The ``/ask_*`` endpoints are declared ``def`` (not ``async def``) and hand
 back a ``StreamingResponse`` wrapped around a *synchronous* generator. Starlette
 therefore pulls every SSE chunk through ``iterate_in_threadpool``, so an
 in-flight model stream occupies one anyio worker thread for as long as the
 provider keeps writing -- up to ``PROVIDER_READ_TIMEOUT_SECONDS`` (120s by
 default).
 
-anyio's default budget is 40 threads. One consensus run fans out to six
+anyio's default budget is 40 threads. One Compare run fans out to up to six
 providers at once, so the pool saturated at roughly six concurrent users and
 every further request queued behind a free thread instead of failing loudly.
 Raising the limiter is the cheap half of the fix; the structural half is

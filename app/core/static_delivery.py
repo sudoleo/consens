@@ -12,7 +12,7 @@ Two narrow jobs, both applied as one ASGI middleware:
   Every other ``/static`` response is ``no-cache``: browsers and
   the CDN must revalidate (ETag, usually a 304). That covers the unversioned
   nested ``@import``/ESM URLs whose bytes are already folded into the entry
-  file's hash, and it replaces the hand-bumped ``?v=`` marks.
+  file's hash, so no ``?v=`` mark is bumped by hand.
 * Static text assets and HTML pages are gzip-compressed when the client asks
   for it. API payloads are left alone, and Server-Sent Events are never
   compressed or buffered: an SSE frame must reach the browser the moment the
@@ -22,7 +22,7 @@ Two narrow jobs, both applied as one ASGI middleware:
   (``InterVariable-latin.woff2``) gets its current hashed file. A tab opened
   before a deploy still runs the old stylesheet and loads italic or
   latin-ext only at its first such character -- otherwise that text fell
-  back to a system font until the next reload (Zweitprüfung, Schriften).
+  back to a system font until the next reload.
 
 The middleware decides per response, from the request path and the response
 headers, before a single body byte is sent. Anything it does not explicitly

@@ -199,8 +199,8 @@ class I18nMiddleware:
                 return
             start = state["start"]
             body = b"".join(state["chunks"])
-            # Off the event loop: until 2026-10-28 a long page held every
-            # other request, SSE streams included, while it was translated.
+            # Off the event loop: on it, a long page holds every other
+            # request, SSE streams included, while it is translated.
             body = await asyncio.to_thread(self._page, body, language, page_path, prefixed, localized)
             headers = MutableHeaders(raw=list(start.get("headers", [])))
             headers["content-length"] = str(len(body))

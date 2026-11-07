@@ -55,8 +55,8 @@ def _model_config_transaction(operation):
 def _persist_and_activate_models(doc_ref, document: dict, expected_revision=None) -> int:
     """Persist one model config revision and roll back only our own revision.
 
-    The write is a compare-and-swap on the monotonic ``revision`` field
-    (R25): a save from a stale admin tab is refused instead of overwriting a
+    The write is a compare-and-swap on the monotonic ``revision`` field:
+    a save from a stale admin tab is refused instead of overwriting a
     newer configuration. If runtime activation fails, the previous document
     is restored only while our revision is still the stored one; a revision
     written meanwhile by another process or admin is never replaced.
@@ -731,8 +731,8 @@ def normalize_models_document(data: dict) -> dict:
     normalized["defaults"] = clean_defaults
 
     # Watch-Antwortmodelle: je Tier hoechstens ein Modell pro Provider. Free
-    # darf keine Premium-Modelle verwenden. Bei Legacy-Dokumenten ohne
-    # dieses Feld wird das bisherige Drei-Modell-Setup eingeblendet.
+    # darf keine Premium-Modelle verwenden. Dokumente ohne dieses Feld
+    # bekommen die Basis (_BASE_WATCH_MODELS_BY_TIER).
     incoming_watch = normalized.get("watch_models")
     incoming_watch = incoming_watch if isinstance(incoming_watch, dict) else {}
     clean_watch = {}
@@ -848,9 +848,7 @@ def normalize_models_document(data: dict) -> dict:
         if preset["consensus"] not in normalized_consensus:
             normalized_consensus.append(preset["consensus"])
 
-    # Deep Think (bis 2026-10-02) koppelte die Synthese an ein eigenes
-    # Modell. Das Feld "deep_think_model" alter Dokumente/Clients wird
-    # verworfen und nicht mehr gespeichert.
+    # Das Feld "deep_think_model" alter Dokumente/Clients wird verworfen.
     normalized.pop("deep_think_model", None)
 
     # Watch-Synthese-Engine: getrennt nach Free/Pro, aber unabhaengig von den
@@ -909,7 +907,7 @@ def normalize_models_document(data: dict) -> dict:
         normalized[field] = clean_judges
 
     # Mapping Engine-Familie -> bevorzugte Judge-Familie: nur bekannte
-    # Provider (die eigene Familie ist seit 2026-10-04 erlaubt). Fehlende
+    # Provider (die eigene Familie ist erlaubt). Fehlende
     # Eintraege bedeuten Auto (Prioritaetsliste).
     incoming_families = normalized.get("judge_families") or {}
     clean_families = {}
@@ -927,7 +925,7 @@ def _server_enforced_models() -> dict:
 
     Providerlisten und Premium-Zuordnung kommen vollstaendig aus Firestore.
     Interne Alias-Fallbacks muessen nicht im normalen Picker stehen
-    und werden deshalb nicht mehr als unsichtbare Pflichtzeilen erzwungen.
+    und werden deshalb nicht als unsichtbare Pflichtzeilen erzwungen.
     """
     return {provider: [] for provider in PROVIDER_KEYS}
 
@@ -956,7 +954,7 @@ def _provider_credentials() -> dict:
 def _model_dependencies(data: dict) -> dict:
     """Liefert rein informative In-use-Gruende je Provider/Modell.
 
-    Anders als das fruehere Required-Flag sperrt dies keine Zeile. Das Admin-UI
+    Das sperrt keine Zeile. Das Admin-UI
     kann eine Referenz zuerst umstellen oder beim Entfernen direkt sehen, welche
     abhaengige Auswahl noch angepasst werden muss.
     """
@@ -1249,7 +1247,6 @@ def _validate_admin_models_input(data: dict, normalized: dict) -> None:
 
 @router.get("/api/admin/models")
 def get_models(request: Request):
-    # This endpoint can be accessed by the admin frontend to get current models
     _require_admin(request, {})
     try:
         doc_ref = db_firestore.collection("app_config").document("models")
@@ -1263,11 +1260,11 @@ def get_models(request: Request):
             data["memory_edit"] = cfg.normalize_memory_edit_config(
                 raw_data.get("memory_edit")
             )
-            # GET bleibt strikt read-only. Der fruehere komplette doc_ref.set
-            # konnte einen kurz zuvor gespeicherten Judge-Family-Wert mit dem
-            # veralteten Snapshot eines parallelen Admin-Reads ueberschreiben.
+            # GET bleibt strikt read-only: ein Schreiben hier koennte einen
+            # kurz zuvor gespeicherten Judge-Family-Wert mit dem veralteten
+            # Snapshot eines parallelen Admin-Reads ueberschreiben.
             # Persistiert wird ausschliesslich ueber POST; die normalisierte
-            # GET-Response bleibt weiterhin direkt darstellbar.
+            # GET-Response bleibt direkt darstellbar.
         else:
             data = {
                 **{
@@ -1359,7 +1356,6 @@ def update_models(request: Request, data: dict = Body(...)):
             if not isinstance(supplied, dict):
                 raise HTTPException(status_code=400, detail=f"preset_models.{preset_id} must be a model mapping")
             supplied_answers = supplied.get("answers")
-            # 2 to 6 families since 2026-10-28 (three for Daily and Open Models).
             most = min(cfg.MAX_RUN_FAMILIES, len(PROVIDER_KEYS))
             if not isinstance(supplied_answers, dict):
                 raise HTTPException(

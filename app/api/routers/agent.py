@@ -52,11 +52,12 @@ MAX_AFTER = 2 ** 53
 
 
 def require_agent_access(uid):
-    """Agent is open to every signed-in account since 2026-10-02.
+    """Agent is open to every signed-in account.
 
     The daily token account (agent_quota) limits it per tier; what stays Pro
-    are the premium models (require_model_access) and, from Plus, uploads.
-    The tier is still read here (cached) although it no longer decides
+    are the premium models (require_model_access) and the high reasoning
+    levels (require_reasoning_access).
+    The tier is still read here (cached) although it does not decide
     access: every Agent route reads it again for the token account, and an
     unavailable tier service must answer 503 up front, before any write,
     rather than fail later inside a route.
@@ -83,7 +84,7 @@ def _premium_allowed(uid):
 def require_model_access(uid, model_ids):
     """Premium models stay Pro in Agent exactly as in Compare and Consensus.
     Checks the current form of a migrated ID, the model the run uses
-    (comparison_selection): kimi-k3 runs as Kimi K3.1 Pro since 2026-10-25."""
+    (comparison_selection): kimi-k3 runs as Kimi K3.1 Pro."""
     model_ids = [cfg.canonical_model_id(model_id) for model_id in model_ids if model_id]
     premium = [model_id for model_id in model_ids if model_id and model_id in cfg.PREMIUM_MODELS]
     if premium and not _premium_allowed(uid):
@@ -91,7 +92,7 @@ def require_model_access(uid, model_ids):
         raise HTTPException(status_code=403, detail=f"{labels} is available on Pro. Choose another model.")
 
 
-# The expensive reasoning levels are Pro (Max, 2026-10-07): they multiply the
+# The expensive reasoning levels are Pro: they multiply the
 # chat model's thinking tokens. Without Pro, Auto runs as Medium where the
 # model offers it (agent_client.free_default_effort, below in run_agent).
 
@@ -101,11 +102,11 @@ def require_reasoning_access(uid, reasoning_effort):
         raise HTTPException(status_code=403, detail="High reasoning levels are available on Pro. Choose Auto or a lower level.")
 
 
-# One mode for every account since 2026-10-31 (agent_audit.py): the agent
+# One mode for every account (agent_audit.py): the agent
 # answers itself, the user's comparison models follow its work and review its
 # answer, and it may ask them its question (compare_models). Its workspace,
 # the account's Linux VM (workspace, live view, restore), only for admins
-# since the workspace's security audit of 2026-10-27; AGENT_VM_ACCESS=all
+# after the workspace's security audit; AGENT_VM_ACCESS=all
 # gives it to every account (agent_vm.open_to_all).
 def vm_allowed(uid):
     if agent_vm.open_to_all():
@@ -186,19 +187,19 @@ class AgentRequest(BaseModel):
     model_id: str | None = Field(default=None, min_length=1, max_length=160)
     reasoning_effort: str = Field(default="default", pattern=REASONING_EFFORT_PATTERN)
     comparison_models: dict[str, str] | None = Field(default=None, max_length=9)
-    # Ignored since the contradiction source check was removed (2026-10-15);
-    # pages still open from before keep sending it.
+    # Ignored: the contradiction source check is gone; pages still open
+    # from before keep sending it.
     check_sources: bool = False
     file_ids: list[str] = Field(default_factory=list, max_length=5)
     google_selection: GoogleSelection | None = None
     google_data_consent: bool = False
-    # Ignored since the Agent has one mode (2026-10-31): the route sets what
+    # Ignored since the Agent has one mode: the route sets what
     # a message runs with (AgentPreferences). Pages still open from before
     # keep sending depth, quorum, autonomy, judges, audit and vm.
     agent_preferences: dict | None = None
     # Who checks this message's work (account setting ``reviewers``,
-    # user_settings.py): the value the composer showed, sent with it. Pages
-    # from before 2026-11-01 send none: the reviewers follow, as they did.
+    # user_settings.py): the value the composer showed, sent with it. Older
+    # pages send none: the reviewers follow.
     # Kept with the turn (agent_settings.reviewers), no part of the request's
     # identity: a turn recovers after the setting changed.
     reviewers: Literal["always", "workspace", "off"] = "always"
@@ -368,17 +369,16 @@ def available_agent_budget(request: Request):
 
 
 # Reads a new message needs before its turn exists, side by side
-# (_turn_reads). Until 2026-11-01 they ran one after another: with the turn's
-# creation, its history and the first step's admission about 25 Firestore
-# round trips lay between Send and the first model request, 2-3 s in prod
-# before a model saw the question.
+# (_turn_reads). One after another, with the turn's creation, its history and
+# the first step's admission, about 25 Firestore round trips lay between Send
+# and the first model request, 2-3 s in prod before a model saw the question.
 _TURN_READS = ThreadPoolExecutor(max_workers=24, thread_name_prefix="agent-turn-read")
 
 
 def _turn_reads(uid, payload, store):
     """Futures of what run_agent reads for a new message, all started at
-    once. Each is taken where its read used to stand, so a failing read
-    still fails the request at the same point. Only reads: the one write
+    once. Each is taken where the route needs it, so a failing read
+    still fails the request at that point. Only reads: the one write
     among them, the reaper of runs whose lease expired (recover_allowance),
     runs on any allowance read too (agent_quota.snapshot). The sweep of
     abandoned turns, which may fail a turn, waits for the checks
@@ -409,8 +409,7 @@ def _turn_reads(uid, payload, store):
 def sweep_after(store, uid, chat_id, recover):
     """The sweep of abandoned turns for a message that passed every check:
     after the reaper (``recover``, which ends an expired run as it should
-    end) and beside the rest of the route's work. Until 2026-11-01 it stood
-    in create_turn."""
+    end) and beside the rest of the route's work."""
     def sweep():
         try:
             recover.result()
@@ -439,8 +438,8 @@ def _first_history_page(read):
         return None
 
 
-# Reads of the account's allowance for the browser's quota frames. Until
-# 2026-11-01 the stream read it in between: the first step's request waited
+# Reads of the account's allowance for the browser's quota frames, beside the
+# run: read in between by the stream, the first step's request would wait
 # three round trips for it after "started", every later step after its usage.
 _ALLOWANCE_READS = ThreadPoolExecutor(max_workers=4, thread_name_prefix="agent-allowance")
 
@@ -464,7 +463,7 @@ def run_agent(request: Request, payload: AgentRequest):
 def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
     """A message of the account ``uid`` as POST /agent runs it: the turn on
     its own thread, the response only a tail of its frames. ``watch_run``:
-    a Watch's scheduled run (agent_watches.start_run, since 2026-11-03),
+    a Watch's scheduled run (agent_watches.start_run),
     with nobody following; it reads only the chat's newest messages, has the
     run's tools, and its end is noted on the Watch (agent_watches.turn_ended)."""
     require_agent_access(uid)
@@ -496,9 +495,8 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             if existing.get("agent_settings", {}).get("comparison_selection") != payload.comparison_models:
                 raise TurnStatusConflict("Request identity conflicts with different comparison models")
             # The turn's agent_preferences are the server's (below), not the
-            # request's: no part of its identity, so a turn from before
-            # 2026-10-31 or from before the account's VM access changed
-            # still recovers.
+            # request's: no part of its identity, so an older turn or one
+            # from before the account's VM access changed still recovers.
             if payload.recover_only and existing["status"] == "pending":
                 # A lost producer has no live SSE/poller to close its lease.
                 # Reap only expired runs; this never starts a paid step.
@@ -550,9 +548,9 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         chat_model = [] if model.selection_id == default_agent_model_id() else [model.selection_id]
         require_model_access(uid, [*chat_model, *(payload.comparison_models or {}).values()])
         require_reasoning_access(uid, payload.reasoning_effort)
-        # A temporary chat (since 2026-11-01, chat_store.create_chat) does
+        # A temporary chat (chat_store.create_chat) does
         # what any chat of the account does and keeps nothing beyond
-        # itself (since 2026-11-01 evening, Max): no sidebar entry
+        # itself: no sidebar entry
         # (_final), memory read but never written (MemorySnapshot), no
         # share; its folder and processes in the workspace go with it
         # (agent_vm.delete_chat_vm).
@@ -622,7 +620,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         if isinstance(restored, dict) and not restored.get("told"):
             app_context += "\n" + agent_vm.VM_RESTORED_NOTE
         # The user works in the workspace's browser or just did (browser_turn),
-        # and where it is logged in (since 2026-11-02, agent_workspace.sign_ins).
+        # and where it is logged in (agent_workspace.sign_ins).
         browser, signed_in = reads["workspace"].result() if preferences.vm == "on" else (None, [])
         if browser:
             app_context += "\n" + agent_vm.HANDED_BACK_NOTE.format(minutes=max(1, round(browser / 60)))
@@ -867,7 +865,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         # Another request of this identity made the buffer and starts the run
         # of this same turn. Never this one: its start could come first, and
         # the maker's duplicate refusal then discarded the buffer this run
-        # fed (bug hunt 2026-11-01). Its buffer and turn stay untouched.
+        # fed. Its buffer and turn stay untouched.
         lease.release()
         return JSONResponse({"error": "This request is still running.", "code": "request_running",
                              "recoverable": True, "recovery_state": "running"}, status_code=409)
@@ -942,8 +940,8 @@ def _agent_details(request, chat_id, turn_id, **kwargs):
 def agent_work_log(request: Request, chat_id: str, turn_id: str,
                    after: int = Query(0, ge=0, le=MAX_AFTER), limit: int = Query(100, ge=1, le=200)):
     """The turn's work log (agent_work_log.py) in order, after entry
-    ``after`` (live: poll with the last ``seq``). Every turn writes one since
-    2026-10-31; only its owner reads it (the turn is looked up under the
+    ``after`` (live: poll with the last ``seq``). Every turn writes one;
+    only its owner reads it (the turn is looked up under the
     caller's account). Long contents come shortened (``ref``); the entry
     endpoint below returns one whole."""
     uid = _chat_uid(request)
@@ -1071,7 +1069,7 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
     from app.services import agent_workspace
     workspace = agent_workspace.record(db_firestore, uid)
     # Only a checkpoint of this account's workspace, recent and taken after
-    # the last sign-out everywhere or chat deletion (security audit 2026-10-27).
+    # the last sign-out everywhere or chat deletion.
     if not agent_workspace.restorable(workspace, turn.get("agent_vm")):
         return JSONResponse({"error": "The workspace can no longer go back to before this message.", "code": "expired"},
                             status_code=409)
@@ -1113,8 +1111,8 @@ class AgentNoteRequest(BaseModel):
 @limiter.limit("30/minute")
 def add_agent_note(request: Request, chat_id: str, request_id: str, payload: AgentNoteRequest):
     """A message into the running response, by the browser's request identity
-    (Enter while it runs, agent-chat.js addNote; since 2026-10-26, with Agent
-    VM). The run takes it before its next step (DelegationLoop._take_notes)."""
+    (Enter while it runs, agent-chat.js deliver; with Agent VM). The run
+    takes it before its next step (DelegationLoop._take_notes)."""
     uid = _chat_uid(request)
     require_agent_access(uid)
     if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
@@ -1170,16 +1168,16 @@ def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text
 class AgentHoldDecision(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     id: str = Field(pattern=r"^[0-9a-f]{12}$")
-    # "deny": not allowed, for the agent's own question (agent_ask.py; until
-    # 2026-11-04 also a domain it asked for); on any other hold 422 (deniable).
+    # "deny": not allowed, for the agent's own question (agent_ask.py); on
+    # any other hold 422 (deniable).
     # "choose": one of the answers of the agent's choice card, by its index
-    # in ``choice`` (since 2026-10-30); 422 elsewhere (check_answer).
+    # in ``choice``; 422 elsewhere (check_answer).
     action: Literal["continue", "stop", "steer", "deny", "choose"]
     text: str = Field(default="", max_length=4000)
     choice: Optional[int] = Field(default=None, ge=0, le=9)
-    # The card's ``revision`` the user decided on (joined_halt, since
-    # 2026-11-07): a reviewer's halt that joined the card after it opens as
-    # the next card. A page from before sends none: the decision covers all.
+    # The card's ``revision`` the user decided on (joined_halt): a reviewer's
+    # halt that joined the card after it opens as the next card. An older
+    # page sends none: the decision covers all.
     revision: Optional[int] = Field(default=None, ge=0, le=1_000_000)
 
 
@@ -1187,7 +1185,7 @@ class AgentHoldDecision(BaseModel):
 @limiter.limit("30/minute")
 def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: AgentHoldDecision):
     """The user's decision when a reviewer paused the response (agent_audit.py
-    halt, DelegationLoop.request_hold; since 2026-10-26): let it go on, stop
+    halt, DelegationLoop.request_hold): let it go on, stop
     it, or go on with a message to the agent. The agent learns only of the
     message, as one the user wrote while it worked. On the agent's own
     question (agent_ask.py) "continue" allows its step and "deny" does not."""
@@ -1236,8 +1234,8 @@ class AgentSecret(BaseModel):
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/secret")
 @limiter.limit("10/minute")
 def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: AgentSecret):
-    """The key the agent asked for (ask_user with secret, agent_secrets.py;
-    since 2026-10-29): written to the account's workbench as the agent's
+    """The key the agent asked for (ask_user with secret, agent_secrets.py):
+    written to the account's workbench as the agent's
     user, then the card is answered. The key goes into no turn, log or
     model's context: the agent hears the file's path."""
     uid = _chat_uid(request)
@@ -1293,7 +1291,7 @@ def save_agent_secret(request: Request, chat_id: str, request_id: str, payload: 
 def stop_agent_request(request: Request, chat_id: str, request_id: str):
     """Stop a message by the browser's request identity (the Stop button).
 
-    A run no longer ends when its connection does, so Stop is explicit. It
+    A run does not end when its connection does, so Stop is explicit. It
     works before the browser knows the turn id, and a Stop that overtakes
     its own POST keeps that request from starting.
     """

@@ -1,12 +1,12 @@
 """Authenticated private file operations for Agent chats.
 
-A picture under an answer loads as a preview (``?preview=1``, since
-2026-10-30, runtime audit P2): at most agent_web_images.MAX_SIDE pixels on a
+A picture under an answer loads as a preview (``?preview=1``): at most
+agent_web_images.MAX_SIDE pixels on a
 side, as WebP, when the stored file is larger; a GIF keeps its frames. The
 original stays the download and what the file viewer opens.
 
-The same ``?preview=1`` is what the app's document preview shows (since
-2026-11-01, static/js/file-viewer.js): an Office file the agent shared from
+The same ``?preview=1`` is what the app's document preview shows
+(static/js/file-viewer.js): an Office file the agent shared from
 its workspace answers with its PDF from the converter all accounts share
 (agent_office.py, agent_vm_tools._office_preview), a Word file the user sent
 with the text read from it (its paragraphs, plain text), a PDF with itself.
@@ -51,8 +51,8 @@ UPLOAD_WINDOW_SECONDS = 600
 
 
 def require_uploads(uid):
-    """Uploading follows the attachment rule of every mode (every tier since
-    2026-10-02) and returns the account's storage quota (files, bytes).
+    """Uploading follows the attachment rule of every mode (every tier) and
+    returns the account's storage quota (files, bytes).
     Listing, downloading and deleting stay open: Agent writes documents into
     the same store for every account."""
     try:

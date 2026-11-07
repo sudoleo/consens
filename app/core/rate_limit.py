@@ -60,7 +60,7 @@ class ApiUidRateLimitExceeded(Exception):
     def headers(self) -> dict:
         """Retry-After for the HTTPException a route raises from it: with it
         main.error_body adds ``code: "rate_limited"`` and ``retry_after``,
-        like every slowapi limit (review 2)."""
+        like every slowapi limit."""
         return {"Retry-After": str(self.retry_after)}
 
 
@@ -125,12 +125,12 @@ api_uid_limiter = ApiUidRateLimiter(enabled=_rate_limits_enabled)
 
 
 # DISABLE_RATE_LIMIT=1 nur fuer die lokale E2E-Suite: die Tests feuern
-# mehrere /ask_*- und /consensus-Requests pro Minute von derselben IP und
+# mehrere /ask_*-Requests pro Minute von derselben IP und
 # wuerden sonst in 429er laufen. In Produktion nie setzen.
 limiter = Limiter(key_func=client_ip_key, enabled=_rate_limits_enabled)
 
 
-# What a person reads when a limit holds them back (Audit H6): no "10 per 1
+# What a person reads when a limit holds them back: no "10 per 1
 # minute", no status code, and never an upgrade offer -- the clients tell a
 # throttle (code "rate_limited") apart from a plan limit ("limit_reached").
 RATE_LIMITED_CODE = "rate_limited"

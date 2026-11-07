@@ -32,14 +32,12 @@ from app.services.llm.provider_runtime import (
 )
 from app.services.llm.engines import OPENROUTER_BASE_URL, openrouter_headers
 
-# To be supplied by main.py dependency injection or imported 
-# We'll import templates from main or setup a generic one here.
 from fastapi.templating import Jinja2Templates
 from app.core.assets import register_asset_globals
 from app.core.seo_entity import register_seo_globals
 
 templates = Jinja2Templates(directory="templates")
-# Content-hashed asset URLs replace the hand-maintained ?v= marks.
+# Content-hashed asset URLs (asset_url) instead of hand-maintained ?v= marks.
 register_asset_globals(templates)
 # Organization/WebSite als EIN Knoten, siehe app/core/seo_entity.py.
 register_seo_globals(templates)
@@ -235,8 +233,7 @@ def _pulse_view(params) -> dict | None:
 
 def landing_live_watch() -> str:
     """The page of a public Watch that is still checked, for "See a live
-    watch" under the Watch example, or "" -- then the link stays away
-    (Apple-Audit L17; all public Watches are paused right now)."""
+    watch" under the Watch example, or "" -- then the link stays away."""
     try:
         from app.services import share_snapshots
         return share_snapshots.live_watch_path()
@@ -505,8 +502,8 @@ def unscripted_form():
     """A form of the app shell sent before its script took it over (the
     login, the feedback, a memory item; index.html posts them here). As POST
     its fields stay out of the address bar, the history and the access log:
-    on 2026-10-29 the login went out as a GET and put an address and a
-    password into Render's log. The body is never read; the app loads again."""
+    a login sent as GET once put an address and a password into Render's
+    log. The body is never read; the app loads again."""
     return RedirectResponse(url="/app", status_code=303)
 
 
@@ -548,14 +545,14 @@ def read_root(request: Request):
     ]
 
     # The chat model's name for the composer's first frame, before the
-    # model list (/agent/models) has loaded (Apple-Audit B1). The same name
+    # model list (/agent/models) has loaded. The same name
     # rule as the catalog's default, without reading it.
     try:
         from app.services.llm.agent_client import agent_model_label
         agent_default_label = agent_model_label()
     except Exception:
         agent_default_label = ""
-    # A guest's composer is Agent's (Apple-Audit H3); its (+) menu shows the
+    # A guest's composer is Agent's; its (+) menu shows the
     # Google entries only where every account has them.
     try:
         from app.services.google_connections import entries_for_everyone
@@ -565,7 +562,7 @@ def read_root(request: Request):
 
     consensus_presets = cfg.get_consensus_presets()
     # The template checks the default preset's families, so the first frame
-    # counts the reviewers the app settles on (three since 2026-10-28).
+    # counts the reviewers the app settles on.
     default_families = next((list(preset["models"]) for preset in consensus_presets
                              if preset["id"] == cfg.APP_DEFAULT_CONSENSUS_PRESET), [])
 
@@ -587,9 +584,8 @@ def read_root(request: Request):
         "model_badges": model_badges,
         # Drei Beispielfragen pro Seitenaufruf (die Seite wird nie gecacht).
         "starters": starter_questions.pick_curated(language=getattr(request.state, "language", "en")),
-        # Statt einer handgepflegten Versionsnummer steht in der Fusszeile
-        # der Commit, der gerade laeuft. Leer = unbekannt: dann zeigt das
-        # Template gar nichts an.
+        # In der Fusszeile steht der Commit, der gerade laeuft. Leer =
+        # unbekannt: dann zeigt das Template gar nichts an.
         "app_commit": get_commit_short(),
         "repo_url": REPO_URL,
         **firebase_config
@@ -676,7 +672,7 @@ def submit_feedback(request: Request, payload: FeedbackRequest):
             uid=uid, feedback=feedback_data, db=db_firestore, now=now
         )
     except persistence_guard.PersistenceLimitError as exc:
-        # Its own code and wait, like every throttle (review 2).
+        # Its own code and wait, like every throttle.
         raise HTTPException(
             status_code=429, detail={"error": exc.message, "code": exc.code},
             headers={"Retry-After": str(exc.retry_after)} if exc.retry_after else None,

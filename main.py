@@ -52,7 +52,6 @@ from app.core.rate_limit import (
 )
 from app.services.agent_background import agent_background
 
-# Import routers
 from app.api.routers import (
     agent,
     agent_files,
@@ -216,7 +215,7 @@ async def lifespan(app: FastAPI):
         restart=False,
     )
     # Every process adopts a newly published model revision within one sync
-    # interval instead of waiting for its next restart (R25). Read-only, so a
+    # interval instead of waiting for its next restart. Read-only, so a
     # MOCK_LLM server keeps following the live configuration.
     model_config_sync_task = _supervised_task(
         model_config_sync_loop, "model-configuration-sync"
@@ -299,7 +298,6 @@ def maintenance_health():
 def operational_metrics():
     return {"status": "ok", "metrics": metrics_snapshot()}
 
-# Add Custom Security Middleware
 app.add_middleware(CustomSecurityMiddleware)
 app.add_middleware(RequestBodyLimitMiddleware)
 app.add_middleware(CorrelationMiddleware)
@@ -310,10 +308,8 @@ app.add_middleware(I18nMiddleware)
 # for static text and HTML. Server-Sent Events are never compressed or held.
 app.add_middleware(StaticDeliveryMiddleware)
 
-# Add Rate Limiter state
 app.state.limiter = limiter
 
-# Mount static directory
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # The public Consensus API keeps its documented {"error": {"code", "message"}}
@@ -323,7 +319,7 @@ PUBLIC_API_PREFIX = "/api/v1/"
 
 def error_body(path: str, detail, fields=None, *, status: int = 0, headers=None) -> dict:
     """One shape for every refusal the app reads: ``{error: "<sentence>",
-    code, ...}`` (Apple-Audit H6, Zweitprüfung 2).
+    code, ...}``.
 
     A structured detail (``{error|message, error_code|code, ...}``) is laid
     flat: the sentence is ``error``, the code ``code``, every other field
@@ -396,9 +392,9 @@ async def handle_rate_limit(request, exc: RateLimitExceeded):
 @app.exception_handler(StarletteHTTPException)
 async def handle_routing_exception(request, exc: StarletteHTTPException):
     # Raised by routing and StaticFiles, not by our routes (those raise
-    # FastAPI's subclass, handled above). An unknown path answered browsers
-    # and crawlers with raw JSON; a navigation gets the HTML 404 page, a
-    # script keeps FastAPI's {"detail": ...}.
+    # FastAPI's subclass, handled above). A navigation to an unknown path
+    # gets the HTML 404 page instead of raw JSON; a script keeps FastAPI's
+    # {"detail": ...}.
     if exc.status_code == 404 and wants_html_page(request):
         return not_found_page(request)
     return await http_exception_handler(request, exc)

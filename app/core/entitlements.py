@@ -1,18 +1,18 @@
 """Drei Kontostufen statt eines Pro-Booleans.
 
-Free  - Basis-Modelle, kleines Tageskontingent, Anhaenge (seit
-        2026-10-02 fuer alle: jede Datei kostet Tokens aus dem eigenen
+Free  - Basis-Modelle, kleines Tageskontingent, Anhaenge (fuer alle
+        Stufen: jede Datei kostet Tokens aus dem eigenen
         Kontingent; Datei-Limits siehe llm/attachments.py, Speicher pro
         Stufe siehe agent_files.UPLOAD_QUOTAS).
 Plus  - Modellauswahl exakt wie Free (KEINE Frontier-/Premium-Modelle),
-        dafuer Resolve-Runden, mehr Dateispeicher und das groesste
-        Run-Kontingent. Gedacht fuer Tester, die die Funktionen ausprobieren
+        dafuer Resolve-Runden, mehr Dateispeicher und ein groesseres
+        Tageskontingent als Free. Gedacht fuer Tester, die die Funktionen ausprobieren
         sollen, ohne Frontier-Kosten ausloesen zu koennen.
 Pro   - alles.
 
 Zwei Regeln halten die Kosten fest:
 
-1. ``is_pro`` behaelt UEBERALL seine alte Bedeutung "darf teure Modelle"
+1. ``is_pro`` hat UEBERALL die Bedeutung "darf teure Modelle"
    und ist fuer Plus ``False``. Jeder Pfad, der noch nicht
    tier-bewusst ist, behandelt einen Plus-Account damit automatisch wie Free
    (fail-closed) - ein vergessener Aufrufer verschenkt hoechstens Komfort,
@@ -45,8 +45,8 @@ _TIER_ALIASES = {
 def normalize_tier(value) -> str:
     """Beliebige Tier-Angabe auf ``free``/``plus``/``pro`` normalisieren.
 
-    Booleans bleiben erlaubt, weil die Limit-Getter jahrelang ``is_pro: bool``
-    genommen haben und Aufrufer/Tests diese Signatur weiter benutzen:
+    Booleans bleiben erlaubt, weil Aufrufer/Tests der Limit-Getter die
+    Signatur ``is_pro: bool`` benutzen:
     ``True`` -> Pro, ``False`` -> Free. Alles Unbekannte faellt auf Free.
     """
     if isinstance(value, bool):

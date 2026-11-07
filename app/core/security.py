@@ -148,13 +148,13 @@ class CustomSecurityMiddleware:
                     "https://apis.google.com https://accounts.google.com https://cloud.umami.is; "
                 )
                 csp = (
-                    # No jsDelivr since 2026-10-15: marked, DOMPurify and KaTeX
+                    # No jsDelivr: marked, DOMPurify and KaTeX
                     # come from static/vendor on every page.
                     "default-src 'self' https://www.gstatic.com; "
                     + script_src
                     +
                     "style-src 'self' 'unsafe-inline'; "
-                    # No other site's images (no "https:" since 2026-10-28):
+                    # No other site's images (no "https:"):
                     # Watch and Topic pictures and every favicon come through
                     # this server (/api/watch|topics/.../image, /api/topics/
                     # favicon); an answer's own images are notes
@@ -186,7 +186,7 @@ class CustomSecurityMiddleware:
                 headers.set(b"x-content-type-options", b"nosniff")
                 headers.set(b"x-frame-options", b"DENY")
                 headers.set(b"strict-transport-security", b"max-age=31536000; includeSubDomains")
-                # strict-origin-when-cross-origin: an fremde Seiten geht nur noch
+                # strict-origin-when-cross-origin: an fremde Seiten geht nur
                 # die Origin, nicht der volle Pfad. Private Watch-Seiten
                 # (/s/{id}) sind Secret-URLs - ihr Pfad darf nie im
                 # Referer-Header eines ausgehenden Klicks landen.
@@ -221,7 +221,6 @@ class CustomSecurityMiddleware:
 FIREBASE_ADMIN_KEY_FILE = "consensai-firebase-adminsdk-fbsvc-9064a77134.json"
 
 
-# Prevent initializing app multiple times if reloaded
 class _AnonymousTestCredential(credentials.Base):
     """Credential accepted by firebase-admin without any live ADC lookup."""
 
@@ -229,6 +228,7 @@ class _AnonymousTestCredential(credentials.Base):
         return AnonymousCredentials()
 
 
+# Prevent initializing app multiple times if reloaded
 if not firebase_admin._apps:
     if e2e_test_mode_enabled():
         # Admin SDKs bypass Firestore rules, so the local emulator endpoint and
@@ -360,7 +360,7 @@ def extract_id_token(request: Request, data: dict) -> Optional[str]:
     return None
 
 # --- Tier-Flag-Cache -------------------------------------------------------
-# is_user_pro/is_user_admin wurden pro Aufruf je ein Firestore-Get;
+# Ohne Cache waeren is_user_pro/is_user_admin pro Aufruf je ein Firestore-Get;
 # ein Frage-Fan-out summierte sich auf 15+ Reads. Ein gemeinsamer Fetch des
 # users/{uid}-Dokuments liefert beide Flags, der TTL-Cache haelt sie kurz
 # (60s), damit manuell vergebene Pro-/Admin-Tags schnell greifen. Fehler werden
@@ -371,7 +371,7 @@ _tier_cache_lock = threading.Lock()
 
 _TIER_FLAGS_DEFAULT = {"tier": TIER_FREE, "pro": False, "admin": False}
 
-# --- Zustimmung zur Weitergabe an KI-Anbieter (seit 2026-11-06) --------------
+# --- Zustimmung zur Weitergabe an KI-Anbieter ---------------------------------
 # Bevor eine Frage eines Kontos an einen KI-Anbieter geht, hat das Konto einmal
 # zugestimmt (users/{uid}.ai_consent = {version, at}, geschrieben von
 # app/services/ai_consent.py). Gilt nur in der aktuellen Fassung: eine neue
@@ -450,7 +450,7 @@ def is_user_pro(uid: str) -> bool:
 
 
 def is_user_plus(uid: str) -> bool:
-    """Plus ODER Pro - die Stufe, ab der Anhaenge und Resolve freigeschaltet sind."""
+    """Plus ODER Pro - die Stufe, ab der Resolve freigeschaltet ist."""
     return tier_at_least(get_user_tier(uid), TIER_PLUS)
 
 def is_user_admin(uid: str) -> bool:

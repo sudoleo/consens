@@ -77,7 +77,7 @@ class ConsensusRunRequest(BaseModel):
             "before they answer (more tokens, slower)."
         ),
     )
-    # Deprecated alias of ``reasoning`` (Deep Think was removed on 2026-10-02).
+    # Deprecated alias of ``reasoning``.
     # Either flag set means Reasoning on; the run document keeps storing it
     # under ``request.deep_think`` so idempotent replays stay stable.
     deep_think: bool = Field(

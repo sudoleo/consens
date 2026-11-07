@@ -35,7 +35,7 @@ from app.services.public_markdown import (
 # OG-Karten) werden nie langlebig oder `immutable` ausgeliefert: Browser und
 # Proxies dürfen sie höchstens kurz halten. Zusammen mit dem In-Process-Cache
 # (snapshots.SHARE_CACHE_TTL_SECONDS) bleibt die Verzögerung eines Widerrufs
-# unter snapshots.PUBLIC_REVOCATION_MAX_DELAY_SECONDS (Review R18).
+# unter snapshots.PUBLIC_REVOCATION_MAX_DELAY_SECONDS.
 SHARE_CACHE_CONTROL = "public, max-age=60, s-maxage=60, stale-while-revalidate=60"
 
 templates = Jinja2Templates(directory="templates")
@@ -45,8 +45,8 @@ register_asset_globals(templates)
 def clip_words(text, limit: int) -> str:
     """Cut at the last word boundary within ``limit`` and end with "…".
 
-    Tab titles, search results and link previews ended mid-word ("…actually
-    includ | consens.io") with ``question[:70]`` (Apple-Audit L8).
+    With ``question[:70]``, tab titles, search results and link previews
+    ended mid-word ("…actually includ | consens.io").
     """
     text = " ".join(str(text or "").split())
     if len(text) <= limit:
@@ -105,7 +105,7 @@ def _build_watch_page_meta(meta, history_points):
     meta = meta or {}
     status = meta.get("status") or "history"
     if cfg.consensus_watches_archived():
-        # Archived since 2026-11-03: the page stays as it last was, nobody checks it any more.
+        # Archived: the page stays as it last was, nobody checks it any more.
         status = "history"
     labels = {
         "active": "Active",
@@ -385,7 +385,7 @@ def sitemap_shares(request: Request):
 def questions_hub(request: Request):
     """Öffentliche Hub-Seite: verlinkt alle indexierten Share-Seiten intern.
 
-    SEO-Zweck: indexierte Shares hingen bisher nur in der Sitemap ("verwaiste
+    SEO-Zweck: indexierte Shares hängen sonst nur in der Sitemap ("verwaiste
     Seiten") – der Hub gibt ihnen einen Crawl-Pfad aus der Hauptnavigation.
     """
     try:
@@ -395,7 +395,7 @@ def questions_hub(request: Request):
         entries = []
 
     # "tracked over time" counts the Watches that are still checked; a paused
-    # one is not tracked any more (Apple-Audit L2).
+    # one is not tracked any more.
     watch_count = sum(1 for e in entries if (e.get("watch") or {}).get("active"))
     jsonld = {
         "@context": "https://schema.org",
@@ -481,7 +481,7 @@ def share_og_card(request: Request, slug_id: str):
     if watch_page:
         # A Watch's card tells what its page leads with, like a Topic card:
         # that it is watched and whether the answer moved -- not a score the
-        # page no longer shows (Apple-Audit L13).
+        # page does not show.
         watch_state = _watch_state_view(
             watch_page,
             _build_watch_history_view(history_points, width=PAGE_CHART_WIDTH),
@@ -558,7 +558,7 @@ def share_page(request: Request, slug_id: str):
             viewer_uid = verify_user_token(token) if token else ""
         except AuthenticationUnavailable:
             # The account check could not be read: no "log in" for an owner
-            # who is logged in, but a moment and another try (review 2).
+            # who is logged in, but a moment and another try.
             response = _unavailable_response(
                 request, 503, "One moment, please",
                 "This private page can’t be checked right now. Please try again in a moment.",
@@ -675,7 +675,7 @@ def share_page(request: Request, slug_id: str):
     sources_view = []
     # A link back to consens.io (often this very page) is no source: it
     # leaves the list, the direct links and the inline names, and its [S#]
-    # markers drop like those of an expired redirect (Apple-Audit L4).
+    # markers drop like those of an expired redirect.
     own_sources = [
         {"id": source.get("id")} for source in payload["sources"]
         if source_links.is_own_page(source.get("url")) and source.get("id")
@@ -749,8 +749,8 @@ def share_page(request: Request, slug_id: str):
         or len(payload["included_models"])
     )
     contradiction_count = sum(1 for d in differences if d.get("type") == "contradiction")
-    # An Agent answer's reviewers and their notes on its sentences (since
-    # 2026-10-31): the page's second view, in place of the differences.
+    # An Agent answer's reviewers and their notes on its sentences: the
+    # page's second view, in place of the differences.
     review_view = check_page.review_cards(
         payload["review_notes"], snapshots.PROVIDERS_BY_LABEL, render_inline_markdown,
     ) if payload["review_notes"] and not watch_page else None
@@ -838,8 +838,8 @@ def share_page(request: Request, slug_id: str):
     # Meta-Description datengeführt statt AI-Textanfang: liest sich im SERP
     # wie ein Datenprodukt, der Konsens-Auszug folgt dahinter.
     # A Watch page leads with its state ("Paused · last checked Oct 1"), not
-    # a score or a count of contradictions it no longer shows (Apple-Audit
-    # L2/L13, Zweitprüfung 16) -- the search line says what the page says.
+    # a score or a count of contradictions it does not show -- the search
+    # line says what the page says.
     description_bits = []
     if watch_state and watch_state.get("headline") and not watch_awaiting_first_run:
         description_bits.append(watch_state["headline"])
@@ -914,7 +914,7 @@ def share_page(request: Request, slug_id: str):
         "consensus_html": consensus_html,
         # The language question and answer are in, for their containers.
         "content_lang": i18n.content_language(f'{payload["question"]}\n{payload["consensus_md"]}'),
-        # Old judge texts say "Model C"; the page names the families (L15).
+        # Old judge texts say "Model C"; the page names the families.
         "differences": check_page.named_differences(differences),
         # The same cards as in the app: "A vs B", the answer's side first.
         "difference_cards": check_page.difference_cards(

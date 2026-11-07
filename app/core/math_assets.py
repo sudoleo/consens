@@ -7,7 +7,7 @@ emits the KaTeX tags only when ``page_has_math()`` finds a formula in the
 template context.
 
 The check is a deliberate superset of what ``static/js/math-render.js``
-renders: a false positive only loads KaTeX as before. A miss is not fatal
+renders: a false positive only loads KaTeX needlessly. A miss is not fatal
 either -- the partial always names the asset URLs, and math-render.js loads
 KaTeX itself when it finds a formula on a page without it.
 """
@@ -26,7 +26,7 @@ _DELIMITER = re.compile(r"\$\$|\\\(|\\\[|\\begin\{")
 _DOLLAR_PAIR = re.compile(r"(?=\$((?:[^$\n\\]|\\[^\n]){1,200}?)\$)")
 _LATEX_SIGNAL = re.compile(r"\\[A-Za-z]|[\^_{}]")
 # A TeX script with braces right after a base and without any delimiter
-# ("O(2^{εn})"), which math-render.js sets as inline math since 2026-11-01.
+# ("O(2^{εn})"), which math-render.js sets as inline math.
 _BARE_SCRIPT = re.compile(r"[\w)][\^_]\{")
 
 _MAX_DEPTH = 8

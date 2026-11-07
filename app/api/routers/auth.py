@@ -130,7 +130,6 @@ async def register_user(
         raise
     except Exception as exc:
         logging.error("/register failed: %s", safe_exception(exc))
-        # generische Meldung an den Client
         raise HTTPException(status_code=503, detail="Registration is temporarily unavailable.")
     
 

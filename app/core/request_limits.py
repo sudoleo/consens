@@ -11,7 +11,7 @@ import re
 DEFAULT_MAX_REQUEST_BODY_BYTES = 16 * 1024 * 1024
 # Every other route. The body is buffered and parsed before authentication
 # and rate limits: a hostile 16 MB JSON body cost about a second of CPU and
-# 380 MB of memory on any route (audit 2026-10-28).
+# 380 MB of memory on any route.
 SMALL_REQUEST_BODY_BYTES = 1024 * 1024
 # The routes that need more: the real uploads, files as base64 inside JSON
 # (/ask_* two files of at most 5 MB, 14 MB as base64, before the server

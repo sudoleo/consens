@@ -1,15 +1,14 @@
 """The account's workspace from the browser (agent_workspace.py,
 workspace-view.js, docs/agent-mode.md "Arbeitsplatz"): the live view of its
 Chrome, the user's takeover, resetting the browser and the list of sites it
-is logged in to (since 2026-11-02, agent-sign-ins.js).
+is logged in to (agent-sign-ins.js).
 
 The view is a WebSocket the server carries through to the workspace's VM
-(agent_vm.workspace_name; from 2026-10-27 to 2026-11-04 a browser VM of its
-own): since the security audit of 2026-10-27 over a command on the
+(agent_vm.workspace_name) over a command on the
 provider's exec API, workspace_vm/browser/relay.py, whose
 stdin and stdout carry the VNC bytes. The provider's token goes only to
-api.sprites.dev, never to an address of the VM (before, it went to the VM's
-own address, where a service answered that the agent could change). The
+api.sprites.dev, never to an address of the VM (where a service could answer
+that the agent can change). The
 browser signs in with its first message ({"id_token"}), never in the URL.
 The relay's states (setup, starting, ready, error) come as JSON lines on its
 stderr and go on as text; after "ready" both ways carry VNC bytes. A view
@@ -18,18 +17,18 @@ view at a time (the newest wins, agent_workspace.claim_view), its time
 counts against the day's VM time (agent_vm_time.py) and never runs past it,
 and opening is rate limited. Its first state ("connecting") names what is
 left of the day's VM time (``left_seconds``, absent without a cap) for the
-panel's head (since 2026-10-30, runtime audit V4). While the server wakes
+panel's head. While the server wakes
 the VM, "waking" carries about when the browser's start ends
-(``until``, since 2026-11-02), as setup and starting do after it.
+(``until``), as setup and starting do after it.
 
 How a view or terminal ended goes to the log with its close code, who ended
 it (the browser, the relay, the provider's socket) and the numbers they gave,
 never an account; the relay's "error" state and a failed carry too. Per UTC
 day ``ops_metrics/workspace-view-{day}`` counts them anonymously: opened,
 refused or failed by reason, how they ended, their open seconds and a bucket
-of their length (runtime audit I8; written off the event loop, never raised).
+of their length (written off the event loop, never raised).
 
-The terminal (since 2026-10-28) is the user's own shell in the workspace,
+The terminal is the user's own shell in the workspace,
 the same way: a WebSocket carried to an exec with a TTY on the provider's
 API (agent_vm.terminal_argv), with the agent's rights and nothing more, one
 per account, its time VM time. The first message also names the terminal's
@@ -38,7 +37,7 @@ keystrokes and {"type": "resize", "cols", "rows"} resizes it; the server's
 binary frames are the terminal's output. The reviewers never see it: it is
 the user's work, not the agent's.
 
-The server's safety rules (workspace_guard.py, since 2026-10-30) see both:
+The server's safety rules (workspace_guard.py) see both:
 the relay's stderr also names the host of every page a tab shows
 ({"visit"}), the VM's network counters ({"net"}) and its Chrome policy
 ({"policy"}), each page with who steered then (_steering: the user from
@@ -280,7 +279,7 @@ async def connect_upstream(url):
 
 async def _state(websocket, state, **fields):
     """Tells the view or terminal a state; False when it is gone already (a
-    tab closed while it connected: until 2026-11-02 an error in the log)."""
+    tab closed while it connected)."""
     try:
         await websocket.send_text(json.dumps({"state": state, **fields}))
     except (WebSocketDisconnect, RuntimeError):
@@ -290,9 +289,9 @@ async def _state(websocket, state, **fields):
 
 # While the server wakes the VM for the view (_open: its status, a
 # VM that slept, its tools, a new one's setup), the view hears about when
-# the start ends ("waking" with "until"). Until 2026-11-02 the first estimate
-# came with the relay's first state, after the wake, and a view that waited
-# 15 s for a cold VM showed no bar (Max). First after WAKE_FIRST_SECONDS: a
+# the start ends ("waking" with "until"). With only the relay's first state,
+# after the wake, a view that waited 15 s for a cold VM would show no bar.
+# First after WAKE_FIRST_SECONDS: a
 # VM that is up answers sooner, and the bar shows after 1.2 s anyway.
 WAKE_FIRST_SECONDS = 1.0
 WAKE_LOOK_SECONDS = 0.5
@@ -313,9 +312,9 @@ async def _waking(websocket, uid, seconds, start):
 
 def _until(uid):
     """About when the browser's start ends (agent_workspace.start_until), for
-    the view's progress bar (since 2026-11-02): {"until": ISO time} or {}.
+    the view's progress bar: {"until": ISO time} or {}.
     A message's workbench start counts too: the view waits for its setup
-    (one computer since 2026-11-04)."""
+    (one computer)."""
     until = agent_workspace.start_until(uid, agent_workspace.START_KINDS)
     return {"until": until.isoformat()} if until is not None else {}
 
@@ -336,7 +335,7 @@ def _time_left(uid):
         return VIEW_SECONDS, None
 
 
-# Anonymous daily counters of views and terminals (I8), beside the audit's
+# Anonymous daily counters of views and terminals, beside the audit's
 # (agent_audit_metrics.py): one document per UTC day, labels and numbers only.
 METRICS_COLLECTION = "ops_metrics"
 # Upper bounds of a view's open time in seconds; the last bucket is "over3600".
@@ -405,7 +404,7 @@ async def _refuse(websocket, kind, code):
     """Closes a view or terminal before it opened, with its reason, logged and
     counted. Counted first: once the socket is closed, nothing guarantees the
     task runs on (a test client ends it at once; the count went missing in 1
-    of 6 runs, 2026-10-31)."""
+    of 6 runs)."""
     logging.info("Agent workspace %s refused code=%d", kind, code)
     await asyncio.to_thread(_count, kind, "refused_" + CLOSE_REASONS[code])
     await _end(websocket, code)
@@ -531,8 +530,8 @@ async def _carry(websocket, upstream, uid, kind, view_id, seconds, started, to_v
                       if isinstance(ending.get(key), int))
     logging.info("Agent workspace %s closed seconds=%d code=%d by=%s%s", kind, int(elapsed), code, by, details)
     # Counted before the close, as in _refuse: once the socket is closed,
-    # nothing guarantees the task runs on (the push CI of 2026-10-31 lost
-    # the end counter).
+    # nothing guarantees the task runs on (a push CI run lost the end
+    # counter).
     await asyncio.to_thread(_count, kind, "end_" + by, elapsed)
     await _end(websocket, code)
 
@@ -547,9 +546,8 @@ async def workspace_view(websocket: WebSocket):
         return
     started = time.monotonic()
     # The browser's start as the view waits for it: waking (_waking) and the
-    # relay's states setup and starting carry about when it ends ("until",
-    # since 2026-11-02), also that of the account's provisioning when it sets
-    # it up right now.
+    # relay's states setup and starting carry about when it ends ("until"),
+    # also that of the account's provisioning when it sets it up right now.
     start = agent_workspace.Start(uid, "browser")
     try:
         url = await _waking(websocket, uid, seconds, start)

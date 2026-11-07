@@ -57,8 +57,8 @@ def _raise(exc: watch_service.WatchError):
 
 
 def _refuse_archived():
-    """The Consensus Watches from before are archived (since 2026-11-03,
-    cfg.consensus_watches_archived): a Watch now runs the Agent
+    """The Consensus Watches are archived (cfg.consensus_watches_archived):
+    a Watch runs the Agent
     (routers/agent_watches.py). Deleting one still works."""
     if cfg.consensus_watches_archived():
         error = HTTPException(status_code=410,
@@ -163,7 +163,7 @@ def my_watches(request: Request):
             "status": "success",
             "watches": watches,
             "limits": {
-                # "plan" traegt jetzt die volle Stufe (free/plus/pro). Aeltere
+                # "plan" traegt die volle Stufe (free/plus/pro). Aeltere
                 # Clients vergleichen nur gegen "pro" und behandeln plus damit
                 # wie free - richtig herum, aber siehe watch.js.
                 "plan": entitlements_for(tier).tier,
@@ -174,7 +174,7 @@ def my_watches(request: Request):
                 "resolved_count": resolved_count,
                 "daily_available": cfg.is_watch_daily_allowed(tier),
             },
-            # Since 2026-11-03 these Watches are an archive (_refuse_archived).
+            # These Watches are an archive (_refuse_archived).
             "archived": cfg.consensus_watches_archived(),
         }
     except Exception as exc:
@@ -259,9 +259,9 @@ def disconnect_telegram(request: Request, data: dict = Body(default={})):
 
 @router.post("/api/telegram/webhook")
 async def telegram_webhook(request: Request):
-    # The secret first, the body after: until 2026-10-28 FastAPI parsed the
-    # JSON of anyone's request before this check (audit). The body itself is
-    # capped before (request_limits.PATH_MAX_REQUEST_BODY_BYTES).
+    # The secret first, the body after: a body parameter would make FastAPI
+    # parse the JSON of anyone's request before this check. The body itself
+    # is capped before (request_limits.PATH_MAX_REQUEST_BODY_BYTES).
     if not telegram_watch.verify_webhook_secret(
         request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
     ):
@@ -391,7 +391,7 @@ _LINK_ERROR_MESSAGES = {
 }
 
 
-# What the mail-link pages are about: the thing is a Watch (Apple-Audit H3).
+# What the mail-link pages are about: the thing is a Watch.
 _WATCH_EYEBROW = "Watch"
 
 

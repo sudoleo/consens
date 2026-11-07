@@ -1,4 +1,4 @@
-"""Watches that run the Agent (agent_watches.py, since 2026-11-03).
+"""Watches that run the Agent (agent_watches.py).
 
 POST /agent/watches starts a Watch: the one the agent prepared under an
 answer (``turn_id``: task and goal from that saved turn), the user's own task

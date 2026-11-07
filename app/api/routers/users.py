@@ -84,10 +84,8 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
     token = auth_header.split(" ")[1]
 
     try:
-        # 1. UID verifizieren
         uid = verify_user_token(token)
-        
-        # 2. Status aus Firestore holen
+
         try:
             tier = get_user_tier(uid)
             consented = security.has_ai_consent(uid)
@@ -108,7 +106,7 @@ def get_user_status(request: Request, background_tasks: BackgroundTasks):
             # is_pro heisst weiterhin "Frontier-Modelle" und ist
             # fuer Plus False; "tier" traegt die vollstaendige Stufe.
             "is_pro": entitlements.is_pro,
-            # Agent is open to every signed-in account (2026-10-02); premium
+            # Agent is open to every signed-in account; premium
             # models inside it still follow is_pro.
             "agent_access": True,
             "tier": entitlements.tier,
@@ -163,8 +161,7 @@ def get_usage_post(request: Request, data: UsageRequest):
         raise _account_status_unavailable() from None
     except Exception:
         raise HTTPException(status_code=401, detail="Authentication failed")
-    
-    # 1. Status prüfen
+
     try:
         tier = get_user_tier(uid)
     except TierStatusUnavailable:
@@ -450,7 +447,7 @@ def change_memory_items(request: Request, payload: MemoryItemsRequest):
         result = agent_memory_repository.apply(
             uid, changes, origin="user", expected_revision=payload.expected_revision)
         # The id lets Settings offer Undo for a change made by hand, the way
-        # it does for Agent's (Apple audit E9): a deleted memory comes back.
+        # it does for Agent's: a deleted memory comes back.
         return {"result": result.get("status"), "change_id": result.get("change_id")}
 
     return _items_write(uid, operation)
@@ -606,8 +603,8 @@ def patch_user_settings(request: Request, payload: UserSettingsPatchRequest):
 @limiter.limit("3/minute")
 def delete_account(request: Request, data: dict = Body(default={})):
     """
-    Löscht den Account vollständig (DSGVO Art. 17): Auth-Account, users-Dokument
-    inkl. Bookmarks, Usage-Daten, Einträgen in pro_waitlist und feedback.
+    Löscht den Account vollständig (DSGVO Art. 17) über einen dauerhaften
+    Löschauftrag (FirestoreAccountDeletion.start, dann cleanup_uid).
     allow_unverified=True, damit auch unbestätigte Accounts gelöscht werden können.
     """
     id_token = extract_id_token(request, data)

@@ -339,8 +339,8 @@ def validate_client_system_prompt(value) -> str:
 
 
 def validate_question_word_limit(question: str, tier, deep_search: bool = False):
-    """Word limit of a question. Since 2026-10-02 it no longer depends on the
-    Reasoning switch (``deep_search``); the argument stays for callers."""
+    """Word limit of a question. It does not depend on the Reasoning switch
+    (``deep_search``); the argument stays for callers."""
     question = validate_text_size(
         question,
         label="Question",
@@ -381,8 +381,7 @@ class AskProvider:
         return cfg.PROVIDERS[self.key].models
 
 
-# Eine /ask-Familie je Registry-Eintrag. Die Routen darunter sind der
-# Client-Vertrag und bleiben ausgeschrieben.
+# Eine /ask-Familie je Registry-Eintrag.
 ASK_PROVIDERS = {
     provider.key: AskProvider(key=provider.key, label=provider.label)
     for provider in cfg.PROVIDERS.values()
@@ -497,8 +496,8 @@ def _run_ask(provider: AskProvider, *, stream_requested, question, key,
 
 def handle_ask(provider: AskProvider, request: Request, data: dict):
     question = data.get("question")
-    # ``deep_search`` is the kept wire name of the Reasoning switch (formerly
-    # Deep Think): same model, more reasoning, larger output cap. No tier gate.
+    # ``deep_search`` is the kept wire name of the Reasoning switch: same
+    # model, more reasoning, larger output cap. No tier gate.
     deep_search = parse_boolean_flag(data.get("deep_search", False))
     stream_requested = parse_boolean_flag(data.get("stream", False))
     system_prompt = validate_client_system_prompt(data.get("system_prompt"))
@@ -506,8 +505,8 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
     api_key = str(data.get("openrouter_key") or "").strip()
     model = data.get("model")
     if isinstance(model, str) and model:
-        # A request may still carry a migrated ID (grok-4.3-no-reasoning,
-        # 2026-10-11); it would otherwise fail the allowlist below.
+        # A request may still carry a migrated ID (grok-4.3-no-reasoning);
+        # it would otherwise fail the allowlist below.
         model = cfg.canonical_model_id(model, provider.key)
 
     tier = TIER_FREE
@@ -588,7 +587,7 @@ def handle_ask(provider: AskProvider, request: Request, data: dict):
             else get_system_prompt()
         )
 
-    # A question continues no chat here: since 2026-10-25 the browser asks
+    # A question continues no chat here: the browser asks
     # /ask_* only for Compare (side by side, a chat of its own). Follow-ups
     # run in Agent (/agent), whose context the server keeps.
     own_keys_requested = parse_boolean_flag(data.get("useOwnKeys", False))
@@ -676,7 +675,7 @@ def _make_ask_endpoint(provider_key: str):
 
 
 # Route, Handlername und Client-Endpoint kommen aus derselben Registry. Damit
-# braucht eine neue Familie keinen zusaetzlichen Copy-Paste-Wrapper mehr.
+# braucht eine neue Familie keinen eigenen Copy-Paste-Wrapper.
 for _provider_key, _provider_config in cfg.PROVIDERS.items():
     _handler = _make_ask_endpoint(_provider_key)
     globals()[_handler.__name__] = _handler

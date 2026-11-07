@@ -12,15 +12,15 @@ OPENROUTER_CHAT_COMPLETIONS_URL = f"{OPENROUTER_BASE_URL}/chat/completions"
 OPENROUTER_REFERER = "https://consens.io"
 OPENROUTER_TITLE = "consens.io"
 
-# Provider routing of every model request (since 2026-10-17): the endpoint
+# Provider routing of every model request: the endpoint
 # with the highest measured throughput among those that neither keep prompts
-# for training nor otherwise collect them. Zero data retention is no longer
+# for training nor otherwise collect them. Zero data retention is not
 # required in general: under it GPT-6 Luna could only run on Azure, whose
 # endpoints answered with up to minutes of delay. A chat with Google data
 # adds it back (google_connections.restricted_model).
 DEFAULT_PROVIDER_ROUTING = {"sort": "throughput", "data_collection": "deny"}
 
-# Agent requests (since 2026-11-05) prefer, among those endpoints, the ones
+# Agent requests prefer, among those endpoints, the ones
 # that start to answer quickly, and of those the one with the highest
 # throughput. Most Agent steps write a tool call or a short answer (about 200
 # tokens), so the wait for the first token decides. Throughput alone put

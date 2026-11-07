@@ -21,7 +21,7 @@ from app.core.site import SITE_URL
 ORGANIZATION_ID = SITE_URL + "/#organization"
 WEBSITE_ID = SITE_URL + "/#website"
 
-# Der NAME muss ueberall zeichengleich stehen -- Website, Profile aus SAME_AS,
+# Der NAME muss ueberall zeichengleich stehen -- Website, Profile aus ORGANIZATION_SAME_AS,
 # jede Bio. "Consens.io" vs. "consens.io" vs. "Consens" macht die Zuordnung
 # unschaerfer. Bei der Beschreibung geht es dagegen um die Aussage, nicht um den
 # Wortlaut: dieselben tragenden Begriffe reichen, wenn ein Profilfeld kuerzer ist.
@@ -69,8 +69,8 @@ WEBSITE: dict[str, Any] = {
     "inLanguage": "en",
 }
 
-# Verweis statt Kopie: ueberall dort, wo bisher ein eigener Organization-Block
-# mit blossem Namen stand.
+# Verweis statt Kopie: fuer jede Stelle, die sonst einen eigenen
+# Organization-Block mit blossem Namen braeuchte.
 ORG_REF: dict[str, str] = {"@id": ORGANIZATION_ID}
 SITE_REF: dict[str, str] = {"@id": WEBSITE_ID}
 
