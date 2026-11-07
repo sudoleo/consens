@@ -749,6 +749,29 @@ def test_a_stuck_workspace_goes_back_to_its_newest_checkpoint_and_the_next_messa
     assert results(loop)[0]["workspace_note"] == agent_workspace.HEALED_NOTE
 
 
+def test_without_a_recorded_checkpoint_a_stuck_workspace_goes_back_to_the_newest_of_all_its_chats(store, fake_vm):
+    """A record from before record_checkpoint: the chat that met the stuck VM
+    last (the newest used_at) holds an older checkpoint of its own, while
+    another chat took a newer one since. Going back to the older one would
+    lose all the other chat's work, not only the last message's."""
+    from google.cloud import firestore
+    older = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(older.run())
+    older_vm = store.get_turn(UID, older.chat_id, older.turn_id)["agent_vm"]
+    newer = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]), request_id="another-chat")
+    list(newer.run())
+    newer_vm = store.get_turn(UID, newer.chat_id, newer.turn_id)["agent_vm"]
+    assert newer.chat_id != older.chat_id and newer_vm["checkpoint"] != older_vm["checkpoint"]
+    assert newer_vm["checkpoint_at"] > older_vm["checkpoint_at"]
+    agent_workspace.ref(store.db, UID).update({"checkpoint": firestore.DELETE_FIELD})
+    # The older chat's next message meets the stuck VM and takes none.
+    pending(store, chat_id=older.chat_id, request_id="met-the-stuck-vm")
+    agent_workspace.claim(store, UID, older.chat_id, "stuck", provider="fake")
+    agent_workspace.release(store, UID, "stuck")
+    assert agent_workspace.heal(store.db, UID, factory=fake_vm.backend) is True
+    assert [call for call in fake_vm.calls if call[0] == "restore"][-1] == ("restore", NAME, newer_vm["checkpoint"])
+
+
 def test_a_stuck_workspace_waits_for_its_message_and_never_brings_back_what_left_for_good(store, fake_vm,
                                                                                           monkeypatch):
     loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
