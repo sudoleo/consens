@@ -5399,17 +5399,29 @@ deshalb nur, was die Website selbst sagt.
 `agent_answer_links.LinkCheck` startet, sobald die Antwort fixiert ist
 (`DelegationLoop._finish_merged` → `_check_links`), auf einem eigenen Thread
 neben Übergabe und Schlussrunde der Prüfer, und ruft jeden Link der Antwort
-einmal auf (`answer_links`: Markdown-Links und nackte URLs außerhalb von Code,
-jede einmal, höchstens `LINKS_MAX` 12). Der Abruf läuft wie ein Klick ohne
-Anmeldung: GET ohne Körper zu lesen, bis zu 4 Weiterleitungen, jeder Sprung
-über `source_documents.pinned_target` (nur öffentliche Adressen, keine
-DNS-Umbindung), 3 zugleich (das DNS-Tor hat 4 Plätze), 4 s je Link, 6 s für
-alle (`CHECK_SECONDS`). Ein Fund ist nur 404, 410 oder ein Host, den es nicht
-gibt (`EAI_NONAME`); 403, Anmeldewände, 5xx, Zeitüberschreitung und
-abgelehnte Adressen sind keiner.
+einmal auf (`answer_links`: Markdown-Ziele so, wie sie dastehen, und nackte URLs
+außerhalb von Code, jede einmal, höchstens `LINKS_MAX` 12). Der Abruf läuft wie
+ein Klick ohne Anmeldung: GET ohne den Körper zu lesen, bis zu 4
+Weiterleitungen, jeder Sprung über `source_documents.pinned_target` (nur
+öffentliche Adressen, keine DNS-Umbindung) mit eigenen DNS-Plätzen (`_lookups`,
+6): Die vier, die Quellenseiten und Bilder teilen, lehnen einen fünften sofort
+ab, und eine langsame Auflösung hält ihren Platz über jede Zeitgrenze. 3 Links
+zugleich, 4 s je Link, 6 s für alle (`CHECK_SECONDS`).
+
+Ein Fund ist nur 404 oder 410. Kein Fund sind 403, Anmeldewände, 5xx,
+Zeitüberschreitung, abgelehnte Adressen und Namen, die das öffentliche DNS
+nicht kennt: Das kann der Router oder das Intranet des Nutzers sein
+(`speedport.ip`, `.local`). Der Abruf ist anonym, und Privates sieht von außen
+fehlend aus. Code-Hosts (`REPO_HOSTS`: GitHub samt `raw.githubusercontent.com`,
+GitLab) antworten auf private Repos mit 404. Ein 404 zählt dort nur für eine
+Seite in einem Repo, dessen Seite selbst öffentlich antwortet (200); der Link
+auf ein Repo oder seinen Besitzer zählt nie. Links, die der Nutzer selbst
+geschrieben hat (`user_urls`), öffnet die Prüfung nie: Ein eingefügter Link kann
+beim Öffnen etwas auslösen (Abmelden, Anmelden, ein Tracker), und er ist seiner.
 
 Nach der Prüfung (`_keep_links`) wartet der Lauf auf den Rest, höchstens bis
-`CHECK_SECONDS`; nach einem Stopp nur auf das, was schon da ist. Funde stehen
+`CHECK_SECONDS`; nach einem Stopp und wenn die Übergabe scheiterte (der Browser
+wartet dann aufs Laufende) nur auf das, was schon da ist. Funde stehen
 in der Review als `links` (`{"checked", "missing": [{url, status,
 retrieved}]}`), gespeichert per `ComparisonTools.checkpoint` vor dem Laufende
 und an den Browser als `review`-Frame. `retrieved` sagt, ob die App die Seite in
@@ -5418,6 +5430,11 @@ lässt sich in den gespeicherten Reviews eine erfundene Adresse von einer
 verschwundenen Seite trennen. Ohne Funde wird nichts gespeichert. Nie in Chats
 mit Google-Daten: Dort würde eine Adresse aus einer Mail ohne Klick abgerufen,
 und `read_source` ist dort aus demselben Grund zu.
+
+Gegenprobe 2026-11-07 mit dem echten Abruf an allen 63 Links aus Max' Chats der
+14 Tage davor: genau 4 Funde, die drei erfundenen Mistral-Links und ein
+GitHub-Link aus der Suche, der inzwischen 404 gibt. Keine funktionierende Seite
+war darunter.
 
 Im Browser streicht `sources.js` `markMissingAnswerLinks` solche Links nach
 jedem Render einer Antwort durch (`agent-review.js` `render`), mit dem Grund im

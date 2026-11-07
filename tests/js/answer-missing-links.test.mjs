@@ -28,19 +28,19 @@ describe("links that lead nowhere", () => {
   it("strikes through exactly the listed links and says why", () => {
     const { window } = boot();
     const body = answer(window, '<p><a href="https://example.org/gone#part">Bericht</a> '
-      + '<a href="https://EXAMPLE.org/fine">Fine</a> <a href="https://nohost.example/x">Other</a></p>');
+      + '<a href="https://EXAMPLE.org/fine">Fine</a> <a href="https://example.net/x">Other</a></p>');
     window.markMissingAnswerLinks(body, review([
       { url: "https://example.org/gone", status: 404, retrieved: false },
-      { url: "https://nohost.example/x", status: "no_host", retrieved: false },
+      { url: "https://example.net/x", status: 410, retrieved: true },
     ]));
-    const [gone, fine, nohost] = body.querySelectorAll("a");
+    const [gone, fine, other] = body.querySelectorAll("a");
     expect(gone.classList.contains("answer-link-missing")).toBe(true);
     expect(gone.title).toContain("the site says there is no such page");
     expect(gone.getAttribute("aria-label")).toBe("Bericht, page not found");
     expect(gone.getAttribute("href")).toBe("https://example.org/gone#part");
     expect(fine.classList.contains("answer-link-missing")).toBe(false);
     expect(fine.hasAttribute("title")).toBe(false);
-    expect(nohost.title).toContain("its address does not exist");
+    expect(other.classList.contains("answer-link-missing")).toBe(true);
   });
 
   it("never marks a source pill and takes the mark back once the link is no longer listed", () => {

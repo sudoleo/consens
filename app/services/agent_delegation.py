@@ -3321,7 +3321,7 @@ class DelegationLoop(AgentLoop):
             if self.google_tools or self._chat_google_data():
                 return None
             from app.services.agent_answer_links import LinkCheck
-            from app.services.agent_read_source import url_key
+            from app.services.agent_read_source import url_key, user_urls
             reader = self.comparison.reader
             retrieved = set()
             if reader is not None:
@@ -3331,18 +3331,20 @@ class DelegationLoop(AgentLoop):
             else:
                 retrieved.update(url_key(source.get("url")) for source in [*self.search_sources, *self.chat_sources]
                                  if isinstance(source, dict))
-            return LinkCheck(text, lambda url: url_key(url) in retrieved).start()
+            skip = {url_key(url) for url in user_urls(self.answer_conversation)}
+            return LinkCheck(text, lambda url: url_key(url) in retrieved, skip=skip).start()
         except Exception as exc:
             logging.warning("Agent answer links not started category=%s", safe_exception(exc))
             return None
 
     def _keep_links(self, check):
         """Links that lead nowhere become part of the turn's review, saved
-        before the run's end (finish_run keeps the review as saved). After the
-        user's Stop only what is already known."""
+        before the run's end (finish_run keeps the review as saved). Only what
+        is already known after the user's Stop, and when the hand-over failed:
+        the browser then waits for the run's end."""
         if check is None:
             return
-        found = check.result(wait=not self.cancellation.cancelled)
+        found = check.result(wait=self.handed_over and not self.cancellation.cancelled)
         if not found or not found["missing"]:
             return
         with self.comparison.lock:

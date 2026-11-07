@@ -71,7 +71,11 @@ def public_address(value):
                                     or getattr(address, 'teredo', None))
 
 
-async def pinned_target(url):
+async def pinned_target(url, *, lookups=None):
+    """``lookups``: (pool, slots) for the DNS lookup; by default the four
+    shared by source pages and pictures. A caller with lookups of its own
+    never takes theirs."""
+    pool, slots = lookups or (_dns_pool, _dns_slots)
     parts = urlsplit(url)
     if (parts.scheme not in ('https', 'http') or not parts.hostname
             or parts.username is not None or parts.password is not None
@@ -79,10 +83,10 @@ async def pinned_target(url):
         raise ValueError('unsafe_url')
     hostname = parts.hostname.encode('idna').decode('ascii')
     port = parts.port or (443 if parts.scheme == 'https' else 80)
-    if not _dns_slots.acquire(blocking=False):
+    if not slots.acquire(blocking=False):
         raise ValueError('dns_busy')
-    future = _dns_pool.submit(socket.getaddrinfo, hostname, port, 0, socket.SOCK_STREAM)
-    future.add_done_callback(lambda _: _dns_slots.release())
+    future = pool.submit(socket.getaddrinfo, hostname, port, 0, socket.SOCK_STREAM)
+    future.add_done_callback(lambda _: slots.release())
     addresses = await asyncio.wrap_future(future)
     if not addresses or any(not public_address(item[4][0]) for item in addresses):
         raise ValueError('unsafe_address')

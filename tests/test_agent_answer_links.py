@@ -11,6 +11,17 @@ from test_agent_runs import UID, store  # noqa: F401  (fixture)
 from test_agent_web_fetch import CITED, Plan, chat_loop, compare, run
 
 
+def test_a_markdown_destination_keeps_what_ends_a_bare_url():
+    text = "[Guide](https://en.wikipedia.org/wiki/Hitchhiker's_Guide) und https://example.org/it's"
+    assert answer_links(text) == ["https://en.wikipedia.org/wiki/Hitchhiker's_Guide", "https://example.org/it"]
+
+
+def test_never_takes_a_link_to_skip():
+    from app.services.agent_read_source import url_key
+    text = "https://example.org/mine und https://example.org/other"
+    assert answer_links(text, {url_key("https://example.org/mine/")}) == ["https://example.org/other"]
+
+
 def test_finds_markdown_and_bare_links_once_and_none_in_code():
     text = ("Laut [Bericht](https://example.org/a_(b)) und https://example.org/c.\n"
             "Siehe auch <https://example.org/d>, (https://example.org/e) und "
@@ -28,7 +39,7 @@ def test_takes_at_most_the_first_links():
 
 
 def pinned(monkeypatch, failure=None):
-    async def target(url):
+    async def target(url, **kwargs):
         if failure is not None:
             raise failure
         parts = httpx.URL(url)
@@ -58,10 +69,26 @@ def test_follows_redirects_to_where_the_page_ends(monkeypatch):
     assert gone("https://example.org/a", loop) is None
 
 
-@pytest.mark.parametrize("errno, expected", [(socket.EAI_NONAME, "no_host"), (socket.EAI_AGAIN, None)])
-def test_a_host_that_does_not_exist_counts_a_lookup_that_failed_does_not(monkeypatch, errno, expected):
-    pinned(monkeypatch, socket.gaierror(errno, "lookup"))
-    assert gone("https://no-such-host.example/page", {}) == expected
+def test_a_name_public_dns_does_not_know_is_no_finding(monkeypatch):
+    """speedport.ip, a printer on .local: the user's network knows them."""
+    pinned(monkeypatch, socket.gaierror(socket.EAI_NONAME, "lookup"))
+    check = LinkCheck("http://speedport.ip/page", gone=link_gone).start()
+    assert check.result() == {"checked": 1, "missing": []}
+
+
+def test_on_a_code_host_only_a_page_inside_a_public_repository_counts(monkeypatch):
+    """Private repositories answer 404 to anonymous visitors."""
+    pinned(monkeypatch)
+    public = {"/owner/public/blob/main/missing.md": (404, None), "/owner/public": (200, None)}
+    assert gone("https://github.com/owner/public/blob/main/missing.md", public) == 404
+    private = {"/owner/private/blob/main/app.py": (404, None), "/owner/private": (404, None)}
+    assert gone("https://github.com/owner/private/blob/main/app.py", private) is None
+    assert gone("https://github.com/owner/private", {"/owner/private": (404, None)}) is None
+    assert gone("https://raw.githubusercontent.com/owner/private/main/app.py",
+                {"/owner/private/main/app.py": (404, None), "/owner/private": (404, None)}) is None
+    nested = {"/group/sub/project/-/blob/main/x": (404, None), "/group/sub/project": (200, None)}
+    assert gone("https://gitlab.com/group/sub/project/-/blob/main/x", nested) == 404
+    assert gone("https://gitlab.com/group/sub/project", {"/group/sub/project": (404, None)}) is None
 
 
 def test_never_opens_a_private_address():
@@ -72,12 +99,12 @@ def test_never_opens_a_private_address():
 
 def test_keeps_what_is_missing_in_the_answers_order_with_where_it_came_from():
     async def fake(url):
-        return {"https://example.org/x": 404, "https://example.org/z": "no_host"}.get(url)
+        return {"https://example.org/x": 404, "https://example.org/z": 410}.get(url)
     check = LinkCheck("https://example.org/x https://example.org/y https://example.org/z",
                       retrieved=lambda url: url.endswith("/z"), gone=fake).start()
     assert check.result() == {"checked": 3, "missing": [
         {"url": "https://example.org/x", "status": 404, "retrieved": False},
-        {"url": "https://example.org/z", "status": "no_host", "retrieved": True}]}
+        {"url": "https://example.org/z", "status": 410, "retrieved": True}]}
 
 
 def test_a_slow_link_is_no_finding_and_the_rest_stand(monkeypatch):
@@ -124,6 +151,19 @@ def loop_frames(loop, events):
     while not loop.outgoing.empty():
         frames.append(loop.outgoing.get_nowait())
     return frames
+
+
+def test_never_opens_the_users_own_links(store, monkeypatch):
+    opened = []
+
+    async def fake(url, **kwargs):
+        opened.append(url)
+        return 404
+    monkeypatch.setattr(agent_answer_links, "link_gone", fake)
+    pasted = "https://example.org/unsubscribe?token=abc"
+    loop, events, saved = run(store, Plan(steps=[[compare()]], answer=f"Der Link {pasted} meldet ab."),
+                              conversation=[{"role": "user", "content": f"Was macht {pasted}?"}])
+    assert saved["status"] == "completed" and opened == [] and "links" not in saved["agent_review"]
 
 
 def test_nothing_is_saved_when_every_link_works(store):

@@ -656,29 +656,21 @@ window.linkifyAgentSources = linkifyAgentSources;
 
 // Links of an agent answer that lead nowhere (the review's ``links``,
 // agent_answer_links.py): the app opened each link once after the answer, and
-// the site said there is no such page, or the host does not exist. Struck
-// through, the reason on hover and for screen readers; still a link, so the
-// reader can try it. Attributes only: the answer's nodes stay as the morph
-// left them. A link no longer listed loses its mark.
-const MISSING_LINK_REASONS = {
-  no_host: 'Page not found: the app opened this link after the answer, and its address does not exist.',
-  page: 'Page not found: the app opened this link after the answer, and the site says there is no such page.',
-};
+// the site said there is no such page. Struck through, the reason on hover
+// and for screen readers; still a link, so the reader can try it. Attributes
+// only: the answer's nodes stay as the morph left them. A link no longer
+// listed loses its mark.
+const MISSING_LINK_REASON = 'Page not found: the app opened this link after the answer, and the site says there is no such page.';
 function markMissingAnswerLinks(containerEl, review) {
   if (!containerEl) return;
-  const missing = new Map();
-  for (const item of review?.links?.missing || []) {
-    const url = canonicalAgentSourceUrl(item?.url);
-    if (url) missing.set(url, item.status === 'no_host' ? 'no_host' : 'page');
-  }
+  const missing = new Set((review?.links?.missing || []).map(item => canonicalAgentSourceUrl(item?.url)).filter(Boolean));
   for (const link of containerEl.querySelectorAll('a[href]')) {
-    const reason = link.classList.contains('src-ref') ? null : missing.get(canonicalAgentSourceUrl(link.getAttribute('href')));
-    if (reason) {
+    if (!link.classList.contains('src-ref') && missing.has(canonicalAgentSourceUrl(link.getAttribute('href')))) {
       const label = link.textContent.trim();
       link.classList.add('answer-link-missing');
-      link.title = window.App.t(MISSING_LINK_REASONS[reason]);
+      link.title = window.App.t(MISSING_LINK_REASON);
       link.setAttribute('aria-label', window.App.t('{label}, page not found', { label }));
-      link.dataset.missingLink = reason;
+      link.dataset.missingLink = 'true';
     } else if (link.dataset.missingLink) {
       link.classList.remove('answer-link-missing');
       link.removeAttribute('title');
