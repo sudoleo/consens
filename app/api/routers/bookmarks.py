@@ -320,8 +320,10 @@ _BOOKMARK_LIST_FIELDS = [
 ]
 
 # Pinned chats lead the sidebar list whatever their age, so the first page
-# brings them along instead of leaving an old one on a later page.
-MAX_PINNED_BOOKMARKS = 50
+# brings them along instead of leaving an old one on a later page. Pinning has
+# no cap of its own, so this is the bookmark cap: until 2026-11-07 it was 50,
+# read in document order, and with more pins a fresh one went missing.
+MAX_PINNED_BOOKMARKS = persistence_guard.MAX_BOOKMARKS_PER_USER
 
 
 def _bookmark_meta(bookmark_id, data, summary=None):
@@ -370,7 +372,9 @@ def _bookmark_list_rows(bookmarks_ref, page):
 
 def _pinned_bookmark_rows(bookmarks_ref):
     """The pinned chats, the latest pin first. An equality filter on one
-    field: Firestore's automatic single-field index serves it."""
+    field: Firestore's automatic single-field index serves it. Ordering by
+    ``pinned_at`` would need a composite index, so every pin is read and
+    sorted here; a read costs one document per pin."""
     try:
         docs = list(
             bookmarks_ref.select(_BOOKMARK_LIST_FIELDS)

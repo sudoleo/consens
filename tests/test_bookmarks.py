@@ -1231,6 +1231,24 @@ def test_a_pinned_chat_comes_with_the_first_page_whatever_its_age():
     assert second.json()["pinned"] == []
 
 
+def test_every_pinned_chat_comes_along_the_latest_pin_first_beyond_fifty():
+    """Pinning has no cap below the bookmark cap. Until 2026-11-07 the first
+    page brought 50 pinned chats in document order (no order_by), so with more
+    pins a fresh one could be missing after a reload."""
+    database = FakeChatDatabase()
+    count = 60
+    for index in range(count):
+        # The newest pin has the last document ID: document order put it last.
+        database.documents[("users", "uid-1", "bookmarks", f"b{index:02d}")] = {
+            "query": f"Q{index}", "timestamp": LIST_START - timedelta(minutes=index),
+            "pinned": True, "pinned_at": LIST_START + timedelta(minutes=index),
+        }
+
+    pinned = [row["id"] for row in _list_bookmarks(database, "/bookmarks?limit=2").json()["pinned"]]
+
+    assert pinned == [f"b{index:02d}" for index in reversed(range(count))]
+
+
 def test_a_pin_outlives_later_saves_and_unpinning_returns_the_chat_to_its_date():
     database = FakeChatDatabase()
     _seed_bookmarks(database, {"b1": {"query": "Q1"}, "b2": {"query": "Q2"}})
