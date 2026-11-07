@@ -72,6 +72,7 @@ def review(db, replies, *, clock=lambda: NOW):
 
     def query(model, keys, *, system, prompt, max_tokens, json_schema, effort):
         prompts.append(prompt)
+        assert model == memory_review.MODEL == "openai/gpt-6.1-terra"
         assert json_schema == memory_review.SCHEMA and max_tokens == memory_review.MAX_TOKENS
         assert effort == memory_review.EFFORT == "medium"
         return json.dumps(replies.pop(0)) if replies else '{"changes": []}'
@@ -408,3 +409,32 @@ def test_the_agent_is_told_what_memory_is_for_not_what_to_leave_out():
     use = " ".join(agent_memory.AUDIT_MEMORY_USE_PROMPT.split())
     assert "apply it without saying why" in use and "never build a bridge" in use
     assert "one short clause" in use and "the question and the evidence decide" in use
+
+
+def test_the_review_model_is_in_the_agent_catalog_with_its_effort():
+    """A model the catalog no longer holds would fail every review quietly
+    (retries, then the window is given up)."""
+    from app.services.llm import agent_client
+    metadata = agent_client.agent_model_metadata.snapshot().get(memory_review.MODEL)
+    assert metadata, memory_review.MODEL
+    assert memory_review.EFFORT in metadata["reasoning"]["supported_efforts"]
+    assert metadata["top_provider"]["max_completion_tokens"] >= memory_review.MAX_TOKENS
+
+
+def test_an_openrouter_model_goes_out_with_schema_and_effort(monkeypatch):
+    from app.services.llm import consensus_engine
+    sent = {}
+
+    def call(provider, api_model, model_ref, api_keys, **kwargs):
+        sent.update(provider=provider, api_model=api_model, model_ref=model_ref, **kwargs)
+        return '{"observations": [], "changes": []}'
+
+    monkeypatch.setattr(consensus_engine, "_call_engine_text", call)
+    consensus_engine.query_openrouter_json("openai/gpt-6.1-terra", {}, system="s", prompt="p", max_tokens=10,
+                                           json_schema=memory_review.SCHEMA, effort="medium")
+    assert (sent["provider"], sent["api_model"], sent["model_ref"]) == ("openai", "openai/gpt-6.1-terra",
+                                                                         "gpt-6.1-terra")
+    assert sent["json_mode"] is True and sent["json_schema"] == memory_review.SCHEMA and sent["effort"] == "medium"
+    with pytest.raises(Exception):
+        consensus_engine.query_openrouter_json("terra", {}, system="s", prompt="p", max_tokens=10,
+                                               json_schema={}, effort="medium")

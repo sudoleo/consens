@@ -1,12 +1,11 @@
 """The agent's memory, tidied up once a day.
 
-With "Let Agent update memory" on, the agent alone keeps the memory
-(update_memory) while it works on a message. In practice it hardly does:
-Max's account got one memory in 121 messages (2026-10-20 to 11-06), and
-clear statements about himself were lost, because during a task the task
-has the agent's attention. Anthropic's "components of agent memory"
-(2026-11) describes the answer: a pass outside the conversation that looks
-back over the transcripts and corrects, merges, adds and forgets ("dreaming").
+With "Let Agent update memory" on, the agent keeps the memory (update_memory)
+while it works on a message, but during a task the task has its attention
+and clear statements about the user go unsaved. Anthropic's "components of
+agent memory" describes the answer: a pass outside the conversation that
+looks back over the transcripts and corrects, merges, adds and forgets
+("dreaming").
 
 So a few hours after an opted-in account's last message (IDLE), at most
 about once a day (INTERVAL), one structured call reads the questions of the
@@ -46,7 +45,6 @@ import logging
 import secrets
 from typing import Callable
 
-from app.core import config as cfg
 from app.core.background_tasks import task_succeeded
 from app.core.observability import safe_exception
 from app.services.agent_memory import (
@@ -82,10 +80,12 @@ ANSWER_TAIL_CHARS = 600
 CHATS_CHARS = 60_000
 MAX_CHANGES = MAX_CHANGES_PER_TURN
 MAX_OBSERVATIONS = 30
-# The configured memory model (Luna) with more thought than a judge's "low":
-# one call a day per account. The first real run (2026-11-07, Luna on "low"
-# and the earlier prompt) read 85 messages in 4.6 s and kept one redundant
-# memory, missing the obvious (Max' project, his PhD plan, his town).
+# The memory is only as good as the model that keeps it, and the review runs
+# once a day per account: the agent's own chat model rather than the cheap
+# memory model of Remember/Correct memory. Its OpenRouter ID from the agent
+# catalog (agent_model_catalog.json); the judge registry does not hold it.
+MODEL = "openai/gpt-6.1-terra"
+# A whole day of chats weighed in one call.
 EFFORT = "medium"
 # Output and reasoning together (reasoning counts here for OpenAI models):
 # observations and twelve changes are about 3,000 tokens, the rest is room so
@@ -95,12 +95,10 @@ MAX_TOKENS = 12_000
 SYSTEM = ("You keep the memory a personal AI assistant has of one user. "
           "You return only the JSON object you are asked for.")
 
-# A task procedure, not the agent's constitution: Anthropic's "components of
-# agent memory" found that a weaker model gains much from being told how (read
-# first, then decide), a strong one from being told what for. Luna is the
-# weaker kind; "observations" makes it go through the chats before it decides
-# (never stored or logged). Without "Often little or nothing needs to
-# change", which Luna took literally on a near-empty memory.
+# A task procedure, not the agent's constitution: a model gains from being
+# told how to go through the chats before it decides ("observations" first,
+# never stored or logged). No "little needs to change": a model takes that
+# literally on a near-empty memory and keeps almost nothing.
 PROMPT = """Once a day you look back over the user's chats with the assistant since the last
 time and keep the saved memories up to date, the way a good personal assistant
 thinks back over the day. The saved memories are what the assistant knows about the
@@ -185,11 +183,6 @@ def mark_due(db, uid: str, *, now: datetime | None = None) -> None:
             {"last_turn_at": now, "review_after": now + IDLE}, merge=True)
     except Exception as exc:
         logging.warning("memory review mark failed category=%s", safe_exception(exc))
-
-
-def review_model() -> str:
-    """The configured memory model (Luna, as Remember/Correct memory)."""
-    return str(cfg.get_memory_edit_config().get("memory_edit_model") or "")
 
 
 # --- What the review reads --------------------------------------------------
@@ -512,14 +505,13 @@ class MemoryReview:
     def _query(self, text: str) -> str:
         from app.services.llm.credentials import openrouter_api_key, resolve_developer_api_keys
         keys = self.api_keys if self.api_keys is not None else resolve_developer_api_keys()
-        model = review_model()
-        if not (model and openrouter_api_key(keys)):
-            raise AgentMemoryError("unavailable", "No memory model is configured.")
+        if not openrouter_api_key(keys):
+            raise AgentMemoryError("unavailable", "No OpenRouter key is configured.")
         query_fn = self.query_fn
         if query_fn is None:
-            from app.services.llm.consensus_engine import query_engine_json
-            query_fn = query_engine_json
-        return query_fn(model, keys, system=SYSTEM, prompt=text, max_tokens=MAX_TOKENS, json_schema=SCHEMA,
+            from app.services.llm.consensus_engine import query_openrouter_json
+            query_fn = query_openrouter_json
+        return query_fn(MODEL, keys, system=SYSTEM, prompt=text, max_tokens=MAX_TOKENS, json_schema=SCHEMA,
                         effort=EFFORT)
 
 

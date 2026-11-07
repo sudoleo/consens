@@ -237,15 +237,13 @@ def query_engine_json(
     prompt: str,
     max_tokens: int,
     json_schema: dict | None = None,
-    effort: str | None = None,
 ) -> str:
     """Run one non-streaming structured task through a configured judge engine.
 
     This deliberately shares the exact credential and model-resolution path
     used by Consensus/Differences. Callers remain responsible for parsing and
     validating the returned JSON in addition to OpenRouter's structured-output
-    schema enforcement. ``effort``: the reasoning effort, by default the
-    judges' (the daily memory review asks for more, memory_review.EFFORT).
+    schema enforcement.
     """
     resolved = _resolve_engine(engine_model)
     if resolved is None:
@@ -261,7 +259,37 @@ def query_engine_json(
         max_tokens=max_tokens,
         temperature=0,
         json_mode=True,
-        effort=effort or cfg.judge_reasoning_effort(provider),
+        effort=cfg.judge_reasoning_effort(provider),
+        json_schema=json_schema,
+    )
+
+
+def query_openrouter_json(
+    api_model: str,
+    api_keys: dict,
+    *,
+    system: str,
+    prompt: str,
+    max_tokens: int,
+    json_schema: dict,
+    effort: str,
+) -> str:
+    """One structured task on a model the judge registry does not hold, named
+    by its OpenRouter ID from the agent catalog ("openai/gpt-6.1-terra"):
+    the same transport, credentials and checks as ``query_engine_json``."""
+    provider, _, name = str(api_model or "").partition("/")
+    if not (provider and name):
+        raise _InvalidEngineError(f"Unsupported OpenRouter model: {api_model}")
+    return _call_engine_text(
+        provider,
+        api_model,
+        name,
+        api_keys,
+        system=system,
+        prompt=prompt,
+        max_tokens=max_tokens,
+        json_mode=True,
+        effort=effort,
         json_schema=json_schema,
     )
 

@@ -2315,9 +2315,14 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`agent_memory.user_words`, ein per „Ask about this“ zitierter Absatz steht
   getrennt als Assistententext daneben) bis 1.000 Zeichen und das Ende der
   Antwort (600), zusammen höchstens `CHATS_CHARS` 60.000 (die ältesten fallen
-  zuerst). Ein strukturierter Aufruf (`query_engine_json`, Modell
-  `memory_edit_model` = Luna wie Remember/Correct memory, Reasoning `EFFORT`
-  „medium“ statt des Judge-„low“) bekommt eine Arbeitsanleitung: erst
+  zuerst). Ein strukturierter Aufruf (`consensus_engine.query_openrouter_json`,
+  derselbe Transport wie `query_engine_json`, aber mit einer OpenRouter-ID aus
+  dem Agent-Katalog, die das Judge-Register nicht kennt; Modell `MODEL` =
+  `openai/gpt-6.1-terra`, das Standard-Chatmodell, nicht das günstige
+  Memory-Modell von Remember/Correct memory, weil das Gedächtnis nur so gut
+  ist wie das Modell, das es pflegt, und die Pflege einmal am Tag läuft;
+  Reasoning `EFFORT` „medium“; ein Test hält Modell und Stufe am Katalog fest)
+  bekommt eine Arbeitsanleitung: erst
   `observations` nach Bereichen (wer er ist, Vorhaben mit Datum, wie er
   arbeiten will, wiederkehrende Themen, was geklappt hat), dann der Abgleich
   mit dem Gedächtnis; dazu Datum von heute, Antworten sind Kontext, ein Fakt
@@ -2328,7 +2333,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   „low“, alter Prompt mit „Often little or nothing needs to change“) machte
   aus 85 Nachrichten eine überflüssige Erinnerung; der Trockenlauf mit
   Anleitung und „medium“ schlug 8 vor, darunter Projekt, Promotion samt Ort
-  und Diagramm-Wunsch. `observations` werden nie gespeichert oder geloggt.
+  und Diagramm-Wunsch. Seit 2026-11-08 Terra statt Luna (Max).
+  `observations` werden nie gespeichert oder geloggt.
   `changes()` verwirft unbrauchbare Änderungen
   einzeln (unbekannte ID, zweite Änderung derselben Erinnerung, Secret, zu
   lang) statt den Durchgang, ordnet Löschungen vor Hinzufügungen und hält die
@@ -9688,7 +9694,7 @@ app/services/
   consensus_pipeline.py      Neutraler Fan-out→Synthese→Differences→Score-Vertrag für alle Produkte
   chat_store.py              Firestore-Pfade, Turn-Anlage und -Lesen (Antwortdokumente gespeicherter Consensus-Turns), Idempotenz, Cursor + Allowlists, Loesch-Kaskade
   agent_memory.py            Agent-Memory: Einzel-Erinnerungen (ein Dokument), Opt-in-Fence, update_memory ohne Belegzitat (AuditMemoryChange; seit 2026-10-28 im Audit, seit 2026-10-31 überall, evidence_matches/user_words nur noch für Einstellungen und Links), Secret-Prüfung, Undo-Log, Prompt-Fakten AUDIT_MEMORY_*
-  memory_review.py           Tägliche Gedächtnis-Pflege (seit 2026-11-06): memory_reviews/{uid} fällig per mark_due, Lifespan-Task memory-review, ein Luna-Aufruf über die Chats seit der letzten Pflege, eine Änderung mit source="review", last_review für Settings
+  memory_review.py           Tägliche Gedächtnis-Pflege (seit 2026-11-06): memory_reviews/{uid} fällig per mark_due, Lifespan-Task memory-review, ein Terra-Aufruf (query_openrouter_json) über die Chats seit der letzten Pflege, eine Änderung mit source="review", last_review für Settings
   agent_watch.py             prepare_watch: Watch-Vorschlag am Turn (agent_watch), Prompt-Block AUDIT_PROMPT, Hinweise im Toolergebnis (INSTRUCTIONS); startet nie eine Watch. Im geplanten Lauf WatchRunTools: report_finding (nur mit Beleg aus diesem Lauf) und finish_watch, RUN_PROMPT/RUN_NOTE (seit 2026-11-03)
   agent_watches.py           Watches, die den Agenten laufen lassen (seit 2026-11-03): Limits/Intervalle je Stufe, Zeitplan (next_run, daily/weekly über watch_service), create aus dem gespeicherten Vorschlag, stop, due/claim (verspätet > 2 h = übersprungen, Tagesgrenzen für Server und Konto, ein Intervall, das die Stufe nicht mehr erlaubt, wird beim Lauf angepasst), start_run (routers/agent.start_agent_turn mit watch_run; 409/429/503 = in 10 min noch mal als derselbe Lauf (`retry_of`, zählt nicht, verschiebt nichts), 404 = Chat weg, 403/422 = Watch endet mit `google_data`/`cannot_run`), run_tick (aus watch_scheduler_loop, je Konto ein Lauf, höchstens 3 parallel, liest bis zu 100 fällige, Gleichstand nach längster Wartezeit seit dem letzten Lauf; jedes Laufende weckt den Takt, wartende Läufe sonst nach BLOCKED_RECHECK = 5 min), turn_ended (last_run, Ende beim Ziel, ungelesen, Mail und Telegram über notification_outbox je nach email_enabled/telegram_enabled), pause/resume/seen/set_channels, Anlegen mit eigenem Auftrag auch in einem eigenen Chat (chat_title), unsubscribe_token/stop_emails (Link „Stop emails“), PICTURES (Bild der Watch: beim Anlegen ein Foto des Gegenstands über watch_scheduler.picture_words → consensus_engine.pick_watch_picture_words und picture_search (Brave), sonst die Seiten des Chats; nach Läufen die Seiten, die sie öffneten, über watch_images.find_image; gespeichert unter watch_images/{id}, eigener Thread, höchstens 3 Versuche), Löschen mit Chat/Konto samt Bild
   agent_chat_search.py       search_chats (seit 2026-10-28): frühere Chats des Kontos nach Titel, Startdatum, letzter Frage finden (mit erster Frage) und einen per chat_id mit Fragen und Antworten lesen; nie der aktuelle Chat, nie Chats mit Google-Daten; Ergebnis ist Fremdinhalt
