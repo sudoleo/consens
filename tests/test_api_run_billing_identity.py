@@ -33,7 +33,7 @@ from app.services.usage_repository import (
     UsageRunExpired,
     canonical_request_fingerprint,
 )
-from app.services import agent_budget_config
+from app.services import agent_budget_config, agent_quota
 from test_api_run_repository import FakeDb
 
 
@@ -323,6 +323,66 @@ def test_crash_between_reserve_and_mark_reserved_is_terminalized_once(env, monke
     # Nothing is left for later recovery passes to retry forever.
     assert env.api.list_by_status(("accepted",)) == []
     assert runner.recover_persisted_runs() == 0
+
+
+# --- The admission lapses with its hold, also in the worker queue -----------
+
+
+LEDGER = ("users", UID, "chat_state", "agent_tokens_" + LIMITS.period)
+
+
+def queued_past_its_hold(env):
+    """A reserved run that waited in the worker queue (32 runs, two workers)
+    longer than its admission hold."""
+    run, _ = env.api.create_or_get(**ARGS)
+    runner.reserve_run(run)
+    receipt = ("users", UID, "usage_runs", idempotency_hash(runner.usage_key_for_run(run)))
+    waited = timedelta(seconds=agent_quota.PIPELINE_HOLD_SECONDS + 1)
+    env.db.documents[receipt]["admitted_at"] -= waited
+    for hold in env.db.documents[LEDGER]["pipeline_holds"].values():
+        hold["expires_at"] -= waited.total_seconds()
+    return run, receipt
+
+
+def test_a_run_queued_past_its_hold_does_not_start_on_a_spent_account(env):
+    # Probe 2026-11-07: queued API runs kept their admission after their holds
+    # lapsed, so the account admitted new runs beside them and in the end all
+    # of them booked (used 300000 at a limit of 100000).
+    run, receipt = queued_past_its_hold(env)
+    env.db.documents[LEDGER]["used"] = LIMITS.limit
+
+    runner.execute_persisted_run(run["run_id"])
+
+    failed = env.api.get(run["run_id"])
+    assert failed["status"] == "failed"
+    assert failed["error"]["code"] == "token_budget_exhausted"
+    assert env.executions == []
+    assert env.db.documents[receipt]["status"] == RunStatus.RELEASED.value
+    assert env.db.documents[LEDGER]["used"] == LIMITS.limit
+
+
+def test_a_run_queued_past_its_hold_is_admitted_again_when_the_account_covers_it(env):
+    run, receipt = queued_past_its_hold(env)
+    lapsed_at = env.db.documents[receipt]["admitted_at"]
+
+    runner.execute_persisted_run(run["run_id"])
+
+    assert env.api.get(run["run_id"])["status"] == "succeeded"
+    assert env.executions == [run["run_id"]]
+    stored = env.db.documents[receipt]
+    assert stored["status"] == RunStatus.CONSUMED.value
+    assert stored["admitted_at"] > lapsed_at and stored["quota_day"] == LIMITS.period
+    assert env.db.documents[LEDGER]["pipeline_readmissions"] == 1
+
+
+def test_a_young_queued_run_starts_without_asking_the_account_again(env):
+    run, _ = env.api.create_or_get(**ARGS)
+    runner.reserve_run(run)
+
+    runner.execute_persisted_run(run["run_id"])
+
+    assert env.api.get(run["run_id"])["status"] == "succeeded"
+    assert "pipeline_readmissions" not in env.db.documents[LEDGER]
 
 
 def test_route_terminalizes_an_accepted_run_whose_reservation_expired(env, monkeypatch):

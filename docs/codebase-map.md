@@ -9032,7 +9032,13 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   konsumiert, und nach der Pipeline bucht `OperationBooking("pipeline",
   final=True)` die gemessenen Tokens aller Antworten und Judges, auch bei
   Fehlern. Kein Konto mehr → 429 („daily token allowance does not cover another
-  run"). Fehler vor Providerstart releasen (Hold frei), Fehler nach
+  run"). Hat ein Run länger als seinen Hold (zehn Minuten) in der Queue
+  gewartet, lässt `consume(admission=…)` ihn beim Start erneut gegen das Konto
+  zu (wie `authorize_operation`, gemeinsamer `_readmit`); deckt das Konto ihn
+  nicht mehr, endet er ohne Providerarbeit als `failed` mit
+  `error.code=token_budget_exhausted` und gibt seine Reservierung frei. Vorher
+  (bis 2026-11-07) buchten wartende Runs nach Ablauf ihrer Holds alle, während
+  das Konto daneben neue Runs zuließ. Fehler vor Providerstart releasen (Hold frei), Fehler nach
   Providerstart bleiben konsumiert. Watches, Topics und die
   Legacy-Publisher-Watches behalten ihre eigenen globalen Budgets.
   Provider- und Engine-Aufrufe liegen immer außerhalb aller Transaktionen.
@@ -9916,7 +9922,9 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
     seinem Hold abgelaufen ist (`admitted_at` + zehn Minuten, ältere Belege ab
     `created_at`), lesen zusätzlich das Kontodokument und werden dort
     (erneut) admittiert. `/prepare` und die externe Consensus-API behalten
-    ihren Reserve-/Consume-Vertrag.
+    ihren Reserve-/Consume-Vertrag; die API übergibt `consume` dabei ihre
+    Admission, damit ein Run, dessen Hold in der Queue abgelaufen ist, vor dem
+    Start erneut zugelassen wird.
   - `chat_state/agent_tokens_{YYYY-MM-DD}[_{reset_epoch}]_eur` — das gemeinsame
     Tageskonto in Mikro-Euro (Agent + Pipeline; ohne `_eur` die Token-Ledger
     bis 2026-10-31): `used` (gemessen, beide Modi), `reserved`

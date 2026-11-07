@@ -314,6 +314,37 @@ def test_a_run_cannot_bank_its_admission_beyond_its_hold(usage_repo):
         repo.claim_operation("banker", "banked", "ask:openai", op_fp, now=later)
 
 
+def test_consume_with_an_admission_admits_a_lapsed_run_again(usage_repo):
+    # The Consensus API consumes when a queued run's worker starts, which can
+    # be after its hold (probe 2026-11-07: used 300000 at a limit of 100000).
+    repo, db = usage_repo
+    for key in ("young", "spent", "funded"):
+        repo.reserve("queue", key, RunKind.REGULAR, ADMISSION, now=UTC_NOON)
+    key = ("users", "queue", "chat_state", "agent_tokens_" + PERIOD)
+    db.reads.clear()
+    assert repo.consume("queue", "young", admission=ADMISSION, now=UTC_NOON).status is RunStatus.CONSUMED
+    assert key not in db.reads
+
+    later = UTC_NOON + timedelta(seconds=agent_quota.PIPELINE_HOLD_SECONDS + 1)
+    db.documents[key] = {**db.documents[key], "used": ADMISSION.limit - ADMISSION.estimate + 1}
+    with pytest.raises(UsageLimitExceeded):
+        repo.consume("queue", "spent", admission=ADMISSION, now=later)
+    assert repo.get_run("queue", "spent", now=later).status is RunStatus.RESERVED
+
+    db.documents[key] = {**db.documents[key], "used": 0}
+    result = repo.consume("queue", "funded", admission=ADMISSION, now=later)
+    stored = ledger(db, "queue")
+    assert result.status is RunStatus.CONSUMED
+    assert stored["pipeline_readmissions"] == 1
+    assert agent_quota.held_amount(stored, later.timestamp()) == ADMISSION.estimate
+    run = db.documents[("users", "queue", "usage_runs", result.idempotency_hash)]
+    assert run["admitted_at"] == later and run["consumed_at"] == later and run["quota_day"] == PERIOD
+    # Without an admission (/prepare) consume stays the bare transition.
+    repo.reserve("queue", "prepared", RunKind.REGULAR, ADMISSION, now=UTC_NOON)
+    assert repo.consume("queue", "prepared", now=later).status is RunStatus.CONSUMED
+    assert ledger(db, "queue")["pipeline_readmissions"] == 1
+
+
 def test_booking_requires_a_consumed_run(usage_repo):
     repo, _ = usage_repo
     with pytest.raises(UsageRunNotFound):

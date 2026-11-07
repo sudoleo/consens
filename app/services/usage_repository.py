@@ -205,7 +205,10 @@ class UsageRepository(Protocol):
         now: datetime | None = None,
     ) -> UsageRunResult: ...
 
-    def consume(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
+    def consume(
+        self, uid: str, idempotency_key: str, *, admission: TokenAdmission | None = None,
+        now: datetime | None = None,
+    ) -> UsageRunResult: ...
 
     def release(self, uid: str, idempotency_key: str) -> UsageRunResult: ...
 
@@ -266,6 +269,14 @@ class FirestoreUsageRepository:
         except agent_quota.PipelineCapacityExceeded as exc:
             raise UsageCapacityExceeded(str(exc)) from None
         return ledger_ref, admitted
+
+    def _readmit(self, tx, uid, key_hash, kind, admission, now):
+        """Admit a run whose admission lapsed (``_admission_lapsed``) again:
+        the account write and the run's new admission fields. The new hold
+        lives in today's period; the run books there."""
+        ledger_ref, admitted = self._admit(tx, uid, key_hash, kind, admission, now, readmission=True)
+        fields = {"admitted_at": now, "quota_day": admission.period, "token_tier": admission.tier}
+        return ledger_ref, admitted, fields
 
     def _new_run(self, kind, admission, request_fingerprint, now, planned_operations=None):
         run = {
@@ -361,9 +372,9 @@ class FirestoreUsageRepository:
                 claimed_at = _stored_datetime(existing.get("claimed_at"), "claim time")
             else:
                 claimed_at = now
-            readmitted = run_snap.exists and existing is None and _admission_lapsed(run_data, now)
-            if readmitted:
-                ledger_ref, admitted = self._admit(tx, uid, key_hash, kind, admission, now, readmission=True)
+            readmitted = None
+            if run_snap.exists and existing is None and _admission_lapsed(run_data, now):
+                ledger_ref, admitted, readmitted = self._readmit(tx, uid, key_hash, kind, admission, now)
 
             # All reads and validations precede every write, as Firestore requires.
             if admitted is not None:
@@ -379,9 +390,7 @@ class FirestoreUsageRepository:
                     "operation_claims": updated_claims, "updated_at": now,
                 }
                 if readmitted:
-                    # The new hold lives in today's period; the run books there.
-                    updates.update({"admitted_at": now, "quota_day": admission.period,
-                                    "token_tier": admission.tier})
+                    updates.update(readmitted)
                 if status is not RunStatus.CONSUMED:
                     updates["consumed_at"] = now
                 if run_snap.exists:
@@ -655,8 +664,20 @@ class FirestoreUsageRepository:
 
         return self._transaction(uid, claim)
 
-    def consume(self, uid: str, idempotency_key: str) -> UsageRunResult:
-        return self._finish(uid, idempotency_key, RunStatus.CONSUMED)
+    def consume(
+        self, uid: str, idempotency_key: str, *, admission: TokenAdmission | None = None,
+        now: datetime | None = None,
+    ) -> UsageRunResult:
+        """Turn a reserved run into a consumed one, right before its paid work.
+
+        With ``admission``, a run whose admission lapsed with its hold
+        (``_admission_lapsed``) is admitted against the account again, as in
+        ``authorize_operation`` (``UsageLimitExceeded`` leaves it reserved):
+        the Consensus API consumes when a queued run's worker starts, which
+        can be long after its hold. ``/prepare`` consumes right after its
+        reserve; its operations pass ``authorize_operation`` anyway.
+        """
+        return self._finish(uid, idempotency_key, RunStatus.CONSUMED, admission=admission, now=now)
 
     def release(self, uid: str, idempotency_key: str) -> UsageRunResult:
         return self._finish(uid, idempotency_key, RunStatus.RELEASED)
@@ -685,11 +706,13 @@ class FirestoreUsageRepository:
         )
 
     def _finish(
-        self, uid: str, idempotency_key: str, target: RunStatus
+        self, uid: str, idempotency_key: str, target: RunStatus, *,
+        admission: TokenAdmission | None = None, now: datetime | None = None,
     ) -> UsageRunResult:
         uid = _validate_uid(uid)
         key_hash = _idempotency_hash(idempotency_key)
         run_ref = self._run_ref(uid, key_hash)
+        now = _as_utc(now)
 
         def operation(tx):
             persistence_guard.ensure_account_write_allowed(
@@ -716,18 +739,19 @@ class FirestoreUsageRepository:
                     f"Cannot transition usage run from {status.value} to {target.value}"
                 )
 
-            updated_at = datetime.now(timezone.utc)
+            updates = {"status": target.value, "updated_at": now, f"{target.value}_at": now}
+            account = None
             if ledger_ref is not None:
                 # Released before any provider work: its admission hold goes.
-                tx.set(ledger_ref, agent_quota.release_run(ledger, key_hash, now=updated_at.timestamp()))
-            tx.update(
-                run_ref,
-                {
-                    "status": target.value,
-                    "updated_at": updated_at,
-                    f"{target.value}_at": updated_at,
-                },
-            )
+                account = (ledger_ref, agent_quota.release_run(ledger, key_hash, now=now.timestamp()))
+            if target is RunStatus.CONSUMED and admission is not None and _admission_lapsed(run_data, now):
+                ledger_ref, admitted, readmitted = self._readmit(tx, uid, key_hash, kind, admission, now)
+                account = (ledger_ref, admitted)
+                updates.update(readmitted)
+            # All reads and validations precede every write, as Firestore requires.
+            if account is not None:
+                tx.set(*account)
+            tx.update(run_ref, updates)
             return UsageRunResult(uid=uid, idempotency_hash=key_hash, kind=kind, status=target,
                                   utc_date=utc_date, token_budget=None, idempotent=False)
 

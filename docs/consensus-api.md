@@ -122,6 +122,12 @@ mit `error.code = "reservation_expired"`; ein noch reservierter Slot wird
 freigegeben. Bereits belastete Runs dürfen nach dem UTC-Tageswechsel zu Ende
 laufen, ohne ein zweites Mal gezählt zu werden.
 
+Die Zulassung beim Annehmen gilt zehn Minuten. Wartet ein Run länger auf
+einen freien Worker, prüft der Server das Tageskonto vor dem Start erneut;
+reicht es nicht mehr, endet der Run ohne Providerarbeit als `failed` mit
+`error.code = "token_budget_exhausted"`, und seine Reservierung wird
+freigegeben.
+
 ## Erfolgreichen Run publizieren
 
 ```http

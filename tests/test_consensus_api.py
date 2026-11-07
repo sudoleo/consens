@@ -477,7 +477,8 @@ def test_runner_claim_prevents_duplicate_usage_and_provider_start(monkeypatch):
         def __init__(self):
             self.consumed = 0
 
-        def consume(self, uid, key):
+        def consume(self, uid, key, *, admission):
+            assert admission == "admission"
             self.consumed += 1
 
     run_repo = ClaimRepo()
@@ -485,6 +486,7 @@ def test_runner_claim_prevents_duplicate_usage_and_provider_start(monkeypatch):
     provider_starts = []
     monkeypatch.setattr(api_consensus_runner, "api_run_repository", run_repo)
     monkeypatch.setattr(api_consensus_runner, "usage_repository", usage_repo)
+    monkeypatch.setattr(api_consensus_runner, "token_admission_for_run", lambda run: "admission")
     monkeypatch.setattr(
         api_consensus_runner,
         "api_account_cleanup",

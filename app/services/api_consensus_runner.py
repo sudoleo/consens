@@ -45,6 +45,7 @@ from app.services.usage_repository import (
     RunKind,
     RunStatus,
     TokenAdmission,
+    UsageLimitExceeded,
     UsageRunConflict,
     UsageRunExpired,
     UsageRunNotFound,
@@ -404,7 +405,21 @@ def execute_persisted_run(run_id: str) -> None:
             return
         # Usage is consumed once, immediately before any provider can start.
         # The usage transaction is separate from the API-run claim transaction.
-        usage_repository.consume(run["uid"], usage_key_for_run(run))
+        # A run that waited in the queue longer than its hold is admitted
+        # against the account again, as every app operation is.
+        try:
+            usage_repository.consume(run["uid"], usage_key_for_run(run),
+                                     admission=token_admission_for_run(run))
+        except UsageLimitExceeded:
+            release_run_reservation(run)
+            api_run_repository.fail(
+                run_id,
+                code="token_budget_exhausted",
+                message=("The daily token allowance no longer covered this run when it was "
+                         "due to start (resets at 00:00 UTC). Start a new run with a new "
+                         "Idempotency-Key."),
+            )
+            return
         usage_consumed = True
         # Every answer and judge call is measured in the transport and booked
         # once on the account, also when the pipeline fails half-way.
