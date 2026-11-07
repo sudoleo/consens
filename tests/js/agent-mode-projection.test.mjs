@@ -27,8 +27,8 @@ const BODY = `
 
 // An account with Agent access in a new chat whose composer is not Agent's
 // (isSelected false): the tests read the shared controls.
-function boot({ mode = "agent" } = {}) {
-  return loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/agent-mode.js"], {
+function boot({ mode = "agent", files = [] } = {}) {
+  return loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/agent-mode.js", ...files], {
     body: BODY,
     before(window) {
       window.App = {
@@ -341,6 +341,24 @@ describe("agent mode panel projection", () => {
     expect(document.body.classList.contains("agent-mode-enabled")).toBe(false);
     document.body.classList.remove("direct-comparison-active");
     document.getElementById("consensusOutput").classList.remove("is-visible");
+    window.updateAgentModeUI();
+    expect(document.body.classList.contains("agent-mode-enabled")).toBe(false);
+    dom.window.close();
+  });
+
+  it("keeps a saved Consensus answer behind its footer from the moment it is revealed", () => {
+    // firebase.js reveals the answer and draws the view right after. Until
+    // 2026-11-07 the answer counted as shown only two frames later, so the
+    // first open of an old chat drew Compare's view for that moment, about
+    // 20 px of blank space until the next redraw.
+    const { window, document, dom } = boot({ mode: "compare", files: ["static/js/consensus-footer.js"] });
+    document.body.insertAdjacentHTML("beforeend", '<div id="consensusOutput" class="consensus-output is-hidden"></div>');
+    // Frames as in a browser: they come later, not inside the call.
+    window.requestAnimationFrame = () => 1;
+    window.revealConsensusOutput();
+    window.updateAgentModeUI();
+    expect(document.body.classList.contains("agent-mode-enabled")).toBe(true);
+    window.hideConsensusOutput();
     window.updateAgentModeUI();
     expect(document.body.classList.contains("agent-mode-enabled")).toBe(false);
     dom.window.close();

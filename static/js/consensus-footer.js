@@ -27,12 +27,14 @@
       revealTimer = null;
     }
     output.classList.remove("is-hidden");
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        // No scroll here: chat-scroll.js owns all jumps.
-        output.classList.add("is-visible");
-      });
-    });
+    // The fade's start committed by one style read, then the class that ends
+    // it: shown at once, no frame to wait for. Until 2026-11-07 two frames
+    // came between, and updateAgentModeUI, called right after (firebase.js),
+    // found no is-visible: the first open of an old chat drew Compare's view
+    // for a moment, about 20 px of blank space.
+    void window.getComputedStyle(output).opacity;
+    // No scroll here: chat-scroll.js owns all jumps.
+    output.classList.add("is-visible");
   }
 
   function hideConsensusOutput() {

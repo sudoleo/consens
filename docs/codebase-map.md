@@ -2827,7 +2827,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   und `consensus-lifecycle.js`) — was eine **gespeicherte Consensus-Antwort**
   (Chats von vor dem 25.10.2026) auf dem Schirm braucht: `window.revealConsensusOutput`
   / `window.hideConsensusOutput` (Klassen `is-hidden`/`is-visible` an
-  `#consensusOutput`) und `window.App.consensusFooter.{render, clear}` fuer den
+  `#consensusOutput`; `is-visible` setzt der Reveal seit 2026-11-07 sofort,
+  nach einem Style-Read für das Einblenden statt zwei Frames später, weil
+  `updateAgentModeUI` direkt danach daran „gespeicherte Antwort auf dem
+  Schirm“ abliest) und `window.App.consensusFooter.{render, clear}` fuer den
   **Provenance-Fuss** `#runProvenance` unter der Antwort. Der gefuehrte Lauf
   `#consensusRun` (Stepper, Modellzeilen, Skip, Uhr), die Lauf-Fakten
   (`#runProvenanceFacts`) und „Run again“ (`#runReplayButton`,
