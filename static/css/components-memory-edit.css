@@ -24,8 +24,8 @@
 .memory-selection-action[hidden],
 .memory-selection-divider[hidden] { display: none; }
 
-/* 44px to the finger (Apple-Audit F5): on touch the menu comes from a
-   finger's selection (memory-edit.js, F7); the bar keeps its drawing. */
+/* 44px to the finger: on touch the menu comes from a
+   finger's selection (memory-edit.js); the bar keeps its drawing. */
 @media (pointer: coarse) {
   .memory-selection-action { position: relative; }
   .memory-selection-action::after { content: ""; position: absolute; inset: var(--hit-slop); }

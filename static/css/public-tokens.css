@@ -99,7 +99,7 @@
   --hairline-soft: var(--line-soft);
 
   --maxw: 1120px;
-  /* One page grid for every public page (Apple-Audit I14): the same left
+  /* One page grid for every public page: the same left
      edge and gutter on the landing page, the legal pages, /questions and
      the Watch and Topic pages. 16 px gutter on phones. */
   --page-gutter: 20px;
@@ -188,7 +188,7 @@
 
 /* The one focus ring of the app (foundation.css), on the public pages too:
    2px of the second ink with 2px of air; a text link rounds its corners
-   instead of getting a square box (Apple audit E4). */
+   instead of getting a square box. */
 :where(a, button, input, textarea, select, summary, [tabindex]):focus-visible {
   outline: var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
@@ -200,7 +200,7 @@
 
 /* A net under every public page: nothing that reaches past the edge (a long
    token, a light, a mark) may let the page pan sideways on a 320 px phone
-   (Apple-Audit I4). clip, not hidden: no scroll container, sticky bars stay. */
+   clip, not hidden: no scroll container, sticky bars stay. */
 body { overflow-x: clip; }
 
 :where(.site-nav, .lp-nav) a[aria-current="page"]:not(.nav-cta):not(.lp-nav-cta) {

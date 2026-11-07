@@ -371,10 +371,7 @@
 
 /* Dieselbe Sprache wie die Bookmark-Liste in der Sidebar: flache Zeile,
    transparent im Ruhezustand, Hover und Auswahl sind ein Tint — kein Rahmen,
-   keine Fuellung, kein Schatten. Die Reiter stehen deshalb auch in der
-   Ausschlussliste des globalen `button`-Selektors (components-input.css);
-   ohne das bekamen sie dessen gefuellte Flaeche und 10/16-Polsterung und
-   sahen aus wie sechs Aktionsknoepfe statt wie eine Navigation. */
+   keine Fuellung, kein Schatten. */
 .settings-nav-item {
   flex: 0 0 auto;
   min-height: 44px;
@@ -691,7 +688,7 @@ body:not(.viewer-has-workspace) .settings-group.workspace-only + .settings-group
 }
 
 /* A guest's line under the header: why controls are greyed out and the
-   way in (Apple-Audit H13). */
+   way in. */
 .settings-guest-note {
   display: flex;
   flex-shrink: 0;
@@ -714,7 +711,7 @@ body:not(.viewer-has-workspace) .settings-group.workspace-only + .settings-group
 }
 
 /* With the keyboard up the settings end at it, like every layer with fields
-   (overlays.css, Apple-Audit F8); the panel scrolls inside. */
+   (overlays.css); the panel scrolls inside. */
 @media (max-width: 1099px) {
   body.keyboard-open #systemPromptModal { height: var(--keyboard-height, 100dvh); }
   body.keyboard-open .settings-modal-content { margin-top: 0; }
@@ -884,8 +881,8 @@ body:not(.viewer-has-workspace) .settings-group.workspace-only + .settings-group
 }
 
 /* --------------------------------------------------------------------------
-   Memory-Panel. Bewusst ohne Sonderbehandlung: seit die Kategorien Reiter sind,
-   ist Prominenz eine Frage der Position (erster Reiter), nicht der Gestaltung.
+   Memory-Panel. Bewusst ohne Sonderbehandlung: die Kategorien sind Reiter,
+   Prominenz ist eine Frage der Position, nicht der Gestaltung.
    -------------------------------------------------------------------------- */
 .settings-memory-fields {
   display: grid;
@@ -1208,7 +1205,7 @@ body:not(.viewer-has-workspace) .settings-group.workspace-only + .settings-group
   font-weight: var(--font-weight-bold);
 }
 
-/* The key's verdict (app-init.js showKeyVerdict, Apple-Audit H12): a drawn
+/* The key's verdict (app-init.js showKeyVerdict): a drawn
    check or cross in the traffic-light colour of the answer marks. */
 .feedback svg {
   width: 0.9em;
@@ -1470,7 +1467,7 @@ body:not(.viewer-has-workspace) .settings-group.workspace-only + .settings-group
 .pro-beta-panel > p { margin: 0; color: var(--sidebar-text-muted); font-size: var(--font-size-sm); line-height: var(--line-height-reading); }
 .pro-beta-panel > p + p { margin-top: 11px; }
 /* Die Kontaktadresse muss als Link erkennbar sein; der Panel-/FAQ-Text ist
-   gedimmt und base.css setzt global "text-decoration: none !important". */
+   gedimmt und base.css nimmt Links global die Linie (text-decoration: none). */
 .pro-beta-panel a,
 .faq-item p a {
   color: var(--text-color);
@@ -1650,7 +1647,7 @@ dialog#shareModal[open] { display: flex; }
 
 /* Share is a sheet anchored at its top edge: every step (confirm, link,
    list) starts there and grows or shrinks downward instead of being
-   re-centred with every height (Apple-Audit J2). */
+   re-centred with every height. */
 @media (min-width: 601px) {
   #shareModal {
     --share-dialog-top: clamp(16px, 9vh, 88px);
@@ -1670,7 +1667,7 @@ dialog#shareModal[open] { display: flex; }
   }
   #shareModalBody { padding: 16px; scroll-padding-block: 16px 96px; }
   .share-modal-content h2 { padding: 17px 48px 14px 16px; }
-  /* With the keyboard up the sheet ends at the keyboard (F8: overlays.css,
+  /* With the keyboard up the sheet ends at the keyboard (overlays.css,
      composer-keyboard.js). */
   body.keyboard-open #shareModal { height: var(--keyboard-height, 100dvh); }
 }

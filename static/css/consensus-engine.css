@@ -49,9 +49,8 @@
   min-width: 0;
 }
 
-/* The mock used to drift up and down on a 7s loop. The frameless shell gives
-   it a real shadow instead, which says "this floats" without moving — and
-   the keyframes it referenced went with the glass. */
+/* The mock stands still: its shadow (landing.css .lp-window) says "this
+   floats" without moving. */
 .ce-engine-result .lp-window {
   animation: none;
 }
@@ -168,7 +167,7 @@
 }
 
 /* Branch connectors: the entry fans out into the two lanes, the lanes merge
-   back into the output. Blue for the consensus lane, amber for differences. */
+   back into the output. Ink for the consensus lane, amber for differences. */
 .ce-flow-entry::before,
 .ce-flow-entry::after,
 .ce-flow-output::before,
@@ -392,7 +391,7 @@
   color: color-mix(in srgb, var(--accent-tertiary) 12%, transparent);
 }
 
-/* Gentle lift on hover, matching the landing's lp-card behaviour. */
+/* Hover fades in a tone (below), no lift. */
 .ce-step,
 .ce-diff-stage,
 .ce-faq-list article {
@@ -536,7 +535,7 @@
   text-align: left;
 }
 
-/* Glass panel around the rendered differences entry */
+/* Tonal panel around the rendered differences entry */
 .ce-render-diff {
   padding: 18px 22px 10px;
   border: 0;
@@ -568,7 +567,7 @@
   flex-wrap: wrap;
 }
 
-/* Single column since the inline-confidence redesign: one answer with the
+/* Single column: one answer with the
    marks in it, the differences collapsed underneath — no side column. */
 .ce-result-grid {
   display: grid;
@@ -600,8 +599,8 @@
   color: var(--ink-2);
 }
 
-/* The differences panel sits inside the answer panel now; it brings its own
-   separator, so it needs neither the glass frame nor extra side padding. */
+/* The differences panel sits inside the answer panel; it brings its own
+   separator, so it needs neither a frame nor extra side padding. */
 .ce-answer .consensus-differences {
   margin-top: 18px;
   padding: 4px 0 0;

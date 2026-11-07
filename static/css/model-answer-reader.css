@@ -85,8 +85,7 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
   z-index: calc(var(--z-modal) - 2);
 }
 /* An Agent answer's notes or sources: a sheet as large as its content, at
-   most 720px wide and 80% of the window high, centred (UX audit D6; before,
-   three sources stood at the top of a 1120 x 850 dialog). Its title is the
+   most 720px wide and 80% of the window high, centred. Its title is the
    question, two lines at most. */
 @media (min-width: 1100px) {
   .answer-reader-dialog.is-compact { inset: 0; margin: auto; width: min(720px, calc(100vw - 48px)); height: fit-content; max-height: 80dvh; }
@@ -102,8 +101,8 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-heading > span { color: var(--ink-2); font-size: var(--font-size-xs); }
 .answer-reader-actions { display: flex; gap: 4px; flex-shrink: 0; }
 .model-answer-reader .answer-reader-icon-button { width: 36px; height: 36px; padding: 8px; color: var(--ink-2); }
-/* The reader closes with the app's one cross (foundation.css .close-button,
-   UX audit J1); the reader's own button rules do not redraw it. A finger
+/* The reader closes with the app's one cross (foundation.css .close-button);
+   the reader's own button rules do not redraw it. A finger
    gets the whole 44px box. */
 .model-answer-reader .close-button { width: 32px; height: 32px; padding: 0; border: 0; border-radius: var(--radius-pill); color: var(--ink-3); }
 @media (pointer: coarse) { .model-answer-reader .close-button { width: 44px; height: 44px; } }
@@ -142,8 +141,7 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-mobile-tabs button[aria-pressed="true"] { background: var(--well); color: var(--ink); box-shadow: 0 1px 3px var(--line-soft); }
 .answer-reader-scroll { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; scrollbar-width: thin; scrollbar-color: var(--line) transparent; padding: 0 6px 32px 0; flex: 1; border-top: 1px solid var(--line-soft); }
 /* Notes and sources do not stream: no gutter kept for a scrollbar they may
-   never need, so their right edge is the tabs' edge, as wide as the left
-   (UX audit D10). */
+   never need, so their right edge is the tabs' edge, as wide as the left. */
 .model-answer-reader.is-inspecting .answer-reader-scroll { scrollbar-gutter: auto; padding-right: 0; }
 .is-direct .answer-reader-scroll { overflow: visible; }
 .answer-reader-columns { max-width: 720px; margin: 0 auto; }
@@ -177,7 +175,7 @@ body.answer-reader-ready:not(.is-hero) .response-section > .response-box {
 .answer-reader-body img { max-width: 100%; height: auto; }
 .answer-reader-body .katex-display { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
 .answer-reader-body table { max-width: 100%; }
-/* A Compare answer reads like an Agent answer (UX audit B12): the answer's
+/* A Compare answer reads like an Agent answer: the answer's
    size and rhythm (shell.css .consensus-answer-body, 17px/1.7, headings in
    em), and the same row under it (directFooter, agent-chat.css). */
 .model-answer-reader.is-direct .answer-reader-body { font-size: var(--font-size-read); line-height: 1.7; letter-spacing: var(--tracking-normal); }
@@ -298,7 +296,7 @@ body.answer-reader-modal { overflow: hidden; }
 .answer-reader-inspector .consensus-source-body { min-width: 0; flex: 1; }
 .answer-reader-inspector .consensus-source-title { font-size: var(--font-size-sm); font-weight: 500; line-height: 1.6; overflow-wrap: anywhere; }
 .answer-reader-inspector .consensus-source-host { display: block; font-size: var(--font-size-xs); color: var(--ink-2); margin-top: 5px; }
-/* 44px to the finger (Apple-Audit F5): a one-line title reaches over the
+/* 44px to the finger: a one-line title reaches over the
    domain under it; the excerpt toggle below keeps its own row. */
 @media (pointer: coarse) {
   .answer-reader-inspector a.consensus-source-title { position: relative; }
@@ -342,7 +340,7 @@ body.answer-reader-modal { overflow: hidden; }
 @media (hover: hover) and (pointer: fine) {
   .model-answer-reader li.answer-reader-source-card a:hover { text-decoration: underline !important; text-underline-offset: 3px; }
 }
-/* No number beside the arrow (UX audit D12): a short list without order. */
+/* No number beside the arrow: a short list without order. */
 .model-answer-reader li.answer-reader-source-card .consensus-source-index { display: none; }
 .answer-reader-source-out { position: absolute; right: 19px; top: 38px; color: var(--ink-2); font-size: var(--font-size-base); }
 .answer-reader-source-excerpt { border-top: 1px solid var(--line-soft); padding-top: 10px; margin-top: 14px; }
@@ -442,7 +440,7 @@ body.answer-reader-modal { overflow: hidden; }
   background: transparent;
 }
 /* The arrow on the title's first line (the title leads here), 16px from
-   the edge (UX audit D12). */
+   the edge. */
 .answer-reader-dialog .answer-reader-source-out { top: 10px; right: 16px; line-height: 21px; }
 
 /* Sources and differences use the same quiet document surface as Answers. */
@@ -575,9 +573,9 @@ body.comparison-layout-changing .input-section { transition: none; }
   .answer-preview-lines { display: none; }
 }
 
-/* Detail panel, calm (2026-10-01): 4/8/12/16px steps, hairlines between
-   findings instead of boxes. The findings' type follows the chat since
-   2026-10-21 (Differences block below). */
+/* Detail panel, calm: 4/8/12/16px steps, hairlines between
+   findings instead of boxes. The findings' type follows the chat
+   (Differences block below). */
 .answer-reader-heading > span:empty { display: none; }
 .answer-reader-dialog .answer-reader-context {
   display: flex;
@@ -618,7 +616,7 @@ body.comparison-layout-changing .input-section { transition: none; }
   transition: background-color var(--dur-state) var(--ease-standard), border-radius var(--dur-state) var(--ease-standard);
 }
 /* The finding being read lies on a soft tone, rounded, like a selected row
-   on Apple's platforms (Max 2026-10-23: the eye should see at once which one
+   on Apple's platforms (the eye should see at once which one
    is open). Its text keeps the column's edge; the hairlines around it give
    way to the surface. No colour of its own: the mark of its sentence says
    how serious it is. */
@@ -631,8 +629,8 @@ body.comparison-layout-changing .input-section { transition: none; }
   border-bottom-color: transparent;
 }
 /* That surface reaches past the text's edge, and the scroll box clips at its
-   own edge, which is the text's: the open card was cut off on the left (Max
-   2026-10-23). With findings in it the box takes the room from the reader's
+   own edge, which is the text's: the open card was cut off on the left.
+   With findings in it the box takes the room from the reader's
    side padding (24px); the text stays where it is. */
 .answer-reader-scroll:has(.answer-reader-inspector .diff-card) {
   margin-inline: -14px;
@@ -649,8 +647,7 @@ body.comparison-layout-changing .input-section { transition: none; }
 @media (forced-colors: active) {
   .answer-reader-inspector .diff-card[open] { border: 1px solid CanvasText; }
 }
-/* Differences, the chat's type (2026-10-21). The tab had five text sizes,
-   three greys and red lines around "vs". It now continues the chat: three
+/* Differences, the chat's type: three
    steps only. The finding's topic is the title (17px semibold),
    each side's claim reads at the answer's size (17px regular), and everything
    else - status, severity word, who says it, "In the answer", the quote and
@@ -719,7 +716,7 @@ body.comparison-layout-changing .input-section { transition: none; }
 }
 .answer-reader-inspector .diff-card[open] > .diff-card-summary { padding-bottom: 12px; }
 .answer-reader-inspector .diff-card-body { padding: 0 0 20px; border: 0; background: transparent; }
-/* Air groups the sides (Max 2026-10-23: "zu eng"): a side's claim, who says
+/* Air groups the sides: a side's claim, who says
    it and its lead stay close, the next side starts well apart. */
 .answer-reader-inspector .diff-sides { gap: 24px; padding-top: 0; }
 .answer-reader-inspector .diff-position { gap: 4px; margin: 0; padding: 0; border: 0; }

@@ -10,7 +10,7 @@
    Loaded last on every page that has such a select, after the component CSS.
    ========================================================================== */
 
-/* The one chevron (Apple-Audit G11), as a background image because a select
+/* The one chevron, as a background image because a select
    cannot carry a masked child: the same path as --chevron-mask, painted in
    --ink-3 of each theme. */
 :root {

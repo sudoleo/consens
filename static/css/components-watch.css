@@ -5,16 +5,14 @@
    only colours are the shared traffic light: green = found or reached,
    rose = needs you. The page's shell, head, panels and buttons use the
    `wd-` prefix, its cards and rows `aw-`, the field `wc-` (watch-composer.js),
-   the pill's sheet `watch-sheet`. Redrawn 2026-11-04 (the redesign Max
-   signed off): one field instead of two buttons, findings first, a pulse
-   per Watch, a panel instead of the "…" menu.
+   the pill's sheet `watch-sheet`.
    ========================================================================== */
 
 /* --- View switch: Chat | Watches, fixed top centre. One thumb slides under
        the active option, so the control reads as one object rather than two
        buttons. It stands in the same place in both views (layout.css), and
-       while the content behind it fades through, it stays (Apple-Audit J4,
-       C6). Clicks and the active state: watch.js setViewSwitchState. --- */
+       while the content behind it fades through, it stays. Clicks and the
+       active state: watch.js setViewSwitchState. --- */
 .view-switch {
   position: fixed;
   top: 14px;
@@ -28,7 +26,7 @@
   border: 0;
   border-radius: 999px;
   background: var(--raise);
-  /* Frameless: the track's tone alone carries the shape (Max, 2026-10-08). */
+  /* Frameless: the track's tone alone carries the shape. */
   box-shadow: none;
   z-index: var(--z-header);
   isolation: isolate;
@@ -36,9 +34,8 @@
 }
 .view-switch[hidden] { display: none; }
 /* Chat and Watches both start beside the sidebar, so the switch over them
-   stands in one place in both views (Apple-Audit J4). Opening or closing the
-   sidebar moves it with the column, with the same duration and curve; it
-   used to jump 130 px in one frame (Apple-Audit C3). */
+   stands in one place in both views. Opening or closing the
+   sidebar moves it with the column, with the same duration and curve. */
 @media (min-width: 1100px) {
   .view-switch {
     left: calc(50vw + var(--app-sidebar-offset) / 2);
@@ -67,8 +64,7 @@
   justify-content: center;
   gap: 7px;
   /* Both halves are the same width, and the chosen one is told by the thumb
-     and the ink alone: a bolder label grew 2 px and moved its icon
-     (Apple-Audit C9). */
+     and the ink alone: a bolder label grew 2 px and moved its icon. */
   min-width: 118px;
   height: 32px;
   border: 0;
@@ -122,8 +118,8 @@
 }
 #mobileSidebarViews .view-switch-thumb { display: none; }
 
-/* --- Page shell. The page scrolls the document like every page (F14:
-       Safari's bar folds away, a tap on the status bar goes to the top);
+/* --- Page shell. The page scrolls the document like every page (Safari's
+       bar folds away, a tap on the status bar goes to the top);
        the chat column steps aside while it is open and returns where it
        was (watch.js). The page cancels the body's 10px padding so its box
        is the viewport's. --- */
@@ -155,7 +151,7 @@ body.is-watch-view .container { display: none !important; }
   padding: clamp(76px, 11vh, 96px) 0 72px;
 }
 /* Beside the open sidebar the page starts where the chat column does, so
-   the switch above both stands still (J4); it follows the sidebar like the
+   the switch above both stands still; it follows the sidebar like the
    chat column (layout.css .container). */
 @media (min-width: 1100px) {
   .watch-page-inner {
@@ -165,7 +161,7 @@ body.is-watch-view .container { display: none !important; }
   }
 }
 
-/* Chat and Watches fade through each other (C6): the old view fades out
+/* Chat and Watches fade through each other: the old view fades out
    quickly, the new one fades in with a small rise. watch.js setWatchView
    sets the phases; the switch never moves, into or out of a chat it fades
    along (desktop; on phones it lives in the sidebar). */
@@ -190,7 +186,7 @@ body.is-view-settle.is-watch-view .watch-page {
 }
 
 /* ==========================================================================
-   Shared controls (one primary button for the whole feature, J18)
+   Shared controls (one primary button for the whole feature)
    ========================================================================== */
 .wd-button {
   display: inline-flex;
@@ -246,7 +242,7 @@ body.is-view-settle.is-watch-view .watch-page {
 .wd-pill:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 
 /* ==========================================================================
-   The page head: title, the next look, how many run (J6: reserved from the
+   The page head: title, the next look, how many run (reserved from the
    first frame, nothing below moves when they arrive)
    ========================================================================== */
 .wd-head {
@@ -1049,16 +1045,16 @@ dialog.modal.wd-detail[open] > .modal-content { translate: none; scale: none; }
 }
 .wd-detail-more { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
-/* --- The Watch and Share pills under an Agent answer (J20; Share since
-   2026-10-21): Share follows Watch --- */
+/* --- The Watch and Share pills under an Agent answer: Share follows
+   Watch --- */
 .agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill) { flex: 0 0 auto; order: 2; width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 /* Without an evidence row Watch and Share stand in a row of their own, the
-   same part at the same distances (agent-chat.css .agent-review; UX audit B1). */
+   same part at the same distances (agent-chat.css .agent-review). */
 .agent-watch-pill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-3); margin: var(--space-4) 0 0 -8px; }
 .agent-watch-pill-row :is(.agent-watch-pill, .agent-share-pill) { width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 :is(.agent-watch-pill, .agent-share-pill) .share-pill-icon { width: 15px; height: 15px; flex: none; }
 .watch-consensus-pill.is-watching { color: var(--ink); }
-/* Phones (2026-10-22): Watch and Share are two more cells of the evidence
+/* Phones: Watch and Share are two more cells of the evidence
    row, drawn like its links (glyph over word, no surface), in its fixed
    columns (agent-chat.css --cell): a column at most, the word at least,
    44px wide at least, for the finger. */
@@ -1141,7 +1137,7 @@ dialog.modal.wd-detail[open] > .modal-content { translate: none; scale: none; }
   }
 }
 
-/* Touch: 44-point targets on the page (J26). */
+/* Touch: 44-point targets on the page. */
 @media (pointer: coarse) {
   .wd-button { height: auto; min-height: 44px; }
   .wc-chip, .wd-pill, .aw-foot-link, .aw-starter { min-height: 40px; }

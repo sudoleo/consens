@@ -240,7 +240,7 @@
   .model-picker-group-option { min-height: 44px; }
 }
 
-/* --- Consensus-Preset-Ebene (Daily/Balanced/Thorough + Custom) ----------- */
+/* --- Consensus-Preset-Ebene (Daily/Open Models/High Quality + Custom) ----- */
 
 .model-picker-preset-option {
   min-height: 44px;
@@ -406,7 +406,7 @@
 }
 
 /* Chevron fuer die Custom-Zeile (nach rechts) bzw. die Back-Zeile (nach
-   links): dasselbe Symbol wie ueberall (--chevron-mask, Apple-Audit G11). */
+   links): dasselbe Symbol wie ueberall (--chevron-mask). */
 .model-picker-option-chevron {
   flex: 0 0 auto;
   width: 1em;

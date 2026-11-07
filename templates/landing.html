@@ -79,17 +79,13 @@
          field is a stretched link under the button, so the two never nest. -->
     <section class="lp-section lp-section--white lp-section--hero">
       <div class="lp-shell lp-hero lp-hero--demo">
-        <!-- The page's h1 is its loudest line (Feinschliff 2026-10-02): a
+        <!-- The page's h1 is its loudest line: a
              statement, then the field. The field stays the thing you reach
              for through its surface and its light, not through a quiet h1. -->
-        <!-- The mechanism in its true order since 2026-10-31, when the Agent
-             became one mode for every account: one AI (the chat model you
+        <!-- The mechanism in its true order: one AI (the chat model you
              pick) does the work, and the AIs you choose check it while it
-             works and review its answer. From 2026-10-02 to 10-31 the line
-             was "Several models answer. See where they disagree.": then the
-             models answered and a separate judge pass checked the answer
-             written from them. "Several", not a number: the preset decides
-             (Daily, the default, has two since 2026-11-01: Claude and
+             works and review its answer. "Several", not a number: the preset
+             decides (Daily, the default, has two: Claude and
              DeepSeek; High Quality three). In German the line of the
              strategy deck, Eine KI arbeitet, mehrere pruefen. Two lines at
              every width. -->
@@ -102,7 +98,7 @@
              aria-labelledby="heroAskLabel heroAskText">
           <!-- Every question here is one where a single confident answer is not
                enough: the models plausibly disagree AND being wrong costs the
-               reader something, and since 2026-11-01 two of them are tasks
+               reader something, and two of them are tasks
                (a chart from a file, slides) the agent does in its workspace.
                list[0] is what reduced-motion users see, and
                it is also the question the demo behind this field actually runs
@@ -149,13 +145,13 @@
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- The field and nothing else: no window, no title bar, no
-                   greeting. A frame around the field was a second frame
+                   greeting. A frame around the field would be a second frame
                    around the first, and the field types a real question
-                   into itself, which says what the greeting said.
+                   into itself, which says what a greeting would say.
                    The field types and the tools in its row leave as the page
-                   scrolls, so a screen reader met an empty or half-typed
-                   field: it reads the finished scene from .lp-sr instead,
-                   and the moving picture is aria-hidden (a11y audit P2). -->
+                   scrolls, so a screen reader would meet an empty or
+                   half-typed field: it reads the finished scene from .lp-sr
+                   instead, and the moving picture is aria-hidden. -->
               <div class="lp-sr">
                 <p>Preview of the message box, with this question typed in and ready to send:</p>
                 <p>Should we buy the flat we rent, or keep renting and invest the difference?</p>
@@ -165,7 +161,7 @@
                   <div class="lp-composer" data-ask-composer>
                     <span class="lp-composer-text" data-ask-text data-placeholder="Enter your question"></span>
                     {# The demo's run has the two reviewers of Daily (Claude
-                       and DeepSeek since 2026-11-01), as the demo behind the
+                       and DeepSeek), as the demo behind the
                        hero (static/demo.js). #}
                     <div class="lp-composer-row">
                       <span class="lp-icon-btn" aria-hidden="true">
@@ -200,8 +196,7 @@
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- An Agent turn in /app, the way agent-activity.js,
-                   agent-delegation.js and agent-review.js draw it in the one
-                   mode (2026-10-31): the clock ("Working for 12s", "Reviewing
+                   agent-delegation.js and agent-review.js draw it: the clock ("Working for 12s", "Reviewing
                    · 15s", later "Thought for 17s") with the reviewers' marks
                    beside it, the agent's own note, its search and its
                    workspace, the one time it asks the two AIs of Daily
@@ -212,8 +207,8 @@
                    demo run's own data (static/demo.js, scripts/demo_assets.py).
                    Driver: landing-scenes.js.
                    The run is a function of the scroll position, so a
-                   screen reader read whatever frame the page stood on: the
-                   finished turn below speaks for it (a11y audit P2). -->
+                   screen reader would read whatever frame the page stands
+                   on: the finished turn below speaks for it. -->
               <div class="lp-sr">
                 <p>Preview of a finished Agent turn:</p>
                 <p>Should we buy the flat we rent, or keep renting and invest the difference?</p>
@@ -308,7 +303,7 @@
          The surface under an Agent answer taken apart into the four things
          it does, in the order you meet them: who reviewed it, a note behind
          a mark, the colours of the marks, and the answers of the AIs the
-         agent asked. Since 2026-10-31 (one mode) there is no score and no
+         agent asked. There is no score and no
          judge: the notes of the reviewers are the review. Every slice is a piece of
          the /app surface, and the marked sentence in step 02 opens its note
          as in /app. Behaviour: static/js/landing-insights.js and the
@@ -430,7 +425,7 @@
             </div>
             <div class="lp-step-visual">
               <!-- Where the two answers in the demo run split (static/demo.js,
-                   the Daily lineup: Claude and DeepSeek since 2026-11-01):
+                   the Daily lineup: Claude and DeepSeek):
                    paying off a loan or staying free to move, the split the
                    agent's note in scene 02 names. -->
               <div class="lp-excerpt">
@@ -449,9 +444,7 @@
           </li>
         </ol>
 
-        <!-- Until 2026-10-31 three more questions with their agreement
-             scores stood here. There is no score any more; what the
-             reviewers do besides marking the answer is this: they can stop
+        <!-- What the reviewers do besides marking the answer: they can stop
              a step before it runs (agent_gate.py, the card above the field
              in /app, agent-chat.js holdCard). An illustration in the
              words of that card. -->
@@ -474,11 +467,9 @@
     </section>
 
     <!-- ====================================================== BENCHMARK PROOF -->
-    <!-- Back on 2026-11-02 (Max: "Der Benchmark soll bleiben"), removed with
-         the one mode on 2026-11-01. It measures the consensus engine (Watches,
-         Topics, API), and its lead says so, as /benchmark and /about do. The
-         live Model Pulse strip that stood under it stays gone: the pulse is an
-         archive since the one mode. -->
+    <!-- The benchmark measures the consensus engine (Watches, Topics, API),
+         and its lead says so, as /benchmark and /about do. No live Model
+         Pulse strip under it: the pulse is an archive. -->
     <section id="benchmark" class="lp-section lp-section--white">
       <div class="lp-shell">
         <div class="lp-head lp-reveal">
@@ -707,8 +698,8 @@
       // Hero prompt: cycle a few example questions, typed in with a cursor.
       // It types only while in view, so it stays unobtrusive, and only once
       // through: then the first question stays, the one the demo behind the
-      // field runs. Nothing on the page moves for ever (WCAG 2.2.2, a11y
-      // audit P5). Scenes 01 and 02 do NOT type on a timer: their playhead is
+      // field runs. Nothing on the page moves for ever (WCAG 2.2.2).
+      // Scenes 01 and 02 do NOT type on a timer: their playhead is
       // the scroll position (static/js/landing-scenes.js).
       document.querySelectorAll(".lp-prompt-text[data-type-loop], .lp-prompt-text[data-type-text]").forEach(typeTarget => {
         const list = (typeTarget.dataset.typeLoop || typeTarget.dataset.typeText || "")
@@ -747,11 +738,11 @@
 
       // Marked passages in the mockups behave like the real ones in /app:
       // clicking the highlighted sentence opens the entry behind the mark and
-      // flashes it. Since the Decide rebuild the card lives in the step below
-      // rather than inside a collapsed panel, so it may be off screen when the
-      // mark is clicked - a flash nobody sees is the same as no answer.
-      // Seit die Punkte weg sind, ist die Passage das einzige Steuerelement -
-      // sie muss deshalb auch auf die Tastatur hoeren.
+      // flashes it. The card lives in the step below rather than inside a
+      // collapsed panel, so it may be off screen when the mark is clicked -
+      // a flash nobody sees is the same as no answer.
+      // Die Passage ist das einzige Steuerelement - sie muss deshalb auch
+      // auf die Tastatur hoeren.
       document.querySelectorAll("[data-diff-open]").forEach(trigger => {
         trigger.addEventListener("keydown", event => {
           if (event.key !== "Enter" && event.key !== " ") return;

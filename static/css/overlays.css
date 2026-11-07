@@ -1,6 +1,5 @@
 /* ==========================================================================
    Overlays — every layer above the page, and how it comes and goes
-   (Apple audit C1, C4, E3, G1)
 
    1. Scrim     one colour behind every modal layer (--scrim), never a blur
    2. Dialog    one surface and one way in and out for every
@@ -13,7 +12,7 @@
    Entrances run from @starting-style; exits keep the layer painted with
    `display`/`overlay` transitions (allow-discrete), so script opens and
    closes synchronously and the motion is CSS's alone. Engines without
-   these features show and hide at once, as before.
+   these features show and hide at once.
    Loaded after every component layer.
    ========================================================================== */
 
@@ -34,8 +33,8 @@ dialog.modal::backdrop {
 }
 
 /* A dim with nothing to scroll takes no pan, and a card's own scroll ends
-   at its edge: the page behind stays where it is (Apple audit F2, with the
-   one scroll lock in foundation.css). */
+   at its edge: the page behind stays where it is (with the one scroll lock
+   in foundation.css). */
 .claim-sheet-backdrop {
   touch-action: none;
 }
@@ -121,7 +120,7 @@ dialog.modal[open] > .modal-content {
   dialog.modal[open] > .modal-content { translate: 0 8px; scale: 0.98; }
 }
 
-/* The keyboard's edge (Apple audit F8). On a phone with the keyboard up,
+/* The keyboard's edge. On a phone with the keyboard up,
    every layer with fields covers only what is visible: composer-keyboard.js
    writes the visible area on the open layer (--keyboard-top, Safari's
    panned offset, and --keyboard-height). A dialog then centres or scrolls

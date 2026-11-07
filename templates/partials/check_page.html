@@ -1,12 +1,11 @@
 {#
   The parts of a page that answers one question again and again: Watch pages
-  (watch_share.html) and curated Topic pages (topic.html) since 2026-10-15.
+  (watch_share.html) and curated Topic pages (topic.html).
   Same markup, same CSS (public-pages.css, .wp-*), so the two pages cannot
   drift apart. Import with context:
   {% import "partials/check_page.html" as check with context %}
 
-  Since 2026-10-20 (Apple-Audit L14) every fold on these pages is ONE
-  disclosure: text, then a chevron that turns (.wp-disclosure-toggle,
+  Every fold on these pages is ONE disclosure: text, then a chevron that turns (.wp-disclosure-toggle,
   .wp-chevron); check-page.js animates its height and lands the focus in what
   opened. Everything is complete without script.
 #}
@@ -23,10 +22,10 @@
   <p class="wp-kicker"><span class="wp-dot is-{{ status }}" aria-hidden="true"></span>{{ caller() }}</p>
   {#- A long question arrives folded to three lines (with script: the clamp
       lives in @media (scripting: enabled)), so nothing the reader has started
-      on folds up after the first paint (Apple-Audit I2). The link sits on
+      on folds up after the first paint. The link sits on
       the third line instead of under it: showing it moves nothing.
       The question and the answer are content: never translated, and in
-      their own language (content_lang from the route, a11y audit L1). -#}
+      their own language (content_lang from the route). -#}
   <div class="wp-question-wrap">
     <h1 id="shareQuestion" class="wp-question share-question{% if clamp %} is-clamped{% endif %}{% if heading | length > 120 %} is-long{% endif %}{% if heading | length > 260 %} is-very-long{% endif %}" data-i18n-skip{% if content_lang %} lang="{{ content_lang }}"{% endif %}>{{ heading }}</h1>
     {% if clamp %}<button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>{% endif %}
@@ -78,13 +77,13 @@
 
 {# A website's icon: same box whether it loads, is late or missing. Script
    fades it in once loaded and puts a neutral globe in its place when it
-   fails, so a row never closes up or pops (Apple-Audit I7). #}
+   fails, so a row never closes up or pops. #}
 {% macro favicon(domain, class_name, size) %}<img class="{{ class_name }} site-icon" src="/api/topics/favicon?d={{ domain | urlencode }}" alt="" width="{{ size }}" height="{{ size }}" loading="lazy" referrerpolicy="no-referrer">{% endmacro %}
 
 {# Direkt zu den Seiten, um die es geht (source_links.key_links): wer ein
    Thema verfolgt, will selbst nachsehen, nicht erst die Quellenliste am Ende
    suchen. Navigation, kein Beleg einzelner Sätze. On a phone a swipeable row,
-   so the answer starts on the first screen (Apple-Audit L6). #}
+   so the answer starts on the first screen. #}
 {% macro direct_links(links) %}
 {% if links %}
 <section class="wp-links" aria-labelledby="wpLinksHeading">
@@ -109,7 +108,7 @@
 
 {# The answer and the sources behind it. More than five sources arrive
    folded, so going back to the page lands where the reader was instead of
-   above a list that folds after the scroll was restored (Apple-Audit L11). #}
+   above a list that folds after the scroll was restored. #}
 {% macro answer(label, answer_html, sources, heading_class="wp-label") %}
 {% set folded = sources | length > 5 %}
 <section class="wp-answer" aria-labelledby="wpAnswerHeading">
@@ -143,11 +142,11 @@
 {% endmacro %}
 
 {# Die Agreement-Kurve nur auf breiten Bildschirmen (CSS blendet sie unter
-   700 px aus): dort ist Platz, auf dem Handy war sie nur Lärm. Jeder Punkt
+   700 px aus): dort ist Platz, auf dem Handy waere sie nur Lärm. Jeder Punkt
    springt zu seinem Check in der Zeitleiste. A check that moved the answer is
    the amber of the timeline below, larger; a check without a score sits as a
-   hollow mark on the axis instead of leaving a gap (Apple-Audit L7). A group,
-   not an image: an image hides the links to its points (a11y audit P4). #}
+   hollow mark on the axis instead of leaving a gap. A group,
+   not an image: an image hides the links to its points. #}
 {% macro agreement_chart(history) %}
 <svg class="watch-chart" viewBox="0 0 {{ history.width }} {{ history.height }}" role="group"
      aria-label="Agreement score from {{ history.start_date }} to {{ history.end_date }}. Select a point to jump to that check.">
@@ -177,7 +176,7 @@
 {# History: only the checks that moved the answer stand on their own, plus
    the newest and the first one; quiet checks fold into one entry.
    ``shown_text`` is the sentence the state box above already says: the entry
-   it comes from does not print it a second time (Apple-Audit L16). #}
+   it comes from does not print it a second time. #}
 {% macro history(page_history, selected, start_title, start_text, notes=[], shown_text="") %}
 {% if page_history and page_history.timeline %}
 <section class="wp-history" aria-labelledby="wpHistoryHeading">
@@ -247,7 +246,7 @@
 {# How the models compared, folded: for the reader who wants the apparatus.
    One material per card: the kind as a quiet label, the claim, each side as
    text with its families, the quote set back, "How to verify" as a line --
-   no pill, boxes or amber panel (Apple-Audit L15). The share router names the
+   no pill, boxes or amber panel. The share router names the
    families in place of the judge's "Model A/B/C"
    (check_page.named_differences). #}
 {% macro models_compared(model_count, contradiction_count, consulted_models, differences, differences_fallback_html) %}

@@ -307,7 +307,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 /* Rahmenloses Konsens-Layout: sitzt direkt auf dem Seitenhintergrund,
    ohne Karte, Rahmen oder Schatten. */
 /* Eine Antwort von oben nach unten: die Differences liegen als zugeklappter
-   Ueberblick UNTER der Antwort, nicht mehr als zweite Spalte daneben. */
+   Ueberblick UNTER der Antwort, nicht als zweite Spalte daneben. */
 .consensus-box {
   display: flex;
   flex-direction: column;
@@ -442,7 +442,6 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 .consensus-main {
-  /* Volle Breite: die 80/20-Spaltenteilung ist entfallen. */
   flex: 1 1 auto;
   width: 100%;
   box-sizing: border-box;
@@ -466,8 +465,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   padding: 4px 16px 8px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
-  /* Trenner wandert von links nach oben: der Block liegt jetzt UNTER der
-     Antwort, nicht daneben. */
+  /* Trenner oben: der Block liegt UNTER der Antwort, nicht daneben. */
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
   box-shadow: none;
   min-width: 0;
@@ -1011,7 +1009,7 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
 }
 
 /* The footer note is read, not decoration: #b3b3b3 reached 2.0:1 on the
-   light canvas (audit F10); --ink-3 gives 5.4:1 there and 5.9:1 in dark. */
+   light canvas; --ink-3 gives 5.4:1 there and 5.9:1 in dark. */
 .feedback-note {
   color: var(--ink-3);
 }

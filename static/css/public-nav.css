@@ -1,7 +1,7 @@
 /* ==========================================================================
    Public navigation on phones
-   Below the width where the links fit, they used to disappear and live only
-   in the footer. A menu mark now opens them in a small panel under the bar.
+   Below the width where the links fit, a menu mark opens them in a small
+   panel under the bar.
    It is a <details>, so it works without script and closes like any
    disclosure. Shared by landing.css and public-pages.css.
    ========================================================================== */
@@ -32,13 +32,13 @@
   transition: background-color var(--dur-press) var(--ease-standard);
 }
 .nav-menu > summary::-webkit-details-marker { display: none; }
-/* A tone step like every ghost control, not a fade (Apple-Audit G5). */
+/* A tone step like every ghost control, not a fade. */
 @media (hover: hover) and (pointer: fine) {
   .nav-menu > summary:hover { background: var(--hover); }
 }
 .nav-menu > summary:focus-visible { outline: var(--focus-ring); outline-offset: -4px; border-radius: var(--radius-sm); }
 .nav-menu > summary svg { width: 22px; height: 22px; }
-/* 44px to the finger (Apple-Audit F5): the bare mark keeps its place (its
+/* 44px to the finger: the bare mark keeps its place (its
    middle stays 12px in from the edge of the bar), only the empty box grows;
    the brand and "Open app" keep their drawing and reach out to 44px. */
 @media (pointer: coarse) {
@@ -101,8 +101,7 @@
 
 /* The skip link (partials/public_nav.html), as in /app (base.css): out of
    sight until the keyboard reaches it as the first stop, then a quiet pill in
-   the top left above the bar. Before it, 7-8 stops of the bar came first on
-   every page (a11y audit P3). Its lift comes with it, as in base.css: parked
+   the top left above the bar. Its lift comes with it, as in base.css: parked
    above the edge, the shadow reached into the page and lay as a grey smudge
    over the wordmark. */
 .skip-link {

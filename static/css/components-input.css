@@ -5,12 +5,9 @@
 /* --------------------------------------------------------------------------
    Buttons & Inputs
    -------------------------------------------------------------------------- */
-/* The one filled button (Apple-Audit G4). Opt-in: `.btn` (or the older
-   `.button`); a <button> starts neutral and asks for this look. It used to
-   come in three shapes: 48 px in the login, 38 px with smaller corners in
-   the feedback form, a pill on the watch page, and with a gloss, a shadow
-   and a lift on hover in the share dialog (in dark mode a light halo glowed
-   under it). Now there is one: 36 px (44 px on touch), --radius-sm, flat;
+/* The one filled button. Opt-in: `.btn` (or the older
+   `.button`); a <button> starts neutral and asks for this look. One shape:
+   36 px (44 px on touch), --radius-sm, flat;
    hover is a tone step toward the page, a press gives way (base.css).
 
    The primary buttons that predate the class wear the same material from
@@ -81,10 +78,8 @@
 }
 
 /* Hover is a tone step on the control's own surface (--hover, --raise-hover,
-   --button-bg-hover in foundation.css), never transparency: the global
-   `button:hover { opacity: .9 }` that once lived here faded text, icons and
-   the dots inside a button, and needed some forty `opacity: 1` exceptions
-   (Apple-Audit G5). */
+   --button-bg-hover in foundation.css), never transparency: opacity fades
+   text, icons and the dots inside a button. */
 
 button:disabled {
   opacity: 0.5;
@@ -103,7 +98,7 @@ textarea {
   transition: border-color var(--dur-press) var(--ease-standard), box-shadow var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard);
 }
 
-/* Field focus (Apple-Audit G12): one look for every text field, from the
+/* Field focus: one look for every text field, from the
    two tokens in foundation.css. */
 input[type="text"]:focus,
 textarea:focus {
@@ -119,12 +114,12 @@ textarea:focus {
    z-index gewann die Antwortflaeche allein durch die Dokumentreihenfolge:
    .response-box ist per will-change/isolation ein eigener Stacking-Context und
    steht spaeter im DOM als die .input-section. Solange der Hero-Wechsel die
-   .input-section transformiert (0.5s Slide), ist sie selbst ein
+   .input-section verschiebt, ist sie selbst ein
    Stacking-Context — der z-index: 60 des offenen (+)-Menues bleibt darin
    gefangen, und die Modellnamen der Antwortboxen lagen fuer die Dauer der
    Animation VOR dem Menue. Mit einem eigenen z-index gehoert der Composer samt
-   Menue in jedem Zustand nach oben; der Thread setzte denselben Wert bisher
-   nur fuer sich (shell.css). */
+   Menue in jedem Zustand nach oben; der Thread setzt denselben Wert
+   (shell.css). */
 .input-section {
   text-align: center;
   margin-bottom: 20px;
@@ -135,18 +130,18 @@ textarea:focus {
      Hero-Ausstieg liess das Feld damit von einer falschen Stelle aus gleiten
      — beim Ausstieg von unterhalb des Bildschirms herauf, weil der Rest der
      Hero-Verschiebung schon auf die neue Position am unteren Rand gerechnet
-     wurde. Ortswechsel gleitet App.glideComposer (app-core.js) von der
+     wurde. Ortswechsel gleitet glideComposer (app-core.js) von der
      tatsaechlich gezeichneten alten zur neuen Stelle. */
 }
 
 /* --------------------------------------------------------------------------
    Hero-Zustand: Vor der ersten Frage sitzt das Eingabefeld vertikal mittig
    (body.is-hero, index.html). window.exitHeroMode() entfernt die Klasse beim
-   Senden/Bookmark-Laden/Demo-Start — das Feld gleitet dann (App.glideComposer)
+   Senden/Bookmark-Laden/Demo-Start — das Feld gleitet dann (glideComposer)
    an seinen Platz im Thread und der Antwortbereich blendet ein.
    68px = body padding-top (10px) + .container padding-top (58px).
    -------------------------------------------------------------------------- */
-/* The empty start screen does not move (Apple-Audit F10). base.css gives the
+/* The empty start screen does not move. base.css gives the
    body 100vh, which on an iPhone is the tall viewport behind Safari's bars:
    the screen scrolled by that difference, field and greeting slid while the
    letter clouds stayed. The small viewport is what is always visible; and a
@@ -154,13 +149,12 @@ textarea:focus {
 body.is-hero { min-height: 100svh; }
 html:has(> body.is-hero) { overscroll-behavior-y: none; }
 
-/* The field, not the block under it, is what stands still (Apple-Audit B5).
-   The shift used to be half of the block's own height: every notice, file,
-   new example or line of text below the field moved the field itself, half
-   up and half down. It is now fixed for the start screen: half of the empty
-   start block (field, examples, note), so the empty screen looks as centred
-   as before, and whatever appears later grows downward. 117px since the tool
-   bar under the field moved into it (2026-10-30: 36px bar, 10px margin back).
+/* The field, not the block under it, is what stands still: with a shift of
+   half the block's own height, every notice, file, new example or line of
+   text below the field would move the field itself, half up and half down.
+   The shift is fixed for the start screen: half of the empty start block
+   (field, examples, note), so the empty screen looks centred and whatever
+   appears later grows downward.
    #verifyBanner follows under the block by the same shift (shell.css). */
 body.is-hero .container {
   --hero-lift: 117px;
@@ -207,7 +201,7 @@ body.is-hero .input-section:has(> .agent-composer-notice:not([hidden])) > .compo
   transform: translateY(6px);
   pointer-events: none;
   /* Leaving the start screen it fades in the first part of the composer's
-     glide (Apple-Audit C2); visibility runs with the fade instead of
+     glide; visibility runs with the fade instead of
      cutting it off in the first frame. It comes back at the slower pace. */
   transition: opacity var(--dur-press) var(--ease-in), transform var(--dur-press) var(--ease-in), visibility var(--dur-press) var(--ease-linear);
 }
@@ -251,7 +245,7 @@ body.is-hero .hero-greeting {
 /* A guest on a phone gets the sentence too: it is the only line that says
    what the field is for (Agent has the same rule in agent-chat.css). On a
    phone it is one line at reading size (17px), not a two-line 22px title
-   over the field (2026-10-22); from about 480px it grows to the desktop's. */
+   over the field; from about 480px it grows to the desktop's. */
 @media (min-height: 620px) {
   body.is-guest.is-hero:not(.direct-comparison-active) .hero-greeting {
     opacity: 1;
@@ -410,7 +404,7 @@ body:not(.dark-mode) .chat-input-container::before {
   outline: none;
   padding: 10px;
   box-sizing: border-box;
-  /* Die Hoehe folgt dem Inhalt per app-init.js. Ab der Maximalhoehe scrollt
+  /* Die Hoehe folgt dem Inhalt per composer-autosize.js. Ab der Maximalhoehe scrollt
      nur noch der Text im Feld, damit der Composer den Thread nicht verdraengt. */
   resize: none;
   overflow-y: hidden;
@@ -768,7 +762,7 @@ body:not(.dark-mode) .chat-input-container::before {
   color: var(--sidebar-text-muted);
 }
 
-/* The switch in the (+) menu: flat, no glass and no gloss (Apple audit G1).
+/* The switch in the (+) menu: flat, no glass and no gloss.
    A grey track, a white knob, the house green when on. .attach-menu prefix
    to override the base .switch size (50px). */
 .attach-menu .attach-menu-switch {
@@ -817,14 +811,13 @@ body:not(.dark-mode) .chat-input-container::before {
    (shell.css). Keine Rahmen, keine Verlaeufe, kein Blur: in der rahmenlosen
    Shell traegt der Ton die Tiefe, ein Schatten gehoert nur wirklich
    schwebenden Ebenen. Farbe traegt hier nichts bei — die Kachel sagt „hier
-   haengt etwas", der Text sagt was; die frueheren roten/blauen Dateitypen-
-   Plaketten waren Dekoration in einer sonst monochromen App.
+   haengt etwas", der Text sagt was; farbige Dateitypen-Plaketten waeren
+   Dekoration in einer sonst monochromen App.
    -------------------------------------------------------------------------- */
 
 /* `text-align: left` ist Pflicht, nicht Geschmack: der Composer-Block ist
    zentriert (Hero-Begruessung), und ohne diese Zeile stehen Label, Zitat und
-   Dateinamen mittig — die Ursache dafuer, dass die Leisten „gebastelt"
-   aussahen. */
+   Dateinamen mittig. */
 /* Volle Breite, buendig mit dem Eingabefeld darunter: die Leisten sind
    Zeilen desselben Composers, keine eingerueckten Einschuebe. */
 .composer-quote,
@@ -958,7 +951,7 @@ body:not(.dark-mode) .chat-input-container::before {
   border-radius: var(--radius-xs);
   background: color-mix(in srgb, var(--ink) 7%, transparent);
   color: var(--ink-2);
-  /* A document glyph instead of a 9-px type label (Apple-Audit G10); the
+  /* A document glyph instead of a 9-px type label; the
      label stays in the markup, the file name beside it carries the type. */
   font-size: 0;
 }
@@ -997,7 +990,7 @@ body:not(.dark-mode) .chat-input-container::before {
 }
 
 /* Ein Griff, zwei Stellen: das × am Zitat und das × am Anhang sind
-   derselbe Knopf. Rot war er nie — Entfernen ist hier kein Alarm.
+   derselbe Knopf. Nicht rot — Entfernen ist hier kein Alarm.
    24px: die kleinste Zielgröße für Maus und Trackpad (WCAG 2.5.8). */
 .composer-quote-remove,
 .attachment-chip-remove {
@@ -1040,7 +1033,7 @@ body:not(.dark-mode) .chat-input-container::before {
   }
 }
 
-/* 44px to the finger (Apple-Audit F5); the button stays 24px. */
+/* 44px to the finger; the button stays 24px. */
 @media (pointer: coarse) {
   .composer-quote-remove,
   .attachment-chip-remove { position: relative; }

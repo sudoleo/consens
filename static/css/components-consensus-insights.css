@@ -6,7 +6,7 @@
 
 /* The kinds of a reviewer's note (Agent audit): one colour each wherever the
    kind is named - the reader, a mark's card, the list under the answer and
-   the reviewer's timeline (UX audit D1). Wrong is the contradiction's red,
+   the reviewer's timeline. Wrong is the contradiction's red,
    doubtful the pause's amber, incomplete stays the quiet ink. Declared again
    on .dark-mode: a token naming another one resolves where it is declared. */
 :root,
@@ -86,7 +86,7 @@
 }
 
 /* --- Die Karte einer Marke ------------------------------------------------
-   Seit 2026-10-23 eine Karte fuer jede Marke im Text (consensus-insights.js
+   Eine Karte fuer jede Marke im Text (consensus-insights.js
    claimCard/differenceCard): als Vorschau beim Hovern (.insight-preview), am
    Rechner festgehalten nach dem Klick (.claim-popover) und auf dem Handy als
    Blatt vom unteren Rand (.claim-popover.is-modal). Vorschau und
@@ -289,9 +289,9 @@
 }
 
 /* Agent audit (agent_audit.py): a reviewer's note names its kind beside
-   the reviewer, in the kind's colour (D1), and its source below as the text
+   the reviewer, in the kind's colour, and its source below as the text
    link (foundation.css .text-link: the line in the text's own colour, a
-   finger's height on a phone; D3, D16). */
+   finger's height on a phone). */
 .cx-card-side[data-kind] .cx-card-tag { font-weight: var(--font-weight-medium); color: var(--kind-incomplete); }
 .cx-card-side[data-kind="wrong"] .cx-card-tag { color: var(--kind-wrong); }
 .cx-card-side[data-kind="doubtful"] .cx-card-tag { color: var(--kind-doubtful); }
@@ -632,7 +632,7 @@ button.cx-card-logo:focus-visible {
 
 /* --- Differences: flache Liste ---------------------------------------------
    Hairline-Trenner statt Karten-Rahmen; Severity steckt im Punkt und im
-   dezenten Text-Label, nicht mehr in Rahmen, Schattenkante und Farbfüllung. */
+   dezenten Text-Label, nicht in Rahmen, Schattenkante und Farbfüllung. */
 .differences-cards {
   position: relative;
   z-index: 1;
@@ -669,8 +669,8 @@ button.cx-card-logo:focus-visible {
   display: none;
 }
 
-/* Severity-Punkt: der einzige Farbträger im Kartenkopf, seit 2026-10-23
-   nur noch vor dem Thema eines kritischen Widerspruchs. */
+/* Severity-Punkt: der einzige Farbträger im Kartenkopf, nur vor dem Thema
+   eines kritischen Widerspruchs. */
 .sev-dot {
   width: 7px;
   height: 7px;
@@ -773,7 +773,7 @@ button.cx-card-logo:focus-visible {
 
 /* Das "vs" ist ein Wort in der Groesse und dem Grau der Metazeilen, ohne
    Haarlinien und ohne Ampelfarbe: die Schwere traegt allein der Punkt im
-   Kartenkopf (2026-10-21; vorher halbfett und rot auf roten Linien). */
+   Kartenkopf. */
 .diff-versus-mark {
   display: block;
   font-size: var(--font-size-xs);
@@ -800,7 +800,7 @@ button.cx-card-logo:focus-visible {
 
 /* Die kleineren Unterschiede hinter den kritischen: eine Zeile, die
    aufklappt. In Tinte und etwas kraeftiger als die Metadaten, damit sie
-   als Weg zu mehr erkennbar ist und nicht als Fussnote (Max 2026-10-23). */
+   als Weg zu mehr erkennbar ist und nicht als Fussnote. */
 .diff-more {
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 45%, transparent);
 }
@@ -876,8 +876,8 @@ button.cx-card-logo:focus-visible {
   color: inherit;
 }
 
-/* Wo eine Seite steht, vor ihrem Satz: "In the answer", dann "In contrast"
-   (seit 2026-10-23 statt "vs"). Leise wie die Metazeile, aber zuerst
+/* Wo eine Seite steht, vor ihrem Satz: "In the answer", dann "In contrast".
+   Leise wie die Metazeile, aber zuerst
    gelesen: erst die Ausgangslage, dann die Gegenseite. */
 .diff-position-lead {
   font-size: var(--font-size-xs);
@@ -1400,7 +1400,7 @@ mark.quote-flash {
     text-align: left;
   }
 
-  /* Die Marke ist ein Punkt, kein Chip mehr — sie muss mobil nicht
+  /* Die Marke ist ein Punkt, kein Chip — sie muss mobil nicht
      aufgeblasen werden. Die Trefferflaeche liefert ohnehin das 44px-::after,
      ohne die Zeilenhoehe anzufassen. */
   .claim-badge {

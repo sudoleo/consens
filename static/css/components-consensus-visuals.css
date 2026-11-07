@@ -42,9 +42,9 @@
 .dark-mode .consensus-verdict.is-alert { --verdict-ring: #e58a79; }
 
 /* Score-Anzeige: gesetzte Zahl über einem feinen Messbalken, Füllstand kommt
-   als --val (0–100) aus dem JS. Der frühere Conic-Ring war ein Widget in einer
-   Textzeile; eine Zahl und ein 3px-Balken sind dieselbe Aussage in derselben
-   Sprache wie der übrige Fuß. */
+   als --val (0–100) aus dem JS. Eine Zahl und ein 3px-Balken sprechen
+   dieselbe Sprache wie der übrige Fuß; ein Ring wäre ein Widget in einer
+   Textzeile. */
 .verdict-gauge {
   flex: 0 0 auto;
   display: flex;
@@ -62,11 +62,10 @@
 }
 
 /* Die Zahl trägt die Ampelfarbe, nicht eine Fläche hinter ihr: die Farbe
-   sitzt damit auf dem Element, das der Leser ohnehin zuerst ansieht. Das ist
-   dieselbe Vorsortierung fürs Auge, die die frühere getönte Platte geleistet
-   hat — ohne dass etwas nach Fehlerbanner aussieht. */
+   sitzt damit auf dem Element, das der Leser ohnehin zuerst ansieht, ohne
+   dass etwas nach Fehlerbanner aussieht. */
 .verdict-score-num {
-  /* Seit 2026-08-14 eine Stufe kleiner (2rem war zu laut, User-Vorgabe): die
+  /* Eine Stufe unter 2rem (zu laut): die
      Zahl bleibt das lauteste Element des Fusses, ohne die Antwort daneben zu
      ueberstimmen. */
   font-size: var(--font-size-xl);
@@ -214,17 +213,15 @@
 
 /* --- Agreement-Marken in der Konsens-Antwort ------------------------------
    Die Quote ist die Kernbotschaft ("4/6"), aber visuell nur eine Mikro-Marke:
-   tabellarische Ziffern, transparente Flaeche, feine Kontur. Damit ist sie
+   tabellarische Ziffern, keine Flaeche, keine Kontur. Damit ist sie
    sofort scanbar und zugleich klar von den hochgestellten Quellenzahlen
    unterschieden. Wenn Claim und Difference denselben Satz meinen, steht dort
-   weiterhin nur EIN Steuerelement - entweder diese Quote oder (beim
+   nur EIN Steuerelement - entweder diese Quote oder (beim
    Widerspruch) die angestrichene Passage selbst.
 
-   Seit 2026-08-10 ohne Kontur: ein 999px-Rahmen mitten im Satz war ein
-   Steuerelement im Fliesstext. Die Quote steht jetzt wie eine Fussnote hinter
-   der Passage - Flaeche gibt es erst im Hover. Deshalb faellt auch die
-   Pillen-Geometrie (min-width, Innenabstand) weg: ohne Rahmen zentrierte sie
-   die Ziffern nur in einer unsichtbaren Box und riss eine Luecke zum Satz. */
+   Ein Rahmen mitten im Satz waere ein Steuerelement im Fliesstext: die
+   Quote steht wie eine Fussnote hinter der Passage - Flaeche gibt es erst
+   im Hover. */
 .claim-badge {
   position: relative;
   display: inline-flex;
@@ -235,7 +232,7 @@
   padding: 0 2px;
   height: 16px;
   border: 0;
-  /* Nur noch die Ecke der Hover-Flaeche, kein Rahmen im Ruhezustand. */
+  /* Nur die Ecke der Hover-Flaeche, kein Rahmen im Ruhezustand. */
   border-radius: var(--radius-2xs);
   background: transparent;
   color: var(--ink-2);
@@ -267,7 +264,7 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-/* Seit 2026-08-17 (User-Vorgabe) ist die Quote IMMER grau - "4/6" sieht aus
+/* Die Quote ist IMMER grau - "4/6" sieht aus
    wie "6/6". Die Farbe trug hier keine eigene Information: dass Modelle
    abweichen, steht schon in der Zahl selbst und im angestrichenen Satz
    daneben. Zwei rote Zahlen pro Absatz lasen sich wie eine Warnung, wo nur
@@ -311,13 +308,13 @@
 }
 
 /* --- Inline-Marker im Antworttext -----------------------------------------
-   Textmarker statt Unterstreichung (2026-08-15, User-Vorgabe): eine Linie
+   Textmarker statt Unterstreichung: eine Linie
    unter einem Satz ist im Web die Form eines Links - der Leser erwartet einen
    Sprung und bekommt eine Bewertung. Ein Marker ueber der Stelle sagt
    dagegen genau das, was hier gemeint ist: jemand hat den Satz gelesen und
    angestrichen.
 
-   Die Farbe traegt die ganze Aussage, seit die Punkte daneben weg sind, und
+   Die Farbe traegt die ganze Aussage und
    spricht die Ampel des Hauses (--agree/--partial/--dispute):
      gruen    volle Zustimmung (6/6, auch 4/4)
      grau     Nuance - die Modelle setzen einen anderen Schwerpunkt
@@ -325,35 +322,23 @@
      rot      echter Widerspruch
    Bewusst niedrige Deckung: der Text darunter behaelt seinen WCAG-Kontrast,
    und eine Antwort, in der fast jeder Satz eine Marke traegt, bleibt lesbar.
+   Lautstaerke nach Informationswert: Gruen (der Normalfall, deckt den
+   Grossteil) am leisesten, dann Nuance-Grau, Bernstein, Rot.
 
-   Ruhige Toenung nach Apples Prinzip (2026-10-02, User-Vorgabe nach einer
-   zu lauten Zwischenstufe): jede Marke ist eine reine Systemfarbe in sehr
-   geringer Deckung - Gruen #34c759, Orange #ff9500, Rot #ff3b30, Grau
-   #8e8e93 (dunkel die Dark-Varianten). Reine Farbe in duenner Schicht wirkt
-   klar, aber leise; die alten Toene waren dagegen abgedunkelte Pastelle und
-   lasen schlammig (Rot als Rose). Lautstaerke nach Informationswert,
-   gemessen in OKLab gegen --ground: Gruen dE 2,9 (der Normalfall, deckt den
-   Grossteil) < Nuance-Grau 4,2 < Bernstein 5,5 < Rot 6,2 - also nie lauter
-   als vorher (max. 6,5), aber endlich gestaffelt. Textkontrast >= 12:1.
-
-   Nur die Stelle des Streits (2026-10-19, User-Vorgabe): eingefaerbte Saetze
+   Nur die Stelle des Streits: eingefaerbte Saetze
    ueber die halbe Antwort sahen im Light Mode wie ein angestrichenes
    Schulbuch aus, im Dark Mode lag heller Text auf braunen und roten Baendern.
-   Seitdem traegt in einem bestrittenen Satz nur die bestrittene Stelle die
+   Deshalb traegt in einem bestrittenen Satz nur die bestrittene Stelle die
    Farbe (.cx-spot, wenige Worte, siehe unten), und die Standard-Einstellung
-   zeigt nur Unterschiede; Gruen und Grau erst unter "All checks". Weil nur
-   noch wenige Worte gefaerbt sind, duerfen Bernstein und Rot klarer sein
-   (Honig #f0b429, Rot #e5484d). Im Dark Mode nimmt die Schrift der Stelle
+   zeigt nur Unterschiede; Gruen und Grau erst unter "All checks". Im Dark
+   Mode nimmt die Schrift der Stelle
    denselben Ton an (Ton in Ton), statt hell auf dunklem Farbband zu
    stehen. Ohne benannte Stelle (aeltere Laeufe) traegt der ganze Satz
    dieselbe Farbe.
 
-   Eine Bedeutung, eine Farbe (2026-10-20, Apple-Audit G15): die Marken
-   hatten eine eigene Palette und damit ein anderes Rot und Bernstein als die
-   Pruef-Punkte und die Ampel daneben (dE 9,9). Seitdem behalten sie
-   Helligkeit und Buntheit der Stufen oben, nehmen aber den Farbton der
-   Ampel-Tokens; das dunkle Korall von --dispute ist dafuer ein Rot geworden,
-   damit Widerspruch neben Bernstein nicht mehr braun wirkt. */
+   Eine Bedeutung, eine Farbe: die Marken nehmen den Farbton der
+   Ampel-Tokens, damit ihr Rot und Bernstein dieselben sind wie bei den
+   Pruef-Punkten und der Ampel daneben (Werte in :root unten). */
 :root {
   /* Grau ist keine Ampel-Bedeutung: Nuance und duenne Abdeckung bleiben
      neutrale Werte. */
@@ -365,7 +350,7 @@
      die gemessenen Saetze sehen und nicht die ungemessenen. */
   --cx-mark-thin: #f2f3f5;
   --cx-mark-thin-strong: #e7e9ed;
-  /* Eine Bedeutung, eine Farbe (Apple-Audit G15): Gruen, Bernstein und Rot
+  /* Eine Bedeutung, eine Farbe: Gruen, Bernstein und Rot
      der Marken sind die Ampel-Tokens (--agree/--partial/--dispute) als
      duenne Schicht - derselbe Farbton wie Punkte, Labels und Schienen,
      nur Helligkeit und Buntheit einer Markierung. Abgeleitet wird darunter
@@ -432,14 +417,14 @@
 }
 
 /* Linien unter den Marken. Die Flaeche allein trennt Widerspruch und
-   Uneinigkeit nur ueber den Farbton, fuer etwa jeden zwoelften Mann kaum
-   (a11y-Audit, Abschnitt 6). Die Kontoeinstellung mark_lines
-   (body.marks-underlined, consensus-insights.js, seit 2026-10-25) legt deshalb
+   Uneinigkeit nur ueber den Farbton, fuer etwa jeden zwoelften Mann kaum.
+   Die Kontoeinstellung mark_lines
+   (body.marks-underlined, consensus-insights.js) legt deshalb
    eine Linie zur Flaeche, deren Form das Ergebnis traegt: Widerspruch
    durchgezogen und kraeftig, Uneinigkeit und Detail gestrichelt, Zustimmung
    und duenne Lage gepunktet, jede in der Farbe ihrer Stufe. Im Kontrastmodus
    faellt die Flaeche weg (Canvas); dort stehen die Linien immer, die Farbe
-   setzt das System (V2). Eine benannte Stelle traegt die Linie statt ihres
+   setzt das System. Eine benannte Stelle traegt die Linie statt ihres
    Satzes, wie sonst die Farbe. Ohne Einstellung bleibt --cx-underline
    leer und die Regel zeichnet nichts. */
 body.marks-underlined {
@@ -527,8 +512,8 @@ body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-f
 /* A reviewer's "incomplete" (Agent audit) is the quietest of its three
    kinds, but never one to search for: the stronger grey, about as far from
    the page as the amber, and a dashed line in the quiet ink under its words,
-   in both themes (UX audit D2; the grey alone was 1.18:1, in the dark
-   almost nothing). */
+   in both themes (the grey alone was 1.18:1, in the dark almost
+   nothing). */
 .cx-claim.is-audit.is-minor {
   --cx-mark: var(--cx-mark-note-strong);
   --cx-mark-strong: color-mix(in srgb, var(--cx-mark-note-strong), var(--ink) 8%);
@@ -606,8 +591,7 @@ body:not(.consensus-markers-hidden) .cx-claim.is-audit.has-spot.is-minor:not(.is
   color: var(--cx-ink-major);
 }
 
-/* Die markierte Passage ist selbst anfassbar - und seit die Punkte daneben
-   weg sind (2026-08-15, User-Vorgabe) ist sie bei einer Differenz auch das
+/* Die markierte Passage ist selbst anfassbar - und bei einer Differenz das
    einzige Steuerelement: Tastatur und Screenreader erreichen sie ueber
    role="button"/tabindex, die das JS an den ersten Span haengt. Der Hover
    vertieft die Marke, statt eine zweite Flaeche darueber zu legen. */

@@ -1,7 +1,8 @@
 /* ==========================================================================
    Shell — frameless app surface (v2)
 
-   Loaded LAST, so it wins on equal specificity. It carries the parts of the
+   Loaded after the component layers (style.css), so it wins over them on
+   equal specificity. It carries the parts of the
    redesign that are about *material* rather than about a single component:
 
      1. elevation — only floating layers keep a shadow
@@ -13,9 +14,7 @@
    ========================================================================== */
 
 /* App surface aliases. The surfaces themselves live in variables.css, the
-   same values as public-tokens.css (Apple-Audit G7: the app had its own,
-   bluish dark surface, #303338, ten times the step of the website). These
-   names stay for older components and resolve on body, where /app puts its
+   same values as public-tokens.css. These names stay for older components and resolve on body, where /app puts its
    dark class. */
 body,
 body.dark-mode {
@@ -32,7 +31,7 @@ body:not(.dark-mode) {
 /* --------------------------------------------------------------------------
    1. Elevation
 
-   variables.css flattened every shadow token, which is right for inline
+   variables.css keeps every shadow token flat, which is right for inline
    surfaces but wrong for layers that genuinely float above the page. Those
    get --lift back here, in one place.
    -------------------------------------------------------------------------- */
@@ -46,7 +45,7 @@ body:not(.dark-mode) {
 }
 
 /* Floating layers are opaque: a translucent menu over streaming text is
-   unreadable, and there is no blur left to rescue it. */
+   unreadable, and there is no blur to rescue it. */
 .modal-content,
 .attach-menu,
 #emailPopup {
@@ -90,7 +89,7 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
    move with the panel's duration and curve. Closing, the panel's toggle
    steps out at once and the floating one glides from that spot to the
    corner; opening, the floating one glides back and hands over when the
-   panel has arrived. One glyph, never two (Apple-Audit C3). Hidden means
+   panel has arrived. One glyph, never two. Hidden means
    visibility: hidden, so neither can be tabbed to while it is not shown. */
 @media (min-width: 1100px) {
   /* The float keeps its (hidden) parts laid out over the panel's corner:
@@ -270,8 +269,8 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   padding: 4px 2px 2px;
 }
 
-/* "New comparison" und die erste Navigation gehoeren enger zusammen als
-   zuvor. Der Sidebar-Flex-Gap liefert bereits 10px; 8px Zusatzabstand ergibt
+/* "New comparison" und die erste Navigation gehoeren eng zusammen. Der
+   Sidebar-Flex-Gap liefert bereits 10px; 8px Zusatzabstand ergibt
    einen ruhigen 20px-Schritt bis zur Models-Zeile statt knapp 30px. */
 .sidebar-pinned {
   margin-top: 8px;
@@ -308,13 +307,12 @@ body:not(:has(.sidebar.collapsed)) .app-nav-float .sidebar-toggle {
   color: inherit;
 }
 
-/* ---- One row, three entries (Apple-Audit G2) ------------------------------
+/* ---- One row, three entries -----------------------------------------------
    New comparison, Models and Chats are the same component: a 16px glyph
    centred in an 18px column, the label 9px after it in 14px/500, 36px tall
    with 6/8px of padding, and the same 4px inset as the sections below, so
    glyphs and words stand on two straight lines. Models adds its count as a
-   quiet second line in --ink-3. They used to differ in size (15/16px glyph,
-   14 and 12px labels), weight (500/600), height (37/44px) and left edge. */
+   quiet second line in --ink-3. */
 .sidebar-new-run {
   flex: 0 0 auto;
   width: auto;
@@ -393,7 +391,7 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   text-transform: none;
 }
 
-/* The glyph and the word are cells of the row itself (G2). */
+/* The glyph and the word are cells of the row itself. */
 .sidebar-bookmarks-head .sidebar-heading-label {
   display: contents;
 }
@@ -469,7 +467,7 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   height: 14px;
 }
 
-/* Always there while the list is open: hidden until hover, nobody found it. */
+/* Always there while the list is open: hidden until hover, nobody would find it. */
 .bookmarks-section:not(.is-collapsed):not(.is-locked) .sidebar-search-trigger {
   opacity: 1;
   pointer-events: auto;
@@ -743,9 +741,7 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
    holds no number: the exact value is in its tooltip and in the panel.
    Semantic colour only on the arc and the bar fill when it runs low.
    -------------------------------------------------------------------------- */
-/* The footer used to be position:fixed with an 80px margin reserved above it
-   — that reserve is exactly the dead band that sat between the bookmark list
-   and the account row. In the flex column the footer needs no reservation:
+/* In the flex column the footer needs no reservation:
    the scrollable list runs all the way down to it. */
 .sidebar-settings {
   /* relative, not fixed: stays the anchor for the quota panel, but sits in
@@ -965,8 +961,8 @@ body.direct-comparison-active:not(.direct-comparison-preview):not(:has(#watchDas
    4. Chat surfaces and floating composer
    The composer is the raised field (--field*, variables.css): the same
    material as the landing page's field, so the step from the website into
-   the product is a cut in the same film (Apple-Audit G8). Opaque: there is
-   no glass left to blur what scrolls beneath it.
+   the product is a cut in the same film. Opaque: there is
+   no glass to blur what scrolls beneath it.
    -------------------------------------------------------------------------- */
 :root,
 body.dark-mode {
@@ -1107,8 +1103,8 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
    a circle. Ink when the question can go, a quiet grey while it cannot; the
    arrow lifts a little on hover. Sending sends one short, faint ring out
    from the button and the stop square fades in; while the run lasts nothing
-   moves (2026-10-02: the orbiting light and the wide fan-out were too much
-   motion for a control people keep in view for a minute). */
+   moves (an orbiting light or a wide fan-out is too much motion for a
+   control people keep in view for a minute). */
 .input-action-btn-primary {
   position: relative;
   display: inline-grid;
@@ -1169,8 +1165,8 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
 }
 
 /* The light below Send (send-glow.css) breathes while the field is empty:
-   it rises and sinks at the slow beat, the control waiting for a question
-   (Max, 2026-10-31). With a question it is brighter and breathes on, higher
+   it rises and sinks at the slow beat, the control waiting for a question.
+   With a question it is brighter and breathes on, higher
    up and never quite out, so typing does not make it stop. Hover lifts it
    to its brightest. While the models work it stays on the pale stop button
    and breathes slowly in place (below): something is running, without a
@@ -1453,7 +1449,7 @@ body:is(.is-hero, .direct-comparison-preview) .chat-input-container .input-field
   gap: 12px;
   margin: 2px 6px 14px;
   padding: 14px 16px;
-  /* Neutral tone; the amber is the icon's (Max, 2026-10-31: no yellow box). */
+  /* Neutral tone; the amber is the icon's (no yellow box). */
   border: 0;
   border-radius: var(--radius-md);
   background: var(--raise);
@@ -1469,7 +1465,7 @@ body:not(.is-hero) #verifyBanner {
 
 /* On the start screen it stands under the composer (it follows it in the
    DOM) and moves with the composer's shift (components-input.css), so the
-   field never moves when it appears (Apple-Audit B5). */
+   field never moves when it appears. */
 body.is-hero #verifyBanner {
   transform: translateY(var(--hero-shift, 0px));
 }
@@ -1675,7 +1671,7 @@ body.agreement-verdict-hidden .run-provenance {
   height: 14px;
 }
 
-/* The verdict, now a line inside the footer rather than a banner above the
+/* The verdict, a line inside the footer rather than a banner above the
    answer. Its surface is set further down, after the frameless reset. */
 .run-provenance .consensus-verdict {
   /* components-consensus.css gives the old topbar an 18px bottom margin.
@@ -1711,9 +1707,7 @@ body.agreement-verdict-hidden .run-provenance::before {
   display: none;
 }
 
-/* The headline is a headline: one line. It used to chain two truncated
-   claim fragments plus "+2 more" into a two-line run-on that was the
-   loudest thing in the footer and the hardest to read. One topic, cut with
+/* The headline is a headline: one line. One topic, cut with
    an ellipsis; the rest is what the differences drawer is for. */
 .run-provenance .verdict-headline {
   display: block;
@@ -1974,7 +1968,7 @@ body.dark-mode .run-provenance {
 
   /* The row under an Agent answer has its own phone grid (agent-chat.css
      .agent-evidence-grid): stretched here, a lone "Sources" took the whole
-     width and Watch and Share fell to the edges below (UX audit B1). */
+     width and Watch and Share fell to the edges below. */
   .consensus-footer-tabs:not(.agent-evidence-links) {
     display: grid;
     grid-template-columns: none;
@@ -2065,8 +2059,8 @@ body.dark-mode .run-provenance {
    keeps the input first (the hero math depends on it); flex order does the
    turning, so the hero state stays untouched.
    -------------------------------------------------------------------------- */
-/* The thread page is exactly one viewport tall and no more. Two things used
-   to add slack below the fold: body's 100vh (on a phone that is taller than
+/* The thread page is exactly one viewport tall and no more. Two things would
+   add slack below the fold: body's 100vh (on a phone that is taller than
    the visible 100dvh) and its 10px bottom padding, which put the column's
    last pixels — and therefore the sticky composer's resting place — below
    the viewport. A composer pinned with `bottom: 0` inside a column that ends
@@ -2158,7 +2152,7 @@ body:not(.is-hero) .input-section {
     width: min(var(--app-container-width), calc(100vw - 40px - env(safe-area-inset-left, 0px) - env(safe-area-inset-right, 0px)));
     box-sizing: border-box;
     margin: 0;
-    /* The field stands above the home indicator (Apple-Audit F12); the
+    /* The field stands above the home indicator; the
        composer's ground still reaches the screen's edge under it. */
     padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
     transform: translateX(-50%);
@@ -2230,7 +2224,7 @@ body:not(.is-hero) .input-section {
      Browser scrollte ihn zum Cursor, sobald Text in das gerade fokussierte
      Feld kam (40-70px). Am Ende der Bewegung fiel das Scrollen mit
      overflow:hidden weg und Senden sprang um so viel nach unten; ein Tipp in
-     diesem Moment ging ins Leere (Nachtlauf Gmail bei 320px, 2026-11-06).
+     diesem Moment ging ins Leere (Nachtlauf Gmail bei 320px).
      hidden bleibt nur der Rueckfall fuer Browser ohne clip. */
   body.composer-animating:not(.is-hero) .input-section {
     transition:
@@ -2307,7 +2301,7 @@ body:not(.is-hero) .input-section::before {
 @media (max-width: 1099px) {
   /* Still on the layout viewport's bottom, raised to the keyboard's edge by
      a transform (composer-keyboard.js writes --keyboard-lift on this box):
-     Safari panning the page moves only this, no layout (Apple-Audit D9). */
+     Safari panning the page moves only this, no layout. */
   body.keyboard-open:not(.is-hero) .input-section {
     padding-bottom: 6px;
     transform: translate(-50%, calc(-1 * var(--keyboard-lift, 0px)));
@@ -2318,8 +2312,8 @@ body:not(.is-hero) .input-section::before {
   }
 
   /* Without a keyboard, Safari can leave the visible part below the layout
-     viewport this box hangs on (after another app's keyboard over the page,
-     2026-11-01): composer-keyboard.js writes the gap as --viewport-drop, and
+     viewport this box hangs on (after another app's keyboard over the
+     page): composer-keyboard.js writes the gap as --viewport-drop, and
      the composer follows the visible bottom down. */
   body.viewport-panned:not(.keyboard-open):not(.is-hero) .input-section {
     transform: translate(-50%, var(--viewport-drop, 0px));
@@ -2334,7 +2328,7 @@ body:not(.is-hero) .input-section::before {
       padding-bottom var(--dur-state) var(--ease-out);
   }
   /* Up and down with the keyboard itself, on iOS's keyboard curve, when the
-     module moves it ahead of Safari's late report (Apple-Audit F9). Only
+     module moves it ahead of Safari's late report. Only
      then: following Safari's panning stays immediate. */
   body.keyboard-moving:not(.is-hero) .input-section,
   body.keyboard-moving.composer-animating:not(.is-hero) .input-section,
@@ -2353,8 +2347,8 @@ body:not(.is-hero) .consensus-section::before {
 
 /* ---- The question at the head of the thread ------------------------------
    An eyebrow and the question itself — das eine Element, das in den Worten
-   des Nutzers spricht. Es liest sich in derselben Groesse wie die Antwort
-   (User-Vorgabe 2026-08-14): wer spricht, sagt die Position, nicht der Grad.
+   des Nutzers spricht. Es liest sich in derselben Groesse wie die Antwort:
+   wer spricht, sagt die Position, nicht der Grad.
    Der Block sitzt rechts (die Antwort links), der Text darin bleibt aber
    linksbuendig — rechtsbuendiger Flattersatz ueber mehrere Zeilen liest sich
    schlecht. Long messages fold to eight lines; "Show more" in the bubble
@@ -2523,8 +2517,7 @@ body:not(.is-hero) .consensus-section::before {
 /* A sent file still uploading in an Agent chat (attachments.js
    markUploading): its place over the message waits in the same skeleton,
    a picture at its own size with the picture held back, then it fades in;
-   another file says "Uploading…" for its size. Before 2026-10-29 a row per
-   file stood under the message instead ("Uploading and reading…"). */
+   another file says "Uploading…" for its size. */
 .message-attachments .attachment-chip.is-uploading {
   position: relative;
   overflow: hidden;
@@ -2700,8 +2693,8 @@ body.chat-opening:not(.is-hero) .container > :not(.thread-opening, .input-sectio
 /* An Agent turn in the history keeps the live turn's boxes to the pixel:
    when a follow-up starts, the live question and answer move up into the
    history as they are (agent-chat.js liveTurn), and a reopened chat builds
-   the same boxes. Both keep one rhythm from the spacing scale (UX audit
-   B11): --space-5 from the question to its answer (the live turn's empty
+   the same boxes. Both keep one rhythm from the spacing scale:
+   --space-5 from the question to its answer (the live turn's empty
    .consensus-section adds nothing in Agent mode, agent-chat.css), --space-7
    from the row under the answer to the next question. */
 .thread-history-turn.is-agent-turn {
@@ -2758,7 +2751,7 @@ body.chat-opening:not(.is-hero) .container > :not(.thread-opening, .input-sectio
   overflow-wrap: anywhere;
 }
 
-/* Die Archivkopie liegt nicht mehr in .run-provenance. Deshalb dieselbe
+/* Die Archivkopie liegt nicht in .run-provenance. Deshalb dieselbe
    kompakte Judge-Fussnote hier explizit wiederherstellen, statt sie als
    rechtsbuendigen eigenen Flex-Block wertvolle Zeilenbreite kosten zu lassen. */
 .thread-history-verdict .verdict-judge {
@@ -2775,10 +2768,9 @@ body.chat-opening:not(.is-hero) .container > :not(.thread-opening, .input-sectio
 
 /* ---- Der Fuss eines archivierten Turns ------------------------------------
    Dieselbe Zeile leiser Schubladen wie unter der aktiven Antwort
-   (.consensus-footer-tabs), nur ohne Lauf-Fakten und Aktionen. Vorher lagen
-   Differences, Sources und Model answers als drei gestapelte <details>
-   untereinander — jeder alte Turn hat den Thread damit um drei Zeilen
-   verlaengert, obwohl alles zugeklappt war. */
+   (.consensus-footer-tabs), nur ohne Lauf-Fakten und Aktionen. Drei
+   gestapelte <details> wuerden jeden alten Turn um drei Zeilen verlaengern,
+   obwohl alles zugeklappt ist. */
 .thread-history-footer {
   display: flex;
   flex-direction: column;
@@ -2856,7 +2848,7 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
    5. Thread surfaces
 
    Answer, model cards and the differences drawer sit directly on the page.
-   Everything that used to be a card keeps its spacing and loses its frame.
+   A former card keeps its spacing, without a frame.
    -------------------------------------------------------------------------- */
 .consensus-box,
 .response-box,
@@ -2882,7 +2874,7 @@ body.agreement-verdict-hidden .thread-history-footer:not(:has(.consensus-tab)) {
   padding: 0 6px;
   /* overflow-x:auto (components-consensus) grew a horizontal scrollbar the
      moment the inline copy actions poked 8px past the edge — a grey bar
-     right across the provenance line. The answer sits on the page now; code
+     right across the provenance line. The answer sits on the page; code
      already wraps (pre-wrap), so nothing needs a private scroll region. */
   overflow: visible;
 }
@@ -3005,10 +2997,10 @@ ul.md-task-list > .md-task-item > p:first-child > .md-task-box {
 .consensus-answer-body h3 { font-size: 1.125em; }
 .consensus-answer-body :is(h4, h5, h6) { font-size: 1em; }
 /* A subheading right under its heading belongs to it: closer to it than to
-   the section before (UX audit J5; it stood almost a full section apart). */
+   the section before. */
 .consensus-answer-body :is(h1, h2, h3) + :is(h2, h3, h4, h5, h6) { margin-top: .5em; }
 /* Inline code hugs its word, so a bracket or comma beside it stays with it:
-   "(Heizlastberechnung)" no longer reads "( Heizlastberechnung )" (J6). */
+   "(Heizlastberechnung)" never reads "( Heizlastberechnung )". */
 .consensus-answer-body :not(pre) > code { padding: .1em .25em; margin-inline: -.05em; }
 .consensus-answer-body :is(strong, b) { font-weight: var(--font-weight-semibold); }
 .consensus-answer-body hr { margin-block: 1.5em; }
@@ -3061,23 +3053,23 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
   max-width: none;
 }
 
-/* The tint behind the answer is a leftover from the card era: a diagonal
-   accent wash that made the consensus look like a panel laid on the page —
-   faint, but with a hard left edge where the column starts. The answer IS
-   the page now, so the wash goes. */
+/* No tint behind the answer (components-consensus.css draws one): a
+   diagonal accent wash makes the consensus look like a panel laid on the
+   page — faint, but with a hard left edge where the column starts. The
+   answer IS the page. */
 .consensus-box::before {
   background: none;
 }
 
 /* ---- Model answers: previews, not six scroll wells -----------------------
-   Behind "Compare answers" every box used to carry its own scrollbar
-   (max-height + overflow-y in components-misc). Six private scroll regions
-   inside a scrolling page meant: the wheel did something different depending
-   on where the pointer was, the columns ended at unrelated heights, and long
-   answers were cut with nothing but a thin scrollbar to say so — in the one
+   Behind "Compare answers" no box keeps its own scrollbar (max-height +
+   overflow-y in components-misc). Six private scroll regions inside a
+   scrolling page would mean: the wheel does something different depending
+   on where the pointer is, the columns end at unrelated heights, and long
+   answers are cut with nothing but a thin scrollbar to say so — in the one
    view whose entire job is comparing those answers side by side.
 
-   Now each answer shows the same measure of itself, fading out at the same
+   Each answer shows the same measure of itself, fading out at the same
    line, and one button opens exactly the one you want to read in full.
    agent-mode.js only clamps boxes that actually overflow, and never while
    they are still streaming.
@@ -3146,8 +3138,8 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
   transform: rotate(180deg);
 }
 
-/* The verdict was a filled, bordered banner. It says the same thing as a
-   line: score ring, headline, judge footnote — so it becomes a line. The
+/* The verdict is a line, not a filled, bordered banner: score, headline,
+   judge footnote. The
    traffic light stays, because that is the one piece of colour that carries
    meaning rather than decoration. */
 .consensus-verdict,
@@ -3186,11 +3178,10 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
 
 /* ---- Das Urteil als Messwert ---------------------------------------------
    Der Fuss besteht aus lauter gleich leisen Grautoenen; die eine Aussage, die
-   der Leser NICHT uebersehen darf — wie einig sich die Modelle sind — sah
-   darin lange aus wie eine Fussnote unter der Fussnote. Der Versuch, sie mit
-   einer eingefaerbten Platte herauszuheben, hat das Kernergebnis wie eine
-   Fehlermeldung aussehen lassen: eine rote Box mitten in einer rahmenlosen
-   Seite. Die Loesung ist Typografie statt Flaeche — eine gesetzte Zahl in
+   der Leser NICHT uebersehen darf — wie einig sich die Modelle sind — saehe
+   darin aus wie eine Fussnote unter der Fussnote. Eine eingefaerbte Platte
+   liesse das Kernergebnis wie eine Fehlermeldung aussehen: eine rote Box
+   mitten in einer rahmenlosen Seite. Deshalb Typografie statt Flaeche — eine gesetzte Zahl in
    Ueberschriftsgroesse, darunter ein 3px-Balken in der Ampelfarbe. Das ist
    das lauteste Element des Fusses, ohne irgendetwas zu umranden, und es traegt
    die Semantik auch bei Score 0, weil die leere Strecke getoent bleibt.
@@ -3216,7 +3207,7 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
 }
 
 /* Groesse, Ampelfarbe und Balken der Score-Anzeige stehen in
-   components-consensus-insights.css — hier nur, was der Fuss-Kontext
+   components-consensus-visuals.css — hier nur, was der Fuss-Kontext
    beisteuert: der gedaempfte Nenner auf der Fuss-Tonleiter. */
 .run-provenance .verdict-score-unit {
   color: var(--ink-3);
@@ -3250,7 +3241,7 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
   box-shadow: none;
 }
 
-/* While the consensus is being synthesised the block used to become a
+/* While the consensus is being synthesised the block does not become a
    ring-lined card. The pipeline line above already says a run is in flight,
    so the answer area just stays the page — nothing appears and disappears
    around the text as it streams in. */
@@ -3265,14 +3256,13 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
    In chat prose (Consensus and Agent answers, saved turns, the key-claims
    list) a citation is a quiet pill on the text baseline: favicon + short
    domain, so the reader sees WHICH source backs the sentence without decoding
-   a footnote number. It replaced the raised numbers on 2026-10-01 (user
-   decision). Adjacent citations share one pill ("uci.org +2"); the teaser
+   a footnote number. Adjacent citations share one pill ("uci.org +2"); the teaser
    lists them all. When the domain is already written right before the
    citation, the pill shrinks to its favicon (.is-compact) instead of
    repeating it. The `.source-link` chips stay in the raw model answers.
    -------------------------------------------------------------------------- */
 /* The pill itself (.src-ref and its parts) lives in source-pill.css, shared
-   with the public pages (Apple-Audit G9). */
+   with the public pages. */
 
 /* Hover teaser: enough of the source to decide whether to leave the page. */
 .source-teaser {
@@ -3370,7 +3360,7 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
   }
 }
 
-/* ---- Every source behind a pill (sources.js sourceSheet, Apple-Audit F6) --
+/* ---- Every source behind a pill (sources.js sourceSheet) ------------------
    A popover at the pill, or on a phone a card in the middle of the screen
    over the scrim, like the sentence card. Each source is one row to tap:
    site, title, and for a single source its excerpt. Motion: overlays.css. */
@@ -3567,7 +3557,7 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
 }
 
 /* Disclosure for the individual answers. It is one of the three drawers in
-   the footer now, not a text link buried in the facts line — showing what
+   the footer, not a text link buried in the facts line — showing what
    the six models actually said is too central to read as a footnote.
    `display: contents` so the button is a direct child of the chip row: as
    an inline-flex wrapper it sat on its own baseline and hung a few pixels
@@ -3595,7 +3585,7 @@ body.consensus-markers-hidden .consensus-answer-body .cx-spot {
 
 /* ---- Menus at the composer open upward -----------------------------------
    In the thread the composer is pinned to the bottom edge, so there is
-   nothing below it to open into: the (+) menu and the run switch both ran
+   nothing below it to open into: the (+) menu and the run switch would run
    off the screen. Above the composer is the whole thread, which is exactly
    where a menu belonging to it has room. The hero keeps opening downward —
    there the input is centred and the space is below it.
@@ -3606,9 +3596,9 @@ body:not(.is-hero) .chat-input-container .attach-menu {
 }
 
 /* On narrow screens the fixed composer and the fixed 56px header share the
-   viewport. Since the mode leads the menu (2026-10-02) the menu is taller,
-   and on a short phone it ran up under the header, which covered its first
-   rows. It now ends below the header and scrolls instead. */
+   viewport. With the mode leading it the menu is tall, and on a short phone
+   it would run up under the header, which covers its first rows. It ends
+   below the header and scrolls instead. */
 @media (max-width: 1099px) {
   body:not(.is-hero) .chat-input-container .attach-menu {
     max-height: max(120px, min(60vh, 420px, calc(100dvh - var(--thread-composer-height, 154px) - 72px)));
@@ -3667,9 +3657,9 @@ body.is-hero .consensus-section::before {
    -------------------------------------------------------------------------- */
 
 /* ---- Plan next to the allowance -----------------------------------------
-   The gold PRO badge used to sit beside "New comparison", where it competed
-   with the one action the sidebar head is for. It belongs to the account, so
-   it moved to the head of the allowance panel. */
+   The gold PRO badge belongs to the account, so it stands in the head of
+   the allowance panel, not beside "New comparison", where it would compete
+   with the one action the sidebar head is for. */
 .sidebar-quota-plan {
   display: inline-flex;
   align-items: center;
@@ -3764,8 +3754,7 @@ body.dark-mode .feedback-modal h2 {
 /* Neutral filled controls. Primary and destructive actions retain their
    semantic colours; text-only actions retain their transparent treatment. */
 /* The feature explanation is one surface, not a card inside a modal, in
-   both themes (until 2026-10-22 only in light: dark kept a tinted header
-   band and a framed panel whose edges sat on the dialog's own). "Got it"
+   both themes. "Got it"
    is a neutral filled button; .btn-free sets its colours with !important
    (components-modals.css), so this one has to as well. */
 #proFeatureModal .pro-header {
@@ -3828,10 +3817,9 @@ body.dark-mode .model-picker-option:focus-visible:not(:disabled):not([aria-disab
   }
 }
 
-/* The current choice reads as chosen, not as unavailable (Apple-Audit G6):
+/* The current choice reads as chosen, not as unavailable:
    name and check in full ink, no tone of its own; grey is reserved for
-   rows that cannot be picked. It used to share the theme toggle's rule
-   below and inherit its --ink-2. */
+   rows that cannot be picked. */
 body .model-picker-option.is-selected,
 body.dark-mode .model-picker-option.is-selected {
   background: transparent;
@@ -3849,7 +3837,7 @@ body.dark-mode .model-picker-option.is-selected:focus-visible {
   }
 }
 
-/* Match controls nested inside the new opaque panels. */
+/* Match controls nested inside the opaque panels. */
 body .theme-toggle,
 body .theme-toggle.is-dark {
   background: var(--app-surface) !important;
@@ -3967,7 +3955,7 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
 }
 /* The start screen's tools and marks rise in when they come back
    (agent-mode.js revealBar: a new chat, the Compare start); on the first
-   paint they are simply there (Apple-Audit B1). */
+   paint they are simply there. */
 :is(.composer-tools, .composer-mode-models).is-revealing:not([hidden]) {
   animation: composer-mode-reveal var(--dur-state) var(--ease-out) both;
 }
@@ -3983,7 +3971,7 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   .composer-mode-bar { padding: 0 8px; gap: 8px; font-size: var(--font-size-xs); }
   .composer-agent-toggle { gap: 4px; }
   /* 16px apart as on the desktop: at -10px a mark covered 45 % of the one
-     before it, OpenAI's showed as half a "C" (UX audit E4). */
+     before it, OpenAI's showed as half a "C". */
   .composer-model-icon { width: 22px; height: 22px; margin-left: -6px; }
   .composer-model-icons { padding-left: 6px; }
   .composer-mode-models { gap: 5px; }
@@ -3993,13 +3981,13 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
 @media (max-width: 700px) {
   .composer-tool-label { display: none; }
   .composer-tool { width: 28px; justify-content: center; padding: 0; }
-  /* The reviewers keep their short form ("3 AIs"), as in a chat (E4, E5). */
+  /* The reviewers keep their short form ("3 AIs"), as in a chat. */
   .composer-mode-models .composer-tool-label[data-short]:not([hidden]) { display: inline; font-size: 0; }
   .composer-mode-models .composer-tool-label[data-short]:not([hidden])::after {
     content: attr(data-short); font-size: var(--font-size-xs);
   }
 }
-/* 44px to the finger (Apple-Audit F5): the workspace and the models keep
+/* 44px to the finger: the workspace and the models keep
    their drawing; on touch each reaches out to 44px. */
 @media (pointer: coarse) {
   .composer-agent-toggle { position: relative; }
@@ -4011,8 +3999,8 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
 }
 
 /* Mobile navigation: no bar, two groups of bare glyphs. The menu mark on the
-   left, the thread's actions on the right; since 2026-10-20 neither sits in
-   a raised island (Apple-Audit G17: rahmenlos wie am Desktop). Between them
+   left, the thread's actions on the right; neither sits in
+   a raised island (rahmenlos wie am Desktop). Between them
    the thread stays visible. Once something scrolls
    beneath, the ground dissolves it over the top of the screen, the same way
    the composer's halo does at the bottom: tone, no blur.
@@ -4087,8 +4075,8 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   /* The fade appears only once something scrolls beneath it
      (mobile-header.js sets .is-scrolled); on an empty start screen it would
      dissolve nothing into nothing. Solid ground behind the whole bar, so no
-     line of the answer reads between the buttons (Apple-Audit F13: a half
-     transparent band looked washed out, neither surface nor free text),
+     line of the answer reads between the buttons (a half transparent band
+     looks washed out, neither surface nor free text),
      then a short fade, gone 20px below it. */
   .app-mobile-header::before {
     content: "";
@@ -4113,8 +4101,7 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
     transition: none;
   }
 
-  /* The menu mark is bare, as on the desktop (Apple-Audit G17, Max'
-     decision): no raised circle, no ring, no shadow - a framed icon button
+  /* The menu mark is bare, as on the desktop: no raised circle, no ring, no shadow - a framed icon button
      breaks the house rule. Once something scrolls beneath, the header's
      ground fade (::before) carries it, not a backing of its own. */
   .app-mobile-header .sidebar-toggle {
@@ -4162,8 +4149,8 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
 
   /* On a phone the switch lives in the menu (mobile-header.js moves it
      there). Until that module has run it is never drawn in the bar, where
-     it did not fit and showed a cut "Chat | Watche…" for the first second
-     (Apple-Audit B2). */
+     it does not fit and would show a cut "Chat | Watche…" for the first
+     second. */
   .app-mobile-header .view-switch { display: none; }
 
   .app-mobile-header .app-top-actions {
@@ -4233,7 +4220,7 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   body:has(.watch-page:not([hidden])) .app-mobile-header .app-nav-float { display: flex; }
 
   /* The right group: New chat, then the answer's actions, bare like the
-     menu mark on the left (Apple-Audit G17): one row of plain glyphs. */
+     menu mark on the left: one row of plain glyphs. */
   .mobile-conversation-actions {
     display: flex; align-items: center; gap: 0; order: 4; margin-inline-start: auto;
     border-radius: var(--radius-pill); background: transparent;
@@ -4243,7 +4230,7 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   .app-mobile-header .app-top-actions:has(> :not([hidden])) ~ .mobile-conversation-actions { margin-inline-start: 0; }
   /* Without an answer's actions a guest's right island is empty: gone from
      the first frame, before mobile-header.js has moved the (hidden) actions
-     in, so the auth buttons never step aside by its gap (Apple-Audit B2). */
+     in, so the auth buttons never step aside by its gap. */
   .app-mobile-header .app-top-actions:has(> .auth-top-actions:not([hidden])) ~ .mobile-conversation-actions .mobile-new-run,
   .app-mobile-header .app-top-actions:has(> .auth-top-actions:not([hidden])) ~ .mobile-conversation-actions:not(:has(.consensus-footer-actions:not([hidden]))) { display: none; }
   /* With nothing shown the group leaves no gap before New chat. */
@@ -4376,12 +4363,12 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
     pointer-events: auto;
     transition: opacity var(--dur-layer) var(--ease-standard), visibility 0s;
   }
-  /* Nothing behind the dim pans (Apple-Audit F2): a swipe on it belongs to
-     the menu (app-init.js, F11). The dim is body's ::after, and a pseudo
+  /* Nothing behind the dim pans: a swipe on it belongs to
+     the menu (app-init.js). The dim is body's ::after, and a pseudo
      element's own touch-action is not asked, so the body carries it; the
      menu and every dialog are scroll containers with their own. */
   body:has(.sidebar.active) { touch-action: pinch-zoom; }
-  /* The menu follows a finger to the left (app-init.js, Apple-Audit F11);
+  /* The menu follows a finger to the left (app-init.js);
      up and down stay the list's own scroll, a pinch still zooms. While the
      finger holds it, it moves with the finger and nothing else. */
   .sidebar.active { touch-action: pan-y pinch-zoom; }
@@ -4412,7 +4399,7 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   .sidebar-footer-meta .sidebar-footer-icon { width: 44px; height: 44px; }
 }
 
-/* ---- Mobile drawer in the ChatGPT language (2026-10-18) -------------------
+/* ---- Mobile drawer in the ChatGPT language --------------------------------
    One list of plain rows instead of a stack of controls: navigation rows with
    a 20px glyph (New chat, Watches), a quiet section label, chat titles as
    text, the account as the last row. No filled pill, no tab strip, no
@@ -4467,7 +4454,7 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   #mobileSidebarViews #viewSwitchWatches.has-watch-pulse::after { top: 50%; right: 14px; margin-top: -3px; }
 
   /* Models (only outside Agent): one line, the count as a quiet value. All
-     rows share one left edge with New chat (Apple-Audit G2). */
+     rows share one left edge with New chat. */
   .models-section { margin: 0; }
   .sidebar .sidebar-section { padding-inline: 0; }
   .sidebar .sidebar-model-copy { flex: 1; flex-direction: row; align-items: baseline; justify-content: space-between; gap: 8px; }

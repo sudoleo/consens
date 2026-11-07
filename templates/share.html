@@ -55,9 +55,9 @@
       <!-- Lange Fragen kommen schon auf drei Zeilen eingeklappt an (nur mit
            Skript, @media (scripting: enabled)); check-page.js zeigt den Link
            auf der dritten Zeile, wenn wirklich etwas abgeschnitten ist. So
-           klappt nichts nach dem ersten Bild zusammen (Apple-Audit I2).
+           klappt nichts nach dem ersten Bild zusammen.
            Frage und Antwort sind Inhalt: nie uebersetzt, in ihrer eigenen
-           Sprache (content_lang aus der Route, a11y-Audit L1). -->
+           Sprache (content_lang aus der Route). -->
       <div class="wp-question-wrap">
         <h1 id="shareQuestion" class="share-question is-clamped{% if question | length > 120 %} is-long{% endif %}{% if question | length > 260 %} is-very-long{% endif %}" data-i18n-skip{% if content_lang %} lang="{{ content_lang }}"{% endif %}>{{ question }}</h1>
         <button type="button" id="shareQuestionMore" class="share-question-more" aria-expanded="false" aria-controls="shareQuestion" hidden>Show full question</button>
@@ -90,8 +90,8 @@
         </ul>
       </div>
       {% endif %}
-      {#- The reviewers' notes of an Agent answer (since 2026-10-31,
-          check_page.review_cards) take the place of the differences. -#}
+      {#- The reviewers' notes of an Agent answer (check_page.review_cards)
+          take the place of the differences. -#}
       {% set has_notes_view = review_view and review_view.cards %}
       {% if consensus_model_view or consulted_models or review_view %}
       <div class="share-models">
@@ -111,7 +111,7 @@
         </div>
         {% endif %}
         {% if consulted_models %}
-        {#- Folded since 2026-10-22: one line, the models as the Agent shows
+        {#- Folded: one line, the models as the Agent shows
             them beside "Thought for …" (overlapping marks at rest in grey);
             the names open below. -#}
         <details class="wp-disclosure share-models-group share-models-compared">
@@ -319,7 +319,7 @@
       <section class="legal-panel">
         <h2>Sources</h2>
         {#- Long lists arrive folded, so the way back lands where the reader
-            was (Apple-Audit L11); one disclosure for every fold (L14). -#}
+            was; one disclosure for every fold. -#}
         <ol id="shareSources" class="share-sources{% if sources | length > 8 %} is-collapsed{% endif %}">
           {% for source in sources %}
           <li {% if source.num %}id="src-{{ source.num }}"{% endif %}>
@@ -346,7 +346,7 @@
                 aria-controls="shareCitationText" aria-expanded="true" hidden>Show full citation</button>
         <div class="links">
           <button type="button" id="copyCitationBtn" class="button-secondary" data-umami-event="share_page_copy_citation">Copy citation</button>
-          {#- A button's new name is not always read; this line is (a11y audit P7). -#}
+          {#- A button's new name is not always read; this line is. -#}
           <span id="copyCitationStatus" class="visually-hidden" role="status"></span>
           <a href="/app" class="button-primary">Ask your own question</a>
         </div>
@@ -369,8 +369,7 @@
       </section>
       {% endif %}
 
-      <!-- Methode und Vorbehalt standen als zwei graue Kleingedruckt-Absaetze
-           nebeneinander. Zusammen beantworten sie "wer, wie, wann" - also
+      <!-- Methode und Vorbehalt beantworten zusammen "wer, wie, wann" - also
            bekommen sie eine Ueberschrift statt einer Fussnoten-Optik. Der
            Irrtumshinweis bleibt woertlich erhalten. -->
       <section class="share-about" aria-labelledby="shareAboutHeading">
@@ -469,7 +468,7 @@
         teaser.addEventListener("click", function () {
           differencesBtn.click();
           // The teaser goes with its view: the focus moves on to where it
-          // leads instead of falling back to the page (a11y audit K7).
+          // leads instead of falling back to the page.
           const heading = differencesView.querySelector("h2");
           if (heading) {
             heading.tabIndex = -1;
@@ -485,7 +484,7 @@
     // Skript wie auf Watch- und Topic-Seiten (static/js/check-page.js).
 
     // A failed send is said under the form it belongs to, not in a browser
-    // window (Apple audit E1).
+    // window.
     function formError(form, message) {
       let line = form.querySelector(".share-form-error");
       if (!line) {

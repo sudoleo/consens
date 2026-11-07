@@ -1,8 +1,8 @@
-/* Dedicated model-pulse page. Since 2026-10-03 the board shows a rate per
-   family (picks / runs it was in) instead of a raw pick count. Each bar
+/* Dedicated model-pulse page. The board shows a rate per
+   family (picks / runs it was in), not a raw pick count. Each bar
    carries three marks on one shared 0..scale axis in real percent: the rate,
    its plausible range as a soft band, and a tick for the family's fair share
-   by chance. Since 2026-11-01 an archive: the tally closed on 2026-10-31,
+   by chance. An archive: the tally closed on 2026-10-31,
    no live dot. */
 
 .pulse-hero {

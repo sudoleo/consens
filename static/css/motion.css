@@ -1,6 +1,5 @@
 /* ==========================================================================
    Motion — the rules every moving part of /app shares
-   (Apple audit C8, C10, C11, C13, C14)
 
    1. Theme switch   light and dark change in one cross-fade (App.motion.switchTheme)
    2. Disclosures    a <details> opens and closes its height (disclosure.js)
@@ -35,7 +34,7 @@ html.is-theme-switching *::after {
    -------------------------------------------------------------------------- */
 /* While its height moves, nothing may paint outside it: a component that sets
    overflow: visible on its <details> (the differences cards) let the folding
-   content run over the rows below, text over text (Max 2026-10-23). */
+   content run over the rows below, text over text. */
 details.is-disclosing {
   overflow: hidden !important;
 }

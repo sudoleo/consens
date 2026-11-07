@@ -46,8 +46,8 @@
   {#
     Eine Watch-Seite sagt genau drei Dinge: wie die Antwort heute lautet, ob
     und wann sie sich bewegt hat, und wie man davon erfährt. Score, Kurven,
-    Modell-Chips und die Positions-Karte standen früher drumherum und haben
-    genau das verdeckt; was davon noch hilft, steht zugeklappt ganz unten.
+    Modell-Chips und eine Positions-Karte drumherum wuerden genau das
+    verdecken; was davon hilft, steht zugeklappt ganz unten.
     Die Teile teilt sie sich mit den Topic-Seiten (partials/check_page.html).
   #}
   {% import "partials/check_page.html" as check with context %}
@@ -56,11 +56,11 @@
     {# Das Bild ist consens.io-eigen ausgeliefert, verlinkt auf seine Quelle;
        nie in og:image/JSON-LD (services/watch_images.py). #}
     {#- The kicker says whether anyone is still looking: a paused Watch is not
-        "checked weekly" (Apple-Audit L2). -#}
+        "checked weekly". -#}
     {% call check.head(watch_page.status, question, watch_page.image) %}Watch{% if watch_page.is_active and watch_page.interval %} · checked {{ watch_page.interval }}{% elif watch_page.status in ('paused', 'paused_error') %} · paused{% elif watch_page.status == 'resolved' %} · resolved{% endif %}{% if is_private %} · private{% endif %}{% endcall %}
 
-    {#- Nobody waits on a paused Watch: its goal says what it was waiting for
-        (Apple-Audit L2, Zweitprüfung 16). -#}
+    {#- Nobody waits on a paused Watch: its goal says what it was waiting
+        for. -#}
     {{ check.state(watch_state, watch_selected_version.current_url, "What this Watch found", watch_page.goal if watch_page.goal and not watch_page.resolution else "", goal_label="Was waiting for" if watch_page.status in ('paused', 'paused_error') else "Waiting for") }}
 
     {% if not watch_awaiting_first_run %}{{ check.direct_links(watch_key_links) }}{% endif %}
@@ -118,7 +118,7 @@
   <script defer src="{{ asset_url('/static/js/check-page.js') }}"></script>
   <script>
     // A failed send is said under the form it belongs to, not in a browser
-    // window (Apple audit E1).
+    // window.
     function formError(form, message) {
       let line = form.querySelector(".share-form-error");
       if (!line) {
@@ -131,7 +131,7 @@
       line.textContent = message || "";
       line.hidden = !message;
       // The address field names its error, so it is read again on return to
-      // the field (a11y audit P7).
+      // the field.
       const field = form.querySelector("input[type=email]");
       if (field) {
         if (message) field.setAttribute("aria-describedby", line.id);

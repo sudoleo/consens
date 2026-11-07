@@ -1,12 +1,8 @@
 /* ==========================================================================
-   Sources — one site icon and one citation pill (Apple-Audit G9)
+   Sources — one site icon and one citation pill
 
    Imported by style.css (/app) and public-pages.css (shared answers, Topic
-   and Watch pages), so a source looks the same wherever it is cited. Before,
-   the same logo was a circle in the answer, a square in its preview, a 36 px
-   tile in the reader (light grey in the dark) and, on the public pages, a
-   tinted, bolder pill; OpenAI's black mark showed on a white tile, as a
-   black circle and black on dark on one page.
+   and Watch pages), so a source looks the same wherever it is cited.
 
    The site icon: a rounded square (radius a quarter of its side), the logo
    inset on a light plate. On light surfaces the plate disappears; in the
@@ -198,7 +194,7 @@
   }
 }
 
-/* 44px to the finger (Apple-Audit F5) across, and up and down exactly the
+/* 44px to the finger across, and up and down exactly the
    pill's own line: the pill stays a 19px mark in the text. A 44 px area
    reached some 9 px into the lines above and below, over their words,
    links and pills - a tap on the lower half of a pill could open the one

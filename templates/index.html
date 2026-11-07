@@ -8,7 +8,7 @@
        steht hinter der Tastatur statt darueber — man tippt in ein Feld, das
        man nicht sieht. Mit resizes-content schrumpft das Viewport, der
        Composer sitzt auf der Tastaturkante und der Thread darueber.
-       viewport-fit=cover (Apple-Audit F12): die Seite reicht unter Notch und
+       viewport-fit=cover: die Seite reicht unter Notch und
        Home-Balken, damit env(safe-area-inset-*) wirkt; Kopf, Composer,
        Hinweise, Menue und Sheets halten diese Raender selbst frei. -->
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content">
@@ -63,7 +63,7 @@
   {% include "partials/font_preload.html" %}
   {# The sign-in comes from Google's CDN (firebase.js imports it), and the
      app group waits for that module: the connection and both files start
-     with the HTML instead of after the bundles (Apple-Audit B9). Same URLs
+     with the HTML instead of after the bundles. Same URLs
      as the imports in static/firebase.js. #}
   <link rel="preconnect" href="https://www.gstatic.com" crossorigin>
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js">
@@ -79,7 +79,7 @@
   <script defer src="{{ asset_url('/static/vendor/marked/12.0.2/marked.min.js') }}"></script>
   <script defer src="{{ asset_url('/static/vendor/dompurify/3.4.17/dist/purify.min.js') }}"></script>
   {# KaTeX sets formulas in model answers, which few answers have: about
-     100 KB that every start loaded before the app (Apple-Audit B12).
+     100 KB that would otherwise load before the app on every start.
      math-render.js loads these files the first time a formula streams in. #}
   <meta name="katex-assets"
         data-css="{{ asset_url('/static/vendor/katex/0.19.0/dist/katex.min.css') }}"
@@ -99,7 +99,7 @@
 
 <body class="is-hero">
   <!-- Erster Tab-Stopp: an Seitenleiste und Kopf vorbei zum Inhalt, im Chat
-       direkt in die Frage (app-dom-events.js; docs/a11y-audit-2026-10-23.md, B2). -->
+       direkt in die Frage (app-dom-events.js). -->
   <a class="skip-link" href="#appMain">Skip to main content</a>
   <!-- iPhone-Safari liest hier die Farbe unter der unteren Leiste (shell.css). -->
   <div class="app-bottom-edge" aria-hidden="true"></div>
@@ -188,7 +188,7 @@
       <span>New chat</span>
     </button>
     <!-- Pinned: model controls — does not scroll with bookmarks.
-         Usage lebt jetzt im Kontingent-Panel über dem Account-Footer. -->
+         Usage lebt im Kontingent-Panel über dem Account-Footer. -->
     <div class="sidebar-pinned">
       <div id="mobileSidebarViews" class="mobile-sidebar-views"></div>
 
@@ -220,8 +220,8 @@
         <!-- DOM state only. The accessible visual controls live in the
              composer picker; these checkbox IDs remain the app contract. -->
         <div id="modelSelectionArea" hidden aria-hidden="true">
-          {#- Vorausgewaehlt sind die Familien des Standard-Presets (seit
-              2026-10-28 drei), damit der erste Frame schon so viele Pruefer
+          {#- Vorausgewaehlt sind die Familien des Standard-Presets,
+              damit der erste Frame schon so viele Pruefer
               zaehlt wie die App danach; ohne Preset die ersten
               max_run_families. -#}
           {% for family in model_families %}
@@ -300,8 +300,7 @@
         <p class="sidebar-quota-foot" id="quotaFoot" hidden></p>
       </div>
       <div class="sidebar-footer-row">
-        <!-- Seit 2026-10-22 eine Zeile wie das Konto oben in den macOS-
-             Einstellungen: Monogramm, Name ueber Tarif, und die ganze Zeile
+        <!-- Eine Zeile wie das Konto oben in den macOS-Einstellungen: Monogramm, Name ueber Tarif, und die ganze Zeile
              ist eine Flaeche (die Adresse spannt ihre Trefferflaeche darueber,
              das Kuerzel bleibt ein eigener Knopf obenauf). Fuer Free steht
              Early access als schlichter Textlink in der Tarifzeile.
@@ -317,9 +316,9 @@
             </span>
           </div>
         </div>
-        <!-- Kontingent: ein 20-px-Glyph ohne Zahl. Seit 2026-10-02 ein
-             Kuchen (Rest des Tages) in einem feinen Ring statt eines
-             offenen Bogens, der wie ein Ladekreisel aussah. Der genaue Wert
+        <!-- Kontingent: ein 20-px-Glyph ohne Zahl. Ein Kuchen (Rest des
+             Tages) in einem feinen Ring; ein offener Bogen saehe wie ein
+             Ladekreisel aus. Der genaue Wert
              steht im Tooltip/aria-label und im Panel; Klick oeffnet
              #sidebarQuota. pathLength=100: der Offset ist direkt der
              verbrauchte Anteil in Prozent. -->
@@ -344,8 +343,7 @@
       <!-- Fußzeile: eine Zeile. Links die rechtlichen Seiten als leise
            Woerter (das Impressum bleibt direkt erreichbar), rechts zwei
            Zeichen gleicher Groesse: Feedback und das Repository (der laufende
-           Commit steht in seinem Tooltip). Vorher brachen fuenf Woerter plus
-           Zeichen auf zwei unruhige Zeilen um. -->
+           Commit steht in seinem Tooltip). -->
       <nav class="sidebar-footer-meta" aria-label="Legal, feedback and source">
         <a href="/imprint" class="sidebar-footer-link" target="_blank" rel="noopener noreferrer">Imprint</a>
         <a href="/privacy" class="sidebar-footer-link" target="_blank" rel="noopener noreferrer" title="Privacy Policy">Privacy</a>
@@ -555,9 +553,9 @@
                                nennt der Chip das Chatmodell, die Marken sagen
                                "2 KIs pruefen mit" (agent-mode.js). Die
                                Denkstufe steht grau neben dem Chatmodell im
-                               Chip ("DeepSeek V4.1 Flash Auto", seit
-                               2026-10-31, model-picker.js); Compares Chip
-                               nennt kein Modell und zeigt keine
+                               Chip ("DeepSeek V4.1 Flash Auto",
+                               model-picker.js); Compares Chip
+                               nennt kein Modell und zeigt keine Denkstufe
              .input-actions-container rechts aussen: Demo und Senden -->
         <div class="composer-lead">
           <button type="button" id="attachTrigger" class="attach-trigger" aria-haspopup="true" aria-expanded="false" aria-controls="attachMenu" title="Mode, files and options" aria-label="Mode, files and options">
@@ -655,8 +653,8 @@
       </div>
       <!-- Beispielfragen unter einem leeren neuen Chat: ein Klick fuellt das
            Feld, abgeschickt wird bewusst (composer-invite.js). Drei aus dem
-           kuratierten Pool pro Seitenaufruf, eine Zeile, seit 2026-10-31 ohne
-           "Check an AI answer" (app/services/starter_questions.py):
+           kuratierten Pool pro Seitenaufruf, eine Zeile
+           (app/services/starter_questions.py):
            Fragen, bei denen eine einzelne selbstsichere Antwort nicht reicht.
            Mit genug gespeicherten Chats ersetzt composer-starters.js sie durch
            vorhergesagte. Sichtbar nur im Hero und bei leerem Feld
@@ -678,14 +676,12 @@
         </div>
       </footer>
     </div>
-    <!-- E-Mail-Bestaetigung. Der Zustand zwischen Registrierung und erstem
-         Lauf war frueher ein Rauswurf: unbestaetigt hiess sofort ausloggen,
-         und wer den Link nicht sofort fand, war weg. Jetzt bleibt die Session
-         stehen, die App ist sichtbar, das Fragefeld nimmt Text an — nur der
-         Lauf wartet. Gefuellt von static/js/email-verify.js (angesteuert aus
+    <!-- E-Mail-Bestaetigung. Zwischen Registrierung und erstem Lauf bleibt
+         die Session stehen, die App ist sichtbar, das Fragefeld nimmt Text
+         an — nur der Lauf wartet. Gefuellt von static/js/email-verify.js (angesteuert aus
          firebase.js, das die Firebase-Aufrufe kennt).
          Nach dem Eingabebereich im DOM: auf dem Startbildschirm steht er unter
-         dem Feld und schiebt es nie (Apple-Audit B5); im Thread holt ihn
+         dem Feld und schiebt es nie; im Thread holt ihn
          order: 0 (shell.css) nach oben. -->
     <section id="verifyBanner" class="verify-banner" role="status" aria-live="polite" hidden>
       <span class="verify-banner-icon" aria-hidden="true">
@@ -711,7 +707,7 @@
       </div>
     </section>
 
-    <!-- Konsens-Section: bewusst OBERHALB der Modellantworten (User-Vorgabe) —
+    <!-- Konsens-Section: bewusst OBERHALB der Modellantworten —
          das Ergebnis (Konsens + Differences) ist die Hauptsache, die einzelnen
          Antworten darunter sind der Beleg. -->
     <div class="consensus-section">
@@ -742,10 +738,9 @@
                     <span class="consensus-tab-label" data-tab="differences" data-short="Differences">Review differences</span>
                     <span class="consensus-tab-meta"><span class="consensus-tab-count" id="consensusDifferencesTabCount"></span></span>
                   </button>
-                  <!-- Die Einzelantworten-Disclosure ist aus dem Agent-Mode-Panel
-                       hierher gewandert: sie gehoert zu der Antwort, deren
-                       Grundlage sie aufdeckt. IDs bleiben, agent-mode.js
-                       adressiert sie unveraendert ueber getElementById. -->
+                  <!-- Die Einzelantworten-Disclosure steht hier: sie gehoert
+                       zu der Antwort, deren Grundlage sie aufdeckt.
+                       agent-mode.js adressiert sie ueber getElementById. -->
                   <div id="agentModeAnswersRow" class="agent-mode-answers-row" hidden>
                     <button type="button" id="agentModeAnswersToggle" class="consensus-tab consensus-evidence-action agent-mode-answers-toggle"
                       aria-expanded="false"
@@ -764,7 +759,7 @@
                 </div>
                 <span class="consensus-footer-actions" id="consensusFooterActions"></span>
               </div>
-              <!-- Quellenverzeichnis: die hochgestellten Zahlen im Antworttext
+              <!-- Quellenverzeichnis: die Quellenangaben im Antworttext
                    zeigen hierher. Standardmaessig zu, geoeffnet ueber den
                    Quellen-Chip im Fuss. Gefuellt von app-init.js
                    (renderEvidenceSources). -->
@@ -832,9 +827,9 @@
       {% endfor %}
     </div>
 
-  {# app-init.js and app-dom-events.js moved into the deferred "app" group in
+  {# app-init.js and app-dom-events.js are in the deferred "app" group in
      <head>. Deferred scripts only run once parsing is finished, so their
-     position in the document never affected execution order. #}
+     position in the document does not affect execution order. #}
   </main>
   <!-- /.container : Overlays unten müssen außerhalb des App-Containers liegen.
        .container setzt container-type/isolation und wäre damit der Containing
@@ -967,7 +962,7 @@
        der Chat tritt solange zur Seite (body.is-watch-view). app-bootstrap.js
        malt sie bei direktem Aufruf ab dem ersten Bild mit Skelett, watch.js
        hält URL und Umschalter synchron, watch-dashboard.js rendert die
-       Watches des Agenten (seit 2026-11-03, neu gezeichnet 2026-11-04): ein
+       Watches des Agenten: ein
        Feld zum Anlegen (watch-composer.js, #watchDashCompose), darunter, was
        den Leser will, und was läuft. Ohne Watch steht das Feld groß in der
        Seite, der Kopf ist dann nur für Screenreader da (.is-empty). -->
@@ -1046,7 +1041,7 @@
           </div>
         </div>
         <!-- A guest sees why Memory and the key are greyed out, and the way
-             in (app-ui.js syncSettingsGuestNote, Apple-Audit H13). -->
+             in (app-ui.js syncSettingsGuestNote). -->
         <div id="settingsGuestNote" class="settings-guest-note" hidden>
           <p>Memory, your settings and your own API key are kept on your account.</p>
           <button type="button" id="settingsLoginButton" class="btn">Log in</button>
@@ -1082,7 +1077,7 @@
           <div class="settings-body" id="settingsBody">
           <p id="settingsSearchEmpty" class="settings-search-empty" hidden>No setting matches your search.</p>
           <p id="settingsSearchStatus" class="visually-hidden" role="status" aria-live="polite"></p>
-          {#- The Agent first (Max, 2026-11-02: settings aligned to the Agent): how
+          {#- The Agent first: how
               a message runs, who checks it, its workspace; Compare's own
               instruction below, since the Agent leaves it out (query-send.js). -#}
           <section id="agentSettingsSection" class="settings-category" role="tabpanel" data-settings-keywords="agent läufe runs lauf run nachricht message"
@@ -1480,7 +1475,7 @@
           </div>
         </div>
         {#- The build stays in the source link's tooltip in the sidebar
-            footer; Settings shows no commit hash (Apple-Audit H5). -#}
+            footer; Settings shows no commit hash. -#}
       </div>
     </dialog>
 
@@ -1493,7 +1488,7 @@
           <div class="faq-header">
             <h2 id="helpTitle">Help</h2>
           </div>
-          {#- What the product is today (Apple-Audit H7): one answer that
+          {#- What the product is today: one answer that
               several models check, Watches, the allowance, memory, data.
               Six questions, short, in the words the app uses. -#}
           <div class="faq-body">

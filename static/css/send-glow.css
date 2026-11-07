@@ -105,7 +105,7 @@
    curved surface moves with its source: run alternate at the breath's own
    length, it crosses once per two breaths, so rise and sway never repeat
    the same way twice in a row. It stays on the lower edge: nothing runs
-   round the rim (2026-10-02). */
+   round the rim. */
 @keyframes send-glow-drift {
   from { --glow-x: 20%; }
   to { --glow-x: 52%; }

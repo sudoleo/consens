@@ -100,7 +100,7 @@
 /* A wrapping row breaks by each item's basis before anything shrinks: with
    the chip's whole width as basis, a long name ("DeepSeek V4.1 Flash 1017
    Auto" beside "Reviewers off", field 470px with the sidebar open) put Send
-   on a line of its own (Max 2026-11-02). From 0 the models never break the
+   on a line of its own. From 0 the models never break the
    row; they grow to their own width (max-content) ahead of the tools (100
    to 1), so a short row cuts the name with an ellipsis and the tools keep
    their icon. */
@@ -156,9 +156,9 @@
 .composer-reviewers-label:empty { display: none; }
 /* Narrow, the short form ("3 AIs", data-short from agent-mode.js) instead
    of nothing: at the same width as the start screen's bar (shell.css), one
-   rule for one control (UX audit 2026-10-29 E4, E5). Beside the open
+   rule for one control. Beside the open
    activity panel the column is ~626px at 1280: with the words and the model
-   chip the field kept 172px, too little for its hint (H2); there too. */
+   chip the field kept 172px, too little for its hint; there too. */
 @media (max-width: 700px) {
   .composer-reviewers-label[data-short] { font-size: 0; }
   .composer-reviewers-label[data-short]::after { content: attr(data-short); font-size: var(--font-size-xs); }
@@ -175,7 +175,7 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
     content: attr(data-short); font-size: var(--font-size-xs);
   }
 }
-/* The account's reviewers are off (Settings > Runs, agent-mode.js): the
+/* The account's reviewers are off (Settings > Agent, agent-mode.js): the
    marks step back, the words say it. The models still answer when the agent
    asks them (compare_models), so the control stays. */
 :is(.composer-reviewers, .composer-mode-models).reviewers-off .composer-model-icon { opacity: .4; filter: grayscale(1); }
@@ -212,8 +212,7 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
   min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* The chat model's reasoning level, quiet beside its name, one word space
-   away ("DeepSeek V4.1 Flash Auto", model-picker.js; Max 2026-10-31, after
-   ChatGPT's "GPT-6.1 Sol High"). The name gives way first; a phone and a
+   away ("DeepSeek V4.1 Flash Auto", model-picker.js). The name gives way first; a phone and a
    desktop chat (below, where the chip is capped at 180px) keep the level in
    the chip's menu. */
 .chat-input-container .composer-models .model-picker-display-level {
@@ -241,7 +240,7 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
 /* (+) and Send are the two round ends of the row, as tall as a picker. */
 .chat-input-container .attach-trigger,
 .chat-input-container .input-action-btn-primary { width: 36px; height: 36px; min-width: 36px; min-height: 36px; border-radius: 50%; }
-/* 44px to the finger, the drawing stays 36px (Apple-Audit F5). Send has no
+/* 44px to the finger, the drawing stays 36px. Send has no
    pseudo-element to spare (::before is the house light, ::after the launch
    ring), so its box grows by the hit area and draws its circle in the
    middle: the padding is the hit area, the margin gives the room back. */
@@ -278,7 +277,7 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
   .chat-input-container .input-action-btn-primary:focus-visible { outline-offset: -1px; }
 }
 /* (+) is built like the picker beside it and answers like it: no fill at
-   rest, one tone step on hover and while its menu is open (Apple-Audit G5). */
+   rest, one tone step on hover and while its menu is open. */
 .chat-input-container .attach-trigger { background: transparent; }
 .chat-input-container .attach-trigger:is(:focus-visible, .is-open) { background: var(--hover); }
 @media (hover: hover) and (pointer: fine) {
@@ -324,7 +323,7 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
 
 /* ---- Desktop thread: one line while the question fits -------------------
    The field takes the place between the two groups; a second line of text
-   (`.is-multiline`, set by the autosizer in app-init.js) returns to the
+   (`.is-multiline`, set by the autosizer in composer-autosize.js) returns to the
    start-screen layout. min-/max-height feed that autosizer: min-height must
    not be 0 (`parseFloat(minHeight) || 52` would fall back to 52). */
 @media (min-width: 1100px) {
@@ -395,8 +394,8 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
    work, and its name stays readable beside the reviewers. They keep their
    words in the short form ("3 AIs") and give up their marks, which only
    repeat who they are (their tooltip and their menu name them): with the
-   marks, the name was cut to 44px at 320px. Words, never marks alone (UX
-   audit E4, E5); the start screen (#composerModelPicker) and a chat
+   marks, the name was cut to 44px at 320px. Words, never marks alone; the
+   start screen (#composerModelPicker) and a chat
    (.composer-reviewers) alike. */
 @media (max-width: 380px) {
   .composer-models > .composer-mode-models:has(> .composer-tool-label:not([hidden])) > .composer-model-icons,
@@ -457,7 +456,7 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
   /* One line means one line for the hint too: a long one ("Sign in to start
      asking questions for free" at 320px) wrapped and showed half of its
      second line under the first. A hint wider than the field ends in an
-     ellipsis, not cut mid-letter by Send (UX audit 2026-10-29 H2): as on
+     ellipsis, not cut mid-letter by Send: as on
      the desktop, Chromium draws it only with text-overflow on the field. */
   body.composer-collapsed:not(.is-hero, .direct-comparison-preview) .chat-input-container > .input-field:placeholder-shown {
     white-space: nowrap;
@@ -667,7 +666,7 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
 /* A composer notice stands in the examples' room (components-input.css):
    the note stays below it instead of gliding up into it, where both lay
    over each other ("Select between two and 6 comparison models…" on
-   "Please avoid personal…", 2026-10-26). */
+   "Please avoid personal…"). */
 body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)):has(> .agent-composer-notice:not([hidden])) > .app-footer {
   transform: none;
 }
@@ -677,7 +676,7 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
   body.is-hero:not(.direct-comparison-active) .input-section > .app-footer { transition-duration: 0s; }
   body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:not(:placeholder-shown)) > .app-footer { transition-delay: var(--dur-state); }
 }
-/* Plain words under the field, no pill (Max, 2026-10-31): the field is the
+/* Plain words under the field, no pill: the field is the
    one object on the start screen. A finger-sized row stays around each, and
    hover gives it the quiet tone of a list row. */
 .composer-starter {
@@ -713,8 +712,7 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
   .composer-starter { flex: 0 0 auto; }
 }
 /* A phone on its side: one row that scrolls sideways, as on a narrow phone,
-   so the empty start screen fits its height and has nothing to scroll
-   (Apple-Audit F10). */
+   so the empty start screen fits its height and has nothing to scroll. */
 @media (max-height: 500px) {
   /* The block's own margin would be the last pixels to scroll into. */
   body.is-hero .input-section { margin-bottom: 0; }
@@ -758,7 +756,7 @@ body.is-hero:not(.direct-comparison-active) .input-section:has(#questionInput:no
   body.is-hero:not(.direct-comparison-active) .composer-starters { -webkit-mask-image: none; mask-image: none; }
 }
 
-/* 44px to the finger (Apple-Audit F5): each example reaches 6px beyond its
+/* 44px to the finger: each example reaches 6px beyond its
    32px pill. Where the row scrolls sideways it clips, so there it gives
    itself that room inside and takes it back outside: the pills, the row's
    measured room (--starters-room) and the note below stay where they were. */

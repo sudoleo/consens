@@ -72,7 +72,7 @@
 }
 
 /* One thumb slides under the chosen tab, as in the Chat | Watches switch:
-   the highlight moves, the labels stay where they are (Apple-Audit C9). */
+   the highlight moves, the labels stay where they are. */
 #loginModal .auth-tabs::before {
   content: "";
   position: absolute;
@@ -482,7 +482,7 @@
   #loginModal .auth-secondary-action:hover { background: var(--hover); }
 }
 
-/* 44px to the finger (Apple-Audit F5) for the dialog's smaller controls:
+/* 44px to the finger for the dialog's smaller controls:
    the two tabs, Show, Forgot password? and the links under the form. */
 @media (pointer: coarse) {
   #loginModal :is(.auth-link, .auth-footer-links a) { position: relative; }

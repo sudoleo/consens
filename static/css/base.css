@@ -11,7 +11,7 @@ body {
   margin: 0;
   padding: 10px;
   padding-top: 10px;
-  /* With viewport-fit=cover (index.html, Apple audit F12) the page reaches
+  /* With viewport-fit=cover (index.html) the page reaches
      under the notch of a phone on its side; the column keeps clear of it. */
   padding-left: max(10px, env(safe-area-inset-left, 0px));
   padding-right: max(10px, env(safe-area-inset-right, 0px));
@@ -32,9 +32,7 @@ h1, h2 {
 /* A link draws no line by default: navigation, logos and controls that are
    links look like controls. What reads as a link draws its own: the text
    link (.text-link, foundation.css), a source under a note, and every plain
-   link inside written text (below). Until 2026-10-29 an !important here took
-   every such line away, and a link in an answer looked like the words beside
-   it (UX audit D3). */
+   link inside written text (below). */
 a {
   text-decoration: none;
   color: inherit;
@@ -53,8 +51,8 @@ a {
 
 /* One focus ring for every control that does not draw its own (foundation.css).
    :where() keeps it at zero specificity, so a component's own ring still wins.
-   No component hides it behind a hover tint any more: a tint of 1.1:1 is no
-   place marker (Apple audit E4, tests/js/focus-and-press.test.mjs). */
+   No component hides it behind a hover tint: a tint of 1.1:1 is no place
+   marker (tests/js/motion-tokens.test.mjs). */
 :where(a, button, summary, select, textarea, input, [role="button"], [role="switch"], [role="tab"], [tabindex]):focus-visible {
   outline: var(--focus-ring);
   outline-offset: var(--focus-ring-offset);
@@ -93,7 +91,7 @@ a {
 }
 
 /* Everything you press gives way by the same amount (--press-scale,
-   foundation.css; Apple audit E11). Zero specificity: a control that
+   foundation.css). Zero specificity: a control that
    already moves (its own transform) keeps its own behaviour. */
 :where(button:not(:disabled), .btn, [role="button"]):where(:active) {
   transform: scale(var(--press-scale));

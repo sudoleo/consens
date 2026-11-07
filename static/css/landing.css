@@ -1,15 +1,16 @@
 /* ==========================================================================
    consens.io — Landing page
 
-   Self-contained: drives ONLY the marketing landing page. Other public pages
+   Drives the marketing landing page; /benchmark and the Consensus Engine
+   page build on it (benchmark.css, consensus-engine.css). Other public pages
    (public-pages.css) and the /app stay untouched.
 
    The page chrome (sections, type, nav) is flat and quiet; the product
    mockups are built from the SAME five surface values as /app (ground /
    raise / well / ink / line), because a screenshot made of different
    material stops being a screenshot. Depth comes from tone, not from a
-   rectangle drawn around content — the only shadow left on this page is the
-   one under the floating app mock.
+   rectangle drawn around content — the only shadows on this page are the
+   one under the floating app mock and the input field's soft lift.
    ========================================================================== */
 
 @import url('./public-tokens.css');
@@ -26,7 +27,7 @@
 /* Anchors land under the sticky bar, not behind it. Smooth scrolling is a
    reply to a click on this page and starts only once the page has loaded
    (public-nav.js sets the class): a visit to /#watch jumps straight to the
-   section instead of gliding through every scene above it (Apple-Audit L1). */
+   section instead of gliding through every scene above it. */
 html { scroll-padding-top: 54px; }
 html.is-scroll-smooth { scroll-behavior: smooth; }
 
@@ -48,11 +49,10 @@ img { display: block; max-width: 100%; }
 /* --------------------------------------------------------------------------
    The input field is the exception to the flat page
 
-   Everywhere else depth comes from tone alone, and the field followed that
-   rule: it was a well, one step DARKER than the section it sat in. On a page
-   whose whole first screen is one field, that is backwards — the thing the
-   visitor is meant to reach for was the quietest surface on it. So the field
-   is the one raised object here: near white in light, a step lighter than
+   Everywhere else depth comes from tone alone. A well, one step DARKER than
+   the section it sits in, would make the thing the visitor is meant to reach
+   for the quietest surface on a page whose whole first screen is one field.
+   So the field is the one raised object here: near white in light, a step lighter than
    the canvas in dark, with the hairline and the soft lift that separate it
    from whichever section tone it lands in.
 
@@ -61,7 +61,7 @@ img { display: block; max-width: 100%; }
    both themes without a second set of overrides.
    -------------------------------------------------------------------------- */
 /* The material itself is the raised field of public-tokens.css (--field*),
-   the same tokens the /app composer uses (Apple-Audit G8). */
+   the same tokens the /app composer uses. */
 :root,
 .dark-mode {
   --lp-field: var(--field);
@@ -113,7 +113,7 @@ img { display: block; max-width: 100%; }
 /* --------------------------------------------------------------------------
    Layout primitives
    -------------------------------------------------------------------------- */
-/* The shared page grid (public-tokens.css --page-width, Apple-Audit I14). */
+/* The shared page grid (public-tokens.css --page-width). */
 .lp-shell {
   width: var(--page-width);
   margin: 0 auto;
@@ -208,8 +208,8 @@ img { display: block; max-width: 100%; }
 /* --------------------------------------------------------------------------
    Navigation — an opaque bar with a horizon, not a pane of glass
 
-   Translucency plus blur was the old material. A bar that sits over
-   streaming text has to be readable first, so it is opaque; what separates
+   A bar that sits over streaming text has to be readable first, so it is
+   opaque, without translucency or blur; what separates
    it from the page is a hairline that fades out at both ends.
    -------------------------------------------------------------------------- */
 .lp-nav {
@@ -288,16 +288,16 @@ img { display: block; max-width: 100%; }
    Hero — tighter top spacing
    -------------------------------------------------------------------------- */
 /* Hero band fills the screen height — on every device, not just on a monitor.
-   The phone used to end the hero wherever its content happened to stop, which
-   left a third of "01 · Ask" standing in the first screen: two openings at
-   once, and neither of them finished. The next section now starts at the fold,
-   where scrolling reveals it.
+   A hero that ends wherever its content stops leaves part of the next
+   section standing in the first screen: two openings at once, and neither of
+   them finished. The next section starts at the fold, where scrolling
+   reveals it.
 
    min-height, not height: a landscape phone is shorter than the content, and
    there the band simply grows instead of clipping. */
 .lp-section--hero {
   padding: clamp(16px, 2.5vw, 32px) 0 0;
-  /* svh, never dvh, for anything in the page flow (Apple-Audit F1). dvh is
+  /* svh, never dvh, for anything in the page flow. dvh is
      live: Safari's bar slides in on the first swipe, every band grew with it
      and the text slid away under the finger, and back on the way up --
      Safari has no scroll anchoring to hide that. svh is the screen with the
@@ -334,17 +334,11 @@ img { display: block; max-width: 100%; }
 }
 
 /* --------------------------------------------------------------------------
-   Demo-first hero: a functional-looking input field, centred on an otherwise
-   empty first screen. The whole field links into /app?demo=1 (demo.js
-   auto-runs the scripted demo there) and the Try-the-demo pill sits inside it.
-   Below the field, in this order: the nine provider marks, the claim, and —
-   on a screen with room for it — the pulse line on the bottom edge.
-
-   Nothing sits above the field any more. The claim used to open the page at
-   68px, which meant the first thing a visitor read was a promise and the
-   second was the thing that keeps it; that order is now reversed. Both
-   "Open the app" and "See Watches" are gone as well: they duplicated the
-   navigation two centimetres higher up.
+   Demo-first hero: the claim (h1), then a functional-looking input field on
+   an otherwise empty first screen. The field opens the app; the Try-the-demo
+   pill inside it links into /app?demo=1 (demo.js auto-runs the scripted demo
+   there). No "Open the app" button: it would duplicate the navigation two
+   centimetres higher up.
    -------------------------------------------------------------------------- */
 .lp-hero.lp-hero--demo {
   display: flex;
@@ -438,10 +432,10 @@ img { display: block; max-width: 100%; }
 
 .lp-hero-prompt-bar { gap: 8px; }
 
-/* The h1, one voice below the display size it used to have. At --ink-2 and
-   18px it was the quietest thing on a nearly empty screen and simply got
-   skipped; at full ink, one step up the scale and a medium weight it is the
-   loudest *text* on the page, while the field stays the loudest *object*.
+/* The h1, one voice below the display size. Quieter, it would be skipped on
+   a nearly empty screen; at full ink, one step up the scale and a medium
+   weight it is the loudest *text* on the page, while the field stays the
+   loudest *object*.
    It opens the hero, so the gap to the field is the field's own top margin —
    no margin of its own to double up with. */
 .lp-hero-claim {
@@ -456,7 +450,7 @@ img { display: block; max-width: 100%; }
 }
 
 /* The two sentences are one thought each, so the line break belongs between
-   them and not inside "what the world / believes". Inline blocks do that on
+   them and not inside one of them. Inline blocks do that on
    their own at every width: both sentences share a line where there is room,
    otherwise the second one takes the next line. */
 .lp-hero-claim span { display: inline-block; }
@@ -464,15 +458,13 @@ img { display: block; max-width: 100%; }
 /* The field reads better above the middle of the first screen than on it.
    Where the hero is tall enough, reserved height under the stack lifts it:
    half of whatever is reserved here is how far the field moves up. Only the
-   height matters, so a phone held upright gets the same treatment. (Until
-   2026-10-03 a Model Pulse status line sat in this space; the pulse now
-   lives with the benchmark further down, as data instead of a link.) */
+   height matters, so a phone held upright gets the same treatment. */
 @media (min-height: 620px) {
   .lp-section--hero .lp-hero.lp-hero--demo { padding-bottom: clamp(76px, 20vh, 220px); }
 }
 
-/* Tablets and short laptop windows: the marks tighten before they wrap, and
-   the claim keeps to the width of the field it belongs to. */
+/* Tablets and short laptop windows: the claim keeps to the width of the
+   field it belongs to. */
 @media (max-width: 900px) {
   .lp-hero-claim { max-width: 38ch; }
 }
@@ -481,9 +473,8 @@ img { display: block; max-width: 100%; }
   .lp-prompt.lp-hero-prompt { padding: 16px; padding-bottom: 12px; gap: 18px; min-height: 140px; }
 
 
-  /* Attach + run switch + "Try the demo" need 339px and a phone gives the
-     field 311, so the row used to push ~28px past its own edge. The two
-     controls keep the first line and the demo action takes a full-width
+  /* The controls and "Try the demo" do not fit a phone's field in one line:
+     the controls keep the first line and the demo action takes a full-width
      second one, which is the better tap target anyway. On every wider screen
      the row is untouched: controls left, demo button flush right. */
   .lp-hero-prompt-bar { flex-wrap: wrap; gap: 10px; min-width: 0; }
@@ -495,17 +486,15 @@ img { display: block; max-width: 100%; }
 }
 
 /* ==========================================================================
-   Product surfaces — the frameless shell (v2), on a marketing page
+   Product surfaces — the frameless shell, on a marketing page
 
-   Everything below used to be liquid glass: gradient fills, inner highlights,
-   blur and a border around every panel. /app dropped all of it — depth is
-   carried by tone now, and a frame is the exception rather than the default.
-   A mockup that keeps the old material stops being a screenshot, so these
-   surfaces are rebuilt from the same five values (ground / raise / well /
-   ink / line) the product is made of.
+   As in /app, depth is carried by tone, and a frame is the exception rather
+   than the default. A mockup of another material stops being a screenshot,
+   so these surfaces are built from the same five values (ground / raise /
+   well / ink / line) the product is made of.
 
    The one exception is the mock window itself: it genuinely floats above the
-   marketing page, and shell.css reserves --lift for exactly that case.
+   marketing page, and foundation.css reserves --lift for exactly that case.
    ========================================================================== */
 
 /* --- The app canvas, floating on the page --------------------------------- */
@@ -526,10 +515,9 @@ img { display: block; max-width: 100%; }
   box-shadow: var(--lift), 0 0 0 1px var(--line);
 }
 
-/* The app has no topbar any more. What is left at the top of the shell is the
-   wordmark on the left and the allowance ring on the right, so that is what
-   the mock shows — quiet, on the same canvas, separated by a horizon that
-   fades out at both ends instead of a ruled line. */
+/* The app has no topbar, so the mock's bar is only the wordmark on the left
+   and a quiet label on the right — on the same canvas, separated by a horizon
+   that fades out at both ends instead of a ruled line. */
 .lp-window-bar {
   position: relative;
   display: flex;
@@ -699,7 +687,7 @@ img { display: block; max-width: 100%; }
   line-height: var(--line-height-ui);
 }
 
-/* The scene mock is now a field and nothing else — no title bar, no greeting
+/* The scene mock is a field and nothing else — no title bar, no greeting
    above it — so it can be the size it is in the product instead of a small
    picture of it. Three reserved lines, because the question typed here is
    longer than the hero's and the mock must not grow while it is written. */
@@ -894,7 +882,7 @@ img { display: block; max-width: 100%; }
   mask: var(--chevron-mask) center / contain no-repeat;
 }
 
-/* Once the check is back the log folds into the clock line (Apple-Audit I1):
+/* Once the check is back the log folds into the clock line:
    a height transition over the one wrapper inside it (grid rows 1fr -> 0fr),
    so the answer below rises with it instead of dropping 200 px in a frame.
    landing-scenes.js toggles .is-folded and measures with .is-measuring. */
@@ -1054,7 +1042,7 @@ img { display: block; max-width: 100%; }
 }
 
 /* The evidence row under a reviewed answer: Notes, then the Answers of the
-   AIs the agent asked. No score since 2026-10-31. */
+   AIs the agent asked; no score. */
 .lp-agent-evidence {
   display: flex;
   flex-wrap: wrap;
@@ -1091,9 +1079,9 @@ img { display: block; max-width: 100%; }
 .lp-scene-rail { display: none; }
 
 /* The scrubbed scenes pin on every screen that is tall enough to hold one,
-   phones included. A phone used to get the fallback playhead: the scene was
-   barely taller than the viewport, so its four phases were spent in a single
-   flick of the thumb and arrived as one blurred change. Pinned, the stage
+   phones included. With the fallback playhead a phone's scene is barely
+   taller than the viewport, so its four phases would be spent in a single
+   flick of the thumb and arrive as one blurred change. Pinned, the stage
    holds still and the scroll becomes the playhead, which is the whole point
    of the scene — and it is also what empties the screen: one thing moving,
    nothing queued underneath it.
@@ -1187,7 +1175,7 @@ img { display: block; max-width: 100%; }
   .lp-agent-log { transition: none; }
 }
 
-/* The finished scene in words, for screen readers (a11y audit P2): scenes 01
+/* The finished scene in words, for screen readers: scenes 01
    and 02 draw whatever frame the scroll position asks for, so the moving
    picture is aria-hidden and this text speaks for it. */
 .lp-sr {
@@ -1240,8 +1228,8 @@ img { display: block; max-width: 100%; }
 .lp-watch-status { display: inline-flex; align-items: center; gap: 6px; padding: 4px 9px; border-radius: 999px; background: var(--agree-bg); color: var(--agree); font-size: var(--font-size-micro); font-weight: var(--font-weight-bold); }
 .lp-watch-status i { width: 6px; height: 6px; border-radius: 50%; background: var(--agree); }
 .lp-watch-card h3 { max-width: 32ch; margin: 20px 0 0; color: var(--text-primary); font-size: var(--font-size-lg); line-height: var(--line-height-ui); }
-/* The goal line reads like the dashboard's .wd-goal: running text, so a
-   narrow card wraps it like a sentence. */
+/* The goal line is running text, so a narrow card wraps it like a
+   sentence. */
 .lp-watch-goal { margin: 10px 0 0; color: var(--text-primary); font-size: var(--font-size-sm); line-height: 1.5; }
 .lp-watch-goal-label,
 .lp-watch-goal-status { color: var(--ink-3); font-size: var(--font-size-xs); }
@@ -1260,7 +1248,7 @@ img { display: block; max-width: 100%; }
 .lp-watch-point strong, .lp-watch-point small { display: block; }
 .lp-watch-point strong { color: var(--text-primary); font-size: var(--font-size-xs); }
 .lp-watch-point small { margin-top: 2px; color: var(--text-secondary); font-size: var(--font-size-micro); line-height: var(--line-height-ui); }
-/* A move names the page that carries it, as a source chip like .wd-sources. */
+/* A move names the page that carries it, as a source chip. */
 .lp-watch-source { padding: 3px 8px; border-radius: var(--radius-xs); background: var(--well); box-shadow: inset 0 0 0 1px var(--line-soft); color: var(--text-primary); font-size: var(--font-size-micro); font-weight: var(--font-weight-semibold); white-space: nowrap; }
 .lp-watch-notification {
   padding: 18px;
@@ -1307,8 +1295,7 @@ img { display: block; max-width: 100%; }
 .consensus-verdict.is-alert { --verdict-ring: var(--dispute); }
 
 /* One answer, read top to bottom — the differences live in a collapsible
-   overview UNDER it, not in a second column beside it (mirrors /app since
-   the inline-confidence redesign). */
+   overview UNDER it, not in a second column beside it (mirrors /app). */
 .consensus-box {
   display: flex;
   flex-direction: column;
@@ -1343,7 +1330,7 @@ img { display: block; max-width: 100%; }
   padding: 4px 16px 8px;
   border-radius: var(--radius-md);
   border: 1px solid transparent;
-  /* Separator moved from left to top: the block sits below the answer now. */
+  /* Separator on top: the block sits below the answer. */
   border-top: 1px solid color-mix(in srgb, var(--sidebar-border) 52%, transparent);
   background: none;
   box-shadow: none;
@@ -1476,10 +1463,10 @@ img { display: block; max-width: 100%; }
 /* --------------------------------------------------------------------------
    Hover preview + claim popover — the two things a mark actually does
 
-   Until now the marks on this page were a picture of a control: the ratio and
-   the dot were rendered but inert, so the one gesture the product is built
-   around ("who said that?") did nothing here. These are the same two surfaces
-   /app uses — the short version on hover (shell.css .insight-preview), the
+   The marks on this page are not a picture of a control: the one gesture the
+   product is built around ("who said that?") works here too. These are the
+   same two surfaces /app uses — the short version on hover
+   (components-consensus-insights.css .insight-preview), the
    full breakdown on click (components-consensus-insights.css .claim-popover)
    — rebuilt from the five landing values, because a mock made of different
    material stops being a mock. Driven by static/js/landing-insights.js.
@@ -1547,8 +1534,7 @@ img { display: block; max-width: 100%; }
   z-index: 1399;
   /* The one scrim, as in the app (foundation.css; darker in dark mode). */
   background: var(--scrim);
-  /* Nothing behind the dim scrolls (Apple-Audit F2; the lock itself is in
-     foundation.css). */
+  /* Nothing behind the dim scrolls (the lock itself is in foundation.css). */
   touch-action: none;
 }
 
@@ -1651,7 +1637,7 @@ img { display: block; max-width: 100%; }
 
 /* The marks stroke themselves on when the mockup scrolls into view: the
    product in one gesture — a plain answer, then someone going over it with a
-   marker pen. Since 2026-08-15 that is literally what happens: the wash grows
+   marker pen. The wash grows
    from the left edge of the sentence to its right, so the eye reads it as a
    stroke and not as a box switching on. */
 @keyframes cxStroke {
@@ -1680,9 +1666,8 @@ img { display: block; max-width: 100%; }
 
 /* --------------------------------------------------------------------------
    Reading key — the three states in their real visual vocabulary.
-   Since the Decide rebuild this is not a legend floating above an unexplained
-   mockup any more: it is step 03's own visual, with the sentence that explains
-   it sitting next to it.
+   Not a legend floating above an unexplained mockup: it is step 03's own
+   visual, with the sentence that explains it sitting next to it.
    -------------------------------------------------------------------------- */
 .lp-mark-key {
   display: flex;
@@ -2184,9 +2169,9 @@ img { display: block; max-width: 100%; }
 /* --------------------------------------------------------------------------
    Why section — three columns of a flat list
 
-   These were three framed, blurred, drop-shadowed boxes. The same three
-   pieces of text separated by a hairline that fades out at both ends say
-   exactly as much, and the page stops looking like a stack of cards.
+   Three pieces of text separated by a hairline that fades out at both ends
+   say as much as three framed boxes, without the page looking like a stack
+   of cards.
    -------------------------------------------------------------------------- */
 .lp-card-grid {
   display: grid;
@@ -2234,8 +2219,8 @@ img { display: block; max-width: 100%; }
   margin-top: clamp(40px, 5vw, 64px);
 }
 
-/* Neun Familien gehen im Viererraster nicht auf. Bleibt genau eine Marke
-   uebrig, wird sie ueber die beiden mittleren Spalten zentriert, statt allein
+/* Geht die Zahl der Familien im Viererraster nicht auf und bleibt genau eine
+   Marke uebrig, wird sie ueber die beiden mittleren Spalten zentriert, statt allein
    an der linken Kante zu haengen. Die Kachel hat keine eigene Flaeche, das
    Spannen aendert also nur ihre Position. */
 .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: 2 / span 2; }
@@ -2383,7 +2368,7 @@ img { display: block; max-width: 100%; }
   .lp-watch-notification { width: 100%; margin-top: 0; }
 
   /* Composer on a phone: the field keeps its height, the row below it stays
-     one line — attach, the run switch, send — exactly as in /app. */
+     one line — attach, the run chip, send — as in /app. */
   .lp-prompt, .lp-composer { padding: 12px 12px 10px; }
   .lp-prompt-text, .lp-composer-text { min-height: 44px; font-size: var(--font-size-base); }
   .lp-run-chip { padding: 6px 10px; font-size: var(--font-size-micro); }
@@ -2397,10 +2382,8 @@ img { display: block; max-width: 100%; }
 
    Everything above is written for a screen wide enough to hold a display
    headline, a lead, a product mock and its footnotes at the same time.
-   Poured into a 343px column that stopped being a page and became a wall:
-   a 44px headline running five lines, six named provider pills over two
-   rows, the same consensus box drawn four times in one section, and 152px
-   of nothing between each of them.
+   Poured unchanged into a 343px column, that stops being a page and becomes
+   a wall.
 
    Nothing here deletes an argument. The type steps down one notch, the
    ornaments collapse to their essential shape, and sentences that are
@@ -2418,8 +2401,7 @@ img { display: block; max-width: 100%; }
   .lp-display,
   .lp-hero .lp-display { font-size: var(--font-size-2xl); line-height: 1.14; }
   .lp-h2 { font-size: var(--font-size-xl); line-height: 1.16; }
-  /* With a screen per section there is room to breathe again: the phone used
-     to be tuned for a page where everything had to be packed. */
+  /* With a screen per section there is room to breathe. */
   .lp-eyebrow { margin-bottom: 14px; font-size: var(--font-size-xs); }
   .lp-lead { margin-top: 18px; font-size: var(--font-size-base); }
   .lp-head .lp-lead,
@@ -2428,7 +2410,7 @@ img { display: block; max-width: 100%; }
   .lp-wide-only { display: none; }
 
   /* --- Hero: one screen, and the field is what it is for ----------------- */
-  /* Only reached on a phone too short for the pinned pulse; otherwise the
+  /* Only reached on a phone shorter than 620px; otherwise the
      .lp-section--hero rule above reserves the space instead. */
   .lp-hero.lp-hero--demo { padding-bottom: 32px; }
   .lp-hero-prompt.lp-prompt { margin-top: 30px; }
@@ -2442,16 +2424,15 @@ img { display: block; max-width: 100%; }
     .lp-hero-prompt .lp-prompt-text { min-height: calc(3 * var(--line-height-ui) * 1em); }
   }
 
-  /* The h1 keeps its size here. At 18px it was smaller than every h2 on the
-     page and barely above the placeholder inside the field it introduces —
-     which is exactly how it read: like a caption for the field rather than
-     the sentence the page is about. Only the measure narrows. */
+  /* The h1 keeps its size here: shrunk below the h2s, it would read like a
+     caption for the field rather than the sentence the page is about. Only
+     the measure narrows. */
   .lp-hero-claim { max-width: 24ch; }
 
-  /* Every section gets a screen of its own. A phone used to show the end of
-     one topic and the beginning of the next in the same frame, which is why
-     the page read as crowded even after the copy was trimmed: nothing was
-     ever alone on the screen. min-height, not height — a section with more
+  /* Every section gets a screen of its own. Otherwise a phone shows the end
+     of one topic and the beginning of the next in the same frame, and the
+     page reads as crowded: nothing is ever alone on the screen. min-height,
+     not height — a section with more
      to say than a screen holds still grows past it. */
   main > .lp-section:not(.lp-section--hero) {
     min-height: calc(100vh - 54px);
@@ -2496,8 +2477,8 @@ img { display: block; max-width: 100%; }
   .lp-card h3 { font-size: var(--font-size-base); }
   .lp-card p { font-size: var(--font-size-sm); }
 
-  /* The hero has already shown these marks; four-up keeps eight providers in
-     a compact two-row strip instead of turning them into a long card list. */
+  /* The hero has already shown these marks; four-up keeps the providers in
+     a compact strip instead of turning them into a long card list. */
   .lp-logos { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 26px; }
   .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: 2 / span 2; }
   .lp-logo { gap: 9px; padding: 16px 6px; }
@@ -2520,11 +2501,10 @@ img { display: block; max-width: 100%; }
 @media (hover: hover) and (pointer: fine) {
   .lp-hero-composer .lp-prompt.lp-hero-prompt:hover { transform: none; }
 }
-/* The row of the /app start screen (composer.css, since 2026-10-30): (+)
+/* The row of the /app start screen (composer.css): (+)
    on the left; on the right the reviewers' marks and words, then Send.
    Nothing hangs under the field. The mockups have no chat model chip, so
-   no reasoning level either: in /app it stands beside the model's name
-   (since 2026-10-31). */
+   no reasoning level either: in /app it stands beside the model's name. */
 .lp-composer-models {
   display: flex;
   align-items: center;
@@ -2555,8 +2535,8 @@ img { display: block; max-width: 100%; }
   .lp-composer-models { animation: none; transition: none; }
 }
 
-/* Phones: like the /app composer, the models chip takes its own line above
-   [(+) mode … Send], so the row never runs past a 320px field. */
+/* Phones: the run chip takes its own line above [(+) … Send], so the row
+   never runs past a 320px field. */
 @media (max-width: 420px) {
   .lp-composer-row { flex-wrap: wrap; row-gap: 4px; }
   .lp-composer-row .lp-run-chip { order: -1; flex: 1 0 100%; justify-content: flex-end; margin-left: 0; }
@@ -2564,14 +2544,14 @@ img { display: block; max-width: 100%; }
 }
 
 /* ==========================================================================
-   Feinschliff (2026-10-02)
-   One statement, then the proof: the page's h1 is its loudest line again,
+   Feinschliff
+   One statement, then the proof: the page's h1 is its loudest line,
    the page stands on one ground with horizons between its parts, the scroll
-   scenes keep their rhythm without idle screens, and the mockups lose the
-   boxes and shadows the product itself no longer has.
+   scenes keep their rhythm without idle screens, and the mockups carry no
+   boxes and shadows the product itself does not have.
    ========================================================================== */
 
-/* L1 — The h1 is the loudest line on the page; its second sentence answers
+/* The h1 is the loudest line on the page; its second sentence answers
    the first, one step quieter. Field and statement read as one unit. */
 .lp-hero-claim {
   max-width: 18ch;
@@ -2583,7 +2563,7 @@ img { display: block; max-width: 100%; }
 .lp-hero-claim span:last-child { color: var(--ink-3); }
 .lp-hero-composer { margin-top: clamp(6px, 1vw, 12px); }
 
-/* L2 — One ground for the whole page. Two section tones 2% apart read as a
+/* One ground for the whole page. Two section tones 2% apart read as a
    seam in the rendering, not as design; parts are set apart by a horizon
    that fades out at both ends, like everywhere in the product. */
 .lp-nav { background: var(--ground); }
@@ -2610,7 +2590,7 @@ main > .lp-section + .lp-section::before {
 /* The pinned scenes run into each other without a seam of their own. */
 main > .lp-scene-02::before { display: none; }
 
-/* L3 — Rhythm: the pinned scenes play through in less scroll and end where
+/* Rhythm: the pinned scenes play through in less scroll and end where
    the stage ends, so no idle screen follows them. The rail is a 1px horizon
    and carries the house light at its tip: the same light that runs along
    the agent's work in the app. */
@@ -2634,8 +2614,8 @@ main > .lp-scene-02::before { display: none; }
     position: relative;
     background: linear-gradient(90deg, transparent, var(--ink-3));
   }
-  /* The light ends at the tip of the rail. Past it (it once sat 6px
-     further), a full rail pushed it over the right edge of the page. */
+  /* The light ends at the tip of the rail. Past it, a full rail would push
+     it over the right edge of the page. */
   /* Drawn like the app's light path (agent-chat.css): a 1px stroke that
      ends in the house colour, no blur, no halo. */
   .lp-scene-rail i::after {
@@ -2652,7 +2632,7 @@ main > .lp-scene-02::before { display: none; }
   .lp-scroll-scene { min-height: 210vh; }
 }
 
-/* L5 — The slices of the product sit on one quiet tone without a shadow, as
+/* The slices of the product sit on one quiet tone without a shadow, as
    in the app; the notes under the marks speak in sentence case (one
    uppercase label per block at most). */
 .lp-excerpt { box-shadow: none; }
@@ -2665,7 +2645,7 @@ main > .lp-scene-02::before { display: none; }
 }
 .lp-mark-note::first-letter { text-transform: uppercase; }
 
-/* L6 — The title over the pause is a quiet line, not a shouting label. */
+/* The title over the pause is a quiet line, not a shouting label. */
 .lp-examples-title {
   font-weight: var(--font-weight-medium);
   letter-spacing: 0;
@@ -2673,14 +2653,14 @@ main > .lp-scene-02::before { display: none; }
   color: var(--ink-3);
 }
 
-/* L7 — The watch story is two objects on the ground, not a card in a card. */
+/* The watch story is two objects on the ground, not a card in a card. */
 .lp-watch-story { background: transparent; padding: 0; }
 .lp-watch-card { background: var(--surface); }
 
-/* L8 — A button as wide as its words: the result is the loud part here. */
+/* A button as wide as its words: the result is the loud part here. */
 .lp-bench-aside .lp-btn { align-self: flex-start; width: auto; }
 
-/* L9 — Eleven marks, one optical size, one row; no wordmarks. */
+/* Eleven marks, one optical size, one row; no wordmarks. */
 @media (min-width: 900px) {
   .lp-logos { grid-template-columns: repeat(11, minmax(0, 1fr)); gap: 4px; }
   .lp-logos > .lp-logo:last-child:nth-child(4n + 1) { grid-column: auto; }
@@ -2690,7 +2670,7 @@ main > .lp-scene-02::before { display: none; }
 .lp-logo-mark img { height: 24px; max-width: 26px; }
 .lp-logo > span:last-child { color: var(--ink-2); font-size: var(--font-size-sm); }
 
-/* L11 — Everything is there from the first frame. A block that starts below
+/* Everything is there from the first frame. A block that starts below
    the fold rises 8px into place as it arrives; nothing waits invisible for
    an observer (link previews and reader modes see the whole page). */
 .lp-reveal { opacity: 1; transform: none; }
@@ -2700,7 +2680,7 @@ main > .lp-scene-02::before { display: none; }
   .lp-reveal.is-armed:not(.is-visible) { transform: none; }
 }
 
-/* L10 — The closing field: the hero's field, empty and waiting. */
+/* The closing field: the hero's field, empty and waiting. */
 .lp-final { gap: clamp(20px, 3vw, 30px); }
 .lp-final-composer { width: min(680px, 100%); margin: 0 auto; text-align: left; }
 .lp-final-composer .lp-prompt-text.is-placeholder { color: var(--ink-3); }

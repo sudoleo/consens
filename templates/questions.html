@@ -80,8 +80,8 @@
             data-contradictions="{{ entry.contradiction_count }}">
           <a href="{{ entry.path }}" class="hub-row" data-umami-event="hub_question_click">
             {#- A Watch row says what its page leads with (check_page.watch_summary):
-                the state, never the score of the first answer the page no
-                longer shows (Apple-Audit L2, L3). -#}
+                the state, never the score of the first answer, which the
+                page does not show. -#}
             {% if entry.watch %}
             <span class="hub-score is-watch{% if entry.watch.active %} is-active{% endif %}" aria-hidden="true"><i></i>Watch</span>
             {% else %}

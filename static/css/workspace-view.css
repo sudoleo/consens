@@ -16,7 +16,7 @@
   flex-direction: column;
   background: var(--side);
   color: var(--ink);
-  /* Its head wraps by its own width, not the window's (G1). */
+  /* Its head wraps by its own width, not the window's. */
   container: workspace-view / inline-size;
 }
 
@@ -69,8 +69,8 @@
     left: calc(50vw + var(--app-sidebar-offset) / 2 - var(--workspace-width) / 2 - 173px);
   }
 
-  /* No room for MIN_WIDTH beside the activity (workspace-view.js covers,
-     G1): the panel lies over it, and the chat's lane is the one without it. */
+  /* No room for MIN_WIDTH beside the activity (workspace-view.js
+     covers): the panel lies over it, and the chat's lane is the one without it. */
   body.workspace-view-covers.workspace-view-docked .workspace-view {
     z-index: 121;
   }
@@ -148,8 +148,8 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 /* It unfolds from the right edge and folds back into it, whole and without
    a fade, in the chat lane's own time and curve (agent-chat.css .container):
    its edge and the chat move together. On closing it keeps its place while it
-   folds (workspace-view.js leave). Max 2026-10-29: a fade made no sense for a
-   panel that docks; before, 12px and a fade in, gone at once on closing. */
+   folds (workspace-view.js leave). A fade makes no sense for a panel that
+   docks. */
 @media (prefers-reduced-motion: no-preference) {
   .workspace-view {
     animation: workspace-view-enter var(--dur-layer, 320ms) var(--ease-standard, ease) both;
@@ -222,7 +222,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 }
 
 /* The line and the tools after the tabs (workspace-view.js build): in the
-   head's row beside the tabs, on a narrow panel a row of their own (V7). */
+   head's row beside the tabs, on a narrow panel a row of their own. */
 .workspace-view-tools {
   flex: 1;
   min-width: 0;
@@ -245,7 +245,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 }
 
 /* Why the connection ended takes up to two lines, never cut after a few
-   words (runtime audit V2). */
+   words. */
 .workspace-view-status.is-wrapping {
   display: -webkit-box;
   -webkit-box-orient: vertical;
@@ -256,7 +256,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   line-height: 17px;
 }
 
-/* What is left of today's VM time (V4): quiet, its digits steady. */
+/* What is left of today's VM time: quiet, its digits steady. */
 .workspace-view-time {
   flex: none;
   font-size: var(--font-size-xs);
@@ -299,7 +299,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   }
 }
 
-/* 44px to the finger, the drawing stays (G3; the close cross is the app's
+/* 44px to the finger, the drawing stays (the close cross is the app's
    .close-button, which brings its own). */
 @media (pointer: coarse) {
   .workspace-view-tab::after,
@@ -319,7 +319,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   color: var(--ink-3);
 }
 
-/* Whose turn it is (since 2026-10-29, workspace-view.js showTurn): right
+/* Whose turn it is (workspace-view.js showTurn): right
    above the picture, in view while the user works there. No surface: a dot
    carries the state's colour (the house green while the user steers, the
    pause tone while the agent waits for them or after a minute without
@@ -407,7 +407,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 }
 
 /* The edge says "you steer this": the browser's picture only, never the
-   terminal (G4). */
+   terminal. */
 .workspace-view.is-user .workspace-view-screen:not(.workspace-view-terminal)::after {
   content: "";
   position: absolute;
@@ -448,7 +448,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   inset: 0;
 }
 
-/* The picture at the top of its place, not in the middle (V5): on a phone
+/* The picture at the top of its place, not in the middle: on a phone
    the page stood in a band halfway down an empty field. noVNC centres its
    canvas with an inline margin: auto. */
 .workspace-view-screen:not(.workspace-view-terminal) canvas {
@@ -582,7 +582,7 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   display: none;
 }
 
-/* After a dropped connection, over the empty picture: the way back (V2). */
+/* After a dropped connection, over the empty picture: the way back. */
 .workspace-view-reconnect {
   bottom: auto;
   top: 50%;
@@ -605,8 +605,8 @@ body.workspace-view-resizing .workspace-view-resizer::after,
 }
 
 /* Takes the browser's paste for a moment (workspace-view.js onPasteKey),
-   and the phone's keyboard while it is open (the field .workspace-view-keys,
-   V1): never seen, 16px so iOS does not zoom in on it. */
+   and the phone's keyboard while it is open (the field
+   .workspace-view-keys): never seen, 16px so iOS does not zoom in on it. */
 .workspace-view-paste-target {
   position: absolute;
   top: 0;
@@ -630,9 +630,9 @@ body.workspace-view-resizing .workspace-view-resizer::after,
   }
 }
 
-/* Narrow, also docked beside the chat (by the panel's width since G1):
+/* Narrow, also docked beside the chat (by the panel's width):
    title, switch and the close cross keep the first row, the line and the
-   tools take the second (V7: at 390px the cross stood alone in a row). */
+   tools take the second (at 390px the cross would stand alone in a row). */
 @container workspace-view (max-width: 760px) {
   .workspace-view-head {
     flex-wrap: wrap;

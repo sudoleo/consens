@@ -15,7 +15,7 @@
 
 /* Anchors land under the sticky bar; smooth scrolling only for clicks on a
    loaded page (public-nav.js sets the class), never for the jump that opens
-   a /s/...#src-3 link (Apple-Audit L1). */
+   a /s/...#src-3 link. */
 html {
   scroll-padding-top: 54px;
 }
@@ -90,7 +90,7 @@ a {
   gap: 9px;
   color: var(--heading);
   font-size: var(--font-size-base);
-  /* The same mark in the same bar as on the landing page (I14). */
+  /* The same mark in the same bar as on the landing page. */
   font-weight: var(--font-weight-semibold);
   letter-spacing: var(--tracking-tight);
   line-height: var(--line-height-solid);
@@ -158,7 +158,7 @@ a {
   box-shadow: 0 8px 22px color-mix(in srgb, var(--accent) 26%, transparent);
 }
 
-/* Hover is a tone step, never a lift (Apple-Audit G4). */
+/* Hover is a tone step, never a lift. */
 @media (hover: hover) and (pointer: fine) {
   .nav-cta:hover,
   .button-primary:hover {
@@ -471,9 +471,7 @@ canvas {
   }
 
   /* The column, the footer and the bar keep the shared page grid on a phone
-     too (--page-gutter, 16 px from public-nav.css): the legal pages, /questions
-     and the Watch and Topic pages used to stand 12 px from the edge under a
-     smaller bar than the landing page's (Apple-Audit I14). */
+     too (--page-gutter, 16 px from public-nav.css), as on the landing page. */
 
   .nav-links a:not(.nav-cta) {
     display: none;
@@ -567,7 +565,7 @@ canvas {
 }
 
 /* ==========================================================================
-   Share page (/s/{slug}) – konsolidierte Styles, vorher inline in share.html
+   Share page (/s/{slug})
    ========================================================================== */
 
 .share-header {
@@ -576,7 +574,7 @@ canvas {
 
 /* Lange Fragen/Prompts: Schrift skaliert herunter statt das Layout zu brechen.
    A headline is balanced, never hyphenated ("sys-tem", "develop-ing"); only
-   a token longer than the line (a pasted URL) breaks (Apple-Audit I9). */
+   a token longer than the line (a pasted URL) breaks. */
 .share-question {
   overflow-wrap: break-word;
   hyphens: manual;
@@ -597,7 +595,7 @@ canvas {
 
 /* Eingeklappte Frage — dieselbe Geste wie #threadAsk in /app: drei Zeilen.
    The template sends the fold (is-clamped), so a long question is folded in
-   the first paint already instead of collapsing under the reader (I2); only
+   the first paint already instead of collapsing under the reader; only
    with script, so without it the whole question stands. The link sits at the
    end of the third line over a fade, so showing it moves nothing; opened,
    it moves under the question. */
@@ -811,7 +809,7 @@ canvas {
   font-size: var(--font-size-sm);
 }
 
-/* Focused, the field wears the one field look (public-shell.css, G12);
+/* Focused, the field wears the one field look (public-shell.css);
    an outline here drew a second ring around it. */
 
 .share-follow-note {
@@ -868,7 +866,7 @@ canvas {
   list-style: none;
 }
 
-/* "Models compared" folded (2026-10-22): one line with the models as the
+/* "Models compared" folded: one line with the models as the
    Agent shows them beside "Thought for …" -- overlapping marks on the page's
    ground, at rest in grey, in colour while pointed at -- and the chevron;
    the chips open below. Its own row under the answer model. */
@@ -1055,8 +1053,7 @@ canvas {
 .share-md p, .share-md ul, .share-md ol, .share-md table, .share-md blockquote, .share-md pre { margin: 0 0 14px; }
 .share-md h1, .share-md h2, .share-md h3, .share-md h4 { margin: 22px 0 10px; line-height: var(--line-height-heading); color: var(--heading); }
 /* The answer's own headings stay below the page's outline: "Short answer"
-   at 24 px outranked the state line (18) and the section label (Apple-Audit
-   L18). */
+   at 24 px outranked the state line (18) and the section label. */
 .share-md h1, .share-md h2 { font-size: var(--font-size-lg); }
 .share-md h3, .share-md h4 { font-size: var(--font-size-base); }
 .share-md ul, .share-md ol { padding-left: 22px; }
@@ -1111,7 +1108,7 @@ canvas {
 .share-differences-md > :last-child { margin-bottom: 0; }
 
 /* Inline-Citations: dasselbe Bauteil wie .src-ref in der App
-   (source-pill.css, Apple-Audit G9). Shared Agent answers carry the app's
+   (source-pill.css). Shared Agent answers carry the app's
    own .src-ref (public_markdown source_pills); the panel's underline for
    links in prose (.legal-panel p a) is not theirs. */
 .share-md a.src-ref { text-decoration: none; }
@@ -1320,9 +1317,9 @@ canvas {
   color: var(--muted);
 }
 
-/* Differences on the share page since 2026-10-22: the app's cards
+/* Differences on the share page: the app's cards
    (components-consensus-insights.css, drawn by check_page.difference_cards),
-   not the older boxed cards above and in public-shell.css, which the Watch
+   not the boxed cards above and in public-shell.css, which the Watch
    pages' "How the models compared" keeps. Under #differencesView so they win
    over those at any order. No box, no rail, no capitals: rows parted by a
    hairline, a dot that carries the weight, the claims in reading size. */
@@ -1416,7 +1413,7 @@ canvas {
 #differencesView .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, #f6dcdd); }
 .dark-mode #differencesView .diff-answer-mark { --diff-paint: var(--cx-mark-note, color-mix(in srgb, var(--ink) 9%, transparent)); }
 .dark-mode #differencesView .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, rgba(255, 123, 114, 0.19)); color: #ffb3ab; }
-/* A reviewer's note (share.html "Notes", since 2026-10-31): doubtful in the
+/* A reviewer's note (share.html "Notes"): doubtful in the
    app's amber, incomplete in the grey above, wrong in the red above. Its
    kind follows the reviewer's name in the line, in the colour of its mark;
    its source closes the note. */
@@ -1970,7 +1967,7 @@ canvas {
    Watch page (/s/... mit Watch, templates/watch_share.html): eine Spalte,
    drei Aussagen -- der Stand, die Antwort, die Aenderungen ueber die Zeit.
    ========================================================================== */
-/* On the shared page grid (I14): the same left edge as every other public
+/* On the shared page grid: the same left edge as every other public
    page, the column itself 860 px. */
 .wp-shell { width: var(--page-width); padding: 44px 0 8px; }
 .wp-shell > * { max-width: 860px; }
@@ -2219,7 +2216,7 @@ canvas {
 /* Zeitleiste: Punkte an einer Linie. Nur Bewegungen sind farbig. */
 .wp-history { margin-top: 40px; }
 .wp-chart { margin: 0 0 28px; }
-/* Die Kurve wird in der Spaltenbreite gezeichnet (CHART_WIDTH), also 1:1
+/* Die Kurve wird in der Spaltenbreite gezeichnet (PAGE_CHART_WIDTH), also 1:1
    in Kurven-Einheiten über die ganze Spalte -- schmaler wirkte sie abgeschnitten. */
 .wp-chart .watch-chart { max-width: 100%; min-width: 0; }
 .wp-chart figcaption { margin-top: 6px; color: var(--muted); font-size: var(--font-size-xs); }
@@ -2304,8 +2301,8 @@ canvas {
   .wp-chart { display: none; }
   .wp-state { margin-top: 18px; padding: 16px; }
   .wp-state.is-compact { margin-top: 12px; padding: 0; }
-  /* The direct links as a swipeable row: for Watch pages too since
-     2026-10-20, see "after the Apple audit" below. */
+  /* The direct links as a swipeable row: for Watch pages too, see "after
+     the Apple audit" below. */
   .wp-follow { padding: 16px; }
 }
 
@@ -2316,10 +2313,10 @@ canvas {
    ========================================================================== */
 
 /* Anything the page hides stays hidden, whatever display a component sets:
-   an inline-flex toggle with [hidden] used to stay on screen. */
+   an inline-flex toggle with [hidden] would stay on screen. */
 [hidden] { display: none !important; }
 
-/* I6 — Running text at the app's measure (66ch, shell.css), not 110
+/* Running text at the app's measure (66ch, shell.css), not 110
    characters across the whole column. Tables, code, formulas and figures
    keep the full width. */
 .share-md > p,
@@ -2333,7 +2330,7 @@ canvas {
 .wp-state-text,
 .wp-event-text { max-width: 66ch; }
 
-/* I7, L5 — A site icon has its box before it loads and keeps it if it fails
+/* A site icon has its box before it loads and keeps it if it fails
    (check-page.js puts a globe in), and it fades in instead of popping. Its
    shape and its light plate in the dark come from source-pill.css. */
 @media (scripting: enabled) {
@@ -2342,23 +2339,23 @@ canvas {
   .site-icon.is-missing { opacity: 1; }
 }
 
-/* L5, I8 — Pictures on a white ground are a step softer in the dark theme,
+/* Pictures on a white ground are a step softer in the dark theme,
    and nothing waits on white while it loads. */
 .dark-mode .wp-image img { background: var(--raise); }
 .dark-mode .wp-image:not(.is-logo) img { filter: brightness(0.9); }
 
-/* L12 — An odd last tile takes the whole row instead of standing beside a
+/* An odd last tile takes the whole row instead of standing beside a
    hole. */
 .wp-links-list > li:last-child:nth-child(odd) { grid-column: 1 / -1; }
 
-/* L7 — One colour, one meaning: amber is "the answer changed" in the curve as
+/* One colour, one meaning: amber is "the answer changed" in the curve as
    in the timeline below it, and those points are larger. A check without a
    score is a hollow mark on the axis, not a gap. */
 .watch-chart-point.is-change { fill: var(--partial); stroke: var(--panel-bg); stroke-width: 2; }
 .watch-chart-point.is-unscored { fill: var(--panel-bg); stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 2 2; }
 .watch-chart-point.is-change.is-unscored { fill: var(--panel-bg); stroke: var(--partial); stroke-dasharray: none; }
 
-/* L14 — One disclosure: the words, then a chevron that turns. The same for
+/* One disclosure: the words, then a chevron that turns. The same for
    folded checks, the source list and the comparison of the models. */
 .wp-disclosure-toggle,
 button.wp-disclosure-toggle {
@@ -2399,7 +2396,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-show { display: none
 details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inline; }
 .wp-more > summary { display: block; }
 
-/* L19 — A folded run of quiet checks is a point on the line like every
+/* A folded run of quiet checks is a point on the line like every
    other: a ring in the muted ink, on a line that can be seen. Its toggle
    stands right after its words, not at the far edge. */
 .wp-event::before { background: var(--line); }
@@ -2408,7 +2405,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 .wp-event.is-quiet summary::after { content: none; }
 .wp-event.is-quiet .wp-disclosure-toggle { min-height: 0; color: var(--accent); font-size: var(--font-size-xs); }
 
-/* L14 — A jump to a check (a point of the curve, the state line) marks it
+/* A jump to a check (a point of the curve, the state line) marks it
    for a moment, so the eye finds where it landed. */
 .wp-event.is-flash,
 .wp-quiet-list li.is-flash { animation: wp-flash var(--dur-beat) var(--ease-standard); }
@@ -2419,7 +2416,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 .wp-event,
 .wp-quiet-list li { border-radius: var(--radius-xs); }
 
-/* L15 — A difference is one card of one material: the kind as a quiet line,
+/* A difference is one card of one material: the kind as a quiet line,
    the claim, each side as text with its families, the quote set back, and
    how to verify it as a plain line. No pill, no boxes, no amber panel. */
 .wp-more .diff-card {
@@ -2452,7 +2449,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 }
 
 @media (max-width: 700px) {
-  /* L6 — The direct links are a swipeable row on every Watch and Topic
+  /* The direct links are a swipeable row on every Watch and Topic
      page, so the answer starts on the first screen instead of under four
      stacked tiles. */
   .wp-shell .wp-links { margin-top: 24px; }
@@ -2473,7 +2470,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
   .wp-shell .wp-link { padding: 10px 12px; }
   .wp-shell .wp-answer { margin-top: 28px; }
 
-  /* L10 — 44 px for everything a thumb taps in the history and the foot;
+  /* 44 px for everything a thumb taps in the history and the foot;
      the type stays small. */
   .wp-version,
   .wp-back,
@@ -2495,13 +2492,13 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 }
 
 /* ==========================================================================
-   Abbildungen aus der Antwort (app/services/topic_figures.py, seit
-   2026-10-15): Zeitleiste, Status-Tafel, Zahlen. Gezeichnet von consens.io
+   Abbildungen aus der Antwort (app/services/topic_figures.py):
+   Zeitleiste, Status-Tafel, Zahlen. Gezeichnet von consens.io
    auf eigener Fläche mit Kopfzeile, damit sie als Abbildung erkennbar ist;
    Semantikfarbe nur auf dem Zeichen, Streit gestrichelt in Bernstein.
    ========================================================================== */
-/* Eine Abbildung ist ein eigenes Objekt im Text (Max 2026-10-15: „als
-   solche nicht zu erkennen“): eigene Fläche, Kopfzeile mit Symbol und Art.
+/* Eine Abbildung ist ein eigenes Objekt im Text, als solche erkennbar:
+   eigene Fläche, Kopfzeile mit Symbol und Art.
    Die Fläche ist die einzige im Antworttext. */
 .af {
   --af-surface: var(--raise);
@@ -2570,7 +2567,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 .af-row.is-disputed .af-bar i { background: none; border: 1.5px dashed var(--partial); }
 .af-value { color: var(--heading); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 
-/* Benchmark (app/services/topic_benchmarks.py, seit 2026-10-31): Daten von
+/* Benchmark (app/services/topic_benchmarks.py): Daten von
    Artificial Analysis, nicht aus der Antwort. Die Modelle des Topics kräftig,
    die besten Modelle der anderen Labore getönt daneben. */
 .af-benchmark .af-row.is-own .af-label { color: var(--heading); font-weight: var(--font-weight-semibold); }
@@ -2660,8 +2657,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 }
 
 /* The first column has one width for every row, so the question titles
-   share one text edge whether the badge reads 64/100, 100/100 or Watch
-   (Apple-Audit I5: it was 9 px further right next to a 100/100). */
+   share one text edge whether the badge reads 64/100, 100/100 or Watch. */
 .hub-row {
   display: grid;
   grid-template-columns: 74px minmax(0, 1fr) auto;
@@ -2698,7 +2694,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 }
 
 /* "/100" steps back by weight, in the badge's own colour: transparency
-   took it below the contrast floor (Apple-Audit G13). */
+   took it below the contrast floor. */
 .hub-score small {
   font-size: var(--font-size-micro);
   font-weight: var(--font-weight-regular);

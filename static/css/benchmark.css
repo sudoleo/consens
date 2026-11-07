@@ -2,9 +2,8 @@
    consens.io Benchmark snapshot subpage (/benchmark)
    Loaded AFTER landing.css, which provides the design tokens, the nav/footer
    chrome, the scroll-reveal system and the button + section primitives.
-   This file only adds the benchmark-specific bits: the stat strip, the bar
-   charts (screenshot style: value on top, blue gradient fill, confidence
-   whiskers) and the takeaway cards.
+   This file only adds the benchmark-specific bits: the stat strip and the bar
+   charts (screenshot style: value on top, flat fill, confidence whiskers).
    ========================================================================== */
 
 /* --- Hero stat strip ----------------------------------------------------- */
@@ -79,8 +78,8 @@
 /* --- Chart card ---------------------------------------------------------- */
 .bench-chart {
   --scale: 3.2px;          /* px per accuracy point (plot height = 320px) */
-  /* Bar palette (TerminalBench-style): high-contrast bars on a crisp card.
-     Light mode — muted slate bars pop against the white card. */
+  /* Bar palette (TerminalBench-style): high-contrast bars.
+     Light mode — muted slate bars, consens.io in the accent. */
   --bench-model-fill: #bdbfc2;
   --bench-model-edge: #9b9ea1;
   --bench-majority-fill: #dcdee0;
@@ -99,7 +98,7 @@
   box-shadow: none;
 }
 
-/* Dark mode — near-black card with light/blue bars, mirroring the reference. */
+/* Dark mode — dark slate bars, consens.io in the accent. */
 .dark-mode .bench-chart {
   --bench-model-fill: #3a3b3d;
   --bench-model-edge: #5a5c5f;
@@ -217,7 +216,7 @@
 
 /* consens.io: the subject of the page, solid in the accent ink -- black in
    light, white in dark; the caption calls it "the highlighted bar" (no colour
-   name, Apple-Audit I10). */
+   name). */
 .bench-col.is-consensus .bench-bar {
   border-color: var(--bench-consensus-edge);
   background: var(--bench-consensus-fill);
@@ -514,7 +513,7 @@
 }
 .bench-mini-foot b { color: var(--text-primary); }
 
-/* The numbers behind each chart, for screen readers (a11y audit P1): the bars
+/* The numbers behind each chart, for screen readers: the bars
    and their labels sit in separate containers and only draw them, so the
    chart is aria-hidden and this table speaks for it. tests/test_benchmark_
    charts.py keeps both in step. The box around it hides it: a table never

@@ -72,9 +72,8 @@ body {
 /* --------------------------------------------------------------------------
    2. Nav and footer — horizons, not ruled lines
 
-   The bar used to be translucent with a saturating blur. Text scrolling
-   underneath a half-transparent bar is unreadable and there is no glass left
-   in the system to justify it, so the bar is opaque and what marks its edge
+   Text scrolling underneath a half-transparent bar is unreadable and there
+   is no glass in the system to justify it, so the bar is opaque and what marks its edge
    is a hairline that fades out at both ends.
    -------------------------------------------------------------------------- */
 .site-nav {
@@ -110,7 +109,7 @@ body {
   .nav-links a:not(.nav-cta):hover { color: var(--ink); }
 }
 
-/* The one filled control in the chrome keeps its fill and loses its glow. */
+/* The one filled control in the chrome keeps its fill, without a glow. */
 .button-primary,
 .nav-cta {
   border: 0;
@@ -119,8 +118,8 @@ body {
 /* --------------------------------------------------------------------------
    3. Panels — a tone, not a box
 
-   Everything that used to be a bordered, gradient-filled, drop-shadowed card
-   keeps its padding and radius and gives up its frame.
+   A card keeps its padding and radius, without border, gradient fill or
+   drop shadow.
    -------------------------------------------------------------------------- */
 .share-scoreboard,
 .share-related-item,
@@ -129,10 +128,9 @@ body {
   background: var(--surface);
 }
 
-/* One material on every public page (Apple-Audit I14): a panel is a section
+/* One material on every public page: a panel is a section
    of the document, set apart by a hairline above it -- as on the Watch and
-   Topic pages -- not a grey box. About and the model guide stacked eight of
-   them, some with a dark rail, while the pages beside them were flat. */
+   Topic pages -- not a grey box. */
 .legal-panel {
   border: 0;
   border-top: 1px solid var(--line-soft);
@@ -145,9 +143,10 @@ body {
    3b. The watched question is ONE page, not a stack of cards
 
    A share/watch page is a single document read top to bottom: answer, sources,
-   positions, history. Giving each of those a tinted rectangle put eight grey
-   boxes -- several of them nested inside each other -- between the reader and
-   the text, and the tone stopped meaning anything because everything had it.
+   positions, history. A tinted rectangle for each of those would put eight
+   grey boxes -- several of them nested inside each other -- between the
+   reader and the text, and the tone would mean nothing because everything
+   had it.
    The sections keep their spacing and their headings and give up their fill:
    separation is a hairline above each block, and every block starts on the
    same left edge as the question. Fills stay only where something really is
@@ -162,7 +161,7 @@ body {
   background: transparent;
 }
 
-/* Die Positionskarte ist hier keine Karte in der Karte mehr: sie erbt die
+/* Die Positionskarte ist hier keine Karte in der Karte: sie erbt die
    Sektionsflaeche, ihre Cluster behalten nur die Schiene. (Auf den kuratierten
    Topic-Seiten bleibt sie ein eigener Block -- dort sitzt sie in einer Karte.) */
 .share-shell .watch-position-map {
@@ -184,8 +183,8 @@ body {
    also die Seitenfarbe statt eines eigenen Tons. */
 .share-shell .watch-trajectory th:first-child { background: var(--ground); }
 
-/* A notice reads like every other section now: its heading says what it
-   is; the dark rail made it a box of its own kind (I14). */
+/* A notice reads like every other section: its heading says what it
+   is; a dark rail would make it a box of its own kind. */
 .notice {
   border-left: 0;
   border-radius: 0;
@@ -289,9 +288,8 @@ body {
    5. The traffic light
 
    Green / amber / red mean agreement, contested and contradicted — and
-   nothing else, anywhere. The public pages had grown their own reds
-   (#dc2626, rgba(220,60,60,…)) and their own accent-tinted "important"
-   panels; both are replaced by the shared three, so one colour never means
+   nothing else, anywhere. No page-own reds and no accent-tinted "important"
+   panels: the shared three stand in their place, so one colour never means
    two things across the product.
    -------------------------------------------------------------------------- */
 
@@ -381,8 +379,8 @@ body {
 /* --------------------------------------------------------------------------
    8. Topics (/topics, /topics/{slug})
 
-   topics.css already resolves its shadows to none through the shared tokens.
-   What is left are three things the rest of the product no longer does: a
+   topics.css resolves its shadows to none through the shared tokens. This
+   section overrides three things the rest of the product does not do: a
    framed card with an accent wash in its corner, two panels painted a
    hardcoded near-black in BOTH themes, and a private amber for the
    "superseded" notice.
@@ -409,7 +407,7 @@ body {
 
 /* An inverted panel is a fourth surface value the system does not have. Both
    of these become ordinary panels that follow the theme like everything
-   else, so the page stops flipping to near-black in light mode. */
+   else, so the page does not flip to near-black in light mode. */
 .topic-explainer,
 .topic-follow-card {
   border: 0;
@@ -442,7 +440,7 @@ body {
 }
 
 /* The card footer is a line of text, not a filled bar: painting it
-   --surface-2 laid a page-coloured block across the bottom of every card. */
+   --surface-2 would lay a page-coloured block across the bottom of every card. */
 .topic-card-link {
   border: 0;
   border-top: 1px solid var(--line-soft);

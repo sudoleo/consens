@@ -13,7 +13,7 @@
 }
 
 /* .source-link (raw model answers) wears the shared citation pill and
-   site icon of source-pill.css (Apple-Audit G9). */
+   site icon of source-pill.css. */
 
 .source-list-cluster {
   display: block;
@@ -137,7 +137,7 @@
   width: 4px;
   height: 10px;
   /* The check takes the ink of a filled button: white on the dark box,
-     dark on the light box of dark mode (it was white on light grey). */
+     dark on the light box of dark mode. */
   border: solid var(--button-text);
   border-width: 0 2px 2px 0;
   transform: rotate(45deg);

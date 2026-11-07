@@ -198,7 +198,7 @@
 .agent-action-title:focus { outline: none; }
 .agent-action-title:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: 3px; }
 .agent-action-meta { margin: 2px 0 0; color: var(--ink-3); font-size: var(--font-size-xs); }
-/* A state is its dot and quiet words, no tinted pill (Max, 2026-10-31). */
+/* A state is its dot and quiet words, no tinted pill. */
 .agent-action-badge {
   flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 3px 0;
   background: transparent; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: 500; line-height: 1.5; white-space: nowrap;

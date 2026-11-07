@@ -7,7 +7,7 @@
    ========================================================================== */
 
 :root {
-  /* Radius Scale (shared with public pages — keep in sync with public-pages.css) */
+  /* Radius Scale (shared with public pages — keep in sync with public-tokens.css) */
   --radius-xs: 8px;
   --radius-sm: 10px;
   --radius-md: 14px;
@@ -45,7 +45,7 @@
      for everything secondary (--ink-2 is kept as a name for the grey).
      White page, black ink here; the dark theme is the same picture
      inverted. The steps are measured, not guessed (OKLab distance x100
-     with the 1% viewing flare of the sRGB reference, Apple-Audit G7):
+     with the 1% viewing flare of the sRGB reference):
      ground -> raise 3.6 here and 3.4 in dark, ground -> side 2.1 and 2.2,
      so a surface lifts the same in both themes. Without the flare a step
      near black looks bigger on paper than on a screen. The grey keeps
@@ -72,7 +72,7 @@
   --selected-mix: 9%;
 
   /* The raised field: the composer in /app and on the landing page is the
-     well lifted by a hairline and a soft shadow (Apple-Audit G8). */
+     well lifted by a hairline and a soft shadow. */
   --field: var(--well);
   --field-line: rgba(10, 10, 10, 0.11);
   --field-lift: 0 1px 2px rgba(0, 0, 0, 0.05), 0 14px 32px -16px rgba(0, 0, 0, 0.24);
@@ -122,9 +122,9 @@
   --vote-exclude-bg: var(--clear-button-bg);
   --vote-exclude-color: var(--clear-button-text);
   
-  /* Modern UI tokens. The former "liquid glass" layer is kept as an alias
-     surface so the ~400 existing call sites keep working — it just no
-     longer paints translucency, blur, inner highlights or drop shadows. */
+  /* Modern UI tokens. The "liquid glass" names stay as alias surfaces so
+     their existing call sites keep working; they paint no translucency,
+     blur, inner highlights or drop shadows. */
   --accent: var(--ink);
   --accent-contrast: #0a0a0a;
   --accent-secondary: var(--agree);
@@ -188,8 +188,8 @@
   --lift: 0 1px 2px rgba(0, 0, 0, 0.5), 0 16px 36px rgba(0, 0, 0, 0.6);
   --side: #101010;
 
-  /* Dispute is a red, not a coral: next to the amber it used to read as
-     the same brown (Apple-Audit G15). */
+  /* Dispute is a red, not a coral: next to the amber a coral reads as
+     the same brown. */
   --agree: #6dc0a4;
   --agree-bg: rgba(109, 192, 164, 0.17);
   --partial: #dcb163;

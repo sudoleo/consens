@@ -1,6 +1,6 @@
 /* Admin buttons style themselves (.admin-btn, .icon-btn, .add-btn, tabs).
-   A button without any class keeps the solid default it had when that look
-   was global; see `.btn` in components-input.css. */
+   A button without any class keeps a solid default; see `.btn` in
+   components-input.css. */
 button:not([class]),
 button[class=""] {
     padding: 10px 16px;

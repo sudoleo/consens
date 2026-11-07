@@ -108,8 +108,8 @@
   }
 }
 
-/* Appearance-Zeile in den Settings: seit dem Topbar-Aus der einzige
-   Dark-Mode-Toggle — auf allen Viewports sichtbar. */
+/* Appearance-Zeile in den Settings: der einzige Dark-Mode-Toggle — auf
+   allen Viewports sichtbar. */
 .settings-theme-row {
   display: flex;
   align-items: center;

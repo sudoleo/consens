@@ -7,7 +7,7 @@
    ========================================================================== */
 
 /* Inter in three files per style, cut by scripts/subset_inter_font.py from
-   the full variable fonts next to them (which no stylesheet loads any more).
+   the full variable fonts next to them (which no stylesheet loads).
    Every page needs only the Latin file, about 135 KB instead of 344 KB for
    the whole font; a browser fetches latin-ext or rest only for a page that
    contains one of their characters. All files keep every OpenType feature
@@ -19,9 +19,9 @@
    its <head> (partials/font_preload.html). That file is `optional`: the page
    is drawn in Inter when it is there by the first paint (always on a return
    visit, nearly always on a first one) and otherwise in the fallback below
-   for the rest of that page view -- never both. `swap` re-set every headline
-   a moment after the first paint, one line shorter, and pushed everything
-   under it (Apple-Audit B3, landing CLS 0.06 on every visit). The other
+   for the rest of that page view -- never both. `swap` would re-set every
+   headline a moment after the first paint, one line shorter, and push
+   everything under it (landing CLS 0.06 on every visit). The other
    files only carry rarer letters and italics; they still swap in. */
 @font-face {
   font-family: "Inter Variable";

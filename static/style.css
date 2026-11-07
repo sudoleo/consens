@@ -7,7 +7,6 @@
 @import url('./css/base.css');
 @import url('./css/layout.css');
 @import url('./css/skeleton.css');
-/* components.css was split by section into the files below (same cascade order). */
 @import url('./css/components-input.css');
 @import url('./css/components-attachment-viewer.css');
 @import url('./css/components-consensus.css');
@@ -21,7 +20,7 @@
 @import url('./css/components-feedback.css');
 @import url('./css/components-consensus-insights.css');
 @import url('./css/components-watch.css');
-/* Shell layer — loaded LAST so the frameless redesign wins on equal
+/* Shell layer — after the components so the frameless redesign wins on equal
    specificity. Elevation, sidebar, topbar, composer and thread material. */
 @import url('./css/shell.css');
 @import url('./css/model-answer-reader.css');
@@ -45,7 +44,7 @@
    component, so the one surface and the one motion win. */
 @import url('./css/overlays.css');
 /* What every moving part shares: the theme switch, disclosures, the one
-   spinner, reduced motion (Apple audit C8, C10, C11, C13). */
+   spinner, reduced motion. */
 @import url('./css/motion.css');
 /* Letter clouds behind the empty start screen (letter-clouds.js). */
 @import url('./css/letter-clouds.css');
@@ -56,7 +55,7 @@
    inline ``element.style.display`` assignment. */
 .u-display-none { display: none; }
 /* Token counts and provider cost are the operator's figures, not the
-   reader's (Apple-Audit H4): they show only while an admin is signed in
+   reader's: they show only while an admin is signed in
    (firebase.js sets body.viewer-is-admin from /user_status). */
 body:not(.viewer-is-admin) .admin-only { display: none !important; }
 /* The account's workspace: firebase.js, /user_status vm_time. */
