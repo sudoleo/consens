@@ -3603,6 +3603,22 @@ class DelegationLoop(AgentLoop):
                             results[call["id"]] = {"role": "tool", "tool_call_id": call["id"],
                                                    "content": json.dumps({"error": text})}
 
+                        def unreached(call, started, text=None):
+                            # A call read beside the first that the batch no
+                            # longer runs itself: what it read is its result.
+                            # One that broke gets what it would have got before
+                            # reads ran side by side, "Not run" (``text``) or
+                            # nothing; until 2026-11-07 its error ended the run.
+                            try:
+                                results[call["id"]] = yield from self._await_call(started)
+                            except ProviderCancelled:
+                                raise
+                            except Exception as exc:
+                                logging.warning("Agent call read beside broke tool=%s category=%s",
+                                                (call.get("function") or {}).get("name"), safe_exception(exc))
+                                if text is not None:
+                                    not_run(call, text)
+
                         for position, call in enumerate(value.tool_calls):
                             name = (call.get("function") or {}).get("name")
                             if call["id"] in over_limit:
@@ -3613,7 +3629,7 @@ class DelegationLoop(AgentLoop):
                                 if started is not None:
                                     # It already ran beside the first: its
                                     # result, not "Not run" for what it did.
-                                    results[call["id"]] = yield from self._await_call(started)
+                                    yield from unreached(call, started, stopped)
                                     continue
                                 not_run(call, stopped)
                                 continue
@@ -3632,7 +3648,7 @@ class DelegationLoop(AgentLoop):
                                 stopped = HOLD_STEERED if paused == "steer" else CALL_AFTER_PAUSE
                                 started = prefetched.pop(call["id"], None)
                                 if started is not None:
-                                    results[call["id"]] = yield from self._await_call(started)
+                                    yield from unreached(call, started, stopped)
                                     continue
                                 not_run(call, stopped)
                                 continue
@@ -3691,11 +3707,14 @@ class DelegationLoop(AgentLoop):
                                 # Ignore speculative extra calls in the same batch
                                 # once the review has reached an end state.
                                 break
+                        calls_by_id = {call["id"]: call for call in value.tool_calls}
                         for call_id, started in list(prefetched.items()):
                             # Read beside the first but not reached (the repeat
-                            # guard stopped the batch): what it read is its result.
+                            # guard stopped the batch): what it read is its
+                            # result; one that broke stays like the calls not
+                            # reached (CALL_AT_LIMIT below).
                             if call_id not in results:
-                                results[call_id] = yield from self._await_call(started)
+                                yield from unreached(calls_by_id[call_id], started)
                         prefetched.clear()
                         if limit:
                             # The repeat guard stopped the batch: the rest gets

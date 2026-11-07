@@ -621,3 +621,87 @@ def test_a_waiting_helper_writes_the_receipt_whose_own_thread_already_failed(sto
     # Written after all: the agent's next claim goes on.
     loop._join_settling()
     assert loop.settling is None
+
+
+def reads_beside(store, read, *, calls=2, policy=None):
+    """A loop whose first step calls ``read_file`` ``calls`` times (n = 0, 1,
+    ...; the later ones start beside the first, _prefetch), the next answers."""
+    from pydantic import BaseModel, ConfigDict
+    from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+
+    class Args(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+        n: int = 0
+    sent = []
+
+    class Reads(AgentCompletion):
+        def stream(self, *, model, messages, **kwargs):
+            self.usage = measured_usage({"prompt_tokens": 10, "completion_tokens": 2, "cost": .0001}, model)
+            sent.append(messages)
+            if len(sent) == 1:
+                self.tool_calls = [{"id": f"read_{n}", "type": "function",
+                                    "function": {"name": "read_file", "arguments": json.dumps({"n": n})}}
+                                   for n in range(calls)]
+                self.finish_reason = "tool_calls"
+                return
+            self.text, self.finish_reason = "Done.", "stop"
+            yield {"type": "delta", "text": self.text}
+    loop = make_loop(store, Reads)
+    if policy:
+        loop.policy = replace(loop.policy, **policy)
+    loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool("read_file", "Read.", Args, read)],
+                                 argument_limit=loop.registry.argument_limit)
+    return loop, sent
+
+
+def tool_results(messages):
+    return {m["tool_call_id"]: json.loads(m["content"]) for m in messages if m.get("role") == "tool"}
+
+
+def test_a_read_started_beside_that_breaks_gets_not_run_once_the_batch_stopped(store):
+    """Bug hunt 2026-11-07: a read the batch started beside its first
+    (_prefetch) and then took on its stopped path (a pause after a call of
+    the step) raised its error out of the run. Before reads ran side by side
+    it would not have run at all: it gets "Not run" again, the run goes on."""
+    from app.services.agent_delegation import CALL_AFTER_PAUSE
+    first_read = threading.Event()
+
+    def read(args, *, cancellation):
+        if args.n:
+            raise RuntimeError("The read beside broke.")
+        first_read.set()
+        return {"text": "read"}
+    loop, sent = reads_beside(store, read)
+    hold_wait, paused = loop._hold_wait, []
+
+    def pause_after_the_first(poll=None):
+        if first_read.is_set() and not paused:
+            # The user let the work go on after a pause between the calls.
+            paused.append(True)
+            return "continue"
+        return (yield from hold_wait(poll))
+    loop._hold_wait = pause_after_the_first
+    list(loop.run())
+    assert paused and loop.completion.text == "Done."
+    results = tool_results(sent[1])
+    assert results["read_0"] == {"text": "read"} and results["read_1"] == {"error": CALL_AFTER_PAUSE}
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
+
+
+def test_a_read_started_beside_that_breaks_after_the_repeat_guard_ended_the_batch_is_not_run(store):
+    """The same for a read the batch never reached (the repeat guard ended
+    it at its first call): it gets the limit's "Not run" like the rest."""
+    from app.services.agent_delegation import CALL_AT_LIMIT
+
+    def read(args, *, cancellation):
+        raise RuntimeError("The read beside broke.")
+    loop, sent = reads_beside(store, read, policy={"account_budget_only": True, "turn_identical_calls": 1})
+    first = {"id": "read_0", "function": {"name": "read_file", "arguments": json.dumps({"n": 0})}}
+    # Read twice before: this third one ends the batch.
+    loop.identical_calls[loop._identical_key(first)] = 2
+    # A run without comparison tools ends at the guard (_wrap_up), with
+    # every call's result kept, not with the read's error.
+    with pytest.raises(AnalysisBudgetExceeded, match="repeated the same tool request"):
+        list(loop.run())
+    results = tool_results(loop.messages)
+    assert results == {"read_0": {"error": CALL_AT_LIMIT}, "read_1": {"error": CALL_AT_LIMIT}}
