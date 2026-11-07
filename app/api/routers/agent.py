@@ -1147,7 +1147,7 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
         _raise_store_error(exc, operation="add agent note", uid=uid)
 
 
-def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text="", choice=None):
+def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text="", choice=None, revision=None):
     """The user's decision on the run's open hold: saved on its root
     (decide_hold) and, when this process runs it, handed to the run at once
     (DelegationLoop.receive), not with its watcher's next look, which still
@@ -1156,11 +1156,11 @@ def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text
     pause stays decidable. Raises as decide_hold when neither knows it open."""
     loop = agent_background.run_loop(uid, chat_id, request_id)
     try:
-        saved = store.decide_hold(uid, chat_id, turn_id, hold_id, action, text, choice)
+        saved = store.decide_hold(uid, chat_id, turn_id, hold_id, action, text, choice, revision)
     except NotesFull:
         raise
     except TurnStatusConflict:
-        if loop is None or not loop.decide_unsaved(hold_id, action, text, choice):
+        if loop is None or not loop.decide_unsaved(hold_id, action, text, choice, revision):
             raise
         return
     if loop is not None:
@@ -1177,6 +1177,10 @@ class AgentHoldDecision(BaseModel):
     action: Literal["continue", "stop", "steer", "deny", "choose"]
     text: str = Field(default="", max_length=4000)
     choice: Optional[int] = Field(default=None, ge=0, le=9)
+    # The card's ``revision`` the user decided on (joined_halt, since
+    # 2026-11-07): a reviewer's halt that joined the card after it opens as
+    # the next card. A page from before sends none: the decision covers all.
+    revision: Optional[int] = Field(default=None, ge=0, le=1_000_000)
 
 
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/hold")
@@ -1204,7 +1208,8 @@ def decide_agent_hold(request: Request, chat_id: str, request_id: str, payload: 
         if not turn or turn.get("status") != "pending":
             return JSONResponse({"error": "This response is no longer running.", "code": "not_running"}, status_code=409)
         try:
-            _decide_hold(store, uid, chat_id, request_id, turn_id, payload.id, payload.action, text, payload.choice)
+            _decide_hold(store, uid, chat_id, request_id, turn_id, payload.id, payload.action, text, payload.choice,
+                         payload.revision)
         except NotesFull as exc:
             # Nothing decided: the card stays for another answer.
             return JSONResponse({"error": str(exc), "code": "notes_full"}, status_code=409)

@@ -626,11 +626,13 @@ class AgentSessionStore:
             return None
         return hold
 
-    def decide_hold(self, uid, chat_id, turn_id, hold_id, action, text="", choice=None):
+    def decide_hold(self, uid, chat_id, turn_id, hold_id, action, text="", choice=None, revision=None):
         """The user's decision on an open hold: "continue", "stop" or "steer"
         (continue with ``text`` as their message into the run, like a note),
         "deny" where it declines, "choose" with the ``choice`` (an index) on a
-        choice card (check_answer).
+        choice card (check_answer). ``revision``: the card's revision the
+        user saw (joined_halt); a halt that joined it later stays open
+        (DelegationLoop._one_hold). Without it, the decision covers the card.
         The run's watcher reads it from the root (DelegationLoop._receive_hold);
         returns the fields saved, for a run in this process (DelegationLoop.receive)."""
         from uuid import uuid4
@@ -645,7 +647,8 @@ class AgentSessionStore:
                 raise TurnStatusConflict("This pause is already over.")
             check_answer(data.get("hold"), action, choice)
             update = {"hold_decision": {"id": hold_id, "action": action,
-                                        **({"choice": choice} if action == "choose" else {})}}
+                                        **({"choice": choice} if action == "choose" else {}),
+                                        **({"revision": revision} if revision is not None else {})}}
             if action == "steer":
                 notes = list(data.get("user_notes") or [])
                 if len(notes) >= USER_NOTES_MAX:

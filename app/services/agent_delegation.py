@@ -489,6 +489,10 @@ class DelegationLoop(AgentLoop):
         # A reviewer's halt that came while the user's own card was open
         # (agent_ask.py): it opens once that card is answered.
         self.queued_hold = None
+        # The reviewers' halts that joined the open card (joined_halt), each
+        # with the card's revision it made, and the revision the user's
+        # decision was taken on (None: a page that does not say).
+        self.hold_joins, self.hold_seen = [], None
         self.hold_started = 0.0
         # The open hold could not be saved (_save_hold): its decision comes
         # in this process only (decide_unsaved).
@@ -2503,11 +2507,13 @@ class DelegationLoop(AgentLoop):
                 # Before 2026-10-29 the second halt was lost, its reason
                 # neither on the card nor in the log.
                 joined = self.hold = joined_halt(self.hold, details)
+                self.hold_joins.append((joined["revision"], details))
             else:
                 hold = {"id": uuid4().hex[:12], **details, "at": datetime.now(timezone.utc).isoformat(),
                         "timeout_seconds": self.hold_timeout}
                 self.hold, self.hold_decision, self.hold_started = hold, None, self.clock()
                 self.hold_unsaved = False
+                self.hold_joins, self.hold_seen = [], None
                 self.condition.notify_all()
         if joined is not None:
             self._show_joined(joined, details)
@@ -2634,10 +2640,11 @@ class DelegationLoop(AgentLoop):
                 return None
             return dict(self.hold)
 
-    def decide_unsaved(self, hold_id, action, text="", choice=None):
+    def decide_unsaved(self, hold_id, action, text="", choice=None, revision=None):
         """The user's decision on that hold, from the decision endpoint of
         this process (POST .../hold, .../secret): True when taken. A message
-        ("steer") is the user's note, as decide_hold would have saved it."""
+        ("steer") is the user's note, as decide_hold would have saved it.
+        ``revision``: the card's revision the user decided on (_one_hold)."""
         from app.services.agent_sessions import USER_NOTE_CHARS, check_answer
         with self.condition:
             hold = self.unsaved_hold()
@@ -2651,6 +2658,7 @@ class DelegationLoop(AgentLoop):
                 self.notes.append(note)
             self.hold_decision = action
             self.hold_choice = choice if action == "choose" else None
+            self.hold_seen = revision
             self.condition.notify_all()
         return True
 
@@ -2759,6 +2767,7 @@ class DelegationLoop(AgentLoop):
             if self.hold is not None and self.hold_decision is None and decision.get("id") == self.hold["id"]:
                 self.hold_decision = decision.get("action")
                 self.hold_choice = decision.get("choice")
+                self.hold_seen = decision.get("revision")
                 self.condition.notify_all()
 
     def receive(self, saved):
@@ -2910,6 +2919,13 @@ class DelegationLoop(AgentLoop):
                     self.paused_seconds += waited
                     choice, self.hold_choice = self.hold_choice, None
                     self.hold = self.hold_decision = None
+                    # Halts that joined the card after the revision the user
+                    # decided on: they open as the next card (below). Until
+                    # 2026-11-07 they counted as decided with it.
+                    seen, joins = self.hold_seen, self.hold_joins
+                    self.hold_joins, self.hold_seen = [], None
+                    unseen = [details for revision, details in joins
+                              if isinstance(seen, int) and not isinstance(seen, bool) and revision > seen]
                     break
                 self.condition.wait(.2)
             if self.watch_error:
@@ -2949,8 +2965,11 @@ class DelegationLoop(AgentLoop):
         yield from self._events()
         with self.condition:
             queued, self.queued_hold = self.queued_hold, None
+        for details in unseen:
+            queued = details if queued is None else joined_halt(queued, details)
         if queued is not None and decision != "stop":
-            # The reviewer's halt that came meanwhile: before the next call.
+            # The reviewer's halt that came meanwhile, or joined the card
+            # after what the user saw on it: before the next call.
             self.request_hold(queued)
         if decision == "stop" or (decision == "timeout" and not asked):
             if decision == "timeout":

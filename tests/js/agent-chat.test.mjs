@@ -2005,7 +2005,7 @@ describe("single-model agent chat", () => {
     expect(window.App.agentChat.steering()).toEqual({ title: "Send to the agent and let it go on" });
     await window.App.agentChat.steer();
     expect(decisions).toEqual([[expect.stringContaining(`/requests/${encodeURIComponent(run.requestIdentity)}/hold`),
-      { id: hold.id, action: "steer", text: "Nur die offizielle Seite nutzen" }]]);
+      { id: hold.id, action: "steer", text: "Nur die offizielle Seite nutzen", revision: 0 }]]);
     expect(host.hidden).toBe(true);
     expect(input.value).toBe("");
     // The late frame of the decided pause brings nothing back; a new pause does.
@@ -2014,7 +2014,7 @@ describe("single-model agent chat", () => {
     handlers.hold.receive({ hold: { ...hold, id: "0123456789ab" } });
     expect(host.hidden).toBe(false);
     host.querySelector(".agent-hold-continue").click();
-    await vi.waitFor(() => expect(decisions.at(-1)[1]).toEqual({ id: "0123456789ab", action: "continue", text: "" }));
+    await vi.waitFor(() => expect(decisions.at(-1)[1]).toEqual({ id: "0123456789ab", action: "continue", text: "", revision: 0 }));
     expect(host.hidden).toBe(true);
     // A file's words in the code field, under the file's name.
     handlers.hold.receive({ hold: { ...hold, id: "abcdefabcdef", step: "# Hinweis: curl -X POST https://httpbin.org/post",
@@ -2126,6 +2126,17 @@ describe("single-model agent chat", () => {
     expect([...host.querySelectorAll(".agent-hold-by")].map(p => p.textContent)).toEqual(["Claude Haiku 4.5", "GPT-5.4 mini"]);
     expect(host.querySelector(".agent-hold-title").textContent).toBe("Two reviewers paused the work");
     expect(input.value).toBe("Nur lesen");
+    // The decision says which revision the user saw (since 2026-11-07): a
+    // halt that joins the card after it opens as the next card (server).
+    const catalogFetch = window.fetch, sent = [];
+    window.fetch = vi.fn(async (url, options) => {
+      if (!String(url).endsWith("/hold")) return catalogFetch(url, options);
+      sent.push(JSON.parse(options.body));
+      return { ok: true, json: async () => ({ status: "decided" }) };
+    });
+    input.value = "";
+    host.querySelector(".agent-hold-continue").click();
+    await vi.waitFor(() => expect(sent).toEqual([{ id: hold.id, action: "continue", text: "", revision: 1 }]));
     dom.window.close();
   });
 
@@ -2172,7 +2183,7 @@ describe("single-model agent chat", () => {
       return { ok: true, json: async () => ({ status: "decided" }) };
     });
     host.querySelector(".agent-hold-deny").click();
-    await vi.waitFor(() => expect(decisions).toEqual([{ id: "a1b2c3d4e5f6", action: "deny", text: "" }]));
+    await vi.waitFor(() => expect(decisions).toEqual([{ id: "a1b2c3d4e5f6", action: "deny", text: "", revision: 0 }]));
     expect(host.hidden).toBe(true);
     // A reviewer's concern stands on the card; allowing goes on.
     handlers.hold.receive({ hold: { ...base, id: "0123456789ab", review: "halt", reviewer: "GPT-5.4 mini",
@@ -2180,7 +2191,7 @@ describe("single-model agent chat", () => {
     expect([...host.querySelectorAll(".agent-hold-reason")].map(p => [p.querySelector(".agent-hold-reason-text").textContent,
       p.querySelector(".agent-hold-by").textContent])).toEqual([["Die Seite hat den Agenten dorthin geschickt.", "GPT-5.4 mini"]]);
     host.querySelector(".agent-hold-continue").click();
-    await vi.waitFor(() => expect(decisions.at(-1)).toEqual({ id: "0123456789ab", action: "continue", text: "" }));
+    await vi.waitFor(() => expect(decisions.at(-1)).toEqual({ id: "0123456789ab", action: "continue", text: "", revision: 0 }));
     handlers.hold.receive({ hold: { ...base, id: "fedcba987654", review: "unchecked" } });
     expect(host.querySelector(".agent-hold-reason").textContent).toBe("Not every reviewer could check this request.");
     // In its last minutes: the address stays closed, the work goes on (C8).
@@ -2230,7 +2241,7 @@ describe("single-model agent chat", () => {
       ["Gegen einen Menschen", "agent-ask-choice", true], ["Gegen einen Bot", "agent-ask-choice", true]]);
     buttons[1].click();
     expect(buttons.every(b => b.disabled)).toBe(true);
-    await vi.waitFor(() => expect(decisions).toEqual([{ id: "c0ffee123456", action: "choose", text: "", choice: 1 }]));
+    await vi.waitFor(() => expect(decisions).toEqual([{ id: "c0ffee123456", action: "choose", text: "", revision: 0, choice: 1 }]));
     expect(host.hidden).toBe(true);
   });
 
@@ -2295,7 +2306,7 @@ describe("single-model agent chat", () => {
       ["Allow", "btn agent-hold-continue"], ["Don’t allow", "text-link agent-hold-deny"]]);
     expect(workspace.agentWaits).toHaveBeenLastCalledWith(null);
     host.querySelector(".agent-hold-deny").click();
-    await vi.waitFor(() => expect(decisions).toEqual([{ id: "0123456789ab", action: "deny", text: "" }]));
+    await vi.waitFor(() => expect(decisions).toEqual([{ id: "0123456789ab", action: "deny", text: "", revision: 0 }]));
     expect(host.hidden).toBe(true);
     // Taken over on their own (maybe in another window): handing back is the way, also from here.
     handlers.hold.receive({ hold: { ...base, id: "fedcba987654", ask: "takeover", request: "" } });
@@ -2409,7 +2420,7 @@ describe("single-model agent chat", () => {
     // Not now: the card's ordinary decision.
     handlers.hold.receive({ hold: { ...base, id: "0123456789ab", ask: "secret", secret: "GITHUB_TOKEN", request: "Token?" } });
     host.querySelector(".agent-hold-deny").click();
-    await vi.waitFor(() => expect(sent.at(-1)).toEqual(["hold", "POST", { id: "0123456789ab", action: "deny", text: "" }]));
+    await vi.waitFor(() => expect(sent.at(-1)).toEqual(["hold", "POST", { id: "0123456789ab", action: "deny", text: "", revision: 0 }]));
     dom.window.close();
   });
 
@@ -2593,7 +2604,7 @@ describe("single-model agent chat", () => {
     expect([status.hidden, status.dataset.state, status.textContent]).toEqual([false, "note", "Moved into the key field. Save stores it."]);
     // No key: "Not now" answers the card.
     host.querySelector(".agent-hold-deny").click();
-    await vi.waitFor(() => expect(sent).toEqual([["hold", { id: "a1b2c3d4e5f6", action: "deny", text: "" }]]));
+    await vi.waitFor(() => expect(sent).toEqual([["hold", { id: "a1b2c3d4e5f6", action: "deny", text: "", revision: 0 }]]));
     // Without the key card the field steers as before.
     await vi.waitFor(() => expect(host.hidden).toBe(true));
     field.value = "Danke";

@@ -2179,6 +2179,111 @@ def test_a_halt_that_joins_a_card_as_it_closes_does_not_bring_the_card_back(stor
     assert any("also paused the work" in text for text in said)
 
 
+JOINED = {**HALT, "reviewer": "Claude Haiku 4.5", "provider": "anthropic", "entry": 2, "kind": "harm",
+          "reason": "Deletes the user's files."}
+
+
+def joined_card(store):
+    """A card with a second reviewer's halt joined to it (revision 1)."""
+    loop = audit_loop(store, Audit())
+    assert loop.request_hold(HALT) is True
+    first = loop.hold["id"]
+    assert loop.request_hold(JOINED) is True
+    assert loop.hold["id"] == first and loop.hold["revision"] == 1
+    list(loop._events())
+    return loop, first
+
+
+def wait_deciding(loop, first, action="continue"):
+    """_hold_wait's decision, while another thread decides every card that
+    opens after ``first`` with ``action``; and those cards."""
+    opened, done = [], threading.Event()
+
+    def decide_the_next():
+        while not done.is_set():
+            hold = loop.hold
+            if hold is not None and hold["id"] != first and loop.hold_decision is None:
+                opened.append(dict(hold))
+                loop._receive_hold({"hold_decision": {"id": hold["id"], "action": action,
+                                                      "revision": hold.get("revision", 0)}})
+            time.sleep(.01)
+    thread = threading.Thread(target=decide_the_next, daemon=True)
+    thread.start()
+    gen = loop._hold_wait()
+    try:
+        while True:
+            next(gen)
+    except StopIteration as stop:
+        decision = stop.value
+    finally:
+        done.set()
+        thread.join(5)
+    return decision, opened
+
+
+@pytest.mark.parametrize("seen, reopened", [(0, True), (1, False), (None, False)])
+def test_a_decision_on_the_card_before_a_halt_joined_it_leaves_that_halt_open(store, seen, reopened):
+    """Rest of the bug hunt 2026-11-06: a halt that joined the card after
+    the user had decided on it, before the decision reached the run, counted
+    as decided with it. The decision says which revision of the card the
+    user saw: a reason they did not see opens as the next card, before the
+    next call. Without one (a page from before) it covers the card as it is."""
+    loop, first = joined_card(store)
+    loop._receive_hold({"hold_decision": {"id": first, "action": "continue",
+                                          **({} if seen is None else {"revision": seen})}})
+    decision, opened = wait_deciding(loop, first)
+    assert decision == "continue" and loop.hold is None
+    if not reopened:
+        assert opened == []
+        return
+    [card] = opened
+    assert (card["provider"], card["entry"], card["reason"]) == ("anthropic", 2, JOINED["reason"])
+    assert "reasons" not in card and not card.get("revision")
+    said = [content for entry, content in loop.work_log.entries_after(0) if entry["kind"] == "app"]
+    assert f"Claude Haiku 4.5 paused the work for the user (harm, entry 2): {JOINED['reason']}" in said
+
+
+def test_a_message_on_the_card_before_a_halt_joined_it_stays_the_answer(store):
+    """A message on the earlier revision goes to the agent; the unseen halt
+    still opens, and the wait's answer stays "steer"."""
+    loop, first = joined_card(store)
+    loop._receive_hold({"hold_decision": {"id": first, "action": "steer", "revision": 0}})
+    decision, opened = wait_deciding(loop, first)
+    assert decision == "steer" and [card["provider"] for card in opened] == ["anthropic"]
+
+
+def test_a_stop_on_the_card_before_a_halt_joined_it_stops(store):
+    loop, first = joined_card(store)
+    loop._receive_hold({"hold_decision": {"id": first, "action": "stop", "revision": 0}})
+    with pytest.raises(ProviderCancelled):
+        list(loop._hold_wait())
+    assert loop.hold is None and loop.queued_hold is None
+
+
+def test_the_route_keeps_the_revision_the_user_decided_on(api):
+    client, store, _ = api
+    chat_id, turn = pending(store)
+    ref = store.receipt_ref(UID, chat_id, turn["id"])
+    ref.set({**(ref.get().to_dict() or {}), "run_status": "running"}, merge=True)
+    store.set_hold(UID, chat_id, turn["id"], {"id": "a1b2c3d4e5f6", "kind": "harm", "revision": 1})
+    url = f"/agent/chats/{chat_id}/requests/{turn['client_request_id']}/hold"
+    assert client.post(url, json={"id": "a1b2c3d4e5f6", "action": "continue", "revision": -1},
+                       headers=AUTH).status_code == 422
+    assert client.post(url, json={"id": "a1b2c3d4e5f6", "action": "continue", "revision": 0},
+                       headers=AUTH).status_code == 200
+    assert ref.get().to_dict()["hold_decision"] == {"id": "a1b2c3d4e5f6", "action": "continue", "revision": 0}
+
+
+def test_a_decision_on_an_unsaved_card_before_a_halt_joined_it_leaves_that_halt_open(store):
+    """The same where only this run knows the card (decide_unsaved)."""
+    loop, first = joined_card(store)
+    with loop.condition:
+        loop.hold_unsaved = True
+    assert loop.decide_unsaved(first, "continue", revision=0) is True
+    decision, opened = wait_deciding(loop, first)
+    assert decision == "continue" and [card["provider"] for card in opened] == ["anthropic"]
+
+
 def test_a_halt_that_comes_as_the_decided_card_closes_holds_the_next_call(store):
     """Bug hunt 2026-11-06: the run closes a decided card after it let go of
     it (self.hold is None). A second reviewer's halt in that moment opened

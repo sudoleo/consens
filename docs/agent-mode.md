@@ -677,7 +677,12 @@ halt`; Frame `hold` mit derselben ID und neuer `revision`, die die Karte neu
 zeichnet, Protokoll `paused` „… also paused …“); vorher ging er verloren.
 Schließt die Entscheidung des Nutzers die Karte, während die angehängte noch
 gespeichert wird, bleibt sie zu: der Root bekommt zurück, was jetzt offen ist,
-und die Seite keine Karte mehr (`_show_joined`, seit 2026-11-06).
+und die Seite keine Karte mehr (`_show_joined`, seit 2026-11-06). Die
+Entscheidung nennt seit 2026-11-07 die `revision`, die der Nutzer gesehen hat
+(`agent-chat.js` `decideHold`, `hold_decision.revision`): ein Halt, der sich
+danach angehängt hat (`hold_joins`), gilt nicht als mitentschieden, sondern
+öffnet als nächste Karte (wie `queued_hold`); `stop` bleibt Stop. Eine Seite
+von vorher schickt keine `revision`, ihre Entscheidung deckt die ganze Karte.
 Ist die Karte schon entschieden, aber noch nicht geschlossen, wartet er und
 öffnet danach als nächste Karte (`queued_hold`). `_hold_wait` kehrt erst
 zurück, wenn keine Karte mehr offen ist: auch eine, die so oder im Moment des
@@ -705,7 +710,7 @@ Karte über dem Feld (`agent-chat.js` `renderHold`, `#agentHold`, SSE-Frame
 `hold`, sticky in `agent_live.py`; ist die Ereignis-Queue voll, wartet er
 in einem eigenen Platz auf den nächsten Lesevorgang, `_send`, seit 2026-10-29,
 statt den Thread des Prüfers mit `queue.Full` zu beenden) per `POST
-/agent/chats/{chat}/requests/{request_id}/hold` (`{id, action, text}`):
+/agent/chats/{chat}/requests/{request_id}/hold` (`{id, action, text, revision}`):
 `continue` läuft weiter, als wäre nichts gewesen; `steer` ist eine Nachricht
 des Nutzers (`decide_hold` hängt sie an `user_notes`, der Agent liest sie
 wie jede Nachricht während der Arbeit; die übrigen Aufrufe der Runde laufen

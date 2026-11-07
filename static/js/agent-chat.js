@@ -1708,15 +1708,19 @@
   function refusal(data, fallback) {
     return DECISION_REFUSALS.has(data.code) && typeof data.error === "string" && data.error ? data.error : fallback;
   }
-  // "choose" carries the place of the answer picked on a choice card.
+  // "choose" carries the place of the answer picked on a choice card, and
+  // every decision the card's `revision` the user saw (since 2026-11-07): a
+  // reviewer's halt that joined the card after it opens as the next card
+  // instead of counting as decided with it.
   async function decideHold(context, action, text = "", choice = null) {
     const hold = openHold(context);
     if (!hold || hold.deciding) return false;
     hold.deciding = action;
     hold.failed = "";
     renderHold();
+    const revision = Number.isInteger(hold.revision) && hold.revision > 0 ? hold.revision : 0;
     const { response, data } = await postDecision(context, "hold",
-      { id: hold.id, action, text, ...(choice === null ? {} : { choice }) });
+      { id: hold.id, action, text, revision, ...(choice === null ? {} : { choice }) });
     // Decided, or the response or the pause is over (decided in another tab,
     // A-B5): the card goes, the activity keeps the record.
     if (response && (response.ok || data.code === "not_running" || data.code === "hold_over")) {
