@@ -1715,8 +1715,11 @@ class DelegationLoop(AgentLoop):
                             unsettled = list(self.unsettled.items())
                         settling = self.settling
                         for pending_step, (value, status) in unsettled:
-                            if settling is not None and settling[2] == pending_step:
-                                # Its own thread writes it (_settle_later).
+                            if settling is not None and settling[2] == pending_step and settling[0].is_alive():
+                                # Its own thread writes it (_settle_later). One
+                                # that already failed writes nothing more: until
+                                # 2026-11-07 a helper then waited here until the
+                                # turn's time limit.
                                 continue
                             self._settle_step(pending_step, value, status)
                         if time.monotonic() - recovered_at >= 3:
@@ -2204,13 +2207,17 @@ class DelegationLoop(AgentLoop):
         self.settling = (thread, box, step)
 
     def _join_settling(self, *, raise_error=True):
-        """Wait for _settle_later's receipt write; raise its failure."""
+        """Wait for _settle_later's receipt write; raise its failure, unless
+        a helper waiting for allowance wrote the receipt since
+        (_admit_chat_step)."""
         settling, self.settling = self.settling, None
         if settling is None:
             return
-        thread, box, _ = settling
+        thread, box, step = settling
         thread.join()
-        if raise_error and "error" in box:
+        with self.condition:
+            unsettled = step in self.unsettled
+        if raise_error and "error" in box and unsettled:
             raise box["error"]
 
     def _settle_step(self, step, value, status):

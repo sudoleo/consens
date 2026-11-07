@@ -574,3 +574,50 @@ def test_a_batch_that_breaks_off_waits_for_the_reads_it_started_beside(store):
     with pytest.raises(RuntimeError):
         list(loop.run())
     assert running == [False]
+
+
+def test_a_waiting_helper_writes_the_receipt_whose_own_thread_already_failed(store, monkeypatch):
+    """Bug hunt 2026-11-07: the agent's step receipt is written in a thread
+    of its own (_settle_later). When that write had already failed, a helper
+    waiting for allowance (_admit_chat_step) still left the step to that
+    thread, and waited until the turn's time limit ("Waiting for active
+    model calls"). A thread still writing keeps it; a failed one does not."""
+    from types import SimpleNamespace
+    from app.services.agent_quota import AgentTokenBudgetExceeded
+    loop = make_loop(store)
+    failed = threading.Thread(target=lambda: None)
+    failed.start()
+    failed.join()
+    loop.unsettled["completion:0"] = ({}, "succeeded")
+    loop.settling = (failed, {"error": RuntimeError("The receipt write failed.")}, "completion:0")
+    settled, attempts = [], []
+
+    def settle(step, value, status):
+        settled.append(step)
+        with loop.condition:
+            loop.unsettled.pop(step, None)
+    loop._settle_step = settle
+
+    def reserve(*args, **kwargs):
+        attempts.append(True)
+        if "completion:0" not in loop.unsettled:
+            return None
+        if len(attempts) > 3:
+            raise AssertionError("Still waiting for a receipt nobody writes.")
+        # The unsettled step's reservation holds the allowance.
+        raise AgentTokenBudgetExceeded(10 ** 9, 1, reserved=10 ** 6)
+    monkeypatch.setattr(loop.costs, "reserve", reserve)
+    monkeypatch.setattr(loop.store, "claim", lambda *args, **kwargs: True)
+    monkeypatch.setattr(loop, "_state", lambda *args, **kwargs: None)
+    helper = SimpleNamespace(id="a1", kind="worker")
+    admission = loop._admit_chat_step(loop.model, loop.messages, "agent:a1:0", loop.registry, loop.cancellation, 0,
+                                      {}, helper)
+    try:
+        while True:
+            next(admission)
+    except StopIteration as done:
+        claimed = done.value[5]
+    assert settled == ["completion:0"] and claimed is True
+    # Written after all: the agent's next claim goes on.
+    loop._join_settling()
+    assert loop.settling is None

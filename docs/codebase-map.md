@@ -4818,7 +4818,11 @@ Prüfer-Verbrauch je Schritt frei (`reviewer_charge`, `_reviewer_step_charge`).
 Den Beleg eines Agent-Schritts mit Toolcalls schreibt seit 2026-11-05 ein
 eigener Thread, während die Aufrufe laufen (`_settle_later`); der nächste
 Claim des Agenten und das Laufende warten darauf (`_join_settling`), ein
-Fehlschlag bleibt in `unsettled` für den Abschluss (Tempo-Plan P3).
+Fehlschlag bleibt in `unsettled` für den Abschluss (Tempo-Plan P3). Ein
+Helfer, der auf Kontingent wartet (`_admit_chat_step`), überlässt den Beleg
+nur einem noch laufenden Thread; einen schon gescheiterten schreibt er selbst,
+und ist er geschrieben, geht der nächste Claim weiter (seit 2026-11-07; vorher
+wartete der Helfer bis zum Zeitlimit des Turns).
 Jeder Schritt des Agenten im Kontomodus kann die Antwort schreiben und wird mit
 dem Steuer-Budget zugelassen (`_routing_model`); sein Antwortbudget darüber
 (`_answer_output`) reserviert er einmal statt pro Suchrunde
