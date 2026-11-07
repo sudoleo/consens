@@ -74,11 +74,26 @@ Derselbe Idempotency-Key mit identischem Request liefert denselben Run
 (`reasoning: true` und `deep_think: true` gelten dabei als identisch). Mit anderem Request folgt HTTP `409`; wurde der Run dieses Keys bereits
 gelöscht, folgt HTTP `410` (`run_deleted`, siehe unten).
 
-Reguläre Consensus-API-v1-Runs verwenden die feste serverseitige
-Sechs-Provider-Auswahl OpenAI, Mistral, Anthropic, Gemini, DeepSeek und Grok.
-DeepSeek ist für API-Kunden verpflichtend und verarbeitet den Prompt in China;
-es gibt keinen per-Request Opt-out. Den früheren Publisher-Header
-`X-Consensus-Publisher` wertet der Server seit 2026-10-04 nicht mehr aus.
+Die Modelle wählt der Server aus dem Preset Open Models
+(`API_CONSENSUS_PRESET = "balanced"` in `app/core/config.py`, seit 2026-11-01),
+mit und ohne Reasoning dieselben:
+
+- Antworten: Qwen (Qwen3.8 27B), DeepSeek (DeepSeek V4.1 Flash) und GLM
+  (GLM 5.3 Flash), je Familie eine eigene Antwort.
+- Consensus-Synthese: GPT-5.6 Luna (OpenAI).
+- Unterschiede und Abdeckung prüfen die Judges der Consensus-Engine in ihrer
+  festen Familien-Reihenfolge (zuerst OpenAI, bei Ausfall die nächste);
+  welcher Judge geliefert hat, steht unter `result.differences_data.judges`.
+
+Jeder Run nutzt alle Familien des Presets; ein Request kann keine einzelnen
+Anbieter abwählen. Er braucht mindestens zwei fertige Antworten, fällt ein
+Modell aus, entsteht der Konsens aus den übrigen. `result.model_answers` nennt
+je Antwort Familie (`provider`) und Modell (`model`). Alle Modellaufrufe laufen
+über OpenRouter, das jedes Modell an den Endpunkt eines
+Infrastruktur-Anbieters leitet; das ist nicht unbedingt der Modellentwickler
+(`/privacy`, Abschnitt 4 „Provider routing“). Ändert sich das Preset, ändern sich die
+Modelle mit. Den früheren Publisher-Header `X-Consensus-Publisher` wertet der
+Server seit 2026-10-04 nicht mehr aus.
 
 ## Status/Ergebnis lesen
 
