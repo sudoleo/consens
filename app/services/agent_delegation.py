@@ -3306,10 +3306,51 @@ class DelegationLoop(AgentLoop):
                               step=value.step_id)
         comparison.freeze_for_synthesis()
         comparison.capture(value.text)
+        links = self._check_links(value.text)
         yield from self._hand_over()
         yield from self._finish_review(value)
+        self._keep_links(links)
         self.completion.text = comparison.text
         self.completion.finish_reason = "stop"
+
+    def _check_links(self, text):
+        """The fixed answer's links, checked beside the hand-over and the
+        reviewers (agent_answer_links). None in a chat with Google data, and
+        when the check cannot start: it never costs the answer."""
+        try:
+            if self.google_tools or self._chat_google_data():
+                return None
+            from app.services.agent_answer_links import LinkCheck
+            from app.services.agent_read_source import url_key
+            reader = self.comparison.reader
+            retrieved = set()
+            if reader is not None:
+                retrieved.update(reader.cited())
+                retrieved.update(url_key(read.get(field)) for read in reader.snapshot()
+                                 if read.get("status") == "completed" for field in ("url", "cited_url"))
+            else:
+                retrieved.update(url_key(source.get("url")) for source in [*self.search_sources, *self.chat_sources]
+                                 if isinstance(source, dict))
+            return LinkCheck(text, lambda url: url_key(url) in retrieved).start()
+        except Exception as exc:
+            logging.warning("Agent answer links not started category=%s", safe_exception(exc))
+            return None
+
+    def _keep_links(self, check):
+        """Links that lead nowhere become part of the turn's review, saved
+        before the run's end (finish_run keeps the review as saved). After the
+        user's Stop only what is already known."""
+        if check is None:
+            return
+        found = check.result(wait=not self.cancellation.cancelled)
+        if not found or not found["missing"]:
+            return
+        with self.comparison.lock:
+            self.comparison.links = found
+        try:
+            self.comparison.checkpoint()
+        except Exception as exc:
+            logging.warning("Agent answer links not saved category=%s", safe_exception(exc))
 
     def _hand_over(self):
         """The answer is fixed: the chat is free for its next message while

@@ -122,28 +122,35 @@ LABEL_SEARCH = "a web search result of this message"
 LABEL_CHOSEN = "a page you chose"
 
 
-def user_urls(conversation):
-    """URLs the user wrote, latest message first.
+def text_urls(text):
+    """The public http(s) URLs written in ``text``, in order.
 
     Markdown links and bare URLs alike; trailing punctuation and an
-    unbalanced closing parenthesis (the end of "[text](url)") are cut. A
-    quoted answer passage is not the user's text (user_words)."""
+    unbalanced closing parenthesis (the end of "[text](url)") are cut."""
+    for match in _CHAT_URL.finditer(text):
+        url = match.group(0)
+        if len(url) > 2100:  # _safe_url refuses over 2048
+            continue
+        opened, closed = url.count("("), url.count(")")
+        while url and (url[-1] in _URL_TRAILING or (url[-1] == ")" and closed > opened)):
+            closed -= url[-1] == ")"
+            url = url[:-1]
+        if _safe_url(url) and url_key(url):
+            yield url
+
+
+def user_urls(conversation):
+    """URLs the user wrote (text_urls), latest message first. A quoted answer
+    passage is not the user's text (user_words)."""
     from app.services.agent_memory import user_words
     found, seen = [], set()
     for message in reversed(conversation or []):
         content = message.get("content") if isinstance(message, dict) else None
         if not isinstance(content, str) or message.get("role") != "user":
             continue
-        for match in _CHAT_URL.finditer(user_words(content)):
-            url = match.group(0)
-            if len(url) > 2100:  # _safe_url refuses over 2048
-                continue
-            opened, closed = url.count("("), url.count(")")
-            while url and (url[-1] in _URL_TRAILING or (url[-1] == ")" and closed > opened)):
-                closed -= url[-1] == ")"
-                url = url[:-1]
-            key = url_key(url) if _safe_url(url) else ""
-            if key and key not in seen:
+        for url in text_urls(user_words(content)):
+            key = url_key(url)
+            if key not in seen:
                 seen.add(key)
                 found.append(url)
                 if len(found) >= CHAT_URLS_MAX:

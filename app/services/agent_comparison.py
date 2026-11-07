@@ -210,6 +210,9 @@ class ComparisonTools:
         # Pages the agent opened (agent_read_source.SourceReader), set by the
         # loop when read_source is on.
         self.reader = None
+        # The fixed answer's links that lead nowhere (agent_answer_links.LinkCheck),
+        # saved only when there are any.
+        self.links = None
         self.auditor = AnswerAudit(self, setting=reviewers)
         # Every chosen model, every answer awaited, the depth the agent's.
         limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
@@ -229,6 +232,8 @@ class ComparisonTools:
             data["checks"] = self.review["checks"]
         if self.reader is not None and self.reader.reads:
             data["read_sources"] = self.reader.snapshot()
+        if self.links:
+            data["links"] = self.links
         return data
 
     def checkpoint(self, status=None):

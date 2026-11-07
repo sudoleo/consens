@@ -1038,8 +1038,14 @@
     App.answerReader?.refreshContext(context);
     if (evidence.reveal || body._revealedMarks === review.answer_hash) revealMarks(body, review.answer_hash);
   }
+  // Every render of an answer ends with its links that lead nowhere marked
+  // (sources.js markMissingAnswerLinks), whichever way it took.
   function render(body, review, evidence = {}) {
     if (!body?.parentElement) return;
+    renderReview(body, review, evidence);
+    window.markMissingAnswerLinks?.(body, review);
+  }
+  function renderReview(body, review, evidence) {
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const raw = body.dataset.markdown ?? version?.text;
     const turnSources = sourcesOf(body, review, evidence, raw);

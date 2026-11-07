@@ -5384,6 +5384,46 @@ Quellenansicht markiert gelesene Quellen mit „Read by the agent“, verglichen
 wie `url_key` und auch über die zitierte Weiterleitung. `MOCK_LLM` liefert eine
 feste Seite ohne Abruf (`mock_llm.mock_fetched_page`).
 
+### Links der Antwort prüfen (seit 2026-11-07)
+
+Modelle schreiben Adressen, die es nicht gibt. Eine Antwort vom 2026-10-26
+(MiMo Flash) verlinkte drei Artikel, alle drei 404, keiner unter ihren
+Treffern. Ein Abgleich mit dem, was die App abgerufen sah, trennt das aber
+nicht: In Max' Chats der 14 Tage davor standen 39 Links in Antworten, die nicht
+unter den gespeicherten Quellen waren. 33 davon führten zu Seiten (27 mit 200,
+6 sperrten Bots mit 403), 3 waren die erfundenen, 3 abgeschnitten oder lokal.
+Die echten stammen vermutlich aus dem Wissen des Modells, aus gelesenen Texten und aus der
+Suche von Luna und Terra, die der App keine Treffer schickt. Gezählt wird
+deshalb nur, was die Website selbst sagt.
+
+`agent_answer_links.LinkCheck` startet, sobald die Antwort fixiert ist
+(`DelegationLoop._finish_merged` → `_check_links`), auf einem eigenen Thread
+neben Übergabe und Schlussrunde der Prüfer, und ruft jeden Link der Antwort
+einmal auf (`answer_links`: Markdown-Links und nackte URLs außerhalb von Code,
+jede einmal, höchstens `LINKS_MAX` 12). Der Abruf läuft wie ein Klick ohne
+Anmeldung: GET ohne Körper zu lesen, bis zu 4 Weiterleitungen, jeder Sprung
+über `source_documents.pinned_target` (nur öffentliche Adressen, keine
+DNS-Umbindung), 3 zugleich (das DNS-Tor hat 4 Plätze), 4 s je Link, 6 s für
+alle (`CHECK_SECONDS`). Ein Fund ist nur 404, 410 oder ein Host, den es nicht
+gibt (`EAI_NONAME`); 403, Anmeldewände, 5xx, Zeitüberschreitung und
+abgelehnte Adressen sind keiner.
+
+Nach der Prüfung (`_keep_links`) wartet der Lauf auf den Rest, höchstens bis
+`CHECK_SECONDS`; nach einem Stopp nur auf das, was schon da ist. Funde stehen
+in der Review als `links` (`{"checked", "missing": [{url, status,
+retrieved}]}`), gespeichert per `ComparisonTools.checkpoint` vor dem Laufende
+und an den Browser als `review`-Frame. `retrieved` sagt, ob die App die Seite in
+dieser Nachricht gesehen hat (`SourceReader.cited` und gelesene Seiten): Damit
+lässt sich in den gespeicherten Reviews eine erfundene Adresse von einer
+verschwundenen Seite trennen. Ohne Funde wird nichts gespeichert. Nie in Chats
+mit Google-Daten: Dort würde eine Adresse aus einer Mail ohne Klick abgerufen,
+und `read_source` ist dort aus demselben Grund zu.
+
+Im Browser streicht `sources.js` `markMissingAnswerLinks` solche Links nach
+jedem Render einer Antwort durch (`agent-review.js` `render`), mit dem Grund im
+Tooltip und in `aria-label`. Der Link bleibt klickbar. Quellen-Pills werden nie
+markiert, denn sie sind abgerufene Quellen.
+
 ### Bilder aus dem Web (find_pictures, show_image, seit 2026-10-28)
 
 Anlass: „zeig mir ein Bild vom besten HS-BG-Spieler“ (Max, 2026-10-28).

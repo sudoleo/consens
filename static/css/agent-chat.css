@@ -1001,6 +1001,8 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    row instead of on a line of prose. */
 .agent-activity-sources { display: flex; flex-wrap: wrap; gap: var(--space-2); margin-top: var(--space-2); }
 .agent-activity-sources .src-ref { top: 0; margin: 0; }
+/* A link of the answer that leads nowhere (sources.js markMissingAnswerLinks). */
+a.answer-link-missing { color: var(--ink-3); text-decoration: line-through; text-decoration-color: color-mix(in srgb, currentColor 60%, transparent); }
 /* A call in the agent's VM (agent-activity.js vmView): one line with the
    command or file and how it ended, its output below in a tinted field,
    open while it runs. Monochrome like the rest of the trace. */

@@ -97,6 +97,18 @@ def _no_workspace_provisioning(monkeypatch):
         agent_workspace._heals.clear()
 
 
+@pytest.fixture(autouse=True)
+def _no_real_link_checks(monkeypatch):
+    """A fixed agent answer's links are opened once (agent_answer_links):
+    never over the network here, every link "unknown". Tests of the check
+    give their own."""
+    from app.services import agent_answer_links
+
+    async def unknown(url, **kwargs):
+        return None
+    monkeypatch.setattr(agent_answer_links, "link_gone", unknown)
+
+
 @pytest.fixture
 def deepseek_default_agent(monkeypatch):
     """Agent mechanics tests (costs, replay, ordering) were written against
