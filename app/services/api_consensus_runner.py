@@ -348,9 +348,10 @@ def recover_persisted_runs() -> int:
             try:
                 reserved, _usage = reserve_or_terminalize(run)
             except AcceptedRunUnrecoverable as exc:
-                logging.warning(
-                    "Consensus API accepted run terminalized reason=%s", exc.reason
-                )
+                # A fixed word of ours (reserve_or_terminalize), never the
+                # exception's text.
+                reason = exc.reason
+                logging.warning("Consensus API accepted run terminalized reason=%s", reason)
                 continue
             except Exception as exc:
                 logging.error(
