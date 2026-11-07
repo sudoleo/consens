@@ -54,8 +54,8 @@ def _axis_label(value, other) -> str:
     """One end of the chart: the year only when the history crosses one.
 
     Everything else on a Watch page names a day without its year ("Oct 3");
-    an axis that alone said "Sep 19, 2026" mixed the two forms on one page
-    (Apple-Audit H8). A history across New Year needs the years to read.
+    an axis that alone said "Sep 19, 2026" would mix the two forms on one
+    page. A history across New Year needs the years to read.
     """
     return f"{day_label(value)}, {value.year}" if value.year != other.year else day_label(value)
 

@@ -406,7 +406,7 @@ def _stream_openrouter_chat_completion(
         return
     result = parse_openrouter_response(answer, annotations, provider)
     # Partial text stays visible, but it is never a normal success: the typed
-    # state travels with the answer to storage and the UI (R06).
+    # state travels with the answer to storage and the UI.
     result["completion"] = state
     if state != completion.COMPLETE:
         result["finish_reason"] = str(finish_reason or "")[:40]

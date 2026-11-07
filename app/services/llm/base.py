@@ -8,7 +8,7 @@ from app.services import prompt_config
 def get_date_context(timezone_name=None, *, device=False) -> str:
     """Fresh server-owned clock; the configured zone is not user geolocation.
     ``device``: ``timezone_name`` is the zone the user's browser reported
-    (agent messages since 2026-10-27), not the application default."""
+    (agent messages), not the application default."""
     timezone_name = timezone_name or prompt_config.get_config()["reference_timezone"]
     now = datetime.now(ZoneInfo(timezone_name))
     weekday = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")[now.weekday()]
@@ -35,7 +35,7 @@ def count_words(text: Optional[str]) -> int:
 
 def validate_model(model: str, allowed: set, provider: str, is_pro: bool = False):
     # Checks the current form of a migrated ID (grok-4.3-no-reasoning ->
-    # grok-4.3, 2026-10-11); the request itself resolves it the same way.
+    # grok-4.3); the request itself resolves it the same way.
     model = cfg.canonical_model_id(model) if model else model
     if model and model not in allowed:
         raise HTTPException(

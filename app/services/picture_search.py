@@ -1,15 +1,14 @@
-"""Brave's image search for the agent (search_pictures in agent_web_images.py,
-since 2026-10-31).
+"""Brave's image search for the agent (search_pictures in agent_web_images.py).
 
-Max, 2026-10-31: ChatGPT answers a question about something to see with a
+ChatGPT answers a question about something to see with a
 collage of pictures to click through, and its model rarely has to look at
-them first, its image search is that good. find_pictures could only take the
+them first, its image search is that good. find_pictures can only take the
 preview picture a page names for itself, often a logo or a banner, so the
-agent guessed one page after the other and looked at each. An image search
+agent guesses one page after the other and looks at each. An image search
 answers with pictures, each with its page, the page's title and its size;
 the agent chooses by those and shows its pick.
 
-Brave over the other image searches (Claude, 2026-10-31, docs/agent-mode.md
+Brave over the other image searches (compared 2026-10-31, docs/agent-mode.md
 "Bildersuche"): an index of its own, a copy of each picture on its own server
 (500 px wide), safe search strict unless asked otherwise. Parallel's terms
 license every query for training, Linkup and Tavily only give the pictures of

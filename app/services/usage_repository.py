@@ -1,10 +1,9 @@
 """Persistente Run-Belege der Consensus-Pipeline auf dem gemeinsamen Tageskonto.
 
-Ein logischer Lauf (``usage_run_key``) ist weiterhin genau ein Beleg: er bindet
-Idempotenz, Request-Fingerprint, Operations-Claims und Chat-Kontext. Gezaehlt
-werden aber keine Runs mehr, sondern Kosten in Mikro-Euro (seit 2026-10-31,
-vorher Tokens) auf demselben Tageskonto wie Agent (``agent_quota``; Limit nach
-Kontostufe aus ``agent_budget_config``):
+Ein logischer Lauf (``usage_run_key``) ist genau ein Beleg: er bindet
+Idempotenz, Request-Fingerprint und Operations-Claims. Gezaehlt werden keine
+Runs, sondern Kosten in Mikro-Euro auf demselben Tageskonto wie Agent
+(``agent_quota``; Limit nach Kontostufe aus ``agent_budget_config``):
 
 * **Admission:** ein neuer Lauf startet nur, wenn das freie Budget die
   erwarteten Kosten eines typischen Laufs dieses Modus deckt (Compare,
@@ -14,11 +13,11 @@ Kontostufe aus ``agent_budget_config``):
   wird erneut gegen das Konto zugelassen (``admitted_at``), sonst sammelte
   ein Konto vorab zugelassene Laeufe fuer das stundenlange
   Ausfuehrungsfenster.
-* **Buchung:** jede abgeschlossene Operation (``ask:<familie>``, ``consensus``,
-  ``resolve``, API ``pipeline``) bucht ihre gemessenen Kosten genau einmal
+* **Buchung:** jede abgeschlossene Operation (``ask:<familie>``, API
+  ``pipeline``) bucht ihre gemessenen Kosten genau einmal
   (``booked_operations``). Fehlt die Messung, bucht sie dieselbe begrenzte
   Schaetzung wie Agent. Ein Lauf darf das Konto dabei leicht ueberziehen.
-  Die letzte Operation gibt den Rest-Hold frei: ``final`` (Consensus, API) oder,
+  Die letzte Operation gibt den Rest-Hold frei: ``final`` (API) oder,
   bei Compare, die Buchung, mit der alle bei ``/prepare`` angekuendigten
   Antworten (``planned_operations``) gebucht sind.
 
@@ -499,8 +498,8 @@ class FirestoreUsageRepository:
     ) -> dict:
         """Debit one finished operation's cost (micro-euros) exactly once.
 
-        ``final`` marks the last operation of a run (Consensus, API pipeline,
-        Resolve): its remaining admission hold is dropped instead of waiting
+        ``final`` marks the last operation of a run (the API pipeline): its
+        remaining admission hold is dropped instead of waiting
         for expiry. A run with ``planned_operations`` (Compare) ends the same
         way with the booking that completes them. Returns the account's public
         snapshot after the booking.
@@ -542,8 +541,8 @@ class FirestoreUsageRepository:
                 raise UsageDataError("Too many booked operations for one run")
             ledger = agent_quota.book_run(ledger, key_hash, measured=measured, estimated=estimated, now=epoch)
             planned = run_data.get("planned_operations")
-            # A Compare run has no closing step since the browser runs no
-            # Consensus (2026-10-25); without this its leftover hold read as
+            # A Compare run has no closing step (the browser runs no
+            # Consensus); without this its leftover hold would read as
             # "held for a message still running" for ten minutes.
             if final or (type(planned) is int and len(booked) + 1 >= planned):
                 ledger = agent_quota.release_run(ledger, key_hash, now=epoch)

@@ -1,4 +1,4 @@
-"""Ein echtes Bild pro Watch -- oder keins (Produktentscheidung 2026-10-10/11).
+"""Ein echtes Bild pro Watch -- oder keins.
 
 Nach einer erfolgreichen Prüfung (und beim Anlegen aus einer fertigen Antwort)
 sucht dieses Modul unter den Quellen, auf die sich die Modelle gestützt haben:
@@ -10,8 +10,8 @@ sucht dieses Modul unter den Quellen, auf die sich die Modelle gestützt haben:
    sonst ``og:type`` article), dessen Überschrift zur Frage passt, mit dem
    Vorschaubild, das der Verlag selbst fürs Teilen festlegt (``og:image``,
    ``kind="article"``);
-3. sonst das Logo derer, um die es geht (seit 2026-10-12, damit man eine Watch
-   auf einen Blick wiedererkennt): eine Quelle, deren Domainname ein Name aus
+3. sonst das Logo derer, um die es geht (damit man eine Watch auf einen
+   Blick wiedererkennt): eine Quelle, deren Domainname ein Name aus
    der Frage ist ("Cursor oder Claude Code?" -> cursor.com, claude.com), mit
    dem App-Icon, das die Seite selbst festlegt -- höchstens zwei nebeneinander
    (``kind="logo"``).
@@ -59,7 +59,7 @@ STATUS_READY = "ready"
 STATUS_NONE = "none"
 STATUS_DISMISSED = "dismissed"
 # Stand der Suche. Erfolglose Versuche einer älteren Suche zählen nicht mehr,
-# sobald eine neue Stufe dazukommt (2 = Logos, 2026-10-12).
+# sobald eine neue Stufe dazukommt (2 = Logos).
 SEARCH_VERSION = 2
 # Drei Prüfungen, in denen Seiten gelesen, aber kein passender Gegenstand
 # gefunden wurde: die Watch ist abstrakt. Versuche, in denen keine einzige

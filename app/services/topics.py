@@ -256,7 +256,7 @@ def classify_evidence(
         "rank": EVIDENCE_ROLE_ORDER[role] + (10 if indirect else 0),
         "is_indirect": indirect,
         # An editorial preference orders sources within their role; it never
-        # changes what kind of source a page is (Review R14).
+        # changes what kind of source a page is.
         "is_preferred": bool(preferred) and _matches_domain(host, preferred),
     }
 
@@ -518,8 +518,8 @@ def normalize_topic_input(data: dict, *, existing: dict | None = None) -> dict:
         # Denormalized public labels. Executable IDs live in run_config.
         "models": topic_model_labels(run_config["provider_models"]),
         "source_rules": source_rules,
-        # Optional editorial seed sources remain supported, but generated runs
-        # no longer require or inherit them as their evidence set.
+        # Optional editorial seed sources; generated runs neither require nor
+        # inherit them as their evidence set.
         "evidence": evidence,
         # The model family a benchmark chart is about (topic_benchmarks.py).
         "benchmark": topic_benchmarks.normalize_config(
@@ -810,7 +810,7 @@ def create_run(
         raise TopicError("bad_request", "Snapshot evidence violates the Topic source rules.")
     # Sources the research found but the Topic's rules do not allow. They are
     # kept with their real role and citation ID so the record stays traceable,
-    # but are never shown as evidence (Review R14).
+    # but are never shown as evidence.
     excluded_evidence = normalize_evidence(data.get("excluded_evidence") or [])
     if any(item["type"] in source_rules["allowed_types"] for item in excluded_evidence):
         raise TopicError("bad_request", "Excluded evidence must be disallowed by the Topic source rules.")
@@ -836,8 +836,8 @@ def create_run(
         "cause": drift_signal.normalize_cause(data.get("cause")),
         "held_summary": _clean(data.get("held_summary"), limit=240, label="Held summary"),
         "evidence_sources": normalize_evidence_sources(data.get("evidence_sources")),
-        # Optional editorial one-liner; nothing writes or reads it since the
-        # page leads with the answer itself (2026-10-15). Kept for old runs.
+        # Optional editorial one-liner; nothing writes or reads it, the page
+        # leads with the answer itself. Kept for old runs.
         "headline": _clean(data.get("headline"), limit=240, label="Headline"),
         "opinion_changes": normalize_opinion_changes(data.get("opinion_changes")),
         "evidence": evidence,
@@ -1405,11 +1405,11 @@ def delivery_id(topic_id: str, run_id: str, follower_doc_id: str) -> str:
 
 
 def claim_delivery(topic_id: str, run_id: str, follower_doc_id: str, *, db=None) -> bool:
-    """Legacy per-follower marker (no longer used by the send path).
+    """Legacy per-follower marker, unused by the send path.
 
-    Topic follower mails go through the durable ``notification_outbox`` since
-    R17; these markers stay only so existing documents are still cleaned up
-    by ``delete_follower_and_deliveries``.
+    Topic follower mails go through the durable ``notification_outbox``;
+    these markers stay only so existing documents are still cleaned up by
+    ``delete_follower_and_deliveries``.
     """
     db = db if db is not None else db_firestore
     follower_ref = db.collection(FOLLOWERS_COLLECTION).document(follower_doc_id)

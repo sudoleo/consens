@@ -1,4 +1,4 @@
-"""Direkte Wege zu den Quellen einer Watch (seit 2026-10-12).
+"""Direkte Wege zu den Quellen einer Watch.
 
 Wer ein Thema beobachtet, will nicht nur die Antwort lesen, sondern selbst
 nachsehen: die Stellenanzeige, die Produktseite, die offizielle Ankündigung.
@@ -11,7 +11,7 @@ Dieses Modul wählt aus den vorhandenen Quellen
   Namen nennt ("bei Idealo und Geizhals"), führt der Name zu ihr.
 
 Bewusst keine Satz-für-Satz-Belege: die Synthese hängt Quellen dabei oft
-falsch an (seit 2026-09 abgeschaltet, docs/codebase-map.md „Quellen in der Synthese“). Ein Name,
+falsch an (docs/codebase-map.md „Quellen in der Synthese“). Ein Name,
 der zu genau dieser Seite führt, ist Navigation, kein Beleg -- er kann nicht
 falsch zitieren. Keine Modell-Calls, keine Netzabrufe.
 """
@@ -29,8 +29,8 @@ MAX_INLINE_LINKS = 8
 MIN_NAME_LENGTH = 4
 
 # consens.io itself. A search that finds the page about this very question
-# hands it back as a source: a Watch then cited itself, under "Direct links"
-# and in its source list (Apple-Audit L4). Such a link is never evidence.
+# hands it back as a source: a Watch would then cite itself, under "Direct
+# links" and in its source list. Such a link is never evidence.
 OWN_HOSTS = ("consens.io",)
 
 
@@ -278,7 +278,7 @@ def key_links(sources, text: str, limit: int = MAX_KEY_LINKS) -> list[dict]:
         ranked.append((-(int(mentioned) * 3 + quality), order.get(id(entry), 0), entry))
     ranked.sort(key=lambda item: item[:2])
     # Two tiles with the same title (a GitHub file and its issue page) read
-    # as a doubled link: the better-ranked one stays (Apple-Audit L12).
+    # as a doubled link: the better-ranked one stays.
     links, titles = [], set()
     for *_rank, entry in ranked:
         title = display_title(entry)

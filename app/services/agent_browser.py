@@ -1,14 +1,11 @@
-"""The agent's ``browser`` tool (since 2026-10-27, docs/agent-mode.md
-"Arbeitsplatz"): the account's Chrome on its workspace
-(agent_vm.workspace_name), the one the user watches and steers live.
+"""The agent's ``browser`` tool (docs/agent-mode.md "Arbeitsplatz"): the
+account's Chrome on its workspace (agent_vm.workspace_name), the one the
+user watches and steers live.
 
-Before 2026-10-27 the agent ran a ``browser`` command in its own VM, next to
-Chrome, its debugging port and its profile with every sign-in. From then to
-2026-11-04 the browser had a VM of its own (security audit 2026-10-27,
-finding 2); since then it runs on the workspace again, as the provider's
-user, and the agent's user reaches neither its protocol (a socket only that
-user opens, workspace_vm/browser/cdp.py), its screen nor its profile (Max:
-the computer's own users instead of bridges between two VMs). The agent
+The browser runs on the workspace as the provider's user, and the agent's
+user reaches neither its protocol (a socket only that user opens,
+workspace_vm/browser/cdp.py), its screen nor its profile (Max: the
+computer's own users instead of bridges between two VMs). The agent
 chooses an action and its typed arguments, the backend checks them and
 calls one fixed program there, workspace_vm/browser/browser.py, with the
 request as JSON on its stdin and no shell. The program reads pages as text
@@ -25,30 +22,26 @@ one file the agent's user may read into the browser's folder for that call
 only. A screenshot comes to the agent as a picture (like vm_view_image),
 only for a chat model that takes images.
 
-The reviewers follow every action live; from 2026-10-27 to 2026-10-29 those
-that act outside (open, click, Enter, upload) waited for them first
-(agent_gate.py). What is the user's to do or to allow goes to them through
-ask_user (agent_ask.py). The calls share the workspace's lease
-and VM time with the VM tools (VMTools._start). A provider failure costs the
-call it happened in; MAX_FAILURES in a row turn the browser off for the rest
-of the message (since 2026-10-30; before, the first did, runtime audit A1).
+The reviewers follow every action live. What is the user's to do or to
+allow goes to them through ask_user (agent_ask.py). The calls share the
+workspace's lease and VM time with the VM tools (VMTools._start). A
+provider failure costs the call it happened in; MAX_FAILURES in a row turn
+the browser off for the rest of the message.
 
 The first call of a message wakes the VM, brings its tools up to date and
-starts Chrome on a backend of its own (_warm, since 2026-10-29), begun
-already when the agent opens its workspace or the message starts with it
-open (prewarm, VMTools.prewarm, since 2026-10-30). The browser needs only
-the workspace's lease and the VM's tools, not the chat's folder (runtime
-audit T5): the folder, checkpoint and notes come with the first call that
-needs them (an upload, a download).
+starts Chrome on a backend of its own (_warm), begun already when the agent
+opens its workspace or the message starts with it open (prewarm,
+VMTools.prewarm). The browser needs only the workspace's lease and the VM's
+tools, not the chat's folder: the folder, checkpoint and notes come with
+the first call that needs them (an upload, a download).
 
 Each call's activity says when the browser itself began (``started_at``,
 after the start of the workspace) and how long the call took
 (``duration_ms``), so the chat tells a starting workspace from a long
-action (runtime audit V3, I4); while the first call waits for the
-browser's start, about when that ends (``starting_until``, since
-2026-11-02), which the chat counts down. At the message's end a browser it used is
-told to rest (the helper's action ``rest``): the VM sleeps after two
-minutes instead of ten (K2).
+action; while the first call waits for the browser's start, about when that
+ends (``starting_until``), which the chat counts down. At the message's end
+a browser it used is told to rest (the helper's action ``rest``): the VM
+sleeps after two minutes instead of ten.
 """
 from __future__ import annotations
 
@@ -81,11 +74,11 @@ TYPE_CHARS = 20_000
 FIND_CHARS = 200
 UPLOAD_BYTES = 15 * 1024 * 1024
 # A file the browser downloaded comes into the chat's folder (downloads/) up
-# to this size, at most this many per call (since 2026-10-28); larger ones
+# to this size, at most this many per call; larger ones
 # are deleted from the browser's folder and named as skipped.
 DOWNLOAD_BYTES = 25 * 1024 * 1024
 DOWNLOADS_PER_CALL = 10
-# click at x,y and drag's strokes (since 2026-10-28), pixels of the
+# click at x,y and drag's strokes, pixels of the
 # screenshot; the helper checks the same (workspace_vm/browser/browser.py).
 MAX_COORDINATE = 10_000
 MAX_STROKES = 50
@@ -97,12 +90,12 @@ WAIT_MAX = 120
 ANSWER_BYTES = 12 * 1024 * 1024
 # The activity's view of the page after an action.
 VIEW_CHARS = 2_000
-# The opened page's picture on its card in the chat (browser.py preview,
-# since 2026-10-29): a JPEG up to this size, in the activity only, never in
-# the agent's result. Measured 2-22 KB at 480 px. Since 2026-10-30 the card
+# The opened page's picture on its card in the chat (browser.py preview):
+# a JPEG up to this size, in the activity only, never in
+# the agent's result. Measured 2-22 KB at 480 px. The card
 # shows the page as it is now: an action that can change it (PICTURE_AFTER)
-# brings a new picture when the last is PREVIEW_SECONDS old (Max: the card
-# kept the page as it opened, and nobody saw where the agent was).
+# brings a new picture when the last is PREVIEW_SECONDS old (Max: a card
+# that keeps the page as it opened shows nobody where the agent is).
 PREVIEW_BYTES = 64 * 1024
 PREVIEW_SECONDS = 12
 # Starts like vm_view_image's (agent_compaction.PICTURE_OPEN), so older ones leave the view the same way.
@@ -115,21 +108,20 @@ BROWSER_UNAVAILABLE = ("The workspace's browser is not available right now. Cont
 BROWSER_INTERRUPTED = ("The connection to the browser broke off during this call, so whether the action happened "
                        "is unknown; the page shows what it did.")
 BROWSER_NOT_STARTED = "The workspace did not start just now; nothing happened in its browser."
-# The helper's rest at the message's end (K2): its own short time, never the message's.
+# The helper's rest at the message's end: its own short time, never the message's.
 REST_SECONDS = 20
 # How often the first call, waiting for the browser's start, looks for a new estimate of its end.
 WARM_POLL_SECONDS = 0.5
 NO_PICTURES = "Your model cannot look at pictures: read the page with the actions read or text."
-# What can bring the picture of the page after it (screenshot_after, since
-# 2026-10-29): the actions that change the page, and wait. Prod the same
-# day: in a game of tic-tac-toe on a canvas, 15 of 45 model steps only asked
-# for the screenshot after a click.
+# What can bring the picture of the page after it (screenshot_after): the
+# actions that change the page, and wait. In a game of tic-tac-toe on a
+# canvas, 15 of 45 model steps only asked for the screenshot after a click.
 PICTURE_AFTER = frozenset({"open", "click", "drag", "type", "select", "key", "scroll", "back", "forward", "tab",
                            "wait"})
 # Those that renew the picture on the page's card now and then (PREVIEW_SECONDS); open brings one always.
 PREVIEW_AFTER = PICTURE_AFTER - {"open"}
-# A screenshot the agent shows the user under its answer (show, since
-# 2026-10-30): at most this many per message. Prod the same day: asked "can
+# A screenshot the agent shows the user under its answer (show): at most
+# this many per message. Asked "can
 # I see it?", DeepSeek tried for 9 minutes to make a picture of bild.de in
 # its workbench (three domains, Playwright, an adblock wall), since its
 # screenshots reached only itself.
@@ -190,7 +182,7 @@ class NoteSignInArgs(BaseModel):
         "False when the browser is logged out of a site the list names."))
 
 
-# note_sign_in in a temporary chat (since 2026-11-02, like the workspace's notes).
+# note_sign_in in a temporary chat (like the workspace's notes).
 SIGN_INS_KEPT_NOTE = ("This is a temporary chat: the list of sign-ins outlasts it, so it stays as it is. Nothing was "
                       "noted.")
 
@@ -285,9 +277,8 @@ def local_port(url):
 
 
 # The browser reaches the web, and localhost is the agent's servers on the
-# same computer (since 2026-11-04; from 2026-10-29 a tunnel to the workbench).
-# DeepSeek's feedback 2026-10-28: it tried its dev server here first, and got
-# this refusal.
+# same computer. DeepSeek's feedback: it tried its dev server here first, and
+# got this refusal.
 BROWSER_PRIVATE = ("That address is the workspace's own files or a private network: the browser reaches public "
                    "pages, and http://localhost:<port> where your server listens (your dev server).")
 LOCAL_PORT = ("localhost in the browser is your workspace, port by port: name the port your server listens on, "
@@ -375,9 +366,9 @@ class BrowserTools:
         self.name = agent_vm.workspace_name(vm_tools.loop.uid)
         self.ready = False
         self.off = False
-        # Provider failures in a row (A1), the warm-up begun before the
+        # Provider failures in a row, the warm-up begun before the
         # first call (prewarm), and the timing of the last call for its
-        # activity (V3, I4).
+        # activity.
         self.failures = 0
         self.warming = None
         self._timing = None
@@ -402,7 +393,7 @@ class BrowserTools:
                        "comes into your chat folder's downloads folder. The user sees the page in front on a card in "
                        "the chat, its picture renewed as you work, and opens it live from there.",
             BrowserArgs, self.call, activity=self._activity, reports=True),
-            # Where the browser is logged in (agent_workspace.note_sign_in, since 2026-11-02).
+            # Where the browser is logged in (agent_workspace.note_sign_in).
             ReadOnlyTool(
                 "note_sign_in", "Keep the list of sites the browser is logged in to: after a sign-in worked, when "
                                 "you find it logged in to a site the list lacks, or with signed_in false logged out "
@@ -454,7 +445,7 @@ class BrowserTools:
         uid = self.vm.loop.uid
         if workspace_guard.status(uid).closed:
             return None
-        # Used in this message: it rests at the end (K2).
+        # Used in this message: it rests at the end.
         session.on_close(self._rest)
 
         def run():
@@ -478,10 +469,10 @@ class BrowserTools:
                 # The counters before the agent's commands: in a new boot the
                 # first reading is only where counting starts (merge_net), so
                 # an upload in a message that only ran commands, read at its
-                # end alone, counted nothing (bug hunt 2026-11-05).
+                # end alone, would count nothing.
                 workspace_guard.note_net(uid, answer.get("net"))
             except Exception as exc:
-                # Anything else: the call then opens it itself, as before.
+                # Anything else: the call then opens it itself.
                 logging.info("Agent browser warm-up failed category=%s", safe_exception(exc))
             finally:
                 start.end()
@@ -497,13 +488,11 @@ class BrowserTools:
 
     def _await_warm(self, warming, deadline, report, cancellation):
         """Waits for the warm-up, at most until ``deadline`` (monotonic), and
-        never past Stop (since 2026-11-06: the run waits for its running
-        call, and a slow provider kept Stop waiting up to CALL_SECONDS; the
-        warm-up goes on by itself). Meanwhile the step says about when the
+        never past Stop (the run waits for its running call, so a slow
+        provider would keep Stop waiting up to CALL_SECONDS; the warm-up
+        goes on by itself). Meanwhile the step says about when the
         browser's start ends (``starting_until``, the latest of the account's
-        starts: agent_workspace.start_until), and the chat counts it down
-        (since 2026-11-02; before, it said "Starting the workspace…" for up
-        to a minute and more)."""
+        starts: agent_workspace.start_until), and the chat counts it down."""
         from app.services import agent_workspace
         told = None
         try:
@@ -578,7 +567,7 @@ class BrowserTools:
     def _unavailable(self, exc, text=BROWSER_INTERRUPTED):
         """A provider failure in a call: that call's error (``text``) and the
         next call tries again; MAX_FAILURES in a row turn the browser off for
-        the message (runtime audit 2026-10-30, A1)."""
+        the message."""
         from app.services.agent_vm_tools import MAX_FAILURES
         if not isinstance(exc, agent_vm.VMUnavailable):
             logging.warning("Agent browser failed unexpectedly category=%s %s", safe_exception(exc),
@@ -590,7 +579,7 @@ class BrowserTools:
         logging.warning("Agent browser unavailable reason=%s failures=%s %s", str(exc)[:120] or type(exc).__name__,
                         self.failures, log_tag(self.vm.loop))
         # The provider's gateway saying the VM does not respond: off at once
-        # (agent_vm.UNRESPONSIVE_STATUSES); each new try waited as long again.
+        # (agent_vm.UNRESPONSIVE_STATUSES); each new try would wait as long again.
         if self.failures >= MAX_FAILURES or agent_vm.unresponsive(exc):
             self.off = True
             return ValueError(BROWSER_UNAVAILABLE)
@@ -624,7 +613,7 @@ class BrowserTools:
         request = {"action": args.action}
         # The agent's step this call is part of: within it, an action on a ref
         # is checked against the element as the agent last saw it, before the
-        # step (browser.py KEY_CHECK_JS, bug hunt 2026-11-04).
+        # step (browser.py KEY_CHECK_JS).
         step = self._step()
         if step:
             request["step"] = step
@@ -662,7 +651,7 @@ class BrowserTools:
         # The lease is all the browser needs (its warm-up brings the VM's
         # tools); the chat's folder only an upload (its file). Its actions
         # are steps of the agent's model, not VM time: the browser goes on
-        # once today's is used up (since 2026-10-31).
+        # once today's is used up.
         self.vm._start(cancellation, bench=args.action == "upload", change=False, spends=False)
         prepared = time.monotonic()
         session = self.vm.session
@@ -674,7 +663,7 @@ class BrowserTools:
                 raise ValueError(VM_NO_TIME)
             timeout = min(timeout, int(left))
         # One time for the whole call: the browser's start and the helper
-        # share it, never twice the time left (runtime audit 2026-10-30, A5).
+        # share it, never twice the time left.
         deadline = time.monotonic() + timeout
         began = None
         try:
@@ -722,7 +711,7 @@ class BrowserTools:
         # The browser answered: a long run from here on (VMSession.started).
         session.started = True
         status, text = answer.get("status"), str(answer.get("text") or "")
-        # Where a call's time goes (since 2026-10-30): before the browser
+        # Where a call's time goes: before the browser
         # (the lease, the first call's start of the VM), the
         # command on the VM, the helper inside it, and whether the resident
         # helper answered (browser.py serve).
@@ -826,9 +815,9 @@ class BrowserTools:
 
     def look(self, cancellation):
         """The browser as it is now, for ask_user once the user handed it back
-        (agent_ask.AskTools, since 2026-10-29): a screenshot for a model that
-        takes pictures (it follows as an image), else the page read as text.
-        Before, the agent's next step always asked for it, one more round."""
+        (agent_ask.AskTools): a screenshot for a model that takes pictures
+        (it follows as an image), else the page read as text, so the agent's
+        next step need not ask for it, one more round."""
         from app.services.agent_vm_tools import sees_pictures
         action = "screenshot" if sees_pictures(self.vm.loop.model) else "read"
         return self.call(BrowserArgs(action=action), cancellation=cancellation)
@@ -837,7 +826,7 @@ class BrowserTools:
         """The browser's finished downloads into the chat's folder
         (downloads/, as the agent's user, never over an existing file), then
         gone from the browser's folder: ``(kept, skipped)``. They need the
-        chat's folder, which a browser call alone does not prepare (T5): it
+        chat's folder, which a browser call alone does not prepare: it
         comes now, and a download changes the workspace, so after the
         message's checkpoint."""
         from app.services import agent_workspace
@@ -873,7 +862,7 @@ class BrowserTools:
                 continue
             except (agent_vm.VMUnavailable, agent_vm.VMFileRefused) as exc:
                 # A provider hiccup or a file in the way costs this file, never
-                # the call (no ValueError: it ended the turn until 2026-10-30).
+                # the call.
                 logging.info("Agent browser download not kept category=%s", safe_exception(exc))
                 skipped.append({"name": name, "reason": "it could not be copied into your workspace"})
             finally:
@@ -923,7 +912,7 @@ class BrowserTools:
         if isinstance(result, dict) and isinstance(result.get("page"), str):
             lines = result["page"].split("\n", 2)
             # A read starts with the page's head; an open first says what it
-            # opened (until 2026-10-29 its card never had the page's title).
+            # opened.
             head = lines[1] if args.action == "open" and len(lines) > 1 else lines[0]
             if head.startswith("Page: "):
                 fields["title"] = head[6:].strip().strip('"')[:200]
@@ -940,6 +929,6 @@ class BrowserTools:
         if isinstance(result, dict) and result.get("error") in {BROWSER_INTERRUPTED, BROWSER_NOT_STARTED}:
             fields["outcome"] = "interrupted"
         if result is not None and self._timing is not None:
-            # When the browser itself began and how long the call took (V3, I4).
+            # When the browser itself began and how long the call took.
             fields.update(self._timing)
         return {**fields, **self.vm._outcome(result)}

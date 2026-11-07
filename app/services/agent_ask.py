@@ -1,10 +1,10 @@
-"""ask_user: the agent hands a step to the user and waits (since 2026-10-29).
+"""ask_user: the agent hands a step to the user and waits.
 
-Working together in the workspace's browser had no "your turn". A sign-in
-was the user's to do, yet the agent could only call the browser again (each
-call waited up to 120 s while the user had it, VMSession.wait_for_user) or
-end its answer, and the user did not see that they still held the browser
-(Max, 2026-10-29: he waited for the agent while it waited for him). Now the
+Working together in the workspace's browser needs a "your turn". A sign-in
+is the user's to do; without one the agent could only call the browser again
+(each call waits up to 120 s while the user has it, VMSession.wait_for_user)
+or end its answer, and the user would not see that they still hold the
+browser (Max: he waited for the agent while it waited for him). So the
 agent asks, and the run pauses on a card above the field
 (DelegationLoop._ask_wait, a hold with ``ask``):
 
@@ -18,16 +18,16 @@ agent asks, and the run pauses on a card above the field
   token into a field on the card, and the server writes it to the workbench
   (agent_secrets.py, POST .../secret), never into the chat, the record or a
   model's context; the agent hears where it lies.
-- ``choices`` (two to four short answers, since 2026-10-30): the user picks
-  one on the card, and the agent hears which. Before, a question with two
-  ways to go had only the confirm card: on chess.com DeepSeek asked "against
-  a person or a bot?", the card said Allow or Don't allow, and from
-  "allowed" it guessed the person.
+- ``choices`` (two to four short answers): the user picks one on the card,
+  and the agent hears which. The confirm card does not fit a question with
+  two ways to go: on chess.com DeepSeek asked "against a person or a bot?",
+  the card said Allow or Don't allow, and from "allowed" it guessed the
+  person.
 - none of these: the user allows or declines a step before the agent takes
-  it, such as sending, posting, booking or deleting in their name. This took
-  the place of the reviewers' gate on every browser click (agent_gate.py):
-  the acting model knows what a step does in the user's name, and the user
-  decides, not a cheaper model on every click (Max, 2026-10-29).
+  it, such as sending, posting, booking or deleting in their name. This
+  replaces a reviewers' gate on every browser click (agent_gate.py): the
+  acting model knows what a step does in the user's name, and the user
+  decides, not a cheaper model on every click (Max).
 
 The user can also take over without being asked: the agent's next call into
 the workspace then waits the same way (DelegationLoop._takeover_wait, card
@@ -55,8 +55,8 @@ MAX_CHOICES = 4
 CHOICE_CHARS = 80
 # How often a waiting run looks whether the user handed the browser back
 # (the account's record, agent_workspace.control_state): the agent goes on
-# within a few seconds. 2 s until the first games were played (2026-10-29),
-# then 1 s, a read every second through a card of up to 30 minutes.
+# within a few seconds, and a card of up to 30 minutes is not a read every
+# second.
 HANDBACK_POLL_SECONDS = 3
 
 # What the agent reads, by the card's kind and the user's answer.

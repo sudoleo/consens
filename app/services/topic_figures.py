@@ -1,4 +1,4 @@
-"""Figures drawn from a Topic's answer (since 2026-10-15).
+"""Figures drawn from a Topic's answer.
 
 Models answer in text; people take in a timeline, a status board or a few
 bars faster. After a check, one cheap Judge call
@@ -163,8 +163,8 @@ def _unit_is_time(unit) -> bool:
 
 def years_as_timeline(figure: dict) -> dict:
     """A numbers figure whose values are all years is a timeline: 2026, 2031
-    and 2047 drawn as bars are three bars of almost the same length
-    (when-will-agi-arrive, 2026-10-15). Only when the unit allows it: a
+    and 2047 drawn as bars are three bars of almost the same length.
+    Only when the unit allows it: a
     rating of 2048 stays a number."""
     items = figure.get("items")
     if (figure.get("kind") != "numbers" or not isinstance(items, list) or not items

@@ -1,5 +1,5 @@
 """Background processes in the agent's VM: a dev server, a long test run
-(vm_start_process, vm_process_output, vm_stop_process; since 2026-10-26).
+(vm_start_process, vm_process_output, vm_stop_process).
 
 A process started with ``&`` in vm_exec stops when the VM pauses, which it
 does after a few idle seconds, so between two of the agent's steps. A
@@ -9,7 +9,7 @@ background process here runs under a small supervisor script in the VM
 refreshed every HEARTBEAT_SECONDS, released when the process ends. A crashed
 supervisor's hold expires by itself.
 
-Since the security audit of 2026-10-27 the supervisor is the server's: it
+The supervisor is the server's: it
 runs as the provider's user, its files lie in the provider's home, which the
 agent cannot open, and the socket stays out of the agent's reach. Only the
 command itself runs as the agent's user, through agent-run like every other
@@ -23,17 +23,16 @@ of awake time. A process outlives its message: the next one finds it by its
 id (the work record names it, agent_compaction.work_record).
 
 Its whole limit counts as VM time when it starts (agent_vm_time.py), at
-most DAY_SHARE of what is left today (since 2026-10-31). Once a look at it
+most DAY_SHARE of what is left today. Once a look at it
 (vm_process_output, vm_stop_process, both also once today's VM time is used
 up) finds it ended, the time it did not run is given back, once
 (``refunded``): to the message that started it, or to the day it was charged
-on (since 2026-10-30; before, four dev server starts used up a Pro account's
-two hours, runtime audit K5).
+on.
 
 Everything lives in PROCESSES_DIR/<id>: the command, its combined output
 (``output.log``), the supervisor's pid file, its start and, once it ended,
 its end and exit code, the VM time it was charged (``reserve``: seconds
-and UTC day) and, since 2026-11-01, the chat that started it (``chat``):
+and UTC day) and the chat that started it (``chat``):
 the process and its folder go with that chat (delete_for_chat). The VM
 holds no secret, so neither does any of it.
 """
@@ -55,9 +54,9 @@ PROCESSES_DIR = agent_vm.SERVER_HOME + "/.consens/processes"
 DEFAULT_SECONDS = 1800
 MAX_SECONDS = 3600
 MAX_RUNNING = 3
-# A process reserves at most this share of what is left of today's VM time
-# (since 2026-10-31): the commands around it still run. Before, a dev server
-# at its default limit reserved all 20 minutes of an account without Pro.
+# A process reserves at most this share of what is left of today's VM time:
+# the commands around it still run, where a dev server at its default limit
+# would reserve all 20 minutes of an account without Pro.
 DAY_SHARE = 0.5
 HEARTBEAT_SECONDS = 60
 HOLD_EXPIRE = "5m"
@@ -67,13 +66,13 @@ STOP_GRACE_SECONDS = 10
 ID = r"^[a-f0-9]{8}$"
 # Between the command's end and its exit code the supervisor sleeps up to a
 # second and may hold the VM a last time (curl, up to 5 s): a look in between
-# found neither and said "lost", and the agent ran a finished run again (bug
-# hunt P24, 2026-11-05). While the folder's own supervisor lives, a look waits
+# found neither and said "lost", and the agent ran a finished run again.
+# While the folder's own supervisor lives, a look waits
 # up to this long for its exit code (state_command).
 SETTLE_SECONDS = 8
-# The first line of every status: "consens-process <state> <bytes>", since
-# 2026-10-30 with the seconds it ran once it ended, the VM time it was
-# charged (seconds, day) and whether the rest was given back.
+# The first line of every status: "consens-process <state> <bytes>", then
+# the seconds it ran once it ended, the VM time it was charged (seconds,
+# day) and whether the rest was given back.
 STATUS_LINE = re.compile(r"^consens-process (running|lost|stopped|-?\d+) (\d+)"
                          r"(?: (-|\d+) (-|\d+) (-|\d{4}-\d{2}-\d{2}) ([01]))?$")
 
@@ -179,7 +178,7 @@ def status_command(directory, chars=OUTPUT_CHARS, wait=0):
 def start_command(directory, task, *, wait=2, root=PROCESSES_DIR):
     """Refuses (exit 4) at MAX_RUNNING running processes, with a line
     ``temporary <chat>`` for each of a temporary chat (other chats' lists
-    leave those out, list_command; since 2026-11-07), else starts the
+    leave those out, list_command), else starts the
     supervisor detached from this command (its own session, ``sid``) and
     reports after ``wait``."""
     d = shlex.quote(directory)
@@ -214,7 +213,7 @@ def stop_command(directory, task):
 AT_CAP = f"{MAX_RUNNING} background processes are already running. Stop one with vm_stop_process first."
 # Some of them run for another, temporary chat: its processes stay out of
 # this chat's list (list_command), so the agent saw fewer than MAX_RUNNING
-# and could not tell why (bug hunt 2026-11-06). They end with that chat.
+# and could not tell why. They end with that chat.
 AT_CAP_TEMPORARY = (f"{MAX_RUNNING} background processes are already running, {{some}} for a temporary chat: "
                     "vm_process_output does not list those here, and they end when the user leaves that chat or "
                     f"at their time limit (at most {MAX_SECONDS // 60} minutes after their start). {{then}}")
@@ -282,12 +281,12 @@ def chat_command(chat_id, root=PROCESSES_DIR):
 
 
 def delete_for_chat(vm, name, chat_id, *, refund=None):
-    """With its chat (agent_vm.delete_chat_vm, since 2026-11-01): the
+    """With its chat (agent_vm.delete_chat_vm): the
     background processes it started on the workbench ``name``, a running
     one stopped as vm_stop_process stops it, and their folders with the
     command and its output. ``refund(seconds, day)`` gives back today's VM
     time a process did not use, as a look at it would (ProcessTools._refund).
-    One started before it had a ``chat`` file ends by its limit. Raises
+    Raises
     VMUnavailable when the provider fails or the list did not come back
     whole: the chat's deletion then retries."""
     from app.services import agent_vm_time
@@ -329,7 +328,7 @@ def parse_status(text):
     """``(state, bytes, output)`` of a status command's output: state is
     "running", "lost" (the VM stopped it, e.g. while paused without a hold),
     "stopped" (vm_stop_process ended it: coreutils timeout then reports 124,
-    which read as its time limit, 2026-10-28) or the exit code."""
+    which read as its time limit) or the exit code."""
     first, _, rest = text.partition("\n")
     match = STATUS_LINE.match(first.strip())
     if not match:
@@ -342,7 +341,7 @@ def spent(text):
     """``(ran, reserved, day, refunded)`` of a status's first line once the
     process ended (seconds it ran, the VM time it was charged and on which
     UTC day, whether the rest was given back), else None: still running,
-    lost, or started before 2026-10-30."""
+    lost, or without a readable start or ``reserve``."""
     match = STATUS_LINE.match(text.partition("\n")[0].strip())
     if not match or match.group(3) in {None, "-"} or match.group(4) == "-" or match.group(5) == "-":
         return None
@@ -451,7 +450,7 @@ class ProcessTools:
         code, text = self._run(start_command(directory, task_name(process_id)), cancellation, 30)
         if code != 0:
             # Its files go again: left behind, the list showed a process that
-            # never ran as "lost" (2026-10-28).
+            # never ran as "lost".
             try:
                 session.backend.delete_path(session.name, directory, agent=False)
             except agent_vm.VMUnavailable:

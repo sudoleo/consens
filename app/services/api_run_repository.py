@@ -20,7 +20,7 @@ API_IDEMPOTENCY_COLLECTION = "api_consensus_idempotency"
 MAX_IDEMPOTENCY_KEY_BYTES = 256
 RUN_LEASE_SECONDS = 60 * 60
 API_RUN_RETENTION_DAYS = 30
-# Done marker of the expiry backfill (audit C12): a finished scan writes it,
+# Done marker of the expiry backfill: a finished scan writes it,
 # later restarts read it instead of the whole collection again.
 RETENTION_MARKER_COLLECTION = "app_config"
 RUN_STATUSES = {"accepted", "reserved", "running", "succeeded", "failed"}

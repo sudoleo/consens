@@ -1,4 +1,4 @@
-"""Ein Bild pro Topic aus den Quellen seiner Checks (seit 2026-10-15).
+"""Ein Bild pro Topic aus den Quellen seiner Checks.
 
 Dieselbe Suche wie bei Watches (``watch_images.search``): Produktfoto, sonst
 die Logos der Seiten, um die es geht, sonst ein Artikelbild -- nie ein

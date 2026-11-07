@@ -81,7 +81,7 @@ def entries_for_everyone():
     """The Google entries every account has, for a guest's composer.
 
     A guest sees Gmail & Calendar or Drive only when no account would miss
-    them after the login (Apple-Audit H3); while Google is open to listed test
+    them after the login; while Google is open to listed test
     users only, a guest sees what every other account sees: neither.
     """
     everyone = open_to_everyone()

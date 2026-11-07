@@ -78,7 +78,7 @@ def _chunks(text: str, size: int = 12):
 
 
 def mock_ask_stream(provider_label: str, question: str):
-    """Ersatz fuer provider.stream_fn: liefert dieselben StreamEvents
+    """Ersatz fuer streaming.stream_model_query: liefert dieselben StreamEvents
     ({type: delta/final}), die streaming_model_response erwartet."""
     text = MOCK_MODEL_ANSWERS.get(provider_label, f"**{provider_label} mock answer.** {SHARED_FACT}")
     delay = _delay_seconds()
@@ -91,7 +91,7 @@ def mock_ask_stream(provider_label: str, question: str):
 
 
 def mock_ask_result(provider_label: str, question: str):
-    """Ersatz fuer provider.query_fn (nicht-streamender Pfad)."""
+    """Ersatz fuer engines.query_model (nicht-streamender Pfad)."""
     text = MOCK_MODEL_ANSWERS.get(provider_label, f"**{provider_label} mock answer.** {SHARED_FACT}")
     _record_usage(question, text)
     return {"text": text, "sources": []}
@@ -100,7 +100,7 @@ def mock_ask_result(provider_label: str, question: str):
 def _mock_sentence_number(prompt: str, needle: str, default: int) -> int:
     """Nummer des Konsens-Satzes, der `needle` enthaelt.
 
-    Der Judge referenziert Saetze inzwischen ueber ihre Nummer statt ueber eine
+    Der Judge referenziert Saetze ueber ihre Nummer statt ueber eine
     Abschrift (siehe _enumerate_consensus_sentences). Der Mock liest die
     Nummern aus dem echten Prompt aus, damit die Fixture nicht an einer
     hartkodierten Zaehlung haengt, sobald sich MOCK_CONSENSUS_TEXT aendert.

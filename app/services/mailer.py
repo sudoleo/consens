@@ -1,4 +1,4 @@
-"""Small async SMTP service for Consensus Watch notifications."""
+"""Small async SMTP service for the app's notification and account mails."""
 
 from __future__ import annotations
 

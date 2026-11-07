@@ -92,9 +92,8 @@ class DocumentTools:
         return self.files.chats._chat_ref(self.uid, self.chat).collection("documents").document(document_id)
 
     def tools(self):
-        # Until 2026-10-28 the description asked to complete model
-        # comparisons first, which the agent of audit mode read as a rule it
-        # could not follow (comparison mode kept it until 2026-10-31).
+        # The description does not ask to complete model comparisons first:
+        # the agent read that as a rule it could not follow.
         # The arguments' shape is spelled out: DeepSeek V4.1 Flash guessed the
         # nested fields from the schema alone (2026-11-01).
         create = ("Create saved DOCX and PDF files from structured content. Preserve uncertainties, and call this "

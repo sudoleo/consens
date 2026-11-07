@@ -6,11 +6,6 @@ this message in its context (tool results, pages read, comparison answers,
 its own decisions), so the answer needs no separate facts about the app or
 the turn. docs/agent-mode.md, "Die Antwort schreibt der Agent selbst",
 describes the flow.
-
-Until 2026-10-14 the orchestrator ended its steering with an ``answer`` tool
-and a fresh, tool-free answer step of the same model wrote the answer from an
-evidence message, reading the conversation and every comparison answer a
-second time without prompt cache (git tag agent-separate-answer-last).
 """
 from __future__ import annotations
 
@@ -20,9 +15,9 @@ from __future__ import annotations
 ANSWER_HOLD_CHARS = 300
 
 # Text a step wrote alongside a tool call stays visible in the timeline as a
-# progress note of at most this many characters, its lines kept. Since
-# 2026-10-28 the whole text, also one too short to have streamed, moved there
-# once the call starts (Max: in the trace, not cut to one line of 400).
+# progress note of at most this many characters, its lines kept. The whole
+# text moves there once the call starts, also one too short to have streamed
+# (Max: in the trace, not cut to one line).
 NOTE_CHARS = 8000
 
 # Tools that change nothing an answer rests on. A step that shows its answer

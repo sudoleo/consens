@@ -67,9 +67,10 @@ class ModelEmptyAnswer(ModelOutputLimit):
     """The model reasoned (and maybe searched), then stopped without a word.
 
     Unlike a real output limit this is chance: gpt-oss-120b did it once in
-    thirteen identical comparison calls (2026-10-15). A comparison answer
-    tries once more (AgentComparison.call); everything else treats it as an
-    output limit."""
+    thirteen identical comparison calls (2026-10-15). A searching worker call
+    (a comparison answer, a reviewer's searching round) tries once more
+    (ComparisonTools.worker_request); everything else treats it as an output
+    limit."""
     def __init__(self, message=None):
         super().__init__(message or "The model ended without writing an answer.")
 

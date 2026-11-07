@@ -15,14 +15,13 @@ Contracts that are design, not convenience:
 2. **The user sees every change.** Agent decides what to keep, with search
    results, pages or files in view or not: each change shows under the
    answer with Undo, and Settings > Memory (edit, delete, Undo) is the
-   backstop. Until 2026-11-02 outside content in view locked memory for the
-   rest of the message (with reviewers since 2026-10-28 their gate,
-   agent_gate.outward "memory"); the agent searches in nearly every first
-   step, and an opted-in account got not a single memory in a month (Max:
-   remove the lock). Until 2026-10-28 every change carried ``evidence``, a
-   verbatim quote of the user's own words: it kept preferences the user never
-   put into words out. ``evidence_matches`` and ``user_words`` remain for the
-   settings tool (agent_settings.py) and the user's links
+   backstop. Outside content in view does not lock memory: the agent
+   searches in nearly every first step, and with such a lock an opted-in
+   account got not a single memory in a month (Max). Nor does a change need
+   ``evidence``, a verbatim quote of the user's own words: it kept
+   preferences the user never put into words out. ``evidence_matches`` and
+   ``user_words`` serve the settings tool (agent_settings.py), the daily
+   review (memory_review.py) and the user's links
    (agent_read_source.user_urls). Secrets (keys, passwords, card/IBAN
    numbers) are refused for every origin.
 3. **One document, one read.** A run reads profile and entries in a single
@@ -218,15 +217,15 @@ def _exact_change_schema(schema) -> None:
     schema["properties"]["op"].pop("default", None)
 
 
-# A change the agent proposes (update_memory), since 2026-10-28 without an
-# evidence quote. Lenient on purpose: every rule lives in ``MemoryTools.apply``
+# A change the agent proposes (update_memory), without an evidence quote.
+# Lenient on purpose: every rule lives in ``MemoryTools.apply``
 # and ``normalize_change``, so a malformed change comes back as a refused
 # memory change (with its reason in the activity) instead of a rejected call.
 # A field of its own is kept aside (extra="allow"): ``evidence`` still saves,
 # and a refusal can name a field such as "action". The schema stays exact
 # (_exact_change_schema). DeepSeek V4.1 Flash read ``changes`` as a bare
 # object, guessed {"add": [...]}, then {"action": "add"}, and got only "Use
-# add, update or delete." until it gave up (2026-11-02). No docstring: it
+# add, update or delete." until it gave up. No docstring: it
 # would become the schema's description.
 class AuditMemoryChange(BaseModel):
     model_config = ConfigDict(extra="allow", json_schema_extra=_exact_change_schema)
@@ -384,9 +383,8 @@ class MemorySnapshot:
     profile: dict = field(default_factory=user_memory.empty_profile)
     items: tuple = ()
     revision: int = 0
-    # A temporary chat (routers/agent.py, since 2026-11-01): the user's
-    # memory is read as in any chat (since 2026-11-01 evening; before, not
-    # at all) and never changed, and the prompt says so.
+    # A temporary chat (routers/agent.py): the user's memory is read as in
+    # any chat and never changed, and the prompt says so.
     temporary: bool = False
 
     @property
@@ -770,28 +768,23 @@ def render_memory_block(snapshot: MemorySnapshot, *, with_ids: bool = True) -> s
             + "\n\n".join(parts) + "\nEND OF USER MEMORY.")
 
 
-# Since 2026-10-28 facts, not rules (compare_models carries no memory field,
+# Facts, not rules (compare_models carries no memory field,
 # agent_comparison.AuditCompareArgs). The model decides what is worth
 # remembering; the user sees and can undo every change (no lock after
-# outside content since 2026-11-02). No evidence quote any more (Max): it
-# kept preferences the user never put into words out. Special categories
-# keep their clause: GDPR art. 9. Until 2026-10-31 comparison mode had its
-# own rules here (MEMORY_*_PROMPT). Since 2026-11-02 one principle of what is
-# worth keeping: with facts alone the agent kept nothing, not even a yes to
-# its own "Shall I make a real PPTX next time?". Since 2026-11-06 what memory
-# is for instead of what not to keep (Max: "no special rules why he can't
-# save; if he wants to make a memory of it, go for it"): "what they merely
-# ask about is not" kept out the projects and plans a personal assistant
-# knows, and even then the agent saved nothing in 121 messages. Anthropic's
-# "components of agent memory": say what memory is for, not how to use it;
-# cheaper models (most runs: DeepSeek Flash, Luna, MiMo) need the moment
-# named, so the paragraph says when. The daily review (memory_review.py)
-# catches what a run lets pass.
-# Use: apply silently, name rarely (Max 2026-10-04: "nothing bothers me more
-# than an agent that ALWAYS references some random memory"). That principle
-# stood in comparison mode's MEMORY_RELEVANCE_RULES (6d4c6a65) and went with
-# it on 2026-10-31 (474a953e); with an empty memory nobody noticed. Back since
-# 2026-11-06, as one principle, now that the review fills the memory.
+# outside content). No evidence quote (Max): it kept preferences the user
+# never put into words out. Special categories keep their clause: GDPR
+# art. 9. One principle of what is worth keeping: with facts alone the agent
+# kept nothing, not even a yes to its own "Shall I make a real PPTX next
+# time?". It says what memory is for instead of what not to keep (Max: "no
+# special rules why he can't save; if he wants to make a memory of it, go
+# for it"): "what they merely ask about is not" kept out the projects and
+# plans a personal assistant knows, and the agent saved nothing in 121
+# messages. Anthropic's "components of agent memory": say what memory is
+# for, not how to use it; cheaper models (most runs: DeepSeek Flash, Luna,
+# MiMo) need the moment named, so the paragraph says when. The daily review
+# (memory_review.py) catches what a run lets pass.
+# Use: apply silently, name rarely (Max: "nothing bothers me more than an
+# agent that ALWAYS references some random memory").
 AUDIT_MEMORY_USE_PROMPT = """Use what you know about the user the way a good assistant does: where it changes
 what a good answer for them is, apply it without saying why; otherwise leave it
 out, and never build a bridge to it. Name a memory only when they ask what you

@@ -23,7 +23,7 @@ USAGE_COLLECTION = "persistence_usage"
 # already paid for, so it must sit well above the chat cap: bookmarks without a
 # chat (Compare saves, older answers) count too. At 250 an account with 181
 # chats and 87 older bookmarks got no sidebar entry for a finished Agent
-# answer (2026-10-19).
+# answer.
 MAX_BOOKMARKS_PER_USER = 500
 MAX_BOOKMARK_DOCUMENT_BYTES = 750_000
 MAX_BOOKMARK_BYTES_PER_USER = 25_000_000
@@ -403,8 +403,8 @@ def agent_best_model_choice(review) -> tuple[str | None, list[str]]:
 
     Only a checked answer counts: the review succeeded or partly succeeded,
     and the pick comes from the check of the widest comparison (most answers)
-    that names one. Until 2026-10-31 such a pick was the turn's one Model
-    Pulse vote (``source: "agent"``); the judges no longer check Agent answers,
+    that names one. Such a pick is the Model Pulse vote (``source: "agent"``)
+    of an Agent turn its judges checked; judges check no new Agent answers,
     and scripts/backfill_model_pulse.py reads the saved ones with this.
     """
     from app.core import config as cfg

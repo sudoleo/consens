@@ -1,6 +1,5 @@
 """consens.io workspace: the live view's way to the VNC server
-(routers/agent_workspace.py; since 2026-10-27 instead of a gateway service
-behind the VM's own address).
+(routers/agent_workspace.py).
 
 The server runs this over the provider's exec API, with the provider's token
 on api.sprites.dev only, and carries the user's WebSocket through it: the
@@ -10,14 +9,12 @@ install.sh installs the browser (once), {"state": "starting"} while display.sh
 starts it, {"state": "ready"} once the VNC server answers, or
 {"state": "error"}. It ends with stdin (the view closed) or the VNC server.
 
-While the view is open it keeps Chrome running (since 2026-10-28): a Chrome
-that ended, by a crash or because the user closed its window, starts again
-within KEEP_SECONDS with its tabs (display.sh --keep). On 2026-10-28 Chrome
-died in Max's open view and the screen stayed black until the agent's next
-call.
+While the view is open it keeps Chrome running: a Chrome that ended, by a
+crash or because the user closed its window, starts again within
+KEEP_SECONDS with its tabs (display.sh --keep). Otherwise a Chrome that died
+in an open view left the screen black until the agent's next call.
 
-And it tells the server's safety rules (workspace_guard.py, since
-2026-10-30) what happens in the browser while the user can steer it, on
+And it tells the server's safety rules (workspace_guard.py) what happens in the browser while the user can steer it, on
 stderr like the states: {"visit": host} whenever a tab shows a page of
 another host (Chrome's target list every LOOK_SECONDS; a page Chrome would
 not load counts too, its tab names the address it was asked for), {"net":
@@ -44,7 +41,7 @@ VNC = os.path.expanduser("~/.consens/browser/vnc.sock")
 CHUNK = 65536
 KEEP_SECONDS = 10
 # The safety rules' look at the browser (watch): Chrome's targets through
-# cdp.py's socket (since 2026-11-04; Chrome has no port any more).
+# cdp.py's socket (Chrome has no debugging port).
 CDP = os.path.expanduser("~/.consens/browser/cdp.sock")
 TARGETS = "/json/list"
 LOOK_SECONDS = 1

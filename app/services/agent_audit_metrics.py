@@ -1,11 +1,11 @@
-"""Anonymous daily counters of the Agent's turns (spec A-M1).
+"""Anonymous daily counters of the Agent's turns (A-M1 in
+docs/agent-audit-readiness-2026-10-29.md).
 
 A deleted chat takes its turn, its sessions and its work log with it; these
 counters stay. One document per UTC day, ``ops_metrics/agent-audit-{day}``,
-counts every chat turn of the agent once at its end (until 2026-10-31 only
-those in audit mode, then one of two): by status and review status, by
-number of reviewers and the user's reviewers setting (``review_setting``,
-since 2026-11-01), in histogram buckets of its times (total, until the
+counts every chat turn of the agent once at its end: by status and review
+status, by number of reviewers and the user's reviewers setting
+(``review_setting``), in histogram buckets of its times (total, until the
 answer was fixed, marks after the last word, each gate's wait, each
 reviewer's final round by model, the reviewers' backlog when the answer was
 fixed), its halts by kind and decision, its failures by code, and with the
@@ -17,18 +17,18 @@ The run's thread only copies what it holds in memory (``capture``: the times
 of the work log's entries, the holds of its activity). A daemon thread reads
 the saved turn once and writes one merge of Firestore increments
 (``record``), so the counters are never on the critical path; errors are
-logged, never raised. Fields that later packages add (a reviewer's
+logged, never raised. Fields not every turn or reviewer has (a reviewer's
 ``final_ms`` and ``backlog``, the turn's ``agent_holds``, a gate entry's
 ``gate_ms``) are read when present; without them their bucket stays empty.
 ``scripts/audit_report.py`` reads the documents back.
 
-Since 2026-10-30 (audit I6) every turn that used the workspace counts there
-too, because 47 % of them lay in chats deleted since and took all their
-details along: in fields of their own (``ws_*``), its status, steps, active
-time (pauses for the user left out), the first call into the workspace
-(browser or VM: how long it took, how far into the message it came, whether
-it failed) and the workspace's outages (VM unavailable or busy, browser off).
-Every turn that ended its work at a limit counts its reason (``wrap_up``, I1).
+Every turn that used the workspace counts there too, because 47 % of them
+lay in chats deleted later, which took all their details along: in fields of
+their own (``ws_*``), its status, steps, active time (pauses for the user
+left out), the first call into the workspace (browser or VM: how long it
+took, how far into the message it came, whether it failed) and the
+workspace's outages (VM unavailable or busy, browser off). Every turn that
+ended its work at a limit counts its reason (``wrap_up``).
 """
 from __future__ import annotations
 
@@ -204,7 +204,7 @@ def turn_counters(turn, captured):
     reviewers = [item for item in audit.get("reviewers") or [] if isinstance(item, dict)]
     _add(counters, "reviewers", f"n{len(reviewers) if reviewers else captured.get('reviewers', 0)}")
     if captured.get("review_setting"):
-        # The user's reviewers setting (always, workspace, off; since 2026-11-01).
+        # The user's reviewers setting (always, workspace, off).
         _add(counters, "review_setting", label(captured["review_setting"]))
     if review:
         _add(counters, "reviews", label(review.get("status")))

@@ -154,7 +154,7 @@ def normalize_source_catalog(answers: Mapping, *, model_sources=None, turn_sourc
     # A browser turn source only numbers a document some provider returned;
     # its content comes from that provider's entry. Anything else would put a
     # link and title of the browser's choosing into the turn, the consensus
-    # prompt and public shares (audit S3).
+    # prompt and public shares.
     provided = {}
     for _, _, sources in answer_parts.values():
         for source in sources if isinstance(sources, list) else []:

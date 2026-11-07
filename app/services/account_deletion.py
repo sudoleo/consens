@@ -27,8 +27,7 @@ from app.services.chat_store import ChatStore
 
 ACCOUNT_DELETION_JOBS_COLLECTION = "account_deletion_jobs"
 # Retries of a deletion that failed inline, and the 2-hour tombstones'
-# end; two queries a look, reads even when empty (5 minutes until
-# 2026-11-01).
+# end; two queries a look, reads even when empty.
 ACCOUNT_DELETION_RETRY_INTERVAL_SECONDS = 15 * 60
 AUTH_TOMBSTONE_RETENTION = timedelta(hours=2)
 

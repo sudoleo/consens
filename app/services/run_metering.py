@@ -27,7 +27,7 @@ class OperationBooking:
         self.usage_run_key = usage_run_key
         self.operation = operation
         self.final = final
-        # Optional operations (chat memory) book nothing when no call ran, so
+        # Optional operations book nothing when no call ran, so
         # a later attempt of the same turn can still book its real call.
         self.skip_empty = skip_empty
         self.meter = UsageMeter()

@@ -63,9 +63,9 @@ TRANSACTION_READ_ATTEMPTS = 4
 FAILED_TURN_ERROR_CODES = frozenset({
     "agent_failed",
     "consensus_failed",
-    # The synthesis stopped at the output limit or was interrupted (R06).
+    # The synthesis stopped at the output limit or was interrupted.
     "consensus_incomplete",
-    # The synthesis phase used up its time budget (audit C3).
+    # The synthesis phase used up its time budget.
     "synthesis_time_limit",
     "cancelled",
     "insufficient_answers",
@@ -96,8 +96,8 @@ MODEL_ANSWER_MAX_LENGTH_FALLBACK = 40_000
 MODEL_SOURCES_MAX_ITEMS = MAX_SOURCES
 TURN_SOURCES_MAX_ITEMS = MAX_SOURCES
 RESULT_ID_MAX_LENGTH = SHARE_ID_LENGTH
-# The self-contained question a saved Consensus turn may carry (written by the
-# follow-up memory until 2026-10-25), bounded when it is read back.
+# The self-contained question a saved Consensus turn may carry (nothing
+# writes it any more), bounded when it is read back.
 RESOLVED_QUESTION_MAX_LENGTH = 400
 ERROR_CODE_MAX_LENGTH = max(len(code) for code in FAILED_TURN_ERROR_CODES)
 
@@ -130,8 +130,8 @@ MAX_TASK_ITEMS = 200
 # handle in the app. The browser creates the chat before the first turn, so an
 # Agent message refused up front (premium model, rate limit, Stop right after
 # sending) or a run that failed before anything was saved leaves one behind.
-# They counted against MAX_CHATS_PER_OWNER, so a user was told to delete a
-# visible conversation while invisible ones held the quota. When the limit is
+# They count against MAX_CHATS_PER_OWNER, so a user would be told to delete a
+# visible conversation while invisible ones hold the quota. When the limit is
 # hit, such chats are deleted first. The age keeps a chat whose first run is
 # still on its way (Agent runs end within minutes) out of reach.
 UNREACHABLE_CHAT_MIN_AGE = timedelta(hours=1)
@@ -149,7 +149,7 @@ CHAT_DELETION_JOB_SCHEMA_VERSION = 1
 CHAT_DELETION_RETRY_BASE_SECONDS = 60
 CHAT_DELETION_RETRY_MAX_SECONDS = 6 * 60 * 60
 CHAT_DELETION_SWEEP_LIMIT = 100
-# Temporary chats (since 2026-11-01, docs/codebase-map.md "Temporäre Chats"):
+# Temporary chats (docs/codebase-map.md "Temporäre Chats"):
 # an Agent chat with ``temporary: true`` has no bookmark and no share and
 # writes nothing to memory. The browser deletes it when the user leaves it;
 # this registry is the guarantee for a closed tab: one document per chat
@@ -467,7 +467,7 @@ def turn_metadata(turn_id: object, data: object) -> dict:
         "question": str(source.get("question") or ""),
         "mode": str(source.get("mode") or ""),
         "execution_mode": source.get("execution_mode", "consensus"),
-        # Persisted name of the Reasoning switch (formerly Deep Think).
+        # Persisted name of the Reasoning switch.
         "deep_search": source.get("deep_search") is True,
         "selected_models": [
             str(item) for item in source.get("selected_models", [])
@@ -490,9 +490,8 @@ def turn_metadata(turn_id: object, data: object) -> dict:
     context_version_id = source.get("context_version_id")
     if isinstance(context_version_id, str) and _ID_RE.fullmatch(context_version_id):
         result["context_version_id"] = context_version_id
-    # Die selbststehende Lesart einer Folgefrage, bis 2026-10-25 vom
-    # Context-Build zusammen mit context_version_id geschrieben; gespeicherte
-    # Consensus-Turns tragen sie noch.
+    # Die selbststehende Lesart einer Folgefrage: nur gespeicherte
+    # Consensus-Turns tragen sie noch, geschrieben wird sie nicht mehr.
     resolved_question = source.get("resolved_question")
     if isinstance(resolved_question, str) and resolved_question.strip():
         result["resolved_question"] = " ".join(
@@ -564,13 +563,13 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         # the transcript shows it in its place (routers/bookmarks.py).
         if source.get("status") == "pending" and source.get("agent_answer_fixed_at") is not None:
             result["agent_answer_fixed"] = True
-        # The turn has a work log (agent_work_log, every chat run since
-        # 2026-10-31): its view loads it through its own endpoint.
+        # The turn has a work log (agent_work_log): its view loads it through
+        # its own endpoint.
         if source.get("work_log_expires_at"):
             result["agent_work_log"] = {"incomplete": bool(source.get("work_log_incomplete"))}
         # How long it waited for the user (agent_holds stays on the document):
         # "Thought for …" leaves that out, as the turn's own clock does
-        # (agent-activity.js savedDuration, UX audit 2026-10-29 E1).
+        # (agent-activity.js savedDuration).
         holds = source.get("agent_holds")
         waited = sum(hold["seconds"] for hold in holds if isinstance(hold, dict)
                      and type(hold.get("seconds")) in (int, float) and hold["seconds"] > 0) if isinstance(holds, list) else 0
@@ -796,10 +795,10 @@ class ChatStore:
         return answers
 
     def _page_model_answers(self, turns_ref, turns: list[tuple[str, dict]]) -> dict[str, dict]:
-        """Model answers for a whole page in a few batched gets (audit C6).
+        """Model answers for a whole page in a few batched gets.
 
-        Answers were only ever written by the Consensus turn completion (until
-        2026-10-25), in the same transaction that recorded ``included_models``. So the document IDs are
+        Answers were only ever written by the Consensus turn completion, in
+        the same transaction that recorded ``included_models``. So the document IDs are
         known up front: one ``get_all`` per chunk replaces one query per turn,
         and pending or failed turns (which never hold answers) cost nothing.
         A completed turn without ``included_models`` keeps the old query.
@@ -1138,7 +1137,8 @@ class ChatStore:
         """One page of turns including consensus, sources and model answers.
 
         The chat is verified once for the whole page instead of once per turn,
-        so a page needs 2 + N SDK calls. Billable document reads still include
+        so a page needs two SDK calls plus the batched gets of its model
+        answers (_page_model_answers). Billable document reads still include
         the chat, every queried turn (including the pagination sentinel), and
         each returned model answer; empty queries also have a minimum charge.
         Pass ``status`` to keep
@@ -1667,7 +1667,7 @@ def read_together(refs, transaction=None, *, db=None):
     a missing document is a snapshot that does not exist. With
     ``transaction`` inside it, else through ``db``. Each read on its own
     costs a round trip of its own, and they add up on the way from Send to
-    the first model request (2026-10-21: claims; 2026-11-01: the turn)."""
+    the first model request."""
     get_all = getattr(transaction, "get_all", None) if transaction is not None else getattr(db, "get_all", None)
     if get_all is None:
         return [ref.get(transaction=transaction) if transaction is not None else ref.get() for ref in refs]
@@ -1788,7 +1788,7 @@ def _expire_temporary_chat(store, snapshot, *, now) -> bool:
 # (agent_sessions.AgentSessionStore): the user's messages into the running
 # response, the open pause with the agent's question or a reviewer's reason,
 # and the decision on it. The receipt itself is billing and outlives its chat
-# (agent_runs); these words go with the chat (since 2026-11-01).
+# (agent_runs); these words go with the chat.
 RUN_RECEIPT_TEXT_FIELDS = ("user_notes", "hold", "hold_decision")
 RECEIPT_SCRUB_BATCH = 100
 

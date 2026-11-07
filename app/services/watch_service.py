@@ -449,7 +449,7 @@ def _check_active_limit(uid: str, tier, db, *, excluding_id: str | None = None):
 
 
 def _ensure_watch_indexes(uid: str, uniqueness_key: str, *, db):
-    """Lazily seed counters/uniqueness for watches created before Phase 2."""
+    """Lazily seed counters/uniqueness for watches created before they existed."""
     owner_ref = _owner_state_ref(db, uid)
     unique_ref = _unique_ref(db, uid, uniqueness_key)
     owner_exists = owner_ref.get().exists
@@ -466,7 +466,7 @@ def _ensure_watch_indexes(uid: str, uniqueness_key: str, *, db):
     )
     if uniqueness_key.startswith("question:"):
         # One question, one watch: started from an answer or from the
-        # question alone (J17). Watches from before that rule seed the key.
+        # question alone. Watches from before that rule seed the key.
         expected = uniqueness_key.removeprefix("question:")
         existing = next(
             (
@@ -696,14 +696,11 @@ def create_watch(uid: str, *, interval, tier, email_mode="changes_only",
 def creation_outlook(uid: str, question: str, tier, db=None) -> dict:
     """Whether a query-first watch of ``question`` could start now. Reads only.
 
-    The Agent asks before it offers a Watch card (agent_watch.py), so its
-    answer can say "already watched" or "no free slot" instead of offering a
-    button that fails. create_watch stays the only writer and decides again
-    in its transaction. "Already watched" is any of the user's watches with
-    the same question (question_hash, any status, also one started from a
-    consensus): create_watch would allow a second query-first watch next to
-    such a one, but two watches of one question are never what the user means.
-    The card in the browser applies the same rule (watch.js watchedFor).
+    create_watch stays the only writer and decides again in its transaction.
+    "Already watched" is any of the user's watches with the same question
+    (question_hash, any status, also one started from a consensus):
+    create_watch would allow a second query-first watch next to such a one,
+    but two watches of one question are never what the user means.
     """
     db = db if db is not None else db_firestore
     expected = share_snapshots.question_hash(question)
@@ -1013,7 +1010,7 @@ def _apply_watch_updates(
         # Every owner/admin configuration change starts a new configuration
         # generation. A run claimed under an older generation may still
         # historize its result, but its schedule and alert rules are then
-        # taken from the current document instead of the stale claim (R16).
+        # taken from the current document instead of the stale claim.
         committed = dict(updates)
         committed["config_generation"] = (
             _safe_count(current.get("config_generation")) + 1
@@ -1651,7 +1648,7 @@ def list_due_watch_ids(*, now=None, db=None, max_items=200) -> list[str]:
 
 def earliest_next_run_at(*, db=None) -> datetime | None:
     """When the next active watch is due, or None. One read on the index of
-    list_due_watch_ids; the scheduler sleeps until then (Audit J5).
+    list_due_watch_ids; the scheduler sleeps until then.
 
     No retries and a short deadline: the loop falls back to its normal
     rhythm when Firestore is slow instead of waiting out a retry series."""
@@ -1680,7 +1677,7 @@ def _worker_lease_transaction(tx, ref, now: datetime, owner: str = ""):
     """Grant the global scheduler lease to ``owner`` when it is free.
 
     The owner token is the fencing value: only the process that holds it may
-    renew or release the lease (R30). A legacy document without an owner is
+    renew or release the lease. A legacy document without an owner is
     treated like any other holder and simply expires.
     """
     snap = ref.get(transaction=tx)
@@ -1805,7 +1802,7 @@ def standing_run_id(watch: dict) -> str:
     """The run whose answer currently stands; the next check is compared with it.
 
     Watches written before the evidence model have no pointer: their newest
-    successful run stands, which is what every comparison used until then.
+    successful run stands.
     """
     return str(watch.get("accepted_run_id") or watch.get("last_successful_run_id") or "")
 
@@ -1897,7 +1894,7 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
     whose outbox items are staged in the same transaction as the result.
     Completion is fenced by ``current_run_id``: a pause, resume or newer claim
     revokes the run, so a stale worker can neither reactivate a paused watch
-    nor overwrite a schedule changed during the run (R16).
+    nor overwrite a schedule changed during the run.
 
     Returns the persisted history entry with its ``outcome``, or None when the
     run was fenced out.
@@ -2069,7 +2066,7 @@ def complete_watch_run(watch_id: str, claimed: dict, result: dict, *, now=None,
                 ),
                 "updated_at": now,
             })
-        # Durable outbox items commit together with the result (R17). The
+        # Durable outbox items commit together with the result. The
         # builder sees the CURRENT alert rules and channels, not the claim.
         for item in (notifications(effective, outcome) if notifications else []) or []:
             notification_outbox.stage(transaction, db, item)
@@ -2116,7 +2113,7 @@ def fail_watch_run(watch_id: str, claimed: dict, *, now=None, db=None,
         was_active = current.get("status") == "active"
         paused = failures >= 3 and was_active
         # Only an active watch can be moved by a failure. Any other status is
-        # an owner/admin decision this worker must never overwrite (R16); the
+        # an owner/admin decision this worker must never overwrite; the
         # counter transaction below then stays consistent with the status.
         if paused:
             status = "paused_error"

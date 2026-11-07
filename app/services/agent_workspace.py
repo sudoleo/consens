@@ -1,4 +1,4 @@
-"""The account's workspace (since 2026-10-27, docs/agent-mode.md "Workspace"):
+"""The account's workspace (docs/agent-mode.md "Arbeitsplatz"):
 one Linux VM for all of an account's chats and its user, like a colleague's
 computer with its browser (agent_vm.workspace_name). The agent works there
 as a user of its own (agent_vm_tools.py); Chrome runs there as the
@@ -7,20 +7,16 @@ provider's user, which the user watches and steers live
 the ``browser`` tool (agent_browser.py). localhost in that browser is the
 agent's own servers, no tunnel between them.
 
-From 2026-10-27 to 2026-11-04 the browser had a VM of its own and the
-workbench reached only the package registries (security audit 2026-10-27,
-Max's option A). Every feature between them needed a bridge (a localhost
-tunnel, uploads and downloads copied from VM to VM, warm-ups of two VMs),
-each bridge a rule of its own, and the agent still sent a key of
-~/.secrets through the browser's upload (Max, 2026-11-04: "Sudo ist um
-einiges sicherer als eine von uns implementierte Sicherheitslayer"). Since
-then one VM, and what the agent must not reach it cannot reach by the
-computer's own means: Unix users and file modes. Chrome's protocol is a
+One VM, and what the agent must not reach it cannot reach by the
+computer's own means: Unix users and file modes, not bridges between two VMs
+(a localhost tunnel, uploads and downloads copied from VM to VM), each a
+rule of its own (Max: "Sudo ist um einiges sicherer als eine von uns
+implementierte Sicherheitslayer"). Chrome's protocol is a
 socket in the provider's home (workspace_vm/browser/cdp.py, no TCP port),
 its screen asks for a cookie from there and starts only on its own socket
 (display.sh), and the agent's commands have a /tmp of their own
-(agent-run). The network is open for the whole VM, as it was for the
-browser (agent_vm.RULES, Max's decision). What a key the user gave the agent
+(agent-run). The network is open for the whole VM (agent_vm.RULES, Max's
+decision). What a key the user gave the agent
 can do, the agent can do with it: that holds on any computer.
 
 Record and lease: ``users/{uid}/chat_state/agent_workspace`` names the VM
@@ -29,7 +25,7 @@ and leases the workspace to one chat's message at a time (``lease``: chat,
 turn, until). A lease ends with its message (release) or by itself
 LEASE_SECONDS after its last VM call, so a run that died never blocks the
 workspace. The user's live view takes no lease: it is their computer. A
-record that still names the browser VM of before (``browser``) has it
+record that still names an older browser VM of its own (``browser``) has it
 deleted at the workspace's next start (retire_old_browser): the sign-ins are
 made again once.
 
@@ -52,15 +48,12 @@ Takeover: the account's record says the user has the browser until a time
 the open view keeps moving on (CONTROL_SECONDS, ``control``), and so does
 ``control.json`` next to the browser. While it holds, the agent waits: the
 server holds its calls (user_has_browser, VMSession.wait_for_user) and
-browser.py refuses to act. What already runs of the agent goes on: from
-2026-10-27 to 2026-10-29 pause.py froze it, from the time the browser lived
-on the workbench without users of its own, where the agent's processes could
-have watched the user type. Now they reach neither the screen nor Chrome,
-and the agent's server must answer the browser while the user tries the
-agent's app. The reviewers follow what the agent does, never what the user
-does.
+browser.py refuses to act. What already runs of the agent goes on: its
+processes reach neither the screen nor Chrome, and the agent's server must
+answer the browser while the user tries the agent's app. The reviewers
+follow what the agent does, never what the user does.
 
-A new account's workspace (provision, since 2026-11-02): its first setup
+A new account's workspace (provision): its first setup
 installs Chrome, its screen and the rest (about a minute). A colleague of
 Max's waited for it on her first try ("every normal user is gone then"),
 two minutes after her first message to the agent. So the account's first
@@ -107,7 +100,7 @@ NOTES_PATH = HOME + "/NOTES.md"
 # What of the notes comes with a message's first VM result; the rest the agent
 # reads itself.
 NOTES_CHARS = 6000
-# The live view's gateway service before 2026-10-27, removed by prepare.
+# The live view's former gateway service, removed by prepare.
 OLD_GATEWAY_SERVICE = "view"
 # How long a takeover holds without the view refreshing it (it does every
 # CONTROL_REFRESH_SECONDS while the user has the browser).
@@ -116,9 +109,8 @@ CONTROL_REFRESH_SECONDS = 30
 # The tools of the VM, by their folder in workspace_vm/: the agent's side
 # (agent-run, setup.sh) and the browser's (browser.py and cdp.py, its
 # installation, start and rules: harden.sh with policy.json and openbox's two
-# files hold whoever steers Chrome, since 2026-10-30, workspace_guard.py; the
-# live view's relay). One folder on the VM since 2026-11-04: the browser's
-# setup.sh is install.sh since then.
+# files hold whoever steers Chrome, workspace_guard.py; the live view's
+# relay).
 TOOL_FILES = {"workbench": ("agent-run", "nouserns.py", "setup.sh"),
               "browser": ("browser.py", "cdp.py", "display.sh", "harden.sh", "install.sh", "openbox-menu.xml",
                           "openbox-rc.xml", "policy.json", "relay.py", "xsocket.py")}
@@ -147,12 +139,12 @@ class Claim:
     title: str = ""
     started: str = ""
     # The name of the chat's folder as the chat records it (open_chat),
-    # empty before its first message since 2026-10-28.
+    # empty before its first message.
     folder: str = ""
-    # Since 2026-10-29: the names of the keys the user gave the agent
-    # (agent_secrets.py), kept on the account's record across restarts.
+    # The names of the keys the user gave the agent (agent_secrets.py),
+    # kept on the account's record across restarts.
     secrets: tuple = ()
-    # Since 2026-11-06: the newest of those restores was the workspace's own (heal).
+    # The newest of those restores was the workspace's own (heal).
     healed: bool = False
 
 
@@ -192,9 +184,8 @@ class Start:
     """One running start of an account's VM (``kind`` "browser" or
     "workbench"): ``phase`` says what it does now, ``end`` that it is over.
     Several may run for one VM (a message and the account's provisioning);
-    start_until says the latest. Since the one computer (2026-11-04) both
-    kinds start the same VM and wait for one setup (setup_lock): whoever
-    waits asks for both (START_KINDS)."""
+    start_until says the latest. Both kinds start the same VM and wait for
+    one setup (setup_lock): whoever waits asks for both (START_KINDS)."""
 
     def __init__(self, uid, kind):
         self.key = (uid, kind)
@@ -334,11 +325,10 @@ def remember_values(db, uid, field, values, *, keep):
 
 
 # The sites the browser is logged in to, as the agent noted them
-# (note_sign_in, agent_browser.py; since 2026-11-02): ``sign_ins`` on the
+# (note_sign_in, agent_browser.py): ``sign_ins`` on the
 # record, each {site, name, since}. Cookies cannot say it (consent and
 # bot-protection cookies are cookies too, browser.py saved_sign_in), the
-# agent sees it on the page. Before, Max told the agent "remember you are
-# logged in to WhatsApp", which went into his memory. The list comes with
+# agent sees it on the page. The list comes with
 # every message (sign_ins_note) and the user sees it in Settings →
 # Connections, where an entry can go; logging out of everything empties it.
 SIGN_INS_KEPT = 20
@@ -445,7 +435,7 @@ def in_use(store, uid, now=None):
     holds, or the chat named by the lease, also one past its time, still
     runs a response (its run lock, ``agent_lock_until``, which the running
     response keeps moving on). A restore never goes under a running agent,
-    also when its lease ran out (runtime audit 2026-10-30, A2)."""
+    also when its lease ran out."""
     now = now or _now()
     lease = record(store.db, uid).get("lease")
     if _held_by_other(lease, None, now):
@@ -495,9 +485,8 @@ def record_for_view(store, uid, *, provider):
 
 
 # The live view (routers/agent_workspace.py): one per account, the newest
-# wins, and an older one ends within VIEW_CHECK_SECONDS once it sees that
-# (security audit 2026-10-27; before, any number stayed open for an hour
-# each). An open view keeps the VM awake: its time counts as VM time.
+# wins, and an older one ends within VIEW_CHECK_SECONDS once it sees that.
+# An open view keeps the VM awake: its time counts as VM time.
 VIEW_CHECK_SECONDS = 30
 
 
@@ -529,8 +518,8 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     agent's user up to date (prepare), under the setup lock; its name.
     ``start`` (a Start) learns what the start has to do: the setup of a VM
     made just now, else how it wakes (the provider's status, a hint only: a
-    VM that just ran may say "cold" too). ``db``: the browser VM of before
-    goes once the workspace is ready (retire_old_browser). ``timeout``: at
+    VM that just ran may say "cold" too). ``db``: an older browser VM of its
+    own goes once the workspace is ready (retire_old_browser). ``timeout``: at
     most this long for a setup (prepare). A VM the gateway called
     unresponsive before raises at once, or once its probe did not reach it
     (reachable); one that does so now is asked again a minute later, and
@@ -567,8 +556,8 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
 def reachable(name, cancellation=None, timeout=None, on_unresponsive=None):
     """Raises VMUnavailable with the gateway's status while ``name`` is
     marked unresponsive (agent_vm.mark_unresponsive): the browser's warm-up
-    and the workbench of one message, and every message after, each waited
-    about 48 s for the same 502 before (prod 2026-11-06, turn bb633b). Waits
+    and the workbench of one message, and every message after, would each
+    wait about 48 s for the same 502 (prod 2026-11-06). Waits
     only for the VM's probe, at most PROBE_WAIT_SECONDS (and ``timeout``),
     so a VM that woke again is used again by the start that asked.
     ``on_unresponsive``: what the probe calls when the VM answers so again."""
@@ -587,12 +576,12 @@ def reachable(name, cancellation=None, timeout=None, on_unresponsive=None):
         raise agent_vm.VMUnavailable(f"unresponsive: HTTP {status}", status)
 
 
-# Accounts whose browser VM of before is gone (or never was), in this process.
+# Accounts whose older browser VM is gone (or never was), in this process.
 _retired: set[str] = set()
 
 
 def retire_old_browser(db, uid, vm):
-    """The browser VM of 2026-10-27 to 2026-11-04 goes once the account's
+    """An older browser VM of its own goes once the account's
     workspace runs (Max: the sign-ins are made again once): deleted by its
     name, then the record forgets it, and the list of sign-ins with it
     (sign_ins), since none of them holds on the new browser. Only where the
@@ -611,11 +600,11 @@ def retire_old_browser(db, uid, vm):
 
 
 def delete_old_browser(db, uid, vm):
-    """The browser VM of 2026-10-27 to 2026-11-04, with the profile and every
+    """The older browser VM, with the profile and every
     sign-in it kept, by its name whatever the record says (a VM that is gone
     counts as deleted), then the record forgets it. Also "Log out
-    everywhere" (routers/agent_workspace.py): an account that did not open
-    its workspace since the move still had that VM (review 2026-11-04)."""
+    everywhere" (routers/agent_workspace.py): an account that has not opened
+    its workspace may still have that VM."""
     vm.delete(agent_vm.old_browser_name(uid))
     ref(db, uid).set({"browser": None}, merge=True)
 
@@ -632,8 +621,8 @@ def provisioning():
 
 
 def provision(store, uid, *, factory=None):
-    """A new account's workspace before it is needed (since 2026-11-02, the
-    module's docstring): the VM made and set up in the background, the
+    """A new account's workspace before it is needed (the module's
+    docstring): the VM made and set up in the background, the
     browser's Chrome started once and then told to rest (the helper's warm
     and rest, as after a message), unless a message uses it by then
     (_provision). Only a VM that is not there: where the
@@ -696,9 +685,9 @@ def _provision(store, uid, factory):
     """The VM set up and its browser started once, then told to rest;
     failures are only logged: the first call that needs it sets up what is
     missing. A message that uses the workspace by then keeps the hold of its
-    browser calls (bug hunt P60, 2026-11-05: the rest shortened it to two
-    minutes, and a longer pause of the agent let the VM sleep under it); the
-    message rests at its own end (agent_browser._rest)."""
+    browser calls (the rest would shorten it to two minutes, and a longer
+    pause of the agent would let the VM sleep under it); the message rests
+    at its own end (agent_browser._rest)."""
     from app.services import agent_browser
     from app.services.llm.provider_runtime import ProviderCancellation
     start, vm, began = Start(uid, "browser").phase("setup"), None, time.monotonic()
@@ -736,16 +725,15 @@ class SetupFailed(agent_vm.VMUnavailable):
 
 def prepare(vm, name, cancellation=None, timeout=None, on_setup=None):
     """The VM at this VERSION, only when the version there differs (else
-    one read): its network rules (agent_vm.RULES, the open web since
-    2026-11-04), its tools written to the provider's home, the live view's
-    gateway service of the layout before removed, and setup.sh run as root
+    one read): its network rules (agent_vm.RULES, the open web), its tools
+    written to the provider's home, the live view's former gateway service
+    removed, and setup.sh run as root
     (the agent's user and its /tmp, the tools every workspace has; once, the
     moves from the layouts before). Returns whether it wrote them; raises
     SetupFailed when the setup failed, so no command runs with the
     provider's rights. ``timeout``: at most this long for the setup (the
-    time the message has left before its answer, runtime audit 2026-10-30,
-    A5). ``on_setup``: called when the setup is about to run (the start's
-    phase)."""
+    time the message has left before its answer). ``on_setup``: called when
+    the setup is about to run (the start's phase)."""
     from app.services.llm.provider_runtime import ProviderCancellation
     if _current(vm, name, VERSION):
         return False
@@ -768,15 +756,15 @@ def prepare(vm, name, cancellation=None, timeout=None, on_setup=None):
 
 
 # Makes the chat's folder (as the agent's user, with the folders the file
-# needs), where commands start, and names its chat there. Since 2026-10-28
-# the folder is named after the chat's title (agent_vm.chat_folder), so
+# needs), where commands start, and names its chat there. The folder is
+# named after the chat's title (agent_vm.chat_folder), so
 # `ls ~/chats` already says which is which; .consens-chat adds title, start
 # and id.
 CHAT_MARKER = ".consens-chat"
 TITLE_CHARS = 200
 
 
-# A temporary chat's folder and marker name no title (since 2026-11-01):
+# A temporary chat's folder and marker name no title:
 # the workspace is every chat's, and its title is the user's question.
 TEMPORARY_FOLDER_TITLE = "temporary"
 TEMPORARY_MARKER = ("This folder holds the files of a temporary chat; it is deleted when the user leaves that "
@@ -813,14 +801,13 @@ def record_folder(store, uid, chat_id, folder):
         logging.warning("Agent chat folder not recorded category=%s", safe_exception(exc))
 
 
-# A message's chat on the workbench in one command (since 2026-10-30, runtime
-# audit T6; before, four: the move, the marker, the notes and the keys, one
-# round trip each), as the agent's user like each of them was: the chat's
-# folder follows its title ($1 the folder now, $2 the one its title wants;
+# A message's chat on the workbench in one command (the move, the marker,
+# the notes and the keys, not one round trip each), as the agent's user: the
+# chat's folder follows its title ($1 the folder now, $2 the one its title wants;
 # "taken" keeps it where it is), its marker comes on stdin, then the keys
 # in ~/.secrets ("key" name NUL value NUL): the record's names first ($6...),
-# then every other file of a key's name, at most $5 (since 2026-11-07: the
-# record keeps only the newest names, an older key went unmasked), and last
+# then every other file of a key's name, at most $5 (the record keeps only
+# the newest names, and an older key would go unmasked), and last
 # the notes' beginning ($3, at most $4 bytes, to the end).
 CHAT_SCRIPT = (
     'old=$1; new=$2; notes=$3; limit=$4; most=$5; shift 5; dir=$old; state=same; '
@@ -853,9 +840,9 @@ class ChatOpened:
 def parse_chat(raw):
     """``(state, keys, notes)`` of CHAT_SCRIPT's output: the folder's
     state, ``(name, value)`` pairs and the notes' bytes (None: no notes).
-    A value loses its surrounding whitespace, as agent_secrets.save and load
-    take it: a key file edited since (an editor's line break at its end)
-    was masked only together with that line break (bug hunt 2026-11-06)."""
+    A value loses its surrounding whitespace, as agent_secrets.save takes
+    it: a key file edited since (an editor's line break at its end) would
+    be masked only together with that line break."""
     head, _, rest = raw.partition(b"\n")
     if not head.startswith(b"folder "):
         raise agent_vm.VMUnavailable("chat: unreadable")
@@ -871,8 +858,8 @@ def parse_chat(raw):
     raise agent_vm.VMUnavailable("chat: unreadable")
 
 
-# A temporary chat reads the notes and leaves them as they are (since
-# 2026-11-01 evening): they outlast it (agent_vm_tools.VMTools._notes_kept).
+# A temporary chat reads the notes and leaves them as they are: they
+# outlast it (agent_vm_tools.VMTools._notes_kept).
 NOTES_TEMPORARY = "This temporary chat leaves the notes as they are: they outlast it."
 NOTES_NONE_TEMPORARY = "No notes yet, and this temporary chat starts none: they would outlast it."
 
@@ -897,8 +884,8 @@ def notes_for_agent(raw, *, temporary=False):
 
 def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), cancellation=None, temporary=False):
     """At a message's first workbench call: the chat's folder follows its
-    title (``folder``: the name the chat recorded, empty for a folder named
-    by its id from before 2026-10-28, which moves too) with its marker
+    title (``folder``: the name the chat recorded, empty for an older
+    chat's folder named by its id, which moves too) with its marker
     rewritten, the account's keys read again for masking (every key file in
     ~/.secrets, ``keys``: the record's names, first; CHAT_SCRIPT) and the
     notes' beginning (notes_for_agent), in one command. Returns ChatOpened:
@@ -984,9 +971,9 @@ def control_of(workspace, now=None):
 
 # user_has_browser's answer for a moment: a call into the workspace asks
 # twice right after another (the run's takeover check, then the session's
-# wait), one read of the account's record each (runtime audit 2026-10-30,
-# T6). A takeover in this process (set_control) forgets it at once; on the
-# browser VM itself browser.py refuses to act while the user has it.
+# wait), one read of the account's record each. A takeover in this process
+# (set_control) forgets it at once; on the VM itself browser.py refuses to
+# act while the user has it.
 CONTROL_CACHE_SECONDS = 1.0
 _control_seen: dict = {}
 _control_lock = threading.Lock()
@@ -1031,13 +1018,12 @@ def reset_browser(vm, uid, cancellation):
 
 
 def delete_for_account(db, uid, *, factory=None):
-    """With the account (account_deletion.py): the workspace's VM (and the
-    browser VM of before) by the names that follow from the account, then
-    its record. Before 2026-10-27 a missing record ended this, and a later
-    area of the deletion removed the record after one failed provider call:
-    the VM stayed for good. Only a server without a provider skips an
-    account without a record (it never made one there). The safety rules'
-    guard and trail go with it (workspace_guard.py, since 2026-10-30)."""
+    """With the account (account_deletion.py): the workspace's VM (and an
+    older browser VM) by the names that follow from the account, so a
+    record already gone never leaves the VM behind, then its record. Only a
+    server without a provider skips an account
+    without a record (it never made one there). The safety rules' guard
+    and trail go with it (workspace_guard.py)."""
     from app.services import workspace_guard
     workspace = ref(db, uid)
     if agent_vm.configured() or factory is not None or workspace.get().exists:
@@ -1046,12 +1032,12 @@ def delete_for_account(db, uid, *, factory=None):
     workspace_guard.delete_for_account(db, uid)
 
 
-# A message's checkpoint of the workspace (VMSession.ready; since 2026-11-04
-# it holds the browser's profile too) may bring the workspace back for
+# A message's checkpoint of the workspace (VMSession.ready; it holds the
+# browser's profile too) may bring the workspace back for
 # this long, and only after the last time something left it for good
 # (``restore_floor``): signing the browser out everywhere or deleting a
 # chat. An older checkpoint would bring the sign-ins or the chat's folder
-# back (security audit 2026-10-27). The provider keeps the checkpoints; only
+# back. The provider keeps the checkpoints; only
 # their use ends here.
 RESTORE_DAYS = 14
 
@@ -1081,7 +1067,7 @@ def restorable(record, turn_vm, now=None):
 
 # A temporary chat's messages take no checkpoint (VMSession.ready), but
 # other chats' messages may while it lives, its folder in them: only those
-# may not bring it back (restore_gaps, since 2026-11-01). A floor at each
+# may not bring it back (restore_gaps). A floor at each
 # deletion would end restore for the account's whole past, and temporary
 # chats are deleted whenever the user leaves one. A gap ends this much
 # after the deletion, for a checkpoint still being taken then.
@@ -1133,8 +1119,7 @@ def record_checkpoint(db, uid, checkpoint, taken):
 
 # A stuck workspace (agent_vm.PROBE_SECONDS: the gateway answered 502, 503
 # or 504 twice, a minute or more apart) goes back to its newest checkpoint
-# by itself (since 2026-11-06): before, it stayed so until Max asked for a
-# restore by hand, several times since 2026-10-29. It loses what changed
+# by itself instead of staying so until a restore by hand. It loses what changed
 # after that checkpoint, which a message takes before its own commands, so
 # at most that message's changes; the files it shared stay in the chat.
 # Only a checkpoint that may still bring the workspace back (restorable),

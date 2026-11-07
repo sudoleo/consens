@@ -848,7 +848,7 @@ def cleanup_memory_edit_records(
     page_size: int = RETENTION_PAGE_SIZE,
     max_pages: int = 20,
 ) -> dict:
-    """Hourly retention for AI memory edits (R13 recovery, R28 minimisation).
+    """Hourly retention for AI memory edits (recovery and minimisation).
 
     1. Undo snapshots: after ``UNDO_SNAPSHOT_RETENTION_DAYS`` the full previous
        Memory (``before``) is removed from each revision record. What remains

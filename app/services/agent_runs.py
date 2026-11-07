@@ -43,15 +43,14 @@ RUN_LEASE_SECONDS = 300
 # 1 MiB next to the answer and its review (agent_comparison: up to 600 kB).
 # Only a long VM run comes near it (one event per command, each with its
 # output's end). It takes what the rest of the turn leaves, less a margin for
-# Firestore's own per-field overhead; until 2026-10-28 it counted characters
-# against a fixed 600,000, and a long audited VM run's turn outgrew the
-# document: finish_run failed and the answer was lost.
+# Firestore's own per-field overhead: a turn that outgrows the document fails
+# finish_run, and the answer is lost.
 TURN_DOCUMENT_BYTES = 1_048_576
 TURN_DOCUMENT_MARGIN = 64_000
 ACTIVITY_MAX_BYTES = 600_000
 ACTIVITY_SHORT_CHARS = 200
 PLAN_ITEM_SHORT_CHARS = 60
-# A model call's own times on its receipt (settle, since 2026-10-30).
+# A model call's own times on its receipt (settle).
 REQUEST_TIMES = ("request_started_at", "first_token_at", "stream_ended_at")
 # What the conversation needs of an earlier turn (messages): not its
 # activity, review or work log, which take up to about a megabyte.
@@ -157,7 +156,7 @@ def agent_sources(completion, review=None):
 # travels with the newest user message instead of the system prompt. The system prompt
 # and the replayed history then stay byte-identical across a chat's messages,
 # so providers can serve them from their prompt cache. A clock at the top of
-# the system prompt invalidated every cached token after it on every message.
+# the system prompt would invalidate every cached token after it on every message.
 # The history repeats an earlier question with the context it was sent with
 # (the turn's ``app_context``): with OpenRouter's search tool a Claude request
 # caches only at its very end, so the next message reads the previous one's
@@ -269,8 +268,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         where history_current says it still holds.
 
         A chat longer than CONTEXT_CHAR_LIMIT keeps its newest messages
-        (history_start) and tells the model so in this message's app context;
-        it used to stop every further message with an error instead.
+        (history_start) and tells the model so in this message's app context.
         ``history_chars`` keeps less: a Watch's scheduled run reads only its
         chat's newest messages (agent_watches.HISTORY_CHARS).
 
@@ -314,8 +312,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 if turn["status"] == "failed":
                     # Match the visible saved conversation without claiming that
                     # an interrupted answer or its review completed successfully.
-                    # With a work record (since 2026-10-27 after any broken-off
-                    # run with tool calls) the next attempt builds on it.
+                    # With a work record (after any broken-off run with tool
+                    # calls) the next attempt builds on it.
                     answer = ("[This previous turn did not finish successfully. The saved response below may be incomplete or unreviewed.]\n\n" + answer
                               if answer else FAILED_TURN_RESUME if isinstance(record, str) and record
                               else "[This previous turn did not finish successfully. No assistant answer was saved.]")
@@ -445,7 +443,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
     def _expected_daily(self, uid):
         """The ledger document a claim of now books into (agent_quota.period_key
         of the cached budget configuration), or None when it cannot be told:
-        the settlement then reads the receipt's own day as before."""
+        the settlement then reads the receipt's own day on its own."""
         try:
             from app.services import agent_budget_config
             return agent_quota.quota_ref(self.db, uid, agent_quota.period_key(agent_budget_config.get_config(self.db)))
@@ -462,16 +460,16 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         # The ledger day a claim of now books into (_claim_delegated): read
         # in the same round trip as the rest, it is almost always the
-        # receipt's own (T3, since 2026-10-30). Until then the ledger was a
-        # second round trip of every settlement, under the account's lock.
+        # receipt's own, which spares every settlement a second round trip
+        # under the account's lock.
         expected_daily = self._expected_daily(uid)
 
         def operation(tx):
             # One round trip for all of them (_read_all), the expected ledger
             # day included; the receipt names the day it books into. Chat,
             # turn and the account's running responses only for a final
-            # settlement: a delegated step's (final=False, every step of a
-            # run since the delegation) touches none of them (2026-11-01).
+            # settlement: a step's with final=False (every step of a
+            # delegated run) touches none of them.
             tombstone, receipt, root, *rest = self._read_all(tx, (
                 persistence_guard.deletion_ref(self.db, uid), receipt_ref, root_ref,
                 *((chat_ref, turn_ref, active_ref) if final else ()),
@@ -523,7 +521,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 receipt_patch["search_hits"] = completion.search_hits
             for field in REQUEST_TIMES:
                 # When the request left, its first token came and its stream
-                # ended (AgentCompletion.stream, audit I7): between created_at
+                # ended (AgentCompletion.stream): between created_at
                 # and settled_at, the provider's part and ours.
                 if isinstance(getattr(completion, field, None), datetime):
                     receipt_patch[field] = getattr(completion, field)
@@ -534,8 +532,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 receipt_patch["round"] = review_round
             charged = agent_quota.measured_charge(usage)
             if daily_ref and charged is not None:
-                # What the account was charged, in micro-euros (since
-                # 2026-10-31; tokens before, without the ledger's "_eur").
+                # What the account was charged, in micro-euros.
                 receipt_patch["quota_charged"] = charged
             if estimate is not None:
                 # Bounded uncertainty: the ledger now carries this estimate.
@@ -586,8 +583,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         reads of it (answer, sources, work record, messages). The chat's lock
         ends, and the run gives up its place among the account's running
         responses. False when the run no longer holds the chat (stopped,
-        reaped): it then ends as before. Until 2026-11-01 a message sent in
-        between waited for the review, about 10 s."""
+        reaped): it then ends through finish_run alone."""
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         chat_ref, turn_ref, active_ref = self._chat_ref(uid, chat_id), self._turn_ref(uid, chat_id, turn_id), self.active_ref(uid)
 
@@ -663,7 +659,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
             closed = {"run_status": status, "finished_at": firestore.SERVER_TIMESTAMP}
             if not chat.exists or (chat.to_dict() or {}).get("status") != "active":
                 # The chat went while the run still wrote (a temporary chat
-                # left mid-run, since 2026-11-01): the texts its deletion took
+                # left mid-run): the texts its deletion took
                 # from this receipt (chat_store.RUN_RECEIPT_TEXT_FIELDS) do not
                 # stay because the run outlived it by a few seconds.
                 from app.services.chat_store import RUN_RECEIPT_TEXT_FIELDS
@@ -701,7 +697,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     patch["agent_holds"] = completion.holds
                 if isinstance(getattr(completion, "wrap_up", None), dict):
                     # Which limit ended its work (DelegationLoop._wrap_up):
-                    # reason code, steps and seconds, no text (audit I1).
+                    # reason code, steps and seconds, no text.
                     patch["agent_wrap_up"] = completion.wrap_up
                 if status == "succeeded" or fixed:
                     patch.update(assistant_response=completion.text or (turn_data.get("assistant_response") or "" if fixed else ""),
@@ -726,7 +722,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         # A review that had already finished keeps its result:
                         # a later failure (a final bookkeeping or provider step)
                         # must not relabel a reviewed answer as unreviewed
-                        # ("off": a check the user switched off, until 2026-10-31).
+                        # ("off": reviewers the user's setting kept away).
                         review = dict(review)
                         if review.get("status") not in {"succeeded", "partial", "off"}:
                             review["status"] = ("cancelled" if status == "cancelled" else
@@ -737,14 +733,13 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         audit = review.get("audit")
                         if isinstance(audit, dict) and isinstance(audit.get("reviewers"), list):
                             # Reviewers a crash or the reaper left at work
-                            # (AnswerAudit.close never ran): none still is
-                            # (A-R6, since 2026-10-29).
+                            # (AnswerAudit.close never ran): none still is.
                             review["audit"] = {**audit, "reviewers": [
                                 {**row, "status": "failed", "failure": {"code": "run_interrupted"}}
                                 if isinstance(row, dict) and row.get("status") in {"waiting", "running"} else row
                                 for row in audit["reviewers"]]}
-                        # A pasted text's check (check_text, until 2026-10-31)
-                        # of a run the reaper ends after the deploy.
+                        # A pasted text's check of the retired check_text,
+                        # still running on an older turn the reaper ends.
                         passage = review.get("passage_check")
                         if isinstance(passage, dict) and passage.get("status") in {"waiting", "running"}:
                             review["passage_check"] = {**passage, "status": "cancelled" if status == "cancelled" else "failed"}

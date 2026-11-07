@@ -1,8 +1,7 @@
 """Kontostufen administrieren: nachschlagen, setzen, protokollieren.
 
-Bis hierher wurde ``users/{uid}.tier`` von Hand in der Firebase-Konsole
-gesetzt. Mit drei Stufen ist das zu fehleranfaellig -- dieses Modul ist die
-einzige Schreibstelle und haelt drei Dinge zusammen:
+Dieses Modul ist die einzige Schreibstelle fuer ``users/{uid}.tier`` und
+haelt drei Dinge zusammen:
 
 * das Feld ``tier`` selbst (plus ``tier_updated_at``/``tier_updated_by``),
 * ein unveraenderliches Audit-Dokument je Aenderung,
@@ -115,7 +114,7 @@ def get_account(identifier: str, db=None) -> dict:
 
 def _with_agent_usage(account: dict, uid: str, profile: dict, db) -> dict:
     """The Agent's sums for one account's detail view: the day ledgers'
-    since 2026-11-01 plus what the user document counted before
+    plus the older counters of the user document
     (agent_quota.usage_totals). Not for lists: it reads every ledger."""
     try:
         from app.services import agent_quota

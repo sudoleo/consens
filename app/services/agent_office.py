@@ -1,13 +1,13 @@
 """LibreOffice for every account in one place: a converter VM of the
-operator's (since 2026-11-01).
+operator's.
 
 An Office file of the agent's, such as a deck it built with python-pptx,
 becomes a PDF and an overview of its first pages, which the agent looks at
-to check its work (vm_render_office, agent_vm_tools.py). Before, the agent
-installed LibreOffice into its own workbench for that: 73 of the 160
-seconds of the first deck in production, and half a gigabyte on every
-workbench that ever did, which Sprites bill as storage for as long as it
-lies there. Here it lies once. The VM sleeps between conversions, so its
+to check its work (vm_render_office, agent_vm_tools.py). Installed into the
+agent's own workbench, LibreOffice took 73 of the 160 seconds of the first
+deck in production, and half a gigabyte on every workbench that had it,
+which Sprites bill as storage for as long as it lies there. Here it lies
+once. The VM sleeps between conversions, so its
 compute costs only while it converts, and no account carries anything.
 
 One Sprite (NAME) for all accounts, the server's own: its tools
@@ -61,9 +61,9 @@ SETUP_RETRY_SECONDS = 600
 CONVERT_SECONDS = 90
 RUN_SECONDS = CONVERT_SECONDS + 75
 # LibreOffice gets at least this long: with less of the answer's time left
-# a conversion is not started (OfficeUnavailable "no time"). Until
-# 2026-11-03 it got max(1, ...) seconds, ended after 1 s and was blamed on
-# the file (exit 5, OfficeRefused), and it took one of the hour's renders.
+# a conversion is not started (OfficeUnavailable "no time"): a limit of a
+# second or two ends it at once, blames the file (exit 5, OfficeRefused) and
+# takes one of the hour's renders.
 MIN_CONVERT_SECONDS = 10
 MIN_SECONDS = RUN_SECONDS - CONVERT_SECONDS + MIN_CONVERT_SECONDS
 # A wait for a slot or for the setup looks at Stop this often.

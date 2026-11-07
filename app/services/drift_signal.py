@@ -21,7 +21,7 @@ The rule below (contract: ``docs/watch-evidence-model.md``) therefore asks
   check is ``confirming``; a re-check that does not repeat it makes it
   ``reverted``.
 
-The score no longer raises an event of its own; it stays a curve marker
+The score raises no event of its own; it stays a curve marker
 (``score_event``). History written before the Judge reported a cause keeps the
 older rule (major grade, or a score leaving the band of the recent checks) and
 is re-read on every render, so nothing needs a backfill.

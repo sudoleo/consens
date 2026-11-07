@@ -1,7 +1,6 @@
 """Short topic titles for the sidebar, the way chat apps name a conversation.
 
-The sidebar used to show the opening question cut after five words
-("Our house is from 1978..."). A conversation is found again by its topic,
+A conversation is found again by its topic,
 not by the first words someone typed, so after the opening turn one cheap
 structured call names it in a few words. The question stays the fallback:
 a failed or skipped call never blocks or renames anything.

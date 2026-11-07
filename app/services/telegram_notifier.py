@@ -67,8 +67,8 @@ def _telegram_description(error: HTTPError) -> str:
 
 def alert_environment() -> str:
     """Wo der Prozess laeuft. Ohne Render-Variablen ist es ein lokaler Lauf,
-    auch wenn die .env einen Bot-Token mitbringt -- frueher stand dann
-    faelschlich "production" im Alert. ``ENVIRONMENT`` uebersteuert lokal."""
+    auch wenn die .env einen Bot-Token mitbringt. ``ENVIRONMENT`` uebersteuert
+    lokal."""
     on_render = bool(os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_NAME"))
     if on_render:
         name = (
@@ -583,7 +583,8 @@ def send_new_user_registration_notification(
 
 
 def send_admin_note(text: str) -> dict:
-    """Send a short operator note (the weekly SEO pulse) to the alert chat."""
+    """Send a short operator note (the weekly SEO pulse, workspace guard
+    alerts) to the alert chat."""
     configured_token = bot_token()
     chat_id = _critical_chat_id()
     attempted_at = datetime.now(timezone.utc).isoformat()

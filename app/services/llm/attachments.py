@@ -342,8 +342,8 @@ def pdf_goes_native(attachment: dict) -> bool:
 def parse_attachments(data: dict, attachments_allowed: bool) -> list[dict]:
     """Liest und validiert `attachments` aus dem Request-Body.
 
-    `attachments_allowed` kommt aus den Entitlements (seit 2026-10-02 jede
-    Stufe) und verlangt ein Konto: Anhaenge kosten Tokens aus dem gemeinsamen
+    `attachments_allowed` kommt aus den Entitlements (jede Stufe) und
+    verlangt ein Konto: Anhaenge kosten Tokens aus dem gemeinsamen
     Kontingent, ohne Konto gibt es keines.
 
     Gibt eine Liste von {name, mime, data (base64), raw (bytes)} zurück.
@@ -483,7 +483,7 @@ def extract_pdf_text(raw: bytes) -> str | None:
     Wegwerf-Prozess wie die Agent-Dateien (``agent_file_extract``): CPU-Zeit,
     Adressraum, Wall-Clock-Timeout und Seitenzahl sind gedeckelt, und das
     Textlimit bricht die Seitenschleife ab. Ein kleines, aber teures PDF kann
-    damit nur seinen eigenen Prozess erschoepfen (R26). Kein Text (Scan, leer,
+    damit nur seinen eigenen Prozess erschoepfen. Kein Text (Scan, leer,
     Budget ueberschritten) liefert ``None``; der Aufrufer schickt das PDF dann
     nativ bzw. sagt dem Modell, dass der Text nicht lesbar war.
     """
@@ -501,7 +501,7 @@ def extract_pdf_text(raw: bytes) -> str | None:
     return text[:MAX_PDF_EXTRACT_CHARS] or None
 
 
-# Word text by file content. A Compare run sends the same attachment with
+# Word text by file content. A run sends the same attachment with
 # every family's request, each extraction is a subprocess: the first request
 # extracts, the others wait for it (striped locks) and read the result.
 DOCX_TEXT_CACHE_SIZE = 32
@@ -512,9 +512,9 @@ _DOCX_EXTRACTIONS = tuple(threading.Lock() for _ in range(16))
 
 def extract_docx_text(raw: bytes) -> str | None:
     """Absatztext aus word/document.xml, im selben begrenzten Wegwerf-Prozess
-    wie PDF (``agent_file_extract``, der Parser lehnt jede DTD ab). Bis
-    2026-10-28 lief er im Webprozess: ein DOCX voller Entities konnte ihn
-    und damit alle laufenden Agent-Turns per OOM beenden (Audit)."""
+    wie PDF (``agent_file_extract``, der Parser lehnt jede DTD ab). Im
+    Webprozess koennte ein DOCX voller Entities ihn und damit alle laufenden
+    Agent-Turns per OOM beenden."""
     if not raw:
         return None
     from app.services import agent_file_extract

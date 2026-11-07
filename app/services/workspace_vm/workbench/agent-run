@@ -3,30 +3,28 @@
 # docs/agent-mode.md "Arbeitsplatz"). Started as root by the provider's user
 # (sudo -n), never by the agent, whose user cannot open this folder:
 #   agent-run [--terminal] <seconds> <folder> <program> [args...]
-# --terminal: the user's own terminal (routers/agent_workspace.py, since
-# 2026-10-28) with the same rights and a terminal type for its programs.
+# --terminal: the user's own terminal (routers/agent_workspace.py) with
+# the same rights and a terminal type for its programs.
 # 1. enters a mount namespace of its own without the provider's management
 #    socket (/.sprite/api.sock: checkpoints, services, the VM's lifetime),
 #    its checkpoints and its logs; the runtimes in /.sprite/bin stay;
-# 2. gives it a /tmp of its own (TMP, the same for all its commands, since
-#    2026-11-04): the browser's screen and Chrome run on this computer as
+# 2. gives it a /tmp of its own ($tmp, the same for all its commands): the
+#    browser's screen and Chrome run on this computer as
 #    the provider's user, and their sockets and locks are in the real /tmp,
 #    where the agent could put its own in their way;
 # 3. lets the user's browser go first when memory or the processor run
-#    short (since 2026-11-04, when it moved onto this computer): the kernel
-#    ends the agent's processes before Chrome when memory runs out
+#    short: the kernel ends the agent's processes before Chrome when
+#    memory runs out
 #    (oom_score_adj 800; the Sprite's root lacks CAP_SYS_RESOURCE, so the
 #    agent's user could lower it again, which no build does, test Sprite
 #    2026-11-04), and they run at nice 10;
-# 4. makes no user namespaces (nouserns.py, a seccomp filter, since
-#    2026-11-04): they let an ordinary user reach the kernel's parts that
+# 4. makes no user namespaces (nouserns.py, a seccomp filter): they let
+#    an ordinary user reach the kernel's parts that
 #    are otherwise root's, the usual way of its flaws from the agent's user
 #    to root, and with root to the browser's sign-ins;
 # 5. becomes the agent's user with no way back to root (setpriv
 #    --no-new-privs: no sudo, no setuid program) in a clean environment;
 # 6. goes to the folder and runs the program under coreutils timeout.
-# Until 2026-10-29 it also joined a cgroup that a takeover of the browser
-# froze (pause.py; agent_workspace.py "Takeover" says why no more).
 # Exit 125: the namespace or the filter could not be made, so nothing ran.
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"

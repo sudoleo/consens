@@ -56,8 +56,8 @@ def find_or_provision_user(email: str):
 def password_setup_continue_url() -> str:
     """Where Firebase's "password saved" page sends the new user back to.
 
-    Without it that page was a dead end on consensai.firebaseapp.com and the
-    user had to find consens.io again on their own. /app?setup=1 opens the
+    Without it that page is a dead end on consensai.firebaseapp.com and the
+    user has to find consens.io again on their own. /app?setup=1 opens the
     login with the address already filled in.
     """
     return f"{SITE_URL}/app?setup=1"

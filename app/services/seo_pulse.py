@@ -1,8 +1,6 @@
 """Weekly SEO pulse: a short, deterministic Search Console note for the admin.
 
-Replaces the Scheduled Publisher and the LLM portfolio review (2026-10-04).
-Sixteen auto-published pages earned two clicks in eleven weeks, and the
-weekly review texts went unread. The pulse reads Search Console live (no
+The pulse reads Search Console live (no
 stored per-page metrics, no LLM), says in a few lines what moved and why, and
 does exactly one thing on its own: an indexed share page that stayed
 invisible for 90 days goes to noindex. "Keep indexed" in the admin undoes
@@ -301,7 +299,7 @@ class SeoPulseService:
             if current and current > now:
                 return False
             if due_only:
-                # Due-ness is read again here, under the lease (audit C14): a
+                # Due-ness is read again here, under the lease: a
                 # second process that saw the old next_run_at before the first
                 # finished must not sweep and notify a second time.
                 due = _as_utc(data.get("next_run_at"))

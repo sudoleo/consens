@@ -20,8 +20,7 @@ from app.services.llm.mock_llm import mock_llm_enabled
 
 # Topics run daily at most, a drift's confirmation 20 minutes after its
 # signal (drift_signal.CONFIRMATION_DELAY): a look every 5 minutes is soon
-# enough. Each look is a query, a read even when nothing is due: about 1,440
-# a day at 60 s (until 2026-11-01).
+# enough. Each look is a query, a read even when nothing is due.
 TOPIC_SCHEDULER_INTERVAL_SECONDS = 300
 # The recent runs a check is classified against (a re-check confirms or
 # sets aside the run before it, drift_signal).
@@ -283,7 +282,7 @@ def run_topic_now(topic_id: str, *, actor_uid: str, db=None, now=None,
 
 
 def topic_notification_builder(topic_id: str, *, db=None, now=None):
-    """Durable follower items that commit together with a Topic run (R17).
+    """Durable follower items that commit together with a Topic run.
 
     Followers are read before the run transaction; the send path re-checks
     each follower before every attempt, so a later unsubscribe still wins.

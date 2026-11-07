@@ -61,9 +61,9 @@ def fetch_models():
 class CatalogSnapshot(Mapping):
     """The catalog as one snapshot() saw it, read like a dict. A model's
     entry is copied when it is first read, not the whole catalog: OpenRouter
-    lists about 550 models, a copy of all of them took about 20 ms, and until
-    2026-11-01 every message made some 45 of them before its first request
-    (one per model of the picker, mostly to read a single entry)."""
+    lists about 550 models, a copy of all of them takes about 20 ms, and a
+    message reads the catalog some 45 times before its first request (once
+    per model of the picker, mostly to read a single entry)."""
 
     def __init__(self, entries):
         # Shared between snapshots and never changed: every read copies.
@@ -88,10 +88,8 @@ class CatalogSnapshot(Mapping):
 class ModelMetadataCache:
     """OpenRouter's metadata, fetched again after five minutes (30 s after a
     failure). Only the process's first snapshot waits for the fetch; later
-    ones hand out what is there while a thread fetches (``refreshing``):
-    until 2026-11-01 the first message after each five minutes waited for the
-    whole catalog's download before its request, with a few users nearly
-    every message."""
+    ones hand out what is there while a thread fetches (``refreshing``), so
+    no message waits for the whole catalog's download before its request."""
 
     def __init__(self):
         self._lock = threading.Lock()

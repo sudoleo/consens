@@ -1,9 +1,8 @@
-"""The workspace's safety rules on consens.io's server (since 2026-10-30).
+"""The workspace's safety rules on consens.io's server.
 
-Max, 2026-10-30, when the workspace opened to every account
-(AGENT_AUDIT_ACCESS=all): a rule that recognises harmful behaviour, "nicht
-durch den Agenten, durch unseren Server". Three layers (docs/agent-mode.md
-"Sicherheitsregeln des Arbeitsplatzes"):
+A rule that recognises harmful behaviour, "nicht durch den Agenten, durch
+unseren Server". Three layers (docs/agent-mode.md "Sicherheitsregeln des
+Arbeitsplatzes"):
 
 1. Chrome blocks, for the agent and for the user in the live view alike
    (workspace_vm/browser/harden.sh with policy.json): Google's SafeSites
@@ -76,7 +75,7 @@ class Rule:
     repeat: bool = True
 
 
-# First thresholds (2026-10-30), generous on purpose: what an honest run or
+# First thresholds, generous on purpose: what an honest run or
 # a person in the live view does in a day stays far below them. To be set
 # from the first weeks' trails, not guessed lower. Bytes never lock by
 # themselves: a canvas app left open in the view is no misuse.
@@ -99,7 +98,7 @@ RULES = (
     # streamed through it, not pages read. The terminal does not count.
     Rule("view_bytes", "view_bytes", 6 * GIB),
     # What the workspace's VM sent and received on its own network, the
-    # browser's and since 2026-11-04 the agent's commands' too (the view's
+    # browser's and the agent's commands' too (the view's
     # bytes go through the provider's exec API and do not count there,
     # measured on a test Sprite 2026-10-31): uploads or a flood from Fly.io's
     # addresses, and downloads in bulk.
@@ -808,9 +807,8 @@ def _count(uid, pending):
 
 def _shut(uid):
     """What still runs when the workspace closes: every process of the
-    agent's user ends (since 2026-11-04: the network is open to the whole
-    computer, and a background process would go on sending for up to an
-    hour; until then it reached only package registries and ran out), and
+    agent's user ends (the network is open to the whole computer, and a
+    background process would go on sending for up to an hour), and
     the VM's wake hold shortens to two minutes (browser.py ``rest``), so
     Chrome's open tabs sleep with it. An open view or terminal ends by itself
     (routers/agent_workspace.py), a running message's next workspace call
@@ -849,7 +847,7 @@ def _end_agent_processes(uid):
 
 # The VM's network counters as relay.py and browser.py read them (their
 # net_counters), for a message whose commands ran without the browser
-# (agent_vm_tools.VMTools._finish, since 2026-11-04): the counters count the
+# (agent_vm_tools.VMSession._finish): the counters count the
 # whole computer, the agent's commands with the browser.
 NET_ARGV = ["cat", "/proc/net/dev", "/proc/sys/kernel/random/boot_id"]
 _BOOT_ID = re.compile(r"[0-9a-f-]{36}")

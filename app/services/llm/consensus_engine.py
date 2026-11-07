@@ -92,7 +92,7 @@ def resolve_consensus_engine_model(consensus_model: str):
 # ---------------------------------------------------------------------------
 
 class _IncompleteEngineOutput(Exception):
-    """The engine stopped without a confirmed normal end (R06)."""
+    """The engine stopped without a confirmed normal end."""
 
     def __init__(self, state: str):
         super().__init__(f"engine output {state}")
@@ -379,8 +379,8 @@ def _build_consensus_prompt(
     )
 
     # Nur bei Folgefragen gesetzt, und nur wenn die Lesart von der getippten
-    # Frage abweicht. Ein Einzellauf bekommt damit exakt denselben Prompt wie
-    # vorher -- die Kalibrierung der Synthese bleibt unangetastet.
+    # Frage abweicht. Ein Einzellauf bekommt damit exakt den Prompt ohne diese
+    # Zeile -- die Kalibrierung der Synthese bleibt unangetastet.
     #
     # Die Lesart ist Modellausgabe ueber vorherige Turn-Inhalte, also selbst
     # nicht vertrauenswuerdig. In den Kontexten der sechs Modelle steht sie im
@@ -411,12 +411,12 @@ def _build_consensus_prompt(
     return "".join(prompt_parts)
 
 
-# Konsens-Fehlertexte, an denen Aufrufer (chat.py) einen gescheiterten Lauf
+# Konsens-Fehlertexte, an denen Aufrufer (consensus_pipeline) einen gescheiterten Lauf
 # erkennen: Differences und Share-Persistenz werden dann übersprungen.
 CONSENSUS_ERROR_PREFIXES = ("Consensus error:", "Invalid consensus model selected:")
 CONSENSUS_MAX_ATTEMPTS = 2
 # Synthesis and judges are separate phases of a run, each with its own budget
-# (provider_runtime.analysis_run_scope, audit C3). Each phase's call limit is
+# (provider_runtime.analysis_run_scope). Each phase's call limit is
 # its longest attempt plan: the synthesis tries the chosen engine twice and
 # one fallback; the judges need at most the pro-tier Differences plan (4,
 # _differences_attempts) plus Coverage's three attempts and its one repair.
@@ -432,8 +432,8 @@ CONSENSUS_INCOMPLETE_TEXT = (
     "Consensus error: the synthesis stopped before it finished and is incomplete."
 )
 
-# The synthesis phase used up its time. Its own text: it used to read as
-# "empty response from consensus engine" (audit C3).
+# The synthesis phase used up its time: its own text, not "empty response
+# from consensus engine".
 CONSENSUS_TIME_LIMIT_TEXT = (
     "Consensus error: the synthesis took too long and was stopped."
 )
@@ -495,8 +495,8 @@ def query_consensus(
     # einem anderen Provider mit verfügbarem Key (wie der Fallback-Judge der
     # Differences-Engine); "Consensus error:" bleibt die letzte Stufe.
     # Nur wiederholbare Fehler (429, 5xx, Transport) bekommen den zweiten
-    # Versuch; 400/403/404 gehen direkt zum Fallback, 401/402 beenden den
-    # Lauf, weil jeder Versuch denselben Key nutzt (Audit C10).
+    # Versuch; 400/402/403/404 gehen direkt zum Fallback, nur 401 beendet den
+    # Lauf, weil jeder Versuch denselben Key nutzt (_provider_error_ends_run).
     attempts = [resolved] * CONSENSUS_MAX_ATTEMPTS
     fallback = _fallback_judge_engine(resolved[0], api_keys)
     if fallback:
@@ -522,7 +522,7 @@ def query_consensus(
             break
         except _IncompleteEngineOutput as e:
             if e.state == completion.TOKEN_LIMIT:
-                # A truncated synthesis is never a finished consensus (R06).
+                # A truncated synthesis is never a finished consensus.
                 # The same prompt and limit would truncate again: no retry.
                 return CONSENSUS_INCOMPLETE_TEXT
             last_error = "provider request failed."
@@ -554,14 +554,14 @@ def query_consensus(
 # ---------------------------------------------------------------------------
 # Satz-Index der Konsensantwort
 #
-# Der Judge musste den Anker frueher woertlich abschreiben ("verbatim excerpt
-# of 5-12 words"). Jede Abschrift ist eine Fehlerquelle: paraphrasiert, mit
+# Muesste der Judge den Anker woertlich abschreiben ("verbatim excerpt
+# of 5-12 words"), waere jede Abschrift eine Fehlerquelle: paraphrasiert, mit
 # Markdown-Resten oder Listenzaehler versehen - und ein Anker, der sich im
 # Konsenstext nicht wiederfindet, verliert seine Inline-Markierung und landet
 # bestenfalls in der Fallback-Liste. Stattdessen sieht der Judge die Antwort
-# mit nummerierten Saetzen und nennt nur noch die Nummer; der Server setzt
+# mit nummerierten Saetzen und nennt nur die Nummer; der Server setzt
 # daraus den exakten Originalsatz ein. Der Anker ist damit per Konstruktion
-# auffindbar und kostet statt ~60 nur noch ~2 Output-Tokens - erst das macht
+# auffindbar und kostet ~2 statt ~60 Output-Tokens - erst das macht
 # die deutlich hoehere Claim-Abdeckung bezahlbar.
 # ---------------------------------------------------------------------------
 
@@ -613,7 +613,7 @@ _VISIBLE_QUOTE_TRANSLATION = str.maketrans({
 })
 
 # Abkuerzungen, deren Punkt kein Satzende ist (Gegenstueck zu ABBREVIATIONS in
-# consensus-insights.js).
+# consensus-anchor.js).
 _SENTENCE_ABBREVIATIONS = {
     "z.b", "u.a", "d.h", "u.u", "i.d.r", "ggf", "bzw", "ca", "etc", "usw",
     "vgl", "evtl", "inkl", "exkl", "nr", "abb", "tab", "bspw", "dr", "prof",
@@ -630,8 +630,8 @@ _SENTENCE_TAIL_TOKEN_RE = re.compile(r"[^\s]+$")
 
 # Deutsche Ordinalzahlen tragen einen Punkt: "am 10. Oktober", "der 3. Platz".
 # Folgt auf eine kurze Zahl mit Punkt eines dieser Woerter, ist der Punkt kein
-# Satzende. Sonst zerfiel "Das Rennen ist fuer den **10. Oktober 2026**
-# angesetzt" in zwei Claims, die sich nicht mehr verankern liessen.
+# Satzende. Sonst zerfaellt "Das Rennen ist fuer den **10. Oktober 2026**
+# angesetzt" in zwei Claims, die sich nicht verankern lassen.
 # Spiegel: ORDINAL_FOLLOWERS in static/js/consensus-anchor.js.
 _ORDINAL_FOLLOWERS = {
     "januar", "jänner", "februar", "märz", "marts", "april", "mai", "maj", "juni",
@@ -925,7 +925,6 @@ class _JudgeContext:
 
 
 # Also "< /response>" or "</ Response>": a judge would read those as a tag too.
-# Until 2026-10-31 "<page" too: the Agent's read pages had blocks of their own.
 _RESPONSE_TAG = re.compile(r"<\s*/?\s*response\b", re.IGNORECASE)
 
 
@@ -1030,7 +1029,7 @@ def _answer_language(text: str) -> str:
     """Language of the consensus answer from common function words, or "" when
     unclear. The judge then gets it by name: GPT-6 Luna ignored "the language
     of the consensus answer" and wrote Spanish or French claims under English
-    answers (judge audit 2026-10-07), while a named language holds (Topics)."""
+    answers, while a named language holds (Topics)."""
     words = re.findall(r"[^\W\d_]+", str(text or "").lower())[:600]
     if not words:
         return ""
@@ -1069,10 +1068,10 @@ def _build_differences_prompt_from(context: _JudgeContext, *, output_language: s
         "who holds them.\n"
     )
 
-    # Nur bei Folgefragen belegt. Der Judge sah die Frage bisher gar nicht und
-    # bewertete deshalb Antworten auf verschiedene Lesarten derselben Frage als
-    # inhaltlichen Widerspruch -- ein niedriger Agreement-Score, der nichts ueber
-    # die Sache aussagte. Einzellaeufe bekommen unveraendert den alten Prompt.
+    # Nur bei Folgefragen belegt. Ohne die Frage bewertet der Judge Antworten
+    # auf verschiedene Lesarten derselben Frage als inhaltlichen Widerspruch --
+    # ein niedriger Agreement-Score, der nichts ueber die Sache aussagt.
+    # Einzellaeufe bekommen den Prompt ohne diese Zeile.
     question_preamble = (
         "The user's question, resolved against the conversation it belongs to: "
         f"{resolved_question}\n"
@@ -1182,7 +1181,7 @@ def _build_differences_prompt(
     )
 
 
-# Seit dem Satz-Index kostet ein Claim nur noch eine Zahl statt einer
+# Mit dem Satz-Index kostet ein Claim nur eine Zahl statt einer
 # Zitat-Abschrift. Der Judge darf deshalb jeden pruefbaren Satz melden statt
 # nur die "3-6 zentralen" - erst dadurch wird ein UNmarkierter Satz zur
 # Aussage ("das stuetzt kein Einzelmodell") statt zu blossem Rauschen.
@@ -1215,7 +1214,7 @@ def _real_model_names(labels, anon_map: dict) -> list:
 
 # The judge's own labels inside free text ("Model F says ...", "Modell F",
 # "Models A and C"). The reader sees real names next to each position and
-# cannot map a label to anything on the page (seen live on 2026-10-16).
+# cannot map a label to anything on the page (seen live).
 _ANON_LABEL_RE = re.compile(
     r"\b(?:Models?|Modell(?:e|en|s)?|Mod[eè]les?|Modelos?|Modell[io])\s+"
     r"([A-Z](?:\s*(?:,|/|&|\band\b|\bund\b|\bor\b|\boder\b|\bet\b|\bou\b|\by\b|\bo\b|\be\b|\ben\b)\s*[A-Z])*)\b"
@@ -1319,7 +1318,7 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
             continue
 
         positions = []
-        # Live 2026-10-21: the judge put the answer's own claim twice, once
+        # Seen live: the judge put the answer's own claim twice, once
         # for Luna and once for two other models, and the reader saw the same
         # sentence on both sides of "vs". One claim is one side, and a model
         # holds only the side it is named for first.
@@ -1358,7 +1357,7 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
         if not positions:
             continue
         # Sides that turned out to be one are no disagreement. A difference
-        # the judge gave a single side keeps it, as before.
+        # the judge gave a single side keeps it.
         if collapsed and len(positions) < 2:
             continue
 
@@ -1404,7 +1403,7 @@ def _normalize_differences(raw_differences, anon_map: dict, sentences: list = No
 
 # ---------------------------------------------------------------------------
 # Agreement-Score: eine transparente 0-100-Zahl aus Claims und Differences.
-# Ersetzt die alte "Anzahl Widersprüche"-Heuristik als einzige Quelle für die
+# Die einzige Quelle für die
 # Credibility-Stufe (Freitext-Satz UND Frontend-Verdict speisen sich daraus).
 # ---------------------------------------------------------------------------
 
@@ -1514,7 +1513,7 @@ def _locate_span(haystack: str, hay_norm: str, hay_offsets: list, needle: str, *
     ``allow_fuzzy`` erlaubt danach die aehnlichste Passage (laengster
     gemeinsamer Teilstring) -- nur zur Navigation, etwa um einen Satz im
     Konsenstext zu markieren. Ein solcher Treffer ist nie ein Beleg: Aufrufer,
-    die einen Verified-/Support-Status vergeben, verwenden ihn nicht (R08).
+    die einen Verified-/Support-Status vergeben, verwenden ihn nicht.
     """
     needle_norm = _normalize_needle(needle)
     if not needle_norm:
@@ -1819,7 +1818,7 @@ def parse_differences_payload(
         # Auch reparierte, aber strukturell unvollständige Objekte (z. B. ohne
         # "differences"-Liste) gelten als unparsbar: fehlende Widersprüche
         # dürfen nicht als "keine Widersprüche" durchgehen. "claims" wird hier
-        # NICHT mehr verlangt: die Belegliste liefert seit 2026-08-31 der
+        # NICHT verlangt: die Belegliste liefert der
         # Coverage-Judge. Gespeicherte Alt-Payloads und Judges, die sie
         # trotzdem mitschicken, laufen weiter durch _normalize_claims.
         text = str(raw or "").strip()
@@ -1892,7 +1891,7 @@ def _translate_best_model(result: str, anon_map: dict) -> str:
 # damit dieser Verweis aktuell bleibt.
 # Die Judge-Stufe folgt der gewählten Consensus-Engine (Standard-Engine ->
 # Standard-Judge, Pro-Engine -> Pro-Judge über die bestehenden Engine-Aliasse);
-# die Judge-FAMILIE folgt seit 2026-10-04 der Prioritaetsliste (OpenAI zuerst),
+# die Judge-FAMILIE folgt der Prioritaetsliste (OpenAI zuerst),
 # auch fuer Engines derselben Familie, siehe _judge_families.
 DIFFERENCES_JUDGE_MODEL_BY_PROVIDER = cfg.DIFFERENCES_JUDGE_MODEL_BY_PROVIDER
 
@@ -1906,7 +1905,7 @@ _FALLBACK_JUDGE_PRIORITY = cfg.JUDGE_FAMILY_PRIORITY
 # The reader sees claim/stance/verify next to the consensus answer, so they
 # follow its language. "Same language as the Model responses" was ambiguous
 # when responses mixed languages, and GPT-6 Luna wrote some claims in Spanish
-# under English questions (judge audit 2026-10-07).
+# under English questions.
 DIFFERENCES_SYSTEM_PROMPT = "Write every text value in the language of the consensus answer; copy quotes verbatim."
 DIFFERENCES_TEMPERATURE = 0.2
 DIFFERENCES_RETRY_SUFFIX = (
@@ -1914,12 +1913,10 @@ DIFFERENCES_RETRY_SUFFIX = (
     "matching the schema above. No prose, no markdown fences, no trailing text."
 )
 
-# Seit 2026-08-31 OHNE "claims": die vollstaendige Belegliste ist ein eigener
-# Call (coverage_judge). Sie stand hier zwar an zweiter Stelle, damit ein
-# gerissenes Token-Budget eher sie als die Widersprueche traf - aber genau das
-# war das Problem: die redundantere Haelfte war es eben NICHT, sie ist der Kern
-# des Produkts, und sie kam regelmaessig verkuerzt oder gar nicht an. Ohne sie
-# geht das ganze Budget dieses Calls in die Widersprueche.
+# OHNE "claims": die vollstaendige Belegliste ist ein eigener Call
+# (coverage_judge). Im selben Call kam sie regelmaessig verkuerzt oder gar
+# nicht an, obwohl sie der Kern des Produkts ist. Ohne sie geht das ganze
+# Budget dieses Calls in die Widersprueche.
 # Alle Modellfamilien erhalten denselben OpenRouter-Structured-Output-Vertrag;
 # dieses Schema wird danach zusätzlich serverseitig validiert.
 DIFFERENCES_JSON_SCHEMA = {
@@ -2027,9 +2024,8 @@ def _judge_families(consensus_provider: str, api_keys: dict, count: int) -> list
     (cfg.JUDGE_FAMILY_BY_ENGINE) kommt davor; ist ihr Key nicht verfügbar,
     greift Auto.
 
-    Die Engine-Familie wird seit 2026-10-04 NICHT mehr übersprungen: der
-    Fremd-Familien-Zwang war gut gemeint, schob aber OpenAI-Läufe (der
-    Agent-Default Luna) auf Gemini Flash-Lite, das teurer und deutlich
+    Die Engine-Familie wird NICHT übersprungen: ein Fremd-Familien-Zwang
+    schöbe OpenAI-Läufe auf Gemini Flash-Lite, das teurer und deutlich
     schwächer ist; die übrigen Familien sind langsam, teuer oder schwach.
     Die Judges prüfen Belege gegen die Einzelantworten nach festem Schema;
     ein stärkerer Judge wiegt hier mehr als die Familienfremdheit."""
@@ -2142,8 +2138,8 @@ def _judge_effort(provider: str, api_model: str, judge_tier: str) -> str | None:
 
     Gilt bewusst für BEIDE Stufen: die Standard-Judges sind zwar die günstigen
     Basis-Modelle, aber längst selbst Reasoning-Modelle (Gemini Flash und
-    OpenAI). OpenAI steht in JUDGE_FAMILY_PRIORITY vorn; OpenAI-Engines nehmen
-    Gemini als erste fremde Familie. Das Modell selbst wird dabei nie getauscht."""
+    OpenAI). OpenAI steht in JUDGE_FAMILY_PRIORITY vorn, auch fuer
+    OpenAI-Engines (_judge_families). Das Modell selbst wird dabei nie getauscht."""
     return cfg.judge_reasoning_effort(provider)
 
 
@@ -2172,12 +2168,12 @@ JUDGE_ATTEMPT_SECONDS = 90.0
 # alongside; the first answer wins and the other one is stopped. With the
 # medians above only the slow tail pays for a duplicate (~0.25 ct with Luna),
 # and a stalled provider then costs the check these seconds instead of
-# JUDGE_ATTEMPT_SECONDS (chat review 2026-10-18: Luna judge timeouts in prod).
+# JUDGE_ATTEMPT_SECONDS (Luna judge timeouts in prod).
 JUDGE_HEDGE_SECONDS = 15.0
 # Still no answer after this long (and the duplicate above none either): the
 # same check also goes to the plan's next family, and the first answer wins.
-# Before 2026-10-21 the next family was only asked once a request had used up
-# JUDGE_ATTEMPT_SECONDS: a provider that hung for every request (Luna via
+# Asking the next family only once a request has used up
+# JUDGE_ATTEMPT_SECONDS, a provider that hung for every request (Luna via
 # Azure, 2026-10-17) cost every check 90 s. Luna answers judge calls in about
 # 8 s (p90 16 s at OpenRouter, 2026-10-18 to 10-21), so the next family only
 # answers when Luna really hangs.
@@ -2400,9 +2396,7 @@ def _run_coverage_judge(context: _JudgeContext, api_keys: dict, differences_mode
     nichts) - eine Antwort ohne Marken ist ehrlicher als eine, in der jeder
     Satz grau als "unbelegt" dasteht, weil ein Provider ausgefallen ist.
 
-    Ein Aufruf deckt alle Saetze ab: MAX_CONSENSUS_SENTENCES begrenzt sie.
-    Bis 2026-10-31 teilten laengere Agent-Antworten sie in parallele Fenster,
-    zum Teil schon waehrend des Schreibens."""
+    Ein Aufruf deckt alle Saetze ab: MAX_CONSENSUS_SENTENCES begrenzt sie."""
     ids = coverage.sentence_ids(context.sentences)
     if not ids:
         return None, None
@@ -2513,11 +2507,11 @@ def _run_coverage_window(context, api_keys, attempts, ids):
 def _coverage_claims(coverage_result: dict, context: _JudgeContext) -> list:
     """Coverage-Votum -> Claim-Eintraege in der bestehenden Payload-Form.
 
-    Die Form bleibt bewusst identisch zu den frueheren Judge-Claims (anchor,
+    Die Form ist bewusst die der Differences-Judge-Claims (anchor,
     agree, dissent, sentence_id, anchor_occurrence), damit Frontend, Snapshot,
-    Opinion-Map und Score unveraendert weiterlaufen. Neu ist nur "coverage":
+    Opinion-Map und Score sie gleich lesen. Dazu kommt "coverage":
     der Anzeigezustand, der eine duenn belegte Aussage sichtbar macht, statt
-    sie - wie bisher - fallen zu lassen."""
+    sie fallen zu lassen."""
     sentences = list(context.sentences)
     anon_map = context.anon_map
     claims = []
@@ -2681,9 +2675,8 @@ def query_differences(
     `output_language`/`statement_claims` setzen Topics (englische öffentliche
     Seiten): claim/stance/verify in dieser Sprache, claim als Aussage statt
     Frage; die App lässt beides leer (Sprache der Antworten).
-    Bis 2026-10-31 prueften beide Judges auch die Antworten des Agenten (mit
-    eigenem Judge-Plan, zwei Differences-Durchgaengen, gelesenen Seiten und
-    Coverage-Fenstern); seitdem pruefen dort Reviewer (agent_audit.py).
+    Die Antworten des Agenten pruefen nicht diese Judges, sondern Reviewer
+    (agent_audit.py).
     Gibt (legacy_text, structured_data | None) zurück.
     """
     # Claims appear next to the answer the user reads, so they take its
@@ -3128,7 +3121,7 @@ def pick_watch_visual(question: str, condition: str, domains, symbols: dict,
         try:
             # Dieselbe Regel wie bei Coverage/Differences: ein hängender
             # Versuch endet nach JUDGE_ATTEMPT_SECONDS, sein Retry entfällt.
-            # Prod 2026-10-15: zwei Luna-Versuche à 120 s hielten die
+            # In Prod hielten zwei Luna-Versuche à 120 s die
             # Bildsuche eines Topics vier Minuten auf.
             with _attempt_time_limit(JUDGE_ATTEMPT_SECONDS):
                 raw = _call_engine_text(

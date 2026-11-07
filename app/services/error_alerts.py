@@ -2,7 +2,7 @@
 
 Die SSE-Streams fangen ihre Fehler selbst (der Nutzer bekommt ein sauberes
 Fehler-Event statt eines abgerissenen Streams). Damit erreicht ein echter
-Programmierfehler dort nie den globalen Exception-Handler und blieb bisher
+Programmierfehler dort nie den globalen Exception-Handler und bliebe sonst
 eine Log-Zeile, die niemand sieht. ``report_server_exception`` schickt genau
 diese Faelle in dieselbe Alert-Form wie ein 500er -- und nur diese:
 Abbrueche, Provider-/Netzfehler, Timeouts und Domaenenfehler sind erwartbar
@@ -22,7 +22,7 @@ def report_server_exception(exc: BaseException, *, where: str, phase: str = "str
     """Alarmiert bei einem Programmierfehler; gibt sonst ``None`` zurueck.
 
     ``where`` ist ein fester Bezeichner der Codestelle (z. B.
-    ``"chat.consensus_stream"``), nie ein Wert aus dem Request. Wirft nie.
+    ``"agent.turn_stream"``), nie ein Wert aus dem Request. Wirft nie.
     """
     if not is_unexpected_exception(exc):
         return None

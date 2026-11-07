@@ -1,12 +1,9 @@
 """The agent's comparison tool and the review of its answer (ComparisonTools).
 
-One mode for every account since 2026-10-31 (Max): the agent answers itself,
-with its own web search, and the user's chosen models review its work and
-its fixed answer (agent_audit.py). compare_models asks those models the
-agent's question, each in a fresh conversation of its own. Until then a
-second mode, comparison mode, ran Differences and Coverage judges on an
-answer written from compare_models and check_text (git history before
-2026-10-31).
+One mode for every account (Max): the agent answers itself, with its own
+web search, and the user's chosen models review its work and its fixed
+answer (agent_audit.py). compare_models asks those models the agent's
+question, each in a fresh conversation of its own.
 """
 from contextvars import copy_context
 from dataclasses import replace
@@ -58,14 +55,14 @@ AgentVM = Literal["off", "on"]
 
 
 class AgentPreferences(BaseModel):
-    """What an Agent turn runs with, frozen with it. Since 2026-10-31 the
-    Agent has one mode for every account (the audit, agent_audit.py) and no
-    settings of its own: the route sets the VM, nothing else is left.
+    """What an Agent turn runs with, frozen with it. The Agent has one mode
+    for every account (the audit, agent_audit.py) and no settings of its
+    own: the route sets the VM, nothing else.
 
-    Turns and open pages from before keep depth, quorum, autonomy, judges and
-    audit of the retired comparison mode: they are dropped silently."""
+    Older turns and open pages may still carry depth, quorum, autonomy,
+    judges and audit of a retired mode: they are dropped silently."""
     model_config = ConfigDict(extra="ignore", strict=True)
-    # Agent VM (since 2026-10-25; routers/agent.py vm_allowed): the agent gets
+    # Agent VM (routers/agent.py vm_allowed): the agent gets
     # the account's workspace, a Linux VM with shell commands, files and a
     # browser (agent_vm_tools.py).
     vm: AgentVM = "off"
@@ -132,7 +129,7 @@ COMPARISON_FAILURES = {
 SEARCHING_KINDS = frozenset({"comparison", "audit"})
 
 
-# compare_models' arguments (since 2026-10-31): what the models are asked.
+# compare_models' arguments: what the models are asked.
 # No progress paragraph: the agent's own text beside a call is its note on
 # the work (AGENT_AUDIT_ANSWER_SECTION). No memory field: a change goes
 # through update_memory and the reviewers' gate. No docstring: it would
@@ -151,7 +148,7 @@ class AuditCompareArgs(BaseModel):
 
 # The tool's description: what it is, as facts (the agent's prompt is a
 # constitution, no list of when to use a tool). The models are the
-# reviewers' models, but never their conversations (Max, 2026-10-30): a
+# reviewers' models, but never their conversations (Max): a
 # reviewer that knows the run answers neither independently nor without a
 # channel back to the agent.
 AUDIT_COMPARE = ("Ask the models the user chose for this chat the same question. Each answers on its own, in a "
@@ -170,7 +167,7 @@ def comparison_selection(value=None):
     """The models of one message: the reviewers of the agent's work and the
     models compare_models asks. One is enough."""
     chosen = dict(cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET]["answers"]) if value is None else dict(value)
-    # A browser may still hold a migrated ID (grok-4.3-no-reasoning, 2026-10-11).
+    # A browser may still hold a migrated ID (grok-4.3-no-reasoning).
     chosen = {provider: cfg.canonical_model_id(model_id, provider) for provider, model_id in chosen.items()}
     if not 1 <= len(chosen) <= cfg.MAX_RUN_FAMILIES:
         raise ValueError(f"Select between one and {cfg.MAX_RUN_FAMILIES} reviewers")
@@ -193,7 +190,6 @@ class ComparisonTools:
         compare_models: they advise the agent, and the reviewers read them."""
         from app.services.agent_audit import AnswerAudit
         self.loop, self.models = loop, models
-        # The agent writes the answer itself (agent_answer_mode).
         self.preferences = preferences or AgentPreferences()
         self.comparisons, self.versions = [], []
         self.text = ""
@@ -238,12 +234,12 @@ class ComparisonTools:
     def checkpoint(self, status=None):
         """Saves the review as it is now, and returns once it (or a newer
         one) is saved. The snapshot is taken under ``self.lock``, the database
-        write only holds it when the caller does: a write no longer stops the
+        write only holds it when the caller does: a write does not stop the
         other answers and the reviewers from using the comparison. Whoever saves
         next saves the newest snapshot, which holds everything the older ones
         held; a caller whose snapshot is saved that way returns without a
-        write of its own (six answers arriving together used to be six writes
-        in a row, until 2026-10-22 still each its own snapshot)."""
+        write of its own, so six answers arriving together are not six writes
+        in a row."""
         with self.lock:
             data = self._checkpoint(status)
             self._snapshots += 1
@@ -565,8 +561,8 @@ class ComparisonTools:
                             safe_exception(exc))
             sources = []
         # Advice for the agent, never the end of its work: they answered the
-        # one question, the rest of the user's request is still to do (Max,
-        # 2026-10-31: a run must not just end once they answered).
+        # one question, the rest of the user's request is still to do (Max:
+        # a run must not just end once they answered).
         if not answers:
             parts = ["No model answered."]
         else:
@@ -627,7 +623,7 @@ class ComparisonTools:
         return shares
 
     def _await_answers(self, comparison, done, finished, cancellation):
-        """Every asked model's answer (Max, 2026-10-07: the one that
+        """Every asked model's answer (Max: the one that
         researches most carefully is often the slowest). Never into the time
         the answer and its review need before the turn's hard stop (prod:
         DeepSeek V4 Flash took up to 299 s): stragglers then become late
@@ -681,8 +677,8 @@ class ComparisonTools:
             comparison.pop("pending_models", None)
         comparison["basis_hash"] = answer_hash(json.dumps(answers, sort_keys=True, ensure_ascii=False))
         count = len(answers)
-        # One answer of several is a partial comparison: no check needs two
-        # sides any more (until 2026-10-31 a comparison of one answer failed).
+        # One answer of several is a partial comparison, not a failed one: no
+        # check needs two sides.
         comparison["status"] = ("succeeded" if count == len(asked) else "partial" if count else
                                 "running" if pending and not final else "failed")
 
@@ -702,7 +698,7 @@ class ComparisonTools:
         """A save while the answer is being fixed: a failed one (storage, the
         budget) never fails the turn with its answer complete; the review
         saves right after it (AnswerAudit.run), and the run's end again
-        (close). Until 2026-11-04 one storage error failed the turn."""
+        (close)."""
         try:
             self.checkpoint()
         except Exception as exc:

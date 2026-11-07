@@ -35,7 +35,7 @@ from app.services.llm.provider_runtime import PROVIDER_HTTP_TIMEOUT, managed_pro
 logger = logging.getLogger(__name__)
 
 # Basis-Modell je Familie aus der Provider-Registry. Der Reasoning-Schalter
-# (Wire-Feld ``deep_search``) tauscht seit 2026-10-02 KEIN Modell mehr: er
+# (Wire-Feld ``deep_search``) tauscht KEIN Modell: er
 # laesst dasselbe gewaehlte Modell nur laenger nachdenken.
 _DEFAULT_MODEL_BY_PROVIDER = {
     provider.key: provider.base_model for provider in cfg.PROVIDERS.values()
@@ -43,7 +43,7 @@ _DEFAULT_MODEL_BY_PROVIDER = {
 
 
 # Suchmaschine je Familie. "auto" laesst OpenRouter waehlen und trifft fuer
-# fuenf Familien die richtige Wahl. Grok ist die Ausnahme: dort landet "auto"
+# die uebrigen Familien die richtige Wahl. Grok ist die Ausnahme: dort landet "auto"
 # auf xAIs nativer Live-Suche, die `max_uses` und `max_results` schlicht
 # ignoriert. Gemessen am 2026-08-31, gleiche Frage, je zwei Laeufe:
 #

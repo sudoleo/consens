@@ -1,4 +1,4 @@
-"""Google-Grounding-Weiterleitungen durch ihr Ziel ersetzen (seit 2026-10-12).
+"""Google-Grounding-Weiterleitungen durch ihr Ziel ersetzen.
 
 Geminis Websuche liefert Quellen als signierte Weiterleitung über
 ``vertexaisearch.cloud.google.com``, oft nur mit der Domain als Titel
@@ -31,8 +31,7 @@ from urllib.parse import urlsplit
 from app.core.observability import safe_exception
 
 REDIRECT_HOSTS = frozenset({"vertexaisearch.cloud.google.com"})
-# Felder, in denen eine Quelle ihre Adresse trägt (Quellen, Belege, Dokumente
-# der Quellenprüfung).
+# Felder, in denen eine Quelle ihre Adresse trägt (Quellen, Belege).
 URL_KEYS = frozenset({"url", "source_url"})
 MAX_URLS = 40
 MAX_WORKERS = 6
@@ -93,7 +92,7 @@ def replace_urls(value, mapping: dict[str, str]):
     """(Kopie mit ersetzten ``url``-Feldern, ob sich etwas geändert hat).
 
     Läuft durch Listen und Dicts -- Quellen, Belege einer Änderung, Belege
-    des Ziels, History-Punkte, Dokumente der Quellenprüfung --; nur die
+    des Ziels, History-Punkte --; nur die
     Adressfelder (``URL_KEYS``) werden ersetzt.
     """
     if not mapping:

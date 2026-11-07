@@ -2,12 +2,12 @@
 # consens.io office converter: one Office file on stdin; on stdout a tar with
 # its PDF (in.pdf), an overview of its first pages (pages.png) and their
 # count (pages.txt) (agent_office.render). Run as root by the provider's
-# user. Each conversion takes one of SLOTS places (a lock in /run) and runs
+# user. Each conversion takes one of $slots places (a lock in /run) and runs
 # LibreOffice and its helpers as that place's own user, office0 to office2,
 # in a folder of this conversion alone; before and after, every process and
 # file of that user goes. Conversions side by side never touch each other
-# (until 2026-11-01 they shared one user, and the first to finish ended the
-# others, live probe), and a file never meets another account's.
+# (with one shared user the first to finish ended the others, live probe),
+# and a file never meets another account's.
 #   convert.sh <extension> <seconds> <overview pages>
 #   convert.sh clean    only the clean-up of every free place (agent_office.sweep)
 # Exit 2: a type it does not take, 3: LibreOffice made no PDF of the file,

@@ -95,17 +95,16 @@ REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_writ
 # context (model answers and their sources, pages, emails, calendars, files,
 # a VM's output or the workspace's notes, a worker's report), a settings
 # change needs the user's own words (outside_in_view, agent_settings): a page
-# could otherwise suggest it. Since the workspace's security audit
-# (2026-10-27) every result counts, an error too (its text may quote what a
-# command printed), except a call the app refused before it ran and the
-# results of the tools below, which return only the user's or the app's own
-# content: memory, settings, the agent's own plan and documents, a prepared
-# card's status. A new tool counts until shown otherwise; ask_user too, since
-# it brings the browser's page back with the user's hand-back. Until
-# 2026-11-02 the same locked memory (memory_locked; with reviewers their gate
-# since 2026-10-28): the agent searches in nearly every first step, and an
-# opted-in account got not a single memory in a month. Max: the agent decides
-# what to keep, the user sees and can undo every change.
+# could otherwise suggest it. Every result counts, an error too (its text
+# may quote what a command printed), except a call the app refused before it
+# ran and the results of the tools below, which return only the user's or
+# the app's own content: memory, settings, the agent's own plan and
+# documents, a prepared card's status. A new tool counts until shown
+# otherwise; ask_user too, since it brings the browser's page back with the
+# user's hand-back. Memory is not locked this way: the agent searches in
+# nearly every first step, and a locked memory left an opted-in account
+# without a single memory in a month. Max: the agent decides what to keep,
+# the user sees and can undo every change.
 OWN_CONTENT_TOOLS = frozenset({"update_memory", "read_settings", "prepare_settings_change", "prepare_watch",
                                "update_plan", "create_document", "revise_document", "open_workspace",
                                "report_finding", "finish_watch"})
@@ -147,23 +146,22 @@ HOLD_SAVE_BACKOFF_SECONDS = .5
 # decisions, lease), and during a pause (_watch). What this process does to
 # the run reaches it at once (agent_background.stop and stop_chat, receive);
 # the look serves another process (a deploy's overlap) and the lease. Every
-# 3 s until 2026-11-01: two reads each, about 40 a minute of run time.
+# 3 s would be two reads each, about 40 a minute of run time.
 WATCH_SECONDS = 10
 WATCH_PAUSED_SECONDS = 10
 # Calls of a batch after the user paused the work and wrote to the agent: not
 # run, so the agent reads the message first. All the agent learns: a pause of
 # the user.
 HOLD_STEERED = "Not run: the user paused your work and wrote to you. Read their message first."
-# The calls of one step run one after another, at most this many (T2). What
+# The calls of one step run one after another, at most this many. What
 # a call that does not run reads instead, by why (the batch in run()): every
 # call of a step gets exactly one result, or the provider refuses the next
 # request. A pause, the user's own card or their turn in the browser ends the
 # step's later calls: they were planned before.
 TOOL_CALLS_PER_STEP = 4
 CALL_OVER_LIMIT = f"Not run: a step runs at most {TOOL_CALLS_PER_STEP} calls."
-# Read-only tools whose calls of one step run at the same time (since
-# 2026-11-05, docs/agent-speed-plan-2026-11-05.md P4): two page reads took
-# 6.3 s one after the other at the median. Only a step whose calls are all
+# Read-only tools whose calls of one step run at the same time: two page
+# reads took 6.3 s one after the other at the median. Only a step whose calls are all
 # of these: anything that writes, acts in the workspace or the browser, or
 # asks the user keeps the order above. The batch still hands out the results
 # in order and applies its checks to each call; a call it does not run after
@@ -176,7 +174,7 @@ CALL_AFTER_ASK = "Not run: this step asked the user first. Their answer is in th
 CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile and has handed it back. The page "
                        "may have changed.")
 CALL_AT_LIMIT = "Not run: this message reached its limit."
-# Since 2026-11-03: a step's browser calls build on each other (click a chat,
+# A step's browser calls build on each other (click a chat,
 # type, Enter). When one fails, the next would act on a page that is not
 # where the step expected it, and type into the wrong chat.
 CALL_AFTER_BROWSER_FAILURE = ("Not run: an earlier browser call of this step failed, so the page may not be where "
@@ -184,22 +182,21 @@ CALL_AFTER_BROWSER_FAILURE = ("Not run: an earlier browser call of this step fai
 # The line of facts after each batch of a message with the workspace (_note_progress).
 PROGRESS_OPEN = "[consens.io, written by the app:"
 # The message's limits stand in that line only from this share of them on
-# (2026-11-01, Max: the 120 minutes mislead). Until then it named them in
-# every batch, "step 9 of at most 200, 2.2 of 120 minutes": a ceiling that
-# read as time to spare, and a run that had its pictures after two minutes
-# went on for thirteen ("füg mal mehr bilder ein").
+# (Max: the 120 minutes mislead). Named in every batch, "step 9 of at most
+# 200, 2.2 of 120 minutes" was a ceiling that read as time to spare, and a
+# run that had its pictures after two minutes went on for thirteen ("füg mal
+# mehr bilder ein").
 LIMITS_SHOWN_FROM = 0.8
 # The user's line at the run's end for messages it did not read. What happens
 # to them is the page's (agent-chat.js flushQueue: sent as the next message,
-# or back into the field); until 2026-11-05 this line asked for a resend.
+# or back into the field).
 NOTES_UNREAD = "Your message arrived after the answer was written, so this answer does not take it into account."
 # The run's end waits this long in all for its journal and its work log to
-# save what they hold (A-R3, since 2026-10-29); what they have not saved by
-# then is logged by its thread's name, and finish_run runs anyway. Until then
-# the journal had no limit and the work log alone up to 20 s.
+# save what they hold; what they have not saved by then is logged by its
+# thread's name, and finish_run runs anyway.
 CLOSE_WAIT_SECONDS = 15
 # Pause before the one retry of a session update after a short database
-# outage (_journal_write; a worker's end record, audit A12).
+# outage (_journal_write; a worker's end record).
 TERMINAL_RETRY_SECONDS = .5
 
 
@@ -276,8 +273,7 @@ PASSING_FAILURE_CODES = frozenset({"provider_error", "provider_timeout"})
 
 def _passing_failure(error):
     """A step that broke off in passing: one more attempt may well succeed
-    (DelegationLoop._answer_attempt). Before 2026-10-27 such a step ended the
-    whole turn, minutes of paid work in the VM and the web included."""
+    (DelegationLoop._answer_attempt)."""
     from app.services.agent_provider_limits import agent_failure
     if isinstance(error, (ModelOutputLimit, AnalysisBudgetExceeded)):
         return False
@@ -392,21 +388,21 @@ class DelegationLoop(AgentLoop):
                  reviewers="always", temporary=False, watch_run=None, history_summary=None,
                  **kwargs):
         super().__init__(**kwargs)
-        # A scheduled run of a Watch (agent_watches.py, since 2026-11-03):
+        # A scheduled run of a Watch (agent_watches.py):
         # nobody is there to answer a card, so a hold ends at once
         # (``hold_timeout``) and the run has its own tools (agent_watch.py
         # WatchRunTools) instead of prepare_watch.
         self.watch_run = watch_run
         self.hold_timeout = 0 if watch_run else HOLD_TIMEOUT_SECONDS
         # A temporary chat (routers/agent.py): every tool of the account's
-        # chats (since 2026-11-01 evening), and the agent knows what goes
+        # chats, and the agent knows what goes
         # with it and what lasts (AGENT_TEMPORARY_CHAT_PROMPT); memory is
         # read-only (MemorySnapshot.temporary), the workspace's notes too
         # (agent_vm_tools.VMTools._notes_kept), and its messages take no
         # checkpoint of the workspace (VMSession.ready).
         self.temporary = temporary
-        # Who checks this message's work (account setting ``reviewers``,
-        # since 2026-11-01): "always" from the run's start, "workspace" from
+        # Who checks this message's work (account setting ``reviewers``):
+        # "always" from the run's start, "workspace" from
         # the agent's first step that reaches for the workspace on
         # (_review_from_here), "off" nobody. Without reviewers no halt, no
         # gate.
@@ -519,9 +515,9 @@ class DelegationLoop(AgentLoop):
         # clock is injectable for tests.
         self.clock = time.monotonic
         self.turn_started = self.clock()
-        # The time the run waited for the reviewers' gate rounds (_gate_wait,
-        # _domain_wait), the wait at hand since ``gate_started``: it pauses
-        # the turn's clock like a halt (A-T3).
+        # The time the run waited for the reviewers' gate rounds (_gate_wait),
+        # the wait at hand since ``gate_started``: it pauses the turn's clock
+        # like a halt.
         self.gate_paused, self.gate_started = 0.0, None
         self.routing_steps = 0
         # What the reviewers' calls took from the allowance so far, in
@@ -548,7 +544,7 @@ class DelegationLoop(AgentLoop):
         self.summarized = []
         # One catalog for all of them: built once per model of the picker,
         # about 45 times, it was most of a message's work before its first
-        # request (until 2026-11-01).
+        # request.
         available = agent_models()
         resolved = {model.selection_id: resolve_agent_model(model.selection_id, models=available) for model, _ in available}
         self.models = {selection: model for selection, model in resolved.items() if supports_delegation(model)
@@ -666,8 +662,8 @@ class DelegationLoop(AgentLoop):
         # A Watch the user asks for is prepared, never started (agent_watch.py):
         # only on their own account-mode turns, never with Google data. The
         # condition holds for a whole chat, so the prompt stays cacheable.
-        # Since 2026-11-03 a Watch runs the agent in its chat: none in a
-        # temporary chat, and a scheduled run reports instead of preparing.
+        # A Watch runs the agent in its chat: none in a temporary chat, and
+        # a scheduled run reports instead of preparing.
         if (self.comparison is not None and self.policy.account_budget_only
                 and not google_selection and not google_data and not temporary):
             from app.services import agent_watch
@@ -715,7 +711,7 @@ class DelegationLoop(AgentLoop):
         self.workspace_released = self.handed_over = False
         self.workspace_task = None
         self.workspace_names = frozenset()
-        # The first call into the workspace in this message (_execute, I6).
+        # The first call into the workspace in this message (_execute).
         self.first_workspace_call = None
         # The user's answer on an ask_user card, for the tool to return (_ask_wait, agent_ask.py).
         self.ask_answer = None
@@ -739,12 +735,10 @@ class DelegationLoop(AgentLoop):
                                              argument_limit=max(self.registry.argument_limit, 24_000))
                 if agent_vm.on_demand():
                     # Open because the chat's last message used it: the browser
-                    # wakes while the model thinks (VMTools.prewarm, runtime
-                    # audit 2026-10-30 T1), nothing of the workbench: its start
-                    # takes a lease (the day's VM time) and a checkpoint that
-                    # stays, for a message that may not use it at all (P5 of
-                    # docs/agent-speed-plan-2026-11-05.md, taken back the same
-                    # day after the review).
+                    # wakes while the model thinks (VMTools.prewarm), nothing
+                    # of the workbench: its start takes a lease (the day's VM
+                    # time) and a checkpoint that stays, for a message that
+                    # may not use it at all.
                     self.vm_tools.prewarm(bench=False)
         # Memory closes the system prompt: everything above is as stable across a
         # chat's messages as before, and a memory change re-caches only what follows.
@@ -870,10 +864,9 @@ class DelegationLoop(AgentLoop):
         """open_workspace: the workspace opens once this step's calls are done
         (_open_workspace, on the run's own thread). Its result says what the
         message took so far; its limits stand in the line of facts once
-        they come near (_note_progress, since 2026-11-01). Its start begins
-        now, beside the model's next step (VMTools.prewarm, runtime audit
-        2026-10-30 T1):
-        the first call waits only for what is left of it. Not while the
+        they come near (_note_progress). Its start begins now, beside the
+        model's next step (VMTools.prewarm): the first call waits only for
+        what is left of it. Not while the
         server's safety rules have closed the workspace (workspace_guard.py):
         the agent learns that it is closed, and answers without it."""
         from app.services import workspace_guard
@@ -925,10 +918,8 @@ class DelegationLoop(AgentLoop):
         The route read it a moment before the run (``google_data``). Google
         data joins a running chat only through this message's own Google
         tools (a Gmail import), and once there it stays, so only a message
-        with Google tools reads the chat again before each step. Until
-        2026-11-05 every step after the first read it, the reviewers' and
-        comparison answers' too (docs/agent-speed-plan-2026-11-05.md, P3). A
-        run started without the route's value reads it every time."""
+        with Google tools reads the chat again before each step. A run
+        started without the route's value reads it every time."""
         if self.google_data:
             return True
         if self.google_data is not None and not self.google_tools:
@@ -939,14 +930,12 @@ class DelegationLoop(AgentLoop):
         return found
 
     def _parallel_calls(self):
-        """Whether the agent's steps ask for several calls at once: always,
-        since 2026-11-05 (docs/agent-speed-plan-2026-11-05.md, P4). Until then
-        only while its workspace was open (audit T2: plan and action, write
-        and run, three form fields were a step each, with the whole context
-        every time); in a chat every further search, page read or side tool
-        cost a step of its own. The same from the first step on: Anthropic's
-        tool_choice carries it, and a change of it rewrites the cached
-        messages."""
+        """Whether the agent's steps ask for several calls at once: always.
+        One call per step made plan and action, write and run, three form
+        fields a step each, with the whole context every time, and every
+        further search, page read or side tool a step of its own. The same
+        from the first step on: Anthropic's tool_choice carries it, and a
+        change of it rewrites the cached messages."""
         return True
 
     def _turn_seconds(self):
@@ -1033,9 +1022,8 @@ class DelegationLoop(AgentLoop):
     def _request_inputs(self, model):
         """Input tokens of the agent's next step as _step sends it: the
         conversation and the file block that goes with every step
-        (``file_tokens``). Until 2026-11-05 the limits measured the
-        conversation alone, and large attachments filled the window first
-        (bug hunt P23)."""
+        (``file_tokens``): measured without it, large attachments filled the
+        window first."""
         from app.services.agent_tokens import input_estimate
         return input_estimate(self.messages, self.registry.schemas, model.request_config) + self.file_tokens
 
@@ -1066,8 +1054,8 @@ class DelegationLoop(AgentLoop):
     def _note_progress(self):
         """In a message with the workspace, a line of facts at the end of
         each batch of results: the step and how long the user has been
-        waiting for the answer (audit L3: a run whose answer stood after
-        30 s went on looking for pictures for five minutes). The message's
+        waiting for the answer (a run whose answer stood after 30 s went on
+        looking for pictures for five minutes). The message's
         limits only once LIMITS_SHOWN_FROM of one is used. New content at
         the end only: the cached prefix stays. A fact, never a rule
         (docs/agent-mode.md)."""
@@ -1115,8 +1103,8 @@ class DelegationLoop(AgentLoop):
         """"history" while the chat's history waits for its summary (first
         step only), "run" once the run's own steps fill the next request
         (agent_compaction.run_summary_due), else None. Only in account mode
-        with comparison tools (every chat run): there a step's text never
-        streams as the answer."""
+        with comparison tools (every chat run): there a step's text streams
+        only as an answer candidate, which a summary step is not."""
         if not (self.merged and self.policy.account_budget_only) or self.mock_answer is not None:
             return None
         if self.history_summary is not None:
@@ -1293,8 +1281,8 @@ class DelegationLoop(AgentLoop):
         outlasts it tries each update on its own: an outage costs a session
         its update, never every session in the batch (a new session's record,
         which its model call waits for, among them). So does a commit refused
-        for good (since 2026-11-05: a document over Firestore's 1 MiB refused
-        the whole batch); only a closed run refuses every update at once."""
+        for good (a document over Firestore's 1 MiB refused the whole batch);
+        only a closed run refuses every update at once."""
         # A line of a call that has ended since: its end record carries what counts.
         live = [job for job in jobs if not (job.progress and job.worker.state in {"completed", "failed", "stopped"})]
         if not live:
@@ -1491,16 +1479,16 @@ class DelegationLoop(AgentLoop):
     def _paid_audit(self):
         """Whether the agent has a paid step in this message that reviewers
         followed: its closing answer then may overdraw the allowance, as
-        after paid comparisons (spec A-R2). Also where the user's setting
-        has no reviewers (``unreviewed``, since 2026-11-01): until then every
-        turn had them, and a refusal must not throw the paid research away."""
+        after paid comparisons. Also where the user's setting has no
+        reviewers (``unreviewed``): a refusal must not throw the paid
+        research away."""
         auditor = self.comparison.auditor if self.comparison is not None else None
         return bool(auditor is not None and (auditor.sessions or auditor.unreviewed)
                     and any(message.get("role") == "assistant" for message in self.own_messages()))
 
     def _final_review(self, worker):
         """Whether ``worker`` is a reviewer at its final round (the answer is
-        fixed): its calls may overdraw the allowance (spec A-R2)."""
+        fixed): its calls may overdraw the allowance."""
         auditor = self.comparison.auditor if self.comparison is not None else None
         return getattr(worker, "kind", None) == "audit" and auditor is not None and auditor.final_answer is not None
 
@@ -1549,10 +1537,10 @@ class DelegationLoop(AgentLoop):
         tool = args = result = None
         status = "failed"
         reason = None
-        # When the call started and how long it ran, for the work log (I4).
+        # When the call started and how long it ran, for the work log.
         started_at, began = datetime.now(timezone.utc).isoformat(), time.monotonic()
         # The message's first call into the workspace, for the anonymous
-        # counters (agent_audit_metrics, I6): its kind, how long it took and
+        # counters (agent_audit_metrics): its kind, how long it took and
         # how far into the message it started.
         first_in_workspace = None
         if self.first_workspace_call is None and (call.get("function") or {}).get("name") in self.workspace_tools:
@@ -1595,7 +1583,7 @@ class DelegationLoop(AgentLoop):
         except (ValueError, TypeError) as exc:
             # A schema/selection error is safe feedback, not a provider retry.
             # 500 characters cut a document's refusal before the fields it
-            # named (2026-11-01); the model has three rounds to get it right.
+            # named; the model has three rounds to get it right.
             result = {"error": str(exc)[:2000]}
             if tool is None:
                 self._log_rejected_call(call, exc)
@@ -1649,11 +1637,11 @@ class DelegationLoop(AgentLoop):
         from app.services.agent_tokens import input_estimate, minimum_output
         soft = bool(worker and getattr(worker, "kind", None) in SEARCHING_KINDS)
         # Only once this message holds paid work: a started comparison whose
-        # answers found no allowance has nothing to finish (review 2026-10-14:
-        # near the daily limit a long first step left the comparison without
-        # answers, and the overdraft then paid an unchecked turn). And only
-        # for what finishes it: until 2026-10-28 every further routing step
-        # overdrew too, never refused before turn_steps (audit).
+        # answers found no allowance has nothing to finish (near the daily
+        # limit a long first step left the comparison without answers, and
+        # the overdraft then paid an unchecked turn). And only for what
+        # finishes it: otherwise every further routing step would overdraw
+        # too, never refused before turn_steps.
         overdraft = (closing and (self._paid_comparison() or self._paid_audit()) if worker is None
                      else self._final_review(worker))
         search_limited, waiting = False, False
@@ -1721,9 +1709,9 @@ class DelegationLoop(AgentLoop):
                         for pending_step, (value, status) in unsettled:
                             if settling is not None and settling[2] == pending_step and settling[0].is_alive():
                                 # Its own thread writes it (_settle_later). One
-                                # that already failed writes nothing more: until
-                                # 2026-11-07 a helper then waited here until the
-                                # turn's time limit.
+                                # that already failed writes nothing more: a
+                                # helper would wait here until the turn's time
+                                # limit.
                                 continue
                             self._settle_step(pending_step, value, status)
                         if time.monotonic() - recovered_at >= 3:
@@ -1761,9 +1749,9 @@ class DelegationLoop(AgentLoop):
         its commit landed while the client saw a Firestore error (an
         ambiguous commit), or the SDK's retry found the receipt it had just
         written. A step index is this run's alone, so a running step under
-        its run token is its own claim. Until 2026-11-06 such a step was
-        never settled: the turn stayed pending until the reaper, which
-        charged half the reservation for a call never sent."""
+        its run token is its own claim. Unsettled, such a step left the turn
+        pending until the reaper, which charged half the reservation for a
+        call never sent."""
         try:
             root = self.store.receipt_ref(self.uid, self.chat_id, self.turn_id).get().to_dict() or {}
         except Exception as exc:
@@ -1884,8 +1872,8 @@ class DelegationLoop(AgentLoop):
         value.published = ""
         value.tool_call_limit = TOOL_CALLS_PER_STEP
         if worker is None:
-            # The agent's own steps: several calls while the workspace is
-            # open, and a call past the limit gets its result (T2).
+            # The agent's own steps: several calls at once (_parallel_calls),
+            # and a call past the limit gets its result.
             value.parallel_tool_calls, value.keep_over_limit = self._parallel_calls(), True
         # A comparison answer's line is quoted live in the chat while the main
         # model waits (agent-activity.js highlight): it keeps updating, paced,
@@ -2045,7 +2033,7 @@ class DelegationLoop(AgentLoop):
                     and self._workers_ready() and not self.mailbox):
                 # The step wrote its answer: one too short to stream
                 # (ANSWER_HOLD_CHARS) shows now, not only after the step's
-                # settlement and _finish_merged (since 2026-11-05, P6).
+                # settlement and _finish_merged.
                 yield from self._show_answer(value)
             if (stream_answer and self._answer_check_follows(value)
                     and not self.comparison.auditor.unreviewed):
@@ -2191,8 +2179,7 @@ class DelegationLoop(AgentLoop):
                 self.step_halt = None
 
     def _settle_later(self, step, value, status):
-        """_settle_step in a thread of its own (since 2026-11-05,
-        docs/agent-speed-plan-2026-11-05.md P3): the receipt of an agent step
+        """_settle_step in a thread of its own: the receipt of an agent step
         that called tools is written while its calls run. A transaction under
         the account lock cost about 0.3 s between every two steps. The next
         claim of the agent waits for it (_join_settling), and so does the
@@ -2325,10 +2312,10 @@ class DelegationLoop(AgentLoop):
         """Save how a worker (a comparison answer, a page read) ended.
 
         A short database outage retries once (_journal_write) and otherwise
-        leaves only this record unsaved: one model's failure used to stop the
-        whole turn when writing it hit a transient error (audit A12). Only a
-        delegated worker's end waits for the database: it is a message for
-        the orchestrator's mailbox."""
+        leaves only this record unsaved: one model's failure never stops the
+        whole turn over a transient write error. Only a delegated worker's
+        end waits for the database: it is a message for the orchestrator's
+        mailbox."""
         mailbox = getattr(worker, "kind", "worker") == "worker"
         try:
             with self.condition:
@@ -2446,8 +2433,6 @@ class DelegationLoop(AgentLoop):
     def _watch(self):
         from google.api_core.exceptions import DeadlineExceeded, InternalServerError, ServiceUnavailable
         last_verified = time.monotonic()
-        # During a pause less often (decisions of this process reach the run
-        # at once, receive): a 30-minute pause read its root ~600 times.
         while not self.closed.wait(WATCH_PAUSED_SECONDS if self.hold is not None else WATCH_SECONDS):
             try:
                 self._check()
@@ -2504,8 +2489,6 @@ class DelegationLoop(AgentLoop):
                     # halt meanwhile joins the first.
                     self.queued_hold = details if self.queued_hold is None else joined_halt(self.queued_hold, details)
                     return True
-                # Before 2026-10-29 the second halt was lost, its reason
-                # neither on the card nor in the log.
                 joined = self.hold = joined_halt(self.hold, details)
                 self.hold_joins.append((joined["revision"], details))
             else:
@@ -2522,8 +2505,7 @@ class DelegationLoop(AgentLoop):
             self.vm_tools.interrupt()
         if not details.get("ask"):
             # The agent's step that streams now breaks off (_step): its
-            # searches and calls wait for the user too. Since 2026-10-29;
-            # before, it ran to its end, up to five search rounds included.
+            # searches and calls wait for the user too.
             with self.condition:
                 streaming = self.step_halt
             if streaming is not None:
@@ -2545,7 +2527,7 @@ class DelegationLoop(AgentLoop):
         if self.work_log is not None:
             before = " before its calls ran" if details.get("gate") else ""
             asked = details.get("ask")
-            # The step and, for a gate, its wait as fields of the entry (I9).
+            # The step and, for a gate, its wait as fields of the entry.
             fields = {"step": step or self._entry_step(details.get("entry"))}
             if details.get("gate") and details.get("gate_ms") is not None:
                 fields["gate_ms"] = details["gate_ms"]
@@ -2582,9 +2564,9 @@ class DelegationLoop(AgentLoop):
         with the new reason. Nothing runs meanwhile: the open hold holds it.
         Saved or not, its id is the one the root knows (or not) already.
         A card the user's decision closed while it was saved stays closed:
-        the root gets back what is open now, and the page no card again
-        (until 2026-11-06 the save came after the card's end, and so did its
-        frame: a card nobody waited for, a click on it 409)."""
+        the root gets back what is open now, and the page no card again (a
+        save after the card's end, and its frame with it, left a card nobody
+        waited for, a click on it 409)."""
         saved = self._save_hold(hold)
         with self.condition:
             current = self.hold
@@ -2611,9 +2593,9 @@ class DelegationLoop(AgentLoop):
     def _save_hold(self, hold):
         """The open hold on the run's root (set_hold), where the decision
         endpoint checks against it; a short outage is retried like the work
-        log's writes (agent_work_log.WRITE_ATTEMPTS). Before 2026-10-29 one
-        failed write left a card that every decision met with 409. False
-        when it stayed unsaved."""
+        log's writes (agent_work_log.WRITE_ATTEMPTS): one failed write would
+        leave a card that every decision meets with 409. False when it stayed
+        unsaved."""
         from app.services.agent_work_log import WRITE_ATTEMPTS
         from app.services.chat_store import TurnStatusConflict
         for attempt in range(WRITE_ATTEMPTS):
@@ -2697,8 +2679,8 @@ class DelegationLoop(AgentLoop):
             return None
         from app.services.agent_gate import outward
         # A call past the step's limit never runs (CALL_OVER_LIMIT), nor one
-        # of a tool the account lacks ("unknown tool", bug hunt 2026-11-03):
-        # nothing to check. No tool waits here since 2026-11-04 (agent_gate).
+        # of a tool the account lacks ("unknown tool"): nothing to check. No
+        # tool waits here at present (agent_gate.outward).
         over_limit = getattr(value, "over_limit_ids", None) or set()
         calls = [call for call in value.tool_calls if call["id"] not in over_limit and outward(call)
                  and (call.get("function") or {}).get("name") in self.registry.tools]
@@ -2740,8 +2722,7 @@ class DelegationLoop(AgentLoop):
             gate.decision = "continue"
             if self.work_log is not None:
                 # The gate's step and wait as fields of the entry, as
-                # scripts/audit_report.py and agent_audit_metrics read them
-                # (I9: until 2026-10-30 neither was there).
+                # scripts/audit_report.py and agent_audit_metrics read them.
                 trace = auditor.gate_trace(gate)
                 self.work_log.app("checked", {"text": f"The reviewers let the calls of entry {gate.entry} run.",
                                               **trace}, step=gate.step, gate_ms=trace.get("gate_ms"))
@@ -2773,7 +2754,7 @@ class DelegationLoop(AgentLoop):
     def receive(self, saved):
         """What the user's request just saved on the run's root in this
         process (POST .../hold, .../notes; agent_background.run_loop): taken
-        at once instead of with the watcher's next look, up to 3 s later. The
+        at once instead of with the watcher's next look, up to WATCH_SECONDS later. The
         saved root stays the truth for every other process, and the watcher
         reads the same again (notes and decisions count once)."""
         self._receive_notes(saved)
@@ -2795,8 +2776,8 @@ class DelegationLoop(AgentLoop):
         decision = yield from self._user_hold(agent_ask.hold(kind, request, secret, choices),
                                               self._handed_back(had=False) if browser else None)
         # The card's own answer counts, also when the user then wrote on a
-        # reviewer's halt that waited behind it ("steer"): before 2026-10-30
-        # the agent heard only of the message, never of the pick or the key.
+        # reviewer's halt that waited behind it ("steer"): the agent hears of
+        # the pick or the key, not only of the message.
         own = self.ask_decision or decision
         self.ask_answer = agent_ask.answer(kind, own, secret, self.ask_choice)
         if decision == "steer" and own != "steer":
@@ -2843,8 +2824,7 @@ class DelegationLoop(AgentLoop):
         agent_ask.HANDBACK_POLL_SECONDS), also one between two looks. A
         takeover that ran out is none: the view stopped refreshing (a phone in
         the background, its 2FA app, a reload) while the user may be in the
-        middle of a sign-in. Until 2026-10-29 having it and then not counted.
-        ``had``: they took the browser on their own (_takeover_wait); then
+        middle of a sign-in. ``had``: they took the browser on their own (_takeover_wait); then
         not having it any more ends the wait, as the server lets the agent's
         calls through again."""
         from app.services import agent_ask, agent_workspace
@@ -2892,8 +2872,7 @@ class DelegationLoop(AgentLoop):
         too ("handed_back"), and the timeout lets the agent finish instead.
         Returns only once no card is open: a reviewer's halt that opened as
         the decided card closed (queued behind it, or in that very moment)
-        is waited for too, and a message on it makes the result "steer".
-        Until 2026-11-06 the step's next call ran while that card stood."""
+        is waited for too, and a message on it makes the result "steer"."""
         decision = yield from self._one_hold(poll)
         while decision is not None and self.hold is not None:
             if (yield from self._one_hold()) == "steer":
@@ -2920,8 +2899,7 @@ class DelegationLoop(AgentLoop):
                     choice, self.hold_choice = self.hold_choice, None
                     self.hold = self.hold_decision = None
                     # Halts that joined the card after the revision the user
-                    # decided on: they open as the next card (below). Until
-                    # 2026-11-07 they counted as decided with it.
+                    # decided on: they open as the next card (below).
                     seen, joins = self.hold_seen, self.hold_joins
                     self.hold_joins, self.hold_seen = [], None
                     unseen = [details for revision, details in joins
@@ -2938,7 +2916,7 @@ class DelegationLoop(AgentLoop):
         if ((decision == "deny" and not deniable(hold)) or (decision == "choose" and picked is None)
                 or (decision == "continue" and hold.get("ask") == "choice")):
             # No answer to this hold (decide_hold refuses it): never a
-            # "continue", as before 2026-10-29, but a stop.
+            # "continue", but a stop.
             decision = "stop"
         if picked is not None:
             # For ask_user's result (_ask_wait).
@@ -3031,8 +3009,8 @@ class DelegationLoop(AgentLoop):
         In every turn, a step that broke off in passing before the user saw
         any of its text (_passing_failure: the provider failed or fell silent
         mid-stream, its stream could not be read) runs once more after
-        PASSING_RETRY_SECONDS, on the same conversation. Since 2026-10-27:
-        before, one such step threw away the whole turn's paid work.
+        PASSING_RETRY_SECONDS, on the same conversation: without it, one such
+        step threw away the whole turn's paid work.
 
         ``step_args`` as for _step."""
         step = f"completion:{index}"
@@ -3123,8 +3101,8 @@ class DelegationLoop(AgentLoop):
         costs marks, never the answer (AnswerAudit.run). The user's Stop
         stops the reviewers, not the complete answer: the turn ends with it.
         So does any other interruption once the answer is fixed (watch_error:
-        a deploy past its grace time, saved state gone, the watcher's stop;
-        A-R1, since 2026-10-29, until then it failed the turn): the review
+        a deploy past its grace time, saved state gone, the watcher's stop):
+        the review
         ends "cancelled" with the live marks. A review that never started (a
         Stop or an error just before) ends at the run's end (AnswerAudit.close)."""
         if self.comparison.finalized:
@@ -3310,8 +3288,7 @@ class DelegationLoop(AgentLoop):
         with self.condition:
             # The answer stands from here on: no reviewer's halt any more
             # (request_hold), and one that came after the last look ends
-            # with it. Before 2026-10-29 its card stood until the turn's end,
-            # doing nothing, and the turn's clock stood still.
+            # with it.
             self.answer_fixed = True
             late = self.hold if self.hold is not None and not self.hold.get("ask") else None
             if late is not None:
@@ -3339,11 +3316,10 @@ class DelegationLoop(AgentLoop):
         the reviewers finish (agent_runs.hand_over), and the browser takes the
         answer as done (frame ``handover``, routers/agent.py). The workspace
         and what the next message reads of this one go with it now. A failed
-        hand-over keeps the chat until the run's end, as it was until
-        2026-11-01, when a message sent in between waited for the review."""
-        # Without reviewers too (since 2026-11-05, P6): the run's end (the
-        # work log, the receipt, the bookmark) took another 2 s before the
-        # browser took the answer as done.
+        hand-over keeps the chat until the run's end: a message sent in
+        between waits for the review."""
+        # Without reviewers too: the run's end (the work log, the receipt,
+        # the bookmark) takes another 2 s the browser need not wait for.
         self._release_workspace()
         if self._long_run():
             from app.services.agent_compaction import work_record
@@ -3408,7 +3384,7 @@ class DelegationLoop(AgentLoop):
         logging.info("Agent turn limit reached; the agent writes the answer from what it has")
         if not comparison.text:
             self._close_open_calls()
-            # Which limit, and that the work can go on (audit L3): facts the
+            # Which limit, and that the work can go on: facts the
             # answer can pass on, instead of "has reached its limit" alone.
             fact, then = self._limit_fact(reason)
             self.messages.append({"role": "user", "content": " ".join(filter(None, (
@@ -3442,8 +3418,7 @@ class DelegationLoop(AgentLoop):
             self.messages.append(value.assistant_message())
             if self.hold is not None and (yield from self._hold_wait()) == "steer":
                 # As at the end of run(): a reviewer's halt still open as the
-                # answer stands counts once the user decided (before
-                # 2026-10-29 this answer was fixed past it), and their
+                # answer stands counts once the user decided, and their
                 # message gets another closing step.
                 yield from self._retract(value)
                 self._take_notes(f"completion:{index}")
@@ -3478,8 +3453,8 @@ class DelegationLoop(AgentLoop):
         With comparison tools the agent writes the answer from what it has
         (_merged_wrap_up); a delegation-only run stops.
         Which limit it was stays with the turn (``agent_wrap_up``) and in the
-        work log (``limit``), written by the app (audit I1): until 2026-10-30
-        a wrap-up looked like an answer the agent chose to give."""
+        work log (``limit``), written by the app: otherwise a wrap-up looks
+        like an answer the agent chose to give."""
         code = WRAP_UP_REASONS.get(reason, "other")
         self.completion.wrap_up = {"reason": code, "steps": self.routing_steps,
                                    "seconds": round(max(0.0, self._turn_elapsed()), 1)}
@@ -3522,7 +3497,7 @@ class DelegationLoop(AgentLoop):
                     # A turn that ends here at its time, step or allowance
                     # limit writes its answer from the whole run while that
                     # fits, without a summary first: its time and cost go to
-                    # the answer (bug hunt 2026-11-04). A full context is
+                    # the answer. A full context is
                     # what a summary is for.
                     limit = self._turn_limit()
                     if limit in (None, TURN_CONTEXT_LIMIT) or not self._answer_fits():
@@ -3603,7 +3578,7 @@ class DelegationLoop(AgentLoop):
                         accepted_tool = last_accepted = False
                         limit = None
                         results = {}
-                        # Why the step's later calls do not run (T2): the
+                        # Why the step's later calls do not run: the
                         # user wrote to the agent (HOLD_STEERED), or the step
                         # was interrupted (CALL_AFTER_*). Each such call gets
                         # that as its result, the app's own text (``unrun``).
@@ -3627,7 +3602,7 @@ class DelegationLoop(AgentLoop):
                             # longer runs itself: what it read is its result.
                             # One that broke gets what it would have got before
                             # reads ran side by side, "Not run" (``text``) or
-                            # nothing; until 2026-11-07 its error ended the run.
+                            # nothing.
                             try:
                                 results[call["id"]] = yield from self._await_call(started)
                             except ProviderCancelled:
@@ -3693,7 +3668,7 @@ class DelegationLoop(AgentLoop):
                                 # The user's card (agent_ask.py); the tool then
                                 # returns their answer. A message on it is that
                                 # answer: the rest of the batch waits, and so it
-                                # does after any answer (T2).
+                                # does after any answer.
                                 asked = yield from self._ask_wait(call)
                                 if asked != "run":
                                     # "run": arguments the tool refuses, no card.
@@ -3832,8 +3807,7 @@ class DelegationLoop(AgentLoop):
                 # The batch broke off with calls it started beside its first
                 # (_prefetch) still running: they end as one does there
                 # (_await_call), and a page read settles its paid step
-                # before finish_run (since 2026-11-06; until then the run
-                # ended without them and finish_run found it unsettled).
+                # before finish_run.
                 self.cancellation.cancel()
             for thread in started:
                 thread.join()
@@ -3874,13 +3848,13 @@ class DelegationLoop(AgentLoop):
                 # Saved with the turn (agent_runs.finish_run): its checkpoint
                 # and the commands' summed run time; where the next message
                 # starts. Also when a receipt above could not be written (its
-                # chat deleted meanwhile): until 2026-11-06 the session then
-                # stayed open, its VM time uncharged.
+                # chat deleted meanwhile): else the session would stay open,
+                # its VM time uncharged.
                 self._release_workspace()
             if self._long_run() or status != "succeeded":
                 # What the next message is told this one did (agent_compaction):
-                # after a VM run, and since 2026-10-27 after any run that broke
-                # off or was stopped, so that "Retry" goes on from its work
+                # after a VM run, and after any run that broke off or was
+                # stopped, so that "Retry" goes on from its work
                 # instead of starting over ("" without a single call).
                 from app.services.agent_compaction import work_record
                 self.completion.work_record = work_record(self.own_messages(), 0)
@@ -3902,10 +3876,10 @@ class DelegationLoop(AgentLoop):
                 self.store.release_unclaimed(self.uid, self.chat_id, self.turn_id, failure=getattr(self.completion, "failure", None))
             if self.comparison is not None:
                 # Anonymous daily counters of every chat turn, its use of the
-                # workspace included (I6), saved off this thread.
+                # workspace included, saved off this thread.
                 from app.services import agent_audit_metrics
                 agent_audit_metrics.record(self)
-            # The turn's time under the account lock (A-T5).
+            # The turn's time under the account lock.
             report = getattr(self.store, "report_lock_time", None)
             if callable(report):
                 report()

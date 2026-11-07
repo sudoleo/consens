@@ -1,9 +1,9 @@
-"""A key the agent needs from the user (ask_user with ``secret``, since
-2026-10-29, docs/agent-mode.md "Arbeitsplatz").
+"""A key the agent needs from the user (ask_user with ``secret``,
+docs/agent-mode.md "Arbeitsplatz").
 
 An app the agent builds often needs an API key or a token of the user's.
 Typed into the chat, it would sit in the chat's history, go to every model
-of the run and into the work record. Now the agent asks for it by name
+of the run and into the work record. So the agent asks for it by name
 (OPENAI_API_KEY), the user pastes it into a field on the card, and the
 server writes it straight to the workbench, as the agent's user, into
 ``~/.secrets/<name>`` (only that user reads it, like a .env of the user's
@@ -18,10 +18,10 @@ the file is fine (agents took a bare mask for a placeholder in the file). The na
 record (``secret_names``, never the values) and the agent hears them with
 its first VM result. Every message's start on the workbench reads the keys
 again (agent_workspace.open_chat), so a restart of the server masks them as
-well: since 2026-11-07 every key file in ~/.secrets, the record's names
-first, at most READ_KEYS (before, only the names the record kept, the
-newest KEEP_NAMES: an older key's value went to the model as it was). A
-key stays on the workbench until the user deletes it (their terminal).
+well: every key file in ~/.secrets, the record's names first, at most
+READ_KEYS (the record keeps only the newest KEEP_NAMES, so reading only those
+would send an older key's value to the model as it was). A key stays on the
+workbench until the user deletes it (their terminal).
 """
 from __future__ import annotations
 

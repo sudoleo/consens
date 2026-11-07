@@ -58,7 +58,7 @@ MAX_DIFFERENCES_TEXT_CHARS = 50_000
 MAX_SOURCES = 50
 
 # Ab so vielen anonymen Reports wird ein Share für die Admin-Review priorisiert.
-# Reports ändern nie selbst `indexed` (Review R19): anonyme Meldungen lassen sich
+# Reports ändern nie selbst `indexed`: anonyme Meldungen lassen sich
 # nicht als unabhängig nachweisen, eine einzelne Person könnte sonst eine Seite
 # durch wiederholtes Melden deindexieren. Deindexieren ist eine Moderations-
 # entscheidung (moderate_share).
@@ -309,7 +309,7 @@ def build_included_models(included_providers, model_labels=None):
 
 
 # Konsens-Engine-Key -> konkretes Modell (deterministisch, analog zu
-# consensus_engine.run_consensus). Der Snapshot speichert nur den Engine-Key,
+# cfg.CONSENSUS_ENGINE_ALIASES). Der Snapshot speichert nur den Engine-Key,
 # das konkrete Modell wird hier rekonstruiert – gilt auch für Alt-Snapshots.
 _CONSENSUS_ENGINE_MODELS = {
     "OpenAI": cfg.DEFAULT_OPENAI_MODEL,
@@ -363,8 +363,8 @@ def consensus_model_view(consensus_model, model_label=""):
     model_label = clean_model_label(model_label) or (cfg.get_model_label(model_id) if model_id else "")
     if not model_label and raw in cfg.MODEL_CONFIGS:
         # Agent runs store the model id itself ("gpt-5.6-luna"); the page
-        # printed it raw above the list that names the same model "GPT-5.6
-        # Luna" (Apple-Audit I11).
+        # shows its label, as the list that names the same model "GPT-5.6
+        # Luna" does.
         config = cfg.MODEL_CONFIGS[raw]
         model_label = config.label
         provider = provider or next(
@@ -397,7 +397,7 @@ def consulted_models_view(included_models):
         if model_name and "-" in model_name and " " not in model_name:
             model_name = cfg.get_model_label(model_name)
         # "Google Gemini Gemini 3.5 Flash-Lite": a model name that already
-        # carries the family needs no label in front (Apple-Audit L15).
+        # carries the family needs no label in front.
         family_words = {word.lower() for word in re.findall(r"[A-Za-z]{3,}", label)}
         named = bool(model_name) and bool(family_words & {word.lower() for word in re.findall(r"[A-Za-z]{3,}", model_name)})
         view.append({
@@ -664,18 +664,18 @@ def build_pending_result(uid, question, consensus_md, differences_data,
     if sanitized_responses:
         payload["model_responses"] = sanitized_responses
     if answer_provenance in {"developer", "byok"}:
-        # R09: "byok" answers came from the user's own key; such results
-        # are flagged and never count for model rankings or votes.
+        # "byok" answers came from the user's own key; such results
+        # are flagged so that model rankings can leave them out.
         payload["answer_provenance"] = answer_provenance
     return payload
 
 
-# Shares of an Agent answer (since 2026-10-21) carry this mode; Consensus
-# shares have no `answer_mode` at all, old ones included.
+# Shares of an Agent answer carry this mode; Consensus shares have no
+# `answer_mode` at all.
 AGENT_ANSWER_MODE = "agent"
 
 
-# The reviewers' notes a share carries (since 2026-10-31): the kinds of
+# The reviewers' notes a share carries: the kinds of
 # agent_audit.KINDS, most serious first, and bounds on what the page shows.
 REVIEW_KINDS = ("wrong", "doubtful", "incomplete")
 MAX_REVIEW_NOTES = 40
@@ -810,13 +810,13 @@ def _agent_share_basis(review, text):
     The app marks an answer with its first comparison (agent-review.js); the
     share takes the first one whose check of this text found something to
     show, else the first one. A check bound to another text or to other
-    answers (its hashes, below) counts as none. Only turns saved until
-    2026-10-31 have such checks: the judges of comparison mode.
+    answers (its hashes, below) counts as none. Only turns saved in the
+    retired comparison mode have such checks: its judges.
     """
     review = review if isinstance(review, dict) else {}
     if review.get("mode") == "audit":
-        # Audit mode: the models the agent asked (compare_models, since
-        # 2026-10-31) answered its own question, not the user's. The
+        # Audit mode: the models the agent asked (compare_models)
+        # answered its own question, not the user's. The
         # reviewers checked the answer: the share shows their notes
         # (_agent_review_notes) instead of a comparison.
         return None, None
@@ -852,10 +852,9 @@ def build_agent_pending_result(uid, turn):
 
     Everything comes from the server-written turn: the question, the agent's
     answer, the sources it and its comparison models cited, and the
-    reviewers' notes on this exact text (since 2026-10-31,
-    _agent_review_notes). A turn saved before then in comparison mode
-    brings the models of its comparison and their check of this exact text
-    instead. A direct answer, or one whose check was off, has none of these,
+    reviewers' notes on this exact text (_agent_review_notes). A turn
+    saved in the retired comparison mode brings the models of its comparison
+    and their check of this exact text instead. A direct answer, or one whose check was off, has none of these,
     and the page leaves them out.
     """
     if (not isinstance(turn, dict) or turn.get("execution_mode") != "agent"
@@ -945,8 +944,8 @@ def _active_share_backlinks(db, uid, result_id) -> dict:
     """The links a stable result backed before it expired, by their source.
 
     A pending result lives PENDING_TTL_HOURS and an expired one is dropped on
-    the next Share; without its backlinks, sharing the same answer again made
-    a second public link. Read only when the result is prepared anew.
+    the next Share; without its backlinks, sharing the same answer again would
+    make a second public link. Read only when the result is prepared anew.
     """
     backlinks = {}
     try:
@@ -960,7 +959,7 @@ def _active_share_backlinks(db, uid, result_id) -> dict:
             if visibility == "public":
                 backlinks.setdefault("share_id", snapshot.id)
     except Exception as exc:
-        # Without them the next Share makes a new link, as before.
+        # Without them the next Share makes a new link.
         logging.warning("share backlink lookup failed category=%s", safe_exception(exc))
     return backlinks
 
@@ -988,7 +987,7 @@ def _pending_expiry_is_valid(value, *, now=None) -> bool:
 
 
 def get_pending_result(uid, result_id, db=None) -> dict | None:
-    """Return one unexpired owner-bound completed browser result."""
+    """Return one unexpired owner-bound pending result."""
     if not pending_result_is_available(uid, result_id, db=db):
         return None
     db = db if db is not None else db_firestore
@@ -1073,7 +1072,7 @@ def get_share(share_id, db=None):
 # gecacht, damit frisch erstellte Shares sofort sichtbar sind; Revoke/Block/
 # Moderation invalidieren explizit, aber nur im eigenen Prozess. Ein anderer
 # Worker sieht einen Widerruf deshalb erst nach Ablauf der TTL: sie ist Teil
-# der zugesagten maximalen Widerrufsverzögerung (Review R18) und muss zusammen
+# der zugesagten maximalen Widerrufsverzögerung und muss zusammen
 # mit den HTTP-Cache-Headern in app/api/routers/share.py darunter bleiben.
 SHARE_CACHE_TTL_SECONDS = 60
 # Längste Zeit, die eine widerrufene öffentliche Seite über consens.io noch
@@ -1409,7 +1408,7 @@ def create_share_from_pending(uid, result_id, db=None, consume_quota=None,
 
 
 def clean_share_sources(share_id, *, db=None, check_expired=False, apply=True):
-    """Google-Weiterleitungen einer Share durch ihr Ziel ersetzen (seit 2026-10-12).
+    """Google-Weiterleitungen einer Share durch ihr Ziel ersetzen.
 
     Mit ``check_expired`` fallen eindeutig abgelaufene Weiterleitungen (404/410)
     aus der Quellenliste; ihre Nummern landen in ``expired_source_ids``,
@@ -1776,7 +1775,7 @@ def _ordered_page(collection, query, *, order_field, sort_key, keep, cursor, max
     """One cursor page of ``query`` ordered by ``order_field`` descending.
 
     The filter and the order run inside Firestore, so relevant documents are
-    never cut off by an arbitrary default-order window before filtering (R24).
+    never cut off by an arbitrary default-order window before filtering.
     Firestore breaks ties by document id, which makes the cursor stable.
     Lightweight test doubles without ordering fall back to the same
     semantics in memory.
@@ -1791,7 +1790,7 @@ def _ordered_page(collection, query, *, order_field, sort_key, keep, cursor, max
         docs = list(ordered.limit(max_items + 1).stream())
     except FailedPrecondition:
         # Composite index not deployed (yet): keep serving the filtered query
-        # unordered and order it here, as before this change.
+        # unordered and order it here.
         logging.warning("Share list index missing; ordering in memory")
         docs = _sorted_fallback(query.stream(), sort_key, keep, cursor, max_items)
     except (AttributeError, TypeError):
@@ -2116,7 +2115,7 @@ def list_hub_shares(db=None, max_items=1000):
         is_watch = isinstance(data.get("last_watch_run_at"), datetime)
         # A Watch row says what its page leads with -- "Unchanged since ...",
         # "Paused · last checked ..." -- not the score of the first answer,
-        # which the page no longer shows (Apple-Audit L2, L3).
+        # which the page does not show.
         watch = _hub_watch_state(db, doc.id) if is_watch else None
         entries.append({
             "path": share_path(data.get("slug") or "", doc.id),
@@ -2210,7 +2209,7 @@ LIVE_WATCH_SCAN_LIMIT = 20
 
 def live_watch_path(db=None) -> str:
     """The page of one curated public Watch that is still checked -- the
-    landing's "See a live watch" link (Apple-Audit L17) -- or "" when there
+    landing's "See a live watch" link -- or "" when there
     is none.
 
     Only a page the operator indexed: "Public" in the app means "anyone with
@@ -2224,7 +2223,7 @@ def live_watch_path(db=None) -> str:
     wait on a failing read.
     """
     if cfg.consensus_watches_archived():
-        # Archived since 2026-11-03: nothing is checked any more.
+        # Consensus Watches are archived: nothing is checked.
         return ""
     use_cache = db is None
     if use_cache and "path" in _live_watch_cache:
@@ -2313,7 +2312,7 @@ def list_shares_for_owner_page(uid, db=None, max_items=200, cursor=""):
 
     Ordering happens in Firestore (``owner_uid`` + ``created_at`` desc,
     composite index in ``firestore.indexes.json``), so the newest links are
-    never lost behind an arbitrary default-order window (R24).
+    never lost behind an arbitrary default-order window.
     """
     db = db if db is not None else db_firestore
     collection = db.collection(SHARES_COLLECTION)
@@ -2513,7 +2512,7 @@ def public_share_payload(data):
         "consensus_model": data.get("consensus_model") or "",
         "answer_mode": AGENT_ANSWER_MODE if data.get("answer_mode") == AGENT_ANSWER_MODE else "",
         "answer_model_label": clean_model_label(data.get("answer_model_label")),
-        # The reviewers' notes of an Agent answer (since 2026-10-31).
+        # The reviewers' notes of an Agent answer.
         "review_notes": (sanitize_review_notes(data.get("review_notes"))
                          if data.get("answer_mode") == AGENT_ANSWER_MODE else None),
         "answered_at": data.get("answered_at") or "",
@@ -2563,7 +2562,7 @@ def build_citation(payload, canonical_url):
 
 
 def cleanup_expired_pending(db=None, max_docs=500):
-    """Aufräum-Fallback beim App-Start (zusätzlich zur Firestore-TTL-Policy)."""
+    """Aufräum-Fallback der Retention-Wartung (zusätzlich zur Firestore-TTL-Policy)."""
     db = db if db is not None else db_firestore
     docs = (
         _where(db.collection(PENDING_COLLECTION), "expires_at", "<", _utcnow())

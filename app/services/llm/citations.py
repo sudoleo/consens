@@ -235,7 +235,7 @@ def citation_end(text: str, citation: Dict[str, Any]) -> int:
     end = _integer_index(citation.get("end_index"))
 
     # A citation must cover at least one character.  Zero-width ranges are a
-    # real OpenRouter/provider failure mode and used to create the row of chips
+    # real OpenRouter/provider failure mode and would create a row of chips
     # before the first word of the model answer.
     valid_range = (
         end is not None

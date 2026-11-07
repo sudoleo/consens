@@ -1,9 +1,6 @@
 """Cleanup of the retired /ask answer receipts (R09).
 
-Until 2026-10-25 every ``/ask_*`` call stored the answer it delivered as a
-receipt, and the browser's ``/consensus`` accepted answers only through those
-receipts. The browser runs no Consensus any more and ``/consensus`` is gone,
-so no receipt is written. What stays: the expired ones are swept by the
+No receipt is written any more. What stays: the expired ones are swept by the
 retention job (``retention_maintenance``) and account deletion removes the
 collection (``account_deletion``).
 """

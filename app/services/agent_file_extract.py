@@ -24,8 +24,8 @@ SAFETY_LIMIT_WARNING = "Processing exceeded its safety limits. Provide a smaller
 # Always true for Word files, so a note for the model, never a warning shown
 # to the person (agent_files.public_file).
 WORD_LIMITS_NOTE = "Word headers, footnotes, drawings and embedded images are not extracted; tables retain cell order."
-# Before 2026-10-16: "No extractable text on pages 1, 3. Scans require visual
-# reading; OCR is not available." Stored records still carry that wording.
+# Stored records may still carry the older wording "No extractable text on
+# pages 1, 3. Scans require visual reading; OCR is not available."
 _SCANNED_PAGES = re.compile(
     r"^(?:No extractable text on pages (?P<old>[\d, ]+)\. Scans require visual reading; OCR is not available\."
     r"|Pages? (?P<new>[\d, and]+) (?:is a scanned image|are scanned images) and (?:was|were) not read\.)$"
@@ -103,9 +103,9 @@ def parse_xml(data):
 
     The parser itself rejects a document type declaration, entity
     declarations and external entity references, in whatever encoding the
-    document declares. Until 2026-10-28 a byte search for "<!doctype" and
-    "<!entity" ran first: a UTF-16 document passed it, and expat expanded its
-    entities (audit)."""
+    document declares. A byte search for "<!doctype" and "<!entity" is not
+    enough: a UTF-16 document passes it, and expat would expand its
+    entities."""
     from xml.parsers import expat
     builder = ET.TreeBuilder()
     parser = expat.ParserCreate(namespace_separator="}")

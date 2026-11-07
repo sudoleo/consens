@@ -6,7 +6,7 @@ usage to the meter bound to the current context. Callers above the transport
 never see usage; they only bind a meter around one logical operation and read
 its totals afterwards (``app.services.run_metering`` books them).
 
-Charging follows the allowance (agent_quota, micro-euros since 2026-10-31):
+Charging follows the allowance (agent_quota, micro-euros):
 the call's dollar cost as OpenRouter reports it in ``usage.cost`` (cache,
 reasoning and web search included), else its tokens at the model's catalog
 price (``agent_model_metadata.pricing``, FALLBACK_PRICES for a model the

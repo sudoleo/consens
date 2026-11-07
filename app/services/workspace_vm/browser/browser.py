@@ -1,21 +1,20 @@
 """consens.io workspace: the one program the server runs here for the
-agent's ``browser`` tool (agent_browser.py, since 2026-10-27 instead of a
-shell command of the agent), as the provider's user. From 2026-10-27 to
-2026-11-04 on a VM of its own; since then on the workbench, next to the
-agent's user, who reaches neither Chrome's protocol (cdp.py, a socket only
-this user opens), its screen (display.sh) nor this folder.
+agent's ``browser`` tool (agent_browser.py), as the provider's user, on the
+workbench next to the agent's user, who reaches neither Chrome's protocol
+(cdp.py, a socket only this user opens), its screen (display.sh) nor this
+folder.
 
 One action per call, as JSON on stdin, typed by the server: {"action":
 "open", "url": ...}, {"action": "click", "ref": "e12"} and so on (ACTIONS).
 The answer is one JSON object on stdout: {"status", "text"} and, for a
 screenshot, "png" (base64); open adds "preview", a small JPEG of the page
 for its card in the chat (base64), and so does another action whose request
-asks for it (since 2026-10-30). Status "ok", "refused" (the action cannot be
+asks for it. Status "ok", "refused" (the action cannot be
 done, the text says why), "user" (the user has the browser), "setup" (the
 browser is being installed) or "failed". No code of the agent runs here: it
 only chooses among these actions and their typed arguments. Two actions are
 the server's own and never the agent's: "warm" starts the browser, "rest"
-lets the VM sleep soon after the message (since 2026-10-30).
+lets the VM sleep soon after the message.
 
 The same Chrome the user sees and steers in the live view, with the sign-ins
 the user made there. Pages are read as text: ``read`` lists the page's
@@ -26,7 +25,7 @@ which elements changed after it, the nearest first (HIT_JS; a click or drag
 at x,y also what lay at its points, with their boxes in the screenshot's
 pixels), and then the page: the whole list after a navigation, else only the
 lines that changed since the agent's last look, after a scroll first what is
-in view (after_text, since 2026-10-30). Its answer comes once the page
+in view (after_text). Its answer comes once the page
 rests, not the network (quiet). A failure names its cause from Playwright's
 log and the page in front (on_failure). The page's head says whether the
 browser holds cookies for its address (yes or no, never which).
@@ -37,14 +36,14 @@ browser (CONTROL, written by consens.io's server, which also holds the
 agent's calls meanwhile).
 
 A Chrome that stops answering costs one call, not the rest of the message
-(since 2026-10-28; on Max's browser VM a page load ran into its 30 s, the
+(on Max's browser VM a page load ran into its 30 s, the
 next connection into its 20 s, and each later call would have too): a call
 that does not finish within CALL_LIMIT ends with "failed" and restarts
 Chrome (display.sh --restart, tabs and sign-ins stay), a connection that
 does not come about restarts it once and tries again, and open returns a
 page that answered but is still loading instead of failing.
 
-Awake between the agent's steps (since 2026-10-29): the VM pauses after a
+Awake between the agent's steps: the VM pauses after a
 few idle seconds (measured: 46 of 60 seconds frozen without a command), and a
 paused Chrome loses every live connection of its pages; a game on foony.com
 went "offline" between two moves, and so do consens.io's live updates. Each
@@ -52,12 +51,12 @@ call therefore holds the VM awake for AWAKE_FOR after it, through the Sprites
 Tasks API like the workbench's background processes (agent_vm_processes): an
 expiring hold, renewed by the next call, gone by itself after the last one.
 The live view keeps it awake anyway (its exec session). At the end of a
-message the server shortens it to REST_FOR (the action rest, since
-2026-10-30): before, the VM stayed awake 10 minutes after every run.
+message the server shortens it to REST_FOR (the action rest), so the VM
+does not stay awake AWAKE_FOR after every run.
 
-A resident helper keeps Playwright's driver running between calls (since
-2026-10-30, serve) and connects to Chrome for each call only: a call that
-finds none runs as before and starts one for the next; one it reaches gets
+A resident helper keeps Playwright's driver running between calls (serve)
+and connects to Chrome for each call only: a call that finds none runs by
+itself and starts one for the next; one it reaches gets
 the request over a unix socket of the server's user and runs the same
 run() (see "The resident helper" below).
 """
@@ -82,11 +81,11 @@ CONTROL = os.path.join(STATE, "control.json")
 REF_COUNTER = os.path.join(STATE, "ref-count")
 # Where the server puts a file of the agent's for an upload.
 UPLOADS = os.path.join(STATE, "uploads")
-# Chrome's protocol through cdp.py (since 2026-11-04; until then its port 9222 on 127.0.0.1).
+# Chrome's protocol through cdp.py's socket.
 CDP = "ws+unix://" + os.path.join(STATE, "cdp.sock") + ":/devtools/browser"
 READ_CHARS = 6000
 AFTER_ACTION_CHARS = 4000
-# The page as the agent last looked at it (after_text, since 2026-10-30):
+# The page as the agent last looked at it (after_text):
 # its address, when, and read's lines, for the next action's answer. Older
 # than LOOK_SECONDS it no longer counts; a list up to WHOLE_BELOW_CHARS
 # comes whole, a diff would save nothing.
@@ -103,7 +102,7 @@ WAIT_MAX = 120
 # A first setup in one call, within the server's limit (agent_browser.CALL_SECONDS).
 SETUP_SECONDS = 100
 # One action once the browser runs (a wait adds its seconds), the connection
-# to Chrome's debugging port, and how long open waits for an address to
+# to Chrome (cdp.py's socket), and how long open waits for an address to
 # answer and then for its document. Together with a restart they stay within
 # the server's limit (agent_browser.CALL_SECONDS).
 CALL_LIMIT = 70
@@ -113,7 +112,7 @@ OPEN_SECONDS = 30
 LOADED_SECONDS = 10
 # After a navigation, how long the network may take to rest (loaded).
 IDLE_SECONDS = 2
-# Without a navigation (quiet, since 2026-10-30): an action's effect is
+# Without a navigation (quiet): an action's effect is
 # there once the page has not changed for QUIET_MS since the action and no
 # request it started is open, at most QUIET_SECONDS; after a scroll or a key
 # other than Enter and Space BRIEF_QUIET_MS and BRIEF_SECONDS. Looked at
@@ -128,7 +127,7 @@ POLL_SECONDS = 0.05
 AWAKE_TASK = "consens-browser-awake"
 AWAKE_FOR = "10m"
 REST_FOR = "2m"
-# The resident helper (serve, since 2026-10-30): its socket, the lock one
+# The resident helper (serve): its socket, the lock one
 # of them holds while it runs, how long it waits for a call (as long as a
 # call keeps the VM awake), how long a call waits to connect and then for
 # the helper's FREE, and how long the helper waits for a
@@ -163,7 +162,7 @@ PICTURE_AROUND = 40
 PICTURE_SECONDS = 2
 # Files a page downloaded (a click, Enter, an address that downloads, the
 # action download) until the server copies them into the chat's folder and
-# deletes them here (agent_browser.py, since 2026-10-28). What the user downloads in
+# deletes them here (agent_browser.py). What the user downloads in
 # the live view lands in Chrome's own folder and is taken along as well.
 DOWNLOADS = os.path.join(STATE, "downloads")
 CHROME_DOWNLOADS = os.path.join(HOME, "Downloads")
@@ -171,14 +170,13 @@ DOWNLOAD_SECONDS = 60
 # What the server keeps of a download (agent_browser.DOWNLOAD_BYTES). The
 # action download asks with HEAD first (HEAD_SECONDS): Playwright's request
 # API holds the whole body in memory, and a file of some GB took the browser
-# down for the message (bug hunt P39, 2026-11-05).
+# down for the message.
 DOWNLOAD_BYTES = 25 * 1024 * 1024
 HEAD_SECONDS = 10
-# The picture of an opened page on its card in the chat (agent-activity.js,
-# since 2026-10-29): the viewport at this width, as a JPEG of this quality.
-# Since 2026-10-30 (audit V7) 720 px instead of 480 at 60: the card shows it
-# up to 360 CSS pixels, soft on a retina screen. At most PREVIEW_BYTES
-# (agent_browser.PREVIEW_BYTES: a larger one is no card picture); measured
+# The picture of an opened page on its card in the chat (agent-activity.js):
+# the viewport at this width, as a JPEG of this quality. 720 px: the card
+# shows it up to 360 CSS pixels, and less is soft on a retina screen. At
+# most PREVIEW_BYTES (agent_browser.PREVIEW_BYTES: a larger one is no card picture); measured
 # locally, a news page 41 KB at 720/50, a page full of small text 98 KB,
 # 53 KB at 600/35 and 31 KB at 480/40 (PREVIEW_TRIES, in this order).
 PREVIEW_WIDTH = 720
@@ -187,16 +185,16 @@ PREVIEW_BYTES = 64 * 1024
 PREVIEW_TRIES = ((PREVIEW_WIDTH, PREVIEW_QUALITY), (600, 35), (480, 40))
 # How long a click, a typed text or a choice on an element waits for it to
 # take the action (visible, still, enabled, nothing over it) before it fails
-# with the reason (failure_text). 10 s until 2026-11-03: an element a layer
-# covered or a list hid kept the agent waiting for nothing.
+# with the reason (failure_text). Not longer: an element a layer covered or
+# a list hid kept the agent waiting for nothing.
 ACT_MS = 3_000
 
 # What an element says of itself, as read lists it, without what is typed
-# into it (since 2026-11-03). read keeps it on the element
+# into it. read keeps it on the element
 # (data-consens-key); an action on the element's ref compares it first
 # (located). A list that draws its rows anew, as WhatsApp's chat list does,
 # gives a row's element, ref and all, another row's content: a click on the
-# ref reached another chat without an error. Now that is a stale ref.
+# ref would reach another chat without an error, the check makes it a stale ref.
 KEY_JS = r"""
 el => {
   const clean = text => (text || '').replace(/\s+/g, ' ').trim();
@@ -214,13 +212,13 @@ el => {
 }
 """.strip()
 # The key read kept and the element's key now. Within one step of the agent
-# (the request's ``step``, since 2026-11-04) the snapshots after its earlier
+# (the request's ``step``) the snapshots after its earlier
 # calls note what an element says now apart (data-consens-next, with the step
 # in data-consens-step), and its key stays as the agent last saw it, before
-# this step: the step's results come back to it all at once. Until then the
-# snapshot after "type e40 ... enter" rewrote the key of a chat row the send
-# had moved, and the same step's "click e17" reached another chat without a
-# StaleRef (bug hunt 2026-11-04). A request without a step: the key of the
+# this step: the step's results come back to it all at once. Otherwise the
+# snapshot after "type e40 ... enter" would rewrite the key of a chat row the
+# send had moved, and the same step's "click e17" would reach another chat
+# without a StaleRef. A request without a step: the key of the
 # last snapshot the agent was shown the element in (SHOWN_JS).
 KEY_CHECK_JS = r"""
 (el, step) => {
@@ -232,9 +230,8 @@ KEY_CHECK_JS = r"""
 """.strip().replace("%KEY_JS%", KEY_JS)
 
 # A ref stays with its element, and a new element takes the next number of
-# the browser (``start``, REF_COUNTER). Until 2026-10-27 every read numbered
-# the page from e1 again, so a ref from an older read could name another
-# element without an error; now it names its element or none.
+# the browser (``start``, REF_COUNTER), so a ref from an older read names
+# its element or none, never another one.
 SNAPSHOT_JS = r"""
 arg => {
   // A number (the next ref's start), or {start, step} within a step of the agent (KEY_CHECK_JS).
@@ -351,14 +348,14 @@ arg => {
 }
 """.replace("%KEY_JS%", KEY_JS)
 
-# What the agent was shown of an element becomes its key (since 2026-11-06).
+# What the agent was shown of an element becomes its key.
 # A snapshot lists every element, but an answer shows only a part of the
 # list: READ_CHARS from an offset, AFTER_ACTION_CHARS after an action, or only
-# the lines that changed. Until then every snapshot wrote the key of every
-# element, so a row out of the part shown that the list drew another chat
-# into got that chat as its key, and the agent's click on the ref it had
-# read before reached that chat without a StaleRef (bug hunt 2026-11-05).
-# Now the snapshot leaves what an element says in data-consens-seen, and the
+# the lines that changed. Were every snapshot to write the key of every
+# element, a row out of the part shown that the list drew another chat into
+# would get that chat as its key, and the agent's click on the ref it had
+# read before would reach that chat without a StaleRef.
+# So the snapshot leaves what an element says in data-consens-seen, and the
 # elements whose lines the answer shows (shown_to_agent) take it as their
 # key: within a step of the agent as data-consens-next (KEY_CHECK_JS).
 SHOWN_JS = r"""
@@ -471,18 +468,18 @@ FIND_JS = r"""
 IS_SECRET_JS = r"""el => el.type === 'password' || /password/i.test(el.autocomplete || '') ||
   /one-time-code/i.test(el.autocomplete || '')"""
 
-# What a click or drag at x,y met (since 2026-10-30). Its answer was only
-# "Clicked at 337,623.": on chess.com DeepSeek V4.1 Flash then spent 20
-# steps on one move, guessing the board's squares from screenshots at 58
-# and then 86 pixels, with a screenshot after every try. "before" (once the
+# What a click or drag at x,y met. With only "Clicked at 337,623." as its
+# answer, DeepSeek V4.1 Flash spent 20 steps on one move on chess.com,
+# guessing the board's squares from screenshots at 58 and then 86 pixels,
+# with a screenshot after every try. "before" (once the
 # mouse is at the first point) says what lies at each point, the element a
 # press there reaches, with its box in the screenshot's pixels, the ref it
 # lies in and the element around it with a box of its own (a board, whose
 # box gives every square's), and watches the page; "after" lists what
 # changed since, nearest to the points first. A change inside a shadow root
 # or a frame is no change here: what a canvas, a frame or a video shows is
-# compared as a picture (look_at). Since 2026-10-30 every action on the page
-# in front has this watch: "refs" names the elements it acts on, whose
+# compared as a picture (look_at). Every action on the page in front has
+# this watch: "refs" names the elements it acts on, whose
 # middles count as its points for "after" (the nearest changes first), and
 # "idle" says how long the page has not changed (quiet: the action's effect
 # is there once it rests; ``fresh`` counts from now, the action's end).
@@ -742,8 +739,7 @@ def stay_awake(expire=AWAKE_FOR):
 
 
 # rest's answer: the server ends a message with it (agent_browser.py) and
-# only logs it. A browser.py before 2026-10-30 refuses rest as an unknown
-# action (and holds the VM its 10 minutes once more).
+# only logs it.
 RESTED = (f"The hold that keeps the workspace awake ends in {REST_FOR} now; then it sleeps unless a call or "
           "the live view keeps it awake.")
 
@@ -758,8 +754,8 @@ def restart_browser():
 
 def connect(playwright):
     """The running Chrome; one fresh start when it does not take the
-    connection (2026-10-28: connect_over_cdp ran into its limit, and every
-    later call would have too)."""
+    connection (once connect_over_cdp ran into its limit, and every later
+    call would have too)."""
     try:
         return playwright.chromium.connect_over_cdp(CDP, timeout=CONNECT_SECONDS * 1000)
     except Exception:
@@ -783,9 +779,8 @@ def load_playwright():
 # Chrome (serve_one). The connection never outlives the call: while
 # Playwright is connected, Chrome saves downloads into Playwright's own
 # folder (not ~/Downloads, where the user's downloads in the live view are
-# taken from) and closes every dialog no handler takes, also the user's
-# (the review of 2026-10-30). A call of its own (``with`` below) ends it the
-# same way.
+# taken from) and closes every dialog no handler takes, also the user's.
+# A call of its own (``with`` below) ends it the same way.
 KEPT = {}
 
 
@@ -879,9 +874,8 @@ def current_page(context):
 
 
 def loaded(page, idle=True):
-    """After a navigation (or on a page without a watch), as before
-    2026-10-30: its document, then with ``idle`` up to IDLE_SECONDS for
-    the network to rest."""
+    """After a navigation (or on a page without a watch): its document,
+    then with ``idle`` up to IDLE_SECONDS for the network to rest."""
     try:
         page.wait_for_load_state("domcontentloaded", timeout=LOADED_SECONDS * 1000)
     except Exception:
@@ -894,13 +888,13 @@ def loaded(page, idle=True):
 
 
 class Traffic:
-    """What a tab sends while an action runs and its effect comes (quiet,
-    since 2026-10-30): a navigation of its main frame, whether it committed
+    """What a tab sends while an action runs and its effect comes (quiet):
+    a navigation of its main frame, whether it committed
     or ended (a download, an error), and the requests started since whose
     answers can change the page and are still open. A navigation answered
     with a redirect goes on as the request that follows it: its own request
-    finishing is no end (a form sent with Enter read the next page before it
-    loaded, bug hunt 2026-10-31)."""
+    finishing is no end (else a form sent with Enter read the next page
+    before it loaded)."""
     KINDS = frozenset({"fetch", "xhr", "script", "document"})
     REDIRECTS = frozenset({301, 302, 303, 307, 308})
 
@@ -959,13 +953,12 @@ def brief(action, request):
 
 
 def quiet(page, traffic, short=False):
-    """Until the page shows an action's effect (since 2026-10-30, audit T4):
-    before, every action waited up to 2 s for the network to rest, which
-    pages with tracking, polling or a websocket never do (a click took a
-    median 1.9 s in Prod), and a page that had rested once got no wait at
-    all, so its answer could come before a menu opened. Now: a navigation of
-    the tab (Traffic) loads as before (loaded); else the page has not
-    changed for QUIET_MS since the action (HIT_JS's watch, a
+    """Until the page shows an action's effect. Waiting up to 2 s for the
+    network to rest does not do: pages with tracking, polling or a websocket
+    never rest (a click took a median 1.9 s in Prod), and a page that had
+    rested once got no wait at all, so its answer could come before a menu
+    opened. A navigation of the tab (Traffic) loads (loaded); else the page
+    has not changed for QUIET_MS since the action (HIT_JS's watch, a
     MutationObserver from before the action) and no request it started is
     open, at most QUIET_SECONDS; ``short`` (a scroll, most keys) for
     BRIEF_QUIET_MS, at most BRIEF_SECONDS. ``page`` is the document the
@@ -1100,12 +1093,11 @@ def frame_hidden(frame):
     return True
 
 
-# A frame's elements in read (since 2026-10-30): the consent dialog of many
-# sites is a frame, and read said only "open its address", which leaves the
-# page. Prod the same day on bild.de: three clicks at x,y missed its "Alle
-# akzeptieren", and the agent gave up on the page. The elements of a frame
-# of at least FRAME_MIN_PIXELS each way now come under its line with refs
-# like the page's own (element finds them in any frame), at most
+# A frame's elements in read: the consent dialog of many sites is a frame,
+# and opening its address leaves the page; on bild.de three clicks at x,y
+# missed its "Alle akzeptieren", and the agent gave up on the page. The
+# elements of a frame of at least FRAME_MIN_PIXELS each way come under its
+# line with refs like the page's own (element finds them in any frame), at most
 # FRAMES_READ frames of one page, FRAME_LINES lines each, FRAME_DEPTH deep.
 # A frame that hangs holds its read (Playwright gives an evaluate no time
 # limit), so only the action read reads every frame; the read after an
@@ -1251,11 +1243,10 @@ def listed_text(page, lines, offset, limit):
     return "\n".join(out)
 
 
-# The page after an action (since 2026-10-30, audit L2): until then every
-# action brought read's list again, up to 4,000 characters, also after a
-# type without Enter, a key or a scroll (about 950 tokens of repetition per
-# step), and a menu that opened past them took a read with an offset. Now
-# the whole list comes after a navigation (another address, another tab,
+# The page after an action: read's list again after every action, up to
+# 4,000 characters, also after a type without Enter, a key or a scroll, was
+# about 950 tokens of repetition per step, and a menu that opened past them
+# took a read with an offset. So the whole list comes after a navigation (another address, another tab,
 # FULL_AFTER), the first time and when the last look is older than
 # LOOK_SECONDS; on the page the agent looked at last only the lines that
 # changed since (+ new, ~ changed, - gone, by their refs: a ref names its
@@ -1490,7 +1481,7 @@ def scrolled_text(page, lines, shown, marked, most):
 
 
 # text: the main content's text and the whole page's, so the main content
-# comes first as in read (2026-10-28: Wikipedia's text began with its menus).
+# comes first as in read (else Wikipedia's text began with its menus).
 TEXT_JS = r"""
 () => {
   const main = document.querySelector('main, [role=main]');
@@ -1545,7 +1536,7 @@ def find_text(page, query):
                                     "around": FIND_AROUND})
     total, matches = int(found.get("total") or 0), found.get("matches") or []
     # Elements whose name holds it (a search box named only by its label or
-    # placeholder is in no page text, 2026-10-28), as read lists them.
+    # placeholder is in no page text), as read lists them.
     seen = {str(match.get("ref") or "") for match in matches}
     named = [line for line in lines if (name := ELEMENT_NAME.match(line)) and name.group(1) not in seen
              and query.casefold() in name.group(2).casefold()][:FIND_MATCHES]
@@ -1595,7 +1586,7 @@ def located(page, ref):
                 raise StaleRef(f"{ref} shows something else now than when you read it: the page reused its element. "
                                "The page as it is now:")
             return (None if address is None else frame), target
-    # The page as it is now follows (on_failure): before, only "Call read", one more step.
+    # The page as it is now follows (on_failure), which saves the agent a read.
     raise StaleRef(f"{ref} is not on the page any more (it changed). The page as it is now:")
 
 
@@ -1675,7 +1666,7 @@ def around(page, x, y, view):
         # The caret as it is: hiding it, Playwright sets every field's style,
         # which the watch on the page (HIT_JS) counted as a change.
         # At most PICTURE_SECONDS: Playwright waits for the page's fonts, by
-        # default up to 30 s, which a stalled web font takes (review 2026-10-30).
+        # default up to 30 s, which a stalled web font takes.
         return page.screenshot(type="png", clip={"x": left, "y": top, "width": width, "height": height},
                                caret="initial", timeout=PICTURE_SECONDS * 1000)
     except Exception:
@@ -1827,9 +1818,8 @@ def keep_downloads(caught):
     return names
 
 
-# localhost is the agent's on the ports its user listens on (agent_ports;
-# from 2026-10-29 to 2026-11-04 the workbench's through a tunnel, on the
-# ports the server named): a page there is the agent's own server, any other
+# localhost is the agent's on the ports its user listens on (agent_ports):
+# a page there is the agent's own server, any other
 # port is not its to read.
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
 OWN_COMPUTER = ("This page is the workspace's own (a file, the browser's own pages, a private network or a localhost "
@@ -1848,7 +1838,7 @@ def agent_ports(tables=SOCKET_TABLES, uid=AGENT_UID):
     of it. The kernel's own table, never what a page or a process says of
     itself. Ports another user listens on too go: the agent's listener on
     127.0.0.2 made another user's server on 127.0.0.1 with the same port
-    readable as localhost (review 2026-11-04)."""
+    readable as localhost."""
     ports, others = set(), set()
     for table in tables:
         try:
@@ -1882,13 +1872,13 @@ def hidden_text(page):
     return f"URL: {page.url}\n{OWN_COMPUTER}"
 
 
-# wait with text (since 2026-11-03): whether the page in front shows the
+# wait with text: whether the page in front shows the
 # text, its whitespace folded and in any case, as find looks for it (not in
-# its frames). What the focused editor holds does not count (bug hunt P65,
-# 2026-11-05): after "type e40 Hello enter" the draft itself met "wait text
-# Hello" when Enter had sent nothing. The text must be on the page more
+# its frames). What the focused editor holds does not count: after "type
+# e40 Hello enter" the draft itself would meet "wait text Hello" when Enter
+# had sent nothing. The text must be on the page more
 # often than in that editor; a field's value is not in innerText anyway, and
-# an editor without focus or a body that is one counts as before.
+# an editor without focus or a body that is one counts like the rest.
 SHOWS_JS = r"""
 query => {
   const fold = text => (text || '').replace(/\s+/g, ' ').trim().toLowerCase();
@@ -1936,7 +1926,7 @@ def wait_for_text(context, request, query):
 def own_computer(url, local_ports=()):
     """Whether the page at ``url`` is the workspace's own or a private
     network (a link or a redirect there too): never read nor shown to the
-    agent. Since 2026-10-29 for every page, not only for an address the
+    agent. For every page, not only for an address the
     agent opens; localhost on a port of ``local_ports`` (agent_ports) is the
     agent's own server."""
     from urllib.parse import urlsplit
@@ -1958,7 +1948,7 @@ def own_computer(url, local_ports=()):
 
 def public_address(url):
     """Only an http(s) address of the open web: never the browser's own
-    computer (its debugging port) nor a private network."""
+    computer nor a private network."""
     import ipaddress
     from urllib.parse import urlsplit
     parts = urlsplit(url)
@@ -1976,10 +1966,9 @@ def fetch(context, page, url):
     """download: the file at ``url`` (else the current page's address) with
     the browser's sign-ins, as Chrome would send its cookies; a PDF Chrome
     shows in its viewer comes as the file this way. Its answer is the file
-    alone (since 2026-10-30, audit L5: before, 4,000 characters of the tab
-    followed, and a sign-in page saved as report.pdf, or 0 bytes, counted as
-    a download): its name, its bytes, its Content-Type and where a redirect
-    led; an empty answer is refused, and so is a file whose HEAD declares
+    alone, so that a sign-in page saved as report.pdf, or 0 bytes, does not
+    pass for a download: its name, its bytes, its Content-Type and where a
+    redirect led; an empty answer is refused, and so is a file whose HEAD declares
     more than the server keeps (declared_bytes), before it is fetched."""
     target = url or page.url
     if not public_address(target):
@@ -2013,7 +2002,7 @@ def fetch(context, page, url):
 def declared_bytes(context, target):
     """The size a HEAD request for ``target`` declares (its Content-Length,
     with the browser's sign-ins), else None: a server that refuses HEAD,
-    fails it or names no length gets the GET as before. Without a length
+    fails it or names no length gets the GET all the same. Without a length
     the GET still reads it whole: Playwright's request API has no limit."""
     try:
         head = context.request.head(target, timeout=HEAD_SECONDS * 1000, max_redirects=10)
@@ -2061,7 +2050,7 @@ def run(request):
         ensure_browser()
     if action == "warm":
         # The server's own start of the browser while the agent's side gets
-        # ready (agent_browser.BrowserTools._warm, since 2026-10-29): it
+        # ready (agent_browser.BrowserTools._warm): it
         # reads nothing of the pages, and the agent never asks for it.
         return {"text": ""}
     with chrome() as browser:
@@ -2158,7 +2147,7 @@ def on_page(context, page, action, request, query, caught):
     # An action on the page in front: its watch (look_at, in act) and the
     # tab's requests (Traffic) until its effect is there (quiet). One that
     # loads a page (open, back, forward), brings another tab to the front, or
-    # has no watch, waits as before (loaded).
+    # has no watch, waits for its load (loaded).
     seen, watch = [], None
     traffic = Traffic(page) if action in WATCHED else None
     try:
@@ -2239,7 +2228,7 @@ def preview(page):
 def with_preview(page, request, answer):
     """An action's answer, with the small picture for the page's card in the
     chat: always after open, after another action when the server asks for
-    it (agent_browser.PREVIEW_SECONDS, since 2026-10-30)."""
+    it (agent_browser.PREVIEW_SECONDS)."""
     if (request.get("action") == "open" or request.get("preview") is True) and not hidden(page):
         answer["preview"] = preview(page)
     return answer
@@ -2247,8 +2236,8 @@ def with_preview(page, request, answer):
 
 def with_picture(page, request, answer):
     """An action's answer, with the picture of the page after it when the
-    agent asked for it (screenshot_after, since 2026-10-29): before, every
-    move on a page drawn on a canvas took a call of its own to look. The
+    agent asked for it (screenshot_after): else every move on a page drawn
+    on a canvas took a call of its own to look. The
     action ran: a picture Chrome cannot take (a web font that never loads
     holds its screenshot 30 s) never fails its answer (the agent would take
     it again, a send twice)."""
@@ -2304,7 +2293,7 @@ def act(context, page, action, request, seen=None):
             return f"Clicked {request.get('ref')}."
         # A place on the page as the screenshot shows it (CSS pixels of the
         # viewport): for what read lists no element of, such as a canvas,
-        # a map or an app drawn in one (since 2026-10-28).
+        # a map or an app drawn in one.
         x, y = point(request.get("x"), request.get("y"))
         # The mouse there first, as the click would move it: what lies at
         # the point is then what the click reaches, hovered as for it.
@@ -2330,7 +2319,7 @@ def act(context, page, action, request, seen=None):
         if request.get("enter"):
             # The field has the focus: Enter through the keyboard, like the
             # action key. Pressed on the element it waited up to 30 s while a
-            # suggestion list covered it (2026-10-28, Wikipedia's search).
+            # suggestion list covered it (Wikipedia's search).
             page.keyboard.press("Enter")
         return f"Typed into {ref}" + (" and pressed Enter." if request.get("enter") else ".")
     if action == "select":
@@ -2388,8 +2377,8 @@ ROUTINE_STEP = re.compile(
 
 def failure_text(exc, log=True):
     """What failed, for the agent: Playwright's message and, with ``log``,
-    the last step of its call log that says why (since 2026-10-30, audit L4:
-    "Timeout 10000ms exceeded." alone, where the log said
+    the last step of its call log that says why (the message alone may be
+    "Timeout 10000ms exceeded.", where the log says
     "<div class="consent-layer"></div> intercepts pointer events"). A page of
     the workspace itself gives no ``log``: its steps quote the page."""
     text = str(exc).strip()
@@ -2409,8 +2398,8 @@ def failure_text(exc, log=True):
 def on_failure(context, page, action, exc):
     """An action on a page that failed or was refused, as the exception
     answer_for turns into its answer: the reason, then the page in front as
-    it is now (since 2026-10-30, audit L4: "refused" and "failed" named no
-    page, and the agent read it again in its next step). A ref no element
+    it is now (without it the agent read the page again in its next step).
+    A ref no element
     has any more brings the page's whole list (StaleRef); a download, which
     changes no page, only its reason."""
     if action == "download":
@@ -2442,9 +2431,9 @@ def failed(exc):
 
 # scroll: the page by 80 % of its view, at once (a page's smooth scrolling
 # would still be under way when the view is read), and where its view is
-# before and after, in CSS pixels of the page (since 2026-10-30: "Scrolled
-# down." alone also when the page did not move, a page that scrolls in a
-# box of its own).
+# before and after, in CSS pixels of the page ("Scrolled down." alone would
+# say so also when the page did not move, a page that scrolls in a box of
+# its own).
 SCROLL_JS = r"""
 direction => {
   const root = document.scrollingElement || document.documentElement;
@@ -2502,11 +2491,11 @@ def answer_for(request):
     return answer
 
 
-# The resident helper (since 2026-10-30). Every call started a process and
-# Playwright's driver: in Prod a read took a median 1.5 s; measured on the
-# browser VM, Python's import took 0.14 s, Playwright's driver 0.44 s and the
-# connection to Chrome 0.06 s of it. Now a call that finds no helper runs
-# as before and starts one for the next call (``--serve``): it keeps
+# The resident helper. With a process and Playwright's driver of its own
+# per call, a read took a median 1.5 s in Prod; measured on the browser VM,
+# Python's import took 0.14 s, Playwright's driver 0.44 s and the
+# connection to Chrome 0.06 s of it. A call that finds no helper runs by
+# itself and starts one for the next call (``--serve``): it keeps
 # Playwright's driver and runs the requests it gets over SERVE_SOCKET, a
 # socket only the server's user on
 # this VM reaches (never a TCP port: a page reaches those), with the same
@@ -2518,7 +2507,7 @@ def answer_for(request):
 # a busy one, another chat's wait or download: it runs itself), then gets
 # the browser ready for the call (ready) and says TOOK; only the call's GO
 # makes it act. A call that gets no TOOK in time, or a DECLINED (the browser
-# or the helper's Playwright broke: the helper ends), runs here as before;
+# or the helper's Playwright broke: the helper ends), runs here itself;
 # one that said GO never runs the request here: unanswered, it fails like a
 # call the browser did not finish, unless it only reads (the call reads
 # here). A call that ends before its answer (the server's limit, Stop) ends
@@ -2533,10 +2522,10 @@ GO = b"go\n"
 STALE = b"stale\n"
 DECLINED = b"declined\n"
 # How long a call waits for TOOK: a running browser (display.sh mends one
-# whose debugging port does not answer, ~20 s) and a connection to Chrome
-# (CONNECT_SECONDS). Until 2026-10-30 80 s (audit A7): with a hanging
-# display.sh the call then ran itself, with its own restart and the 70 s of
-# its watchdog, past the server's 180 s (agent_browser.CALL_SECONDS).
+# whose debugging pipe does not answer, ~20 s) and a connection to Chrome
+# (CONNECT_SECONDS). Not longer: with a hanging display.sh the call then
+# runs itself, with its own restart and the 70 s of its watchdog, which must
+# stay within the server's 180 s (agent_browser.CALL_SECONDS).
 READY_SECONDS = 35
 # A request: a few kilobytes, up to a drag's 2000 points or 20,000 characters
 # of text; an answer, up to a screenshot (agent_browser.ANSWER_BYTES).
@@ -2657,10 +2646,9 @@ def ready(request):
     """Before the resident helper takes a call: the browser running and,
     for an action on the pages, this call's connection to Chrome, which
     restarts Chrome once when it takes none (connect, as a call of its own
-    does; since 2026-10-30, audit A7: before, the helper declined, and the
-    call healed the browser itself after waiting for it). False when that
-    fails too: the call then runs itself, and this helper ends, since its
-    Playwright may be what broke."""
+    does, so the call need not wait and heal the browser itself). False
+    when that fails too: the call then runs itself, and this helper ends,
+    since its Playwright may be what broke."""
     action = request.get("action") if isinstance(request, dict) else None
     if action == "rest":
         # It lets the VM sleep (main answers it without a helper): no browser to start.
@@ -2858,7 +2846,7 @@ def main():
             answer = answer_for(request)
     # For the server's log: the helper's own time, and whether the resident one answered.
     answer.update(seconds=round(time.monotonic() - started, 3), served=served)
-    # For the server's safety rules (workspace_guard.py, since 2026-10-30):
+    # For the server's safety rules (workspace_guard.py):
     # the VM's network counters and the fingerprint of Chrome's policy.
     answer.update(net=net_counters(), policy=policy_print())
     if resting:

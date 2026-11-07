@@ -1,4 +1,4 @@
-"""Watches that run the Agent on a schedule (since 2026-11-03, "Watch mit Agent").
+"""Watches that run the Agent on a schedule.
 
 A Watch is a task with a schedule in one Agent chat. At its time the server
 starts an ordinary Agent turn in that chat (routers/agent.py
@@ -12,7 +12,7 @@ met. A run without either is quiet: no mail, and the chat keeps its place in
 the sidebar (routers/agent.py _final).
 
 What the task says, the agent may do in the user's name: starting the Watch
-from its card is that permission (Max, 2026-11-03). The user is away during
+from its card is that permission (Max). The user is away during
 a run, so a card that would wait for them (ask_user, a reviewer's halt)
 ends at once (DelegationLoop.hold_timeout); a halt is mailed.
 
@@ -25,7 +25,7 @@ it was prepared. The records live in the top-level collection
 chat in one transaction. Schedules reuse watch_service's local-time rules
 for daily and weekly runs.
 
-Nothing is made up later (feedback 2026-10: liegengebliebene Jobs verfallen):
+Nothing is made up later (Max: liegengebliebene Jobs verfallen):
 a run more than LATE_AFTER behind its time is skipped to the next one; a run
 whose allowance is spent fails like any message, and the next one tries
 again.
@@ -52,8 +52,8 @@ DAYS_COLLECTION = "agent_watch_days"
 # A day's counts (DAYS_COLLECTION/{date}, with each account's UID) serve that
 # day's caps and a run claimed before midnight that gives its run back after
 # it. Older days go (purge_days, once a day from run_tick), and an account's
-# deletion takes its UID out of those left: they kept the UIDs of deleted
-# accounts for good (bug hunt 2026-11-04).
+# deletion takes its UID out of those left, or they would keep the UIDs of
+# deleted accounts for good.
 DAYS_KEPT = 2
 
 STATUS_ACTIVE = "active"
@@ -241,9 +241,9 @@ def _look(outcome: str, at: datetime, summary="") -> dict:
 
 
 def _legacy_look(data: dict) -> list[dict]:
-    """A Watch from before ``looks`` (2026-11-04): its last run as its one
+    """A Watch from before ``looks``: its last run as its one
     look. A run that had run already is no look of its own (_not_started),
-    so it is none here either (review 2026-11-04)."""
+    so it is none here either."""
     last = data.get("last_run") if isinstance(data.get("last_run"), dict) else {}
     if not isinstance(last.get("at"), datetime) or not last.get("outcome") or last.get("outcome") == "already_ran":
         return []
@@ -259,7 +259,7 @@ def _with_look(data: dict, look: dict) -> list[dict]:
 
 
 def _looks_view(data: dict) -> list[dict]:
-    """Its runs, oldest first. A Watch from before ``looks`` (2026-11-04)
+    """Its runs, oldest first. A Watch from before ``looks``
     shows its last run alone (``runs`` says it had more: the page then
     calls it its last look, not its first)."""
     looks = [item for item in (data.get("looks") or []) if isinstance(item, dict) and isinstance(item.get("at"), datetime)]
@@ -409,7 +409,7 @@ def create(uid: str, *, tier, chat_id: str = "", turn_id: str = "", task: str | 
         from app.services import watch_scheduler
         # Its first run is due now: the scheduler looks at once.
         watch_scheduler.wake_watch_scheduler()
-    # Its picture comes with it, not only after a run (Max, 2026-11-03).
+    # Its picture comes with it, not only after a run (Max).
     PICTURES.first(watch_id, data, db=db)
     return serialize(watch_id, data)
 
@@ -423,7 +423,7 @@ def _owned(tx, db, uid: str, watch_id: str) -> dict:
 
 
 def pause(uid: str, watch_id: str, *, db=None, now: datetime | None = None) -> dict:
-    """No runs until it is resumed; its slot is free meanwhile, as a paused Watch's always was."""
+    """No runs until it is resumed; its slot is free meanwhile."""
     db = _db(db)
     now = now or utcnow()
 
@@ -503,7 +503,7 @@ def update(uid: str, watch_id: str, *, tier=None, email: bool | None = None, tel
     """What the user changes on a Watch's page (PATCH): its channels, its
     goal ("" runs it until they end it) and how often it runs. A new
     schedule counts from now; one saved as it stands keeps its next run and
-    a pending retry (review 2026-11-04). A paused Watch keeps a new one for
+    a pending retry. A paused Watch keeps a new one for
     its resume; an ended Watch keeps what it had. ``tier`` decides the
     interval; without one the lowest plan's (allowed_intervals(None), Free)
     does, never more."""
@@ -595,7 +595,7 @@ def list_for(uid: str, *, chat_id: str = "", db=None) -> list[dict]:
 
 
 def _drop_images(db, watch_ids) -> None:
-    """A Watch's picture goes with it (``watch_images/{id}``, the same store as before)."""
+    """A Watch's picture goes with it (``watch_images/{id}``)."""
     from app.services import watch_images
     for watch_id in watch_ids:
         db.collection(watch_images.WATCH_IMAGES_COLLECTION).document(watch_id).delete()
@@ -744,7 +744,7 @@ def due(*, now: datetime | None = None, db=None, max_items: int = DUE_BATCH) -> 
     """(watch id, uid) of the Watches whose time has come, the oldest first.
     Watches due at the same time (the default 08:00) go by how long they have
     waited: when the morning's capacity ends before LATE_AFTER, another one is
-    skipped each day, not always the same (bug hunt 2026-11-04)."""
+    skipped each day, not always the same."""
     db = _db(db)
     now = now or utcnow()
     query = (db.collection(COLLECTION).where(filter=FieldFilter("next_run_at", "<=", now))
@@ -1162,11 +1162,11 @@ def turn_ended(uid: str, chat_id: str, turn_id: str, watch_run: dict, *, db=None
 
 
 class Pictures:
-    """A Watch's picture, as a Watch always had one (watch_images.py): a real
+    """A Watch's picture (watch_images.py): a real
     photo of what it is about, never generated; without one, the page draws
     the eye. Looked for on a thread of its own:
 
-    * at its start (Max, 2026-11-03: "beim ersten Anlegen direkt ein
+    * at its start (Max: "beim ersten Anlegen direkt ein
       passendes Bild"): a cheap model names what it is about in a few words
       (watch_scheduler.picture_words), Brave's image search finds the photo
       (picture_search); without one, the pages of the chat it starts in;

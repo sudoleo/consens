@@ -57,7 +57,7 @@ class AgentPolicy:
         data = asdict(self)
         if not self.account_budget_only:
             # Bounded runs have their own hard limits; their snapshot (also
-            # the "Shared run limits" prompt line) stays as before.
+            # the "Shared run limits" prompt line) leaves these guards out.
             for key in ("turn_comparisons", "turn_steps", "turn_seconds", "turn_identical_calls",
                         "vm_turn_steps", "vm_turn_seconds"):
                 data.pop(key)

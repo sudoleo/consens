@@ -1,8 +1,8 @@
 """Neutral server-side Consensus orchestration.
 
 The pipeline combines already normalized provider answers with synthesis,
-Differences parsing and agreement scoring.  API, Watch, Topic and the browser
-JSON endpoint use this module; product-specific persistence and notifications
+Differences parsing and agreement scoring.  API, Watch and Topic
+use this module; product-specific persistence and notifications
 remain in their owning services.
 """
 
@@ -82,9 +82,9 @@ def analyze_provider_answers(
             if isinstance(answer, ProviderAnswer) and answer.sources
         }
     # Nur weitergereicht, wenn eine aufgeloeste Lesart vorliegt (Folgefragen).
-    # synthesize/judge sind injizierbar -- Benchmark und Topic-Runner geben
-    # eigene Callables herein, die dieses Argument nicht kennen und es ohne
-    # Folgefrage auch nie zu sehen bekommen.
+    # synthesize/judge sind injizierbar -- eingereichte Callables muessen
+    # dieses Argument nicht kennen und bekommen es ohne Folgefrage auch nie
+    # zu sehen.
     follow_up = (
         {"resolved_question": resolved_question} if resolved_question else {}
     )
@@ -106,7 +106,7 @@ def analyze_provider_answers(
             differences_data=None,
             agreement=None,
         )
-    # Also covers injected synthesis callables (benchmarks and topic runners).
+    # Also covers injected synthesis callables.
     # Saved answers never pass through this new-generation boundary.
     consensus = strip_consensus_source_markers(consensus)
     differences_text, differences_data = judge(

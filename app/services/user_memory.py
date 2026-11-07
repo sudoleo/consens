@@ -4,7 +4,8 @@ Bewusst OHNE Ableitung aus Antworten. Was hier steht, hat der Nutzer selbst
 getippt -- damit ist der Autor eindeutig, es kostet keinen LLM-Call, es kann
 nichts halluzinieren und es braucht keine Review-Schleife. Ein aus Laeufen
 destilliertes Profil waere eine andere Datenverarbeitung (Profilbildung) und
-eine andere Rechtsgrundlage; das ist eine spaetere Stufe, nicht diese.
+eine andere Rechtsgrundlage; Erinnerungen, die der Agent selbst speichert,
+sind deshalb ein eigenes Opt-in (``auto_memory``, agent_memory.py).
 
 Drei Grenzen sind Absicht und keine Sparmassnahme:
 
@@ -71,14 +72,13 @@ ITEMS_HEADING = ("SAVED MEMORIES (individual facts and preferences kept in the u
                  "newer than the note above):")
 
 # Marken, die einen Prompt-Rahmen schliessen. Ein Nutzer koennte sie sonst in ein
-# Profilfeld tippen und damit den Chat-Kontext-Rahmen vorzeitig beenden. Das
+# Profilfeld tippen und damit den Profilrahmen vorzeitig beenden. Das
 # schadet nur seinem eigenen Lauf -- aber es waere ein stiller Defekt, der
 # aussieht wie ein Modellfehler.
 #
 # Alle Rahmen stehen in Grossbuchstaben; nur genau diese Marken gehen, normale
 # Formulierungen ("tell me about the user settings", "saved memories")
-# bleiben stehen. Frueher war der alte Teil case-insensitiv und frass solche
-# Saetze aus Profil, Notiz und Erinnerungen.
+# bleiben stehen.
 _FRAME_MARKER_RE = re.compile(
     r"(?:END\s+)?(?:AUTHORITATIVE\s+CHAT\s+CONTEXT|OF\s+USER\s+PROFILE|ABOUT\s+THE\s+USER)"
     # The Agent memory block (agent_memory.render_memory_block) is framed in
@@ -258,8 +258,7 @@ def render_profile(profile: object, *, max_notes_chars: int = MAX_NOTES_CHARS, i
 def build_user_memory_system_prompt(base_prompt: str, memory_text: str) -> str:
     """Profil an die stehende Anweisung haengen, nicht davor.
 
-    Der Chat-Kontext umschliesst spaeter das Ergebnis (Kontext zuerst, Anweisung
-    zuletzt). Damit steht das Profil neben der Basisanweisung -- als stehende
+    Damit steht das Profil neben der Basisanweisung -- als stehende
     Praeferenz -- und nicht im Datenteil, wo es wie Gespraechsinhalt gelesen wuerde.
     """
     base = str(base_prompt or "").strip()
@@ -562,7 +561,7 @@ def load_profile_text(
 
     Ein nicht lesbares Profil darf einen Lauf nie aufhalten: der Nutzer hat eine
     Frage gestellt, nicht eine Einstellung geoeffnet. Der Lauf geht dann ohne
-    Profil raus, so wie vor diesem Feature. Sichtbar bleibt es trotzdem, sonst
+    Profil raus. Sichtbar bleibt es trotzdem, sonst
     faellt es still fuer alle aus, ohne dass irgendwo etwas kaputt aussieht.
 
     Mit Lauf-Key teilen parallele Modell-Requests desselben Owners und Workers

@@ -2,7 +2,7 @@
 
 Before a question of an account first goes to a model, the app says where it
 goes (OpenRouter and the model families of the registry) and asks once
-(App Store guideline 5.1.2(i); the web asks the same since 2026-11-06). The
+(App Store guideline 5.1.2(i); the web asks the same). The
 answer is kept on ``users/{uid}`` as ``ai_consent = {version, at}``; the
 check reads it with the account's tier (``security.has_ai_consent``) and the
 entry points refuse with ``ai_consent_required`` (``security.require_ai_consent``).

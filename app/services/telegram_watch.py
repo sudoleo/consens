@@ -61,8 +61,7 @@ def is_configured() -> bool:
 
 def verify_webhook_secret(candidate: str) -> bool:
     # As bytes: compare_digest raises TypeError for a str with non-ASCII
-    # characters, and a header can carry any Latin-1 character (until
-    # 2026-10-28 such a request ended in a 500 and an alert).
+    # characters, and a header can carry any Latin-1 character.
     expected = webhook_secret()
     return bool(expected and hmac.compare_digest(expected.encode("utf-8"), str(candidate or "").encode("utf-8")))
 
@@ -397,7 +396,7 @@ def _notification_text(kind: str, watch: dict, result: dict, *, plain: bool = Fa
     ``plain`` is the resend without markup. A link there reads "title (url)",
     longer than the link was, so the room is measured on that text: the
     answer takes what is left, the news gives way if it must, and the
-    question at the bottom is never what Telegram cuts (review 2 N3).
+    question at the bottom is never what Telegram cuts.
     """
     question = str(watch.get("question") or "Your Watch")
     delta = result.get("delta") or {}
@@ -594,7 +593,7 @@ def _answer_callback(callback_id: str, text: str = "") -> None:
 
 
 # What the message itself says after a tap, as its last line: the
-# confirmation sits where the tap was, not in a new message (Audit K7).
+# confirmation sits where the tap was, not in a new message.
 STATUS_PAUSED = "Paused. Resume it here or on consens.io any time."
 STATUS_RESUMED = "Resumed. It checks again on its usual schedule."
 _STATUS_LINES = (STATUS_PAUSED, STATUS_RESUMED)
@@ -705,7 +704,7 @@ def _handle_callback(callback: dict, db) -> None:
         elif action == "wr":
             from app.core import config as cfg
             if cfg.consensus_watches_archived():
-                # Archived since 2026-11-03: a Watch now runs the Agent.
+                # Consensus Watches are archived: a Watch runs the Agent.
                 _answer_callback(callback_id, "This Watch is archived")
                 return
             _ref, watch = watch_service._owned_watch(uid, watch_id, db)

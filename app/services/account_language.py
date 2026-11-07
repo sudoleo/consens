@@ -6,7 +6,7 @@ Accept-Language) is recorded on ``users/{uid}`` as ``language``. Watch
 alerts and the Morning Brief go out from the outbox long after any request
 and read it back (notification_delivery). Followers have no account: their
 language comes with the click that confirms the follow (watch_followers,
-topics). Without a record a mail stays English, as before.
+topics). Without a record a mail stays English.
 """
 
 from __future__ import annotations

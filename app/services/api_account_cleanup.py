@@ -19,7 +19,7 @@ API_IDEMPOTENCY_COLLECTION = "api_consensus_idempotency"
 API_KEYS_COLLECTION = "api_consensus_keys"
 API_RUNS_COLLECTION = "api_consensus_runs"
 # Retries of a cleanup that failed inline; each look is a query, a read
-# even when nothing waits (every 5 minutes until 2026-11-01).
+# even when nothing waits.
 API_ACCOUNT_CLEANUP_INTERVAL_SECONDS = 15 * 60
 
 

@@ -30,10 +30,9 @@ from app.services.llm.streaming import _sse_pairs
 @dataclass(frozen=True)
 class AgentModel:
     # The Agent's default chat model, open to every tier as "Early access"
-    # (agent_model_options). Since 2026-10-07 Claude Sonnet 5.5: in a blind
-    # test of 20 questions it was ranked first most often and surfaced twice
-    # as many contradictions as GPT-6 Luna (before: GPT-6 Luna since
-    # 2026-10-04, DeepSeek V4.1 Flash before that).
+    # (agent_model_options). Claude Sonnet 5.5: in a blind test of 20
+    # questions (2026-10-07) it was ranked first most often and surfaced twice
+    # as many contradictions as GPT-6 Luna.
     model: str = "anthropic/claude-sonnet-5.5"
     label: str = "Claude Sonnet 5.5"
     max_output_tokens: int = 4096
@@ -147,7 +146,7 @@ REASONING_STORAGE_CHARS = 32_000
 TEXT_STORAGE_CHARS = 100_000
 # Distinct cited URLs one model call keeps. A comparison answer may search up
 # to three rounds of five results; five sources cut off the evidence of a
-# thorough answer before the synthesis saw it (2026-10-10).
+# thorough answer.
 ANSWER_SOURCES_MAX = 10
 # Source text OpenRouter attaches to a URL citation (``url_citation.content``):
 # Exa highlights up to the requested 2000 characters, other engines measured
@@ -383,7 +382,8 @@ def agent_model_options():
 
 
 def metered_model(model_id, *, max_tokens=2048):
-    """Resolve any existing answer/judge model through the shared registry."""
+    """Resolve any registry model (a comparison model, read_source's reader)
+    through the shared registry."""
     entry = cfg.get_model_config(model_id)
     if entry is None:
         raise ValueError("Unknown comparison or judge model")
@@ -430,9 +430,9 @@ def with_reasoning_summary(model, _metadata=None):
 
 # "Auto" sends no level, so the model reasons at its own default, which is
 # "high" for some (Claude Sonnet 5.5) - a Pro level. Without Pro, Auto means
-# this level wherever the model offers it (Max, 2026-10-08).
+# this level wherever the model offers it.
 FREE_DEFAULT_REASONING = "medium"
-# The expensive levels are Pro (Max, 2026-10-07): they multiply thinking tokens.
+# The expensive levels are Pro: they multiply thinking tokens.
 PRO_REASONING_EFFORTS = frozenset({"high", "xhigh", "max"})
 
 
@@ -450,9 +450,9 @@ def _free_default_effort(model, metadata):
 
 def free_default_effort(model_id=None):
     """`_free_default_effort` for a selectable chat model (None if unknown),
-    found as resolve_agent_model finds it: until 2026-11-03 a migrated ID
-    (grok-4.3-no-reasoning) was unknown here, and Auto without Pro ran at
-    the model's own level instead of Medium."""
+    found as resolve_agent_model finds it, so a migrated ID
+    (grok-4.3-no-reasoning) also gets Medium for Auto without Pro instead of
+    the model's own level."""
     models = agent_models()
     wanted = cfg.canonical_model_id(model_id) if model_id else models[0][0].selection_id
     for model, metadata in models:
@@ -560,7 +560,8 @@ def prompt_cache_control(model):
     (with_cache_points). The default five-minute lifetime matches chat pacing.
 
     Writing costs a quarter more than plain input: a request no later one
-    continues (AgentCompletion.one_off: a judge) skips the marker unless its
+    continues (AgentCompletion.one_off: a comparison answer, a reviewer's
+    last round) skips the marker unless its
     own search rounds re-read the prompt (AgentCompletion.stream).
     """
     name = str(getattr(model, "model", "") or "")
@@ -714,18 +715,18 @@ class AgentCompletion:
         # a cache point of its own (with_cache_points, AgentLoop.history_end).
         self.history_end = None
         # When the request left, its first streamed token (text, reasoning
-        # or a tool call) arrived and its stream ended, in UTC (since
-        # 2026-10-30, audit I7): the receipt keeps them (AgentRunStore.settle),
-        # so the time between claim and settlement splits into ours before
-        # the request, the provider's and ours after it (T3).
+        # or a tool call) arrived and its stream ended, in UTC: the receipt
+        # keeps them (AgentRunStore.settle), so the time between claim and
+        # settlement splits into ours before the request, the provider's and
+        # ours after it.
         self.request_started_at = self.first_token_at = self.stream_ended_at = None
         # Several calls per step (DelegationLoop._parallel_calls: while the
-        # workspace is open, audit T2); off, the request asks for one call.
+        # workspace is open); off, the request asks for one call.
         self.parallel_tool_calls = False
         # Calls past tool_call_limit stay in tool_calls, without arguments,
         # their ids in over_limit_ids, so that each gets a result instead of
-        # vanishing from the conversation (DelegationLoop, T2). Off, they are
-        # skipped as before.
+        # vanishing from the conversation (DelegationLoop). Off, they are
+        # skipped.
         self.keep_over_limit = False
         self._over_limit = set()
         self.over_limit_ids = set()
@@ -877,7 +878,7 @@ class AgentCompletion:
         calls inside it included (its web search): after four searches the
         agent's next call arrived as index 5 and failed the whole turn, which
         read as "The model provider could not finish this request"
-        (2026-10-27, DeepSeek V4.1 Flash in audit mode, twice). Any index
+        (DeepSeek V4.1 Flash, twice). Any index
         below TOOL_INDEX_BOUND names a call; a step keeps at most
         ``tool_call_limit`` of them, in stream order."""
         if not isinstance(raw, list):
@@ -922,7 +923,7 @@ class AgentCompletion:
     def _completed_tool_calls(self):
         """The step's calls in stream order, each with an id a provider takes
         back (letters, digits, _ and -): an id with other characters, too
-        long or missing no longer fails the step; its tool result names it the
+        long or missing does not fail the step; its tool result names it the
         same way, so call and result still match."""
         calls, seen = [], set()
         self.over_limit_ids = set()
@@ -1029,12 +1030,12 @@ class AgentCompletion:
 
         Claude announces its server-side search ("Ich suche nach ...",
         2026-10-10) and OpenRouter joins that text to the answer, where it
-        opened the comparison answer, its card and the evidence of synthesis
-        and judges. Live deltas already showed it; text and citation offsets
+        would open the comparison answer, its card and the evidence read from
+        it. Live deltas already showed it; text and citation offsets
         are moved together (see citations.presearch_end). Text the user
         already saw as the agent's answer stays (``published``, set by
-        DelegationLoop._candidate_delta): cutting it lost the opening of an
-        answer that searched midway (review 2026-10-14)."""
+        DelegationLoop._candidate_delta): cutting it would lose the opening of
+        an answer that searched midway."""
         if getattr(self, "published", ""):
             self._results_at = None
             return
@@ -1079,7 +1080,7 @@ class AgentCompletion:
         the hits went; never fails the step. Every step that searched counts
         as ``search_step`` and keeps ``search_hits`` for its receipt
         (agent_runs.settle), so the share without hits per model can be read
-        (spec A-M9, scripts/audit_report.py)."""
+        (scripts/audit_report.py)."""
         count = (self.usage or {}).get("web_search_requests")
         if type(count) is int and count > 0:
             self.search_hits = len({source.get("url") for source in self.sources}
@@ -1136,8 +1137,8 @@ class AgentCompletion:
         # next steps and message, a worker's next step or retry, and the search
         # rounds inside this request (2026-10-21: 21 of 49 Claude comparison
         # answers, one request each, read from the cache; scripts/
-        # cache_hit_rate.py). A one-off call without search, a judge, would
-        # only pay the write.
+        # cache_hit_rate.py). A one-off call without search would only pay
+        # the write.
         cache = prompt_cache_control(model) if prompt_cache and (native_searches or not self.one_off) else None
         fallback = None
         if cache:

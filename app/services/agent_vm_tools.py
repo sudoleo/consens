@@ -1,16 +1,17 @@
-"""The agent's VM tools: vm_exec, vm_read_file, vm_write_file, vm_edit_file
+"""The agent's VM tools: vm_exec, vm_install_packages, vm_read_file,
+vm_write_file, vm_edit_file, vm_render_office, vm_view_image, vm_save_picture
 and vm_share_file (agent_vm.py).
 
 For accounts with the VM (AgentPreferences.vm, routers/agent.py
 vm_allowed), never in chats with Google data, in turns with
 comparison or audit tools on the account's token ledger (DelegationLoop).
-Since 2026-10-27 the VM is the account's workspace (agent_workspace.py),
+The VM is the account's workspace (agent_workspace.py),
 shared by its chats one message at a time, each chat in its own folder
 (agent_vm.chat_dir), where commands start and relative paths lead. One
 VMSession per message: its first call of the workspace leases it and
 records it on the account and the chat (before the provider creates it, so
 deleting either always finds it); the browser needs no more than that and
-the VM's tools (since 2026-10-30). The first call of the agent's side wakes
+the VM's tools. The first call of the agent's side wakes
 or creates the VM, brings its tools up to date, takes the message's
 checkpoint (the state before this message changed anything; only a call
 that changes the workspace waits for it) and copies the message's
@@ -25,47 +26,45 @@ then exit code and duration. The model gets each stream's end
 (MODEL_STREAM_CHARS) with the cut said in the text; the same result is
 the call's ``tool`` entry in the work log, which the reviewers
 follow live. The turn keeps the summary (``agent_vm``: checkpoint, commands,
-seconds; since 2026-10-30 also the start's parts in seconds, whether a VM
-was cold, the browser's calls and seconds, and why the workspace went off).
+seconds, the start's parts in seconds, whether a VM was cold, the browser's
+calls and seconds, and why the workspace went off).
 A failing VM costs its tools, never the answer: a failure is the call's
 error, said as a fact (whether it ran is unknown), and MAX_FAILURES in a row
 turn the workspace off for the rest of the message.
 
-vm_edit_file (since 2026-10-26) replaces exact text in a file, like Claude
+vm_edit_file replaces exact text in a file, like Claude
 Code's Edit: old_string must occur once (or replace_all), the bytes around it
 stay as they were, and the agent sees the changed lines again.
 
-vm_view_image (since 2026-10-26) lets the agent look at a picture in its VM,
+vm_view_image lets the agent look at a picture in its VM,
 a chart it plotted or a screenshot, if the chat model takes images: the
 result says it follows, and the loop puts it after the batch's results as a
 user message with the image (picture_message), the format attached images
 use (agent_files.FileContext.messages), never inside a tool result, which
 not every provider takes. Only the newest pictures stay in view
-(agent_compaction.older_pictures). Since 2026-11-01 every picture the model
+(agent_compaction.older_pictures). Every picture the model
 gets, the browser's and the overviews too, goes at most PICTURE_SIDE on a
 side and about PICTURE_SENT_BYTES in size (model_picture): it travels with
 every request while it is in view.
 
-vm_save_picture (since 2026-11-01) writes a picture of find_pictures or
+vm_save_picture writes a picture of find_pictures or
 search_pictures into the workspace by its id, as the server fetched it
 (agent_web_images.py), so the browser need not download it.
 
-vm_share_file gives the user a file of the VM (since 2026-10-26): it is
+vm_share_file gives the user a file of the VM: it is
 copied into the chat's private file store (AgentFiles, kind ``vm_file``, the
 turn's id) and shown under the answer, a picture as a picture, anything else
 as a download (agent-workspace.js). The VM has no public address; nothing of
 it is ever a link.
 
-Since the security audit of 2026-10-27 every command and file operation of
-the agent runs as its own user without sudo (agent_vm.agent_argv), so its
-tools reach only what that user may; a path it may not use is the agent's
-error, never the VM's failure. System packages come through
+Every command and file operation of the agent runs as its own user without
+sudo (agent_vm.agent_argv), so its tools reach only what that user may; a
+path it may not use is the agent's error, never the VM's failure. System
+packages come through
 vm_install_packages: typed apt package names that the server installs as
 root. The browser runs on the same VM as the provider's user
 (agent_browser.py), out of the agent's user's reach, and the VM reaches the
-open web (agent_vm.RULES; until 2026-11-04 the browser had a VM of its own
-and the agent's side reached only the package registries and the domains
-the user allowed for a chat).
+open web (agent_vm.RULES).
 """
 from __future__ import annotations
 
@@ -115,8 +114,8 @@ SHARE_BYTES = 5 * 1024 * 1024
 PREVIEW_BYTES = 10 * 1024 * 1024
 PREVIEW_MIN_SECONDS = 30
 # The newest PDFs of vm_render_office a message keeps for a share of the
-# same file (_rendered). Until 2026-11-03 it kept every one: a long run
-# that renders its deck after each change held up to 10 MB a render.
+# same file (_rendered): a long run that renders its deck after each change
+# would otherwise hold up to 10 MB a render.
 RENDERED_KEPT = 3
 # Pictures the chat shows as pictures, known by their bytes only: a name
 # never makes a file an image (agent-workspace.js shows these inline).
@@ -127,7 +126,7 @@ PICTURE_BYTES = 5 * 1024 * 1024
 # What a picture costs in every step it stays in view (agent_compaction.
 # PICTURES_SHOWN): the providers scale it to about PICTURE_SIDE on its long
 # side anyway (as the overview, workspace_vm/office/sheet.py), but its bytes
-# go along with each request. On 2026-11-01 two photos of 4000 px (3.4 and
+# go along with each request. Two photos of 4000 px (3.4 and
 # 3.6 MB) and the overviews (1.2 MB each) made every step about nine seconds
 # slower until they left the view, while the provider worked for a tenth of
 # a second ("füg mal mehr bilder ein", 13 minutes). Larger ones go as WebP
@@ -155,18 +154,17 @@ EDIT_SNIPPET_CHARS = 2_000
 VM_UNAVAILABLE = ("The VM is not available right now. Continue without it for this message and do not call VM "
                   "tools again; say so if the answer needed it.")
 # A provider failure costs the call it happened in; MAX_FAILURES in a row
-# turn the workspace off for the message (VM_UNAVAILABLE). Until 2026-10-30
-# the first one did, a waking VM's broken handshake included (runtime audit
-# A1). A read is tried once more first; for anything else whether it ran is
+# turn the workspace off for the message (VM_UNAVAILABLE). A read is tried
+# once more first; for anything else whether it ran is
 # not known, and the agent is told that fact. The provider's gateway saying
 # the VM does not respond (agent_vm.unresponsive, HTTP 502/503/504) turns it
-# off at once (since 2026-11-05): each new try waited as long again.
+# off at once: each new try waits as long again.
 MAX_FAILURES = 3
 VM_INTERRUPTED = "The connection to your workspace broke off during this call, so whether it ran is unknown."
 VM_NOT_REACHED = "Your workspace did not answer just now; nothing was changed."
 VM_NOT_STARTED = "Your workspace did not start just now; nothing ran."
 # A failure on the server's side of a workspace tool (a file store, a bug):
-# the call's error, reported, never the end of the run (runtime audit A3).
+# the call's error, reported, never the end of the run.
 TOOL_FAILED = "This call failed on consens.io's side, not in your workspace, and was reported."
 # The lease is moved on this often while the message holds it (_keep_lease),
 # for at most this long, and the message's end waits this long for its
@@ -184,11 +182,11 @@ VM_DAY_LIMIT = ("The VM time of this account for today is used up: commands, ins
                 "background processes and the browser still work. Continue without commands and tell the user "
                 "when one was needed.")
 # A command or installation whose time limit today's VM time set, stopped
-# there (VMTools.exec, install): until 2026-10-31 it read like its own limit.
+# there (VMTools.exec, install), so it does not read like its own limit.
 VM_DAY_CUT = ("The {what} was stopped after {seconds} seconds, when the VM time of this account for today ran "
               "out: commands run again tomorrow (the day starts at midnight UTC).")
 # vm_write_file or vm_edit_file on the workspace's notes in a temporary chat
-# (VMTools._notes_kept, since 2026-11-01 evening).
+# (VMTools._notes_kept).
 NOTES_KEPT = ("This is a temporary chat: the workspace's notes outlast it, so it leaves them as they are. Nothing "
               "was written.")
 # Below this much of today's VM time, the first result of a message says how
@@ -209,7 +207,7 @@ INSTALL_TIMEOUT = 300
 # An install its time limit or Stop cut off leaves dpkg half done, and every
 # later apt-get would refuse until it is finished; the agent has no sudo to
 # finish it. The package lists are fetched again when older than a day.
-# Since 2026-11-04 the user's browser runs on the same computer, and root's
+# The user's browser runs on the same computer, and root's
 # apt-get takes the agent's names, so an install never removes anything
 # (--no-remove: a package that conflicts with an installed one would
 # otherwise take out Chrome, its screen or sudo, -y says yes to that) and
@@ -309,12 +307,12 @@ class _Interrupted(ValueError):
 
 
 class _StartFailed(Exception):
-    """A part of the start failed for now; its message is the reason (I2)."""
+    """A part of the start failed for now; its message is the reason."""
 
 
 def log_tag(loop):
     """The turn (its id's start) and the agent's step for a log line of the
-    workspace (runtime audit 2026-10-30, I3)."""
+    workspace."""
     return f"turn={str(getattr(loop, 'turn_id', '') or '')[:8]} step={getattr(loop, 'routing_steps', '-')}"
 
 
@@ -416,7 +414,7 @@ def model_picture(mime, raw):
     """``(mime, bytes)`` of a picture as the model gets it: ``raw`` itself
     within PICTURE_SIDE and PICTURE_SENT_BYTES, else smaller as WebP (turned
     upright, without its metadata); ``raw`` when it cannot be decoded within
-    bounds, which leaves it to the provider as before."""
+    bounds, which leaves it to the provider."""
     from PIL import Image, ImageOps
     from app.services import watch_images
     try:
@@ -534,7 +532,7 @@ class VMSession:
     """The workspace of one message (thread-safe). ``factory`` returns a
     backend or None without a configured provider (tests pass a fake).
 
-    Its start has two parts (since 2026-10-30, runtime audit T5): the lease
+    Its start has two parts: the lease
     (``lease``), all the browser needs, and the workbench (``bench``): its
     rules, tools, the chat's folder with the notes and keys, the message's
     checkpoint and its attachments, which only the workbench's own tools
@@ -586,11 +584,11 @@ class VMSession:
         # folder is the chat's and which attachments are in its input folder.
         self._announced = False
         # Failures of the provider in a row: the workspace goes off for the
-        # message at MAX_FAILURES (runtime audit 2026-10-30, A1), with why
-        # (``unavailable_reason``: the operation and the kind, never data, I2).
+        # message at MAX_FAILURES, with why
+        # (``unavailable_reason``: the operation and the kind, never data).
         self.failures = 0
         self.unavailable_reason = None
-        # For the turn's summary (I5): seconds of each part of the start,
+        # For the turn's summary: seconds of each part of the start,
         # whether a VM was cold, the browser's calls and their seconds.
         self.phases = {}
         self.cold = {}
@@ -622,7 +620,7 @@ class VMSession:
         if job is None:
             return
         # The workbench waits for whichever start holds the VM's setup (one
-        # computer since 2026-11-04: the provisioning's is the browser's).
+        # computer: the provisioning's is the browser's).
         self._wait(job, cancellation, kinds=START_KINDS if bench else ())
         error = job.error
         if error is None:
@@ -741,8 +739,8 @@ class VMSession:
     def _keep_lease(self):
         """Moves the lease on every LEASE_KEEP_SECONDS while the message
         holds it, also while it waits for the user (ask_user, a takeover, a
-        reviewer's halt): before 2026-10-30 only a call did, and a wait of
-        15 minutes let another chat take the workspace (runtime audit A2)."""
+        reviewer's halt): a wait of 15 minutes would otherwise let another
+        chat take the workspace."""
         from app.services import agent_workspace
         began = time.monotonic()
         while not self._stop.wait(LEASE_KEEP_SECONDS):
@@ -815,7 +813,7 @@ class VMSession:
             since = self._took("chat", since)
             # A temporary chat's messages take none: a checkpoint holds the
             # chat's folder, and the provider keeps it beyond the chat (its
-            # API deletes none, docs/agent-mode.md "Wiederherstellen").
+            # API deletes none, docs/agent-mode.md "Agent VM").
             if getattr(self.loop, "temporary", False) is not True:
                 self._checkpoint_start()
             context = self.loop.file_context
@@ -858,7 +856,7 @@ class VMSession:
         # When it began: a chat deleted while it is taken (up to
         # CHECKPOINT_SECONDS) raises the restore floor past this, so a
         # checkpoint that may still hold its folder never brings it back
-        # (agent_workspace.restorable). Stamped when done, it counted as newer.
+        # (agent_workspace.restorable). Stamped when done, it would count as newer.
         began = _now()
         try:
             checkpoint = self.backend.checkpoint(self.name, f"consens.io message {self.loop.turn_id}")
@@ -986,7 +984,7 @@ class VMSession:
     def announce(self, result):
         """``result`` with the chat's folder, the inputs and the workspace's
         notes, once per message, with the first result after the workbench
-        is ready (a browser call alone needs none of it, T5)."""
+        is ready (a browser call alone needs none of it)."""
         from app.services import agent_workspace
         with self._lock:
             if self._announced or self.state != "ready":
@@ -1058,9 +1056,7 @@ class VMSession:
     def close(self):
         """The message's end: its VM time charged, then on a thread of its
         own (_finish) the lease released and the browser told to rest. The
-        message waits for that at most CLOSE_WAIT_SECONDS: until 2026-10-30
-        it waited for the workbench's rules up to WAKE_SECONDS, also when a
-        deploy's interrupt left it 20 (runtime audit A6). Whatever does not
+        message waits for that at most CLOSE_WAIT_SECONDS. Whatever does not
         finish leaves the lease to end by itself."""
         from app.services import agent_vm_time
         with self._lock:
@@ -1085,7 +1081,7 @@ class VMSession:
             self.leased = False
             callbacks = list(self._on_close)
         # A lease that ran out while the message waited (a card, up to 30
-        # minutes) may be another chat's message's now (bug hunt 2026-10-30).
+        # minutes) may be another chat's message's now.
         if leased and agent_workspace.holds_lease(self.loop.store, self.loop.uid, self.loop.turn_id) is not False:
             agent_workspace.release(self.loop.store, self.loop.uid, self.loop.turn_id)
         # After the release: it touches this chat's paths alone, and another
@@ -1107,10 +1103,9 @@ class VMSession:
 
     def _note_net(self):
         """The VM's network counters for the server's safety rules once the
-        message's commands ran (since 2026-11-04, when the network opened
-        for the whole computer): the browser's answers bring them, but a
-        message that only ran commands brought none, and an upload with curl
-        went uncounted. Only where the guard counts; a failure costs this
+        message's commands ran: the browser's answers bring them, but a
+        message that only ran commands would bring none, and an upload with
+        curl would go uncounted. Only where the guard counts; a failure costs this
         look, the next one counts the bytes since boot all the same."""
         from app.services import workspace_guard
         if self.backend is None or not workspace_guard.counts():
@@ -1128,7 +1123,7 @@ class VMSession:
 
     def _sweep_deleted(self):
         """A stopped message whose chat is being deleted or gone (a
-        temporary chat left mid-answer, since 2026-11-01): what its last
+        temporary chat left mid-answer): what its last
         calls wrote after the deletion's sweep (agent_vm.delete_chat_vm)
         goes too, its folder and its background processes. Only after a
         stop, which a deletion in this process makes first
@@ -1239,10 +1234,8 @@ class VMTools:
 
     def _guarded(self, tool):
         """``tool`` whose unexpected failures (a file store's outage, a bug)
-        are the call's error and reported, never the end of the run: until
-        2026-10-30 a storage error in vm_share_file failed the whole answer
-        (runtime audit A3). Stop, the run's limits and the tools' own errors
-        pass as they are."""
+        are the call's error and reported, never the end of the run. Stop,
+        the run's limits and the tools' own errors pass as they are."""
         execute = tool.execute
         loop = self.loop
         reporting = self.session.reporting
@@ -1266,7 +1259,7 @@ class VMTools:
 
     def prewarm(self, *, bench=True):
         """Starts the workspace while the model still thinks, on a thread of
-        its own (runtime audit 2026-10-30, T1): after open_workspace the VM
+        its own: after open_workspace the VM
         with its Chrome and, with ``bench``, the lease and the agent's side;
         for a message that starts with the workspace open only the browser
         (nothing else is known to be needed). Nothing when the day's VM time
@@ -1317,9 +1310,8 @@ class VMTools:
         ``spends``: the call runs a command, which counts as VM time
         (agent_vm_time.py), and is refused once today's is used up. Files,
         a background process's output and stop and the browser count
-        nothing and go on (since 2026-10-31: before, a background process
-        that reserved the rest of a Free account's 20 minutes left its own
-        agent unable to read or stop it)."""
+        nothing and go on: a background process that reserved the rest of
+        the day's time can still be read and stopped."""
         from app.services import workspace_guard
         guard = workspace_guard.status(self.loop.uid)
         if guard.closed:
@@ -1372,8 +1364,7 @@ class VMTools:
         """A command the server runs in the VM for the agent's work (a
         process's status or wait, an import's unpacking, an installation):
         its run time counts against today's VM time like the agent's own
-        commands (security audit 2026-10-27; before, only vm_exec counted).
-        ``agent``: as the agent's user (the default), or the server's own
+        commands. ``agent``: as the agent's user (the default), or the server's own
         step as the provider's user."""
         outcome = self._provider("exec", lambda: self.session.backend.exec(
             self.session.name, command, cwd=cwd, timeout=timeout, on_output=on_output, cancellation=cancellation,
@@ -1443,7 +1434,7 @@ class VMTools:
             seconds = self.session.clock() - started
             if cancellation.cancelled or not command.cancelled:
                 # Stop or the response's time limit: the command ran in the
-                # VM until now, and its time counts (before, a stop booked none).
+                # VM until now, and its time counts.
                 with self.session._lock:
                     self.session.commands += 1
                     self.session.seconds += seconds
@@ -1813,7 +1804,7 @@ class VMTools:
                                       window_seconds=3600)
                 # Within the answer's time, its last MIN_COMMAND_SECONDS kept
                 # for the share itself: a slow or cold converter costs the
-                # preview, never the file (review 2026-11-01).
+                # preview, never the file.
                 pdf = agent_office.render(raw, extension, cancellation=cancellation,
                                           seconds=None if left is None else left - MIN_COMMAND_SECONDS).pdf
             except ProviderCancelled:
@@ -1838,7 +1829,7 @@ class VMTools:
         command = args.command if len(args.command) <= COMMAND_VIEW_CHARS else \
             args.command[:COMMAND_VIEW_CHARS - 1] + "…"
         # A folder the call itself refuses (a NUL in it) shows as none, like
-        # _path_activity: until 2026-11-03 the event lost its command too.
+        # _path_activity, and the event keeps its command.
         try:
             cwd = vm_path(args.cwd, self.session.dir) if args.cwd.strip() else self.session.dir
         except ValueError:

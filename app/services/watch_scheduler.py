@@ -27,7 +27,7 @@ from app.services.llm.mock_llm import mock_llm_enabled
 
 TICK_SECONDS = 30 * 60
 # The loop sleeps until the next watch is due, so a check set for 09:00 runs
-# at 09:00 and not up to a tick later (Audit J5) -- never more often than this.
+# at 09:00 and not up to a tick later -- never more often than this.
 MIN_TICK_SECONDS = 30
 WATCH_LEASE_HEARTBEAT_SECONDS = 5 * 60
 # The global worker lease lasts WORKER_LEASE_MINUTES; renew well before that
@@ -176,7 +176,7 @@ def execute_watch(question: str, standing=None, condition: str = "",
     # Judge und Ziel-Bewertung sie als Belege zitieren (source_redirects.py).
     sources = source_redirects.resolve_sources(sources)
     # A search that finds consens.io's own page on this question is no
-    # evidence for or against it: the judge never sees it (Apple-Audit L4).
+    # evidence for or against it: the judge never sees it.
     # It stays in the stored list so its [S#] markers resolve and drop on the
     # page (share router), instead of turning into raw "[S5]" text.
     evidence = source_links.without_own_pages(sources)
@@ -287,8 +287,8 @@ def run_notification_builder(watch_id: str, result: dict, follower_ids, *,
     ``complete_watch_run`` calls the builder inside its result transaction
     with the claim merged with the current configuration and the outcome the
     drift rule assigned to this check, so alert rule, channels and goal edited
-    during the run are honoured (R16) and the items commit atomically with the
-    result (R17).
+    during the run are honoured and the items commit atomically with the
+    result.
     """
 
     def build(effective: dict, outcome: dict) -> list:
@@ -416,7 +416,7 @@ async def _run_probes(worker_lost: asyncio.Event) -> int:
 
 def _work_due(now) -> bool:
     """A watch to run or a probe to make (a failed look counts as work: the
-    tick then decides under its lease, as before)."""
+    tick then decides under its lease)."""
     try:
         if watch_service.list_due_watch_ids(now=now, max_items=1):
             return True
@@ -432,14 +432,14 @@ async def run_watch_tick() -> int:
     # real watch runs. execute_watch itself stays mockable for the test suite.
     if mock_llm_enabled():
         return 0
-    # Archived since 2026-11-03 (cfg.consensus_watches_archived): no check, no
-    # probe. A Watch now runs the Agent (agent_watches.run_tick).
+    # Archived (cfg.consensus_watches_archived): no check, no probe. A Watch
+    # runs the Agent (agent_watches.run_tick).
     if cfg.consensus_watches_archived():
         return 0
     now = watch_service.utcnow()
-    # Nothing due, no lease: taking and giving back the global lease wrote
-    # two documents on every tick, also on an idle server (about 100-150 a
-    # day, 2026-11-01). The look costs the queries the tick makes anyway;
+    # Nothing due, no lease: taking and giving back the global lease would
+    # write two documents on every tick, also on an idle server. The look
+    # costs the queries the tick makes anyway;
     # with work due, the tick looks again under the lease.
     if not await asyncio.to_thread(_work_due, now):
         return 0
@@ -457,7 +457,7 @@ async def run_watch_tick() -> int:
         for watch_id in due_ids:
             if worker_lost.is_set():
                 # Another worker owns the global lease now; running on would
-                # put two schedulers side by side (R30).
+                # put two schedulers side by side.
                 logging.warning("Consensus Watch worker lease lost; stopping tick")
                 break
             claimed, reason = await asyncio.to_thread(
@@ -491,9 +491,9 @@ async def run_watch_tick() -> int:
                 account_tier = await asyncio.to_thread(
                     security.get_user_tier, claimed["owner_uid"]
                 )
-                # Scheduled Publisher pages are deliberately pinned to the
-                # Admin-configured Free Watch providers. All ordinary watches
-                # continue to follow the owner's live account tier.
+                # Watches of the retired Scheduled Publisher (model_tier
+                # "free") stay pinned to the Admin-configured Free Watch
+                # providers. All others follow the owner's live account tier.
                 # Plus faehrt hier ohnehin die Free-Modelle (siehe
                 # cfg.get_watch_models) -- mehr Watches, gleiche Kosten.
                 tier = TIER_FREE if claimed.get("model_tier") == "free" else account_tier
@@ -622,11 +622,11 @@ async def run_brief_tick() -> int:
     """Claim due Morning Briefs and deliver them through the durable outbox.
 
     The claim advances the schedule and stages the Brief's outbox item in the
-    same transaction. A crash after the claim no longer skips the digest: the
+    same transaction. A crash after the claim does not skip the digest: the
     outbox pass retries it (within ``BRIEF_DELIVER_WITHIN``), re-checking the
     Brief subscription before every attempt. At-least-once, not exactly-once.
     """
-    # The Brief summed up the Consensus Watches, archived since 2026-11-03.
+    # The Brief sums up the Consensus Watches, which are archived.
     if cfg.consensus_watches_archived():
         return 0
     if mock_llm_enabled() or not mailer.is_configured():

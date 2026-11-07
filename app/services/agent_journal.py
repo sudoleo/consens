@@ -1,21 +1,21 @@
-"""The run's agent-session journal, written on one thread (since 2026-10-21).
+"""The run's agent-session journal, written on one thread.
 
 Every status of every model call of a run (waiting, working, the live
 reasoning line, completed, its result) is saved by ``publish_agents`` in a
-Firestore transaction. Until 2026-10-21 the calling thread wrote it itself,
-holding the run's lock: a comparison answer stopped reading its stream for
-every line it saved, and every other call waited behind it. With six
-comparison models, two Differences passes, Coverage windows and their hedges
-the transactions queued up faster than Firestore (0.4-1 s each) could take
-them; in prod a request left 77 s after the decision and finished judge
-answers were cancelled after 90 s (docs/agent-mode.md "Wartezeit im Server").
+Firestore transaction. Written by the calling thread itself, holding the
+run's lock, a comparison answer would stop reading its stream for every line
+it saved, and every other call would wait behind it. With six comparison
+models, two Differences passes, Coverage windows and their hedges the
+transactions queued up faster than Firestore (0.4-1 s each) could take them;
+in prod a request left 77 s after the decision and finished judge answers
+were cancelled after 90 s (docs/agent-mode.md "Wartezeit im Server").
 
-Now a call hands its status to this journal and goes on. One writer thread
+So a call hands its status to this journal and goes on. One writer thread
 saves them in order per session:
 
-- Everything due when the writer is free goes into one transaction (since
-  2026-10-22): six answers starting together are one write, not six writes
-  in a row, each ahead of a model call's receipt behind the account lock.
+- Everything due when the writer is free goes into one transaction: six
+  answers starting together are one write, not six writes in a row, each
+  ahead of a model call's receipt behind the account lock.
 - A caller that needs the saved event (a new session must exist before its
   receipt is claimed, a worker's message carries its event id) waits; its
   session goes first when a batch is full.
@@ -129,9 +129,9 @@ class AgentJournal:
 
     def close(self, timeout=None):
         """Write everything still queued, lines included, and stop; wait at
-        most ``timeout`` seconds (since 2026-10-29, A-R3: a hung write held
-        the run's end until its lease expired). What is not written by then
-        is written later or lost, and the run ends anyway."""
+        most ``timeout`` seconds (a hung write would hold the run's end until
+        its lease expired). What is not written by then is written later or
+        lost, and the run ends anyway."""
         with self._condition:
             self._closing = True
             self._condition.notify_all()
@@ -193,6 +193,6 @@ class AgentJournal:
                 job.done.set()
             for job in jobs:
                 # An update ahead of a waiting caller is urgent but its own:
-                # until 2026-11-05 its refusal went unreported (bug hunt P0).
+                # its refusal reaches no caller, so it is reported here.
                 if job.error is not None and not job.awaited:
                     self._failed(job, job.error)

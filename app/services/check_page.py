@@ -1,7 +1,7 @@
 """The part of a repeatedly checked page that says whether the answer moved.
 
 Consensus Watches (``/s/...``) and curated Topics (``/topics/...``) both ask
-one question again and again and keep every answer. Since 2026-10-15 both
+one question again and again and keep every answer. Both
 pages are built from the same parts (templates/partials/check_page.html): a
 state line, direct links, the answer, the history. This module builds the
 state line from the annotated history, so the two pages cannot disagree about
@@ -19,7 +19,7 @@ from app.services.history_view import build_history_view, day_label
 
 # A paused Watch is not checked any more. Its page says so first, in grey,
 # instead of promising "Unchanged since ..." in green for weeks after its last
-# check (Apple-Audit L2; Max: shown honestly, not restarted).
+# check (shown honestly, not restarted).
 PAUSED_STATUSES = frozenset({"paused", "paused_error"})
 
 
@@ -74,8 +74,7 @@ def state_view(
 
     ``page`` carries ``is_active``, ``next_run`` (``{"day": ...}``),
     ``status_label`` and ``resolution``. Everything else on the page explains
-    or proves this line. Scores, curves and model chips used to stand around
-    it and buried what the page is for.
+    or proves this line.
     """
     points = (history or {}).get("points") or []
     start = points[0]["ts"] if points else None
@@ -133,10 +132,10 @@ def state_view(
 
 def watch_summary(status, points, *, last_run=None, resolved_at=None):
     """The headline of a Watch page for the places that point at it: its row
-    on /questions and its preview card (Apple-Audit L3, L13).
+    on /questions and its preview card.
 
     Built by :func:`state_view` from the same history, so the list and the
-    card can no longer announce a score or a state the page does not show.
+    card cannot announce a score or a state the page does not show.
     ``points`` are the Watch's history points, oldest first.
     """
     points = list(points or [])
@@ -161,8 +160,8 @@ def watch_summary(status, points, *, last_run=None, resolved_at=None):
 
 
 # "Model C claims ... whereas Models A and B ...": the judge's own labels.
-# Since 2026-10-16 the judge step names the real models itself
-# (consensus_engine._named_models); pages written before keep the letters.
+# The judge step names the real models itself
+# (consensus_engine._named_models); older pages keep the letters.
 _JUDGE_LABEL = re.compile(r"\bModels?\s+([A-Z](?:\s*(?:,|/|&|\band\b|\bor\b)\s*[A-Z])*)\b")
 
 
@@ -229,15 +228,14 @@ def _judge_letter_blocks(differences) -> dict[str, tuple[frozenset, list[str]]]:
 def named_differences(differences):
     """Differences with "Model A/B/C" replaced by the families the page names
     next to each position, and without a family line that only repeats the
-    stance (Apple-Audit L15). Readers had to map "Model C" to "Gemini"
-    themselves.
+    stance, so readers need not map "Model C" to "Gemini" themselves.
 
     The letters are one judge call's anonymization, so one mapping holds for
     every difference on the page (_judge_letter_blocks). A label is named
     only when it covers whole blocks: "Models A and B" becomes "OpenAI and
     Gemini" when the page says that pair is those two, "Model A" alone only
     when A is known on its own. Anything less certain keeps its letters --
-    a wrong family is worse than a letter (Zweitprüfung 14).
+    a wrong family is worse than a letter.
     """
     differences = [diff for diff in differences or [] if isinstance(diff, dict)]
     blocks = _judge_letter_blocks(differences)
@@ -276,7 +274,7 @@ def named_differences(differences):
 
 
 # Differences on the share page as the app draws them (consensus-insights.js
-# buildDifferenceCards, Max 2026-10-16): critical contradictions first, then
+# buildDifferenceCards): critical contradictions first, then
 # minor ones, then other emphases; two or more smaller ones fold behind the
 # critical ones. Each side is one claim, the side the answer takes first, the
 # sides under one another with "vs" between them; the same claim said by

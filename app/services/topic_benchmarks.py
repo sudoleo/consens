@@ -1,4 +1,4 @@
-"""A benchmark chart for Topics about a model family (since 2026-10-31).
+"""A benchmark chart for Topics about a model family.
 
 A Topic about a model family ("Gemini 4") names that family in its
 ``benchmark.models`` setting. After each check the runner reads the

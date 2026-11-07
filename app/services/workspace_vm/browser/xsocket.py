@@ -1,5 +1,5 @@
 """consens.io workspace: whether the screen's abstract X socket is this
-user's (display.sh x_ours, since 2026-11-04; docs/agent-mode.md "Ein Rechner").
+user's (display.sh x_ours; docs/agent-mode.md "Ein Rechner").
 
 X clients (Chrome) try the abstract socket @/tmp/.X11-unix/X1 first, and
 any user of the computer may bind an abstract name: one the agent's user
@@ -8,12 +8,11 @@ while every stream socket bound to that name (listening, or bound and not
 yet listening) belongs to the user who runs this, and there is one.
 
 The kernel says whose a socket is (sock_diag, UNIX_DIAG_UID: the user that
-made it), to every user. Until this the check looked for the socket among
-the X server's own descriptors, but Ubuntu 26.04's Xtigervnc is not
-dumpable: its /proc/<pid>/fd belongs to root, and the Sprite's root lacks
-CAP_SYS_PTRACE, so the check failed on every start and no Chrome ever ran
-(test Sprite 2026-11-04). Connections count for nothing: an accepted one
-carries the name and the connecting user's uid, and anyone may connect
+made it), to every user. The X server's own descriptors would not tell:
+Ubuntu 26.04's Xtigervnc is not dumpable, its /proc/<pid>/fd belongs to
+root, and the Sprite's root lacks CAP_SYS_PTRACE, so a check there failed on
+every start and no Chrome ever ran (test Sprite 2026-11-04). Connections
+count for nothing: an accepted one carries the name and the connecting user's uid, and anyone may connect
 without the cookie. Other socket types neither: Linux keeps abstract names
 apart by type, so the agent's user may bind a datagram socket to the same
 name, and Chrome connects to a stream socket only.

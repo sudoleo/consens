@@ -8,9 +8,9 @@
 # would block the next call. Neither listens on a network: the VNC server on
 # a Unix socket in this folder (vnc.sock, mode 0600), which only the
 # provider's user opens (relay.py); -rfbport -1 and -nolisten tcp leave no
-# TCP port (test Sprite 2026-11-02).
+# TCP port.
 #
-# Since 2026-11-04 all of it runs on the workbench, next to the agent's
+# All of it runs on the workbench, next to the agent's
 # user, who must reach none of it (docs/agent-mode.md "Ein Rechner"):
 # - Chrome has no debugging port (TCP on 127.0.0.1 would let every user of
 #   the computer steer it and read its cookies): cdp.py starts it with
@@ -30,10 +30,10 @@
 #   a process of the agent's user named like Chrome or the X server counts
 #   for nothing.
 #
-# The screen is TigerVNC's X server since 2026-11-02 (Xtigervnc, one process
-# for screen and VNC). Until then Xvfb drew and x11vnc found the changes by
-# comparing the picture line by line (-noxdamage), and each picture waited
-# for the view's next request. On a test Sprite with a scrolling page about
+# The screen is TigerVNC's X server (Xtigervnc, one process for screen and
+# VNC). With Xvfb drawing, x11vnc found the changes by comparing the picture
+# line by line (-noxdamage), and each picture waited for the view's next
+# request. On a test Sprite with a scrolling page about
 # half of what reached the view were half-drawn pictures: 13 whole pictures a
 # second with 30 ms more between the user and the server, 9 with 60 ms.
 # Xtigervnc knows what changed and sends without being asked (continuous
@@ -41,14 +41,14 @@
 # after a few seconds of scrolling, also with 30 ms more; 15 to 23 with 60 ms.
 # Without the limit it sent over 120 a second. No clipboard either way (the
 # view's paste types keys) and no resizing by the viewer. A VM from before
-# installs it once (setup.sh) and its Xvfb, x11vnc and openbox make way here,
+# installs it once (install.sh) and its Xvfb, x11vnc and openbox make way here,
 # Chrome first (its session keeps the tabs); never under --keep, which must
 # not end a Chrome in use.
 #
-# Since 2026-10-28 it also mends a Chrome that is no longer usable (Max's
-# browser VM, 2026-10-28: a page load and the next connection ran into their
-# time limits, Chrome died two minutes later, and the live view stayed black
-# until the next call): a Chrome whose debugging port does not answer, or
+# It also mends a Chrome that is no longer usable (seen on Max's browser
+# VM: a page load and the next connection ran into their time limits,
+# Chrome died two minutes later, and the live view stayed black until the
+# next call): a Chrome whose debugging pipe does not answer, or
 # whose browser process is gone while children remain, is ended and started
 # again; the profile keeps sign-ins and the session its tabs. --restart (from
 # browser.py, after a call it could not finish) restarts it in any case;
@@ -72,14 +72,14 @@ runs() { pgrep -u "$me" -f -- "$1" >/dev/null; }
 # was started, /usr/bin/google-chrome (the starter script execs Chrome under
 # its own name); only its children (renderers, the zygote, the GPU process)
 # are /opt/google/chrome/chrome, and they carry its --user-data-dir too.
-# Until 2026-10-28 the check matched the children alone: a Chrome counted
+# A check on the children alone failed: a Chrome counted
 # as running while any child lived, the flags' restart ended only the
 # children (Chrome died with "GPU process isn't usable"), and a Chrome whose
 # children were gone got a second one started on the same profile. From the
 # start of the command line, so cdp.py (whose own line names Chrome's) is
 # not Chrome.
 chrome="^([^ ]*/)?(google-chrome(-stable)?|chrome) .*--user-data-dir=$profile( |$)"
-# cdp.py holding Chrome's pipe (since 2026-11-04), whatever python3 is called.
+# cdp.py holding Chrome's pipe, whatever python3 is called.
 hub="[^ ]*/cdp\.py $cdp( |$)"
 # The browser process is the one without --type=.
 browser_pid() {
@@ -90,7 +90,7 @@ browser_pid() {
 # The target list needs Chrome's own main thread, unlike its version.
 answers() { curl -s -m "${1:-5}" -o /dev/null --unix-socket "$cdp" "http://localhost/json/list"; }
 # Every process of this profile ends before a new Chrome starts: two on one
-# profile at once (seen 2026-10-28 when the flags changed) could damage it.
+# profile at once (seen when the flags changed) could damage it.
 # cdp.py first: it ends Chrome with it.
 stop_chrome() {
   pkill -TERM -u "$me" -f -- "$hub"
@@ -109,12 +109,11 @@ stop_chrome() {
 # running one normally holds it; were it to listen without it, none of
 # another user's may exist at the moment Chrome connects. Connections count
 # for nothing (anyone may connect without the cookie: a loop of the agent's
-# connections ended the user's Chrome, review 2026-11-04), nor do other
+# connections ended the user's Chrome), nor do other
 # socket types (Linux keeps abstract names apart by type; a datagram socket
-# of the agent's on the name did the same). Until it asked the kernel the
-# check looked among the X server's own descriptors, which Ubuntu 26.04's
-# Xtigervnc, not dumpable, keeps from its own user (test Sprite 2026-11-04:
-# no Chrome ever started).
+# of the agent's on the name did the same). The X server's own descriptors
+# would not tell: Ubuntu 26.04's Xtigervnc, not dumpable, keeps them from
+# its own user (test Sprite 2026-11-04: no Chrome ever started).
 x_pid() { pgrep -u "$me" -x Xtigervnc | head -n 1; }
 x_ours() {
   [ -n "$(x_pid)" ] || return 1
@@ -130,7 +129,7 @@ with open(sys.argv[1], "wb") as handle:
     handle.write(struct.pack(">H", 0xFFFF) + field(b"") + field(b"1") + field(b"MIT-MAGIC-COOKIE-1")
                  + field(os.urandom(16)))' "$auth.new" && mv -f "$auth.new" "$auth")
 }
-# The screen of a VM from before 2026-11-02 and the openbox on it.
+# The old screen of a VM from before (Xvfb, x11vnc) and the openbox on it.
 old="^(Xvfb :1|x11vnc -display :1) |^openbox( |$)"
 if [ "$mode" != "--keep" ] && runs "^(Xvfb :1|x11vnc -display :1) "; then
   stop_chrome
@@ -156,7 +155,7 @@ if ! x_ours; then
   echo "The browser's screen did not start (its socket is not its own)." >&2
   exit 1
 fi
-# The rules that hold whoever steers Chrome (harden.sh, since 2026-10-30):
+# The rules that hold whoever steers Chrome (harden.sh):
 # Chrome's policy, openbox without menus, an xdg-open that opens nothing.
 # Without them no Chrome starts, and one that runs (under older rules) ends.
 if ! bash "$here/harden.sh" >"$dir/harden.log" 2>&1 </dev/null; then
@@ -168,14 +167,13 @@ if ! runs "^openbox( |$)"; then
   setsid nohup openbox >"$dir/openbox.log" 2>&1 </dev/null 8>&- &
 fi
 # WebGL without a graphics card: Chrome no longer falls back to software
-# by itself, so maps, design tools and canvas apps did not start (2026-10-28).
+# by itself, so maps, design tools and canvas apps did not start.
 # A Chrome started with older flags is restarted once; the profile keeps
 # sign-ins and the session its tabs. Which flags it has says the marker this
 # script writes when it starts Chrome: Chrome rewrites its command line, so
-# a search for a flag in it never matched, and Chrome restarted on every call
-# (test Sprite 2026-10-28). The rules' version counts as a flag: new rules
-# restart Chrome once, so that it starts under them. pipe-1: Chrome behind
-# cdp.py (since 2026-11-04).
+# a search for a flag in it never matched, and Chrome restarted on every
+# call. The rules' version counts as a flag: new rules restart Chrome once,
+# so that it starts under them. pipe-1: Chrome behind cdp.py.
 flags="webgl-1 pipe-1 rules-$(cat "$dir/hardened" 2>/dev/null)"
 pid="$(browser_pid)"
 why=""
@@ -208,7 +206,7 @@ if [ -z "$(browser_pid)" ]; then
 fi
 # A Chrome started here is ready once it answers; one that ran was asked
 # above (and with --keep is not asked: a hung one there held the lock for
-# 150 answers of 5 s, review 2026-11-04). At most 15 s either way.
+# 150 answers of 5 s). At most 15 s either way.
 until=$((SECONDS + 15))
 while [ "$SECONDS" -lt "$until" ]; do
   [ -S "$cdp" ] && runs "$hub" && [ -S "$dir/vnc.sock" ] && { [ -z "$started" ] || answers 2; } && exit 0

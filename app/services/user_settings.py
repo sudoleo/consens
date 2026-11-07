@@ -71,9 +71,9 @@ class CompareModelSetting(_Strict):
 class UserSettings(_Strict):
     """Every account setting. ``None`` means "not chosen": the app default."""
 
-    # Compare / Agent for the next message (run-mode.js). "consensus" was a
-    # mode until 2026-10-25; a stored one no longer validates and is dropped
-    # on read (sanitize_settings), so the account falls back to the default.
+    # Compare / Agent for the next message (run-mode.js). A stored
+    # "consensus" (a retired mode) does not validate and is dropped on read
+    # (sanitize_settings), so the account falls back to the default.
     run_mode: Optional[Literal["compare", "agent"]] = None
     agent_model: Optional[AgentModelSetting] = None
     # Keyed by the family label the app shows (OpenAI, Gemini, ...).
@@ -96,9 +96,9 @@ class UserSettings(_Strict):
     # (stream-reveal.js, letter-clouds.js); None is on.
     letter_animations: Optional[bool] = None
     # The Agent's live lines in full, every thought, command and output as
-    # it comes (agent-activity.js, since 2026-11-01); None is the calm line.
+    # it comes (agent-activity.js); None is the calm line.
     detailed_progress: Optional[bool] = None
-    # Who checks the Agent's work (agent_audit.py, since 2026-11-01): its
+    # Who checks the Agent's work (agent_audit.py): its
     # reviewers in every message, only from its first step in the workspace
     # on, or nobody. None is "always". The browser sends the value with each
     # message (routers/agent.py AgentRequest.reviewers), so a message runs
@@ -118,9 +118,9 @@ class UserSettings(_Strict):
 
 
 SETTING_NAMES = tuple(UserSettings.model_fields)
-# Settings the app no longer has that an open page of an older version still
-# sends: agent_preferences (answer depth, answer start, Agent freedom, answer
-# check, audit, VM) until the Agent's one mode (2026-10-31). A PATCH gets one
+# Settings the app no longer has that an open page of an older version may
+# still send: agent_preferences (answer depth, answer start, Agent freedom,
+# answer check, audit, VM). A PATCH gets one
 # back in ``rejected`` like any unknown name; a stored one is dropped on read
 # (sanitize_settings) and with the account's next change.
 RETIRED_SETTINGS = ("agent_preferences",)

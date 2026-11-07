@@ -195,7 +195,7 @@ def list_due_brief_uids(*, now=None, db=None, max_items=200) -> list[str]:
 def _claim_in_transaction(tx, ref, now: datetime, db=None):
     """Advance the schedule and stage the Brief's durable outbox item.
 
-    Both writes commit together, so a crash after the claim no longer skips
+    Both writes commit together, so a crash after the claim does not skip
     the digest: the outbox retries it (at-least-once, deduplicated by the
     scheduled slot). Without ``db`` only the schedule advances (legacy use).
     """

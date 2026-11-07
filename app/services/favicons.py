@@ -13,7 +13,7 @@ a self-hosted monogram.
 
 An icon smaller than ``MIN_ICON_PX`` counts as no icon: shown at 20 CSS
 pixels on a 3x display it would be visibly soft next to sharp ones, and the
-crisp globe reads better than a blurred logo (Audit I13).
+crisp globe reads better than a blurred logo.
 """
 
 from __future__ import annotations

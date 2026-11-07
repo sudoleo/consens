@@ -1,5 +1,5 @@
 """consens.io workbench: the agent's commands make no user namespaces
-(agent-run, since 2026-11-04; docs/agent-mode.md "Ein Rechner").
+(agent-run; docs/agent-mode.md "Ein Rechner").
 
 The browser with every sign-in of the user runs on this computer as the
 provider's user; between it and the agent stands the kernel, which keeps the

@@ -51,9 +51,8 @@ ENDED_TTL_SECONDS = 600.0
 # still sends.
 ACTIVE_TTL_SECONDS = 3 * 3600.0
 MAX_EVENTS_PER_READ = 500
-# A reader waits for its run's next frame and wakes with it (since
-# 2026-11-05: it looked every 0.1 s, so a frame waited 50 ms on average,
-# docs/agent-speed-plan-2026-11-05.md P3). It looks this often anyway, should
+# A reader waits for its run's next frame and wakes with it (a look every
+# 0.1 s would hold a frame 50 ms on average). It looks this often anyway, should
 # a wake-up go missing; without an asyncio loop (another backend) it polls.
 TAIL_INTERVAL_SECONDS = 1.0
 TAIL_KEEPALIVE_SECONDS = 15.0
@@ -121,7 +120,7 @@ class LiveRun:
     # newest dropped frame of each sticky type ({type: (seq, json text)}).
     # The text is kept in pieces and joined only for such a reader: one
     # string grown and measured again with every dropped frame held the
-    # global lock for seconds in a long run (80,000 frames: 12 s, 2026-11-02).
+    # global lock for seconds in a long run (80,000 frames: 12 s).
     base_seq: int = 0
     base_parts: list = field(default_factory=list)
     sticky: dict = field(default_factory=dict)

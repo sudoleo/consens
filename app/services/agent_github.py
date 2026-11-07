@@ -7,7 +7,7 @@ GITHUB_APP_CLIENT_ID, GITHUB_APP_CLIENT_SECRET and GITHUB_APP_SLUG (the name
 in https://github.com/apps/<slug>). The app is public, so any GitHub account
 can install it on repositories of its choice.
 
-Connecting (per user, Settings -> GitHub; GitHubConnections), like Google's:
+Connecting (per user, Settings -> Connections -> GitHub; GitHubConnections), like Google's:
 1. ``start``: a one-time state (STATE_MINUTES) under the user's
    ``github_oauth_states``, bound to this browser by an HttpOnly cookie; the
    popup opens the app's installation page with it.
@@ -37,14 +37,13 @@ Tools (with the VM, GitHubTools): ``github_import`` downloads a commit's
 tarball and unpacks it in the VM as a git repository with one commit, named
 in ``.git/consens-import.json``; a public repository also without a
 connection, then without a token (the workbench reaches github.com only
-on the user's card, since 2026-11-02, and holds no GitHub credentials); ``prepare_pull_request`` takes the list of
+on the user's card and holds no GitHub credentials); ``prepare_pull_request`` takes the list of
 changed paths from the VM's git (it only limits what goes up), reads each
 file's bytes through the provider's file API and diffs them in the backend
 against the import commit's tree, fetched from GitHub; it saves a proposal
 on the turn (``agent_pull_request``, the card under the answer). The card's
 diff and the upload are the same bytes: nothing in the VM (its git, a filter,
-a moved ref) can show one change and send another (security audit
-2026-10-27). Nothing goes to GitHub
+a moved ref) can show one change and send another. Nothing goes to GitHub
 until the user confirms the card (PullRequests.confirm): the backend reads
 the files again, checks them against the preview, and creates blobs, tree,
 commit, a new branch and the pull request, never a push to an existing
@@ -203,10 +202,9 @@ class GitHubApp:
     def installation_token(self, installation_id, repo, permissions):
         """A token of ``installation_id`` for ``repo`` alone and
         ``permissions`` alone; None when the installation is gone (404).
-        Until 2026-11-03 a 401, 403 or 422 counted as gone too, and the
-        user's whole connection was forgotten: for a repository taken out
-        of the app's selection (422), a rate limit (403) or the app's own
-        key or clock (401)."""
+        A 401, 403 or 422 is not gone, since None forgets the user's whole
+        connection: it is a repository taken out of the app's selection
+        (422), a rate limit (403) or the app's own key or clock (401)."""
         try:
             response = self.request("POST", f"/app/installations/{int(installation_id)}/access_tokens",
                                     token=self.app_jwt(),
@@ -541,9 +539,8 @@ class GitHubTools:
 
     def tools(self):
         """github_import always: public repositories need no app. Private
-        ones and prepare_pull_request only where the app is set up (since
-        2026-10-29): before, an installation without it offered a tool that
-        could only answer NOT_SET_UP, one more choice for nothing."""
+        ones and prepare_pull_request only where the app is set up: without
+        it, a tool could only answer NOT_SET_UP, one more choice for nothing."""
         app = configured()
         tools = [ReadOnlyTool("github_import", f"Copy a GitHub repository into {REPOS_DIR} in your workspace, as a git "
                               "repository with one commit of its state: any public one"
@@ -613,7 +610,7 @@ class GitHubTools:
         files = _count_files(raw)
         report({"repo": repo, "bytes": len(raw)})
         self.vm._start(cancellation)
-        # Never past today's VM time or the answer's (since 2026-11-06), as
+        # Never past today's VM time or the answer's, as
         # the agent's own commands (VMTools._timeout).
         timeout = self.vm._timeout(UNPACK_SECONDS)
         session = self.vm.session
@@ -691,7 +688,7 @@ class GitHubTools:
             raise ValueError("git could not list the changes in the VM.")
         # The VM's git names the paths, nothing more: what is not named does
         # not go up. Which change it is, its bytes and its diff come from the
-        # file API and GitHub (security audit 2026-10-27).
+        # file API and GitHub.
         claimed = {item["path"]: item for item in parse_changes(text)}
         if len(claimed) > PR_FILES:
             raise ValueError(f"{len(claimed)} files changed, at most {PR_FILES} go into one pull request. Leave "
@@ -832,7 +829,7 @@ class PullRequests:
             persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
             # Only an active chat's card, as every write of a message
             # (agent_workspace.claim, GitHubTools._save): a card left open
-            # elsewhere pushed the files of a chat in deletion (bug hunt P29).
+            # elsewhere would push the files of a chat in deletion.
             chat = chat_ref.get(transaction=tx)
             if not chat.exists or (chat.to_dict() or {}).get("status") != "active":
                 raise GitHubUnavailable("This chat no longer exists.", 404)

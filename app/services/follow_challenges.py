@@ -29,12 +29,13 @@ def _challenge_ref(*, resource_type: str, resource_id: str, email: str, db):
 
 
 def _get(ref, tx):
+    # Firestore Transaction.get(ref) yields a generator in 2.20.x.  Read
+    # through the DocumentReference to receive the single snapshot while
+    # still binding the read to the transaction.
     try:
         return ref.get(transaction=tx)
     except TypeError:
-        # Firestore Transaction.get(ref) yields a generator in 2.20.x.  Read
-        # through the DocumentReference to receive the single snapshot while
-        # still binding the read to the transaction.
+        # A fake whose get() takes no transaction.
         return ref.get()
 
 

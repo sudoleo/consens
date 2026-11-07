@@ -58,14 +58,11 @@ def _plan_only(sentence):
     return len(sentence) <= _PLAN_ONLY_MAX_CHARS and bool(_PLAN_ONLY.match(sentence))
 
 
-# Highlights quote complete statements only (2026-10-21; before, the last
-# sentence of the streamed buffer was cut at 177 characters, and "e.g.",
-# "U.S." or "3." at the end of the buffer passed for the end of a
-# sentence). A sentence ends where its punctuation is followed by
-# whitespace that has arrived, not inside common abbreviations, initials or
-# German ordinals ("am 3. Oktober"). Nothing is ever shortened: a sentence
-# over _EXCERPT_MAX_CHARS gives way to a shorter one, or the previous
-# highlight stays.
+# Highlights quote complete statements only. A sentence ends where its
+# punctuation is followed by whitespace that has arrived, not inside common
+# abbreviations, initials or German ordinals ("am 3. Oktober"). Nothing is
+# ever shortened: a sentence over _EXCERPT_MAX_CHARS gives way to a shorter
+# one, or the previous highlight stays.
 _EXCERPT_MIN_CHARS = 12
 _EXCERPT_MAX_CHARS = 160
 _WINDOW_CHARS = 8000
@@ -134,10 +131,9 @@ def _fits(text):
     return _EXCERPT_MIN_CHARS <= len(text) <= _EXCERPT_MAX_CHARS and not _plan_only(text)
 
 
-# What a step thought, to read once its history is open (sections(), UX audit
-# 2026-10-29 A2): until then a step kept only its newest line, and under a
-# provider summary only its headings ("Checking the numbers"). Its first
-# characters are kept for this, its paragraphs whole up to _DETAIL_CHARS.
+# What a step thought, to read once its history is open (sections()): its
+# first _DETAIL_SOURCE_CHARS characters are kept for this, its paragraphs
+# whole up to _DETAIL_CHARS.
 _DETAIL_CHARS = 4000
 _DETAIL_SOURCE_CHARS = 16_000
 
@@ -193,7 +189,7 @@ class ReasoningProgress:
         limit = None if self.unlimited else 8 if source == "provider_summary" else 7
         # A line paced by time (min_seconds) needs no pace by size as well:
         # 400 characters held a section's first sentence back until the next
-        # heading had taken the line (UX audit 2026-10-29, A2).
+        # heading had taken the line.
         if ((limit is not None and self.updates >= limit)
                 or (self.summary and not self.min_seconds and self.received_chars - self.published_chars < 400)
                 or (self.published_at is not None and self.clock() - self.published_at < self.min_seconds)):
@@ -231,8 +227,7 @@ class ReasoningProgress:
                     excerpts.remove(excerpt)
                 excerpts.append(excerpt)
         def lead(sentences):
-            # The section's first sentence joins its heading; until 2026-10-29
-            # a heading alone stood for all the sentences under it.
+            # The section's first sentence joins its heading.
             fitting = [sentence for sentence in sentences if _fits(sentence)]
             if fitting and excerpts and excerpts[-1] == section:
                 excerpts[-1] = f"{section} – {fitting[0]}"

@@ -2,13 +2,13 @@
 # consens.io workspace: the layout of this version (agent_workspace.prepare
 # runs it as root whenever its VERSION changed; every step may run again).
 # - the agent's own user without sudo, its home closed to others, and the
-#   provider's home closed to it (the server's files, and since 2026-11-04
-#   the browser: Chrome, its screen and its profile with every sign-in run
-#   here as the provider's user, docs/agent-mode.md "Ein Rechner");
+#   provider's home closed to it (the server's files, and the browser:
+#   Chrome, its screen and its profile with every sign-in run here as the
+#   provider's user, docs/agent-mode.md "Ein Rechner");
 # - the agent's own /tmp (agent-run binds it over /tmp for each command), so
 #   nothing of the agent lies in the way of the screen's sockets and locks;
 # - once: what lay in the provider's home before (chats' folders, the notes,
-#   repositories) moves to the agent's; once since 2026-11-04 (MERGED):
+#   repositories) moves to the agent's; once per computer ($merged):
 #   whatever browser, screen or tunnel an older layout left goes, and so do
 #   the agent's processes that still share the real /tmp;
 # - installs into the user's own folders: pip falls back to them by itself
@@ -39,14 +39,14 @@ chmod 750 "$legacy"
 install -d -o root -g root -m 0755 "$state"
 install -d -o "$user" -g "$user" -m 1777 "$tmp"
 
-# Once per computer since 2026-11-04 (the marker lies on its disk, so a
-# restore to a checkpoint from before does it again): the browser that ran
-# here before 2026-10-27 with its profile and screen, the live view's
-# gateway, the localhost tunnel of the two-VM layout (2026-10-29 to
-# 2026-11-04) and the leftovers of the provider's user in /tmp. The agent's
-# processes end once too: they share the real /tmp, where the browser's
-# screen keeps its sockets from now on. Chrome, its screen and its profile
-# start anew under display.sh; the account's sign-ins are made again.
+# Once per computer (the marker lies on its disk, so a restore to a
+# checkpoint from before does it again): what older layouts left, the
+# browser with its profile and screen, the live view's gateway, the
+# localhost tunnel of the two-VM layout and the leftovers of the provider's
+# user in /tmp. The agent's processes end once too: they share the real
+# /tmp, where the browser's screen keeps its sockets. Chrome, its screen
+# and its profile start anew under display.sh; the account's sign-ins are
+# made again.
 if [ ! -e "$merged" ]; then
   pkill -KILL -u sprite -f '/opt/google/chrome/|google-chrome|cdp\.py' 2>/dev/null || true
   pkill -KILL -u sprite -x Xvfb 2>/dev/null || true
@@ -64,8 +64,8 @@ if [ ! -e "$merged" ]; then
   done
   touch "$merged"
 fi
-# Until 2026-10-29 a takeover of the browser froze the agent's processes
-# (pause.py); one frozen at the change goes on, and the pause goes.
+# An older layout froze the agent's processes while the user had the
+# browser (pause.py); one still frozen goes on, and the pause goes.
 pkill -KILL -f "$legacy/.consens/workspace/pause.py" 2>/dev/null || true
 for group in /sys/fs/cgroup/consens-agent /sys/fs/cgroup/consens-user; do
   [ -e "$group/cgroup.freeze" ] && echo 0 > "$group/cgroup.freeze" 2>/dev/null || true
@@ -118,28 +118,24 @@ wait
 # install.sh); the agent runs it headless for checks the user need not see,
 # such as its dev server or a page it serves on localhost (screenshots,
 # PDFs; no sign-ins, its own profile). Chrome's policy holds for every
-# user of the computer since 2026-11-04 (harden.sh): no file:// pages,
-# printing off, which leaves headless --print-to-pdf and Playwright's pdf()
-# working (measured with Chrome 153 and the policy, review 2026-11-04).
-# `google-chrome --headless=new` runs as the agent's user with
-# --no-sandbox since 2026-11-04: no_new_privs ignores the setuid helper, and
-# agent-run's filter (nouserns.py) leaves it no user namespace, which kept
-# the agent's user from root's parts of the kernel more than the sandbox
-# kept a page from the agent's own files (its commands reach them anyway).
-# Until then the sandbox ran in user namespaces (test Sprite 2026-10-28).
-# Workspaces from before 2026-10-27 have Xvfb and x11vnc of the
-# old screen: those go (TigerVNC's X server took their place on
-# 2026-11-02). A failed install costs the workspace that tool until the
-# next version, never its user (the steps above).
+# user of the computer (harden.sh): no file:// pages, printing off, which
+# leaves headless --print-to-pdf and Playwright's pdf() working (measured
+# with Chrome 153 and the policy). `google-chrome --headless=new` runs as
+# the agent's user with --no-sandbox: no_new_privs ignores the setuid
+# helper, and agent-run's filter (nouserns.py) leaves it no user namespace,
+# which kept the agent's user from root's parts of the kernel more than the
+# sandbox kept a page from the agent's own files (its commands reach them
+# anyway). Older workspaces have Xvfb and x11vnc of the old screen: those
+# go (TigerVNC's X server took their place). A failed install costs the
+# workspace that tool until the next version, never its user (the steps
+# above).
 export DEBIAN_FRONTEND=noninteractive
 apt_get() { apt-get -o DPkg::Lock::Timeout=60 -o Dpkg::Options::=--force-confold -y -qq "$@"; }
 installed() { [ "$(dpkg-query -W -f='${Status}' "$1" 2>/dev/null)" = "install ok installed" ]; }
 # Chrome's package adds Google's apt source, and a daily job of it adds the
-# source again: until 2026-11-04 the workbench reached no Google server, and
-# every apt run warned "Failed to fetch dl.google.com" (2026-10-28). It stays
-# off, so an apt run for the agent (vm_install_packages) never updates the
-# browser's Chrome under it. The package reads /etc/default/google-chrome
-# before it adds anything.
+# source again. It stays off, so an apt run for the agent
+# (vm_install_packages) never updates the browser's Chrome under it. The
+# package reads /etc/default/google-chrome before it adds anything.
 no_chrome_source() {
   printf 'repo_add_once="false"\nrepo_reenable_on_distupgrade="false"\n' > /etc/default/google-chrome
   rm -f /etc/apt/sources.list.d/google-chrome.list /etc/apt/sources.list.d/google-chrome.sources

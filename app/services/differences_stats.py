@@ -16,12 +16,11 @@ einer identifizierbaren Person herstellbar) und fallen nicht unter
 personenbezogene Daten. Beim Erweitern des Schemas gilt: niemals Inhalte oder
 nutzerbezogene Identifikatoren aufnehmen.
 
-Schreiber (Stand 2026-10-31): keiner. Bis 2026-10-25 schrieb der
-Consensus-Modus der App, vom 2026-10-15 bis 2026-10-31 der Vergleichsmodus des
-Agenten; seit dem einen Modus prüfen Prüfer statt Judges, und es entsteht kein
-differences_data mehr. Wie der Datensatz künftig gespeist wird, klärt der
-Betreiber nach dem Umbau zusammen mit Model Pulse; bis dahin bleiben Modul und
-Schema für die vorhandenen Dokumente stehen.
+Schreiber: keiner (welche es gab, steht bei ``source``). Im einen Modus des
+Agenten prüfen Prüfer statt Judges, und es entsteht kein differences_data.
+Wie der Datensatz künftig gespeist wird, klärt der Betreiber zusammen mit
+Model Pulse; bis dahin bleiben Modul und Schema für die vorhandenen Dokumente
+stehen.
 
 Metadaten-Vollständigkeit: schema_version + engine-/modellbezogene Felder sind
 Pflicht, damit alte Datensätze bei späteren Analysen nicht entwertet werden.
@@ -110,11 +109,11 @@ def build_differences_stats_doc(
             "agree": len(claim.get("agree") or []),
             "dissent": len(claim.get("dissent") or []),
         }
-        # Seit dem Coverage-Judge ist ein Claim mit einer einzigen Stimme kein
-        # Ausreisser mehr, sondern ein sichtbarer Zustand. Ohne diese Spalte
-        # liesse sich in der Telemetrie nicht mehr trennen, ob die Abdeckung
-        # breit oder nur zahlreich war. Alt-Payloads ohne Coverage-Feld
-        # behalten die bisherige Zeilenform.
+        # Mit dem Coverage-Judge ist ein Claim mit einer einzigen Stimme kein
+        # Ausreisser, sondern ein sichtbarer Zustand. Ohne diese Spalte
+        # liesse sich in der Telemetrie nicht trennen, ob die Abdeckung
+        # breit oder nur zahlreich war. Payloads ohne Coverage-Feld
+        # behalten die Zeilenform ohne sie.
         coverage = str(claim.get("coverage") or "")
         if coverage:
             entry["coverage"] = coverage

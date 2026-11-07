@@ -1,8 +1,7 @@
 """The Agent's Watch tools: it prepares a Watch, and runs it on schedule.
 
-A Watch runs the Agent again on a schedule in its chat (agent_watches.py,
-since 2026-11-03; before, it re-asked a question through the Consensus
-pipeline). Two sides:
+A Watch runs the Agent again on a schedule in its chat (agent_watches.py).
+Two sides:
 
 * ``prepare_watch`` (WatchTools), on the user's own turns: never creates
   anything. It keeps one proposal on the running turn (``agent_watch``:
@@ -35,9 +34,9 @@ from app.services.agent_document_spec import Strict
 from app.services.agent_watches import (GOAL_MAX_CHARS, REASON_MAX_CHARS, TASK_MAX_CHARS, TASK_MIN_CHARS,
                                         URL_MAX_CHARS)
 
-# Since 2026-11-03 (prompt_defaults.py style, facts and no recipe): what a
-# Watch is and what prepare_watch does; the tool's result says what to tell
-# the user (INSTRUCTIONS).
+# In prompt_defaults.py style, facts and no recipe: what a Watch is and what
+# prepare_watch does; the tool's result says what to tell the user
+# (INSTRUCTIONS).
 AUDIT_PROMPT = """WATCHES
 
 A Watch runs you again on a schedule in this chat, without the user present, and is consens.io's only way to reach the user later: a run that finds something new for them emails it. It suits anything the user wants to be told, reminded of or kept up to date on later, or done again and again. prepare_watch prepares one as a card below your answer, which only the user starts; what its task says, the runs then do in the user's name."""

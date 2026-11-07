@@ -37,12 +37,12 @@ _LINK_REL = "nofollow noopener noreferrer"
 # Läufe wie "[S1]", "[S1, S2]" oder "[1, 3]" (gleiches Muster wie im Frontend).
 SOURCE_RUN_RE = re.compile(r"\[((?:S?\d+)(?:\s*,\s*S?\d+)*)\]", re.IGNORECASE)
 # The whole group of markers before the sentence end moves behind the point,
-# not only the last one: "Claim [S1][S2]." became "Claim [1].[2]" with the
-# point between the two (2026-10-20). A group always matches whole, its
+# not only the last one, else "Claim [S1][S2]." becomes "Claim [1].[2]" with
+# the point between the two. A group always matches whole, its
 # point is optional (group 2 is None without one): with the point required,
-# a long group without one was tried again from each of its markers and
+# a long group without one is tried again from each of its markers and
 # from each blank before it, quadratic (4,000 markers took 5.7 s on a
-# share page, 2026-10-22). Same matches as before otherwise.
+# share page).
 _TERMINAL_SOURCE_ORDER_RE = re.compile(
     r"(?<![ \t])[ \t]*((?:\[(?:S?\d+)(?:\s*,\s*S?\d+)*\][ \t]*)*\[(?:S?\d+)(?:\s*,\s*S?\d+)*\])"
     r"(?:([.!?]+(?:[\"'”’)\]}]+)?)(?=\s|$))?",
@@ -97,7 +97,7 @@ def source_host(url, title=""):
 def source_site_name(url, title=""):
     """Kurzer, erkennbarer Site-Name einer Quelle ("en.wikipedia.org" → "wikipedia").
 
-    Python-Pendant zu getSourceSiteName() in index.html, damit Inline-
+    Python-Pendant zu getSourceSiteName() in static/js/sources.js, damit Inline-
     Citations auf der Share-Seite genauso aussehen wie im Consensus-Bereich.
     """
     hostname = re.sub(r"^(www|m|amp)\.", "", source_host(url, title))
@@ -230,9 +230,9 @@ def _same_origin_image(src) -> bool:
 
 def _neutralize_remote_images(tokens):
     """An image of the answer that would load from elsewhere is the note the
-    app shows instead (markdown-stream.js neutralizeRemoteMedia). Until
-    2026-10-28 a public page loaded it: a model's or an injected picture told
-    its host who read the page, and when (audit). A picture the agent placed
+    app shows instead (markdown-stream.js neutralizeRemoteMedia): loaded on a
+    public page, a model's or an injected picture would tell its host who
+    read the page, and when. A picture the agent placed
     in its answer (``picture:p2``, a file of the private chat the app shows
     there) leaves nothing, and a line of only those leaves no paragraph. A
     table cell of only those stays, empty: the row keeps its columns."""

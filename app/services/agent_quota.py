@@ -1,9 +1,7 @@
 """UTC-day allowance in micro-euros (agent_budget_config.MICRO_EUR). Every
 call is charged what it cost: the provider's dollar cost of the call (cache,
 reasoning and web search included), else its catalog price, converted at
-agent_budget_config.NANO_USD_PER_MICRO_EUR (measured_charge). Until
-2026-10-31 the account counted tokens, cache reads and audit reviewers at
-weights that stood in for their cost.
+agent_budget_config.NANO_USD_PER_MICRO_EUR (measured_charge).
 
 One ledger document per account and period serves Agent and the Consensus
 pipeline alike; the limit comes from the account tier (agent_budget_config).
@@ -18,7 +16,7 @@ admitted run holds its estimate against concurrent admissions.
 Reservations protect active calls only. A paid receipt is settled once;
 retries cannot release or charge it again.
 
-Bounded uncertainty (owner decision for R07): a started call whose final usage
+Bounded uncertainty (owner decision): a started call whose final usage
 is missing is neither fully released nor fully charged. Its reservation is
 released and a bounded estimate is charged instead: the measured provisional
 lower bound, but at least ``UNKNOWN_ESTIMATE_FRACTION`` of the reservation.
@@ -191,9 +189,9 @@ def day_key():
     return datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
 
-# The unit of the period's ledger. Ledgers of the token account (until
-# 2026-10-31) have no suffix: a call reserved in tokens before the switch
-# settles into its own token ledger, never into the euro one.
+# The unit of the period's ledger. Ledgers of the token account have no
+# suffix: a call reserved in tokens settles into its own token ledger, never
+# into the euro one.
 LEDGER_UNIT = "_eur"
 
 
@@ -349,7 +347,7 @@ def reserve(data, amount, *, limit=None, overdraft=False):
     """Hold ``amount`` for an active call. ``overdraft=True`` admits it even
     beyond the limit (finishing an Agent message whose comparison already ran);
     the next admission then fails, as after an overdrawn pipeline run. An int
-    ``overdraft`` lets only that many tokens of ``amount`` lie beyond the limit
+    ``overdraft`` lets only that many micro-euros of ``amount`` lie beyond the limit
     (the answer an Agent step may write after its routing allowance)."""
     data = normalize(data)
     remaining = _remaining(data, daily_limit() if limit is None else limit)
@@ -385,14 +383,14 @@ def settle(data, reserved, usage, *, measurable=False):
 
 # How many of a ledger's estimates still wait for their measurement, apart
 # from the amount: an estimate that can never be measured stays charged for
-# good, and until 2026-11-03 its ``estimated`` amount alone had snapshot()
-# look for a measurement all day (a query a minute while a chat was open, and
+# good, and its ``estimated`` amount alone would have snapshot() look for a
+# measurement all day (a query a minute while a chat is open, and
 # yesterday's ledger read on every snapshot of the next day).
 def awaits_measurement(data):
     data = data or {}
     if "estimates_pending" in data:
         return data["estimates_pending"] > 0
-    # A ledger no call has settled into since then only knows the amount.
+    # An older ledger without the counter only knows the amount.
     return data.get("estimated", 0) > 0
 
 
@@ -405,9 +403,9 @@ def estimate_closed(data):
 
 # What the account's model calls took in all (the admin's account lookup),
 # counted in the day's ledger that a claim and a settlement write anyway.
-# Until 2026-11-01 the user document carried these counters: two more writes
-# and reads of the account's busiest document per model call, about a fifth
-# of all Firestore writes of an Agent message.
+# On the user document they would cost two more writes and reads of the
+# account's busiest document per model call, about a fifth of all Firestore
+# writes of an Agent message.
 USAGE_SUMS = ("input_tokens", "output_tokens", "cached_input_tokens", "cache_write_tokens", "reasoning_tokens",
               "estimated_cost_nano_usd")
 
@@ -441,8 +439,8 @@ def count_settlement(data, usage):
 
 def usage_totals(db, uid, legacy=None):
     """The account's sums over all its day ledgers (count_claim and
-    count_settlement), added to ``legacy``: what the user document counted
-    until 2026-11-01. Reads every ledger of the account: for the admin's
+    count_settlement), added to ``legacy``: the older counters of the user
+    document. Reads every ledger of the account: for the admin's
     lookup only, never on a message's path."""
     totals = {key: value for key, value in (legacy or {}).items() if type(value) in (int, float)}
     ledgers = db.collection("users").document(uid).collection("chat_state").stream()

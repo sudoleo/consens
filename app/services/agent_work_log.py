@@ -1,14 +1,14 @@
 """The agent's work log, written live by the app (docs/agent-work-log.md).
 
-Since 2026-10-25 (in audit mode only until 2026-10-31, then in every chat
-run of every account; routers/agent.py lets the turn's owner read it). While
+Written in every chat run of every account; routers/agent.py lets the turn's
+owner read it. While
 the agent works, the app records what it sees and does, never the agent
 itself: the context each model step receives (``context``: the chat's
 history and question, then everything the run adds to the conversation,
 such as the app's hints and workers' messages), the step's readable
 reasoning, text, tool calls and search hits (``step``), every tool result
-(``tool``), the app's own interventions (``app``: a retracted text, the
-memory lock, the fixed answer), and the run's ``start`` and ``end``.
+(``tool``), the app's own interventions (``app``: a retracted text, a
+pause, the fixed answer), and the run's ``start`` and ``end``.
 Delegated workers write into the same log under their own id. The reviewers,
 the comparison answers and the app's page fetches are not part of it
 (DelegationLoop._log_actor).
@@ -17,8 +17,8 @@ The log only grows: an entry is never changed, a retraction is a new entry.
 One writer thread saves the entries in order, up to BATCH_LIMIT per
 Firestore transaction of their own (AgentSessionStore.save_work_log), as
 chunk documents ``users/{uid}/chats/{chat}/turns/{turn}/work_log/{seq:06d}``
-named after their first entry (``seq``, ``last_seq``, ``entries``; until
-2026-11-01 one document per entry, which readers still take). Content above
+named after their first entry (``seq``, ``last_seq``, ``entries``; older
+logs have one document per entry, which readers still take). Content above
 INLINE_CHARS goes to the private object store (agent_files.PrivateObjects);
 without one it is kept shortened. Recording never raises and never holds the
 agent up: an entry that cannot be saved is lost, and the turn then carries
@@ -48,13 +48,13 @@ RETENTION_DAYS = 30
 INLINE_CHARS = 16_000
 PREVIEW_CHARS = 2_000
 # Entries per Firestore transaction. They go out together as a few chunk
-# documents (AgentSessionStore.save_work_log, CHUNK_BYTES each), never one
-# document per entry (until 2026-11-01: 687 writes on a day of 15 messages,
-# and as many deletes 30 days later).
+# documents (AgentSessionStore.save_work_log, agent_sessions.WORK_LOG_CHUNK_BYTES
+# each), never one document per entry (that made 687 writes on a day of 15
+# messages, and as many deletes 30 days later).
 BATCH_LIMIT = 50
 # The writer gathers what comes within this long after the first entry it
 # has not saved yet (the run's end saves at once): a step brings several
-# entries one after another. On the 687 entries of 2026-11-01 that is 202
+# entries one after another. On those 687 entries of one day that is 202
 # writes instead of 627 (2 s: 285, 10 s: 136). Only the saved log's view
 # (admins, agent-work-log.js, polling every 3 s) sees entries this much
 # later; the reviewers read the log in memory.
@@ -86,13 +86,12 @@ TOOL_DATA = {
     "browser": "web", "ask_user": "web",
     # Pictures of the web the server fetched (agent_web_images.py).
     "find_pictures": "web", "search_pictures": "web", "show_image": "web", "vm_save_picture": "web",
-    # The answers of the user's chosen models with their pages (since
-    # 2026-10-31): model output.
+    # The answers of the user's chosen models with their pages: model output.
     "compare_models": "agent",
 }
-# Measurements an entry may carry beside its content (since 2026-10-30): a
-# tool result's start and duration (``tool``, audit I4), a gate's wait on its
-# ``checked`` or ``paused`` entry (I9). Numbers and times only, never text.
+# Measurements an entry may carry beside its content: a tool result's start
+# and duration (``tool``), a gate's wait on its ``checked`` or ``paused``
+# entry. Numbers and times only, never text.
 ENTRY_FIELDS = ("started_at", "duration_ms", "gate_ms")
 
 
@@ -355,7 +354,7 @@ class WorkLog:
         """A tool result as it goes into the actor's conversation (where the
         next ``context`` then skips it), with when the call started (UTC,
         ISO) and how long it ran: a slow browser or VM call shows in the log
-        itself, not only as the gap to the next entry (audit I4)."""
+        itself, not only as the gap to the next entry."""
         try:
             name = (call.get("function") or {}).get("name") or ""
             with self._condition:

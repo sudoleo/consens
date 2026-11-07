@@ -270,7 +270,7 @@ def analysis_budget_scope(seconds=None, max_calls=None):
 
 @contextmanager
 def analysis_run_scope():
-    """A Consensus run of phases: synthesis, then both judges (audit C3).
+    """A Consensus run of phases: synthesis, then both judges.
 
     Each budgeted phase gets its own deadline and call count, so a slow
     synthesis never uses up the judges' time. The run carries the shared
@@ -391,10 +391,10 @@ async def _guard_provider_io(awaitable, cancellation, budget, progress=None, *, 
 
 
 # Provider HTTP runs on one event loop per process with one pooled client.
-# Until 2026-11-05 every call built its own loop and AsyncClient: DNS, TCP, TLS
-# and the CA bundle again for each model step (prod: 50-560 ms from request
-# start to the provider's first byte). No connection limit: each concurrent
-# call gets its own connection as before, so a hung request never makes
+# A loop and AsyncClient per call would redo DNS, TCP, TLS and the CA bundle
+# for each model step (prod: 50-560 ms from request start to the provider's
+# first byte). No connection limit: each concurrent call gets its own
+# connection, so a hung request never makes
 # another wait for the pool. 60 s idle stays below common server idle limits;
 # httpcore also drops a pooled connection the server already closed. HTTP/1.1
 # although h2 is installed: HTTP/2 would carry all parallel model streams on
@@ -530,7 +530,7 @@ class ProviderHTTP:
         complete stream (``drain``) the tail is read first, in the background,
         so the connection returns to the pool. Otherwise it is closed at once,
         which drops an unfinished connection: the provider sees the
-        disconnect as before."""
+        disconnect."""
         on_loop = threading.current_thread() is session.thread
         if drain or on_loop:
             closing = _drain_and_close(response, chunks) if drain else _close_stream(response, chunks)
@@ -684,7 +684,7 @@ def cancellable_sse_lines(url, *, json, headers, progress=None):
             except StopAsyncIteration:
                 lines, ended = decoder.flush(), True
             for line in lines:
-                # As before each guarded line read: a stop or an exhausted
+                # Checked before every line: a stop or an exhausted
                 # deadline/progress budget ends the stream between lines too.
                 _check_provider_io(cancellation, budget, progress)
                 if line.startswith("data:") and line[5:].strip() == "[DONE]":

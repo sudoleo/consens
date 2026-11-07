@@ -1,4 +1,4 @@
-"""Typed completion state of one generated text (review R06).
+"""Typed completion state of one generated text.
 
 A provider stream that simply stops, or stops at the output-token limit, is
 not a finished answer. Every model answer and every synthesis carries one of

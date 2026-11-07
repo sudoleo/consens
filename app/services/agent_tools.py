@@ -34,11 +34,11 @@ SEARCH_RESULTS, SEARCH_RESULT_CHARACTERS = 5, 2000
 
 
 # The engine of the agent's own steps: "auto" as everywhere, or Exa with
-# AGENT_SEARCH_ENGINE=exa (since 2026-11-05, a switch to measure in normal
-# use, docs/agent-speed-plan-2026-11-05.md P1). A round of a publisher's own
-# search took 6.2 s (GPT-6.1 Terra) and 5.4 s (Claude Haiku 5.5) at the
-# median in prod, a round on Exa 2.4-4.4 s, but with other models; one Terra
-# step on Exa took 7.9 s for one round in a probe the same day, no faster.
+# AGENT_SEARCH_ENGINE=exa (a switch to measure in normal use,
+# docs/agent-speed-plan-2026-11-05.md P1). Measured 2026-11-05: a round of a
+# publisher's own search took 6.2 s (GPT-6.1 Terra) and 5.4 s (Claude Haiku
+# 5.5) at the median in prod, a round on Exa 2.4-4.4 s, but with other models;
+# one Terra step on Exa took 7.9 s for one round in a probe, no faster.
 # Every round is another pass of the model on OpenRouter, whatever the
 # engine: what shortens the search is fewer passes (several searches in one,
 # DelegationLoop._parallel_calls) and endpoints that start quickly
@@ -196,7 +196,7 @@ def _decode_stringified(arguments, value, unique):
 # A bound against a runaway registry, far below the providers' own limits
 # (OpenAI and Gemini take 128). An admin's largest message (workers, files,
 # Memory, VM with GitHub and pictures) offers 27 tools; 20 failed every
-# message of such a chat (2026-10-26, tests/test_agent_vm.py).
+# message of such a chat (tests/test_agent_vm.py).
 MAX_TOOLS = 40
 
 
@@ -245,8 +245,8 @@ class ToolRegistry:
             arguments = tool.arguments.model_validate(value)
         except ValidationError as exc:
             # Field and message only: pydantic's default text repeats the
-            # input and a docs URL per error, and the 500-character cut
-            # dropped every error after the second. An unknown field also
+            # input and a docs URL per error, and the refusal's cut would
+            # drop every error after the second. An unknown field also
             # names the fields its object takes: "Extra inputs are not
             # permitted" alone left DeepSeek guessing (2026-11-01). The same
             # mistake in every list item is one problem ("and 9 more like
@@ -280,8 +280,8 @@ class ToolRegistry:
         """What an unknown tool's refusal adds, true of this registry: which
         tool opens web pages (read_source's own description says which ones:
         any public page), and that the workspace's
-        tools come with open_workspace while it is closed (audit L7: a direct
-        call of browser did not say so)."""
+        tools come with open_workspace while it is closed (a direct call of
+        browser would not say so otherwise)."""
         notes = []
         if "read_source" in self.tools:
             notes.append("Of these, read_source opens web pages.")

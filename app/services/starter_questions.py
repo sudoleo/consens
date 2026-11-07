@@ -1,7 +1,7 @@
 """Example questions under an empty new chat (#composerStarters).
 
 Two sources. A curated pool: the app shell shows three of them per page
-load, in one row (since 2026-10-31 without "Check an AI answer"). They are questions where one confident answer
+load, in one row. They are questions where one confident answer
 is not enough -- law, health, energy, engineering and business decisions on
 which careful sources and experts differ -- so several models and their
 disagreements earn their place. And, once an account has a few saved

@@ -3,7 +3,7 @@
 Statt des Favicons zeigt der Link-Preview die Frage der Seite: darüber leise
 das Datum, unten neben der Wortmarke, was hinter der Antwort steht (Agreement,
 Modelle, Widersprüche). Watch- und Topic-Karten tragen statt Datum und Score
-den Zustand ihrer Seite („Watch · Unchanged since …“, seit 2026-10-20). Rein
+den Zustand ihrer Seite („Watch · Unchanged since …“). Rein
 aus gespeicherten Daten gerendert – keine LLM-Calls.
 Dazu die Markenkarte für alle übrigen Seiten (``render_brand_card``, als
 static/og-home-v2.png gespeichert von scripts/render_brand_card.py).
@@ -59,9 +59,8 @@ FOOTER_Y = 548  # optische Mitte der Fußzeile
 FACTS_SEPARATOR = "  ·  "
 
 # Die Markenkarte der Landing: Vorschaubild jeder Seite ohne eigene Karte.
-# Ihre Zeile ist der Hero-Satz der Landing (templates/landing.html, h1), seit
-# 2026-10-31 der eine Modus des Agenten; die sechs Marken sind die Familien
-# eines vollen Laufs (High Quality).
+# Ihre Zeile ist der Hero-Satz der Landing (templates/landing.html, h1), der
+# eine Modus des Agenten; die sechs Marken sind Modellfamilien der App.
 BRAND_CARD = "/static/og-home-v2.png"
 BRAND_HEADLINE = ("One AI does the work.", "Several check it.")
 BRAND_LOGOS = ("chatgpt.png", "claude.png", "gemini-icon.png", "grok.png", "deepseek.png", "mistral.png")
@@ -309,7 +308,7 @@ def watch_card_png(share_id: str, *, question: str, state_line: str,
                    model_count: int) -> bytes | None:
     """A Watch's card, built like a Topic card: above the question what its
     page leads with ("Watch · Unchanged since Sep 24", "Watch · Paused · last
-    checked Oct 1"), no score -- the page shows none (Apple-Audit L13)."""
+    checked Oct 1"), no score -- the page shows none."""
     return card_png(
         f"watch:{share_id}", question=question,
         facts=[f"{model_count} AI models" if model_count else "Several AI models"],

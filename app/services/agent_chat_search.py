@@ -1,4 +1,4 @@
-"""The agent finds the user's earlier chats and reads one (since 2026-10-28).
+"""The agent finds the user's earlier chats and reads one.
 
 ``search_chats`` with words looks through the account's chats by title, start
 date and latest question and names up to RESULTS of them with their first
@@ -12,7 +12,7 @@ data, never instructions, and outside content like any tool result
 words). Chats with Google data stay in their chat: their content was
 consented to and routed for that chat alone (routers/agent.py
 ``google_data``), so they are neither found nor opened. Neither are temporary
-chats (chat_store.create_chat, since 2026-11-01): they keep nothing beyond
+chats (chat_store.create_chat): they keep nothing beyond
 themselves. The current chat is in view already and left out.
 """
 from __future__ import annotations
@@ -28,7 +28,7 @@ from app.services.agent_tools import ReadOnlyTool
 
 TOOL_NAME = "search_chats"
 # Chats a search looks through, newest first: the account keeps at most 200
-# (storage caps 2026-10-19), so this is all of them.
+# (chat_store.MAX_CHATS_PER_OWNER), so this is all of them.
 SEARCH_CHATS = 200
 RESULTS = 10
 QUESTION_CHARS = 300

@@ -11,9 +11,9 @@ AGREEMENT_LEVEL_THRESHOLDS = [
 ]
 
 # Eine einzelne Stimme belegt nichts: "1/1" liest sich wie eine Bestaetigung,
-# ist aber nur ein Modell. Solche Claims sind seit dem Coverage-Judge sichtbar
+# ist aber nur ein Modell. Solche Claims sind mit dem Coverage-Judge sichtbar
 # (grau, "zu wenige Modelle haben das behandelt") - in den Score gehen sie
-# weiterhin NICHT ein, sonst hoebe fehlende Abdeckung die Zahl.
+# NICHT ein, sonst hoebe fehlende Abdeckung die Zahl.
 MIN_SCORED_CLAIM_SUPPORT = 2
 
 

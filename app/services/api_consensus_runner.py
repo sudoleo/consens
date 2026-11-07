@@ -66,8 +66,7 @@ MAX_SCHEDULED_RUNS = 32
 API_MAINTENANCE_INTERVAL_SECONDS = 60
 # With no API run open (reserved, accepted, running) the scan doubles its
 # pause up to this; a run this process schedules brings it back to the
-# minute (schedule_run). Until 2026-11-01 it made four queries a minute,
-# about 5,800 reads a day on an idle API, every empty query billed as one.
+# minute (schedule_run). Every empty query is billed as one read.
 API_MAINTENANCE_IDLE_MAX_SECONDS = 600
 # The 30-day retention of finished runs needs no minute.
 API_RETENTION_INTERVAL_SECONDS = 3600
@@ -477,8 +476,7 @@ def execute_consensus_pipeline(run: dict) -> dict:
     tier = run_tier(run)
     plan = run.get("model_plan") or {}
     providers = dict(plan.get("providers") or {})
-    # Publisher runs use the same preset families as every other API run. The
-    # persisted model_plan is the single source of truth for who answers, so a
+    # The persisted model_plan is the single source of truth for who answers, so a
     # run never drops a provider that its own plan still advertises.
     keys = resolve_developer_api_keys()
     if mock_llm_enabled():

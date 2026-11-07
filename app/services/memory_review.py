@@ -1,4 +1,4 @@
-"""The agent's memory, tidied up once a day (since 2026-11-06).
+"""The agent's memory, tidied up once a day.
 
 With "Let Agent update memory" on, the agent alone keeps the memory
 (update_memory) while it works on a message. In practice it hardly does:
@@ -12,8 +12,7 @@ So a few hours after an opted-in account's last message (IDLE), at most
 about once a day (INTERVAL), one structured call reads the questions of the
 account's chats since the last review with the end of each answer, and the
 memory with its ids, and returns the changes. It is not a writer beside every
-message (921ff52b, reverted 2026-11-02): it runs once, away from any run,
-and costs no message time. The changes go through
+message: it runs once, away from any run, and costs no message time. The changes go through
 ``FirestoreAgentMemoryRepository.apply`` like the agent's own (opt-in in the
 same transaction, secret filter, limits, Undo log) as one change with
 ``source="review"``; Settings › Memory names the latest review with one Undo
@@ -100,8 +99,8 @@ SYSTEM = ("You keep the memory a personal AI assistant has of one user. "
 # agent memory" found that a weaker model gains much from being told how (read
 # first, then decide), a strong one from being told what for. Luna is the
 # weaker kind; "observations" makes it go through the chats before it decides
-# (never stored or logged). Since the first run without "Often little or
-# nothing needs to change", which Luna took literally on a near-empty memory.
+# (never stored or logged). Without "Often little or nothing needs to
+# change", which Luna took literally on a near-empty memory.
 PROMPT = """Once a day you look back over the user's chats with the assistant since the last
 time and keep the saved memories up to date, the way a good personal assistant
 thinks back over the day. The saved memories are what the assistant knows about the

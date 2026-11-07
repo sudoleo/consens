@@ -3,13 +3,13 @@
 Comparison models cite URLs from their web search. OpenRouter sends source
 text with each URL citation (``url_citation.content``): Exa highlights for the
 families without their own search; for native search often nothing usable.
-Before this module the answer was written from URL and title only, so it could weigh
-what the answers claimed, but not what their sources say.
+From URL and title alone the answer could weigh what the answers claim, but
+not what their sources say.
 
 Per turn this module keeps the cited source text in memory, binds each source
 to the answer sentences it supports, fetches the page for sources without
-usable text (the bounded, cached retrieval of the source checks, started as
-soon as an answer arrives) and gives the agent one deduplicated source
+usable text (source_documents' bounded, cached retrieval, started as soon as
+an answer arrives) and gives the agent one deduplicated source
 list with relevant original excerpts under a fixed character budget.
 
 No model call, no search, nothing persisted or streamed. See

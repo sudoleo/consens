@@ -10,8 +10,8 @@ of a turn add up). The card under the completed answer
 with one click through the owner modules of the Settings dialog, which save it
 to the account (PATCH /api/my/settings). ``read_settings`` tells the agent
 what is set, the defaults and what this account can choose, so it can answer
-"what is set?" and ask back with real choices when a wish is unclear; since
-2026-11-01 also the facts about consens.io itself (``_about``: price, daily
+"what is set?" and ask back with real choices when a wish is unclear; also
+the facts about consens.io itself (``_about``: price, daily
 allowance, limits, sharing, memory, data, pages), read on demand instead of
 sitting in every turn's system prompt.
 Why a card instead of a write (docs/agent-settings-evaluation-2026-10-17.md):
@@ -78,16 +78,15 @@ LINEUP_LABEL = "Reviewers"
 # Said with every Pro limit on a level: no other model or setting lifts it
 # (a live probe offered "pick another model in Settings" as a way around).
 PRO_LEVELS_NOTE = "High, Extra high and Max need Pro on every model; no other model or setting lifts this."
-# Whether reviewers check the agent's work (``reviewers``, since 2026-11-01)
-# is the user's alone: a page the agent read must never switch off its own
+# Whether reviewers check the agent's work (``reviewers``) is the user's
+# alone: a page the agent read must never switch off its own
 # review, not even through a card.
 ELSEWHERE = ("The system prompt, memory, privacy, connections, notifications and whether reviewers check your work "
              "are in Settings; the mode (Agent or Compare) is in the (+) menu of a new chat. You cannot change them.")
 SITE = "https://consens.io"
 TIER_LABELS = {"free": "Free", "plus": "Plus", "pro": "Pro", "admin": "Admin"}
 
-# The tools' block of the agent's system prompt (audit mode since
-# 2026-10-28, the Agent's one mode since 2026-10-31): what the tools do and
+# The tools' block of the agent's system prompt: what the tools do and
 # the rules that protect the user, without examples or a recipe for unclear
 # requests; read_settings lists the settings and choices, the tool's result
 # says what to tell the user (INSTRUCTIONS).
@@ -470,7 +469,7 @@ class SettingsTools:
             _, models, current, default = self._models()
         except ValueError as exc:
             # The facts of consens.io do not need the model list: a question
-            # about the price still has its answer (review 2026-11-01).
+            # about the price still has its answer.
             return {"settings": str(exc), "consens_io": self._about()}
         effort = self.loop.model.reasoning_effort or "default"
         open_models = [model["label"] for model in models if model.get("available") is not False and not model.get("premium")]
@@ -491,7 +490,7 @@ class SettingsTools:
                                    **({"on_pro": [EFFORT_LABELS[value] for value in choice.locked]} if choice.locked else {})}
         presets = _presets()
         lineup = self._lineup_now(pro)
-        # The models by name: live (2026-10-22) the agent could not say how
+        # The models by name: without them the agent could not say how
         # many models "Daily" asks. This message runs what the page sent
         # (Custom too); each lineup lists its configured models.
         comparison = getattr(self.loop, "comparison", None)
@@ -519,8 +518,8 @@ class SettingsTools:
     # ---- consens.io itself --------------------------------------------------
 
     def _about(self):
-        """What the agent knows of consens.io itself (2026-11-01, Max: all it
-        must know, read only when asked). Here, not in the system prompt that
+        """What the agent knows of consens.io itself (Max: all it must know,
+        read only when asked). Here, not in the system prompt that
         every turn pays for; the figures come from the code that enforces
         them, and the privacy policy stays the binding word on data."""
         from app.services import agent_budget_config, agent_quota
@@ -531,7 +530,7 @@ class SettingsTools:
         def percent(left, limit):
             # As the sidebar ring says it (token-budget.js percentLabel):
             # users see shares of their allowance, never amounts of money
-            # (Max 2026-11-01: "Wir sollen kein € erwähnen").
+            # (Max: "Wir sollen kein € erwähnen").
             share = max(0, min(100, int(left / limit * 100))) if limit else 0
             return "<1%" if share == 0 and left > 0 else f"{share}%"
 

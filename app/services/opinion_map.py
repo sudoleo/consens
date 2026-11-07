@@ -230,7 +230,7 @@ def _claim_dimensions(differences_data: dict) -> list[dict]:
             break
         if not isinstance(raw, dict):
             continue
-        # Seit dem Coverage-Judge stehen auch duenn belegte Saetze in der
+        # Mit dem Coverage-Judge stehen auch duenn belegte Saetze in der
         # Claim-Liste. Fuer die Opinion-Map (und damit fuer das Claim Ledger
         # der Topic-Seiten) taugen sie nicht: eine einzelne Stimme ist keine
         # Position, die man ueber Laeufe hinweg verfolgen koennte.

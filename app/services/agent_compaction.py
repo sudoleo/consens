@@ -14,9 +14,9 @@ Prompt cache: each step's request continues the previous one's prefix, and
 changing an older message rewrites the cached prefix from there on. So a cut
 happens only above the mark and only when it saves at least MIN_GAIN_CHARS;
 afterwards the prefix stays stable until the run has grown by REGROW_CHARS
-since the cut. Until 2026-11-03 it waited only for the mark, which a run
-whose calls and answers alone pass it stays above: from about its 16th step
-on it cut every third step and wrote the cache anew each time.
+since the cut. Waiting only for the mark is not enough: a run whose calls
+and answers alone pass it stays above it and would cut every few steps,
+writing the cache anew each time.
 Only tool results change: assistant messages (their reasoning signatures and
 tool arguments) go back to the provider exactly as it wrote them, and the
 number and order of messages stay the same.
@@ -37,7 +37,7 @@ cached prefix. It is never the user's words (``is_work_record``): memory
 evidence, the user's links and addresses and the comparison's context leave
 it out (DelegationLoop.answer_conversation).
 
-Summaries (since 2026-11-03), as Claude Code and Codex compact a session
+Summaries, as Claude Code and Codex compact a session
 whose context fills up: the chat model itself writes a summary that replaces
 what it covers, in one step of the turn (DelegationLoop._summarize), claimed
 and billed like any other step.
@@ -49,9 +49,7 @@ and billed like any other step.
   The turn saves it (``agent_history_summary``: the message as sent, the
   position of the last message it covers); later messages start with it
   byte for byte (AgentRunStore.messages), so their prefix stays cached until
-  the next summary. Until then a chat longer than CONTEXT_CHAR_LIMIT lost
-  its oldest messages without a trace, and every message sent up to that
-  limit again.
+  the next summary.
 - A run's own steps: once a step would send more than RUN_SUMMARY_ABOVE_TOKENS
   (or RUN_SUMMARY_WINDOW_SHARE of a smaller window) despite the stubs above,
   and most of it is the run's own, the agent summarizes its work on this
@@ -61,7 +59,7 @@ and billed like any other step.
   puts the plan back after compacting, the app adds the plan and the
   background processes of the message (run_state). The summary request repeats the next step's
   request with the request at its end (same tools, same tool choice), so it
-  reads the cached prefix. A long VM run no longer ends at the window's
+  reads the cached prefix. So a long VM run need not end at the window's
   LONG_RUN_CONTEXT_SHARE, and each later step sends a fraction.
 
 A summary is the agent's own text, never the user's words (``is_summary``):
@@ -103,11 +101,10 @@ WORK_RECORD_CLOSE = "[end of work record]"
 # find_pictures) stay in view until more than PICTURES_SHOWN are; then all
 # but the newest PICTURES_KEPT leave at once, and with a compaction down to
 # PICTURES_KEPT too (older_pictures). Pictures the agent has not seen yet
-# (after its last step) never leave. Until 2026-10-30 every picture past the
-# third replaced the oldest one in the middle of the conversation: the cache
-# broke from there in every step with a new picture (81 % instead of 91 %
-# read from it, audit L6), and of six pictures find_pictures fetched, three
-# left before the agent saw them (L1). An image counts as PICTURE_CHARS
+# (after its last step) never leave. Replacing the oldest picture whenever
+# one more came broke the cache from there in every step with a new picture
+# (81 % instead of 91 % read from it), and of six pictures find_pictures
+# fetched, three left before the agent saw them. An image counts as PICTURE_CHARS
 # towards the marks above, not as the length of its base64 text.
 PICTURES_KEPT = 3
 PICTURES_SHOWN = 10
@@ -308,7 +305,7 @@ def compact(messages, start, *, since=None):
                 or len(content) < MIN_RESULT_CHARS or '"compacted"' in content):
             continue
         candidates.append((index, name, content))
-    # The newest results stay whole until they reach ``keep``; everything
+    # The newest results stay whole until they reach KEEP_RECENT_CHARS; everything
     # older is cut.
     kept = 0
     while candidates and kept + len(candidates[-1][2]) <= KEEP_RECENT_CHARS:
@@ -415,7 +412,7 @@ def describe(name, arguments, result):
         # text stays out: it may be a message).
         if args.get("action") in {"find", "wait"} and isinstance(args.get("text"), str) and args["text"].strip():
             target = f'"{" ".join(args["text"].split())}"'
-        # A place clicked or the strokes dragged (since 2026-10-28), not the points.
+        # A place clicked or the strokes dragged, not the points.
         if args.get("action") == "click" and not target and args.get("x") is not None:
             target = f"at {args.get('x')},{args.get('y')}"
         if args.get("action") == "drag" and isinstance(args.get("strokes"), list):
@@ -545,7 +542,7 @@ def run_summary_due(inputs, context_length, messages, start, *, end_at=None):
     back (RUN_SUMMARY_OWN_SHARE). ``end_at``: the size at which the run would
     end because its answer no longer fits (a long run, LONG_RUN_CONTEXT_SHARE
     less the answer's allowance); the summary comes before it. Without it
-    Haiku 4.5 ended at 96k before its summary at 100k (bug hunt 2026-11-04)."""
+    Haiku 4.5 ended at 96k before its summary at 100k."""
     above = min(RUN_SUMMARY_ABOVE_TOKENS, int(context_length * RUN_SUMMARY_WINDOW_SHARE))
     if end_at is not None and end_at > 0:
         above = min(above, int(end_at))

@@ -1,6 +1,5 @@
 """consens.io workspace: Chrome's debugging protocol (CDP) on a Unix socket
-only the provider's user opens (since 2026-11-04, when the browser moved onto
-the workbench, docs/agent-mode.md "Ein Rechner").
+only the provider's user opens (docs/agent-mode.md "Ein Rechner").
 
 Chrome's own debugging port is TCP on 127.0.0.1, and every user of the
 computer reaches it: on the workbench the agent's user too, and with it every
@@ -187,10 +186,10 @@ SOCKET_PATH = [""]
 
 class Connection:
     """One WebSocket client on the socket. What goes to it waits in its own
-    queue for its own writer (since 2026-11-06): send runs on the one thread
-    that reads Chrome's pipe, and a client that stopped reading held it in
-    sendall, so no connection heard from Chrome any more and Chrome's pipe
-    filled (bug hunt 2026-11-05). A client that lets more than QUEUE_BYTES
+    queue for its own writer: send runs on the one thread that reads
+    Chrome's pipe, and a client that stopped reading would hold it in
+    sendall, so no connection would hear from Chrome any more and Chrome's
+    pipe would fill. A client that lets more than QUEUE_BYTES
     wait is dropped, as one that left; one message of any size still goes."""
 
     def __init__(self, sock):

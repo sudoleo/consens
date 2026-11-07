@@ -6,7 +6,7 @@ cost of a typical run and books the measured cost afterwards. Both read their
 limit from the account tier (Free, Plus, Pro, Admin). Opening Agent to another
 tier is therefore an access decision only; the ledger needs no change.
 
-Since 2026-10-31 (Max) the account counts money, not tokens: whole
+The account counts money, not tokens (Max): whole
 micro-euros (1 EUR = 1,000,000), converted from the provider's dollar cost at
 the fixed NANO_USD_PER_MICRO_EUR. A cached prompt, a web search and an audit
 reviewer then count what they cost, without weights. The derivation of the
@@ -24,7 +24,7 @@ from app.services import persistence_guard
 CACHE_SECONDS = 30
 # Amounts are whole micro-euros: 1 EUR = 1,000,000.
 MICRO_EUR = 1_000_000
-# Written with every save since 2026-10-31: a document without it holds tokens.
+# Written with every save: a document without it holds tokens.
 UNIT = "micro_eur"
 MAX_DAILY_LIMIT = 1_000 * MICRO_EUR
 MAX_RUN_ESTIMATE = 10 * MICRO_EUR
@@ -35,10 +35,10 @@ NANO_USD_PER_MICRO_EUR = 1_150
 
 TIER_KEYS = ("free", "plus", "pro", "admin")
 # "deep_think" is the kept storage key (app_config, admin API) of a run with
-# the Reasoning switch on; Deep Think itself was removed on 2026-10-02.
+# the Reasoning switch on; Deep Think itself no longer exists.
 RUN_MODES = ("compare", "consensus", "deep_think")
 
-# Euros per day (Max, 2026-10-31). Measured 21.-30.10. in Prod, one million
+# Euros per day (Max). Measured 21.-30.10. in Prod, one million
 # tokens of the former account cost 0.24 to 2.18 USD, about 1.46 USD at Free:
 # 660,000 tokens were about 0.85 EUR a day, 5 million at Pro typically 4 EUR.
 # The limits keep that capacity in round figures; Plus stays 2.5 x Free.
@@ -120,11 +120,9 @@ def snapshot(data):
         raise ValueError("Invalid token budget revision")
     if epoch and (not isinstance(epoch, str) or len(epoch) != 32 or any(c not in '0123456789abcdef' for c in epoch)):
         raise ValueError("Invalid token budget reset")
-    # The single pre-2026-10 `daily_token_limit` (Agent only) is not read any
-    # more: its value is part of the Pro/Admin default above.
-    # Every save and reset before 2026-10-31 wrote the whole table in tokens;
-    # read as micro-euros they would be other limits (Free 0.66 EUR), so a
-    # document without the unit keeps the euro defaults until its next save.
+    # A document without the unit holds the whole table in tokens; read as
+    # micro-euros they would be other limits (Free 0.66 EUR), so it keeps the
+    # euro defaults until its next save.
     euros = data.get("unit") == UNIT
     return {"tier_limits": normalize_tier_limits(data.get("tier_limits") if euros else None),
             "run_estimates": normalize_run_estimates(data.get("run_estimates") if euros else None),

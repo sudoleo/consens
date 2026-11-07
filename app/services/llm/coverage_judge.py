@@ -2,7 +2,7 @@
 
 Warum ein zweiter Judge?
 ------------------------
-Der Differences-Judge hatte bis 2026-08-31 zwei Auftraege in EINEM Call: die
+Ein Differences-Judge allein hatte zwei Auftraege in EINEM Call: die
 inhaltlichen Widersprueche herausarbeiten (die eigentliche Intelligenz) und
 nebenbei jeden pruefbaren Satz mit Zustimmung/Ablehnung belegen. Die beiden
 Aufgaben konkurrierten um Aufmerksamkeit und um Output-Tokens - und verloren
@@ -47,7 +47,7 @@ OPPOSING_STANCES = frozenset({"contradicts"})
 MAX_COVERAGE_QUOTE_CHARS = 300
 
 # Die Worte des Satzes, denen ein Gegenzitat widerspricht (counter_quotes[].target).
-# Nur sie werden im Antworttext markiert, nicht der ganze Satz (2026-10-19):
+# Nur sie werden im Antworttext markiert, nicht der ganze Satz:
 # eine Antwort, in der fast jeder Satz eine Flaeche traegt, liest sich wie ein
 # angestrichenes Schulbuch, und im Dark Mode lag heller Text auf dunklen
 # Farbbaendern. Die Stelle des Streits ist kurz; ein ganzer Satz bleibt die
@@ -321,7 +321,7 @@ def parse_coverage_payload(raw, labels, allowed_ids) -> dict | None:
         quotes: dict[str, str] = {}
         targets: dict[str, str] = {}
         # Anything but a list (a judge that ignores the schema: 1, true) has
-        # no quotes; iterating it raised and lost the whole round.
+        # no quotes; iterating it would raise and lose the whole round.
         raw_quotes = entry.get("counter_quotes")
         for item in raw_quotes if isinstance(raw_quotes, list) else []:
             if not isinstance(item, dict):
@@ -354,8 +354,8 @@ def missing_sentence_ids(coverage: dict, allowed_ids) -> list[str]:
 def coverage_state(agree_count: int, dissent_count: int, min_support: int) -> str:
     """Anzeigezustand eines belegten Satzes.
 
-    Vier Zustaende, weil eine Aussage mit duenner Abdeckung seit 2026-08-31
-    nicht mehr verschwinden darf: sie wuerde sonst wie ein ungeprueftes Stueck
+    Vier Zustaende, weil eine Aussage mit duenner Abdeckung
+    nicht verschwinden darf: sie wuerde sonst wie ein ungeprueftes Stueck
     Text aussehen, obwohl der Judge sie sehr wohl angesehen hat.
     """
     if dissent_count:

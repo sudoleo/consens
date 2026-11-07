@@ -144,7 +144,7 @@ def fan_out_provider_answers(
             if not text or (isinstance(raw, str) and text.lower().startswith("error")) or (
                 isinstance(raw, dict) and raw.get("error")
             ) or (
-                # Interrupted/errored answers are not model positions (R06);
+                # Interrupted/errored answers are not model positions;
                 # token-limit answers are used as marked truncated answers.
                 isinstance(raw, dict)
                 and not completion.usable_as_input(raw.get("completion"))

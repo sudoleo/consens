@@ -1,4 +1,4 @@
-"""Late measurement of Agent calls that settled without final usage (R07).
+"""Late measurement of Agent calls that settled without final usage.
 
 Settlement charges such calls a bounded estimate (``agent_quota.settle``) and
 marks their receipt ``quota_reconcile="pending"`` when a provider generation id

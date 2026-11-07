@@ -1,14 +1,13 @@
 """The agent's own Linux VM (docs/agent-mode.md, "Agent VM", "Arbeitsplatz").
 
-One per account since 2026-11-04, the workspace (agent_workspace.py,
+One per account, the workspace (agent_workspace.py,
 workspace_name): the agent's commands and files, shared by the account's
 chats one at a time, each in its own folder (chat_dir), and the Chrome its
 user watches and steers live and the agent uses through the ``browser`` tool
-(agent_browser.py). From 2026-10-27 to 2026-11-04 the browser had a VM of its
-own (old_browser_name), deleted when the account's workspace first starts
-after the move (agent_workspace.retire_old_browser). Before 2026-10-27 each
-chat had a VM of its own (vm_name); chats that still record one keep it
-until they are deleted.
+(agent_browser.py). An older account's browser VM of its own
+(old_browser_name) is deleted when the account's workspace first starts
+(agent_workspace.retire_old_browser); an older chat's own VM (vm_name) is
+kept until the chat is deleted.
 
 A small interface (``VMBackend``) with one implementation on Fly.io Sprites
 (``SpritesBackend``). Everything that knows the provider lives in this file:
@@ -17,8 +16,8 @@ nothing else. The tools the agent calls, the per-message session and the
 activity events are in agent_vm_tools.py.
 
 The agent has no access to what it must not have, by the VM's own means
-rather than rules on its commands (security audit 2026-10-27, Max
-2026-11-04: Unix users and file modes instead of bridges between two VMs).
+rather than rules on its commands (Unix users and file modes instead of
+bridges between two VMs).
 Every command of the agent, and every file its tools read or write, runs as
 its own Unix user without sudo (AGENT_USER), in a mount namespace without
 the provider's management socket and checkpoints and with a /tmp of its own
@@ -28,8 +27,8 @@ server's own steps use them directly, in SERVER_HOME, which the agent's user
 cannot open. So does the browser: Chrome, its screen and its profile with
 the user's sign-ins run as ``sprite``, its protocol on a socket in that home
 (workspace_vm/browser/cdp.py), its screen behind a cookie there. The VM
-reaches the open web (RULES), like the browser always did: one policy per
-VM, and the agent's commands share it since the move (Max's decision).
+reaches the open web (RULES): one policy per VM, which the browser and the
+agent's commands share (Max's decision).
 
 The VMs never hold a secret: the provider token (SPRITES_TOKEN) goes only
 into the headers of this module's requests to SPRITES_API, never to a VM's
@@ -66,10 +65,8 @@ SPRITES_API = "https://api.sprites.dev"
 # Sprite 2026-10-27: a closed domain gets REFUSED, raw IPs are closed under an
 # allowlist, nothing inside can change it). The workspace reaches the open web
 # like any browser, Fly.io's private network (*.internal, *.flycast) not.
-# From 2026-10-27 to 2026-11-04 these were the browser VM's rules, and the
-# workbench reached only the package registries and the domains the user
-# allowed for a chat (request_domain): with the browser on the workbench one
-# policy holds for both (Max, 2026-11-04: "offenes Netz").
+# With the browser on the workbench one policy holds for it and the agent's
+# commands (Max: "offenes Netz").
 RULES = [{"domain": "*.internal", "action": "deny"}, {"domain": "*.flycast", "action": "deny"},
          {"domain": "*", "action": "allow"}]
 # The agent's Unix user on the workbench (created by workspace_vm/workbench/
@@ -97,7 +94,7 @@ WAKE_SECONDS = 90
 # command after more than this long without contact (the user answered a
 # card for 15 minutes) first wakes it with a REST request, which waits
 # WAKE_SECONDS, instead of meeting the sleep in the exec handshake, which
-# gave up after WS_OPEN_SECONDS (runtime audit 2026-10-30, A4).
+# gives up after WS_OPEN_SECONDS.
 WAKE_AFTER_SECONDS = 5 * 60
 CHECKPOINT_SECONDS = 120
 WS_OPEN_SECONDS = 20
@@ -111,8 +108,7 @@ TERMINAL_AFTER_DISCONNECT = "5s"
 # Exit codes of ``timeout``: the limit passed (TERM), or KILL after the grace.
 TIMEOUT_EXIT_CODES = frozenset({124, 137})
 # Ending a session in the VM on Stop or a deploy's interrupt: the VM-side
-# limit ends the command anyway, so this never holds the message's end long
-# (until 2026-10-30 it had REQUEST_SECONDS, A6).
+# limit ends the command anyway, so this never holds the message's end long.
 KILL_SECONDS = 5
 
 
@@ -148,8 +144,8 @@ def unresponsive(exc):
 # with 502 after about 48 s and stayed "cold", while another sprite of the
 # organization woke in 10 s; Fly's "wedged sprites"). The browser's warm-up
 # and the workbench of one message each asked it under the setup lock, 97 s
-# for one 502 (turn bb633b), and every further message waited as long
-# again. Since then the backend marks such a VM (mark_unresponsive), any
+# for one 502, and every further message waited as long
+# again. So the backend marks such a VM (mark_unresponsive), any
 # request that reaches it clears the mark (_touch), and a start that meets
 # the mark (agent_workspace.open_workspace) waits only for a probe on a
 # thread of its own (probe: one at a time, a new one at most every
@@ -172,8 +168,7 @@ _watches: dict[str, threading.Timer] = {}
 
 
 def _unavailable(reason):
-    """VMUnavailable for ``reason``, logged where it arises (runtime audit
-    2026-10-30, I2: several places raised it without a log line)."""
+    """VMUnavailable for ``reason``, logged where it arises."""
     logging.warning("Agent VM unavailable reason=%s", reason)
     return VMUnavailable(reason)
 
@@ -318,8 +313,7 @@ class ExecOutcome:
 
 
 def vm_name(uid, chat_id):
-    """The name of a chat's own VM (before 2026-10-27): only to delete it
-    with its chat."""
+    """The name of an older chat's own VM: only to delete it with its chat."""
     return "consens-" + hashlib.sha256(f"{uid}:{chat_id}".encode("utf-8")).hexdigest()[:32]
 
 
@@ -330,8 +324,8 @@ def workspace_name(uid):
 
 
 def old_browser_name(uid):
-    """The account's browser VM from 2026-10-27 to 2026-11-04: only to delete
-    it (agent_workspace.retire_old_browser, the account's deletion)."""
+    """An older account's browser VM of its own: only to delete it
+    (agent_workspace.retire_old_browser, the account's deletion)."""
     return "consens-b-" + hashlib.sha256(f"browser:{uid}".encode("utf-8")).hexdigest()[:32]
 
 
@@ -347,7 +341,7 @@ _GERMAN_LETTERS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"}
 
 
 def chat_folder(title, chat_id):
-    """The name of a chat's folder since 2026-10-28: its title as words and
+    """The name of a chat's folder: its title as words and
     the start of its id, ``promotion-neben-dem-beruf-3f9a1c`` (``chat-…``
     while it has no title yet). The id part keeps two chats of one title
     apart; the folder follows a new title (agent_workspace.open_chat)."""
@@ -364,8 +358,8 @@ def chat_folder(title, chat_id):
 def chat_dir(chat_id, folder=None):
     """A chat's own folder in the workspace: where its commands start and its
     attachments land, deleted with the chat. ``folder``: its name as the
-    chat records it (chat_folder); without one the folder of a chat from
-    before 2026-10-28, named by its id."""
+    chat records it (chat_folder); without one the folder of an older chat,
+    named by its id."""
     if not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", str(chat_id or "")):
         raise ValueError("chat id")
     if folder is not None:
@@ -464,8 +458,8 @@ class VMBackend:
         raise NotImplementedError
 
     def delete_service(self, name, service):
-        """Remove a service of the VM (the live view's gateway before
-        2026-10-27); gone is fine."""
+        """Remove a service of the VM (the live view's former gateway); gone
+        is fine."""
         raise NotImplementedError
 
     def close(self):
@@ -493,8 +487,8 @@ def agent_argv(argv, timeout, cwd=HOME):
 
 
 def terminal_argv(timeout):
-    """The user's own terminal on the workbench (routers/agent_workspace.py,
-    since 2026-10-28): a login shell through AGENT_RUN --terminal, with the
+    """The user's own terminal on the workbench (routers/agent_workspace.py):
+    a login shell through AGENT_RUN --terminal, with the
     agent's rights and nothing more, in the agent's home, under ``timeout``."""
     return ["sudo", "-n", "/bin/bash", AGENT_RUN, "--terminal", str(int(timeout)), HOME, "bash", "-l"]
 
@@ -519,9 +513,9 @@ WRITE_SCRIPT = ('[ -d "$1" ] && exit 45; mkdir -p -- "$(dirname -- "$1")" 2>/dev
                 'cat > "$1" 2>/dev/null || exit 46; stat -c %s -- "$1"')
 # A folder the agent made read-only (chmod -R a-w, Go's module cache) gets
 # its write bits back first: rm alone failed, and a chat's deletion retried
-# for ever (bug hunt 2026-10-30). Its read and search bits too (chmod -R 644
+# for ever. Its read and search bits too (chmod -R 644
 # on a folder): without them neither rm nor chmod gets inside it; chmod -R
-# sets a folder's bits before it goes in (bug hunt 2026-11-02).
+# sets a folder's bits before it goes in.
 DELETE_SCRIPT = 'rm -rf -- "$1" 2>/dev/null || { chmod -R u+rwX -- "$1" 2>/dev/null; rm -rf -- "$1"; }'
 # Never over something that exists (mv -T -n would still merge into an empty folder).
 MOVE_SCRIPT = ('[ -e "$1" ] || [ -L "$1" ] || exit 44; { [ -e "$2" ] || [ -L "$2" ]; } && exit 47; '
@@ -539,7 +533,7 @@ def _file_error(code, path):
     return None
 
 
-# Closing without waiting for the server's close frame (above) makes the
+# Closing without waiting for the server's close frame (_open) makes the
 # library's reader log "unexpected internal error" with a trace for a socket
 # that ended as intended (seen on a Sprite 2026-10-27); this module logs the
 # failures that matter itself.
@@ -559,7 +553,7 @@ class SpritesBackend(VMBackend):
         self._clock = clock
         # Each VM's runtime status as the last GET of it said ("cold",
         # "warm", "running"; the API's Sprite.status): whether a message met
-        # it cold (VMSession.summary, runtime audit 2026-10-30, I5).
+        # it cold (VMSession.summary).
         self.statuses = {}
 
     # --- REST -----------------------------------------------------------------
@@ -614,7 +608,7 @@ class SpritesBackend(VMBackend):
                 self._request("create", "POST", "/v1/sprites", json={"name": name})
                 created = True
             except VMUnavailable:
-                # Another message of the chat may have created it just now.
+                # Another message of the account may have created it just now.
                 if self._request("get", "GET", self._sprite(name), missing_ok=True).status_code == 404:
                     raise
         if rules is not None:
@@ -832,7 +826,7 @@ class SpritesBackend(VMBackend):
         its sleep, seen 2026-10-27) is tried once more. A handshake that ran
         out of time is not: the command is in the request, and whether the
         provider starts it before its answer is not known, so a second try
-        might run it twice (runtime audit 2026-10-30, A4). The wake before
+        might run it twice. The wake before
         it (_wake) keeps that case rare. A gateway's 502/503/504 marks
         ``name`` unresponsive."""
         from websockets.exceptions import InvalidHandshake, InvalidStatus
@@ -878,7 +872,7 @@ class SpritesBackend(VMBackend):
         cancellation.raise_if_cancelled()
         ws = self._connect_exec(url, name=name)
         # The command's time runs from the open socket: a handshake that
-        # waited for the VM never eats its limit (runtime audit 2026-10-30, A4).
+        # waited for the VM never eats its limit.
         started = self._clock()
         _touch(name)
         # Stop closes the socket at once; the loop below then ends the command.
@@ -1020,20 +1014,18 @@ def configured():
 
 
 def open_to_all():
-    """AGENT_VM_ACCESS=all: the VM and its browser for every account (since
-    2026-10-31, with the one Agent mode), held in check by the token account
-    (every browser action is a step of the agent's model) and the day's VM
-    time (agent_vm_time.daily_limit). "pro", its value before (Pro accounts
-    and, with the retired AGENT_AUDIT_ACCESS=all, every account), means the
-    same. Otherwise, the default since the workspace's security audit of
-    2026-10-27, only admins get it (routers/agent.py vm_allowed); everyone
-    else's messages run without a VM."""
+    """AGENT_VM_ACCESS=all: the VM and its browser for every account, held in
+    check by the token account (every browser action is a step of the
+    agent's model) and the day's VM time (agent_vm_time.daily_limit). "pro",
+    an older value, means the same. Otherwise, the default, only admins get
+    it (routers/agent.py vm_allowed); everyone else's messages run without a
+    VM."""
     return os.getenv("AGENT_VM_ACCESS", "").strip().lower() in {"all", "pro"}
 
 
 def on_demand():
-    """The workspace on demand (docs/agent-mode.md "Arbeitsplatz auf Abruf"),
-    since 2026-10-29 for every account with the VM (vm_allowed): a message
+    """The workspace on demand (docs/agent-mode.md "Arbeitsplatz auf Abruf")
+    for every account with the VM (vm_allowed): a message
     starts without the workspace's tools until the agent opens it
     (DelegationLoop._open_workspace). AGENT_WORKSPACE_ON_DEMAND=off, the
     emergency off, gives them from the start again."""
@@ -1075,10 +1067,10 @@ def restore_workspace(uid, checkpoint, *, factory=None):
 def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
     """What a chat recorded (chat field ``agent_vm``) goes with the chat: its
     folder in the account's workbench with the background processes it
-    started there (since 2026-11-01, agent_vm_processes.delete_for_chat),
-    and the chat's own VM from before 2026-10-27. That one's name comes from the chat (vm_name), never from
+    started there (agent_vm_processes.delete_for_chat), and an older chat's
+    own VM. That one's name comes from the chat (vm_name), never from
     the record: a chat that moved to the workspace lost it there, and its VM
-    stayed (security audit 2026-10-27). The folder goes as the agent's user
+    stayed. The folder goes as the agent's user
     (its tools brought up to date first, agent_workspace.prepare) and from
     where it was before the agent had a user of its own (LEGACY_CHATS_DIR).
     Gone already is fine. Raises when the provider fails or is not
@@ -1099,7 +1091,7 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
             from app.services import agent_vm_processes, agent_workspace
             # Under the setup lock like every start of the computer: after a
             # new VERSION its setup.sh never runs beside a message's start,
-            # the browser's warm-up or the live view (bug hunt 2026-11-06).
+            # the browser's warm-up or the live view.
             with agent_workspace.setup_lock(name):
                 agent_workspace.prepare(vm, name)
             # Its processes first: they run in its folder. ``store``: the VM
@@ -1109,8 +1101,8 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
                 from app.services import agent_vm_time
                 refund = lambda seconds, day: agent_vm_time.refund(store, uid, seconds, day)  # noqa: E731
             agent_vm_processes.delete_for_chat(vm, name, chat_id, refund=refund)
-            # The folder by the name the chat recorded (since 2026-10-28), and
-            # by its id, as before and while a rename has not happened yet.
+            # The folder by the name the chat recorded, and by its id (an
+            # older chat's, or while a rename has not happened yet).
             folder = record.get("folder")
             if isinstance(folder, str) and re.fullmatch(r"[a-z0-9][a-z0-9-]{0,63}", folder):
                 vm.delete_path(name, chat_dir(chat_id, folder))
@@ -1123,8 +1115,8 @@ def delete_chat_vm(uid, chat_id, record, *, factory=None, store=None):
 
 def delete_workspace(uid, *, factory=None):
     """Delete the account's workspace with its account (agent_workspace.py):
-    every chat's folder and the browser with its sign-ins, and the browser VM
-    of 2026-10-27 to 2026-11-04 where it is still there. By the names that
+    every chat's folder and the browser with its sign-ins, and an older
+    account's browser VM of its own where it is still there. By the names that
     follow from the account, so a record already gone never hides them; gone
     already is fine."""
     vm = (factory or backend)()

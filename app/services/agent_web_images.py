@@ -1,11 +1,8 @@
 """find_pictures, search_pictures and show_image: pictures from the web in
-the agent's answer (show_image since 2026-10-28, looking first since
-2026-10-29, an image search since 2026-10-31).
+the agent's answer.
 
-Claude shows pictures from the web with its answer; consens.io's agent could
-only say where one was (2026-10-28, "zeig mir ein Bild vom besten HS-BG-
-Spieler": "Direkt einblenden kann ich es hier leider nicht"). Now it names a
-picture's address or a page's, and the server fetches it itself: over
+The agent names a picture's address or a page's, and the server fetches it
+itself: over
 source_documents.pinned_target like the watch pictures (public addresses
 only, no DNS rebinding), a page's own preview picture (og:image,
 twitter:image, else the first image of its JSON-LD), only what the bytes
@@ -18,27 +15,24 @@ only: the picture's host never sees the user, and the answer itself still
 renders no remote image (markdown-stream.js), which could carry chat content
 out on its own.
 
-Looking comes before showing (2026-10-29, "wer ist das gesicht von delay
-sports? zeig her": 45 steps over five minutes, and under the answer a
-placeholder captioned as a portrait, a site's icon and a team photo named as
-the founder). show_image put every picture under the answer at once, with a
-caption written before the picture was seen, and there was no search for
-pictures, so the agent guessed one page after the other. find_pictures now
+Looking comes before showing: a caption written before the picture was seen
+named a placeholder as a portrait, a site's icon and a team photo as the
+founder ("wer ist das gesicht von delay sports? zeig her"). find_pictures
 fetches up to LOOKS_PER_CALL pages or pictures at once, such as the pages of
 its search hits, and shows them to the agent only (smaller, LOOK_SIDE), each
 with an id, its page's title and the picture's alt text; show_image puts one
 of them under the answer by its id, captioned by then. What it only looked
 at is kept in this process and never stored.
 
-In the text, not under it (2026-10-31, Max: pictures always hung under the
-answer, often in poor style; they belong in the text). show_image answers
+In the text, not under it (Max: under the answer pictures often stand in
+poor style; they belong in the text). show_image answers
 with ``![caption](picture:p2)``: the agent writes it on a line of its own
 where the picture belongs, and the app puts the stored picture there (the
 file's ``origin.ref``, markdown-stream.js .md-picture). A picture it does not
-place stands under the answer as before, once the answer is written.
+place stands under the answer, once the answer is written.
 Pictures on one line are a gallery the user clicks through (agent-workspace.js).
 
-Searching, not guessing (2026-10-31, Max: ChatGPT shows a collage of image
+Searching, not guessing (Max: ChatGPT shows a collage of image
 results, its model needs no look first). search_pictures asks Brave's image
 search (picture_search.py) and answers with up to FOUND_PER_SEARCH pictures,
 each with an id, its page, the page's title and its size, nothing for the
@@ -53,10 +47,8 @@ without trouble). vm_save_picture (agent_vm_tools.py) writes a picture of
 this message into the workspace by its id, as the server fetched it
 (picture_file), in the format of the file's extension (saved_as).
 
-The fetch reaches out like a browser's open, which the reviewers follow live
-(from 2026-10-28 to 2026-10-29 an address the message did not hold waited
-for them first, agent_gate.py). Never in chats with Google data (like
-read_source). A chat model that takes images
+The fetch reaches out like a browser's open, which the reviewers follow
+live. Never in chats with Google data (like read_source). A chat model that takes images
 sees the pictures after the result (vm_view_image's way,
 DelegationLoop._show_pictures); one that does not chooses by page, title and
 alt text.
@@ -107,7 +99,7 @@ FETCH_SECONDS = 12.0
 CALL_SECONDS = 30.0
 # No smallest size: whether a small picture (a logo, a chart, the only photo
 # there is) fits is the agent's call, which learns its size from the result
-# (Max, 2026-10-28, against a 160 px floor: a blanket rule causes problems).
+# (Max, against a 160 px floor: a blanket rule causes problems).
 MAX_SIDE = 1600
 MAX_PIXELS = 40_000_000
 STORED_BYTES = 1_500_000
@@ -137,7 +129,6 @@ def picture_markdown(ref, caption=""):
     return f"![{words}](picture:{ref})"
 
 
-# Text beside the call shows the user as a note: no status_update here.
 class FindPicturesArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     urls: list[Annotated[str, Field(min_length=1, max_length=2048)]] = Field(
@@ -309,8 +300,7 @@ FETCHES_AT_ONCE = 3
 async def _fetch_all(urls, cancellation=None):
     """fetch_picture for each address, FETCHES_AT_ONCE side by side: a result
     or the exception. Each address has CALL_SECONDS once it starts. Stop
-    (``cancellation``) ends them all at once with ProviderCancelled; until
-    2026-11-03 it waited for the running wave, up to CALL_SECONDS each."""
+    (``cancellation``) ends them all at once with ProviderCancelled."""
     from app.services.llm.provider_runtime import ProviderCancelled
     gate = asyncio.Semaphore(FETCHES_AT_ONCE)
 

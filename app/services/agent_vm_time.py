@@ -1,5 +1,4 @@
-"""The daily VM time of an account (since 2026-10-26, when Audit and its VM
-opened to Pro accounts).
+"""The daily VM time of an account.
 
 A Sprite is billed only while it runs (Fly.io: CPU and memory by the hour,
 nothing while it is warm or cold), and between two of the agent's steps it
@@ -7,8 +6,7 @@ pauses within seconds. What an account's VM costs is therefore about the time
 its commands run, plus its background processes, which hold it awake
 (agent_vm_processes.py). Per UTC day, the token account's day
 (agent_quota.day_key), a Pro account gets PRO_DAILY_SECONDS of that, every
-other account BASE_DAILY_SECONDS (since 2026-10-30, when Audit and its VM
-opened to all of them); admins have no cap. The browser's actions do not
+other account BASE_DAILY_SECONDS; admins have no cap. The browser's actions do not
 count here: each is a step of the agent's model, which the token account
 holds in check.
 
@@ -17,11 +15,11 @@ which then tells the agent why it stopped); a background process counts with
 its whole time limit when it starts, because it outlives its message and
 nobody watches it end, and takes at most half of what is left
 (agent_vm_processes.DAY_SHARE); what it did not run comes back once a look at
-it finds it ended (refund, since 2026-10-30). Reads, writes and shares take
+it finds it ended (refund). Reads, writes and shares take
 seconds and do not count. Once the day's time is used up, only what counts
 is refused (commands, installations, new processes; VMTools._start
-``spends``): files, a process's output and stop and the browser go on (since
-2026-10-31). Below agent_vm_tools.DAY_NOTE_SECONDS the first result of a
+``spends``): files, a process's output and stop and the browser go on.
+Below agent_vm_tools.DAY_NOTE_SECONDS the first result of a
 message tells the agent how much is left. A message charges its time once,
 when it ends (VMSession.close); messages running at the same time can
 overshoot the cap by what they started with, which stays small.
@@ -40,7 +38,7 @@ from app.core.observability import safe_exception
 # memory (about $0.04 to $0.09 at 1 to 2 GB); a command that waits on the
 # network or a dev server at rest uses a small part of that.
 PRO_DAILY_SECONDS = 2 * 60 * 60
-# Twenty minutes without Pro (Max, 2026-10-30): computing, a file's analysis,
+# Twenty minutes without Pro: computing, a file's analysis,
 # a chart. Used up, that is about $0.10 at full load.
 BASE_DAILY_SECONDS = 20 * 60
 
