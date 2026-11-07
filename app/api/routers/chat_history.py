@@ -48,7 +48,11 @@ class ChatCreateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str | None = None
-    execution_mode: Literal["consensus", "agent"] = "consensus"
+    # Agent chats only (since 2026-11-07): no route adds a turn to a new
+    # Consensus chat any more, yet one made by an old tab or a direct call
+    # counted toward the chat cap. The field stays for the browser, which
+    # names the mode.
+    execution_mode: Literal["agent"] = "agent"
     # A temporary Agent chat (since 2026-11-01): no bookmark, nothing written
     # to memory, no share; deleted with its workspace folder when the user
     # leaves it, at the latest chat_store.TEMPORARY_CHAT_TTL after its last
@@ -156,15 +160,11 @@ def create_chat(
     payload: ChatCreateRequest | None = Body(default=None),
 ):
     uid = _chat_uid(request, "create_chat")
-    execution_mode = payload.execution_mode if payload else "consensus"
     temporary = bool(payload and payload.temporary)
-    if temporary and execution_mode != "agent":
-        raise HTTPException(status_code=422, detail="Only an Agent chat can be temporary.")
-    if execution_mode == "agent":
-        from app.api.routers.agent import require_agent_access
-        require_agent_access(uid)
+    from app.api.routers.agent import require_agent_access
+    require_agent_access(uid)
     try:
-        chat = _store().create_chat(uid, title=(payload.title if payload else "") or "", execution_mode=execution_mode,
+        chat = _store().create_chat(uid, title=(payload.title if payload else "") or "", execution_mode="agent",
                                     temporary=temporary)
         return {"status": "success", "chat": chat}
     except Exception as exc:

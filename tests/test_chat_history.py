@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 import app.core.config as cfg
-from app.api.routers import chat_history as chat_history_router
+from app.api.routers import agent as agent_router, chat_history as chat_history_router
 from app.core.rate_limit import api_uid_limiter, limiter
 from app.core.security import CustomSecurityMiddleware
 from app.services import chat_store
@@ -401,6 +401,8 @@ def chat_api(monkeypatch):
         raise RuntimeError("invalid token")
 
     monkeypatch.setattr(chat_history_router, "verify_user_token", verify)
+    # POST /chats makes Agent chats, which read the account's tier first.
+    monkeypatch.setattr(agent_router, "get_user_tier", lambda uid: "free")
     app = FastAPI()
     app.state.limiter = limiter
     app.include_router(chat_history_router.router)
@@ -408,14 +410,16 @@ def chat_api(monkeypatch):
     return TestClient(app), database
 
 
-def create_chat(client, *, title=None, headers=AUTH_OWNER):
-    body = {} if title is None else {"title": title}
-    response = client.post("/chats", json=body, headers=headers)
-    assert response.status_code == 201
-    return response.json()["chat"]
-
-
 UIDS = {AUTH_OWNER["Authorization"]: "owner-uid", AUTH_OTHER["Authorization"]: "other-uid"}
+
+
+def create_chat(client, *, title=None, headers=AUTH_OWNER):
+    """A Consensus chat as it is stored, for the turns below. Since
+    2026-11-07 POST /chats makes Agent chats only (the browser runs no
+    Consensus chat since 2026-10-25); reading, listing and deleting still
+    meet the older chats."""
+    store = chat_store.ChatStore(chat_history_router.db_firestore)
+    return store.create_chat(UIDS[headers["Authorization"]], title=title or "", execution_mode="consensus")
 
 
 def create_turn(client, chat_id, payload=None, *, headers=AUTH_OWNER):
@@ -528,7 +532,9 @@ def test_all_chat_endpoints_require_verified_authentication(chat_api):
 
 def test_chat_creation_uses_server_id_and_storage_allowlist(chat_api):
     client, database = chat_api
-    chat = create_chat(client, title="  Project   Alpha  ")
+    created = client.post("/chats", json={"title": "  Project   Alpha  "}, headers=AUTH_OWNER)
+    assert created.status_code == 201
+    chat = created.json()["chat"]
 
     assert re.fullmatch(r"[0-9a-f]{32}", chat["id"])
     assert chat["id"] not in {"Project Alpha", "project-alpha"}
@@ -548,6 +554,22 @@ def test_chat_creation_uses_server_id_and_storage_allowlist(chat_api):
     )
     assert rejected.status_code == 422
     assert len(database.chats("owner-uid")) == 1
+
+
+def test_a_new_chat_is_always_an_agent_chat(chat_api):
+    """Since 2026-10-25 nothing adds a turn to a new Consensus chat, yet one
+    made by an old tab or a direct call counted toward the chat cap. Since
+    2026-11-07 POST /chats makes Agent chats only."""
+    client, database = chat_api
+
+    plain = client.post("/chats", json={}, headers=AUTH_OWNER)
+    bare = client.post("/chats", headers=AUTH_OWNER)
+    refused = client.post("/chats", json={"execution_mode": "consensus"}, headers=AUTH_OWNER)
+
+    assert plain.status_code == 201 and bare.status_code == 201
+    assert plain.json()["chat"]["execution_mode"] == "agent"
+    assert refused.status_code == 422
+    assert [chat["execution_mode"] for chat in database.chats("owner-uid").values()] == ["agent", "agent"]
 
 
 def test_chat_detail_is_owner_scoped_and_list_is_compact(chat_api):

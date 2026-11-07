@@ -8020,7 +8020,11 @@ nach einem Lauf und der Consensus-Teil der Demo) ist entfernt. Was bleibt:
 - Die Server-Endpunkte des alten Browser-Pfads (`/consensus`, `/resolve`,
   `/vote`, `POST /bookmark/consensus`, Turns/Context der Consensus-Familie
   unter `/chats`) sind seit 2026-10-25 entfernt. Es bleiben `POST /chats`
-  (Agent-Chats), `PUT …/task-checks` und `/bookmark/consensus/share-result`.
+  (Agent-Chats; seit 2026-11-07 nur noch die: `execution_mode` ist
+  `Literal["agent"]` mit Default `agent`, `consensus` gibt 422, damit ein
+  alter Tab oder ein direkter Aufruf keinen Chat ohne mögliche Turns anlegt,
+  der zur 200er-Grenze zählt), `PUT …/task-checks` und
+  `/bookmark/consensus/share-result`.
 - `config.agentMode`/`autoConsensus` bleiben die persistierten Laufsfelder
   („die Pipeline lief“): ein Compare-Lauf traegt `false`, ein Agent-Lauf
   `agentMode: true` (fuer `firebase.js::finalizeRegistryRunBookmark`).
