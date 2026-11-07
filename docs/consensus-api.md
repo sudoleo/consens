@@ -90,8 +90,10 @@ Anbieter abwählen. Er braucht mindestens zwei fertige Antworten, fällt ein
 Modell aus, entsteht der Konsens aus den übrigen. `result.model_answers` nennt
 je Antwort Familie (`provider`) und Modell (`model`). Alle Modellaufrufe laufen
 über OpenRouter, das jedes Modell an den Endpunkt eines
-Infrastruktur-Anbieters leitet; das ist nicht unbedingt der Modellentwickler
-(`/privacy`, Abschnitt 4 „Provider routing“). Ändert sich das Preset, ändern sich die
+Infrastruktur-Anbieters leitet; das ist nicht unbedingt der Modellentwickler.
+Verarbeitet wird auch außerhalb der EU/des EWR, je nach Endpunkt in den USA,
+in Singapur oder in China (`/privacy`, Abschnitt 4 „Provider routing“).
+Ein Opt-out je Request gibt es nicht. Ändert sich das Preset, ändern sich die
 Modelle mit. Den früheren Publisher-Header `X-Consensus-Publisher` wertet der
 Server seit 2026-10-04 nicht mehr aus.
 

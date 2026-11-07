@@ -476,7 +476,7 @@ def execute_consensus_pipeline(run: dict) -> dict:
     tier = run_tier(run)
     plan = run.get("model_plan") or {}
     providers = dict(plan.get("providers") or {})
-    # Publisher runs use the same six preset families as every other API run. The
+    # Publisher runs use the same preset families as every other API run. The
     # persisted model_plan is the single source of truth for who answers, so a
     # run never drops a provider that its own plan still advertises.
     keys = resolve_developer_api_keys()
