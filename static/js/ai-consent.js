@@ -74,7 +74,7 @@
     const uid = account.uid;
     // Calm and short: who answers, what goes to them, where to read more.
     // The list is every family the app may use; a question goes to only some
-    // (2026-11-07, Max: say so, short, to take the worry away). Not "only the
+    // (the note says so, short, to take the worry away). Not "only the
     // ones you chose": the chat's title and other helpers run on models of
     // their own (privacy.html #providers).
     const agreed = await App.confirm({

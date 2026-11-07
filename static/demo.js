@@ -1,5 +1,3 @@
-// static/demo.js
-
 window.App.state.set("spinnerHTML", `
   <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
     <span class="thinking typing-indicator" data-text="Typing" aria-label="Typing">Typing<span class="typing-dots" aria-hidden="true"><span>.</span><span>.</span><span>.</span></span></span>
@@ -13,9 +11,8 @@ if (!Array.isArray(window.currentEvidenceSources)) {
    Das Szenario ist eine Entscheidung, fuer die man sich im echten Leben
    eine zweite und dritte Meinung holt und bei der ein Fehler Geld kostet:
    Soll ein Paar die Wohnung kaufen, in der es zur Miete wohnt, oder weiter
-   mieten und die Differenz anlegen? Seit 2026-11-01 zeigt die Demo, was
-   der Agent inzwischen kann (vorher: eine Waermepumpen-Frage als reine
-   Textantwort): einen Plan, der sich abhakt, eine Websuche mit echten
+   mieten und die Differenz anlegen? Die Demo zeigt, was der Agent kann:
+   einen Plan, der sich abhakt, eine Websuche mit echten
    Quellen, seinen Arbeitsplatz (Skript schreiben, rechnen, Ausgabe), ein
    Diagramm im Antworttext und eine Excel-Tabelle mit Vorschau neben dem
    Chat, die einmal gefragten KIs und die Pruefer, die der Arbeit folgen.
@@ -191,7 +188,7 @@ const DEMO_DATA = demoInPageLanguage({
   // What the reviewers note on that answer, in the review's own shape
   // (agent_audit.place_marks): the sentence it concerns (anchor), the
   // quoted words in it (target), its kind and the reviewer's note. Daily's
-  // two reviewers (Claude, DeepSeek since 2026-11-01) carry one note of each
+  // two reviewers (Claude, DeepSeek) carry one note of each
   // kind between them; a reviewer the lineup does not have stays out. The
   // numbers are scripts/demo_assets.py's: with 5.5 % buying pulls ahead in
   // year 13, with 1 % value growth in year 20; after 15 years €157,116 is owed.
@@ -446,8 +443,8 @@ function renderDemoModelResponse(model, outputEl) {
 
 /* === DEMO: Agent turn ===================================================
    Agent is where every question starts, so the demo plays an Agent turn on
-   the real Agent surfaces, in the one mode every account has since
-   2026-10-31: one AI does the work, the AIs of the Daily lineup follow it
+   the real Agent surfaces, in the one mode every account has: one AI
+   does the work, the AIs of the Daily lineup follow it
    and review its answer. What the agent does is what a real turn shows
    (agent-activity.js): its plan, checked off step by step (update_plan),
    a web search with its sources, its workspace (open_workspace, a script it
@@ -774,7 +771,8 @@ async function runAgentDemoFlow() {
   };
   const round = ms => rounds.push({ kind: "round", text: DEMO_NO_OBJECTIONS, created_at: iso(ms) });
   // A step that changes is a new event in its old place, as a real turn's
-  // update arrives (agent-activity.js draws an event once per version).
+  // update arrives (agent-activity.js redraws an event only as a new object
+  // or with a new status, stamp).
   const step = (id, changes) => {
     const index = events.findIndex(item => item.id === id);
     const item = { ...(index >= 0 ? events[index] : { version: 1, kind: "tool", id }), ...changes };
@@ -970,9 +968,9 @@ async function runDemoFlow() {
       DEMO_TYPED_QUESTION.slice(0, DEMO_PHASES.typeChars),
       DEMO_PHASES.typeSpeed
     );
-    // Den Entwurf tippt niemand ab; er wird eingefuegt. Deshalb erscheint er
-    // in einem Zug, mit einer kurzen Pause davor, damit sichtbar bleibt, dass
-    // Frage und Nachricht zwei verschiedene Dinge sind.
+    // Die Eckdaten tippt niemand ab; sie werden eingefuegt. Deshalb erscheinen
+    // sie in einem Zug, mit einer kurzen Pause davor, damit sichtbar bleibt,
+    // dass Frage und Eckdaten zwei verschiedene Dinge sind.
     if (qiEl) {
       await sleep(340);
       qiEl.value = DEMO_SCENARIO_PROMPT;
@@ -999,7 +997,7 @@ async function runDemoFlow() {
   });
 
   // Jede Modellantwort läuft zeitversetzt als Streaming-Response ein und wird
-  // danach sauber gerendert (für [S1]-Quellenlinks und Copy-Buttons).
+  // danach wie eine echte Antwort gerendert (renderDemoModelResponse).
   await Promise.all(activeDemoModels.map(model =>
     new Promise(resolve => {
       const start = DEMO_STREAM_STARTS[model] ?? (activeDemoData.delays[model] || 1800);
@@ -1028,8 +1026,7 @@ async function runDemoFlow() {
 // (demoChipDismissed), so the composer never swaps Send for it in front of
 // the reader. This wires it up once and keeps the offer in step with the
 // field. It stays a one-time offer: the first keystroke retires it for
-// good, and it fades out while Send fades in at the same end of the row
-// (Apple-Audit B13).
+// good, and it fades out while Send fades in at the same end of the row.
 const DEMO_SWAP_MS = 180;
 function demoMotionAllowed() {
   return !window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
@@ -1050,7 +1047,7 @@ function retireDemoChip(btn, storage) {
     btn.remove();
     return;
   }
-  // Out of the row while it fades (composer.css .demo-chip.is-leaving), so
+  // Out of the row while it fades (components-misc.css .demo-chip.is-leaving), so
   // Send takes its place at once and nothing beside it moves.
   btn.classList.add("is-leaving");
   btn.tabIndex = -1;

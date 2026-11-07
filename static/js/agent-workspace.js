@@ -9,27 +9,26 @@
 // - The documents created or revised in a turn (one row per document_id),
 //   the other files the agent shared from its VM and the mail attachments
 //   it fetched belong to its answer: right under its text and pictures,
-//   above the evidence row (.agent-answer-documents, documentsSlot; Max
-//   2026-10-31: "die Antwort endet mit diesen Punkten", 2026-11-01 also the
-//   files). A document's click opens its PDF in the preview beside the chat
-//   (file-viewer.js), as a shared presentation, PDF, code or text file does
-//   (2026-11-01): each shows its first page as a thumbnail, its type and its
+//   above the evidence row (.agent-answer-documents, documentsSlot). A
+//   document's click opens its PDF in the preview beside the chat
+//   (file-viewer.js), as a shared presentation, PDF, code or text file does:
+//   each shows its first page as a thumbnail, its type and its
 //   number of pages, and the word Preview, so it is plain that it opens.
-// - #agentAnswerResources (after the live answer) and one resources row per
-//   archived Agent turn (renderTurnResources) show a note when a file of the
-//   turn was only partly readable or could not load (and the files of a turn
-//   without an answer body).
+// - #agentAnswerResources (after the live answer) shows a note when a file of
+//   the turn was only partly readable or could not load; it and one resources
+//   row per archived Agent turn (renderTurnResources) also hold the files of
+//   a turn without an answer body.
 // - The pictures the agent showed (vm_share_file, show_image) stand in the
 //   answer text where it placed them (.md-picture, fillPictures), the others
 //   right under the text, above its evidence row (Notes, Watch, Share):
 //   .agent-answer-pictures, directly after the answer body.
 //   App.answerTail(body) is where that row and the answer check line go
-//   (agent-review.js, watch.js, share-dialog.js).
+//   (agent-review.js, watch.js, share-dialog.js, agent-chat.js).
 //   Each loads when its place comes near the screen, as the server's preview
 //   (?preview=1, at most 1600 px on a side, routers/agent_files.py); the
-//   viewer and the download get the original (runtime audit 2026-10-30 P2:
-//   an opened chat fetched every picture of every turn at once, up to 5 MB
-//   each, as data: URLs).
+//   viewer and the download get the original (otherwise an opened chat
+//   fetches every picture of every turn at once, up to 5 MB each, as data:
+//   URLs).
 //
 // refresh(chatId, force) is cheap to call on every render: without force it
 // only re-projects the cached list (for example when the turn changes). A
@@ -82,9 +81,9 @@
   function answerResources() {
     let resources = document.getElementById('agentAnswerResources');
     if (!resources) {
-      // Package C adds this hook to the template; create it until that lands.
-      // Placed where the template will put it (before the error line), so the
-      // answer's evidence and copy rows keep their own stable anchors on body.
+      // A page without the template's hook gets one where the template puts
+      // it (before the error line), so the answer's evidence and copy rows
+      // keep their own stable anchors on body.
       const body = document.getElementById('agentAnswerBody');
       if (!body) return null;
       resources = node('div'); resources.id = 'agentAnswerResources';
@@ -111,7 +110,6 @@
   }
   // A file step failed: the server's sentence or ours, never the engine's.
   const fileError = (failure, context) => App.userError(failure, { context, fallback: context ? undefined : 'The file request failed. Try again.' });
-  // Shared with agent-google.js: a plain inline button that reports failures.
   function button(label, action) {
     const control = node('button', 'settings-inline-btn', label); control.type = 'button';
     control.addEventListener('click', async () => {
@@ -350,8 +348,8 @@
   function downloadChip(chatId, file, context, withLabel) {
     const control = node('button', withLabel ? 'agent-files-chip' : 'agent-files-icon-btn'); control.type = 'button';
     control.setAttribute('aria-label', `Download ${file.name}${context}`);
-    // Size and expiry are details for the pointer, not for the row (Max,
-    // 2026-10-31: "viel zu viel Infos"). Part by part (docs/i18n.md).
+    // Size and expiry are details for the pointer, not for the row. Part by
+    // part (docs/i18n.md).
     control.title = [App.t(`Download ${file.name}`), size(file.size), App.t(expiry(file))].filter(Boolean).join(' · ');
     control.append(icon('download'));
     if (withLabel) control.append(node('span', 'agent-files-chip-type', extension(file)));
@@ -368,10 +366,11 @@
   function versionMeta(version) {
     return version.parent ? `Version ${version.number} · revised from version ${version.parent}` : `Version ${version.number}`;
   }
-  // A document is one quiet row in the flow of its answer (Max, 2026-10-31:
-  // no box, no green badge, no hint, "Apple-Niveau"): its mark, its title
-  // and, on the right, the formats to download. Under the title only what
-  // changes a decision: a later version's number, or that it expired.
+  // A document is one quiet row in the flow of its answer (no box, no green
+  // badge, no hint): its mark, its title and, on the right, the formats to
+  // download. Under the title only what changes a decision: a later
+  // version's number, or that it expired; with a PDF to preview, its type
+  // and pages before them (previewMark).
   function documentCard(chatId, group, { upTo = Infinity, scope }) {
     const versions = group.list.filter(version => version.number <= upTo);
     const current = versions[0];
@@ -381,9 +380,8 @@
     card.dataset.filesKey = key; card.dataset.documentId = group.id;
     card.setAttribute('aria-label', `${group.title}, version ${current.number}`);
     const head = node('div', 'agent-doc-head');
-    // Its PDF opens in the file viewer (attachments.js), as an upload does
-    // (Max, 2026-10-31: "warum kann ich erzeugte Dokumente nicht in der
-    // Vorschau angucken?"); without one ready, the row only downloads.
+    // Its PDF opens in the file viewer (file-viewer.js), as an upload does;
+    // without one ready, the row only downloads.
     const pdf = current.files.find(file => (file.mime === 'application/pdf' || /\.pdf$/i.test(file.name || ''))
       && available(file));
     const main = node(pdf ? 'button' : 'div', 'agent-doc-main');
@@ -531,9 +529,8 @@
     if (body.parentNode && body.nextElementSibling !== slot) body.after(slot);
     return slot;
   }
-  // Pictures in the text (2026-10-31, Max: under the answer they were often
-  // in poor style): the agent writes ![what it shows](picture:p2) where one
-  // belongs, a place in the rendered answer (markdown-stream.js .md-picture)
+  // Pictures in the text: the agent writes ![what it shows](picture:p2)
+  // where one belongs, a place in the rendered answer (markdown-stream.js .md-picture)
   // that takes the turn's picture with that origin.ref. The others stand
   // under the text, once the answer is written: while it streams, a picture
   // waits for its place instead of jumping from under the text into it.
@@ -591,9 +588,9 @@
     }
     slot.hidden = !rest.length;
   }
-  // Pictures the agent wrote on one line are a collage (2026-10-31, Max:
-  // ChatGPT's collage to click through): one large, the next two beside it,
-  // "+2" on the third for the rest, which the viewer pages through. The marks
+  // Pictures the agent wrote on one line are a collage to click through: one
+  // large, the next two beside it (two alone side by side), "+N" on the third
+  // for the rest, which the viewer pages through. The marks
   // sit on the figures, which are ours: a morph of the streamed text keeps
   // them (agent-workspace.css lays the line out by them with :has).
   const GALLERY_TILES = 3;
@@ -690,8 +687,7 @@
     figure.setAttribute('data-i18n-ui', '');
     // Its own shape when the store knows it (agent_files.picture_size): the
     // field it shows until it arrives is the picture's, so nothing moves
-    // when it comes (2026-11-07, Max: pictures appeared with a jerk, from a
-    // 16:10 field to their own size). Older files keep the 16:10 field.
+    // when it comes. Files without a size keep the 16:10 field.
     const width = Number(file.width), height = Number(file.height);
     if (Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0) {
       figure.classList.add('has-size');
@@ -706,8 +702,7 @@
     if (loaded?.url) img.src = loaded.url;
     else {
       // Until it is drawn, the skeleton's field with its light passing, then
-      // the picture fades in (an old chat opening; before, a blank white or
-      // grey field stood there). One that cannot come says so in the field.
+      // the picture fades in. One that cannot come says so in the field.
       // It loads once its place comes near the screen.
       figure.classList.add('is-loading');
       whenNear(figure, () => picture(chatId, file).load.then(url => {
@@ -790,8 +785,7 @@
   // What one turn produced: its documents (versions up to this turn), the
   // files the agent shared from its VM, the pictures it showed from the web
   // and the mail attachments it fetched. All of it belongs to the answer:
-  // under its text, above its evidence row (Max, 2026-11-01: files under
-  // Notes and Sources "gehören doch zur Antwort"). Uploads are on the message.
+  // under its text, above its evidence row. Uploads are on the message.
   function turnResources(box, chatId, files, turnId, scope, live, body) {
     if (!turnId) { fillPictures(body, chatId, [], scope); fillDocuments(body, []); return; }
     const own = [];
@@ -842,8 +836,7 @@
       if (readable.length) resources.append(partialNotice(readable));
       if (error && selected.size) {
         // Only worth a line when this answer's own files are missing: one
-        // quiet line, no surface and no technical reason, Retry as the text
-        // link (UX audit B13; before, a grey box under every answer).
+        // quiet line, no surface and no technical reason, Retry as the text link.
         const notice = node('p', 'agent-files-error');
         notice.append(node('span', '', 'Files couldn’t load'), ' · ');
         const retry = node('button', 'text-link', 'Retry'); retry.type = 'button';
@@ -940,7 +933,7 @@
     const files = context.attachments || [];
     // Their places over the message wait in the skeleton's light until each
     // file is stored (attachments.js markUploading, set when the message was
-    // sent); since 2026-10-29 instead of a row per file under the message.
+    // sent), with no row per file under the message.
     const waiting = index => App.attachments?.markUploading?.(context.runId, files.slice(index));
     const stopped = () => App.attachments?.markUploading?.(context.runId, []);
     const result = [];

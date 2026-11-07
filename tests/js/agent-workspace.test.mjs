@@ -35,7 +35,7 @@ describe('private Agent workspace', () => {
   it('renders one document row per document under the answer text, grouped by version and without raw IDs', async () => {
     const { window, document, dom } = boot({ files: [UPLOAD, ...DOCS] });
     await window.App.agentWorkspace.refresh(CHAT);
-    // Part of the answer (Max, 2026-10-31): right after its text and its
+    // Part of the answer: right after its text and its
     // pictures' place, so the evidence row (App.answerTail) follows them.
     const body = document.getElementById('agentAnswerBody');
     const docs = body.nextElementSibling.nextElementSibling;
@@ -49,7 +49,7 @@ describe('private Agent workspace', () => {
     expect(cards).toHaveLength(1);
     const card = cards[0];
     expect(card.querySelector('.agent-doc-title > span').textContent).toBe('Decision brief');
-    // One quiet row (Max, 2026-10-31): a later version says its number, no
+    // One quiet row: a later version says its number, no
     // badge, no hint; size and expiry are the download's tooltip.
     expect(card.querySelector('.agent-doc-meta').textContent).toBe('Version 2');
     expect(card.querySelector('.agent-files-badge')).toBeNull();
@@ -139,8 +139,8 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  // vm_share_file (2026-10-26): a picture under the answer, any other file a
-  // row; both above the evidence row (2026-11-01: the files belong to the answer).
+  // vm_share_file: a picture under the answer, any other file a row; both
+  // above the evidence row (the files belong to the answer).
   it('shows the pictures the agent shared from its VM under the answer, other files as rows', async () => {
     const PICTURE = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',
       turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z', origin: { source: 'vm', path: '/tmp/chart.png' } };
@@ -230,8 +230,8 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  // Since 2026-10-29 the files wait on the message itself (attachments.js
-  // markUploading), each until it is stored; no row under the message.
+  // The files wait on the message itself (attachments.js markUploading),
+  // each until it is stored; no row under the message.
   it('marks the message’s files as uploading until each is stored, with no row under the message', async () => {
     const { window, document, dom } = boot({ files: [UPLOAD] });
     await window.App.agentWorkspace.refresh(CHAT);
@@ -259,8 +259,8 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  // Runtime audit 2026-10-30 P2: an opened chat fetched every picture of
-  // every turn at once, up to 5 MB each.
+  // Otherwise an opened chat fetches every picture of every turn at once,
+  // up to 5 MB each.
   it("loads a picture once its place comes near the screen, as the server's preview", async () => {
     const PICTURE = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',
       turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z' };
@@ -318,7 +318,7 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  // 2026-11-07, Max: pictures appeared with a jerk, from the 16:10 field to their size.
+  // Without its size a picture jumps from the 16:10 field to its own size when it arrives.
   it('keeps the place of a picture of known size in its own shape, older ones in the 16:10 field', async () => {
     const SIZED = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',
       turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z', width: 1600, height: 1000 };
@@ -409,7 +409,7 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  // show_image (2026-10-28): a picture from the web, with what it shows and
+  // show_image: a picture from the web, with what it shows and
   // the site it came from as a link; never a link that is not http(s).
   it('shows a picture from the web with its caption and its source', async () => {
     const WEB = { id: 'a'.repeat(32), name: 'picture-1a2b3c4d.webp', mime: 'image/webp', size: 15000, status: 'ready',
@@ -435,7 +435,6 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  // 2026-10-31, Max: ChatGPT's collage of pictures to click through.
   it('makes a line of pictures a collage that opens as a gallery', async () => {
     const web = (id, ref) => ({ id: id.repeat(32), name: `picture-${id}.webp`, mime: 'image/webp', size: 900, status: 'ready',
       kind: 'web_image', turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z',
@@ -476,7 +475,7 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
-  // 2026-10-31, Max: pictures belong in the text, not all under it.
+  // Pictures belong in the text, not all under it.
   it('puts a picture where the agent placed it in the text, the others under it once the answer is written', async () => {
     const web = (id, ref) => ({ id: id.repeat(32), name: `picture-${id}.webp`, mime: 'image/webp', size: 900, status: 'ready',
       kind: 'web_image', turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z',

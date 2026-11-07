@@ -1,12 +1,11 @@
 /* Agent files, attachments and document versions (agent-workspace.js).
    Document cards, shared files and mail attachments of a turn are part of
    its answer (.agent-answer-documents, above its evidence row); notes about
-   its uploads follow in #agentAnswerResources for the live answer, in
-   .agent-turn-resources for archived turns. Uploads are chips on their
-   message. Tokens only (variables.css). */
+   its uploads follow in #agentAnswerResources for the live answer. The
+   .agent-turn-resources of archived turns hold only the files of a turn
+   without an answer body. Uploads are chips on their message. Tokens only
+   (variables.css). */
 
-/* Shared panel shell. agent-google.js also uses .agent-workspace for its
-   action and evidence panels. */
 .agent-workspace { box-sizing: border-box; width: min(100%, 760px); margin: 12px auto; padding: 0 12px; color: var(--ink-2); font-size: var(--font-size-ui); overflow-wrap: anywhere; }
 .agent-workspace[hidden] { display: none; }
 #agentWorkspace, #agentGoogleActions { order: 4; }
@@ -15,13 +14,13 @@
 .agent-files-icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .agent-files-icon-more { stroke-width: 2.6; }
 
-/* ---- Answer resources: this turn's documents, uploads, partial reads ---- */
+/* ---- Answer resources: this turn's documents and files, partial reads ---- */
 .agent-resources { display: grid; gap: 10px; margin: 16px 0 4px; min-width: 0; }
 .agent-resources[hidden], .agent-resources:empty { display: none; }
 
-/* A document is one quiet row in the flow of its answer (Max, 2026-10-31:
-   the grey box, the green badge and the hint read as foreign matter): no
-   rectangle, no fill. Its mark, its title on one line and, on the right,
+/* A document is one quiet row in the flow of its answer (a grey box, a green
+   badge or a hint would read as foreign matter): no rectangle, no fill.
+   Its mark, its title on one line and, on the right,
    the formats to download as plain words that take a tone on hover. Rows
    of several documents part with a hairline (design: tone and hairlines,
    never a box around content). */
@@ -69,8 +68,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
   display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 2px 8px; border-radius: var(--radius-pill, 999px);
   font-size: var(--font-size-xs); font-weight: 600; line-height: 1.5; white-space: nowrap;
 }
-/* A state is a coloured glyph beside quiet words, never a tinted pill (Max,
-   2026-10-31: "hast du sowas schon mal bei Apple gesehen?"). */
+/* A state is a coloured glyph beside quiet words, never a tinted pill. */
 .agent-files-badge.is-warning { padding: 0; background: transparent; color: var(--ink-2); font-weight: 500; }
 .agent-files-badge.is-warning .agent-files-icon { color: var(--partial); }
 .agent-files-badge .agent-files-icon { width: 12px; height: 12px; }
@@ -141,8 +139,8 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 
 /* Uploads wait on the message itself (shell.css .is-uploading). */
 .agent-file-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
-/* The file's type is a document glyph, not an 8-px "PDF" (Apple-Audit
-   G10): the name beside it already ends in the extension. The label stays
+/* The file's type is a document glyph, not an 8-px "PDF": the name beside
+   it already ends in the extension. The label stays
    in the markup for scripts; it is not drawn. A mail origin keeps its icon. */
 .agent-file-type {
   display: inline-flex; align-items: center; justify-content: center; flex: none; width: 32px; height: 32px;
@@ -159,11 +157,11 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 .agent-file-meta .agent-files-icon { width: 14px; height: 14px; }
 .agent-file-origin { color: var(--ink-2); font-size: var(--font-size-xs); line-height: 1.5; }
 
-/* A file the preview shows (file-viewer.js, 2026-11-01): its first page
+/* A file the preview shows (file-viewer.js): its first page
    stands where the glyph stood, white with a hairline like a page on the
    desk, and its type and pages under the name ("PowerPoint · 5 slides").
    Mark, name and the quiet word Preview are one button with the hover tone
-   of a document's row: no box around it (Max 2026-10-31), the page itself
+   of a document's row: no box around it, the page itself
    says it opens. */
 .agent-file-thumb { width: 64px; height: 48px; border-radius: 6px; }
 .agent-file-thumb.has-thumb { background: transparent; }
@@ -233,8 +231,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 .agent-vm-picture-open img { display: block; max-width: 100%; max-height: var(--picture-max-height); width: auto; height: auto; }
 /* Until it arrives, a field of a picture's size in the skeleton's tone with
    its light passing (attachments' tiles, skeleton.css); one that cannot come
-   says so there. Before 2026-10-29 the field was the page's own --raise: an
-   old chat opened with blank white or grey boxes. */
+   says so there. */
 .agent-vm-picture:is(.is-loading, .is-failed) .agent-vm-picture-open {
   display: flex; align-items: center; justify-content: center;
   width: min(420px, 100vw - 64px); aspect-ratio: 16 / 10; cursor: default;
@@ -251,8 +248,8 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 @media (prefers-reduced-motion: reduce) {
   .agent-vm-picture.is-loading .agent-vm-picture-open::after { animation: none; background: none; }
 }
-/* A picture whose size the store knows (agent_files.picture_size, since
-   2026-11-07) keeps its own place from the first frame: as wide as it will
+/* A picture whose size the store knows (agent_files.picture_size) keeps
+   its own place from the first frame: as wide as it will
    be drawn (its own width, the answer's, or what the height limit allows)
    at its own aspect ratio, so the answer does not jump when it arrives.
    Without a size, the 16:10 field above. A collage tile keeps its cell. */
@@ -298,8 +295,8 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 .md-picture-line > .md-picture { align-self: stretch; }
 .md-picture-line:not(:has(> .md-picture:not(:empty))) { display: none; }
 .consensus-answer-body p > .md-picture:not(:empty) { margin: 12px 0; }
-/* Several pictures on one line: a collage at the answer's width (2026-10-31,
-   agent-workspace.js markGalleries). Two side by side; from three on one
+/* Several pictures on one line: a collage at the answer's width
+   (agent-workspace.js markGalleries). Two side by side; from three on one
    large and two beside it, the third with "+N" for the rest. Each tile is
    filled edge to edge; caption and source show in the viewer it opens. */
 .md-picture-line:has(> .md-picture > .agent-vm-picture[data-gallery-size]) {
@@ -335,7 +332,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 :has(> .agent-answer-pictures:not([hidden])) > .consensus-answer-body :is(.blocked-remote-image.is-local-ref, .local-ref-line),
 .consensus-answer-body:has(.md-picture:not(:empty)) :is(.blocked-remote-image.is-local-ref, .local-ref-line) { display: none; }
 
-/* ---- Mail attachments of a turn ---- */
+/* ---- Shared files and mail attachments of a turn ---- */
 /* The same quiet rows as the documents: a hairline only between rows,
    none around the list. */
 .agent-file-item { padding: 6px 0; }
@@ -350,7 +347,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 }
 
 /* This answer's own files could not load (agent-workspace.js): one quiet
-   line in the row's ink, Retry as the text link (UX audit B13). */
+   line in the row's ink, Retry as the text link. */
 .agent-files-error { margin: var(--space-2) 0 0; color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.5; }
 
 /* Composer and message chips (attachments.js). */
@@ -397,7 +394,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
   .agent-files-badge { border: 1px solid CanvasText; }
 }
 
-/* ---- A start counted down (start-progress.js, since 2026-11-02) ----
+/* ---- A start counted down (start-progress.js) ----
    The Apple way: a thin bar in the ink's tone that fills toward the
    server's estimate, the time left under it in the quiet grey with steady
    digits. No colour, no box; the chat's step (agent-chat.css) and the live
@@ -409,7 +406,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
   display: block; height: 100%; border-radius: inherit; background: color-mix(in srgb, var(--ink) 72%, transparent);
   transform: scaleX(0); transform-origin: left center;
 }
-/* The step the start is at (since 2026-11-04), over the bar in the ink, the time left grey under it. */
+/* The step the start is at, over the bar in the ink, the time left grey under it. */
 .start-progress-step { color: var(--ink); font-size: var(--font-size-micro); line-height: 1.3; }
 .start-progress-step[hidden] { display: none; }
 .start-progress-left { min-height: 1.3em; color: var(--ink-3); font-size: var(--font-size-micro); line-height: 1.3; font-variant-numeric: tabular-nums; }
