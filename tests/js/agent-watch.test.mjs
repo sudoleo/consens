@@ -92,6 +92,40 @@ describe("Agent Watch card", () => {
       expect.objectContaining({ source: "agent", has_goal: true, interval: "daily" }));
   });
 
+  it("asks for the consent to the AI providers before it starts, and starts nothing on Not now", async () => {
+    // A Watch's runs go to the models: without the account's yes the server
+    // refuses with ai_consent_required, and only the Send of a chat asked.
+    const { window, server, render, card } = boot();
+    const answers = [false, true];
+    const asked = [];
+    window.App.aiConsent = { ensure: async () => { asked.push("ask"); return answers.shift(); }, refused: vi.fn() };
+    render({ proposal: PROPOSAL });
+    await settle();
+    card().querySelector(".agent-watch-start").click();
+    await settle();
+    expect(asked).toEqual(["ask"]);
+    expect(server.calls.some(call => call.method === "POST")).toBe(false);
+    expect(card().dataset.state).toBe("proposal");
+    card().querySelector(".agent-watch-start").click();
+    await settle();
+    expect(asked).toEqual(["ask", "ask"]);
+    expect(server.calls.filter(call => call.method === "POST")).toHaveLength(1);
+    expect(card().dataset.state).toBe("watching");
+  });
+
+  it("lets a refusal for the missing consent make the next Start ask", async () => {
+    const refusal = { status: 403, data: { detail: { error: "Agree to sending your questions to the AI providers first.",
+      code: "ai_consent_required" } } };
+    const { window, render, card } = boot({ create: refusal });
+    window.App.aiConsent = { ensure: async () => true, refused: vi.fn() };
+    render({ proposal: PROPOSAL });
+    await settle();
+    card().querySelector(".agent-watch-start").click();
+    await settle();
+    expect(window.App.aiConsent.refused).toHaveBeenCalledTimes(1);
+    expect(window.App.aiConsent.refused.mock.calls[0][0].code).toBe("ai_consent_required");
+  });
+
   it("offers only the intervals the account has, and a time for daily and weekly", async () => {
     const { window, server, render, card } = boot({ intervals: ["every_6_hours", "daily", "weekly"] });
     render({ proposal: { ...PROPOSAL, interval: "hourly" } });

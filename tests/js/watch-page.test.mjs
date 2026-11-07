@@ -688,6 +688,27 @@ describe("The field that starts a Watch (watch-composer.js)", () => {
     expect(detail(document)?.open).toBeFalsy();
   });
 
+  it("asks for the consent to the AI providers before it starts one, and keeps the sentence on Not now", async () => {
+    // A Watch's runs go to the models: without the account's yes the server
+    // refuses with ai_consent_required, and only the Send of a chat asked.
+    const { window, document, server } = boot({ watches: [watch()] });
+    const answers = [false, true];
+    window.App.aiConsent = { ensure: vi.fn(async () => answers.shift()), refused: vi.fn() };
+    await window.App.watchDashboard.render();
+    const form = field(document);
+    const task = form.querySelector(".wc-task");
+    task.focus();
+    type(window, task, "Tell me when the new Garmin 975 is announced.");
+    task.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.waitFor(() => expect(window.App.aiConsent.ensure).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(posted(server)).toBeUndefined();
+    expect(task.value).toBe("Tell me when the new Garmin 975 is announced.");
+    task.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    await vi.waitFor(() => expect(posted(server)).toBeTruthy());
+    expect(window.App.aiConsent.ensure).toHaveBeenCalledTimes(2);
+  });
+
   it("offers the plan's intervals and says what the others need", async () => {
     const { window, document } = boot({ watches: [watch()] });
     await window.App.watchDashboard.render();

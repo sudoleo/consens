@@ -314,6 +314,10 @@
 
   async function start(view) {
     if (view.busy || !view.chatId || !view.turnId) return;
+    // Its runs go to the models: the account's one yes first (ai-consent.js),
+    // as before a chat's Send; "Not now" starts nothing.
+    if (App.aiConsent && !(await App.aiConsent.ensure())) return;
+    if (view.busy) return;
     const timed = TIMED.has(view.choice.interval);
     const payload = { chat_id: view.chatId, turn_id: view.turnId, interval: view.choice.interval,
       run_time: timed ? view.choice.run_time || DEFAULT_TIME : '',
@@ -330,6 +334,8 @@
       App.trackAppEvent?.('app_watch_created', { interval: data.watch.interval, source: 'agent',
         has_goal: Boolean(data.watch.goal), goal_source: data.watch.goal ? 'suggested' : 'none' });
     } catch (error) {
+      // Refused for want of the consent: the next Start asks.
+      App.aiConsent?.refused?.(error);
       view.message = App.t('Watch not started. {reason}', { reason: App.userError(error, { fallback: 'Try again.' }) });
     } finally {
       view.busy = false;

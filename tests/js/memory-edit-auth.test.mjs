@@ -146,6 +146,56 @@ describe("memory edit dialog ownership", () => {
   });
 });
 
+describe("memory edit and the consent to the AI providers", () => {
+  // The memory model reads the correction: without the account's yes the
+  // server refuses with ai_consent_required, and only the Send of a chat asked.
+  it("asks before the correction leaves, keeps the dialog on Not now and sends after the yes", async () => {
+    const ctx = boot();
+    const answers = [false, true];
+    ctx.window.App.aiConsent = { ensure: vi.fn(async () => answers.shift()), refused: vi.fn() };
+    selectAndOpen(ctx);
+    submit(ctx);
+    await settle();
+    expect(ctx.window.App.aiConsent.ensure).toHaveBeenCalledTimes(1);
+    expect(ctx.requests).toEqual([]);
+    expect(ctx.document.getElementById("memoryEditBackdrop").hidden).toBe(false);
+    expect(ctx.document.getElementById("memoryEditCorrection").value).toBe("Account A preference");
+    submit(ctx);
+    await settle();
+    expect(ctx.requests).toHaveLength(1);
+  });
+
+  it("sends nothing for another account that signed in while it asked", async () => {
+    const ctx = boot();
+    let agree;
+    ctx.window.App.aiConsent = { ensure: () => new Promise(resolve => { agree = resolve; }), refused: vi.fn() };
+    selectAndOpen(ctx);
+    submit(ctx);
+    await settle();
+    ctx.window.auth.currentUser = account("B");
+    agree(true);
+    await settle();
+    expect(ctx.requests).toEqual([]);
+  });
+
+  it("lets a refusal for the missing consent make the next Save ask", async () => {
+    const ctx = boot();
+    ctx.window.App.aiConsent = { ensure: vi.fn(async () => true), refused: vi.fn() };
+    selectAndOpen(ctx);
+    submit(ctx);
+    await settle();
+    ctx.requests[0].resolve({
+      ok: false,
+      status: 403,
+      json: async () => ({ detail: { error: "Agree to sending your questions to the AI providers first.",
+        code: "ai_consent_required" } }),
+    });
+    await settle();
+    expect(ctx.window.App.aiConsent.refused).toHaveBeenCalledTimes(1);
+    expect(ctx.window.App.aiConsent.refused.mock.calls[0][0].code).toBe("ai_consent_required");
+  });
+});
+
 describe("memory edit retries", () => {
   const requestId = request => JSON.parse(request.options.body).client_request_id;
 

@@ -573,6 +573,10 @@
         App.watchUi?.requireAccount?.({ question: text }, send);
         return;
       }
+      // Its runs go to the models: the account's one yes first (ai-consent.js),
+      // as before a chat's Send; "Not now" keeps the sentence.
+      if (App.aiConsent && !(await App.aiConsent.ensure())) return;
+      if (state.busy) return;
       closePopover();
       const schedule = state.schedule;
       const payload = { task: text, goal: line(goal.value), interval: schedule.interval,
@@ -592,6 +596,8 @@
         options.onStarted?.(data.watch);
       } catch (failure) {
         state.busy = false;
+        // Refused for want of the consent: the next Start asks.
+        App.aiConsent?.refused?.(failure);
         showError(App.userError ? App.userError(failure, { fallback: 'Try again.' }) : App.t('Try again.'));
         task.focus({ preventScroll: true });
       }

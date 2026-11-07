@@ -8531,9 +8531,15 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   nutzen eigene Modelle), dann was über OpenRouter an sie geht, Link
   `/privacy#providers`; bewusst kurz und ohne Warnton;
   „Not now“ lässt die Frage im Feld, „Agree“ → `POST /api/my/ai-consent`, dann
-  geht sie raus). Ein unbekannter Stand (kein Status, Feld fehlt) fragt nicht:
+  geht sie raus). Ebenso vor den anderen Eingängen mit Schranke: Start einer
+  Watch (`watch-composer.js` `submit`, die Karte unter der Antwort
+  `agent-watch.js` `start`) und Remember/Correct memory (`memory-edit.js`
+  `submitEdit`); „Not now“ lässt Satz bzw. Dialog stehen (bis 2026-11-07
+  fragten nur Chat-Nachrichten, ein Konto ohne Zustimmung bekam dort nur die
+  Absage). Ein unbekannter Stand (kein Status, Feld fehlt) fragt nicht:
   der Server ist die Schranke, seine Ablehnung (`agent-chat.js` `failRun`,
-  `query-send.js` `finishFailed` → `refused`) lässt das nächste Senden fragen.
+  `query-send.js` `finishFailed`, die drei eben genannten → `refused`) lässt
+  das nächste Senden fragen.
   Tests: `tests/test_ai_consent.py` (Marker `real_ai_consent`; sonst hat jedes
   Testkonto zugestimmt, `conftest._accounts_agreed_to_the_ai_providers`),
   `tests/js/ai-consent.test.mjs`, `tests/e2e/test_ai_consent_dialog.py`; die

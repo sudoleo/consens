@@ -470,6 +470,12 @@
     if (!bindingIsCurrent(binding)) return resetForAuthChange();
     const correction = document.getElementById("memoryEditCorrection").value.trim();
     if (!correction) return showFieldError("Enter what consens.io should remember.");
+    // The memory model reads it: the account's one yes first (ai-consent.js),
+    // as before a chat's Send; "Not now" keeps the dialog and its text.
+    const asked = state.epoch;
+    if (window.App?.aiConsent && !(await window.App.aiConsent.ensure())) return;
+    if (!bindingIsCurrent(binding)) return resetForAuthChange();
+    if (state.busy || asked !== state.epoch) return;
     if (state.requestFeedback !== correction) {
       state.requestId = makeRequestId();
       state.requestFeedback = correction;
@@ -504,6 +510,8 @@
         state.requestId = null;
         state.requestFeedback = null;
       }
+      // Refused for want of the consent: the next Save asks.
+      window.App?.aiConsent?.refused?.(error);
       showFieldError(window.App.userError(error, { fallback: "Memory couldn’t be updated. Try again." }));
     } finally {
       if (epoch === state.epoch) setBusy(false);

@@ -6,10 +6,13 @@
 //
 //   set(uid, given)   firebase.js after /user_status (its ai_consent)
 //   clear()           on sign-out
-//   ensure()          window.sendQuestion awaits it before Agent or Compare:
+//   ensure()          window.sendQuestion awaits it before Agent or Compare,
+//                     as do a Watch's start (watch-composer.js, agent-watch.js)
+//                     and Remember/Correct memory (memory-edit.js):
 //                     true = send; false = "Not now" (the draft stays)
 //   refused(fields)   a refusal with code ai_consent_required (agent-chat.js
-//                     failRun, query-send.js finishFailed): the next Send asks
+//                     failRun, query-send.js finishFailed, the three above):
+//                     the next Send asks
 //
 // Not known yet (no status, or a status without the field) asks nothing:
 // the server is the gate; its refusal makes the next Send ask.
