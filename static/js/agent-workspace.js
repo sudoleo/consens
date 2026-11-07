@@ -574,7 +574,11 @@
       const figure = file && !placed.has(file.id) ? figures.get(file.id).figure : null;
       if (figure) placed.add(file.id);
       if (figure ? place.firstChild !== figure || place.childNodes.length !== 1 : place.firstChild) {
+        // One the text reaches while it is written fades in like the words
+        // around it, instead of standing there whole from one frame to the next.
+        const arriving = hold && figure && !figure.isConnected;
         place.replaceChildren(...(figure ? [figure] : []));
+        if (arriving) fadeIn(figure);
       }
     }
     markGalleries(body);
@@ -605,6 +609,11 @@
     for (const figure of body.querySelectorAll('.md-picture > .agent-vm-picture')) {
       if (!marked.has(figure)) markTile(figure, 0, 0);
     }
+  }
+  function fadeIn(element) {
+    if (!element.animate || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
+    element.animate([{ opacity: 0 }, { opacity: 1 }], { duration: App.motion?.ms?.('state') ?? 200,
+      easing: App.motion?.ease?.('out') ?? 'ease-out' });
   }
   function markTile(figure, count, index) {
     const marks = {
@@ -679,6 +688,16 @@
     const figure = node('figure', 'agent-vm-picture'); figure.dataset.filesKey = key;
     // In the answer's text the page's words are its own (data-i18n-skip); this bar is ours (i18n.js).
     figure.setAttribute('data-i18n-ui', '');
+    // Its own shape when the store knows it (agent_files.picture_size): the
+    // field it shows until it arrives is the picture's, so nothing moves
+    // when it comes (2026-11-07, Max: pictures appeared with a jerk, from a
+    // 16:10 field to their own size). Older files keep the 16:10 field.
+    const width = Number(file.width), height = Number(file.height);
+    if (Number.isInteger(width) && Number.isInteger(height) && width > 0 && height > 0) {
+      figure.classList.add('has-size');
+      figure.style.setProperty('--picture-width', String(width));
+      figure.style.setProperty('--picture-height', String(height));
+    }
     const open = node('button', 'agent-vm-picture-open'); open.type = 'button';
     open.setAttribute('aria-label', `Open ${name}`);
     const img = node('img'); img.alt = name; img.decoding = 'async';
@@ -694,10 +713,7 @@
       whenNear(figure, () => picture(chatId, file).load.then(url => {
         img.addEventListener('load', () => {
           figure.classList.remove('is-loading');
-          if (img.animate && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
-            img.animate([{ opacity: 0 }, { opacity: 1 }], { duration: App.motion?.ms?.('state') ?? 200,
-              easing: App.motion?.ease?.('out') ?? 'ease-out' });
-          }
+          fadeIn(img);
         }, { once: true });
         img.src = url;
       }, () => {
@@ -1016,13 +1032,15 @@
   // { id, name, mime, kind, preview?, origin?, demo: { file, preview? } }:
   // loaded without a chat or an account, never removable. demo(body, files)
   // shows them with that answer (called again as the turn shares more),
-  // demo(null) lets go.
+  // demo(null) lets go. With { writing: true } the answer is still being
+  // written: as in a live run, a picture waits for its place in the text
+  // instead of standing under it first; it loads already.
   async function demoFetch(url) {
     const response = await fetch(url);
     if (!response.ok) throw new Error('The file couldn’t load.');
     return response.blob();
   }
-  function demo(body, files = []) {
+  function demo(body, files = [], { writing = false } = {}) {
     if (demoBody && demoBody !== body) { fillPictures(demoBody, '', [], 'demo'); fillDocuments(demoBody, []); }
     if (!body) {
       for (const id of demoFiles.keys()) pictures.delete(id);
@@ -1032,7 +1050,8 @@
     demoBody = body;
     for (const file of files) demoFiles.set(file.id, file);
     const shown = files.filter(file => PICTURE_MIMES.has(file.mime));
-    fillPictures(body, '', shown, 'demo');
+    for (const file of shown) picture('', file);
+    fillPictures(body, '', shown, 'demo', writing);
     const rows = files.filter(file => !shown.includes(file));
     const list = node('div', 'agent-files-list');
     for (const file of rows) list.append(fileRow('', file, 'demo'));

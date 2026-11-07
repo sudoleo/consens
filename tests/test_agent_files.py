@@ -106,6 +106,29 @@ def test_images_are_capability_aware_and_private(setup, monkeypatch):
     assert visual[-1]['image_url']['url'].startswith('data:image/png;base64,')
 
 
+def test_a_picture_keeps_its_drawn_size_for_the_app_but_not_for_the_model(setup):
+    # 2026-11-07, Max: pictures in an answer appeared with a jerk; the app
+    # keeps a place of their own shape (agent-workspace.js has-size).
+    from app.services.agent_files import picture_size, public_file
+    files, chat = setup
+    out = io.BytesIO(); Image.new('RGB', (160, 90)).save(out, 'PNG')
+    meta = files.save('owner', chat, raw=out.getvalue(), name='chart.png', mime='image/png',
+                      extraction={'status': 'ready', 'parts': [], 'warnings': []}, extra={'kind': 'vm_file'})
+    assert (meta['width'], meta['height']) == (160, 90)
+    assert files.list('owner', chat)[0]['width'] == 160
+    stored = files.get('owner', chat, meta['id'])
+    assert 'width' not in public_file(stored, for_model=True)
+    # A photo taken sideways is drawn upright: its sides swap.
+    photo = Image.new('RGB', (400, 300)); exif = photo.getexif(); exif[0x0112] = 6
+    out = io.BytesIO(); photo.save(out, 'JPEG', exif=exif.tobytes())
+    assert picture_size(out.getvalue(), 'image/jpeg') == (300, 400)
+    # No picture, or none the app draws: no size.
+    assert picture_size(b'not a picture', 'image/png') is None
+    assert picture_size(out.getvalue(), 'application/pdf') is None
+    text = upload(files, chat)
+    assert 'width' not in text and 'height' not in text
+
+
 def test_legacy_image_note_is_not_shown_as_a_partial_read():
     from app.services.agent_files import public_file
     old = {'id': 'f', 'name': 'a.png', 'mime': 'image/png', 'status': 'partial',

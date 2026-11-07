@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 from datetime import datetime, timedelta, timezone
 import hashlib
+import io
 import json
 import logging
 import os
@@ -186,6 +187,32 @@ def preview_key(data):
     return data["object_key"] + PREVIEW_SUFFIX
 
 
+# Pictures the app draws with an answer (agent-workspace.js PICTURE_MIMES).
+SIZED_MIMES = frozenset({"image/png", "image/jpeg", "image/webp", "image/gif"})
+# EXIF orientations that turn a picture on its side: width and height swap.
+_SIDEWAYS = frozenset({5, 6, 7, 8})
+
+
+def picture_size(raw, mime):
+    """``(width, height)`` of a picture as the browser draws it (upright, as
+    the preview is, agent_web_images.encode), or None. The app keeps a place
+    of exactly that shape until the picture arrives (2026-11-07, Max: the
+    pictures in an answer appeared with a jerk, from a 16:10 field to their
+    own size). Only the header is read, nothing is decoded."""
+    if mime not in SIZED_MIMES:
+        return None
+    from PIL import Image
+    try:
+        with Image.open(io.BytesIO(raw), formats=("PNG", "JPEG", "WEBP", "GIF")) as image:
+            width, height = image.size
+            sideways = image.getexif().get(0x0112) in _SIDEWAYS
+    except Exception:
+        return None
+    if width < 1 or height < 1:
+        return None
+    return (height, width) if sideways else (width, height)
+
+
 def public_file(data, *, for_model=False):
     """File metadata for the browser, or with ``for_model`` for a model's tool result."""
     file = {key: data[key] for key in ("id", "name", "title", "mime", "size", "sha256", "status", "warnings",
@@ -194,6 +221,9 @@ def public_file(data, *, for_model=False):
     # That it can be previewed, as what: never where it lies.
     if isinstance(data.get("preview"), dict) and not for_model:
         file["preview"] = {"mime": data["preview"].get("mime", ""), "size": data["preview"].get("size", 0)}
+    # A picture's size, for the place the app keeps for it (picture_size).
+    if not for_model:
+        file.update({key: data[key] for key in ("width", "height") if isinstance(data.get(key), int)})
     if file.get("warnings"):
         warnings = [_warning(data, w, for_model=for_model) for w in file["warnings"]]
         file["warnings"] = [w for w in warnings if w]
@@ -258,6 +288,9 @@ class AgentFiles:
             "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest(), "object_key": key,
             "status": "processing", "processing_until": (now + timedelta(minutes=20)).isoformat(), "created_at": now.isoformat(), "expires_at": (now + timedelta(days=RETENTION_DAYS)).isoformat(),
             "warnings": extraction["warnings"], "parts": extraction["parts"], "kind": "upload", **(extra or {})}
+        drawn = picture_size(raw, mime)
+        if drawn:
+            data["width"], data["height"] = drawn
         if preview:
             data["preview"] = {"mime": "application/pdf", "size": len(preview),
                                "sha256": hashlib.sha256(preview).hexdigest()}

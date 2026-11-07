@@ -539,6 +539,6 @@
   "Agree to sending your questions to the AI providers first.": "Stimm zuerst zu, dass deine Fragen an die KI-Anbieter gehen.",
   "A quick note": "Kurz vorab",
   "Your answers come from AI models by these providers:": "Deine Antworten kommen von KI-Modellen dieser Anbieter:",
-  "For that, consens sends them your question, attached files and the chat so far through OpenRouter, and your memory if it’s on.": "consens schickt ihnen dafür deine Frage, angehängte Dateien und den bisherigen Chat über OpenRouter, dazu dein Gedächtnis, wenn es an ist.",
+  "Your question only goes to the models working on it, not to all of them. Through OpenRouter they get your question, attached files and the chat so far, and your memory if it’s on.": "Deine Frage geht nur an die Modelle, die daran arbeiten, nicht an alle. Sie bekommen über OpenRouter deine Frage, angehängte Dateien und den bisherigen Chat, dazu dein Gedächtnis, wenn es an ist.",
   "More in the privacy notice": "Mehr dazu in der Datenschutzerklärung"
 }

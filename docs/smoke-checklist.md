@@ -1289,7 +1289,8 @@ Server.
 - [ ] KI-Zustimmung (seit 2026-11-06): ein Konto ohne `users/{uid}.ai_consent`
       tippt eine Frage und sendet → Dialog „A quick note“ / „Kurz vorab“ listet
       die Anbieter aller Familien mit Logo in zwei Spalten (Logos im Dark Mode
-      lesbar), darunter klein, was über OpenRouter an sie geht; Link öffnet
+      lesbar), darunter klein „Deine Frage geht nur an die Modelle, die daran
+      arbeiten, nicht an alle.“ und was über OpenRouter an sie geht; Link öffnet
       `/privacy#providers` im neuen Tab. „Not now“ lässt die Frage im Feld, nichts geht raus;
       „Agree“ schickt sie sofort, die nächste Frage fragt nicht mehr (auch nach
       Neuladen und auf einem zweiten Gerät). Auf Deutsch dieselben Sätze.
@@ -1578,7 +1579,10 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   darunter; erscheint dort erst, wenn seine Zeile fertig gestreamt ist (keine
   rohen `![`-Zeichen), blinkt nicht beim Prüfer-Markieren; ein nicht gesetztes
   Bild steht erst nach dem Lauf unter dem Text. Deutsch: Download/„Weitere
-  Aktionen“ an einem Bild im Text deutsch.
+  Aktionen“ an einem Bild im Text deutsch. Ein neues Bild (seit 2026-11-07 mit
+  Größe gespeichert) zeigt bis zum Laden ein Skelett-Feld in seiner eigenen
+  Form; wenn es kommt, verschiebt sich darunter nichts (auch die Diagramm-Grafik
+  der Demo `/app?demo=1`, die erst an ihrer Stelle im Text auftaucht).
 - [ ] Lauf mit Mail-Entwurf/Kalenderänderung: Aktivität zeigt „Email draft ready
   for review“ und „Waiting for your confirmation below“; nach dem Lauf steht über
   dem Composer „n items need your review · Review“, das Bookmark trägt einen

@@ -26,7 +26,8 @@ def test_the_first_question_names_the_providers_and_goes_out_after_the_yes(brows
         page.click("#sendButton")
         dialog = page.locator("#appConfirmDialog")
         expect(dialog).to_be_visible()
-        expect(dialog).to_contain_text("through OpenRouter")
+        expect(dialog).to_contain_text("only goes to the models working on it, not to all of them")
+        expect(dialog).to_contain_text("Through OpenRouter")
         # The providers come from the registry (window.MODEL_FAMILIES), each with its logo.
         families = page.evaluate("() => window.MODEL_FAMILIES.length")
         expect(dialog.locator("#appConfirmList li")).to_have_count(families)

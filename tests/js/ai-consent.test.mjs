@@ -51,7 +51,9 @@ describe("before the first question", () => {
       { text: "Anthropic Claude", icon: "/static/claude.png", iconClass: undefined },
       { text: "Qwen", icon: undefined, iconClass: undefined },
     ]);
-    expect(calls.asked[0].note).toContain("through OpenRouter");
+    // First the calming part (2026-11-07, Max): the list is not who gets every question.
+    expect(calls.asked[0].note).toMatch(/^Your question only goes to the models working on it, not to all of them\./);
+    expect(calls.asked[0].note).toContain("Through OpenRouter");
     expect(calls.asked[0].link.href).toBe("/privacy#providers");
     expect(calls.posts).toEqual([["/api/my/ai-consent", { method: "POST", headers: { Authorization: "Bearer token-u1" } }]]);
     expect(await App.aiConsent.ensure()).toBe(true);

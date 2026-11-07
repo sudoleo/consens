@@ -13,6 +13,8 @@ from dataclasses import replace
 from pathlib import Path
 from xml.dom import minidom
 
+from PIL import Image
+
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
 
@@ -61,6 +63,9 @@ def test_the_files_the_demo_loads_are_there():
             assert path.is_file() and path.stat().st_size > 1000, path
             assert f"/static/demo/buy-vs-rent.${{lang}}.{ending}" in DEMO
         assert (folder / f"buy-vs-rent.{lang}.pdf").read_bytes().startswith(b"%PDF")
+        # The chart's field keeps the PNG's shape until it arrives (has-size).
+        with Image.open(folder / f"buy-vs-rent.{lang}.png") as chart:
+            assert f"width: {chart.width}, height: {chart.height}," in DEMO
         # A real spreadsheet: every part is XML, the 30 years are formulas.
         with zipfile.ZipFile(folder / f"buy-vs-rent.{lang}.xlsx") as book:
             for name in book.namelist():

@@ -318,6 +318,50 @@ describe('private Agent workspace', () => {
     dom.window.close();
   });
 
+  // 2026-11-07, Max: pictures appeared with a jerk, from the 16:10 field to their size.
+  it('keeps the place of a picture of known size in its own shape, older ones in the 16:10 field', async () => {
+    const SIZED = { id: 'e'.repeat(32), name: 'chart.png', mime: 'image/png', size: 17000, status: 'ready', kind: 'vm_file',
+      turn_id: TURN_TWO, expires_at: '2099-10-29T10:00:00Z', width: 1600, height: 1000 };
+    const OLD = { ...SIZED, id: '9'.repeat(32), name: 'old.png', width: undefined, height: undefined };
+    const BROKEN = { ...SIZED, id: '8'.repeat(32), name: 'broken.png', width: '1600px', height: 0 };
+    const files = [SIZED, OLD, BROKEN];
+    const { window, document, dom } = boot({ files });
+    window.fetch = vi.fn(url => url.includes('/files/') ? new Promise(() => {}) : Promise.resolve(reply(files)));
+    await window.App.agentWorkspace.refresh(CHAT);
+    const [sized, old, broken] = document.querySelectorAll('.agent-vm-picture');
+    expect(sized.classList.contains('has-size')).toBe(true);
+    expect(sized.style.getPropertyValue('--picture-width')).toBe('1600');
+    expect(sized.style.getPropertyValue('--picture-height')).toBe('1000');
+    for (const figure of [old, broken]) {
+      expect(figure.classList.contains('has-size')).toBe(false);
+      expect(figure.style.getPropertyValue('--picture-width')).toBe('');
+    }
+    dom.window.close();
+  });
+
+  // The demo plays a live run: its chart waits for its place in the text
+  // instead of standing under the answer while the words before it stream.
+  it('holds a demo picture back while its answer is written and puts it into its place', async () => {
+    const CHART = { id: 'dec0de00000000000000000000000001', name: 'chart.png', mime: 'image/png', kind: 'vm_file',
+      status: 'ready', size: 131072, width: 1600, height: 1000, origin: { ref: 'f1' }, demo: { file: '/static/demo/chart.png' } };
+    const { window, document, dom } = boot();
+    window.fetch = vi.fn(async () => ({ ok: true, blob: async () => new window.Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }) }));
+    const body = document.getElementById('agentAnswerBody');
+    body.innerHTML = '<p>Buying pulls ahead in year 9.</p>';
+    window.App.agentWorkspace.demo(body, [CHART], { writing: true });
+    // It loads already, but shows nowhere yet.
+    expect(window.fetch.mock.calls.map(([url]) => url)).toEqual(['/static/demo/chart.png']);
+    expect(document.querySelector('.agent-vm-picture')).toBeNull();
+    expect(body.nextElementSibling?.hidden ?? true).toBe(true);
+    body.insertAdjacentHTML('beforeend', '<div class="md-picture-line"><span class="md-picture" data-picture="f1"></span></div>');
+    await vi.waitFor(() => expect(body.querySelector('.md-picture > .agent-vm-picture.has-size')).not.toBeNull());
+    window.App.agentWorkspace.demo(body, [CHART]);
+    expect(body.querySelectorAll('.agent-vm-picture')).toHaveLength(1);
+    expect(body.nextElementSibling.querySelector('.agent-vm-picture')).toBeNull();
+    window.App.agentWorkspace.demo(null);
+    dom.window.close();
+  });
+
   it('keeps a failed upload in the composer with its reason', async () => {
     const { window, dom } = boot({ files: [] });
     window.App.attachments = { markError: vi.fn() };

@@ -217,7 +217,10 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
    the file viewer. */
 .agent-answer-pictures { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; margin: 18px 0 22px; min-width: 0; }
 .agent-answer-pictures[hidden] { display: none; }
-.agent-vm-picture { display: flex; flex-direction: column; width: fit-content; max-width: 100%; margin: 0; }
+.agent-vm-picture {
+  --picture-max-height: min(520px, 60vh);
+  display: flex; flex-direction: column; width: fit-content; max-width: 100%; margin: 0;
+}
 .agent-vm-picture-open {
   position: relative; display: block; max-width: 100%; padding: 0; border: 0; border-radius: var(--radius-sm, 10px);
   background: var(--raise); overflow: hidden; cursor: zoom-in;
@@ -227,7 +230,7 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 9%, transparent);
 }
 .agent-vm-picture-open:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
-.agent-vm-picture-open img { display: block; max-width: 100%; max-height: min(520px, 60vh); width: auto; height: auto; }
+.agent-vm-picture-open img { display: block; max-width: 100%; max-height: var(--picture-max-height); width: auto; height: auto; }
 /* Until it arrives, a field of a picture's size in the skeleton's tone with
    its light passing (attachments' tiles, skeleton.css); one that cannot come
    says so there. Before 2026-10-29 the field was the page's own --raise: an
@@ -247,6 +250,21 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 }
 @media (prefers-reduced-motion: reduce) {
   .agent-vm-picture.is-loading .agent-vm-picture-open::after { animation: none; background: none; }
+}
+/* A picture whose size the store knows (agent_files.picture_size, since
+   2026-11-07) keeps its own place from the first frame: as wide as it will
+   be drawn (its own width, the answer's, or what the height limit allows)
+   at its own aspect ratio, so the answer does not jump when it arrives.
+   Without a size, the 16:10 field above. A collage tile keeps its cell. */
+.agent-vm-picture.has-size:not([data-gallery-size]) {
+  width: min(calc(var(--picture-width) * 1px), 100%,
+    calc(var(--picture-max-height) * var(--picture-width) / var(--picture-height)));
+}
+.agent-vm-picture.has-size:not([data-gallery-size]) .agent-vm-picture-open {
+  width: 100%; aspect-ratio: var(--picture-width) / var(--picture-height);
+}
+.agent-vm-picture.has-size:not([data-gallery-size]) .agent-vm-picture-open img {
+  width: 100%; height: 100%; max-height: none; object-fit: cover;
 }
 .agent-vm-picture-failed { padding: 0 16px; color: var(--ink-3); font-size: var(--font-size-xs); }
 /* Takes no width of its own (width 0, min-width 100%): the picture sets it. */
@@ -276,6 +294,8 @@ button.agent-doc-main:focus-visible { outline: var(--focus-ring); outline-offset
 .md-picture { display: block; max-width: 100%; }
 .md-picture:empty { display: none; }
 .md-picture-line { display: flex; flex-direction: column; align-items: flex-start; gap: 18px; margin: 18px 0 22px; min-width: 0; }
+/* As wide as the line, so a picture of known size measures itself by it. */
+.md-picture-line > .md-picture { align-self: stretch; }
 .md-picture-line:not(:has(> .md-picture:not(:empty))) { display: none; }
 .consensus-answer-body p > .md-picture:not(:empty) { margin: 12px 0; }
 /* Several pictures on one line: a collage at the answer's width (2026-10-31,

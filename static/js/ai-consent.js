@@ -70,11 +70,15 @@
   async function ask() {
     const uid = account.uid;
     // Calm and short: who answers, what goes to them, where to read more.
+    // The list is every family the app may use; a question goes to only some
+    // (2026-11-07, Max: say so, short, to take the worry away). Not "only the
+    // ones you chose": the chat's title and other helpers run on models of
+    // their own (privacy.html #providers).
     const agreed = await App.confirm({
       title: t("A quick note"),
       body: t("Your answers come from AI models by these providers:"),
       list: providers(),
-      note: t("For that, consens sends them your question, attached files and the chat so far through OpenRouter, and your memory if it’s on."),
+      note: t("Your question only goes to the models working on it, not to all of them. Through OpenRouter they get your question, attached files and the chat so far, and your memory if it’s on."),
       confirmLabel: t("Agree"),
       cancelLabel: t("Not now"),
       link: { href: "/privacy#providers", label: t("More in the privacy notice") },

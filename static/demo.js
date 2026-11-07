@@ -515,8 +515,10 @@ const DEMO_AGENT_FILES = demoInPageLanguage({
 const DEMO_SHEET_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 function demoAgentShared(withSheet) {
   const lang = window.App?.lang === "de" ? "de" : "en";
+  // Its size is the PNG's (scripts/demo_assets.py WIDTH, HEIGHT): the field
+  // it shows until it arrives has its shape (agent_files.picture_size).
   const chart = { id: "dec0de00000000000000000000000001", name: DEMO_AGENT_FILES.chart, mime: "image/png",
-    kind: "vm_file", status: "ready", size: 131072, origin: { ref: "f1" },
+    kind: "vm_file", status: "ready", size: 131072, width: 1600, height: 1000, origin: { ref: "f1" },
     demo: { file: `/static/demo/buy-vs-rent.${lang}.png` } };
   const sheet = { id: "dec0de00000000000000000000000002", name: DEMO_AGENT_FILES.sheet, mime: DEMO_SHEET_MIME,
     kind: "vm_file", status: "ready", size: 8192, preview: true,
@@ -863,7 +865,7 @@ async function runAgentDemoFlow() {
   if (!await at(DEMO_AGENT_STEPS.compare + DEMO_AGENT_STEPS.modelSpread + DEMO_AGENT_STEPS.afterCompare)) return;
   plan(3);
   events.push({ version: 1, kind: "status", id: "demo-status", status: "responding" });
-  App.agentWorkspace?.demo?.(body, demoAgentShared(false));
+  App.agentWorkspace?.demo?.(body, demoAgentShared(false), { writing: true });
   const tokens = answer.match(/\s+|[^\s]+/g) || [];
   let index = 0;
   while (index < tokens.length) {

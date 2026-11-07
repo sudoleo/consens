@@ -6829,7 +6829,15 @@ Bild, das der Agent vorher mit `find_pictures` angesehen hat, mit Bildunterschri
 Website als Link, `webSource`) als Bild direkt unter dem
 Antworttext (bis es gezeichnet ist, ein Feld im Skelett-Ton mit wanderndem Licht,
 `is-loading`, seit 2026-10-29; vorher eine leere weiße/graue Fläche beim Öffnen
-alter Chats; eines, das nicht kommt, sagt „Picture couldn’t load“), über der Zeile Notes · Watch · Share (`.agent-answer-pictures` hinter
+alter Chats; eines, das nicht kommt, sagt „Picture couldn’t load“; seit
+2026-11-07 in der Form des Bildes selbst: `AgentFiles.save` legt bei
+PNG/JPEG/WebP/GIF `width`/`height` ab, aufrecht wie gezeichnet
+(`agent_files.picture_size`, nur der Kopf, EXIF-Drehung tauscht die Seiten),
+`public_file` gibt sie dem Browser, nie dem Modell; `pictureCard` setzt
+`.has-size` mit `--picture-width`/`--picture-height`, das Feld ist so breit, wie
+das Bild gezeichnet wird, und nichts springt, wenn es kommt. Ältere Dateien
+ohne Größe behalten das 16:10-Feld; ein Bild, das die Antwort beim Schreiben
+erreicht, blendet ein), über der Zeile Notes · Watch · Share (`.agent-answer-pictures` hinter
 dem Antwort-Body; `App.answerTail(body)` sagt agent-review.js, watch.js,
 share-dialog.js und der Prüfzeile, wo die Antwort endet; data:-URL, Klick öffnet
 `App.attachments.openStored`), andere als Dateizeile. **Im Text statt darunter
@@ -8517,8 +8525,11 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   setzt es aus `/user_status` und leert es beim Abmelden; `window.sendQuestion`
   wartet vor Agent und Compare auf `ensure()` (`App.confirm` „A quick note“:
   ein Satz, die Anbieter aus `window.MODEL_FAMILIES` als Liste mit Logo
-  (`citationLabel`, `icon`, `iconClass`), Kleingedrucktes, was über OpenRouter
-  an sie geht, Link `/privacy#providers`; bewusst ohne Warnton;
+  (`citationLabel`, `icon`, `iconClass`), Kleingedrucktes: seit 2026-11-07
+  zuerst, dass die Frage nur an die Modelle geht, die daran arbeiten, nicht an
+  alle (bewusst nicht „nur die gewählten“: Titel, Gedächtnis und andere Helfer
+  nutzen eigene Modelle), dann was über OpenRouter an sie geht, Link
+  `/privacy#providers`; bewusst kurz und ohne Warnton;
   „Not now“ lässt die Frage im Feld, „Agree“ → `POST /api/my/ai-consent`, dann
   geht sie raus). Ein unbekannter Stand (kein Status, Feld fehlt) fragt nicht:
   der Server ist die Schranke, seine Ablehnung (`agent-chat.js` `failRun`,
@@ -12285,7 +12296,10 @@ Dateiliste unter der Antwort mehr:
   chat“ mit Inline-Bestätigung anbietet (`App.agentWorkspace.removeFile(id)`).
   Der Chat ist der sichtbare; der Server prüft Owner und Chat bei jedem Request.
 - Die Demo (`static/demo.js`, seit 2026-11-01) zeigt ihre Dateien über
-  `App.agentWorkspace.demo(body, files)`: Bilder in ihren `.md-picture`-Plätzen,
+  `App.agentWorkspace.demo(body, files, { writing })`: Bilder in ihren
+  `.md-picture`-Plätzen (mit `writing: true`, solange die Antwort streamt, wie
+  ein echter Lauf erst an ihrem Platz statt vorher unter dem Text; geladen wird
+  schon beim Aufruf; das Diagramm trägt `width`/`height` des PNGs),
   andere Dateien als Zeile mit Vorschau unter der Antwort, mit denselben
   Bausteinen (`pictureCard`, `fileRow`, `previewItem`) wie ein echter Turn.
   Eine Demo-Datei trägt `demo: { file, preview? }` (statische Adressen unter
