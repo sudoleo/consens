@@ -10,13 +10,11 @@ judge model (the fetched text arrives there as an output item). The text
 becomes the tool result the agent works from, the reviewers read it in the
 work log, and it is saved with the review.
 
-Bounds: any public http(s) page (since 2026-11-07 with or without
-reviewers); only before the answer, at most READS_PER_MESSAGE pages per
-message and READS_PER_STEP per step, READ_CONTENT_TOKENS per page. Never for
-comparison models or reviewers, never in chats with Google data. On unless
-AGENT_READ_SOURCES=0. See docs/agent-mode.md, "Quellen nachlesen". Until
-2026-10-31 comparison mode read only the answers' sources, with a purpose and
-a point for each read.
+Bounds: any public http(s) page, with or without reviewers; only before the
+answer, at most READS_PER_MESSAGE pages per message and READS_PER_STEP per
+step, READ_CONTENT_TOKENS per page. Never for comparison models or
+reviewers, never in chats with Google data. On unless AGENT_READ_SOURCES=0.
+See docs/agent-mode.md, "Quellen nachlesen".
 """
 from __future__ import annotations
 
@@ -44,10 +42,9 @@ from app.services.source_catalog import canonical_source_url
 
 ENABLED_ENV = "AGENT_READ_SOURCES"
 # Pages per message and per routing step. Every later routing step re-sends
-# what was read (from the prompt cache). Since 2026-10-28 fifteen instead of
-# five: the agent decides itself how much it reads (Max), five cut thorough
-# research short; five at once instead of three, so reading them takes fewer
-# steps that each re-send the conversation.
+# what was read (from the prompt cache). Fifteen: the agent decides itself
+# how much it reads, and five cut thorough research short; five at once, so
+# reading them takes fewer steps that each re-send the conversation.
 READS_PER_MESSAGE = 15
 READS_PER_STEP = 5
 # Exa cuts a page at about this many tokens (max_content_tokens); a 15-page
@@ -65,7 +62,7 @@ READ_TIME_MARGIN = 10
 # The helper only has to call the fetch tool and say "OK"; the room covers a
 # little reasoning where a model cannot switch it off (Gemini "minimal").
 FETCH_OUTPUT_TOKENS = 512
-# Read pages in the saved review give way first, to this length, before the
+# Read pages in the saved review give way, to this length, before the
 # 600 kB review budget would fail (agent_comparison._checkpoint).
 READ_TRIM_CHARS = 2000
 RESPONSES_URL = OPENROUTER_BASE_URL + "/responses"
@@ -77,8 +74,8 @@ _LIGHTEST = ("none", "minimal", "low")
 
 
 def enabled():
-    """On unless AGENT_READ_SOURCES=0 (2026-10-11: off by default, the Agent
-    told users it could not read any source)."""
+    """On unless AGENT_READ_SOURCES=0 (off, the Agent tells users it cannot
+    read any source)."""
     return os.environ.get(ENABLED_ENV, "1").strip() != "0"
 
 
@@ -92,18 +89,15 @@ def url_key(value):
     return urlunsplit(("https", parts.netloc, path, parts.query, ""))
 
 
-# Sources from the chat itself (2026-10-11): asked "kannst du eine Quelle
-# direkt nachlesen?" after an answer citing tri247.com, the Agent could open
-# nothing, because only this message's comparison answers counted. Two more
-# kinds are readable now, neither of which a page can steer:
+# Sources from the chat itself count as cited, under labels of their own,
+# and neither kind can be steered by a page:
 # * the sources saved with the chat's earlier messages (provider citations,
 #   pages read before; DelegationLoop.chat_sources from AgentRunStore.messages);
-# * URLs the user wrote (user_urls). Links in earlier answer TEXT are not: the
-#   agent writes from untrusted evidence, and an injected page could
-#   make it write a URL carrying chat content for a later, click-free fetch.
-#   The same holds for an answer passage the user quotes with "Ask about
-#   this": it is cut off like for memory evidence (user_words, review
-#   2026-10-12).
+# * URLs the user wrote (user_urls). Links in earlier answer TEXT are not the
+#   user's: the agent writes from untrusted evidence, so such a link is a page
+#   the agent chose (LABEL_CHOSEN). The same holds for an answer passage the
+#   user quotes with "Ask about this": it is cut off like for memory evidence
+#   (user_words).
 # One character class, no nested quantifier: linear on any text. Typographic
 # quotes end a URL like straight ones ("„https://…“" kept the closing quote).
 _CHAT_URL = re.compile("https?://[^\\s<>\"'`\\[\\]{}|\\\\^\u201c\u201d\u201e\u00ab\u00bb\u2018\u2019\u2039\u203a]+",
@@ -112,21 +106,19 @@ _URL_TRAILING = ".,;:!?*"
 CHAT_URLS_MAX = 60
 LABEL_USER = "your message"
 LABEL_EARLIER = "an earlier message's sources"
-# The agent researches itself (since 2026-10-27). Its own search results are
-# provider citations like the earlier messages' sources, which they become
-# with the next message anyway: no page wrote them. The web search runs with
-# every step (the provider's own): the agent does not call it, so "your
-# search" read as a search it never made (2026-10-28).
+# The agent researches itself. Its own search results are provider citations
+# like the earlier messages' sources, which they become with the next message
+# anyway: no page wrote them. The web search runs with every step (the
+# provider's own): the agent does not call it, so "your search" read as a
+# search it never made.
 LABEL_SEARCH = "a web search result of this message"
-# Any public page the agent names itself: from 2026-10-28 while reviewers
-# followed the work, since 2026-11-07 always. The provider's search of GPT-6
-# Luna and GPT-6.1 Terra sends no hits to the app (probe 2026-11-07: neither
-# Chat Completions nor the Responses API carries them), so without reviewers
-# they could read nothing they found: 11 of 21 reads in Max' own turns of
-# 25.10.-06.11. were refused. The refusal guarded against a page making the
-# agent fetch a URL with chat content in it, but since 2026-11-04 the
-# workspace reaches the whole web without reviewers too (curl), so it only
-# held back honest work. Chats with Google data stay closed (_refuse).
+# Any public page the agent names itself, with or without reviewers. The
+# provider's search of GPT-6 Luna and GPT-6.1 Terra sends no hits to the app
+# (probe 2026-11-07: neither Chat Completions nor the Responses API carries
+# them), so with cited pages alone they could read nothing they found. A page
+# making the agent fetch a URL with chat content in it is no reason to refuse:
+# the workspace reaches the whole web without reviewers too (curl). Chats
+# with Google data stay closed (_refuse).
 LABEL_CHOSEN = "a page you chose"
 
 
@@ -227,10 +219,9 @@ def resolve_redirect(url):
 
 
 # read_source's arguments (no docstring: it would become the schema's
-# description). Since 2026-10-28 only the address: no purpose and point to
-# justify a read with (a list of when to read, which Max took out of the
-# prompt on 2026-10-28), and no status_update, since text beside a tool call
-# shows the user as a note. The description says the rest once.
+# description): only the address, no purpose and point to justify a read
+# with, and no status_update, since text beside a tool call shows the user as
+# a note. The description says the rest once.
 class AuditReadSourceArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     url: str = Field(min_length=1, max_length=2048, description="The page's http(s) address.")
@@ -352,9 +343,8 @@ class SourceReader:
         self.lock = threading.Lock()
         self._steps = {}
         self._user_urls = None
-        # Since 2026-10-28: what it opens, not when to. The time is measured
-        # (3.0-6.4 s per read in prod, 2026-10-30 to 11-06); until 2026-11-07
-        # it said 10 to 30 seconds.
+        # What it opens, not when to. The time is measured (3.0-6.4 s per
+        # read in prod, 2026-10-30 to 11-06).
         description = (
             "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins, scripts "
             f"or clicks; a read takes about 3 to 6 seconds. At most {READS_PER_MESSAGE} per message.")

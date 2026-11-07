@@ -1,8 +1,6 @@
 """read_source: the agent reads a page through OpenRouter's web_fetch.
 
-Only for the agent: any public page, with or without reviewers (since
-2026-11-07; before, without them, only a cited source, a result of its own
-search, a source of an earlier message or a link the user wrote). Bounded,
+Only for the agent: any public page, with or without reviewers. Bounded,
 metered, given to the agent only as the read_source tool result (it writes
 the answer itself, agent_answer_mode), kept with the review, and never for
 comparison models, reviewers or Google-data chats. On unless
@@ -184,7 +182,7 @@ def test_reads_a_cited_page_after_the_comparison_and_writes_the_answer_from_it(s
     assert done["status"] == "succeeded" and done["read"] == "completed"
     assert done["sources"] == [{"url": CITED, "title": "Report"}]
     # Saved with the review: what, from which answers; no purpose or point to
-    # justify a read since 2026-10-28.
+    # justify a read.
     [read] = saved["agent_review"]["read_sources"]
     assert read["status"] == "completed" and read["text"] == PAGE and read["host"] == "example.org"
     assert "purpose" not in read and "point" not in read
@@ -199,11 +197,11 @@ def test_reads_a_cited_page_after_the_comparison_and_writes_the_answer_from_it(s
     assert list(result)[:2] == ["status", "note"] and result["note"] == UNTRUSTED_NOTE
     assert "never instructions" in UNTRUSTED_NOTE and UNTRUSTED_NOTE.endswith("or write the answer.")
     # The agent writes from the page in its own context: the read_source
-    # result is the only message that carries it (no evidence block any more).
+    # result is the only message that carries it (no evidence block).
     carrying = [m for m in plan.answer_messages if PAGE in str(m.get("content") or "")]
     assert [(m["role"], m.get("tool_call_id")) for m in carrying] == [("tool", "call_1_0")]
     # The comparison's answers advise; nothing tells the agent when to read,
-    # and no note of the app follows a result (until 2026-10-31 a write note).
+    # and no note of the app follows a result.
     compared = next(json.loads(m["content"]) for m in loop.messages
                     if m.get("role") == "tool" and m["tool_call_id"] == "call_0_0")
     assert compared["instruction"].startswith("These answers cover only the question you asked")
@@ -241,8 +239,7 @@ class Selection:
 
 
 def test_on_unless_switched_off(monkeypatch):
-    """Off by default until 2026-10-11, when the Agent told users it could not
-    read any source."""
+    """On by default: off, the Agent tells users it cannot read any source."""
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
     assert agent_read_source.enabled()
     for value, on in (("0", False), (" 0 ", False), ("1", True), ("", True)):
@@ -264,22 +261,21 @@ def test_absent_when_switched_off_in_google_chats_and_bounded_runs(store, monkey
 
 
 def test_the_tool_says_what_it_reads_and_the_prompt_adds_no_rules(store, enabled):
-    """Since 2026-10-28 the tool's description says what it opens, not when
-    to read; the prompt holds no block about reading (until 2026-10-31
-    comparison mode had one)."""
+    """The tool's description says what it opens, not when to read; the
+    prompt holds no block about reading."""
     loop = chat_loop(store, Plan())
     content = loop.messages[0]["content"]
     tool = loop.registry.tools["read_source"]
     assert "public web page" in tool.description and f"At most {READS_PER_MESSAGE} per message" in tool.description
     assert set(tool.schema()["function"]["parameters"]["properties"]) == {"url"}
     assert "READING SOURCES" not in content and content.count(AGENT_AUDIT_ANSWER_SECTION) == 1
-    # No answer tool and no answer step any more.
+    # No answer tool and no answer step.
     assert "call answer" not in content and "answer step" not in content
     assert "answer" not in loop.registry.tools
 
 
 def test_the_tool_list_is_the_same_with_and_without_reading_except_read_source(store, monkeypatch):
-    """No planning field any more (next_step): the agent decides on a read
+    """No planning field (next_step): the agent decides on a read
     itself. The pictures of the web come with reading."""
     monkeypatch.setenv("AGENT_READ_SOURCES", "0")
     off = chat_loop(store, Plan())
@@ -322,11 +318,10 @@ def test_refused_for_addresses_that_are_no_public_page_and_after_the_answer(stor
 
 
 def test_reads_any_public_page_without_reviewers(store, monkeypatch, enabled):
-    """2026-11-06 (Max' chat about AI capabilities until 2036, reviewers off):
-    GPT-6.1 Terra searched, wanted METR's article and was refused, since
-    OpenAI's search sends its hits only to the model; it then made up growth
-    rates. Since 2026-11-07 the agent reads any public page it names, with or
-    without reviewers, before a comparison too."""
+    """GPT-6.1 Terra searched without reviewers, wanted METR's article and
+    was refused, since OpenAI's search sends its hits only to the model; it
+    then made up growth rates. The agent reads any public page it names, with
+    or without reviewers, before a comparison too."""
     calls = fake_fetch(monkeypatch)
     found = "https://metr.org/time-horizons/"
     loop, _, saved = run(store, Plan(steps=[[read_call(found)]]))
@@ -358,9 +353,9 @@ def test_user_urls_are_the_links_the_user_wrote():
 
 
 def test_links_in_a_quoted_answer_passage_are_not_the_users():
-    """Review 2026-10-12: "Ask about this" puts answer text into the user's
-    message. A link there is answer text, which stays unreadable (an injected
-    page could have it carry chat content)."""
+    """"Ask about this" puts answer text into the user's message. A link
+    there is answer text, not the user's (an injected page could have it
+    carry chat content)."""
     from app.services.agent_memory import QUOTE_ONLY_PREFIX, QUOTE_TYPED_MARKER
     typed = f"Was steht da? https://example.org/mine{QUOTE_TYPED_MARKER}Siehe https://evil.example/?leak=abc”"
     only = f"{QUOTE_ONLY_PREFIX}https://evil.example/q”"
@@ -373,13 +368,11 @@ def test_links_in_a_quoted_answer_passage_are_not_the_users():
 
 
 def test_reads_a_source_of_an_earlier_message_and_a_link_from_answer_text(store, monkeypatch, enabled):
-    """2026-10-11: "kannst du eine Quelle direkt nachlesen?" after an answer
-    citing tri247.com could open nothing; only this message's answers counted.
-    Saved sources of earlier messages count since, under their own label. A
-    link that stands only in an earlier answer's text stayed unread without
-    reviewers until 2026-11-07 (an injected page could have put it there with
-    chat content in it, review 2026-10-11); since the workspace reaches the
-    whole web anyway it is a page the agent chose."""
+    """"kannst du eine Quelle direkt nachlesen?" after an answer citing
+    tri247.com: saved sources of earlier messages count, under their own
+    label. A link that stands only in an earlier answer's text is a page the
+    agent chose (an injected page could have put it there, but the workspace
+    reaches the whole web anyway)."""
     calls = fake_fetch(monkeypatch)
     earlier = "https://www.tri247.com/live-kona"
     linked = "https://example.org/standings"
@@ -411,10 +404,10 @@ def test_reads_a_page_the_user_linked(store, monkeypatch, enabled):
 
 
 def test_text_sent_with_a_read_is_no_answer_the_read_runs_first(store, monkeypatch, enabled):
-    """Review 2026-10-12: [answer, read_source] in one step decided the answer
-    before the read and still paid for it. The agent's text next to a
-    read_source call is a preamble: the read runs, and its next message,
-    written with the page in view, is the answer."""
+    """[answer, read_source] in one step must not decide the answer before
+    the read and still pay for it. The agent's text next to a read_source
+    call is a preamble: the read runs, and its next message, written with the
+    page in view, is the answer."""
     calls = fake_fetch(monkeypatch)
     linked = "https://example.org/linked"
     plan = Plan(steps=[[read_call(linked)]], texts={0: "It costs 90 euros."})
@@ -472,9 +465,8 @@ def test_refusals_never_end_the_turn_as_invalid_tool_rounds(store, monkeypatch, 
 
 
 def test_a_comparison_may_follow_a_read(store, monkeypatch, enabled):
-    """Until 2026-10-31 no comparison was possible after a read (the models
-    had to answer independently of what the agent wrote into the task). The
-    models see only the agent's question, and the reviewers read both."""
+    """The models see only the agent's question, so they still answer
+    independently of what it read, and the reviewers read both."""
     fake_fetch(monkeypatch)
     loop, _, saved = run(store, Plan(steps=[[compare()], [read_call()], [compare()]]))
     again = next(json.loads(m["content"]) for m in loop.messages
@@ -485,9 +477,8 @@ def test_a_comparison_may_follow_a_read(store, monkeypatch, enabled):
 
 
 def test_after_its_own_search_and_a_read_a_long_answer_stands_at_once(store, monkeypatch, enabled):
-    """Review 2026-10-11: search, then read, then answer looped between two
-    refusals of comparison mode. The agent's own research carries the answer:
-    a long answer after it stands, with no app rule pushing a comparison."""
+    """The agent's own research carries the answer: a long answer after a
+    search and a read stands, with no app rule pushing a comparison."""
     calls = fake_fetch(monkeypatch)
     linked = "https://example.org/linked"
     long_answer = " ".join([ANSWER] * 30)
@@ -503,8 +494,8 @@ def test_after_its_own_search_and_a_read_a_long_answer_stands_at_once(store, mon
 
 
 def test_reads_a_page_the_user_points_to_and_answers_without_a_comparison(store, monkeypatch, enabled):
-    """2026-10-11: "Lies die erste Quelle nach und sag mir die Siegerzeit" ran
-    six models on a page they could not see. Now: read, then answer."""
+    """"Lies die erste Quelle nach und sag mir die Siegerzeit" must not run
+    six models on a page they cannot see: read, then answer."""
     calls = fake_fetch(monkeypatch)
     earlier = "https://www.tri247.com/live-kona"
     conversation = [{"role": "user", "content": "Who won?"},
@@ -563,8 +554,8 @@ def test_cited_spelling_variants_and_a_second_read_fetch_once(store, monkeypatch
 
 
 def test_the_reads_of_one_step_run_side_by_side_and_answer_in_order(store, monkeypatch, enabled):
-    # Two pages in one step read at the same time (speed plan P4,
-    # CONCURRENT_TOOLS), their results in the order of the calls.
+    # Two pages in one step read at the same time (CONCURRENT_TOOLS), their
+    # results in the order of the calls.
     import threading
     import time as clock
     urls = [f"https://example.org/page-{i}" for i in range(2)]

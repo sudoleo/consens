@@ -85,7 +85,7 @@ def test_malformed_and_scanned_pdf_limits(setup):
     assert result['status'] == 'partial' and not result['parts']
     assert result['warnings'] == ['Page 1 is a scanned image and was not read.']
     # The model reads such a PDF from the file itself, so the person sees no
-    # "couldn't be read" (2026-10-16: a correctly described scan carried one).
+    # "couldn't be read" (a correctly described scan carried one).
     meta = files.upload('owner', chat, {'name': 'plan.pdf', 'data': base64.b64encode(out.getvalue()).decode()})
     assert meta['status'] == 'ready' and meta['warnings'] == []
 
@@ -107,8 +107,8 @@ def test_images_are_capability_aware_and_private(setup, monkeypatch):
 
 
 def test_a_picture_keeps_its_drawn_size_for_the_app_but_not_for_the_model(setup):
-    # 2026-11-07, Max: pictures in an answer appeared with a jerk; the app
-    # keeps a place of their own shape (agent-workspace.js has-size).
+    # Pictures in an answer must not jump: the app keeps a place of their own
+    # shape (agent-workspace.js has-size).
     from app.services.agent_files import picture_size, public_file
     files, chat = setup
     out = io.BytesIO(); Image.new('RGB', (160, 90)).save(out, 'PNG')
@@ -255,8 +255,8 @@ class _SeesImages(dict):
 
 
 def test_turn_sends_a_file_at_one_place_and_downloads_it_once(setup, monkeypatch):
-    """Audit A6: the image used to follow the newest tool result (a new
-    place, so no prompt cache) and was downloaded again for every call."""
+    """The image stays at one place, not after the newest tool result (a new
+    place means no prompt cache), and is downloaded once, not for every call."""
     from app.services.agent_runs import AgentRunStore
     from test_agent_comparison import Script, make_loop
     from test_agent_runs import UID
@@ -576,7 +576,7 @@ def test_uploads_are_limited_per_account(setup, monkeypatch):
 
 
 def test_the_upload_limit_says_how_long_to_wait(monkeypatch):
-    # Nachprüfung 2: a per-account 429 names its wait (Retry-After), which
+    # A per-account 429 names its wait (Retry-After), which
     # main.error_body turns into code "rate_limited" and retry_after.
     from fastapi import HTTPException
     from app.api.routers import agent_files as uploads

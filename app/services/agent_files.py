@@ -39,8 +39,7 @@ UPLOAD_QUOTAS = {
 }
 RETENTION_DAYS = 30
 ID_PATTERN = r"^[a-f0-9]{32}$"
-# What the file tools need to say beyond their descriptions (prompt_defaults.py
-# since 2026-10-28; until 2026-10-31 comparison mode had a list of rules here).
+# What the file tools need to say beyond their descriptions.
 AUDIT_UNTRUSTED = ("The file tools read the attached files; a part they could not read (an image, a page) is "
                    "named in their result.")
 
@@ -172,8 +171,8 @@ def _warning(data, warning, *, for_model):
         return None
     pages = agent_file_extract.scanned_pages(text)
     if pages is not None:
-        # The model reads a fully scanned PDF from the file itself (2026-10-16:
-        # a one-page scan was described correctly under "couldn't be read").
+        # The model reads a fully scanned PDF from the file itself (a one-page
+        # scan was described correctly under "couldn't be read").
         return None if _reads_visually(data) else agent_file_extract.scanned_pages_warning(pages)
     return text
 
@@ -196,9 +195,9 @@ _SIDEWAYS = frozenset({5, 6, 7, 8})
 def picture_size(raw, mime):
     """``(width, height)`` of a picture as the browser draws it (upright, as
     the preview is, agent_web_images.encode), or None. The app keeps a place
-    of exactly that shape until the picture arrives (2026-11-07, Max: the
-    pictures in an answer appeared with a jerk, from a 16:10 field to their
-    own size). Only the header is read, nothing is decoded."""
+    of exactly that shape until the picture arrives (else the pictures in an
+    answer jump from a 16:10 field to their own size). Only the header is
+    read, nothing is decoded."""
     if mime not in SIZED_MIMES:
         return None
     from PIL import Image

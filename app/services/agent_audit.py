@@ -1,8 +1,6 @@
 """The agent works, the user's chosen models review its work and its answer.
 
-The Agent's one mode for every account since 2026-10-31 (Max); from
-2026-10-25 an Agent setting ("audit instead of comparison") beside a
-comparison mode with judges, which is gone. The agent answers itself, with
+The Agent's one mode for every account. The agent answers itself, with
 its own web search in every step, and its answer streams at once. Each of
 the user's chosen models reviews the agent's work while it happens: it
 follows the agent's live work log (agent_work_log.py, docs/agent-work-log.md)
@@ -30,7 +28,7 @@ Differences, no judge. Whoever calls a statement
 wrong names a source (any http(s) URL); without one the mark counts as
 doubtful.
 
-Since 2026-10-31 the agent may also ask the user's chosen models its question
+The agent may also ask the user's chosen models its question
 (compare_models, agent_comparison.AUDIT_COMPARE): they answer as advisers,
 each in a fresh conversation of its own, never the reviewers' sessions, and
 the reviewers read their answers in the log as evidence (review_entry,
@@ -86,7 +84,7 @@ FAILURE_PAUSE_SECONDS = 60
 # MIN_ENTRY_CHARS). The whole log stays in the work log.
 SYSTEM_ENTRY_CHARS = 60_000
 ENTRY_CHARS = 12_000
-# A compare_models result (since 2026-10-31) holds every answer
+# A compare_models result holds every answer
 # of the user's chosen models: read as its structure up to this, each answer
 # shortened alike where they do not fit, so the reviewers see all of them.
 COMPARISON_ENTRY_CHARS = 60_000
@@ -121,20 +119,20 @@ MAX_MARK_SENTENCES = 3
 # its plan. A step that calls only these waits for the next round (with a
 # step that does more, QUIET_STEPS of them in a row, or the final round):
 # a halt could not undo or prevent anything they did, and every round sends
-# the reviewer's whole conversation again (2026-10-27).
+# the reviewer's whole conversation again.
 QUIET_TOOLS = frozenset({"update_plan", "read_settings", "read_file", "read_document", "gmail_read",
                          "calendar_read", "vm_read_file", "vm_process_output", "vm_view_image", "wait_agents"})
 # The browser's actions that only read the page in front or the tabs, like
 # vm_read_file the VM (agent_browser.ACTIONS; workspace_vm/browser/browser.py
 # on_page answers them without acting, settling or navigating). By the
-# action in the call's arguments, never its text (Max, 2026-10-30, audit K6:
-# about 30 % fewer live rounds in browser runs). Every other action, and a
-# call whose arguments cannot be read, gets its round as before.
+# action in the call's arguments, never its text (about 30 % fewer live
+# rounds in browser runs). Every other action, and a call whose arguments
+# cannot be read, gets its round.
 QUIET_BROWSER_ACTIONS = frozenset({"read", "text", "find", "tabs", "screenshot"})
 QUIET_STEPS = 3
 # A final round whose reply could not be read, or whose provider failed in
 # passing, gets one more request on the same session, with REPAIR_NOTE after
-# an unreadable reply (2026-10-27: 2 of 87 final rounds in Prod ended
+# an unreadable reply (2 of 87 final rounds in Prod ended
 # review_unreadable and left their answer without marks). An empty reply had
 # its second request already (ComparisonTools.worker_request), a reply cut
 # at its output limit would be cut again.
@@ -151,10 +149,10 @@ REVIEW_TIME_MARGIN = 15
 REVIEW_MIN_SECONDS = 30
 # A final round without a usable reply after its hedge time
 # (final_hedge_seconds) gets a second request on a new session with the
-# same messages (the hedge, A-T2); the first usable reply wins and the other
-# request stops. Until 2026-10-29 the slowest reviewer alone set the time to
-# the marks (GPT-6 Luna p90 40 s, max 72 s), and a hung request held the
-# turn until its hard stop. The hedge time is the FINAL_HEDGE_QUANTILE of
+# same messages (the hedge); the first usable reply wins and the other
+# request stops. Without it the slowest reviewer alone sets the time to the
+# marks (GPT-6 Luna p90 40 s, max 72 s), and a hung request holds the turn
+# until its hard stop. The hedge time is the FINAL_HEDGE_QUANTILE of
 # the model's last FINAL_HEDGE_SAMPLES final rounds in this process, from
 # FINAL_HEDGE_MIN_SAMPLES on, at least FINAL_HEDGE_MIN_SECONDS, else
 # FINAL_HEDGE_SECONDS. The receipts hold the same durations, but reading
@@ -163,7 +161,7 @@ REVIEW_MIN_SECONDS = 30
 # a lower bound above the hedge time, so the quantile does not drift down.
 # FINAL_ROUND_SECONDS bounds the final round, both requests and a repair
 # included; then the reviewer's live marks stand (no_time) and the turn
-# completes. Thinking and search stay as they are (Max: no cuts, hangs are
+# completes. Thinking and search stay as they are (no cuts: hangs are
 # caught by hedging). The p90, not the p75: a hedge pays only against a long
 # tail (Luna 13/40/72 s, MiMo Pro 9/14/67 s median/p90/max in Prod,
 # 25.–29.10.), and at the p75 a model without one (Qwen 20/25/29 s) paid a
@@ -176,10 +174,10 @@ FINAL_HEDGE_SAMPLES = 50
 FINAL_HEDGE_MIN_SAMPLES = 8
 FINAL_ROUND_SECONDS = 90
 # A reviewer's threads (its own, its final round's requests) get this long
-# after their stop to end (A-R3, since 2026-10-29); one still at work then is
-# logged by its thread's name and left behind (a daemon), and the run ends
-# anyway. Until then a hung thread held finish_run until the lease expired
-# and the reaper wrote run_interrupted. The final round itself waits at most
+# after their stop to end; one still at work then is logged by its thread's
+# name and left behind (a daemon), and the run ends anyway, else a hung
+# thread holds finish_run until the lease expires and the reaper writes
+# run_interrupted. The final round itself waits at most
 # FINAL_ROUND_SECONDS plus this before its reviewers count as out of time.
 REVIEWER_JOIN_SECONDS = 10
 
@@ -194,7 +192,7 @@ _KIND_WORDS = {
 }
 _KIND_ALIASES = {word: kind for kind, words in _KIND_WORDS.items() for word in words}
 
-# Why a reviewer may stop the work for the user (since 2026-10-26, "halt"):
+# Why a reviewer may stop the work for the user ("halt"):
 # a security-critical step the user did not ask for, damage beyond the task,
 # work far off the user's goal, or the agent following instructions that came
 # from content instead of the user. The agent never learns of it; the run
@@ -210,14 +208,10 @@ HALT_QUOTE_CHARS = 400
 # What the card shows of an entry without such a quote.
 HALT_STEP_CHARS = 300
 
-# Before a call on agent_gate.outward's list (a request for a domain until
-# 2026-11-04, a memory change with outside content in view until 2026-11-02;
-# none since), each
-# reviewer that can answer
-# gets one gate round, without web search: the step's calls, which run only
-# once every one of them said "go" (since 2026-10-27). A halt, or no reviewer
-# able to answer, asks the user. Browser actions and pages the server fetched
-# were on it until 2026-10-29 (agent_gate.py says why they are not).
+# Before a call on agent_gate.outward's list (none at present), each reviewer
+# that can answer gets one gate round, without web search: the step's calls,
+# which run only once every one of them said "go". A halt, or no reviewer
+# able to answer, asks the user. agent_gate.py says why no call waits.
 GATE_NOTE = ("Before it runs: the agent's step in entry {entry} calls these, which act outside its workspace and "
              "have not run yet:\n{calls}\nThey run only once every reviewer let them. Reply with your marks and "
              "\"gate\": \"go\", or with a halt for entry {entry}.")
@@ -226,8 +220,7 @@ GATE_GO = frozenset({"go", "run", "allow", "allowed", "yes", "ok", "continue", "
 GATE_UNCHECKED = "unchecked"
 # Each asked reviewer has GATE_SECONDS from the step's entry on for its
 # verdict; then it counts as "failed", so the user decides on the card, never
-# a silent go (A-T3, since 2026-10-29; Prod 28./29.10.: p90 9.6 s, max
-# 13 s). A gate round cuts the reviewer's live round at work short (its
+# a silent go (Prod 28./29.10.: p90 9.6 s, max 13 s). A gate round cuts the reviewer's live round at work short (its
 # entries go into the gate round), an unreadable reply (also a tool call)
 # gets one more request with REPAIR_NOTE within that time, and the wait
 # pauses the turn's clock like a halt (DelegationLoop._gate_wait).
@@ -308,8 +301,8 @@ def review_system_prompt(reference_timezone=None, device_timezone=None):
     """System prompt of every reviewer: the task, today's date, the rules.
     ``device_timezone``: the zone of the user's device for this message
     (AnswerAudit.timezone), in which the agent counts its days too
-    (agent_runs.get_agent_turn_context); until 2026-11-05 the reviewers
-    counted them in the app's zone, a day ahead on an American evening."""
+    (agent_runs.get_agent_turn_context); in the app's zone the reviewers
+    would be a day ahead on an American evening."""
     from app.services import prompt_config
     from app.services.llm.base import get_date_context
     zone = device_timezone or reference_timezone or prompt_config.get_config()["reference_timezone"]
@@ -353,8 +346,8 @@ BRIEF_TOOLS = (
                      "every message and the user sees in their settings."),
     ("ask_user", "A key or token the user gave through ask_user lies in ~/.secrets in the workspace: the agent "
                  "reads it there for the command that needs it, which is its purpose."),
-    # No quote of the user since 2026-10-28, no gate since 2026-11-02: the
-    # agent decides, the user sees and can undo every change.
+    # No quote of the user and no gate: the agent decides, the user sees and
+    # can undo every change.
     ("update_memory", "update_memory saves lasting facts about the user, as the user allowed in their settings; "
                       "the user sees every change and can undo it."),
     ("update_plan", "update_plan keeps the plan of a long task, as the app asks the agent to."),
@@ -435,7 +428,7 @@ def review_entry(entry, text, limit=ENTRY_CHARS, *, brief=None, answer=None, com
     without its token usage, but with the web searches it ran (``searches``):
     a provider may send no hits for them (GPT-6 Luna since at least
     2026-10-23), and a step without hits then read as one that never
-    searched (2026-10-27). ``brief`` ({seq, content}, AnswerAudit.brief):
+    searched. ``brief`` ({seq, content}, AnswerAudit.brief):
     the agent's instructions read as their brief. ``answer``: the fixed
     answer, which the final round gives once, not again in its step.
     ``compared_limit``: the limit of a compare_models result instead
@@ -731,7 +724,7 @@ def _single_value(text):
 def _read_json(text):
     """(value, error): the reply's JSON value, or None and why the JSON
     reader could not take it (ReviewUnreadable.error). Tolerant of a code
-    fence or words around the value, and since 2026-10-30 of line breaks in
+    fence or words around the value, and of line breaks in
     strings (_LENIENT), a quote mark left unescaped in a string and a comma
     before a closing bracket (_mended): in two days of Prod (10-28/29), 5 of 7
     unusable reviewer replies were short, complete JSON the reader refused
@@ -810,9 +803,9 @@ class Gate:
     then; ``verdicts``: provider -> ("go" | "halt" | "failed", halt or None);
     ``decision``: what the run made of it ("continue", "steer");
     ``ready_at``: when the reviewers were asked (the run's clock), ``times``
-    the milliseconds from then to each verdict, ``ms`` to the result (A-M3).
+    the milliseconds from then to each verdict, ``ms`` to the result.
     ``step``: the agent's step whose calls these are (``completion:N``), for
-    the gate's ``checked`` or ``paused`` entry in the work log (I9)."""
+    the gate's ``checked`` or ``paused`` entry in the work log."""
 
     def __init__(self, calls, step=None):
         self.id = uuid4().hex[:12]
@@ -852,9 +845,8 @@ def _call_line(name, arguments):
 
 
 # The calls of a halted model step as the card says them (agent-chat.js
-# holdEvidence, UX audit 2026-10-29 C1): the tool, what it does and the words
-# it acts on, never the arguments' JSON. Before, a click read as 'browser:
-# {"action": "click", "ref": "e14"}' and a memory change as its whole JSON.
+# holdEvidence): the tool, what it does and the words it acts on, never the
+# arguments' JSON such as 'browser: {"action": "click", "ref": "e14"}'.
 # A browser element is named as the browser's last read listed it
 # (element_names): the user decides on "Jetzt kaufen", not on "e14". The
 # app writes the sentence in the user's language; a command stays code.
@@ -974,8 +966,8 @@ def halt_step(entry, content, quote="", names=None):
     ``step_source`` its names), "result" (a tool's result, ``step_name`` the
     tool) or "context" (anything else the agent received). Where the entry
     holds the reviewer's quote, the quote is the text: the words that show
-    the problem, not the file's first rows (2026-10-27, a CSV whose comment
-    told the agent to upload it read on the card as its id and hash)."""
+    the problem, not the file's first rows (a CSV whose comment told the
+    agent to upload it read on the card as its id and hash)."""
     kind, text = entry.get("kind"), str(content or "")
     if kind == "step":
         try:
@@ -1019,7 +1011,7 @@ def parse_review(text, *, known=(), final=True):
     without an http(s) source becomes "doubtful". Raises ReviewUnreadable
     when the reply holds no list of marks at all; while the agent works, a
     valid halt alone (parse_halt) is a round without marks, else that halt
-    was lost with the round (until 2026-10-30)."""
+    would be lost with the round."""
     raw = _FENCE.sub("", str(text or "").strip())
     data, error = _read_json(text)
     marks = data if isinstance(data, list) else data.get("marks") if isinstance(data, dict) else None
@@ -1059,10 +1051,10 @@ def _marks(marks, known, final):
 
 def kept_marks(marks, limit=MAX_MARKS):
     """``marks`` within ``limit``, like one review: the most severe, among
-    equals the newest, in their order. A reviewer's live marks: until
-    2026-11-05 they grew with every round of a long run, every new
-    conversation carried them all (from about 200 none held them) and the
-    review outgrew its storage (from about 1100, losing every reviewer's)."""
+    equals the newest, in their order. A reviewer's live marks too: unbounded,
+    they grow with every round of a long run, every new conversation carries
+    them all (from about 200 none holds them) and the review outgrows its
+    storage (from about 1100, losing every reviewer's)."""
     if len(marks) <= limit:
         return marks
     ranked = sorted(range(len(marks)), key=lambda index: (_SEVERITY[marks[index]["kind"]], index), reverse=True)
@@ -1100,8 +1092,8 @@ class ReviewTooLong(ValueError):
 
 
 def reply_shape(error, reply=None):
-    """How a reviewer's reply failed, for the log, never with its words
-    (2026-10-26): {shape, chars, finish, output_tokens, reasoning_tokens}, for
+    """How a reviewer's reply failed, for the log, never with its words:
+    {shape, chars, finish, output_tokens, reasoning_tokens}, for
     ``broken_json`` with the JSON reader's message (``json_error``), or None
     for a failure without a reply (provider, stop, deadline)."""
     from app.services.agent_provider_limits import ModelEmptyAnswer, ModelOutputLimit
@@ -1130,8 +1122,8 @@ def reply_shape(error, reply=None):
 def review_failure(error, cancellation=None):
     """Why a reviewer left no marks, as {code, error} (agent panel, review).
     A reply with a tool call instead of the review is ``review_tool_calls``,
-    an empty one ``review_empty`` (since 2026-10-29; until then both counted
-    as ``provider_error``, which stays for failures of the provider)."""
+    an empty one ``review_empty``, not ``provider_error``, which stays for
+    failures of the provider."""
     from app.services.agent_comparison import COMPARISON_FAILURES
     from app.services.agent_provider_limits import agent_failure
     shape = (reply_shape(error) or {}).get("shape")
@@ -1161,8 +1153,7 @@ def review_failure(error, cancellation=None):
 
 # --- Finding the marks in the answer ------------------------------------------
 
-# The tolerant search form of the quote locator (locate_quote). Until
-# 2026-10-31 it located a pasted text for check_text, hence "passage".
+# The tolerant search form of the quote locator (locate_quote).
 _PASSAGE_CHARACTERS = str.maketrans({"\u201c": '"', "\u201d": '"', "\u201e": '"', "\u00ab": '"', "\u00bb": '"',
                                      "\u2018": "'", "\u2019": "'", "\u201a": "'", "\u2013": "-", "\u2014": "-",
                                      "\u00a0": " "})
@@ -1508,7 +1499,7 @@ class ReviewerSession:
         # False once a live round does not fit even a new conversation: the
         # final round still comes.
         self.following = True
-        # New conversations and failure pauses so far (A-M4, in the review).
+        # New conversations and failure pauses so far (in the review).
         self.fresh = self.pauses = 0
         self.worker = None
         # Marks of the live rounds (kept if the final round fails) and the
@@ -1538,7 +1529,7 @@ class ReviewerSession:
 
     def fixed(self):
         """The answer is fixed: what this reviewer has not read yet goes into
-        the review (``backlog``, A-M4: the entries, the steps among them that
+        the review (``backlog``: the entries, the steps among them that
         called a tool, the seconds into the live round at work, None without
         one), and that round gives way (cut_round)."""
         started, rest = self.live_started, self.audit.work_log.entries_after(self.cursor)
@@ -1547,13 +1538,12 @@ class ReviewerSession:
         self.cut_round()
 
     def cut_round(self):
-        """The live round at work gives way (A-T1): the answer is fixed, so
-        no halt could come of it any more and the final round reads its
-        entries anyway. The reviewer goes on; until 2026-10-29 its final
-        round waited for it (MiMo Pro: up to 53 s) and paid for its entries
-        twice. Also for a gate that asks this reviewer (its gate round
-        comes first and reads the entries) and for a gate round past
-        GATE_SECONDS (A-T3)."""
+        """The live round at work gives way: the answer is fixed, so no halt
+        could come of it any more and the final round reads its entries
+        anyway. The reviewer goes on; its final round neither waits for the
+        round (MiMo Pro: up to 53 s) nor pays for its entries twice. Also for
+        a gate that asks this reviewer (its gate round comes first and reads
+        the entries) and for a gate round past GATE_SECONDS."""
         live = self.live
         if live is not None:
             live.cancel()
@@ -1633,8 +1623,7 @@ class ReviewerSession:
         run's beginning and the reviewer's marks so far (nothing for its
         first conversation). The beginning keeps the app's workspace_opened
         entries read so far: with the workspace on demand only they carry its
-        rules to the reviewers (the brief is older), and until 2026-11-03 a
-        new conversation lost them."""
+        rules to the reviewers (the brief is older)."""
         if len(self.messages) > 1 or not self.cursor:
             return {"brief": self.audit.brief()}
         entries = self.audit.work_log.entries_after(0)
@@ -1793,7 +1782,7 @@ class ReviewerSession:
         """One paid live or gate round on the reviewer's session: (value,
         marks). A failed or unreadable round ends its session (the next round
         opens a new one) and leaves the conversation as it was; an unreadable
-        reply in a gate round (``gate``, A-T3), also a tool call, first gets
+        reply in a gate round (``gate``), also a tool call, first gets
         one more request on the same session with REPAIR_NOTE. ``parse``: a
         gate round's reader (parse_gate), whose result stands for the marks;
         such a round does not search. The round runs under a stop of its own
@@ -1869,7 +1858,7 @@ class ReviewerSession:
                             f" json_error={shape['json_error']}" if shape.get("json_error") else "")
 
     def _final_request(self, message, known):
-        """The final round's requests (A-T2): (value, marks) of the first
+        """The final round's requests: (value, marks) of the first
         usable reply. Its first request runs on the reviewer's session; one
         that could not be used may try once more (_mendable: on the same
         session with REPAIR_NOTE after an unreadable reply, on a new one
@@ -1899,7 +1888,7 @@ class ReviewerSession:
                 running.append(hedge)
                 self.hedged = True
             # Stopped, no hedge comes any more: wait for the running requests
-            # (until 2026-11-03 it waited 0 s past hedge_at and spun).
+            # (a wait of 0 s past hedge_at would spin).
             no_more_hedge = hedge is not None or self.cancellation.cancelled
             try:
                 done = results.get(timeout=max(0., (deadline if no_more_hedge else min(hedge_at, deadline))
@@ -2010,8 +1999,7 @@ class AnswerAudit:
     the unplaced marks and the marks on the work. The marks show only once
     every reviewer is done, so no mark comes and goes while the page is read.
 
-    ``setting``: the user's ``reviewers`` (user_settings.py, since
-    2026-11-01). "always" follows from the run's start (DelegationLoop.run),
+    ``setting``: the user's ``reviewers`` (user_settings.py). "always" follows from the run's start (DelegationLoop.run),
     "workspace" from the agent's first step in the workspace on
     (DelegationLoop._review_from_here), "off" never. A review the setting
     kept the reviewers from ends "off" (``unreviewed``), not "failed": nobody
@@ -2135,7 +2123,7 @@ class AnswerAudit:
     def ready_gate(self, gate, entry):
         """The step is in the log as ``entry`` (None: it could not be
         written): every reviewer that can answer now gets its gate round, and
-        a live round it is at gives way to it (cut_round, A-T3). One that
+        a live round it is at gives way to it (cut_round). One that
         pauses after failures, follows no more or has ended is not waited
         for."""
         now = time.monotonic()
@@ -2183,9 +2171,8 @@ class AnswerAudit:
         reviewer of the run let the calls run, (GATE_UNCHECKED, []) when one
         could not answer (failed, paused or no longer following): the veto
         of one reviewer is enough, and a reviewer that could not answer is
-        never a go (security audit 2026-10-27); the user decides instead. An
-        asked reviewer without a verdict after GATE_SECONDS could not answer
-        (A-T3): its gate round stops."""
+        never a go; the user decides instead. An asked reviewer without a
+        verdict after GATE_SECONDS could not answer: its gate round stops."""
         late = []
         with self._gate_changed:
             if not gate.ready:
@@ -2213,7 +2200,7 @@ class AnswerAudit:
         return GATE_UNCHECKED, []
 
     def gate_trace(self, gate):
-        """The gate's course without any text (A-M3): {gate_ms, verdicts:
+        """The gate's course without any text: {gate_ms, verdicts:
         [{provider, model, verdict, ms}]} in the reviewers' order; one not
         asked (paused, following no more) could not answer: "failed"."""
         with self._gate_changed:
@@ -2276,10 +2263,10 @@ class AnswerAudit:
         ``model`` carries after its conversation (DelegationLoop._step,
         FileContext.messages: a PDF or a picture natively where the model
         reads it), as the admission estimates them (input_estimate: 3,000 a
-        page of a PDF, 16,000 a picture). Until 2026-11-05 a reviewer's
-        budget counted its conversation alone, and with a scanned PDF on a
-        smaller window its rounds went past it (their search dropped, their
-        output cut, or no room at all). 0 without files, or when they cannot
+        page of a PDF, 16,000 a picture). A budget of the conversation alone
+        lets a scanned PDF on a smaller window push its rounds past it (their
+        search dropped, their output cut, or no room at all). 0 without files,
+        or when they cannot
         be read: then its rounds fail on their own, never the run."""
         file_context = getattr(self.tools.loop, "file_context", None)
         if not self.file_ids or file_context is None:
@@ -2294,8 +2281,8 @@ class AnswerAudit:
     def output_share(self, provider):
         """A reviewer's output allowance (ComparisonTools._output_shares),
         computed once for all of them by the first reviewer that starts, on
-        its own thread: it reads the account, and until 2026-11-01 that read
-        stood in follow(), between Send and the agent's first request."""
+        its own thread: it reads the account, which in follow() would stand
+        between Send and the agent's first request."""
         with self._shares_lock:
             if self._shares is None:
                 self._shares = self.tools._output_shares(dict(self.tools.models), remaining=self.allowance)
@@ -2356,9 +2343,8 @@ class AnswerAudit:
     def _live_findings(self):
         """A stopped review keeps what the reviewers found while the agent
         worked, as one whose final round failed does: in claims, unplaced and
-        process, each mark ``live`` (A-M7, since 2026-10-29; until then a
-        stop lost them, B8). A reviewer already through its final round keeps
-        that list (until 2026-11-04 a stop dropped it). Never fails the stop."""
+        process, each mark ``live``. A reviewer already through its final
+        round keeps that list. Never fails the stop."""
         try:
             reviews = self._reviews()
             if reviews:
@@ -2423,7 +2409,7 @@ class AnswerAudit:
         self.final_answer = answer
         for session in self.sessions.values():
             # Its backlog, and a live round at work gives way to the final
-            # round (A-M4, A-T1).
+            # round.
             session.fixed()
         self.work_log.wake()
         locked = self._lock_time()
@@ -2438,7 +2424,7 @@ class AnswerAudit:
         self._join(late)
         if locked is not None:
             # What the final rounds waited for the account lock, their claims
-            # all at once (A-T5): whether bundling them would pay.
+            # all at once: whether bundling them would pay.
             now = self._lock_time()
             record_metric("agent_account_lock", "final_rounds", duration_ms=(now["waited"] - locked["waited"]) * 1000,
                           processed=now["calls"] - locked["calls"])
@@ -2482,7 +2468,7 @@ class AnswerAudit:
     def _join(self, sessions):
         """Waits for the threads of stopped reviewers, their final round's
         requests included (one another reply overtook may still be
-        stopping), at most REVIEWER_JOIN_SECONDS in all (A-R3)."""
+        stopping), at most REVIEWER_JOIN_SECONDS in all."""
         until = time.monotonic() + REVIEWER_JOIN_SECONDS
         for session in list(sessions):
             for thread in [session.thread, *(request.thread for request in session.requests)]:
@@ -2562,8 +2548,7 @@ class AnswerAudit:
         stopped or timed out): there is no answer to review, but what the
         reviewers found while the agent worked is kept, as after a stop in
         the final round: a review "cancelled" with their live marks in
-        ``process`` (no claims without an answer) and their rows "stopped"
-        (G7, since 2026-10-29; until then only their sessions held them).
+        ``process`` (no claims without an answer) and their rows "stopped".
         Only with live marks: a stop without any keeps no review. Returns
         whether there is one to save."""
         tools = self.tools
