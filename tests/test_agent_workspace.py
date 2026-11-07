@@ -1673,6 +1673,41 @@ def test_a_chat_folder_moves_as_the_agent_and_never_over_another(monkeypatch, tm
     assert not (tmp_path / "old").exists()
 
 
+def test_a_messages_start_reads_every_key_file_the_records_first(monkeypatch, tmp_path):
+    """Bug hunt 2026-11-06: CHAT_SCRIPT read only the keys the record names
+    (the newest agent_secrets.KEEP_NAMES); an older key still in ~/.secrets
+    went to the model unmasked after a day or a restart. Now every key file
+    there, the record's names first, at most agent_secrets.READ_KEYS; a
+    half-written key, another name and a folder are no key. In a real bash."""
+    from app.services import agent_secrets
+    found = shutil.which("bash")
+    if not found:
+        pytest.skip("no bash")
+    home = tmp_path.as_posix()
+    keys = tmp_path / ".secrets"
+    (keys / "NESTED_KEY").mkdir(parents=True)
+    for name in ("AAA_KEY", "NEWER_KEY", "OLDEST_KEY"):
+        (keys / name).write_bytes(f"sk-{name.lower()}-12345678\n".encode())
+    (keys / ".DRAFT_KEY.part").write_bytes(b"sk-half-written-1234")
+    (keys / "lower_key").write_bytes(b"sk-not-a-key-name-1234")
+    (tmp_path / "NOTES.md").write_bytes(b"# notes\n")
+
+    class Bash:
+        def run(self, name, argv, *, cwd, timeout, on_output, cancellation, input=None):
+            assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN] and argv[6:8] == ["bash", "-c"]
+            done = subprocess.run([found, *[arg.replace(agent_vm.HOME, home) for arg in argv[7:]]], input=input,
+                                  capture_output=True, env={**os.environ, "HOME": home})
+            on_output("stdout", done.stdout)
+            return agent_vm.ExecOutcome(exit_code=done.returncode, timed_out=False, seconds=0.0)
+    opened = agent_workspace.open_chat(Bash(), "consens-w-a", "chat1", keys=["NEWER_KEY", "GONE_KEY"])
+    assert opened.keys == (("NEWER_KEY", "sk-newer_key-12345678"), ("AAA_KEY", "sk-aaa_key-12345678"),
+                           ("OLDEST_KEY", "sk-oldest_key-12345678"))
+    assert opened.notes["text"] == "# notes\n"
+    monkeypatch.setattr(agent_secrets, "READ_KEYS", 2)
+    opened = agent_workspace.open_chat(Bash(), "consens-w-a", "chat1", keys=["OLDEST_KEY"])
+    assert [name for name, _ in opened.keys] == ["OLDEST_KEY", "AAA_KEY"]
+
+
 def test_a_folder_the_agent_made_read_only_is_deleted_too(tmp_path):
     """DELETE_SCRIPT runs as the agent's user: a folder it made read-only
     (chmod -R a-w, Go's module cache) failed rm -rf, and a chat's deletion

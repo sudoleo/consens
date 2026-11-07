@@ -818,10 +818,12 @@ def record_folder(store, uid, chat_id, folder):
 # round trip each), as the agent's user like each of them was: the chat's
 # folder follows its title ($1 the folder now, $2 the one its title wants;
 # "taken" keeps it where it is), its marker comes on stdin, then the keys
-# the account gave ($5...: name NUL value NUL, as agent_secrets.LOAD_SCRIPT)
-# and last the notes' beginning ($3, at most $4 bytes, to the end).
+# in ~/.secrets ("key" name NUL value NUL): the record's names first ($6...),
+# then every other file of a key's name, at most $5 (since 2026-11-07: the
+# record keeps only the newest names, an older key went unmasked), and last
+# the notes' beginning ($3, at most $4 bytes, to the end).
 CHAT_SCRIPT = (
-    'old=$1; new=$2; notes=$3; limit=$4; shift 4; dir=$old; state=same; '
+    'old=$1; new=$2; notes=$3; limit=$4; most=$5; shift 5; dir=$old; state=same; '
     'if [ "$new" != "$old" ]; then '
     'if [ ! -e "$old" ] && [ ! -L "$old" ]; then dir=$new; state=missing; '
     'elif [ -e "$new" ] || [ -L "$new" ]; then state=taken; '
@@ -829,7 +831,11 @@ CHAT_SCRIPT = (
     'else state=failed; fi; fi; '
     'mkdir -p -- "$dir" 2>/dev/null && cat > "$dir/' + CHAT_MARKER + '" 2>/dev/null || exit 46; '
     'printf "folder %s\\n" "$state"; '
-    'if cd "$HOME/.secrets" 2>/dev/null; then for name in "$@"; do [ -f "$name" ] || continue; '
+    'if cd "$HOME/.secrets" 2>/dev/null; then count=0; named=$#; seen=" "; for name in "$@" *; do '
+    'if [ "$named" -gt 0 ]; then named=$((named - 1)); seen="$seen$name "; '
+    'else case $seen in *" $name "*) continue;; esac; fi; '
+    '[[ $name =~ ^[A-Z][A-Z0-9_]{1,63}$ ]] && [ -f "$name" ] && [ -r "$name" ] || continue; '
+    '[ "$count" -lt "$most" ] || break; count=$((count + 1)); '
     'printf "key %s\\0" "$name"; head -c 16384 -- "$name"; printf "\\0"; done; fi; '
     'if [ -f "$notes" ] && [ -r "$notes" ]; then printf "notes +\\n"; exec head -c "$limit" -- "$notes"; fi; '
     'printf "notes -\\n"')
@@ -893,10 +899,11 @@ def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), ca
     """At a message's first workbench call: the chat's folder follows its
     title (``folder``: the name the chat recorded, empty for a folder named
     by its id from before 2026-10-28, which moves too) with its marker
-    rewritten, the account's keys read again for masking (as
-    agent_secrets.load) and the notes' beginning (notes_for_agent), in one
-    command. Returns ChatOpened: the folder's name now, the old one when the
-    new name is taken or the move failed."""
+    rewritten, the account's keys read again for masking (every key file in
+    ~/.secrets, ``keys``: the record's names, first; CHAT_SCRIPT) and the
+    notes' beginning (notes_for_agent), in one command. Returns ChatOpened:
+    the folder's name now, the old one when the new name is taken or the
+    move failed."""
     from app.services import agent_secrets
     from app.services.llm.provider_runtime import ProviderCancellation
     wanted = wanted_folder(chat_id, title, temporary=temporary)
@@ -904,19 +911,22 @@ def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), ca
     names = [key for key in dict.fromkeys(keys) if agent_secrets.NAME.fullmatch(str(key))][:agent_secrets.KEEP_NAMES]
     out = bytearray()
     limit = NOTES_CHARS * 4
-    cap = limit + len(names) * (agent_secrets.VALUE_CHARS + 80) + 256
+    most = agent_secrets.READ_KEYS
+    cap = limit + most * (agent_secrets.VALUE_CHARS + 80) + 256
 
     def keep(stream, chunk):
         if stream == "stdout" and len(out) <= cap:
             out.extend(chunk)
     outcome = vm.run(name, agent_vm.agent_argv(["bash", "-c", CHAT_SCRIPT, "chat", old,
-                                                agent_vm.chat_dir(chat_id, wanted), NOTES_PATH, str(limit), *names],
-                                               CHAT_SECONDS, HOME),
+                                                agent_vm.chat_dir(chat_id, wanted), NOTES_PATH, str(limit), str(most),
+                                                *names], CHAT_SECONDS, HOME),
                      cwd="/", timeout=CHAT_SECONDS, on_output=keep, cancellation=cancellation or ProviderCancellation(),
                      input=chat_marker(chat_id, title, started, temporary=temporary))
     if outcome.exit_code != 0:
         raise agent_vm.VMUnavailable(f"chat: exit {outcome.exit_code}")
     state, found, notes = parse_chat(bytes(out))
+    # The script's own check of a name is the shell's, in the VM's locale.
+    found = [(key, value) for key, value in found if agent_secrets.NAME.fullmatch(key)][:most]
     return ChatOpened(folder=wanted if state in {"moved", "missing", "same"} else folder,
                       notes=notes_for_agent(notes, temporary=temporary),
                       keys=tuple(found), seconds=outcome.seconds)

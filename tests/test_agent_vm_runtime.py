@@ -229,7 +229,7 @@ def test_the_chats_folder_notes_and_keys_come_in_one_command(store, fake_vm):
     first = results(loop)[0]
     assert first["workspace_notes"]["text"] == "# notes\n" and first["workspace_keys"]["names"] == ["OPENAI_API_KEY"]
     assert agent_secrets.scrub(UID, "key sk-test-123456789") == "key [secret ~/.secrets/OPENAI_API_KEY, hidden from you]"
-    # The agent's own commands only: no separate read of the keys (agent_secrets.LOAD_SCRIPT).
+    # The agent's own commands only: no separate read of the keys (agent_secrets.load until 2026-10-30).
     assert not [call for call in fake_vm.calls if call[0] == "run" and call[1] == NAME]
 
 
@@ -248,6 +248,24 @@ def test_a_key_whose_file_ends_with_a_line_break_is_masked_without_it(store, fak
     list(loop.run())
     assert key not in json.dumps(results(loop)[0])
     assert agent_secrets.scrub(UID, f"Bearer {key}") == "Bearer [secret ~/.secrets/OPENAI_API_KEY, hidden from you]"
+
+
+def test_a_key_the_record_no_longer_names_is_masked_too(store, fake_vm, monkeypatch):
+    """Bug hunt 2026-11-06: the record keeps the newest 32 names
+    (agent_secrets.KEEP_NAMES); from the 33rd key on, the oldest fell out of
+    it, and after a day or a restart of the server its value, still in
+    ~/.secrets, went to the model as it was. Every key file there is read."""
+    from app.services import agent_secrets
+    monkeypatch.setattr(agent_secrets, "_seen", {})
+    old = "sk-oldest-1234567890"
+    fake_vm.vms[NAME] = {"files": {agent_secrets.path("OLDEST_KEY"): old.encode(),
+                                   agent_secrets.path("NEWER_KEY"): b"sk-newer-0987654321"}, "checkpoints": []}
+    agent_workspace.ref(store.db, UID).set({"secret_names": ["NEWER_KEY"]})
+    fake_vm.commands["python3 call.py"] = ([("stdout", f'{{"api_key": "{old}"}}\n'.encode())], 0, .1)
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "python3 call.py"})]]))
+    list(loop.run())
+    assert old not in json.dumps(results(loop)[0])
+    assert agent_secrets.scrub(UID, old) == "[secret ~/.secrets/OLDEST_KEY, hidden from you]"
 
 
 def test_the_takeover_is_read_once_per_call_and_a_takeover_forgets_it(store, monkeypatch):

@@ -151,15 +151,10 @@ class _FakeBackend(VMBackend):
                                 b"0b5f0d1c-9c55-4c1e-9f4e-3a1d2b9e7c10\n")
             return ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
         from app.services import agent_secrets
-        if agent_secrets.SAVE_SCRIPT in argv or agent_secrets.LOAD_SCRIPT in argv:
+        if agent_secrets.SAVE_SCRIPT in argv:
             assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN]
             files = self.vm.vms.setdefault(name, {"files": {}, "checkpoints": []})["files"]
-            if agent_secrets.SAVE_SCRIPT in argv:
-                files[agent_secrets.path(argv[-1])] = input
-            else:
-                names = argv[argv.index(agent_secrets.LOAD_SCRIPT) + 2:]
-                on_output("stdout", b"".join(name.encode() + b"\0" + files[agent_secrets.path(name)] + b"\0"
-                                             for name in names if agent_secrets.path(name) in files))
+            files[agent_secrets.path(argv[-1])] = input
             return ExecOutcome(exit_code=0, timed_out=False, seconds=.1)
         request = json.loads(input or b"{}")
         if request.get("action") == "warm":
@@ -181,16 +176,20 @@ class _FakeBackend(VMBackend):
     def _chat(self, name, argv, marker, on_output):
         from app.services import agent_secrets
         script = argv.index(agent_workspace.CHAT_SCRIPT)
-        old, new, notes, limit, *keys = argv[script + 2:]
+        old, new, notes, limit, most, *keys = argv[script + 2:]
         assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN]
         state = "same" if new == old else self.move_path(name, old, new)
         target = new if state in {"moved", "missing"} else old
         self.write_file(name, f"{target}/{agent_workspace.CHAT_MARKER}", marker)
         out = f"folder {state}\n".encode()
         files = self.vm.vms[name]["files"]
-        for key in keys:
-            if agent_secrets.path(key) in files:
-                out += b"key " + key.encode() + b"\0" + files[agent_secrets.path(key)][:16384] + b"\0"
+        # The record's names first, then every other key file in the folder.
+        folder = sorted(path[len(agent_secrets.DIR) + 1:] for path in files
+                        if path.startswith(agent_secrets.DIR + "/"))
+        found = [key for key in dict.fromkeys([*keys, *folder])
+                 if agent_secrets.NAME.fullmatch(key) and agent_secrets.path(key) in files]
+        for key in found[:int(most)]:
+            out += b"key " + key.encode() + b"\0" + files[agent_secrets.path(key)][:16384] + b"\0"
         try:
             raw, _ = self.read_file(name, notes, limit=int(limit))
             out += b"notes +\n" + raw

@@ -2606,10 +2606,14 @@ mit `audit_access`). Die
   `AgentLoop.activity`; ab 8 Zeichen): Die Maske sagt, wo der Key liegt und
   dass die Datei stimmt, damit der Agent sie nicht für einen Platzhalter hält
   und neu fragt. Nach einem Neustart des Servers ist nichts mehr im Speicher:
-  Jeder VM-Start einer Nachricht liest die Keys, die `Claim.secrets` nennt,
-  als Agenten-Nutzer wieder ein (`agent_secrets.load`, `VMSession.ready`,
-  eine Ausführung, nur wenn es Keys gibt; ein gelöschter fehlt einfach), und
-  das erste VM-Ergebnis nennt dem Agenten die Namen (`workspace_keys`, auch
+  Jeder VM-Start einer Nachricht liest die Keys als Agenten-Nutzer wieder
+  ein (`agent_workspace.open_chat`, im selben Befehl wie Ordner und Notizen;
+  ein gelöschter fehlt einfach): seit 2026-11-07 jede Datei mit einem
+  Key-Namen in `~/.secrets`, die Namen aus `Claim.secrets` zuerst, höchstens
+  `agent_secrets.READ_KEYS` (64). Vorher nur die Namen des Datensatzes, und
+  der hält die neuesten 32: Ab dem 33. Key ging der Wert des ältesten nach
+  einem Tag oder einem Neustart unmaskiert ans Modell. Das erste
+  VM-Ergebnis nennt dem Agenten die Namen (`workspace_keys`, auch
   in späteren Chats; der VM-Prompt sagt, wo sie liegen). Die Datei bleibt auf
   der Werkbank, bis der Nutzer sie löscht (Terminal), wie eine `.env` seines
   Rechners.

@@ -15,10 +15,13 @@ run keeps and the models read (scrub: tool results, activity, work record),
 as ``[secret ~/.secrets/<name>, hidden from you]``: an `echo $KEY` by
 mistake never reaches a chat, and the mask says where the key is and that
 the file is fine (agents took a bare mask for a placeholder in the file). The names stay on the account's
-record (``secret_names``, never the values), so every message's VM start
-reads the keys again (load, VMSession.ready) and a restart of the server
-masks them as well; the agent hears their names with its first VM result.
-A key stays on the workbench until the user deletes it (their terminal).
+record (``secret_names``, never the values) and the agent hears them with
+its first VM result. Every message's start on the workbench reads the keys
+again (agent_workspace.open_chat), so a restart of the server masks them as
+well: since 2026-11-07 every key file in ~/.secrets, the record's names
+first, at most READ_KEYS (before, only the names the record kept, the
+newest KEEP_NAMES: an older key's value went to the model as it was). A
+key stays on the workbench until the user deletes it (their terminal).
 """
 from __future__ import annotations
 
@@ -40,11 +43,9 @@ KEEP_NAMES = 32
 # With the first VM result of a message whose account holds keys.
 KEYS_NOTE = ("Keys the user gave you through ask_user, one file each: read the file in the same command line "
              "that needs it, never print it, and ask again only for a key not here.")
-LOAD_SECONDS = 30
-# Every key the record names, as name NUL value NUL, read as the agent's
-# user; a deleted one is left out.
-LOAD_SCRIPT = ('cd "$HOME/.secrets" 2>/dev/null || exit 0; for name in "$@"; do [ -f "$name" ] || continue; '
-               'printf "%s\\0" "$name"; head -c 16384 -- "$name"; printf "\\0"; done')
+# The key files a message's start reads at most (agent_workspace.open_chat):
+# twice the names the record keeps, ~1 MB at VALUE_CHARS each.
+READ_KEYS = 2 * KEEP_NAMES
 # As the agent's user, readable by it alone, written whole (a half-written
 # key is never read): the name comes as an argument, never in the text.
 SAVE_SCRIPT = ('umask 077 && mkdir -p -- "$HOME/.secrets" && chmod 700 -- "$HOME/.secrets" && '
@@ -77,28 +78,6 @@ def save(vm, uid, name, value, cancellation, db=None):
         from app.services import agent_workspace
         agent_workspace.remember_values(db, uid, "secret_names", [name], keep=KEEP_NAMES)
     return path(name)
-
-
-def load(vm, workbench, uid, names, cancellation):
-    """Reads the keys ``names`` on the workbench again, for scrub only:
-    their values go nowhere else. Returns the seconds it took."""
-    names = [name for name in dict.fromkeys(names) if NAME.fullmatch(str(name))][:KEEP_NAMES]
-    if not names:
-        return 0.0
-    out = bytearray()
-
-    def keep(stream, chunk):
-        if stream == "stdout" and len(out) <= KEEP_NAMES * (VALUE_CHARS + 80):
-            out.extend(chunk)
-    outcome = vm.run(workbench, agent_vm.agent_argv(["bash", "-c", LOAD_SCRIPT, "bash", *names], LOAD_SECONDS,
-                                                    agent_vm.HOME),
-                     cwd="/", timeout=LOAD_SECONDS, on_output=keep, cancellation=cancellation)
-    parts = bytes(out).split(b"\0")
-    for name, value in zip(parts[0::2], parts[1::2]):
-        text = value.decode("utf-8", "replace").strip()
-        if text and NAME.fullmatch(name.decode("ascii", "replace")):
-            remember(uid, text, name.decode("ascii"))
-    return outcome.seconds
 
 
 _seen: dict[str, dict[str, tuple[float, str]]] = {}
