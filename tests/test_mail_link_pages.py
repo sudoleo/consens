@@ -8,7 +8,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from html import unescape
 from unittest.mock import patch
-from urllib.parse import quote
+from urllib.parse import parse_qs, quote, urlsplit
 import re
 
 import pytest
@@ -22,6 +22,15 @@ from app.services import watch_service
 def _form_action(page):
     match = re.search(r'<form method="post" action="([^"]*)"', page)
     return unescape(match.group(1)) if match else None
+
+
+def _resumes(action):
+    """The watch a resume form acts on. Its token carries an expiry to the
+    second, so two pages a second apart sign different tokens for the same
+    watch: compare what the token says, never its letters."""
+    url = urlsplit(action or "")
+    assert url.path == "/watch/resume", action
+    return watch_service.parse_resume_token(parse_qs(url.query)["token"][0])
 
 def test_pause_link_page_names_the_watch_and_offers_resume_and_watches(watch_http):
     h = watch_http
@@ -44,11 +53,11 @@ def test_pause_link_page_names_the_watch_and_offers_resume_and_watches(watch_htt
     assert done.status_code == 200 and "Watch paused" in done.text and question in done.text
     assert h.watch_db.stores[watch_service.WATCHES_COLLECTION][h.watch["id"]]["status"] == "paused"
     resume_action = _form_action(done.text)
-    assert resume_action.startswith("/watch/resume?token=")
+    assert _resumes(resume_action) == h.watch["id"]
 
     # Opening the pause link again tells the state instead of asking again.
     again = h.client.get("/watch/unsubscribe", params={"token": token})
-    assert "This watch is paused" in again.text and _form_action(again.text) == resume_action
+    assert "This watch is paused" in again.text and _resumes(_form_action(again.text)) == h.watch["id"]
 
     with patch("app.api.routers.watch.get_user_tier", return_value="free"):
         resumed = h.client.post(resume_action)
