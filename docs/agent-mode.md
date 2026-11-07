@@ -220,16 +220,19 @@ Einstellung in ganzen Sätzen und gilt so im Code:
 |---|---|---|---|
 | Marken auf der Antwort, Notes | ja | nur wenn der Arbeitsplatz genutzt wurde | nein, „Not reviewed · …“ |
 | Aussteuern (Halt) | ja | ab dem ersten Schritt am Arbeitsplatz | nein |
-| Vorab-Prüfung (Memory nach Fremdinhalt; bis 2026-11-04 auch `request_domain`) | Prüfer, dann Nutzer | ab dem ersten Schritt am Arbeitsplatz, vorher wie Off | Memory gesperrt |
-| `read_source` auf selbst gewählte Adressen | ja | ab dem Arbeitsplatz | nein (nur Suchtreffer, Quellen, Links des Nutzers) |
 | Prüferanteil am Tageskonto | ja | nur am Arbeitsplatz | nein |
 
+Bis 2026-11-02 stand hier eine Vorab-Prüfung für Memory nach Fremdinhalt
+(ohne Prüfer: Memory gesperrt), bis 2026-11-04 auch für `request_domain`, und
+bis 2026-11-07 las `read_source` selbst gewählte Adressen nur mit Prüfern.
+Alle drei gelten für jede Einstellung gleich nicht mehr (siehe „Quellen
+nachlesen“ unten und codebase-map.md, §3 „Agent-Memory“).
+
 Was immer bleibt: die eigenen Sicherungen des Modells, die festen Grenzen der
-App (Zeit, Schritte, Tageskonto, VM-Zeit, Karten statt Schreibzugriffen,
-Memory-Sperre nach Fremdinhalt, die Sicherheitsregeln des Arbeitsplatzes; bis
-2026-11-04 auch ein geschlossenes Netz der Werkbank mit Freigabe jeder Domain
-durch den Nutzer, „Ein Rechner“) und
-der Stopp-Knopf. „Only in the workspace“ startet die Prüfer, sobald der
+App (Zeit, Schritte, Tageskonto, VM-Zeit, Karten statt Schreibzugriffen, die
+Sicherheitsregeln des Arbeitsplatzes; bis 2026-11-04 auch ein geschlossenes
+Netz der Werkbank mit Freigabe jeder Domain durch den Nutzer, „Ein Rechner“)
+und der Stopp-Knopf. „Only in the workspace“ startet die Prüfer, sobald der
 Arbeitsplatz geöffnet ist (ihre Kurzfassung kennt dann seine Regeln), oder, wo
 er schon offen war, mit dem ersten Schritt, der eines seiner Werkzeuge aufruft
 (nicht `ask_user` allein), und zwar vor dessen Vorab-Prüfung; sie lesen das
@@ -5190,14 +5193,20 @@ haben. Google-Daten-Chats suchen nicht und haben deshalb keine Auszüge.
 ### Quellen nachlesen (read_source, seit 2026-10-10)
 
 `read_source` öffnet eine öffentliche Seite als Text, auch PDFs: ein
-Leser-Dienst holt sie ohne Anmeldung, Skripte oder Klicks, etwa 10–30 s je
-Abruf (die Beschreibung sagt seit 2026-10-28, was es öffnet, nicht wann).
+Leser-Dienst holt sie ohne Anmeldung, Skripte oder Klicks, gemessen 3,0–6,4 s
+je Abruf (Prod, 30.10.–06.11.; die Beschreibung nennt seit 2026-11-07 „about 3
+to 6 seconds“, davor 10–30 s; seit 2026-10-28 sagt sie, was es öffnet, nicht
+wann).
 Argument nur `url` (`AuditReadSourceArgs`; bis 2026-10-31 nahm der
 Vergleichsmodus dazu `purpose` und `point` aus einer Liste von Lesegründen und
 ein `status_update`). Schalter: `AGENT_READ_SOURCES` (Env), seit 2026-10-11
 standardmäßig an, `0` schaltet ab. Code: `agent_read_source.py`.
 
-**Was lesbar ist** (`SourceReader.cited`, `chosen`):
+**Was lesbar ist** (`SourceReader.cited`, `chosen`): seit 2026-11-07 jede
+öffentliche http(s)-Adresse, mit und ohne Prüfer. Abgelehnt wird nur, was keine
+öffentliche Seite ist (`_safe_url`: anderes Schema, Anmeldung in der Adresse,
+kein Host), sowie jeder Abruf in Chats mit Google-Daten. Das Label im Ergebnis
+sagt, woher die Adresse kommt:
 
 - Quellen, die eine Antwort von `compare_models` dieser Nachricht zitiert;
 - die eigenen Suchtreffer dieser Nachricht (`LABEL_SEARCH`, seit 2026-10-27);
@@ -5207,20 +5216,31 @@ standardmäßig an, `0` schaltet ab. Code: `agent_read_source.py`.
   Nutzer selbst geschrieben hat (`user_urls`, Label „your message“): Vorher
   fand „kannst du eine Quelle direkt nachlesen?“ nach einer Antwort mit
   tri247.com-Links nichts, was es öffnen durfte;
-- seit 2026-10-28, solange Prüfer dem Lauf folgen (`auditor.sessions`), jede
-  öffentliche http(s)-Adresse (`LABEL_CHOSEN`, „a page you chose“).
+- jede andere öffentliche Adresse, die der Agent selbst nennt (`LABEL_CHOSEN`,
+  „a page you chose“): von 2026-10-28 an nur, solange Prüfer dem Lauf folgten
+  (`auditor.sessions`), seit 2026-11-07 immer.
 
-Ohne Prüfer gilt nur die Liste ohne den letzten Punkt. Dann sind Links, die nur
-im Text einer früheren Antwort stehen, **nicht** lesbar: Der Agent schreibt aus
-nicht vertrauenswürdiger Evidenz, eine präparierte Seite könnte ihn eine URL
-mit Chat-Inhalt schreiben lassen, die ein späterer Turn ohne Klick abrufen
-würde (Review 2026-10-11). Dasselbe gilt seit 2026-10-12 für eine
-Antwortpassage, die der Nutzer per „Ask about this“ zitiert: `user_urls` liest
-nur `agent_memory.user_words`, also ohne das Zitat. Typografische
-Anführungszeichen („…“, «…», ‚…‘) beenden einen Link wie gerade, und ein
-großgeschriebenes `HTTPS://` zählt mit. Mit Prüfern ist die Sicherheit die des
-Browsers: Sie folgen jedem Abruf live, und der Abruf läuft über Exa ohne
-Anmeldungen.
+`user_urls` liest nur `agent_memory.user_words` (ohne eine per „Ask about
+this“ zitierte Antwortpassage); typografische Anführungszeichen („…“, «…», ‚…‘)
+beenden einen Link wie gerade, und ein großgeschriebenes `HTTPS://` zählt mit.
+
+**Warum die Sperre ohne Prüfer fiel (2026-11-07).** Bis dahin waren ohne Prüfer
+nur die Quellen der Liste lesbar, nicht aber Links aus dem Text einer früheren
+Antwort oder selbst gewählte Seiten: Eine präparierte Seite hätte den Agenten
+eine URL mit Chat-Inhalt schreiben lassen können, die ein späterer Abruf ohne
+Klick an den Angreifer schickt (Review 2026-10-11). Seit dem offenen Netz der
+Werkbank (2026-11-04, „Ein Rechner“) erreicht der Agent ohne Prüfer jede Adresse
+ohnehin per `curl`. Die Sperre schützte also nichts mehr, hielt aber ehrliche
+Arbeit auf. In Max' eigenen Läufen vom 25.10. bis 06.11. lehnte sie 11 von 21
+Leseversuchen ab. Im Chat zur KI-Entwicklung bis 2036 (06.11., Prüfer aus)
+wollte Terra den METR-Artikel lesen, der ihr eigener Suchtreffer war, und
+erfand nach der Ablehnung Wachstumsraten. Grund: Die eingebaute Suche von OpenAI
+schickt ihre Treffer nur dem Modell, und das lässt sich nicht beheben. Die
+Probe vom 2026-11-07 fand die Treffer weder in Chat Completions (nur
+`web_search_requests`) noch in der Responses API (`web_search_call` mit
+`action.query`, ohne Treffer; `include: ["web_search_call.action.sources"]`
+lehnt OpenRouter mit 400 ab). Gesperrt bleiben Chats mit Google-Daten. Dort ist
+auch die Werkbank zu, und es stehen Gmail-Inhalte im Chat.
 
 Anlass für die freie Wahl (Audit-Läufe 25.–28.10.): GPT-6.1 Terra suchte
 15-mal und behielt eine Quelle, GPT-6 Luna 7-mal und keine (DeepSeek 25 → 45,

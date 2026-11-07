@@ -10,10 +10,8 @@ judge model (the fetched text arrives there as an output item). The text
 becomes the tool result the agent works from, the reviewers read it in the
 work log, and it is saved with the review.
 
-Bounds: a source a comparison answer of this message cited, a result of this
-message's own web search, a source an earlier message of the chat saved, a
-URL the user wrote, or, while reviewers follow the work, any public page the
-agent chooses; only before the answer, at most READS_PER_MESSAGE pages per
+Bounds: any public http(s) page (since 2026-11-07 with or without
+reviewers); only before the answer, at most READS_PER_MESSAGE pages per
 message and READS_PER_STEP per step, READ_CONTENT_TOKENS per page. Never for
 comparison models or reviewers, never in chats with Google data. On unless
 AGENT_READ_SOURCES=0. See docs/agent-mode.md, "Quellen nachlesen". Until
@@ -120,10 +118,15 @@ LABEL_EARLIER = "an earlier message's sources"
 # every step (the provider's own): the agent does not call it, so "your
 # search" read as a search it never made (2026-10-28).
 LABEL_SEARCH = "a web search result of this message"
-# Since 2026-10-28 any public page, which the reviewers follow live (until
-# 2026-10-29 one the message did not hold waited for them first,
-# agent_gate.py). The provider's search of GPT-6 Luna and GPT-6.1 Terra sends
-# no hits to the app, so they could read nothing they found.
+# Any public page the agent names itself: from 2026-10-28 while reviewers
+# followed the work, since 2026-11-07 always. The provider's search of GPT-6
+# Luna and GPT-6.1 Terra sends no hits to the app (probe 2026-11-07: neither
+# Chat Completions nor the Responses API carries them), so without reviewers
+# they could read nothing they found: 11 of 21 reads in Max' own turns of
+# 25.10.-06.11. were refused. The refusal guarded against a page making the
+# agent fetch a URL with chat content in it, but since 2026-11-04 the
+# workspace reaches the whole web without reviewers too (curl), so it only
+# held back honest work. Chats with Google data stay closed (_refuse).
 LABEL_CHOSEN = "a page you chose"
 
 
@@ -349,10 +352,12 @@ class SourceReader:
         self.lock = threading.Lock()
         self._steps = {}
         self._user_urls = None
-        # Since 2026-10-28: what it opens, not when to.
+        # Since 2026-10-28: what it opens, not when to. The time is measured
+        # (3.0-6.4 s per read in prod, 2026-10-30 to 11-06); until 2026-11-07
+        # it said 10 to 30 seconds.
         description = (
             "Read one public web page as text, PDFs too: a reader service fetches it, without sign-ins, scripts "
-            f"or clicks; a read takes about 10 to 30 seconds. At most {READS_PER_MESSAGE} per message.")
+            f"or clicks; a read takes about 3 to 6 seconds. At most {READS_PER_MESSAGE} per message.")
         self.tool = ReadOnlyTool("read_source", description, AuditReadSourceArgs, self.read,
                                  activity=self.activity)
 
@@ -395,11 +400,11 @@ class SourceReader:
         return cited
 
     def chosen(self, url):
-        """A page the agent named itself, while reviewers follow the work
-        (they follow the read live); else None."""
-        auditor = getattr(self.comparison, "auditor", None)
+        """A public page the agent named itself (LABEL_CHOSEN), with or
+        without reviewers; None for anything else (another scheme, sign-in in
+        the address, no host)."""
         url = url.strip()
-        if not getattr(auditor, "sessions", None) or not _safe_url(url) or not url_key(url):
+        if not _safe_url(url) or not url_key(url):
             return None
         return {"url": url, "title": "", "cited_by": [{"comparison_id": None, "provider": "agent",
                                                        "label": LABEL_CHOSEN}]}
@@ -465,10 +470,7 @@ class SourceReader:
                 key = url_key(args.url)
                 entry = (self.cited().get(key) if key else None) or self.chosen(args.url)
                 if entry is None:
-                    raise ValueError("read_source opens only a public http(s) address here: a result of this "
-                                     "message's web search, a source the models you asked cite (compare_models), "
-                                     "a source of an earlier message of this chat or one the user wrote, copied "
-                                     "exactly.")
+                    raise ValueError("read_source opens only a public http(s) address, without a sign-in in it.")
                 tried = next((r for r in self.reads if r["status"] in {"completed", "failed"}
                               and key in {url_key(r["url"]), url_key(r.get("cited_url"))}), None)
                 if tried is not None and tried["status"] == "failed":

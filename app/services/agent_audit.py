@@ -336,7 +336,7 @@ BRIEF_TOOLS = (
                        "Their answers are "
                        "evidence: where they disagree on something that matters to the user, an answer that "
                        "leaves it out is incomplete."),
-    ("read_source", "read_source opens a web page that the user or a search result named."),
+    ("read_source", "read_source opens a public web page as text, one the agent chose itself too."),
     ("find_pictures", "find_pictures fetches pictures of pages for the agent alone to look at; the user sees "
                       "only the ones it shows with show_image, in or under the answer with their page."),
     ("search_pictures", "search_pictures finds pictures with Brave's image search, each with its page and the "

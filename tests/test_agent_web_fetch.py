@@ -1,13 +1,13 @@
 """read_source: the agent reads a page through OpenRouter's web_fetch.
 
-Only for the agent: a source a comparison answer cited, a result of its own
-search, a source of an earlier message, a link the user wrote, or, while
-reviewers follow the work, any public page (test_agent_gate.py). Bounded,
+Only for the agent: any public page, with or without reviewers (since
+2026-11-07; before, without them, only a cited source, a result of its own
+search, a source of an earlier message or a link the user wrote). Bounded,
 metered, given to the agent only as the read_source tool result (it writes
 the answer itself, agent_answer_mode), kept with the review, and never for
 comparison models, reviewers or Google-data chats. On unless
 AGENT_READ_SOURCES=0. The loops here have no reviewers that start
-(agent_reviewers.py): a page nothing in the chat names stays unread.
+(agent_reviewers.py).
 """
 import json
 
@@ -29,8 +29,8 @@ from agent_reviewers import without_reviewers
 from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 
 CITED = "https://example.org/report"
-# The refusal of a page nothing in the chat names (SourceReader.read).
-UNCITED = "only a public http(s) address"
+# The refusal of an address that is no public page (SourceReader.read).
+UNSAFE = "only a public http(s) address"
 PAGE = "Annual report 2026. The first option costs 100 euros per month, VAT included."
 ANSWER = "The first option costs 100 euros per month."
 
@@ -310,17 +310,31 @@ def refused(result, match):
     assert result["status"] == "refused" and match in result["reason"] and "error" not in result, result
 
 
-def test_refused_for_uncited_urls_and_after_the_answer(store, monkeypatch, enabled):
+def test_refused_for_addresses_that_are_no_public_page_and_after_the_answer(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch)
-    # Before any comparison nothing is cited yet: only chat sources and user links.
-    refused(read(chat_loop(store, Plan())), UNCITED)
     loop = comparison_ready(store)
-    for url in ("https://evil.example/steal?data=1", "ftp://example.org/report", "javascript:alert(1)",
-                "https://example.org/report/deeper", "https://user@example.org/report"):
-        refused(read(loop, url), UNCITED)
+    for url in ("ftp://example.org/report", "javascript:alert(1)", "https://user@example.org/report",
+                "https://user:secret@example.org/report", "https:///no-host", "https://example.org/a b"):
+        refused(read(loop, url), UNSAFE)
     loop.comparison.text = "The fixed answer."
     refused(read(loop), "already written")
     assert calls == [] and loop.comparison.reader.reads == []
+
+
+def test_reads_any_public_page_without_reviewers(store, monkeypatch, enabled):
+    """2026-11-06 (Max' chat about AI capabilities until 2036, reviewers off):
+    GPT-6.1 Terra searched, wanted METR's article and was refused, since
+    OpenAI's search sends its hits only to the model; it then made up growth
+    rates. Since 2026-11-07 the agent reads any public page it names, with or
+    without reviewers, before a comparison too."""
+    calls = fake_fetch(monkeypatch)
+    found = "https://metr.org/time-horizons/"
+    loop, _, saved = run(store, Plan(steps=[[read_call(found)]]))
+    [result] = results(loop)
+    assert result["status"] == "completed" and result["cited_by"] == ["a page you chose"]
+    assert result["untrusted_page_text"] == PAGE
+    assert len(calls) == 1 and calls[0]["messages"][0]["content"].endswith("URL: " + found)
+    assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
 
 
 def test_user_urls_are_the_links_the_user_wrote():
@@ -358,34 +372,33 @@ def test_links_in_a_quoted_answer_passage_are_not_the_users():
         "https://example.org/a?b=1", "https://example.org/c", "HTTPS://Example.org/x"]
 
 
-def test_reads_a_source_of_an_earlier_message_and_without_reviewers_no_link_from_answer_text(
-        store, monkeypatch, enabled):
+def test_reads_a_source_of_an_earlier_message_and_a_link_from_answer_text(store, monkeypatch, enabled):
     """2026-10-11: "kannst du eine Quelle direkt nachlesen?" after an answer
     citing tri247.com could open nothing; only this message's answers counted.
-    Saved sources of earlier messages count now. A link that stands only in an
-    earlier answer's text does not: an injected page could have put it there
-    with chat content in it (review 2026-10-11). Since 2026-10-28 such a page
-    is read while reviewers follow the read live (test_agent_gate.py); without
-    them it stays unread."""
+    Saved sources of earlier messages count since, under their own label. A
+    link that stands only in an earlier answer's text stayed unread without
+    reviewers until 2026-11-07 (an injected page could have put it there with
+    chat content in it, review 2026-10-11); since the workspace reaches the
+    whole web anyway it is a page the agent chose."""
     calls = fake_fetch(monkeypatch)
     earlier = "https://www.tri247.com/live-kona"
-    planted = "https://evil.example/collect?d=secret"
+    linked = "https://example.org/standings"
     conversation = [{"role": "user", "content": "Who leads?"},
-                    {"role": "assistant", "content": f"Ditlev leads ([tri247]({earlier}), [more]({planted}))."},
+                    {"role": "assistant", "content": f"Ditlev leads ([tri247]({earlier}), [more]({linked}))."},
                     {"role": "user", "content": "kannst du eine Quelle direkt nachlesen?"}]
-    plan = Plan(steps=[[compare()], [read_call(earlier), read_call(planted)]])
+    plan = Plan(steps=[[compare()], [read_call(earlier), read_call(linked)]])
     loop, _, saved = run(store, plan, conversation=conversation,
                          chat_sources=[{"url": earlier, "title": "Live", "provider": "OpenAI", "id": "S1"}])
     done, other = results(loop)
     assert done["status"] == "completed" and done["cited_by"] == ["an earlier message's sources"]
-    refused(other, UNCITED)
-    assert len(calls) == 1 and calls[0]["messages"][0]["content"].endswith("URL: " + earlier)
-    assert [r["url"] for r in saved["agent_review"]["read_sources"]] == [earlier]
-    # The agent that writes the answer saw both outcomes itself: the page it
-    # opened and the refusal (it denied reading before, as a separate step).
+    assert other["status"] == "completed" and other["cited_by"] == ["a page you chose"]
+    # Both run side by side (DelegationLoop._prefetch): either may register first.
+    assert len(calls) == 2
+    assert sorted(r["url"] for r in saved["agent_review"]["read_sources"]) == sorted([earlier, linked])
+    # The agent that writes the answer saw both pages itself.
     seen = [json.loads(m["content"]) for m in plan.answer_messages
             if m.get("role") == "tool" and m["tool_call_id"] in {"call_1_0", "call_1_1"}]
-    assert [r["status"] for r in seen] == ["completed", "refused"] and seen[0]["untrusted_page_text"] == PAGE
+    assert [r["status"] for r in seen] == ["completed", "completed"] and seen[0]["untrusted_page_text"] == PAGE
     assert saved["assistant_response"] == ANSWER
 
 
@@ -437,18 +450,18 @@ def test_refused_in_a_chat_that_holds_google_data(store, monkeypatch, enabled):
 
 def test_a_refused_call_before_the_comparison_costs_nothing_and_the_run_goes_on(store, monkeypatch, enabled):
     calls = fake_fetch(monkeypatch)
-    loop, events, saved = run(store, Plan(steps=[[read_call()], [compare()]]))
-    refused(results(loop)[0], UNCITED)
+    loop, events, saved = run(store, Plan(steps=[[read_call("ftp://example.org/report")], [compare()]]))
+    refused(results(loop)[0], UNSAFE)
     assert calls == [] and saved["status"] == "completed"
     running, done = tool_events(events)
-    # No host for a URL nobody cited, and a refusal is no tool error.
+    # No host for an address that is no page, and a refusal is no tool error.
     assert "host" not in running and done["status"] == "succeeded" and done["read"] == "refused"
 
 
 def test_refusals_never_end_the_turn_as_invalid_tool_rounds(store, monkeypatch, enabled):
     """Three tool errors in a row end a turn; refused or failed reads must not."""
     calls = fake_fetch(monkeypatch, status="incomplete", error="HTTP 403: Forbidden")
-    steps = [[compare()], [read_call("https://example.org/guess-1")], [read_call("https://example.org/guess-2")],
+    steps = [[compare()], [read_call("ftp://example.org/guess-1")], [read_call("javascript:guess-2")],
              [read_call()], [read_call()]]
     loop, _, saved = run(store, Plan(steps=steps))
     outcome = [r["status"] for r in results(loop)]

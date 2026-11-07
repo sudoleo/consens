@@ -1328,18 +1328,19 @@ def test_the_agents_prompt_has_its_writing_reading_and_memory_facts(store, monke
     assert "comparison answer" not in loop.registry.tools["read_source"].description
 
 
-def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_other_page(store, monkeypatch):
+def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_any_other_page(store, monkeypatch):
     """Harness review 2026-10-27: without a comparison no answer cites a
     page, so the agent could open nothing it found itself in this message,
     although the same results become readable as an earlier message's sources
-    with the next one. Its own search results count now. Another page needs
-    reviewers, who follow the read live (since 2026-10-28, test_agent_gate):
-    without them it stays unread."""
+    with the next one. Its own search results count since. Another page
+    needed reviewers until 2026-11-07; since then it is a page the agent
+    chose, with or without them (OpenAI's search sends its hits only to the
+    model, and the workspace reaches the whole web anyway)."""
     from test_agent_web_fetch import PAGE, fake_fetch
-    from app.services.agent_read_source import LABEL_SEARCH
+    from app.services.agent_read_source import LABEL_CHOSEN, LABEL_SEARCH
     monkeypatch.delenv("AGENT_READ_SOURCES", raising=False)
     calls = fake_fetch(monkeypatch)
-    found, other = "https://www.toureiffel.paris/en", "https://evil.example/collect?d=1"
+    found, other = "https://www.toureiffel.paris/en", "https://de.wikipedia.org/wiki/Eiffelturm"
 
     # Only the address since 2026-10-28: no purpose or point to justify a read.
     script = Audit(tool_steps=2, step_tools={0: "read_source", 1: "read_source"},
@@ -1354,8 +1355,8 @@ def test_the_agent_reads_a_result_of_its_own_search_and_without_reviewers_no_oth
     results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     assert results[0]["status"] == "completed" and results[0]["cited_by"] == [LABEL_SEARCH]
     assert results[0]["untrusted_page_text"] == PAGE
-    assert results[1]["status"] == "refused" and "this message's web search" in results[1]["reason"]
-    assert len(calls) == 1
+    assert results[1]["status"] == "completed" and results[1]["cited_by"] == [LABEL_CHOSEN]
+    assert len(calls) == 2
 
 
 def test_a_reviewers_search_results_are_no_search_of_the_agent(store, monkeypatch):
