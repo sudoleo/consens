@@ -108,6 +108,9 @@ Ein falscher Kommentar ist schlimmer als keiner.
   `admin.html` binden Assets über `{{ asset_url('/static/...') }}` (Inhalts-Hash
   inkl. verschachtelter Imports); handgeschriebene `?v=`-Marken gibt es nirgends
   mehr, ein Test verbietet sie.
+- Der pre-commit-Hook („Prüfungen vor dem Commit“ in `docs/testing.md`) lehnt
+  Commits ab, deren `static/dist` nicht zu den Quellen passt oder deren
+  englischer Text kein Deutsch hat. Die Ursache beheben, nie `--no-verify`.
 - Windows-Einstieg für Tests: `.\dev.ps1 check frontend|backend|browser`,
   optional `-TestPath <Datei oder Verzeichnis>`; direkte Runner-Befehle und Setup
   stehen in `docs/testing.md`. Bei Änderungen an Test-/Build-Einstiegspunkten

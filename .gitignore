@@ -91,3 +91,6 @@ artifacts/**/*.png
 # Zeilen stehen am Ende, damit keine !-Ausnahme sie wieder freigibt.
 gen-lang-client-*.json
 *-firebase-adminsdk-*.json
+
+# Git Bash (MSYS) crash dumps
+*.stackdump

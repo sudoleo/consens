@@ -102,6 +102,27 @@ herunterladen. Paketinstallation, Chromium und der erste Emulatorstart benötige
 Netzzugang; marked, DOMPurify und KaTeX werden im Browserlauf aus lokalen
 Vendorassets geladen. Die Browserfixtures ersetzen das Firebase-SDK.
 
+### Prüfungen vor dem Commit
+
+`.\dev.ps1 update` setzt `git config core.hooksPath .githooks`; die Einstellung
+gilt für den Checkout und alle seine Worktrees. Danach führt git vor jedem
+Commit `scripts/pre_commit.py` aus (über `.githooks/pre-commit` mit der venv).
+Das Skript startet die zwei CI-Prüfungen, die `main` am häufigsten rot machen,
+und zwar nur, wenn gestagte Dateien sie betreffen, beide gleichzeitig (je etwa
+20 s):
+
+- `node scripts/build_frontend.mjs --check` bei `static/`, den Build-Skripten,
+  `package.json` oder `package-lock.json`. Behebung: einmal `npm run build`,
+  `static/dist` mit stagen.
+- `scripts/i18n.py check` bei `templates/`, `static/`, `app/` oder `main.py`.
+  Behebung: `scripts/i18n.py missing` zeigt die Lücken.
+
+Beide lesen das Arbeitsverzeichnis, nicht den Commit. Haben Dateien, die eine
+Prüfung liest, ungestagte Änderungen (etwa eine andere Session im selben
+Checkout), warnt ein Fehlschlag nur und blockiert nicht. Ohne `node_modules`
+oder venv entfällt die jeweilige Prüfung mit Hinweis; die CI prüft weiterhin.
+Die Tests dazu stehen in `tests/test_pre_commit.py`.
+
 Videoproduktion und ihre Prüfungen liegen separat in
 [sudoleo/consens-video](https://github.com/sudoleo/consens-video).
 
@@ -232,6 +253,8 @@ Auch `git worktree remove` läuft durch eine noch vorhandene Junction und leert
 die Haupt-venv. Für Läufe geplanter Aufgaben legt `scripts/task_worktree.py
 new <aufgabe>` einen Worktree samt `npm ci` und Junction an (etwa 45 s), und
 `scripts/task_worktree.py remove <pfad>` löst die Junction vor dem Entfernen.
+`new` räumt außerdem leere Task-Ordner ab, die Windows zurücklässt, wenn eine
+Session den Worktree entfernt, in dem sie noch steht.
 
 ### Pakete ändern
 

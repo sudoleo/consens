@@ -114,6 +114,27 @@ def test_new_prunes_only_stale_worktrees_that_are_clean_and_pushed(root):
     assert (root / "venv" / "python.txt").read_text() == "real venv"
 
 
+def test_prune_clears_empty_leftover_folders_but_nothing_with_content(root):
+    base = tw.worktrees_dir(root)
+    empty_old = base / "bug-hunt-20261020-110000"
+    empty_fresh = base / f"bug-hunt-{T0:%Y%m%d-%H%M%S}"
+    full_old = base / "bug-hunt-20261020-120000"
+    other = base / "angry-panini-0c2b3b"
+    for folder in (empty_old, empty_fresh, full_old, other):
+        folder.mkdir(parents=True)
+    (full_old / "notes.txt").write_text("keep")
+    live = tw.new("ci-watch", root=root, npm=False, now=T0 - timedelta(days=3))
+    (live / "half.py").write_text("")
+
+    tw.prune(root, now=T0 + timedelta(hours=1))
+
+    assert not empty_old.exists()
+    assert empty_fresh.exists()
+    assert (full_old / "notes.txt").exists()
+    assert other.exists()
+    assert (live / "half.py").exists()
+
+
 def test_task_names_stay_inside_the_worktrees_folder(root):
     with pytest.raises(tw.Refused, match="task name"):
         tw.new("../escape", root=root, npm=False, now=T0)

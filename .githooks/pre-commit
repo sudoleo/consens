@@ -1,0 +1,9 @@
+#!/bin/sh
+# Git runs hooks from the top of the working tree; worktrees reach the venv through their junction.
+for python in venv/Scripts/python.exe venv/bin/python; do
+  if [ -x "$python" ]; then
+    exec "$python" scripts/pre_commit.py
+  fi
+done
+echo "[pre-commit] no venv in this checkout, checks skipped; CI still runs them." >&2
+exit 0

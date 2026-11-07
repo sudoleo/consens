@@ -6,3 +6,6 @@ static/dist/** -text
 
 # Scripts that run in the agent's Linux VM (agent_workspace.py): LF on every checkout.
 app/services/workspace_vm/** text eol=lf
+
+# Git hooks run under sh, which reads a CR as part of the command.
+.githooks/** text eol=lf

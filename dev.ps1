@@ -150,6 +150,10 @@ function Update-DevCheckout {
     $git = Find-DevCommand 'git' 'Install Git and add it to PATH.'
     $branch = "$(& $git rev-parse --abbrev-ref HEAD)".Trim()
     if ($LASTEXITCODE -ne 0) { throw 'This folder is not a Git checkout.' }
+    # Set before the branch and dirt checks so every update turns it on; worktrees share this config.
+    if ("$(& $git config --get core.hooksPath)".Trim() -ne '.githooks') {
+        Invoke-DevStep 'Enable the pre-commit checks (.githooks)' $git @('config', 'core.hooksPath', '.githooks')
+    }
     if ($branch -ne 'main') { throw "The checked out branch is $branch. Switch to main first: git checkout main" }
     $dirty = & $git status --porcelain --untracked-files=no
     if ($dirty) { throw 'Local changes found. Commit or stash them first (git stash), then run .\dev.ps1 update again.' }

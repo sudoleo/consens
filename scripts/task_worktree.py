@@ -12,11 +12,12 @@ back at the end, both from the main checkout:
 `new` prints the path as its last line (.claude/worktrees/<task>-<timestamp>).
 The worktree gets node_modules (npm ci, skip with --no-npm) and `venv` as a
 junction to the main checkout's venv. `remove` takes the junction out first:
-`git worktree remove` once walked through it and deleted the real venv
-(2026-10-22). It refuses a worktree with uncommitted changes or with commits
-that are on no remote branch, unless --discard says the run throws them away.
-`new` and `prune` also remove task worktrees older than a day that are clean
-and pushed, so runs that were stopped halfway do not pile up.
+`git worktree remove` walks through it and deletes the real venv. It refuses a
+worktree with uncommitted changes or with commits that are on no remote
+branch, unless --discard says the run throws them away. `new` and `prune` also
+remove task worktrees older than a day that are clean and pushed, so runs that
+were stopped halfway do not pile up, and the empty folders Windows leaves when
+a session removes the worktree it is still standing in.
 
 Exit code: 0 done, 1 refused or failed (reason on stderr).
 """
@@ -177,7 +178,28 @@ def prune(root: Path, *, now: datetime | None = None) -> list[str]:
         except Refused as error:
             kept.append(path.name)
             print(f"[task-worktree] kept stale {path.name}: {str(error).splitlines()[0]}", file=sys.stderr)
+    remove_empty_leftovers(root, now=now)
     return kept
+
+
+def remove_empty_leftovers(root: Path, *, now: datetime) -> None:
+    """Delete empty task folders git no longer lists; anything with content stays."""
+    base = worktrees_dir(root)
+    if not base.is_dir():
+        return
+    registered = set(task_worktrees(root))
+    for path in base.iterdir():
+        match = NAME.fullmatch(path.name)
+        if not match or _is_link(path) or not path.is_dir() or path.resolve() in registered:
+            continue
+        # A run that is just being created has its folder before git lists it.
+        if now - datetime.strptime(match["stamp"], STAMP) < STALE_AFTER:
+            continue
+        try:
+            path.rmdir()
+        except OSError:
+            continue
+        print(f"[task-worktree] removed empty folder {path.name}")
 
 
 def main(argv: list[str] | None = None) -> int:

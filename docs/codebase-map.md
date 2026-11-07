@@ -10718,7 +10718,10 @@ gekürzt, damit kein Bericht in Telegram landet; ebenfalls freigegeben. Läufe
 geplanter Tasks, die am Repo arbeiten, nehmen pro Lauf einen eigenen Worktree
 (`scripts/task_worktree.py new <task>` / `remove <pfad>`, AGENTS.md): frisch von
 `origin/main`, venv als Junction, die beim Entfernen zuerst gelöst wird; `new`
-räumt saubere, gepushte Task-Worktrees nach 24 h selbst ab. Grok 4.3 ist
+räumt saubere, gepushte Task-Worktrees und leere Task-Ordner nach 24 h selbst
+ab. Vor jedem Commit prüft `.githooks/pre-commit` → `scripts/pre_commit.py`
+`build:check` und `i18n.py check`, sobald gestagte Dateien sie betreffen
+(`core.hooksPath` setzt `dev.ps1 update`; Details in `docs/testing.md`). Grok 4.3 ist
 seit 2026-10-11 ein einziger Free-Eintrag „Grok 4.3“ ohne feste Denkstufe
 (OpenRouter-Standard „low“; Reasoning-Schalter und Agent-Menü setzen die Stufe).
 Grok-Alt-Aliasse (u. a. 4.1 Fast) und die früheren Varianten
