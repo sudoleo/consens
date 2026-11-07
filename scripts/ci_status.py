@@ -33,8 +33,7 @@ WAIT_MINUTES = 40
 # say more.
 NOISE = ("Process completed with exit code", "The operation was canceled.")
 # A job over its time limit ends cancelled, like one a newer run or a person
-# cancelled, but it failed: the nightly browser suite ran into it unseen
-# (2026-10-25).
+# cancelled, but it failed: the nightly browser suite ran into it unseen.
 TIMED_OUT = "exceeded the maximum execution time"
 
 
@@ -155,7 +154,7 @@ def wait(sha):
 
 def main():
     # A Windows console (cp1252) cannot print every character of a test's
-    # failure text; it crashed the report of a red run (2026-10-23).
+    # failure text; it crashed the report of a red run.
     sys.stdout.reconfigure(errors="replace")
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--hours", type=int, default=26)

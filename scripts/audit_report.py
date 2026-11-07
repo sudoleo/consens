@@ -150,7 +150,7 @@ def _turn(turn):
 
 def _answered_by_two(info):
     """Every comparison of the turn got at least two answers: a "partial"
-    one with a single answer compared nothing (bug hunt 2026-11-01)."""
+    one with a single answer compared nothing."""
     answers = info.get("comparison_answers") or []
     return len(answers) == len(info.get("comparisons") or []) and all(n >= 2 for n in answers)
 

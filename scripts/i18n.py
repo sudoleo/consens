@@ -97,7 +97,7 @@ def _placeholder(expression: str, index: int, literals: list[str] | None = None)
 # A tag inside an attribute's value ("{% if a %}Answer check{% else %}…")
 # leaves this mark in its key: the page translates each value it renders as
 # a whole, and a key glued from both branches stands for none of them
-# (composed_gaps; docs/a11y-audit-2026-10-23.md, L2).
+# (composed_gaps).
 TAG_IN_VALUE = "{%}"
 
 
@@ -436,7 +436,7 @@ def looks_like_text(text: str) -> bool:
     if re.fullmatch(r"\{\w+\} [a-z’']{3,}[.…]?", text.strip()):
         return True
     # A label and its value after a middle dot ("Activity · {0}"): a German
-    # screen reader read it in English, and nothing reported it (UX audit I4).
+    # screen reader read it in English, and nothing reported it.
     if re.fullmatch(r"[A-Z][a-z’']{2,}(?: [a-z’']+)* · \{\w+\}", text.strip()):
         return True
     # A lowercase phrase around a number or a value ("of {total} checked
@@ -760,7 +760,7 @@ def composed_in(relative: str, source: str, current: i18n.Catalog) -> list[Found
 # A label read aloud, put together from values only, one of them a word in
 # a variable (``setAttribute("aria-label", `${label} ${count}`)``): the page
 # looks the whole value up, finds no entry, and a German screen reader heard
-# "Notes 4" (UX audit I4). The word goes through App.t first; a variable
+# "Notes 4". The word goes through App.t first; a variable
 # named like an interface word (label, word, text, …Word) that does not is
 # reported. A value with words of its own is a pattern ("Choose model:
 # {displayLabel}") and found as a key instead.
@@ -835,11 +835,11 @@ SERVER_MARKED = {"app/services/mailer.py": {"_t", "_h", "_N"}}
 # Services whose exceptions carry a sentence for the page: the first argument
 # of ``raise Name("…")`` for these classes reaches a card as the server's
 # ``error`` (routers/agent.py: the hold, secret and notes endpoints answer
-# with ``str(exc)``), e.g. "This pause is already over." (B7).
+# with ``str(exc)``), e.g. "This pause is already over."
 SERVER_RAISED = {"app/services/agent_sessions.py": {"TurnStatusConflict", "NotesFull"}}
 # Services whose progress lines reach the activity as they are: the "text"
-# of a dict with "kind": "progress" (UX audit 2026-10-29 I6: "The reviewers
-# check this request before you decide." stood in English in a German run).
+# of a dict with "kind": "progress" ("The reviewers check this request
+# before you decide." stood in English in a German run).
 SERVER_ACTIVITY = {"app/services/agent_delegation.py"}
 
 

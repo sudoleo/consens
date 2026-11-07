@@ -1,6 +1,6 @@
 """Explicit, bounded live probe of OpenRouter's ``openrouter:web_fetch`` server tool.
 
-Answers, before any product change (docs/agent-mode.md, "Quellen lesen"):
+Answers, before any product change (docs/agent-mode.md, "Quellen nachlesen"):
 1. Does the fetched page text reach the client, in which field, also streamed?
 2. Which usage field counts the fetches, and what do they cost?
 3. Does ``engine: auto`` run under ZDR, and which engine serves it?

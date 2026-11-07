@@ -124,7 +124,7 @@ class Config:
             for model in [*provider.models, *(prod.get(family) or [])]:
                 self.family_by_model.setdefault(model, family)
         # What a preset may use per family, read like the app reads the lists:
-        # an old ID in the document (deepseek-v4-pro since 2026-10-29) counts
+        # an old ID in the document (e.g. deepseek-v4-pro) counts
         # as the model it migrates to.
         self.allowed = {}
         for family, provider in cfg.PROVIDERS.items():
@@ -181,7 +181,7 @@ class Config:
 
         The stored answers run through the app's own normalization with the
         production lists, premium set and defaults, so a migration such as
-        gpt-oss leaving Open Models (2026-10-22, no Firestore write) does not
+        gpt-oss leaving Open Models (no Firestore write) does not
         read as a seventh model."""
         cfg = self.cfg
         definitions = {preset["id"]: preset for preset in cfg.CONSENSUS_PRESET_DEFINITIONS}
@@ -238,9 +238,8 @@ def preset_findings(conf: Config, catalog: dict, configured: dict) -> list[tuple
         answers = preset["answers"]
         if not preset["consensus"]:
             findings.append((f"{preset_id}:engine:missing", f"{label}: keine Consensus-Engine gespeichert"))
-        # The presets choose the Agent's reviewers: Daily two since
-        # 2026-11-01, Open Models and High Quality three; fewer than two is
-        # no comparison in Compare.
+        # The presets choose the Agent's reviewers: Daily two, Open Models
+        # and High Quality three; fewer than two is no comparison in Compare.
         if len(answers) < conf.cfg.MIN_PRESET_FAMILIES:
             findings.append((f"{preset_id}:families:{len(answers)}",
                              f"{label}: nur {len(answers)} Familie(n) belegt, mindestens {conf.cfg.MIN_PRESET_FAMILIES}"))
@@ -264,7 +263,7 @@ def preset_findings(conf: Config, catalog: dict, configured: dict) -> list[tuple
                 findings.append((f"{preset_id}:{role}:gone:{openrouter_id}",
                                  f"{label}/{role}: {openrouter_id} gibt es bei OpenRouter nicht mehr"))
             # Open Models promises open weights; the catalog's Hugging Face
-            # entry is the evidence (the writer is exempt, it stays Daily's).
+            # entry is the evidence (the writer, the engine, is exempt).
             if (preset_id == OPEN_WEIGHT_PRESET and index < len(answers) and openrouter_id in catalog
                     and not catalog[openrouter_id].get("hugging_face_id")):
                 findings.append((f"{preset_id}:{role}:closed:{openrouter_id}",

@@ -83,8 +83,8 @@ function Invoke-DevStep([string]$Label, [string]$Executable, [string[]]$Argument
 }
 
 # Browser and rules runs share fixed ports (the emulator port from
-# firebase.json, the app test ports 8031/8033). Sessions working in parallel
-# used to break each other's runs; a later run now queues on a named mutex
+# firebase.json, the app test ports 8031/8033). So that sessions working in
+# parallel do not break each other's runs, a later run queues on a named mutex
 # per emulator port. Windows releases it when the holding process ends, also
 # after a crash or kill. The port itself is checked too, because a direct
 # "firebase emulators:exec" or an orphaned emulator does not take the mutex.

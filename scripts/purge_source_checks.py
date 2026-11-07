@@ -1,7 +1,7 @@
 """Delete what the removed contradiction source check left in Firestore.
 
 The source check (background jobs that judged contradictions against the
-models' cited sources) was removed on 2026-10-15. Its collections are no
+models' cited sources) was removed. Its collections are no
 longer read, cleaned up after 30 days or deleted with an account, so they are
 removed once, completely:
 

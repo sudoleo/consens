@@ -21,7 +21,7 @@ from pathlib import Path
 LIMIT = 9
 # The test's own lines in the traceback. The end of a Playwright or Firestore
 # error is the library's frames, not the wait in the test that ran out (a
-# timed-out wait_for_function named no line, nightly run 2026-10-24).
+# timed-out wait_for_function named no line).
 TEST_FRAME = re.compile(r"^(tests/[\w./-]+\.py:\d+)", re.M)
 SLOWEST = 8
 
