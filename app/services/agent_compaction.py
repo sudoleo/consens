@@ -64,8 +64,9 @@ and billed like any other step.
 
 A summary is the agent's own text, never the user's words (``is_summary``):
 the work log files it as the agent's, memory evidence leaves it out. A
-summary that does not work out (no text, cut off, a tool call instead)
-changes nothing: the run goes on with what it had.
+summary that does not work out (no text, cut off, a tool call instead, or the
+provider declined the request or broke off) changes nothing: the run goes on
+with what it had.
 """
 from __future__ import annotations
 

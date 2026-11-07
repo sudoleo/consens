@@ -280,6 +280,20 @@ def _passing_failure(error):
     return agent_failure(error).get("code") in PASSING_FAILURE_CODES
 
 
+# What leaves a summary step without its summary, beside a step that broke
+# off: the provider's filter declined the summary request (the run's own
+# steps can pass the same filter), or the provider refused the request.
+SUMMARY_SKIP_CODES = PASSING_FAILURE_CODES | {"model_declined", "provider_rejected"}
+
+
+def _summary_unwritten(error):
+    """A summary step the provider did not write: the run goes on without
+    the summary (DelegationLoop._summarize), as the same request would most
+    likely fail the same way."""
+    from app.services.agent_provider_limits import agent_failure
+    return agent_failure(error).get("code") in SUMMARY_SKIP_CODES
+
+
 def _waited(seconds):
     """How long the user has waited, as the line of facts says it
     (_note_progress): seconds under a minute, else whole minutes."""
@@ -1164,11 +1178,15 @@ class DelegationLoop(AgentLoop):
             free = getattr(exc, "unclaimed_step", None)
             logging.info("Agent summary refused by the allowance kind=%s", kind)
             return int(free.split(":")[1]) if isinstance(free, str) else index
-        text = agent_compaction.summary_text(value)
+        failure = getattr(value, "summary_failure", None)
+        # A failed step's text is never a summary: at best it was cut off.
+        text = None if failure is not None else agent_compaction.summary_text(value)
         if text is None:
             self.run_summary_failed = self.run_summary_failed or kind == "run"
-            logging.warning("Agent summary unusable kind=%s finish_reason=%s chars=%s tool_calls=%s", kind,
-                            value.finish_reason, len(value.text or ""), len(value.tool_calls or []))
+            logging.warning("Agent summary unusable kind=%s finish_reason=%s chars=%s tool_calls=%s failure=%s detail=%s",
+                            kind, value.finish_reason, len(value.text or ""), len(value.tool_calls or []),
+                            safe_exception(failure) if failure is not None else None,
+                            provider_diagnostic(failure) if failure is not None else None)
             return next(steps)
         before = agent_compaction.own_chars(self.messages, 1)
         if kind == "history":
@@ -1796,7 +1814,9 @@ class DelegationLoop(AgentLoop):
 
         ``summary`` ("history" or "run"): a summary step (_summarize). Its
         request ends with the app's summary request, the history's has no
-        file block, and nothing it calls opens a gate or starts reviewers."""
+        file block, and nothing it calls opens a gate or starts reviewers.
+        One the provider did not write (_summary_unwritten) returns settled
+        and logged as failed, with ``value.summary_failure``."""
         self._check(cancellation)
         # The caller's conversation, before this step adds its file block or
         # notes (work log: what is the conversation, what only this request).
@@ -2078,6 +2098,11 @@ class DelegationLoop(AgentLoop):
                 # it used (usage, or its bounded estimate) so the retry can
                 # claim the next step; the work log keeps it as failed.
                 value.passing_failure = exc
+                status, log_status = "succeeded", "failed"
+            elif summary and claimed and _summary_unwritten(exc):
+                # Settled like a step that broke off: the agent's next step
+                # claims the next index, the summary is left out (_summarize).
+                value.summary_failure = exc
                 status, log_status = "succeeded", "failed"
             else:
                 raise
@@ -3032,7 +3057,11 @@ class DelegationLoop(AgentLoop):
             delay = self._passing_delay() if passing else self._rate_limit_delay(getattr(cause, "retry_after", None))
             index = next(steps, None) if delay is not None else None
             if index is None:
-                raise cause
+                if not step_args.get("summary"):
+                    raise cause
+                # A summary without its retry is left out (_summarize).
+                value.summary_failure = cause
+                return value
             step = f"completion:{index}"
         if passing:
             logging.warning("Agent step broke off, retrying model=%s category=%s detail=%s retry_in=%s", model.model,

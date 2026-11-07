@@ -12,10 +12,11 @@ from app.services.agent_compaction import (HISTORY_SUMMARY_OPEN, HISTORY_SUMMARY
                                            RUN_SUMMARY_OPEN, RUN_SUMMARY_REQUEST, SUMMARY_CLOSE, history_keep,
                                            is_summary, run_summary_due, run_tail, summary_message, summary_text)
 from app.services.agent_delegation import LONG_RUN_CONTEXT_SHARE, SUMMARY_TEXTS, DelegationLoop
+from app.services.agent_provider_limits import ModelDeclined
 from app.services.agent_runs import strip_app_context
 from app.services.agent_work_log import context_data
-from app.services.llm.agent_client import (AgentCompletion, AgentModel, answer_output_limit, measured_usage,
-                                           resolve_agent_model)
+from app.services.llm.agent_client import (AgentCompletion, AgentModel, AgentStreamIncomplete, answer_output_limit,
+                                           measured_usage, resolve_agent_model)
 from test_agent_runs import UID, _answered, pending, receipt, store  # noqa: F401  (fixture)
 from test_agent_vm import ANSWER, _admin_allowance, fake_vm, vm_loop  # noqa: F401  (fixtures)
 
@@ -338,6 +339,67 @@ def test_a_run_summary_that_does_not_work_out_is_not_tried_again(store, fake_vm,
     # Its call never ran.
     assert "never-run" not in json.dumps(fake_vm.calls, default=str)
     assert all(not is_summary(str(m.get("content"))) for m in script.seen[-1])
+
+
+def refused(completion):
+    """The provider's filter ends the summary request with its refusal line,
+    as GPT-6.1 Terra did twice in a row while the run's own steps passed."""
+    completion.text, completion.finish_reason = "I'm sorry, but I cannot assist with that request.", "content_filter"
+    raise AgentStreamIncomplete("finish=content-filter native=content-filter text=49 tool_parts=0 output_tokens=0")
+
+
+def declined(completion):
+    raise ModelDeclined()
+
+
+def every_step_after_a_command(monkeypatch):
+    monkeypatch.setattr(agent_compaction, "run_summary_due",
+                        lambda inputs, context_length, messages, start, end_at=None: any(
+                            m.get("role") == "tool" for m in messages[start:]))
+
+
+def test_a_run_summary_the_provider_refuses_leaves_the_run_going(store, fake_vm, monkeypatch):
+    monkeypatch.setattr(agent_delegation, "PASSING_RETRY_SECONDS", 0)
+    every_step_after_a_command(monkeypatch)
+    calls = [[("vm_exec", {"command": f"make step{n}"})] for n in range(3)]
+    script = Summarizer(calls, reply=refused)
+    loop = vm_loop(store, script)
+    events = list(loop.run())
+    turn = stored(store, loop)
+    assert turn["status"] == "completed" and turn["assistant_response"] == ANSWER
+    # The broken-off summary tried once more, then the run went on with all its steps.
+    assert len(script.summary_requests()) == 2
+    assert all(f"make step{n}" in json.dumps(fake_vm.calls, default=str) for n in range(3))
+    assert all(not is_summary(str(m.get("content"))) for m in script.seen[-1])
+    assert any(e.get("type") == "activity" and e.get("text") == agent_delegation.PASSING_RETRY_TEXT for e in events)
+    # Every step settled, so each next one could claim its index; none was skipped.
+    receipts = [store.receipt_ref(UID, loop.chat_id, loop.turn_id, f"completion:{n}").get()
+                for n in range(len(script.seen))]
+    assert all(r.exists and r.to_dict()["status"] == "succeeded" for r in receipts)
+
+
+def test_a_declined_run_summary_is_not_tried_again_and_the_run_answers(store, fake_vm, monkeypatch):
+    every_step_after_a_command(monkeypatch)
+    calls = [[("vm_exec", {"command": f"make step{n}"})] for n in range(3)]
+    script = Summarizer(calls, reply=declined)
+    loop = vm_loop(store, script)
+    list(loop.run())
+    assert len(script.summary_requests()) == 1
+    turn = stored(store, loop)
+    assert turn["status"] == "completed" and turn["assistant_response"] == ANSWER
+    assert "agent_failure" not in turn
+
+
+def test_a_declined_history_summary_leaves_the_history_whole(store):
+    script = Summarizer(reply=declined)
+    loop = history_loop(store, script)
+    list(loop.run())
+    request, answer = script.seen
+    assert [m["content"] for m in answer[1:7]] == ["Question one", "Answer one", "Question two", "Answer two",
+                                                   "Question three", "Answer three"]
+    turn = stored(store, loop)
+    assert "agent_history_summary" not in turn and turn["status"] == "completed"
+    assert store.receipt_ref(UID, loop.chat_id, loop.turn_id, "completion:0").get().to_dict()["status"] == "succeeded"
 
 
 def test_a_run_is_summarized_before_it_would_end_at_the_window():
