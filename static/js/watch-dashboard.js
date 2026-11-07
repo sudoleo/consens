@@ -1,6 +1,5 @@
-// The Watches page (/app/watches). Since 2026-11-03 a Watch runs the Agent
-// on a schedule in its chat (agent_watches.py); since 2026-11-04 (the
-// redesign Max signed off) the page reads like this:
+// The Watches page (/app/watches). A Watch runs the Agent on a schedule in
+// its chat (agent_watches.py); the page reads like this:
 //
 // * One way in: a field that takes a sentence (watch-composer.js). With no
 //   Watch yet it is the page (large, with four ways to begin); with Watches
@@ -97,7 +96,7 @@
   // newest that told something (a finding, a question, the goal). A quiet run
   // after it moves last_run on and leaves `unread` set (agent_watches.turn_ended);
   // the card read "Found something · Nothing new." and a question lost its
-  // Decide (bug hunt 2026-11-05).
+  // Decide.
   const TELLS = ['finding', 'needs_you', 'done'];
   function shownRun(watch) {
     const last = watch.last_run;
@@ -120,7 +119,7 @@
 
   // Its first run has not ended: due now, or going. Its start moves
   // next_run_at on to the following time at once (agent_watches.claim), so a
-  // first run under way says so by `looking` alone (bug hunt 2026-11-04).
+  // first run under way says so by `looking` alone.
   function firstRunPending(watch) {
     return watch.status === 'active' && !watch.last_run
       && (watch.looking === true || Date.parse(watch.next_run_at || '') <= Date.now() + 60000);
@@ -131,9 +130,8 @@
   // answered, a failed one too (routers/agent.py _save_interrupted); a run
   // that did not start (a busy chat's retry, a refusal) wrote none. A Watch
   // started in a chat (the agent's proposal, the pill's sheet) has its chat
-  // already. Until 2026-11-06 "no turn_id" stood for the page's own chat,
-  // and the sheet's Watch, which has none either, opened no chat during its
-  // first look (bug hunt 2026-11-05).
+  // already. Its sidebar name, not a missing turn_id, tells the page's own
+  // chat: the sheet's Watch has no turn_id either.
   const ANSWERED = ['finding', 'needs_you', 'done', 'quiet', 'failed'];
   function chatPending(watch) {
     if (!watch.bookmark_id) return true;
@@ -201,7 +199,7 @@
   }
 
   // One look and no run before it: its first. A Watch from before the looks
-  // (2026-11-04) shows only its last run, and `runs` says there were more.
+  // were kept shows only its last run, and `runs` says there were more.
   function onlyFirst(watch, looks) {
     return looks.length === 1 && !(Number(watch.runs) > 1);
   }
@@ -1045,7 +1043,7 @@
 
   // The Watch's own row is gone (ended into the closed "Ended" drawer, or
   // deleted with its chat): the nearest place that is there, never the page
-  // itself (review 2026-11-04). The drawer's toggle for an ended one, else
+  // itself. The drawer's toggle for an ended one, else
   // the first Watch, else the field that starts one.
   function nearest(id) {
     const host = body();
@@ -1130,7 +1128,7 @@
     const token = ++page.token;
     const [agent, archived, telegram] = await Promise.all([
       ui().api('GET', '/agent/watches'),
-      // Shared with watch.js's own load of the list (one GET, review 2).
+      // Shared with watch.js's own load of the list (one GET).
       ui().requestWatchList().catch(() => ({ watches: [] })),
       ui().api('GET', '/api/my/telegram').catch(() => ({ telegram: page.telegram || {} })),
     ]);
@@ -1196,9 +1194,8 @@
   // under an answer says "Watching" and comes here).
   // The wish waits only for the list's first drawing: once it is drawn, a
   // Watch ended elsewhere (the pill still says "Watching") shows in the
-  // opened "Ended" drawer, and one that is gone is forgotten. Until
-  // 2026-11-06 it stayed, and opening the drawer later opened its panel by
-  // itself (bug hunt 2026-11-05).
+  // opened "Ended" drawer, and one that is gone is forgotten. A wish kept
+  // longer opened its panel by itself when the drawer was opened later.
   function focusWatch(id, { open = true } = {}) {
     const wanted = String(id || '');
     page.focus = wanted ? { id: wanted, open } : null;

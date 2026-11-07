@@ -1,4 +1,4 @@
-// Inviting the first question (2026-10-15). Three jobs around the composer:
+// Inviting the first question. Three jobs around the composer:
 //
 // 1. Guests type. Their Send keeps the question (draft, app-init.js) and
 //    opens the sign-in; once the new session can run it, the question goes
@@ -50,7 +50,7 @@
     App.saveQuestionDraft?.(text);
     // The text itself: only exactly this question goes out by itself later,
     // never one typed (or cut short) after this Send. A mode the guest chose
-    // in the (+) menu goes with it (Apple-Audit H3): the sign-in may bring an
+    // in the (+) menu goes with it: the sign-in may bring an
     // account's settings that say otherwise. Unchosen, the account's own
     // mode applies (Agent by default, as the guest saw it). A temporary chat
     // is not a guest's to choose (temporary-chat.js): the switch comes with
@@ -62,8 +62,8 @@
     return true;
   }
 
-  // What the guest sent is in the field (records from before 2026-10-16 carry
-  // no text and only need one).
+  // What the guest sent is in the field (a record without its text only
+  // needs one).
   function holdsSentText(pending) {
     const text = field()?.value.trim() || "";
     return Boolean(text) && (typeof pending.text !== "string" || text === pending.text.trim());

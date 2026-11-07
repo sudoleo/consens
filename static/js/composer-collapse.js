@@ -16,8 +16,8 @@
 // die Kurve steht in shell.css unter .composer-animating.
 //
 // Der Desktop hat KEINEN Zustand: dort ist die eine Zeile ab der ersten Frage
-// einfach die Form des Composers, aufklappen gibt es nicht (User-Vorgabe
-// 2026-08-14). Das ist reines CSS in shell.css (Abschnitt A) — dieses Modul
+// einfach die Form des Composers, aufklappen gibt es nicht (User-Vorgabe).
+// Das ist reines CSS in shell.css (Abschnitt A) — dieses Modul
 // ruehrt oberhalb von COLLAPSE_QUERY nichts an ausser der Feldhoehe beim
 // Verlassen des Hero-Zustands.
 // Exporte: window.App.composer.{collapse,expand,isCollapsed}
@@ -77,8 +77,8 @@
     return document.body.classList.contains(COLLAPSED_CLASS);
   }
 
-  // Der Autosizer in app-init.js schreibt bei jedem Tastendruck eine INLINE-
-  // Hoehe ins Feld — die schlaegt jede Regel aus shell.css. Nach jedem
+  // Der Autosizer (composer-autosize.js) schreibt bei jedem Tastendruck eine
+  // INLINE-Hoehe ins Feld — die schlaegt jede Regel aus shell.css. Nach jedem
   // Umschalten muss er deshalb neu rechnen: sonst behaelt das Feld die Hoehe
   // des anderen Zustands, der Text scrollt in einem 34-px-Kasten weg und der
   // Cursor steht sichtbar ausserhalb des Feldes, in das man gerade tippt.
@@ -283,7 +283,7 @@
     // The Agent notices of the composer carry their own action ("Choose
     // models", "Review"); a tap there is that action, not a tap on the field.
     // So do a reviewer's pause and the waiting messages above the field
-    // (2026-10-27: a tap on "Write to the agent" went to the field instead).
+    // (a tap on "Write to the agent" went to the field instead).
     if (event.target.closest(".composer-mode-bar, .chat-scroll-latest, #attachTrigger, #attachMenu, .agent-composer-notice, .agent-hold, .agent-queue")) return;
 
     // Waehrend eines Laufs ist der Senden-Knopf der Abbrechen-Knopf: der
@@ -395,8 +395,8 @@
 
   // Der Hero-Zustand startet immer offen. "New chat" kommt ueber den
   // Beobachter oben an (die Klasse is-hero), waehrend app-core.js den Weg
-  // zurueck gleiten laesst; ein eigener Klick-Listener lief vorher und
-  // animierte die Hoehe gegen dieses Gleiten (Apple-Audit C2).
+  // zurueck gleiten laesst; ein eigener Klick-Listener animierte die Hoehe
+  // gegen dieses Gleiten.
   window.addEventListener("pageshow", function () {
     if (isStartScreen()) expand();
   });

@@ -142,7 +142,7 @@
 
   // run_mode ---------------------------------------------------------------
   const RUN_MODE_KEY = "runMode";
-  // "consensus" was a mode until 2026-10-25: a stored one reads as unchosen
+  // "consensus" is a retired mode: a stored one reads as unchosen
   // (the default, Agent), here and on the server (user_settings.py).
   const RUN_MODES = ["compare", "agent"];
 
@@ -157,7 +157,7 @@
 
   // agent_model ------------------------------------------------------------
   const AGENT_MODEL_KEY = "consensio.agentModel.v1";
-  // Until 2026-10-12 the pick was kept per account: agent_settings_<uid>.
+  // The pick as an older version kept it, per account: agent_settings_<uid>.
   const AGENT_MODEL_LEGACY_PREFIX = "agent_settings_";
 
   // The model is the pick; a level the app no longer knows falls back to
@@ -392,8 +392,8 @@
   // ---- Retired settings ----------------------------------------------------
   // A setting that no longer exists leaves nothing behind in this browser:
   // agent_preferences (the Agent's way of working and its comparison
-  // options) went on 2026-10-31, when the Agent got one mode for every
-  // account. The account's copy is the server's to drop (user_settings.py);
+  // options) is gone: the Agent has one mode for every account. The
+  // account's copy is the server's to drop (user_settings.py);
   // a value it still sends is not a setting here and is ignored.
   const RETIRED_KEYS = ["consensio.agentPreferences.v2", "consensio.agentPreferences.v1"];
 

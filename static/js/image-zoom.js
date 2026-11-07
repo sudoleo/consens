@@ -1,4 +1,4 @@
-// Zooming into a picture in its preview (2026-11-02, Max: "dass man bei einer
+// Zooming into a picture in its preview (Max: "dass man bei einer
 // Bildervorschau auch ranzoomen kann", Apple-like and without a toolbar).
 // Two fingers or a trackpad pinch (Ctrl + wheel; Safari's gesture events)
 // zoom about the point under them or the cursor, a double tap or click

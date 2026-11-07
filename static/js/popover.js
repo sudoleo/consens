@@ -3,7 +3,7 @@
 // App.popover: the menus and cards that open at a control — the (+) menu,
 // the model menu, the account menu, the "…" menus, the token card, the
 // card of a marked sentence. Each module keeps its own markup and its own
-// open/close; this module makes them one family (Apple audit C4, E6, E10):
+// open/close; this module makes them one family:
 //
 //   - exactly one is open: opening one closes every other (and a dialog
 //     opening closes them all), even when the opener stopped its click;

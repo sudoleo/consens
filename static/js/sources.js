@@ -2,12 +2,13 @@
 // sources.js
 // Evidence-/Quellen-Tags: Chips, [S1]-Linkifizierung, Merge & Rewrite der
 // Quell-IDs ueber alle Modellantworten hinweg.
-// Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.linkifySourceTags, window.mergeEvidenceSources,
 // window.rewriteSourceTags, window.registerResponseSources,
 // window.prepareResponseSources, window.renderModelResponseWithSources,
-// window.linkifyAgentSources, window.isBareSourceLink.
-// Call-time-Abhaengigkeiten: window.injectMarkdown, window.renderEvidenceSources,
+// window.linkifyAgentSources, window.isBareSourceLink,
+// window.App.{prepareResponseSourcesForEvidence, sourceTeaser, sourceSheet,
+// sourceRefs}.
+// Call-time-Abhaengigkeiten: window.renderEvidenceSources (optional),
 // window.currentEvidenceSources (geteilter State).
 // =====================================================================
 
@@ -159,7 +160,7 @@ function getSourcePillLabel(src, token) {
 
 // The same globe for sources without (or with a failed) favicon as on the
 // public pages (source-pill.css draws it): never a broken-image icon, and no
-// 8-px letter (Apple-Audit G9, G10). The proxy answers unknown hosts with a
+// 8-px letter. The proxy answers unknown hosts with a
 // globe too.
 function createSourceGlyph() {
   const glyph = document.createElement("span");
@@ -1025,10 +1026,9 @@ const sourceTeaser = (function () {
   return { hide };
 })();
 
-// ---- Every source behind a pill, to open (Apple audit F6) ----------------
-// The teaser above is a tooltip: it names, it cannot be clicked. A grouped
-// pill ("uci.org +2") opened only its first source, and on a phone the
-// teaser never showed at all: a tap went straight to a new tab. Now
+// ---- Every source behind a pill, to open ----------------------------------
+// The teaser above is a tooltip: it names, it cannot be clicked, and a phone
+// never shows it. So
 //   - on touch the first tap on any pill opens this list of every source
 //     behind it (a single one with its excerpt), each one a link;
 //   - with a mouse or the keyboard a grouped pill opens the same list at the
@@ -1071,8 +1071,8 @@ const sourceSheet = (function () {
 
   // A pill inside an open dialog (the answer reader is a modal <dialog>)
   // gets its list inside that dialog: everything outside the top dialog is
-  // inert and painted under it, so a list on <body> never showed there
-  // (review 5). Elsewhere the list lives on <body>.
+  // inert and painted under it, so a list on <body> never showed there.
+  // Elsewhere the list lives on <body>.
   function hostFor(ref) {
     return ref.closest?.("dialog[open]") || document.body;
   }
@@ -1247,7 +1247,7 @@ const sourceSheet = (function () {
   // back the browser does not let us hold, a layout change that closes or
   // re-opens the dialog), the list closes with it. A list left open in a
   // closed dialog kept its backdrop, and the backdrop held the page still
-  // (foundation.css, review 2 N1).
+  // (foundation.css).
   const inHost = event => Boolean(root && !root.hidden && event.target === root.parentElement);
   document.addEventListener("cancel", event => {
     if (!inHost(event) || !event.cancelable) return;

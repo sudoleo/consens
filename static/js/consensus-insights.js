@@ -1,6 +1,5 @@
 // =====================================================================
 // consensus-insights.js
-// Extrahiert aus templates/index.html (zweiter Inline-Script-Block).
 // Credibility-Frames, Consensus-Insights-Popover, Spalten-Balancer.
 // Kommuniziert ausschliesslich ueber window.* (siehe Exporte am Ende).
 // Abhaengigkeiten (call-time): window.trackUmamiEvent.
@@ -119,10 +118,9 @@
           };
           const highlightSelect = $("consensusHighlightsSelect");
           const highlightHelp = $("consensusHighlightsHelp");
-          // Only disagreements by default (2026-10-19, user decision): a mark
-          // means "the models do not agree here". Agreement (green) and thin
-          // coverage (grey) show only after the reader picks "All checks";
-          // from 2026-10-12 to 2026-10-19 that was the default.
+          // Only disagreements by default (user decision): a mark means "the
+          // models do not agree here". Agreement (green) and thin coverage
+          // (grey) show only after the reader picks "All checks".
           const DEFAULT_HIGHLIGHT_MODE = "concerns";
           let highlightMode = DEFAULT_HIGHLIGHT_MODE;
           let markersVisible = true;
@@ -313,8 +311,8 @@
           }
 
           // --- Die vier Anzeigezustaende einer belegten Aussage --------------
-          // Seit der Coverage-Judge JEDEN Satz beurteilt (2026-08-31), darf
-          // eine duenn belegte Aussage nicht mehr einfach verschwinden - sonst
+          // Der Coverage-Judge beurteilt JEDEN Satz, deshalb darf eine duenn
+          // belegte Aussage nicht einfach verschwinden - sonst
           // sieht sie aus wie ungepruefter Fliesstext, obwohl sie sehr wohl
           // angesehen wurde. Deshalb:
           //   split      geteilte Zustimmung (mindestens ein Modell widerspricht)
@@ -496,8 +494,8 @@
             return spans;
           }
 
-          // Nur die Stelle des Streits traegt die Farbe (2026-10-19, User-
-          // Vorgabe): in einem bestrittenen Satz die Worte, denen ein Modell
+          // Nur die Stelle des Streits traegt die Farbe (User-Vorgabe): in
+          // einem bestrittenen Satz die Worte, denen ein Modell
           // widerspricht (dissent[].target, vom Coverage-Judge benannt und
           // serverseitig gegen den Satz geprueft), nicht der ganze Satz. Der
           // Satz-Span bleibt das Steuerelement (Klick, Tastatur, Hover,
@@ -635,8 +633,8 @@
           }
 
           // Enter oder Leertaste zuletzt: die Karte kam von der Tastatur, und
-          // ihre Wege muessen per Tab erreichbar sein (a11y-Audit K1). Die
-          // Maus behaelt den Fokus an der Marke, wie bisher.
+          // ihre Wege muessen per Tab erreichbar sein. Die Maus behaelt den
+          // Fokus an der Marke.
           let lastActivationByKey = false;
           document.addEventListener("keydown", function (event) {
             lastActivationByKey = event.key === "Enter" || event.key === " ";
@@ -760,7 +758,7 @@
             window.trackUmamiEvent?.("app_consensus_marker_opened", { kind: kind, previewed: previewed });
             // Escape belongs to the card from its first moment; only the click
             // waits a task, so the click that opened it does not close it
-            // (nightly 2026-10-28: an Escape right after the click was lost).
+            // (an Escape right after the click was lost).
             document.addEventListener("keydown", onKeyDown, true);
             setTimeout(function () {
               document.addEventListener("click", onDocClick, true);
@@ -859,7 +857,7 @@
             const box = $(MODEL_BOX_IDS[model] || "");
             if (!box) return;
 
-            // Einzelantworten liegen inzwischen in jedem Modus hinter derselben
+            // Einzelantworten liegen in jedem Modus hinter derselben
             // Disclosure. Den Zielbereich aufdecken, den Modus aber beibehalten.
             window.App?.agentMode?.showModelAnswers?.();
 
@@ -1037,7 +1035,7 @@
             verdict.innerHTML = "";
 
             // Score-Anzeige; alte Bookmarks ohne Score behalten den kleinen Punkt.
-            // Seit 2026-08-04 gesetzte Zahl plus feiner Messbalken statt
+            // Gesetzte Zahl plus feiner Messbalken statt
             // Conic-Ring auf getoenter Platte: die Zahl traegt die Aussage,
             // der Balken macht sie auf einen Blick vergleichbar, und die
             // Ampelfarbe bleibt die einzige Farbe im Fuss.
@@ -1128,8 +1126,7 @@
             main.appendChild(headline);
 
             // Detailzeile: erst wie schwer, dann wer geurteilt hat. Die
-            // Modellzahl steht seit 2026-07-28 nur noch in den Lauf-Fakten
-            // eine Zeile tiefer — sie zweimal in zwei grauen Zeilen
+            // Modellzahl steht nicht darin: sie in zwei grauen Zeilen
             // untereinander zu wiederholen war der halbe Ballast im Fuss.
             const detail = document.createElement("span");
             detail.className = "verdict-detail";
@@ -1173,8 +1170,7 @@
             }
 
             // Transparenz: welche Modellfamilie die Analyse geliefert hat
-            // (seit 2026-10-04 nicht mehr zwingend eine andere als die
-            // Engine). Als Nachsatz derselben Zeile statt als rechts
+            // (nicht zwingend eine andere als die Engine). Als Nachsatz derselben Zeile statt als rechts
             // ausgerichteter Zweizeiler — eine Fußnote, die einen eigenen
             // Block bekommt, liest sich wie eine zweite Überschrift.
             if (judge && judge.provider) {
@@ -1272,10 +1268,9 @@
           }
 
           // --- Inline-Marker: Widersprüche und Claims im Antworttext ---------
-          // Seit 2026-08-15 (User-Vorgabe) trägt die Textstelle einen farbigen
-          // Textmarker statt einer Unterstreichung, und der Punkt daneben ist
-          // ersatzlos weg: die Farbe sagt bereits alles, was der Punkt sagen
-          // konnte. Bei einer Differenz ist die angestrichene Passage deshalb
+          // Die Textstelle trägt einen farbigen Textmarker (User-Vorgabe),
+          // ohne Punkt daneben: die Farbe sagt bereits alles, was ein Punkt
+          // sagen könnte. Bei einer Differenz ist die angestrichene Passage deshalb
           // selbst das Steuerelement (role="button"), bei einem Claim bleibt
           // die Quote daneben das sichtbare Ziel.
 
@@ -1300,7 +1295,7 @@
 
           // Öffnet die zugehörige Karte im Differences-Überblick und hebt sie
           // kurz hervor (vom Thema der festgehaltenen Karte aus). Das
-          // <details> darüber (Phase 4) wird mit aufgeklappt.
+          // <details> darüber wird mit aufgeklappt.
           function focusDifferenceCard(index) {
             if (window.App?.answerReader?.openPanel('differences', null, null, index)) return;
             const card = differenceCardAt($("differencesCards"), index);
@@ -1487,9 +1482,7 @@
           // Die Marke sagt "hier ist etwas", aber nicht was. Wer mit der Maus
           // darauf verweilt, bekommt die Karte der Marke, und die Karte ist
           // erreichbar: wer mit dem Zeiger hineinfaehrt, behaelt sie und kann
-          // ihre Wege nehmen (Logos, Fusszeile). Vorher fing sie keine Maus,
-          // verschwand auf dem Weg zu ihr, und dass ein Klick sie festhaelt,
-          // musste man erraten (Max 2026-10-23). Der Klick haelt sie weiter
+          // ihre Wege nehmen (Logos, Fusszeile). Der Klick haelt sie weiter
           // fest (openCard), fuer Touch und Tastatur ist das der Weg. Wer von
           // einer Marke zur naechsten zieht, wartet nicht ein zweites Mal
           // (HOVER_WARM_MS), wie bei den Tooltips (tooltip.js); steht noch eine
@@ -1594,7 +1587,7 @@
           }
 
           // Escape nimmt die Vorschau weg, ohne dass Zeiger oder Fokus sich
-          // bewegen muessen (WCAG 1.4.13, a11y-Audit K6). Steht eine
+          // bewegen muessen (WCAG 1.4.13). Steht eine
           // festgehaltene Karte, gehoert ihr das Escape (onKeyDown).
           document.addEventListener("keydown", function (event) {
             if (event.key !== "Escape" || event.defaultPrevented || !hoverCard || hoverCard.hidden) return;
@@ -1637,7 +1630,7 @@
           // ganze Satz. Nur sein erster Span war zu wenig: ein Satz mit
           // **fett** oder Link zerfaellt in mehrere, und die Karte hielt
           // dessen erste Zeile fuer die Stelle des Streits (stand ueber dem
-          // Satz und hing rechts aus dem Text, Max 2026-10-23).
+          // Satz und hing rechts aus dem Text).
           function cardAnchor(spans) {
             for (const span of spans) {
               const spot = span.querySelector?.(".cx-spot");
@@ -1832,8 +1825,7 @@
           }, true);
 
           // --- Die Karte einer Marke ------------------------------------------
-          // Seit 2026-10-23 (Max: "das muss perfekt sein") spricht jede Marke
-          // dieselbe Sprache wie die Differences-Schublade: Behauptungen, die
+          // Jede Marke spricht dieselbe Sprache wie die Differences-Schublade: Behauptungen, die
           // sich gegenueberstehen, "vs" dazwischen, und unter jeder, wer sie
           // vertritt (Logos, ein oder zwei Namen, sonst die Anzahl). Keine
           // Quote "5/6 stuetzen das" an einem Streit, keine Namenslisten,
@@ -1842,12 +1834,10 @@
           // (ctx.interactive) werden die Logos zu Wegen in die Antwort ihres
           // Modells, und die Fusszeile (cardActions) fuehrt in den Leser: zum
           // Unterschied (Zitate, alle Unterschiede) und zu den
-          // Antworten. Ihr Titel fuehrte vorher als Chevron dorthin, das sah
-          // niemand (Max 2026-10-23). `ctx.close` schliesst die Karte vor dem
-          // Weg (festgehalten: closeClaimPopover, Vorschau: leavePreviewFor).
+          // Antworten. `ctx.close` schliesst die Karte vor dem Weg (festgehalten: closeClaimPopover, Vorschau: leavePreviewFor).
 
-          // Der Pin oben rechts (Max 2026-10-23): dass ein Klick die Karte
-          // festhaelt, sieht man jetzt. In der Vorschau umrandet, ein Klick
+          // Der Pin oben rechts zeigt, dass ein Klick die Karte festhaelt.
+          // In der Vorschau umrandet, ein Klick
           // heftet an; an der festgehaltenen Karte gefuellt, ein Klick loest
           // sie. Das Blatt auf dem Handy hat sein x statt des Pins.
           const PIN_ICON = '<svg class="cx-card-pin-icon" viewBox="0 0 24 24" aria-hidden="true">'
@@ -1873,7 +1863,7 @@
           // Eine lange Karte scrollt in sich (.cx-card); ihre Scrollleiste lief
           // unter dem Pin durch. Pin und erste Zeile ruecken um die echte Breite
           // der Leiste nach links (0 bei Overlay-Leisten), auch wenn die Karte
-          // spaeter waechst (2026-10-26).
+          // spaeter waechst.
           function keepPinClear(container) {
             const card = container?.querySelector(":scope > .cx-card");
             container?._pinObserver?.disconnect();
@@ -1989,7 +1979,7 @@
           // Marke im Leser. `answers`: die erste Antwort, die sich oeffnen
           // laesst, zuerst die der Gegenseite, an ihrem Zitat.
           // `notes`: die Anmerkungen der Pruefer (Audit), wie in der Leiste
-          // eine Notiz am Rand statt der Gabel des Widerspruchs (UX-Audit B10).
+          // eine Notiz am Rand statt der Gabel des Widerspruchs.
           const CARD_ACTION_ICONS = {
             differences: "M12 20v-7M12 13 5 6M12 13l7-7M5 11V6h5M14 6h5v5",
             answers: "M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4",
@@ -2179,8 +2169,8 @@
           }
 
           // Dieselbe Kopplung ohne eigenes Element: die angestrichene Passage
-          // IST das Steuerelement. Seit die Punkte weg sind (2026-08-15) haengt
-          // hier die gesamte Bedienbarkeit einer Differenz - ohne role/tabindex
+          // IST das Steuerelement. Ohne Punkt daneben haengt hier die gesamte
+          // Bedienbarkeit einer Differenz - ohne role/tabindex
           // waere sie fuer Tastatur und Screenreader unerreichbar. Der erste
           // Span traegt die Semantik; ein Satz, der ueber einen Zeilenumbruch
           // in mehrere Spans zerfaellt, bekommt trotzdem nur EINEN Tabstopp.
@@ -2288,15 +2278,15 @@
             // EIN sichtbares Signal — welches, entscheidet die Schwere:
             //
             // - WIDERSPRUCH: die Passage gewinnt, das Claim-Badge entfaellt.
-            //   Seit die Claims jeden pruefbaren Satz abdecken (Satz-Index,
-            //   2026-08-07), traegt ein strittiger Satz fast IMMER auch ein
-            //   Claim-Badge. Mit der alten Regel (Badge gewinnt) verschwand
-            //   damit praktisch jeder Widerspruch aus dem Text: der
-            //   strittige Satz sah aus wie jeder andere, und der Klick darauf
-            //   oeffnete "4 of 6 models agree" statt der Widerspruchs-Karte.
-            //   Genau das ist der Kern des Produkts — es darf nicht als
-            //   Zustimmungsquote getarnt werden.
-            // - EMPHASIS: das Badge gewinnt wie bisher; eine andere Gewichtung
+            //   Die Claims decken jeden pruefbaren Satz ab (Satz-Index), also
+            //   traegt ein strittiger Satz fast IMMER auch ein Claim-Badge.
+            //   Gewaenne das Badge, verschwaende damit praktisch jeder
+            //   Widerspruch aus dem Text: der strittige Satz saehe aus wie
+            //   jeder andere, und der Klick darauf oeffnete "4 of 6 models
+            //   agree" statt der Widerspruchs-Karte. Genau das ist der Kern
+            //   des Produkts — es darf nicht als Zustimmungsquote getarnt
+            //   werden.
+            // - EMPHASIS: das Badge gewinnt; eine andere Gewichtung
             //   ist die schwaechere Aussage als die Stuetzungsquote.
             //
             // Das unterlegene Control bleibt als suppressed im Group-Objekt,
@@ -2422,7 +2412,7 @@
                   support: support
                 });
               }
-              // Nur noch Emphasis-Marken treten hinter das Badge zurueck.
+              // Nur Emphasis-Marken treten hinter das Badge zurueck.
               if (overlappingDifference) suppressControl(overlappingDifference.control);
               attachControl(result, badge, function () {
                 const anchor = document.body.classList.contains("claim-counts-visible") ? badge : result.spans[0];
@@ -2441,8 +2431,8 @@
             if (unanchored.length) {
               // Der Anker ist eine woertliche Kopie des Konsenstextes und
               // traegt damit dessen Quellentags. Im Fliesstext macht
-              // linkifySourceTags daraus die hochgestellte Fussnote - hier
-              // stand bis dahin die rohe Klammer "[S4]" im Satz.
+              // linkifySourceTags daraus die Quellen-Pille - hier stuende
+              // sonst die rohe Klammer "[S4]" im Satz.
               const sources = Array.isArray(options.sources)
                 ? options.sources
                 : (Array.isArray(window.currentEvidenceSources) ? window.currentEvidenceSources : []);
@@ -2515,7 +2505,7 @@
             return claims.length > 0;
           }
 
-          // --- Pruefer des Agenten (seit 2026-10-25, seit 2026-10-31 jede Antwort) ---
+          // --- Pruefer des Agenten (jede Antwort) ---
           // Die gewaehlten Modelle pruefen die fertige Antwort wie Reviewer
           // (agent_audit.py): je markiertem Satz ein Claim mit `kind` (wrong,
           // doubtful, incomplete) und ihren Anmerkungen in `dissent` (model,
@@ -2531,7 +2521,7 @@
           }
 
           // Whole sentences per count (docs/i18n.md); the kind first. The
-          // reviewers are "reviewers", never "models" (glossary, UX audit I1).
+          // reviewers are "reviewers", never "models" (glossary).
           function auditSummary(claim) {
             const t = window.App.t;
             const count = auditModels(claim.dissent).length;
@@ -2558,8 +2548,7 @@
           // Die Karte einer Marke: die markierten Worte der Antwort, darunter
           // jede Anmerkung mit ihrem Pruefer, ihrer Art und ihrer Quelle. Eine
           // Anmerkung, deren Zitat die Antwort nicht enthaelt, sagt das, statt
-          // "In the answer" ueber Worte zu schreiben, die dort nicht stehen
-          // (UX-Audit D4).
+          // "In the answer" ueber Worte zu schreiben, die dort nicht stehen.
           function auditCard(claim, ctx) {
             const card = cardNode("div", "cx-card cx-card-audit");
             card.appendChild(cardHeading(auditSummary(claim)));
@@ -2595,7 +2584,7 @@
             const spots = [];
             // A mark over several sentences carries its number on each
             // (agent_audit.place_marks): listed once, and not where one of
-            // its sentences shows it (bug hunt 2026-11-02).
+            // its sentences shows it.
             const missed = [], placedMarks = new Set();
             claims.forEach(function (claim) {
               const shown = { anchor: claim.anchor, kind: AUDIT_CLASSES[claim.kind] ? claim.kind : "doubtful",
@@ -2641,7 +2630,7 @@
                 // Each line says the note, not a fragment of words: its
                 // reviewer and note, the kind in the colour of its marks, the
                 // quoted words quietly after it. The whole line opens its card,
-                // a target a finger can hit (UX audit D4, D14).
+                // a target a finger can hit.
                 unplaced.forEach(function (item) {
                   const row = cardNode("button", "claims-fallback-row is-audit-note");
                   row.type = "button";
@@ -2675,10 +2664,9 @@
           }
 
           // --- Resolve-Ergebnis -----------------------------------------------
-          // Bis 2026-10-25 konnte eine Resolve-Runde (POST /resolve) die
-          // dissentierenden Modelle eines Widerspruchs mit der Gegenposition
-          // konfrontieren; ihr Ergebnis steht am diff-Objekt gespeicherter
-          // Consensus-Antworten und wird hier weiter gezeigt.
+          // Eine Resolve-Runde konfrontierte die dissentierenden Modelle eines
+          // Widerspruchs mit der Gegenposition; ihr Ergebnis steht am
+          // diff-Objekt gespeicherter Consensus-Antworten und wird hier gezeigt.
           const RESOLVE_STATUS = {
             resolved: { cls: "is-resolved", label: "Resolved" },
             standoff: { cls: "is-standoff", label: "Dissent confirmed" },
@@ -2846,8 +2834,8 @@
           }
 
           // Ein gespeicherter Widerspruch zeigt das Ergebnis seiner Resolve-Runde
-          // (persistiert im Bookmark). Neue Runden gibt es seit 2026-10-25 nicht
-          // mehr: sie gehoerten zum Consensus-Lauf im Browser. Die
+          // (persistiert im Bookmark). Neue Runden gibt es nicht: sie
+          // gehoerten zum Consensus-Lauf im Browser. Die
           // Karten-Kennzeichnung uebernimmt renderDifferenceCards nach dem
           // Einhaengen der Karte.
           function buildResolveSection(diff) {
@@ -2863,9 +2851,8 @@
           }
 
           // --- Differences-Panel ----------------------------------------------
-          // Die Unterschiede sind nicht mehr die zweite Spalte neben der
-          // Antwort, sondern ein zugeklappter Ueberblick darunter. Waehrend der
-          // Synthese ist er offen (Spinner), danach entscheidet das Ergebnis.
+          // Die Unterschiede sind ein zugeklappter Ueberblick unter der
+          // Antwort; ob er aufgeht, entscheidet das Ergebnis.
           const DIFF_SUMMARY_RUNNING = "Differences";
           const DIFF_SUMMARY_DONE = "See all differences";
 
@@ -2882,9 +2869,8 @@
           }
 
           window.App.differencesPanel = {
-            // Zu, nicht offen: der Spinner in diesem Panel ist entfallen, weil
-            // der gefuehrte Lauf dieselbe Phase schon ansagt. Ein aufgeklapptes
-            // leeres Panel waere die dritte Anzeige desselben Vorgangs.
+            // Zu, nicht offen und ohne Spinner: ein aufgeklapptes leeres Panel
+            // zeigte nur, dass noch nichts da ist.
             setSynthesizing: function () { setPanelState(false, DIFF_SUMMARY_RUNNING); },
             // Freitext-Fallback: der alte Block muss sichtbar und aufgeklappt
             // erscheinen, sonst verschwindet die Analyse stillschweigend.
@@ -2928,7 +2914,7 @@
             if (group) group.open = true;
           }
 
-          // Differenzen von vor 2026-10-16 erzaehlen beide Seiten mit den
+          // Aeltere Differenzen erzaehlen beide Seiten mit den
           // Anonym-Labels des Judges ("Model F sagt, ...", "Die Synthese sagt,
           // dass ..."), und die Ueberschrift erzaehlt dasselbe noch einmal. In
           // der Gegenueberstellung steht jede Behauptung nur einmal: die
@@ -3036,8 +3022,8 @@
             return { claim: withModelNames(diff.claim, names), narrative: narrative, positions: mergedPositions(positions) };
           }
 
-          // Gelbe Saetze der Satzpruefung mit benannter Streitstelle (Max
-          // 2026-10-23: was im Text markiert ist, steht auch in der Liste):
+          // Gelbe Saetze der Satzpruefung mit benannter Streitstelle (was im
+          // Text markiert ist, steht auch in der Liste):
           // als kleinere Unterschiede, Kopf ihr Satz mit seiner Stelle, dann
           // die Gegenseiten. Ein Satz, den schon ein Unterschied traegt,
           // bleibt dessen Karte. `claims` wie die Marken sie filtern; ihr
@@ -3148,7 +3134,7 @@
                 card.className = cardClass;
                 // Jede Karte wartet zugeklappt auf ihren Kopf, die kleineren
                 // dazu in ihrer Gruppe: wer sich dafuer interessiert, oeffnet
-                // sie einzeln (Max 2026-10-23).
+                // sie einzeln.
                 card.open = false;
 
                 // Ein Widerspruch sind Behauptungen, die sich gegenueberstehen:
@@ -3158,7 +3144,7 @@
                 const ordered = readable.positions.slice().sort(function (a, b) {
                   return (b.in_answer === true) - (a.in_answer === true);
                 });
-                // Seit 2026-10-23 in der Reihenfolge, in der man es versteht
+                // In der Reihenfolge, in der man es versteht
                 // (Max: "zuerst WAS die Ausgangssituation ist, DANN die
                 // Aussage, die konkurriert, DANN welches Modell was sagt"):
                 // Im Leser fehlt die Antwort, also ist ihr markierter Satz
@@ -3167,7 +3153,7 @@
                 // darueber, kein Punkt), dann die Gegenseite ("In contrast"
                 // statt "vs"), darunter je wer sie vertritt. Ohne Satz in der
                 // Antwort bleibt das Thema der Kopf, ein kritisches mit rotem
-                // Punkt. Die Etikettzeile ("● Critical") ist weg; Screenreader
+                // Punkt. Keine Etikettzeile ("● Critical"); Screenreader
                 // hoeren die Schwere vorab (diff-card-meaning).
                 const answerAnchor = String(diff.consensus_anchor || "").replace(/\[S?\d+(?:\s*,\s*S?\d+)*\]/gi, "").trim();
                 // Ein gelber Satz steht in der Antwort, auch wenn kein Modell
@@ -3186,7 +3172,7 @@
                 if (opensOnAnswer) {
                   // Das Thema leise darueber, auch zugeklappt: viele Saetze
                   // sagen allein nichts ("Das ist unbestaetigt.", "Er ist CEO
-                  // ..."; Max' echte Daten 2026-10-23), das Thema gibt ihnen
+                  // ..."; Max' echte Daten), das Thema gibt ihnen
                   // ihren Zusammenhang. Dass der Satz aus der Antwort stammt,
                   // sagt seine Marke.
                   const lead = document.createElement("span");
@@ -3242,9 +3228,8 @@
                     renderInlineMarkdown(stance, pos.stance || pos.quote);
                     posEl.appendChild(stance);
                   }
-                  // Unter der Behauptung eine leise Zeile (2026-10-21): wer das
-                  // sagt, ob die Antwort diese Seite vertritt, und das Zitat
-                  // auf Wunsch. Vorher stand jedes davon in eigener Zeile.
+                  // Unter der Behauptung eine leise Zeile: wer das sagt, ob die
+                  // Antwort diese Seite vertritt, und das Zitat auf Wunsch.
                   const meta = document.createElement("div");
                   meta.className = "diff-position-meta";
 
@@ -3357,9 +3342,8 @@
           }
 
           // Ein archivierter Turn hat dieselben strukturierten Daten wie der
-          // Live-Lauf — bis 2026-08-17 fiel er trotzdem auf den Freitext des
-          // Judges zurueck und zeigte dabei sogar dessen "BestModel:"-Zeile.
-          // Gleiche Daten, gleiche Karten; interaktiv ist nur der aktive Lauf.
+          // Live-Lauf: gleiche Daten, gleiche Karten; interaktiv ist nur der
+          // aktive Lauf.
           function renderStoredDifferenceCards(container, differencesData, options) {
             if (!container || !differencesData || typeof differencesData !== "object") {
               return false;

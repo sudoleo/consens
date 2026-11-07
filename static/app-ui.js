@@ -5,16 +5,14 @@ function getStoredSystemPrompt() {
 }
 
 /**
- * Die Einstellungen als Reiter statt als eine lange Bahn.
+ * Die Einstellungen als Reiter statt als eine lange Bahn: alle Kategorien
+ * untereinander waeren beim Oeffnen eine Wand, durch die man scrollen muesste,
+ * um zu wissen, was es ueberhaupt gibt. Genau EINE Kategorie ist sichtbar und
+ * die Liste links ist das Inhaltsverzeichnis.
  *
- * Sechs Kategorien untereinander waren beim Oeffnen eine Wand: der Nutzer musste
- * scrollen, um zu wissen, was es ueberhaupt gibt. Jetzt ist genau EINE Kategorie
- * sichtbar und die Liste links ist das Inhaltsverzeichnis.
- *
- * Die Sichtbarkeit der Panels gehoert ausschliesslich hierher. firebase.js hat
- * frueher `style.display` direkt auf dem Account-Panel gesetzt; ein Inline-Style
- * haette diesen Controller uebersteuert, deshalb schaltet firebase.js jetzt
- * ueber `setTabAvailable` nur noch den REITER frei.
+ * Die Sichtbarkeit der Panels gehoert ausschliesslich hierher. Ein Inline-Style
+ * wuerde diesen Controller uebersteuern, deshalb schaltet firebase.js ueber
+ * `setTabAvailable` nur den REITER frei.
  */
 const settingsTabs = (function () {
   function tabs() {
@@ -146,7 +144,7 @@ function closeSettingsModal() {
 }
 
 // A guest finds Memory and the key greyed out: the line under the header
-// says why and offers the way in (Apple-Audit H13).
+// says why and offers the way in.
 function syncSettingsGuestNote() {
   const note = document.getElementById("settingsGuestNote");
   if (note) note.hidden = Boolean(window.auth?.currentUser);
@@ -194,8 +192,8 @@ function bindSettingsModalControls() {
 
   settingsTabs.bind();
   // The backdrop closes only a click that also started on it: selecting
-  // text in a field and releasing over the backdrop used to close Settings
-  // and drop the unsaved edit (audit F5).
+  // text in a field and releasing over the backdrop would otherwise close
+  // Settings and drop the unsaved edit.
   window.App.modalDialog.bind(document.getElementById("systemPromptModal"));
   window.App.modalDialog.bind(document.getElementById("helpModal"));
 
@@ -217,9 +215,9 @@ function bindSettingsModalControls() {
 
 // The language of the page is chosen on the server (cookie consens_lang,
 // docs/i18n.md): ?lang= stores the choice and comes back without it.
-// On a closed select every arrow key is a "change": reloading there left
-// no way past the first option (docs/a11y-audit-2026-10-23.md, K5). Keys
-// only choose; Enter or leaving the field applies the choice.
+// On a closed select every arrow key is a "change": reloading there would
+// leave no way past the first option. Keys only choose; Enter or leaving
+// the field applies the choice.
 function bindLanguageSelect() {
   const select = document.getElementById("languageSelect");
   if (!select || select.dataset.bound) return;

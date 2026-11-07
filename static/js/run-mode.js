@@ -4,8 +4,8 @@
 //   agent   · Agent: works in steps with research, files and tools
 //   compare · answers side by side
 //
-// Consensus was a third mode until 2026-10-25. The pipeline behind it now
-// runs only on the server (Watches, the API, curated topics); a stored
+// Consensus is no mode here: its pipeline runs only on the server
+// (Watches, the API, curated topics); a stored
 // "consensus" choice is dropped and reads as the default, Agent
 // (user-settings.js, user_settings.py). Saved Consensus chats stay
 // readable and belong to the same server family as Compare.
@@ -29,15 +29,14 @@
 
   const settings = window.App.userSettings;
   const MODES = Object.freeze(["compare", "agent"]);
-  // For people who never chose. Agent is the default since 2026-10-02, for
-  // guests too (Max, Apple-Audit H3: a guest sees what an account sees and
-  // logs in on Send); an account without Agent access (a refused status
+  // For people who never chose. Agent is the default, for guests too (a
+  // guest sees what an account sees and logs in on Send); an account without Agent access (a refused status
   // check) falls back to Compare in effective().
   const DEFAULT_MODE = "agent";
 
   const COPY = Object.freeze({
     compare: Object.freeze({ label: "Compare", description: "Answers side by side." }),
-    // No "Beta" badge since 2026-11-02 (Max): the Agent is the product.
+    // No "Beta" badge: the Agent is the product.
     agent: Object.freeze({ label: "Agent", description: "Works in steps with research, files and tools." }),
   });
 

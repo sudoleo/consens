@@ -34,7 +34,7 @@
       }).catch(function (error) {
         status.textContent = error.message;
         status.classList.add("is-error");
-        // The field names its error, read again on return to it (a11y audit P7).
+        // The field names its error, read again on return to it.
         field.setAttribute("aria-describedby", status.id);
       }).then(function () {
         button.disabled = false;

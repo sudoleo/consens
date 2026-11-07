@@ -1,8 +1,8 @@
 // Daily allowance in euros (one account for Compare, Consensus, Reasoning runs
 // and Agent): limit per tier and the expected cost of a typical run per tier and
 // mode, which is the admission threshold of the pipeline. The API speaks whole
-// micro-euros; the fields show euros. Revision-guarded like before; the global
-// reset stays a separate product action.
+// micro-euros; the fields show euros. Revision-guarded; the global reset is a
+// separate product action.
 const TIERS = [['free', 'Free'], ['plus', 'Plus'], ['pro', 'Pro'], ['admin', 'Admin']];
 const MODES = [['compare', 'Compare run'], ['consensus', 'Consensus run'], ['deep_think', 'Reasoning run']];
 const MICRO_EUR = 1000000;

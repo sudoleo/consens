@@ -1,10 +1,9 @@
 // =====================================================================
 // passage-check.js
-// A pasted text the Agent checked: until 2026-10-31 (the comparison mode,
-// check_text) it checked a passage of the user's own message against
-// independent answers (review.passage_check, see
-// app/services/agent_comparison.py). Saved turns keep their card; no run
-// checks a text any more. This module puts the result at
+// A pasted text the Agent checked: the retired comparison mode (check_text)
+// checked a passage of the user's own message against independent answers
+// (review.passage_check, see app/services/agent_comparison.py). Saved turns
+// keep their card; no run checks a text. This module puts the result at
 // the top of the ANSWER as one card: the result as one sentence ("4 of 28
 // statements in your text are contradicted"), the text as a strip of its
 // sentences in reading order and a legend; then the sentences that do not
@@ -206,7 +205,7 @@
   }
 
   // The card always starts folded, on what other models dispute, whatever
-  // the Highlights setting (Max 2026-10-21: the differences count first).
+  // the Highlights setting (Max: the differences count first).
   // Only the reader unfolds it; a change of the setting repaints the full
   // text but never folds or unfolds the card.
 

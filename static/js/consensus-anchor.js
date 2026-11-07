@@ -123,8 +123,7 @@
     // werden: die Quoten-Badges und die [S1]-Quellenchips sind UI (ihr Text
     // wuerde die Offsets verschieben), Code und KaTeX duerfen nicht
     // angefasst werden.
-    // `.src-ref` sind die Quellen-Pillen im Konsens (frueher hochgestellte
-    // Zahlen). Ohne sie hier wurde ihr Text als Satzteil gewrappt und trug
+    // `.src-ref` sind die Quellen-Pillen im Konsens. Ohne sie hier wurde ihr Text als Satzteil gewrappt und trug
     // dann die Unterstreichung der Passage — eine bernsteinfarbene Domain
     // sieht aus wie ein Fehler, nicht wie eine Quellenangabe.
     // A picture the agent placed in its answer (.md-picture) is the app's,
@@ -144,7 +143,7 @@
     const BLOCK_SELECTOR = "p, li, td, th, h1, h2, h3, h4, h5, h6, blockquote, dd, dt";
     
     // --- Inline-Marker: Satzgrenzen und Text-Wrapping -----------------
-    // Der verifizierte Anker ist absichtlich kurz (5-12 Wörter). Als
+    // Ein Anker ohne Satznummer ist absichtlich kurz (5-12 Wörter). Als
     // Markierungseinheit wäre er zu klein: ein unterstrichenes Fragment
     // mitten im Satz wirkt zufällig. Für die Darstellung wird deshalb auf
     // den umgebenden Satz ausgedehnt, der Anker selbst bleibt intern
@@ -227,8 +226,8 @@
       return !/[a-zäöüß]/.test(text[k]);
     }
 
-    // Endet [.., end) bereits auf einem Satzende? Seit der Anker die
-    // Satznummer aufloest (statt eines 5-12-Wort-Ausschnitts) ist das der
+    // Endet [.., end) bereits auf einem Satzende? Loest der Anker eine
+    // Satznummer auf (statt eines 5-12-Wort-Ausschnitts), ist das der
     // Normalfall — und dann darf nicht weitergedehnt werden, sonst
     // verschluckt der erste Satz den zweiten und beide Claims landen auf
     // derselben Markierung.

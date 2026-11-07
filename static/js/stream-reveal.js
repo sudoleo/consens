@@ -13,12 +13,12 @@
 // stay sharp: the light is a tint, not a glow.
 // The look is drawn with the CSS Custom Highlight API over the text the
 // Markdown renderer made: no node is added and nothing moves, so a link or a
-// selection in the growing paragraph stays what it is (Apple audit D4).
+// selection in the growing paragraph stays what it is.
 // Without that API, with reduced motion or with Letter animations switched
 // off in Settings, active() is false and the caller paints the answer as it
 // arrives.
 // The first word of an answer comes into view at once, within about a tenth
-// of a second of its arrival (P6, 2026-11-05): its pace has no history yet,
+// of a second of its arrival: its pace has no history yet,
 // so it has its own lead and the short end of the light.
 // Exports: App.streamReveal { active, stream, settle }.
 // =====================================================================
@@ -53,9 +53,8 @@
   const STEP_CURVE = 1.7;
   // Letters come into view at the pace of the text, never more than LEAD_MS
   // after their word was painted; the first word's within FIRST_LEAD_MS, in
-  // the shortest light. Until 2026-11-05 the first word took the pace it did
-  // not have yet: up to 25 ms a letter and the longest light (750 ms), so
-  // its last letter was half in view only up to 0.15 s after it was painted.
+  // the shortest light: the pace it does not have yet would hold its last
+  // letter back.
   const LEAD_MS = 100;
   const FIRST_LEAD_MS = 40;
   // The light reaches back about six words however fast the answer streams,
@@ -353,7 +352,7 @@
     const own = Boolean(state) && !foreign(state);
     // Someone else's render stands (the review took its marks off by
     // rendering the arrived text in full): its words stand too. Started from
-    // nothing, the answer went blank and ran in again (bug hunt P6).
+    // nothing, the answer went blank and ran in again.
     const shown = own ? state.target.slice(0, state.cut) : written(body);
     if (!own || state.settled || !text.startsWith(shown)) {
       // A new answer, or one that went on or took words back: the words it
@@ -417,7 +416,6 @@
   }
 
   // The answer's first letters come in while the live lines above them fade
-  // out (agent-activity.js handoff, since 2026-11-05). From 2026-10-30 they
-  // waited for that fade here (hold(body, ms), 160 ms).
+  // out (agent-activity.js handoff).
   App.streamReveal = { active, stream, settle };
 })();

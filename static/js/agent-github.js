@@ -256,8 +256,8 @@
     sync(view);
   }
 
-  // Another account (or none): until 2026-11-03 Settings went on showing the
-  // previous account's GitHub login and repositories until a reload.
+  // Another account (or none): Settings drops the previous account's GitHub
+  // login and repositories at once, not only after a reload.
   window.addEventListener('consensio:auth-state', () => {
     accountGeneration++;
     settingsLoaded = false;

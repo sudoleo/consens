@@ -1,12 +1,10 @@
 /* ==========================================================================
    consens.io — landing page: the marked passage in the mockups works
 
-   The mockups on the landing page are rebuilds of the /app surfaces. Since
-   2026-10-31 (the Agent's one mode) the reviewers' marks are what an answer
-   carries: no agreement ratio behind a sentence any more, so the ratio
-   badges and their popover left this file. What stays is the marked
-   passage in "03 · Decide", with the behaviour it has in
-   static/js/consensus-insights.js:
+   The mockups on the landing page are rebuilds of the /app surfaces. The
+   reviewers' marks are what an answer carries, no agreement ratio behind a
+   sentence, so this file only works the marked passage in "03 · Decide",
+   with the behaviour it has in static/js/consensus-insights.js:
 
      hover (pointer devices)  short version in an .insight-preview card
      click / Enter            the card with the reviewer's note opens and

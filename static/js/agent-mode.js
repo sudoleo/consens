@@ -5,10 +5,9 @@
 // next message. Which mode runs (Agent, Compare) is owned by run-mode.js;
 // this module renders the one selector for it and the tools that apply to
 // the chosen mode. The "agent-mode" names here are historical: they once
-// meant the grouped Consensus run (removed from the browser 2026-10-25),
-// not Agent.
+// meant the grouped Consensus run (removed from the browser), not Agent.
 // Exporte: window.setAgentModeStatus, window.updateAgentModeUI,
-// window.projectAgentModeRun.
+// window.projectAgentModeRun, window.App.{renderComposerMode, agentMode}.
 // Abhaengigkeiten: window.App.{modelPrefs, getModelOptionLabel,
 // trackAppEvent, runMode, answerReader}.
 // =====================================================================
@@ -29,7 +28,7 @@
   // answer grid, which would flash on every load until access arrives. That
   // includes the second before the sign-in itself is known (Firebase restores
   // it from storage): neither account nor guest yet, the grid came for it
-  // and the field slid down and back up on every reload (2026-10-26).
+  // and the field slid down and back up on every reload.
   const agentAwaited = () => {
     const state = window.App.agentChat?.modeState?.();
     if (window.App.runMode.preference() !== "agent" || state?.family) return false;
@@ -49,8 +48,8 @@
   }
 
   // ---- Einzelantworten als Vorschau statt als Scroll-Schacht --------------
-  // Hinter "Compare answers" hatte jede Box ihren eigenen Innen-Scroll
-  // (max-height + overflow-y in components-misc.css). Sechs private
+  // Hinter "Compare answers" bekommt keine Box ihren eigenen Innen-Scroll
+  // (max-height + overflow-y). Sechs private
   // Scroll-Bereiche in einer scrollenden Seite heissen: das Mausrad tut je
   // nach Zeigerposition etwas anderes, die Spalten enden auf verschiedenen
   // Hoehen, und lange Antworten sind abgeschnitten, ohne dass es jemand
@@ -246,8 +245,7 @@
       for (const option of Array.from(select.options)) {
         const rule = available[option.value];
         const copy = window.App.runMode.copy(option.value);
-        // A mode this version does not know (Consensus, retired 2026-10-25)
-        // is no choice.
+        // A mode this version does not know (Consensus, retired) is no choice.
         if (!rule || (option.value === "agent" && !rule.visible)) { option.remove(); continue; }
         option.disabled = !rule.enabled;
         option.dataset.description = rule.enabled ? copy.description : rule.reason;
@@ -336,7 +334,7 @@
     const wasHidden = tools.hidden;
     tools.hidden = !start;
     // The tools come in when they come back (a new chat, the Compare start),
-    // never on the first paint, where they are simply there (Apple-Audit B1).
+    // never on the first paint, where they are simply there.
     if (wasHidden && !tools.hidden) revealBar(tools);
     bar.hidden = !summary;
     document.getElementById("composerModeDescription").textContent = window.App.runMode.copy(mode).description;
@@ -403,12 +401,9 @@
     renderReviewers(beta, start, models.length);
     const status = document.getElementById("composerComparisonStatus");
     status.hidden = !summary;
-    // The comparison on screen says how far it got. (Its "Shown: Compare
-    // result" prefix for a differing next mode left with Consensus on
-    // 2026-10-25: Agent, the only other mode, has its own composer, where
-    // this bar steps aside.) The summary comes translated (directSummary),
-    // so the narrow form comes from the numbers: parsed out of the words, it
-    // stayed the whole German sentence, cut off (2026-10-23).
+    // The comparison on screen says how far it got. The summary comes
+    // translated (directSummary), so the narrow form comes from the numbers:
+    // parsed out of the words, it stayed the whole German sentence, cut off.
     status.textContent = summary ? `${summary}.` : "";
     status.title = status.textContent;
     status.dataset.compact = counts
@@ -416,7 +411,7 @@
   }
 
   // With Agent the comparison models review the agent’s work and have a
-  // control of their own (Max, 2026-10-27): their marks stand before the
+  // control of their own: their marks stand before the
   // chip, which names the chat model (model-picker.js), and say "2 AIs
   // cross-check" (#composerModelPicker on the start screen,
   // #composerReviewers in a chat). Both open the reviewers' level of the
@@ -428,7 +423,7 @@
     const words = reviewing ? window.App.words.reviewing(count, setting) : "";
     // Where the words do not fit, their short form ("3 AIs"), the same in the
     // chat and on the start screen: the marks never stand without a word on a
-    // phone (UX audit E4, E5). An attribute is not translated by i18n.js.
+    // phone. An attribute is not translated by i18n.js.
     // Off keeps its two words: "Off" alone beside (+) said nothing (a phone shows no marks).
     const short = !reviewing ? "" : setting === "off" ? "Reviewers off" : count === 1 ? "1 AI" : `${count} AIs`;
     const title = setting === "off"
@@ -469,8 +464,8 @@
     if (reviewers.hidden) return;
     reviewers.classList.toggle("reviewers-off", setting === "off");
     write(reviewers, "aria-label", words);
-    // What the icons are, said beside them and in the tooltip (2026-10-28,
-    // Max: new users did not know why a logo stood there).
+    // What the icons are, said beside them and in the tooltip: new users did
+    // not know why a logo stood there.
     write(reviewers, "title", title);
     const caption = document.getElementById("composerReviewersLabel");
     if (caption) {
@@ -547,8 +542,8 @@
       answersToggle.setAttribute("aria-expanded", String(answersVisible));
       answersToggle.title = label;
       answersToggle.setAttribute("aria-label", label);
-      // Gezielt das Label, nicht "das erste span": der Chip traegt seit
-      // 2026-07-28 auch einen Chevron und eine Zahl.
+      // Gezielt das Label, nicht "das erste span": der Chip traegt auch ein
+      // Icon und eine Zahl.
       const labelEl = answersToggle.querySelector(".consensus-tab-label");
       if (labelEl) {
         labelEl.textContent = label;

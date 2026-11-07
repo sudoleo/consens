@@ -1,4 +1,4 @@
-// Predicted example questions under an empty new chat (2026-10-16).
+// Predicted example questions under an empty new chat.
 //
 // The app shell renders three curated questions in one row (a new pick per
 // page load, app/services/starter_questions.py). Once an account has a few

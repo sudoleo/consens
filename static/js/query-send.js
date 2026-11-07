@@ -2,8 +2,8 @@
 // Every await/callback is bound to one RunContext from App.runRegistry; the
 // shared response DOM is written only by run-view.js when that run is visible.
 // Agent messages go to agent-chat.js (window.sendQuestion hands them over).
-// Until 2026-10-25 this module also ran the Consensus pipeline after the
-// answers; that now runs only on the server (Watches, the API, topics).
+// The Consensus pipeline does not run here; it runs only on the server
+// (Watches, the API, topics).
 (function () {
   "use strict";
 
@@ -121,7 +121,7 @@
   }
 
   // A refusal's own sentence, or `fallback`; never "HTTP 502" or the
-  // engine's words (App.userError, Apple-Audit H1).
+  // engine's words (App.userError).
   function apiErrorMessage(data, fallback = "Something went wrong. Try again.") {
     return window.App.userError(data && typeof data === "object" ? data : String(data || ""), { fallback });
   }
@@ -159,7 +159,7 @@
       const noSavedViewSelected = !registry.visible()
         && !registry.getSelectedConversationBasis?.();
       // Wie in run-view.js: ein blosses "is_pro_user: false" ohne "tier" ist
-      // seit der Plus-Stufe kein Free-Beleg mehr, sondern nur "nicht Pro".
+      // kein Free-Beleg, sondern nur "nicht Pro".
       // Nur ein ausdrueckliches tier oder ein true darf die Anzeige stellen.
       const tierSignal = normalized.tier
         ?? (normalized.is_pro_user === true ? "pro" : null);
@@ -409,7 +409,7 @@
         system_prompt: context.config.systemPrompt,
         deep_search: context.config.deepSearch,
         mode: context.mode,
-        // Admission: the expected tokens of a typical Compare run.
+        // Admission: the expected cost of a typical Compare run.
         run_mode: "compare",
         // The answer that books last frees what the admission still holds;
         // otherwise the sidebar calls it held for a running message.
@@ -484,7 +484,7 @@
     const useOwnKeys = document.getElementById("useOwnKeysSwitch")?.checked === true;
     const attachments = window.getAttachmentsPayload?.() || [];
     const attachmentMeta = attachments.map(item => ({ name: item.name, mime: item.mime, size: item.size || 0 }));
-    // Files are open to every account (2026-10-02); they only need one.
+    // Files are open to every account; they only need one.
     if (attachments.length && !window.auth?.currentUser) {
       window.App.askToLogIn?.("Log in to send files with your question.", { trigger: document.getElementById("sendButton"), source: "attachments" });
       return null;
@@ -733,7 +733,7 @@
         button._launchTimer = setTimeout(() => button.classList.remove("is-launching"), 800);
       }
       // The arrow comes back the way the stop square came: the same short
-      // fade and scale (Apple audit C12), not in one frame.
+      // fade and scale, not in one frame.
       button.classList.toggle("is-returning", !stop && button.dataset.icon === "stop");
       clearTimeout(button._returnTimer);
       if (button.classList.contains("is-returning")) {

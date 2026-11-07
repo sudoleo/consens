@@ -20,7 +20,7 @@
   // the view leaves that run, so returning to it frames it again.
   let frameKey = '', viewEpoch = 0, framedRunId = null;
   // The run whose projection only carries new words of its answer (follow's
-  // flush): its activity is not drawn again (runtime audit P1).
+  // flush): its activity is not drawn again.
   let paintOnly = null;
   // The local demo (demo.js) plays a scripted Agent turn on the real answer
   // surface, also for guests without Agent access. While it is on screen the
@@ -231,7 +231,7 @@
     // While the list loads, the chip keeps the name it had when the page was
     // left, else the default model's (app-bootstrap.js App.firstFrame): a
     // "Loading models…" in between was one of five faces of the composer in
-    // its first second (Apple-Audit B1).
+    // its first second.
     const waiting = App.firstFrame?.agentModel?.() || "Loading models…";
     const options = ready ? catalog.models : [{ id: "", label: catalogStatus === "failed" ? "Models unavailable" : waiting }];
     const signature = JSON.stringify([options, options.map(locked)]);
@@ -269,8 +269,6 @@
     select.value = ready ? current.model_id || catalog.default_model_id : "";
     // Open also while a response runs: the pick is for the next message (the
     // running one keeps its settings), as the comparison models always were.
-    // Until 2026-10-26 a run locked them, and the Reasoning button below the
-    // composer followed only now and then.
     select.disabled = !ready || !catalog.models.some(selectable);
     select.dataset.running = String(running);
     // Whether the chip's words come from the model list (app-bootstrap.js
@@ -372,7 +370,7 @@
     return Boolean(uid && App.agentAccess?.uid !== uid);
   }
   // A guest (app-bootstrap.js App.isGuest) gets Agent's composer of a new
-  // chat as an account does by default (Max, Apple-Audit H3): the default
+  // chat as an account does by default: the default
   // model's name on the chip, no model list (it needs an account), no notice.
   // Every choice in it asks for the login (model-picker.js, attachments.js,
   // agent-google.js), and Send does too (composer-invite.js).
@@ -382,7 +380,7 @@
   function modeState() {
     return { family: chatFamily(), canUse: canUse(), pending: accessPending(), guest: guest() };
   }
-  // Agent's look before its access is known (Apple-Audit B1, B4): a session
+  // Agent's look before its access is known: a session
   // app-bootstrap.js expects in Agent (html.agent-shell-expected) keeps
   // Agent's composer in a new chat instead of Consensus's for a moment. A
   // look only: nothing is sent until access is known (app-init.js waits).
@@ -393,7 +391,7 @@
     return selectedMode() === "agent" || expectingAgent();
   }
   // While access is unknown only a failed status check speaks (firebase.js
-  // asks again by itself, Apple-Audit B8); a short wait stays quiet.
+  // asks again by itself); a short wait stays quiet.
   function accessBlocker() {
     const check = App.agentAccessCheck;
     if (!check?.failed || check.uid !== window.auth?.currentUser?.uid) return null;
@@ -481,9 +479,6 @@
     document.body.classList.toggle("agent-demo-active", demoView);
     App.renderComposerMode?.();
     if (modeChanged) requestAnimationFrame(() => App.resizeQuestionInput?.());
-    // The switch says "Chat" and the sidebar "New chat" in every mode and for
-    // guests (Max, Apple-Audit H3): the words no longer change once the mode
-    // is known, so the pill keeps its width (B10).
     const panel = document.getElementById("agentAnswer");
     const context = registry.visible();
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
@@ -502,7 +497,7 @@
     if (panel) panel.hidden = demoView ? false : !agent || (!context && !basis);
     if (panel?.hidden) activityHost('');
     if (demoView) return;
-    // With the Google sheet (Package A) this only re-projects cached state; the
+    // With the Google sheet this only re-projects cached state; the
     // connections list loads when the Google entry is first opened.
     App.agentGoogle?.refreshControls?.();
     if (!agent || (!context && !basis)) { App.agentWorkspace?.refresh(null); App.agentGoogle?.refreshActions?.(null); }
@@ -532,9 +527,9 @@
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_watch : null,
         chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId });
       // A reopened chat's answer has its Watch pill too, with the question of
-      // this turn, never one left from the chat shown before (J20). Since
-      // 2026-11-03 it starts a Watch in this chat (watch-sheet.js); a
-      // temporary chat keeps nothing, so it has none.
+      // this turn, never one left from the chat shown before. It starts a
+      // Watch in this chat (watch-sheet.js); a temporary chat keeps nothing,
+      // so it has none.
       App.watch?.answerButton?.(document.getElementById('agentAnswerBody'), {
         question: basis.currentTurn?.question || basis.question, chatId: basis.chatId,
         eligible: basis.currentTurn?.status === 'completed' && !basis.currentTurn?.agent_watch && basis.temporary !== true });
@@ -573,7 +568,7 @@
     syncPendingReview();
   }
   // The models a saved turn compared, from its review: its icons stand at
-  // once, before the activity list loads (agent-delegation.js, Apple audit A10).
+  // once, before the activity list loads (agent-delegation.js).
   function reviewModels(review) {
     const models = new Map();
     for (const comparison of review?.comparisons || []) {
@@ -599,7 +594,7 @@
   // (markdown-stream.js). Once the text is fixed it is rendered in full, like
   // a saved answer, so review markers and cross-block Markdown are exact.
   // Both morph into the nodes on screen: a link in the answer stays the same
-  // link and a selection stays (Apple audit D4, A6). Where it can draw,
+  // link and a selection stays. Where it can draw,
   // stream-reveal.js paces the streamed text and brings its letters into
   // view; the full render then follows its last word.
   function renderAnswerBody(body, text, mode) {
@@ -659,8 +654,7 @@
   // quiet line says it in the activity's words (agent-activity.js
   // reviewStage), as tall as that row, so the row takes its place in the same
   // frame without a jump (agent-chat.css). The row then shows the reviewers
-  // at work (agent-review.js reviewerMarks). Until 2026-11-01 a light band
-  // passed over the answer the whole time.
+  // at work (agent-review.js reviewerMarks).
   function setAnswerChecking(body, checking, { fade = true } = {}) {
     if (!body || body.classList.contains('is-answer-checking') === checking) return;
     body.classList.toggle('is-answer-checking', checking);
@@ -707,7 +701,7 @@
   }
   const BOOKMARK_FAILURES = new Set(['bookmark_count_limit', 'bookmark_storage_limit', 'bookmark_too_large', 'bookmark_unavailable']);
   // Budget refusals carry a stable code; show a plain next step in the
-  // reader's unit, the allowance, never ledger terms (Apple-Audit H4).
+  // reader's unit, the allowance, never ledger terms.
   function failureNotice(failure, review, text, { retry = true } = {}) {
     const code = failure?.code || failure?.error_code;
     if (code === 'agent_token_reservation') {
@@ -716,13 +710,13 @@
       actions: [['choose-model', 'Try a smaller model'], ['compare', 'Choose models']] };
     }
     if (code === 'agent_tokens_exhausted') return { text: `You’ve used today’s allowance. It resets at ${resetTime()}.` };
-    // A pause nobody decided (A-R4): why it stopped, also under a partial answer.
+    // A pause nobody decided: why it stopped, also under a partial answer.
     if (code === 'hold_timeout') {
       return { text: 'Stopped after 30 minutes without your decision.', actions: retry ? [['retry', 'Retry']] : [] };
     }
     // The answer is complete; only its sidebar entry was not saved. Said even
     // under a checked answer, which failureNote treats as settled: the
-    // reader must know to free space and recover it (2026-10-19).
+    // reader must know to free space and recover it.
     if (BOOKMARK_FAILURES.has(code)) return { text: failure.error || failure.message || '' };
     const note = App.agentReview?.failureNote?.(failure, review, text);
     // Any other stop (provider busy, timeout, lost connection) can be sent
@@ -780,7 +774,7 @@
   // The live surface as the page first had it (#threadAsk, #agentAnswer and
   // their IDs, a JS contract). When a follow-up starts, the turn on screen
   // moves into the history as it is: the same nodes, with what the reader
-  // opened, the cards under it and its marks (Apple audit A4); a fresh copy
+  // opened, the cards under it and its marks; a fresh copy
   // of the live surface takes its place for the new message. Rebuilding the
   // turn instead shifted it sideways, closed "Thought for …" and let its
   // logos fly in again.
@@ -816,7 +810,7 @@
       panel.replaceWith(freshPanel);
       // Retry, "Choose another model" and "Recover saved answer" act on the
       // run on screen: the turn in the history keeps its words, not these
-      // buttons (review B2; a saved failure there reads as one, thread-history.js).
+      // buttons (a saved failure there reads as one, thread-history.js).
       panel.querySelector("#agentAnswerErrorActions")?.remove();
       panel.querySelector("#agentRecover")?.remove();
       for (const el of [ask, ...ask.querySelectorAll("[id]"), panel, ...panel.querySelectorAll("[id]")]) {
@@ -874,9 +868,9 @@
     const activity = activityHost(unsent ? `${context.runId}:unsent` : context.runId);
     // What the activity reads of the answer: whether there is one (its lines
     // give way, "Writing answer…") and whether it is the version the review
-    // holds. New words alone change neither: until 2026-10-30 every 100 ms
-    // of streamed answer drew the whole activity again (P1: 120 ms a frame
-    // at 150 steps on a slowed phone).
+    // holds. New words alone change neither: drawing the whole activity again
+    // for every 100 ms of streamed answer cost 120 ms a frame at 150 steps
+    // on a slowed phone.
     const answer = state.text || state.streamText || "";
     const answerReview = state.completedTurn?.agent_review || context.metadata.agentReview;
     const answerKey = `${Boolean(answer)}:${Boolean(answer.trim())}:${
@@ -916,8 +910,8 @@
     setAnswerChecking(answerBody, checking);
     if (checking) context.metadata.revealMarks = true;
     // The row under the fixed answer stands while the reviewers work, Notes
-    // waiting and Sources already counted (agent-review.js renderAudit; UX
-    // audit B3): the end of the review changes a word, not the row.
+    // waiting and Sources already counted (agent-review.js renderAudit): the
+    // end of the review changes a word, not the row.
     if (!running || framed || fixed) {
       const live = running && !fixed;
       App.agentReview?.render(answerBody, live ? null : state.completedTurn?.agent_review || liveReview,
@@ -938,7 +932,7 @@
     App.agentWatch?.render(answerBody, { key: context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null,
       chatId: context.metadata.chatId, turnId: state.completedTurn?.id || state.completedTurn?.turn_id });
-    // The Watch pill on every finished answer (watch.js; Apple-Audit J20).
+    // The Watch pill on every finished answer (watch.js).
     // It is not the Agent offering one: a prepared Watch has its card
     // instead. The pill starts a Watch in this chat (watch-sheet.js): none
     // in a temporary chat, which keeps nothing; no share there either, it
@@ -960,7 +954,7 @@
     if (!running) syncPendingReview();
     const delegated = context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation;
     // Before the server named the new turn, a chat whose activity panel is
-    // open keeps it open, waiting (agent-delegation.js, Apple audit A9).
+    // open keeps it open, waiting (agent-delegation.js).
     // Every run writes a work log (admins only, agent-work-log.js).
     App.agentDelegation?.project(delegated ? { chatId: context.metadata.chatId,
       turnId: state.completedTurn?.id || context.metadata.agentTurnId,
@@ -1141,7 +1135,7 @@
     return true;
   }
   // Shortcuts named by a composer notice or an answer error. Google actions
-  // belong to agent-google.js (Package A) and stay optional.
+  // belong to agent-google.js and stay optional.
   function runNoticeAction(action) {
     if (action === 'compare') App.openModelPicker?.(document.getElementById('consensusModelDropdown'));
     else if (action === 'choose-model') {
@@ -1181,16 +1175,15 @@
     } });
   }
   // Handing the workspace's browser back with its button (workspace-view.js,
-  // "consensio:workspace-handback") means the user expects the agent to go on
-  // (Max, 2026-10-29). A run that waits for them (ask_user, a takeover) goes
+  // "consensio:workspace-handback") means the user expects the agent to go
+  // on. A run that waits for them (ask_user, a takeover) goes
   // on by itself. Otherwise the chat on screen gets "Done in the browser." as
   // their next message: at once, or once its running message has succeeded,
   // unless that message used the workspace after the hand-back. Closing the
   // view or a lapsed takeover hands back without a word.
   // The run it concerns may be another chat's than the one on screen: the
   // workspace serves one chat at a time (agent_workspace.claim), the one
-  // whose running message used it. Until 2026-11-06 only the visible run
-  // counted, and a hand-back from chat B sent the words into B.
+  // whose running message used it.
   const WORKSPACE_TOOL = /^(vm_|browser$|ask_user$|request_domain$|github_)/;
   const usedWorkspace = (items = []) => items.some(item => item?.kind === "tool" && WORKSPACE_TOOL.test(String(item.name || "")));
   let handback = null;
@@ -1223,8 +1216,8 @@
     const context = registry.get(runId);
     const later = (context?.metadata.agentActivity || []).slice(seen);
     // A message the user typed meanwhile goes out instead (flushQueue): their
-    // own words say more. Until 2026-11-04 the hand-back went first, and the
-    // waiting message, which then found a response running, was lost.
+    // own words say more. A hand-back sent first would leave the waiting
+    // message to find a response running, and it would be lost.
     if (context?.status !== "succeeded" || registry.visible()?.runId !== runId || queueOf(context).length
         || usedWorkspace(later)) return;
     // After the run's own completion code: its saved turn becomes the chat's
@@ -1282,11 +1275,10 @@
     // (seeded before the first paint in app-bootstrap.js), as the greeting does.
     if (!looksAgent() || window.userCanAskQuestions?.() === false) return;
     const basis = registry.getSelectedConversationBasis({ includeHistory: false });
-    // While a card waits above it, the field says what it does now (UX audit
-    // 2026-10-29 C3, C11): words go to the agent with the card's answer
-    // (steer), or, for a key, into the card's key field. Short enough for
-    // a phone beside the reviewers (H2: "Write your next message…" ended
-    // mid-word). A new chat has the words of every empty field (App.askPlaceholder).
+    // While a card waits above it, the field says what it does now: words go
+    // to the agent with the card's answer (steer), or, for a key, into the
+    // card's key field. Short enough for a phone beside the reviewers
+    // ("Write your next message…" ended mid-word). A new chat has the words of every empty field (App.askPlaceholder).
     input.placeholder = running ? runningPlaceholder(openHold(registry.visible())) : basis?.chatId && !basis.continuationUnavailable
       ? 'Ask a follow-up' : App.temporaryChat?.armed?.() ? 'Ask in a temporary chat'
         : App.askPlaceholder?.() ?? input.placeholder;
@@ -1378,7 +1370,8 @@
     writePending(uid, list);
   }
   // The VM back to how it was before this message (routers/agent.py
-  // restore_agent_vm, admins): asked first, since later changes are lost.
+  // restore_agent_vm, accounts with the workspace): asked first, since later
+  // changes are lost.
   async function restoreVm(chatId, turnId) {
     const confirmed = await App.confirm?.({ title: "Restore the workspace?", danger: true, confirmLabel: "Restore",
       body: "Your workspace goes back to how it was before this message: every chat’s folder and the browser with the sites it is logged in to. Everything changed there since is lost, and running background processes stop." });
@@ -1398,8 +1391,7 @@
     App.showPopup?.(message);
   }
   // A message typed while a response runs (Enter or Send, app-init.js,
-  // query-send.js): never lost, always on screen (2026-10-26; before, it
-  // went nowhere without the VM and showed nothing until the agent read it).
+  // query-send.js): never lost, always on screen.
   // A run that reads messages (Agent VM, routers/agent.py add_agent_note)
   // takes it before its next step, like typing to Claude Code while it works;
   // the activity then shows it under "You". Any other waits in the queue
@@ -1410,9 +1402,8 @@
     return context?.metadata ? (context.metadata.queue ||= []) : [];
   }
   // The waiting messages live in the run's pending record too, so a reload
-  // keeps them (A-B4; before, they lived only in memory, also everything
-  // typed during the final review): what the run did not read goes out after
-  // it, as without a reload. Called after every change of the queue.
+  // keeps them, also everything typed during the final review: what the run
+  // did not read goes out after it, as without a reload. Called after every change of the queue.
   function persistQueue(context) {
     const uid = context?.auth?.uid;
     if (!uid) return;
@@ -1442,9 +1433,7 @@
   // A running response reads messages where the account has the workspace
   // (routers/agent.py add_agent_note). Once the answer is fixed (a version
   // under review) the run takes no more steps: a message then waits for its
-  // end like any other (2026-10-27; before, it went to the run as "Read
-  // before the next step" and came back only when the review was done).
-  // A temporary chat too, since 2026-11-01 evening: it has the account's
+  // end like any other. A temporary chat too: it has the account's
   // workspace like any chat.
   function readsMessages(context) {
     return document.body.classList.contains("viewer-has-workspace")
@@ -1465,8 +1454,8 @@
     const input = document.getElementById("questionInput");
     if (!steering() || !input) return false;
     const text = String(input.value).trim();
-    // The agent asked for a key and its card is open (A-S7): the field never
-    // sends a message then (its placeholder says so, C11). Its words go, as
+    // The agent asked for a key and its card is open: the field never
+    // sends a message then (its placeholder says so). Its words go, as
     // dots, into the card's key field, the card says so for a moment, and
     // the user saves them there or answers "Not now". Only the open card
     // decides, nothing guesses at the words: a key someone writes into a
@@ -1532,7 +1521,7 @@
   // agent_loop.activity); matched as "note-<id>" alone, a read message
   // stayed queued and went out again after the response. The run can read
   // it before this page has the POST's answer with the id: kept as read, so
-  // deliver drops it then (before, it went out again as a new, paid message).
+  // deliver drops it then instead of sending it again as a new, paid message.
   function delivered(context, event) {
     const match = typeof event?.id === "string" ? /(?:^|\/)note-([^/]+)$/.exec(event.id) : null;
     if (!event?.from_user || !match) return;
@@ -1558,9 +1547,7 @@
     renderHold();
     if (!queue.length || !registry.isAuthCurrent(context)) return;
     // A logout empties the field for whoever uses this browser next
-    // (resetLoadedRunAfterLogout): said, never put back there. Until
-    // 2026-11-03 it went into the field, with a popup saying so, and was
-    // gone a moment later.
+    // (resetLoadedRunAfterLogout): said, never put back there.
     if (reason === "logout") {
       App.showPopup?.("Your waiting message was not sent: you logged out before the response ended.");
       return;
@@ -1638,24 +1625,23 @@
     host.hidden = !queue.length;
   }
   // A reviewer paused the work for the user (agent_audit.py halt,
-  // DelegationLoop.request_hold; since 2026-10-26): one card above the field
+  // DelegationLoop.request_hold): one card above the field
   // until the user decides. The agent never learns of it: going on changes
   // nothing for it, a message written now reaches it like any message
   // written while it works, and Stop is the Stop button. Without a decision
   // the response stops after timeout_seconds (30 min).
-  // A pause with `gate` (since 2026-10-27, agent_gate.py) comes before a step
+  // A pause with `gate` (agent_gate.py) comes before a step
   // that acts outside the workspace runs: it runs only if the user lets it.
   // "unchecked": not every reviewer could answer for it (one that failed or
   // paused never counts as a go), so no reviewer and no reason.
   const holdKinds = { safety: "Security-critical step", harm: "Possible damage", off_goal: "Far off your request",
     injection: "Prompt injection", unchecked: "Not checked" };
   let holdTimer = null;
-  // Every card names its deadline only in its last minutes, as the agent's
-  // own questions did (UX audit 2026-10-29 C7): a reviewer's pause said
-  // "Stops in 30 minutes" from its first second, a threat that did not count
-  // for 25 minutes.
+  // Every card names its deadline only in its last minutes: "Stops in 30
+  // minutes" from the first second is a threat that does not count for 25
+  // minutes.
   const CLOCK_MINUTES = 5;
-  // A move of the main field's words into the key field says so this long (C11).
+  // A move of the main field's words into the key field says so this long.
   const MOVED_NOTE_MS = 6000;
   function openHold(context) {
     const hold = context?.metadata?.hold;
@@ -1669,8 +1655,8 @@
     const minutes = Math.ceil(left / 60000);
     if (minutes > CLOCK_MINUTES) return "";
     // What happens then: the agent's own question goes on without an
-    // answer, a domain stays closed and the work goes on (C8; the card said
-    // "Stops"), a reviewer's pause stops the response.
+    // answer, a domain stays closed and the work goes on, a reviewer's
+    // pause stops the response.
     if (hold.ask) {
       return minutes > 1 ? App.t("The agent waits {count} more minutes", { count: minutes })
         : "The agent waits less than a minute more";
@@ -1684,8 +1670,8 @@
   }
   // A decision's POST (…/hold, …/secret) within DECISION_TIMEOUT_MS: on a
   // half-open connection it hung for minutes, every button of the card
-  // locked and nothing said so (A-B3). The pressed button says it is on its
-  // way meanwhile (C13), and the Stop button beside the field stays a Stop.
+  // locked and nothing said so. The pressed button says it is on its
+  // way meanwhile, and the Stop button beside the field stays a Stop.
   const DECISION_TIMEOUT_MS = 15000;
   async function postDecision(context, path, body) {
     const url = `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/${path}`;
@@ -1702,14 +1688,14 @@
   }
   // A refusal the user can act on says the server's own sentence (in their
   // language); anything else, a lost connection or an internal error, the
-  // card's. In the card, where the user acted, not in a toast (C12: a
-  // toast said "Internal error" and the card looked as before).
+  // card's. In the card, where the user acted, not in a toast (a toast
+  // said "Internal error" and the card looked as before).
   const DECISION_REFUSALS = new Set(["notes_full", "invalid_action", "vm_unavailable"]);
   function refusal(data, fallback) {
     return DECISION_REFUSALS.has(data.code) && typeof data.error === "string" && data.error ? data.error : fallback;
   }
   // "choose" carries the place of the answer picked on a choice card, and
-  // every decision the card's `revision` the user saw (since 2026-11-07): a
+  // every decision the card's `revision` the user saw: a
   // reviewer's halt that joined the card after it opens as the next card
   // instead of counting as decided with it.
   async function decideHold(context, action, text = "", choice = null) {
@@ -1721,8 +1707,8 @@
     const revision = Number.isInteger(hold.revision) && hold.revision > 0 ? hold.revision : 0;
     const { response, data } = await postDecision(context, "hold",
       { id: hold.id, action, text, revision, ...(choice === null ? {} : { choice }) });
-    // Decided, or the response or the pause is over (decided in another tab,
-    // A-B5): the card goes, the activity keeps the record.
+    // Decided, or the response or the pause is over (decided in another
+    // tab): the card goes, the activity keeps the record.
     if (response && (response.ok || data.code === "not_running" || data.code === "hold_over")) {
       holdDone(context, hold);
       return true;
@@ -1747,8 +1733,8 @@
     hold.failed = failed;
     if (context.metadata.hold?.id === hold.id) Object.assign(context.metadata.hold, { deciding: null, failed });
   }
-  // The key the agent asked for (ask_user with secret, agent_secrets.py;
-  // since 2026-10-29): it goes from this field to the workspace alone (POST
+  // The key the agent asked for (ask_user with secret, agent_secrets.py):
+  // it goes from this field to the workspace alone (POST
   // .../secret), never into the chat, and the field is no form, so nothing
   // ever sends it by GET. Saved, the server answers the card. A text area
   // whose letters show as dots, not a password field: Chrome offered to save
@@ -1806,11 +1792,10 @@
   }
   // Why the work waits, one line each (data-reason). A reviewer's pause: the
   // kind first, then the reviewer's own sentence (already in the user's
-  // language) and, quietly after it, who said it (UX audit C10: the kind
-  // stood once in a line of its own for all reasons, every name twice). A
+  // language) and, quietly after it, who said it. A
   // domain request: what the reviewers made of it (no concern, their
   // concern, or that not every one could look). A second halt on the open
-  // pause comes as the same pause with more `reasons` (A-S2): renderHold
+  // pause comes as the same pause with more `reasons`: renderHold
   // swaps these lines and the title in place, so a decision on its way and
   // the words in the field stay.
   function holdReasons(hold) {
@@ -1862,14 +1847,14 @@
     }
     // "unchecked": no reviewer paused it, none could answer for it; what the
     // step would do, in a sentence. A reviewer that pauses on it later stands
-    // under its name. A memory change waited here until 2026-11-02.
+    // under its name.
     if (hold.kind === "unchecked" && !listed.length) return [plain("This step runs only with your OK.")];
     return (listed.length ? listed : [own]).map(said);
   }
   function reasonsKey(hold) {
     return JSON.stringify([hold.reason || "", hold.review || "", holdReasons(hold).map(item => [item.reviewer || "", item.reason || ""])]);
   }
-  // The title counts who paused (C10: two reviewers read "A reviewer paused
+  // The title counts who paused (two reviewers read "A reviewer paused
   // the work"). Whole sentences, so every language says them its way.
   function holdTitle(hold) {
     if (hold.kind === "unchecked") return "Not every reviewer could check this step";
@@ -1892,8 +1877,8 @@
     return button;
   }
   // What a model step was about to do, in a sentence (agent_audit.halt_step
-  // step_calls, C1): before, 'browser: {"action": "click", "ref": "e14"}'
-  // and a memory change's whole JSON. The element as the browser's read
+  // step_calls), not 'browser: {"action": "click", "ref": "e14"}' or a
+  // memory change's whole JSON. The element as the browser's read
   // named it; the words are data. Any other call stays code ("").
   function callWords(call) {
     const text = String(call.text || ""), target = String(call.target || "");
@@ -1923,7 +1908,7 @@
   // "Memory", "In the file tabelle.csv"), and the words themselves
   // (agent_audit.halt_step: the reviewer's quote where the entry holds it).
   // A command or a file's rows stand in the code field and scroll inside it;
-  // a cut line fades out (C17). A pause saved before 2026-10-27 has no
+  // a cut line fades out. A pause saved before 2026-10-27 has no
   // step_kind: "name: text".
   function holdEvidence(hold) {
     const box = document.createElement("figure");
@@ -1974,22 +1959,18 @@
     return box;
   }
   // A code field longer than it shows fades out at its cut instead of
-  // ending in half a line, until it is scrolled to its end (C17).
+  // ending in half a line, until it is scrolled to its end.
   function fadeCut(field) {
     const cut = () => field.classList.toggle("is-cut", field.scrollTop + field.clientHeight < field.scrollHeight - 1);
     field.addEventListener("scroll", cut, { passive: true });
     cut();
   }
-  // One family (UX audit 2026-10-29 C2): every card above the field is
-  // built like the agent's own questions from the design pass of 2026-10-29
-  // (438aacdc). Its glyph hangs in a tinted circle left of the words;
+  // One family: every card above the field is built like the agent's own
+  // questions. Its glyph hangs in a tinted circle left of the words;
   // title, words, evidence and the decision share one edge. One filled
-  // button and at most one link (C3): the field below takes a message to the
+  // button and at most one link: the field below takes a message to the
   // agent (steer: its placeholder says so while a card is open), and Stop is
-  // the Stop button there. Before, the reviewers' and the domain's cards
-  // were an older family with a meta line, up to three links beside the
-  // button ("Write to the agent" opened a second field over the first, and
-  // "Stop" stood above Stop) and a deadline from the first second.
+  // the Stop button there.
   const holdGlyphs = {
     // Two bars: the work pauses.
     pause: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6.5v11M15 6.5v11" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"></path></svg>',
@@ -2024,8 +2005,8 @@
     return { card, body, alert, title };
   }
   // The card's one quiet line under its words: the deadline in its last
-  // minutes, a decision that did not go through (C12), or what just
-  // happened to the main field's words (C11). Said when it changes.
+  // minutes, a decision that did not go through, or what just
+  // happened to the main field's words. Said when it changes.
   function cardStatus() {
     const status = document.createElement("p");
     status.className = "agent-hold-clock";
@@ -2039,11 +2020,11 @@
     actions.append(...buttons.filter(Boolean));
     return actions;
   }
-  // The agent asks for a domain its workspace may reach (since 2026-10-27,
-  // agent_domains.py, DelegationLoop._domain_wait): the user decides every
+  // A request for a domain its workspace may reach (request_domain; the
+  // agent no longer has that tool, see agent_gate.py): the user decides every
   // one, after the reviewers judged it. The domain and the agent's reason
   // are data (untranslated): the reason as the quiet line under the title,
-  // like an ask card's request (C16; it stood in the code field). "Allow
+  // like an ask card's request. "Allow
   // for this chat" is the decision "continue", "Don't allow" is "deny".
   function domainCard(context, hold) {
     const { card, body, alert, title } = cardShell("agent-domain-card", holdGlyphs.domain);
@@ -2065,11 +2046,11 @@
       holdButton("Don’t allow", "text-link agent-hold-deny", () => decideHold(context, "deny"))));
     return card;
   }
-  // The agent hands a step to the user (ask_user, agent_ask.py; since
-  // 2026-10-29): "browser", their turn in the workspace's browser, which
+  // The agent hands a step to the user (ask_user, agent_ask.py):
+  // "browser", their turn in the workspace's browser, which
   // handing it back answers (the run sees it on the server); "confirm", their
   // yes or no to a step in their name; "secret", a key for its commands;
-  // "choice", one of two to four answers the agent named (since 2026-10-30);
+  // "choice", one of two to four answers the agent named;
   // "takeover", the user took the browser over on their own and the agent's
   // next call waits for it. The agent's request is data (untranslated). The
   // one button follows who has the browser in this window
@@ -2112,7 +2093,7 @@
       }));
     } else if (kind === "secret") {
       // The field below takes no words for the agent while this card is
-      // open (steer, A-S7): what it holds moves into the key field. "Not
+      // open (steer): what it holds moves into the key field. "Not
       // now" is the answer without a key.
       const field = secretField(context, hold);
       const input = field.querySelector(".agent-ask-secret-input");
@@ -2144,7 +2125,7 @@
       "btn agent-hold-continue", () => decideHold(context, "continue"))));
     return card;
   }
-  // The card goes the way it came (C18): it fades and sinks 3px, then makes
+  // The card goes the way it came: it fades and sinks 3px, then makes
   // room. Focus that was on it moves to the field below, for a keyboard and
   // a mouse; never under a finger, where the field would raise the keyboard.
   function leaveHold(host) {
@@ -2168,7 +2149,7 @@
     if (App.motion?.leave) App.motion.leave(card, gone);
     else gone();
   }
-  // The room the card may take on a phone (C4): the screen between the
+  // The room the card may take on a phone: the screen between the
   // header and the rest of the fixed composer, measured, since the field
   // grows when it opens and the keyboard takes its share of the screen
   // (agent-chat.css --hold-room). The card scrolls in itself beyond it.
@@ -2192,7 +2173,7 @@
     const host = document.getElementById("agentHold");
     if (!host) return;
     const context = registry.visible();
-    // The run on screen decides, never the mode switch (A-B2): a pause is
+    // The run on screen decides, never the mode switch: a pause is
     // the user's to decide whatever the next message would run with.
     const hold = openHold(context);
     clearTimeout(holdTimer);
@@ -2232,7 +2213,7 @@
       host.dataset.reasons = reasons;
       host.replaceChildren(holdCard(context, hold));
     } else if (host.dataset.reasons !== reasons) {
-      // The same pause with another reason (a second halt, A-S2): only its
+      // The same pause with another reason (a second halt): only its
       // lines and its count change, the card with its decision stays.
       host.dataset.reasons = reasons;
       const old = [...host.querySelectorAll("[data-reason]")];
@@ -2249,7 +2230,7 @@
     // The one quiet line: a failed decision first, then the words just moved
     // into the key field, then the deadline in its last minutes. While a
     // decision is on its way it keeps what it said: the pressed button says
-    // it (C13; "Sending…" here grew the card by a line).
+    // it ("Sending…" here grew the card by a line).
     const status = host.querySelector(".agent-hold-clock");
     const moved = hold.movedUntil > Date.now() ? "Moved into the key field. Save stores it." : "";
     const said = hold.failed || moved || (hold.deciding ? null : holdClock(hold));
@@ -2267,7 +2248,7 @@
     for (const input of host.querySelectorAll(".agent-ask-secret-input")) input.disabled = Boolean(hold.deciding);
     holdTimer = setTimeout(renderHold, moved ? Math.max(100, hold.movedUntil - Date.now()) : 15000);
   }
-  // Stop is explicit: closing the connection no longer ends a turn. The
+  // Stop is explicit: closing the connection does not end a turn. The
   // request identity reaches the turn before its id is known, and a Stop
   // that overtakes its own message keeps it from starting at all. It is
   // retried (backoff, and at once when the network returns) until the server
@@ -2325,7 +2306,7 @@
     flushQueue(context, reason);
   }
   // After a reload: follow this tab's turns that were still running. Also
-  // when the mode switch stands on Compare (A-B2): a turn that may wait for
+  // when the mode switch stands on Compare: a turn that may wait for
   // the user is followed whatever the next message would run with.
   function resumePending() {
     const uid = window.auth?.currentUser?.uid;
@@ -2347,8 +2328,8 @@
         // Followed meanwhile: the chat was opened while its turn runs (followRunning).
         if (registry.list().some(run => run.requestIdentity === record.body.client_request_id)) continue;
         // A message that waited for the response was dropped with the record
-        // when the page came back after it (a phone that discarded the tab,
-        // bug hunt 2026-11-01): a saved turn is shown, and the message goes
+        // when the page came back after it (a phone that discarded the tab):
+        // a saved turn is shown, and the message goes
         // out after it as it would have; one that is gone says the words.
         const waiting = restoreQueue(record.queue);
         if (state === "over" || (state === "long over" && !waiting.length)) {
@@ -2367,7 +2348,7 @@
   // first, quietly (recover_only starts nothing): only a turn still running,
   // or one that ended moments ago, takes the screen. A turn long over or one
   // the server no longer knows took it on every reload, the field slid down
-  // and back up, and its record stayed (2026-10-26). Without an answer (no
+  // and back up, and its record stayed. Without an answer (no
   // network) it is followed as before. "Moments ago" counts from the turn's
   // end, not from sending: a VM run of more than 10 minutes that ended just
   // before the reload counted as long over, and its answer stayed away.
@@ -2396,11 +2377,10 @@
     if (rest.length !== list.length) writePending(uid, rest);
   }
   // A chat opened while its newest turn runs, started in another tab or on
-  // another device (A-B2): this tab follows it like its own after a reload,
+  // another device: this tab follows it like its own after a reload,
   // by the turn's request identity (GET /bookmarks/{id}/conversation names
   // it as `running`, with the settings its recover_only request repeats), so
-  // its pause card shows here too. Before, the chat showed its last saved
-  // turn, nothing followed it, and a pause ran into its timeout unseen.
+  // its pause card shows here too, instead of running into its timeout unseen.
   // Asked quietly first: only a turn still running takes the screen, and
   // only while its chat is still the one on screen.
   const followingElsewhere = new Set();
@@ -2468,7 +2448,7 @@
         usage: { status: "simulation", key: null },
       });
     } catch (_) { return; }
-    // What waited for this run before the reload waits again (A-B4).
+    // What waited for this run before the reload waits again.
     context.metadata.queue = restoreQueue(record.queue);
     context.controllers.query = new AbortController();
     const signal = context.controllers.query.signal;
@@ -2513,7 +2493,7 @@
   async function follow(context, body, signal, { headers = null, post = true } = {}) {
     let timer = null, resumeTracked = false, lastByte = Date.now(), tail = false;
     // One projection per 100 ms for what the stream brings; whether anything
-    // but the answer's words came since the last (P1, project's paintOnly).
+    // but the answer's words came since the last (project's paintOnly).
     let activityDirty = false;
     const flush = () => {
       timer = null;
@@ -2528,7 +2508,7 @@
     };
     // Streamed text is painted once per frame, apart from the rest of the
     // projection (every 100 ms): the answer flows instead of jumping on by a
-    // bundle of words ten times a second (Apple audit D4). A frame that took
+    // bundle of words ten times a second. A frame that took
     // long (a long table or list still growing) spaces out the next ones.
     let paintFrame = 0, paintTimer = 0, paintAfter = 0;
     const paint = () => {
@@ -2538,7 +2518,7 @@
       const answer = document.getElementById("agentAnswerBody");
       if (!answer) return;
       // The answer's first words are projected in this frame, not on the
-      // 100-ms beat (P6, 2026-11-05): with them the live lines hand over to
+      // 100-ms beat: with them the live lines hand over to
       // the answer (project(), agent-activity.js handoff). Further words keep
       // the beat for the rest of the projection.
       if (!answer.dataset.markdown?.trim()) {
@@ -2629,8 +2609,8 @@
         context.metadata.agentReview = event.review;
         registry.update(context.runId, () => {});
       } },
-      // A reviewer paused the work for the user (renderHold), or the pause
-      // is over (null). A frame for a pause decided here is late news.
+      // A pause for the user, a reviewer's or the agent's own (renderHold),
+      // or the pause is over (null). A frame for a pause decided here is late news.
       hold: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         const hold = event.hold && typeof event.hold.id === "string" ? event.hold : null;
@@ -2800,8 +2780,7 @@
   // answer); its reviewers still review. Their frames come on the same
   // stream, or the poll behind it, until the run's end: each lands on the
   // turn wherever it stands now, under the live answer or in the history
-  // after the next message took the live surface. Until 2026-11-01 the next
-  // message waited for this end (Send after this response).
+  // after the next message took the live surface.
   const REVIEW_TAIL_MS = 180000;
   const structuredCopy = value => (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
   function followReview(context, { streaming = null, live = null } = {}) {
@@ -2856,7 +2835,7 @@
     const body = node?.querySelector(".consensus-answer-body");
     if (!body) return;
     // Its activity too, before the row (as thread-history.js): it still said
-    // "Reviewing the answer…" (bug hunt 2026-11-02).
+    // "Reviewing the answer…".
     const activity = node.querySelector(".agent-answer-activity");
     if (activity) App.agentActivity?.renderTurn(activity, saved);
     App.agentReview?.render(body, saved.agent_review, { sources: saved.sources, events: saved.agent_activity,
@@ -2892,7 +2871,7 @@
   }
   // The words of a failed run: a refusal's own sentence, otherwise what
   // happened in plain words (offline, unreachable, too slow), never the
-  // engine's ("Failed to fetch", "Load failed", Apple-Audit H1).
+  // engine's ("Failed to fetch", "Load failed").
   const NOT_SENT_ALREADY_SAYS = new Set(["offline", "unreachable", "timeout", "unknown"]);
   function failRun(context, error) {
     // Flat ({error, code}) or wrapped ({error: {error, error_code}}, {detail}).
@@ -2922,14 +2901,14 @@
       context.metadata.recoverable = false;
       context.metadata.restoreDraft = true;
     } else if (code === 'hold_timeout' && !context.consensus.streamText) {
-      // A pause nobody decided ends the run with nothing saved to check
-      // (UX audit C15): Retry stays, "Check saved answer" would find nothing.
+      // A pause nobody decided ends the run with nothing saved to check:
+      // Retry stays, "Check saved answer" would find nothing.
       context.metadata.recoverable = false;
     }
     context.bookmark.status = "failed";
     // Nothing reviews any more: the review ends here as it will read after a
     // reload (agent_runs.finish_run), not "Reviewing the answer…" until the
-    // chat is opened again (A-B5). A finished review keeps its result.
+    // chat is opened again. A finished review keeps its result.
     const review = context.metadata.agentReview;
     if (review && !["succeeded", "partial", "off", "failed", "cancelled", "missing"].includes(review.status)) {
       context.metadata.agentReview = { ...review, status: review.status === "required" ? "missing" : "failed",
@@ -2943,7 +2922,7 @@
   async function send(recovery = null, { retry = null } = {}) {
     if (recovery) return recoverAnswer(recovery);
     if (!canUse()) {
-      // A guest is asked in the login dialog (Apple-Audit H2); an account
+      // A guest is asked in the login dialog; an account
       // without Agent hears why.
       if (!window.auth?.currentUser) App.askToLogIn?.("Log in to use Agent.", { trigger: document.getElementById("sendButton"), source: "agent" });
       else App.showPopup?.("Agent isn’t available on your account yet.");
@@ -2985,8 +2964,7 @@
     let refused = null;
     // The run is created and started as one change: the registry projects it
     // once (run-registry.js batch). Two projections in this click read each
-    // other's half-written layout and held the first frame back
-    // (Apple-Audit D3).
+    // other's half-written layout and held the first frame back.
     const begin = () => {
       try {
         context = registry.create({
@@ -3125,8 +3103,8 @@
       if (demoView) { document.getElementById("agentAnswer")?.removeAttribute("hidden"); renderShell(true); return activityHost("demo"); }
       renderShell(true); return null;
     } };
-  // Coming back to the tab refreshes a figure older than a minute; switching
-  // between editor and browser no longer fetches it every time.
+  // Coming back to the tab refreshes a figure older than a minute, so
+  // switching between editor and browser does not fetch it every time.
   function refreshVisibleBudget() {
     if (Date.now() - budgetSeenAt < 60000) return;
     if (document.visibilityState !== 'hidden' && canUse() && selectedMode() === 'agent' && catalogStatus === 'ready') refreshBudget(catalogOwner);
@@ -3140,7 +3118,7 @@
   window.addEventListener("consensio:run-mode-change", () => renderShell());
   // The session is known (signed in, or ended): the look the page expected
   // gives way to the real one, e.g. no Agent chip for a session that ended
-  // while the page still expected it (review 1).
+  // while the page still expected it.
   window.addEventListener("consensio:auth-state", () => renderShell());
   // The user took the workspace's browser over or handed it back (workspace-view.js):
   // the agent's browser card offers the other way.
@@ -3183,7 +3161,7 @@
   // The buttons under a failed answer live on the live surface, which a
   // follow-up replaces by a fresh copy (liveTurn.take). A listener bound to
   // the first copy went with it: after the first follow-up Retry & Co. did
-  // nothing (review B2). One listener on the document reaches every copy.
+  // nothing. One listener on the document reaches every copy.
   document.addEventListener("click", event => {
     if (event.target.closest?.("#agentRecover")) {
       const context = registry.visible();

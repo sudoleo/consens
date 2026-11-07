@@ -1,7 +1,7 @@
 // =====================================================================
 // tooltip.js
-// App.tooltip: one way the app explains a mark that has no words of its own
-// (Apple audit E12). The browser's own title tooltips came late, looked
+// App.tooltip: one way the app explains a mark that has no words of its own.
+// The browser's own title tooltips came late, looked
 // different in every browser and never appeared under a finger or for the
 // keyboard. This takes them over, for `title` and `data-tooltip` alike:
 //
@@ -44,7 +44,7 @@
       // off chat title): i18n.js leaves them as they are.
       tip.setAttribute("data-i18n-skip", "");
       // Faded out it is still in the page: hidden from screen readers until
-      // it shows (an empty, nameless tooltip; a11y audit P6).
+      // it shows (an empty, nameless tooltip).
       tip.setAttribute("aria-hidden", "true");
       document.body.appendChild(tip);
     }

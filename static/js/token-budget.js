@@ -14,7 +14,7 @@
        server's admission: available ≥ expected cost of a typical run);
      - the approximate share one run of a mode takes.
 
-   Since 2026-10-31 the account counts money: amounts are whole micro-euros
+   The account counts money: amounts are whole micro-euros
    (`unit: "micro_eur"`). Readers see percent only; the euro figures are the
    operator's (formatAmount).
 
@@ -48,8 +48,7 @@
   // without revisions the server's observation time.
   function isOlder(next, previous) {
     if (!previous) return false;
-    // A new unit is a new account (the token ledger before 2026-10-31):
-    // its revisions start again.
+    // A new unit is a new account: its revisions start again.
     if ((next.unit || "") !== (previous.unit || "")) return false;
     var nextConfig = next.config_revision || 0;
     var prevConfig = previous.config_revision || 0;
@@ -164,8 +163,8 @@
   }
 
   // The server's estimate keys; "consensus" stays its key for any other
-  // pipeline run (agent_budget_config.run_mode), which the browser no
-  // longer starts.
+  // pipeline run (agent_budget_config.run_mode), which the browser does
+  // not start.
   function modeKey(mode) {
     return mode === "deep_think" || mode === "compare" ? mode : "consensus";
   }

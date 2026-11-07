@@ -11,10 +11,12 @@
 // weg, und der Composer bleibt beim Tippen die eine Zeile, die er sein soll.
 //
 // Der Lauf selbst kennt kein Zitat: compose() setzt es der Frage voran, und ab
-// da ist es Teil der Frage — Thread-Kopf, Bookmark, Chat-Kontext und die sechs
-// Modelle sehen genau einen Text. Deshalb braucht keine andere Stelle als
-// query-send.js (Senden) und app-init.js (Aufraeumen) davon zu wissen.
-// Exporte: window.App.quote.{set,clear,text,has,compose,element}
+// da ist es Teil der Frage — Thread-Kopf, Bookmark, Chat-Kontext und die
+// Modelle sehen genau einen Text. Deshalb setzen es nur die Sendewege
+// (query-send.js, agent-chat.js) ein; die Anzeige einer gesendeten Nachricht
+// trennt es mit split() wieder ab.
+// Exporte: window.App.quote.{set,clear,text,has,compose,split,format,
+//          focusComposer,element}
 // =====================================================================
 
 (function () {

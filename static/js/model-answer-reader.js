@@ -258,8 +258,8 @@
   }
   function polishInspector() {
     // Every finding waits folded to its head, the weightiest first (cards are
-    // ordered by severity); only the one a marker asks for opens (Max
-    // 2026-10-23: "Unterschiede immer zuerst eingeklappt").
+    // ordered by severity); only the one a marker asks for opens (Max:
+    // "Unterschiede immer zuerst eingeklappt").
     get('Inspector').querySelectorAll('.diff-card:not([data-reader-ready])').forEach(card => {
       const key = card.querySelector('.diff-card-claim')?.textContent;
       inspector.seenClaims.add(key);
@@ -297,7 +297,7 @@
       if (!domain) { domain = document.createElement('span'); domain.className = 'consensus-source-host'; domain.textContent = hostName || 'Reference'; }
       body.prepend(domain); link?.classList.add('consensus-source-title');
       const badge = document.createElement('span'); badge.className = 'answer-reader-site-icon'; badge.setAttribute('aria-hidden', 'true');
-      // The globe of source-pill.css until the favicon has loaded (Apple-Audit G9).
+      // The globe of source-pill.css until the favicon has loaded.
       const fallback = document.createElement('span'); fallback.className = 'site-icon-fallback'; badge.append(fallback);
       if (hostName) {
         const img = document.createElement('img'); img.alt = ''; img.width = 20; img.height = 20; img.loading = 'lazy'; img.referrerPolicy = 'no-referrer';
@@ -307,7 +307,7 @@
       }
       item.prepend(badge);
       // No number: the list is short and has no order, and a number over the
-      // arrow stood as two small marks on no common line (UX audit D12).
+      // arrow stood as two small marks on no common line.
       if (link) {
         const arrow = document.createElement('span'); arrow.className = 'answer-reader-source-out'; arrow.setAttribute('aria-hidden', 'true'); arrow.textContent = '↗'; item.append(arrow);
       }
@@ -472,8 +472,8 @@
     const docked = open && !direct && !modal;
     // Docking narrows the reading column (model-answer-reader.css) and every
     // line wraps anew. The line the reader clicked stays where it was: its
-    // top is measured before and restored right after, in the same frame
-    // (Apple audit A8). Undocking holds it the same way.
+    // top is measured before and restored right after, in the same frame.
+    // Undocking holds it the same way.
     const keep = docked !== document.body.classList.contains("answer-reader-docked") ? readingAnchor() : null;
     document.body.classList.toggle("answer-reader-docked", docked);
     if (keep) {
@@ -482,7 +482,7 @@
     }
     document.body.classList.toggle("answer-reader-modal", modal);
     // An answer's notes or sources (a context without model answers) open as
-    // a sheet as large as its content, not as the whole window (UX audit D6).
+    // a sheet as large as its content, not as the whole window.
     dialog.classList.toggle("is-compact", modal && !expanded && Boolean(inspector && selected?.renderPanel && !selected.answers?.length));
     root.classList.toggle("is-direct", direct);
     if (composer && composerAnchor.parentNode) {
@@ -619,9 +619,7 @@
   }
   // A Compare answer ends like an Agent answer (agent-chat.css .agent-review):
   // one row of glyph and word, Sources with its count and Copy, the sources
-  // folding open under it as the reader lists them (UX audit B12; before, a
-  // grey "Sources · 1" disclosure with its arrow at the far right, and no
-  // Copy at all).
+  // folding open under it as the reader lists them.
   const ROW_GLYPHS = { sources: 'M14 3H5v18h14V8ZM14 3v5h5M8 12h8M8 16h6', copy: 'M9 9h11v11H9zM15 5V3H3v12h2' };
   let footerSerial = 0;
   function rowButton(kind, label, count = null) {
@@ -709,7 +707,7 @@
     get('Question').querySelector('summary').tabIndex = longQuestion || get('Question').open ? 0 : -1;
     get('Question').querySelector('summary').setAttribute('aria-disabled', String(!longQuestion && !get('Question').open));
     // The compact sheet names its question in the title; the tabs name the
-    // section (the title "Notes" only repeated the tab, D6).
+    // section (the title "Notes" only repeated the tab).
     const questionTitle = dialog.classList.contains('is-compact') && Boolean(selected.question);
     if (get('Question').hidden !== questionTitle) get('Question').hidden = questionTitle;
     const contextBox = root.querySelector('.answer-reader-context');

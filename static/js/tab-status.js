@@ -10,7 +10,7 @@
   const READY = "Answer ready";
   const WORKING = "Working…";
   // The reviewers check the written answer: the word of the activity's head
-  // and the chat list (agent-activity.js phase, UX audit E2).
+  // and the chat list (agent-activity.js phase).
   const REVIEWING = "Reviewing…";
   const FAILED = "Failed";
   // A reviewer paused the work and the user decides (agent-chat.js renderHold).
@@ -28,7 +28,7 @@
       return null;
     }
   }
-  // A run of another chat that waits for the user says so too (A-B2): its
+  // A run of another chat that waits for the user says so too: its
   // pause runs into its timeout otherwise, while the tab said nothing.
   function waitingRun() {
     try {

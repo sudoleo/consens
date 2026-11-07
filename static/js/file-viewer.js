@@ -1,4 +1,4 @@
-// The preview of a file beside the chat (2026-11-01, Max: "einen Viewer für
+// The preview of a file beside the chat (Max: "einen Viewer für
 // Office-Dokumente … wie bei ChatGPT", then "natürlich auch für PDFs … für
 // Code natürlich auch"). Presentations, Word files, spreadsheets and PDFs
 // show page by page with a rail of thumbnails ("5 slides"), code and text
@@ -20,8 +20,8 @@
 // file-viewer.css), the activity panel and the workspace wait beneath it.
 // The edge drags and remembers its width per browser; "Full screen" takes
 // the whole window. Narrower screens show it over everything. It opens only
-// when the user opens a file, never by itself (Max 2026-10-31: panels open
-// on a click alone).
+// when the user opens a file, never by itself (Max: panels open on a click
+// alone).
 //
 // App.fileViewer: open(item), close(), isOpen(), describe(file) (how a file
 // is shown and called), previews(file), thumbnail(host, item, onInfo) (the

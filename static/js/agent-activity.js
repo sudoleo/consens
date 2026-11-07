@@ -2,7 +2,7 @@
 (function () {
   "use strict";
   const App = window.App = window.App || {};
-  // The glossary's words for a run (App.words, Apple-Audit H9).
+  // The glossary's words for a run (App.words).
   const statuses = { failed: "Failed", cancelled: "Stopped", canceled: "Stopped" };
   // One table per tool: noun (history/failure rows), running and completed copy.
   // Unknown future tools fall back to a neutral label instead of a raw name.
@@ -22,7 +22,7 @@
     prepare_settings_change: ['Settings', 'Preparing a settings change…', 'Prepared a settings change for you to apply'],
     judge_answer: ['Answer check', 'Checking the answer…', 'Checked the answer'],
     // The comparison models review the answer (judge_answer and check_text:
-    // the comparison mode, turns saved before 2026-10-31).
+    // the comparison mode, in older saved turns).
     audit_answer: ['Answer review', 'Reviewing the answer…', 'Reviewed the answer'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
     wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
@@ -108,8 +108,8 @@
   function pictureHost(item) {
     return typeof item.host === 'string' && /^[\w.-]{1,253}$/.test(item.host) ? item.host : '';
   }
-  // "Showed a picture · liquipedia.net"; a site that gave none says so (a
-  // turn before 2026-10-29, when show_image fetched the picture itself).
+  // "Showed a picture · liquipedia.net"; a site that gave none says so (an
+  // older saved turn, from when show_image fetched the picture itself).
   function pictureSummary(item) {
     if (item.status !== 'succeeded') return null;
     const host = pictureHost(item);
@@ -138,9 +138,9 @@
     const task = typeof item.task === 'string' ? item.task.trim() : '';
     return item.status === 'succeeded' && task ? `Opened the workspace · ${task}` : null;
   }
-  // A turn whose only check was that of a pasted text (saved on 2026-10-09
-  // before the answer of such a turn was judged too): the answer judges did
-  // not run.
+  // A turn whose only check was that of a pasted text (older saved turns,
+  // from before the answer of such a turn was judged too): the answer judges
+  // did not run.
   const textOnlySteps = { judge_answer: 'Checked your text' };
   function textOnlyReview(review) {
     const checks = Array.isArray(review?.checks) ? review.checks : [];
@@ -171,8 +171,8 @@
   // A turn's working time: from its start to its end without the time it
   // waited for the user (agent_wait_seconds, chat_store.turn_detail: its
   // pauses and the agent's questions). The server's turn clock leaves that
-  // out as well (_turn_elapsed), and the head stands still while it waits
-  // (UX audit E1): a pause that ran into its 30 minutes read "Thought for 32m 4s".
+  // out as well (_turn_elapsed), and the head stands still while it waits:
+  // else a pause that ran into its 30 minutes reads "Thought for 32m 4s".
   function savedDuration(turn) {
     const start = Date.parse(turn?.created_at);
     const end = Date.parse(turn?.completed_at || turn?.failed_at);
@@ -185,12 +185,8 @@
     return App.format.duration(ms);
   }
   // One word for what a run does now, the same in the activity's head, the
-  // chat list (run-view.js) and the tab title (tab-status.js), UX audit E1/E2:
-  // before, the head said "Working for" while the reviewers checked the
-  // answer and while the run waited for the user, and the chat list
-  // "Thinking" or a cut "Writing ans…" at the same moment. A run's review is
-  // the reviewers' (mode "audit"); the comparison mode's answer check, whose
-  // "Checking" only the demo still played, left with it on 2026-10-31.
+  // chat list (run-view.js) and the tab title (tab-status.js). A run's
+  // review is the reviewers' (mode "audit").
   const PHASE_WORDS = Object.freeze({ working: 'Working', reviewing: 'Reviewing',
     paused: 'Paused', asking: 'Waiting for you' });
   function phase({ asking = false, held = false, review = null } = {}) {
@@ -201,8 +197,7 @@
   }
   // Every word the head writes before its clock, each alone in its element
   // (the page translates it on its own; tests/test_i18n.py reads this list):
-  // until 2026-10-29 "Failed after" and "Stopped after" had no German alone
-  // and stood in English before "0 Sek." (I3).
+  // a word without German of its own stands in English before "0 Sek.".
   const HEAD_VERBS = Object.freeze({ working: 'Working for', reviewing: 'Reviewing',
     paused: 'Paused', asking: 'Waiting for you', succeeded: 'Thought for', failed: 'Failed after',
     cancelled: 'Stopped after' });
@@ -217,7 +212,7 @@
     return { verb: HEAD_VERBS[settled], gap: ' ', time };
   }
   // The clock ticks in a field of fixed width, so the chevron and the model
-  // icons after it do not move with every second (Apple audit A7): the time
+  // icons after it do not move with every second: the time
   // sits in a slot as wide as its largest value in the same unit ("59s",
   // "9m 59s"), and the verb ("Working for" / "Thought for") takes the width
   // of the wider of the two, so the end of the run changes the words, not
@@ -251,7 +246,7 @@
     // cell (agent-chat.css), so the field is as wide as the wider one; it is
     // no text of the title. Once it is over the clock is still and the field
     // takes its own words: "Fertig nach" kept the width of "Arbeitet seit",
-    // a double gap before the time (UX audit B14/R19).
+    // a double gap before the time.
     const paired = now && verb === SETTLED_VERBS.running ? SETTLED_VERBS.done : "";
     const holder = verbEl.parentElement;
     if (paired) holder.dataset.ghost = paired; else delete holder.dataset.ghost;
@@ -300,7 +295,7 @@
   const activeMotion = new Set();
   let offscreenUpdate = false;
   // The app's easing, read once: App.motion.ease reads the page's style,
-  // and each read laid the page out anew in the middle of a render (P1).
+  // and each read lays the page out anew in the middle of a render.
   let easeOut = '';
   function motion(element, frames, finish = () => {}, duration = 220) {
     if (offscreenUpdate || quietMotion?.matches || !element.animate || !element.isConnected) { finish(); return null; }
@@ -331,11 +326,11 @@
       if (host.contains(animation.effect?.target)) cancelMotion(animation);
     }
     cancelMotion(host._agentActivity?.historyMotion);
-    // Lines on their way out (and an answer waiting for them) are gone now.
+    // Lines on their way out are gone at once.
     if (host._agentActivity?.previewExit) clearPreview(host._agentActivity);
   }
   // An attribute is written only when it changes: every write is a mutation
-  // the page's observers and its style look at again (P1).
+  // the page's observers and its style look at again.
   function hide(element, hidden) {
     if (element.hidden !== hidden) element.hidden = hidden;
   }
@@ -355,13 +350,11 @@
     view.previewMotion = null;
     dropPaced(view);
   }
-  // The live lines move as one surface (2026-10-30, Max: "the picture jumps
-  // the whole time while the reasoning comes in"). Every change to them goes
-  // through settle(): their height glides from the old to the new, the lines
-  // that stay slide from where they stood, a new line fades in and a line
-  // that goes fades out where it stood. Before, a thought that went from two
-  // lines to one, a step folding the ones before it and a line leaving all
-  // snapped in one frame, and everything under them with it.
+  // The live lines move as one surface, so nothing under them jumps while
+  // the reasoning comes in. Every change to them goes through settle(): their
+  // height glides from the old to the new, the lines that stay slide from
+  // where they stood, a new line fades in and a line that goes fades out
+  // where it stood.
   const SETTLE_MS = 220;
   function lineTops(view) {
     const tops = new Map();
@@ -371,7 +364,7 @@
     return tops;
   }
   // What the lines show: a render that changes none of it leaves every
-  // motion under way alone (it restarted them before, in each render).
+  // motion under way alone.
   function shown(preview) {
     let text = '';
     for (const node of preview.children) {
@@ -428,15 +421,11 @@
     }
     return true;
   }
-  // The answer takes the place of the live lines (2026-10-30), and since
-  // 2026-11-05 (P6) in the same frame: the lines leave the flow where they
-  // stand (a negative bottom margin as tall as they are, so they add nothing
-  // to the height) and fade out over the answer's first words, which come in
-  // where they stood. Their going then moves nothing. From 2026-10-30 the
-  // answer waited for the fade (160 ms): its letters held (stream-reveal.js),
-  // or the answer hidden without them. Before, the lines vanished in the
-  // frame of the answer's first words and those stood where the lines had
-  // begun.
+  // The answer takes the place of the live lines in the same frame: the
+  // lines leave the flow where they stand (a negative bottom margin as tall
+  // as they are, so they add nothing to the height) and fade out over the
+  // answer's first words, which come in where they stood. Their going then
+  // moves nothing.
   const HANDOFF_MS = 160;
   function handoff(view) {
     if (view.previewExit) return;
@@ -538,9 +527,9 @@
     }
     return found;
   }
-  // Reasoning highlights as complete statements only (2026-10-21): each of
-  // the last three lines gives its first complete sentence that fits, or
-  // stands as it is when it is a title without punctuation. Nothing is cut:
+  // Reasoning highlights as complete statements only: up to three of the
+  // last lines each give their first complete sentence that fits, or stand
+  // as they are when they are a title without punctuation. Nothing is cut:
   // a line whose sentences are all too long, or one that an older turn
   // stored cut off ("…"), is left out.
   function compactReasoning(text) {
@@ -573,11 +562,10 @@
       p._fadeMotion = motion(p, [{ opacity: 0 }, { opacity: 1 }], () => {}, 220);
     }, 140);
   }
-  // While the comparison models answer, one quiet line quotes them in turn
-  // (2026-10-21): an excerpt stands at least LINE_DWELL_MS, then the next
-  // model in order with something new to say takes the line. Before, the
-  // model that reported last always won, and the line changed model every
-  // half second.
+  // While the comparison models answer, one quiet line quotes them in turn:
+  // an excerpt stands at least LINE_DWELL_MS, then the next model in order
+  // with something new to say takes the line, so the model that reported
+  // last does not take it every half second.
   const LINE_DWELL_MS = 2500;
   function comparisonLine(view, highlights) {
     const lines = (Array.isArray(highlights) ? highlights : []).filter(item => item?.id && item.text)
@@ -604,11 +592,10 @@
     return null;
   }
 
-  // The calm view (2026-11-01, Max: "a casual user sees far too much: nobody
-  // understands the fast output, and nobody should see console commands by
-  // default"). Under the head one line says in everyday words what the agent
-  // does now, and one thought of its own says what it is after, each held a
-  // while. Commands, their output, every thought and the earlier steps are a
+  // The calm view: a casual user follows neither the fast output nor console
+  // commands. Under the head one line says in everyday words what the agent
+  // does now, or between steps one thought of its own that says what it is
+  // after, held a while. Commands, their output, every thought and the earlier steps are a
   // click away in the history (the head), and live with the Display switch
   // "Detailed progress" (account setting detailed_progress).
   const detailed = () => App.userSettings?.get?.('detailed_progress') === true;
@@ -639,9 +626,9 @@
   // ("Checking the numbers", the way ChatGPT shows it), else its newest
   // complete sentence; of a note its first. Short ones only, nothing cut: a
   // longer one leaves the thought before it standing. A sentence of raw
-  // thinking needs THOUGHT_WORDS words and a capital at its start: Max's
-  // line read "Also maybe share nothing." (2026-11-04), a scrap of the
-  // model's deliberation that tells the user nothing.
+  // thinking needs THOUGHT_WORDS words and a capital at its start: a scrap
+  // of the model's deliberation like "Also maybe share nothing." tells the
+  // user nothing.
   const CALM_CHARS = 120;
   const THOUGHT_WORDS = 6;
   const substantial = sentence => /^[\p{Lu}\d]/u.test(sentence) && sentence.split(/\s+/).length >= THOUGHT_WORDS;
@@ -691,8 +678,8 @@
       line.timer = line.next = null;
       return text;
     }
-    // Each text stands its own time (since 2026-11-04, one line for status
-    // and thought): a thought its seconds also when a step follows it.
+    // Each text stands its own time (one line for status and thought): a
+    // thought its seconds also when a step follows it.
     if (!line || now - line.at >= line.hold) {
       clearTimeout(line?.timer);
       lines.set(id, { text, at: now, hold: dwell, timer: null, next: null });
@@ -737,8 +724,8 @@
 
   // Every change to an event gets a new number (receive; a saved turn's
   // event its own on first sight), and a node compares that number with its
-  // status instead of all its fields as JSON (runtime audit P1: at 150 steps
-  // each render wrote ~950 KB of signatures). The status stays in the stamp
+  // status instead of all its fields as JSON (at 150 steps those signatures
+  // came to ~950 KB per render). The status stays in the stamp
   // for a caller that changes it in place.
   const revisions = new WeakMap();
   let lastRevision = 0;
@@ -748,8 +735,8 @@
     if (revision === undefined) { revision = ++lastRevision; revisions.set(item, revision); }
     return `${revision}:${item.status ?? ''}:${item.state ?? ''}`;
   }
-  // A thought's excerpt, kept per event while its text is the same (it was
-  // worked out three times per thought and render, P1).
+  // A thought's excerpt, kept per event while its text is the same (a
+  // render asks for it more than once).
   const excerpts = new WeakMap();
   function compact(item) {
     const kept = excerpts.get(item);
@@ -759,7 +746,7 @@
     return value;
   }
   // When a workspace step's call really began here, and when its output
-  // last changed (V3: a cold start, a long command and a hang looked alike).
+  // last changed, so a cold start, a long command and a hang look different.
   const startSeen = new WeakMap(), outputSeen = new WeakMap();
   function seen(item, event, now = Date.now()) {
     if (event.started_at && !startSeen.has(item)) startSeen.set(item, now);
@@ -768,7 +755,7 @@
 
   // Room in a live run's activity besides its steps: status and reasoning
   // entries, and apart from them the pauses (as many as a turn saves in
-  // agent_holds, A-M5).
+  // agent_holds, HOLDS_KEPT).
   const AUXILIARY_ENTRIES = 63, HOLD_ENTRIES = 20;
   function receive(events, event) {
     if (event?.version !== 1 || !["status", "progress", "reasoning", "usage", "tool", "hold"].includes(event.kind) || typeof event.id !== "string") return;
@@ -783,7 +770,7 @@
       if (event.kind === 'status') { events.splice(events.indexOf(existing), 1); events.push(existing); }
     } else {
       // Keep commentary and confirmed steps together for the full timeline.
-      // Pauses have room of their own (A-B7): in a long run the many status
+      // Pauses have room of their own: in a long run the many status
       // and reasoning entries pushed earlier pauses out of the live activity.
       const own = event.kind === 'hold' ? item => item.kind === 'hold'
         : item => !['progress', 'tool', 'hold'].includes(item.kind);
@@ -817,7 +804,7 @@
   // as it is, the reasoning is translated on its own: on the German page
   // "{0} reasoning" took the whole line ("Nachdenken: Claude Sonnet 5.5 ·
   // High"), and the line was written anew on every render because the page
-  // translates data-label, which it was compared with (2026-10-23).
+  // translates data-label, which it was compared with.
   function renderRunDetails(view, settings) {
     const text = settings?.label ? label(settings) : '';
     hide(view.runDetails, !text);
@@ -897,11 +884,10 @@
       return ['http:', 'https:'].includes(url.protocol) ? url.hostname.replace(/^www\./, '') : '';
     } catch (_) { return ''; }
   }
-  // What a step names, in its own type (UX audit A8/A9): a command, a path
-  // or code in mono; a search term on a page as a quote in the text's type
-  // („Förderfähige Kosten“); an opened page by its title (its host after it,
-  // the address on hover). Before, all three stood in mono, the page as its
-  // raw address.
+  // What a step names, in its own type: a command, a path or code in mono;
+  // a search term on a page as a quote in the text's type („Förderfähige
+  // Kosten“); an opened page by its title (its host after it, the address on
+  // hover).
   function vmTargetKind(item) {
     if (item.name !== 'browser') return 'code';
     if (item.action === 'find' && item.query) return 'quote';
@@ -925,25 +911,25 @@
     return item.path || item.process;
   }
   // The glossary's word: the workspace, never "VM" on the page (docs/i18n.md).
-  // "interrupted" (since 2026-10-30, agent_vm_tools.py): the connection broke
-  // and whether the call ran is unknown; before, it read "Failed".
+  // "interrupted" (agent_vm_tools.py): the connection broke and whether the
+  // call ran is unknown.
   const vmOutcomes = { unavailable: 'Workspace not available', no_time: 'Skipped · no time left',
     day_limit: 'Skipped · workspace time for today used up', busy: 'Skipped · workspace in use by another chat',
     interrupted: 'Connection lost' };
   // Steps that say when their call began, after the workspace started and
   // warmed up (`started_at`: agent_vm_tools.py, agent_browser.py): until then
   // "Starting the workspace…", then "Running · 42s"; a command quiet for
-  // QUIET_MS "No output for 45s" (runtime audit V3). An event saved without
+  // QUIET_MS "No output for 45s". An event saved without
   // the field is done: it never gets this far.
   const timedTools = new Set(['vm_exec', 'vm_install_packages', 'browser']);
   const QUIET_MS = 30_000;
   // A workspace step that waits for the workspace's start says about when
   // that ends (``starting_until``: agent_browser._await_warm,
   // VMSession._wait), and a bar under the step counts it down
-  // (start-progress.js, since 2026-11-02: a first start took a minute and
-  // more with one word, and a new user gave up).
+  // (start-progress.js): a first start takes a minute and more, and with
+  // one word for it a new user gave up.
   // What a message's start of the workspace does, in order, over its bar
-  // (start-progress.js steps, since 2026-11-04): the browser needs the VM
+  // (start-progress.js steps): the browser needs the VM
   // and Chrome, the other tools the chat's folder and the message's restore
   // point too (VMSession: claim, prepare, open_chat, checkpoint). Real work only.
   const START_STEPS = {
@@ -985,7 +971,7 @@
     const parts = [];
     if (item.timed_out) parts.push(App.t('Timed out'));
     else if (Number.isInteger(item.exit_code) && item.exit_code !== 0) {
-      // A command's exit code is its verdict, in words (UX audit F1); a
+      // A command's exit code is its verdict, in words; a
       // stopped process's code (143) is only how it ended.
       parts.push(commandFailed(item) ? App.t('Failed · code {code}', { code: item.exit_code })
         : App.t('Exit {code}', { code: item.exit_code }));
@@ -998,8 +984,6 @@
   }
   // A command that ended with an error (or ran out of time), or a step that
   // failed: its line says so in the disagreement's tone (agent-chat.css).
-  // Before, "Exit 1" stood as grey as "3s" beside a command that worked,
-  // and data-status said "succeeded".
   const commandTools = new Set(['vm_exec', 'vm_install_packages']);
   function commandFailed(item) {
     return item.status === 'succeeded' && commandTools.has(item.name)
@@ -1047,8 +1031,8 @@
     if (!ticking.size && tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   }
   // Outputs shown at their end, all in one frame: reading scrollHeight lays
-  // the page out, and every update of a running command did so twice (its
-  // live line and its entry in the closed timeline, P1).
+  // the page out, and every update of a running command would do so twice
+  // (its live line and its entry in the closed timeline).
   const toEnd = new Set();
   let endFrame = false;
   function scrollToEnd(output) {
@@ -1085,11 +1069,10 @@
     details.addEventListener('toggle', () => { if (details.open) output.scrollTop = output.scrollHeight; });
     return details;
   }
-  // An opened page is a card (since 2026-10-29, Max: "professional, like
-  // the browser card in Claude"): the page as the agent's browser showed it
-  // (agent_browser.preview_url), its title, the site, and Open for the live
-  // view (workspace-view.js). While it opens, the picture's place waits in
-  // the skeleton's light. Before, every browser step ended in "Watch live".
+  // An opened page is a card, like the browser card in Claude: the page as
+  // the agent's browser showed it (agent_browser.preview_url), its title, the
+  // site, and Open for the live view (workspace-view.js). While it opens, the
+  // picture's place waits in the skeleton's light.
   const opensPage = item => item?.name === 'browser' && item.action === 'open';
   const pagePicture = item => typeof item.preview === 'string' && item.preview.startsWith('data:image/jpeg;base64,')
     ? item.preview : '';
@@ -1121,7 +1104,7 @@
     card.append(body);
     return card;
   }
-  // `key`: what the card shows changes with it (a stamp, P1).
+  // `key`: what the card shows changes with it (a stamp).
   function updateCard(card, item, key = stamp(item)) {
     const canOpen = document.body.classList.contains('viewer-has-workspace') && Boolean(App.workspaceView);
     const signature = `${key}|${canOpen}|${App.t('Open')}`;
@@ -1145,7 +1128,7 @@
     meta.textContent = running ? App.t('Opening in the browser…') : ended
       || (item.title && host ? App.t('{host} · opened in the browser', { host }) : App.t('Opened in the browser'));
     // The picture when it came, its waiting place while the page opens,
-    // nothing for a step without one (saved before 2026-10-29, or none came).
+    // nothing for a step without one (an older saved step, or none came).
     // A newer picture of the same card takes the place of the one shown,
     // without the waiting light in between.
     if (picture && img.getAttribute('src') !== picture) {
@@ -1162,16 +1145,16 @@
     open.textContent = App.t('Open');
     open.setAttribute('aria-label', App.t('Open the browser'));
   }
-  // The page the browser shows (2026-10-29, Max: the card folded away with
-  // the earlier steps while the browser was still open, and that was weird):
-  // one card under the run's line with the page opened last, changed in place
-  // when the agent opens another, still there while the answer comes and
-  // after it; a page that did not open leaves the one before. The timeline
-  // keeps a card per page; open, it holds this one too.
-  // Since 2026-10-30 it shows the page as it is now (Max: it kept the page
-  // as it opened, so nobody saw where the agent was): the newest picture a
-  // later step on it brought (agent_browser.PREVIEW_SECONDS), with the title
-  // and address that step's page had.
+  // The page the browser shows, so it does not fold away with the earlier
+  // steps while the browser is still open: one card under the run's line
+  // with the page opened last, changed in place when the agent opens
+  // another, still there while the answer comes and after it; a page that
+  // did not open leaves the one before. The timeline keeps a card per page;
+  // open, it holds this one too.
+  // It shows the page as it is now, so the reader sees where the agent is:
+  // the newest picture a later step on it brought
+  // (agent_browser.PREVIEW_SECONDS), with the title and address that step's
+  // page had.
   function pinPage(view, tools) {
     const at = tools.findLastIndex(item => opensPage(item) && !['failed', 'cancelled'].includes(item.status));
     if (at < 0) { view.pin.hidden = true; view.pin.replaceChildren(); view.pinCard = null; return; }
@@ -1270,32 +1253,32 @@
   // A reviewer's halt (agent_audit.py): who paused the work, why (the
   // reviewer's own sentence) and what the user decided (agent-chat.js
   // renderHold has the card).
-  // "unchecked" (agent_gate.py, since 2026-10-27): a step that acts outside
+  // "unchecked" (agent_gate.py, older saved turns): a step that acts outside
   // the workspace that not every reviewer could check before it ran.
   const holdKinds = { safety: 'Security-critical step', harm: 'Possible damage', off_goal: 'Far off your request',
     injection: 'Prompt injection', unchecked: 'Not checked', domain: 'Network access' };
   const holdStates = { waiting: 'Waiting for your decision', continue: 'You let the work go on',
     steer: 'You wrote to the agent', stop: 'You stopped the response', deny: 'You did not allow it',
     timeout: 'Stopped after 30 minutes without a decision', ended: 'Over when the response ended' };
-  // A request for a domain (agent_domains.py) is the user's to decide, not a
-  // reviewer's pause. Undecided it stays closed and the work goes on (UX
-  // audit 2026-10-29 C8: this said "Stopped after 30 minutes").
+  // A request for a domain (request_domain, older saved turns) is the user's
+  // to decide, not a reviewer's pause. Undecided it stays closed and the
+  // work goes on.
   const domainStates = { ...holdStates, continue: 'You allowed it for this chat',
     timeout: 'Not allowed after 30 minutes without a decision' };
-  // The agent's own question to the user (ask_user, agent_ask.py; since
-  // 2026-10-29): their turn in the browser, their yes to a step, or a call
+  // The agent's own question to the user (ask_user, agent_ask.py): their
+  // turn in the browser, their yes to a step, or a call
   // that waited while they had the browser. Its request is data.
   const askHeads = { browser: 'The agent asked you to take over the browser', confirm: 'The agent asked before a step',
     secret: 'The agent asked you for a key', choice: 'The agent asked you to choose',
     takeover: 'The agent waited while you had the browser' };
-  // While it still waits, in the present (C14: "The agent asked …" stood over "Waiting for you").
+  // While it still waits, in the present: never "The agent asked …" over "Waiting for you".
   const askHeadsNow = { browser: 'The agent asks you to take over the browser', confirm: 'The agent asks before a step',
     secret: 'The agent asks you for a key', choice: 'The agent asks you to choose', takeover: 'You have the browser' };
   const askStates = { ...holdStates, waiting: 'Waiting for you', handed_back: 'You handed the browser back',
     timeout: 'No answer within 30 minutes' };
   const confirmStates = { ...askStates, continue: 'You allowed it' };
   const secretStates = { ...askStates, continue: 'You saved it in the workspace', deny: 'You did not give it' };
-  // A choice card (since 2026-10-30): the answer picked is the agent's words.
+  // A choice card: the answer picked is the agent's words.
   const choiceStates = { ...askStates, choose: 'You chose: {choice}' };
   function holdView(className) {
     const node = document.createElement('div');
@@ -1348,10 +1331,9 @@
 
   // A step's thinking line (agent_delegation `completion:N/thinking`).
   const isThought = item => item.kind === 'progress' && /\/thinking$/.test(String(item.id || ''));
-  // What a step thought, in its opened history (ReasoningProgress.sections,
-  // UX audit A2): each heading over its paragraphs, as ChatGPT and Claude
-  // open "Thought for …". Before, a step kept only its newest line, and a
-  // provider summary only its headings. The words are the model's: never
+  // What a step thought, in its opened history (ReasoningProgress.sections):
+  // each heading over its paragraphs, as ChatGPT and Claude open "Thought
+  // for …". The words are the model's: never
   // translated; a step still thinking (no sections yet) shows its line.
   function updateThought(node, item) {
     const signature = stamp(item);
@@ -1375,7 +1357,7 @@
   }
 
   // The step the agent is on, for the live view's line (workspace-view.js
-  // agentStep, runtime audit V6): its verb and target ("Clicking e12",
+  // agentStep): its verb and target ("Clicking e12",
   // "Opening Docs – Example"), or the run's heading ("Thinking…"); nothing
   // while it waits for the user or in a run without the workspace. The verb
   // in the page's language, the target as data.
@@ -1419,16 +1401,11 @@
     return p;
   }
 
-  // Like Claude Code, a run that works in its VM folds its earlier steps into
-  // one line ("Ran 4 commands"); the note that leads into the latest command,
-  // that command and what follows stay in view. Until 2026-10-26 every
-  // command and every note between them stood one under the other, a screen
-  // long. A step that waits on the reader never folds away.
-  // The live lines stay a few: the step at work (with the note leading into
-  // it), and whatever waits on the user; every earlier step folds into one
-  // line, in every run (2026-10-28, Max: a long run grew the live lines down
-  // the screen, and their growing and folding made the page jump). Until
-  // then only a VM run folded, up to its latest command.
+  // Like Claude Code, the live lines stay a few: the step at work (with the
+  // note leading into it), and whatever waits on the user; every earlier
+  // step folds into one line ("Ran 4 commands", detailed view), so a long run
+  // neither grows the live lines down the screen nor makes the page jump with
+  // their growing and folding. A step that waits on the reader never folds away.
   function foldPast(paragraphs) {
     // The step at work, not the "Thinking…" row that stands after it.
     const lastStep = paragraphs.findLastIndex(item => (item.kind === 'vm' || item.kind === 'step')
@@ -1508,7 +1485,7 @@
       const note = document.createElement("p");
       note.className = "agent-activity-note";
       // Tokens and provider cost are the operator's figures, not the
-      // reader's (Apple-Audit H4): only an admin sees this line.
+      // reader's: only an admin sees this line.
       const usageEl = document.createElement("p");
       usageEl.className = "agent-usage admin-only";
       // The VM back to its checkpoint before this message (agent-chat.js
@@ -1524,7 +1501,7 @@
       const preview = document.createElement('div'); preview.className = 'agent-progress';
       preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');
       // A line that changes swaps its text node, an addition: "text" as well
-      // read every change twice (a11y audit B5).
+      // would read every change twice.
       preview.setAttribute('aria-relevant', 'additions');
       preview.setAttribute('aria-label', 'Progress updates');
       const history = document.createElement('div'); history.className = 'agent-activity-history';
@@ -1556,11 +1533,8 @@
     }
     const view = host._agentActivity;
     const progress = events.filter(item => item.kind === 'progress' && item.text);
-    // Reasoning stays beside the agent's notes (UX audit A1): until
-    // 2026-10-29 any progress line, a note as much as a gate or retry line,
-    // hid every thought of the run, live and saved (a rule from the time
-    // progress lines were summaries standing in for it). Only a step's
-    // reasoning that its own note repeats word for word stands back.
+    // Reasoning stays beside the agent's notes: only a step's reasoning
+    // that its own note repeats word for word stands back.
     const notes = new Map();
     for (const item of progress) {
       if (item.step_id) notes.set(item.step_id, notes.has(item.step_id) ? `${notes.get(item.step_id)}\n${item.text}` : item.text);
@@ -1581,7 +1555,7 @@
     // reviewer's reason of their own, yet stay in the history: every opened
     // pause names its kind (halt).
     const holds = events.filter(item => item.kind === 'hold' && (item.reason || item.domain || item.halt));
-    // Asked once per event and render: Sets, not includes over every event (P1).
+    // Asked once per event and render: Sets, not includes over every event.
     const isProgress = new Set(progress), isReasoning = new Set(reasoning), isTool = new Set(tools), isHold = new Set(holds);
     const textOnly = textOnlyReview(review);
     const latest = events.filter(item => item.kind === "status").at(-1);
@@ -1632,7 +1606,7 @@
     // The latest plan stands above the live progress, never in its order.
     const plan = tools.findLast(item => hasPlan(item) && item.status !== 'failed');
     pinPage(view, tools);
-    // The step the agent is on, for the live view's line (V6).
+    // The step the agent is on, for the live view's line.
     if (running || finished) reportStep(view, running ? workspaceStep(tools, activeTool, heading, held) : null);
     const paragraphs = events.flatMap(item => isHold.has(item) ? [{id:`hold:${item.id}`, kind:'hold', item}]
       : isProgress.has(item)
@@ -1649,7 +1623,7 @@
             ? [{id:`review:${item.id}`, text:'Waiting for your confirmation below', kind:'review'}] : [])] : []);
     // A waiting pause stands once in the timeline (its entry, with who paused
     // and why) and once on the card where the user decides; a status line
-    // under it said the same a third time (UX audit C9).
+    // under it would say the same a third time.
     if (running && !saving && !held && (!activeTool || waiting || reconnecting)) paragraphs.push({id:'current-status', text:heading, kind:'step', current:true});
     // While the comparison models answer, the main model is silent: one quiet
     // line quotes their reasoning in turn (comparisonLine).
@@ -1664,8 +1638,8 @@
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
     // The calm view's lines (detailed()): what waits on the user, and what
     // the user wrote or decided since the last step; then the line of what
-    // it does now, and under it one thought (the comparison models' quote
-    // while they answer, the reason while it waits for tokens).
+    // it does now, and under it the comparison models' quote while they
+    // answer or the reason while it waits for tokens.
     let lines = paragraphs;
     if (calm) {
       const since = paragraphs.findLastIndex(item => ['vm', 'step'].includes(item.kind) && item.id !== 'current-status');
@@ -1673,9 +1647,9 @@
         || (item.kind === 'hold' && ((item.item.state || 'waiting') === 'waiting' || index > since))
         || (item.kind === 'user' && index > since));
       if (running && !saving && !held) {
-        // One line (since 2026-11-04; Max: the thin, indented thought under
-        // the status "does not fit there"): what a running step does, else
-        // the newest thought since the last step, else the status. It keeps
+        // One line, no thin, indented thought under the status: what a
+        // running step does, else the newest thought since the last step,
+        // else the status. It keeps
         // the mark and its sheen and cross-fades from one to the next.
         const aside = paragraphs.find(item => item.id === 'comparison-highlight' || item.id === 'waiting');
         let thought = '';
@@ -1701,7 +1675,7 @@
     // run ended, their collapse pulled the finished answer up under the eye.
     // A preamble before a running tool is not the answer yet; the app's own
     // checks of the written answer are no such tool: the lines came back for
-    // "Checking the answer" and left again (2026-10-12), two collapses for one.
+    // "Checking the answer" and left again, two collapses for one.
     const answering = running && (!activeTool || answerChecks.has(activeTool.name))
       && Boolean(String(answerText || '').trim());
     const showPreview = running && lines.length && !answering;
@@ -1798,7 +1772,7 @@
         endHandoff(view);
       }
       // A hidden or still empty preview is 0 tall without asking the layout (a
-      // new run's first render happens inside the click on Send, Apple-Audit D3).
+      // new run's first render happens inside the click on Send).
       const appearing = view.preview.hidden || !view.preview.childElementCount;
       view.preview.hidden = false;
       view.preview.removeAttribute('aria-hidden');
@@ -1818,9 +1792,9 @@
     else hidePreview(view);
     const ids = new Set();
     // The plan stands once in the history, where it was first made, with its
-    // latest state (UX audit A5): every change of the checklist was an entry
-    // of its own ("Plan · 1 of 4 done", "2 of 4", "3 of 4"). An update that
-    // failed keeps its own line ("Plan not updated").
+    // latest state, not one entry per change of the checklist ("Plan · 1 of
+    // 4 done", "2 of 4", "3 of 4"). An update that failed keeps its own line
+    // ("Plan not updated").
     const firstPlan = tools.find(item => hasPlan(item) && item.status !== 'failed');
     for (const item of events.filter(item => isProgress.has(item) || isReasoning.has(item) || (isTool.has(item)
       && !(hasPlan(item) && item.status !== 'failed' && item !== firstPlan)) || isHold.has(item))) {

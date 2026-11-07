@@ -10,9 +10,9 @@
 // The text is measured in a hidden twin with the field's sizing styles, not
 // in the field itself. Measuring the field at height 0 made it, and the page
 // with it, a moment shorter on every key press (a reader at the end of a long
-// chat was pulled up by the scroll clamp, Apple audit A12), and it gave the
-// height no start value to glide from: the start field now grows downward in
-// one soft step per line (composer.css, Apple audit B5).
+// chat was pulled up by the scroll clamp), and it gave the height no start
+// value to glide from: the start field grows downward in one soft step per
+// line (composer.css).
 (function () {
   window.App = window.App || {};
   const MULTILINE = "is-multiline";
@@ -130,7 +130,7 @@
     // Typing measures once per frame, before it is painted and after every
     // other write of the task: sending clears the field in the same click
     // that builds the thread, and a measurement in between forced the whole
-    // new layout once more (Apple-Audit D3).
+    // new layout once more.
     let inputFrame = null;
     questionInput.addEventListener("input", () => {
       if (inputFrame !== null) return;
@@ -142,7 +142,7 @@
 
     // Typing never moves the conversation. Chrome brings the caret into view
     // as if the sticky composer stood at the page's end, so a reader further
-    // up was pulled 42px down with every key (2026-10-26). While the composer
+    // up was pulled 42px down with every key. While the composer
     // is in view, the caret is too: the page keeps the place it had before
     // the key. A field under a phone's keyboard is left to the browser. The
     // browser's scroll arrives before the next frame, which ends the guard.

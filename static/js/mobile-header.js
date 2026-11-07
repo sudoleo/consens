@@ -52,7 +52,7 @@
     scheduleEdge();
   }
   // Reading the scroll position right after a class change forced the new
-  // layout in the middle of a send (Apple-Audit D3); in the frame it is free.
+  // layout in the middle of a send; in the frame it is free.
   let edgeFrame = 0;
   function scheduleEdge() {
     if (!edgeFrame) edgeFrame = requestAnimationFrame(() => { edgeFrame = 0; syncEdge(); });

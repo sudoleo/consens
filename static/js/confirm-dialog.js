@@ -1,8 +1,8 @@
 // =====================================================================
 // confirm-dialog.js
 // App.confirm: the app's own question before something that cannot be
-// taken back, instead of the browser's grey "consens.io says" window
-// (Apple audit E1). One dialog, built once, the same surface and motion as
+// taken back, instead of the browser's grey "consens.io says" window.
+// One dialog, built once, the same surface and motion as
 // every other (App.modalDialog, overlays.css).
 //
 //   const ok = await App.confirm({

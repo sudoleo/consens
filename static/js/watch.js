@@ -1,5 +1,5 @@
-// The Watches page (/app/watches) and what every Watch surface shares. Since
-// 2026-11-03 a Watch runs the Agent on a schedule (agent_watches.py):
+// The Watches page (/app/watches) and what every Watch surface shares. A
+// Watch runs the Agent on a schedule (agent_watches.py):
 // watch-sheet.js starts one, watch-dashboard.js renders the page, agent-watch.js
 // is the card under an answer. This file keeps the page's route and view
 // switch, the Watch pill under an Agent answer, the sign-in hand-off and the
@@ -8,7 +8,7 @@
 (function () {
   const VIEW_SWITCH_HINT_STORAGE_KEY = "consensio.watchViewSwitchHint.seen.v1";
   // What a guest asked for before signing in (the sign-in reloads the page):
-  // the sheet opens again with it afterwards (Apple-Audit J3).
+  // the sheet opens again with it afterwards.
   const PENDING_STORAGE_KEY = "consensio.watchAfterLogin.v1";
   const PENDING_MAX_AGE_MS = 60 * 60 * 1000;
   const watchState = window.App.watchState;
@@ -75,7 +75,7 @@
   function normalizeWatchLimits(rawLimits, watches) {
     const list = Array.isArray(watches) ? watches : [];
     const activeFromList = list.filter(watch => watch.status === "active").length;
-    // "plan" traegt jetzt free/plus/pro. Der Fallback greift nur, solange der
+    // "plan" traegt free/plus/pro. Der Fallback greift nur, solange der
     // Server noch nicht geantwortet hat; die Zahl selbst kommt sonst immer aus
     // der Antwort.
     const tier = window.App.normalizeTier?.(rawLimits?.plan ?? window.userTier) || "free";
@@ -117,8 +117,8 @@
   }
 
   // One GET of the list at a time: a caller that comes while one is on its
-  // way shares it (the Watches page opened directly loaded the list three
-  // times, review 2), unless it needs a list newer than a change it just
+  // way shares it (the Watches page opened directly loads the list three
+  // times), unless it needs a list newer than a change it just
   // made (`fresh`). Resolves to the server's answer, already taken in.
   function requestWatchList({ fresh = false } = {}) {
     if (watchState.limitRequest && !fresh) return watchState.limitRequest;
@@ -147,7 +147,7 @@
   }
 
   // ------------------------------------------------------------------
-  // Telegram pairing (J19): one pairing at a time for the whole page. It
+  // Telegram pairing: one pairing at a time for the whole page. It
   // waits as long as the link is valid (10 min), checks at once when the
   // reader comes back from Telegram and never asks for a reload. Every
   // surface that offers it (the page's Delivery) listens.
@@ -250,7 +250,7 @@
   }
 
   // A block that changes its height grows or shrinks over --dur-state from
-  // where it was instead of in one frame (J2). `hold` keeps the old height
+  // where it was instead of in one frame. `hold` keeps the old height
   // while the reader types in a field below it; the block settles once the
   // field is left, so nothing slides away under the cursor.
   function smoothHeight(node, mutate, { hold = null } = {}) {
@@ -303,7 +303,7 @@
   }
 
   // ------------------------------------------------------------------
-  // Guests (J3): every invitation leads into the sign-in and, after the
+  // Guests: every invitation leads into the sign-in and, after the
   // reload it ends in, straight back to the sheet with the same question.
   // ------------------------------------------------------------------
   function readPending() {
@@ -359,11 +359,11 @@
 
   // ------------------------------------------------------------------
   // Watch page (/app/watches): full view with URL + segmented-switch sync.
-  // The page scrolls the document like every page (F14): the chat column
+  // The page scrolls the document like every page: the chat column
   // steps aside while it is open (body.is-watch-view) and gets its scroll
   // position back when it returns. Changing views fades through: the old
   // view fades out, the new one fades in with a small rise; the switch
-  // itself never moves (C6, J4).
+  // itself never moves.
   // ------------------------------------------------------------------
 
   const WATCH_PAGE_PATH = "/app/watches";
@@ -474,7 +474,7 @@
     } catch (_) {}
     // A dot stands only where something waits that can be opened: a guest
     // could only be asked for an account behind it, so the hint waits for
-    // a signed-in account (Apple-Audit H2), also on the phone's menu button.
+    // a signed-in account, also on the phone's menu button.
     let scheduled = false;
     const schedule = () => {
       if (scheduled || !window.auth?.currentUser) return;
@@ -497,7 +497,7 @@
     if (!page || page.dataset.wired) return;
     page.dataset.wired = "1";
     // Esc closes the topmost layer only (a dialog, a menu): the page is a
-    // page, not a layer, and never closes on Esc with work in it (J1).
+    // page, not a layer, and never closes on Esc with work in it.
     // Browser-Navigation (Back/Forward) hält Seite und URL synchron.
     window.addEventListener("popstate", () => {
       if (onWatchPagePath()) showWatchPage();
@@ -551,8 +551,8 @@
     }
   }
 
-  // Guests see the page too: what a watch is, by example, and the way in
-  // (J3) -- no toast that says "log in" and leaves them where they were.
+  // Guests see the page too: what a watch is, by example, and the way in --
+  // no toast that says "log in" and leaves them where they were.
   function openWatchDashboard(options = {}) {
     closeShareDialog();
     acknowledgeViewSwitchHint();
@@ -564,7 +564,7 @@
 
   // The page's first look for an account comes once, from whichever way
   // learns of the account first: the route's wait below or the auth state.
-  // Both rendered it, and each render loaded the page (review 2).
+  // Both rendered it, and each render loaded the page.
   let firstLookFor = "";
   function firstLook(uid) {
     if (!uid || firstLookFor === uid) return false;
@@ -574,7 +574,7 @@
 
   function initWatchPageRoute() {
     // Deep-Link /app/watches: app-bootstrap.js has already painted the page
-    // with its card skeleton (J6); here it waits for the asynchronous
+    // with its card skeleton; here it waits for the asynchronous
     // Firebase auth state and only then loads -- without a line of
     // "Checking your session…" in between.
     if (!onWatchPagePath()) return;
@@ -626,8 +626,8 @@
   }
 
   // ------------------------------------------------------------------
-  // The Watch pill under an Agent answer (J20): a chat with a Watch reads
-  // "Watching" and opens it on Watches (J17), any other starts one there.
+  // The Watch pill under an Agent answer: a chat with a Watch reads
+  // "Watching" and opens it on Watches, any other starts one there.
   // ------------------------------------------------------------------
   const EYE_ICON = '<svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>';
   const answerButtons = new Set();
@@ -668,7 +668,7 @@
   // The Agent answer's pill, right after its evidence row (Sources ·
   // Answers · Differences) in the same line, on phones on the next one;
   // without an evidence row, on a line of its own under the answer.
-  // Every finished Agent answer has one (Max, Apple-Audit J20): the live
+  // Every finished Agent answer has one: the live
   // answer (agent-chat.js, on every projection), a reopened chat's answer
   // and each Agent turn of the history (thread-history.js, built off the
   // page, `history: true`). The pill carries the question of its own turn,
@@ -779,7 +779,7 @@
     answerButton: syncAnswerWatchButton,
     resetAfterLogout: resetAfterLogout,
     // A chat that opens leaves Watches (openBookmark): by keyboard or from
-    // Share in its "…" menu it opened unseen behind the page (2026-10-23).
+    // Share in its "…" menu it opened unseen behind the page.
     leave: () => { if (watchViewIsOpen()) closeWatchDashboard({ animate: false, restoreScroll: false }); }
   });
   // Shared with watch-dashboard.js (the API, the archive's list, Telegram),

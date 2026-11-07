@@ -1,8 +1,9 @@
 // =====================================================================
 // share-dialog.js
 // Oeffentliche Share-Links: Bestaetigen, Erfolg, Liste/Revoke. In eigene
-// IIFE gekapselt. Extrahiert aus templates/index.html (initApp-Closure).
-// Export: window.openShareDialog (firebase.js User-Menue ruft es auf).
+// IIFE gekapselt.
+// Export: window.openShareDialog (firebase.js User-Menue ruft es auf),
+// window.App.answerShare {open, button}, window.App.sharedModal {close}.
 // Abhaengigkeiten: window.auth (firebase), window.lastShareResultId,
 // window.App.showPopup, window.App.trackAppEvent.
 // =====================================================================
@@ -33,7 +34,7 @@
 
   // #shareModal is a native <dialog> opened through App.modalDialog: focus
   // goes in and back, Tab stays inside, Escape closes this layer only (the
-  // Watches page beneath keeps what is typed there, Apple-Audit J1), and it
+  // Watches page beneath keeps what is typed there), and it
   // fades in and out like every dialog (overlays.css).
   function dialogIsOpen(modal) {
     return Boolean(modal?.open || modal?.hasAttribute?.("open"));
@@ -264,14 +265,13 @@
       prepareLink();
     } else if (!pendingId) {
       confirmBtn.disabled = true;
-      // Nothing on screen to publish (the browser runs no Consensus since
-      // 2026-10-25; a saved answer prepares itself above).
+      // Nothing on screen to publish (the browser runs no Consensus; a saved
+      // answer prepares itself above).
       confirmBtn.textContent = "Nothing to share yet";
     }
     // A prepared answer lives a day on the server (PENDING_TTL_HOURS): an
     // older one in a tab left open answers 404 and is prepared again once,
-    // keeping its link (share_snapshots.py). Before, every click failed
-    // until a reload.
+    // keeping its link (share_snapshots.py).
     function renewable() {
       if (prepare) return Boolean(prepare.forget?.());
       return Boolean(window.forgetPreparedShareResult?.());
@@ -431,7 +431,7 @@
   }
 
   // ------------------------------------------------------------------
-  // Sharing an Agent answer (since 2026-10-21). The server builds the
+  // Sharing an Agent answer. The server builds the
   // snapshot from the saved turn (POST /agent/chats/{chat}/turns/{turn}/
   // share-result) under an ID that stays the same for that answer, so a
   // second Share finds the first link. Every finished answer of a chat has

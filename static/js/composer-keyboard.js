@@ -15,20 +15,20 @@
 // und schreibt, wie weit die Unterkante des sichtbaren Viewports ueber der
 // des Layout-Viewports liegt, als --keyboard-lift an den Composer selbst
 // (nicht an <html>: eine Variable am Wurzelelement liess bei jedem Scroll
-// die Styles der ganzen Seite neu rechnen, Apple-Audit D9). shell.css hebt
+// die Styles der ganzen Seite neu rechnen). shell.css hebt
 // den unten fixierten Composer per transform um diesen Betrag an, ohne
 // Layout. Jede offene Ebene mit Feldern (jeder modale Dialog, das Memory-
 // und das Gmail-&-Calendar-Sheet) bekommt den sichtbaren Bereich als
 // --keyboard-top/--keyboard-height und endet damit an der Tastatur
-// (overlays.css, Apple-Audit F8): was man tippt und die Knoepfe darunter
+// (overlays.css): was man tippt und die Knoepfe darunter
 // bleiben erreichbar. Ohne Tastatur bleibt es bei bottom: 0, das der Browser
 // beim Scrollen ohne Verzug nachfuehrt.
 //
 // iOS meldet die neue Groesse erst, wenn die Tastatur schon steht; der
-// Composer sprang ihr hinterher und liess beim Schliessen kurz eine Luecke
-// (Apple-Audit F9). Hat dieses Geraet die Tastatur schon einmal gemeldet,
-// faehrt der Composer beim Fokus deshalb sofort mit ihr hoch (gemerkte Hoehe,
-// iOS-Kurve, body.keyboard-moving) und beim Verlassen des Feldes mit ihr
+// Composer sprang ihr hinterher und liess beim Schliessen kurz eine Luecke.
+// Hat dieses Geraet die Tastatur schon einmal gemeldet, faehrt der Composer
+// beim Fokus deshalb sofort mit ihr hoch (gemerkte Hoehe, iOS-Kurve,
+// body.keyboard-moving) und beim Verlassen des Feldes mit ihr
 // herunter; die gemeldete Groesse korrigiert danach nur noch. Android meldet
 // nie eine verdeckende Tastatur (resizes-content) und bleibt unberuehrt.
 //
@@ -75,7 +75,7 @@
   // rounding between the two viewports.
   const PANNED_MIN_PX = 4;
   // How long the state must last before the composer moves: a bounce at the
-  // page's end is over by then (review 2026-11-01).
+  // page's end is over by then.
   const PANNED_HOLD_MS = 700;
   const PANNED_CLASS = "viewport-panned";
   let pannedTracked = false;
@@ -87,7 +87,7 @@
 
   function composer() { return document.querySelector(".input-section"); }
   // The layers that cover the page and hold fields; the open ones follow the
-  // keyboard. Variables on the layer itself, never on <html> (D9).
+  // keyboard. Variables on the layer itself, never on <html>.
   const LAYERS = "dialog[open], .memory-edit-backdrop:not([hidden]), .agent-google-overlay:not([hidden])";
   let layers = [];
 

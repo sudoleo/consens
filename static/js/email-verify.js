@@ -6,11 +6,10 @@
 // Der Streifen fuer den Zustand "angemeldet, aber E-Mail noch nicht
 // bestaetigt" (#verifyBanner in templates/index.html).
 //
-// Frueher war dieser Zustand ein Rauswurf: onIdTokenChanged hat unbestaetigte
-// Nutzer sofort ausgeloggt. Wer den Bestaetigungslink nicht im selben Moment
-// fand, stand wieder vor der Login-Maske — mit verlorener Frage. Jetzt bleibt
-// die Session stehen, die App ist sichtbar, und dieser Streifen sagt, was
-// fehlt: ein Klick im Postfach.
+// Die Session bleibt stehen, die App ist sichtbar, und dieser Streifen sagt,
+// was fehlt: ein Klick im Postfach. Ein Rauswurf schickte jeden, der den
+// Bestaetigungslink nicht im selben Moment findet, mit verlorener Frage
+// zurueck vor die Login-Maske.
 //
 // Dieses Modul kennt Firebase NICHT. firebase.js reicht die drei Aktionen
 // (erneut senden, Status neu laden, ausloggen) als Callbacks herein.

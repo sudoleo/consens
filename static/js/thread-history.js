@@ -5,10 +5,9 @@
 // server stored. Also the one exchange on screen (lastExchange) and the
 // composer's input lock and placeholder.
 //
-// Until 2026-10-25 this file was consensus-run.js and also ran the
-// Consensus synthesis in the browser (/consensus); that pipeline now runs
-// only on the server (Watches, the API, curated topics). Saved Consensus
-// chats stay readable here; they are no longer continued.
+// The Consensus synthesis runs only on the server (Watches, the API,
+// curated topics). Saved Consensus chats stay readable here; they are not
+// continued.
 //
 // Shared deps via existing window contracts:
 //   - window.injectMarkdown (markdown-stream.js)
@@ -22,7 +21,7 @@
   window.App = window.App || {};
 
   // "BestModel: Anthropic" ist Buchhaltung fuer die Modell-Wertung, kein Satz
-  // fuer Leser. Im Freitext-Fallback stand sie bisher sichtbar unter der
+  // fuer Leser. Im Freitext-Fallback stuende sie sonst sichtbar unter der
   // Analyse.
   function stripBestModelLine(differencesText) {
     return String(differencesText || "")
@@ -49,8 +48,8 @@
   // --------- Der Austausch auf dem Schirm und der Verlauf darueber ---------
   // lastExchange ist das Frage/Antwort-Paar einer geoeffneten gespeicherten
   // Consensus-Antwort (firebase.js showExchange); der Antwortleser liest es
-  // (model-answer-reader.js). Fortgesetzt wird ein solcher Chat nicht mehr:
-  // seit 2026-10-25 laeuft der Consensus nur noch auf dem Server.
+  // (model-answer-reader.js). Fortgesetzt wird ein solcher Chat nicht: der
+  // Consensus laeuft nur auf dem Server.
   const DEFAULT_INPUT_PLACEHOLDER = "Enter your question";
 
   // Jede archivierte Schublade braucht eine eigene ID fuer aria-controls.
@@ -58,7 +57,7 @@
   // ein JS-Vertrag sind — hier darf nie eine davon ein zweites Mal auftauchen.
   let panelSequence = 0;
 
-  // ---- A Watch's chat, day by day (since 2026-11-05) ----------------------
+  // ---- A Watch's chat, day by day -----------------------------------------
   // Max: a Watch's chat reads as one running conversation, its messages
   // "wie bei WhatsApp mit Datum getrennt", so the reader sees which run is
   // the newest and when each one ran. In a chat where a Watch ran, every day
@@ -284,8 +283,8 @@
       const answerBody = document.createElement("div");
       answerBody.className = "consensus-answer-body";
       answerBody.dataset.markdown = turnData.consensus;
-      // Consensus prose has carried no source references since 2026-09-11, so
-      // a numeric [1] in it never picks up a citation (as in the live run).
+      // Consensus prose carries no source references, so a numeric [1] in
+      // it never picks up a citation (as in the live run).
       // Older answers with [S1] tags and Agent prose keep their citations.
       answerBody.dataset.sourceReferences = agentTurn || /\[S\d/i.test(turnData.consensus || '') ? 'legacy' : 'none';
       // Its checklists keep their ticks on the turn (task-checks.js).
@@ -328,12 +327,12 @@
         window.App.passageCheck?.apply(answerBody, turnData.agent_review);
         window.App.agentMemory?.render(answerBody, { key: turnId, changes: turnData.agent_memory });
         // Every finished Agent answer has its Watch pill, with the question
-        // of its own turn (Max, Apple-Audit J20). The history shows no
+        // of its own turn. The history shows no
         // prepared-Watch card, so a turn with one gets the pill as well.
         // A temporary chat has its Watch pill too (a Watch names no chat),
         // but no share: that keeps a copy for 30 days (temporary-chat.js).
         const finished = turnData.status !== "failed" && Boolean(String(turnData.consensus || "").trim());
-        // Since 2026-11-03 a Watch belongs to the chat (agent_watches.py):
+        // A Watch belongs to the chat (agent_watches.py):
         // its pill stands under the newest answer only, not under each one.
         window.App.watch?.answerButton?.(answerBody, { question: turnData.question, history: true, eligible: false });
         // Its Share pill shares this turn's answer; the chat is the one on
@@ -688,7 +687,7 @@
       return this.renderStoredTurns(turnData ? [turnData] : []);
     },
 
-    // The history never shrinks under the reader (Apple audit A1): turns
+    // The history never shrinks under the reader: turns
     // already on the page under the same key stay as they are, only what is
     // missing is appended. Emptying the history first left the page shorter
     // for a moment; the browser cut the scroll position to fit, and a
@@ -751,7 +750,7 @@
       this.render();
     },
 
-    // Der Kontext-Zustand hat KEINE eigene Flaeche mehr am Composer. Sichtbar
+    // Der Kontext-Zustand hat KEINE eigene Flaeche am Composer. Sichtbar
     // ist er dort, wo er hingehoert: im Thread, der ueber dem Eingabefeld
     // steht. Uebrig bleibt das Nachziehen der Login-Schranke und des
     // Platzhalters.

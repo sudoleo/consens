@@ -23,16 +23,13 @@ googleProvider.setCustomParameters({ prompt: "select_account" });
 
 if (!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey) {
   console.error("[FATAL] FIREBASE_CONFIG fehlt/leer. Abbruch (kein Auto-Init).", window.FIREBASE_CONFIG);
-  // Optional: UI-Hinweis anzeigen
   const el = document.getElementById("loginError");
   if (el) el.textContent = "Init failed: Missing Firebase config.";
-  // return;  // <- wenn du sicher abbrechen willst
 }
 
 // Initialisiere Firebase mit der globalen Konfiguration, die aus dem HTML kommt
 const app = initializeApp(window.FIREBASE_CONFIG);
 
-// Initialisiere Auth
 const auth = getAuth(app);
 // Google's sign-in window and Firebase's own mails (password reset) in the
 // page's language (i18n.js sets App.lang on a German page).
@@ -89,9 +86,9 @@ async function refreshVerificationState() {
 }
 
 // The recheck under way ({ uid, done }). reload() fires onIdTokenChanged
-// again (Firebase, User.reload): until 2026-10-30 that run rechecked once
-// more, without end, and each time cleared the composer, drew the strip anew
-// and dropped the server session. A run that comes while the account's
+// again (Firebase, User.reload): a run that rechecked once more would loop
+// without end, each time clearing the composer, drawing the strip anew and
+// dropping the server session. A run that comes while the account's
 // recheck is under way leaves the page to the run that started it.
 let verificationRecheck = null;
 function recheckVerification() {
@@ -117,8 +114,9 @@ async function performLogout() {
     // sent beside the session cleanup, waited for at most 3 s. What does not
     // arrive is dropped with the account's values on sign-out.
     const settingsSent = window.App.userSettings.flush({ timeoutMs: 3000 });
-    // A chat or a watch deleted a moment ago (its Undo still offered) is
-    // deleted now, with this account's token; a watch kept running before.
+    // A chat deleted a moment ago (its Undo still offered) is deleted now,
+    // with this account's token; so is whatever the Watches page still holds
+    // (commitPending).
     const deletesSent = Promise.race([
       Promise.allSettled([settleUndoableBookmarkDeletes(), window.App?.watchDashboard?.commitPending?.()]),
       new Promise(resolve => setTimeout(resolve, 3000))
@@ -214,7 +212,6 @@ function renderMarkdownSafe(md) {
 // App.tokenBudget (token-budget.js); /user_status und /usage liefern es als
 // `token_budget`, genau wie jede Lauf-Antwort.
 
-// merken, dass wir Bookmarks schon einmal geladen haben
 let bookmarksLoaded = false;
 let bookmarksNextCursor = null;
 let bookmarksLoading = false;
@@ -353,7 +350,7 @@ function clearAuthenticatedUiState() {
 
 // A status check that fails for a moment (network, a deploy, the tier
 // service) must not swap Agent for Consensus under the reader for the rest of
-// the session (Apple-Audit B8). The account then stays "being checked": Agent's
+// the session. The account then stays "being checked": Agent's
 // composer stands (agent-chat.js expectingAgent), nothing is sent, the composer
 // says so once a check has failed, and the check runs again by itself with a
 // growing pause, at once when the browser is back online or the tab returns,
@@ -397,8 +394,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) stat
 // This module runs before the deferred app bundle, whose start (app-init.js)
 // sets the tier to Free; user-tier.js, the account mark and the agent modules
 // do not exist before it. A status that answered first was overwritten there
-// and a Pro account stayed Free in that tab (nightly run 2026-10-28). The
-// requests leave at once; their answers apply after DOMContentLoaded, which
+// and a Pro account stayed Free in that tab. The requests leave at once;
+// their answers apply after DOMContentLoaded, which
 // follows every deferred script.
 const appStarted = new Promise(resolve => {
   if (document.readyState === "complete") resolve();
@@ -431,7 +428,7 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
       clearStatusRetry();
       // The operator's own browsers leave the Umami numbers (docs/analytics.md).
       if (data.is_admin === true) window.consensioAnalytics?.excludeOperator?.();
-      // Token and cost figures (.admin-only) are for the operator only (Apple-Audit H4).
+      // Token and cost figures (.admin-only) are for the operator only.
       document.body.classList.toggle("viewer-is-admin", data.is_admin === true);
       // The account's workspace (Linux computer for the Agent): vm_time comes
       // only with it. Its settings, restore and composer button follow.
@@ -444,8 +441,8 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
 
       // 2. UI AKTUALISIEREN
 
-      // "is_pro" ist seit der Plus-Stufe kein vollstaendiger Status mehr: es
-      // heisst nur "Frontier-Modelle" und ist fuer Plus false.
+      // "is_pro" ist kein vollstaendiger Status: es heisst nur
+      // "Frontier-Modelle" und ist fuer Plus false.
       // Wer hier weiterhin nur das Flag durchreicht, macht aus jedem
       // Plus-Konto beim Laden ein Free-Konto. /user_status liefert "tier".
       const tier = data.tier ?? data.is_pro;
@@ -464,9 +461,9 @@ async function checkUserStatusOnLoad(user, token, generation, attempt = 0) {
       // Premium Agent models unlock with the tier, which arrives after access.
       window.App.agentChat?.render?.();
 
-      // B) FALLBACK -- nur wenn es den sauberen Weg oben nicht gibt. Frueher
-      // lief er immer und schrieb danach das Ergebnis von updateUserTierUI
-      // wieder um: Plus verlor sein Badge und bekam den Free-Hinweis.
+      // B) FALLBACK -- nur wenn es den sauberen Weg oben nicht gibt. Liefe er
+      // immer, schriebe er das Ergebnis von updateUserTierUI wieder um: Plus
+      // verloere sein Badge und bekaeme den Free-Hinweis.
       if (typeof window.updateUserTierUI !== "function") {
         const badge = document.getElementById("proBadge");
         const upgradeLink = document.getElementById("upgradeLink");
@@ -514,7 +511,7 @@ onIdTokenChanged(auth, async (user) => {
 
   if (user) {
     // Unbestaetigt: kein Token persistieren, keine authentifizierten Calls —
-    // aber auch KEIN Rauswurf mehr. Der Nutzer bleibt angemeldet, sieht die
+    // aber auch KEIN Rauswurf. Der Nutzer bleibt angemeldet, sieht die
     // App und den Bestaetigungs-Streifen. Ausgeloggt zu werden, waehrend man
     // im Postfach sucht, war der teuerste Moment im ganzen Funnel.
     if (!user.emailVerified) {
@@ -579,7 +576,7 @@ onIdTokenChanged(auth, async (user) => {
       const unverifiedTopActions = document.getElementById("authTopActions");
       if (unverifiedTopActions) unverifiedTopActions.hidden = true;
       publishAuthState(null);
-      return; // <--- ganz wichtig
+      return;
     }
 
     hideEmailVerificationGate();
@@ -632,7 +629,7 @@ onIdTokenChanged(auth, async (user) => {
 
     let sessionCookieSet = false;
     try {
-      // Dieser Call übernimmt nun die Arbeit für ALLE Login-Arten (Google, Email, Reload)
+      // Dieser Call übernimmt die Arbeit für ALLE Login-Arten (Google, Email, Reload)
       const res = await fetch("/confirm-registration", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -641,7 +638,6 @@ onIdTokenChanged(auth, async (user) => {
       sessionCookieSet = res.ok;
       
       if (!res.ok) {
-        // Hilft dir beim Debuggen: Was genau sagt das Backend?
         const errData = await res.json();
         console.warn("Registration Check Failed:", errData);
       }
@@ -684,7 +680,7 @@ onIdTokenChanged(auth, async (user) => {
     // The sidebar's watch count: the list the sign-in already loads (watch.js
     // on the auth state, the Watches page) is taken as it is; only a missing
     // one is fetched. A forced reload here was a second list request on
-    // every sign-in (review 2).
+    // every sign-in.
     window.App?.watch?.loadState?.().catch(() => {});
 
     // 4) Usage-UI anzeigen
@@ -692,10 +688,10 @@ onIdTokenChanged(auth, async (user) => {
       usageOptions.style.display = "block";
     }
 
-    // Account-Reiter in den Settings einblenden. Seit die Einstellungen
-    // Tabs sind, gehoert die Sichtbarkeit des PANELS allein dem Tab-Controller
-    // (app-ui.js); hier wird nur noch der Reiter selbst freigegeben. Ein
-    // inline gesetztes display wuerde den Controller sonst uebersteuern.
+    // Account-Reiter in den Settings einblenden. Die Sichtbarkeit des PANELS
+    // gehoert allein dem Tab-Controller (app-ui.js); hier wird nur der Reiter
+    // selbst freigegeben. Ein inline gesetztes display wuerde den Controller
+    // sonst uebersteuern.
     window.App?.settingsTabs?.setTabAvailable?.("accountSettingsSection", true);
 
     // View-Switch-Pill ist immer sichtbar (auch ausgeloggt) — hier nichts tun.
@@ -744,7 +740,7 @@ onIdTokenChanged(auth, async (user) => {
     // traegt, ist mit dem alten Knoten weg und muss neu gesetzt werden.
     window.App?.accountTier?.render?.();
 
-    // The address beside the initial opens the same menu (sidebar footer).
+    // The name beside the initial opens the same menu (sidebar footer).
     const accountIdentity = document.getElementById("accountIdentity");
     const logoutButton = document.getElementById("logoutButton");
     const sharedLinksButton = document.getElementById("sharedLinksButton");
@@ -837,8 +833,8 @@ onIdTokenChanged(auth, async (user) => {
     });
 
     // Übersicht der geteilten Consensus-Links direkt aus dem User-Menü öffnen.
-    // stopPropagation ist wichtig: der umschließende #loginContainer hat einen
-    // Klick-Handler, der eingeloggte Nutzer sonst ausloggt.
+    // stopPropagation: der umschließende #loginContainer hat einen eigenen
+    // Klick-Handler (für Gäste öffnet er den Login).
     if (sharedLinksButton) {
       sharedLinksButton.addEventListener("click", e => {
         e.stopPropagation();
@@ -858,8 +854,7 @@ onIdTokenChanged(auth, async (user) => {
     }
 
     logoutButton.addEventListener("click", e => {
-      // stopPropagation: Klick soll weder das Icon-Toggle noch den
-      // loginContainer-Handler treffen.
+      // stopPropagation: Klick soll den loginContainer-Handler nicht treffen.
       e.stopPropagation();
       setAccountMenuOpen(false);
       openLogoutConfirm();
@@ -919,7 +914,7 @@ onIdTokenChanged(auth, async (user) => {
         // B) Kein Konto, kein Kontostand.
         window.App.tokenBudget?.clear?.();
 
-        // C) Premium Modelle wieder sperren (HIER WAR DER FEHLER)
+        // C) Premium Modelle wieder sperren
         const premiumOptions = document.querySelectorAll('.premium-option');
         premiumOptions.forEach(option => {
             option.disabled = true;
@@ -935,7 +930,7 @@ onIdTokenChanged(auth, async (user) => {
         });
 
         if (typeof window.updateUserTierUI === "function") {
-            window.updateUserTierUI(false, false); // isPro=false, isLoggedIn=false
+            window.updateUserTierUI(false, false); // tier=false, isLoggedIn=false
         }
         window.App?.accountTier?.set?.("free");
         document.body.classList.remove("viewer-is-admin", "viewer-has-workspace");
@@ -947,7 +942,7 @@ onIdTokenChanged(auth, async (user) => {
         // remembered (app-bootstrap.js expectedSession): an ended session
         // (password changed elsewhere, account disabled, a Google sign-in
         // that came back without a user) left it grey and locked under
-        // "Log in" until a reload (review 1, regression of B4).
+        // "Log in" until a reload.
         if (typeof window.updateQuestionInputAccess === "function") {
           window.updateQuestionInputAccess();
         }
@@ -1037,8 +1032,7 @@ let authContextLead = "";
 
 function mapFirebaseLoginError(error) {
   // SDK 9.22 predates Firebase's e-mail enumeration protection: a wrong
-  // password arrives as auth/internal-error carrying INVALID_LOGIN_CREDENTIALS
-  // and used to read "An error occurred" instead of "wrong password".
+  // password arrives as auth/internal-error carrying INVALID_LOGIN_CREDENTIALS.
   const message = String(error?.message || "");
   switch (error?.code) {
     case "auth/user-not-found":
@@ -1161,8 +1155,7 @@ async function continueSignedIn() {
   window.App.reloadingAfterSignIn = true;
   // The fresh page paints the account from its first frame
   // (app-bootstrap.js reads the stored token): without it the Google sign-in
-  // came back as a guest page that turned into the app a second later
-  // (Apple-Audit B4).
+  // came back as a guest page that turned into the app a second later.
   try {
     const user = auth.currentUser;
     if (user?.emailVerified) localStorage.setItem("id_token", await user.getIdToken());
@@ -1283,7 +1276,7 @@ function setMode(mode) {
 function selectAuthTab(mode) {
   if (formEl.dataset.mode === mode && !formEl.hidden) return;
   // Sign up hides the password row: the dialog follows its fields with one
-  // height movement instead of jumping (Apple-Audit C9; App.watchUi.smoothHeight).
+  // height movement instead of jumping (App.watchUi.smoothHeight).
   const smooth = window.App?.watchUi?.smoothHeight;
   const box = formEl.closest(".auth-modal");
   if (smooth && box) smooth(box, () => setMode(mode));
@@ -1513,7 +1506,7 @@ async function handleEmailLogin() {
     const { user } = await signInWithEmailAndPassword(auth, email, password);
     forgetRememberedEmail();
     if (!user.emailVerified) {
-      // Unbestaetigt heisst nicht mehr "raus": das Modal geht zu, die App
+      // Unbestaetigt heisst nicht "raus": das Modal geht zu, die App
       // ist da, und der Streifen (onIdTokenChanged) erklaert den einen
       // fehlenden Schritt inklusive Resend.
       try { localStorage.removeItem("id_token"); } catch (_) {}
@@ -1530,7 +1523,7 @@ async function handleEmailLogin() {
   } catch (error) {
     setButtonPending(loginBtn, false);
     // Compared before it is shown: the German page translates the text a
-    // moment later, so the text on screen never matched (2026-10-23).
+    // moment later, so the text on screen would never match.
     const message = mapFirebaseLoginError(error);
     loginErr.textContent = message;
     if (message === WRONG_CREDENTIALS_MESSAGE) passEl.setAttribute("aria-invalid", "true");
@@ -1688,7 +1681,7 @@ function closeAuthModal() {
 // Klick auf den Login-Bereich: Öffne das Modal, wenn nicht angemeldet.
 // Eingeloggt passiert hier bewusst NICHTS - das User-Icon öffnet sein eigenes
 // Popup (stopPropagation), Logout läuft ausschließlich über den bestätigten
-// Logout-Button im Popup. Vorher loggte ein Klick knapp neben das Icon aus.
+// Logout-Button im Popup.
 document.getElementById("loginContainer").addEventListener("click", event => {
   if (!auth.currentUser) {
     showAuthModal("login", event.currentTarget);
@@ -1712,7 +1705,6 @@ window.App.openAuthModal = openAuthModal;
 document.getElementById("authTopLoginBtn")?.addEventListener("click", event => openAuthModal("login", event.currentTarget));
 document.getElementById("authTopSignupBtn")?.addEventListener("click", event => openAuthModal("register", event.currentTarget));
 
-// Schließen des Modals
 document.getElementById("closeLoginModal").addEventListener("click", closeAuthModal);
 // Standard: beim Öffnen im Login-Modus
 setMode("login");
@@ -1746,7 +1738,7 @@ setMode("login");
 })();
 
 // A private Watch page opens only with its owner's session cookie, which a
-// mail app or another browser lacks. Its links and its "Sign in to view"
+// mail app or another browser lacks. Its links and its "Log in to view"
 // button come here as /app?next=/s/...; once signed in (or at once, when this
 // browser is signed in already) the auth handler above goes back. Only
 // same-origin page paths are accepted, never a full URL or "//host".
@@ -1767,7 +1759,7 @@ const SIGNED_IN_RETURN = (() => {
 })();
 
 // A Watch's mail or Telegram message links its chat as /app?chat=<bookmark>
-// (notification_delivery._agent_chat_url, since 2026-11-03): once signed
+// (notification_delivery._agent_chat_url): once signed
 // in, the chat opens; signed out, the login comes first.
 (function openChatFromLink() {
   // A Google login on a phone leaves through a redirect and comes back to a
@@ -1830,9 +1822,8 @@ const SIGNED_IN_RETURN = (() => {
 
 // --- Account löschen (DSGVO Art. 17) ---
 // The app asks once, in its own dialog (App.confirm), and says how it went
-// in the notice line (App.toast); the browser's grey windows are gone
-// (Apple audit E1). After a deletion the line is read before the page
-// leaves for the start page.
+// in the notice line (App.toast). After a deletion the line is read before
+// the page leaves for the start page.
 const ACCOUNT_DELETED_READ_MS = 2400;
 document.getElementById("deleteAccountBtn")?.addEventListener("click", async event => {
   const button = event.currentTarget;
@@ -1895,8 +1886,7 @@ document.getElementById("deleteAccountBtn")?.addEventListener("click", async eve
 });
 
 // The sidebar shows the whole name; the row's CSS ellipsis cuts it where the
-// space ends. The former five-word cut ("Our house is from 1978...")
-// shortened even names that fitted.
+// space ends.
 function bookmarkLabelText(text) {
   return String(text || "").replace(/\s+/g, " ").trim();
 }
@@ -1905,10 +1895,11 @@ function bookmarkDisplayQuestion(bookmark) {
   return String(bookmark?.query || "").trim();
 }
 
-// Der Sidebar-Name ist die ERSTE Frage der Unterhaltung und bleibt danach
-// stehen; `query` ist die zuletzt gestellte Frage und wandert mit jedem
-// Follow-up weiter. Aeltere Bookmarks ohne gespeicherten Titel fallen auf
-// die Frage zurueck.
+// Der Sidebar-Name ist der gespeicherte Titel (zuerst die ERSTE Frage der
+// Unterhaltung, dann ein erzeugter oder umbenannter Name) und bleibt bei
+// Follow-ups stehen; `query` ist die zuletzt gestellte Frage und wandert mit
+// jedem Follow-up weiter. Aeltere Bookmarks ohne gespeicherten Titel fallen
+// auf die Frage zurueck.
 function bookmarkDisplayTitle(bookmark) {
   return String(bookmark?.title || "").trim() || bookmarkDisplayQuestion(bookmark);
 }
@@ -2045,11 +2036,9 @@ function bookmarkModelAnswerCount(bookmark) {
   return bookmarkModelKeys().filter(name => String(responses[name] || "").trim()).length;
 }
 
-// Ein Direktvergleich (Agent Mode aus) legt Modellantworten ab und nie einen
-// Consensus — daran, nicht am heutigen Stand des Schalters, ist er beim Laden
-// zu erkennen. Ohne diese Unterscheidung blieb ein solches Bookmark unter
-// eingeschaltetem Agent Mode unsichtbar hinter "Compare answers" haengen und
-// zeigte nur noch die Frage. Ein abgebrochener Consensus-Lauf faellt in
+// Ein Direktvergleich (Compare) legt Modellantworten ab und nie einen
+// Consensus — daran, nicht an der heute gewaehlten Betriebsart (run-mode.js),
+// ist er beim Laden zu erkennen. Ein abgebrochener Consensus-Lauf faellt in
 // dieselbe Kategorie: seine Antworten sind alles, was es zu zeigen gibt.
 function isDirectComparisonBookmark(bookmark) {
   const consensus = String(bookmark?.responses?.consensus || "").trim();
@@ -2163,8 +2152,8 @@ function applyBookmarkTitle(named, source = "generated") {
   const entry = (window.bookmarksData || []).find(item => item.id === named.id);
   if (entry) Object.assign(entry, { title, title_source: source });
   // Every run of the chat, a running follow-up too, and the open chat's
-  // basis: a follow-up sent next takes its name from there and showed the
-  // old one in the sidebar while it ran (review F, review 2).
+  // basis: a follow-up sent next takes its name from there and would show
+  // the old one in the sidebar while it ran.
   window.App.runRegistry?.retitle?.(named.id, title, { source });
   window.App.bookmarkSession?.noteSavedMeta?.({ ...(entry || bookmarkMeta(named)), title, title_source: source });
   // The name settles in place of the question instead of switching.
@@ -2259,7 +2248,7 @@ function showBookmarkSaveError(status, detail, scope = "") {
     message = "Chats can’t be saved right now. Wait a minute and try again.";
   }
 
-  // Ein Lauf speichert bis zu sechs Modellantworten parallel. Derselbe Fehler
+  // Ein Lauf speichert mehrere Modellantworten parallel. Derselbe Fehler
   // darf deshalb genau einmal sichtbar werden, nicht als Popup-Kaskade.
   const key = `${scope}:${status}:${message}`;
   const now = Date.now();
@@ -2298,7 +2287,6 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
       const res = await fetch("/bookmark", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // HIER: sources hinzufügen
         body: JSON.stringify({
           id_token,
           question,
@@ -2317,8 +2305,7 @@ async function saveBookmark(question, response, modelName, mode, previousQuestio
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return;
 
       if (!res.ok) {
-        // The server's sentence (`error`, flat since Apple-Audit H6) names
-        // the limit; `detail` was never sent, so the specific line never came.
+        // The server's sentence (`error`) names the limit.
         const errorDetail = window.App?.errorFields?.(data)?.error || data.detail || "";
         console.error("Error saving bookmark:", errorDetail);
         if (boundRunId) {
@@ -2493,8 +2480,8 @@ async function requestBookmarkShareResult() {
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return null;
       if (!response.ok) throw window.App.httpError(response, data, "This chat couldn’t be prepared for sharing. Try again.");
       const resultId = String(data.result_id || "") || null;
-      // An Agent answer is no Consensus result: votes and the Consensus
-      // Watch keep reading lastShareResultId; the promise keeps the ID.
+      // An Agent answer is no Consensus result: lastShareResultId (the
+      // Share dialog's default) stays a Consensus one; the promise keeps the ID.
       if (version === bookmarkShareResultVersion && !agentTurn) {
         window.App.state.set("lastShareResultId", resultId, "share");
       }
@@ -2647,9 +2634,9 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
       // Die Anhaenge des Turns schlagen die des Dokuments: das Dokument kennt
       // nur die zuletzt gespeicherte Frage, der Turn kennt seine eigene. Ohne
       // diese Reihenfolge zeigte ein Chat, dessen letzte Frage ohne Datei
-      // auskam, die Datei der vorigen Frage — oder gar keine. Chats von VOR
-      // dieser Aenderung haben nichts am Turn stehen; fuer sie bleibt das
-      // Dokument die einzige Quelle, und es beschreibt genau diese Frage.
+      // auskam, die Datei der vorigen Frage — oder gar keine. Aeltere Chats
+      // haben nichts am Turn stehen; fuer sie bleibt das Dokument die
+      // einzige Quelle, und es beschreibt genau diese Frage.
       attachments: (Array.isArray(currentTurn.attachments) && currentTurn.attachments.length)
         ? currentTurn.attachments
         : (Array.isArray(bookmark.attachments) ? bookmark.attachments : []),
@@ -2668,7 +2655,7 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
 }
 
 // The transcript of a chat bookmark, by bookmark ID alone: it loads beside
-// the bookmark detail instead of after it (Apple audit D2). The caller checks
+// the bookmark detail instead of after it. The caller checks
 // `chatId` against the detail's chat. A bookmark without a chat answers with
 // no chat and no turns.
 async function loadBookmarkConversationOnce(bookmarkId) {
@@ -2742,7 +2729,7 @@ async function loadBookmarkConversation(bookmarkId) {
   }
 }
 
-// Chat and turn IDs the server issues (chat_history.py): 32 hex characters.
+// Chat and turn IDs the server issues (chat_store.py): 32 hex characters.
 const SERVER_ID = /^[0-9a-f]{32}$/;
 
 function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = {}) {
@@ -2751,9 +2738,9 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
     let bookmarkCitationModels = [];
     const displayQuestion = bookmarkDisplayQuestion(bookmark);
     // Ein Bookmark bringt seine eigene Ansicht mit: ein Direktvergleich laedt
-    // als Direktvergleich zurueck (Composer oben, sechs Antworten darunter),
-    // ein gefuehrter Lauf als Thread. Der aktuelle Agent-Mode-Schalter sagt
-    // nur, was der NAECHSTE Lauf tun wird.
+    // als Direktvergleich zurueck (Composer oben, die Antworten darunter),
+    // ein gefuehrter Lauf als Thread. Die gewaehlte Betriebsart (run-mode.js)
+    // sagt nur, was der NAECHSTE Lauf tun wird.
     const directComparison = isDirectComparisonBookmark(bookmark);
     // Ein geladenes Bookmark zeigt sofort Antworten und startet daher nie im
     // zentrierten Leerzustand.
@@ -2801,8 +2788,8 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
     // A consensus bookmark gets a reusable server-side snapshot on Share/Watch.
     prepareBookmarkShareResult(bookmark);
 
-    // --- NEU: Quellen wiederherstellen ---
-    // 1. Globale Variable setzen, damit injectMarkdown (in index.html) darauf zugreifen kann
+    // --- Quellen wiederherstellen ---
+    // 1. In den App-State, damit injectMarkdown (markdown-stream.js) darauf zugreifen kann
     window.App.state.set("currentEvidenceSources", bookmark.sources || [], "evidence");
 
     // 2. Die Quellen-Liste (unten im UI) visuell rendern (falls die Funktion existiert)
@@ -2812,7 +2799,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
 
     if (bookmark && bookmark.responses) {
         
-        // HELPER: Nutzt die globale Funktion injectMarkdown aus der index.html, 
+        // HELPER: Nutzt die globale Funktion injectMarkdown (markdown-stream.js),
         // um Markdown korrekt zu rendern, Copy-Buttons hinzuzufügen etc.
         const renderContent = (container, text) => {
             if (!container) return;
@@ -2820,7 +2807,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
             const content = text || "";
             
             if (window.injectMarkdown) {
-                // Nutzt die Logik aus index.html (Marked + DOMPurify + Copy Buttons)
+                // Nutzt die Logik aus markdown-stream.js (Marked + DOMPurify + Copy Buttons)
                 window.injectMarkdown(container, content);
             } else {
                 // Fallback, falls injectMarkdown noch nicht geladen ist
@@ -2858,7 +2845,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         // WICHTIG: Die Konsens-Antwort zuerst rendern – die Claim-Badges
         // (Modell-Zustimmung) verankern sich am Text der Hauptantwort.
         const conMain = window.App.consensusBodyEl(consensusDiv);
-        // Consensus prose has carried no source references since 2026-09-11,
+        // Consensus prose carries no source references,
         // so a numeric [1] in it never picks up a citation (as in the live
         // run). Older answers with [S1] tags keep their citations.
         conMain.dataset.sourceReferences = /\[S\d/i.test(consensusText || '') ? 'legacy' : 'none';
@@ -2911,7 +2898,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
 
         // Der Reasoning-Schalter beschreibt den NAECHSTEN Lauf und bleibt beim
         // Laden eines Bookmarks unangetastet -- auch fuer alte Bookmarks mit
-        // mode "Deep Think" (Deep Think gibt es seit 2026-10-02 nicht mehr).
+        // mode "Deep Think" (Deep Think gibt es nicht mehr).
 
         // Historische Modellnamen erst nach allen Mode-Synchronisierungen
         // anwenden, weil updateReasoningUI sonst wieder die aktuelle Picker-
@@ -2925,7 +2912,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
             window.App?.setThreadQuestion?.(displayQuestion);
             // The same chat drawn anew (openBookmark's check of a cached
             // view found a change) keeps what was typed meanwhile and its
-            // quote; until 2026-11-03 the redraw emptied them.
+            // quote.
             if (!options.keepComposer) {
                 const questionInput = document.getElementById("questionInput");
                 if (questionInput) {
@@ -2937,7 +2924,6 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
                 // Schirm steht jetzt eine andere.
                 window.App?.quote?.clear?.();
             }
-            // Falls du eine globale Variable für die letzte Frage hast:
             window.App.state.set("lastQuestion", displayQuestion, "run");
         }
 
@@ -2948,7 +2934,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         }
     }
     if (directComparison) window.App?.answerReader?.showDirectBookmark?.(bookmark);
-    // === NEU: Citation-Meta immer nach dem Rendern setzen ===
+    // === Citation-Meta immer nach dem Rendern setzen ===
     try {
         let includedModels = bookmarkCitationModels;
 
@@ -2973,8 +2959,8 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
         window.App.state.set("consensusCitationMeta", null, "consensus");
     }
     if (options.conversationLoadFailed) {
-        // Only an Agent chat continues; a saved Consensus chat is read-only
-        // since 2026-10-25, so its message promises no follow-up context.
+        // Only an Agent chat continues; a saved Consensus chat is read-only,
+        // so its message promises no follow-up context.
         const message = bookmark.mode !== "Agent"
           ? "Some earlier messages of this chat could not be displayed."
           : authoritativeChatRestored
@@ -3167,7 +3153,7 @@ function syncActiveBookmark(bookmarkId = activeBookmarkId()) {
 window.addEventListener("consensio:run-registry-change", () => syncActiveBookmark());
 
 // While a chat that is not in memory loads, the thread already shows it:
-// its question and a quiet answer skeleton (Apple audit D2). The view of the
+// its question and a quiet answer skeleton. The view of the
 // chat before is only hidden (body.chat-opening), so a failed load gives it
 // back unchanged.
 function showChatOpening(bookmarkId) {
@@ -3219,7 +3205,7 @@ function hideChatOpening(opening = null, { restore = false } = {}) {
 
 // Detail and transcript of one chat, requested side by side. A transcript
 // that is missing, broken or belongs to another chat falls back to the saved
-// continuation data, as before.
+// continuation data.
 async function loadBookmarkView(bookmarkId) {
   const conversation = loadBookmarkConversation(bookmarkId).catch(error => ({ error }));
   const bookmark = await loadBookmarkDetail(bookmarkId);
@@ -3269,7 +3255,7 @@ function bookmarkViewSignature(view) {
 window.openBookmark = async function (bookmarkId) {
   if (!bookmarkWriteAllowed(auth.currentUser?.uid, bookmarkId)) return;
   // The tap is answered at once: the phone menu closes and the row is
-  // marked before anything loads (Apple audit D2).
+  // marked before anything loads.
   window.App.chatScroll?.closeMenu?.();
   const fromWatches = document.body.classList.contains("is-watch-view");
   window.App.watch?.leave?.();
@@ -3314,8 +3300,7 @@ window.openBookmark = async function (bookmarkId) {
       const stillShown = shownEpoch === bookmarkViewEpoch && isCurrentAuthenticatedUser(requestUid, requestGeneration)
         && bookmarkWriteAllowed(requestUid, bookmarkId);
       // A transcript that failed to load says nothing new: the full view on
-      // screen stays, and so does its cache entry (until 2026-11-04 the
-      // fallback without the earlier messages was drawn over it).
+      // screen stays, and so does its cache entry.
       if (!stillShown || fresh.conversationLoadFailed) return;
       if (bookmarkViewSignature(fresh) !== bookmarkViewSignature(cached)) {
         loadSingleBookmarkUI(fresh.bookmark, fresh.turns, { conversationLoadFailed: fresh.conversationLoadFailed,
@@ -3505,9 +3490,9 @@ function updateBookmarkDOM(bookmark) {
 }
 
 // ---- A chat row --------------------------------------------------------
-// The title is the row's control (role="button", Enter or Space opens it,
-// Apple audit E5); a pointer may press anywhere on the row. "…" opens a
-// small menu with Pin, Rename, Share and Delete (E2); a deleted chat can be
+// The title is the row's control (role="button", Enter or Space opens it);
+// a pointer may press anywhere on the row. "…" opens a
+// small menu with Pin, Rename, Share and Delete; a deleted chat can be
 // taken back for a few seconds. One delegated listener serves every row, so
 // a run row that turns into a saved one in place keeps working.
 const BOOKMARK_MENU_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>';
@@ -3519,8 +3504,8 @@ const BOOKMARK_MENU_ITEMS = [
 ];
 const BOOKMARK_UNDO_MS = 5000;
 
-// Share only offers a chat with a saved answer to share: a Consensus or,
-// since 2026-10-21, an Agent answer (its turn, share-dialog.js). A direct
+// Share only offers a chat with a saved answer to share: a Consensus or
+// an Agent answer (its turn, share-dialog.js). A direct
 // comparison has none and leaves Share out instead of opening a dialog that
 // can only say no; so does a row whose chat is not in the list.
 function bookmarkShareable(meta) {
@@ -3734,7 +3719,7 @@ function startBookmarkRename(row) {
   };
   input.addEventListener("keydown", event => {
     event.stopPropagation();
-    // An Enter confirming an input method's word stays the word's (E8).
+    // An Enter confirming an input method's word stays the word's.
     if (event.key === "Enter" && !(event.isComposing || event.keyCode === 229)) { event.preventDefault(); finish(true); }
     else if (event.key === "Escape") { event.preventDefault(); finish(false); }
   });
@@ -3832,12 +3817,12 @@ function expandBookmarkRow(row) {
   insertBookmarkRowSoftly(row);
 }
 // A row that joins the list opens its place instead of pushing the rows
-// below by a whole row in one frame (Apple audit A11, C12).
+// below by a whole row in one frame.
 function insertBookmarkRowSoftly(row) {
   if (!row.animate || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   // Measured in the frame the row first shows in, after everything else the
   // send wrote: read at once, it forced the half-built thread's layout in
-  // the middle of the click (Apple-Audit D3).
+  // the middle of the click.
   requestAnimationFrame(() => {
     if (!row.isConnected || !row.getClientRects().length) return;
     const height = row.getBoundingClientRect().height;
@@ -3864,7 +3849,7 @@ function deleteBookmarkWithUndo(bookmarkId, { keyboard = false } = {}) {
   const rows = [...document.querySelectorAll(`#bookmarksContainer .bookmark[data-id="${bookmarkId}"]`)];
   // A chat still loading (its row clicked a moment ago) is the one on screen
   // too: its load is dropped, so it never opens under "Chat deleted · Undo"
-  // and empties the view once the deletion is sent (bug hunt 2026-11-04).
+  // and empties the view once the deletion is sent.
   const loading = rows.some(row => row.classList.contains("is-loading"));
   const wasOpen = loading || activeBookmarkId() === bookmarkId;
   const entry = { promise: null };
@@ -3894,7 +3879,7 @@ function deleteBookmarkWithUndo(bookmarkId, { keyboard = false } = {}) {
     },
   });
   // The menu closed without handing focus back: a keyboard reader would
-  // never reach Undo in its few seconds (docs/a11y-audit-2026-10-23.md, K4).
+  // never reach Undo in its few seconds.
   if (keyboard) entry.notice?.focusAction?.();
 }
 // Settles every deletion still waiting for its Undo; resolves once each was sent.
@@ -3959,7 +3944,7 @@ function replacePendingBookmarkWithReady(bookmark, runId = null) {
 // A finished run's row becomes the saved row in place: same node, same
 // height, its title kept; the status words fade and the title takes their
 // room in one glide (layout.css). Replacing it moved the list by 2 px and
-// switched colour and length in one frame (Apple audit C7, A11).
+// switched colour and length in one frame.
 function settleRunRow(row, bookmark, runId) {
   const hadFocus = row === document.activeElement;
   row.classList.remove("run-entry", "is-pending", ...[...row.classList].filter(name => name.startsWith("run-status-")));

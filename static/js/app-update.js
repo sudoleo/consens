@@ -5,7 +5,7 @@
 // which one is live: when it is left, when it comes back, and every 15 minutes
 // while it is in front. A newer build is loaded only while nobody watches:
 // while the page is hidden, never in front of the reader (a reload in the
-// moment the page came back landed them somewhere else, Apple-Audit B7), and
+// moment the page came back landed them somewhere else), and
 // only while nothing would be lost: no run, no draft, no file, no open dialog,
 // nothing unsaved on screen. A build learnt while the page is in front is
 // loaded the moment it is left. The saved chat that was open is reopened

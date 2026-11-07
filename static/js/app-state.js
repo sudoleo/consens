@@ -3,24 +3,24 @@
 (function () {
   window.App = window.App || {};
 
-  // Deep-frozen: the owner table IS the enforcement. A shallow freeze left
-  // each entry writable, so any script could reassign an owner and then write
-  // whatever it liked through the front door (found by tests/js/app-state.test.mjs).
+  // Deep-frozen: the owner table IS the enforcement. A shallow freeze would
+  // leave each entry writable, so any script could reassign an owner and then
+  // write whatever it liked through the front door.
   const definitions = Object.freeze({
     lastQuestion: { owner: "run", initial: "" },
     currentEvidenceSources: { owner: "evidence", initial: [] },
     consensusCitationMeta: { owner: "consensus", initial: null },
     lastShareResultId: { owner: "share", initial: null },
-    // Drei Stufen, zwei Flags: isUserPro heisst weiterhin "darf Frontier-
-    // Modelle" (Plus -> false), isUserPlus heisst "darf
-    // Anhaenge und Resolve" (Plus und Pro -> true). Wer nur eines der beiden
-    // liest, sperrt Plus im Zweifel wie Free statt wie Pro.
+    // Drei Stufen, zwei Flags: isUserPro heisst "darf Frontier-Modelle"
+    // (Plus -> false), isUserPlus heisst "Plus oder Pro" (Plus und Pro ->
+    // true). Wer nur eines der beiden liest, sperrt Plus im Zweifel wie Free
+    // statt wie Pro.
     userTier: { owner: "userTier", initial: "free" },
     // accountTier ist NICHT dasselbe wie userTier. userTier ist die Stufe, die
     // gerade auf dem Schirm gilt -- run-view.js und query-send.js stellen sie
     // auf die Stufe des sichtbaren Laufs, damit Modellauswahl und Gates zu dem
-    // passen, was da steht. accountTier ist die Stufe des KONTOS und hat genau
-    // zwei Schreiber (/user_status und /usage in firebase.js). Die Marke am
+    // passen, was da steht. accountTier ist die Stufe des KONTOS und wird nur
+    // in firebase.js geschrieben (/user_status, /usage, Abmelden). Die Marke am
     // Konto-Kuerzel haengt an dieser hier: sonst wechselt sie die Farbe, sobald
     // jemand einen alten Free-Lauf oeffnet.
     accountTier: { owner: "userTier", initial: "free" },
@@ -75,7 +75,7 @@
   // Konsument (run-view, watch, sidebar) findet sie dann schon vor.
   // Gegenstueck zu normalize_tier() in app/core/entitlements.py.
   function normalizeTier(value) {
-    // Booleans bleiben erlaubt: aeltere Aufrufer reichen data.is_pro durch.
+    // Booleans bleiben erlaubt: ohne data.tier reicht firebase.js data.is_pro durch.
     if (value === true) return "pro";
     if (value === false || value === null || value === undefined) return "free";
     const text = String(value).trim().toLowerCase();

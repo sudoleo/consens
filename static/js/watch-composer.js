@@ -1,5 +1,4 @@
-// The one field that starts a Watch (since 2026-11-04, the Watches redesign):
-// a Watch is a sentence. The user writes what the Agent should keep an eye
+// The one field that starts a Watch: a Watch is a sentence. The user writes what the Agent should keep an eye
 // on; two chips under it say how often (a popover with the account's
 // intervals, the weekday and the time) and, if they want, when it is done
 // (a token they type into). A line under the field says what happens next,
@@ -414,8 +413,8 @@
         state.schedule = picker.value();
       }
       if (typeof limitReached === 'boolean') state.limitReached = limitReached;
-      // A Watch ended meanwhile: "All your Watches are in use" no longer holds
-      // (review 2026-11-04), and the slim field may close again.
+      // A Watch ended meanwhile: "All your Watches are in use" no longer holds,
+      // and the slim field may close again.
       if (!state.limitReached && state.errorKind === 'limit') showError('');
       else sync();
     }
@@ -623,7 +622,7 @@
     // `reload`: the account's intervals and slots are read again at the next
     // focus (a sheet opened again, a Watch started or ended in between);
     // until then no full plan is assumed, so the old answer cannot refuse
-    // before the new one is there (review 2026-11-04).
+    // before the new one is there.
     function reset({ reload = true } = {}) {
       closePopover();
       if (reload) {

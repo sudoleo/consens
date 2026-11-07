@@ -1,17 +1,17 @@
 // =====================================================================
 // attachments.js
-// Datei-Anhaenge (Pro-Feature): Attach-Menue, Upload-/Paste-/Drop-Validierung,
-// Chips, Viewer-Vorschau, Bookmark-Vorschau-Chips. In eigene IIFE gekapselt.
-// Extrahiert aus templates/index.html (initApp-Closure).
+// Datei-Anhaenge (jedes angemeldete Konto): Attach-Menue, Upload-/Paste-/
+// Drop-Validierung, Chips, Viewer-Vorschau, Bookmark-Vorschau-Chips. In
+// eigene IIFE gekapselt.
 // Exporte: window.pendingAttachments, window.renderAttachmentChips,
 // window.clearPendingAttachments, window.getAttachmentsPayload,
-// window.showBookmarkAttachments.
+// window.showBookmarkAttachments, window.App.attachments.
 // Call-time-Abhaengigkeiten: window.auth, window.trackUmamiEvent,
 // DOM (#attachTrigger, #attachMenu, #attachFileInput, #attachmentBar, ...).
 // =====================================================================
 
 (function () {
-  // Telemetrie-Wrapper (entspricht trackAppEvent aus initApp).
+  // Telemetrie-Wrapper (entspricht trackAppEvent in app-core.js).
   function trackAppEvent(eventName, eventData = {}) {
     if (typeof window.trackUmamiEvent === "function") {
       window.trackUmamiEvent(eventName, eventData);
@@ -155,7 +155,7 @@
     // closes every other menu or card, it comes out of (+) and goes back
     // into it, and it belongs to the keyboard like the account menu: focus
     // goes to its first row, the arrows and Home/End move, Escape closes it
-    // and gives focus back to (+), Tab leaves it (Apple audit C4, E6, E10).
+    // and gives focus back to (+), Tab leaves it.
     function menuItems() {
       return Array.from(menu.querySelectorAll(
         "button:not([hidden]):not(:disabled), label.attach-menu-toggle:not([hidden]) input:not(:disabled)"
@@ -164,7 +164,7 @@
 
     // On the start screen the menu opens down from the centred composer. On
     // a short phone (320x568) its last rows lay below the screen edge, out
-    // of reach of its own scroll; it now ends above the edge and scrolls.
+    // of reach of its own scroll; it ends above the edge and scrolls.
     // In a chat it opens upward with its own limit (shell.css). Measured
     // from the layout, not the box on screen: that is still mid-motion
     // (overlays.css), moved and scaled by up to 11px.
@@ -307,7 +307,7 @@
 
     // A text file (.txt, .csv, .md) reads in the app's own colours and type,
     // its lines wrapped: in a frame the browser drew it with the dark theme's
-    // light text on the frame's white page, unreadable (2026-10-27). Larger
+    // light text on the frame's white page, unreadable. Larger
     // files keep the frame (on a light page, components-attachment-viewer.css).
     const TEXT_PREVIEW_BYTES = 2 * 1024 * 1024;
     function textPreview(text, name) {
@@ -521,7 +521,7 @@
     }
 
     // Documents, code and text open in the preview beside the chat
-    // (file-viewer.js, 2026-11-01); pictures stay in this dialog, which pages
+    // (file-viewer.js); pictures stay in this dialog, which pages
     // through a gallery. A stored file previews as the server's preview of it
     // (an Office file's PDF, a Word file's text), a file only in this page
     // (Compare) from its bytes; a Word file there keeps the note below.
@@ -681,14 +681,14 @@
       });
     }
 
-    // Files are open to every account since 2026-10-02: they are paid from
-    // the same token account as the question. They still need an account,
+    // Files are open to every account: they are paid from the same account
+    // as the question. They still need an account,
     // so a guest is asked to sign in instead of seeing a file picker.
     function canAttach() {
       return Boolean(window.auth?.currentUser);
     }
     // The login dialog with the reason, as at every door a guest meets
-    // (App.askToLogIn, Apple-Audit H2, H3). The focus goes back to (+),
+    // (App.askToLogIn). The focus goes back to (+),
     // whose menu closes.
     function showAttachmentSignIn(source) {
       setMenuOpen(false);
@@ -727,8 +727,7 @@
     }
     // Files of a sent Agent message still on their way to the chat, per run
     // (agent-workspace.js upload): their place over the message waits in the
-    // skeleton's light until the file is stored. Before 2026-10-29 a row per
-    // file stood under the message ("Uploading and reading…").
+    // skeleton's light until the file is stored.
     const uploadingRuns = new Map();
     function isUploading(key) {
       for (const keys of uploadingRuns.values()) if (keys.has(key)) return true;
@@ -817,7 +816,7 @@
         img.src = "data:" + att.mime + ";base64," + att.data;
         chip.appendChild(img);
       } else {
-        // Die Plakette traegt seit 2026-08-17 keine Typfarbe mehr (monochrome
+        // Die Plakette traegt keine Typfarbe (monochrome
         // App): der Dateityp steht als Text darin, nicht in einem Farbton.
         const icon = document.createElement("span");
         icon.className = "attachment-chip-icon";
@@ -959,7 +958,7 @@
 
     // What a message of files alone says: their names. A run needs a
     // question, and a name is the user's own, not words put in their mouth
-    // (2026-10-22 a user typed "." to send a screenshot).
+    // (a user typed "." to send a screenshot).
     function messageText() {
       return (window.pendingAttachments || [])
         .filter(function (att) { return !att.previewOnly && att.data; })
@@ -1133,9 +1132,9 @@
     // Upload ist aber ein Bruchteil. Kleine Bilder bleiben unangetastet (ein
     // Screenshot behaelt seine PNG-Schaerfe).
     // Dekodiert wird mit createImageBitmap, nicht mit <img>: das braeuchte
-    // eine blob:-URL, und die laesst die CSP (img-src) nicht zu. Bis
-    // 2026-10-28 scheiterte daran jede Verkleinerung still, und ein Foto
-    // ueber 5 MB lehnte danach der Server ab.
+    // eine blob:-URL, und die laesst die CSP (img-src) nicht zu: jede
+    // Verkleinerung scheiterte daran still, und ein Foto ueber 5 MB lehnte
+    // danach der Server ab.
     // Loest immer auf: `null` heisst "unveraendert weiterverwenden".
     function shrinkImage(file, mime) {
       if (mime.indexOf("image/") !== 0
@@ -1215,7 +1214,7 @@
     window.addEventListener("consensio:auth-state", invalidateImports);
 
     // A file that cannot come along is said at the composer, once for the
-    // whole drop, instead of one browser window per file (Apple audit E1).
+    // whole drop, instead of one browser window per file.
     function sayAttachmentProblem(message) {
       if (window.App?.composerNotice) {
         window.App.composerNotice.show(message, { tone: "error", duration: 9000 });

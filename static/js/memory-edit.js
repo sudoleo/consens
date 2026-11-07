@@ -244,7 +244,7 @@
     showSelection(text, kind, range.getBoundingClientRect(), range.commonAncestorContainer, { touch });
   }
 
-  // A finger selects without a mouseup (Apple audit F7): on a phone "Ask
+  // A finger selects without a mouseup: on a phone "Ask
   // about this", "Remember" and "Correct memory" never appeared. After a
   // touch the selection itself is watched: while the handles move the menu
   // waits, once the selection has stood still for a moment it shows; a

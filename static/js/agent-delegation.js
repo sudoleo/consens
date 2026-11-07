@@ -5,8 +5,8 @@
   const views = new Map();
   const labels = { waiting: "Waiting", working: "Working", question: "Question", review: "Review",
     rework: "Rework", completed: "Completed", failed: "Failed", stopped: "Stopped" };
-  // Judge calls of the comparison mode's answer check (turns saved before
-  // 2026-10-31) are plumbing: retries and backup models are routine and say
+  // Judge calls of the comparison mode's answer check (only in older saved
+  // turns) are plumbing: retries and backup models are routine and say
   // nothing about the answer. The panel shows them as ONE row, "Answer
   // check", whose state is the outcome of the checks, not of individual
   // attempts. No judge works any more: the row is always a saved outcome.
@@ -21,8 +21,8 @@
     if (!judges.length) return null;
     const titles = [...new Set(judges.map(agent => agent.title))];
     const done = new Set(titles.filter(title => judges.some(agent => agent.title === title && agent.status === "completed")));
-    // Coverage windows started while the answer was still being written
-    // (agent_coverage_prefetch); the answer's check was done only after its
+    // Coverage windows started while the answer was still being written;
+    // the answer's check was done only after its
     // Differences judge, so finished early windows never read as done: the
     // run ended before the check, which did not finish.
     const answerCheckOpen = titles.includes("Coverage judge") && !titles.includes("Differences judge");
@@ -37,7 +37,7 @@
     const duration = Math.max(...titles.map(title => span(view, judges.filter(a => a.title === title))));
     // A pasted text was checked: its result is the card above the answer.
     // Alone and done, the answer's own checks never ran (turns saved before
-    // they followed it, 2026-10-09). After a failed one the answer's checks
+    // they followed it). After a failed one the answer's checks
     // followed as usual.
     const textOnly = titles.length === 1 && titles[0] === "Text check" && done.size === 1;
     return { id: CHECK_ID, kind: "check", title: textOnly ? "Text check" : "Answer check", status, usage, duration_ms: duration,
@@ -55,8 +55,6 @@
   // failed round or a full conversation (agent_audit.ReviewerSession): ONE
   // row per reviewer, under its first session's id. Its state is that of the
   // session at work, else of the last one; tokens and time cover them all.
-  // Until 2026-10-26 a reviewer back after a failed round read as a third
-  // reviewer beside the two chosen.
   function reviewerRows(view) {
     const groups = new Map();
     for (const agent of view.agents.values()) {
@@ -69,7 +67,7 @@
     for (const sessions of groups.values()) {
       if (sessions.length === 1) { rows.set(sessions[0].id, sessions[0]); continue; }
       sessions.sort((a, b) => (Date.parse(a.created_at) || 0) - (Date.parse(b.created_at) || 0));
-      // A final round's second request (its hedge, since 2026-10-29) is a
+      // A final round's second request (its hedge) is a
       // session too: the one another reply overtook ("superseded") never
       // speaks for the reviewer.
       const latest = sessions.find(agent => activeStates.has(agent.status))
@@ -94,7 +92,7 @@
       .map(agent => reviewers.has(agent.id) ? reviewers.get(agent.id) : agent).filter(Boolean);
     return [...rows, ...(check ? [check] : [])];
   }
-  // The work log keeps a turn's panel open only for those who see it (admins, F5).
+  // The work log keeps a turn's panel open only for those who see it (admins).
   const shownLog = view => Boolean(view.workLog) && document.body.classList.contains("viewer-is-admin");
   function findRow(view, id) {
     if (id === CHECK_ID) return checkRow(view);
@@ -128,10 +126,8 @@
   const uid = () => window.auth?.currentUser?.uid || "";
   // Beside the column on wide screens (the column moves aside, agent-chat.css),
   // a sheet on narrower ones. On every width it opens only on request: the
-  // panel glyph or a model icon (2026-10-31, Max: "nur öffnen, wenn man auf
-  // das Icon klickt"; from 2026-10-28 it stood open by itself from 1200 px,
-  // in audit mode from Send on, otherwise a moment after Send). Opened, it
-  // stays for the chat's next message while it shows (openChat).
+  // panel glyph or a model icon. Opened, it stays for the chat's next message
+  // while it shows (openChat).
   const wideQuery = window.matchMedia?.('(min-width: 1200px)');
   const wide = () => !wideQuery || wideQuery.matches;
   function setText(el, value) { if (el.textContent !== window.App.t(value)) el.textContent = value; }
@@ -173,7 +169,7 @@
     } catch (_) { /* Storage may be unavailable. */ }
   }
   // The chat whose panel the reader has open: it stays open over the chat's
-  // next message (Apple audit A9), never for another chat, and never comes
+  // next message, never for another chat, and never comes
   // back by itself once it closed (a reload, another chat and back).
   let openChat = "";
   const panelShown = () => Boolean(sidebar && !sidebar.hidden && !sidebar.classList.contains("is-leaving"));
@@ -375,7 +371,7 @@
     const overview = node("div", "agent-sidebar-overview");
     const counts = node("div", "agent-sidebar-counts");
     const progress = node("span", "agent-sidebar-progress");
-    // Token figures are the operator's (Apple-Audit H4): admins only.
+    // Token figures are the operator's: admins only.
     const usage = node("span", "agent-sidebar-usage admin-only");
     counts.append(progress, usage);
     const segments = node("div", "agent-sidebar-segments"); segments.setAttribute("aria-hidden", "true");
@@ -384,9 +380,8 @@
     const list = node("div", "agent-session-list");
     sidebar._list = list;
     // The work log (agent-work-log.js): the list's last child, so it
-    // scrolls with the rows; rows are inserted before it. Admins only (UX
-    // audit F5): from 2026-10-26 every Pro account with audit saw the raw
-    // log, with entry numbers, internal names and JSON; the activity tells
+    // scrolls with the rows; rows are inserted before it. Admins only: the
+    // raw log has entry numbers, internal names and JSON; the activity tells
     // the same run in words.
     sidebar._workLog = node("div", "agent-work-log-host admin-only");
     sidebar._workLog.hidden = true;
@@ -419,7 +414,7 @@
     sidebar._rows?.clear();
     sidebar._list.replaceChildren(...(sidebar._workLog ? [sidebar._workLog] : []));
   }
-  // The panel leaves the way it came (Apple audit C5): it slides and fades
+  // The panel leaves the way it came: it slides and fades
   // out, the sheet's scrim with it, and is hidden only then. Asked to show
   // again while leaving, it simply stays.
   const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -485,7 +480,7 @@
   // A comparison model's answer is read where answers are read: in the
   // reader, on that model; the answer check opens its differences there.
   // Without a readable answer yet (still running, a delegated worker) the
-  // row opens its detail here as before.
+  // row opens its detail here.
   function openInReader(view, agent) {
     const comparisonId = agent?.kind === "check"
       ? [...view.agents.values()].findLast(item => item.kind === "comparison" && item.comparison_id)?.comparison_id
@@ -500,11 +495,10 @@
       || (agent.model?.label && item.label === agent.model.label));
     return Boolean(answer) && App.answerReader?.openContext(context, { model: answer.provider, trigger }) !== false;
   }
-  // A reviewer's work as one overview and one timeline (2026-10-26): rounds
-  // without objection fold into one line ("Rounds 1–5 · No objections"), a
-  // round with notes lists them, the final review closes it. Before, every
-  // round stood under its own heading: a screen of "No objections." per run.
-  // The notes come as agent_audit.review_text writes them
+  // A reviewer's work as one overview and one timeline: rounds without
+  // objection fold into one line ("Rounds 1–5 · No objections") instead of a
+  // screen of "No objections.", a round with notes lists them, the final
+  // review closes it. The notes come as agent_audit.review_text writes them
   // ("- **kind** · #entry · “quote”: note (source)").
   const NO_OBJECTION = "No objections.";
   const NOTE_LINE = /^- \*\*([a-z_]+)\*\* · (?:#(\d+))?(?: · )?(“[^”]*”)?: (.*?)(?: \((https?:\/\/[^\s)]+)\))?$/;
@@ -515,9 +509,9 @@
       return match ? { kind: match[1], entry: match[2], quote: match[3], note: match[4], source: match[5] } : { note: line.replace(/^- /, "") };
     });
   const notesLabel = count => !count ? "No objections" : count === 1 ? "1 note" : App.t("{count} notes", { count });
-  // How long after the reviewers' start a message came, "0:17" (UX audit
-  // F6): a run takes one to three minutes, and every round read "10:00",
-  // its clock time to the minute. The clock time stays on hover.
+  // How long after the reviewers' start a message came, "0:17": a run takes
+  // one to three minutes, and every round read "10:00", its clock time to
+  // the minute. The clock time stays on hover.
   function sinceStart(message, start) {
     const at = Date.parse(message.created_at);
     if (!Number.isFinite(at) || !Number.isFinite(start)) return App.format.time(message.created_at);
@@ -525,7 +519,7 @@
     return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
   }
   // The reviewer at a glance, one quiet line instead of three figures
-  // between rules (UX audit F7): "4 rounds · 1 note · Final review: 2 notes".
+  // between rules: "4 rounds · 1 note · Final review: 2 notes".
   function reviewSummary(rounds, final, agent) {
     if (!rounds.length && !final) return "";
     const notes = rounds.reduce((n, message) => n + reviewNotes(message.text).length, 0);
@@ -765,8 +759,8 @@
         inline._stack = node("span", "agent-model-stack");
         // The reviewers' icons say who works; the controls stand apart, after
         // them: the workspace, then the panel at the edge, as its own toggle
-        // sits at the edge of the app (2026-10-28, Max: the panel sat between
-        // the icons, a central element lost among them).
+        // sits at the edge of the app; between the icons, a central element
+        // is lost among them.
         const svg = (paths, className) => {
           const glyph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
           glyph.setAttribute("viewBox", "0 0 16 16"); glyph.setAttribute("aria-hidden", "true");
@@ -810,8 +804,8 @@
         if (!models.has(key)) models.set(key, []);
         models.get(key).push(agent);
       }
-      // A saved turn's icons stand at once, from its review (Apple audit
-      // A10); the agent list arrives later and only completes them.
+      // A saved turn's icons stand at once, from its review; the agent list
+      // arrives later and only completes them.
       if (!view.agents.size) {
         for (const seed of view.seed || []) {
           const key = seed.model?.model || seed.model?.label;
@@ -825,7 +819,7 @@
         if (!button) {
           button = node("button", "agent-inline-model"); button.type = "button";
           // Only a model joining a live run settles in; a saved turn's
-          // icons are simply there (Apple audit A10). The class goes once the
+          // icons are simply there. The class goes once the
           // entry ran, so moving the turn into the history replays nothing.
           if (view.running) {
             button.classList.add("is-arriving");
@@ -847,7 +841,7 @@
         if (!models.has(key)) { button.remove(); inline._buttons.delete(key); }
       }
       inline._toggle.hidden = !view.agents.size && !(view.seed || []).length && !shownLog(view);
-      // In the page's language, also for a screen reader (UX audit I4).
+      // In the page's language, also for a screen reader.
       const activityLabel = App.t("Activity · {n}", { n: App.format.number(rowsFor(view).length) });
       inline._toggle.setAttribute("aria-label", activityLabel);
       inline._toggle.title = activityLabel;
@@ -929,7 +923,7 @@
         : agent.kind === 'check' ? (agent.textOnly ? 'Your text, sentence by sentence' : 'Differences and coverage') : agent.title);
       row.role.hidden = row.role.textContent === row.title.textContent;
       // The state through App.t first: the line glued to the time matches no
-      // entry ("No review · 8 Sek." stayed half English, 2026-10-26).
+      // entry ("No review · 8 Sek." stayed half English).
       setText(row.state, `${App.t(stateLabel(agent))} · ${agent.duration_incomplete ? '≥ ' : ''}${App.format.duration(elapsed(view, agent))}`);
       setTitle(row.state, agent.duration_incomplete ? 'Last confirmed elapsed time before the server connection ended.' : 'Elapsed session time, including waiting and review.');
       const pending = view.running && ['waiting', 'working', 'rework'].includes(agent.status);
@@ -971,8 +965,8 @@
   function project(spec) {
     resetOwner();
     // A new message of a chat whose panel the reader has open: the panel
-    // waits for the new turn's calls instead of closing and opening again
-    // (Apple audit A9). It never opens here by itself (2026-10-31).
+    // waits for the new turn's calls instead of closing and opening again.
+    // It never opens here by itself.
     if (!spec?.turnId && spec?.running && owner && spec.chatId && spec.chatId === openChat && panelShown()) {
       if (current) prefs(current);
       current = null; inline?.remove(); inline = null;
@@ -999,7 +993,7 @@
     }
     mergeUsage(view, spec.usage);
     if (Array.isArray(spec.models)) view.seed = spec.models;
-    // The turn has a work log (admins; every run since 2026-10-31): once known, it stays.
+    // The turn has a work log (admins see it): once known, it stays.
     if (spec.workLog) view.workLog = true;
     if (wasRunning && !spec.running) { stopClock(view); view.settling = true; }
     view.running = !!spec.running && !view.ended;

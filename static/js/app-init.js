@@ -1,16 +1,14 @@
 // =====================================================================
 // app-init.js
-// App initialisation / orchestration. This is the remaining initApp()
-// bootstrap after the feature clusters were extracted into their own
-// modules: theme, usage/limits + user status, response-box UI toggles,
-// sidebar/layout, modals, tooltips, evidence rendering, API-key test and
+// App initialisation / orchestration. The initApp() bootstrap that is not
+// a feature module of its own: theme, usage countdown + input limits,
+// response-box UI toggles, sidebar/layout, FAQ, evidence rendering, API-key test and
 // all the DOM event wiring that glues the window.* contracts together.
 //
-// MUST load last (after all other static/js modules, firebase.js and
-// demo.js): it aliases window.App.* and many window.* helpers at
-// initApp() time and wires the document's event listeners. Loaded via a
-// deferred <script> at the end of <body> in templates/index.html, so it
-// runs after every earlier module in document order.
+// MUST load after the other static/js modules, firebase.js and demo.js
+// (static/js/bundles.json, deferred "app" group; only app-dom-events.js
+// follows): it aliases window.App.* and many window.* helpers at
+// initApp() time and wires the document's event listeners.
 //
 // The daily allowance is a token account shared by every mode; it lives in
 // window.App.tokenBudget (token-budget.js), not in a Jinja value.
@@ -41,11 +39,6 @@
         }
 
         function initApp() {
-        // --------------------------
-        // Dark/Light Mode Initialisierung
-        // --------------------------
-        // Zugriff auf die Checkboxen:
-
         // Global verfügbar für alle Funktionen
         window.App.state.set("spinnerHTML", `
           <span class="thinking-wrap" role="status" aria-live="polite" aria-busy="true">
@@ -58,11 +51,8 @@
             <span class="thinking consensus-thinking">Synthesizing consensus</span>
           </span>
         `;
-        // Der Differences-Judge liefert JSON, das erst am Ende sichtbar wird.
-        // Frueher stand hier erst eine eigene Fortschrittsleiste, dann noch das
-        // Wort "Comparing responses". Beides sagte, was der gefuehrte Lauf
-        // ueber dem Thread ohnehin schon ansagt ("Checking for contradictions").
-        // Es gibt genau EINE Fortschrittsanzeige, also bleibt hier nichts.
+        // Der Differences-Judge bekommt keinen eigenen Fortschritt: es gibt
+        // genau EINE Fortschrittsanzeige, also bleibt hier nichts.
         window.consensusDifferencesSpinnerHTML = "";
 
         // Geteilte Config + Helfer kommen aus static/js/app-core.js (window.App).
@@ -117,8 +107,8 @@
 
         // Markdown-Rendering + SSE-Streaming-Helfer sind nach
         // static/js/markdown-stream.js ausgelagert (window.injectMarkdown,
-        // window.createStreamRenderer, window.streamSSERequest). Lokale Aliase,
-        // damit die bestehenden Aufrufstellen in initApp unverändert bleiben.
+        // window.createStreamRenderer, window.streamSSERequest); initApp
+        // selbst ruft keinen davon auf.
         const injectMarkdown = window.injectMarkdown;
         const createStreamRenderer = window.createStreamRenderer;
         const streamSSERequest = window.streamSSERequest;
@@ -129,7 +119,6 @@
         // window.renderModelResponseWithSources). Alle Aufrufer nutzen bereits window.*,
         // daher keine lokalen Aliase noetig.
 
-        // Lese gespeicherten Wert aus; wenn keiner vorhanden, verwende die Systempräferenz:
         let storedTheme = readStored("theme");
         if (!storedTheme) {
           storedTheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
@@ -137,12 +126,11 @@
         }
         applyTheme(storedTheme);
 
-        // Schalte den Dark Mode um und speichere die Auswahl:
         modeToggles.forEach(toggle => {
           toggle.addEventListener("click", function () {
             const newTheme = document.body.classList.contains("dark-mode") ? "light" : "dark";
             writeStored("theme", newTheme);
-            // One step, not a smear of different speeds (Apple audit C8).
+            // One step, not a smear of different speeds.
             if (window.App.motion?.switchTheme) window.App.motion.switchTheme(() => applyTheme(newTheme));
             else applyTheme(newTheme);
           });
@@ -152,7 +140,7 @@
         // will, waehlt eine von drei Stufen, die fuer Live- und archivierte
         // Consensus-Antworten gemeinsam gilt:
         //   full    — Zahl, Balken und Einordnung
-        //   summary — nur die Worte, keine Zahl (die alte Aus-Stellung)
+        //   summary — nur die Worte, keine Zahl
         //   off     — gar kein Urteilsbereich, unter der Antwort bleiben nur
         //             die Schubladen (Differences / Answers / Sources)
         // Kontoeinstellung "agreement_display" (user-settings.js, dort auch
@@ -198,9 +186,8 @@
           return Boolean(window.auth?.currentUser?.emailVerified);
         }
 
-        // Angemeldet, aber die E-Mail ist noch nicht bestaetigt. Frueher wurde
-        // dieser Zustand sofort ausgeloggt; jetzt bleibt der Nutzer in der App
-        // und sieht den Bestaetigungs-Streifen (#verifyBanner). Tippen darf er
+        // Angemeldet, aber die E-Mail ist noch nicht bestaetigt: der Nutzer
+        // bleibt in der App und sieht den Bestaetigungs-Streifen (#verifyBanner). Tippen darf er
         // dabei — nur der Lauf selbst wartet auf die Bestaetigung, damit die
         // getippte Frage den Klick auf den Verify-Link ueberlebt.
         function hasUnverifiedSession() {
@@ -209,7 +196,7 @@
         }
         window.hasUnverifiedSession = hasUnverifiedSession;
 
-        // Gaeste tippen auch (seit 2026-10-15): erst die Frage, die Anmeldung
+        // Gaeste tippen auch: erst die Frage, die Anmeldung
         // kommt beim Absenden (composer-invite.js). Nur ein unerreichbarer
         // Login sperrt das Feld, dann koennte kein Konto sie abschicken. Eine
         // gespeicherte Sitzung, die noch wiederhergestellt wird, ist kein Gast.
@@ -379,7 +366,7 @@
         function readQuestionDraft() {
           const stored = readStored(QUESTION_DRAFT_KEY) || "";
           let draft = null;
-          try { draft = JSON.parse(stored); } catch (_) { /* a plain string from before 2026-10-16 */ }
+          try { draft = JSON.parse(stored); } catch (_) { /* a plain string of the older format */ }
           if (!draft || typeof draft.text !== "string") return stored;
           if (!(Date.now() - Number(draft.at) <= QUESTION_DRAFT_MAX_AGE_MS)) {
             storeQuestionDraft("");
@@ -432,8 +419,8 @@
         // Only now, with the draft back in the field: after the sign-in's
         // reload the account's status can be in before this start, and a
         // question sent as a guest goes out only when the field holds it
-        // again (composer-invite.js). Before, the empty field used up its
-        // one try.
+        // again (composer-invite.js). Called earlier, the empty field would
+        // use up its one try.
         window.updateQuestionInputAccess();
 
         function isCompactControlLayout() {
@@ -447,12 +434,8 @@
         }
         window.showMobileInfoPopup = showMobileInfoPopup;
 
-        // Der Modus-Erklaerer ist mit seinem (i)-Trigger entfallen: die
-        // Modi werden jetzt dort erklaert, wo man sie schaltet (Settings,
-        // (+)-Menue) und waehrend sie laufen (gefuehrter Lauf).
-
-        // Der Reasoning-Schalter (#reasoningToggle) tauscht seit 2026-10-02
-        // weder Antwortmodelle noch die Consensus-Engine: dieselben gewaehlten
+        // Der Reasoning-Schalter (#reasoningToggle) tauscht weder
+        // Antwortmodelle noch die Consensus-Engine: dieselben gewaehlten
         // Modelle denken nur laenger. Diese Funktion haelt deshalb nur die
         // Modell-Ueberschriften und den Composer synchron.
         function updateReasoningUI() {
@@ -502,7 +485,7 @@
 
         updateReasoningUI();
 
-        // Datei-Anhaenge (Pro) sind nach static/js/attachments.js ausgelagert
+        // Datei-Anhaenge sind nach static/js/attachments.js ausgelagert
         // (window.pendingAttachments, window.renderAttachmentChips,
         // window.clearPendingAttachments, window.getAttachmentsPayload,
         // window.showBookmarkAttachments). Alle Aufrufer nutzen window.*.
@@ -514,7 +497,6 @@
           try {
             const token = await user.getIdToken();
 
-            // Aufruf an den neuen Backend-Endpoint
             const response = await fetch("/user_status", {
               method: "GET",
               headers: {
@@ -547,8 +529,8 @@
           return window.matchMedia(`(max-width: ${SIDEBAR_OVERLAY_BREAKPOINT}px)`).matches;
         }
 
-        // Neben dem Inhalt (ab 1100px): die eigene Wahl, sonst seit
-        // 2026-10-18 fuer Gaeste eingeklappt (der erste Besuch beginnt bei der
+        // Neben dem Inhalt (ab 1100px): die eigene Wahl, sonst
+        // fuer Gaeste eingeklappt (der erste Besuch beginnt bei der
         // Frage, nicht bei einer leeren Chatliste) und fuer Konten offen.
         // Dieselbe Regel malt app-bootstrap.js in den ersten Frame.
         function prefersCollapsedSidebar() {
@@ -574,15 +556,14 @@
         // (shell.css --thread-composer-height). Written on the column, which
         // alone reads it: on <html> every change restyled the whole page.
         // While the composer opens, closes or glides, its height changes each
-        // frame; the room follows once, with the height it ends at
-        // (Apple-Audit D9).
+        // frame; the room follows once, with the height it ends at.
         const threadComposer = document.querySelector(".input-section");
         const threadColumn = threadComposer?.closest(".container") || null;
         const MOVING_COMPOSER = ["composer-animating", "composer-gliding"];
         // The same height as the page's scroll-padding, at every width: a
         // link or mark reached with Tab scrolls into view above the composer
         // (sticky on a desktop, fixed on a phone) instead of behind it (WCAG
-        // 2.4.11, a11y audit K3). A plain property of <html>, not a custom
+        // 2.4.11). A plain property of <html>, not a custom
         // one, so its change restyles nothing below.
         function syncFocusReserve(height) {
           const root = document.documentElement;
@@ -623,8 +604,8 @@
         }).observe(document.body, { attributes: true, attributeFilter: ["class"] });
         requestAnimationFrame(syncThreadComposerReserve);
 
-        // On a phone or tablet the open sidebar is a drawer over the page
-        // (Apple audit E6): the page behind is inert while it is open, focus
+        // On a phone or tablet the open sidebar is a drawer over the page:
+        // the page behind is inert while it is open, focus
         // goes into it and comes back to the menu button when it closes, and
         // Escape closes it. What lives on <body> for the drawer (a chat's row
         // menu, the notice line, dialogs) stays usable.
@@ -692,7 +673,7 @@
           }
         });
 
-        // The phone menu follows the finger (Apple audit F11): a swipe to the
+        // The phone menu follows the finger: a swipe to the
         // left takes it along, the dim fades with it, and it closes once it
         // is a third of the way out or was flicked; let go earlier and it
         // settles back. Up and down stay the list's own scroll (shell.css
@@ -728,8 +709,8 @@
           }
           document.addEventListener("pointerdown", function (event) {
             // A second finger leaves the first one's swipe alone: dropping it
-            // here left the menu stuck half way, with no finger to end it
-            // (review 13). A new first finger ends a swipe whose end was lost.
+            // here left the menu stuck half way, with no finger to end it.
+            // A new first finger ends a swipe whose end was lost.
             if (!event.isPrimary) return;
             if (drag?.moving) {
               sidebar.classList.remove("is-dragging");
@@ -851,8 +832,8 @@
             // Counted like the server: code points after NFKC (an emoji is one
             // character, "…" becomes three).
             const length = [...String(message).normalize("NFKC").trim()].length;
-            // Said under the field it is about, not in a browser window
-            // (Apple audit E1); typing again takes it away.
+            // Said under the field it is about, not in a browser window;
+            // typing again takes it away.
             if (length > maxChars) {
               window.App.composerNotice.show(`Your message is longer than ${window.App.format.number(maxChars)} characters `
                 + `(it has ${window.App.format.number(length)}). `
@@ -883,7 +864,7 @@
         // Mit Tastatur sendet Enter, Shift+Enter macht einen Absatz; auf einem
         // Touch-Geraet bleibt Enter die Absatz-Taste, und ein Enter, das ein
         // Wort einer Eingabemethode bestaetigt, gehoert dem Wort
-        // (App.enterSends, app-core.js; Apple-Audit E7, E8).
+        // (App.enterSends, app-core.js).
         document.getElementById("questionInput").addEventListener("keydown", function (event) {
           if (event.key === "Enter" && !event.shiftKey) {
             if (!window.App.enterSends(event)) {
@@ -899,7 +880,6 @@
               event.preventDefault();
               return;
             }
-            // Wenn der Button deaktiviert ist, breche die Ausführung ab
             if (document.getElementById("sendButton").disabled) {
               event.preventDefault();
               return;
@@ -1002,10 +982,8 @@
           updateToggleButton();
         });
 
-        // Fixed navigation should make room while a result is being read. The
-        // main app scrolls the window, whereas the Watch dashboard owns an
-        // independent scroll container, so both sources feed the same small
-        // direction-aware controller. A little accumulated travel prevents
+        // Fixed navigation should make room while a result is being read.
+        // A little accumulated travel prevents
         // touchpad jitter from flickering the controls on and off.
         function initReadingChrome() {
           const body = document.body;
@@ -1124,7 +1102,6 @@
 
         initReadingChrome();
 
-        // Aktualisiert den Pfeil des Sidebar-Toggle-Buttons
         function updateToggleButton() {
           const sidebar = document.querySelector(".sidebar");
           if (!sidebar) return;
@@ -1152,9 +1129,6 @@
             arrow.textContent = newText;
           }
         }
-
-        // Funktion, um das Popup anzuzeigen
-        // showPopup stammt aus app-core.js (window.App), siehe Alias oben.
 
         // Quellenverzeichnis unter der Antwort. Die hochgestellten Zahlen im
         // Konsenstext zeigen hierher, deshalb ist die Reihenfolge dieser Liste
@@ -1236,7 +1210,6 @@
           window.App?.consensusFooter?.render?.();
         }
 
-        // global machen, falls du es anderswo brauchst
         window.renderEvidenceSources = renderEvidenceSources;
 
 
@@ -1254,9 +1227,8 @@
             // A second click closes: the menu left as this click took the
             // focus from it (model-picker.js focusout).
             if (window.App.popover?.recentTrigger?.(400) === trigger) return;
-            // Kein Choice-State mehr, den die Modellwahl stoeren koennte: eine
-            // Folgefrage ist der Default, und die Modelle duerfen dabei jederzeit
-            // gewechselt werden (der naechste Lauf nutzt die neue Auswahl).
+            // Eine Folgefrage ist der Default, und die Modelle duerfen dabei
+            // jederzeit gewechselt werden (der naechste Lauf nutzt die neue Auswahl).
             const consensusSelect = document.getElementById("consensusModelDropdown");
             if (!consensusSelect) return;
 
@@ -1281,7 +1253,7 @@
         });
 
         // Exclude/Include einer Antwort-Box
-        // ➜ steuert jetzt auch die Sidebar-Checkboxen / modelSelectionArea mit
+        // ➜ steuert auch die Checkboxen in #modelSelectionArea mit
         window.toggleExclude = function (responseId) {
           const box = document.getElementById(responseId);
           if (!box) return;
@@ -1289,7 +1261,7 @@
           const checkbox = getCheckboxForResponse(responseId);
 
           // Fallback: falls aus irgendeinem Grund keine Checkbox gefunden wird,
-          // verhalte dich wie früher (nur .excluded toggeln).
+          // nur .excluded toggeln.
           if (!checkbox) {
             if (!box.classList.contains("excluded")) {
               showPopup("You have excluded this answer. It is minimized, and its model is left out of your next run.");
@@ -1315,10 +1287,6 @@
         // animateResponseReorder, setModelSelectionState und restoreModelSelections
         // sind nach static/js/model-picker.js ausgelagert. Aliase siehe oben.
 
-        // View classes: static/js/agent-mode.js (window.setAgentModeStatus,
-        // window.updateAgentModeUI). Mode choice: App.runMode
-        // (static/js/run-mode.js).
-
         // 1. Initialer Aufruf beim Laden der Seite
         window.restoreModelSelections();
         updateAgentModeUI();
@@ -1328,7 +1296,7 @@
           updateAgentModeUI();
         });
 
-        // 2. Event Listener zum Speichern hinzufügen (bleibt gleich)
+        // 2. Event Listener zum Speichern hinzufügen
         modelPrefs.forEach(pref => {
           const checkbox = document.getElementById(pref.checkId);
           const select = document.getElementById(pref.selectId);
@@ -1365,8 +1333,8 @@
 
 
 
-        // A search without a match says so in one quiet line (Apple audit
-        // H11); an empty list of a new account stays empty on purpose.
+        // A search without a match says so in one quiet line; an empty list
+        // of a new account stays empty on purpose.
         window.filterBookmarks = function (query) {
           const shown = String(query || "").trim();
           const q = shown.toLowerCase();
@@ -1541,8 +1509,8 @@
 
 
         // Query-Send (window.sendQuestion, Cancel, Query-Run-State und die
-        // Query-Helfer isDemoQuery/predictSearchIntent/getActiveMode) ist nach
-        // static/js/query-send.js ausgelagert. Die Send-Listener unten fragen
+        // Query-Helfer isDemoQuery/getActiveMode) ist nach
+        // static/js/query-send.js ausgelagert. Der Enter-Listener oben fragt
         // window.isQueryRequestRunning() statt das private Flag zu lesen.
 
         // Modelle (Checkboxen) ein-/ausschalten
@@ -1605,7 +1573,7 @@
           el.classList.toggle("is-success", tone === "success");
         }
 
-        // The verdict beside the key's label (Apple-Audit H12): a check in the
+        // The verdict beside the key's label: a check in the
         // agreement colour for a valid key, a cross in the dispute colour for
         // one OpenRouter refused, nothing while unknown. Never a star.
         function showKeyVerdict(valid) {
@@ -1711,7 +1679,6 @@
           window.App.followup?.clearHistory?.();
           window.App.bookmarkSession?.reset?.();
 
-          // Lösche den Inhalt aller Modell-Antwortboxen.
           boxIds.forEach(id => {
             const box = document.getElementById(id);
             if (box) {
@@ -1724,7 +1691,6 @@
             }
           });
 
-          // Leere den Inhalt der Consensus-Antwortbox.
           const consensusBox = document.getElementById("consensusResponse");
           if (consensusBox) {
             const mainElement = window.App.consensusBodyEl(consensusBox);
@@ -1741,7 +1707,6 @@
             }
           }
 
-          // Leere den Inhalt der Input-Box mit der ID "questionInput".
           const inputBox = document.getElementById("questionInput");
           if (inputBox) {
             inputBox.value = "";
@@ -1760,8 +1725,6 @@
           setAgentModeStatus("idle");
           window.App.syncSendButtonRunning?.();
         }
-
-        // getActiveMode lebt jetzt in static/js/query-send.js (einziger Aufrufer war sendQuestion).
 
         let countdownUtcDay = null;
         let usageRefreshUtcDay = null;
@@ -1820,8 +1783,8 @@
           // (#usageOptions) und weckt ueber den MutationObserver in
           // sidebar-quota.js das Kontingent-Panel, dessen "in 3 h 12 min"
           // er damit frisch haelt. Jede Sekunde neu geschrieben, zog er das
-          // Panel auch beim Scrollen und Streamen jede Sekunde nach (Apple-
-          // Audit D10); einmal pro Minute reicht dem Panel.
+          // Panel auch beim Scrollen und Streamen jede Sekunde nach; einmal
+          // pro Minute reicht dem Panel.
           const totalMinutes = Math.floor(diff / (1000 * 60));
           const formattedHours = Math.floor(totalMinutes / 60).toString().padStart(2, "0");
           const formattedMinutes = (totalMinutes % 60).toString().padStart(2, "0");
@@ -1849,9 +1812,8 @@
 
         document.getElementById("logoLink").addEventListener("click", () => {
           trackAppEvent("app_logo_home_click");
-          // wenn ich wirklich zurück will, entferne den visitedLanding-Flag
+          // Raeumt nur einen alten Merker weg: visitedLanding liest keine Seite.
           writeStored("visitedLanding", null);
-          // und damit gilt beim nächsten Laden der Landing-Seite wieder first-view
         });
 
         // Demo-Chip automatisch beim ersten echten Besuch (wenn noch nie benutzt)
@@ -1861,10 +1823,6 @@
 
         // Consensus-Actions (Copy/Citation/Share controls) sind nach
         // static/js/consensus-actions.js ausgelagert.
-
-        // === Share-Dialog (öffentliche Links) ===
-        // Views: "confirm" (Opt-in vor dem Teilen), "success" (Link erstellt),
-        // "list" (eigene Links verwalten/widerrufen).
 
         // Share-Dialog (oeffentliche Links) ist nach static/js/share-dialog.js
         // ausgelagert. Export: window.openShareDialog.
@@ -1876,11 +1834,8 @@
         window.App.state.set("isUserPro", false, "userTier");
         window.App.state.set("isUserPlus", false, "userTier");
 
-        // Tier-/Pro-UI (updateUserTierUI, updatePremiumModelsState) ist nach
-        // static/js/user-tier.js ausgelagert. Exporte gleichen Namens auf window.
-
         // The one tooltip of the app (tooltip.js): title and data-tooltip, for
-        // the pointer, the keyboard and a tap on a mark (Apple audit E12).
+        // the pointer, the keyboard and a tap on a mark.
         window.App.tooltip?.init?.();
 
         }

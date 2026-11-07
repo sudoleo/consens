@@ -158,12 +158,12 @@
   }
   // Ein neues Format behält die Zeichen, die schon dastehen: Öffnet sich die
   // Android-Tastatur oder dreht sich das Gerät, würfelten sonst alle Zeichen
-  // auf einmal neu (Apple-Audit D11). Nur hinzugekommene Zellen sind neu.
+  // auf einmal neu. Nur hinzugekommene Zellen sind neu.
   function resize() {
     stale = false;
     // Die Zeichen werden in voller Gerätedichte gemalt (bis 3x): auf dem
     // iPhone waren sie mit 2x um das 1,5-Fache hochskaliert und weicher als
-    // der Text davor (Apple-Audit G16). Das Raster wird fast nie neu gemalt,
+    // der Text davor. Das Raster wird fast nie neu gemalt,
     // der Nebel bleibt grob (FOG, unabhängig von der Dichte).
     dpr = Math.min(window.devicePixelRatio || 1, 3);
     cw = Math.round(7.2 * dpr);
@@ -353,7 +353,7 @@
     if (!raf && active && supported && !document.hidden) raf = window.requestAnimationFrame(loop);
   }
 
-  // Einstellungen > Darstellung > Buchstaben-Animationen aus (Kontoeinstellung):
+  // Einstellungen > Anzeige > Buchstaben-Animationen aus (Kontoeinstellung):
   // keine Wolken, auch keine ruhenden.
   function wanted() {
     if (!body.classList.contains("is-hero")) return false;
@@ -390,7 +390,7 @@
   // Hinter einem Chat bleibt die Ebene unsichtbar liegen. Sobald sie
   // ausgeblendet ist, gibt sie ihre Leinwände frei (bei DPR 2 rund 30 MB),
   // statt sie für den nächsten leeren Startbildschirm aufzuheben; der baut
-  // ohnehin neu auf und blendet ein (Apple-Audit D11).
+  // ohnehin neu auf und blendet ein.
   function release() {
     if (active || !img) return;
     gc.width = gc.height = 0;

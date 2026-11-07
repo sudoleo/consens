@@ -1,5 +1,5 @@
 // The Watch the Agent prepared (agent_watch.py) as a card under the answer.
-// Since 2026-11-03 a Watch runs the Agent again on a schedule in this chat
+// A Watch runs the Agent again on a schedule in this chat
 // (agent_watches.py): the card shows its task, its goal and when it runs,
 // and Start sends only the chat, the turn and the schedule to POST
 // /agent/watches, which reads the task from the saved turn. "Change" opens
@@ -203,7 +203,7 @@
     status.setAttribute('data-i18n-skip', '');
     const view = { key, card, title, task, goal, settings, status, proposal: null, choice: null,
       chatId: '', turnId: '', busy: false, message: '', changing: false };
-    // The one primary button of every watch surface (Apple-Audit J18).
+    // The one primary button of every watch surface.
     view.start = button('wd-button is-primary agent-watch-start', 'Start Watch', () => start(view));
     view.change = button('text-link agent-watch-link', 'Change', () => { view.changing = !view.changing; sync(view); });
     view.end = button('text-link agent-watch-link agent-watch-end', 'End Watch', () => act(view, 'stop'));
@@ -250,10 +250,10 @@
 
   // This card's Watch: the one started from its turn, or the same task in its
   // chat (the Agent prepared it again: already_watched). End and resume act
-  // on the Watch the card shows (bug hunt 2026-11-04). Only a running or
-  // paused one is taken by its task, and the card keeps it once seen (also
-  // when it ends): an ended Watch of the same task is no reason to withhold
-  // Start from a new proposal (bug hunt 2026-11-05).
+  // on the Watch the card shows. Only a running or paused one is taken by
+  // its task, and the card keeps it once seen (also when it ends): an ended
+  // Watch of the same task is no reason to withhold Start from a new
+  // proposal.
   function ownWatch(view, watches) {
     const own = watches.find(watch => watch.turn_id === view.turnId)
       || (view.watchId && watches.find(watch => watch.id === view.watchId))

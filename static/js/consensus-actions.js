@@ -1,7 +1,6 @@
 // =====================================================================
 // consensus-actions.js
 // Consensus action controls: share button, copy consensus, copy citation.
-// Extracted from templates/index.html without changing the consensus run.
 // Dependencies: window.App.{showPopup,trackAppEvent}, window.auth,
 // window.openShareDialog, window.consensusCitationMeta.
 // =====================================================================
@@ -406,8 +405,8 @@
     });
 
     // A scroll event without movement (scroll anchoring settling after an
-    // opened chat's first tap, chat-scroll.js) used to close the menu the
-    // moment it opened.
+    // opened chat's first tap, chat-scroll.js) would otherwise close the
+    // menu the moment it opened.
     window.addEventListener("scroll", () => {
       if (menu.classList.contains("open") && Math.abs(window.scrollY - openedAtY) > 2) closeMenu();
     }, { passive: true });

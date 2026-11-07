@@ -1,6 +1,6 @@
-// The sheet that starts a Watch away from the Watches page (since
-// 2026-11-03, agent_watches.py; since 2026-11-04 the same field as the
-// page, watch-composer.js): the Watch pill under an answer starts one in
+// The sheet that starts a Watch away from the Watches page
+// (agent_watches.py; the same field as the page, watch-composer.js): the
+// Watch pill under an answer starts one in
 // that chat, its question already written. On the Watches page every start
 // goes to the page's own field instead (watch.js startWatch). The Watch the
 // Agent prepared itself has its card under the answer (agent-watch.js).

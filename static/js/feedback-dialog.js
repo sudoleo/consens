@@ -6,7 +6,7 @@
 // guest gets the login hint and the contact address instead of a form that
 // can only fail. The answer lands in the dialog's own status line instead of
 // an alert(), and the submit button stays locked while a send is in flight,
-// so a double click is one message (audit F7).
+// so a double click is one message.
 //
 // Call-time dependencies: App.modalDialog (modal-dialog.js), window.auth
 // (firebase.js), App.openAuthModal (firebase.js), App.trackAppEvent

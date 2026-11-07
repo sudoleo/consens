@@ -1,6 +1,6 @@
 // =====================================================================
 // notices.js
-// One notice system for the whole app (Apple audit E3):
+// One notice system for the whole app:
 //
 //   App.toast({ message, tone, action, undo, onExpire, duration, key })
 //     One line just above the composer (or the bottom edge where there is
@@ -27,10 +27,10 @@
 //   App.composerNotice.show(message, { tone, for: element })
 //   App.composerNotice.clear()
 //     A mistake in what is being typed or attached is said where it
-//     happened, at the composer, not in a window (Apple audit E1).
+//     happened, at the composer, not in a window.
 //
 // The older names forward here: App.undoNotice.show (chat deletion),
-// App.showPopup (app-core.js), App.watchDashboard.showUndoToast.
+// App.showPopup (app-core.js).
 // =====================================================================
 (function () {
   "use strict";
@@ -193,10 +193,9 @@
     if (!current) {
       present(record);
     } else if (stays(current)) {
-      // An error stays until it is closed (E3), but it does not hold up
-      // what comes after it: it steps aside, the new line shows now, and
-      // the error comes back once that one has gone (an action-less line
-      // waited behind an open error until it was closed, review 2 N2).
+      // An error stays until it is closed, but it does not hold up what
+      // comes after it: it steps aside, the new line shows now, and the
+      // error comes back once that one has gone.
       setAside(current);
       present(record);
     } else if (record.action) {
@@ -226,8 +225,7 @@
 
   // The line on screen gives way to the queue once it has been seen,
   // unless it holds an action the user might still take, is working, or
-  // stays until it is closed (an error: E3; it went after 1.6 s when another
-  // line came, review E3). An error that stepped aside does not hurry the
+  // stays until it is closed (an error). An error that stepped aside does not hurry the
   // line in front of it: it waits as long as it takes.
   function hurry(record) {
     if (!record || record.ended || record.action || record.busy) return;
@@ -348,7 +346,7 @@
     // A line replaced by another (an Undo, the same key) gives its place to
     // that one, which the caller shows now; what waited keeps waiting. Moving
     // the queue on here showed a waiting line under the new one, and nothing
-    // ever took it away again (review 7).
+    // ever took it away again.
     if (reason === "replaced") return;
     const next = queue.shift();
     if (next) present(next);
@@ -431,7 +429,7 @@
       if (!el) { toast({ message, tone }); return; }
       window.clearTimeout(noticeTimer);
       // A notice still folding away is taken over by this one: its fold
-      // turns around instead of hiding the new words when it ends (review 6).
+      // turns around instead of hiding the new words when it ends.
       const wasHidden = el.hidden || noticeClosing;
       el.textContent = String(message || "");
       el.dataset.tone = tone;
@@ -488,7 +486,7 @@
   }
   // A dialog that opens or closes while a line is on screen takes it along:
   // it never stays under the open dialog, and never inside a closed one
-  // while another is still open (review E3). The `open` attribute is the
+  // while another is still open. The `open` attribute is the
   // one signal every way of opening and closing a dialog sets.
   if (typeof MutationObserver === "function") {
     new MutationObserver(records => {

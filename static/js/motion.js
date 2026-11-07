@@ -6,7 +6,7 @@
 // Durations and curves live in CSS (--dur-press/state/layer/light,
 // --ease-standard/out/in). A script that animates (a FLIP glide, a layer
 // that waits for its way out) reads the same values here instead of
-// writing its own 300 or 420 ms (Apple audit C14):
+// writing its own 300 or 420 ms:
 //
 //   App.motion.ms("layer")          -> 320 (from --dur-layer)
 //   App.motion.ease("out")          -> "cubic-bezier(0.22, 1, 0.36, 1)"
@@ -18,7 +18,7 @@
 //   App.motion.switchTheme(apply)
 //       runs apply() (the class change of light/dark) with every transition
 //       off for that frame, inside one cross-fade of the page where the
-//       browser has view transitions (Apple audit C8, motion.css).
+//       browser has view transitions (motion.css).
 //
 // Loaded first in the "auth" group (the overlay modules), before firebase.js.
 // =====================================================================

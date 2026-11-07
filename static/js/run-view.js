@@ -2,8 +2,7 @@
 // Background callbacks only mutate their context; this adapter is the only
 // place that mirrors run-owned data into compatibility globals and elements.
 // An Agent run is handed to agent-chat.js; everything else is a Compare run
-// (the models' answers side by side). Until 2026-10-25 a run here could also
-// carry a Consensus synthesis; the browser no longer runs one.
+// (the models' answers side by side).
 (function () {
   "use strict";
 
@@ -176,8 +175,8 @@
       // Nothing on screen belongs to a run any more: a saved bookmark, or a
       // cleared view. A run still going in the background reports itself in
       // its sidebar row. A saved answer draws its own footer (firebase.js),
-      // which stays when the same saved chat is drawn again: until
-      // 2026-11-03 a run ending in the background took it away.
+      // which stays when the same saved chat is drawn again (a run ending
+      // in the background draws it again).
       if (!drawnBefore) window.App.consensusFooter?.clear?.();
       window.App.syncSendButtonRunning?.();
       return;
@@ -188,12 +187,11 @@
     // Only when the run actually disagrees with the tier on screen. Pushing
     // it on every pass rebuilt the whole model picker for each streamed
     // chunk, and the picker's own restore is what closed the cycle above.
-    // "is_pro_user: false" heisst seit der Plus-Stufe nur noch "nicht Pro" --
-    // es unterscheidet Free nicht mehr von Plus. Ein Lauf ohne ausdrueckliches
-    // "tier" (aeltere Antwort, Tab von vor einem Deploy) darf die Stufe auf dem
-    // Schirm deshalb nur noch ANHEBEN, nie senken: sonst schaltet ein
-    // Plus-Konto beim ersten projizierten Lauf zurueck auf Free und verliert
-    // Anhaenge.
+    // "is_pro_user: false" heisst nur "nicht Pro" -- es unterscheidet Free
+    // nicht von Plus. Ein Lauf ohne ausdrueckliches "tier" (aeltere Antwort,
+    // Tab von vor einem Deploy) darf die Stufe auf dem Schirm deshalb nur
+    // ANHEBEN, nie senken: sonst schaltet ein Plus-Konto beim ersten
+    // projizierten Lauf zurueck auf Free.
     const runTier = context.usage?.tier
       ?? (context.usage?.isProUser === true ? "pro" : null);
     if (runTier !== null
@@ -234,12 +232,10 @@
     if (context.config?.executionMode === "agent") {
       if (context.status === "canceled") return "Stopped";
       // One word for what the run does, from the same state as the head of
-      // its activity (agent-activity.js phase, UX audit E2): "Working" while
+      // its activity (agent-activity.js phase): "Working" while
       // it thinks, runs a step or writes, "Reviewing" while the reviewers
       // check the answer, and while it waits for the user "Paused" or
-      // "Waiting for you", in the row of every chat, also one not on screen
-      // (A-B2). Before, the row said "Thinking" during commands and a cut
-      // "Writing ans…" while the reviewers worked.
+      // "Waiting for you", in the row of every chat, also one not on screen.
       const hold = context.metadata?.hold;
       const activity = window.App.agentActivity;
       const now = activity?.phase?.({ asking: Boolean(hold?.ask), held: Boolean(hold), review: context.metadata?.agentReview });
@@ -259,10 +255,10 @@
     if (element.getAttribute(name) !== value) element.setAttribute(name, value);
   }
   // A run's row is built once; afterwards only what changed is written, so
-  // its pulse runs on instead of restarting with every registry event
-  // (Apple audit C7). It has a saved row's height and becomes the saved row
-  // in place when the chat is saved (firebase.js replacePendingBookmarkWithReady),
-  // so the list below it never moves (A11).
+  // its pulse runs on instead of restarting with every registry event. It
+  // has a saved row's height and becomes the saved row in place when the
+  // chat is saved (firebase.js replacePendingBookmarkWithReady),
+  // so the list below it never moves.
   function ensureRunRow(context) {
     if (!context?.bookmark?.id || !context.auth?.uid) return;
     if (context.bookmark.deleted || context.bookmark.deleting) return;

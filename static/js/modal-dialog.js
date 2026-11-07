@@ -13,7 +13,7 @@
 //   - the backdrop closes only a deliberate click on it. A press that starts
 //     inside (selecting text in a field) and is released over the backdrop
 //     reaches the dialog as a click on itself; that one must not close it
-//     and drop what was typed (audit F5, same guard as the login dialog);
+//     and drop what was typed (same guard as the login dialog);
 //   - Escape belongs to the open dialog, so a document-level Escape handler
 //     behind it (the answer reader, a popover) does not act at the same time;
 //   - an open menu or card (App.popover) closes when a dialog opens.
@@ -136,7 +136,7 @@
     let from = active && active !== document.body && !dialog.contains(active) ? active : null;
     // A dialog chosen in a menu ("Shared links", "Log out"): the menu goes
     // as the dialog comes, so focus goes back to the control that opened
-    // the menu, not into nothing (review F, 2026-10-21).
+    // the menu, not into nothing.
     if (from?.closest?.("[data-popover]")) from = window.App.popover?.triggerOf?.(from) || null;
     from = from || opener || window.App.popover?.recentTrigger?.() || null;
     openers.set(dialog, from);
@@ -166,8 +166,7 @@
 
   window.App.modalDialog = { bind, open, close, isOpen };
 
-  // The one close cross (foundation.css .close-button/.close-icon, Apple
-  // audit G3): a drawn X, never the "×"/"✕" glyphs of two different fonts.
+  // The one close cross (foundation.css .close-button/.close-icon): a drawn X, never the "×"/"✕" glyphs of two different fonts.
   const CLOSE_ICON = '<svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
     + '<path d="M4 4l8 8M12 4l-8 8"/></svg>';
   window.App.closeIcon = () => CLOSE_ICON;

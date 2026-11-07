@@ -1,7 +1,7 @@
 // =====================================================================
 // disclosure.js
 // Every <details> in /app opens and closes with the same soft height
-// change (Apple audit C11): the sources list, the check details, earlier
+// change: the sources list, the check details, earlier
 // answer versions, the Google cards, the panel rows, the Settings notes.
 // "Thought for …" (agent-activity.js) and the Watch settings (watch.js)
 // already move their own way; they stop the click (preventDefault) and are

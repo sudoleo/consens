@@ -9,9 +9,8 @@
 //   SILENCE_MS after the response's headers (`responded()`), or no response
 //   at all UNANSWERED_MS after the request (a proxy that holds the headers
 //   back too), polling starts and hands every frame to the run's dispatcher.
-//   Until 2026-11-05 SILENCE_MS counted from watch(), before the POST went
-//   out: a slow start on the server (its reads before the headers) polled
-//   for nothing and was counted as a buffering network.
+//   Counting from the headers keeps a slow start on the server (its reads
+//   before the headers) from polling for nothing as a buffering network.
 // - Reconnect (`reconnect()`): the stream broke or went silent (network drop,
 //   a phone that put the tab to sleep, a half-open connection, a server
 //   restart) or the page was reloaded while the turn ran. Polling then
@@ -70,12 +69,10 @@
   const GONE_MS = 20000;
   // Following stops after this long without a new frame. A turn can run for
   // hours (Agent VM), and a pause for the user (a reviewer's halt) sends
-  // nothing for up to 30 minutes: counted from the start of following, a
-  // paused turn was given up while the user could still decide. Since
-  // 2026-10-29 (A-B1) stream bytes count as news too, the limit is checked
-  // only after a poll that brought nothing, and never while a pause waits
-  // for the user (`paused()`): before, a healthy run followed for 40 minutes
-  // ended as "Connection lost" with the next tab switch, its card with it.
+  // nothing for up to 30 minutes. So stream bytes count as news too, the
+  // limit is checked only after a poll that brought nothing, and never while
+  // a pause waits for the user (`paused()`): a healthy run must not end as
+  // "Connection lost", its card with it.
   const MAX_FOLLOW_MS = 40 * 60 * 1000;
 
   function sequence() {
@@ -181,8 +178,7 @@
       inFlight = true;
       try { await pollOnce(); } catch (_) {
         // A frame its handler could not apply never ends the following: the
-        // next poll asks after it (the cursor passed it already). Before, no
-        // poll came again until the tab was hidden and shown.
+        // next poll asks after it (the cursor passed it already).
         if (!stopped && polling) { failures += 1; schedule(backoff()); }
       } finally { inFlight = false; }
     }

@@ -85,8 +85,8 @@
 
       // Once there is a question, the composer is live: field focused,
       // then send. The reviewers' words beside it are a label, not a switch:
-      // until 2026-11-02 they lit up on the way (a run switch's step), which
-      // read as a flicker while scrolling.
+      // lighting up on the way (a run switch's step) read as a flicker while
+      // scrolling.
       composer.classList.toggle("is-active", typed > 0.02);
       if (send) {
         send.classList.toggle("is-ready", typed >= 1);
@@ -102,11 +102,10 @@
 
   // ---- Scene 02: Run --------------------------------------------------
 
-  // One Agent turn in the one mode (2026-10-31), on the surfaces
-  // agent-activity.js, agent-delegation.js and agent-review.js draw in
-  // /app: the reviewers join beside the clock with the first step, a note
-  // on the plan, its search and its workspace (since 2026-11-01, the demo's
-  // run), the agent asking the AIs once (their answers land one by one),
+  // One Agent turn in the one mode, on the surfaces agent-activity.js,
+  // agent-delegation.js and agent-review.js draw in /app: the reviewers
+  // join beside the clock with the first step, a note on the plan, its
+  // search and its workspace (the demo's run), the agent asking the AIs once (their answers land one by one),
   // the answer written in its own step with the files it shared, the
   // reviewers' review of that exact text, then their marks and the evidence
   // row. No score. The comparison owns the longest stretch, as it does in a run.
@@ -124,7 +123,7 @@
   const RUN_SECONDS = 17;
 
   // Where each AI's answer lands inside the comparison, by how many AIs the
-  // scene asks (Daily's two since 2026-11-01). A comparison is only as fast
+  // scene asks (Daily's two). A comparison is only as fast
   // as its slowest AI, so the spread is deliberate, and the last one always
   // lands at the end of the stretch. Any other count spreads evenly.
   const MODEL_FINISH = { 2: [0.55, 1.0], 3: [0.42, 0.7, 1.0] };
@@ -169,7 +168,7 @@
     }
 
     // Nothing around the mock may move while the run plays, and nothing in
-    // it may jump (Apple-Audit I1). The SLOT the card sits in is locked to
+    // it may jump. The SLOT the card sits in is locked to
     // the card's tallest state, so the heading beside it and the page below
     // keep their place and the scroll progress keeps a fixed reference. The
     // card itself follows its content: the log grows, and once the review is

@@ -12,13 +12,11 @@
 //      (window.CONSENSUS_PRESETS) plus "Custom" fuer die einzelnen Modelle.
 //      Ein Preset setzt die Pruefer des Agenten (die auch compare_models
 //      beantworten) und die Antwortmodelle von Compare.
-//      Die Consensus-Engine, die es frueher mitsetzte, waehlt seit
-//      2026-10-25 niemand mehr im Browser; ihr Wert bleibt nur der Anker
-//      der Preset-Aufloesung. High Quality bleibt Pro-only.
+//      Die Consensus-Engine waehlt niemand im Browser; ihr Wert ist nur
+//      der Anker der Preset-Aufloesung. High Quality bleibt Pro-only.
 //   4) Verknuepfte Picker (linkModelPicker): ein Chip, ein Menue fuer zwei
 //      Selects. Agent nutzt es fuer Chatmodell + Pruefer: Uebersicht
 //      mit Abschnitten, jede Zeile fuehrt in die Ebenen ihres eigenen Pickers.
-// Extrahiert aus templates/index.html (initApp-Closure), verhaltenserhaltend.
 // Exporte:
 //   window.restoreModelSelections, window.syncCustomModelPickers,
 //   window.App.{applyTierDefaultModels, setModelSelectionState,
@@ -106,14 +104,13 @@
   window.App.runFamilyCap = runFamilyCap;
   window.App.capBlocksInclusion = capBlocksInclusion;
 
-  // Provider, die der LAUFENDE Lauf bewusst ausgelassen hat (heute: DeepSeek,
-  // solange Anhaenge mitgehen). Der Block gehoert dem Lauf, nicht dem Composer:
+  // Provider, die der LAUFENDE Lauf bewusst ausgelassen hat (ein Modell, das
+  // die mitgehenden Anhaenge nicht lesen kann). Der Block gehoert dem Lauf, nicht dem Composer:
   // beim Senden wandern die Anhaenge an die Nachricht, der Composer ist wieder
   // leer — und jede /ask-Antwort loest einen Tier-Refresh und damit
   // restoreModelSelections() aus. Ohne diesen Block schaltet der gespeicherte
   // Wert das Modell mitten im Lauf wieder ein, obwohl fuer es nie eine Anfrage
-  // rausging: der Konsens wartet dann auf eine Antwort, die nie kommt, und
-  // bricht mit "at least two completed model answers" ab.
+  // rausging: der Lauf wartet dann auf eine Antwort, die nie kommt.
   const runBlockedResponseIds = new Set();
 
   function setRunModelBlock(responseId, blocked) {
@@ -154,7 +151,7 @@
   }
 
   function animateResponseReorder(box, applyStateChange) {
-    // "Reduce motion" moves nothing: the boxes change places at once (C10).
+    // "Reduce motion" moves nothing: the boxes change places at once.
     if (!box || typeof box.animate !== "function" || window.App.motion?.reduced?.()) {
       applyStateChange();
       return;
@@ -237,7 +234,7 @@
         box.title = checked ? "" : `${pref.key} is excluded. Click the checkmark to include it again.`;
         const excludeBtn = box.querySelector(".exclude-btn");
         if (excludeBtn) {
-          // Drawn marks, not the glyphs of a fallback font (Apple audit G3).
+          // Drawn marks, not the glyphs of a fallback font.
           excludeBtn.innerHTML = checked
             ? '<svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg>'
             : '<svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M3.5 8.5l3 3 6-7"/></svg>';
@@ -535,7 +532,7 @@
     // field, agent-mode.js renderReviewers).
     // Translated part by part: "{picker}: {label}" has no entry of its own.
     // The chat model's reasoning level stands quietly beside its name
-    // ("DeepSeek V4.1 Flash Auto", Max 2026-10-31, after ChatGPT's "GPT-6.1
+    // ("DeepSeek V4.1 Flash Auto", Max, after ChatGPT's "GPT-6.1
     // Sol High"); Compare's chip names how many answer and has none. While
     // the list loads, the level the first frame painted (app-bootstrap.js);
     // a model without the setting shows none.
@@ -591,7 +588,7 @@
       // Gone, not hidden, without a level: the chip's text is its words alone.
       // A word space stands between name and level: the flex chip draws
       // none, but its text reads "Name Level" like its spoken name (WCAG
-      // 2.5.3; without it axe read "NameLevel", 2026-11-01).
+      // 2.5.3; without it axe read "NameLevel").
       let levelNode = state.displayButton.querySelector(".model-picker-display-level");
       if (!level) {
         if (levelNode?.previousSibling?.nodeType === Node.TEXT_NODE) levelNode.previousSibling.remove();
@@ -728,7 +725,7 @@
     const customHint = document.createElement("span");
     customHint.className = "model-picker-preset-hint";
     // Active: who is chosen, as the overview row names them. The consensus
-    // engine this select still carries is nobody's choice since 2026-10-25.
+    // engine this select still carries is nobody's choice.
     const families = window.App.modelPrefs
       .filter(pref => document.getElementById(pref.checkId)?.checked)
       .map(pref => pref.label || pref.key);
@@ -1018,7 +1015,7 @@
     toggle.setAttribute("role", "checkbox");
     toggle.setAttribute("aria-checked", String(included));
     // A checkbox keeps its name, aria-checked says the state; the title
-    // tells what a click does (a11y audit K8).
+    // tells what a click does.
     toggle.setAttribute("aria-label", pref.label);
     const capped = !included && capBlocksInclusion(pref);
     toggle.title = included
@@ -1074,7 +1071,7 @@
     const comparisonOnly = select.dataset.comparisonOnly === "true";
     // The count stands in the label's line from the start. A requirement
     // that appeared above the rows only below the minimum moved every row
-    // under the pointer, one click before the last (2026-10-26).
+    // under the pointer, one click before the last.
     const selectedCount = window.App.getSelectedModelCount?.() || 0;
     const minimum = comparisonOnly ? 1 : 2;
     const requirement = document.createElement("span");
@@ -1217,7 +1214,8 @@
         if (option.disabled || targetSelect.disabled) return;
 
         // Das change-Event traegt die ganze Persistenz (app-init.js speichert
-        // pref_select_* und schaltet auf "custom" um) — deshalb wird es auch
+        // die Wahl ueber markConsensusPresetCustom und schaltet auf "custom"
+        // um) — deshalb wird es auch
         // fuer die Provider-Selects hier gefeuert, nicht nur fuer die Engine.
         targetSelect.selectedIndex = option.index;
         targetSelect.value = option.value;
@@ -1359,7 +1357,7 @@
     // A guest cannot choose models yet. Every way into the composer's
     // pickers (the chip, Reasoning, Reviewers, a notice) is this
     // door: it asks for the login with the reason instead of opening a menu
-    // whose choices need an account (Apple-Audit H2, H3).
+    // whose choices need an account.
     if (state && window.App.isGuest?.() && state.host.closest(".chat-input-container")) {
       const reasoning = level === "secondary";
       window.App?.closeAttachMenu?.();
@@ -1511,7 +1509,7 @@
     let displayButton = null;
     if (!options.externalTrigger) {
       // app-bootstrap.js may have drawn this chip into the first frame with
-      // the words it will show; it becomes the picker's own (Apple-Audit B1).
+      // the words it will show; it becomes the picker's own.
       displayButton = host.querySelector(":scope > .model-picker-display[data-seeded]");
       if (displayButton) delete displayButton.dataset.seeded;
       else {

@@ -3,10 +3,10 @@
 // through noVNC (static/vendor/novnc, loaded when the panel first opens).
 // The user watches; a click on the screen takes the browser over, and the
 // agent waits (agent_workspace.py "Takeover") until "Hand back"; its server
-// runs on the same computer as this Chrome, so localhost keeps answering here
-// (one computer since 2026-11-04). While the user has it, the panel refreshes the takeover every
+// runs on the same computer as this Chrome, so localhost keeps answering here.
+// While the user has it, the panel refreshes the takeover every
 // REFRESH_MS, and at once when the page comes back to the front; a reload of
-// this tab opens the view again in the user's hands (A-S6, 2026-10-29); a
+// this tab opens the view again in the user's hands; a
 // closed tab lets it expire by itself. Sign-ins happen here, by
 // the user: the agent never types a password.
 //
@@ -17,7 +17,7 @@
 // nothing else. The shortcut never reaches noVNC: a hidden field takes the
 // browser's paste.
 //
-// Typing on a phone (since 2026-10-30, runtime audit V1): iOS and Android
+// Typing on a phone: iOS and Android
 // open no keyboard for noVNC's canvas. "Keyboard" (touch screens, while the
 // user has the browser) focuses a field out of sight (16px, no capitals or
 // corrections) whose keys go to the VM like noVNC's own keyboard input
@@ -27,23 +27,23 @@
 //
 // A connection that drops without a reason from the server (the phone went
 // to its 2FA app and iOS closed the socket, a network change) comes back by
-// itself (V2): after 1, 2, 5 and 10 s, and at once when the page is in front
+// itself: after 1, 2, 5 and 10 s, and at once when the page is in front
 // again or back online. Meanwhile the skeleton and "Reconnecting…" show; the
 // bar with "Hand back" stays, and so does the takeover. A close with a
 // server's reason (FINAL) or four failed tries say why in up to two lines,
-// with "Reconnect". Before, the view stayed empty without "Hand back", and
-// closing it was the only way out, which gave the browser back mid-login.
+// with "Reconnect". Closing the view is never the only way out: it would
+// give the browser back mid-login.
 // Closing the panel still hands back what the user holds, without
 // "consensio:workspace-handback"; a dropped connection never closes it.
 //
 // While the agent has the browser and this tab is hidden for HIDDEN_MS, the
-// view lets go (its time counts as VM time, V4: a forgotten view used half a
+// view lets go (its time counts as VM time: a forgotten view used half a
 // day's time) and comes back when the tab does. The head says what is left
 // of today's VM time (the server's "connecting" state, left_seconds), and
 // while the agent has the browser, the status line names the step it is on
-// (agentStep, from agent-activity.js; V6) instead of a fixed sentence.
+// (agentStep, from agent-activity.js) instead of a fixed sentence.
 //
-// The picture stands at the top of its place, not in the middle (V5). On a
+// The picture stands at the top of its place, not in the middle. On a
 // narrow panel, while the user has the browser, "100%" shows the page at
 // its real size, to pan by dragging (noVNC clipViewport, dragViewport);
 // handing back fits it again.
@@ -53,12 +53,12 @@
 // workspace-view-docked, --workspace-width; workspace-view.css), next to the
 // Agent activity panel when that is open and leaves it MIN_WIDTH; else it
 // lies over the activity (workspace-view-covers), which waits beneath it
-// (UX audit 2026-10-29 G1: at 1280px the panel was 155px wide, its buttons
-// over the activity's text). The edge between them drags (or moves with the
+// (beside it, at 1280px, the panel was 155px wide, its buttons over the
+// activity's text). The edge between them drags (or moves with the
 // arrow keys) and remembers its width per browser; the chat never gets
 // narrower than MIN_CHAT. Narrower screens show it full width.
 //
-// Two tabs (since 2026-10-28): Browser, the live view above, and Terminal, the
+// Two tabs: Browser, the live view above, and Terminal, the
 // user's own shell on the workbench (routers/agent_workspace.py, xterm.js from
 // static/vendor/xterm, loaded on the tab's first use) with the agent's rights:
 // no administrator rights, only package sources online. Its keys go to the
@@ -66,15 +66,14 @@
 // tab loads it shows a skeleton of what comes (no spinner), and after
 // SLOW_MS a calm word that the first start takes a minute.
 //
-// Whose turn it is (since 2026-10-29): a bar right above the picture says it
+// Whose turn it is: a bar right above the picture says it
 // while the user has the browser, with the one strong button to hand it
 // back, and reminds them after IDLE_MS without a key or click there; while
 // the agent waits for them (ask_user, agent-chat.js askCard) it says what
 // for, with the button to take over, and keeps saying it once they have the
-// browser (G2: the request vanished just when it was needed). In the
+// browser (the request must not vanish just when it is needed). In the
 // Terminal tab the bar stays while they have the browser, and the green
-// edge stays on the browser's picture (G4). Before, only a small toggle in
-// the head said so, and Max waited for the agent while it waited for him.
+// edge stays on the browser's picture.
 //
 // window.App.workspaceView: open({ takeOver }), close(), isOpen(), init()
 // (the start screen's Workspace button, the (+) menu's row, the row in
@@ -115,7 +114,7 @@
     connecting: 'Connecting to the workspace…',
     slow: 'Starting your workspace. The first start can take a minute.',
     // How long it takes stands under the bar (startBar). waking: the server
-    // wakes the VM (since 2026-11-02, before that only "Connecting…").
+    // wakes the VM.
     setup: 'Setting up the browser. This happens once.',
     waking: 'Starting the browser…',
     starting: 'Starting the browser…',
@@ -135,7 +134,7 @@
     watching: 'Watching. Click the screen to take over.',
   };
   // What the start does in each phase the server reports, in order, over the
-  // bar (start-progress.js steps, since 2026-11-04; Max wanted to see what
+  // bar (start-progress.js steps; Max wanted to see what
   // happens instead of a bare bar). The real work, never made up: waking is
   // the server's _open (the VM, its tools and rules), setup install.sh and
   // harden.sh (once per computer), starting display.sh.
@@ -163,7 +162,7 @@
     replaced: 'The terminal opened in another window, so this one closed.',
     unavailable: 'The terminal could not load. Reload the page and try again.',
   };
-  // One line above the picture, gone while the bar says whose turn it is (G5).
+  // One line above the picture, gone while the bar says whose turn it is.
   const HINTS = {
     browser: 'Log in here yourself: the agent never types a password.',
     terminal: 'The computer the agent works on, with the same files and rights: no administrator rights, and only package sources online.',
@@ -355,17 +354,17 @@
       tabs.append(tab);
     }
     // The line and the tools after the tabs; on a narrow panel they take a
-    // second row, and title, tabs and the close cross keep the first (V7).
+    // second row, and title, tabs and the close cross keep the first.
     const tools = node('div', 'workspace-view-tools');
     const status = node('span', 'workspace-view-status', STATES.connecting);
     status.setAttribute('role', 'status');
-    // What is left of today's VM time (V4): already in the page's language.
+    // What is left of today's VM time: already in the page's language.
     const time = node('span', 'workspace-view-time');
     time.dataset.i18nSkip = '';
     time.hidden = true;
     const toggle = button('workspace-view-toggle', 'Take over', () => (view?.holder === 'user' ? handBack() : takeOver()));
     toggle.hidden = true;
-    // The app's one close cross (foundation.css .close-button, J1).
+    // The app's one close cross (foundation.css .close-button).
     const closer = button('close-button workspace-view-close', '', close);
     closer.setAttribute('aria-label', 'Close workspace');
     closer.title = 'Close workspace';
@@ -414,7 +413,7 @@
     const pasteTarget = node('textarea', 'workspace-view-paste-target');
     pasteTarget.tabIndex = -1;
     pasteTarget.setAttribute('aria-hidden', 'true');
-    // The phone's keyboard types here (V1), out of sight like the paste target.
+    // The phone's keyboard types here, out of sight like the paste target.
     const keys = node('input', 'workspace-view-paste-target workspace-view-keys');
     keys.type = 'text';
     keys.tabIndex = -1;
@@ -426,7 +425,7 @@
     keys.addEventListener('input', onFieldInput);
     keys.addEventListener('focus', () => showKeyboard(true));
     keys.addEventListener('blur', () => showKeyboard(false));
-    // After a dropped connection: try again now (V2).
+    // After a dropped connection: try again now.
     const reconnectButton = button('workspace-view-reconnect', 'Reconnect',
       () => reconnect({ fresh: true }));
     reconnectButton.hidden = true;
@@ -476,7 +475,7 @@
       tab: 'browser', said: { browser: STATES.connecting, terminal: TERMINAL.connecting }, sayAs: {}, slow: null,
       // The start's bar (startBar), new with each connection.
       progress: null,
-      // The connection (V2, V4): trying, its tries and timer, why it ended for good, paused while hidden.
+      // The connection: trying, its tries and timer, why it ended for good, paused while hidden.
       connecting: false, again: false, retries: 0, retry: null, readyAt: 0, final: null, paused: false,
       pausing: null, away: null, dayLeft: null, clock: null, full: false, fieldValue: '',
       term: null, fit: null, termSocket: null, termReady: false, termResize: null };
@@ -518,7 +517,7 @@
     if (!view) return;
     (key === 'terminal' ? view.terminal : view.screen).classList.toggle('is-loading', on);
   }
-  // The start's bar over the skeleton (start-progress.js, since 2026-11-02),
+  // The start's bar over the skeleton (start-progress.js),
   // new for each connection: the server's states carry about when the
   // browser's start ends ("until"), and the bar counts it down until
   // "ready" fills it.
@@ -601,7 +600,7 @@
     typeIn(text);
   }
 
-  // ---- The phone's keyboard (V1) -------------------------------------------
+  // ---- The phone's keyboard ------------------------------------------------
   function resetField() {
     if (!view) return;
     view.keys.value = FIELD_FILL;
@@ -691,9 +690,9 @@
     if (agentLine) say(agentLine, 'browser', { raw: true });
     else say(STATES.watching);
   }
-  // What is left of today's VM time (V4), counted down while the view is open,
-  // also in the user's hands (since 2026-10-31): their own time in the view
-  // counts too, and the view closed mid-login without a word before.
+  // What is left of today's VM time, counted down while the view is open,
+  // also in the user's hands: their own time in the view counts too, and the
+  // view would otherwise close mid-login without a word.
   function showTime() {
     if (!view) return;
     const left = view.dayLeft;
@@ -747,8 +746,8 @@
   // The bar: the user's turn (and after IDLE_MS a reminder), or what the
   // agent waits for them to do, or nothing while the agent works. What the
   // agent asked for stays its quiet line while the user has the browser;
-  // "The agent waits." only for a takeover nobody asked for (G2). While the
-  // connection comes back the user's bar stays, with "Hand back" (V2).
+  // "The agent waits." only for a takeover nobody asked for. While the
+  // connection comes back the user's bar stays, with "Hand back".
   function showTurn() {
     if (!view) return;
     const user = view.holder === 'user';
@@ -758,7 +757,7 @@
     view.turn.hidden = !(user || (asked && browser && (view.rfb || view.again)));
     // One way to take over or hand back at a time: the bar's, when it shows.
     if (!view.turn.hidden) view.toggle.hidden = true;
-    // The hint gives way to the bar: two blocks of words over the picture were one too many (G5).
+    // The hint gives way to the bar: two blocks of words over the picture were one too many.
     view.hint.hidden = !view.turn.hidden;
     view.turn.classList.toggle('is-user', user);
     view.turn.classList.toggle('is-idle', Boolean(idle));
@@ -789,7 +788,7 @@
     window.dispatchEvent(new CustomEvent('consensio:workspace-holder', { detail: { holder } }));
   }
 
-  // The user has the browser (A-S6): remembered in this tab, so a reload
+  // The user has the browser: remembered in this tab, so a reload
   // (a phone that discarded the page while the user was in the 2FA app)
   // opens the view again in their hands instead of letting it lapse.
   function rememberHolder(holder) {
@@ -801,7 +800,7 @@
   }
   function refreshNow() {
     // Another window has the view now (4409): its hand-back is the user's
-    // word, never overwritten from here (bug hunt 2026-10-31).
+    // word, never overwritten from here.
     if (view?.final === 'replaced') return;
     rememberHolder('user');
     post('/agent/workspace/control', { holder: 'user' }).catch(() => {});
@@ -826,10 +825,10 @@
   // A page in the background (the 2FA app, a call, a locked phone) may not
   // run its interval: the takeover lapsed after CONTROL_SECONDS and the agent
   // went on mid-login. Back in front, it is refreshed at once and the
-  // interval starts over (A-S6; the server no longer takes a lapse for a
-  // hand-back while the agent waits for the user). A dropped connection
-  // comes back at once (V2); hidden for HIDDEN_MS while the agent has the
-  // browser, the view lets go until the tab is back (V4).
+  // interval starts over (the server does not take a lapse for a hand-back
+  // while the agent waits for the user). A dropped connection comes back at
+  // once; hidden for HIDDEN_MS while the agent has the browser, the view
+  // lets go until the tab is back.
   function onVisibility() {
     if (!view) return;
     if (document.visibilityState === 'hidden') {
@@ -875,7 +874,7 @@
   // agent-chat.js continueAfterHandback): the user expects the agent to go on.
   // Closing the view and a lapsed takeover hand back without that. A second
   // click while the first is on its way hands back once (a double click sent
-  // "Done in the browser." twice, bug hunt 2026-10-30).
+  // "Done in the browser." twice).
   let handingBack = false;
   async function handBack() {
     if (handingBack) return;
@@ -919,7 +918,7 @@
   }
   // The step the agent is on, in the page's language with its target as data
   // (agent-activity.js), or null: the status line names it while the agent
-  // has the browser (V6; on a phone the panel covers the chat).
+  // has the browser (on a phone the panel covers the chat).
   function agentStep(line) {
     const next = line ? String(line) : null;
     if (next === agentLine) return;
@@ -927,7 +926,7 @@
     if (view?.rfb && view.holder !== 'user') sayWatching();
   }
 
-  // ---- The picture's size (V5) -----------------------------------------------
+  // ---- The picture's size ----------------------------------------------------
   // Fitted into the panel while the agent works; the page's real size, moved by
   // dragging, while the user has it and asked for it.
   function applySize() {
@@ -1093,7 +1092,7 @@
     view.away = null;
     if (view.holder === 'user' || document.visibilityState !== 'hidden') return;
     // Between two tries (retryLater): the next one connected in the hidden
-    // tab and stayed (bug hunt P45). It waits for the tab instead.
+    // tab and stayed. It waits for the tab instead.
     if (!view.rfb && !view.connecting) {
       if (!view.retry) return;
       clearTimeout(view.retry);
@@ -1315,10 +1314,9 @@
     document.body.classList.remove('workspace-view-open', 'workspace-view-docked', 'workspace-view-covers', 'workspace-view-resizing');
     document.body.style.removeProperty('--workspace-width');
   }
-  // It leaves the way it came (Apple audit C5): folds back into the right
-  // edge from where it stood while the chat takes its lane back
-  // (workspace-view.css). Until 2026-10-29 it was gone at once. Its place is
-  // held inline, since the body's classes that dock it go at once.
+  // It leaves the way it came: folds back into the right edge from where it
+  // stood while the chat takes its lane back (workspace-view.css). Its place
+  // is held inline, since the body's classes that dock it go at once.
   function leave(panel) {
     if (App.motion?.reduced?.() || !panel.isConnected) { panel.remove(); return; }
     const box = panel.getBoundingClientRect();
@@ -1327,8 +1325,8 @@
     panel.inert = true;
     panel.classList.add('is-leaving');
     // Gone when its way out ends: the chat's new lane can hold back its
-    // first frame, and a fixed timer cut it off before it showed (docked,
-    // 2026-10-29). The timer only covers a way out that never runs.
+    // first frame, and a fixed timer cut it off before it showed (docked).
+    // The timer only covers a way out that never runs.
     const gone = () => panel.remove();
     panel.addEventListener('animationend', event => { if (event.target === panel) gone(); });
     setTimeout(gone, (App.motion?.ms?.('layer') ?? 320) * 2);
@@ -1372,7 +1370,7 @@
     host._workspace = true;
   }
   // Settings › Agent ends with the workspace's row (GitHub is in Settings ›
-  // Connections since 2026-11-02): it is there for an account with Agent
+  // Connections): it is there for an account with Agent
   // that has the workspace (/user_status vm_time, firebase.js), and says
   // today's workspace time (agent_vm_time.py) in whole sentences, translated
   // here (data-i18n-skip). firebase.js calls it when the account's status
@@ -1410,9 +1408,9 @@
   // The account is known (auth-session-state.js): a takeover from before a
   // reload is taken up again, also when that was said before this script ran.
   // A logout does not reload the page: the view of an account that is no
-  // longer signed in here closes, with its sockets (until 2026-10-30 its
-  // Chrome stayed in the next person's hands, and its refresh claimed the
-  // browser of whoever signed in next).
+  // longer signed in here closes, with its sockets (otherwise its Chrome
+  // stays in the next person's hands, and its refresh claims the browser of
+  // whoever signed in next).
   window.addEventListener('consensio:auth-state', (event) => {
     if (view && view.uid !== (event.detail?.uid || null)) close();
     returnToHolder();

@@ -1,6 +1,6 @@
 // =====================================================================
 // app-text.js
-// How the app writes what it says, in one place (Apple-Audit H1, H8, H9):
+// How the app writes what it says, in one place:
 //
 //   App.format     dates, times, numbers and spans of time in ONE locale,
 //                  the language of the page (en-US, or de-DE when i18n.js
@@ -209,7 +209,7 @@
   App.format = Object.freeze({ LOCALE, number, time, date, month, weekday, dateTime, upcoming, duration, relative, count, toDate });
 
   // ------------------------------------------------------------------
-  // App.words -- the glossary (Apple-Audit H9). One word per state.
+  // App.words -- the glossary. One word per state.
   // ------------------------------------------------------------------
   App.words = Object.freeze({
     // The check of an answer against the independent model answers.
@@ -233,8 +233,8 @@
     // enough (agent_comparison.comparison_selection).
     crossCheck: count => count < 1 ? "No cross-check"
       : count === 1 ? "1 AI cross-checks" : `${count} AIs cross-check`,
-    // The same by the account's reviewers setting (since 2026-11-01): only
-    // from the agent's first step in the workspace on, or nobody.
+    // The same by the account's reviewers setting: only from the agent's
+    // first step in the workspace on, or nobody.
     reviewing: (count, setting) => setting === "off" ? "Reviewers off"
       : setting !== "workspace" || count < 1 ? App.words.crossCheck(count)
         : count === 1 ? "1 AI checks the workspace" : `${count} AIs check the workspace`,
@@ -292,7 +292,7 @@
 
   // The sentence a refusal carries: {error}, {detail} (FastAPI), {message},
   // nested {detail: {error|message}} or {error: {error|message}} (main.py
-  // wraps a route's detail object that way, review 2026-10-21). A list of
+  // wraps a route's detail object that way). A list of
   // validation errors is no sentence for a reader.
   function serverSentence(data) {
     if (!data || typeof data !== "object") return plainText(data);
@@ -441,7 +441,7 @@
     if (status === 401) return "session";
     // A 5xx says the server's words only when they are meant for a reader:
     // a refusal with a code, or a sentence. "Error updating watch" or
-    // "Chat storage error" are labels for the log (review 2026-10-21).
+    // "Chat storage error" are labels for the log.
     if (status >= 500 && error.serverMessage && !code && !SENTENCE_END.test(error.serverMessage.trim())) return "server";
     if (error.serverMessage && !ENGINE.test(error.serverMessage)) return "message";
     if (status >= 500) return "server";
@@ -517,7 +517,6 @@
   App.readJson = readJson;
   App.httpError = httpError;
   App.errorFields = errorFields;
-  // agent-chat.js, when /chats refuses a new chat (moved here from the
-  // Consensus chat session, chat-session.js, on 2026-10-25).
+  // agent-chat.js, when /chats refuses a new chat.
   App.chatPersistenceErrorMessage = chatPersistenceErrorMessage;
 })();

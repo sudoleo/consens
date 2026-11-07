@@ -27,8 +27,7 @@
     revision: null,   // Revision von `saved`; Basis fuer Compare-and-swap
     // "Keep my draft": die neuere Revision, gegen die nur Save den Entwurf
     // schreibt. Ein Schalter schickt `saved` und bleibt bei `revision`, sonst
-    // ersetzte er den neueren Stand still durch den alten (Fehlersuche
-    // 2026-10-24).
+    // ersetzte er den neueren Stand still durch den alten.
     draftRevision: null,
     loaded: false,
     loading: false,
@@ -418,8 +417,7 @@
     const user = currentUser();
     if (!user) return false;
     // An unsaved draft in Settings stays as it is: read fresh beside it and
-    // write the switch with the saved texts (until 2026-11-04 the draft made
-    // Turn on fail). The draft keeps the revision it was written on, so its
+    // write the switch with the saved texts. The draft keeps the revision it was written on, so its
     // Save still meets what another tab saved meanwhile (keepDraft in load).
     const draft = state.loaded && state.uid === user.uid && isDirty();
     let saved, revision;
@@ -555,7 +553,7 @@
         input.maxLength = itemInput?.maxLength > 0 ? itemInput.maxLength : 300;
         input.setAttribute("aria-label", "Edit memory");
         // An emptied field is not a way to delete: Save waits for words,
-        // Delete is its own button with its own Undo (Apple audit E9).
+        // Delete is its own button with its own Undo.
         const save = itemButton("Save", () => saveEdit(item, input.value));
         const syncSave = () => { save.disabled = !input.value.trim() || state.itemsBusy; };
         input.addEventListener("input", syncSave);

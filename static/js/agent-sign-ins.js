@@ -1,4 +1,4 @@
-// Where the workspace's browser is logged in (since 2026-11-02), in Settings
+// Where the workspace's browser is logged in, in Settings
 // → Connections: the sites the Agent noted (note_sign_in,
 // agent_workspace.sign_ins), each with the day it was first noted. Removing
 // one only takes it off the list; logging out happens on the site itself or

@@ -8,8 +8,8 @@
   const modal = document.getElementById("proFeatureModal");
   const closeButton = document.getElementById("closeProModal");
   const sidebarLink = document.getElementById("upgradeLink");
-  // Features a Plus account already has (none since Resolve left the
-  // browser with the Consensus run, 2026-10-25).
+  // Features a Plus account already has (none: Resolve left the browser
+  // with the Consensus run).
   const plusFeatures = new Set();
   const messages = {
     "High Quality mode": "High Quality mode is not available on your account yet. Your current models are still selected.",

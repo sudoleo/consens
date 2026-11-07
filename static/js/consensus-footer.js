@@ -1,14 +1,12 @@
 // =====================================================================
 // consensus-footer.js
-// The surroundings of a saved Consensus answer on screen (a Consensus chat
-// from before 2026-10-25, opened from the sidebar): showing and hiding the
-// answer area, and the footer under it with its three drawers
+// The surroundings of a saved Consensus answer on screen (an old Consensus
+// chat, opened from the sidebar): showing and hiding the answer area, and
+// the footer under it with its three drawers
 // (Review differences · Compare answers · Sources).
 //
-// Until 2026-10-25 consensus-progress.js (the guided run block, run facts,
-// "Run again") and consensus-lifecycle.js (gate, cancel, run state) lived
-// here; the browser no longer runs the Consensus pipeline, so only what a
-// saved answer needs is left.
+// The browser does not run the Consensus pipeline, so only what a saved
+// answer needs lives here.
 // Exports: window.App.consensusFooter {render, clear},
 //          window.revealConsensusOutput, window.hideConsensusOutput
 // =====================================================================
@@ -28,10 +26,9 @@
     }
     output.classList.remove("is-hidden");
     // The fade's start committed by one style read, then the class that ends
-    // it: shown at once, no frame to wait for. Until 2026-11-07 two frames
-    // came between, and updateAgentModeUI, called right after (firebase.js),
-    // found no is-visible: the first open of an old chat drew Compare's view
-    // for a moment, about 20 px of blank space.
+    // it: shown at once, no frame to wait for. updateAgentModeUI, called
+    // right after (firebase.js), reads is-visible; without it the first open
+    // of an old chat drew Compare's view for a moment.
     void window.getComputedStyle(output).opacity;
     // No scroll here: chat-scroll.js owns all jumps.
     output.classList.add("is-visible");

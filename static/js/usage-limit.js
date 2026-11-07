@@ -1,10 +1,8 @@
 /* ==========================================================================
    usage-limit.js — "dieser Lauf hat nicht stattgefunden"
 
-   Ein aufgebrauchtes Kontingent war bis 2026-07-31 der einzige Fehlerfall,
-   den die App gar nicht erzaehlt hat: die Meldung landete in Antwortboxen,
-   die niemand sah. Dieses Modul ist die eine Stelle, die diesen Zustand
-   besitzt:
+   Dieses Modul ist die eine Stelle, die den Zustand "Kontingent
+   aufgebraucht" besitzt:
 
      - erkennt Limit-Antworten (ein Detektor, nicht drei),
      - prueft VOR dem Absenden gegen dasselbe Tokenkonto wie der Ring
@@ -12,10 +10,9 @@
      - rendert eine bleibende Karte im Thread (#runBlocked), genau dort, wo
        sonst die Antwort stuende.
 
-   Seit 2026-10-01 gibt es keine Run-Zaehler mehr: Agent, Compare und
-   Reasoning-Laeufe teilen ein Tokenkonto pro Tag. Ein Lauf startet, wenn das
-   freie Budget die erwarteten Tokens eines typischen Laufs dieses Modus
-   deckt — dieselbe Regel wie die Admission auf dem Server.
+   Agent, Compare und Reasoning-Laeufe teilen ein Konto pro Tag. Ein Lauf
+   startet, wenn das freie Budget die erwarteten Kosten eines typischen
+   Laufs dieses Modus deckt — dieselbe Regel wie die Admission auf dem Server.
 
    Die Karte verkauft nichts. consens.io ist waehrend des Tests gratis, es
    gibt also keinen Kauf-Ausweg — sie sagt, wann das Kontingent
@@ -35,7 +32,7 @@
   // {error: {...}}; die Streams reichen das Objekt teils schon ausgepackt
   // weiter, die vereinbarte Form ist flach ({error: "<Satz>", code}). Alle
   // muessen hier ankommen duerfen (App.errorFields, app-text.js; ohne das
-  // erkannte Compare ein leeres Kontingent nicht, Review 2).
+  // erkannte Compare ein leeres Kontingent nicht).
   function unwrap(data) {
     if (window.App.errorFields) return window.App.errorFields(data);
     var detail = data && data.detail;
@@ -55,7 +52,7 @@
     var code = String(normalized.error_code || normalized.code || "").toLowerCase();
     var text = String(message || normalized.error || normalized.detail || "").toLowerCase();
     // Too many requests in a short time is a wait, never the day's
-    // allowance ("rate_limited", "provider_rate_limited", Apple-Audit H1).
+    // allowance ("rate_limited", "provider_rate_limited").
     if (code.indexOf("rate_limited") !== -1) return false;
     return code === "token_budget_exhausted"
       || code.indexOf("limit") !== -1
@@ -149,7 +146,7 @@
 
     card.hidden = false;
     // Zwei Frames, damit der Einblend-Uebergang auch beim ersten Zeigen
-    // greift (dieselbe Mechanik wie beim gefuehrten Lauf).
+    // greift.
     requestAnimationFrame(function () {
       requestAnimationFrame(function () { card.classList.add("is-visible"); });
     });

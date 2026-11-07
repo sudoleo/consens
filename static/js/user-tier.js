@@ -2,7 +2,6 @@
 // user-tier.js
 // Tier-/Pro-UI: Badge, Early-Access-Link, Premium-Modell-
 // Optionen je nach Pro/Plus/Free/ausgeloggt. In eigene IIFE gekapselt.
-// Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.updateUserTierUI, window.updatePremiumModelsState,
 // window.App.accountTier ({set, render}) fuer die Marke am Konto-Kuerzel.
 // window.App.normalizeTier kommt aus app-state.js (head-Bundle).
@@ -12,11 +11,11 @@
 //
 // Drei Stufen, zwei Flags (Serverseite: app/core/entitlements.py):
 //   Free  - Basis-Modelle, kleines Kontingent.
-//   Plus  - Modellauswahl wie Free, aber Anhaenge und das groesste
-//           Kontingent.
+//   Plus  - Modellauswahl wie Free, aber mehr Kontingent und
+//           Dateispeicher.
 //   Pro   - alles.
 // Der Reasoning-Schalter ist fuer alle Stufen frei und wird hier nicht
-// gesperrt (seit 2026-10-02; vorher Pro-only als "Deep Think").
+// gesperrt.
 // isUserPro bleibt das Modell-Flag und ist fuer Plus false;
 // isUserPlus ist "Plus oder Pro". Wer nur isUserPro liest, sperrt Plus wie
 // Free -- das ist die sichere Richtung.
@@ -34,7 +33,6 @@
     const isPro = tier === TIER_PRO;
     const isPlus = tier === TIER_PLUS || isPro;
 
-    // 1. Globalen Status aktualisieren.
     window.App.state.set("userTier", tier, "userTier");
     window.App.state.set("isUserPro", isPro, "userTier");
     window.App.state.set("isUserPlus", isPlus, "userTier");
@@ -43,7 +41,6 @@
     // wird bei jedem Tier-Wechsel ohnehin neu aufgebaut).
     window.App?.followup?.render?.();
 
-    // 2. Elemente referenzieren
     const badge = document.getElementById("proBadge");
     const upgradeLink = document.getElementById("upgradeLink");
 
@@ -51,12 +48,11 @@
 
     // === CASE 1: NICHT EINGELOGGT ===
     if (!isLoggedIn) {
-      // Alles verstecken
       if (badge) badge.style.display = "none";
       if (upgradeLink) upgradeLink.style.display = "none";
 
       if (typeof updatePremiumModelsState === "function") updatePremiumModelsState(false);
-      return; // Funktion hier beenden!
+      return;
     }
 
     // === CASE 2: EINGELOGGT (Pro, Plus oder Free) ===
@@ -85,7 +81,7 @@
   }
 
   function updatePremiumModelsState(isPro) {
-    // Dropdown-IDs definieren (Consensus und OpenAI)
+    // Dropdown-IDs definieren (Consensus und je Familie)
     const dropdownIds = [
       "consensusModelDropdown",
       ...(window.App?.modelPrefs || []).map(pref => pref.selectId)

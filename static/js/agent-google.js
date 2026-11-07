@@ -66,8 +66,8 @@
   // Google's step failed: its sentence, or ours, never the engine's.
   const failed = error => App.userError(error, { fallback: 'The Google request failed. Try again.' });
   const post = (path, body) => api(path, {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)});
-  // "is-link": the app's one text link (foundation.css .text-link, UX audit
-  // 2026-10-29 J2), not a button drawn as one.
+  // "is-link": the app's one text link (foundation.css .text-link), not a
+  // button drawn as one.
   function button(label, action, cls = '') {
     const link = /(^| )is-link( |$)/.test(cls);
     const el = node('button', label, link ? `text-link ${cls}` : `settings-inline-btn agent-google-btn${cls ? ' ' + cls : ''}`);
@@ -96,7 +96,7 @@
   function agentActive() {
     return Boolean(uid() && App.agentChat?.isSelected?.() && App.agentChat?.canUse?.() !== false);
   }
-  // A guest in Agent's composer (Apple-Audit H3) sees an entry ('gmail' or
+  // A guest in Agent's composer sees an entry ('gmail' or
   // 'drive') exactly when every account has it (pages.py
   // google_for_everyone): Google is per account while the app is unverified
   // (GOOGLE_TEST_USERS), and an entry that vanishes after the login would be
@@ -325,8 +325,6 @@
       });
       anchor.after(option);
     }
-    // Google lives only in the (+) menu, next to the files; there is no
-    // second entry in the toolbar.
   }
   function stateText() {
     if (!sourcesOn()) return 'Off';
@@ -431,7 +429,7 @@
     dialog.setAttribute('aria-labelledby', 'agentGoogleSheetTitle'); dialog.setAttribute('aria-describedby', 'agentGoogleSheetIntro');
     const head = node('header', '', 'agent-google-sheet-head');
     const title = node('h2', 'Gmail & Calendar'); title.id = 'agentGoogleSheetTitle';
-    // The app's one close cross (foundation.css .close-button, Apple audit G3).
+    // The app's one close cross (foundation.css .close-button).
     const close = node('button', '', 'close-button agent-google-close'); close.type = 'button';
     close.setAttribute('aria-label', 'Close Gmail & Calendar');
     if (window.App?.closeIcon) close.innerHTML = window.App.closeIcon(); else close.append(svg('close'));
@@ -644,7 +642,7 @@
   function when(value) {
     if (!value) return '';
     try {
-      // One way to write a time (App.format, Apple-Audit H8), in the event's own zone.
+      // One way to write a time (App.format), in the event's own zone.
       if (value.date) return App.format.date(`${value.date}T12:00:00Z`, {weekday: true, timeZone: 'UTC'});
       return App.format.dateTime(value.dateTime, {weekday: true, timeZone: value.timeZone || 'UTC'});
     } catch (_) { return value.dateTime || value.date || ''; }

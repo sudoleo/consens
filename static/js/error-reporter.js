@@ -233,7 +233,7 @@
   // Browser extensions run their own scripts in the page. An error thrown
   // there (chrome-extension://…, also with an Error object, or a rejection
   // whose stack holds only extension frames) is no fault of the app and
-  // raised alerts without a place (2026-10-22). A stack that also passes
+  // raised alerts without a place. A stack that also passes
   // through our own files is still reported.
   const EXTENSION_URL = /\b(?:chrome|moz|safari|safari-web|ms-browser)-extension:\/\//;
   function fromExtension(filename, stack) {
@@ -243,13 +243,13 @@
   }
 
   // A browser that refuses a resource type itself fires the same error as an
-  // outage: headless scrapers drop every stylesheet (Render log 2026-10-09: a
-  // proxy swarm fetched all scripts and no CSS, and each page raised two
+  // outage: headless scrapers drop every stylesheet (Render log: a proxy
+  // swarm fetched all scripts and no CSS, and each page raised two
   // "critical" alerts). Our own assets are critical only when the server
   // really does not deliver them, which one uncached HEAD request settles.
-  // A probe without an answer proves nothing about the server: on
-  // 2026-10-22 a reload cut off the stylesheet's download (served 200) and
-  // the probe with it, which never reached the server, and still alerted.
+  // A probe without an answer proves nothing about the server: a reload cut
+  // off the stylesheet's download (served 200) and the probe with it, which
+  // never reached the server, and still alerted.
   const SAME_ORIGIN_CLASSES = new Set(["app_bundle", "static_asset", "same_origin_resource"]);
   function assetUnavailable(target) {
     const url = target?.src || target?.href || "";

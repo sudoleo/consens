@@ -6,16 +6,15 @@
 // cross-cutting Helfer (getModelOptionLabel, getSelectedModelCount,
 // trackAppEvent). MUSS vor den Feature-Modulen geladen werden.
 //
-// Hinweis: window.App ist bewusst ein TEMPORAERER Bus, um die Cluster
-// schrittweise aus index.html zu loesen. Der echte State-Refactor folgt
-// spaeter (DOM-als-State aufloesen).
+// Hinweis: window.App ist bewusst ein TEMPORAERER Bus. Der echte
+// State-Refactor folgt spaeter (DOM-als-State aufloesen).
 // =====================================================================
 
 (function () {
   window.App = window.App || {};
 
   // Smooth scrolling is decoration. Whoever asked the system for less
-  // motion gets the jump instead (audit F15); every scrollTo/scrollIntoView
+  // motion gets the jump instead; every scrollTo/scrollIntoView
   // in /app takes its `behavior` from here. Read per call, so a changed
   // system setting applies without a reload.
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
@@ -215,15 +214,15 @@
     // A Watch's chat orders its days and repeated tasks by this question
     // (thread-history.js syncThread). Opening a saved chat projects its run
     // before its question comes (firebase.js loadSingleBookmarkUI), so they
-    // are ordered again here (bug hunt 2026-11-06).
+    // are ordered again here.
     window.App.followup?.syncThread?.();
   }
 
   // ---- Die gerade abgeschickte Nachricht -----------------------------------
   // Sie steht sofort im Thread, nicht erst wenn der Lauf sie zum Kopf des
   // neuen Turns macht: dazwischen liegen /prepare und, im laufenden Gespraech,
-  // das Binden des Chat-Kontexts. Das sind Sekunden, in denen frueher nichts
-  // passierte — die Frage stand unveraendert im Feld, der Thread zeigte
+  // das Binden des Chat-Kontexts. Das sind Sekunden, in denen sonst nichts
+  // passierte — die Frage stuende unveraendert im Feld, der Thread zeigte
   // weiter die vorige. Der Vorgaenger bleibt dabei unangetastet: erst wenn der
   // Lauf wirklich stattfindet, wandert er in den Verlauf.
   const PENDING_MESSAGE_CLASS = "thread-message-pending";
@@ -294,7 +293,7 @@
     // Block meldet scrollHeight je nach Zeitpunkt die geklammerte Hoehe.
     // Only a folded question is clamped (shell.css .is-long); an unfolded
     // one is measured as it stands, without the write that forced a second
-    // style pass inside every send (Apple-Audit D3).
+    // style pass inside every send.
     let full;
     if (wrap.classList.contains("is-long")) {
       const previous = text.style.webkitLineClamp;
@@ -309,7 +308,7 @@
   // The observer measures after layout, before the frame is painted (its
   // first call comes with the first layout of the text); measuring here as
   // well read the half-built thread in the middle of every send and of every
-  // streamed projection (Apple-Audit D3). Without an observer it measures now.
+  // streamed projection. Without an observer it measures now.
   function observeQuestionFold(wrap, text) {
     if (!wrap || !text) return;
     if (typeof ResizeObserver !== "function") { syncQuestionFold(wrap, text); return; }
@@ -398,10 +397,9 @@
     return (option?.textContent || "").replace(/(?:\s*(?:Â·|·)\s*Pro)+$/i, "").trim();
   }
 
-  // Einziges Renderziel des Konsenstextes. Frueher war das ein einzelnes <p>
-  // unter .consensus-main, adressiert per ".consensus-main p" an einem guten
-  // Dutzend Stellen. Das Inline-Marker-Rendering braucht einen stabilen
-  // Blockcontainer, deshalb laeuft jeder Zugriff jetzt ueber diesen Helfer.
+  // Einziges Renderziel des Konsenstextes. Das Inline-Marker-Rendering
+  // braucht einen stabilen Blockcontainer, deshalb laeuft jeder Zugriff ueber
+  // diesen Helfer.
   // Der scope-Parameter erlaubt es, gezielt in einer bestimmten Konsens-Box zu
   // suchen.
   function consensusBodyEl(scope) {
@@ -416,7 +414,7 @@
   // An Enter that confirms a word an input method (Japanese, Chinese,
   // Korean) is still composing belongs to that word, never to a send or
   // save. Safari reports the confirming Enter with isComposing false but
-  // keyCode 229 (Apple-Audit E8). Every Enter handler of a text field asks
+  // keyCode 229. Every Enter handler of a text field asks
   // this first.
   function isComposingKey(event) {
     return Boolean(event?.isComposing || event?.keyCode === 229);
@@ -426,14 +424,14 @@
   // is a new paragraph (there is a Send button under the thumb); with a
   // physical keyboard it sends, Shift+Enter breaks the line. Decided by the
   // device, not the window's width: a narrow desktop window sends, an iPad's
-  // touch keyboard does not (Apple-Audit E7).
+  // touch keyboard does not.
   const touchKeyboard = window.matchMedia?.("(hover: none) and (pointer: coarse)");
   function enterSends(event) {
     if (event?.key !== "Enter" || event.shiftKey || isComposingKey(event)) return false;
     return !touchKeyboard?.matches;
   }
 
-  // The short notice of ~100 callers: a thin forward to the one notice line
+  // The short notice of many callers: a thin forward to the one notice line
   // (App.toast, notices.js), which queues, reads out and stays as long as it
   // takes to read. `options` passes on tone, action, duration.
   function showPopup(message, options = {}) {
@@ -442,7 +440,7 @@
   }
 
   // A guest at a door that needs an account: the login dialog, with one line
-  // that says what for, the same way everywhere (Apple-Audit H2). The notice
+  // that says what for, the same way everywhere. The notice
   // line says it only when the dialog cannot open (Firebase unreachable).
   function askToLogIn(lead, { trigger = null, source = "gate", mode = "login" } = {}) {
     if (typeof window.App.openAuthModal === "function") {
@@ -497,9 +495,8 @@
   // before the next paint, after the rest of the task has built the thread
   // around it, so no frame shows the field at its end before it moves.
   //
-  // It is one movement, also for the box's shape (Apple-Audit C2): the start
-  // box and the thread's pill differ in height, and the pill used to stand
-  // there at once, then glide. Now the box's height runs with the glide.
+  // It is one movement, also for the box's shape: the start box and the
+  // thread's pill differ in height, and the box's height runs with the glide.
   // Leaving the start screen the bottom edge travels (the thread composer
   // stands on the bottom, the box shrinks onto its row of controls); coming
   // back the top edge travels (the start field hangs from its top). The
@@ -519,7 +516,7 @@
   }
   // The start place of the box, read where a gesture begins (query-send.js),
   // before the gesture writes anything: read later in the same task, it
-  // forced the half-built thread's layout (Apple-Audit D3). Valid for the
+  // forced the half-built thread's layout. Valid for the
   // task that read it.
   let anchoredBox = null;
   function anchorGlide() {
@@ -589,7 +586,7 @@
   }
 
   // Ein logischer UI-Lauf teilt genau einen serverseitigen Idempotency-Key
-  // zwischen /prepare, allen parallelen /ask_* und /consensus. Kosten oder
+  // zwischen /prepare und allen parallelen /ask_*. Kosten oder
   // Modellanzahl kommen bewusst nicht aus dem Client.
   const usageRun = {
     current: null,

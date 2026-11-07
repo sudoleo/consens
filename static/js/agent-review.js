@@ -2,19 +2,17 @@
 (function () {
   "use strict";
   const App = window.App = window.App || {};
-  // The comparison mode's answer check, for turns saved before 2026-10-31
-  // (the Agent has one mode since: its reviewers review, renderAudit below).
+  // The comparison mode's answer check, for older saved turns (the Agent's
+  // one mode has its reviewers review, renderAudit below).
   // "off": the answer check was switched off then, so no judge ran; the line
   // says why the answer has no marks.
-  // One word per state of the answer check, the same everywhere (App.words,
-  // Apple-Audit H9).
+  // One word per state of the answer check, the same everywhere (App.words).
   const W = App.words || {};
   const states = { required: "Answer check pending", running: W.checking || "Checking the answer…", succeeded: W.checked || "Checked",
     partial: W.partlyChecked || "Partly checked", failed: "Answer check failed", cancelled: "Answer check stopped", missing: "Not checked",
     off: W.checkOff || "Answer check off" };
-  // Turns saved between 7303e034 and the full answer check (both 2026-10-09) did not
-  // check the answer of a comparison that checked a pasted text (`skipped`);
-  // since then it is judged like any answer.
+  // Some older saved turns did not check the answer of a comparison that
+  // checked a pasted text (`skipped`).
   const PASSAGE_CHECKED = "passage_checked";
   const PASSAGE_NOTE = "Your text was checked sentence by sentence; the result is shown above the answer.";
   const OFF_NOTE = "The answer check was switched off when this answer was written, so it was not checked against the model answers.";
@@ -46,7 +44,7 @@
     const message = failure?.error || failure?.message || '';
     if (typeof raw !== 'string' || !raw.trim()) {
       // Stopped before the answer, with what the reviewers found by then: one
-      // sentence instead of "Review stopped" over "Response stopped" (B8).
+      // sentence instead of "Review stopped" over "Response stopped".
       const code = failure?.code || failure?.error_code;
       const notes = isAudit(review) && code === 'cancelled' ? auditCount(review.audit) : 0;
       if (notes) return notes === 1 ? 'Stopped. The reviewers had 1 note by then.' : `Stopped. The reviewers had ${notes} notes by then.`;
@@ -155,9 +153,8 @@
     return issues.every(i => i.code === 'models_unavailable') ? 'Checked' : states.partial;
   }
   // Above the findings only what they cannot say themselves: a missing
-  // model, a check still running or incomplete. "4 models answered ·
-  // Checked" for a complete check only confused (Max 2026-10-23); it is no
-  // line at all now (null).
+  // model, a check still running or incomplete. A complete check gets no
+  // line at all (null): "4 models answered · Checked" only confused.
   function evidenceStatus(comparison, answers, check, state, issues) {
     const unavailable = check ? comparison.failed_models || [] : [];
     const total = answers.length + unavailable.length;
@@ -195,7 +192,7 @@
   // What the comparison cards show. The streaming answer counts only through
   // whether a check belongs to it, a model's text only through being there:
   // both change on every tick while the agent writes, and rebuilding the cards
-  // each time swallowed clicks on their buttons (Apple audit D7).
+  // each time would swallow clicks on their buttons.
   const UNSHOWN_TEXT = new Set(['text', 'partial_text']);
   function activitySignature(review, raw) {
     const bound = (review?.comparisons || []).map(c => Boolean(currentCheck(review, c, raw)));
@@ -222,7 +219,7 @@
       const check = currentCheck(review, comparison, raw);
       const issues = checkIssues(comparison, check);
       const state = check?.status || (['running', 'failed', 'cancelled', 'missing'].includes(review.status) ? review.status : 'required');
-      // The comparison checked a pasted text instead (agent_comparison.py).
+      // The comparison checked a pasted text instead (check_text, older saved turns).
       const passageChecked = check?.skipped === PASSAGE_CHECKED;
       card.append(node('p', 'agent-activity-check', comparison.status === 'running' && !check
         ? 'Waiting for independent model answers.' : passageChecked ? PASSAGE_NOTE : statusText(state, issues)));
@@ -306,9 +303,9 @@
       actions.append(button); card.append(actions); host.append(card);
     });
   }
-  // The links a markdown text carries, parsed once per text. Every open of a
-  // chat and every review update ran marked and DOMPurify again over each
-  // turn's answer and all its model answers (Apple audit D5). The cache
+  // The links a markdown text carries, parsed once per text, else every open
+  // of a chat and every review update runs marked and DOMPurify again over
+  // each turn's answer and all its model answers. The cache
   // holds the newest texts up to a size, so a streaming answer's many
   // intermediate versions push out only themselves over time.
   const textLinks = new Map();
@@ -407,7 +404,7 @@
         error: `No answer from this model: ${failureReason(m.failure)}. The comparison uses the other answers.`, sources: [] })
     ];
   }
-  // The answers of compare_models in audit mode (since 2026-10-31): one
+  // The answers of compare_models in audit mode: one
   // reader context per comparison, its answers and the sources, no review
   // (the reviewers' notes have their own, auditContext). Under the keys of
   // comparison mode, so the agent panel opens a model's answer the same way
@@ -434,7 +431,7 @@
   }
   // The glyphs of the row under an answer. The reviewers' notes have their
   // own (a note in the margin): the fork means a contradiction between
-  // models, and reviewers comment, they do not contradict (UX audit B10).
+  // models, and reviewers comment, they do not contradict.
   const GLYPHS = {
     differences: 'M12 20v-7M12 13 5 6M12 13l7-7M5 11V6h5M14 6h5v5',
     answers: 'M4 4h12v10H8l-4 4V4ZM16 8h4v12l-4-4h-4',
@@ -451,7 +448,7 @@
     button.dataset.section = section;
     button.setAttribute('aria-controls', 'modelAnswerReader');
     // The word through App.t first: "Notes 4" as a whole has no entry, and a
-    // German screen reader read it in English (UX audit I4).
+    // German screen reader would read it in English.
     button.setAttribute('aria-label', count === null ? label : `${App.t(label, null, 'answer tabs')} ${count}`);
     const icon = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     icon.classList.add('agent-evidence-icon');
@@ -466,14 +463,14 @@
   }
   // The row under an answer is one part, whatever it holds (sources only, a
   // comparison, a review, Watch and Share): the same nav, the same cells,
-  // on a phone one grid of fixed columns (agent-chat.css; UX audit B1).
+  // on a phone one grid of fixed columns (agent-chat.css).
   function evidenceNav() {
     const nav = node('nav', 'consensus-footer-tabs agent-evidence-links agent-evidence-grid');
     nav.setAttribute('aria-label', 'Explore answer evidence');
     return nav;
   }
   // An answer that never came (stopped before it was written): what happened
-  // and Retry stand first, under the activity; the notes follow (UX audit B8).
+  // and Retry stand first, under the activity; the notes follow.
   function rowAnchor(body, raw) {
     if (typeof raw !== 'string' || !raw.trim()) {
       // The live notice and its Retry, or a saved turn's note (thread-history.js).
@@ -543,8 +540,7 @@
   // Marks are laid over the text the reader sees, never a new copy of it:
   // the answer is morphed back to its plain render (markdown-stream.js),
   // marked and turned into pills inside the nodes on screen, and a selection
-  // the reader holds comes back where it was. Each check update replaced the
-  // whole answer before, two to five times a run (Apple audit A6).
+  // the reader holds comes back where it was.
   function overText(body, raw, change) {
     const apply = () => {
       // The marks are redrawn: a hover card of one of them goes with it.
@@ -556,7 +552,7 @@
     };
     return window.keepTextSelection ? window.keepTextSelection(body, apply) : apply();
   }
-  // --- The reviewers (since 2026-10-25; the one mode since 2026-10-31) -------
+  // --- The reviewers ---------------------------------------------------------
   // The reviewers followed the agent's work log and reviewed the fixed
   // answer (agent_audit.py): their marks show once every reviewer is done,
   // through the shared markers (renderStoredAuditMarks), and "Notes" opens
@@ -564,7 +560,7 @@
   // entries). No score and no Differences: unmarked text means no objection.
   // Done: every reviewer ended, the notes can be read. Ended: also stopped
   // or never started; nothing is reviewing any more. "off": the account's
-  // reviewers setting had none for this message (since 2026-11-01):
+  // reviewers setting had none for this message:
   // switched off, or only for work in the workspace, which it did not use.
   const AUDIT_DONE = new Set(['succeeded', 'partial', 'failed']);
   const AUDIT_ENDED = new Set([...AUDIT_DONE, 'cancelled', 'missing', 'off']);
@@ -578,13 +574,12 @@
   // The most serious first: in the reader's tally and on one passage.
   const KIND_RANK = { wrong: 0, doubtful: 1, incomplete: 2 };
   const kindOf = item => (AUDIT_KINDS[item?.kind] ? item.kind : 'doubtful');
-  // review_tool_calls / review_empty (since 2026-10-29, A-M6): a reply with a
-  // tool call instead of the review, or an empty one, no longer counts as
-  // the provider's failure.
+  // review_tool_calls / review_empty (agent_audit.review_failure): a reply
+  // with a tool call instead of the review, or an empty one, is not the
+  // provider's failure.
   const auditReasons = { review_unreadable: 'its review could not be read', no_time: 'it ran out of time',
     audit_unavailable: 'the review could not be completed', stopped: 'the review was stopped',
     context_limit: 'the work did not fit its context',
-    // Since 2026-10-29 (agent_audit.review_failure); before, provider_error.
     review_tool_calls: 'it called a tool instead of giving its review', review_empty: 'its reply was empty',
     // A crash or the reaper ended the run while it reviewed (agent_runs.finish_run).
     run_interrupted: 'the run was interrupted' };
@@ -616,8 +611,7 @@
   }
   // The notes can be read: every reviewer ended, or the review was stopped
   // (or never reached its final round) and kept what the reviewers found
-  // while the agent worked (``live``, since 2026-10-29, A-M7/B8). Before,
-  // a stopped review had them only in its sessions.
+  // while the agent worked (``live``).
   function auditReadable(review) {
     if (AUDIT_DONE.has(review.status)) return true;
     return AUDIT_ENDED.has(review.status) && auditCount(review.audit) > 0;
@@ -629,7 +623,7 @@
     return (audit?.process || []).filter(item => item && (!reviewer || item.model === label));
   }
   // Every note of a review, once: the row under the answer, the activity
-  // and the reader count the same number (UX audit B5).
+  // and the reader count the same number.
   function auditCount(audit) {
     return auditMarks(audit).length + auditWork(audit).length;
   }
@@ -645,7 +639,7 @@
   // its mark), then the note, then its source as a link. A note on the work
   // names its step in the activity's words ("Command", "Agent step"); the
   // work log's number and raw name only for those who can open the log
-  // (admins). Before 2026-10-27 every reader saw "#7 Tool vm_exec".
+  // (admins).
   function auditNote(item, audit) {
     const entry = node('li', 'agent-audit-note');
     entry.dataset.kind = kindOf(item);
@@ -692,9 +686,8 @@
     return entry;
   }
   // One passage of the answer: its words once, then every reviewer's note on
-  // them, the most serious first, as the mark's card shows them (UX audit
-  // D5). Before, the reader went reviewer by reviewer, and the same passage
-  // stood twice, far apart.
+  // them, the most serious first, as the mark's card shows them, so the same
+  // passage never stands twice, far apart.
   function auditPassage(quote, items, audit) {
     const passage = node('section', 'agent-audit-passage');
     if (quote) {
@@ -732,8 +725,8 @@
     return line;
   }
   // The reader's first line: how far the review got, when it did not finish.
-  // A stopped review says once that its notes came while the agent worked
-  // (UX audit D7); before, every reviewer repeated "the review was stopped".
+  // A stopped review says once that its notes came while the agent worked,
+  // instead of every reviewer repeating "the review was stopped".
   function auditStatus(review) {
     const reviewers = review.audit.reviewers || [];
     const done = reviewers.filter(r => r.status === 'completed').length;
@@ -793,8 +786,8 @@
   }
   // The reader context of a reviewed answer: its notes ("Notes") and sources.
   // Keyed by its turn too: every answer stopped before it was fixed has the
-  // hash of "" (agent_comparison snapshot), and one turn's notes opened
-  // another's (bug hunt 2026-11-02).
+  // hash of "" (agent_comparison snapshot), and one turn's notes would open
+  // another's.
   function auditContext(review, evidence = {}, turnSources = []) {
     const turn = evidence.key ? `${evidence.key}:` : '';
     const context = { key: `agent-audit:${turn}${review.answer_hash}`, question: evidence.question || 'Answer review',
@@ -808,7 +801,7 @@
     return context;
   }
   // The review in the duration disclosure: who reviewed, what came of it, in
-  // the row's count (B5) and the glossary's words ("reviewer", I1).
+  // the row's count and the glossary's words ("reviewer").
   function renderAuditActivity(host, review) {
     const audit = review.audit, reviewers = audit.reviewers || [];
     const comparisons = review.comparisons || [];
@@ -831,14 +824,13 @@
     const card = node('section', 'agent-activity-insight');
     const done = AUDIT_DONE.has(review.status), ended = AUDIT_ENDED.has(review.status);
     const count = reviewers.length;
-    // One line says who reviews and how far it is (UX audit A6: "Review ·
-    // Reviewing the answer…", "Review · 3 reviewers" and "Reviewers: …" said
-    // it twice over, like a form); the outcome stands under it.
+    // One line says who reviews and how far it is, not twice over like a
+    // form; the outcome stands under it.
     const names = reviewers.map(r => reviewerName(r)).filter(Boolean);
     card.append(node('h4', '', !ended ? 'Reviewing the answer…'
       : names.length ? (done ? `Reviewed by ${names.join(', ')}` : `Reviewers: ${names.join(', ')}`)
       : count === 1 ? '1 reviewer' : `${count} reviewers`));
-    // A failed review says so once, in the line below (D8).
+    // A failed review says so once, in the line below.
     const missing = review.status === 'failed' ? [] : reviewers.filter(r => done && r.status !== 'completed').map(r => reviewerName(r));
     if (missing.length) card.append(node('p', '', `No review: ${missing.join(', ')}`));
     const found = [total === 1 ? '1 note' : total ? `${total} notes` : '',
@@ -862,7 +854,7 @@
     const readable = auditReadable(review) && !(review.status === 'failed' && !total);
     if (readable || !ended) {
       const actions = node('div', 'agent-activity-insight-actions');
-      // Glyph and word as in the row under the answer (D15).
+      // Glyph and word as in the row under the answer.
       const button = evidenceButton('differences', 'Read the notes', null, 'notes', 'consensus-tab agent-activity-notes');
       button.removeAttribute('aria-controls');
       if (readable) {
@@ -872,8 +864,8 @@
           App.answerReader?.openContext(context, { section: 'differences', trigger: button });
         });
       } else {
-        // Its place is kept while the reviewers work: the open history no
-        // longer grows by a row just as the marks arrive (2026-10-26).
+        // Its place is kept while the reviewers work, so the open history
+        // does not grow by a row just as the marks arrive.
         actions.classList.add('is-reserved');
         actions.setAttribute('aria-hidden', 'true');
         actions.inert = true;
@@ -883,11 +875,6 @@
     }
     host.append(card);
   }
-  // The status at the end of the row under the answer: only what the row
-  // cannot say itself. While the reviewers work it stands where Watch and
-  // Share will (B3); a partial review is a quiet word, no line of its own
-  // (D13); a failed one says what it means (D8). Stopped before the answer
-  // was written, the notice above says it (B8).
   // One mark per reviewer, by its provider, with its state: "working"
   // (waiting or in its final round), "done" or "failed".
   function reviewerMarks(host, reviewers) {
@@ -910,6 +897,11 @@
     });
     for (const child of [...host.children]) if (!seen.has(child.dataset.reviewer)) child.remove();
   }
+  // The status at the end of the row under the answer: only what the row
+  // cannot say itself. While the reviewers work it stands where Watch and
+  // Share will; a partial review is a quiet word, no line of its own; a
+  // failed one says what it means. Stopped before the answer was written,
+  // the notice above says it.
   function rowStatus(review, { pending, empty }) {
     if (pending) return 'Reviewing the answer…';
     const reviewers = review.audit.reviewers || [];
@@ -920,15 +912,14 @@
     return { failed: 'Not reviewed – the reviewers did not finish', missing: 'Not reviewed' }[review.status] || '';
   }
   // A finished review is announced, never shown: the marks and the row say
-  // it to the eye (UX audit H5).
+  // it to the eye.
   function rowAnnouncement(review) {
     const count = auditCount(review.audit);
     return !count ? 'Review finished: no objections' : count === 1 ? 'Review finished: 1 note' : `Review finished: ${count} notes`;
   }
   // The reviewers beside "Thought for …" of a turn in the history, as the
-  // live turn shows them (agent-delegation.js); each opens the notes (B6).
-  // While the review runs they wait, as its Notes do (until 2026-11-04 a
-  // click said that no complete answer arrived).
+  // live turn shows them (agent-delegation.js); each opens the notes.
+  // While the review runs they wait, as its Notes do.
   function historyReviewers(body, review, open, pending) {
     body._agentModels?.remove(); body._agentModels = null;
     const activity = body.parentElement?.querySelector(':scope > * > .agent-activity > summary');
@@ -962,7 +953,7 @@
     // the agent asked had answered: the row offers their answers.
     const adviceOnly = !review.versions?.length && !notesOnly && advised(review);
     // The reviewers still work on the fixed answer: the row stands already
-    // as it will, Notes waiting in grey (UX audit B3).
+    // as it will, Notes waiting in grey.
     const pending = exact && !AUDIT_ENDED.has(review.status);
     const empty = typeof raw !== 'string' || !raw.trim();
     if (!host?.isConnected) {
@@ -983,7 +974,7 @@
     // The check line of agent-chat.js gives its place to the row.
     if (pending) { body._checkStatus?.remove(); body._checkStatus = null; }
     // One live region for the review, kept across renders: the change from
-    // "Reviewing the answer…" to its result is announced (H5).
+    // "Reviewing the answer…" to its result is announced.
     const status = host._auditStatus || node('span', 'agent-review-status');
     host._auditStatus = status;
     status.setAttribute('role', 'status'); status.dataset.state = pending ? 'running' : review.status;
@@ -1024,7 +1015,7 @@
     host._advice = advice;
     const answered = (review.comparisons || []).reduce((n, c) => n + (c.answers || []).length, 0);
     const firstAnswered = advice.find(c => c.answers.some(a => a.status === 'complete')) || advice[0];
-    // Notes waiting; "No objections" when the reviewers found nothing (B4);
+    // Notes waiting; "No objections" when the reviewers found nothing;
     // Notes without a number when there was no review to count.
     const cells = [];
     if (pending) cells.push(['differences', 'Notes', null, 'notes']);
@@ -1190,8 +1181,8 @@
         body._markFallback = fallback;
         fallback.replaceChildren(); fallback.hidden = true;
         // A body that already shows exactly this text, unmarked (a saved turn
-        // just rendered), is marked as it is: rendering it a second time cost
-        // every opened chat a second Markdown pass per turn (Apple audit D5).
+        // just rendered), is marked as it is: rendering it a second time would
+        // cost every opened chat a second Markdown pass per turn.
         overText(body, raw, () => {
           if (check?.differences_data) window.renderStoredConsensusClaims?.(body, check.differences_data, fallback, sources, {
             answerNavigation: navigation,

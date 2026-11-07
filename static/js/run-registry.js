@@ -1,4 +1,4 @@
-// Browser-session owner for independent Consensus runs.
+// Browser-session owner for independent runs (Agent and Compare).
 //
 // A RunContext is the authority for every asynchronous callback.  The main
 // DOM, the selected bookmark and the compatibility "current" globals are only
@@ -127,7 +127,7 @@
   // Several changes made together (a run created and started in one click)
   // are projected once, at the end: each projection reads the layout its
   // predecessor just wrote, and two of them in the click on Send held the
-  // first frame back (Apple-Audit D3). Events are still sent per change.
+  // first frame back. Events are still sent per change.
   let batchDepth = 0;
   let batchedRender = false;
   function batch(changes) {
@@ -264,7 +264,7 @@
       // A follow-up passes its complete history, the continued turn included,
       // so the run's first projection already shows that turn in the
       // history: a view without it was briefly shorter than the page and
-      // snapped the reader to the top (Apple audit A1).
+      // snapped the reader to the top.
       historyTurns: cloneValue(Array.isArray(spec.historyTurns) ? spec.historyTurns : basis?.historyTurns || []),
       previousExchange: basis && basis.question && basis.consensus
         ? {
@@ -387,7 +387,7 @@
   // run of it carries the new name, a running follow-up too (its sidebar
   // row reads it, and when it ends it hands its name to the next basis),
   // and so do the bases a next message starts from. A run that kept the
-  // old name brought it back during and after a follow-up (review 2).
+  // old name brought it back during and after a follow-up.
   function retitle(bookmarkId, title, { source = "" } = {}) {
     const id = cleanId(bookmarkId);
     const name = String(title || "");
@@ -465,7 +465,8 @@
     return true;
   }
 
-  // Costly post-actions such as Resolve share the same two-slot admission and
+  // Costly post-actions such as an Agent answer's recovery (agent-chat.js)
+  // share the same two-slot admission and
   // browser-session cancellation boundary. They do not replace the immutable
   // result context they annotate, but the registry still owns their controller.
   function beginAction(spec = {}) {

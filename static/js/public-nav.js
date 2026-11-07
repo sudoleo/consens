@@ -8,8 +8,8 @@
  *    does: tapping beside it, choosing a link, Escape, scrolling. It leaves
  *    with the same short movement it arrives with.
  * 2. Smooth scrolling is a reply to a click on this page, never part of
- *    arriving. A link to /#watch from another page used to land on the top of
- *    the landing page and then glide 8,000 px through every scene; now the
+ *    arriving. A link to /#watch from another page would otherwise land on the
+ *    top of the landing page and glide 8,000 px through every scene; so the
  *    browser jumps straight to the section, and only once the page has loaded
  *    does `html.is-scroll-smooth` (landing.css, public-pages.css) switch the
  *    glide on for in-page links.

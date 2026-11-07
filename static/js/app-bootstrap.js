@@ -41,9 +41,7 @@
     window.umami.track(eventName, safeData);
   };
 
-  // The words of an empty new chat, for every account and for guests. Until
-  // 2026-10-31 they named the check of a pasted AI answer, which left with
-  // the Agent's comparison mode.
+  // The words of an empty new chat, for every account and for guests.
   window.App = window.App || {};
   window.App.askPlaceholder = () => "Ask anything";
 
@@ -64,7 +62,7 @@
     } catch (_) { return null; }
   }
 
-  // ---- The session this page expects (Apple-Audit B4) ----------------------
+  // ---- The session this page expects ---------------------------------------
   // Firebase answers only once its CDN modules ran, long after the first
   // paint. Until then this is the page's best knowledge, taken once from what
   // this browser stored: our ID token, the user Firebase keeps in
@@ -108,9 +106,9 @@
   // ("agentShellExpected" is "0", written by agent-chat.js once access is
   // known). html.agent-shell-expected holds Agent's look until then
   // (agent-chat.js drops it); a failed status check keeps it while it asks
-  // again (firebase.js, Apple-Audit B8). A guest sees Agent's composer of a
-  // new chat as an account does by default (Max, Apple-Audit H3) and logs in
-  // on Send (composer-invite.js); a guest's own choice of mode holds.
+  // again (firebase.js). A guest sees Agent's composer of a new chat as an
+  // account does by default and logs in on Send (composer-invite.js); a
+  // guest's own choice of mode holds.
   window.App.expectsAgent = function () {
     const session = window.App.expectedSession();
     if ((window.App.runMode?.preference?.() || "agent") !== "agent") return false;
@@ -125,7 +123,7 @@
     document.documentElement.classList.remove("agent-shell-expected");
   });
 
-  // ---- What the composer said when the page was left (Apple-Audit B1) -----
+  // ---- What the composer said when the page was left ----------------------
   // The composer's chips are drawn by the deferred app bundle once the model
   // list has loaded; until then the template's placeholders stood there and
   // the field changed its face five times in a second. The words on screen
@@ -171,7 +169,7 @@
   window.addEventListener("pagehide", rememberLook);
   document.addEventListener("visibilitychange", () => { if (document.hidden) rememberLook(); });
 
-  // ---- The question waiting in the field (Apple-Audit B6) ------------------
+  // ---- The question waiting in the field -----------------------------------
   // Same record as app-init.js (QUESTION_DRAFT_KEY): a guest's question that
   // waits for the sign-in stands in the field from the first frame instead of
   // arriving with the app bundle.
@@ -198,12 +196,12 @@
   if (theme !== "dark" && theme !== "light") {
     theme = window.matchMedia?.("(prefers-color-scheme: dark)")?.matches ? "dark" : "light";
   }
-  // /app/watches opens as the Watches page from its first frame (Apple-Audit
-  // J6): the chat column is never painted, the page and its card skeleton
-  // are, and watch.js takes over once the session is known.
+  // /app/watches opens as the Watches page from its first frame: the chat
+  // column is never painted, the page and its card skeleton are, and
+  // watch.js takes over once the session is known.
   const watchPage = window.location.pathname === "/app/watches";
   // The Watches page as it will stand (watch-dashboard.js): the field, one
-  // wide card and two, then the rows. Nothing below moves when they arrive (J6).
+  // wide card and two, then the rows. Nothing below moves when they arrive.
   window.App.watchSkeleton = function () {
     const card = '<div class="wd-skeleton-card" aria-hidden="true">'
       + '<span class="skeleton is-status"></span><span class="skeleton is-title"></span>'
@@ -227,7 +225,7 @@
     return '<span class="skeleton-group" role="status" aria-label="Loading account"><span class="skeleton login-skeleton" aria-hidden="true"></span></span>';
   }
   // A session being restored (not yet known, auth reachable): the account's
-  // placeholders belong in the first frame, not after the bundles (B11).
+  // placeholders belong in the first frame, not after the bundles.
   function restoringAccount() {
     if (document.documentElement.dataset.authUnavailable === "true") return false;
     return !window.__consensioAuthState?.known && window.App.expectedSession().account;
@@ -351,8 +349,8 @@
     // buttons if it turns out to be a guest after all.
     const authTopActions = once("auth", document.getElementById("authTopActions"));
     if (authTopActions && guestExpected()) authTopActions.hidden = false;
-    // One greeting for every mode and for guests (Max, 2026-10-22): it
-    // stands in the template and never changes while the page loads.
+    // One greeting for every mode and for guests: it stands in the
+    // template and never changes while the page loads.
     // The composer starts with the words it will keep: Agent's new-chat line
     // (same words as agent-chat.js syncComposer), which a guest gets too
     // (app-init.js: guests type, and sign in when they send). A restored
@@ -406,7 +404,7 @@
         dashBody.setAttribute("aria-busy", "true");
       }
     }
-    // The composer as the app will draw it (Apple-Audit B1, B2, B13): the
+    // The composer as the app will draw it: the
     // chips (with the chat model's reasoning level), the provider marks, the demo button and Send. Every
     // node below is parsed before the composer's end, so the first frame
     // has all of them.
@@ -463,9 +461,9 @@
     }
     // On a phone the Watches hint is a still dot on the menu island until
     // Watches is opened once (watch.js): there from the first frame, not
-    // added a second later (Apple-Audit B2). Above the overlay width it is a
-    // pulse that watch.js starts on purpose after a moment. Only for an
-    // account: a guest could only be asked to log in behind it (H2, review 3).
+    // added a second later. Above the overlay width it is a pulse that
+    // watch.js starts on purpose after a moment. Only for an account: a
+    // guest could only be asked to log in behind it.
     const watchHint = once("watchHint", document.getElementById("viewSwitchWatches"));
     if (watchHint && !watchPage && !guestExpected() && window.matchMedia("(max-width: 1099px)").matches
       && read("consensio.watchViewSwitchHint.seen.v1") !== "true") {
@@ -493,7 +491,7 @@
     // restoring placeholders above never apply to it (restoringAccount).
   });
   // The account this browser remembered is not coming (its session ended):
-  // the Watches dot drawn for it goes, as nobody signed in has one (H2).
+  // the Watches dot drawn for it goes, as nobody signed in has one.
   window.addEventListener("consensio:auth-state", event => {
     if (!event.detail?.uid) document.getElementById("viewSwitchWatches")?.classList.remove("has-watch-pulse");
   });

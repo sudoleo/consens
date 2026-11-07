@@ -1,13 +1,13 @@
 // =====================================================================
 // markdown-stream.js
 // Markdown-Rendering (sanitised) + SSE-Streaming-Helfer.
-// Extrahiert aus templates/index.html (initApp-Closure).
 // Exporte: window.injectMarkdown, window.morphMarkdown,
 // window.isPlainMarkdown, window.keepTextSelection,
+// window.renderMarkdownFragment,
 // window.renderMarkdownStream, window.resetMarkdownStream,
 // window.createStreamRenderer, window.streamSSERequest.
 // (readSSEStream bleibt modul-privat.)
-// Call-time-Abhaengigkeiten: DOMPurify, marked (CDN), window.ConsensusMath,
+// Call-time-Abhaengigkeiten: DOMPurify, marked (static/vendor), window.ConsensusMath,
 // window.addNewTabToLinks, window.linkifySourceTags,
 // window.currentEvidenceSources, window.App.taskChecks (task-checks.js).
 // =====================================================================
@@ -72,7 +72,7 @@ function neutralizeRemoteMedia(root) {
   });
   // SVG's fill, stroke, mask, filter, clip-path and markers take url(...):
   // one that points outside the answer (not "#id") goes, like a remote
-  // image (bug hunt 2026-10-24; until 2026-11-03 only the CSP held it).
+  // image.
   root.querySelectorAll("svg, svg *").forEach(el => {
     for (const { name, value } of [...el.attributes]) {
       if (/url\(/i.test(value) && [...value.matchAll(/url\(\s*['"]?\s*([^)'"]*)/gi)]
@@ -90,7 +90,7 @@ function plainTextFragment(text) {
 // --- Checklists ---------------------------------------------------------
 // "- [ ] Pack the passport" is a checklist item. marked draws its box as a
 // form field, which MODEL_HTML_CONFIG rightly forbids, so the box vanished
-// and the item read as a plain bullet. marked now leaves a marker instead;
+// and the item read as a plain bullet. marked leaves a marker instead;
 // the box itself is a button made here, never by the model's markup.
 // task-checks.js (App.taskChecks) decides which boxes can be ticked and
 // keeps the ticks of a saved answer.
@@ -145,7 +145,7 @@ function syncTaskBoxes(el) {
 
 // --- Pictures in the answer -------------------------------------------------
 // The agent places a picture it showed (show_image, vm_share_file) with
-// "![what it shows](picture:p2)" (2026-10-31, Max: pictures always hung under
+// "![what it shows](picture:p2)" (Max: pictures always hung under
 // the answer, often in poor style). Here that is an empty place;
 // agent-workspace.js puts that picture of the turn into it, and a place that
 // names none of them takes no room (agent-workspace.css). Nothing loads from
@@ -177,7 +177,7 @@ function liftPictureLines(root) {
 }
 
 // --- Copying a code block -------------------------------------------------
-// Each code block carries a copy button in its corner (2026-10-26). An icon
+// Each code block carries a copy button in its corner. An icon
 // without text, so the answer's text (claims, selections, the copied answer)
 // stays as it was; one listener on the document copies, because a morph
 // keeps or swaps nodes without their listeners.
@@ -234,7 +234,7 @@ document.addEventListener("click", event => {
 
 // A model's headings stand under the chat's h1 and the turn's h2 "Answer":
 // a screen reader hears its "# Title" as level 3. The look stays with the
-// tag (a11y audit B3).
+// tag.
 function nestModelHeadings(root) {
   root.querySelectorAll?.("h1, h2, h3, h4, h5, h6").forEach(heading => {
     heading.setAttribute("aria-level", String(Math.min(6, Number(heading.tagName[1]) + 2)));
@@ -243,7 +243,7 @@ function nestModelHeadings(root) {
 
 // Markdown -> sanitized nodes of this document, parsed once: DOMPurify hands
 // over its own DOM instead of a string that would be parsed again for the
-// media check and once more for the page (Apple audit D4).
+// media check and once more for the page.
 function renderMarkdownFragment(md) {
   const prepared = window.ConsensusMath
     ? window.ConsensusMath.prepareMarkdown(md)
@@ -506,7 +506,7 @@ function prosePoint(offset, nodes) {
 
 function keepTextSelection(root, change) {
   // Nothing in it, nothing selected in it: asking the selection forced a
-  // style pass inside the click on Send for the new, empty answer (D3).
+  // style pass inside the click on Send for the new, empty answer.
   if (!root?.firstChild) return change();
   const selection = typeof window.getSelection === "function" ? window.getSelection() : null;
   const inside = node => Boolean(node) && root.contains(node);
@@ -612,7 +612,7 @@ function closeOpenStrong(text) {
 // A table that is still streaming stands as quiet rows in its place until it
 // is complete, then appears at once. Each new row changed the automatic
 // column widths, so the header the reader was on slid sideways, by up to 4 cm
-// for the first data row (Apple audit A5).
+// for the first data row.
 const TABLE_ROW = /^\s{0,3}\|/;
 const TABLE_RULE = /^\s{0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-*:?\s*)*\|?\s*$/;
 
@@ -669,7 +669,7 @@ const OPEN_IMAGE = /!\[[^\]\n]*(?:\](?:\([^)\n]*)?)?$/;
 // Lines of only pictures at the end wait until something else follows: one
 // line, or lines without a blank one between, are one collage
 // (agent-workspace.js markGalleries), which drawn picture by picture jumped
-// from one large picture to two, then to three (2026-10-31).
+// from one large picture to two, then to three.
 const PICTURES_ONLY = String.raw`[ \t]*(?:!\[[^\]\n]*\]\(picture:[^)\s]*\)[ \t]*)+`;
 const OPEN_PICTURE_LINES = new RegExp(String.raw`(^|\n)(?:${PICTURES_ONLY}\n)*${PICTURES_ONLY}\n?[ \t]*$`);
 
@@ -909,7 +909,7 @@ async function streamSSERequest(url, payload, signal, deltaRenderers, requestOpt
         data = rawBody ? JSON.parse(rawBody) : {};
       } catch (_) {
         // A proxy's or portal's HTML page is no sentence for the reader:
-        // only its status and that it was unreadable travel on (Apple-Audit H1).
+        // only its status and that it was unreadable travel on.
         data = { error_code: "http_error", unreadable: true };
       }
       if (!data || typeof data !== "object") data = {};
@@ -940,7 +940,7 @@ async function streamSSERequest(url, payload, signal, deltaRenderers, requestOpt
         if (deltaText) {
           renderer.append(deltaText);
         } else if (data.reasoning && renderer.markReasoning) {
-          // Reasoning-Marker auf einem benannten Event (z. B. consensus.delta):
+          // Reasoning-Marker auf einem benannten Event (z. B. delta):
           // nur den zugehörigen Renderer markieren, nicht alle.
           renderer.markReasoning();
         }

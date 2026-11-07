@@ -10,7 +10,7 @@
    the ring's arc and the bar's fill when the account runs low, never on a
    surface behind them.
 
-   Watches keep their own allowance (watch.js writes #watchUsageDisplay);
+   Watches keep their own allowance (agent-watch.js writes #watchUsageDisplay);
    the panel shows it as a separate, smaller line.
    ========================================================================== */
 (function () {
@@ -24,8 +24,7 @@
 
   // sync() runs on every account update and on each tick of the reset
   // countdown. Writing a value that is already there still invalidates
-  // style and layout, so every write below only happens on a change
-  // (Apple audit D10).
+  // style and layout, so every write below only happens on a change.
   function setText(node, text) {
     if (node && node.textContent !== window.App.t(text)) node.textContent = text;
   }
@@ -134,7 +133,7 @@
     if (detail) {
       // The reader's unit is the allowance in percent; the euro figures
       // are the operator's and stand in a line only an admin sees
-      // (.admin-only, Apple-Audit H4).
+      // (.admin-only).
       var mode = nextRunMode();
       var share = mode !== "agent" && tokens() ? tokens().runShare(mode) : null;
       var line = share ? "A " + MODE_NAMES[mode] + " uses about " + share + "."

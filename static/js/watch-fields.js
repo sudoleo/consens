@@ -1,4 +1,4 @@
-// The one way a Watch's schedule is written (Apple-Audit J5, J30): the sheet
+// The one way a Watch's schedule is written: the sheet
 // (watch-sheet.js), the card under an answer (agent-watch.js) and the
 // Watches page (watch-dashboard.js) all say it the same way. Classic script;
 // exports window.App.watchFields. Loads before all three.

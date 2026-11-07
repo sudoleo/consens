@@ -1,5 +1,5 @@
-// A start the user waits for, the Apple way (since 2026-11-02, Max after a
-// colleague's first try: "every normal user is gone then"): a thin bar that
+// A start the user waits for, the Apple way (Max after a colleague's first
+// try: "every normal user is gone then"): a thin bar that
 // fills toward the server's estimate and a line with the time left ("About
 // 40 seconds left"), instead of one word for a wait of unknown length. The
 // server says until when a start of the workspace should run
@@ -13,14 +13,13 @@
 // stands. It shows only once a start took SHOW_MS, so a quick one never
 // flashes a bar. done() fills it.
 //
-// Since 2026-11-04 (Max: "at least statements like configuring the user
-// settings, connecting the VM") a line above the bar names the step the
-// start is at: the real steps of that start, in their real order, moved on
+// A line above the bar names the step the start is at (Max: "at least
+// statements like configuring the user settings, connecting the VM"): the real steps of that start, in their real order, moved on
 // by the same estimate as the bar (steps(list) for each phase the server
 // reports). Never made-up work, and never back to an earlier step.
 //
 // The estimate is the server's time, and a device's clock may run beside it
-// (a phone set by hand): until 2026-11-06 a phone three minutes behind said
+// (a phone set by hand): a phone three minutes behind said
 // "About 4 minutes left" for a minute's start. The Date header of the
 // agent's own answer (agent-chat.js, serverDate) says how far, to the
 // second; a clear difference (SKEW_MS) moves every estimate onto this clock.

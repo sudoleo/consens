@@ -64,16 +64,16 @@
   // this space instead of lengthening the page: nothing above or on screen
   // moves, and the page only grows once the turn is taller than the viewport.
   //
-  // The layout keeps that space, not a measurement after the fact (since
-  // 2026-10-30): the column holds a minimum height that ends the page one
-  // viewport below the scroll offset that puts the question at the top, and
-  // the reserve (flex-grow, chat-scroll.css) takes whatever the turn leaves
-  // of it, in the same layout. Until then the reserve's own height followed
-  // the turn from a ResizeObserver: a turn that got shorter at the end of the
-  // page, where Send leaves every later question, first shortened the page
-  // for one layout, the browser clamped the scroll offset, and the whole chat
-  // jumped by that much and back (Max, 2026-10-30: a live line going from two
-  // lines to one, 21px; the phone's composer folding after Send, 151px).
+  // The layout keeps that space, not a measurement after the fact: the
+  // column holds a minimum height that ends the page one viewport below the
+  // scroll offset that puts the question at the top, and the reserve
+  // (flex-grow, chat-scroll.css) takes whatever the turn leaves of it, in the
+  // same layout. A reserve whose own height followed the turn from a
+  // ResizeObserver let a turn that got shorter at the end of the page, where
+  // Send leaves every later question, first shorten the page for one layout;
+  // the browser clamped the scroll offset, and the whole chat jumped by that
+  // much and back (a live line going from two lines to one, 21px; the phone's
+  // composer folding after Send, 151px).
   // A turn taller than the window still never gets shorter while its run
   // works: the reviewers finish while the reader types the next question,
   // and their row (or the live lines leaving) took a line from the end of the
@@ -83,7 +83,7 @@
   // get shorter. Held whole, every taller moment of a long run (an answer
   // taken back for a tool call, a command's open output, the steps before
   // they fold, the activity opened once) left a screen of white under the
-  // turn to scroll into (Max, 2026-11-01).
+  // turn to scroll into.
   let floor = "", peak = 0, tallest = 0;
   // The turn's own height: the column without the room the reserve fills.
   // The column alone holds its floor, and a floor measured into the next
@@ -149,7 +149,7 @@
   }
   // "Latest message" comes once the end stays out of reach a moment and by
   // more than the near-end band; it goes at once. Live lines that grow and
-  // fold during a run made it flash on and off (2026-10-28). Just out of
+  // fold during a run made it flash on and off. Just out of
   // reach (up to SHOW_FAR) the wait ends; the next scroll or layout change
   // starts it again, instead of a check in every frame while idle.
   const SHOW_FAR = 160, SHOW_AFTER_MS = 500;
@@ -319,7 +319,7 @@
     }
   }
   // An opened conversation stands at its newest question before its first
-  // frame (Apple audit A2/A3): no ride from the top through every answer,
+  // frame: no ride from the top through every answer,
   // and on a phone the question is never left under the floating header,
   // as it was at the absolute end. Only "Latest message" and Send move.
   function opened() {

@@ -5,11 +5,10 @@
  * an external file because Topic pages run under a script CSP without
  * 'unsafe-inline' (app/core/security.py).
  *
- * Since 2026-10-20 (Apple-Audit) nothing here changes the layout after the
- * first paint unless the reader asks for it: the long question and the long
- * source list arrive folded from the server (I2, L11), a missing site icon
- * keeps its box (I7), and every fold opens and closes with one height
- * movement and leaves the focus in what it opened (L9, L14).
+ * Nothing here changes the layout after the first paint unless the reader
+ * asks for it: the long question and the long source list arrive folded from
+ * the server, a missing site icon keeps its box, and every fold opens and
+ * closes with one height movement and leaves the focus in what it opened.
  */
 (function () {
   "use strict";
@@ -105,13 +104,13 @@
 
   // Folded in the template (is-collapsed); "Show all" opens the list with one
   // movement and moves the focus to the first source that was hidden, so the
-  // next Tab does not skip all of them (L9). A jump from an inline citation
+  // next Tab does not skip all of them. A jump from an inline citation
   // (#src-N) opens it too.
   function foldSources() {
     var list = document.getElementById("shareSources");
     var toggle = document.getElementById("shareSourcesToggle");
     if (!list || !toggle) return;
-    // Pages cached from before 2026-10-20 still fold here.
+    // A list that arrives unfolded (an older cached page) still folds here.
     if (!list.classList.contains("is-collapsed")) list.classList.add("is-collapsed", "is-short");
     toggle.hidden = false;
 
