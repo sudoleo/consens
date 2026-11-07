@@ -25,3 +25,20 @@ def test_every_page_with_the_bar_has_one_main_named_main():
     for path in pages:
         mains = re.findall(r"<main(?=[\s>])[^>]*>", path.read_text(encoding="utf-8"))
         assert len(mains) == 1 and 'id="main"' in mains[0], (path.name, mains)
+
+
+def _rule(css, selector):
+    match = re.search(r"(?m)^" + re.escape(selector) + r"\s*\{([^}]*)\}", css)
+    assert match, selector
+    return match.group(1)
+
+
+def test_the_parked_skip_link_casts_no_shadow_over_the_page():
+    """Parked above the top edge, its lift reached about 30 px into the page
+    and lay as a grey smudge over the wordmark (base.css until 0b2ad6ae, the
+    public bar until 2026-11-07). The shadow comes with the focus."""
+    static = TEMPLATES.parent / "static" / "css"
+    for name in ("public-nav.css", "base.css"):
+        css = (static / name).read_text(encoding="utf-8")
+        assert "box-shadow" not in _rule(css, ".skip-link"), name
+        assert "box-shadow: var(--lift)" in _rule(css, ".skip-link:focus"), name
