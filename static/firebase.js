@@ -2555,7 +2555,6 @@ function applyBookmarkModelPresentation(bookmark) {
   return citationModels;
 }
 
-// Diese Funktion füllt die UI mit den Daten eines Bookmarks
 function normalizeConversationTurn(turn) {
   if (!turn || !turn.question) return null;
   const agent = turn.execution_mode === "agent";

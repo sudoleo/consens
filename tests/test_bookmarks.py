@@ -943,7 +943,7 @@ def test_bookmark_restore_uses_historical_model_labels_without_mutating_picker_s
     query_send = (root / "static" / "js" / "query-send.js").read_text(encoding="utf-8")
 
     helper = firebase.split("function applyBookmarkModelPresentation(bookmark) {", 1)[1]
-    helper = helper.split("// Diese Funktion füllt die UI", 1)[0]
+    helper = helper.split("function normalizeConversationTurn(turn) {", 1)[0]
 
     assert "bookmark?.model_labels" in helper
     assert "labelEl.textContent = visibleLabel" in helper

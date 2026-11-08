@@ -5380,6 +5380,11 @@ Antwort fixiert ist:
   `routers/bookmarks._transcript_turn`); als `running` (dem der Browser
   folgt) gilt er nur, wenn er der neueste Turn ist. Vorher fehlte er nach
   einem Neuladen, solange die nächste Nachricht lief, oder stand unter ihr.
+  Der Browser (`firebase.js normalizeConversationTurn`) nimmt ihn als
+  beantwortete Nachricht (`pending` + `agent_answer_fixed` mit Antwort): er
+  ist dann `currentTurn` des Chats, und die laufende Nachricht
+  (`followRunning`) wie die nächste setzen auf ihm auf. Seine Prüfung zeigt
+  den Stand beim Laden; nachgeführt wird sie erst beim nächsten Öffnen.
 - Die Route sendet daraufhin den Frame `handover` (`_handover_frame`: der Turn
   wie im `final`-Frame, Review noch `running`, Bookmark gespeichert); `final`
   folgt am Laufende wie bisher.
