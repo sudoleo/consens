@@ -1125,6 +1125,8 @@ Anfrage). Der Ablauf:
 - Antwortet die VM auch dann mit 502/503/504, gilt sie als festgefahren:
   `heal_later` setzt sie auf ihren neuesten Checkpoint zurück. Der steht seit
   2026-11-06 im Datensatz des Kontos (`checkpoint`, `record_checkpoint`).
+  Nach einem Restore des Nutzers ist es der zurückgeholte: Ein neuerer
+  enthielte, was er gerade verworfen hat.
 - Zurückgesetzt wird nur auf einen Checkpoint, der nach `restorable` noch
   zurückführen darf. Gelöschte Chats und ein „Überall abmelden“ kommen also
   nie zurück.

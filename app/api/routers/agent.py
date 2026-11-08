@@ -1085,6 +1085,9 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
         logging.warning("Agent VM restore unavailable category=%s", safe_exception(exc))
         return JSONResponse({"error": "The workspace could not be restored right now. Try again later.",
                              "code": "vm_unavailable"}, status_code=503)
+    # Any newer checkpoint holds what the user just threw away: a stuck
+    # workspace heals to this one (agent_workspace.heal).
+    agent_workspace.record_checkpoint(db_firestore, uid, checkpoint, turn["agent_vm"].get("checkpoint_at"))
     ref = store._chat_ref(uid, chat_id)
 
     def record(tx):

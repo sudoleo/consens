@@ -78,6 +78,23 @@ def test_an_admin_restores_the_vm_to_before_a_message(admin_api, fake_vm):
     assert restored["checkpoint"] == "v3" and restored["turn_id"] == turn_id and "told" not in restored
 
 
+def test_a_stuck_workspace_heals_to_the_checkpoint_the_user_went_back_to(admin_api, fake_vm):
+    """After the user went back to v5, the newer v9 is the state they threw
+    away: a workspace stuck before the next message must heal to v5
+    (agent_workspace.heal takes the record's checkpoint)."""
+    from datetime import datetime, timedelta, timezone
+    from app.services import agent_workspace
+    client, store, _ = admin_api
+    taken = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+    chat, turn_id, name = vm_turn(store, checkpoint="v5", taken=taken)
+    agent_workspace.record_checkpoint(store.db, UID, "v9", datetime.now(timezone.utc))
+    assert client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH).status_code == 200
+    assert agent_workspace.record(store.db, UID)["checkpoint"] == {"id": "v5", "at": taken}
+    agent_vm.mark_unresponsive(name, 502)
+    assert agent_workspace.heal(store.db, UID) is True
+    assert [call for call in fake_vm.calls if call[0] == "restore"] == [("restore", name, "v5")] * 2
+
+
 def test_restore_is_refused_while_a_response_runs_without_a_checkpoint_or_for_others(api, admin_api, fake_vm,
                                                                                       monkeypatch):
     client, store, _ = admin_api
