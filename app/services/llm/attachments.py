@@ -223,14 +223,10 @@ def _is_docx(raw: bytes) -> bool:
 
 
 def _looks_like_text(raw: bytes) -> bool:
-    """UTF-8-dekodierbar und ohne Null-Bytes: deckt .txt/.md/.csv ab."""
-    if not raw.strip() or b"\x00" in raw:
-        return False
-    try:
-        raw.decode("utf-8")
-    except UnicodeDecodeError:
-        return False
-    return True
+    """.txt/.md/.csv in the encodings agent_file_extract.decode_text reads."""
+    from app.services.agent_file_extract import decode_text
+    text = decode_text(raw)
+    return bool(text and text.strip())
 
 
 def shrink_image(raw: bytes, mime: str) -> tuple[bytes, str]:
@@ -559,11 +555,8 @@ def attachment_fallback_text(attachment: dict, *, include_images_note: bool = Tr
         )
 
     if mime == TEXT_MIME:
-        raw = attachment.get("raw", b"")
-        try:
-            text = raw.decode("utf-8").strip()
-        except UnicodeDecodeError:
-            text = ""
+        from app.services.agent_file_extract import decode_text
+        text = (decode_text(attachment.get("raw", b"")) or "").strip()
         if text:
             return (
                 f"--- Attached file: {name} ---\n"

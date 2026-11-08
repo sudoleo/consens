@@ -8277,7 +8277,9 @@ Vorschau und Entfernen sind getrennte native Buttons.
 Frontend `attachments.js` baut Payload; Backend `app/services/llm/attachments.py`
 validiert: max **2** Dateien, serverseitig je **5 MB** und zusammen höchstens
 **6 MB**, MIMEs PDF/DOCX/TXT/PNG/JPEG/WebP
-(TXT umfasst auch die UI-Endungen MD und CSV). Word- und Textdateien werden
+(TXT umfasst auch die UI-Endungen MD und CSV; gelesen als UTF-8, UTF-16 mit
+BOM oder Windows-1252 wie CSV aus deutschem Excel, `agent_file_extract.decode_text`,
+für Anhänge und Agent-Dateien gleich). Word- und Textdateien werden
 serverseitig als begrenzter Text extrahiert und als Text-Fallback an alle
 Provider angehängt. Große Bilder dürfen clientseitig bis 15 MB ausgewählt
 werden, werden aber vor dem Upload auf höchstens 1568 px und ungefähr 900 kB

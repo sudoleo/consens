@@ -48,6 +48,39 @@ def scanned_pages(warning):
     return [int(page) for page in re.findall(r"\d+", match.group("old") or match.group("new"))]
 
 
+# C0 control characters a text file holds: tab, line feed, form feed, carriage return.
+_TEXT_CONTROLS = frozenset("\t\n\f\r")
+
+
+def decode_text(raw):
+    """The text of a .txt/.md/.csv file, or None when the bytes are no text.
+
+    UTF-8, else UTF-16 with its BOM ("Unicode text" from Excel or Notepad),
+    else Windows-1252: what Excel on a German Windows writes as CSV. The
+    composer and the file preview (file-viewer.js) take all three. A
+    Windows-1252 reading counts only without bytes that code page leaves
+    undefined and without control characters, so binary data stays out."""
+    if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+        try:
+            text = raw.decode("utf-16")
+        except UnicodeDecodeError:
+            return None
+        return None if "\x00" in text else text
+    if b"\x00" in raw:
+        return None
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        pass
+    try:
+        text = raw.decode("cp1252")
+    except UnicodeDecodeError:
+        return None
+    if any(char < " " and char not in _TEXT_CONTROLS for char in text):
+        return None
+    return text
+
+
 def run_isolated(raw, mode, *args, timeout=PROCESS_TIMEOUT_SECONDS):
     """Run one extraction in a disposable, resource-limited subprocess.
 
@@ -212,7 +245,10 @@ def extract(raw, mime):
         # is told so in its own prompt (agent_files.FileContext.messages), so
         # this is no reading limitation to show the user.
     else:
-        lines = raw.decode("utf-8").splitlines()
+        text = decode_text(raw)
+        if text is None:
+            raise ValueError("not a text file")
+        lines = text.splitlines()
         for offset in range(0, len(lines), 40):
             add(f"lines {offset + 1}-{min(offset + 40, len(lines))}", "\n".join(lines[offset:offset + 40]))
     return {"parts": parts, "warnings": list(dict.fromkeys(warnings)),

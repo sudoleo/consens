@@ -23,6 +23,7 @@ from app.services.llm.attachments import (
     parse_attachments,
 )
 from app.services.llm.engines import build_provider_payload
+from app.services import agent_file_extract
 
 
 PNG_BYTES = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
@@ -83,6 +84,26 @@ class ParseAttachmentsTests(unittest.TestCase):
                 )
                 self.assertEqual(parsed[0]["mime"], expected_mime)
                 self.assertEqual(parsed[0]["raw"], raw)
+
+    def test_csv_from_german_excel_and_utf16_text_are_text(self):
+        """Excel on a German Windows saves CSV in Windows-1252 and "Unicode
+        text" in UTF-16 with a BOM; the composer and the file preview take
+        both as text, so the server reads them as text too."""
+        table = "Größe;Preis\r\nÄpfel;2,50 €\r\n"
+        for name, raw in (("tabelle.csv", table.encode("cp1252")), ("liste.txt", table.encode("utf-16"))):
+            with self.subTest(name=name):
+                parsed = parse_attachments({"attachments": [make_attachment(name, raw)]}, attachments_allowed=True)
+                self.assertEqual(parsed[0]["mime"], TEXT_MIME)
+                self.assertIn("Äpfel;2,50 €", build_attachment_question_suffix(parsed, "openai"))
+                extraction = agent_file_extract.extract(raw, TEXT_MIME)
+                self.assertIn("Äpfel;2,50 €", extraction["parts"][0]["text"])
+
+    def test_binary_without_null_bytes_is_still_no_text(self):
+        for raw in (bytes(range(0x80, 0x100)) * 4, b"\x01\x02\x03\x04 header" + bytes(range(0xa0, 0xff))):
+            with self.subTest(raw=raw[:8]):
+                with self.assertRaises(HTTPException) as ctx:
+                    parse_attachments({"attachments": [make_attachment("data.csv", raw)]}, attachments_allowed=True)
+                self.assertEqual(ctx.exception.status_code, 400)
 
     def test_unsupported_type_is_rejected_even_with_image_extension(self):
         data = {"attachments": [make_attachment("evil.png", b"MZ\x90\x00" + b"\x00" * 32)]}
