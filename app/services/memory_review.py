@@ -44,6 +44,7 @@ import json
 import logging
 import secrets
 from typing import Callable
+from zoneinfo import ZoneInfo
 
 from app.core.background_tasks import task_succeeded
 from app.core.observability import safe_exception
@@ -276,12 +277,21 @@ def _within_budget(chats: list[dict]) -> list[dict]:
     return result
 
 
+def _local_day(moment: datetime):
+    """The day of ``moment`` where the agent dates the user's words: the
+    reference timezone (agent_runs.get_agent_turn_context without a device
+    zone). UTC calls 00:30 in Berlin the day before: that message's
+    "tomorrow" would point a day early."""
+    from app.services import prompt_config
+    return moment.astimezone(ZoneInfo(prompt_config.get_config()["reference_timezone"])).date()
+
+
 def render_chats(chats: list[dict]) -> str:
     parts = []
     for chat in chats:
         lines = [f"## Chat: {chat['title']}"]
         for turn in chat["turns"]:
-            lines.append(f"[{turn['at'].date().isoformat()}] User: {turn['question']}")
+            lines.append(f"[{_local_day(turn['at']).isoformat()}] User: {turn['question']}")
             if turn.get("quoted"):
                 lines.append(f"(The user quoted the assistant's earlier answer: {turn['quoted']})")
             if turn["answer"]:
@@ -489,7 +499,7 @@ class MemoryReview:
         through = min(now, running) if running else now
         if not chats:
             return {"status": "no_chats"}, through
-        text = prompt(snapshot, chats, today=now.date())
+        text = prompt(snapshot, chats, today=_local_day(now))
         messages = sum(len(chat["turns"]) for chat in chats)
         raw = self._query(text)
         try:

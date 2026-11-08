@@ -153,7 +153,7 @@ def test_the_review_reads_the_days_chats_and_saves_one_change_with_undo(db):
     for left_out in ("still running", "Watch task", "last month", "inbox", "Something private", "Deleted chat",
                      "Compare question", "while it was off"):
         assert left_out not in prompt
-    assert "m000001" in prompt and "Builds consens.io" in prompt and f"Today is {NOW.date().isoformat()}." in prompt
+    assert "m000001" in prompt and "Builds consens.io" in prompt and f"Today is {memory_review._local_day(NOW).isoformat()}." in prompt
 
     repository = FirestoreAgentMemoryRepository(db)
     items, revision, last = repository.get_with_review(UID)
@@ -333,6 +333,25 @@ def test_a_claim_from_an_aborted_transaction_attempt_is_not_kept(db):
     service, prompts = review(db, [])
     service.repository = Retrying(service.repository)
     assert service._claim(UID, NOW) is None and queued(db)["lease_id"] == "other"
+
+
+def test_dates_are_the_users_day_in_the_reference_timezone(db, monkeypatch):
+    """The agent dates a message in the reference timezone when the browser
+    names none: "tomorrow" sent at 00:10 in Berlin means the day after the
+    Berlin date, which UTC still calls the day before."""
+    from app.services import prompt_config
+    monkeypatch.setattr(prompt_config, "get_config", lambda: {"reference_timezone": "Europe/Berlin"})
+    day = (NOW - timedelta(days=1)).date()
+    late = datetime(day.year, day.month, day.day, 23, 30, tzinfo=timezone.utc)
+    berlin_day = (day + timedelta(days=1)).isoformat()
+    set_profile(db, auto_memory=True)
+    memory_review.mark_due(db, UID, now=late - memory_review.IDLE)
+    chat(db, "c1", updated=late - timedelta(minutes=20))
+    turn(db, "c1", "t1", "Ich habe morgen Prüfung.", at=late - timedelta(minutes=20))
+    service, prompts = review(db, [], clock=lambda: late)
+    service.run()
+    assert f"[{berlin_day}] User: Ich habe morgen Prüfung." in prompts[0]
+    assert f"Today is {berlin_day}." in prompts[0]
 
 
 def test_never_further_back_than_the_lookback_and_the_newest_messages_first(db, monkeypatch):
