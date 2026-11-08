@@ -2558,8 +2558,13 @@ function applyBookmarkModelPresentation(bookmark) {
 // Diese Funktion füllt die UI mit den Daten eines Bookmarks
 function normalizeConversationTurn(turn) {
   if (!turn || !turn.question) return null;
-  if (!(turn.execution_mode === "agent" && turn.status === "failed")
-      && !(turn.status === "completed" && turn.consensus)) return null;
+  const agent = turn.execution_mode === "agent";
+  // An Agent answer that stands while its reviewers still work: the server
+  // sends it in its place when another turn is the one followed as running
+  // (routers/bookmarks.py _transcript_turn).
+  const reviewing = agent && turn.status === "pending" && turn.agent_answer_fixed === true && turn.consensus;
+  if (!(agent && turn.status === "failed")
+      && !(turn.status === "completed" && turn.consensus) && !reviewing) return null;
   return { ...turn, consensus: turn.consensus || "", turn_id: turn.id || turn.turn_id || "" };
 }
 
