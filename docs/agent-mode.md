@@ -2633,7 +2633,14 @@ mit `audit_access`). Die
   Key-Namen in `~/.secrets`, die Namen aus `Claim.secrets` zuerst, höchstens
   `agent_secrets.READ_KEYS` (64). Vorher nur die Namen des Datensatzes, und
   der hält die neuesten 32: Ab dem 33. Key ging der Wert des ältesten nach
-  einem Tag oder einem Neustart unmaskiert ans Modell. Das erste
+  einem Tag oder einem Neustart unmaskiert ans Modell. Eine Nachricht nur
+  mit dem Browser startet die Werkbank nie: Ihr erster Browser-Aufruf liest
+  die Keys deshalb selbst, in einem eigenen kurzen Befehl
+  (`BrowserTools._read_keys`, `agent_workspace.read_keys`, `KEYS_SCRIPT`),
+  bevor er die Seite liest, aber nur solange ein Name aus `Claim.secrets`
+  noch nicht maskiert ist (`agent_secrets.known`), also nach einem Neustart
+  oder einem Tag ohne Werkbank-Start. Schlägt das fehl, scheitert der
+  Aufruf, statt die Seite unmaskiert zu liefern. Das erste
   VM-Ergebnis nennt dem Agenten die Namen (`workspace_keys`, auch
   in späteren Chats; der VM-Prompt sagt, wo sie liegen). Die Datei bleibt auf
   der Werkbank, bis der Nutzer sie löscht (Terminal), wie eine `.env` seines

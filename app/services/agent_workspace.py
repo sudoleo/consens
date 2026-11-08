@@ -801,14 +801,23 @@ def record_folder(store, uid, chat_id, folder):
         logging.warning("Agent chat folder not recorded category=%s", safe_exception(exc))
 
 
+# The keys in ~/.secrets as the agent's user ("key" name NUL value NUL):
+# the record's names first ("$@"), then every other file of a key's name, at
+# most $most (the record keeps only the newest names, and an older key would
+# go unmasked).
+KEYS_PART = (
+    'if cd "$HOME/.secrets" 2>/dev/null; then count=0; named=$#; seen=" "; for name in "$@" *; do '
+    'if [ "$named" -gt 0 ]; then named=$((named - 1)); seen="$seen$name "; '
+    'else case $seen in *" $name "*) continue;; esac; fi; '
+    '[[ $name =~ ^[A-Z][A-Z0-9_]{1,63}$ ]] && [ -f "$name" ] && [ -r "$name" ] || continue; '
+    '[ "$count" -lt "$most" ] || break; count=$((count + 1)); '
+    'printf "key %s\\0" "$name"; head -c 16384 -- "$name"; printf "\\0"; done; fi; ')
 # A message's chat on the workbench in one command (the move, the marker,
 # the notes and the keys, not one round trip each), as the agent's user: the
 # chat's folder follows its title ($1 the folder now, $2 the one its title wants;
 # "taken" keeps it where it is), its marker comes on stdin, then the keys
-# in ~/.secrets ("key" name NUL value NUL): the record's names first ($6...),
-# then every other file of a key's name, at most $5 (the record keeps only
-# the newest names, and an older key would go unmasked), and last
-# the notes' beginning ($3, at most $4 bytes, to the end).
+# (KEYS_PART, at most $5, the record's names from $6), and last the notes'
+# beginning ($3, at most $4 bytes, to the end).
 CHAT_SCRIPT = (
     'old=$1; new=$2; notes=$3; limit=$4; most=$5; shift 5; dir=$old; state=same; '
     'if [ "$new" != "$old" ]; then '
@@ -817,16 +826,13 @@ CHAT_SCRIPT = (
     'elif mkdir -p -- "$(dirname -- "$new")" && mv -T -- "$old" "$new"; then dir=$new; state=moved; '
     'else state=failed; fi; fi; '
     'mkdir -p -- "$dir" 2>/dev/null && cat > "$dir/' + CHAT_MARKER + '" 2>/dev/null || exit 46; '
-    'printf "folder %s\\n" "$state"; '
-    'if cd "$HOME/.secrets" 2>/dev/null; then count=0; named=$#; seen=" "; for name in "$@" *; do '
-    'if [ "$named" -gt 0 ]; then named=$((named - 1)); seen="$seen$name "; '
-    'else case $seen in *" $name "*) continue;; esac; fi; '
-    '[[ $name =~ ^[A-Z][A-Z0-9_]{1,63}$ ]] && [ -f "$name" ] && [ -r "$name" ] || continue; '
-    '[ "$count" -lt "$most" ] || break; count=$((count + 1)); '
-    'printf "key %s\\0" "$name"; head -c 16384 -- "$name"; printf "\\0"; done; fi; '
+    'printf "folder %s\\n" "$state"; ' + KEYS_PART +
     'if [ -f "$notes" ] && [ -r "$notes" ]; then printf "notes +\\n"; exec head -c "$limit" -- "$notes"; fi; '
     'printf "notes -\\n"')
 CHAT_SECONDS = 60
+# The keys alone (read_keys): at most $1, the record's names from $2.
+KEYS_SCRIPT = 'most=$1; shift 1; ' + KEYS_PART + 'exit 0'
+KEYS_SECONDS = 30
 
 
 @dataclass(frozen=True)
@@ -846,16 +852,23 @@ def parse_chat(raw):
     head, _, rest = raw.partition(b"\n")
     if not head.startswith(b"folder "):
         raise agent_vm.VMUnavailable("chat: unreadable")
-    state, keys = head[7:].decode("ascii", "replace"), []
-    while rest.startswith(b"key "):
-        name, _, rest = rest[4:].partition(b"\0")
-        value, _, rest = rest.partition(b"\0")
-        keys.append((name.decode("ascii", "replace"), value.decode("utf-8", "replace").strip()))
+    state = head[7:].decode("ascii", "replace")
+    keys, rest = _parse_keys(rest)
     if rest.startswith(b"notes +\n"):
         return state, keys, rest[8:]
     if rest.startswith(b"notes -"):
         return state, keys, None
     raise agent_vm.VMUnavailable("chat: unreadable")
+
+
+def _parse_keys(raw):
+    """KEYS_PART's ``(name, value)`` pairs at the start of ``raw``, and the rest."""
+    keys = []
+    while raw.startswith(b"key "):
+        name, _, raw = raw[4:].partition(b"\0")
+        value, _, raw = raw.partition(b"\0")
+        keys.append((name.decode("ascii", "replace"), value.decode("utf-8", "replace").strip()))
+    return keys, raw
 
 
 # A temporary chat reads the notes and leaves them as they are: they
@@ -917,6 +930,32 @@ def open_chat(vm, name, chat_id, *, title="", started="", folder="", keys=(), ca
     return ChatOpened(folder=wanted if state in {"moved", "missing", "same"} else folder,
                       notes=notes_for_agent(notes, temporary=temporary),
                       keys=tuple(found), seconds=outcome.seconds)
+
+
+def read_keys(vm, name, keys=(), *, cancellation=None, timeout=KEYS_SECONDS):
+    """The account's keys for masking (agent_secrets.scrub) where no start
+    of the workbench reads them (open_chat): every key file in ~/.secrets,
+    ``keys`` (the record's names) first, as ``(name, value)`` pairs."""
+    from app.services import agent_secrets
+    from app.services.llm.provider_runtime import ProviderCancellation
+    names = [key for key in dict.fromkeys(keys) if agent_secrets.NAME.fullmatch(str(key))][:agent_secrets.KEEP_NAMES]
+    most = agent_secrets.READ_KEYS
+    cap = most * (agent_secrets.VALUE_CHARS + 80) + 256
+    out = bytearray()
+
+    def keep(stream, chunk):
+        if stream == "stdout" and len(out) <= cap:
+            out.extend(chunk)
+    seconds = max(1, int(timeout))
+    outcome = vm.run(name, agent_vm.agent_argv(["bash", "-c", KEYS_SCRIPT, "keys", str(most), *names], seconds, HOME),
+                     cwd="/", timeout=seconds, on_output=keep, cancellation=cancellation or ProviderCancellation())
+    if outcome.exit_code != 0:
+        raise agent_vm.VMUnavailable(f"keys: exit {outcome.exit_code}")
+    found, rest = _parse_keys(bytes(out))
+    if rest:
+        raise agent_vm.VMUnavailable("keys: unreadable")
+    # The script's own check of a name is the shell's, in the VM's locale.
+    return tuple((key, value) for key, value in found if agent_secrets.NAME.fullmatch(key))[:most]
 
 
 def control_payload(holder, *, now=None):

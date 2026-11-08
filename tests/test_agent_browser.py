@@ -604,6 +604,35 @@ def test_the_warm_up_brings_the_network_counters_before_the_agents_commands(stor
     assert noted == [(UID, counters)]
 
 
+def test_a_message_with_the_browser_alone_masks_the_accounts_keys_after_a_restart(store, fake_vm, monkeypatch):
+    """Only the workbench's start reads the keys for masking
+    (agent_workspace.open_chat), and the browser alone never starts it: after
+    a restart of the server, or a day without such a start, a page that shows
+    a key (the agent's own app on localhost, a provider's dashboard) would go
+    to the model and the work record as it is. The browser reads them, once a
+    message and only while a name on the record is not masked yet."""
+    from app.services import agent_secrets
+    monkeypatch.setattr(agent_secrets, "_seen", {})
+    key = "sk-dashboard-123456789"
+    fake_vm.vms[BROWSER] = {"files": {agent_secrets.path("OPENAI_API_KEY"): key.encode()}, "checkpoints": []}
+    agent_workspace.ref(store.db, UID).set({"secret_names": ["OPENAI_API_KEY"]})
+    fake_vm.browser = lambda request: {"status": "ok", "text": f'Page: "Keys"\nURL: http://localhost:3000/\n{key}'}
+    loop = vm_loop(store, Agent([[("browser", {"action": "read"})], [("browser", {"action": "read"})]]))
+    list(loop.run())
+    mask = agent_secrets.MASK.format(name="OPENAI_API_KEY")
+    assert [mask in result["page"] for result in results(loop)] == [True, True]
+    assert key not in json.dumps(results(loop)) + json.dumps(store.get_turn(UID, loop.chat_id, loop.turn_id),
+                                                              default=str)
+    assert fake_vm.vms[BROWSER]["checkpoints"] == []
+    reads = [call for call in fake_vm.calls if call[0] == "keys"]
+    assert reads == [("keys", BROWSER)]
+    # Masked already: the next message reads nothing more.
+    again = vm_loop(store, Agent([[("browser", {"action": "read"})]]), chat_id=loop.chat_id, request_id="two")
+    list(again.run())
+    assert mask in results(again)[0]["page"]
+    assert [call for call in fake_vm.calls if call[0] == "keys"] == reads
+
+
 def test_the_helpers_actions_are_the_tools():
     assert set(BrowserArgs.model_json_schema()["properties"]["action"]["enum"]) == set(agent_browser.ACTIONS)
 

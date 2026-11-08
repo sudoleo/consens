@@ -140,9 +140,16 @@ class _FakeBackend(VMBackend):
         from the workbench's files, as the agent's user. The chat's folder,
         marker, keys and notes in one command (agent_workspace.open_chat)
         are its parts as calls of their own: the move, the marker's write,
-        the notes' read."""
+        the notes' read. The keys alone (agent_workspace.read_keys) are a
+        call ``keys`` of their own."""
         if agent_workspace.CHAT_SCRIPT in argv:
             return self._chat(name, argv, input, on_output)
+        if agent_workspace.KEYS_SCRIPT in argv:
+            self._call("keys", name)
+            assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN]
+            most, *keys = argv[argv.index(agent_workspace.KEYS_SCRIPT) + 2:]
+            on_output("stdout", self._keys(name, keys, int(most)))
+            return ExecOutcome(exit_code=0, timed_out=False, seconds=0.0)
         self._call("run", name, argv[-1])
         from app.services import workspace_guard
         if argv == workspace_guard.NET_ARGV:
@@ -174,22 +181,13 @@ class _FakeBackend(VMBackend):
         return ExecOutcome(exit_code=0, timed_out=False, seconds=.5)
 
     def _chat(self, name, argv, marker, on_output):
-        from app.services import agent_secrets
-        script = argv.index(agent_workspace.CHAT_SCRIPT)
+        script =argv.index(agent_workspace.CHAT_SCRIPT)
         old, new, notes, limit, most, *keys = argv[script + 2:]
         assert argv[:4] == ["sudo", "-n", "/bin/bash", agent_vm.AGENT_RUN]
         state = "same" if new == old else self.move_path(name, old, new)
         target = new if state in {"moved", "missing"} else old
         self.write_file(name, f"{target}/{agent_workspace.CHAT_MARKER}", marker)
-        out = f"folder {state}\n".encode()
-        files = self.vm.vms[name]["files"]
-        # The record's names first, then every other key file in the folder.
-        folder = sorted(path[len(agent_secrets.DIR) + 1:] for path in files
-                        if path.startswith(agent_secrets.DIR + "/"))
-        found = [key for key in dict.fromkeys([*keys, *folder])
-                 if agent_secrets.NAME.fullmatch(key) and agent_secrets.path(key) in files]
-        for key in found[:int(most)]:
-            out += b"key " + key.encode() + b"\0" + files[agent_secrets.path(key)][:16384] + b"\0"
+        out = f"folder {state}\n".encode() + self._keys(name, keys, int(most))
         try:
             raw, _ = self.read_file(name, notes, limit=int(limit))
             out += b"notes +\n" + raw
@@ -197,6 +195,18 @@ class _FakeBackend(VMBackend):
             out += b"notes -\n"
         on_output("stdout", out)
         return ExecOutcome(exit_code=0, timed_out=False, seconds=0.0)
+
+    def _keys(self, name, keys, most):
+        """The keys as KEYS_PART prints them: the record's names first, then
+        every other key file in the folder."""
+        from app.services import agent_secrets
+        files = self.vm.vms[name]["files"]
+        folder = sorted(path[len(agent_secrets.DIR) + 1:] for path in files
+                        if path.startswith(agent_secrets.DIR + "/"))
+        found = [key for key in dict.fromkeys([*keys, *folder])
+                 if agent_secrets.NAME.fullmatch(key) and agent_secrets.path(key) in files]
+        return b"".join(b"key " + key.encode() + b"\0" + files[agent_secrets.path(key)][:16384] + b"\0"
+                        for key in found[:most])
 
     def exec_url(self, name, argv, *, cwd, stdin, tty=None):
         self._call("exec_url", name, tuple(argv), tty)

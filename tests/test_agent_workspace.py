@@ -1732,6 +1732,13 @@ def test_a_messages_start_reads_every_key_file_the_records_first(monkeypatch, tm
     monkeypatch.setattr(agent_secrets, "READ_KEYS", 2)
     opened = agent_workspace.open_chat(Bash(), "consens-w-a", "chat1", keys=["OLDEST_KEY"])
     assert [name for name, _ in opened.keys] == ["OLDEST_KEY", "AAA_KEY"]
+    # The keys alone (the browser without the workbench) read the same files.
+    monkeypatch.setattr(agent_secrets, "READ_KEYS", 64)
+    assert agent_workspace.read_keys(Bash(), "consens-w-a", ["NEWER_KEY", "GONE_KEY"]) == (
+        ("NEWER_KEY", "sk-newer_key-12345678"), ("AAA_KEY", "sk-aaa_key-12345678"),
+        ("OLDEST_KEY", "sk-oldest_key-12345678"))
+    shutil.rmtree(keys)
+    assert agent_workspace.read_keys(Bash(), "consens-w-a", ["NEWER_KEY"]) == ()
 
 
 def test_a_folder_the_agent_made_read_only_is_deleted_too(tmp_path):

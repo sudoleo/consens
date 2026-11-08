@@ -20,8 +20,11 @@ its first VM result. Every message's start on the workbench reads the keys
 again (agent_workspace.open_chat), so a restart of the server masks them as
 well: every key file in ~/.secrets, the record's names first, at most
 READ_KEYS (the record keeps only the newest KEEP_NAMES, so reading only those
-would send an older key's value to the model as it was). A key stays on the
-workbench until the user deletes it (their terminal).
+would send an older key's value to the model as it was). A message with the
+browser alone never starts the workbench: its first call reads them itself
+while a name on the record is not masked (known, agent_browser
+BrowserTools._read_keys). A key stays on the workbench until the user deletes
+it (their terminal).
 """
 from __future__ import annotations
 
@@ -89,6 +92,14 @@ def remember(uid, value, name, now=None):
         return
     with _lock:
         _seen.setdefault(uid, {})[value] = ((now or time.time()) + SCRUB_SECONDS, name)
+
+
+def known(uid, names, now=None):
+    """Whether a value of each of ``names`` is masked now (remember)."""
+    now = now or time.time()
+    with _lock:
+        live = {name for until, name in (_seen.get(uid) or {}).values() if until > now}
+    return set(names) <= live
 
 
 def _values(uid, now=None):

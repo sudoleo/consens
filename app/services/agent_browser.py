@@ -378,6 +378,8 @@ class BrowserTools:
         self.previewed_at = None
         # Screenshots shown to the user in this message: digest -> what the agent heard (show).
         self.shown = {}
+        # The account's keys are masked in this message's results (_read_keys).
+        self.keys_read = False
 
     def tools(self):
         return [ReadOnlyTool(
@@ -585,6 +587,27 @@ class BrowserTools:
             return ValueError(BROWSER_UNAVAILABLE)
         return ValueError(text)
 
+    def _read_keys(self, deadline, cancellation):
+        """The account's keys for masking its results (agent_secrets.scrub),
+        before the first answer of the message: only the workbench's start
+        reads them (agent_workspace.open_chat), which the browser alone never
+        needs, and after a restart of the server or a day without one a page
+        showing a key (the agent's own app, a provider's dashboard) would go
+        to the model as it is. One command, only while a name on the record
+        is not masked yet; failing, the call fails before the page is read."""
+        from app.services import agent_secrets, agent_workspace
+        from app.services.agent_vm_tools import MIN_COMMAND_SECONDS, VM_NO_TIME
+        session, uid = self.vm.session, self.vm.loop.uid
+        names = tuple(getattr(session.claim, "secrets", None) or ())
+        if names and not agent_secrets.known(uid, names):
+            rest = deadline - time.monotonic()
+            if rest < MIN_COMMAND_SECONDS:
+                raise ValueError(VM_NO_TIME)
+            for name, value in agent_workspace.read_keys(session.backend, self.name, names, cancellation=cancellation,
+                                                         timeout=min(rest, agent_workspace.KEYS_SECONDS)):
+                agent_secrets.remember(uid, value, name)
+        self.keys_read = True
+
     def _upload(self, path, cancellation):
         """The file at ``path``, read as the agent's user (what it may not
         read it cannot upload), in the browser's folder for this call."""
@@ -677,6 +700,8 @@ class BrowserTools:
                 if warming is None or not warming.ok:
                     agent_workspace.open_workspace(session.backend, self.vm.loop.uid, cancellation, db=self._db())
                 self.ready = True
+            if not self.keys_read:
+                self._read_keys(deadline, cancellation)
             if args.action == "upload":
                 path = vm_path(args.file, session.dir)
                 target, size = self._upload(path, cancellation)
