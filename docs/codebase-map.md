@@ -2310,7 +2310,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`agent_settings.memory.auto` des Turns: nicht vor dem Opt-in, nicht
   pausiert, nicht temporär), ohne Google-Daten-Chats, nicht aktive Chats und
   ohne Watch-Läufe. Eine noch laufende Nachricht (`pending`) setzt
-  `reviewed_through` auf ihren Start, damit die nächste Pflege sie liest. Je
+  `reviewed_through` auf ihren Start, damit die nächste Pflege sie liest;
+  hängt sie seit `DEAD_AFTER` (1 Tag ab Start bzw. `agent_answer_fixed_at`),
+  gilt sie als tot und hält nichts mehr auf (abgeräumt wird sie erst von
+  `purge_abandoned_turns` bei der nächsten Nachricht ihres Chats). Je
   Turn die Worte des Nutzers
   (`agent_memory.user_words`, ein per „Ask about this“ zitierter Absatz steht
   getrennt als Assistententext daneben) bis 1.000 Zeichen und das Ende der
@@ -2325,7 +2328,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   bekommt eine Arbeitsanleitung: erst
   `observations` nach Bereichen (wer er ist, Vorhaben mit Datum, wie er
   arbeiten will, wiederkehrende Themen, was geklappt hat), dann der Abgleich
-  mit dem Gedächtnis; dazu Datum von heute, Antworten sind Kontext, ein Fakt
+  mit dem Gedächtnis; dazu Datum von heute und je Nachricht, beide in der
+  `reference_timezone` aus `prompt_config` (wie der Agent rechnet; in UTC
+  landete eine Nachricht kurz nach Mitternacht beim Vortag), Antworten sind Kontext, ein Fakt
   über den Nutzer braucht seine Worte oder sein Ja, nichts, was eine Watch
   oder Einstellung schon hält, Art. 9, und `render_memory_block` mit IDs.
   Eine Anleitung statt nur „wofür“, weil der Artikel zeigt, dass schwächere
@@ -2348,11 +2353,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   der Pflege. Gescheitert (Modell, `unreadable`, `unavailable`,
   `revision_conflict`) bleibt das Fenster offen, `attempts` + 1 und
   `review_after` = jetzt + `RETRY_AFTER` 2 h; nach `MAX_ATTEMPTS` 3 gilt das
-  Fenster als geprüft. Opt-in aus (oder Konto weg) löscht den Datensatz;
-  die nächste Nachricht mit Opt-in legt ihn neu an. `last_result` hält nur
+  Fenster als geprüft. Opt-in aus oder pausiert (`auto_memory_off`): nichts
+  ist mehr fällig; ein Datensatz ohne `reviewed_through` geht (auch eine
+  Markierung, die nach der Kontolöschung landete), einer mit behält
+  `reviewed_at`/`reviewed_through`, sonst läse Aus- und Wiedereinschalten
+  die geprüften Tage erneut; die nächste Nachricht mit Opt-in setzt ihn
+  wieder fällig. `last_result` hält nur
   Status und Zahlen. Eine abgeschnittene oder unlesbare Antwort heißt
-  `unreadable`, nicht `unchanged` (`MAX_TOKENS` 8.000, weil die
-  Reasoning-Tokens von „low“ bei OpenAI mitzählen). Nicht auf das
+  `unreadable`, nicht `unchanged` (`MAX_TOKENS` 12.000, weil die
+  Reasoning-Tokens bei OpenAI mitzählen). Nicht auf das
   Tageskonto des Nutzers gebucht (wie Chat-Titel). **Sichtbar** nur in
   Settings › Memory: `GET /api/my/memory` (und jede Schreibantwort) liefert
   `last_review` (`get_with_review` → `memory_review.last_review`:
@@ -10342,7 +10351,8 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   (`last_turn_at`, `review_after`, `reviewed_at`, `reviewed_through`,
   `attempts`, `lease_until`, `lease_id`, `last_result` nur mit Status und
   Zahlen; seit 2026-11-06, §3 „Tägliche Gedächtnis-Pflege“). Keine Texte;
-  gelöscht mit dem Konto und bei ausgeschaltetem Opt-in.
+  gelöscht mit dem Konto, bei ausgeschaltetem Opt-in nur ohne
+  `reviewed_through`.
 - `watch_briefs/{uid}` — user-level Morning-Brief-Einstellungen (`enabled`,
   `send_time` `HH:MM`, IANA-`timezone`, `mode` = `always|changes_only`,
   `next_send_at`, `last_evaluated_at`, `last_sent_at`, `enabled_at`). Reine

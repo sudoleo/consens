@@ -62,6 +62,11 @@ IDLE = timedelta(hours=3)
 # At most about once a day.
 INTERVAL = timedelta(hours=20)
 LOOKBACK = timedelta(days=14)
+# No run lasts a day, pauses for the user included. A turn pending longer
+# died without its end and stays pending until its chat's next message
+# retires it (ChatStore.purge_abandoned_turns); waiting for it would have
+# every review read the same days again.
+DEAD_AFTER = timedelta(days=1)
 LEASE = timedelta(minutes=10)
 # A failed review (provider, a cut-off reply, the user's edit during the
 # call) comes again after RETRY_AFTER; after MAX_ATTEMPTS in a row its
@@ -206,7 +211,7 @@ def _counts(settings: dict) -> bool:
             and not settings.get("google_data"))
 
 
-def collect_chats(store, uid: str, since: datetime) -> tuple[list[dict], datetime | None]:
+def collect_chats(store, uid: str, since: datetime, now: datetime) -> tuple[list[dict], datetime | None]:
     """The account's messages since ``since``, oldest first, by chat:
     ``[{title, turns: [{at, question, quoted, answer}]}]`` within
     CHATS_CHARS, and when the oldest message that may still finish started
@@ -236,7 +241,10 @@ def collect_chats(store, uid: str, since: datetime) -> tuple[list[dict], datetim
             if not _counts(settings):
                 continue
             if turn.get("status") == "pending":
-                if created and (running is None or created < running):
+                # A turn whose answer stands while its reviewers still work
+                # lives on from that moment (agent_runs.hand_over).
+                alive = max(created, _as_utc(turn.get("agent_answer_fixed_at")) or created) if created else None
+                if alive and alive + DEAD_AFTER > now and (running is None or created < running):
                     running = created
                 continue
             if turn.get("status") not in {"completed", "succeeded"}:
@@ -427,8 +435,11 @@ class MemoryReview:
         """Close the review. Done (or given up after MAX_ATTEMPTS): the
         messages up to ``through`` count as reviewed. Failed: the window
         stays open and the review comes again after RETRY_AFTER. Agent
-        memory off (or the account gone): the record goes; the next message
-        that may update the memory brings it back."""
+        memory off: nothing is due until the next message that may update
+        the memory; a record that was never reviewed goes (also a mark that
+        landed after the account's deletion), one that was keeps how far it
+        read, or switching memory off and on would read the reviewed days
+        again."""
         ref = self._ref(uid)
         status = result["status"]
 
@@ -442,7 +453,11 @@ class MemoryReview:
             last_turn = _as_utc(data.get("last_turn_at"))
             quiet = last_turn is None or last_turn <= started
             if status == "auto_memory_off" and quiet:
-                tx.delete(ref)
+                if data.get("reviewed_through") is None:
+                    tx.delete(ref)
+                else:
+                    tx.update(ref, {"review_after": None, "attempts": 0, "lease_until": None, "lease_id": None,
+                                    "last_result": result})
                 return "reviewed"
             attempts = int(data.get("attempts") or 0) + 1
             if status in DONE or status == "auto_memory_off" or attempts >= MAX_ATTEMPTS:
@@ -495,7 +510,7 @@ class MemoryReview:
             return {"status": "unavailable"}, now
         if not snapshot.writable:
             return {"status": "auto_memory_off"}, now
-        chats, running = collect_chats(self.store, uid, since)
+        chats, running = collect_chats(self.store, uid, since, now)
         through = min(now, running) if running else now
         if not chats:
             return {"status": "no_chats"}, through

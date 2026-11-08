@@ -190,6 +190,35 @@ def test_without_the_opt_in_the_review_reads_nothing_and_its_record_goes(db):
     assert queued(db) is None
 
 
+def test_turning_the_opt_in_off_and_on_again_keeps_what_was_reviewed(db):
+    set_profile(db, auto_memory=True)
+    memory_review.mark_due(db, UID, now=NOW - memory_review.IDLE)
+    chat(db, "c1")
+    turn(db, "c1", "t1", "I live in Hannover.", at=NOW - timedelta(hours=5))
+    service, prompts = review(db, [])
+    service.run()
+    assert "Hannover" in prompts[0]
+    # A message, then the opt-in goes off before its review came.
+    off = NOW + timedelta(days=1)
+    turn(db, "c1", "t2", "I run marathons.", at=off - timedelta(hours=4))
+    chat(db, "c1", updated=off - timedelta(hours=4))
+    memory_review.mark_due(db, UID, now=off - memory_review.IDLE)
+    set_profile(db, auto_memory=False)
+    service, prompts = review(db, [], clock=lambda: off)
+    assert service.run()["reviewed"] == 1 and prompts == []
+    assert queued(db)["reviewed_through"] == NOW and queued(db)["review_after"] is None
+    # On again: the next review reads on from the last one, not the whole
+    # LOOKBACK the user's earlier days were already reviewed in.
+    on = off + timedelta(days=1)
+    set_profile(db, auto_memory=True)
+    turn(db, "c1", "t3", "I moved to Berlin.", at=on - timedelta(hours=4))
+    chat(db, "c1", updated=on - timedelta(hours=4))
+    memory_review.mark_due(db, UID, now=on - memory_review.IDLE)
+    service, prompts = review(db, [], clock=lambda: on)
+    service.run()
+    assert "Berlin" in prompts[0] and "marathons" in prompts[0] and "Hannover" not in prompts[0]
+
+
 def test_the_review_runs_at_most_once_a_day(db):
     set_profile(db, auto_memory=True)
     db.collection(memory_review.COLLECTION).document(UID).set({"reviewed_at": NOW, "reviewed_through": NOW})
@@ -314,6 +343,20 @@ def test_a_message_still_running_at_the_review_is_read_the_next_time(db):
     assert "marathons" in prompts[0] and "Hannover" not in prompts[0]
 
 
+def test_a_message_pending_for_a_day_died_and_holds_no_review_back(db):
+    """A run that ended without its end (a crash before the drain) leaves its
+    turn pending until the chat's next message retires it."""
+    set_profile(db, auto_memory=True)
+    memory_review.mark_due(db, UID, now=NOW - memory_review.IDLE)
+    chat(db, "c1")
+    turn(db, "c1", "t0", "Started and never finished.", at=NOW - timedelta(days=2), status="pending")
+    turn(db, "c1", "t1", "I live in Hannover.", at=NOW - timedelta(hours=5))
+    service, prompts = review(db, [])
+    service.run()
+    assert "Hannover" in prompts[0] and "never finished" not in prompts[0]
+    assert queued(db)["reviewed_through"] == NOW
+
+
 def test_a_claim_from_an_aborted_transaction_attempt_is_not_kept(db):
     """Firestore runs the transaction's function again after an aborted
     commit; another process took the lease in between."""
@@ -361,7 +404,7 @@ def test_never_further_back_than_the_lookback_and_the_newest_messages_first(db, 
     for hour in range(6):
         turn(db, "c1", f"t{hour}", f"question {hour} " + "x" * 300, at=NOW - timedelta(hours=10 - hour))
     monkeypatch.setattr(memory_review, "CHATS_CHARS", 1_200)
-    chats, _ = memory_review.collect_chats(ChatStore(db), UID, NOW - memory_review.LOOKBACK)
+    chats, _ = memory_review.collect_chats(ChatStore(db), UID, NOW - memory_review.LOOKBACK, NOW)
     questions = [turn["question"][:10] for turn in chats[0]["turns"]]
     assert questions == ["question 3", "question 4", "question 5"]
 
