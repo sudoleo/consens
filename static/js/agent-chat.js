@@ -1192,8 +1192,10 @@
     const context = registry.visible();
     const running = registry.list().filter(run => registry.isExecuting(run.runId) && registry.isAuthCurrent(run));
     if (running.some(run => ["browser", "takeover"].includes(openHold(run)?.ask))) return;
-    const owner = context && registry.isExecuting(context.runId) ? context
-      : running.find(run => usedWorkspace(run.metadata.agentActivity));
+    // The run that used the workspace first, the visible one among them;
+    // a visible run that never touched it only when none did.
+    const visibleRun = context && registry.isExecuting(context.runId) ? context : null;
+    const owner = [visibleRun, ...running].find(run => run && usedWorkspace(run.metadata.agentActivity)) || visibleRun;
     if (owner) {
       handback = { runId: owner.runId, seen: (owner.metadata.agentActivity || []).length };
       return;

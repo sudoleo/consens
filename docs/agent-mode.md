@@ -2551,10 +2551,10 @@ mit `audit_access`). Die
   Übernahme melden nichts. `agent-chat.js continueAfterHandback` entscheidet:
   Wartet ein Lauf auf den Browser (`ask_user` `browser` oder `takeover`), geht
   er von selbst weiter; seit 2026-11-06 auch einer in einem anderen Chat als
-  dem sichtbaren. Läuft der sichtbare noch, ohne zu warten (er schreibt etwa
-  die Antwort), oder ist der sichtbare Chat still, während die laufende
-  Nachricht eines anderen den Arbeitsplatz benutzt hat (er dient einem Chat
-  zur Zeit), schickt der Chat dieses Laufs nach dessen Ende „Done in the
+  dem sichtbaren. Hat eine laufende Nachricht den Arbeitsplatz benutzt (er
+  dient einem Chat zur Zeit; bei mehreren zählt die sichtbare), oder läuft
+  sonst der sichtbare Chat noch, ohne zu warten (er schreibt etwa die
+  Antwort), schickt der Chat dieses Laufs nach dessen Ende „Done in the
   browser.“ (deutsch „Fertig im Browser.“) als nächste Nachricht des Nutzers,
   außer der Lauf rief nach der Rückgabe selbst ein Werkzeug des Arbeitsplatzes
   auf, endete nicht erfolgreich oder steht dann nicht auf dem Schirm. Läuft
