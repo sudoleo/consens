@@ -1,0 +1,142 @@
+{
+  "_comment": "A reopened Consensus chat whose texts NFKC changes (U+2011, U+2026, CO₂) and whose difference carries a Resolve result. `bookmark` is the document as GET /bookmarks/{id} returns it, `turn` the same turn as GET /bookmarks/{id}/conversation serves it (chat_store.turn_detail), `version` the server's _bookmark_share_version of the document. Tested in tests/test_bookmarks.py and tests/js/bookmark-share-version.test.mjs.",
+  "bookmark": {
+    "id": "Q08yX2luZGV4",
+    "query": "Is the CO₂‑index of steel 1.8 t per tonne…?",
+    "mode": "Standard",
+    "chat_id": "cccccccccccccccccccccccccccccccc",
+    "turn_id": "22222222222222222222222222222222",
+    "share_result_id": "",
+    "responses": {
+      "consensus": "Steel emits about 1.8 t CO₂ per tonne… The figure is a mid‑range estimate.",
+      "differences_data": {
+        "claims": [
+          {
+            "anchor": "Steel emits about 1.8 t CO₂ per tonne…",
+            "agree": [
+              "OpenAI",
+              "Gemini"
+            ],
+            "dissent": []
+          }
+        ],
+        "differences": [
+          {
+            "claim": "Whether 1.8 t is the mid‑range",
+            "consensus_anchor": "The figure is a mid‑range estimate.",
+            "type": "contradiction",
+            "severity": "major",
+            "positions": [
+              {
+                "stance": "Mid‑range",
+                "models": [
+                  "OpenAI"
+                ],
+                "quote": "about 1.8 t"
+              },
+              {
+                "stance": "Upper end",
+                "models": [
+                  "Gemini"
+                ],
+                "quote": "closer to 2.2 t"
+              }
+            ],
+            "verify": "worldsteel CO₂ data",
+            "resolution": {
+              "outcome": "resolved",
+              "results": [
+                {
+                  "model": "OpenAI",
+                  "decision": "maintain",
+                  "position": "1.8 t is the mid‑range",
+                  "reason": "worldsteel average"
+                },
+                {
+                  "model": "Gemini",
+                  "decision": "revise",
+                  "position": "1.8 t fits",
+                  "reason": "2.2 t was a single plant"
+                }
+              ]
+            }
+          }
+        ],
+        "best_model": "OpenAI",
+        "models_compared": [
+          "OpenAI",
+          "Gemini"
+        ],
+        "agreement": {
+          "score": 72,
+          "level": "moderate",
+          "model_count": 2,
+          "major_contradictions": 1,
+          "minor_contradictions": 0,
+          "emphases": 0
+        }
+      }
+    }
+  },
+  "turn": {
+    "id": "22222222222222222222222222222222",
+    "position": 1,
+    "status": "completed",
+    "question": "Is the CO2‐index of steel 1.8 t per tonne...?",
+    "mode": "Standard",
+    "execution_mode": "consensus",
+    "consensus": "Steel emits about 1.8 t CO2 per tonne... The figure is a mid‐range estimate.",
+    "differences_data": {
+      "claims": [
+        {
+          "anchor": "Steel emits about 1.8 t CO₂ per tonne…",
+          "agree": [
+            "OpenAI",
+            "Gemini"
+          ],
+          "dissent": []
+        }
+      ],
+      "differences": [
+        {
+          "claim": "Whether 1.8 t is the mid‑range",
+          "consensus_anchor": "The figure is a mid‑range estimate.",
+          "type": "contradiction",
+          "severity": "major",
+          "positions": [
+            {
+              "stance": "Mid‑range",
+              "models": [
+                "OpenAI"
+              ],
+              "quote": "about 1.8 t"
+            },
+            {
+              "stance": "Upper end",
+              "models": [
+                "Gemini"
+              ],
+              "quote": "closer to 2.2 t"
+            }
+          ],
+          "verify": "worldsteel CO₂ data"
+        }
+      ],
+      "best_model": "OpenAI",
+      "models_compared": [
+        "OpenAI",
+        "Gemini"
+      ],
+      "agreement": {
+        "score": 72,
+        "level": "moderate",
+        "model_count": 2,
+        "major_contradictions": 1,
+        "minor_contradictions": 0,
+        "emphases": 0
+      }
+    },
+    "model_answers": {}
+  },
+  "version": "be27443f8217b9027ad68d8a78228e640f43ce0de5964dc044ca301446a18d45"
+}

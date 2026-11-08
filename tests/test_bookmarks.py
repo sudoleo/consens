@@ -1,4 +1,5 @@
 import base64
+import copy
 import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -13,7 +14,9 @@ from app.core import config as cfg
 from app.core.rate_limit import limiter
 from app.core.security import CustomSecurityMiddleware
 from app.services import persistence_guard, share_snapshots
-from app.services.chat_store import ChatCursorUnavailable, InvalidChatCursor
+from app.services.chat_store import (
+    ChatCursorUnavailable, InvalidChatCursor, normalize_question, turn_detail,
+)
 from test_chat_history import FakeChatDatabase, FakeTransaction as ChatFakeTransaction, complete_turn
 
 
@@ -533,7 +536,7 @@ def test_chat_bookmark_conversation_falls_back_without_losing_middle_turns():
     ]
 
 
-def _prepare_share_result(bookmark_ref, chat_store, *, new_result_id="R" * 16):
+def _prepare_share_result(bookmark_ref, chat_store, *, new_result_id="R" * 16, expected_version=""):
     app = FastAPI()
     app.state.limiter = limiter
     limiter.reset()
@@ -555,7 +558,8 @@ def _prepare_share_result(bookmark_ref, chat_store, *, new_result_id="R" * 16):
     ):
         response = TestClient(app).post(
             "/bookmark/consensus/share-result",
-            json={"id_token": "token", "bookmarkId": bookmark_ref.id},
+            json={"id_token": "token", "bookmarkId": bookmark_ref.id,
+                  "expectedVersion": expected_version},
         )
     payload = save_pending.call_args.args[0] if save_pending.called else None
     return response, payload
@@ -891,12 +895,58 @@ def test_bookmark_share_result_rejects_a_different_visible_revision():
     save_pending.assert_not_called()
 
 
+SHARE_VERSION = json.loads((Path(__file__).parent / "fixtures"
+                            / "bookmark_share_version.json").read_text(encoding="utf-8"))
+
+
+def test_the_share_version_is_the_shared_contract_with_firebase_js():
+    """firebase.js sends the version of the bookmark it loaded, never of the
+    transcript turn it shows (tests/js/bookmark-share-version.test.mjs): that
+    turn comes NFKC-folded and without the bookmark's Resolve result."""
+    stored = SHARE_VERSION["bookmark"]
+    assert bookmarks_router._bookmark_share_version(stored) == SHARE_VERSION["version"]
+
+    differences = copy.deepcopy(stored["responses"]["differences_data"])
+    del differences["differences"][0]["resolution"]
+    served = turn_detail(stored["turn_id"], {
+        "position": 1, "status": "completed", "mode": "Standard",
+        "question": normalize_question(stored["query"]),
+        "consensus": stored["responses"]["consensus"],
+        "differences_data": differences,
+    }, {})
+    turn = SHARE_VERSION["turn"]
+    for field in ("id", "question", "consensus", "differences_data"):
+        assert served[field] == turn[field], field
+    assert turn["question"] != stored["query"]
+    assert turn["consensus"] != stored["responses"]["consensus"]
+
+
+def test_a_reopened_chat_shares_with_the_version_of_its_stored_bookmark():
+    stored = copy.deepcopy(SHARE_VERSION["bookmark"])
+    bookmark_ref = FakeBookmarkRef(stored.pop("id"), stored)
+    turn = SHARE_VERSION["turn"]
+
+    response, payload = _prepare_share_result(
+        bookmark_ref,
+        OneTurnChatStore(_completed_turn(
+            question=turn["question"], consensus=turn["consensus"],
+            differences_data=turn["differences_data"],
+        )),
+        expected_version=SHARE_VERSION["version"],
+    )
+
+    assert response.status_code == 200, response.text
+    [difference] = payload["differences_data"]["differences"]
+    assert difference["resolution"]["outcome"] == "resolved"
+    assert bookmark_ref.data["share_result_id"] == "R" * 16
+
+
 def test_bookmark_frontend_prepares_share_result():
     root = Path(__file__).resolve().parents[1]
     firebase = (root / "static" / "firebase.js").read_text(encoding="utf-8")
     share_dialog = (root / "static" / "js" / "share-dialog.js").read_text(encoding="utf-8")
     assert 'fetch("/bookmark/consensus/share-result"' in firebase
-    assert "prepareBookmarkShareResult(bookmark);" in firebase
+    assert "prepareBookmarkShareResult(bookmark, sourceBookmark);" in firebase
     assert "resolveCurrentShareResultId" in share_dialog
 
 

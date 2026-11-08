@@ -8065,7 +8065,10 @@ nach einem Lauf und der Consensus-Teil der Demo) ist entfernt. Was bleibt:
 - Ein gespeicherter Consensus-Chat oeffnet wie bisher ueber
   `firebase.js::loadSingleBookmarkUI`: Antwort mit Markern
   (`renderConsensusInsights`), Verdict, Differences-Karten samt gespeicherter
-  Resolve-Ergebnisse (`buildResolveSection` zeigt nur noch `diff.resolution`),
+  Resolve-Ergebnisse (`buildResolveSection` zeigt nur noch `diff.resolution`;
+  für den Turn, den das Bookmark nennt, kommen die `differences_data` vom
+  Bookmark, weil nur dort ein Resolve-Ergebnis steht —
+  `materializeConversationBookmark`),
   Quellen, Compare answers (`answerReader`), Verlauf (`thread-history.js`),
   Fuss (`consensusFooter.render`) sowie Share/Watch/Cite (`consensus-actions.js`,
   `/bookmark/consensus/share-result`).
@@ -9226,7 +9229,18 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   toter Knopf „Saved consensus unavailable“). Share/Watch warten
   auf diese Rehydration und können dadurch auch außerhalb der Ursprungssession
   verwendet werden. Ein Versions-Gate verhindert, dass eine verspätete Antwort
-  auf ein inzwischen anderes angezeigtes Ergebnis zeigt.
+  auf ein inzwischen anderes angezeigtes Ergebnis zeigt. Dazu schickt der
+  Browser `expectedVersion`, den SHA-256 über Frage, Consensus, `chat_id`,
+  `turn_id`, `share_result_id` und `differences_data` des Bookmarks
+  (`firebase.js::bookmarkShareVersionParts` ↔
+  `bookmarks.py::_bookmark_share_version`); weicht er vom gespeicherten
+  Dokument ab, antwortet der Server 409 „Bookmark changed. Reopen it before
+  sharing.“. Gehasht wird das geladene Dokument (`GET /bookmarks/{id}`), nicht
+  der angezeigte Transcript-Turn: dessen Texte kommen NFKC-gefaltet
+  (`chat_store.turn_detail`), seine Differences ohne Resolve-Ergebnis. Nur die
+  `turn_id` ist die des angezeigten Turns, damit eine Ansicht eines anderen
+  Turns als des vom Bookmark genannten abgelehnt wird. Gemeinsame Probe:
+  `tests/fixtures/bookmark_share_version.json`.
 - **Agent-Antworten (seit 2026-10-21).** Bis dahin lehnte der Endpunkt
   Agent-Chats ab (400 „Sharing Agent Beta answers is not available yet.“),
   obwohl Agent seit Oktober der Standard ist. `POST /agent/chats/{chat}/turns/

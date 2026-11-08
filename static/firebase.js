@@ -2388,7 +2388,8 @@ window.forgetPreparedShareResult = function () {
   return true;
 };
 
-function prepareBookmarkShareResult(bookmark) {
+// `bookmark` is the chat as shown, `stored` the bookmark document as loaded.
+function prepareBookmarkShareResult(bookmark, stored = bookmark) {
   window.clearPreparedBookmarkShareResult();
   const bookmarkId = bookmark?.id;
   const consensusText = bookmark?.responses?.consensus;
@@ -2407,10 +2408,14 @@ function prepareBookmarkShareResult(bookmark) {
   }
   // Bind the exact snapshot on screen. The same bookmark document can advance
   // to a newer follow-up while this saved view remains visible; the server must
-  // reject preparing that newer revision for an older view.
+  // reject preparing that newer revision for an older view. The server hashes
+  // the document as it stores it (_bookmark_share_version), never the
+  // transcript turn the view shows: that turn's texts come NFKC-folded and its
+  // differences without a Resolve result. The turn on screen stays bound, so a
+  // view of another turn than the one the document names is refused.
   window.currentBookmarkShareResultContext = {
     bookmarkId,
-    versionParts: bookmarkShareVersionParts(bookmark)
+    versionParts: bookmarkShareVersionParts({ ...stored, turn_id: bookmark.turn_id })
   };
   return window.currentBookmarkShareResultContext;
 }
@@ -2619,10 +2624,17 @@ function materializeConversationBookmark(bookmark, conversationTurns) {
   }
 
   const currentTurn = turns[turns.length - 1];
+  // The document's structured differences belong to the turn it names and
+  // can carry a Resolve result that turn lacks; its share takes them the
+  // same way (bookmarks.py).
+  const storedDifferences = bookmark?.responses?.differences_data;
+  const ownDifferences = currentTurn.turn_id && currentTurn.turn_id === String(bookmark?.turn_id || "")
+    && storedDifferences && typeof storedDifferences === "object" && !Array.isArray(storedDifferences)
+    ? storedDifferences : null;
   const responses = {
     consensus: currentTurn.consensus || "",
     differences: currentTurn.differences || "",
-    differences_data: currentTurn.differences_data || null,
+    differences_data: ownDifferences || currentTurn.differences_data || null,
   };
   const modelLabels = {};
   Object.entries(currentTurn.model_answers || {}).forEach(([provider, item]) => {
@@ -2790,7 +2802,7 @@ function loadSingleBookmarkUI(sourceBookmark, conversationTurns = [], options = 
     }
     // Never let Share/Watch target a run that was displayed previously.
     // A consensus bookmark gets a reusable server-side snapshot on Share/Watch.
-    prepareBookmarkShareResult(bookmark);
+    prepareBookmarkShareResult(bookmark, sourceBookmark);
 
     // --- Quellen wiederherstellen ---
     // 1. In den App-State, damit injectMarkdown (markdown-stream.js) darauf zugreifen kann
