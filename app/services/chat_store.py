@@ -556,7 +556,10 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         # which would invalidate a completed review even on trailing newlines.
         # Agent output is already bounded at generation/storage time.
         result["assistant_response"] = result["consensus"] = text if isinstance(text, str) else ""
-        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_watch_run", "agent_settings_proposal", "agent_vm", "agent_pull_request"):
+        for field in ("agent_settings", "agent_activity", "agent_usage", "agent_finish_reason", "agent_reasoning_truncated", "agent_review", "agent_failure", "agent_memory", "agent_watch", "agent_watch_run", "agent_settings_proposal", "agent_vm", "agent_pull_request",
+                      # Which limit ended its work (reason code, steps, seconds): the
+                      # page says so under the answer (agent-review.js wrapUpNote).
+                      "agent_wrap_up"):
             if field in source:
                 result[field] = source[field]
         # Its answer stands while its reviewers still work (agent_runs.hand_over):

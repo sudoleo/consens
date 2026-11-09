@@ -4703,7 +4703,18 @@ Antworten), danach prüfen die Prüfer sie; mit ungeprüften Worker-Ergebnissen
 gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige
 Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`). Seit 2026-10-30
 nennt das Wrap-up dem Agenten die Grenze (`_limit_fact`), und der Turn hält sie
-fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Jeder
+fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Seit
+2026-11-09 bekommt sie auch der Browser (`chat_store.turn_detail`, schon mit
+der Übergabe: `agent_runs.hand_over`): unter der Antwort steht in den Worten
+der App, welche Grenze es war (`agent-review.js` `wrapUpNote`, im Verlauf als
+`p.agent-review-note`), und bei Schritt-, Zeit-, Kontext- und
+Wiederholungsgrenze der Knopf „Continue“ (`agent-chat.js` `wrapUpNotice`,
+`continueWork`: „Continue.“ als nächste Nachricht des Chats, wie
+`sendHandback`); bei `allowance` stattdessen die Reset-Zeit, sofern der Turn
+vom heutigen UTC-Tag ist. Der Hinweis ist `role="status"`, kein Alarm
+(`renderError`, `calm`). Vorher las sich ein Wrap-up wie eine Antwort, die der
+Agent so geben wollte; ein Nutzer schrieb dreimal „continue“ in dieselbe
+Grenze. Jeder
 Schritt des Agenten fragt mit `parallel_tool_calls` (`_parallel_calls`; seit
 2026-11-05 immer, vorher nur bei offenem Arbeitsplatz, Tempo-Plan P4); die
 Aufrufe laufen nacheinander, höchstens `TOOL_CALLS_PER_STEP` = 4, jeder mit

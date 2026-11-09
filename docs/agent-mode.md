@@ -1364,6 +1364,19 @@ Screenshot mit `browser` oder `find_pictures` mit der Adresse (gleiche id).
 `screenshot` löst wie `vm_read_file` keine eigene Live-Runde aus (Max'
 Entscheidung; siehe [agent-work-log.md](agent-work-log.md) „Wann“).
 
+**Die Grenze steht unter der Antwort (seit 2026-11-09).** Bis dahin sagte
+nur die Antwort des Modells, dass eine Grenze sie beendet hatte; ein Nutzer,
+dessen Lauf dreimal an derselben (falschen) Kontingentgrenze endete, schrieb
+dreimal „continue“ und ging. Jetzt sagt die App es selbst, in einem ruhigen
+Satz unter der Antwort (`agent-review.js` `wrapUpNote`, `WRAP_UPS`; im
+Verlauf als `p.agent-review-note`), und bietet bei Schritt-, Zeit-, Kontext-
+und Wiederholungsgrenze „Continue“ an (`agent-chat.js` `wrapUpNotice`,
+`continueWork`: „Continue.“ bzw. „Mach weiter.“ als nächste Nachricht, die
+Antwort und der Arbeitsbericht des Laufs stehen dem Agenten im Verlauf).
+Bei `allowance` nennt sie die Reset-Zeit statt eines Knopfs, bei `invalid`
+nur den Grund. Der Browser bekommt `agent_wrap_up` mit dem Turn
+(`chat_store.turn_detail`), schon ab der Übergabe (`agent_runs.hand_over`).
+
 **Messen (I1, I4, I6, I7, I9).** `agent_wrap_up` am Turn und der App-Eintrag
 `limit` nennen die Grenze eines Wrap-ups. Werkzeugeinträge im
 Arbeitsprotokoll tragen `started_at`/`duration_ms`, Gate-Einträge `step` und

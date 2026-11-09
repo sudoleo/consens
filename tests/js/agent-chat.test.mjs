@@ -51,6 +51,13 @@ function boot({ allowed = true, catalog = CATALOG, body = BODY, setup: prepare, 
   return setup;
 }
 
+// The page's own sentence for a limit (agent-review.js), which these cases
+// do not load otherwise.
+function wrapUpNote() {
+  return loadScripts(["static/js/agent-review.js"], { body: "<section></section>",
+    before(window) { window.App = {}; } }).window.App.agentReview.wrapUpNote;
+}
+
 async function selectAgent(window) {
   // The one mode choice (run-mode.js); agent-chat.js re-renders on its event.
   window.App.runMode.set("compare");
@@ -416,6 +423,64 @@ describe("single-model agent chat", () => {
     w.App.agentChat.project(w.App.runRegistry.visible());
     expect(d.getElementById('agentAnswerError').textContent).toBe('Stopped after 30 minutes without your decision.');
     expect([...d.querySelectorAll('#agentAnswerErrorActions button')].map(b => b.textContent)).toEqual(['Retry']);
+    dom.window.close();
+  });
+
+  // An answer written at a limit of its message is no failure: the page says
+  // which limit in the app's words and offers to go on with the work.
+  it('says which limit ended a response and continues the work in the same chat', async () => {
+    const {window:w,document:d,dom} = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div><div id="bookmarksContainer"></div>');
+    await selectAgent(w);
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), failureNote: vi.fn(() => ''), wrapUpNote: wrapUpNote() };
+    const turn = { id: 'c'.repeat(32), question: 'Build the importer', consensus: 'Half of it is built.', mode: 'Agent',
+      execution_mode: 'agent', status: 'completed', completed_at: new Date().toISOString(),
+      agent_wrap_up: { reason: 'steps', steps: 24, seconds: 310.2 } };
+    w.streamSSERequest.mockImplementationOnce(async () => ({ ok: true, data: { response: turn.consensus,
+      chat_id: 'a'.repeat(32), turn_id: turn.id, turn } }));
+    d.getElementById('questionInput').value = turn.question;
+    await w.App.agentChat.send();
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    const note = d.getElementById('agentAnswerError');
+    expect(note.hidden).toBe(false);
+    expect(note.textContent).toBe('This response reached its step limit.');
+    expect(note.getAttribute('role')).toBe('status');
+    const buttons = [...d.querySelectorAll('#agentAnswerErrorActions button')];
+    expect(buttons.map(b => b.textContent)).toEqual(['Continue']);
+    d.getElementById('questionInput').value = 'My own draft';
+    buttons[0].click();
+    await vi.waitFor(() => expect(w.streamSSERequest).toHaveBeenCalledTimes(2));
+    const [first, second] = w.streamSSERequest.mock.calls.map(call => call[1]);
+    expect(second).toMatchObject({ chat_id: first.chat_id, question: 'Continue.', file_ids: [], recover_only: false });
+    expect(d.getElementById('questionInput').value).toBe('My own draft');
+    dom.window.close();
+  });
+
+  it('names the reset instead of Continue when the day’s allowance ended a response', async () => {
+    const {window:w,document:d,dom} = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div><div id="bookmarksContainer"></div>');
+    await selectAgent(w);
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), failureNote: vi.fn(() => ''), wrapUpNote: wrapUpNote() };
+    const turn = { id: 'c'.repeat(32), question: 'Build the importer', consensus: 'Half of it is built.', mode: 'Agent',
+      execution_mode: 'agent', status: 'completed', completed_at: new Date().toISOString(),
+      agent_wrap_up: { reason: 'allowance', steps: 3, seconds: 41 } };
+    w.streamSSERequest.mockImplementationOnce(async () => ({ ok: true, data: { response: turn.consensus,
+      chat_id: 'a'.repeat(32), turn_id: turn.id, turn } }));
+    d.getElementById('questionInput').value = turn.question;
+    await w.App.agentChat.send();
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(d.getElementById('agentAnswerError').textContent)
+      .toMatch(/^This response ended early because today’s allowance is nearly used up\. It resets at \S+/);
+    expect(d.querySelectorAll('#agentAnswerErrorActions button')).toHaveLength(0);
+    // An answer of an earlier day names no reset time: that day is over.
+    w.App.runRegistry.visible().consensus.completedTurn.completed_at = '2026-01-05T10:00:00Z';
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(d.getElementById('agentAnswerError').textContent)
+      .toBe('This response ended early because the day’s allowance was nearly used up.');
+    // One that ended by itself says nothing.
+    delete w.App.runRegistry.visible().consensus.completedTurn.agent_wrap_up;
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(d.getElementById('agentAnswerError').hidden).toBe(true);
     dom.window.close();
   });
 

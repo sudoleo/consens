@@ -1332,3 +1332,23 @@ it('says an answer nobody reviewed by the account\'s setting is not reviewed, ne
     dom.window.close();
   }
 });
+
+// An answer written at a limit of its message (agent_delegation.py
+// WRAP_UP_REASONS): the app's own sentence for the limit, and whether a
+// follow-up can go on with the work.
+it('names the limit a response ended at and whether a follow-up can go on', () => {
+  const { window: w } = setup();
+  const note = w.App.agentReview.wrapUpNote;
+  const turn = (reason, more = {}) => ({ status: 'completed', agent_wrap_up: { reason, steps: 3, seconds: 12 }, ...more });
+  expect(note(turn('steps'))).toEqual({ text: 'This response reached its step limit.', reason: 'steps', resume: true });
+  expect(['time', 'context', 'repeat'].map(reason => note(turn(reason)).resume)).toEqual([true, true, true]);
+  expect(['allowance', 'invalid'].map(reason => note(turn(reason)).resume)).toEqual([false, false]);
+  // Its answer stands while the reviewers still work on it.
+  expect(note(turn('time', { status: 'pending', agent_answer_fixed: true })).reason).toBe('time');
+  // No limit, an unknown one, a failure or a turn without its answer: nothing.
+  expect(note({ status: 'completed' })).toBeNull();
+  expect(note(turn('other'))).toBeNull();
+  expect(note(turn('steps', { agent_failure: { code: 'run_limit', error: 'x' } }))).toBeNull();
+  expect(note(turn('steps', { status: 'pending' }))).toBeNull();
+  expect(note(null)).toBeNull();
+});

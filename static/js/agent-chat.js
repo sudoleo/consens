@@ -511,7 +511,8 @@
         turnId: basis.currentTurn?.status === 'completed' ? basis.currentTurn.id || basis.turnId : '',
         checked: basis.currentTurn?.task_checks });
       renderAnswer(basis.consensus || "", failure?.error ? failureNotice(failure, basis.currentTurn?.agent_review, basis.consensus || "")
-        : (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.' : ''));
+        : (basis.currentTurn?.status === 'failed' ? 'This response did not finish successfully.'
+          : wrapUpNotice(basis.currentTurn, { resume: !basis.continuationUnavailable })));
       markLiveTurn(basis.currentTurn);
       App.agentActivity?.renderTurn(activityHost(`${basis.chatId}:${basis.turnId}`), basis.currentTurn, {
         vmRestore: basis.currentTurn?.agent_vm?.checkpoint && basis.currentTurn?.status !== 'pending'
@@ -680,6 +681,8 @@
     if (errorEl) {
       if (errorEl.textContent !== window.App.t(text)) errorEl.textContent = text;
       errorEl.hidden = !text;
+      // A limit the response reached is no failure: said, not announced.
+      errorEl.setAttribute('role', error?.calm ? 'status' : 'alert');
     }
     if (!actionsEl) return;
     const actions = text ? error.actions || [] : [];
@@ -727,6 +730,19 @@
     // A refused request names the way out itself: another chat model.
     if (['provider_rate_limited', 'provider_unavailable', 'provider_rejected', 'model_declined'].includes(code)) actions.push(['choose-model', 'Choose another model']);
     return { text: note ?? (failure?.error || failure?.message || ''), actions };
+  }
+  // Under an answer that ended at a limit of its message (agent-review.js
+  // wrapUpNote): which limit, and Continue where a follow-up goes on with the
+  // work. The day's reset only for a response of today's (UTC) allowance.
+  function wrapUpNotice(turn, { resume = true } = {}) {
+    const note = App.agentReview?.wrapUpNote?.(turn);
+    if (!note) return '';
+    const ended = Date.parse(turn.completed_at || turn.updated_at || turn.created_at || '');
+    const today = Number.isFinite(ended) && new Date(ended).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+    if (note.reason === 'allowance' && today) {
+      return { text: `This response ended early because today’s allowance is nearly used up. It resets at ${resetTime()}.`, calm: true };
+    }
+    return { text: note.text, calm: true, actions: resume && note.resume ? [['continue', 'Continue']] : [] };
   }
   // A brand-new chat has no files or actions until the run reports resources
   // or finishes; its first lists need no request.
@@ -858,7 +874,8 @@
     App.taskChecks?.scope(document.getElementById("agentAnswerBody"), { chatId: context.metadata.chatId,
       turnId: savedTurn ? savedTurn.id || savedTurn.turn_id : '', checked: savedTurn?.task_checks });
     renderAnswer(state.text || state.streamText || "", failure ? failureNotice(failure,
-      state.completedTurn?.agent_review || context.metadata.agentReview, running ? "" : state.text || state.streamText || "", { retry }) : "",
+      state.completedTurn?.agent_review || context.metadata.agentReview, running ? "" : state.text || state.streamText || "", { retry })
+      : (running ? "" : wrapUpNotice(state.completedTurn)),
       { streaming: running && !state.text && !settled });
     // A finished turn is what the next message continues (setCompletedBasis).
     markLiveTurn(running ? null : state.completedTurn);
@@ -1145,6 +1162,7 @@
     else if (action === 'google-open') App.agentGoogle?.open?.();
     else if (action === 'reload') { catalogStatus = 'idle'; render(); }
     else if (action === 'retry') retryFailed();
+    else if (action === 'continue') continueWork();
     else if (action === 'status-retry') App.retryAccountStatus?.();
     window.updateQuestionInputAccess?.();
   }
@@ -1172,6 +1190,20 @@
       question: basis.question, basis, chatId: basis.chatId, bookmarkId: basis.bookmarkId,
       fileIds: turn.agent_settings?.file_ids || [], attachmentMeta: turn.attachments || [],
       googleSelection: null, googleDataConsent: App.agentGoogle?.consent?.() === true,
+    } });
+  }
+  // Continue under an answer that ended at a limit of its message
+  // (wrapUpNotice): the chat's next message, in the reader's language. The
+  // agent reads the answer it wrote and, after work in the workspace, the
+  // record of what that response did (agent_compaction.work_record).
+  function continueWork() {
+    const context = registry.visible();
+    if (context && registry.isExecuting(context.runId)) return;
+    const basis = registry.getSelectedConversationBasis();
+    if (!basis?.chatId || basis.continuationUnavailable) return;
+    return send(null, { retry: {
+      question: App.t("Continue."), basis, chatId: basis.chatId, bookmarkId: basis.bookmarkId,
+      fileIds: [], attachmentMeta: [], googleSelection: null, googleDataConsent: App.agentGoogle?.consent?.() === true,
     } });
   }
   // Handing the workspace's browser back with its button (workspace-view.js,

@@ -608,6 +608,10 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 patch["agent_work_record"] = completion.work_record
             if getattr(completion, "vm", None):
                 patch["agent_vm"] = completion.vm
+            if isinstance(getattr(completion, "wrap_up", None), dict):
+                # The page offers to go on from the answer's first moment,
+                # not only once its review ended (finish_run).
+                patch["agent_wrap_up"] = completion.wrap_up
             tx.update(turn_ref, patch)
             chat_patch = {"agent_lock_until": datetime.now(timezone.utc), "updated_at": firestore.SERVER_TIMESTAMP}
             if isinstance(getattr(completion, "workspace_used", None), bool):

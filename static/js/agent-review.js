@@ -53,6 +53,26 @@
     if (reviewedAnswer(review, raw)) return '';
     return 'This answer may be incomplete because the run ended early. Everything received has been saved, and you can ask again at any time.';
   }
+  // A response that ended at one of its per-message limits wrote its answer
+  // from what it had (agent_delegation.py WRAP_UP_REASONS). The app says
+  // which limit in its own words: otherwise the stop reads as an answer the
+  // agent chose to give, and the reader cannot tell that a follow-up goes on
+  // with the work. ``resume``: whether it can (not on a used-up day, nor
+  // after tool requests that kept failing).
+  const WRAP_UPS = {
+    steps: 'This response reached its step limit.',
+    time: 'This response reached its time limit.',
+    context: 'This response reached the model’s context limit.',
+    repeat: 'This response ended because the model repeated the same step without progress.',
+    invalid: 'This response ended because the model’s tool requests kept failing.',
+    allowance: 'This response ended early because the day’s allowance was nearly used up.',
+  };
+  function wrapUpNote(turn) {
+    const answered = turn?.status === 'completed' || turn?.agent_answer_fixed === true;
+    const reason = answered && !turn.agent_failure ? turn.agent_wrap_up?.reason : '';
+    const text = WRAP_UPS[reason];
+    return text ? { text, reason, resume: !['allowance', 'invalid'].includes(reason) } : null;
+  }
   // The agreement score under an Agent answer: the same number and words as
   // the Consensus verdict (consensus-insights.js), set quietly in the
   // evidence row. Only the number carries the traffic-light colour. Settings
@@ -1280,5 +1300,5 @@
     // review object; the last built context of the comparison still opens.
     return (review && activityContexts.get(review) || []).find(c => c.key === key) || contextsByKey.get(key) || null;
   }
-  App.agentReview = { render, renderActivity, failureNote, failureReason, contextFor };
+  App.agentReview = { render, renderActivity, failureNote, wrapUpNote, failureReason, contextFor };
 })();

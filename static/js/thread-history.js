@@ -315,10 +315,13 @@
         answer.insertBefore(activity, answerBody);
         const failureText = turnData.agent_failure?.error && (window.App.agentReview?.failureNote?.(
           turnData.agent_failure, turnData.agent_review, turnData.consensus || '') ?? turnData.agent_failure.error);
-        if (failureText) {
+        // Else which limit of its message the answer ended at, if any
+        // (agent-review.js wrapUpNote): one quiet line, as for a failure.
+        const noteText = failureText || window.App.agentReview?.wrapUpNote?.(turnData)?.text;
+        if (noteText) {
           const failure = document.createElement("p");
           failure.className = "agent-review-note";
-          failure.textContent = failureText;
+          failure.textContent = noteText;
           answer.append(failure);
         }
         window.App.agentReview?.render(answerBody, turnData.agent_review,

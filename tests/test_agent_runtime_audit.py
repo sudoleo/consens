@@ -128,6 +128,9 @@ def test_a_wrap_up_says_which_limit_in_the_log_on_the_turn_and_to_the_agent(stor
     assert turn["status"] == "completed" and turn["assistant_response"] == ANSWER
     assert turn["agent_wrap_up"]["reason"] == "steps" and turn["agent_wrap_up"]["steps"] == 2
     assert isinstance(turn["agent_wrap_up"]["seconds"], float)
+    # The browser gets it with the turn, live and from the history: the page
+    # says which limit it was and offers to go on.
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_wrap_up"] == turn["agent_wrap_up"]
     [(entry, text)] = log_entries(loop, kind="app", name="limit")
     assert entry["actor"] == "app" and json.loads(text)["reason"] == "steps"
     # The agent reads which limit, and that a follow-up message can go on.
