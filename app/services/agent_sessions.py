@@ -93,10 +93,13 @@ def check_answer(hold, action, choice=None):
 
 
 def root_usage(root):
-    """Turn usage including compacted steps, for every reader of root maps."""
+    """Turn usage including compacted steps and the run's paid calls that are
+    no model steps (AgentRunStore.book_service), for every reader of root maps."""
     usages = list((root.get("step_usage") or {}).values())
     if root.get("compacted_steps"):
         usages.insert(0, root.get("compacted_usage"))
+    if root.get("service_usage"):
+        usages.append(root["service_usage"])
     return aggregate_usage(usages)
 
 

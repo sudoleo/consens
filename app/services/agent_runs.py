@@ -589,6 +589,51 @@ class AgentRunStore(AgentSessionStore, ChatStore):
 
         return self._agent_transaction(uid, operation)
 
+    def service_ref(self, uid, chat_id, turn_id, call):
+        """The receipt of one paid call to a service that is no model (book_service)."""
+        if not re.fullmatch(r"[a-f0-9]{32}", call):
+            raise ValueError("Invalid service call")
+        key = hashlib.sha256(f"agent\0{chat_id}\0{turn_id}\0service:{call}".encode()).hexdigest()
+        return self.db.collection("users").document(uid).collection("llm_calls").document(key)
+
+    def book_service(self, uid, chat_id, turn_id, *, run_token, call, service, operation, usage, requests=1):
+        """Book a paid call of the run to a service that is no model (Exa's
+        search and page text, exa.py): a receipt of its own, charged to the
+        day's allowance as measured (agent_quota.book_service) and added to
+        the run's usage on its root (``service_usage``, agent_sessions.root_usage).
+
+        Written once the call returned, in one transaction: a receipt that
+        never stands as "running" cannot hold up the run's end (finish_run)
+        or be left for the reaper. ``call``: 32 hex characters naming the
+        call; False when its receipt already stands (a retried write)."""
+        receipt_ref = self.service_ref(uid, chat_id, turn_id, call)
+        root_ref = self.receipt_ref(uid, chat_id, turn_id)
+        from app.services import agent_budget_config
+        from app.services.agent_costs import aggregate_usage
+        day = agent_quota.period_key(agent_budget_config.get_config(self.db))
+        daily_ref = agent_quota.quota_ref(self.db, uid, day)
+
+        def book(tx):
+            tombstone, receipt, root, daily = self._read_all(tx, (
+                persistence_guard.deletion_ref(self.db, uid), receipt_ref, root_ref, daily_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
+            if receipt.exists:
+                return False
+            tx.set(daily_ref, agent_quota.book_service(daily.to_dict(), usage))
+            tx.set(receipt_ref, {
+                "schema_version": 3, "purpose": "agent", "step": f"service:{call}", "service": service,
+                "operation": operation, "requests": requests, "chat_id": chat_id, "turn_id": turn_id,
+                "status": "succeeded", "usage": usage, "usage_status": "measured", "quota_day": day,
+                "quota_reserved": 0, "quota_charged": agent_quota.measured_charge(usage) or 0,
+                "created_at": firestore.SERVER_TIMESTAMP, "settled_at": firestore.SERVER_TIMESTAMP})
+            data = root.to_dict() or {}
+            if run_token and data.get("run_token") == run_token:
+                tx.update(root_ref, {"service_usage": aggregate_usage(
+                    [item for item in (data.get("service_usage"), usage) if item])})
+            return True
+
+        return self._agent_transaction(uid, book)
+
     def hand_over(self, uid, chat_id, turn_id, *, run_token, completion):
         """The answer is fixed and only its review is left (agent_audit): the
         chat is free for its next message from here on (DelegationLoop._hand_over).

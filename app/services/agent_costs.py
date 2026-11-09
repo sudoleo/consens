@@ -175,6 +175,13 @@ class RunCosts:
             return model.max_output_tokens
         return min(model.max_output_tokens, 1 + (nanos - low) * (model.max_output_tokens - 1) // (high - low))
 
+    def add(self, usage):
+        """A paid call that is no model step (service_usage): in the run's
+        total, nothing was reserved for it."""
+        with self._lock:
+            self.usages.append(usage)
+            self.cost += usage.get("estimated_cost_nano_usd") or 0
+
     def reconcile(self, reservation, usage):
         with self._lock:
             self.usages.append(usage)
@@ -200,6 +207,17 @@ def remaining_reservation(reservation, usage):
         if usage.get("cost_complete", usage.get("complete", True)) and usage.get("estimated_cost_nano_usd") is not None:
             cost = usage["estimated_cost_nano_usd"]
     return tokens, cost
+
+
+def service_usage(cost_nanos, *, searches=0):
+    """The usage of a paid call to a service that is no model (Exa's search
+    and page text): its measured cost, no tokens and no model call, so that
+    sums with it stay complete (aggregate_usage). ``searches``: the web
+    searches it ran."""
+    return {**{field: 0 for field in USAGE_FIELDS}, "estimated_cost_nano_usd": max(0, int(cost_nanos)),
+            "web_search_requests": max(0, int(searches)), "complete": True, "cost_complete": True,
+            "measured_calls": 0, "unmetered_calls": 0, "cost_source": "provider", "source": "provider",
+            "billing_mode": "simulation", "currency": "USD"}
 
 
 def _call_counts(usage):

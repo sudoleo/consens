@@ -27,7 +27,7 @@ def _comparison():
 def _reviewer():
     from app.services.agent_audit import review_system_prompt
     from app.services.prompt_config import DEFAULT_TIMEZONE
-    return _DATE_CONTEXT.sub(DATE_PLACEHOLDER, review_system_prompt(DEFAULT_TIMEZONE), count=1)
+    return _DATE_CONTEXT.sub(DATE_PLACEHOLDER, review_system_prompt(DEFAULT_TIMEZONE, own_search=True), count=1)
 
 
 def _audit_blocks():
@@ -44,8 +44,9 @@ def _watch_run():
 
 
 def _review_facts():
-    from app.services.prompt_defaults import AGENT_REVIEW_FACTS
-    return "\n\n".join(f"[{setting}] {fact}" for setting, fact in AGENT_REVIEW_FACTS.items())
+    from app.services.prompt_defaults import AGENT_PROVIDER_SEARCH_FACT, AGENT_REVIEW_FACTS
+    return "\n\n".join([*(f"[{setting}] {fact}" for setting, fact in AGENT_REVIEW_FACTS.items()),
+                         f"[always and workspace, without web_search] {AGENT_PROVIDER_SEARCH_FACT}"])
 
 
 def _temporary_chat():
@@ -82,7 +83,8 @@ def _delegation(name):
 _ENTRIES = (
     ("agent", "Agent: instructions",
      "System prompt of the user's selected Agent model in every chat (one mode since 2026-10-31): the agent "
-     "researches with its own web search in every step and writes the answer itself (AGENT_AUDIT_ANSWER_SECTION); "
+     "researches with its own web search (the web_search tool on Exa; the provider's search inside its steps "
+     "where Exa is not available) and writes the answer itself (AGENT_AUDIT_ANSWER_SECTION); "
      "compare_models asks the models the user chose (its description agent_comparison.py:AUDIT_COMPARE), and "
      "those models review its work and its answer (\"Agent: reviewers\"), no judge. Since 2026-10-28 it says "
      "only what the model cannot know, the app's contracts and the rules of safety and truth. At runtime the "
@@ -92,7 +94,8 @@ _ENTRIES = (
      "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent")),
     ("agent_review_facts", "Agent: who reviews",
      "Appended right after \"Agent: instructions\", one of three by the user's reviewers setting (Settings > "
-     "Agent, since 2026-11-01): always, only from the agent's first step in the workspace on, or off.",
+     "Agent, since 2026-11-01): always, only from the agent's first step in the workspace on, or off. The last "
+     "one follows a reviewed setting where the agent has no web_search tool.",
      "prompt_defaults.py:AGENT_REVIEW_FACTS", _review_facts),
     ("agent_temporary_chat", "Agent: temporary chat",
      "Appended after \"Agent: who reviews\" in a temporary chat (since 2026-11-01), which has the tools of "
@@ -120,7 +123,8 @@ _ENTRIES = (
      "System prompt of each model the user chose, as a reviewer: it follows the agent's work log in rounds (each "
      "user message holds the new entries as JSON, up to two search rounds each) and reviews the fixed answer in a "
      "final round (the rest of the log and the answer, up to three search rounds); the message's files go along. "
-     "The date line is filled in per request.",
+     "The date line is filled in per request. Shown for an agent with the web_search tool; without it the "
+     "sentence on its searches is agent_audit.py:REVIEW_SEARCH_INSIDE.",
      "agent_audit.py:review_system_prompt()", _reviewer),
     ("agent_vm", "Agent: Linux VM",
      "Appended to \"Agent: instructions\" before the memory instructions when the agent has its workspace "

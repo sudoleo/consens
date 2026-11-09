@@ -342,15 +342,18 @@ tauschte sie ihn nur im Audit gegen den Vergleichs-Prompt, Schlüssel
 Dateien, Dokumenten und Google (`agent_watch.AUDIT_PROMPT`,
 `agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
 `agent_files.AUDIT_UNTRUSTED`; im Admin „Agent: tool blocks“) und mit dem
-Arbeitsplatz VM, GitHub und Plan. Der Agent sucht in jedem Schritt mit bis zu
-`AGENT_SEARCH_ROUNDS` (5) Runden, seit 2026-11-09 unabhängig vom Rest des
-Tageskontos (die Suche wird gebucht, nicht reserviert, siehe „Reservierung“);
-nur wenn das Kontextfenster sie nicht fasst, geht `smaller_search`
-5 → 3 → 1 → 0. Sein Text streamt wie jede Antwort, auch nach
+Arbeitsplatz VM, GitHub und Plan. Der Agent sucht seit 2026-11-09 mit dem
+Werkzeug `web_search` (Exa, bis zu 5 Suchen je Aufruf nebeneinander, siehe
+„Websuche“); wo es fehlt, in jedem Schritt mit bis zu `AGENT_SEARCH_ROUNDS`
+(5) Runden in der Anfrage des Modells, unabhängig vom Rest des Tageskontos
+(die Suche wird gebucht, nicht reserviert, siehe „Reservierung“; nur wenn das
+Kontextfenster sie nicht fasst, geht `smaller_search` 5 → 3 → 1 → 0). Sein
+Text streamt wie jede Antwort, auch nach
 eigenen Suchtreffern. `read_source` liest Seiten, die der Nutzer verlinkt,
 Quellen früherer Nachrichten, die Quellen der Antworten von `compare_models`,
 die eigenen Suchtreffer dieser Nachricht (`DelegationLoop.search_sources`
-sammelt die Anbieter-Zitate jedes Schritts, `SourceReader.cited` nimmt sie mit
+sammelt die Seiten von `web_search` oder die Anbieter-Zitate jedes Schritts,
+`SourceReader.cited` nimmt sie mit
 `LABEL_SEARCH` auf, „a web search result of this message“) und, solange Prüfer
 folgen, jede öffentliche Seite (siehe „Quellen nachlesen“). Watch,
 Einstellungen, Chatsuche, Dateien, Dokumente, Google, Bilder und Memory gibt es
@@ -4940,10 +4943,77 @@ und `sources`. Rein anzeigende Felder hat seit 2026-10-31 kein Werkzeug mehr
 Einzige Quelle für das Suchverhalten im Agent-Modus; Code und Kommentare
 verweisen hierher.
 
-**Eine Konfiguration für alle Modelle.** `agent_tools.search_tools` baut für
-jedes Modell dasselbe Tool wie der Consensus-Modus (`engines.web_search_tool`,
-Engine `auto`), begrenzt auf 5 Treffer à 2000 Zeichen pro Runde. Welcher
-Suchweg greift, entscheidet OpenRouter, nicht unser Code:
+**Der Agent sucht mit einem eigenen Werkzeug (seit 2026-11-09, Max).**
+`web_search` (`agent_web_search.py`) ist ein Werkzeug der App: Der Agent ruft
+es wie jedes andere, mit bis zu 5 Suchen je Aufruf (`queries`; dazu optional
+`domains` und `since`), die App fragt Exa direkt (`exa.py`,
+`POST /search`, Typ `auto`, 5 Seiten à 2000 Zeichen Auszüge je Suche) und
+lässt die Suchen eines Aufrufs nebeneinander laufen. Die Treffer gehören
+damit der App:
+
+- als Werkzeugergebnis im Gespräch (`{"note", "searches": [{"query",
+  "results": [{url, title, published, excerpts}]}]}`; eine Seite, die mehrere
+  Suchen fanden, steht einmal, danach unter `also_above`),
+- im Arbeitsprotokoll als Web-Inhalt (`agent_work_log.TOOL_DATA`), den die
+  Prüfer strukturiert lesen (`agent_audit.review_entry`,
+  `SEARCH_ENTRY_CHARS`: jeder Auszug gleich gekürzt, keine Suche verdeckt die
+  anderen),
+- in `DelegationLoop.search_sources` (was `read_source`, die Linkprüfung und
+  ein Watch als „von dieser Nachricht gefunden“ kennen),
+- in der Timeline: die Suchwörter (`queries`), die Zahl der gelaufenen
+  Suchen (`count`) und die Seiten (`sources`, von jeder Suche die erste vor
+  der zweiten einer anderen).
+
+Warum: Die eigene Suche eines Anbieters läuft in dessen Anfrage und gibt ihre
+Treffer nur dem Modell. Von 101 Suchschritten von GPT-6.1 Terra in Prod
+(31.10.–09.11.2026) hinterließen 62 der App nichts; die Prüfer sahen dann,
+dass gesucht wurde, aber nicht was gefunden wurde, `read_source` kannte die
+Treffer nicht, und jede Suchrunde war ein weiterer Durchgang des Modells
+(6,2 s im Median). Direkt gefragt dauert eine Suche 1,3–2,9 s, fünf
+nebeneinander 1,7 s (Probe 2026-11-09). Live auf der echten Route
+(Free-Konto, Terra, zwei Prüfer, eine Faktenfrage): 11,0 s wie zuvor
+(11,2 s), aber 0,033 $ statt 0,069 $ und fünf Quellen statt einer.
+
+Registriert wird das Werkzeug je Nachricht, wenn Exa verfügbar ist
+(`exa.available()`: `EXA_API_KEY` gesetzt, nicht `AGENT_EXA=0`, nicht nach
+Ausfällen beiseitegestellt), im Kontomodus und nie in Chats mit Google-Daten
+(`DelegationLoop.__init__`, `own_search`). Die eigenen Schritte des Agenten
+tragen dann keine Suche des Anbieters mehr (`run`: `search_rounds = 0`).
+Sonst suchen sie wie bisher in der Anfrage des Modells (unten), und der
+Prompt sagt dem Agenten, dass die App dann nur hat, was der Anbieter meldet
+(`AGENT_PROVIDER_SEARCH_FACT`). Der Prompt der Prüfer kennt beide Wege
+(`REVIEW_SEARCH_TOOL`, `REVIEW_SEARCH_INSIDE`). Prüfer, Vergleichsantworten
+und Worker suchen weiter in ihrer eigenen Anfrage: Ihre Recherche bleibt
+unabhängig von der des Agenten.
+
+**Ausfälle.** Eine Suche, die scheitert, steht im Ergebnis (`failed`), nie
+als Werkzeugfehler: Drei Werkzeugfehler in Folge beenden die Antwort. `exa.py`
+versucht 429 (nach `Retry-After`), 5xx und ausbleibende Antworten bis zu
+dreimal, hält die Suchen aller Läufe unter Exas Grenze von 10 Anfragen je
+Sekunde und Team (`_Pace`, `EXA_SEARCH_QPS`) und stellt Exa nach drei
+gescheiterten Aufrufen in Folge, bei abgelehntem Schlüssel oder
+aufgebrauchtem Guthaben sofort (Log als ERROR), für fünf Minuten beiseite:
+Nachrichten, die in dieser Zeit beginnen, suchen wieder in der Anfrage des
+Modells. Eine laufende Nachricht behält ihr Werkzeug (Prompt-Cache).
+
+**Abrechnung.** Jede Suche kostet den Nutzer, was sie kostet (Exas
+`costDollars`, sonst der Listenpreis von 0,007 $): `DelegationLoop.book_service`
+bucht sie nach dem Aufruf als gemessen aufs Tageskonto, mit eigenem Beleg
+(`AgentRunStore.book_service`, `llm_calls`, `step` „service:<id>“,
+`service` „exa“, `operation` „search“, `requests`), ohne Reservierung
+vorher: Der Preis steht erst danach fest und ist klein neben einem
+Modellschritt; das Konto darf dadurch leicht unter null enden, der nächste
+Modellschritt wird dann abgelehnt. Die Kosten stehen in der Nutzung des
+Turns (`agent_costs.service_usage`: Preis und Suchen, keine Tokens, kein
+Modellaufruf; `web_search_requests` zählt sie) und auf dem Root-Beleg
+(`service_usage`, `agent_sessions.root_usage`).
+
+**Die Suche in der Anfrage eines Modells: eine Konfiguration für alle.**
+`agent_tools.search_tools` baut für jedes Modell dasselbe Tool wie der
+Consensus-Modus (`engines.web_search_tool`, Engine `auto`), begrenzt auf
+5 Treffer à 2000 Zeichen pro Runde: für Prüfer, Vergleichsantworten, Worker
+und die Schritte des Agenten ohne `web_search`. Welcher Suchweg greift,
+entscheidet OpenRouter, nicht unser Code:
 
 | Familie | Suchweg unter `auto` |
 |---|---|
@@ -4963,21 +5033,24 @@ Suchrunde ist ein weiterer Durchgang des Modells bei OpenRouter: In einem
 Terra-Lauf standen 15 Runden nacheinander für 85 von 136 s. Im Median dauerte
 eine Runde mit der eigenen Suche des Anbieters 6,2 s (Terra) und 5,4 s (Haiku),
 eine auf Exa 2,4–4,4 s bei anderen Modellen. Eine Probe mit Terra auf Exa
-brauchte für eine Runde 7,9 s, war also nicht schneller. Deshalb bleibt `auto`
-der Standard; `AGENT_SEARCH_ENGINE=exa` stellt nur die eigenen Schritte des
-Agenten um (`agent_tools.agent_search_engine`), um das im Betrieb zu messen.
-Prüfer und Vergleichsantworten suchen immer mit `auto`, damit ihre Recherche
-unabhängig bleibt. Was die Suche wirklich verkürzt: Seit 2026-11-05 darf jeder
-Schritt mehrere Aufrufe auf einmal stellen (`parallel_tool_calls`), also auch
-mehrere Suchen in einem Durchgang. Und die Agent-Aufrufe bevorzugen Endpunkte,
-die schnell anfangen (`openrouter_contract.agent_provider_routing`).
+über OpenRouter brauchte für eine Runde 7,9 s, war also nicht schneller: Der
+Durchgang des Modells ist das Teure, nicht die Suchmaschine. Den Schalter
+`AGENT_SEARCH_ENGINE` (05.–09.11.2026) gibt es nicht mehr; die eigenen
+Schritte des Agenten suchen seit 2026-11-09 mit `web_search` ganz ohne
+Durchgang des Modells (oben). Was die Suche in der Anfrage verkürzt: Seit
+2026-11-05 darf jeder Schritt mehrere Aufrufe auf einmal stellen
+(`parallel_tool_calls`), und die Agent-Aufrufe bevorzugen Endpunkte, die
+schnell anfangen (`openrouter_contract.agent_provider_routing`).
 
 **Wer wie oft sucht.** Das ist die einzige Stellschraube, und sie ist eine
 Produktentscheidung, keine Modell-Sonderlösung:
 
-- Agent (seit 2026-10-31 in jedem Chat-Lauf, im Audit seit 2026-10-25): in
-  jedem Schritt bis zu `AGENT_SEARCH_ROUNDS` (5) Runden; er recherchiert die
-  ganze Antwort selbst. Der letzte Schritt an einer Turn-Grenze sucht nicht.
+- Agent (seit 2026-10-31 in jedem Chat-Lauf, im Audit seit 2026-10-25): Er
+  recherchiert die ganze Antwort selbst. Mit `web_search` bis zu 5 Suchen je
+  Aufruf, so viele Aufrufe, wie ein Schritt fasst (`TOOL_CALLS_PER_STEP`),
+  ohne Grenze je Nachricht außer Tageskonto, Zeit und Schritten; ohne das
+  Werkzeug in jedem Schritt bis zu `AGENT_SEARCH_ROUNDS` (5) Runden in der
+  Anfrage. Der letzte Schritt an einer Turn-Grenze sucht nicht.
   Bis 2026-10-31 durfte der Orchestrator des Vergleichsmodus vor dem ersten
   Vergleich bis zu drei Runden suchen (`ORCHESTRATOR_SEARCH_ROUNDS`), nur um
   die Anfrage zu verstehen, nach einem Vergleich eine Runde je Schritt, und

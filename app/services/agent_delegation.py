@@ -33,7 +33,7 @@ from app.services.agent_provider_limits import (
 )
 from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
 from app.services.agent_comparison import SEARCHING_KINDS
-from app.services.prompt_defaults import AGENT_REVIEW_FACTS as REVIEW_FACTS
+from app.services.prompt_defaults import AGENT_PROVIDER_SEARCH_FACT, AGENT_REVIEW_FACTS as REVIEW_FACTS
 from app.services.llm.agent_client import (
     AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, reasoning_active, resolve_agent_model,
     routing_output_limit,
@@ -168,7 +168,7 @@ CALL_OVER_LIMIT = f"Not run: a step runs at most {TOOL_CALLS_PER_STEP} calls."
 # all (a pause, a limit) still gets the result it read, never "Not run".
 # Not the picture tools: their per-message budgets (agent_web_images) are
 # taken call by call, so two at once could both spend the same room.
-CONCURRENT_TOOLS = frozenset({"read_source", "read_file", "search_chats"})
+CONCURRENT_TOOLS = frozenset({"web_search", "read_source", "read_file", "search_chats"})
 CALL_AFTER_PAUSE = "Not run: the work was paused before this call; the user let it go on with your next step."
 CALL_AFTER_ASK = "Not run: this step asked the user first. Their answer is in the ask_user result above."
 CALL_AFTER_TAKEOVER = ("Not run: the user had the workspace's browser meanwhile and has handed it back. The page "
@@ -574,6 +574,13 @@ class DelegationLoop(AgentLoop):
                     "output_usd_per_million": m.output_usd_per_million, "context_length": m.context_length}
                    for m in self.models.values()]
         self.messages[0] = dict(self.messages[0])
+        # Whether the agent searches with a tool of its own (agent_web_search.py)
+        # in this message. Decided once, like every tool: Exa set aside after
+        # failures (exa.available) changes the next message's tools, never
+        # this one's (prompt cache). Never with Google data, like read_source.
+        from app.services import exa
+        own_search = (comparison_models is not None and self.policy.account_budget_only and not google_selection
+                      and not google_data and exa.available())
         if self.merged:
             from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION
             if AGENT_AUDIT_ANSWER_SECTION not in self.messages[0]["content"]:
@@ -581,7 +588,8 @@ class DelegationLoop(AgentLoop):
                 self.messages[0]["content"] += "\n\n" + AGENT_AUDIT_ANSWER_SECTION
             # Who reviews the work, by the user's setting: the same through
             # the message, the workspace's opening included (cache).
-            self.messages[0]["content"] += "\n\n" + REVIEW_FACTS[reviewers]
+            self.messages[0]["content"] += "\n\n" + REVIEW_FACTS[reviewers] + (
+                "" if own_search or reviewers == "off" else " " + AGENT_PROVIDER_SEARCH_FACT)
             if temporary:
                 from app.services.prompt_defaults import AGENT_TEMPORARY_CHAT_PROMPT
                 self.messages[0]["content"] += "\n\n" + AGENT_TEMPORARY_CHAT_PROMPT
@@ -599,6 +607,9 @@ class DelegationLoop(AgentLoop):
         ], argument_limit=24_000)
         self.comparison = None
         self.app_registry = None
+        # The agent's own web search as a tool (agent_web_search.py), or None:
+        # its steps then search inside the model's request (run).
+        self.web_search = None
         # Pictures from the web under the answer (find_pictures, show_image).
         self.image_tools = None
         if comparison_models is not None:
@@ -615,6 +626,11 @@ class DelegationLoop(AgentLoop):
             # The review: run by the app once the answer is written, never
             # offered to the model.
             self.app_registry = ToolRegistry(self.comparison.app_tools)
+            if own_search:
+                from app.services.agent_web_search import WebSearch
+                self.web_search = WebSearch(self, reads=read_sources)
+                self.registry = ToolRegistry([*self.registry.tools.values(), self.web_search.tool],
+                                             argument_limit=24_000)
             if read_sources:
                 # Reading pages (docs/agent-mode.md, "Quellen nachlesen"); the
                 # tool's description says what it does. Registered for the
@@ -777,6 +793,26 @@ class DelegationLoop(AgentLoop):
         if self.merged:
             from app.services.agent_work_log import WorkLog
             self.work_log = WorkLog(self.store, self.uid, self.chat_id, self.turn_id, ready=lambda: self.claimed)
+
+    def book_service(self, operation, cost_nanos, *, searches=0):
+        """A paid call of one of the run's tools to Exa (exa.py), booked as
+        measured: in the turn's usage at once, on the account with a receipt
+        of its own (AgentRunStore.book_service). A booking that fails never
+        fails the tool: its result is paid for and in hand."""
+        from app.services.agent_costs import service_usage
+        usage = service_usage(cost_nanos, searches=searches)
+        self.costs.add(usage)
+        call = uuid4().hex
+        for attempt in range(2):
+            try:
+                self.store.book_service(self.uid, self.chat_id, self.turn_id, run_token=self.run_token, call=call,
+                                        service="exa", operation=operation, usage=usage, requests=max(1, searches))
+                return
+            except Exception as exc:
+                if attempt or not _transient_store_error(exc):
+                    logging.warning("Agent service call not booked operation=%s category=%s", operation,
+                                    safe_exception(exc))
+                    return
 
     def _log_actor(self, step, worker=None):
         """Who a model step or tool result is in the work log: the agent, one
@@ -1682,7 +1718,7 @@ class DelegationLoop(AgentLoop):
         delay, recovered_at = .1, time.monotonic()
         while True:
             self._check(cancellation)
-            tools = [*registry.schemas, *search_tools(model, searches, agent=worker is None), *server_tools]
+            tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
             if not searches:
                 room = model.context_length - input_estimate(messages, tools, model.request_config)
                 if room < minimum_output(model):
@@ -1895,7 +1931,7 @@ class DelegationLoop(AgentLoop):
             from app.services import agent_compaction
             messages = with_step_note(messages, agent_compaction.HISTORY_SUMMARY_REQUEST if summary == "history"
                                       else agent_compaction.RUN_SUMMARY_REQUEST)
-        tools = [*registry.schemas, *search_tools(model, searches, agent=worker is None), *server_tools]
+        tools = [*registry.schemas, *search_tools(model, searches), *server_tools]
         reservation = None
         try:
             if not self.policy.account_budget_only:
@@ -3595,7 +3631,9 @@ class DelegationLoop(AgentLoop):
                         self.settings_tools.mock_turn(self.answer_conversation[-1]["content"])
                 steps = count() if self.policy.account_budget_only else iter(range(self.policy.max_calls))
                 from app.services.agent_audit import AGENT_SEARCH_ROUNDS
-                search_rounds = AGENT_SEARCH_ROUNDS if self.merged else 1
+                # With web_search the agent searches through that tool, and
+                # its requests carry no search of the provider.
+                search_rounds = 0 if self.web_search is not None else AGENT_SEARCH_ROUNDS if self.merged else 1
                 value = None
                 for index in steps:
                     # A reviewer's halt waits for the user here (request_hold).

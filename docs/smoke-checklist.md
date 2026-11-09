@@ -75,6 +75,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       „Last tidy-up from your chats: …“ mit den Zahlen; Undo stellt den
       vorigen Stand wieder her und blendet die Zeile aus. In keinem Chat
       erscheint ein Hinweis darauf.
+- [ ] Websuche des Agenten (2026-11-09, Prod, `EXA_API_KEY` gesetzt): eine
+      Frage mit aktuellem Bezug („Wer trainiert gerade …? Mit Quelle.“) → die
+      Zeile nennt, wonach gesucht wird („Searching the web · …“), danach
+      „Searched the web · N sources: …“; in der Timeline stehen die Suchwörter
+      unter dem Schritt und die Seiten als Pills, die Antwort verlinkt eine
+      davon, „Sources“ zählt sie. Im Admin-Arbeitsprotokoll ist das Ergebnis
+      von `web_search` ein Web-Eintrag mit Treffern, und unter
+      `users/{uid}/llm_calls` liegt ein Beleg mit `service: "exa"`. Mit
+      `AGENT_EXA=0` (oder ohne Schlüssel) sucht der Agent wieder in der
+      Anfrage des Modells („Searched the web“ ohne Suchwörter).
 - [ ] Agent-Einstellungen (2026-10-17, echter Provider, Free-Konto auf Auto):
       „Denk ab jetzt maximal gründlich“ → kurze Antwort ohne `compare_models`: Max ist
       auf Pro, Medium (= Auto ohne Pro) gilt schon, keine Karte. „Prüf mit

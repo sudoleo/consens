@@ -4270,8 +4270,10 @@ laufenden Request, Consensus oder Save gelesen werden. Entfernte Controls wie
 ### Agent · Beta: ein Modus, Prüfer und Tokenkontingent (seit 2026-09-19, ein Modus seit 2026-10-31)
 
 **Ein Modus für jedes Konto (seit 2026-10-31, Max).** Eine KI, das gewählte
-Chatmodell, arbeitet: sie recherchiert in jedem Schritt mit eigener Websuche
-(`agent_audit.AGENT_SEARCH_ROUNDS` = 5 Runden je Schritt), nutzt ihre Werkzeuge
+Chatmodell, arbeitet: sie recherchiert mit eigener Websuche (seit 2026-11-09
+das Werkzeug `web_search` auf Exa, `agent_web_search.py`; ohne Exa
+`agent_audit.AGENT_SEARCH_ROUNDS` = 5 Runden je Schritt in der Anfrage des
+Modells), nutzt ihre Werkzeuge
 und, wo das Konto ihn hat (`routers/agent.py::vm_allowed`), den Arbeitsplatz
 (Werkbank-VM und Browser), und schreibt die Antwort selbst. Die vom Nutzer
 gewählten Modelle (1 bis `MAX_RUN_FAMILIES`, `comparison_selection`) sind
@@ -4892,9 +4894,9 @@ höchstens rund 11k je Runde). Live nachgemessen 2026-11-09 (echte Route,
 Free-Konto, Terra): 120 302 Mikro-Euro gehalten statt rund 870 000, fünf
 Runden; bei 90 % verbrauchtem Tag 99 997 gehalten, fünf Runden, Antwort und
 Prüfung vollständig. Suchkonfiguration
-(`search_tools`: eine für alle Modelle, Engine `auto`, nur Grok fest Exa; die
-eigenen Schritte des Agenten seit 2026-11-05 per `AGENT_SEARCH_ENGINE=exa`
-umstellbar, Standard `auto`),
+(der Agent seit 2026-11-09 mit dem eigenen Werkzeug `web_search` auf Exa,
+abgerechnet über `AgentRunStore.book_service`; in der Anfrage eines Modells
+`search_tools`: eine für alle Modelle, Engine `auto`, nur Grok fest Exa),
 Reservierung (`SEARCH_INPUT_TOKENS` pro Runde, `smaller_search`) und Messwerte
 stehen ausschließlich in [agent-mode.md](agent-mode.md), Abschnitt „Websuche“.
 Die Output-Grenze einer Vergleichsantwort ist die Completion-Grenze des
@@ -6374,8 +6376,8 @@ schlank: nur App-Fakten, App-Verträge, Sicherheit und Wahrheit; Blöcke
 Fakt einmal: `read_source`/`find_pictures`/`show_image` ohne eigenen Block,
 ihre App-Fakten in `AGENT_AUDIT_ANSWER_SECTION`, `AGENT_VM_PROMPT` nur
 Werkzeug-übergreifendes, ein Name „workspace“, `AuditReadSourceArgs` nur `url`).
-Der Agent sucht in jedem Schritt (`agent_audit.AGENT_SEARCH_ROUNDS`), Text
-streamt sofort. Die gewählten Modelle sind Prüfer, also reicht eines
+Der Agent sucht mit `web_search` (ohne Exa in jedem Schritt,
+`agent_audit.AGENT_SEARCH_ROUNDS`), Text streamt sofort. Die gewählten Modelle sind Prüfer, also reicht eines
 (`comparison_selection`: 1 bis `MAX_RUN_FAMILIES`; im Browser seit 2026-10-31
 immer, vorher `App.agentPreferences.auditing()`). Seit 2026-10-27 haben die
 Prüfer im Composer ein eigenes Bedienelement: Der Agent-Chip nennt das
@@ -6456,8 +6458,10 @@ eines Prüfers behält deshalb nichts: in 14 Tagen bis 2026-11-09 81 von 131
 solchen Schritten (Terra allein 62 von 101), bei den 152 Schritten, deren
 Suche OpenRouter selbst ausführte, keiner. Die Zuordnung entscheidet der
 Endpunkt, nicht das Modell (Haiku auf Anthropic/AWS: eigene Suche, auf
-Azure/Vertex: OpenRouters). Der einzige Hebel ist die Suchmaschine der
-Agent-Schritte, `AGENT_SEARCH_ENGINE=exa`: Max' Entscheidung);
+Azure/Vertex: OpenRouters). Seit 2026-11-09 sucht der Agent deshalb mit
+einem eigenen Werkzeug auf Exa, dessen Treffer die App hat (`web_search`,
+agent-mode.md „Websuche“); die Meldung betrifft seitdem nur noch Prüfer,
+Vergleichsantworten und Läufe ohne Exa);
 `_step` trägt 429 von Prüfer-Schritten nicht in `provider_cooldowns` ein.
 Gate-Runden haben seit 2026-10-29 Vorrang und eine Frist (`ready_gate` ruft
 `cut_round` für jeden gefragten Prüfer, `GATE_SECONDS` in `gate_result`,
@@ -9832,6 +9836,8 @@ app/services/
   agent_github.py            GitHub für die VM über eine öffentliche GitHub-App, die jeder Nutzer selbst installiert (seit 2026-10-26; GITHUB_APP_ID/_PRIVATE_KEY/_CLIENT_ID/_CLIENT_SECRET/_SLUG): GitHubConnections (Popup-Verbindung mit state + Cookie, Prüfung über GET /user/installations mit dem sofort widerrufenen Nutzer-Token, users/{uid}/github_connections), Installations-Token je Vorgang für ein Repo, github_import (öffentliche Repos auch ohne App), prepare_pull_request (seit 2026-10-29 nur angeboten, wenn die App eingerichtet ist; sonst auch AGENT_GITHUB_IMPORT_PROMPT statt AGENT_GITHUB_PROMPT; Vorschlag am Turn agent_pull_request; seit 2026-10-27 Diff im Backend aus den Bytes der Datei-API gegen Tree und Blobs des Import-Commits von GitHub, die VM nennt nur die Pfade) und PullRequests.confirm (Dateien gegen die Vorschau geprüft, Blobs/Tree/Commit/neuer Branch/PR)
   agent_compaction.py        Kompaktierung langer VM-Läufe (seit 2026-10-26): über 150.000 Zeichen eigenem Gespräch werden ältere vm_exec/vm_read_file-Ergebnisse zu Stummeln (Exit-Code, Ausgabe-Ende, Pfad), neueste bleiben ganz; schneidet selten und groß wegen des Prompt-Caches, Assistant-Nachrichten bleiben unverändert. Zusammenfassungen (seit 2026-11-03, wie Claude Code/Codex): HISTORY_SUMMARY_*/history_keep für den Chatverlauf, run_summary_due/run_tail für die eigenen Schritte eines Laufs (über min(100k Token, 60 % Fenster, bei langen Läufen dem Ende bei 80 % abzüglich Antwort), nicht vor einer Antwort an Zeit-/Schritt-/Kontingentgrenze, die noch passt, solange der Lauf selbst mindestens die Hälfte ausmacht; Nutzernachrichten des Laufs bleiben wörtlich davor, run_state hängt Plan und gestartete Hintergrundprozesse an), summary_message/summary_text/is_summary (nie Nutzertext, im Arbeitsprotokoll Daten des Agenten). Bilder (older_pictures, seit 2026-10-30): gesammelt ab mehr als 10 sichtbaren auf die neuesten 3 und mit jeder Kompaktierung, nie die des aktuellen Batches; Ersatztext nach Herkunft (picture_gone). Dazu work_record: eine Zeile je Tool-Aufruf eines VM-Turns und seit 2026-10-27 jedes abgebrochenen Turns (von der App, ohne Modell), am Turn als agent_work_record, im Verlauf der nächsten Nachricht nach der Antwort; is_work_record hält es aus allem, was als Nutzertext gilt
   agent_work_log.py          Arbeitsprotokoll des Agenten (seit 2026-10-25, seit 2026-10-31 jeder Chat-Lauf, lesbar für den Besitzer des Turns): WorkLog schreibt live, was der Agent sieht und tut (start, context nach Position im Gespräch samt Verlauf, step mit lesbarem Reasoning/Text/Tools/Suchtreffern, tool, app, end; Worker unter eigener ID, Prüfer nie; seit 2026-10-30 Messfelder ENTRY_FIELDS: started_at/duration_ms an tool, gate_ms an checked/paused), ein Schreib-Thread in eigenen Transaktionen (save_work_log, ohne Kontosperre und ohne Root-Beleg), lange Inhalte in PrivateObjects; Löschung mit dem Turn (delete_turn_log), 30 Tage Aufbewahrung (cleanup_expired_work_logs)
+  exa.py                     Exa für die eigene Recherche des Agenten (seit 2026-11-09): search() fragt POST /search (Typ auto, Auszüge je Treffer, optional includeDomains und startPublishedDate), page() POST /contents (Text einer Seite, gespeicherte Kopie oder frisch geholt); ein Client mit Verbindungspool für den Prozess, _Pace hält die Suchen aller Läufe unter Exas Grenze (10/s je Team, EXA_SEARCH_QPS), 429/5xx/Zeitüberschreitung bis zu dreimal, ExaError mit code (rejected, busy, account, server, unreachable, unreadable); available() ist für BREAK_SECONDS falsch nach drei gescheiterten Aufrufen in Folge oder sofort bei abgelehntem Schlüssel/aufgebrauchtem Guthaben (ERROR im Log); EXA_API_KEY, aus mit AGENT_EXA=0; Preis aus costDollars, sonst Listenpreis
+  agent_web_search.py        Tool web_search (seit 2026-11-09, wenn exa.available(), Kontomodus, nie mit Google-Daten): bis zu QUERIES_PER_CALL (5) Suchen je Aufruf nebeneinander auf exa.search, optional domains (site() nimmt auch eine Adresse) und since; Ergebnis {note, searches: [{query, results | failed, also_above}]}, eine gescheiterte Suche ist Teil des Ergebnisses, nie ein Werkzeugfehler; Treffer nach DelegationLoop.search_sources, Kosten über DelegationLoop.book_service (eigener Beleg, Tageskonto), activity() liefert queries, count und sources für die Timeline; die Schritte des Agenten tragen dann keine Suche des Anbieters
   agent_read_source.py       Tool read_source (an, AGENT_READ_SOURCES=0 schaltet ab): der Agent liest vor der Antwort eine öffentliche Seite über OpenRouters web_fetch (Responses API, PageFetch, Standard-Judge-Modell als Helfer): jede öffentliche Adresse, seit 2026-11-07 auch ohne Prüfer (Label: zitiert von einer Vergleichsantwort, eigener Suchtreffer, Quelle früherer Nachrichten, Link des Nutzers oder SourceReader.chosen/LABEL_CHOSEN); Grenzen READS_PER_MESSAGE 15 / READS_PER_STEP 5, Seitentext im Toolergebnis und im Arbeitsprotokoll, read_sources in der Review; SourceReader.knows für das Gate
   agent_answer_links.py      Links der fixierten Antwort, die ins Leere führen (seit 2026-11-07): LinkCheck startet in DelegationLoop._finish_merged (_check_links, nie in Chats mit Google-Daten, nie für Links des Nutzers) neben Übergabe und Prüfern, ruft jeden Link der Antwort einmal auf (answer_links: Markdown-Ziele und nackte URLs außerhalb von Code, höchstens 12; GET über pinned_target mit eigenen DNS-Plätzen _lookups, bis 4 Weiterleitungen, 3 zugleich, 4 s je Link, 6 s gesamt) und zählt nur 404/410, auf Code-Hosts (REPO_HOSTS) nur in einem öffentlichen Repo; _keep_links legt Funde als review.links {checked, missing:[{url, status, retrieved}]} ab (ComparisonTools.links, checkpoint vor dem Laufende); sources.js markMissingAnswerLinks streicht sie nach jedem agent-review.js render durch
   agent_web_images.py        Tools find_pictures und show_image (seit 2026-10-28, in jedem Chat-Lauf, wo read_source läuft): find_pictures nimmt bis zu 6 Adressen je Aufruf (18 je Nachricht), holt davon 3 gleichzeitig (FETCHES_AT_ONCE, das DNS-Tor der Quellen hat 4 Plätze), Bild oder Vorschaubild einer Seite (og:image/twitter:image/JSON-LD, page_picture) serverseitig über watch_images._fetch + pinned_target, nur echte Bildbytes neu als WebP (encode, ≤1600 px, keine Mindestgröße: Größe im Ergebnis), dazu Seitentitel und Alt-Text (page_words); Kandidaten mit ID p1… nur im Prozess, Bildmodelle sehen sie auf 768 px (smaller, take_pictures → DelegationLoop._show_pictures), der Nutzer nicht. Seit 2026-10-29 legt erst show_image(picture=ID, caption) einen Kandidaten unter die Antwort: Ablage AgentFiles kind web_image mit origin {source: web, url, page, host, caption}, resources-Event; höchstens 6 je Nachricht. Seit 2026-10-31 search_pictures (nur mit BRAVE_SEARCH_API_KEY, picture_search.py): bis zu 10 Treffer je Suche (FOUND_PER_SEARCH), 4 Suchen je Nachricht, als Kandidaten mit ID, Seite, Seitentitel und Größe, ohne Bild für das Modell; die ersten 6 (PREFETCH) holt ein ThreadPool mit 2 Plätzen sofort (PREFETCH_AT_ONCE, DNS-Tor; fetch_found: Original mit der Seite als Referer, sonst Braves 500-px-Kopie), show_image wartet darauf (_arrived, nur dns_busy wird einmal neu versucht), ein Bild, das nicht kommt, ist status failed statt Fehler, dasselbe Bild (Hash) zeigt es einmal (shown_digests); find_pictures mit der Adresse eines Treffers behält dessen ID; close() aus DelegationLoop.run beendet wartende Abrufe. Seit 2026-11-01 picture_file(key) für vm_save_picture (agent_vm_tools.py) und saved_as(data, extension) nach SAVE_FORMATS (JPEG auf Weiß, PNG, WebP unverändert); agent_browser hängt an einen abgelehnten Download (HTTP-Status) DOWNLOAD_REFUSED_PICTURE an, wo die Bildwerkzeuge da sind. PLACE_NOTE: Bilder auf einer Zeile oder auf Zeilen ohne Leerzeile dazwischen sind eine Galerie; seit 2026-11-09 nennen die Beschreibungen von search_pictures und show_image ihre Grenzen je Nachricht (4 Suchen, 6 Bilder): vorher lief ein Modell erst in der Absage hinein

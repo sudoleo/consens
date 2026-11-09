@@ -112,7 +112,7 @@ def test_the_agents_step_holds_its_routing_allowance_and_keeps_its_search(store)
             yield from super().stream(**kwargs)
     loop = chat_loop(store, Capture)
     routing = routing_output_limit(loop.model)
-    tools = [*loop.registry.schemas, *search_tools(loop.model, 1, agent=True)]
+    tools = [*loop.registry.schemas, *search_tools(loop.model, 1)]
     inputs = input_estimate(loop.messages, tools, loop.model.request_config)
     # Room for the request and one routing allowance, with a little to spare.
     quota(store, inputs + routing + 300)
@@ -394,7 +394,7 @@ def test_in_the_days_last_cents_the_search_gives_way_before_the_step_is_refused(
             observed.append(kwargs)
             yield from super().stream(**kwargs)
     loop = chat_loop(store, Capture)
-    searching = [*loop.registry.schemas, *search_tools(loop.model, 1, agent=True)]
+    searching = [*loop.registry.schemas, *search_tools(loop.model, 1)]
     inputs = input_estimate(loop.messages, searching, loop.model.request_config)
     # The smallest answer fits, but not beside the search's fee.
     quota(store, inputs + 256 + 400)

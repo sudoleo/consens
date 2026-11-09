@@ -93,6 +93,20 @@
     const count = Number.isInteger(item.count) && item.count > 0 ? item.count : 0;
     return count === 1 ? 'Searched the web · 1 search' : count ? `Searched the web · ${count} searches` : 'Searched the web';
   }
+  // What the agent searches for, in its own words (agent_web_search.py
+  // `queries`): "Searching the web · e-bike range test (+2)" while it runs,
+  // all of them under the step in the timeline.
+  function searchQueries(item) {
+    return (Array.isArray(item.queries) ? item.queries : [])
+      .filter(query => typeof query === 'string' && query.trim()).slice(0, 5);
+  }
+  function searchingLabel(item) {
+    const queries = searchQueries(item);
+    if (item.status !== 'running' || !queries.length) return null;
+    const query = queries[0].length > 80 ? `${queries[0].slice(0, 79)}…` : queries[0];
+    const more = queries.length - 1;
+    return more ? `Searching the web · ${query} (+${more})` : `Searching the web · ${query}`;
+  }
   // "Read source · arxiv.org" only when the page was really read (the server
   // sends `read` from the fetch result); a failed or refused read says so.
   function readSummary(item) {
@@ -161,7 +175,10 @@
     if (item.name === 'search_chats' && item.opened && ['running', 'succeeded'].includes(item.status)) {
       return item.status === 'running' ? 'Opening an earlier chat…' : 'Read an earlier chat';
     }
+    if (item.name === 'web_search' && searchingLabel(item)) return searchingLabel(item);
     if (item.status === 'running') return tools[item.name]?.[1] || 'Working on a step…';
+    // No search of the call ran (the service did not answer, no time left).
+    if (item.status === 'succeeded' && item.name === 'web_search' && item.outcome === 'failed') return 'Couldn’t search the web';
     if (item.status === 'succeeded' && item.name === 'web_search') return searchSummary(item);
     if (item.status === 'succeeded') return tools[item.name]?.[2] || `${toolName(item.name)} · Completed`;
     // Translated part by part: "{tool} · {state}" has no entry of its own.
@@ -1849,6 +1866,14 @@
             const text = document.createElement("p");
             text.textContent = String(item.text).slice(0, 8000);
             node.appendChild(text);
+          }
+          const queries = item.name === 'web_search' ? searchQueries(item) : [];
+          if (queries.length) {
+            // The agent's own search words: data, not the app's text.
+            const asked = document.createElement("p");
+            asked.setAttribute('data-i18n-skip', '');
+            asked.textContent = queries.join(' · ').slice(0, 1000);
+            node.appendChild(asked);
           }
           if (pills.length) {
             const row = document.createElement("span");

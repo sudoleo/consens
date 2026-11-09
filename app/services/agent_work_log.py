@@ -71,7 +71,7 @@ KINDS = ("start", "context", "step", "tool", "app", "end")
 DATA_CLASSES = ("user", "web", "file", "google", "memory", "agent", "vm", "app")
 UNTRUSTED_DATA = frozenset({"web", "file", "google", "agent", "vm"})
 TOOL_DATA = {
-    "read_source": "web",
+    "web_search": "web", "read_source": "web",
     "read_file": "file", "read_document": "file", "create_document": "file", "revise_document": "file",
     "gmail_read": "google", "calendar_read": "google", "import_gmail_attachment": "google",
     "prepare_gmail_draft": "google", "prepare_calendar_event": "google",

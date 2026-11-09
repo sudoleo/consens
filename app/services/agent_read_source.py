@@ -106,11 +106,11 @@ _URL_TRAILING = ".,;:!?*"
 CHAT_URLS_MAX = 60
 LABEL_USER = "your message"
 LABEL_EARLIER = "an earlier message's sources"
-# The agent researches itself. Its own search results are provider citations
-# like the earlier messages' sources, which they become with the next message
-# anyway: no page wrote them. The web search runs with every step (the
-# provider's own): the agent does not call it, so "your search" read as a
-# search it never made.
+# The agent researches itself. Its own search results (the pages web_search
+# found, or a provider's citations where the search ran inside the model's
+# request) are like the earlier messages' sources, which they become with
+# the next message anyway: no page wrote them. Not "your search": inside a
+# request the agent never called one, and it read as a search it never made.
 LABEL_SEARCH = "a web search result of this message"
 # Any public page the agent names itself, with or without reviewers. The
 # provider's search of GPT-6 Luna and GPT-6.1 Terra sends no hits to the app

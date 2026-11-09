@@ -38,9 +38,12 @@ AGENT_AUDIT_SYSTEM_PROMPT = _AGENT_AUDIT_STEERING + "\n\n" + AGENT_AUDIT_ANSWER_
 # (user_settings.py); DelegationLoop appends one after the section above.
 # The agent learns whether it is reviewed, so it can say so truthfully, never
 # what the reviewers found.
-_REVIEW_MARKS = ("the user sees their marks, you do not, and their review is not finished while you write. With "
-                 "some providers the hits of your web search reach you but not the app; the reviewers then see that "
-                 "you searched, not what you found.")
+_REVIEW_MARKS = "the user sees their marks, you do not, and their review is not finished while you write."
+# Added to the reviewed settings where the agent's steps search inside the
+# model's request (no web_search tool, DelegationLoop.__init__): the app then
+# has only what the provider reports of a search.
+AGENT_PROVIDER_SEARCH_FACT = ("With some providers the hits of your web search reach you but not the app; the "
+                              "reviewers then see that you searched, not what you found.")
 AGENT_REVIEW_FACTS = {
     "always": "Models the user chose review your work and the answer independently: " + _REVIEW_MARKS,
     "workspace": ("Models the user chose review your work and the answer independently from your first step in "
@@ -61,12 +64,13 @@ AGENT_TEMPORARY_CHAT_PROMPT = """TEMPORARY CHAT
 
 The user opened this chat as a temporary one: it does not appear in their chats, and it is deleted once they leave it or a day after its last message, together with its files, its folder in the workspace and the background processes it started there; its messages take no restore points of the workspace. The rest outlasts it, so this chat adds nothing of its own to the user's memory or to the workspace's notes, and its answers can't be shared, since a shared answer is kept for 30 days. A Watch the user starts from it is theirs and stays."""
 
-# read_source, find_pictures and show_image need no block of their own: what
-# each does stands in its description (agent_read_source, agent_web_images),
-# and the two facts about the app around them are in AGENT_AUDIT_ANSWER_SECTION
-# (a picture in the answer shows only where the agent places one it showed)
-# and AGENT_REVIEW_FACTS (some providers' search hits never reach the app or
-# the reviewers, agent_audit.REVIEW_PROMPT_BODY). One place for each fact (Max).
+# web_search, read_source, find_pictures and show_image need no block of
+# their own: what each does stands in its description (agent_web_search,
+# agent_read_source, agent_web_images), and the two facts about the app
+# around them are in AGENT_AUDIT_ANSWER_SECTION (a picture in the answer shows
+# only where the agent places one it showed) and AGENT_PROVIDER_SEARCH_FACT
+# (without web_search, some providers' search hits never reach the app or the
+# reviewers, agent_audit.REVIEW_SEARCH_INSIDE). One place for each fact (Max).
 
 # Agent VM (agent_vm_tools.py; the account's workspace, agent_workspace.py):
 # appended to the system prompt above, before the memory block, when the
@@ -82,7 +86,7 @@ The calls of one step run one after another, in your order, up to four. A pause,
 
 This chat has its own folder (the first result from the workspace names it): commands start there, relative paths lead there, and the files the user attached to the current message are in its input folder. Other chats' folders are next to it under /home/agent/chats, each named after its chat's title, which it follows when the chat is renamed (its .consens-chat file holds title, start and id). Files stay across messages and chats.
 
-Four ways reach the web, each with its own reach. Your web search runs inside your own steps, and its hits come back with the step within seconds. read_source reads a page's text through a reader service, without sign-ins. The browser tool is a real Chrome, signed in as the user: it runs a page's scripts, clicks and fills in forms. Your commands in the workspace reach the web too (curl, git, an API your code calls), without the user's sign-ins. GitHub repositories come in with github_import.
+Four ways reach the web, each with its own reach. Your web search finds pages and excerpts of them within seconds. read_source reads a page's text through a reader service, without sign-ins. The browser tool is a real Chrome, signed in as the user: it runs a page's scripts, clicks and fills in forms. Your commands in the workspace reach the web too (curl, git, an API your code calls), without the user's sign-ins. GitHub repositories come in with github_import.
 
 /home/agent/NOTES.md is your notebook of the workspace across chats (what is where, work in progress, a project's conventions); its beginning comes with your first result from the workspace in every message. It holds your own words from earlier chats, maybe outdated. Facts about the user themselves belong in memory; secrets and what you saw behind a sign-in belong in neither. A key or token your work needs comes from the user through ask_user with secret and lies in /home/agent/.secrets, one file per name, also for later chats: your first result names the ones there.
 

@@ -1,13 +1,15 @@
-"""Explicit read-only client tools and shared OpenRouter search configuration.
+"""Explicit read-only client tools and the search inside a model's request.
 
-No custom search service: search executes in the selected model's request.
-The direct loop's registry is empty by default. Delegation supplies its own
-server-owned registry; tools require a strict argument model and bounded executor.
+search_tools is OpenRouter's search tool of a request: the model's provider
+runs it, and the app sees only what the provider reports of it. The agent's
+own steps search with a tool of the app instead where it is available
+(agent_web_search.py). The direct loop's registry is empty by default.
+Delegation supplies its own server-owned registry; tools require a strict
+argument model and bounded executor.
 """
 from dataclasses import dataclass
 import functools
 import json
-import os
 import re
 from typing import Callable, Optional
 
@@ -28,48 +30,29 @@ def search_family(model):
                  if model.model.startswith(p.openrouter_prefix.rstrip("/") + "/")), "")
 
 
-# Exa results per search round. They bound what a round can add to the
-# input (SEARCH_INPUT_TOKENS); the publishers' own search may ignore them.
+# Pages per search and characters of excerpts per page: of one search of
+# web_search (agent_web_search.py), and of one round of the search inside a
+# model's request, where they bound what a round can add to the input
+# (SEARCH_INPUT_TOKENS); the publishers' own search may ignore them.
 SEARCH_RESULTS, SEARCH_RESULT_CHARACTERS = 5, 2000
 
 
-# The engine of the agent's own steps: "auto" as everywhere, or Exa with
-# AGENT_SEARCH_ENGINE=exa (a switch to measure in normal use,
-# docs/agent-speed-plan-2026-11-05.md P1). Measured 2026-11-05: a round of a
-# publisher's own search took 6.2 s (GPT-6.1 Terra) and 5.4 s (Claude Haiku
-# 5.5) at the median in prod, a round on Exa 2.4-4.4 s, but with other models;
-# one Terra step on Exa took 7.9 s for one round in a probe, no faster.
-# Every round is another pass of the model on OpenRouter, whatever the
-# engine: what shortens the search is fewer passes (several searches in one,
-# DelegationLoop._parallel_calls) and endpoints that start quickly
-# (openrouter_contract.agent_provider_routing). Exa is the engine
-# privacy.html names. Reviewers and comparison answers stay on "auto": their
-# research stays independent of the agent's (docs/agent-mode.md, "Websuche").
-AGENT_SEARCH_ENGINE_ENV = "AGENT_SEARCH_ENGINE"
-AGENT_SEARCH_ENGINES = ("auto", "exa")
-
-
-def agent_search_engine():
-    """The engine of the agent's own searches (AGENT_SEARCH_ENGINE_ENV),
-    "auto" unless set to another of AGENT_SEARCH_ENGINES."""
-    value = os.environ.get(AGENT_SEARCH_ENGINE_ENV, "").strip().lower()
-    return value if value in AGENT_SEARCH_ENGINES else AGENT_SEARCH_ENGINES[0]
-
-
-def search_tools(model, searches, *, agent=False):
-    """The one search configuration for every model, as in Consensus.
+def search_tools(model, searches):
+    """The search inside a model's request, one configuration for every
+    model, as in Consensus: reviewers, comparison answers, workers, and the
+    agent's own steps where web_search is not available (agent_web_search.py).
 
     Engine "auto" lets OpenRouter choose: the publisher's own search where one
     exists (Google grounding, OpenAI, Anthropic), Exa otherwise. The only
-    exception, Grok on Exa, lives in engines.web_search_tool. The agent's own
-    steps (``agent``) search on agent_search_engine(). See
-    docs/agent-mode.md, "Websuche".
+    exception, Grok on Exa, lives in engines.web_search_tool. Every round is
+    another pass of the model on OpenRouter, whatever the engine (a round of
+    a publisher's own search took 6.2 s for GPT-6.1 Terra and 5.4 s for Claude
+    Haiku 5.5 at the median in prod, 2026-11-05). See docs/agent-mode.md,
+    "Websuche".
     """
-    engine = agent_search_engine() if agent else "auto"
-    engine = {"engine": engine} if engine != "auto" else {}
     return [web_search_tool(search_family(model), max_uses=searches, max_results=SEARCH_RESULTS,
                             max_total_results=SEARCH_RESULTS * searches,
-                            max_characters=SEARCH_RESULT_CHARACTERS, **engine)] if searches else []
+                            max_characters=SEARCH_RESULT_CHARACTERS)] if searches else []
 
 
 def argument_schema(arguments):

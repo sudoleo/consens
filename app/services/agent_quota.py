@@ -381,6 +381,23 @@ def settle(data, reserved, usage, *, measurable=False):
     return data
 
 
+def book_service(data, usage):
+    """Charge a paid call to a service that is no model (Exa's search and page
+    text, AgentRunStore.book_service) as measured. Nothing was held for it:
+    its price is known when it returns and small beside a model step's, so
+    the account may end a little below zero by it, like after a pipeline
+    run; the next model step is then refused."""
+    data = normalize(data)
+    data["used"] = data.get("used", 0) + (measured_charge(usage) or 0)
+    totals = dict(data.get("agent_usage") or {})
+    totals["service_calls"] = totals.get("service_calls", 0) + 1
+    for field in ("estimated_cost_nano_usd", "provider_cost_nano_usd"):
+        totals[field] = totals.get(field, 0) + (usage.get("estimated_cost_nano_usd") or 0)
+    data["agent_usage"] = totals
+    data["revision"] = data.get("revision", 0) + 1
+    return data
+
+
 # How many of a ledger's estimates still wait for their measurement, apart
 # from the amount: an estimate that can never be measured stays charged for
 # good, and its ``estimated`` amount alone would have snapshot() look for a

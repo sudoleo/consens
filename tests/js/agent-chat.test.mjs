@@ -1141,6 +1141,34 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('says what the agent searches for, and lists its searches under the step', () => {
+    const {window: w, document: d, dom} = boot();
+    const host = d.getElementById('agentAnswerActivity');
+    const step = event => {
+      w.App.agentActivity.render(host, {running:true, events:[event]});
+      return [...host.querySelectorAll('.agent-progress-step')].map(p => p.textContent)[0];
+    };
+    const search = {id:'s', kind:'tool', name:'web_search', status:'running', queries:['e-bike range test']};
+    expect(step(search)).toBe('Searching the web · e-bike range test');
+    expect(step({...search, queries:['e-bike range test', 'e-bike battery 2026', 7, ' ']}))
+      .toBe('Searching the web · e-bike range test (+1)');
+    expect(step({...search, queries:['x'.repeat(200)]})).toBe(`Searching the web · ${'x'.repeat(79)}…`);
+    // An older event, or the provider's own search, has no words to show.
+    expect(step({...search, queries:undefined})).toBe('Searching the web…');
+    // No search of the call ran.
+    expect(step({...search, status:'succeeded', outcome:'failed'})).toBe('Couldn’t search the web');
+    // The timeline keeps the agent's own words, untranslated, under the step.
+    w.App.agentActivity.render(host, {running:false, status:'succeeded', answerText:'Answer.', events:[
+      {...search, status:'succeeded', count:2, queries:['e-bike range test', 'e-bike battery 2026'],
+       sources:[{url:'https://example.org/a', title:'A'}]}]});
+    const tool = host.querySelector('.agent-activity-tool');
+    expect(tool.querySelector('strong').textContent).toBe('Searched the web');
+    const asked = tool.querySelector('p[data-i18n-skip]');
+    expect(asked.textContent).toBe('e-bike range test · e-bike battery 2026');
+    expect(tool.querySelectorAll('.agent-activity-sources a').length).toBe(1);
+    dom.window.close();
+  });
+
   it('says what came of a settings change, not "prepared" for a refusal', () => {
     const {window: w, document: d, dom} = boot();
     const host = d.getElementById('agentAnswerActivity');
