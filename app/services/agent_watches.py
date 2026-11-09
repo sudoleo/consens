@@ -839,8 +839,9 @@ def run_context(watch: dict) -> str:
 def _reviewers(uid: str, db) -> str:
     """Who checks a run's work: the account's setting, as the composer sends it."""
     try:
-        from app.services.user_settings import UserSettings
-        value = getattr(UserSettings(db).get(uid), "reviewers", None)
+        from app.services.user_settings import FirestoreUserSettingsRepository
+        values, _, _ = FirestoreUserSettingsRepository(db).get(uid)
+        value = values.get("reviewers")
     except Exception as exc:
         logging.info("Agent watch reviewers setting unreadable category=%s", safe_exception(exc))
         value = None

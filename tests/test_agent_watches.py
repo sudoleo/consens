@@ -50,6 +50,30 @@ def outbox_items(store):
     return [data for path, data in store.db.documents.items() if path[0] == outbox.OUTBOX_COLLECTION]
 
 
+# --- who checks a run ----------------------------------------------------------
+
+@pytest.mark.parametrize("saved,expected", [("off", "off"), ("workspace", "workspace"), ("always", "always"),
+                                            (None, "always"), ("everyone", "always")])
+def test_a_run_is_checked_as_the_account_chose(store, saved, expected):
+    """A Watch's run has no composer to send the account's ``reviewers``
+    setting: it reads it. The read built the settings' model instead of
+    their repository and failed on every run (7 of 7 in a week of prod), so
+    every run was reviewed, whatever the account had chosen."""
+    if saved is not None:
+        store.db.collection("users").document(UID).collection("settings").document("app").set(
+            {"values": {"reviewers": saved}, "revision": 1, "field_revisions": {"reviewers": 1}})
+    assert agent_watches._reviewers(UID, store.db) == expected
+
+
+def test_a_setting_that_cannot_be_read_leaves_the_reviewers_on(store, caplog):
+    class Down:
+        def collection(self, _name):
+            raise RuntimeError("database unavailable")
+    with caplog.at_level("INFO"):
+        assert agent_watches._reviewers(UID, Down()) == "always"
+    assert "reviewers setting unreadable" in caplog.text
+
+
 # --- schedule ----------------------------------------------------------------
 
 def test_each_tier_has_its_shortest_interval_and_its_slots():
