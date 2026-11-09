@@ -282,15 +282,18 @@ def _notes(data):
             if isinstance(note, str) and note.strip()][:3]
 
 
-def search(query, *, results, characters, domains=(), since=""):
+def search(query, *, results, characters, domains=(), without=(), since=""):
     """One web search: {"hits": [{url, title, published?, excerpts}],
     "cost_nanos", "notes"}. ``characters``: of excerpts per hit, chosen by
-    Exa for the query. ``domains``: only these sites. ``since`` (YYYY-MM-DD):
-    only pages published from that day on. Raises ExaError."""
+    Exa for the query. ``domains``: only these sites; ``without``: none of
+    these. ``since`` (YYYY-MM-DD): only pages published from that day on.
+    Raises ExaError."""
     body = {"query": query, "type": "auto", "numResults": results,
             "contents": {"highlights": {"maxCharacters": characters}}}
     if domains:
         body["includeDomains"] = list(domains)
+    if without:
+        body["excludeDomains"] = list(without)
     if since:
         body["startPublishedDate"] = f"{since}T00:00:00.000Z"
     data = _post(SEARCH_URL, body, seconds=SEARCH_SECONDS, pace=_pace())

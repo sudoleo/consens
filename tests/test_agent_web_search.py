@@ -19,7 +19,7 @@ from app.services.agent_costs import aggregate_usage, service_usage
 from app.services.agent_delegation import CONCURRENT_TOOLS, OWN_CONTENT_TOOLS
 from app.services.agent_sessions import root_usage
 from app.services.agent_tools import SEARCH_RESULT_CHARACTERS, SEARCH_RESULTS, ToolRegistry
-from app.services.agent_web_search import QUERIES_PER_CALL, UNTRUSTED_NOTE, WebSearch, WebSearchArgs, site
+from app.services.agent_web_search import QUERIES_PER_CALL, UNTRUSTED_NOTE, WebSearch, WebSearchArgs, scoped, site
 from app.services.agent_work_log import TOOL_DATA, UNTRUSTED_DATA
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 from app.services.prompt_defaults import AGENT_PROVIDER_SEARCH_FACT
@@ -87,7 +87,7 @@ def test_the_agent_searches_with_its_tool_and_answers_from_the_hits(store, searc
     # Every search with the same bounds, side by side.
     assert sorted(query for query, _ in searches.calls) == ["option one 2026", "price option one"]
     assert all(options == {"results": SEARCH_RESULTS, "characters": SEARCH_RESULT_CHARACTERS, "domains": (),
-                           "since": ""} for _, options in searches.calls)
+                           "without": (), "since": ""} for _, options in searches.calls)
     [result] = results(loop)
     assert result == {"note": UNTRUSTED_NOTE, "searches": [
         {"query": "price option one", "results": [hit("https://example.org/report"), hit("https://example.net/other", "")]},
@@ -256,7 +256,7 @@ def test_the_tool_says_what_it_does_and_takes_few_fields(store, searches):
     result = tool.execute(WebSearchArgs(queries=[" q ", "q"], domains=["https://www.Europa.eu/", "europa.eu"],
                                         since="2026-01-01"), cancellation=ProviderCancellation())
     assert searches.calls == [("q", {"results": SEARCH_RESULTS, "characters": SEARCH_RESULT_CHARACTERS,
-                                     "domains": ("europa.eu",), "since": "2026-01-01"})]
+                                     "domains": ("europa.eu",), "without": (), "since": "2026-01-01"})]
     assert [entry["query"] for entry in result["searches"]] == ["q"]
     with pytest.raises(ValueError, match="is no site"):
         tool.execute(WebSearchArgs(queries=["q"], domains=["not a site"]), cancellation=ProviderCancellation())
@@ -266,6 +266,27 @@ def test_the_tool_says_what_it_does_and_takes_few_fields(store, searches):
                                              ("*.gov.uk", "*.gov.uk"), ("sub.example.co.uk", "sub.example.co.uk")])
 def test_a_site_is_a_host_with_or_without_its_address_around_it(value, expected):
     assert site(value) == expected
+
+
+@pytest.mark.parametrize("query, expected", [
+    ("site:eur-lex.europa.eu AI Act Artikel 113", ("AI Act Artikel 113", ("eur-lex.europa.eu",), ())),
+    ("Elroq Preis site:skoda-auto.de -site:pinterest.com", ("Elroq Preis", ("skoda-auto.de",), ("pinterest.com",))),
+    ("SITE:https://www.Tesla.com/de_de/modely \"39.990\"", ("\"39.990\"", ("tesla.com/de_de/modely",), ())),
+    ("website: how to build one", ("website: how to build one", (), ())),
+    ("site:nothing-like-a-host news", ("site:nothing-like-a-host news", (), ())),
+    # Only an operator: the search keeps its words.
+    ("site:europa.eu", ("site:europa.eu", (), ())),
+])
+def test_a_searchs_site_operators_become_its_filter(query, expected):
+    assert scoped(query) == expected
+
+
+def test_a_search_with_its_own_site_keeps_it_beside_the_calls_domains(store, searches):
+    loop, tool = tool_of(store)
+    tool.execute(WebSearchArgs(queries=["site:tesla.com Model Y price", "Elroq price -site:pinterest.com"],
+                               domains=["skoda-auto.de"]), cancellation=ProviderCancellation())
+    sent = {query: (options["domains"], options["without"]) for query, options in searches.calls}
+    assert sent == {"Model Y price": (("tesla.com",), ()), "Elroq price": (("skoda-auto.de",), ("pinterest.com",))}
 
 
 @pytest.mark.parametrize("value", ["", "localhost", "two words.com", "europa", "site:europa.eu"])

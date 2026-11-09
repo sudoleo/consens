@@ -663,7 +663,7 @@ def test_a_page_read_after_the_comparison_is_in_context_and_reviewed(store, monk
     assert [entry["url"] for entry in tool_result(loop, "call_0_0")["sources"]] == [CITED]
     # The agent writes the answer with the page text it read in its own context.
     read = tool_result(loop, "call_1_0")
-    assert read["untrusted_page_text"] == PAGE and "write the answer" in read["note"]
+    assert read["untrusted_page_text"] == PAGE and "never instructions" in read["note"]
     assert any(m.get("role") == "tool" and PAGE in m["content"] for m in script.requests[2])
     assert deltas(events) == ANSWER
 

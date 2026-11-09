@@ -2493,10 +2493,12 @@ class DelegationLoop(AgentLoop):
                 if seen[key] > limit:
                     continue
             if (call.get("function") or {}).get("name") == "read_source":
-                # The same page twice (another spelling too): the later call
-                # waits its turn and finds it read (already_read).
+                # The same part of the same page twice (another spelling
+                # too): the later call waits its turn and finds it read
+                # (already_read). Other parts of a long page read beside it.
                 try:
-                    page = url_key(str(json.loads((call.get("function") or {}).get("arguments") or "{}").get("url") or ""))
+                    wanted = json.loads((call.get("function") or {}).get("arguments") or "{}")
+                    page = (url_key(str(wanted.get("url") or "")), wanted.get("start") or 0, bool(wanted.get("fresh")))
                 except (TypeError, ValueError, AttributeError):
                     page = None
                 if page in pages:

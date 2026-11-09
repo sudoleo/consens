@@ -157,8 +157,9 @@
           prompts and answers for a limited period under its own terms, for example for abuse monitoring or
           legal obligations. Temporary prompt caching can occur, operational metadata is separate, and
           OpenRouter's own optional content logging depends on the account's settings.</p>
-        <p>The Agent searches the web through <a href="https://exa.ai/privacy-policy">Exa</a>, which our
-          server asks directly (see "Web search" in section 7). Other model runs can use OpenRouter's
+        <p>The Agent searches the web and reads pages through
+          <a href="https://exa.ai/privacy-policy">Exa</a>, which our server asks directly (see "Web search and
+          page reading" in section 7). Other model runs can use OpenRouter's
           web-search tool: search terms derived from your input may then reach the selected search service,
           including Exa or native search services. Their processing and retention follow those services' own
           terms.</p>
@@ -315,9 +316,10 @@
             chats with Google data. A picture the Agent shows is fetched by our server from its page, or as Brave's
             copy of it, and stored with the chat like other Agent files.
             <a href="https://api-dashboard.search.brave.com/privacy-policy">Brave Search API privacy notice</a>.</li>
-          <li><strong>Web search:</strong> Exa Labs, Inc. (USA) receives the words the Agent searches the web
-            with, from our server and without your account, IP address or other identifiers, and processes them
-            under its own terms. The Agent's web search is off in chats with Google data.
+          <li><strong>Web search and page reading:</strong> Exa Labs, Inc. (USA) receives the words the Agent
+            searches the web with and the addresses of the pages it reads, from our server and without your
+            account, IP address or other identifiers, and processes them under its own terms. Both are off in
+            chats with Google data.
             <a href="https://exa.ai/privacy-policy">Exa privacy policy</a>.</li>
           <li><strong>GitHub:</strong> GitHub, Inc. (USA), only if you connect GitHub or the Agent imports a public
             repository. Our server asks GitHub which repositories you installed the app on, downloads their contents

@@ -47,6 +47,30 @@ Domain = Annotated[str, StringConstraints(min_length=1, max_length=253)]
 _SITE = re.compile(r"(?:\*\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:/[^\s]*)?")
 
 
+# Models write a search engine's operators out of habit ("site:europa.eu AI
+# Act", "-site:pinterest.com"). Exa takes a site as a filter, not as words of
+# the search (docs.exa.ai: "use these instead of site: in the query").
+_SITE_OPERATOR = re.compile(r"(?:^|(?<=\s))(-?)site:(\S+)", re.IGNORECASE)
+
+
+def scoped(query):
+    """``query`` as Exa takes it: (the words, the sites its site: operators
+    name, the sites its -site: operators rule out). An operator that names no
+    site stays among the words."""
+    only, without = [], []
+
+    def take(match):
+        try:
+            (without if match.group(1) else only).append(site(match.group(2).strip("\"'")))
+        except ValueError:
+            return match.group(0)
+        return ""
+    words = " ".join(_SITE_OPERATOR.sub(take, query).split())
+    if not words:
+        return query, (), ()
+    return words, tuple(dict.fromkeys(only)), tuple(dict.fromkeys(without))
+
+
 def site(value):
     """A site as Exa filters by it (a host, with a path or "*." before it),
     from what a model writes for one: an address with its scheme and "www."
@@ -106,8 +130,14 @@ class WebSearch:
         if not queries:
             raise ValueError("queries: at least one search with text.")
         options = {"results": SEARCH_RESULTS, "characters": SEARCH_RESULT_CHARACTERS,
-                   "domains": tuple(dict.fromkeys(site(domain) for domain in args.domains)), "since": args.since}
-        outcomes = exa.together([lambda query=query: exa.search(query, **options) for query in queries],
+                   "domains": tuple(dict.fromkeys(site(domain) for domain in args.domains)), "without": (),
+                   "since": args.since}
+        def one(query):
+            # A search's own site: operators count for that search; the
+            # call's domains for every search without one.
+            words, only, without = scoped(query)
+            return exa.search(words, **{**options, "domains": only or options["domains"], "without": without})
+        outcomes = exa.together([lambda query=query: one(query) for query in queries],
                                 lambda: loop._check(cancellation))
         for outcome in outcomes:
             if isinstance(outcome, Exception):

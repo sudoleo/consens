@@ -41,12 +41,12 @@ def test_a_search_sends_the_query_and_returns_pages_with_excerpts_and_its_price(
                                           {"url": "https://example.net/undated", "title": "", "highlights": ["b"]}],
                               "costDollars": {"total": 0.007}, "notices": ["Query was shortened.", 5]})]
     found = exa.search("what does option one cost", results=5, characters=2000, domains=("example.org",),
-                       since="2026-01-01")
+                       without=("pinterest.com",), since="2026-01-01")
     url, body, key = service.sent[0]
     assert url == exa.SEARCH_URL and key == "key"
     assert body == {"query": "what does option one cost", "type": "auto", "numResults": 5,
                     "contents": {"highlights": {"maxCharacters": 2000}}, "includeDomains": ["example.org"],
-                    "startPublishedDate": "2026-01-01T00:00:00.000Z"}
+                    "excludeDomains": ["pinterest.com"], "startPublishedDate": "2026-01-01T00:00:00.000Z"}
     # Each page once, only public http(s) addresses, the title on one line.
     assert found["hits"] == [
         {"url": "https://example.org/report", "title": "Annual report", "published": "2026-11-03",
@@ -58,7 +58,7 @@ def test_a_search_sends_the_query_and_returns_pages_with_excerpts_and_its_price(
 def test_a_search_without_a_reported_price_costs_the_list_price(service):
     service.answers = [(200, {"results": []})]
     assert exa.search("q", results=5, characters=2000) == {"hits": [], "cost_nanos": exa.SEARCH_COST_NANOS, "notes": []}
-    assert "includeDomains" not in service.sent[0][1] and "startPublishedDate" not in service.sent[0][1]
+    assert not {"includeDomains", "excludeDomains", "startPublishedDate"} & set(service.sent[0][1])
 
 
 def test_a_rate_limit_and_a_server_error_are_tried_again_a_refused_request_is_not(service):

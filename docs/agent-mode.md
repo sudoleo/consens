@@ -5348,14 +5348,45 @@ haben. Google-Daten-Chats suchen nicht und haben deshalb keine Auszüge.
 ### Quellen nachlesen (read_source, seit 2026-10-10)
 
 `read_source` öffnet eine öffentliche Seite als Text, auch PDFs: ein
-Leser-Dienst holt sie ohne Anmeldung, Skripte oder Klicks, gemessen 3,0–6,4 s
-je Abruf (Prod, 30.10.–06.11.; die Beschreibung nennt seit 2026-11-07 „about 3
-to 6 seconds“, davor 10–30 s; seit 2026-10-28 sagt sie, was es öffnet, nicht
-wann).
-Argument nur `url` (`AuditReadSourceArgs`; bis 2026-10-31 nahm der
-Vergleichsmodus dazu `purpose` und `point` aus einer Liste von Lesegründen und
-ein `status_update`). Schalter: `AGENT_READ_SOURCES` (Env), seit 2026-10-11
-standardmäßig an, `0` schaltet ab. Code: `agent_read_source.py`.
+Leser-Dienst holt sie ohne Anmeldung, Skripte oder Klicks. Schalter:
+`AGENT_READ_SOURCES` (Env), seit 2026-10-11 standardmäßig an, `0` schaltet ab.
+Code: `agent_read_source.py`.
+
+**Zwei Wege zur Seite (seit 2026-11-10).** Wo Exa verfügbar ist
+(`exa.available()`, je Nachricht einmal entschieden: `SourceReader.direct`),
+fragt der Server Exa selbst nach dem Text (`exa.page`, `POST /contents`), ohne
+Modellaufruf:
+
+- Exas gespeicherte Kopie kommt in 0,2–0,3 s (Probe 2026-11-09: Wikipedia,
+  ein arXiv-PDF, Python-Doku), eine Seite ohne Kopie holt Exa in 1–9 s; `fresh:
+  true` lässt sie jetzt holen (`maxAgeHours: 0`). Das Ergebnis sagt, was es
+  ist (`copy`: „stored“ oder „fetched now“), bei einer Kopie mit dem Hinweis,
+  dass sie Tage alt sein kann (`STORED_NOTE`): Das Modell entscheidet, wann
+  es die Seite frisch braucht.
+- Ein Abruf gibt bis zu `READ_TEXT_CHARS` (24.000) Zeichen ab `start`; bei
+  einer längeren Seite nennt das Ergebnis die Gesamtlänge und die nächste
+  Position (`CUT_NOTE`, `next_start`), denn jeder Abruf fragt mindestens
+  `PAGE_LENGTH_CHARS` (300.000) Zeichen an. Der Agent liest ein langes
+  Dokument so weiter oder springt an die Stelle, die er braucht; mehrere
+  Teile einer Seite laufen in einem Schritt nebeneinander. Vorher endete jede
+  Seite nach 4.000 Tokens (ein 15-seitiges PDF nach 15.900 Zeichen), und was
+  dahinter stand, war nicht erreichbar.
+- Abgerechnet zu Exas Preis (0,001 $ je Seite) über
+  `DelegationLoop.book_service` (Beleg `operation` „page“), ohne Sitzung und
+  ohne Modellschritt.
+- Live (echte Route, Free-Konto, Terra): Tabelle 2 und die Trainingskosten aus
+  „Attention Is All You Need“ in 20,2 s, drei Abrufe des PDFs in 0,64, 0,25
+  und 0,23 s.
+- Argumente `url`, `start`, `fresh` (`ReadSourceArgs`). Eine Seite, die Exa
+  nicht geben kann (404, Zeitüberschreitung, Seite lässt keinen Leser zu),
+  scheitert mit ihrem Grund und kostet nichts.
+
+Ohne Exa, und für einen Abruf, den Exa selbst nicht beantwortet, liest ein
+Helfermodell die Seite über OpenRouters `web_fetch` (`PageFetch`, unten):
+gemessen 3,0–6,4 s je Abruf (Prod, 30.10.–06.11.), Argument nur `url`
+(`AuditReadSourceArgs`; bis 2026-10-31 nahm der Vergleichsmodus dazu `purpose`
+und `point` aus einer Liste von Lesegründen und ein `status_update`), die
+Seite von Anfang an und höchstens `READ_CONTENT_TOKENS`.
 
 **Was lesbar ist** (`SourceReader.cited`, `chosen`): seit 2026-11-07 jede
 öffentliche http(s)-Adresse, mit und ohne Prüfer. Abgelehnt wird nur, was keine
@@ -5450,15 +5481,17 @@ Helfers („OK“) wird verworfen.
   `Location`-Header (`resolve_redirect`, ohne Weiterleitung zu folgen, Ziel nach
   denselben Regeln geprüft), dann liest Exa die Zielseite; gespeichert werden
   Ziel (`url`) und Zitat (`cited_url`).
-- Höchstens `READS_PER_MESSAGE` (15, bis 2026-10-28: 5) Abrufe je Nachricht
-  (auch gescheiterte zählen), `READS_PER_STEP` (5, vorher 3) je Schritt,
-  `READ_CONTENT_TOKENS` (4.000) je Seite (`max_uses: 1`,
-  `max_content_tokens`); gespeichert bis `READ_TEXT_CHARS` (24.000 Zeichen).
-  Eine schon gelesene URL (auch über ihre Weiterleitung) liefert `already_read`
-  ohne neuen Abruf, eine gescheiterte wird nicht erneut versucht.
+- Höchstens `READS_PER_MESSAGE` (30, bis 2026-11-10: 15, bis 2026-10-28: 5)
+  Abrufe je Nachricht (auch gescheiterte zählen), `READS_PER_STEP` (5, vorher
+  3) je Schritt; über den Helfer `READ_CONTENT_TOKENS` (4.000) je Seite
+  (`max_uses: 1`, `max_content_tokens`); gespeichert bis `READ_TEXT_CHARS`
+  (24.000 Zeichen). Derselbe Teil derselben Seite (auch über ihre
+  Weiterleitung) liefert `already_read` ohne neuen Abruf; ein anderer `start`
+  oder `fresh` nach der gespeicherten Kopie ist ein neuer Abruf. Eine
+  gescheiterte Seite wird nicht erneut versucht.
 - Zeit: Ein Abruf endet samt Weiterleitung und Ersatz-Helfer nach höchstens
   `READ_SECONDS` (60 s, eigene, mit dem Turn verkettete Abbruchquelle); unter
-  `READ_MIN_SECONDS` (45 s) bis zum spätesten Start der Antwort
+  `READ_MIN_SECONDS` (45 s; direkt bei Exa `DIRECT_MIN_SECONDS`, 30 s) bis zum spätesten Start der Antwort
   (`answer_time_left`) beginnt keiner. Nur der eigene Zeitgeber macht einen
   Abbruch zum `timeout` des Abrufs; jeder andere Stop (Nutzer, Server) beendet
   den Turn wie sonst. Ohne diese Grenze hätte ein hängender Abruf bis zur
