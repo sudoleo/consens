@@ -7,7 +7,7 @@ import pytest
 from app.services import agent_budget_config, agent_quota
 from app.services.agent_delegation import TURN_ALLOWANCE_LIMIT
 from app.services.agent_tokens import input_estimate
-from app.services.llm.agent_client import answer_output_limit, routing_output_limit
+from app.services.llm.agent_client import routing_output_limit
 from test_agent_audit import ANSWER, Audit, audit_loop, saved
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
 
@@ -59,7 +59,8 @@ def test_a_long_runs_reserve_counts_what_the_reviewers_took(store, monkeypatch):
     loop = audit_loop(store, Audit())
     model = loop.model
     inputs = input_estimate(loop.messages, loop.registry.schemas, model.request_config)
-    room = 2 * inputs + routing_output_limit(model) + answer_output_limit(model) + 1_000
+    # One more step and the closing one, each held at its routing allowance.
+    room = 2 * inputs + 2 * routing_output_limit(model) + 1_000
     monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: room)
     assert loop._long_run_limit() is None
     # 10,000 over four steps: the next step's live rounds and the final

@@ -4832,6 +4832,12 @@ die Antwort im frei gebliebenen Schritt (`_closing_index`, Grund
 nach dem ersten bezahlten Vergleich jeder Steuer-Schritt bis `turn_steps`
 (Sicherheitsaudit). `_long_run_limit` hält zusätzlich zweimal den bisherigen
 Prüfer-Verbrauch je Schritt frei (`reviewer_charge`, `_reviewer_step_charge`).
+Seit 2026-11-09 verlangt es, was die Zulassung hält (ein weiterer Schritt und
+der Schlussschritt, je mit Steuer-Budget, statt dazu das ganze Antwortbudget
+von 65 536 Tokens), und liest das Konto erst, wenn der Beleg des Schritts
+davor geschrieben ist (`_await_settling`): mit dessen Reservierung gelesen,
+war ein Free-Konto nach `open_workspace` „fast aufgebraucht“, bei 85 % freiem
+Tag, drei Nachrichten hintereinander (Prod, 2026-11-07).
 Den Beleg eines Agent-Schritts mit Toolcalls schreibt seit 2026-11-05 ein
 eigener Thread, während die Aufrufe laufen (`_settle_later`); der nächste
 Claim des Agenten und das Laufende warten darauf (`_join_settling`), ein
@@ -4841,12 +4847,30 @@ nur einem noch laufenden Thread; einen schon gescheiterten schreibt er selbst,
 und ist er geschrieben, geht der nächste Claim weiter (seit 2026-11-07; vorher
 wartete der Helfer bis zum Zeitlimit des Turns).
 Jeder Schritt des Agenten im Kontomodus kann die Antwort schreiben und wird mit
-dem Steuer-Budget zugelassen (`_routing_model`); sein Antwortbudget darüber
-(`_answer_output`) reserviert er einmal statt pro Suchrunde
-(`RunCosts.estimate(answer_output=…)`), und nur dieser Teil darf schon vor
-bezahlter Arbeit überziehen (`claim(overdraft=<Tokens>)` →
-`agent_quota.reserve`): eine Direktantwort kurz vor dem Limit wird nicht
-abgeschnitten, und Recherche geht nicht früher verloren. Suchkonfiguration
+dem Steuer-Budget zugelassen (`_routing_model`). **Seit 2026-11-09 hält ein
+Schritt des Agenten nur noch, was er sendet, und einmal sein Steuer-Budget**
+(`RunCosts.estimate`): weder seine Suchrunden (`soft_search`, wie zuvor schon
+Vergleichsantworten und Prüfer) noch das Antwortbudget darüber
+(`_answer_output` ist nur noch die Ausgabegrenze der Anfrage und muss ins
+Kontextfenster passen). Beides bucht das Settlement, wie gemessen. Anlass
+(Prod-Belege 31.10.–09.11., 555 Schritte): die Reservierung eines Schritts war
+im Median das 91-Fache (extern) bis 153-Fache (eigene Konten) seiner Kosten.
+Auf einem Free-Konto (1 €) hielt ein Terra-Schritt 0,76–1,00 € für Kosten von
+0,001–0,05 €: fünf Suchrunden passten nie (immer drei, ab 46 % verbrauchtem
+Tag eine, ab 80 % keine, „aufgebraucht“ bei 92 %), parallele Aufrufe warteten
+aufeinander, und ein verlorener Usage-Wert kostete die Hälfte davon als
+Schätzung. Jetzt hält derselbe Schritt rund 0,12 € und behält seine fünf
+Runden; nur ein zu kleines Kontextfenster nimmt einem Schritt noch die Suche
+(`smaller_search`), und in den letzten Cent des Tages die Gebühren der
+Suchrunden: passt neben ihnen nicht einmal die kleinste Antwort, läuft der
+Schritt mit weniger Runden oder ohne Suche, statt abgelehnt zu werden. Die
+mögliche Überziehung je Schritt bleibt, was sie war: die Antwort über dem
+Steuer-Budget durfte schon vorher jenseits des Limits liegen
+(`claim(overdraft=<Betrag>)`), dazu kommen jetzt die Suchtokens (gemessen
+höchstens rund 11k je Runde). Live nachgemessen 2026-11-09 (echte Route,
+Free-Konto, Terra): 120 302 Mikro-Euro gehalten statt rund 870 000, fünf
+Runden; bei 90 % verbrauchtem Tag 99 997 gehalten, fünf Runden, Antwort und
+Prüfung vollständig. Suchkonfiguration
 (`search_tools`: eine für alle Modelle, Engine `auto`, nur Grok fest Exa; die
 eigenen Schritte des Agenten seit 2026-11-05 per `AGENT_SEARCH_ENGINE=exa`
 umstellbar, Standard `auto`),
@@ -8374,9 +8398,12 @@ Agent.
   `defaults`. Stufe: `agent_quota.account_tier(uid, tier)` = `admin` bei
   Admin-Rolle, sonst `free|plus|pro`. Agent für alle Stufen zu öffnen
   (2026-10-02) war deshalb nur eine Zugangsentscheidung, keine Ledger-Änderung.
-- **Agent** bleibt bei strikter Einzelabrechnung (Reserve vor jedem Call,
-  Settlement mit Messwerten, Schätzung + Reconciliation bei fehlender Usage);
-  nur das Limit kommt aus der Stufe.
+- **Agent** rechnet jeden Call einzeln ab (Reserve vor dem Call, Settlement
+  mit Messwerten, Schätzung + Reconciliation bei fehlender Usage); nur das
+  Limit kommt aus der Stufe. Die Reserve ist seit 2026-11-09 keine
+  Obergrenze aller Suchrunden und der ganzen Antwort mehr, sondern die
+  Anfrage plus ein Steuer-Budget (`RunCosts.estimate`, „Agent · Beta“ oben):
+  wie bei der Pipeline bucht das Settlement, was darüber anfällt.
 - **Pipeline: messen und danach buchen.**
   - *Admission* (`/prepare`, Legacy-Direktaufrufe in `authorize_operation`,
     API v1 beim Annehmen): ein Lauf startet nur, wenn `remaining` (Limit −
@@ -8477,9 +8504,9 @@ Mikro-Euro um).
 
 In der Agent-Schleife rechnen alle Stellen, die den Rest des Kontos lesen,
 in Geld: `_admit_chat_step` kürzt die Ausgabe auf das, was der Rest bezahlt
-(`RunCosts.output_within`, zwei Schätzungen, linear), `beyond` (Antwort über
-der Routing-Grenze) ist deren Preis, `_long_run_limit` vergleicht mit
-`worst_case_nanos` zweier Schritte plus Antwort, `_output_shares` gibt jedem
+(`RunCosts.output_within`, zwei Schätzungen, linear), `_long_run_limit`
+vergleicht mit `worst_case_nanos` zweier Schritte (je Steuer-Budget, bis
+2026-11-09 dazu das ganze Antwortbudget), `_output_shares` gibt jedem
 Vergleichsmodell/Prüfer Output-Tokens im Wert seines Anteils.
 
 **Herleitung der Token-Defaults bis 2026-10-31** (Prinzip: ein typischer Nutzer behält ungefähr

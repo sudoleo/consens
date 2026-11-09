@@ -112,17 +112,21 @@ class RunCosts:
         return tokens, cost
 
     def estimate(self, model, messages, tools=(), *, native_searches=0, soft_search=False, answer_output=0):
-        """Worst-case tokens and cost of one call.
+        """What one call holds: its tokens and their dearest cost.
 
-        ``soft_search`` (comparison answers): the search must still fit the
-        context window, but its tokens are not reserved; settlement books them
-        as measured. Otherwise a worst-case bound for several rounds and six
-        parallel answers exceeds a whole daily allowance.
+        ``soft_search`` (the agent's own steps on the daily account,
+        comparison answers, reviewers' rounds): the search must still fit the
+        context window, but its tokens are not held; settlement books them as
+        measured. A bound for every round held 76 to 100 % of a Free day for
+        one step that cost a hundredth of it (prod, 2026-11): five rounds
+        never fitted, the rounds left shrank as the day went on, and a step
+        waited for its siblings.
 
-        ``answer_output`` (a step that may write the answer): the
-        call's output limit, above ``model.max_output_tokens`` (the routing
-        allowance). The answer is written once, so one segment reserves it
-        and every further search continuation the routing allowance."""
+        ``answer_output`` (a step that may write the answer): the call's
+        output limit, above ``model.max_output_tokens`` (the routing
+        allowance). The window must hold it. The account does not: an answer
+        is written once and rarely grows past the routing allowance, so what
+        it takes on top is booked as measured, like the search."""
         from app.services.agent_tokens import input_estimate
         extra = max(0, answer_output - model.max_output_tokens)
         inputs = (input_estimate(messages, tools, model.request_config) if self.policy.account_budget_only
@@ -148,7 +152,7 @@ class RunCosts:
             # Search results do not exist in the pre-search generation. Each
             # result enters only its subsequent continuations.
             total_inputs = initial_inputs * segments + (inputs - initial_inputs) * segments // 2
-        outputs = model.max_output_tokens * segments + extra
+        outputs = model.max_output_tokens * segments
         tokens = total_inputs + outputs
         cost = worst_case_nanos(model, total_inputs, outputs)
         if native_searches:

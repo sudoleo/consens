@@ -343,8 +343,10 @@ Dateien, Dokumenten und Google (`agent_watch.AUDIT_PROMPT`,
 `agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
 `agent_files.AUDIT_UNTRUSTED`; im Admin „Agent: tool blocks“) und mit dem
 Arbeitsplatz VM, GitHub und Plan. Der Agent sucht in jedem Schritt mit bis zu
-`AGENT_SEARCH_ROUNDS` (5) Runden; passt die Reservierung nicht, geht
-`smaller_search` 5 → 3 → 1 → 0. Sein Text streamt wie jede Antwort, auch nach
+`AGENT_SEARCH_ROUNDS` (5) Runden, seit 2026-11-09 unabhängig vom Rest des
+Tageskontos (die Suche wird gebucht, nicht reserviert, siehe „Reservierung“);
+nur wenn das Kontextfenster sie nicht fasst, geht `smaller_search`
+5 → 3 → 1 → 0. Sein Text streamt wie jede Antwort, auch nach
 eigenen Suchtreffern. `read_source` liest Seiten, die der Nutzer verlinkt,
 Quellen früherer Nachrichten, die Quellen der Antworten von `compare_models`,
 die eigenen Suchtreffer dieser Nachricht (`DelegationLoop.search_sources`
@@ -4729,7 +4731,12 @@ Antworten oder einer schon fixierten Antwort.
 `vm_turn_steps` = 200 und `vm_turn_seconds` = 2 h (Vorschlag, Konstanten in
 `AgentPolicy.for_chat`). Die eigentliche Grenze bleibt das Tageskonto: Vor
 jedem Schritt prüft `_long_run_limit`, ob es noch zwei Schritte im heutigen
-Umfang plus Antwort trägt, so teuer, wie ihre Zulassung sie reserviert
+Umfang trägt (den nächsten und den Schlussschritt), so teuer, wie ihre
+Zulassung sie hält: je das Gespräch plus ein Steuer-Budget. Bis 2026-11-09
+kam das ganze Antwortbudget dazu (65 536 Tokens: bei Terra 0,38–0,49 €, bei
+Sonnet 0,77–0,97 € eines Free-Tags von 1 €), und gelesen wurde das Konto,
+während der Schritt davor seine Reservierung noch hielt; jetzt wartet die
+Prüfung auf dessen Beleg (`_await_settling`).
 (`worst_case_nanos`; `remaining_allowance`, ein Firestore-Lesezugriff je Schritt, nur in langen
 Läufen; mit Prüfern seit 2026-10-29 zusätzlich zweimal deren bisheriger
 Verbrauch je Agent-Schritt, `_reviewer_step_charge` aus `reviewer_charge`:
@@ -4951,7 +4958,13 @@ Modelle) — ein Scheinkonsens, den keine Prüfung erkennen kann.
 
 **Reservierung.** Jede Suchrunde reserviert für jedes Modell gleich
 `agent_costs.SEARCH_INPUT_TOKENS` (32k), höchstens so viel, wie das
-Kontextfenster noch fasst. Ausnahme seit 2026-10-06: **Vergleichsantworten und
+Kontextfenster noch fasst. Das gilt seit 2026-11-09 nur noch für delegierte
+Worker und begrenzte Läufe: **die eigenen Schritte des Agenten reservieren
+ihre Suche nicht mehr** (und auch nicht die Antwort über ihrem Steuer-Budget).
+In Prod hielt ein Terra-Schritt eines Free-Kontos damit 0,76–1,00 € seines
+Tages von 1 € für Kosten von 0,001–0,05 € (Median: das 91-Fache), bekam nie
+fünf Runden und ab 80 % verbrauchtem Tag keine Suche mehr. Schon seit
+2026-10-06: **Vergleichsantworten und
 Prüferrunden reservieren ihre Suche nicht** (`soft_search`, `SEARCHING_KINDS`);
 sie muss nur ins Kontextfenster passen, die Abrechnung bucht den gemessenen
 Verbrauch. Die Worst-Case-Schranke für drei Runden und sechs parallele
@@ -4981,7 +4994,8 @@ große Runde kann das Tageslimit deshalb leicht überschreiten (weiche Grenze,
 kein Abbruch). Die Suchgebühr kommt aus dem Katalogpreis des Modells, sonst
 gilt die Exa-Pauschale. Passt eine Reservierung nicht, stuft `smaller_search`
 ab (5 → 3 → 1 → keine); Vergleichsantworten und Prüfer nur, wenn das
-Kontextfenster die Suche nicht fasst.
+Kontextfenster die Suche nicht fasst, der Agent außerdem in den letzten Cent
+des Tages, wenn neben den Suchgebühren nicht einmal die kleinste Antwort passt.
 
 **Suchzähler.** OpenRouter meldet die Suchen eines Aufrufs im Usage-Paket als
 `usage.server_tool_use_details.web_search_requests` (live 2026-10-10);

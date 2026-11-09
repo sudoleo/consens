@@ -1019,16 +1019,23 @@ class DelegationLoop(AgentLoop):
         inputs = self._request_inputs(model)
         if inputs + answer > model.context_length * LONG_RUN_CONTEXT_SHARE:
             return TURN_CONTEXT_LIMIT
+        # The step before may still hold its reservation while its receipt
+        # is written beside its calls (_settle_later). Read with it, a Free
+        # account whose first step opened the workspace had "nearly used up"
+        # its day with 85 % of it left, three messages in a row (prod,
+        # 2026-11-07). The next claim waits for the same write anyway.
+        self._await_settling()
         try:
             remaining = agent_quota.remaining_allowance(self.store.db, self.uid)
         except Exception as exc:
             # The next admission reads the ledger again and refuses then.
             logging.warning("Agent long run allowance unavailable category=%s", safe_exception(exc))
             return None
-        # One more step and the answer as their admissions reserve them
-        # (micro-euros, agent_quota): the whole conversation twice at the
-        # dearest input price.
-        steps = micro_eur(worst_case_nanos(model, 2 * inputs, routing_output_limit(model) + answer))
+        # One more step and the closing one as their admissions hold them
+        # (micro-euros, RunCosts.estimate): the whole conversation twice at
+        # the dearest input price, each with the routing allowance. What the
+        # answer writes on top is booked as measured.
+        steps = micro_eur(worst_case_nanos(model, 2 * inputs, 2 * routing_output_limit(model)))
         if remaining < steps + 2 * self._reviewer_step_charge():
             return TURN_ALLOWANCE_LIMIT
         return None
@@ -1630,15 +1637,17 @@ class DelegationLoop(AgentLoop):
         """Retry admission, never generation. All successful claims stay atomic.
 
         Contention is backpressure, not exhaustion. Wait for active receipts,
-        then shrink optional search step by step (fewer rounds, then none) and
-        fit the actual provider output cap if needed.
+        then fit the actual provider output cap if needed.
         With ``clamp_floor`` (parallel comparison answers and reviewers'
         rounds), a call whose output still fits at that size starts now with
         the smaller allowance instead of queueing behind its siblings.
-        Searching helpers do not reserve their search (``soft_search``): every
-        answer of a comparison keeps its full rounds, whatever order the
-        siblings are admitted in; settlement books the measured search tokens.
-        Only a context window too small for the search shrinks it.
+        The agent's own steps and the searching helpers hold no search tokens
+        (``soft_search``): a step keeps its full rounds whatever is left of
+        the day and whatever its siblings hold; settlement books the measured
+        search tokens. Only a context window too small for the search shrinks
+        it (fewer rounds, then none), and for the agent's step the day's last
+        cents: where not even the smallest answer fits beside the search's
+        fees. A delegated worker still holds its search.
         Once this message holds paid work (comparison answers, or a step of
         the agent that reviewers followed), the ``closing`` step (the answer
         written without tools, _merged_wrap_up) and the reviewers' final
@@ -1646,14 +1655,14 @@ class DelegationLoop(AgentLoop):
         answer and its review, and the next message is refused instead (see
         agent_quota.reserve). A routing step is admitted only within the
         allowance; refused, it leaves its step to the closing one (run).
-        A step that may write the answer (``answer_output``) is admitted like
-        a routing step, with ``model``'s routing allowance per segment. The
-        answer it may write on top (one segment up to ``answer_output``) is
-        reserved too but may lie beyond the allowance, so a direct answer is
-        not cut short near the daily limit and research is not lost earlier.
+        A step that may write the answer (``answer_output``) is admitted and
+        held like a routing step, with ``model``'s routing allowance. The
+        answer it may write on top (up to ``answer_output``) is the request's
+        output limit only and is booked as measured (RunCosts.estimate), so a
+        direct answer is not cut short near the daily limit.
         """
         from app.services.agent_tokens import input_estimate, minimum_output
-        soft = bool(worker and getattr(worker, "kind", None) in SEARCHING_KINDS)
+        soft = worker is None or getattr(worker, "kind", None) in SEARCHING_KINDS
         # Only once this message holds paid work: a started comparison whose
         # answers found no allowance has nothing to finish (near the daily
         # limit a long first step left the comparison without answers, and
@@ -1676,10 +1685,9 @@ class DelegationLoop(AgentLoop):
             reservation = None
             # Searches whose tokens this admission reserves.
             reserved = 0 if soft else searches
-            # A merged step's answer above its routing allowance: reserved, not
-            # admitted (its cost in micro-euros, agent_quota.reserve).
+            # A merged step's answer above its routing allowance: the
+            # request's output limit, not held (RunCosts.estimate).
             extra = max(0, answer_output - model.max_output_tokens)
-            beyond = True if overdraft else micro_eur(worst_case_nanos(model, 0, extra)) if extra else 0
             try:
                 reservation = self.costs.reserve(model, messages, tools, native_searches=searches, soft_search=soft,
                                                  answer_output=answer_output)
@@ -1687,7 +1695,7 @@ class DelegationLoop(AgentLoop):
                 try:
                     claimed = self.store.claim(self.uid, self.chat_id, self.turn_id, request, step=step,
                         run_token=self.run_token, policy=claim_policy, reservation=reservation,
-                        **({"overdraft": beyond} if beyond else {}))
+                        **({"overdraft": True} if overdraft else {}))
                 except Exception as exc:
                     if not _transient_store_error(exc) or not self._claim_landed(step):
                         raise
@@ -1744,13 +1752,17 @@ class DelegationLoop(AgentLoop):
                     if not reserved:
                         output = self.costs.output_within(model, messages, tools, nano_usd(exc.remaining),
                                                           native_searches=searches, soft_search=soft)
+                        if minimum_output(model) <= output < model.max_output_tokens:
+                            model = replace(model, max_output_tokens=output)
+                            continue
                         # Nothing smaller to try (a page read's reservation does
                         # not shrink with its output): the same request again
-                        # would only spin on the ledger.
-                        if output < minimum_output(model) or output >= model.max_output_tokens:
+                        # would only spin on the ledger. Only the agent's own
+                        # step has something left to give in the day's last
+                        # cents: the fees of its search rounds, which it holds
+                        # beside its request (below).
+                        if output >= model.max_output_tokens or worker is not None or not searches:
                             raise
-                        model = replace(model, max_output_tokens=output)
-                        continue
                 elif not isinstance(exc, AnalysisBudgetExceeded) or not searches:
                     raise
                 # The optional search does not fit: try a smaller one first.
@@ -2221,6 +2233,13 @@ class DelegationLoop(AgentLoop):
         thread = threading.Thread(target=copy_context().run, args=(work,), daemon=True)
         thread.start()
         self.settling = (thread, box, step)
+
+    def _await_settling(self):
+        """Wait for _settle_later's receipt write without taking it: the
+        next claim still joins it and raises its failure (_join_settling)."""
+        settling = self.settling
+        if settling is not None:
+            settling[0].join()
 
     def _join_settling(self, *, raise_error=True):
         """Wait for _settle_later's receipt write; raise its failure, unless

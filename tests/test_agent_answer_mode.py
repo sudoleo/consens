@@ -26,6 +26,10 @@ from app.services.llm.engines import _ProviderHTTPStatusError
 from app.services.llm.provider_runtime import AnalysisBudgetExceeded, ProviderCancellation
 from agent_reviewers import inert_reviewers, without_reviewers  # noqa: F401  (fixture)
 from test_agent_comparison import REVIEWER, Script
+# At import, before any fixture replaces AgentCompletion.stream: imported
+# inside the test, REAL_STREAM was the api fixture's stand-in whenever this
+# file ran without test_agent_loop collected first.
+from test_agent_loop import REAL_STREAM, reviewed_transport
 from test_agent_runs import UID, api, pending, store  # noqa: F401  (fixtures)
 
 
@@ -404,8 +408,9 @@ def test_a_free_account_keeps_its_research_after_a_first_message(store, monkeypa
 
 
 def test_near_the_limit_a_direct_answer_keeps_its_whole_allowance(store, monkeypatch):
-    """Admitted like a routing step, the answer on top may overdraw; the
-    search still yields."""
+    """Admitted and held like a routing step: the answer on top is booked as
+    measured, and so is the search, which stays whatever is left of the day."""
+    from app.services.agent_audit import AGENT_SEARCH_ROUNDS
     from app.services.llm.agent_client import answer_output_limit
     ref = free_account(store, monkeypatch, 30_000)
     used = ref.get().to_dict()["used"]
@@ -414,8 +419,8 @@ def test_near_the_limit_a_direct_answer_keeps_its_whole_allowance(store, monkeyp
     events = list(loop.run())
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
-    assert script.kwargs[0]["native_searches"] == 0
-    assert any(e.get("name") == "web_search" and e.get("status") == "blocked" for e in events)
+    assert script.kwargs[0]["native_searches"] == AGENT_SEARCH_ROUNDS
+    assert not any(e.get("name") == "web_search" and e.get("status") == "blocked" for e in events)
     assert script.limits[0] == answer_output_limit(loop.model) > 30_000
     ledger = ref.get().to_dict()
     # The answer's provider cost, $0.0001, is 87 micro-euros (rounded up).
@@ -690,7 +695,6 @@ def test_over_http_a_direct_answer_is_one_streamed_request(api, monkeypatch):
     """The whole path: POST /agent, the real stream client, the saved turn
     and the recovered answer. The comparison models review it (every
     account's turn) and mark nothing."""
-    from test_agent_loop import REAL_STREAM, reviewed_transport
     from test_agent_runs import AUTH
     from app.services.llm.agent_client import AgentCompletion
     client, store, _ = api

@@ -323,11 +323,12 @@ def _search(kwargs):
     return next((t["parameters"] for t in kwargs.get("tools") or [] if t.get("type") == "openrouter:web_search"), None)
 
 
-# "full" answers may search three rounds, "quick" answers once, whatever the
-# account's remaining budget: their search is booked, not reserved. The
-# agent's own search is optional: a tight budget shrinks it.
+# "full" answers may search three rounds, "quick" answers once, and the agent
+# its five, whatever the account's remaining budget: a search is booked, not
+# reserved. Reserved, a small account never got the agent's five rounds, and
+# the rounds left shrank with every message of the day.
 @pytest.mark.parametrize("depth,limit,rounds,own", [("quick", 10_000_000, 1, 5), ("full", 10_000_000, 3, 5),
-                                                    ("full", 300_000, 3, 3), ("full", 100_000, 3, 1)])
+                                                    ("full", 300_000, 3, 5), ("full", 100_000, 3, 5)])
 def test_every_model_searches_with_one_configuration(store, depth, limit, rounds, own):
     from app.services.agent_audit import AGENT_SEARCH_ROUNDS, LIVE_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS
     from app.services.llm.engines import web_search_tool
@@ -369,10 +370,9 @@ def test_every_model_searches_with_one_configuration(store, depth, limit, rounds
     told = "use web search once" if rounds == 1 else f"up to {rounds} search rounds"
     assert all("Current date:" in prompt and told in prompt for *_, prompt in comparisons.values())
     assert all("hints, never a requirement" in prompt for *_, prompt in comparisons.values())
-    # The agent researches in every step, up to AGENT_SEARCH_ROUNDS each; its
-    # reservation includes the routing reasoning headroom for every round.
+    # The agent researches in every step, up to AGENT_SEARCH_ROUNDS each.
     [(_, _, searched, tool, _)] = [row for row in seen if row[0] == "agent"]
-    assert own <= AGENT_SEARCH_ROUNDS and searched == own and tool == expected("anthropic", own)
+    assert own == AGENT_SEARCH_ROUNDS and searched == own and tool == expected("anthropic", own)
     [(_, _, searched, tool, _)] = [row for row in seen if row[0] == "answer"]
     assert searched >= 1 and tool == expected("anthropic", searched)
     # The reviewers search the same way, however tight the budget: live
@@ -438,16 +438,21 @@ def test_overdraft_admits_a_reservation_beyond_the_limit_only_when_asked():
     assert (refused.value.required, refused.value.remaining) == (150, 100)
 
 
-def test_a_merged_step_reserves_its_answer_once_not_per_search_round():
+def test_a_merged_step_holds_its_routing_allowance_not_the_answer_on_top():
+    """What an answer writes above the routing allowance is booked as
+    measured: held, it took a third of a Free day for every step of the
+    chat model (Terra: 49,152 tokens of output at their price)."""
     from app.services.agent_costs import RunCosts
     costs = RunCosts(AgentPolicy.for_chat({**defaults(), "enabled": True}))
     messages = [{"role": "user", "content": "Q"}]
     routing = resolve_agent_model("claude-haiku-4-5")
     answer = routing.max_output_tokens + 40_000
     for searches in (0, 1, 3):
-        plain = costs.estimate(routing, messages, native_searches=searches)
-        merged = costs.estimate(routing, messages, native_searches=searches, answer_output=answer)
-        assert merged[0] - plain[0] == 40_000 and merged[1] > plain[1]
+        for soft in (False, True):
+            plain = costs.estimate(routing, messages, native_searches=searches, soft_search=soft)
+            merged = costs.estimate(routing, messages, native_searches=searches, soft_search=soft,
+                                    answer_output=answer)
+            assert merged == plain
     # The context window still has to hold the whole answer.
     with pytest.raises(AnalysisBudgetExceeded, match="context limit"):
         costs.estimate(routing, messages, answer_output=routing.context_length)

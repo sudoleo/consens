@@ -135,6 +135,46 @@ def test_a_long_run_ends_with_its_answer_before_the_allowance_runs_out(store, fa
     assert loop._long_run_limit() == TURN_ALLOWANCE_LIMIT
 
 
+def test_the_allowance_is_read_once_the_step_before_released_its_reservation(store, fake_vm, monkeypatch):
+    """The receipt of a step that called tools is written beside its calls
+    (_settle_later), and until then the account holds the step's
+    reservation. Read with it, a Free account whose first step opened the
+    workspace was "nearly used up" with 85 % of its day left."""
+    import threading
+    import time
+    loop = vm_loop(store, LongAgent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    released = []
+    def write():
+        time.sleep(.05)
+        released.append(True)
+    thread = threading.Thread(target=write)
+    loop.settling = (thread, {}, "completion:9")
+    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: 10_000_000 if released else 0)
+    thread.start()
+    assert loop._long_run_limit() is None
+    # Not taken: the next claim still joins the write and raises its failure.
+    assert loop.settling is not None
+
+
+def test_a_free_day_holds_a_long_run_of_the_chat_model(store, fake_vm, monkeypatch):
+    """One more step and the closing one as their admissions hold them:
+    their routing allowance each. With the answer's whole output limit on
+    top, a workspace run on a small account ended at its first step."""
+    from app.services.agent_tokens import input_estimate
+    from app.services.llm.agent_client import answer_output_limit, routing_output_limit
+    loop = vm_loop(store, LongAgent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    model = loop.routing_lighter or loop.model
+    inputs = input_estimate(loop.messages, loop.registry.schemas, model.request_config) + loop.file_tokens
+    needed = 2 * inputs + 2 * routing_output_limit(model)
+    assert needed < 2 * inputs + routing_output_limit(model) + answer_output_limit(model)
+    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: needed + loop._reviewer_step_charge() * 2)
+    assert loop._long_run_limit() is None
+    monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid: needed - 1)
+    assert loop._long_run_limit() == TURN_ALLOWANCE_LIMIT
+
+
 def test_a_long_run_ends_with_its_answer_before_the_context_window_is_full(store, fake_vm):
     script = LongAgent([[("vm_exec", {"command": "ls"})], [("vm_exec", {"command": "pwd"})]])
     loop = vm_loop(store, script)

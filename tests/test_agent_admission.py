@@ -61,7 +61,8 @@ def test_screenshot_sized_prompt_fits_20933_tokens_without_byte_reservation(stor
     assert old > 26283
     ref = quota(store, 20933)
     list(loop.run())
-    assert len(observed) == 1 and observed[0]["native_searches"] == 0
+    # With its search: a search holds nothing before it runs.
+    assert len(observed) == 1 and observed[0]["native_searches"] == 1
     assert ref.get().to_dict()["reserved"] == 0
     assert ref.get().to_dict()["used"] == 250000 - 20933 + 150
     assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
@@ -87,7 +88,6 @@ def test_small_remaining_budget_sets_provider_and_receipt_output_cap(store):
             yield from super().stream(**kwargs)
     loop = chat_loop(store, Capture)
     inputs = input_estimate(loop.messages, loop.registry.schemas, loop.model.request_config)
-    # Include the small notice added when optional search is unavailable.
     ref = quota(store, inputs + 900)
     list(loop.run())
     assert len(observed) == 1 and 256 <= observed[0].max_output_tokens < 1000
@@ -98,19 +98,28 @@ def test_small_remaining_budget_sets_provider_and_receipt_output_cap(store):
     assert totals(store)["calls"] == loop.costs.calls == 1
 
 
-def test_search_does_not_reserve_its_results_before_the_search(store):
+def test_the_agents_step_holds_its_routing_allowance_and_keeps_its_search(store):
+    """The agent's own step holds what it sends and its routing allowance,
+    once: neither its search rounds nor the answer it may write on top
+    (RunCosts.estimate). Held for every round, one step of a Free account
+    took 76 to 100 % of its day and never got its five rounds."""
+    from app.services.agent_tools import search_tools
+    from app.services.llm.agent_client import routing_output_limit
     observed = []
     class Capture(Completion):
         def stream(self, **kwargs):
-            observed.append(kwargs["native_searches"])
+            observed.append((kwargs["native_searches"], kwargs["model"].max_output_tokens))
             yield from super().stream(**kwargs)
-    from app.services.llm.agent_client import ROUTING_REASONING_HEADROOM
     loop = chat_loop(store, Capture)
-    # Fits one round only because its results are not reserved up front; the
-    # routing reasoning headroom is reserved for both generations of the round.
-    quota(store, 45000 + 2 * ROUTING_REASONING_HEADROOM)
+    routing = routing_output_limit(loop.model)
+    tools = [*loop.registry.schemas, *search_tools(loop.model, 1, agent=True)]
+    inputs = input_estimate(loop.messages, tools, loop.model.request_config)
+    # Room for the request and one routing allowance, with a little to spare.
+    quota(store, inputs + routing + 300)
     list(loop.run())
-    assert observed == [1]
+    assert observed == [(1, routing)]
+    saved = store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()
+    assert inputs + routing <= saved["quota_reserved"] <= inputs + routing + 300
 
 
 @pytest.mark.parametrize("cancel", [False, True])
@@ -337,7 +346,24 @@ def test_google_chat_tells_the_model_that_web_search_is_unavailable(store):
     assert all(GOOGLE_NO_SEARCH not in str(message["content"]) for message in loop.messages)
 
 
-def test_a_search_that_does_not_fit_is_noted_after_the_newest_message(store):
+def test_a_search_that_does_not_fit_the_window_is_noted_after_the_newest_message(store):
+    """Only a context window too small for it takes a step's search: never
+    what is left of the day."""
+    observed = []
+    class Capture(Completion):
+        def stream(self, **kwargs):
+            observed.append(kwargs)
+            yield from super().stream(**kwargs)
+    loop = chat_loop(store, Capture)
+    model = replace(loop.model, context_length=input_estimate(loop.messages) + 900)
+    exhaust(loop._step(model, loop.messages, "completion:0", ToolRegistry(), loop.cancellation, search_rounds=1))
+    assert observed[0]["native_searches"] == 0
+    assert observed[0]["messages"][0] == loop.messages[0]
+    assert observed[0]["messages"][-1]["role"] == "user"
+    assert observed[0]["messages"][-1]["content"].startswith("Web search is unavailable for this step")
+
+
+def test_a_nearly_spent_day_keeps_the_steps_search(store):
     observed = []
     class Capture(Completion):
         def stream(self, **kwargs):
@@ -345,11 +371,36 @@ def test_a_search_that_does_not_fit_is_noted_after_the_newest_message(store):
             yield from super().stream(**kwargs)
     loop = chat_loop(store, Capture)
     inputs = input_estimate(loop.messages, loop.registry.schemas, loop.model.request_config)
-    quota(store, inputs + 900)
+    # Too little for the whole routing allowance: the output shrinks to what
+    # is left, the search stays.
+    quota(store, inputs + 2_000)
     list(loop.run())
+    assert observed[0]["native_searches"] == 1
+    assert not any("Web search is unavailable" in str(message["content"]) for message in observed[0]["messages"])
+    assert 256 <= observed[0]["model"].max_output_tokens < 2_000
+
+
+def test_in_the_days_last_cents_the_search_gives_way_before_the_step_is_refused(store, monkeypatch):
+    """A search holds only its fees. Where not even the smallest answer fits
+    beside them, the step runs without the search instead of ending the day
+    on an allowance that still pays for an answer."""
+    from app.services import agent_budget_config, agent_costs
+    from app.services.agent_tools import search_tools
+    # A search fee of 500 micro-euros (the suite's flat price makes it one).
+    monkeypatch.setattr(agent_costs, "search_cost_nanos", lambda model: agent_budget_config.nano_usd(500))
+    observed = []
+    class Capture(Completion):
+        def stream(self, **kwargs):
+            observed.append(kwargs)
+            yield from super().stream(**kwargs)
+    loop = chat_loop(store, Capture)
+    searching = [*loop.registry.schemas, *search_tools(loop.model, 1, agent=True)]
+    inputs = input_estimate(loop.messages, searching, loop.model.request_config)
+    # The smallest answer fits, but not beside the search's fee.
+    quota(store, inputs + 256 + 400)
+    list(loop.run())
+    assert store.get_turn(UID, loop.chat_id, loop.turn_id)["status"] == "completed"
     assert observed[0]["native_searches"] == 0
-    assert observed[0]["messages"][0] == loop.messages[0]
-    assert observed[0]["messages"][-1]["role"] == "user"
     assert observed[0]["messages"][-1]["content"].startswith("Web search is unavailable for this step")
 
 
