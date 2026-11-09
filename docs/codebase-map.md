@@ -6427,7 +6427,18 @@ loggt solche Schritte mit den Feldnamen der Chunks, „Agent search without
 citations“, Metrik `search_without_citations`; seit 2026-10-29 zählt jeder
 Suchschritt als `search_step`, und sein Beleg trägt `search_hits`, die Zahl
 der behaltenen Seiten, damit `scripts/audit_report.py` den Anteil ohne Treffer
-je Modell zeigt, A-M9);
+je Modell zeigt, A-M9; seit 2026-11-09 ist die Zeile nur noch eine WARNING,
+wenn ein Chunk ein Feld oder eine Annotation trug, die der Client nicht liest
+(`_shapes`), sonst INFO: Die Ursache ist geklärt und kein Fehler im Stream.
+Eine eigene Suche des Anbieters (OpenAI, Anthropic, Google) gibt ihre Treffer
+nur dem Modell; eine Adresse kommt nur an, wo das Modell sie im Text zitiert.
+Ein Schritt, der sucht und dann ein Werkzeug ruft, oder die JSON-Antwort
+eines Prüfers behält deshalb nichts: in 14 Tagen bis 2026-11-09 81 von 131
+solchen Schritten (Terra allein 62 von 101), bei den 152 Schritten, deren
+Suche OpenRouter selbst ausführte, keiner. Die Zuordnung entscheidet der
+Endpunkt, nicht das Modell (Haiku auf Anthropic/AWS: eigene Suche, auf
+Azure/Vertex: OpenRouters). Der einzige Hebel ist die Suchmaschine der
+Agent-Schritte, `AGENT_SEARCH_ENGINE=exa`: Max' Entscheidung);
 `_step` trägt 429 von Prüfer-Schritten nicht in `provider_cooldowns` ein.
 Gate-Runden haben seit 2026-10-29 Vorrang und eine Frist (`ready_gate` ruft
 `cut_round` für jeden gefragten Prüfer, `GATE_SECONDS` in `gate_result`,

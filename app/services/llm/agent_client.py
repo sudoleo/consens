@@ -1105,14 +1105,20 @@ class AgentCompletion:
                     shapes.add(f"{where}.annotation:{str(annotation.get('type'))[:40]}:{','.join(sorted(annotation)[:8])}")
 
     def _record_missing_citations(self, model):
-        """A step that searched but kept no hit (GPT-6 Luna in every logged
-        step since at least 2026-10-23): its sources, the source excerpts and
-        the reviewers' log have nothing of the search (agent_audit.review_entry
-        says it searched). Logged with the chunk shapes seen, to find where
-        the hits went; never fails the step. Every step that searched counts
-        as ``search_step`` and keeps ``search_hits`` for its receipt
-        (agent_runs.settle), so the share without hits per model can be read
-        (scripts/audit_report.py)."""
+        """A step that searched but kept no hit: its sources, the source
+        excerpts and the reviewers' log have nothing of the search
+        (agent_audit.review_entry says it searched). A publisher's own search
+        (OpenAI, Anthropic, Google) hands its hits to the model only; the
+        stream carries a URL only where the model cites one in its text. So a
+        step that searched and then called a tool, or a reviewer's round whose
+        reply is its JSON, keeps none (prod, 14 days to 2026-11-09: 81 of 131
+        such steps; of 152 steps whose search OpenRouter ran, none). That is
+        no fault of the stream: logged at INFO. A WARNING only when the
+        chunks carried a field or an annotation this client does not read
+        (``_shapes``): then hits may have arrived unseen. Never fails the
+        step. Every step that searched counts as ``search_step`` and keeps
+        ``search_hits`` for its receipt (agent_runs.settle), so the share
+        without hits per model can be read (scripts/audit_report.py)."""
         count = (self.usage or {}).get("web_search_requests")
         if type(count) is int and count > 0:
             self.search_hits = len({source.get("url") for source in self.sources}
@@ -1120,8 +1126,9 @@ class AgentCompletion:
             record_metric("search_step", model.model, processed=count)
         if type(count) is int and count > 0 and not self.sources and not self.citations:
             record_metric("search_without_citations", model.model, processed=count)
-            logging.warning("Agent search without citations model=%s searches=%s shapes=%s",
-                            model.model, count, ";".join(sorted(self._shapes))[:1500])
+            logging.log(logging.WARNING if self._shapes else logging.INFO,
+                        "Agent search without citations model=%s searches=%s shapes=%s",
+                        model.model, count, ";".join(sorted(self._shapes))[:1500])
 
     def stream(self, *, model: AgentModel, messages: list[dict], api_key: str, tools=None,
                native_searches=0, allow_tool_calls=False, prompt_cache=True, session_id=None):

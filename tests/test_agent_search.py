@@ -102,6 +102,22 @@ def test_a_search_without_citations_is_logged_with_the_chunk_shapes(monkeypatch,
     assert "searches=2" in line and "chunk.citations" in line and "delta.annotation:url_citation:type,url" in line
     assert "a.example" not in line
 
+    # A publisher's own search hands its hits to the model only: a step that
+    # cites nothing (it called a tool, or wrote a reviewer's JSON) and whose
+    # chunks held nothing unread is counted, but no warning.
+    metrics.clear()
+    caplog.clear()
+    transport(monkeypatch, [[packet({"content": "Answer."}, finish="stop"),
+                             packet(usage={"prompt_tokens": 900, "completion_tokens": 50, "cost": .01,
+                                           "server_tool_use_details": {"web_search_requests": 2}})]])
+    completion = AgentCompletion()
+    with caplog.at_level("INFO"):
+        list(completion.stream(model=model, messages=[{"role": "user", "content": "Q"}], api_key="key",
+                               tools=search_tools(model, 2), native_searches=2))
+    assert ("search_without_citations", "anthropic/claude-haiku-4.5", {"processed": 2}) in metrics
+    [quiet] = [record for record in caplog.records if "without citations" in record.getMessage()]
+    assert quiet.levelname == "INFO" and quiet.getMessage().endswith("shapes=") and completion.search_hits == 0
+
     # A step whose hits arrived as URL citations says nothing.
     metrics.clear()
     transport(monkeypatch, [[packet({"content": "Answer.", "annotations": [
