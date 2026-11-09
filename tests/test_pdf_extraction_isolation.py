@@ -38,6 +38,14 @@ def _pdf_with_text(pages):
     return out.getvalue()
 
 
+@pytest.fixture(autouse=True)
+def _no_text_from_an_earlier_test():
+    # Text is cached by content; these tests count subprocesses and fake results.
+    attachments._extracted_texts.clear()
+    yield
+    attachments._extracted_texts.clear()
+
+
 def test_normal_pdf_text_is_extracted_in_a_subprocess(monkeypatch):
     calls = []
     real_run = subprocess.run
@@ -54,6 +62,30 @@ def test_normal_pdf_text_is_extracted_in_a_subprocess(monkeypatch):
     assert args[1:4] == ["-m", "app.services.agent_file_extract", agent_file_extract.PDF_TEXT_MODE]
     assert args[4] == str(attachments.MAX_PDF_EXTRACT_CHARS)
     assert kwargs["timeout"] == agent_file_extract.PROCESS_TIMEOUT_SECONDS
+
+
+def test_pdf_text_is_extracted_once_for_all_families_of_a_run(monkeypatch):
+    calls = []
+    real_run = subprocess.run
+
+    def spy(args, **kwargs):
+        calls.append(args)
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", spy)
+    raw = _pdf_with_text(["Clause nine applies"])
+    results = []
+    # Six family requests of one Compare run arrive together, each with its
+    # own parsed attachment.
+    threads = [threading.Thread(target=lambda: results.append(
+        attachments.pdf_text_for({"name": "contract.pdf", "mime": "application/pdf", "raw": raw})))
+        for _ in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(30)
+    assert len(results) == 6 and all("Clause nine applies" in text for text in results)
+    assert len(calls) == 1
 
 
 def test_blank_or_scanned_pdf_reports_no_text():

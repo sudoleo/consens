@@ -315,8 +315,9 @@ def shrink_image(raw: bytes, mime: str) -> tuple[bytes, str]:
 
 
 def pdf_text_for(attachment: dict) -> str | None:
-    """Extrahierter PDF-Text, einmal pro Anhang. Der Text wird von bis zu
-    sechs Familien gebraucht und pypdf ist zu teuer fuer sechs Laeufe."""
+    """Extrahierter PDF-Text, einmal pro Anhang (``pdf_goes_native`` und der
+    Text-Fallback fragen beide); ueber die Anfragen der Familien hinweg
+    haelt ``extract_pdf_text`` ihn je Inhalt."""
     if "pdf_text" not in attachment:
         attachment["pdf_text"] = extract_pdf_text(attachment.get("raw", b""))
     return attachment["pdf_text"]
@@ -488,23 +489,39 @@ def extract_pdf_text(raw: bytes) -> str | None:
         return None
     from app.services import agent_file_extract
 
-    result = agent_file_extract.run_isolated(
-        raw, agent_file_extract.PDF_TEXT_MODE, MAX_PDF_EXTRACT_CHARS,
-    )
-    if result.get("status") == "failed":
-        logger.warning("PDF text extraction failed or exceeded its safety limits")
-        return None
-    text = str(result.get("text") or "").strip()
-    return text[:MAX_PDF_EXTRACT_CHARS] or None
+    return _extract_once(raw, agent_file_extract.PDF_TEXT_MODE, MAX_PDF_EXTRACT_CHARS, "PDF")
 
 
-# Word text by file content. A run sends the same attachment with
+# Extracted text by file content. A Compare run sends the same attachment with
 # every family's request, each extraction is a subprocess: the first request
 # extracts, the others wait for it (striped locks) and read the result.
-DOCX_TEXT_CACHE_SIZE = 32
-_docx_texts: OrderedDict[str, str | None] = OrderedDict()
-_docx_texts_guard = threading.Lock()
-_DOCX_EXTRACTIONS = tuple(threading.Lock() for _ in range(16))
+EXTRACTED_TEXT_CACHE_SIZE = 32
+_extracted_texts: OrderedDict[tuple[str, str], str | None] = OrderedDict()
+_extracted_texts_guard = threading.Lock()
+_EXTRACTIONS = tuple(threading.Lock() for _ in range(16))
+
+
+def _extract_once(raw: bytes, mode: str, max_chars: int, kind: str) -> str | None:
+    from app.services import agent_file_extract
+
+    digest = hashlib.sha256(raw).hexdigest()
+    key = (mode, digest)
+    with _EXTRACTIONS[int(digest[:8], 16) % len(_EXTRACTIONS)]:
+        with _extracted_texts_guard:
+            if key in _extracted_texts:
+                _extracted_texts.move_to_end(key)
+                return _extracted_texts[key]
+        result = agent_file_extract.run_isolated(raw, mode, max_chars)
+        if result.get("status") == "failed":
+            # Not cached: a timeout under load may pass on the next request.
+            logger.warning("%s text extraction failed or exceeded its safety limits", kind)
+            return None
+        text = str(result.get("text") or "").strip()[:max_chars] or None
+        with _extracted_texts_guard:
+            _extracted_texts[key] = text
+            while len(_extracted_texts) > EXTRACTED_TEXT_CACHE_SIZE:
+                _extracted_texts.popitem(last=False)
+        return text
 
 
 def extract_docx_text(raw: bytes) -> str | None:
@@ -516,25 +533,7 @@ def extract_docx_text(raw: bytes) -> str | None:
         return None
     from app.services import agent_file_extract
 
-    digest = hashlib.sha256(raw).hexdigest()
-    with _DOCX_EXTRACTIONS[int(digest[:8], 16) % len(_DOCX_EXTRACTIONS)]:
-        with _docx_texts_guard:
-            if digest in _docx_texts:
-                _docx_texts.move_to_end(digest)
-                return _docx_texts[digest]
-        result = agent_file_extract.run_isolated(
-            raw, agent_file_extract.DOCX_TEXT_MODE, MAX_TEXT_EXTRACT_CHARS,
-        )
-        if result.get("status") == "failed":
-            # Not cached: a timeout under load may pass on the next request.
-            logger.warning("DOCX text extraction failed or exceeded its safety limits")
-            return None
-        text = str(result.get("text") or "").strip()[:MAX_TEXT_EXTRACT_CHARS] or None
-        with _docx_texts_guard:
-            _docx_texts[digest] = text
-            while len(_docx_texts) > DOCX_TEXT_CACHE_SIZE:
-                _docx_texts.popitem(last=False)
-        return text
+    return _extract_once(raw, agent_file_extract.DOCX_TEXT_MODE, MAX_TEXT_EXTRACT_CHARS, "DOCX")
 
 
 def attachment_fallback_text(attachment: dict, *, include_images_note: bool = True) -> str:

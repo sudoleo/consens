@@ -28,7 +28,7 @@
   const IMAGE_MAX_INPUT_BYTES = 15 * 1024 * 1024;
   // Gleiche Werte wie in app/services/llm/attachments.py.
   const IMAGE_MAX_EDGE = 1568;
-  const IMAGE_TARGET_BYTES = 900 * 1024;
+  const IMAGE_TARGET_BYTES = 900000;
   const IMAGE_JPEG_QUALITY = 0.82;
   const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   // Die kanonischen Typen, die auch der Server kennt. Was der Browser sonst

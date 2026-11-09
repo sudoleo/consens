@@ -8340,9 +8340,11 @@ DOCX-Text (`extract_docx_text`) läuft wie PDF im Wegwerf-Subprozess (Modus
 `docx-text`): `document.xml` wird nur bis zum Budget expandiert und von
 `agent_file_extract.parse_xml` gelesen, einem stdlib-expat, dessen Handler
 jede DTD, Entity-Deklaration und externe Entity ablehnen, in jeder Kodierung.
-Das Ergebnis gilt pro Dateiinhalt (sha256, 32 Einträge, Fehlschläge nicht):
-die Familien-Requests eines Compare-Laufs extrahieren einmal, die übrigen
-warten darauf. Bis 2026-10-28 lief er im Webprozess pro Familien-Request,
+Das Ergebnis gilt pro Dateiinhalt (`_extract_once`, Modus + sha256, 32
+Einträge gemeinsam mit PDF, Fehlschläge nicht): die Familien-Requests eines
+Compare-Laufs extrahieren einmal, die übrigen warten darauf; ebenso der
+PDF-Text (`extract_pdf_text`), den ein PDF über 2 MB und jede Familie ohne
+natives PDF brauchen. Bis 2026-10-28 lief er im Webprozess pro Familien-Request,
 hinter einer Bytesuche nach `<!doctype`/`<!entity`, die UTF-16 übersah
 (Sicherheitsaudit; ein OOM beendete alle laufenden Agent-Turns).
 
