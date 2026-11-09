@@ -525,6 +525,39 @@ scheitert, nicht lesbar antwortet oder bei der Frist noch arbeitet, verliert
 nur seine Marken. Die Prüfer starten nur mit mindestens `REVIEW_MIN_SECONDS`
 bis zum harten Stopp und enden `REVIEW_TIME_MARGIN` davor (`no_time`); der
 Agent hört dafür `REVIEW_RESERVE_SECONDS` früher auf (`answer_time_left`).
+**Marken je Prüfer (seit 2026-11-09, Max: „die Markierungen sollen
+erscheinen, sobald ein Modell fertig ist, das zweite soll dann ergänzen“).**
+Bis dahin wartete die Seite auf den langsamsten Prüfer. In Prod (31.10.–09.11.,
+46 Turns mit zwei und mehr Prüfern) brauchte die Schlussrunde von Haiku 5.5 im
+Median 7 s (p90 14 s), die von DeepSeek V4.1 Flash 10 s (p90 42 s, 7–10k
+Denk-Tokens bei rund 230 Tokens/s, kein schnellerer Endpunkt); vom ersten bis
+zum letzten Prüfer vergingen im Median 5 s, am p90 34 s.
+- `AnswerAudit._await_reviewers` wartet nicht mehr Thread für Thread, sondern
+  auf das Signal jedes Prüfers (`reviewer_ended`, `ReviewerSession.ended`).
+  Ist einer durch und arbeiten andere noch, setzt `_show_early` die
+  **Schlussmarken** der fertigen Prüfer auf die Antwort (`_place`) und
+  speichert (`checkpoint`: Review weiter `running`, dazu `claims`, `unplaced`,
+  `process`; derselbe Stand geht als `review`-Frame an die Seite). Enden
+  Prüfer innerhalb von `EARLY_MARKS_GRACE_SECONDS` (0,3 s), gibt es einen
+  Stand für beide.
+- Nur Schlussmarken, nie Befunde der Live-Runden eines noch arbeitenden
+  Prüfers: seine Schlussliste kann einen solchen Befund fallen lassen, und
+  eine Marke auf der Seite bleibt stehen. Die Nummern der Marken (`mark`)
+  können sich mit dem zweiten Prüfer verschieben; die Seite nutzt sie nur zum
+  Zusammenfassen, nie als Anzeige. Das Ende der Review schreibt weiter allein
+  `_finish`.
+- Bricht der Lauf danach ab oder scheitern die letzten Saves, endet eine
+  Review, die schon Schlussmarken hält, als `partial` („1 of 2 reviewed“),
+  nicht als `failed` („Not reviewed“ neben ihren Marken):
+  `agent_runs.early_marks`. Ein Stop bleibt `cancelled`.
+- Kosten: je Turn höchstens ein Save mehr je weiterem Prüfer (eine
+  Transaktion unter der Kontosperre, ein Frame).
+- Tests: `tests/test_agent_audit.py` (`test_a_reviewers_marks_show_while_the_
+  others_still_review` und die vier danach), `tests/js/agent-review.test.mjs`
+  („shows a finished reviewer's marks …“, „strokes on only the marks a later
+  reviewer adds“), `tests/e2e/test_agent_audit_frontend.py`
+  (`test_a_reviewers_marks_stand_while_the_other_still_reviews`).
+
 Seit 2026-10-29 hat die Schlussrunde eine eigene Frist und Hedging (A-T2):
 ohne brauchbare Antwort nach `final_hedge_seconds` (p90 der letzten
 Schlussrunden des Modells im Prozess, mindestens 12 s, sonst 30 s) dieselbe
@@ -600,8 +633,9 @@ deaktiviert), „Sources“ mit der Zahl aus der Aktivität, am Ende der Zeile
 Review die Antwort als Version hält; die Prüfzeile `.agent-check-status`
 von `setAnswerChecking` („Reviewing the answer…“; die Zeile „Checking the
 answer…“ des Vergleichsmodus ist seit 2026-10-31 weg) gilt nur bis dahin, auf dem Handy
-56 px hoch wie die Leiste). Am Ende tauscht nur ein Wort. Die Marken erscheinen erst, wenn alle
-fertig sind, und nur auf genau diesem Text: falsch `is-major` (rot),
+56 px hoch wie die Leiste). Am Ende tauscht nur ein Wort. Die Marken eines Prüfers erscheinen,
+sobald seine Schlussrunde da ist, die der übrigen kommen dazu (seit 2026-11-09, siehe „Marken
+je Prüfer“ unten; vorher erst, wenn alle fertig waren), und nur auf genau diesem Text: falsch `is-major` (rot),
 zweifelhaft `is-split` (gelb), unvollständig `is-minor` (das kräftigere Grau
 mit gestrichelter Linie in `--ink-3`, D2), dazu
 `is-audit`; die zitierten Worte tragen die Farbe (`wrapSpots`). Die Karte der
@@ -3863,8 +3897,9 @@ sich nur per `transform` innerhalb der Antwort bewegt: Der Browser schiebt ihn
 über einmal gemalten Text. Das frühere Overlay in Antwortgröße mit wanderndem
 Hintergrund malte die ganze Antwort in jedem Bild neu (gemessen 126
 Malvorgänge in 3 s, p95-Bildzeit 50 ms; jetzt keiner, 16,7 ms; Apple-Audit D1).
-Die Marken der Prüfer erscheinen erst, wenn alle fertig sind (siehe „Anzeige“
-unter „Ein Modus“). Vorläufige Satzmarken fertiger Coverage-Fenster
+Die Marken eines Prüfers erscheinen mit seiner Schlussrunde, die der übrigen
+kommen dazu (seit 2026-11-09, siehe „Anzeige“ unter „Ein Modus“). Vorläufige
+Satzmarken fertiger Coverage-Fenster
 (`coverage_preview`, 2026-10-18 bis 2026-10-31, seit 2026-10-21 als neutrale
 gepunktete Linie) gibt es mit den Judges nicht mehr.
 Rund um die Antwort gilt ein Farbsystem: Antworttext `--ink`; Thinking samt

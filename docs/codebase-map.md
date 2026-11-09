@@ -6020,9 +6020,18 @@ agent_review. Vor Markierungen prüft es Text-/Versions-/Basisbindung.
 seit 2026-10-31 für jeden neuen Turn, rendert `agent-review.js` `render` eine
 Review mit Prüfern über `renderAudit`, auch eine vor der fixierten Antwort
 gestoppte mit Befunden (`auditReadable`) oder mit Antworten der gefragten
-Modelle (`advised`): erst wenn alle Prüfer fertig sind und nur auf genau dieser
-Version markiert `window.renderStoredAuditMarks(body, review.audit, fallback,
-sources, {openNotes})` (consensus-insights.js) die Sätze mit `.is-audit` und
+Modelle (`advised`): nur auf genau dieser Version markiert
+`window.renderStoredAuditMarks(body, review.audit, fallback, sources,
+{openNotes})` (consensus-insights.js), seit 2026-11-09 sobald der erste Prüfer
+seine Schlussrunde hat (Review noch `running`, `audit.claims` schon da: `early`
+in `renderAudit`; die Marken der übrigen kommen dazu, keine verschwindet;
+Server: `AnswerAudit._show_early`, siehe „Ein Modus“ in
+[agent-mode.md](agent-mode.md)). Die Leiste sagt dabei weiter „Reviewing the
+answer…“, Notes ist schon lesbar (`auditReadable`), und der Leser nennt die
+noch arbeitenden Prüfer („Still reviewing: …“) statt „No review from“. Neue
+Marken streichen sich einzeln auf (`revealMarks`: jede Marke hat ihren
+Zeitpunkt in `body._revealAt`, schon stehende bleiben stehen). Bis dahin
+erschien alles erst mit dem langsamsten Prüfer. Die Marken setzen die Sätze mit `.is-audit` und
 `is-major`/`is-split`/`is-minor` je Art, die Karte (`auditCard`) zeigt je Prüfer
 Art, Anmerkung und Quelle, nicht platzierte Anmerkungen stehen in der
 Fallback-Liste („Other notes“; die Hervorhebungsfilter behandeln eine Zeile wie

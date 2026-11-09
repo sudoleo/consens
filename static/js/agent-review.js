@@ -504,12 +504,15 @@
     const anchor = rowAnchor(body, raw);
     if (anchor.nextElementSibling !== host) anchor.after(host);
   }
-  // The first time a live answer receives its marks they stroke on in reading
+  // The first time a live answer receives marks they stroke on in reading
   // order, like a marker pen going over the text (the landing page's gesture).
-  // Later re-renders of the same answer show them at once.
+  // Each mark has its moment (``body._revealAt``, by its words): the marks of
+  // a reviewer that finishes later stroke on when they arrive, beside those
+  // already standing, which stay as they are. A re-render (a fresh DOM when
+  // the run ends) continues every stroke where it was, through negative
+  // delays, instead of restarting it.
   const MARKS = '.cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major)';
-  // A re-render during the reveal (a fresh DOM when the run ends) continues
-  // the stroke where it was, through negative delays, instead of restarting.
+  const REVEAL_STROKE_MS = 900;
   function revealMarks(body, hash) {
     // Marks hidden by the highlight setting (all markers off, or e.g. green
     // ones filtered out) neither animate nor take a place in the sequence.
@@ -521,20 +524,31 @@
     const now = performance.now();
     if (body._revealedMarks !== hash) {
       body._revealedMarks = hash;
-      body._revealStart = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? null : now;
-    } else if (marks[0].style.getPropertyValue('--cx-reveal-delay')) {
-      return; // Same spans, animation already running.
+      body._revealAt = new Map();
+      body._revealNext = 0;
     }
-    if (body._revealStart == null || now - body._revealStart > body._revealTotal) return;
-    const elapsed = now - body._revealStart;
-    const step = Math.min(38, 900 / marks.length);
-    let delay = 0, index = 0;
+    const still = Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches);
+    const fresh = marks.filter(el => !body._revealAt.has(el.textContent));
+    // New marks follow one another from now on, or from the end of a
+    // sequence still under way.
+    const step = Math.min(38, REVEAL_STROKE_MS / Math.max(1, fresh.length));
+    let at = Math.max(now, body._revealNext || 0);
+    for (const el of fresh) {
+      body._revealAt.set(el.textContent, still ? -Infinity : at);
+      at += step;
+    }
+    if (fresh.length && !still) body._revealNext = at;
+    const end = Math.max(...marks.map(el => body._revealAt.get(el.textContent))) + REVEAL_STROKE_MS;
+    if (!(end > now)) return; // Every stroke is over: the marks stand.
+    let start = now;
     for (const el of moving) {
-      const mark = el.matches(MARKS);
-      if (mark) delay = Math.round(index++ * step);
-      el.style.setProperty('--cx-reveal-delay', `${Math.round((mark ? delay : delay + 260) - elapsed)}ms`);
+      if (el.matches(MARKS)) start = body._revealAt.get(el.textContent);
+      // A node that carries its delay already is mid-stroke: left alone.
+      if (el.style.getPropertyValue('--cx-reveal-delay')) continue;
+      // Long over (a mark that stood before these): far enough back that it never strokes again.
+      const delay = Number.isFinite(start) ? Math.round((el.matches(MARKS) ? start : start + 260) - now) : -60000;
+      el.style.setProperty('--cx-reveal-delay', `${Math.max(delay, -60000)}ms`);
     }
-    body._revealTotal = delay + 900;
     body.classList.add('is-marks-revealing');
     clearTimeout(body._revealTimer);
     body._revealTimer = setTimeout(() => {
@@ -546,7 +560,7 @@
       for (const el of body.querySelectorAll('[style*="--cx-reveal-delay"]')) el.style.removeProperty('--cx-reveal-delay');
       void body.offsetWidth;
       body.classList.remove('is-marks-settling');
-    }, Math.max(0, body._revealTotal - elapsed));
+    }, Math.max(0, end - now));
   }
   // Every source of the turn: search, the answer's links, comparison citations.
   function sourcesOf(body, review, evidence, raw) {
@@ -574,10 +588,12 @@
   }
   // --- The reviewers ---------------------------------------------------------
   // The reviewers followed the agent's work log and reviewed the fixed
-  // answer (agent_audit.py): their marks show once every reviewer is done,
-  // through the shared markers (renderStoredAuditMarks), and "Notes" opens
-  // their reviews in the reader, with their notes on the work (log
-  // entries). No score and no Differences: unmarked text means no objection.
+  // answer (agent_audit.py): a reviewer's marks show as soon as its final
+  // round is in, while the others still review (their marks join later, and
+  // none goes away: AnswerAudit._show_early), through the shared markers
+  // (renderStoredAuditMarks), and "Notes" opens their reviews in the reader,
+  // with their notes on the work (log entries). No score and no Differences:
+  // unmarked text means no objection.
   // Done: every reviewer ended, the notes can be read. Ended: also stopped
   // or never started; nothing is reviewing any more. "off": the account's
   // reviewers setting had none for this message:
@@ -634,7 +650,8 @@
   // while the agent worked (``live``).
   function auditReadable(review) {
     if (AUDIT_DONE.has(review.status)) return true;
-    return AUDIT_ENDED.has(review.status) && auditCount(review.audit) > 0;
+    // Also while the review runs: the notes of the reviewers that are done.
+    return (AUDIT_ENDED.has(review.status) || review.status === 'running') && auditCount(review.audit) > 0;
   }
   // The notes on the agent's work (``process``): the log entry each concerns;
   // ``live``: from a round while the agent worked (its final round failed).
@@ -787,7 +804,12 @@
     const quiet = reviewers.filter(r => r.status === 'completed' && !noted.has(reviewerLabel(r))).map(r => reviewerName(r));
     if (quiet.length) lines.push(`No objections from ${quiet.join(', ')}.`);
     const reasons = new Map();
-    for (const reviewer of reviewers.filter(r => r.status !== 'completed')) {
+    // While the review runs, a reviewer without its final round is at work,
+    // not missing.
+    const running = !AUDIT_ENDED.has(review.status);
+    const working = reviewers.filter(r => running && ['waiting', 'running'].includes(r.status));
+    if (working.length) lines.push(`Still reviewing: ${working.map(r => reviewerName(r)).join(', ')}.`);
+    for (const reviewer of reviewers.filter(r => r.status !== 'completed' && !working.includes(r))) {
       const failure = reviewer.failure || (review.status === 'cancelled' || reviewer.status === 'stopped' ? { code: 'stopped' } : null);
       if (review.status === 'cancelled' && failure?.code === 'stopped') continue;
       const key = `${noted.has(reviewerLabel(reviewer)) ? 'final' : 'none'}|${auditReason(failure)}`;
@@ -975,6 +997,9 @@
     // The reviewers still work on the fixed answer: the row stands already
     // as it will, Notes waiting in grey.
     const pending = exact && !AUDIT_ENDED.has(review.status);
+    // Some of them are done and found something: their marks and notes show
+    // now, the row keeps saying that the review goes on.
+    const early = pending && auditCount(review.audit) > 0;
     const empty = typeof raw !== 'string' || !raw.trim();
     if (!host?.isConnected) {
       host = node('section', 'agent-review'); placeRow(body, host, raw); body._agentReview = host;
@@ -1020,9 +1045,10 @@
     const context = auditContext(review, evidence, turnSources);
     host._auditContext = context;
     const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
-    // The marks of exactly this answer, once the review is done.
+    // The marks of exactly this answer: of every reviewer once the review is
+    // done, before that of those whose final round is in.
     overText(body, raw, () => {
-      if (exact && done) window.renderStoredAuditMarks?.(body, review.audit, fallback, turnSources, {
+      if (exact && (done || early)) window.renderStoredAuditMarks?.(body, review.audit, fallback, turnSources, {
         openNotes: () => open('differences', { trigger: document.activeElement }) });
       window.linkifyAgentSources?.(body, turnSources);
     });
@@ -1038,14 +1064,14 @@
     // Notes waiting; "No objections" when the reviewers found nothing;
     // Notes without a number when there was no review to count.
     const cells = [];
-    if (pending) cells.push(['differences', 'Notes', null, 'notes']);
+    if (pending && !early) cells.push(['differences', 'Notes', null, 'notes']);
     else if (done && !count && review.status !== 'failed') cells.push(['differences', 'No objections', null, 'clear']);
     else if (done || notesOnly) cells.push(['differences', 'Notes', count || null, 'notes']);
     if (advice.length && answered) cells.push(['answers', 'Answers', answered, 'answers']);
     if (turnSources.length) cells.push(['sources', 'Sources', turnSources.length, 'sources']);
     for (const [section, label, number, glyph] of cells) {
       const button = evidenceButton(section, label, number, glyph);
-      if (pending && section === 'differences') {
+      if (pending && !early && section === 'differences') {
         button.disabled = true; button.classList.add('is-pending');
       } else if (section === 'answers') {
         button.addEventListener('click', () => App.answerReader?.openContext(firstAnswered, { section, trigger: button }));
@@ -1053,7 +1079,7 @@
       tabs.append(button);
     }
     for (const context of advice) App.answerReader?.refreshContext(context);
-    if (body.classList.contains('thread-history-answer-body')) historyReviewers(body, review, open, pending);
+    if (body.classList.contains('thread-history-answer-body')) historyReviewers(body, review, open, pending && !early);
     else { body._agentModels?.remove(); body._agentModels = null; }
     App.answerReader?.refreshContext(context);
     if (evidence.reveal || body._revealedMarks === review.answer_hash) revealMarks(body, review.answer_hash);

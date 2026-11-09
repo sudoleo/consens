@@ -236,6 +236,61 @@ def test_the_review_runs_under_a_fixed_answer(browser, phase4_server):
         context.close()
 
 
+def early_review():
+    """The first reviewer's final round is in, the second still reviews: the
+    review as AnswerAudit._show_early saves it, "running" with the marks of
+    the reviewer that is through."""
+    early = review("running", "running")
+    first = early["audit"]["reviewers"][0]
+    first.update(status="completed", marks=len(MARKS["OpenAI"]))
+    claims, unplaced, process = agent_audit.place_marks(ANSWER, [("OpenAI", MARKS["OpenAI"], False)], {})
+    early["audit"].update(claims=claims, unplaced=unplaced, process=process)
+    return early
+
+
+@pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
+def test_a_reviewers_marks_stand_while_the_other_still_reviews(browser, phase4_server, width, dark):
+    """The marks of the reviewer that is through are on the answer and its
+    notes can be read; the row still says that the review goes on, and the
+    second reviewer's mark breathes beside the first one's."""
+    events = [("started", {"chat_id": CHAT, "turn_id": TURN, "delegation": True})]
+    events += [("activity", event) for event in ACTIVITY]
+    events += [("delegation", {"version": 1, "chat_id": CHAT, "turn_id": TURN, "agent": agent})
+               for agent in reviewer_sessions("working")]
+    events += [("delta", {"text": ANSWER}), ("answer_check", {}),
+               ("review", {"review": review("running", "running")}),
+               ("review", {"review": early_review()})]
+    context, page, errors = open_audit_page(browser, phase4_server, width, dark, events, hang_live=True)
+    try:
+        body = page.locator("#agentAnswerBody")
+        expect(body).to_contain_text("Colosseum opened in 80 AD")
+        # Both of the first reviewer's passages are marked, nothing of the second's.
+        expect(body.locator(".cx-claim.is-audit").filter(has_text="A standard ticket costs 18 euros")).not_to_have_count(0)
+        expect(body.locator(".cx-claim.is-audit").filter(has_text="The arena floor was rebuilt in 2023.")).not_to_have_count(0)
+        expect(body.locator(".cx-claim.is-audit").filter(has_text="It held about 50,000 spectators")).to_have_count(0)
+        row = page.locator("#agentAnswer .agent-review")
+        expect(row.locator(".agent-review-status")).to_have_text("Reviewing the answer…")
+        marks = row.locator(".agent-review-reviewers .agent-review-reviewer")
+        expect(marks.nth(0)).to_have_attribute("data-state", "done")
+        expect(marks.nth(1)).to_have_attribute("data-state", "working")
+        notes = row.locator('.agent-evidence-link[data-section="differences"]')
+        expect(notes).to_be_enabled()
+        expect(notes).to_contain_text("2")
+        page.wait_for_timeout(1200)
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        _snapshot(page, f"audit-early-marks-{width}")
+        notes.click()
+        reader = page.locator("#modelAnswerReader")
+        expect(reader).to_contain_text("Since 2025 the standard ticket costs 24 euros")
+        expect(reader).to_contain_text("Still reviewing: MiMo V2.6 Flash.")
+        expect(reader).not_to_contain_text("No review from")
+        page.wait_for_timeout(400)
+        _snapshot(page, f"audit-early-notes-{width}")
+        assert errors == []
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width", [1280, 390])
 def test_the_next_message_goes_while_the_reviewers_review(browser, phase4_server, width):
     """Once the answer stands the server frees the chat (frame

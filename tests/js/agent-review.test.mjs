@@ -751,6 +751,22 @@ function auditReview(status = 'partial') {
       unplaced: [{ model: 'OpenAI', kind: 'incomplete', note: 'Missing context.', quote: 'Elsewhere' }],
       issues: [{ code: 'reviewers_unavailable', count: 1 }] } };
 }
+// The reviewers are in their final rounds and none is through: the saved
+// review holds no marks yet (agent_audit.AnswerAudit._show_early).
+function waitingReview() {
+  const review = auditReview('running');
+  review.audit = { reviewers: review.audit.reviewers.map(reviewer => ({ provider: reviewer.provider,
+    provider_label: reviewer.provider_label, model: reviewer.model, status: 'running' })) };
+  return review;
+}
+// One reviewer's final round is in, with what it found; the others still review.
+function earlyReview() {
+  const review = auditReview('running');
+  review.audit.reviewers = review.audit.reviewers.map((reviewer, index) => index === 0 ? reviewer
+    : { provider: reviewer.provider, provider_label: reviewer.provider_label, model: reviewer.model, status: 'running' });
+  delete review.audit.issues;
+  return review;
+}
 it('marks a reviewed answer with its reviewers\' notes, without a score or differences', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
@@ -813,11 +829,53 @@ it('strokes the reviewers\' marks on when a live answer is first reviewed', () =
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   w.matchMedia = () => ({ matches: false });
   w.renderStoredAuditMarks = vi.fn(el => { el.innerHTML = '<span class="cx-claim is-audit is-major">Exact answer.</span>'; });
-  w.App.agentReview.render(body, auditReview('running'), { reveal: true });
+  w.App.agentReview.render(body, waitingReview(), { reveal: true });
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
   w.App.agentReview.render(body, auditReview('succeeded'), { reveal: true });
   expect(body.classList.contains('is-marks-revealing')).toBe(true);
   vi.runAllTimers();
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  vi.useRealTimers();
+  dom.window.close();
+});
+// A reviewer that finishes later adds its marks to those on the page: only
+// the new ones stroke on, the first reviewer's stand as they are.
+it('strokes on only the marks a later reviewer adds', () => {
+  vi.useFakeTimers();
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'First. Second.';
+  w.matchMedia = () => ({ matches: false });
+  const review = (status, count) => {
+    const base = status === 'running' ? earlyReview() : auditReview(status);
+    for (const version of base.versions) version.text = 'First. Second.';
+    base.audit.claims = ['First.', 'Second.'].slice(0, count).map(anchor => ({ anchor, kind: 'wrong', audit: true, agree: [],
+      dissent: [{ model: 'OpenAI', kind: 'wrong', note: `About ${anchor}`, target: anchor }] }));
+    return base;
+  };
+  w.renderStoredAuditMarks = vi.fn((el, audit) => {
+    el.innerHTML = audit.claims.map(claim => `<span class="cx-claim is-audit is-major">${claim.anchor}</span>`).join(' ');
+  });
+  const delay = el => parseInt(el.style.getPropertyValue('--cx-reveal-delay'), 10);
+  // The page's clock (fake timers do not move the window's own).
+  let clock = 1000;
+  Object.defineProperty(w.performance, 'now', { value: () => clock, configurable: true });
+  // The first reviewer is through while the others still review: its mark strokes on.
+  w.App.agentReview.render(body, review('running', 1), { reveal: true });
+  expect(body.classList.contains('is-marks-revealing')).toBe(true);
+  expect(delay(body.querySelector('.cx-claim'))).toBe(0);
+  vi.runAllTimers();
+  expect(body.classList.contains('is-marks-revealing')).toBe(false);
+  // The review ends with one more mark: it strokes on, the first one does not again.
+  clock += 5000;
+  w.App.agentReview.render(body, review('succeeded', 2), { reveal: true });
+  const [first, second] = body.querySelectorAll('.cx-claim');
+  expect(body.classList.contains('is-marks-revealing')).toBe(true);
+  expect(delay(first)).toBeLessThan(-900);
+  expect(delay(second)).toBe(0);
+  vi.runAllTimers();
+  // The same marks again (the run's end renders once more): nothing moves.
+  clock += 5000;
+  w.App.agentReview.render(body, { ...review('succeeded', 2) }, { reveal: true, key: 'again' });
   expect(body.classList.contains('is-marks-revealing')).toBe(false);
   vi.useRealTimers();
   dom.window.close();
@@ -849,10 +907,40 @@ it('shows each reviewer at work before the word while the review runs, and nothi
   expect(marks.hidden).toBe(true);
   dom.window.close();
 });
-it('waits with the marks until every reviewer is done, and never marks another text', () => {
+// A reviewer's marks show as soon as its final round is in; the others'
+// join them (agent_audit.AnswerAudit._show_early). The row keeps saying that
+// the review goes on, and the notes so far can be read.
+it('shows a finished reviewer\'s marks and notes while the others still review', () => {
+  const {window: w, document: d, dom} = setup();
+  w.App.createModelMark = model => { const mark = d.createElement('img'); mark.alt = model.label; return mark; };
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  const early = earlyReview();
+  w.App.agentReview.render(body, early, { question: 'Q', key: 't1' });
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(w.renderStoredAuditMarks.mock.calls[0][1]).toBe(early.audit);
+  const row = d.querySelector('.agent-review');
+  const status = row.querySelector('.agent-review-status');
+  expect([status.textContent, status.dataset.state]).toEqual(['Reviewing the answer…', 'running']);
+  expect([...row.querySelectorAll('.agent-review-reviewer')].map(mark => mark.dataset.state)).toEqual(['done', 'working', 'working']);
+  const notes = row.querySelector('.agent-evidence-link');
+  expect([notes.disabled, notes.classList.contains('is-pending'), notes.textContent]).toEqual([false, false, 'Notes2']);
+  notes.click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect(panel.textContent).toContain('It is not exact.');
+  // Who has no final round yet is at work, not missing.
+  expect(panel.textContent).toContain('Still reviewing: Claude, Gemini.');
+  expect(panel.textContent).not.toContain('No review from');
+  // The review ends: the same row, the marks of every reviewer.
+  w.App.agentReview.render(body, auditReview('succeeded'), { question: 'Q', key: 't1' });
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(2);
+  expect(d.querySelector('.agent-review')).toBe(row);
+  expect(row.querySelector('.agent-review-reviewers').hidden).toBe(true);
+  dom.window.close();
+});
+it('waits with the marks until a reviewer is done, and never marks another text', () => {
   const {window: w, document: d, dom} = setup();
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
-  w.App.agentReview.render(body, auditReview('running'));
+  w.App.agentReview.render(body, waitingReview());
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
   // The row stands while the reviewers work, as it will: Notes waiting in
   // grey, the state where Watch and Share will stand.
@@ -878,13 +966,19 @@ it('waits with the marks until every reviewer is done, and never marks another t
 it('shows the review in the duration disclosure and opens its notes', () => {
   const {window: w, document: d, dom} = setup();
   const details = d.createElement('div');
-  w.App.agentReview.renderActivity(details, auditReview('running'), 'Exact answer.');
+  w.App.agentReview.renderActivity(details, waitingReview(), 'Exact answer.');
   expect(details.textContent).toContain('Reviewing the answer…');
   // "Read the notes" holds its place, hidden and disabled, so the open
   // history does not grow under the arriving marks.
   const reserved = details.querySelector('.agent-activity-insight-actions.is-reserved');
   expect(reserved.getAttribute('aria-hidden')).toBe('true');
   expect(reserved.querySelector('button').disabled).toBe(true);
+  // A reviewer is through with notes: they can be read in that place while
+  // the others still review.
+  w.App.agentReview.renderActivity(details, earlyReview(), 'Exact answer.');
+  expect(details.textContent).toContain('Reviewing the answer…');
+  expect(details.querySelector('.is-reserved')).toBeNull();
+  expect(details.querySelector('.agent-activity-insight-actions button').disabled).toBe(false);
   w.App.agentReview.renderActivity(details, auditReview(), 'Exact answer.');
   expect(details.querySelector('.is-reserved')).toBeNull();
   // One line: who reviewed, not a label and a list.
@@ -1300,8 +1394,7 @@ it('keeps the reviewers of a history turn shut while its review runs', () => {
   answer.prepend(activity);
   const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
   body.classList.add('thread-history-answer-body');
-  const running = auditReview('running');
-  for (const reviewer of running.audit.reviewers) reviewer.status = 'running';
+  const running = waitingReview();
   w.App.agentReview.render(body, running);
   let models = activity.querySelectorAll('summary > .agent-history-models .agent-inline-model');
   expect(models).toHaveLength(3);

@@ -58,6 +58,17 @@ HISTORY_FIELDS = ("status", "question", "assistant_response", "consensus", "app_
                   "agent_work_record", "sources", "agent_answer_fixed_at", "agent_history_summary")
 
 
+def early_marks(review):
+    """Whether a review that was still running holds a reviewer's final
+    marks already (agent_audit.AnswerAudit._show_early saves them as soon as
+    that reviewer is done): interrupted, it ends "partial", some reviewers'
+    review beside its marks, not "failed", which the page reads as "not
+    reviewed"."""
+    audit = review.get("audit") if isinstance(review, dict) else None
+    return (isinstance(audit, dict) and review.get("status") == "running" and audit.get("claims") is not None
+            and any(isinstance(row, dict) and row.get("status") == "completed" for row in audit.get("reviewers") or []))
+
+
 def in_history(turn):
     """Whether the next message reads ``turn``: finished, or its answer fixed
     while its reviewers still work (hand_over), which does not change it."""
@@ -715,7 +726,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                     if status == "succeeded" and review and review.get("mode") == "audit" and review.get("status") in {"required", "running"}:
                         # A review (agent_audit.py) whose last saves failed: a
                         # finished answer never keeps "reviewing".
-                        patch["agent_review"] = {**review, "status": "failed"}
+                        patch["agent_review"] = {**review, "status": "partial" if early_marks(review) else "failed"}
                 if status != "succeeded":
                     if not fixed:
                         patch.update(error_code="cancelled" if status == "cancelled" else "agent_failed", failed_at=firestore.SERVER_TIMESTAMP)
@@ -735,7 +746,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         review = dict(review)
                         if review.get("status") not in {"succeeded", "partial", "off"}:
                             review["status"] = ("cancelled" if status == "cancelled" else
-                                                "missing" if review.get("status") == "required" else "failed")
+                                                "missing" if review.get("status") == "required" else
+                                                "partial" if early_marks(review) else "failed")
                         for comparison in review.get("comparisons", []):
                             if comparison.get("status") == "running":
                                 comparison["status"] = "cancelled" if status == "cancelled" else "failed"

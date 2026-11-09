@@ -1198,6 +1198,124 @@ def test_a_failed_save_of_the_marks_is_saved_again_at_the_end(store, monkeypatch
     assert review["status"] == "succeeded" and len(review["audit"]["claims"]) == 3
 
 
+class Held:
+    """A reviewer's final reply that waits until ``release`` is set."""
+
+    def __init__(self, reply):
+        self.reply, self.release = reply, threading.Event()
+
+    def __call__(self, messages):
+        assert self.release.wait(5)
+        return self.reply
+
+
+def watch_saves(store, monkeypatch, held=None):
+    """Every saved review that is still running and already holds marks:
+    (reviewer states, the models of its marks, its claims). The first one
+    lets ``held`` go on."""
+    early, save = [], store.save_review
+
+    def watching(uid, chat_id, turn_id, token, review, text):
+        result = save(uid, chat_id, turn_id, token, review, text)
+        audit = review.get("audit") or {}
+        if review.get("status") == "running" and audit.get("claims") is not None:
+            marks = [item for claim in audit["claims"] for item in claim["dissent"]] + list(audit.get("unplaced") or [])
+            early.append(({row["provider"]: row["status"] for row in audit["reviewers"]},
+                          sorted({item["model"] for item in marks}), audit["claims"]))
+            if held is not None:
+                held.release.set()
+        return result
+    monkeypatch.setattr(store, "save_review", watching)
+    return early
+
+
+def test_a_reviewers_marks_show_while_the_others_still_review(store, monkeypatch):
+    """The first reviewer's final marks reach the page with its final round,
+    not with the slowest reviewer's (at the p90 that was 34 s later): the
+    review stays "running", and the second reviewer's marks join it."""
+    held = Held(REVIEWS["openai"])
+    script = Audit({**REVIEWS, "openai": held})
+    loop = audit_loop(store, script)
+    early = watch_saves(store, monkeypatch, held)
+    events = list(loop.run())
+    [(states, models, claims)] = early
+    assert states == {"anthropic": "completed", "openai": "running"} and models == ["Anthropic"]
+    assert [claim["anchor"] for claim in claims] and all(claim["audit"] for claim in claims)
+    # The page gets the same review live, before the review's end.
+    frames = [event["review"] for event in events if event.get("type") == "review"]
+    live = [frame for frame in frames if frame["status"] == "running" and frame["audit"].get("claims") is not None]
+    assert live and frames.index(live[0]) < len(frames) - 1 and frames[-1]["status"] == "succeeded"
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "succeeded"
+    final = {claim["anchor"]: claim for claim in review["audit"]["claims"]}
+    # No mark went away: every early claim stands, with the first reviewer's notes in it.
+    for claim in claims:
+        notes = [(item["model"], item["note"]) for item in final[claim["anchor"]]["dissent"]]
+        assert all((item["model"], item["note"]) in notes for item in claim["dissent"])
+    assert {item["model"] for claim in final.values() for item in claim["dissent"]} == {"Anthropic", "OpenAI"}
+
+
+def test_reviewers_that_end_together_show_their_marks_together(store, monkeypatch):
+    early = watch_saves(store, monkeypatch)
+    loop = audit_loop(store, Audit())
+    list(loop.run())
+    # One save and one frame for both, not two back to back.
+    assert early == [] and saved(store, loop)["agent_review"]["status"] == "succeeded"
+
+
+def test_early_marks_are_final_marks_only(store, monkeypatch):
+    """What a reviewer found while the agent worked may be gone from its
+    final list: it does not show before that reviewer's final round is in."""
+    noticed = json.dumps({"marks": [{"entry": 1, "kind": "doubtful", "note": "Seen while the agent worked."}]})
+    held = Held(REVIEWS["openai"])
+    script = Audit({**REVIEWS, "openai": held}, tool_steps=1, live={"openai": noticed})
+    loop = audit_loop(store, script)
+    early = watch_saves(store, monkeypatch, held)
+    list(loop.run())
+    [(states, models, _)] = early
+    assert states["openai"] == "running" and models == ["Anthropic"]
+
+
+def test_a_reviewer_that_fails_first_shows_nothing_early(store, monkeypatch):
+    held = Held(REVIEWS["openai"])
+    script = Audit({"anthropic": "no review at all", "openai": held})
+    loop = audit_loop(store, script)
+    early = watch_saves(store, monkeypatch)
+    threading.Timer(.6, held.release.set).start()
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert early == [] and review["status"] == "partial"
+
+
+def test_an_interrupted_review_with_a_reviewers_marks_is_partial_not_unreviewed(store, monkeypatch):
+    """A running review may hold a reviewer's final marks since they are
+    saved early: when its last saves fail, the finished answer says what it
+    has ("1 of 2 reviewed"), not "not reviewed" beside its marks."""
+    from app.services.agent_runs import early_marks
+    held = Held(REVIEWS["openai"])
+    loop = audit_loop(store, Audit({**REVIEWS, "openai": held}))
+    save, seen = store.save_review, []
+
+    def down_after_the_first_marks(uid, chat_id, turn_id, token, review, text):
+        if seen:
+            raise RuntimeError("database unavailable")
+        result = save(uid, chat_id, turn_id, token, review, text)
+        if review.get("status") == "running" and (review.get("audit") or {}).get("claims") is not None:
+            seen.append(True)
+            held.release.set()
+        return result
+    monkeypatch.setattr(store, "save_review", down_after_the_first_marks)
+    list(loop.run())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "partial" and review["audit"]["claims"]
+    running = {"mode": "audit", "status": "running", "audit": {"claims": [], "reviewers": [
+        {"provider": "anthropic", "status": "completed"}, {"provider": "openai", "status": "running"}]}}
+    assert early_marks(running)
+    assert not early_marks({**running, "audit": {**running["audit"], "claims": None}})
+    assert not early_marks({**running, "audit": {"claims": [], "reviewers": [{"provider": "openai", "status": "running"}]}})
+    assert not early_marks({**running, "status": "required"})
+
+
 def test_a_completed_answer_never_keeps_a_review_that_says_reviewing(store, monkeypatch):
     script = Audit()
     loop = audit_loop(store, script)

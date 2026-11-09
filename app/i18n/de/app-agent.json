@@ -684,6 +684,7 @@
   "No objections from {0}.": "Keine Einwände von {0}.",
   "No final review from {0}: {reason}.": "Keine Schlussprüfung von {0}: {reason}.",
   "No review from {0}: {reason}.": "Keine Prüfung von {0}: {reason}.",
+  "Still reviewing: {0}.": "Prüft noch: {0}.",
   "Notes from {name}": "Anmerkungen von {name}",
   "Unmarked text means no objection, not confirmed.": "Unmarkierter Text heißt: kein Einwand, nicht bestätigt.",
   "No objections.": "Keine Einwände.",

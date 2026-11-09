@@ -180,6 +180,11 @@ FINAL_ROUND_SECONDS = 90
 # run_interrupted. The final round itself waits at most
 # FINAL_ROUND_SECONDS plus this before its reviewers count as out of time.
 REVIEWER_JOIN_SECONDS = 10
+# A reviewer whose final round is in shows its marks while the others still
+# review (AnswerAudit._show_early). Reviewers that end within this many
+# seconds of each other show theirs together: one save and one frame instead
+# of two back to back.
+EARLY_MARKS_GRACE_SECONDS = .3
 
 # Most severe first. The mark of a sentence takes its most severe kind.
 KINDS = ("wrong", "doubtful", "incomplete")
@@ -1518,6 +1523,9 @@ class ReviewerSession:
         self.requests = []
         self.hedged = False
         self.thread = None
+        # Its thread is through (final round in, failed or stopped): the
+        # audit shows what it has (AnswerAudit._await_reviewers).
+        self.ended = False
 
     @property
     def state(self):
@@ -1595,11 +1603,14 @@ class ReviewerSession:
             logging.warning("Agent reviewer stopped category=%s", safe_exception(exc))
             self._set(status="failed", failure={"code": "review_unavailable"})
         finally:
-            # A gate still waiting for this reviewer goes on without it.
-            gate = audit.gate
-            if gate is not None and self.provider in gate.asked and self.provider not in gate.verdicts:
-                audit.gate_verdict(self, gate, "failed")
-            self._close()
+            try:
+                # A gate still waiting for this reviewer goes on without it.
+                gate = audit.gate
+                if gate is not None and self.provider in gate.asked and self.provider not in gate.verdicts:
+                    audit.gate_verdict(self, gate, "failed")
+                self._close()
+            finally:
+                audit.reviewer_ended(self)
 
     def _close(self):
         """A session still waiting for its next round ends with the reviewer
@@ -1996,8 +2007,10 @@ class AnswerAudit:
 
     Its state is part of the turn's review (ComparisonTools.snapshot, under
     ComparisonTools.lock): the reviewers while they work, then the claims,
-    the unplaced marks and the marks on the work. The marks show only once
-    every reviewer is done, so no mark comes and goes while the page is read.
+    the unplaced marks and the marks on the work. A reviewer's marks show as
+    soon as its final round is in, while the others still review
+    (_show_early); theirs join later. Only final marks show early, so a mark
+    on the page stays: none comes and goes while the page is read.
 
     ``setting``: the user's ``reviewers`` (user_settings.py). "always" follows from the run's start (DelegationLoop.run),
     "workspace" from the agent's first step in the workspace on
@@ -2030,6 +2043,8 @@ class AnswerAudit:
         self._timer = None
         # A save of the review failed: the run's end saves it again (close).
         self._unsaved = False
+        # Signalled by every reviewer whose thread is through (reviewer_ended).
+        self._ended = threading.Condition()
         # The reviewers' brief of the agent's instructions (instructions_brief),
         # bound to their log entry once the log holds it (brief).
         self._brief_parts = self._brief = None
@@ -2413,9 +2428,7 @@ class AnswerAudit:
             session.fixed()
         self.work_log.wake()
         locked = self._lock_time()
-        until = time.monotonic() + FINAL_ROUND_SECONDS + REVIEWER_JOIN_SECONDS
-        for session in self.sessions.values():
-            session.thread.join(max(0., until - time.monotonic()))
+        self._await_reviewers(answer, time.monotonic() + FINAL_ROUND_SECONDS + REVIEWER_JOIN_SECONDS)
         late = [session for session in self.sessions.values() if session.thread.is_alive()]
         for session in late:
             # Held up outside its requests (FINAL_ROUND_SECONDS bound those).
@@ -2443,6 +2456,68 @@ class AnswerAudit:
         if any((state.get("failure") or {}).get("code") == "no_time" for state in self.reviewers.values()):
             issues.append({"code": "no_time"})
         self._finish(answer, issues)
+
+    def reviewer_ended(self, session):
+        """``session``'s thread is through: _await_reviewers looks again."""
+        with self._ended:
+            session.ended = True
+            self._ended.notify_all()
+
+    def _await_reviewers(self, answer, until):
+        """Waits for every reviewer, at most until ``until`` (time.monotonic).
+        Each time one is through while others still review, its marks go to
+        the page (_show_early): the slowest reviewer's final round set the
+        time to the first mark before, 34 s after the fastest at the p90
+        (prod, 2026-11). Reviewers that end within EARLY_MARKS_GRACE_SECONDS
+        of each other are shown together."""
+        waiting = set(self.sessions)
+        shown = 0
+        while waiting:
+            with self._ended:
+                through = {provider for provider in waiting if self.sessions[provider].ended}
+                if not through:
+                    left = until - time.monotonic()
+                    if left <= 0:
+                        return
+                    # The wait also ends by itself: a thread that died without
+                    # its signal is found by the look below.
+                    self._ended.wait(min(left, 1.))
+                    through = {provider for provider in waiting
+                               if self.sessions[provider].ended or not self.sessions[provider].thread.is_alive()}
+                    if not through:
+                        continue
+                waiting -= through
+                if waiting:
+                    self._ended.wait_for(lambda: all(self.sessions[provider].ended for provider in waiting),
+                                         min(EARLY_MARKS_GRACE_SECONDS, max(0., until - time.monotonic())))
+                    waiting = {provider for provider in waiting if not self.sessions[provider].ended}
+            if not waiting:
+                break
+            shown = self._show_early(answer, shown)
+        for session in self.sessions.values():
+            # Through, so its thread ends at once: not "late" below.
+            session.thread.join(max(0., min(1., until - time.monotonic())))
+
+    def _show_early(self, answer, shown):
+        """The final marks of the reviewers that are through, on the page
+        while the others still review. Only final marks, never what a
+        reviewer found while the agent worked: its final list may drop such a
+        mark, and a mark on the page must stay. The review stays "running";
+        its end is _finish's alone. ``shown``: how many reviews the page has
+        already; returns the number it has now. Never fails the review."""
+        if self.stopping:
+            return shown
+        try:
+            reviews = [review for review in self._reviews() if not review[2]]
+            if len(reviews) <= shown:
+                # A reviewer that failed or was stopped has nothing final to add.
+                return shown
+            self._place(answer, reviews)
+            self._save()
+            return len(reviews)
+        except Exception as exc:
+            logging.warning("Agent audit early marks not shown category=%s", safe_exception(exc))
+            return shown
 
     def _lock_time(self):
         """The turn's time under the account lock so far (AgentSessionStore.lock_time), or None."""
