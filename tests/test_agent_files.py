@@ -106,6 +106,26 @@ def test_images_are_capability_aware_and_private(setup, monkeypatch):
     assert visual[-1]['image_url']['url'].startswith('data:image/png;base64,')
 
 
+def test_reading_a_file_without_text_says_where_its_content_is(setup):
+    """A picture or a scanned PDF has no text parts. Its read came back
+    with empty excerpts and nothing else, which read as an empty file: the
+    agent did see it in its next step, and the reviewers held that the look
+    never happened (prod, 2026-11-07)."""
+    from app.services.agent_files import READ_VISUAL_NOTE, ReadFileArgs
+    from app.services.llm.provider_runtime import ProviderCancellation
+    files, chat = setup
+    out = io.BytesIO(); Image.new('RGB', (100, 100)).save(out, 'PNG')
+    picture = files.upload('owner', chat, {'name': 'photo.png', 'data': base64.b64encode(out.getvalue()).decode()})
+    text = files.upload('owner', chat, {'name': 'notes.txt', 'data': base64.b64encode(b'Delivery in 2 weeks.').decode()})
+    ctx = FileContext(files, 'owner', chat, [])
+    seen = ctx.read(ReadFileArgs(file_id=picture['id']), cancellation=ProviderCancellation())
+    assert seen['excerpts'] == [] and seen['note'] == READ_VISUAL_NOTE
+    # The file itself goes with the next step.
+    assert ctx.selection() == [picture['id']]
+    read = ctx.read(ReadFileArgs(file_id=text['id']), cancellation=ProviderCancellation())
+    assert read['excerpts'] and 'note' not in read
+
+
 def test_a_picture_keeps_its_drawn_size_for_the_app_but_not_for_the_model(setup):
     # Pictures in an answer must not jump: the app keeps a place of their own
     # shape (agent-workspace.js has-size).

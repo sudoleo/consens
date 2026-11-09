@@ -437,6 +437,12 @@ class AgentFiles:
                 self.delete(uid, chat_id, snap.id)
 
 
+# What read_file says of a file without text parts (FileContext.read): where
+# its content is, since ``excerpts`` is empty.
+READ_VISUAL_NOTE = ("This file has no text to excerpt (a picture, or a PDF of scanned pages). The file itself "
+                    "comes with your next step, as far as this model takes pictures or PDFs.")
+
+
 class ReadFileArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     file_id: str = Field(pattern=ID_PATTERN)
@@ -470,9 +476,16 @@ class FileContext:
     def read(self, args, *, cancellation):
         cancellation.raise_if_cancelled()
         data = self.files.get(self.uid, self.chat_id, args.file_id)
-        if (data["mime"].startswith("image/") or not data["parts"]) and args.file_id not in self.file_ids:
+        visual = data["mime"].startswith("image/") or not data["parts"]
+        if visual and args.file_id not in self.file_ids:
             self.read_ids = [fid for fid in self.read_ids if fid != args.file_id][-(4):] + [args.file_id]
-        return self._excerpts(data, args)
+        result = self._excerpts(data, args)
+        if visual and not result["excerpts"]:
+            # Without it the result reads as an empty file: a picture or a
+            # scanned PDF has no text parts, and reviewers took the agent's
+            # look at such a file for one that never happened.
+            result["note"] = READ_VISUAL_NOTE
+        return result
 
     def _excerpts(self, data, args):
         parts = list(data["parts"])
