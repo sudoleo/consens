@@ -71,6 +71,12 @@ ANSWER_RESERVE_SECONDS = {"none": 120, "minimal": 120, "low": 150, "medium": 240
 # less than RATE_LIMIT_RETRY_MIN_TURN_SECONDS left before its hard stop.
 RATE_LIMIT_RETRY_SECONDS = 3
 RATE_LIMIT_RETRY_MAX_SECONDS = 10
+# The same for a turn that already holds work of its own (a step it claimed):
+# it waits out a busy provider this long, one further attempt, where its time
+# allows. A 429 without Retry-After closes the model for 30 s for every run
+# of the process (ProviderCooldowns): without the wait, one user's 429 ended
+# another's forty-minute run at its next step.
+RATE_LIMIT_WAIT_MAX_SECONDS = 60
 RATE_LIMIT_RETRY_MIN_TURN_SECONDS = 60
 # A chat model's step that broke off in passing (_passing_failure) before the
 # user saw any of its text runs once more after this pause, under the same
@@ -116,6 +122,22 @@ TURN_REPEAT_LIMIT = ("The model repeated the same tool request without progress.
                      "The available results have been saved; send a follow-up message to continue.")
 TURN_INVALID_LIMIT = ("The model repeated invalid tool requests without progress. "
                       "The available results have been saved.")
+# Steps in a row whose requests the registry refused before any tool ran (an
+# unknown tool, arguments that are no JSON or do not fit the schema), after
+# which the turn ends with its answer: the model is not getting its calls
+# right. And steps in a row in which every call ran and failed, after which
+# it ends the same way: its tools are not there (a workspace that does not
+# start, a page that cannot be reached). Twice as many: a failed call is the
+# tool's answer to work from (an edit whose text was not found, a command's
+# missing file), and three of them in a row ended real work as "invalid".
+INVALID_TOOL_ROUNDS = 3
+FAILED_TOOL_ROUNDS = 6
+TURN_TOOLS_LIMIT = ("The tools this response needed failed several times in a row. "
+                    "The available results have been saved; send a follow-up message to continue.")
+# A call that broke on the app's side (storage, a service of ours): the
+# call's result, never the turn's end (_execute).
+TOOL_BROKE = ("This call failed on the app's side, not because of your request. Whether it took effect is not "
+              "known; another try may work.")
 # A long VM run (AgentPolicy.vm_turn_*) ends with its answer while there is
 # still room for it: before the day's allowance cannot hold one more step and
 # the answer, and before its conversation fills this share of the model's
@@ -128,7 +150,8 @@ TURN_CONTEXT_LIMIT = ("This response reached the model's context limit. "
 # Which limit ended a turn's work (_wrap_up): the turn's ``agent_wrap_up``
 # and the work log's ``limit`` entry keep the code, never a text.
 WRAP_UP_REASONS = {TURN_TIME_LIMIT: "time", TURN_STEP_LIMIT: "steps", TURN_REPEAT_LIMIT: "repeat",
-                   TURN_INVALID_LIMIT: "invalid", TURN_ALLOWANCE_LIMIT: "allowance", TURN_CONTEXT_LIMIT: "context"}
+                   TURN_INVALID_LIMIT: "invalid", TURN_TOOLS_LIMIT: "tools", TURN_ALLOWANCE_LIMIT: "allowance",
+                   TURN_CONTEXT_LIMIT: "context"}
 # A message the user sends into the running response (add_user_note): it
 # opens the user-role message the agent gets before its next step.
 USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the user:]"
@@ -181,6 +204,15 @@ CALL_AFTER_BROWSER_FAILURE = ("Not run: an earlier browser call of this step fai
                               "this call expected it. That call's result shows the page as it is now.")
 # The line of facts after each batch of a message with the workspace (_note_progress).
 PROGRESS_OPEN = "[consens.io, written by the app:"
+# A tool call whose arguments were at least this long when the step's output
+# limit cut it off: the call itself is what did not fit (a whole file in one
+# vm_write_file), not the reasoning before it. The model is told so in place
+# of the call's result; the turn failed with "used its whole output allowance
+# on reasoning" before, after an hour of work.
+CUT_CALL_CHARS = 4_000
+CALL_CUT = ("{open} your last step ended at its output limit of {tokens} tokens in the middle of a {tool} call, "
+            "after {chars} characters of its arguments. The call did not run, and nothing of it is kept. A call "
+            "has to fit into one step: longer content goes in several calls.]")
 # The message's limits stand in that line only from this share of them on
 # (Max: the 120 minutes mislead). Named in every batch, "step 9 of at most
 # 200, 2.2 of 120 minutes" was a ceiling that read as time to spare, and a
@@ -284,6 +316,9 @@ def _passing_failure(error, value=None):
         return False
     if isinstance(error, ModelDeclined):
         return bool(getattr(value, "endpoint", ""))
+    if getattr(error, "status_code", None) == 503:
+        # Over capacity for the moment (404 is a model that is not there).
+        return True
     return agent_failure(error).get("code") in PASSING_FAILURE_CODES
 
 
@@ -522,7 +557,10 @@ class DelegationLoop(AgentLoop):
         self.holds = []
         self.paused_seconds = 0.0
         self.tools_used = 0
-        self.invalid_tool_rounds = 0
+        # Steps in a row whose calls were all refused before running, and
+        # in which every call that ran failed (INVALID_TOOL_ROUNDS,
+        # FAILED_TOOL_ROUNDS).
+        self.invalid_tool_rounds = self.failed_tool_rounds = 0
         self.search_remaining = self.policy.max_searches
         self.closed = threading.Event()
         self.watch_error = None
@@ -1273,6 +1311,9 @@ class DelegationLoop(AgentLoop):
                                                *tail]
             self.run_summaries += 1
             self.compacted_to = None
+            # The results the repeat guard points to ("Its results are
+            # above") are no longer in the conversation: a call may run again.
+            self.identical_calls.clear()
             if self.work_log is not None:
                 # The summary comes next; the user's messages and the kept step
                 # are in the log already, a message the user sent meanwhile not yet.
@@ -1282,6 +1323,21 @@ class DelegationLoop(AgentLoop):
         if self.work_log is not None:
             self.work_log.app("summarized", {"kind": kind, "chars_before": before, "chars_after": after}, step=step)
         return next(steps)
+
+    @staticmethod
+    def _cut_call(value):
+        """(tool name, characters of arguments written) of a call the step's
+        output limit cut in half after CUT_CALL_CHARS of its arguments, else
+        None: a call cut earlier is a step that reasoned through its
+        allowance (_thought_only)."""
+        parts = getattr(value, "_tool_parts", None) or {}
+        if value.finish_reason not in {"length", "max_tokens"} or value.tool_calls or not parts:
+            return None
+        function = (parts[sorted(parts)[-1]].get("function") or {})
+        written = len(function.get("arguments") or "")
+        if written < CUT_CALL_CHARS:
+            return None
+        return re.sub(r"[^A-Za-z0-9_.-]", "?", str(function.get("name") or ""))[:64], written
 
     def _identical_call(self, call):
         """No-progress guard: the same tool with the same arguments.
@@ -1298,6 +1354,13 @@ class DelegationLoop(AgentLoop):
         if seen <= limit:
             return None
         return "refuse" if seen == limit + 1 else "stop"
+
+    def _forget_identical(self, call):
+        """Take back _identical_call's count of ``call`` (run: a call that
+        came to nothing)."""
+        key = self._identical_key(call) if self.policy.account_budget_only else None
+        if key is not None and self.identical_calls.get(key):
+            self.identical_calls[key] -= 1
 
     @staticmethod
     def _identical_key(call):
@@ -1655,8 +1718,22 @@ class DelegationLoop(AgentLoop):
             result = {"error": str(exc)[:2000]}
             if tool is None:
                 self._log_rejected_call(call, exc)
+                # Refused before any tool ran (run: INVALID_TOOL_ROUNDS).
+                value.__dict__.setdefault("rejected_calls", set()).add(call["id"])
             if tool is not None and tool.name == "update_memory":
                 reason = getattr(exc, "code", None) or "invalid_arguments"
+        except Exception as exc:
+            # Storage or a service of ours broke inside the tool (a file's
+            # bytes, the chat's documents): that call's failure. The turn
+            # ended as "the model provider could not finish this request".
+            # A failure with a meaning of its own still ends the turn (the
+            # allowance, the turn's limits, a lost run, Google's consent),
+            # and so does one of the app's own review call.
+            if (registry is not self.registry or tool is None
+                    or agent_failure(exc).get("code") != "provider_error"):
+                raise
+            logging.warning("Agent tool broke on the app's side tool=%s category=%s", tool.name, safe_exception(exc))
+            result = {"error": TOOL_BROKE}
         finally:
             publish(status)
         # A key the user saved for the agent (agent_secrets.py) never reaches a model or the record.
@@ -2153,11 +2230,14 @@ class DelegationLoop(AgentLoop):
                 # the next step (a failed step would block that claim).
                 value.rate_limited = exc
                 status = "succeeded"
-            elif (retry_passing and claimed and not value.published and not (publish_text and value.text)
-                  and _passing_failure(exc, value)):
-                # Broke off before the user saw a word of it: settled with what
-                # it used (usage, or its bounded estimate) so the retry can
-                # claim the next step; the work log keeps it as failed.
+            elif (retry_passing and claimed and not (publish_text and value.text)
+                  and (not value.published or self.merged) and _passing_failure(exc, value)):
+                # Broke off before the user saw a word of it, or while its
+                # answer was showing in a turn whose text can go back
+                # (_answer_attempt retracts it): settled with what it used
+                # (usage, or its bounded estimate) so the retry can claim the
+                # next step; the work log keeps it as failed. A long run's
+                # answer that broke off after twenty seconds failed the turn.
                 value.passing_failure = exc
                 status, log_status = "succeeded", "failed"
             elif summary and claimed and _summary_unwritten(exc):
@@ -3121,7 +3201,7 @@ class DelegationLoop(AgentLoop):
             delay = self._rate_limit_delay(exc.retry_after) if rate_limit else None
             if delay is None:
                 raise
-            cause, passing = exc, False
+            cause, passing, value = exc, False, None
         else:
             cause, passing = getattr(value, "rate_limited", None), False
             if cause is None and getattr(value, "passing_failure", None) is not None:
@@ -3144,9 +3224,17 @@ class DelegationLoop(AgentLoop):
         else:
             logging.warning("Agent step rate limited model=%s retry_in=%s", model.model, delay)
             yield self.activity({"step_id": step, "id": "rate_limit", "kind": "progress",
-                                 "text": "The model's provider is busy right now. Trying again in a few seconds."})
+                                 "text": "The model's provider is busy right now. Trying again in a few seconds."
+                                 if delay <= RATE_LIMIT_RETRY_MAX_SECONDS else
+                                 "The model's provider is busy right now. Trying again in a moment."})
+        if passing and getattr(value, "published", ""):
+            # It broke off while its answer was showing: that text goes back,
+            # and the next attempt writes the answer anew.
+            yield from self._retract(value)
         yield from self._pause(delay)
-        elsewhere = {"avoid_endpoint": value.endpoint} if passing and getattr(value, "endpoint", "") else {}
+        # Another endpoint where the model has one: what broke or refused the
+        # first attempt mostly belongs to its endpoint.
+        elsewhere = {"avoid_endpoint": value.endpoint} if getattr(value, "endpoint", "") else {}
         return (yield from self._past_halts(model, messages, step, steps, registry, check_cooldown=False,
                                             **step_args, **elsewhere))[0]
 
@@ -3179,7 +3267,8 @@ class DelegationLoop(AgentLoop):
 
     def _rate_limit_delay(self, retry_after):
         """Seconds to wait before the one answer retry, or None for no retry."""
-        if type(retry_after) in (int, float) and retry_after > RATE_LIMIT_RETRY_MAX_SECONDS:
+        longest = RATE_LIMIT_WAIT_MAX_SECONDS if self.claimed else RATE_LIMIT_RETRY_MAX_SECONDS
+        if type(retry_after) in (int, float) and retry_after > longest:
             return None
         delay = retry_after if type(retry_after) in (int, float) and retry_after >= 0 else RATE_LIMIT_RETRY_SECONDS
         left = self._hard_stop_left()
@@ -3230,15 +3319,18 @@ class DelegationLoop(AgentLoop):
     # --- Merged answer (agent_answer_mode) --------------------------------
     def _orchestrate(self, model, index, steps, search):
         """One steering step; in a merged turn its text may be the answer."""
-        # A step that broke off in passing runs once more in every turn; after
-        # paid comparisons a free 429 does too (_answer_attempt).
+        # A step that broke off in passing runs once more in every turn; once
+        # the turn holds work of its own (a step it claimed) a free 429 does
+        # too, and the turn waits out a provider's cooldown (_answer_attempt).
+        # A message's first step fails at once instead: nothing is lost, and
+        # the user may rather take another model than wait.
         if not self.merged:
             return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
                                                     rate_limit=False, **search))
         args = {**search, "answer_candidate": True, "hold": self._hold_answer(),
                 "answer_output": self._answer_output()}
         return (yield from self._answer_attempt(model, self.messages, index, steps, registry=self.registry,
-                                                rate_limit=bool(self.comparison.comparisons), **args))
+                                                rate_limit=bool(self.claimed), **args))
 
     def _closing_thoughts(self, step, thinking):
         """The step's thinking line once its stream is over, with what it
@@ -3458,6 +3550,16 @@ class DelegationLoop(AgentLoop):
         except Exception as exc:
             logging.warning("Agent answer links not saved category=%s", safe_exception(exc))
 
+    def _keeps_record(self, status):
+        """Whether the next message is told what this one did
+        (agent_compaction.work_record): after a VM run, after any run that
+        broke off or was stopped, so that "Retry" goes on from its work
+        instead of starting over, and after a run that ended at a limit of
+        its message (_wrap_up): its answer says a follow-up can go on, and
+        "Continue" without the record started the research again."""
+        return (self._long_run() or status != "succeeded"
+                or isinstance(getattr(self.completion, "wrap_up", None), dict))
+
     def _hand_over(self):
         """The answer is fixed: the chat is free for its next message while
         the reviewers finish (agent_runs.hand_over), and the browser takes the
@@ -3468,7 +3570,7 @@ class DelegationLoop(AgentLoop):
         # Without reviewers too: the run's end (the work log, the receipt,
         # the bookmark) takes another 2 s the browser need not wait for.
         self._release_workspace()
-        if self._long_run():
+        if self._keeps_record("succeeded"):
             from app.services.agent_compaction import work_record
             self.completion.work_record = work_record(self.own_messages(), 0)
         try:
@@ -3587,6 +3689,7 @@ class DelegationLoop(AgentLoop):
                          "It reached its step limit.",
                 "repeat": "The same tool request repeated without progress.",
                 "invalid": "Tool requests were invalid three times in a row.",
+                "tools": f"Its tool calls failed {FAILED_TOOL_ROUNDS} times in a row; their results say why.",
                 "allowance": "Today's token allowance is nearly used up.",
                 "context": "The conversation nearly fills the model's context window."}.get(code, "")
         then = ("The work can go on in a later message once the allowance renews." if code == "allowance" else
@@ -3673,6 +3776,25 @@ class DelegationLoop(AgentLoop):
                     routing = self._routing_model()
                     try:
                         value = yield from self._orchestrate(routing, index, steps, search)
+                        cut = self._cut_call(value)
+                        if cut:
+                            # No lighter reasoning makes a call of that length
+                            # fit: the model learns what happened and goes on.
+                            # Counted like a refused request: three in a row
+                            # end the turn with its answer.
+                            self.invalid_tool_rounds += 1
+                            logging.warning("Agent tool call cut at the output limit model=%s tool=%s argument_chars=%s",
+                                            routing.model, cut[0] or "-", cut[1])
+                            if self.merged:
+                                yield from self._retract(value)
+                            self.messages.append({"role": "user", "content": CALL_CUT.format(
+                                open=PROGRESS_OPEN, tool=cut[0] or "tool", chars=cut[1],
+                                tokens=routing.max_output_tokens)})
+                            if self.invalid_tool_rounds >= INVALID_TOOL_ROUNDS:
+                                yield from self._wrap_up(TURN_INVALID_LIMIT, steps, value)
+                                status = "succeeded"
+                                break
+                            continue
                         if _thought_only(value):
                             # Reasoned through the routing allowance without a
                             # complete tool call (prod: Sonnet "max"). One retry with
@@ -3724,7 +3846,7 @@ class DelegationLoop(AgentLoop):
                             yield from self._keep_cut_answer(value)
                         raise AnalysisBudgetExceeded("The model reached its output token limit. The available partial answer has been saved.")
                     if value.tool_calls:
-                        accepted_tool = last_accepted = False
+                        accepted_tool = last_accepted = ran = False
                         limit = None
                         results = {}
                         # Why the step's later calls do not run: the
@@ -3845,6 +3967,14 @@ class DelegationLoop(AgentLoop):
                             content = json.loads(result["content"])
                             last_accepted = "error" not in content
                             accepted_tool |= last_accepted
+                            ran = ran or call["id"] not in getattr(value, "rejected_calls", ())
+                            if not last_accepted or (isinstance(content, dict)
+                                                     and content.get("status") in {"failed", "refused"}):
+                                # A call that came to nothing is no repetition
+                                # yet: the same call may be what works next
+                                # (a service that was busy, a workspace that
+                                # was starting). FAILED_TOOL_ROUNDS bounds it.
+                                self._forget_identical(call)
                             browser_failed = browser_failed or (name == "browser" and not last_accepted)
                             if self.comparison and self.comparison.finalized:
                                 # Ignore speculative extra calls in the same batch
@@ -3886,12 +4016,22 @@ class DelegationLoop(AgentLoop):
                             yield from self._wrap_up(limit, steps, value)
                             status = "succeeded"
                             break
-                        self.invalid_tool_rounds = 0 if accepted_tool else self.invalid_tool_rounds + 1
-                        if self.invalid_tool_rounds >= 3:
+                        rejected = getattr(value, "rejected_calls", ())
+                        if accepted_tool:
+                            self.invalid_tool_rounds = self.failed_tool_rounds = 0
+                        elif ran:
+                            # Every call that ran failed: the tools' answers,
+                            # not the model's mistake in asking.
+                            self.invalid_tool_rounds, self.failed_tool_rounds = 0, self.failed_tool_rounds + 1
+                        elif rejected:
+                            self.invalid_tool_rounds += 1
+                        # Else only calls the app did not run (CALL_*): neither.
+                        if self.invalid_tool_rounds >= INVALID_TOOL_ROUNDS or self.failed_tool_rounds >= FAILED_TOOL_ROUNDS:
                             # A merged turn still reaches its reviewed answer
                             # (_wrap_up), e.g. after three rounds of malformed
                             # tool calls; a delegation-only run stops.
-                            yield from self._wrap_up(TURN_INVALID_LIMIT, steps, value)
+                            yield from self._wrap_up(TURN_INVALID_LIMIT if self.invalid_tool_rounds >= INVALID_TOOL_ROUNDS
+                                                     else TURN_TOOLS_LIMIT, steps, value)
                             status = "succeeded"
                             break
                         # Once the answer is fixed only its review remains, and
@@ -4000,11 +4140,7 @@ class DelegationLoop(AgentLoop):
                 # chat deleted meanwhile): else the session would stay open,
                 # its VM time uncharged.
                 self._release_workspace()
-            if self._long_run() or status != "succeeded":
-                # What the next message is told this one did (agent_compaction):
-                # after a VM run, and after any run that broke off or was
-                # stopped, so that "Retry" goes on from its work
-                # instead of starting over ("" without a single call).
+            if self._keeps_record(status):
                 from app.services.agent_compaction import work_record
                 self.completion.work_record = work_record(self.own_messages(), 0)
             if self.work_log is not None:

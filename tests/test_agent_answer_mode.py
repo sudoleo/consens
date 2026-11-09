@@ -577,8 +577,9 @@ def test_text_before_a_cut_tool_call_is_taken_back_before_the_retry(store, monke
 
 
 class RealStep(Merged):
-    """Merged, but step completion:``real`` streams through the real client
-    (AgentCompletion.stream over test_agent_loop.transport)."""
+    """Merged, but step completion:``real`` (one index or several) streams
+    through the real client (AgentCompletion.stream over
+    test_agent_loop.transport)."""
 
     def __init__(self, plan, *, real, **kwargs):
         super().__init__(plan, **kwargs)
@@ -591,7 +592,8 @@ class RealStep(Merged):
 
         class Completion(base):
             def stream(self, **kwargs):
-                if self.step_id != f"completion:{script.real}":
+                real = script.real if isinstance(script.real, tuple) else (script.real,)
+                if self.step_id not in {f"completion:{index}" for index in real}:
                     yield from super().stream(**kwargs)
                     return
                 script.calls.append((self.step_id, kwargs["model"].model))
@@ -635,15 +637,17 @@ def test_a_step_that_breaks_off_after_its_own_search_saves_what_was_shown(store,
     from test_agent_loop import transport
     opening = "Let me look into the current prices of both options carefully. " * 6
     research = "From the results: the first option costs 100 and the second 80 a month. " * 12
-    transport(monkeypatch, [searched_midway(opening, research, RuntimeError("connection reset"))])
-    loop = merged_loop(store, RealStep([{}], real=0))
+    # The step runs once more after it broke off (_answer_attempt), and breaks again.
+    transport(monkeypatch, [searched_midway(opening, research, RuntimeError("connection reset")),
+                            searched_midway(opening, research, RuntimeError("connection reset"))])
+    loop = merged_loop(store, RealStep([{}, {}], real=(0, 1)))
     loop.cooldowns = ProviderCooldowns()  # never the process-wide gate in tests
     events = []
     with pytest.raises(RuntimeError, match="connection reset"):
         for event in loop.run():
             events.append(event)
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
-    assert deltas(events) == opening + research
+    assert deltas(events) == (opening + research) * 2
     assert saved["status"] == "failed" and saved["assistant_response"] == opening + research
 
 

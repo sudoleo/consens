@@ -1634,6 +1634,9 @@ class ChatStore:
             filter=FieldFilter("status", "==", TURN_STATUS_PENDING)
         ).limit(ABANDONED_TURN_SWEEP_LIMIT)
         retired: list[str] = []
+        # The turn an Agent run still works on, read once a turn is old
+        # enough to go ("" until then, None: none).
+        running = ""
         for snapshot in query.stream():
             data = snapshot.to_dict() or {}
             created_at = data.get("created_at")
@@ -1648,6 +1651,18 @@ class ChatStore:
             if isinstance(fixed_at, datetime) and fixed_at.tzinfo is not None:
                 created_at = max(created_at, fixed_at)
             if created_at > cutoff:
+                continue
+            if running == "":
+                # A run that is alive renews the chat's lock with its lease
+                # (agent_sessions: agent_lock_until). A workspace run of
+                # forty minutes is older than the cutoff and not abandoned:
+                # another message to its chat (a second tab, a Watch's run)
+                # failed it here and then was refused itself, and the run
+                # ended at its next step without an answer.
+                chat = self._chat_ref(uid, chat_id).get().to_dict() or {}
+                lock = chat.get("agent_lock_until")
+                running = chat.get("agent_turn_id") if isinstance(lock, datetime) and lock > now else None
+            if snapshot.id == running:
                 continue
             try:
                 self.fail_turn(uid, chat_id, snapshot.id, error_code="abandoned")

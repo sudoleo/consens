@@ -9,6 +9,7 @@ import pytest
 pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 
 from app.services.agent_delegation import DelegationLoop
+from app.services.agent_provider_limits import AgentRunInterrupted
 from app.services.agent_delegation_config import defaults
 from app.services.agent_costs import RunCosts
 from app.services.agent_policy import AgentPolicy
@@ -544,7 +545,7 @@ def test_a_batch_that_breaks_off_waits_for_the_reads_it_started_beside(store):
     def read(args, *, cancellation):
         if args.n == 0:
             beside.wait(5)
-            raise RuntimeError("The first read broke.")
+            raise AgentRunInterrupted("The first read broke.")
         reads.append(threading.current_thread())
         beside.set()
         # Until the run's end looks (finish_run), at most a second.
@@ -666,7 +667,7 @@ def test_a_read_started_beside_that_breaks_gets_not_run_once_the_batch_stopped(s
 
     def read(args, *, cancellation):
         if args.n:
-            raise RuntimeError("The read beside broke.")
+            raise AgentRunInterrupted("The read beside broke.")
         first_read.set()
         return {"text": "read"}
     loop, sent = reads_beside(store, read)
@@ -692,7 +693,7 @@ def test_a_read_started_beside_that_breaks_after_the_repeat_guard_ended_the_batc
     from app.services.agent_delegation import CALL_AT_LIMIT
 
     def read(args, *, cancellation):
-        raise RuntimeError("The read beside broke.")
+        raise AgentRunInterrupted("The read beside broke.")
     loop, sent = reads_beside(store, read, policy={"account_budget_only": True, "turn_identical_calls": 1})
     first = {"id": "read_0", "function": {"name": "read_file", "arguments": json.dumps({"n": 0})}}
     # Read twice before: this third one ends the batch.

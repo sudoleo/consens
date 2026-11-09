@@ -203,6 +203,7 @@
   "This response reached its time limit.": "Diese Antwort hat ihr Zeitlimit erreicht.",
   "This response reached the model’s context limit.": "Diese Antwort hat das Kontextlimit des Modells erreicht.",
   "This response ended because the model repeated the same step without progress.": "Diese Antwort endete, weil das Modell denselben Schritt wiederholt hat, ohne voranzukommen.",
+  "This response ended because the tools it needed kept failing.": "Diese Antwort endete, weil die Werkzeuge, die sie brauchte, immer wieder scheiterten.",
   "This response ended because the model’s tool requests kept failing.": "Diese Antwort endete, weil die Werkzeugaufrufe des Modells immer wieder scheiterten.",
   "This response ended early because the day’s allowance was nearly used up.": "Diese Antwort endete früher, weil das Kontingent des Tages fast aufgebraucht war.",
   "This response ended early because today’s allowance is nearly used up. It resets at {0}.": "Diese Antwort endete früher, weil dein heutiges Kontingent fast aufgebraucht ist. Es wird um {0} zurückgesetzt.",

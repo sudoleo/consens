@@ -4713,7 +4713,18 @@ einem letzten Schritt ohne aufrufbare Tools aus dem, was er hat (seit
 Antworten), danach prüfen die Prüfer sie; mit ungeprüften Worker-Ergebnissen
 (`_can_wrap_up`) stattdessen `AnalysisBudgetExceeded` mit
 gespeicherten Teilergebnissen; seit 2026-10-12 enden auch drei ungültige
-Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`). Seit 2026-10-30
+Tool-Batches in Folge per Wrap-up (`TURN_INVALID_LIMIT`); seit 2026-11-10 sind
+das nur noch Schritte, deren Aufrufe die Registry alle ablehnte
+(`INVALID_TOOL_ROUNDS`), während Schritte, in denen jeder gelaufene Aufruf
+scheiterte, erst nach `FAILED_TOOL_ROUNDS` (6) enden, mit eigenem Grund
+(`TURN_TOOLS_LIMIT`, „tools“); ein Werkzeug, das auf Seite der App bricht,
+ist das Ergebnis des Aufrufs (`TOOL_BROKE`), und ein am Output-Limit
+abgeschnittener Aufruf wird dem Modell gesagt (`_cut_call`, `CALL_CUT`;
+agent-mode.md „Ein gescheiterter Aufruf ist keine ungültige Anfrage“). Seit
+2026-11-10 behält ein Turn, der an einer Grenze endete, seinen
+Arbeitsbericht auch ohne Arbeitsplatz (`_keeps_record`; `web_search` und
+`read_source` stehen darin mit Suchwörtern, Fundstellen und Seiten), damit
+„Continue“ dort weitermacht. Seit 2026-10-30
 nennt das Wrap-up dem Agenten die Grenze (`_limit_fact`), und der Turn hält sie
 fest (`agent_wrap_up` `{reason, steps, seconds}`, App-Eintrag `limit`). Seit
 2026-11-09 bekommt sie auch der Browser (`chat_store.turn_detail`, schon mit
@@ -5000,7 +5011,9 @@ gestreamter Text wird zurückgenommen); die leichtere Stufe bleibt für weitere
 Schritte des Turns (`routing_lighter`, auch im Antwortbudget), der Wrap-up
 wiederholt ebenso einmal. Ohne leichtere Stufe oder bei erneutem Leerlauf endet
 der Turn mit `output_limit` und `TURN_OUTPUT_LIMIT` (Rat: niedrigere Denkstufe
-oder anderes Chatmodell). **429 nach Vergleichen:** `_orchestrate`
+oder anderes Chatmodell). **429, sobald der Turn Arbeit hat** (bis 2026-11-09:
+nur nach Vergleichen; seitdem wartet ein Turn mit geclaimtem Schritt bis
+`RATE_LIMIT_WAIT_MAX_SECONDS` = 60 s statt 10 s, agent-mode.md): `_orchestrate`
 (und der Wrap-up) ruft dann `_answer_attempt`, das einen kostenlosen 429
 (`_free_rate_limit`: HTTP-Ablehnung, `provider_rejection`, kein Text;
 `_step(retry_rate_limit=True)` settled ihn als erledigten Nullschritt) oder eine
@@ -5421,7 +5434,12 @@ Antwort fixiert ist:
   `purge_abandoned_turns` misst sein Alter ab `agent_answer_fixed_at`, nicht
   ab `created_at`: ein zweistündiger Arbeitsplatz-Turn ist bei der Übergabe
   älter als die 30 Minuten und wurde sonst als `abandoned` beendet, während
-  seine Prüfer arbeiteten (Gegenprüfung 2026-11-01).
+  seine Prüfer arbeiteten (Gegenprüfung 2026-11-01). Seit 2026-11-10 lässt
+  der Sweep auch den Turn stehen, an dem ein Lauf noch arbeitet (der Chat
+  nennt ihn in `agent_turn_id`, und `agent_lock_until` liegt in der Zukunft,
+  weil der Lease des Laufs die Sperre erneuert): Eine zweite Nachricht an den
+  Chat eines Laufs, der älter als 30 Minuten war (anderer Tab, Watch-Lauf),
+  beendete ihn sonst als `abandoned` und wurde dann selbst abgelehnt.
 - Stirbt der Prozess im Nachlauf (harter Abbruch), beendet der Reaper den
   Lauf als `cancelled`; `finish_run` lässt einen Turn mit fixierter Antwort
   dann `completed` mit Antwort, Quellen und Aktivität der Übergabe, nur die

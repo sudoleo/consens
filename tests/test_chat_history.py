@@ -1542,6 +1542,28 @@ def test_stale_pending_turn_is_retired_as_abandoned(chat_api):
     assert stored["error_code"] == "abandoned"
 
 
+def test_an_old_turn_its_agent_run_still_works_on_is_not_abandoned(chat_api):
+    """A long workspace run is older than the cutoff and alive: its lease
+    keeps the chat's lock ahead of now. Only once that lock ran out without
+    a renewal is the turn nobody's."""
+    client, database = chat_api
+    chat = create_chat(client)
+    running = create_turn(client, chat["id"])
+    _age_turn(database, chat["id"], running["id"], seconds=chat_store.ABANDONED_TURN_MAX_AGE_SECONDS + 600)
+    store = chat_store.ChatStore(database)
+    now = datetime.now(timezone.utc)
+    store._chat_ref("owner-uid", chat["id"]).update({"agent_turn_id": running["id"],
+                                                     "agent_lock_until": now + timedelta(seconds=90)})
+    assert store.purge_abandoned_turns("owner-uid", chat["id"]) == []
+    assert database.turns("owner-uid", chat["id"])[running["id"]]["status"] == "pending"
+    # Another old pending turn of the chat is still retired.
+    other = create_turn(client, chat["id"])
+    _age_turn(database, chat["id"], other["id"], seconds=chat_store.ABANDONED_TURN_MAX_AGE_SECONDS + 60)
+    assert store.purge_abandoned_turns("owner-uid", chat["id"]) == [other["id"]]
+    # The run died: its lock ran out.
+    assert store.purge_abandoned_turns("owner-uid", chat["id"], now=now + timedelta(seconds=91)) == [running["id"]]
+
+
 def test_a_recent_pending_turn_is_never_retired(chat_api):
     client, database = chat_api
     chat = create_chat(client)

@@ -1434,7 +1434,8 @@ it('names the limit a response ended at and whether a follow-up can go on', () =
   const note = w.App.agentReview.wrapUpNote;
   const turn = (reason, more = {}) => ({ status: 'completed', agent_wrap_up: { reason, steps: 3, seconds: 12 }, ...more });
   expect(note(turn('steps'))).toEqual({ text: 'This response reached its step limit.', reason: 'steps', resume: true });
-  expect(['time', 'context', 'repeat'].map(reason => note(turn(reason)).resume)).toEqual([true, true, true]);
+  expect(['time', 'context', 'repeat', 'tools'].map(reason => note(turn(reason)).resume)).toEqual([true, true, true, true]);
+  expect(note(turn('tools')).text).toBe('This response ended because the tools it needed kept failing.');
   expect(['allowance', 'invalid'].map(reason => note(turn(reason)).resume)).toEqual([false, false]);
   // Its answer stands while the reviewers still work on it.
   expect(note(turn('time', { status: 'pending', agent_answer_fixed: true })).reason).toBe('time');

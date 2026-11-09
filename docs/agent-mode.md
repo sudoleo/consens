@@ -4904,14 +4904,55 @@ Technische Grenzen schützen Providerprotokoll, Speicher und Parallelität:
 Reservierungen sind Zulassungskontrollen, keine Garantie für die tatsächliche
 Provider-Rechnung. Meldet der Provider höheren Verbrauch, wird er vollständig
 verbucht und weiterer Verbrauch blockiert. Unbekannte Nutzung ist kein Nullwert.
-Drei aufeinanderfolgende Tool-Batches ohne gültig ausgeführten Aufruf stoppen
-als Protokollstillstand, statt das Tageskontingent mit derselben ungültigen
-Anfrage aufzubrauchen. Seit 2026-10-12 auch hier per Wrap-up
-(`TURN_INVALID_LIMIT`): Der Agent schreibt die Antwort aus dem, was er hat,
-und die Prüfer prüfen sie (bis 2026-10-31 nur nach bezahlten Vergleichen mit
-zwei Antworten, etwa wenn das Modell dreimal `compare_models` ohne Pflichtfeld
-`memory` schickte). Gültige Arbeit begrenzen nur die Schutzgrenzen pro
-Nachricht oben.
+Drei aufeinanderfolgende Schritte, deren Aufrufe die Registry alle abgelehnt
+hat, bevor ein Werkzeug lief (unbekanntes Werkzeug, kein JSON, Schemafehler;
+`INVALID_TOOL_ROUNDS`), stoppen als Protokollstillstand, statt das
+Tageskontingent mit derselben ungültigen Anfrage aufzubrauchen. Seit
+2026-10-12 auch hier per Wrap-up (`TURN_INVALID_LIMIT`): Der Agent schreibt
+die Antwort aus dem, was er hat, und die Prüfer prüfen sie (bis 2026-10-31 nur
+nach bezahlten Vergleichen mit zwei Antworten, etwa wenn das Modell dreimal
+`compare_models` ohne Pflichtfeld `memory` schickte). Gültige Arbeit begrenzen
+nur die Schutzgrenzen pro Nachricht oben.
+
+**Ein gescheiterter Aufruf ist keine ungültige Anfrage (seit 2026-11-10).**
+Bis dahin zählte jeder Schritt, dessen Ergebnisse alle `error` trugen, als
+ungültig: ein Edit, dessen Text nicht gefunden wurde, eine Datei, die es nicht
+gibt, ein Arbeitsplatz, der gerade nicht startet, ein veralteter Browser-Ref.
+Drei solche Schritte in Folge beendeten echte Arbeit mit „Tool requests were
+invalid three times in a row“ (`_execute` machte aus dem `ValueError` eines
+Werkzeugs dasselbe `{"error"}` wie aus einer Schema-Ablehnung). Jetzt:
+
+- `_execute` merkt sich nur Aufrufe, die `registry.validate` ablehnte
+  (`value.rejected_calls`); nur Schritte, die ganz aus solchen bestehen,
+  zählen zu `invalid_tool_rounds`.
+- Schritte, in denen jeder gelaufene Aufruf scheiterte, zählt
+  `failed_tool_rounds`; erst `FAILED_TOOL_ROUNDS` (6) in Folge enden per
+  Wrap-up, mit eigenem Grund (`TURN_TOOLS_LIMIT`, `agent_wrap_up.reason`
+  „tools“, Fakt „Its tool calls failed 6 times in a row; their results say
+  why.“, im Browser „This response ended because the tools it needed kept
+  failing.“ mit „Continue“). Ein Aufruf, der gelingt, setzt beide Zähler
+  zurück; Schritte nur aus „Not run“-Ergebnissen der App zählen nirgends.
+- Der Wiederholungswächter (`_identical_call`) zählt einen Aufruf nicht, der
+  scheiterte oder dessen Ergebnis `failed`/`refused` ist (`_forget_identical`):
+  Derselbe Aufruf kann der sein, der als Nächstes klappt (ein Dienst war
+  beschäftigt, der Arbeitsplatz startete noch). Nach einer Zusammenfassung
+  des Laufs beginnt er neu (`identical_calls.clear()`): Seine Absage verwies
+  auf Ergebnisse „above“, die nicht mehr im Gespräch standen.
+- Bricht ein Werkzeug auf Seite der App (Speicher, ein eigener Dienst; alles,
+  was `agent_failure` sonst als `provider_error` gemeldet hätte), ist das das
+  Ergebnis dieses Aufrufs (`TOOL_BROKE`), nicht das Ende des Turns mit „The
+  model provider could not finish this request“. Fehler mit eigener Bedeutung
+  (Kontingent, Grenzen des Turns, verlorener Lauf, Google-Zustimmung) und die
+  Prüfung der App selbst beenden den Turn wie zuvor.
+- Ein Werkzeugaufruf, den das Output-Limit des Schritts mitten in den
+  Argumenten abschnitt (`_cut_call`: mindestens `CUT_CALL_CHARS` = 4.000
+  Zeichen geschrieben, etwa eine ganze Datei in einem `vm_write_file`), ist
+  kein Schritt, der „nur gedacht“ hat: Leichteres Denken macht ihn nicht
+  kürzer, und der Turn scheiterte nach einem Retry mit „used its whole output
+  allowance on reasoning“. Das Modell bekommt stattdessen den Fakt als Notiz
+  der App (`CALL_CUT`: Werkzeug, geschriebene Zeichen, Limit, „longer content
+  goes in several calls“) und arbeitet weiter; drei in Folge zählen wie
+  abgelehnte Anfragen.
 
 Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
 (`ToolRegistry.validate`) die Änderung: unbekanntes Tool mit Liste der
@@ -5852,8 +5893,23 @@ nahm nur 0–3 an. Seitdem:
   Aktivität „The model's reply broke off. Trying this step once more.“. Der
   abgebrochene Versuch wird mit seinem Verbrauch abgerechnet (sonst sperrt er
   den nächsten Claim), im Arbeitsprotokoll steht er als `failed`. Ein zweiter
-  Abbruch beendet den Turn wie bisher. Der 429-Retry bleibt auf Schritte nach
-  einem Vergleich beschränkt.
+  Abbruch beendet den Turn wie bisher. Seit 2026-11-10 gilt das auch für
+  einen Schritt, der abbrach, während seine Antwort schon zu sehen war: Der
+  gezeigte Text geht zurück (`_retract`), der nächste Versuch schreibt die
+  Antwort neu (vorher scheiterte der Turn mit dem Teiltext, auch nach fünfzig
+  Schritten). Ein 503 („over capacity“) zählt ebenfalls als Abbruch
+  unterwegs, ein 404 nicht.
+- *Ein Turn mit eigener Arbeit wartet einen beschäftigten Anbieter ab* (seit
+  2026-11-10). Ein 429 ohne Retry-After sperrt das Modell prozessweit für
+  30 s (`ProviderCooldowns`), und jeder Schritt jedes Laufs prüft die Sperre
+  vor seinem Claim: Der 429 eines Nutzers beendete so den Vierzig-Minuten-Lauf
+  eines anderen bei dessen nächstem Schritt, denn wiederholt wurde nur nach
+  einem Vergleich und nur bis 10 s. Jetzt wiederholt jeder Turn, der schon
+  einen Schritt geclaimt hat (`self.claimed`), einmal, nach Retry-After bzw.
+  der Sperre, bis `RATE_LIMIT_WAIT_MAX_SECONDS` (60 s) und nur, wenn bis zum
+  harten Stopp genug Zeit bleibt; der zweite Versuch meidet den Endpunkt des
+  ersten. Der erste Schritt einer Nachricht scheitert weiter sofort: Es ist
+  nichts verloren, und der Nutzer nimmt vielleicht lieber ein anderes Modell.
 - *Der zweite Versuch geht an einen anderen Endpunkt* (seit 2026-11-09). Was
   einen Versuch bricht (Ausfall, hängender Host, Filter), gehört meist zu
   seinem Endpunkt, und die Sitzung des Chats (`x-session-id`) schickte den

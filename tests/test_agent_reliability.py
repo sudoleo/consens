@@ -127,7 +127,8 @@ def test_partial_answer_survives_after_comparisons(store, ending):
     base = type(script.factory())
     class Interrupted(base):
         def stream(self, **kwargs):
-            if self.step_id == "completion:1":
+            # The answer step, and its one further attempt after it broke off.
+            if self.step_id in {"completion:1", "completion:2"}:
                 self.text = partial
                 yield {"type": "delta", "text": self.text}
                 if ending == "timeout":

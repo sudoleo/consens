@@ -73,6 +73,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import re
+from urllib.parse import urlsplit
 
 COMPACT_ABOVE_CHARS = 150_000
 KEEP_RECENT_CHARS = 40_000
@@ -342,6 +343,14 @@ def _seconds(milliseconds):
     return f"{milliseconds / 1000:.1f} s" if isinstance(milliseconds, (int, float)) else ""
 
 
+def _host(url):
+    try:
+        host = urlsplit(str(url or "")).hostname or ""
+    except ValueError:
+        return ""
+    return host[4:] if host.startswith("www.") else host
+
+
 def describe(name, arguments, result):
     """One call of the agent as a line of the work record."""
     try:
@@ -438,6 +447,26 @@ def describe(name, arguments, result):
         line = f"{name} {_short(args.get('domain') or args.get('request'), 120)}"
         if data.get("status"):
             line += f" -> {data['status']}"
+    elif name == "web_search":
+        # What was searched for and where the hits lie: a follow-up message
+        # goes on from there (the pages are among the chat's sources).
+        queries = [query for query in args.get("queries") or [] if isinstance(query, str) and query.strip()]
+        line = "web_search " + " | ".join(_short(query, 80) for query in queries[:5])
+        hosts = list(dict.fromkeys(
+            _host(hit.get("url")) for entry in data.get("searches") or [] if isinstance(entry, dict)
+            for hit in entry.get("results") or [] if isinstance(hit, dict) and _host(hit.get("url"))))
+        if hosts:
+            line += f" -> pages of {', '.join(hosts[:8])}" + (f" and {len(hosts) - 8} more sites" if len(hosts) > 8 else "")
+        elif data.get("searches"):
+            line += " -> nothing found"
+    elif name == "read_source":
+        line = f"read_source {_short(args.get('url'), 200)}"
+        if args.get("start"):
+            line += f" from {args['start']}"
+        if data.get("status"):
+            line += f" -> {data['status']}"
+            if data.get("status") == "completed" and data.get("title"):
+                line += f": {_short(data['title'], 120)}"
     else:
         detail = next((args[key] for key in ("task", "question", "repo", "url", "title", "query", "setting")
                        if isinstance(args.get(key), str) and args[key].strip()), "")

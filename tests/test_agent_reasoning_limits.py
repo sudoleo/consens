@@ -364,8 +364,22 @@ def test_rate_limited_answer_step_is_retried_once_and_the_429_costs_nothing(stor
     assert len(rejected) == 1 and rejected[0]["estimated_cost_nano_usd"] == 0
 
 
-def test_answer_step_honours_a_long_retry_after_instead_of_retrying(store, monkeypatch):
+def test_a_turn_with_work_in_hand_waits_out_a_busy_provider(store, monkeypatch):
+    """A 429 without Retry-After closes the model for 30 s for every run of
+    the process. A turn that already holds work waits that long for its one
+    further attempt (RATE_LIMIT_WAIT_MAX_SECONDS): it ended there before,
+    whatever it had done."""
+    waits = []
+    monkeypatch.setattr(agent_delegation.DelegationLoop, "_pause", lambda self, seconds: waits.append(seconds) or iter(()))
     loop, requests, _ = _answer_with(monkeypatch, store, _ProviderHTTPStatusError(429, retry_after=30))
+    list(loop.run())
+    assert len(requests) == 2 and waits == [30]
+    assert saved(store, loop)["status"] == "completed"
+
+
+def test_a_provider_that_asks_for_longer_than_the_wait_ends_the_step(store, monkeypatch):
+    wait = agent_delegation.RATE_LIMIT_WAIT_MAX_SECONDS + 1
+    loop, requests, _ = _answer_with(monkeypatch, store, _ProviderHTTPStatusError(429, retry_after=wait))
     with pytest.raises(_ProviderHTTPStatusError):
         list(loop.run())
     assert len(requests) == 1
@@ -378,6 +392,11 @@ def test_rate_limit_retry_respects_the_turn_deadline_and_stops(store):
     loop.clock = lambda: now[0]
     assert loop._rate_limit_delay(None) == agent_delegation.RATE_LIMIT_RETRY_SECONDS
     assert loop._rate_limit_delay(4) == 4 and loop._rate_limit_delay(11) is None
+    # With work in hand the turn waits longer for its one further attempt.
+    loop.claimed = True
+    assert loop._rate_limit_delay(11) == 11 and loop._rate_limit_delay(30) == 30
+    assert loop._rate_limit_delay(agent_delegation.RATE_LIMIT_WAIT_MAX_SECONDS + 1) is None
+    loop.claimed = False
     now[0] += loop.policy.turn_seconds + TURN_WRAP_UP_SECONDS - 30
     assert loop._rate_limit_delay(1) is None
     loop.cancellation.cancel()

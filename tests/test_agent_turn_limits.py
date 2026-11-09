@@ -298,3 +298,236 @@ def test_repeated_polling_is_not_counted_as_identical_calls(store):
     plan = {"id": "p", "type": "function", "function": {"name": "update_plan", "arguments": json.dumps(
         {"items": [{"content": "Run the tests", "status": "in_progress"}]})}}
     assert all(loop._identical_call(plan) is None for _ in range(5))
+
+
+def with_probe(loop, outcomes):
+    """Adds a tool ``probe`` to the loop: call n returns ``outcomes[n]`` or
+    raises it (the last one repeats). Returns the list of the calls it got."""
+    from pydantic import BaseModel, ConfigDict
+    from app.services.agent_tools import ReadOnlyTool, ToolRegistry
+
+    class Args(BaseModel):
+        model_config = ConfigDict(extra="forbid", strict=True)
+        path: str = ""
+    seen = []
+
+    def probe(args, *, cancellation):
+        outcome = outcomes[min(len(seen), len(outcomes) - 1)]
+        seen.append(args.path)
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome
+    loop.registry = ToolRegistry([*loop.registry.tools.values(), ReadOnlyTool("probe", "A probe.", Args, probe)],
+                                 argument_limit=24_000)
+    return seen
+
+
+def probes(count, *, same=False):
+    """``count`` steps of one probe call each, then the answer."""
+    return [*([("probe", {"path": "a" if same else f"file-{n}"})] for n in range(count)), None]
+
+
+def test_calls_that_ran_and_failed_are_the_tools_answers_not_invalid_requests(store):
+    """An edit whose text was not found, a file that is not there, a
+    workspace that did not start: the tool ran and said why. Three such
+    steps in a row ended real work as "invalid tool requests"."""
+    from app.services.agent_delegation import FAILED_TOOL_ROUNDS, INVALID_TOOL_ROUNDS
+    assert FAILED_TOOL_ROUNDS > INVALID_TOOL_ROUNDS == 3
+    script = Script()
+    loop = chat_loop(store, script)
+    seen = with_probe(loop, [ValueError("No file at that path.")])
+    loop.factory = planned(script, probes(FAILED_TOOL_ROUNDS - 1))
+    list(loop.run())
+    saved = saved_turn(store, loop)
+    assert len(seen) == FAILED_TOOL_ROUNDS - 1 and tool_result(loop, "s0_0") == {"error": "No file at that path."}
+    assert saved["status"] == "completed" and getattr(loop.completion, "wrap_up", None) is None
+    assert saved["assistant_response"] == "The first option costs 100."
+
+
+def test_tools_that_keep_failing_end_the_turn_with_its_answer_and_the_true_reason(store):
+    from app.services.agent_delegation import FAILED_TOOL_ROUNDS
+    script = Script()
+    requests = []
+    loop = chat_loop(store, script)
+    seen = with_probe(loop, [ValueError("The workspace did not start just now; nothing ran.")])
+    planned_type = planned(script, probes(FAILED_TOOL_ROUNDS + 3))
+
+    class Recorded(planned_type):
+        def stream(self, **kwargs):
+            if self.step_id.startswith("completion:"):
+                requests.append(kwargs)
+            yield from super().stream(**kwargs)
+    loop.factory = Recorded
+    list(loop.run())
+    saved = saved_turn(store, loop)
+    assert len(seen) == FAILED_TOOL_ROUNDS and saved["status"] == "completed"
+    assert loop.completion.wrap_up["reason"] == "tools" and saved["agent_wrap_up"]["reason"] == "tools"
+    # The closing step is told what happened, in words that are true of it.
+    closing = json.dumps(requests[-1]["messages"])
+    assert f"failed {FAILED_TOOL_ROUNDS} times in a row" in closing and "invalid" not in closing.split("consens.io")[-1]
+    assert not steering(requests[-1])
+
+
+def test_a_call_that_works_between_failures_starts_the_count_anew(store):
+    from app.services.agent_delegation import FAILED_TOOL_ROUNDS
+    script = Script()
+    loop = chat_loop(store, script)
+    failed = ValueError("old_string was not found in the file.")
+    outcomes = [*[failed] * (FAILED_TOOL_ROUNDS - 1), {"text": "ok"}, *[failed] * (FAILED_TOOL_ROUNDS - 1), {"text": "ok"}]
+    seen = with_probe(loop, outcomes)
+    loop.factory = planned(script, probes(len(outcomes)))
+    list(loop.run())
+    assert len(seen) == len(outcomes) and getattr(loop.completion, "wrap_up", None) is None
+    assert saved_turn(store, loop)["status"] == "completed"
+
+
+def test_a_call_that_failed_may_come_again_unchanged(store):
+    """The repeat guard counts calls whose results are in hand. A call that
+    came to nothing (a service that was busy, a workspace still starting) is
+    no repetition: the same call may be what works next."""
+    script = Script()
+    loop = chat_loop(store, script)
+    busy = ValueError("The service is busy right now; the same call may work in a moment.")
+    seen = with_probe(loop, [busy, busy, busy, {"text": "ok"}, {"text": "ok"}, {"text": "ok"}])
+    loop.factory = planned(script, probes(8, same=True))
+    list(loop.run())
+    # Three failures, two that worked, then the guard: refused once, and the next identical call ends the turn.
+    assert len(seen) == 5 and "already ran 2 times" in tool_result(loop, "s5_0")["error"]
+    assert loop.completion.wrap_up["reason"] == "repeat"
+
+
+def test_a_tool_that_breaks_on_the_apps_side_fails_that_call_not_the_turn(store, caplog):
+    """A storage error inside a tool (a file's bytes, the chat's documents)
+    ended the whole turn as "the model provider could not finish this
+    request"."""
+    from app.services.agent_delegation import TOOL_BROKE
+    script = Script()
+    loop = chat_loop(store, script)
+    seen = with_probe(loop, [RuntimeError("bucket unreachable: secret detail"), {"text": "ok"}])
+    loop.factory = planned(script, probes(2))
+    list(loop.run())
+    saved = saved_turn(store, loop)
+    assert tool_result(loop, "s0_0") == {"error": TOOL_BROKE} and tool_result(loop, "s1_0") == {"text": "ok"}
+    assert saved["status"] == "completed" and saved.get("agent_failure") is None
+    assert "Agent tool broke on the app's side tool=probe category=RuntimeError" in caplog.text
+    assert "secret detail" not in caplog.text
+
+
+def test_a_failure_with_a_meaning_of_its_own_still_ends_the_turn(store):
+    from app.services.agent_provider_limits import AgentRunInterrupted
+    script = Script()
+    loop = chat_loop(store, script)
+    with_probe(loop, [AgentRunInterrupted("The response lost its saved chat state.")])
+    loop.factory = planned(script, probes(1))
+    with pytest.raises(AgentRunInterrupted):
+        list(loop.run())
+    assert saved_turn(store, loop)["agent_failure"]["code"] == "run_interrupted"
+
+
+def cut_calls(script, cut_steps, *, characters=5000):
+    """Steering steps ``cut_steps`` end at the output limit in the middle of
+    a probe call with ``characters`` of arguments written (as the client
+    leaves such a step: ModelOutputLimit, the half call in _tool_parts);
+    every other step is Script's."""
+    from app.services.agent_provider_limits import ModelOutputLimit
+    base = type(script.factory())
+
+    class Cut(base):
+        def stream(self, *, model, messages, **kwargs):
+            index = int(self.step_id.split(":")[-1]) if self.step_id.startswith("completion:") else None
+            if index not in cut_steps or not steering(kwargs):
+                script.requests.append(messages) if index is not None else None
+                yield from super().stream(model=model, messages=messages, **kwargs)
+                return
+            script.calls.append((self.step_id, model.model))
+            self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 2000}, model)
+            self._tool_parts = {0: {"id": "cut", "type": "function",
+                                    "function": {"name": "probe", "arguments": '{"path": "' + "x" * characters}}}
+            self.finish_reason = "length"
+            yield from ()
+            raise ModelOutputLimit()
+    script.requests = []
+    return Cut
+
+
+def test_a_call_cut_off_at_the_output_limit_is_said_and_the_work_goes_on(store):
+    """A whole file in one vm_write_file can pass a step's output limit: the
+    call is cut in half. No lighter reasoning makes it fit, and the turn
+    failed with "used its whole output allowance on reasoning" after an hour
+    of work. The model is told what happened instead."""
+    script = Script(compares=0)
+    loop = chat_loop(store, script)
+    with_probe(loop, [{"text": "ok"}])
+    loop.factory = cut_calls(script, {0})
+    list(loop.run())
+    saved = saved_turn(store, loop)
+    assert saved["status"] == "completed" and saved.get("agent_failure") is None
+    assert getattr(loop.completion, "wrap_up", None) is None
+    # The next step reads the fact, in place of a result of the call that never ran.
+    [said] = [m["content"] for m in script.requests[0] if "output limit" in str(m.get("content"))]
+    assert "in the middle of a probe call" in said and "after 5010 characters" in said and "did not run" in said
+    assert said.startswith(agent_delegation.PROGRESS_OPEN)
+    # The half call is no message of the conversation.
+    assert not any(m.get("tool_calls") for m in loop.messages if m.get("role") == "assistant")
+
+
+def test_calls_that_keep_being_cut_off_end_the_turn_with_its_answer(store):
+    script = Script(compares=0)
+    loop = chat_loop(store, script)
+    with_probe(loop, [{"text": "ok"}])
+    loop.factory = cut_calls(script, {0, 1, 2, 3, 4})
+    list(loop.run())
+    assert saved_turn(store, loop)["status"] == "completed" and loop.completion.wrap_up["reason"] == "invalid"
+    assert len(routing_steps(script)) == agent_delegation.INVALID_TOOL_ROUNDS + 1
+
+
+def test_a_call_cut_off_after_a_few_characters_is_a_step_that_reasoned_through_its_allowance(store):
+    """Little of the call was written: the reasoning before it took the
+    allowance. That is the lighter-reasoning retry's case, as before."""
+    assert DelegationLoop._cut_call(type("Value", (), {
+        "finish_reason": "length", "tool_calls": [],
+        "_tool_parts": {0: {"function": {"name": "probe", "arguments": '{"path": "a'}}}})()) is None
+    assert DelegationLoop._cut_call(type("Value", (), {
+        "finish_reason": "stop", "tool_calls": [],
+        "_tool_parts": {0: {"function": {"name": "probe", "arguments": "x" * 9000}}}})()) is None
+
+
+def test_a_turn_that_ended_at_a_limit_leaves_its_work_for_the_follow_up(store):
+    """Its answer says a follow-up can go on with the work: the next message
+    then needs what was done. Without the workspace nothing was kept, and
+    "Continue" started the research again."""
+    script = Script()
+    loop = chat_loop(store, script)
+    seen = with_probe(loop, [{"text": "found it"}])
+    loop.policy = replace(loop.policy, turn_steps=2, turn_comparisons=10)
+    loop.factory = planned(script, probes(5))
+    list(loop.run())
+    saved = saved_turn(store, loop)
+    assert loop.completion.wrap_up["reason"] == "steps" and len(seen) == 2
+    record = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["agent_work_record"]
+    assert "1. probe" in record and "2. probe" in record and "3. probe" not in record
+    # A turn that simply answered keeps none.
+    script = Script()
+    plain = chat_loop(store, script)
+    with_probe(plain, [{"text": "found it"}])
+    plain.factory = planned(script, probes(1))
+    list(plain.run())
+    assert "agent_work_record" not in store._turn_ref(UID, plain.chat_id, plain.turn_id).get().to_dict()
+
+
+def test_the_work_record_says_what_was_searched_for_and_read():
+    from app.services.agent_compaction import describe
+    found = {"note": "n", "searches": [
+        {"query": "a", "results": [{"url": "https://www.example.org/x"}, {"url": "https://example.org/y"}]},
+        {"query": "b", "results": [{"url": "https://example.net/z"}], "also_above": ["https://www.example.org/x"]},
+        {"query": "c", "failed": "The search service did not answer."}]}
+    assert describe("web_search", json.dumps({"queries": ["price option one", "option one 2026", "c"]}),
+                    json.dumps(found)) == ("web_search price option one | option one 2026 | c -> pages of "
+                                           "example.org, example.net")
+    assert describe("web_search", json.dumps({"queries": ["q"]}),
+                    json.dumps({"searches": [{"query": "q", "results": []}]})) == "web_search q -> nothing found"
+    assert describe("read_source", json.dumps({"url": "https://example.org/report", "start": 24000}),
+                    json.dumps({"status": "completed", "title": "Annual report"})) == (
+        "read_source https://example.org/report from 24000 -> completed: Annual report")
+    assert describe("read_source", json.dumps({"url": "https://example.org/gone"}),
+                    json.dumps({"status": "failed"})) == "read_source https://example.org/gone -> failed"

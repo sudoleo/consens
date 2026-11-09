@@ -49,11 +49,14 @@ def answer_factory(script, *, early_review=False, ending="stop", chunks=CHUNKS, 
     and ends with ``ending``."""
     base = type(script.factory())
     answer_step = 0 if direct else 2 if early_review else 1
+    # A step that broke off in passing runs once more (_answer_attempt):
+    # "timeout" breaks that attempt too, "timeout once" only the first.
+    answer_steps = {answer_step, answer_step + 1} if ending == "timeout" else {answer_step}
 
     class Completion(base):
         def stream(self, *, model, messages, tools, **kwargs):
             index = int(self.step_id.split(":")[-1]) if self.step_id.startswith("completion:") else None
-            if index == answer_step:
+            if index in answer_steps:
                 script.calls.append((self.step_id, model.model))
                 self.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 20, "cost": .0001}, model)
                 # The agent's own steering step: its model, its tools, no search.
@@ -74,7 +77,7 @@ def answer_factory(script, *, early_review=False, ending="stop", chunks=CHUNKS, 
                 if ending == "cancelled":
                     script.loop.cancellation.cancel()
                     raise ProviderCancelled()
-                if ending == "timeout":
+                if ending in {"timeout", "timeout once"}:
                     raise httpx.ReadTimeout("Provider interrupted the answer")
                 self.finish_reason = ending
                 return
@@ -184,13 +187,33 @@ def test_incomplete_answer_is_saved_without_starting_the_review(store, ending):
     saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
     assert saved["status"] == "failed"
     # The turn keeps the text the user saw (agent_runs.finish_run); it is no
-    # version for the reviewers.
+    # version for the reviewers. An answer that broke off was written once
+    # more, and broke off again.
     assert saved["consensus"] == ANSWER
-    assert "".join(e["text"] for e in events if e["type"] == "delta") == ANSWER
+    assert "".join(e["text"] for e in events if e["type"] == "delta") == ANSWER * (2 if ending == "timeout" else 1)
     assert saved["agent_review"]["status"] == ("cancelled" if ending == "cancelled" else "missing")
     assert saved["agent_review"]["versions"] == []
     assert not saved["agent_review"].get("checks")
     assert not final_round(loop)
+
+
+def test_an_answer_that_breaks_off_while_it_shows_is_written_again(store):
+    """The provider cuts the stream after the answer began to show: that
+    text goes back and the step runs once more. A fifty-step run's answer
+    that broke off after twenty seconds failed the whole turn before."""
+    script = Script()
+    loop = make_loop(store, script, reviewers=True)
+    loop.factory = answer_factory(script, ending="timeout once")
+    events = list(loop.run())
+    saved = store.get_turn(UID, loop.chat_id, loop.turn_id)
+    assert saved["status"] == "completed" and saved.get("agent_failure") is None
+    # What showed of the broken attempt is taken back before the new answer.
+    retracted = [index for index, event in enumerate(events) if event.get("id", "").endswith("/retract")]
+    first = next(index for index, event in enumerate(events) if event["type"] == "delta")
+    assert retracted and first < retracted[0]
+    assert any(e.get("text") == "The model's reply broke off. Trying this step once more." for e in events)
+    assert saved["consensus"] and saved["consensus"] != ANSWER
+    assert saved["agent_review"]["versions"][-1]["text"] == saved["consensus"]
 
 
 def _empty_over_http(script, monkeypatch):

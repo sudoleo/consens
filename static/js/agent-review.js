@@ -65,6 +65,7 @@
     context: 'This response reached the model’s context limit.',
     repeat: 'This response ended because the model repeated the same step without progress.',
     invalid: 'This response ended because the model’s tool requests kept failing.',
+    tools: 'This response ended because the tools it needed kept failing.',
     allowance: 'This response ended early because the day’s allowance was nearly used up.',
   };
   function wrapUpNote(turn) {
