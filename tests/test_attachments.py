@@ -331,6 +331,21 @@ class AttachmentPayloadTests(unittest.TestCase):
         self.assertEqual([block["type"] for block in content], ["text", "image_url"])
         self.assertTrue(content[1]["image_url"]["url"].startswith("data:image/png;base64,"))
 
+    def test_mistral_sees_the_image_but_reads_a_pdf_as_text(self):
+        # Mistral Small 2603 and Medium 3.5 take images on OpenRouter; only
+        # Medium takes files, so the family gets the PDF's text.
+        request = build_provider_payload(
+            "mistral",
+            question="summarize",
+            system_prompt="system",
+            max_output_tokens=128,
+            attachments=self.parsed(PNG_BYTES, "img.png") + self.parsed(PDF_BYTES, "doc.pdf"),
+        )
+        content = request["payload"]["messages"][1]["content"]
+        self.assertEqual([block["type"] for block in content], ["text", "image_url"])
+        self.assertNotIn("cannot view images", content[0]["text"])
+        self.assertIn("doc.pdf", content[0]["text"])
+
     def test_openai_pdf_becomes_input_file_block(self):
         request = build_provider_payload(
             "openai",
@@ -383,7 +398,7 @@ class AttachmentPayloadTests(unittest.TestCase):
         self.assertIn("doc.pdf", text_block["text"])
 
     def test_text_only_providers_get_fallback_notes(self):
-        for provider in ("mistral", "deepseek"):
+        for provider in ("deepseek",):
             with self.subTest(provider=provider):
                 request = build_provider_payload(
                     provider,

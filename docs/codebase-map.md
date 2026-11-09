@@ -8304,8 +8304,8 @@ serverseitig als begrenzter Text extrahiert und als Text-Fallback an alle
 Provider angehängt. Große Bilder dürfen clientseitig bis 15 MB ausgewählt
 werden, werden aber vor dem Upload auf höchstens 1568 px und ungefähr 900 kB
 gebracht; serverseitig gelten zusätzlich 40 Mio. Pixel vor dem Dekodieren und
-1,5 MB nach der Aufbereitung. Bild-Support:
-openai/anthropic/gemini/grok/kimi/glm; PDF-Support:
+1,5 MB nach der Aufbereitung. Bild-Support (`PROVIDER_IMAGE_SUPPORT`):
+openai/anthropic/gemini/grok/kimi/glm/meta/qwen/xiaomi/mistral; PDF-Support:
 openai/anthropic/gemini. PDFs über 2 MB werden für alle Familien als einmal
 extrahierter Text verwendet; nur nicht extrahierbare Scans bleiben für
 PDF-fähige Familien nativ. Die PDF-Textextraktion (`extract_pdf_text`) läuft
