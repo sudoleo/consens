@@ -53,7 +53,7 @@ ORGANIZATION: dict[str, Any] = {
     "logo": {
         "@type": "ImageObject",
         "@id": SITE_URL + "/#logo",
-        "url": SITE_URL + "/static/favicon-square.png",
+        "url": SITE_URL + "/static/brand/logo-512.png",
     },
 }
 if ORGANIZATION_SAME_AS:

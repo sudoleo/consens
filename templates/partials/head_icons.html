@@ -1,0 +1,9 @@
+{#- Tab, home-screen and search icons, the same on every page. The SVG is the
+    mark itself and follows the system's light or dark. The PNGs are a solid
+    tile for everything that cannot use it: Safari tabs, the iOS home screen
+    (which paints transparency black) and search results, whose icon has to
+    be a multiple of 48 px. The fixed size on the PNG keeps Chrome on the
+    SVG. All files come from scripts/render_brand_assets.py. -#}
+<link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
+  <link rel="icon" href="{{ asset_url('/static/brand/icon-192.png') }}" sizes="192x192" type="image/png">
+  <link rel="apple-touch-icon" href="{{ asset_url('/static/brand/apple-touch-icon.png') }}">

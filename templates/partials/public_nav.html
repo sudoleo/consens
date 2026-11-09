@@ -7,10 +7,11 @@
     semibold self (public-tokens.css), so marking another section moves
     nothing. Before it the skip link, the first stop of every public page; each
     page's <main> is #main (tests/test_public_skip_link.py). -#}
+{% from "partials/brand.html" import brand_mark %}
 <a class="skip-link" href="#main">Skip to main content</a>
 <nav class="site-nav lp-nav" aria-label="Primary">
   <a href="/" class="brand lp-brand" aria-label="consens.io home">
-    <img src="{{ asset_url('/static/favicon.png') }}" alt="" width="24" height="17">
+    {{ brand_mark(width=24, height=17) }}
     <span>consens.io</span>
   </a>
   <div class="nav-links lp-nav-links">

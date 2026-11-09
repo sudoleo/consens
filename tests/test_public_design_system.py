@@ -300,7 +300,6 @@ def test_smooth_scrolling_starts_only_after_the_page_has_arrived():
     on by public-nav.js once the page has loaded; anchors land under the bar."""
     nav = read("templates/partials/public_nav.html")
     assert "asset_url('/static/js/public-nav.js')" in nav
-    assert "asset_url('/static/favicon.png')" in nav
     for sheet in ("static/css/landing.css", "static/css/public-pages.css"):
         css = re.sub(r"/\*.*?\*/", "", read(sheet), flags=re.S)
         assert not re.search(r"(?m)^html\s*\{[^}]*scroll-behavior:\s*smooth", css), sheet

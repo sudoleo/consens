@@ -100,6 +100,11 @@ def _placeholder(expression: str, index: int, literals: list[str] | None = None)
 # (composed_gaps).
 TAG_IN_VALUE = "{%}"
 
+# {{ brand_mark() }} draws the mark (templates/partials/brand.html): markup,
+# an element without words on the page, like ${icons.ask} in a script. As a
+# placeholder it would give the text beside it a key the page never asks for.
+_ICON_MACRO = re.compile(r"\{\{-?\s*brand_mark\s*\(")
+
 
 def jinja_to_html(source: str, literals: list[str] | None = None) -> str:
     """Template source as HTML a parser can read: expressions as placeholders.
@@ -148,6 +153,9 @@ def jinja_to_html(source: str, literals: list[str] | None = None) -> str:
                 out.append("<!--j-->")
             elif quote:
                 out.append(TAG_IN_VALUE)
+            continue
+        if not in_tag and _ICON_MACRO.match(token):
+            out.append("<svg></svg>")
             continue
         counter += 1
         out.append(_placeholder(token, counter, literals))

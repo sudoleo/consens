@@ -250,9 +250,7 @@ img { display: block; max-width: 100%; }
   color: var(--text-primary);
 }
 
-.lp-brand img { width: 24px; height: auto; filter: invert(1); }
-.dark-mode .lp-brand img,
-.dark-mode .lp-mocklogo img { filter: none; }
+.lp-brand .brand-mark { width: 24px; height: auto; flex: none; }
 
 .lp-nav-links {
   display: flex;
@@ -551,7 +549,7 @@ img { display: block; max-width: 100%; }
   color: var(--ink-2);
 }
 
-.lp-mocklogo img { width: 16px; height: auto; filter: invert(1); }
+.lp-mocklogo .brand-mark { width: 16px; height: auto; flex: none; }
 .lp-window-bar .lp-mock-login { margin-left: auto; color: var(--ink-3); font-size: var(--font-size-sm); }
 
 /* Scene 01: the field, its toolbar and the footnote under it. */

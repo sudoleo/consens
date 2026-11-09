@@ -19,7 +19,7 @@
   <script type="application/ld+json">{{ jsonld | safe }}</script>
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-shell.css') }}">
-  <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
+  {% include "partials/head_icons.html" %}
   {#- No inline scripts on this page: /topics/{slug} is served with a script
       CSP without 'unsafe-inline' (app/core/security.py). -#}
   <script src="{{ asset_url('/static/js/public-theme.js') }}"></script>

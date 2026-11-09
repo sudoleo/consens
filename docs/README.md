@@ -10,6 +10,7 @@ Most documents are written in German (internal working notes). Start here.
 | [testing.md](testing.md) | How to run backend, frontend, browser, and rules checks |
 | [frontend-build.md](frontend-build.md) | esbuild bundles, content-hash cache busting |
 | [smoke-checklist.md](smoke-checklist.md) | Manual checks for behavior without automated tests |
+| [brand.md](brand.md) | The mark, the lockup, tones, and where every icon file comes from |
 
 ## Product and design
 

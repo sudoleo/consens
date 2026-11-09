@@ -35,11 +35,7 @@
   height: auto;
   margin: 0 auto 14px;
   aspect-ratio: 279 / 200;
-  object-fit: contain;
-  filter: invert(1);
 }
-
-.dark-mode #loginModal .auth-mark { filter: none; }
 
 #loginModal .auth-title {
   margin: 0;

@@ -193,13 +193,7 @@ body:has(.sidebar.active) .brand-float {
   width: auto;
   aspect-ratio: 279 / 200;
   display: block;
-  object-fit: contain;
-  filter: invert(1);
-  transition: filter var(--dur-layer) var(--ease-standard);
-}
-
-.dark-mode .app-favicon {
-  filter: invert(0);
+  flex: none;
 }
 
 .brand-float-title,

@@ -1,6 +1,7 @@
+{% from "partials/brand.html" import brand_mark %}
 <div class="lp-window public-product-result" aria-label="consens.io consensus result preview">
   <div class="lp-window-bar">
-    <span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span>
+    <span class="lp-mocklogo">{{ brand_mark() }} consens.io</span>
     <span class="lp-mock-login">Consensus</span>
   </div>
   <div class="lp-window-body lp-hero-result">

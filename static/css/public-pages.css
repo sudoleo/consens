@@ -96,16 +96,11 @@ a {
   line-height: var(--line-height-solid);
 }
 
-.brand img {
+.brand .brand-mark {
   width: 24px;
   height: auto;
   display: block;
-  object-fit: contain;
-  filter: invert(1);
-}
-
-.dark-mode .brand img {
-  filter: invert(0);
+  flex: none;
 }
 
 .nav-links {

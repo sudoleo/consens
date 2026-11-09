@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import io
 import logging
+import math
 import os
 from datetime import datetime
 
@@ -41,6 +42,8 @@ FONT_PATH = os.path.join("static", "fonts", "Inter-Variable.ttf")
 # Bildmarke und Anbieter-Logos als Alphamasken; gefärbt wird beim Zeichnen.
 MARK_PATH = os.path.join("static", "favicon-dark.png")
 LOGO_DIR = os.path.join("static", "icons", "chat_icons")
+WORDMARK = "consens.io"
+WORD_WEIGHT = 600
 
 # Grund der Markenkarte, Tinte und Ampel aus static/css/variables.css (hell).
 BG = (250, 250, 247)
@@ -158,20 +161,27 @@ def _paste_mask(image, path: str, height: int, xy: tuple[int, int], color) -> in
     return width
 
 
-def _lockup(draw, mark_height: int, word_size: int):
-    """Font, Markenbreite, Abstand und Gesamtbreite von Bildmarke + Wortmarke."""
-    word_font = _font(word_size, 420)
+def _lockup(draw, word_size: int):
+    """Font, Markenhöhe, Markenbreite, Abstand und Gesamtbreite von Bildmarke + Wortmarke.
+
+    Das Maß der Website (`.brand` in public-pages.css, docs/brand.md): Die
+    Bildmarke ist anderthalb Schriftgrößen breit, der Abstand 9/16 davon, die
+    Wortmarke halbfett. Die enge Laufweite der Website (-0,02 em, hier gut ein
+    halbes Pixel je Buchstabe) kennt Pillow nicht.
+    """
+    word_font = _font(word_size, WORD_WEIGHT)
+    mark_width = round(word_size * 1.5)
     with Image.open(MARK_PATH) as mark:
-        mark_width = round(mark.width * mark_height / mark.height)
-    gap = round(mark_height * 0.42)
-    return word_font, mark_width, gap, mark_width + gap + int(draw.textlength("consens.io", font=word_font))
+        mark_height = round(mark_width * mark.height / mark.width)
+    gap = round(word_size * 0.5625)
+    return word_font, mark_height, mark_width, gap, mark_width + gap + math.ceil(draw.textlength(WORDMARK, font=word_font))
 
 
-def _draw_lockup(image, draw, x: int, center_y: int, mark_height: int = 36, word_size: int = 28) -> int:
+def _draw_lockup(image, draw, x: int, center_y: int, word_size: int = 30) -> int:
     """Bildmarke + Wortmarke ab x, mittig auf center_y; gibt die rechte Kante zurück."""
-    word_font, mark_width, gap, total = _lockup(draw, mark_height, word_size)
+    word_font, mark_height, mark_width, gap, total = _lockup(draw, word_size)
     _paste_mask(image, MARK_PATH, mark_height, (x, center_y - mark_height // 2), INK)
-    draw.text((x + mark_width + gap, center_y), "consens.io", font=word_font, fill=INK, anchor="lm")
+    draw.text((x + mark_width + gap, center_y), WORDMARK, font=word_font, fill=INK, anchor="lm")
     return x + total
 
 
@@ -242,8 +252,8 @@ def render_brand_card() -> bytes:
     image = Image.new("RGB", (WIDTH, HEIGHT), BG)
     draw = ImageDraw.Draw(image)
 
-    total = _lockup(draw, 38, 30)[3]
-    _draw_lockup(image, draw, (WIDTH - total) // 2, 112, mark_height=38, word_size=30)
+    total = _lockup(draw, 32)[4]
+    _draw_lockup(image, draw, (WIDTH - total) // 2, 112, word_size=32)
 
     headline = _font(70, 560)
     for line, fill, baseline in zip(BRAND_HEADLINE, (INK, MUTED), (272, 360)):

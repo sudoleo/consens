@@ -69,9 +69,7 @@
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js">
   <link rel="modulepreload" href="https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js">
   <link rel="stylesheet" href="{{ frontend.style }}">
-  <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
-  <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
-  <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
+  {% include "partials/head_icons.html" %}
   <!-- Marked (Markdown -> HTML) and DOMPurify (HTML sanitizer). Deferred: no
        head script calls them, and deferred scripts and modules run in
        document order, so both are in place before firebase.js and the app
@@ -98,6 +96,7 @@
 </head>
 
 <body class="is-hero">
+  {% from "partials/brand.html" import brand_mark %}
   <!-- Erster Tab-Stopp: an Seitenleiste und Kopf vorbei zum Inhalt, im Chat
        direkt in die Frage (app-dom-events.js). -->
   <a class="skip-link" href="#appMain">Skip to main content</a>
@@ -112,7 +111,7 @@
       <svg class="sidebar-panel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="4"></rect><path d="M9.5 4.5v15"></path></svg>
     </button>
     <a href="/" class="brand-float" aria-label="consens.io home">
-      <img src="/static/favicon.png" alt="" class="app-favicon">
+      {{ brand_mark("app-favicon") }}
       <span class="brand-float-title">consens.io</span>
     </a>
   </div>
@@ -170,7 +169,7 @@
          schwebende Toggle erscheint weiterhin nur bei geschlossener Sidebar. -->
     <div class="sidebar-brand-row">
       <a href="/" id="logoLink" aria-label="consens.io home" class="sidebar-brand-link">
-        <img src="/static/favicon.png" alt="" class="app-favicon">
+        {{ brand_mark("app-favicon", fit="xMinYMid meet") }}
         <span class="sidebar-brand-title">consens.io</span>
       </a>
       <button id="sidebarToggleInner" class="sidebar-toggle sidebar-toggle-square" type="button"
@@ -842,7 +841,7 @@
         <button type="button" class="close close-button" id="closeLoginModal" aria-label="Close"><svg class="close-icon" viewBox="0 0 16 16" aria-hidden="true" focusable="false"><path d="M4 4l8 8M12 4l-8 8"/></svg></button>
 
         <div class="auth-head">
-          <img class="auth-mark" src="/static/favicon.png" alt="" width="38" height="27" />
+          {{ brand_mark("auth-mark", width=38, height=27) }}
           <h2 id="authTitle" class="auth-title">Log in to consens.io</h2>
           <p id="authLead" class="auth-lead">Pick up where you left off.</p>
         </div>

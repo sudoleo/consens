@@ -8,9 +8,7 @@
   <title>Page not found | consens.io</title>
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-pages.css') }}">
   <link rel="stylesheet" href="{{ asset_url('/static/css/public-shell.css') }}">
-  <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
-  <link rel="icon" href="{{ asset_url('/static/favicon-square-dark.png') }}" sizes="any" type="image/png">
-  <link rel="apple-touch-icon" href="{{ asset_url('/static/favicon-square-dark.png') }}">
+  {% include "partials/head_icons.html" %}
   {#- No inline script: this page also answers under /topics/, which is served
       with a script-src without 'unsafe-inline' (app/core/security.py). -#}
   <script src="{{ asset_url('/static/js/public-theme.js') }}"></script>

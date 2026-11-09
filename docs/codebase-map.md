@@ -593,7 +593,17 @@ Bild, Zustandszeile, Direktlinks, Antwort mit Quellen, Verlauf,
 Modellvergleich); die Topic-Redaktion liegt als eigener Tab in
 `admin.html` unter `/admin#topics` (`/admin/topics` redirectet dorthin).
 Alle öffentlichen HTML-Seiten teilen Navigation und Footer über
-`templates/partials/public_nav.html` und `public_footer.html`. Das
+`templates/partials/public_nav.html` und `public_footer.html`. Die Bildmarke
+hat eine Zeichnung, `static/brand/mark.svg` (Regeln in `docs/brand.md`): Neben
+der Wortmarke steht sie als Inline-SVG aus dem Makro `brand_mark`
+(`templates/partials/brand.html`, Farbe des Wortes über `currentColor`; Kopf
+der öffentlichen Seiten, `.app-favicon` in Kopf und Sidebar von `/app`,
+`.auth-mark` im Login-Dialog), in Reihen aus Anbieter-Icons bleibt sie
+`static/favicon.png`. Tab-, Homescreen- und Such-Icons bindet jede Seite über
+`templates/partials/head_icons.html` ein; alle Icon-Dateien schreibt
+`scripts/render_brand_assets.py` aus der Zeichnung (`--check` meldet
+veraltete), `tests/test_brand_assets.py` hält Zeichnung, Makro und Dateien
+gleich. Das Organization-Logo im JSON-LD ist `static/brand/logo-512.png`. Das
 Link-Vorschaubild (`og:image`, `twitter:card` `summary_large_image`, 1200 × 630)
 kommt seit 2026-10-18 überall aus `templates/partials/og_card.html`, auch für
 `/app`: Ohne eigene Karte zeigt eine Seite die Markenkarte der Landing
@@ -9247,11 +9257,12 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
 - Vorschaukarten (`app/services/og_image.py`, seit 2026-10-18 in einer
   Sprache): heller Grund, darüber leise das Datum („Answered Oct 12, 2026“
   bzw. bei Topics „Checked …“), die Frage in Inter 520 so groß, wie sie ganz
-  passt (84 → 42 px, erst danach „…“), unten links Bildmarke + Wortmarke,
-  rechts Agreement und Fakten. Die Markenkarte (`render_brand_card`) steht
-  zentriert: Wortmarke, der Hero-Satz der Landing in zwei Tönen („Six models
-  answer.“ / „See where they disagree.“), darunter die sechs Anbieter-Marken
-  als graue Silhouetten. **Sicherer Bereich:** WhatsApp zeigt die Karte im
+  passt (84 → 42 px, erst danach „…“), unten links Bildmarke + Wortmarke im
+  Lockup der Website (`_lockup`: Marke 1,5 Schriftgrößen breit, Wortmarke
+  Inter 600, `docs/brand.md`), rechts Agreement und Fakten. Die
+  Markenkarte (`render_brand_card`) steht zentriert: dasselbe Lockup, der
+  Hero-Satz der Landing in zwei Tönen (`BRAND_HEADLINE`), darunter die sechs
+  Anbieter-Marken als graue Silhouetten. **Sicherer Bereich:** WhatsApp zeigt die Karte im
   Eingabefeld auf etwa 1,6:1 beschnitten (rund 90 px weniger je Seite; die
   alte Markenkarte verlor dort das „T“ ihres Titels). Deshalb 144 px Rand,
   und `tests/test_og_image.py`/`tests/test_og_cards.py` verlangen für jede

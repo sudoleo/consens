@@ -4549,7 +4549,7 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   /* Head: the mark in the glyph column, the wordmark in the word column. */
   .sidebar-brand-row { min-height: 40px; padding: 0 3px 0 10px; margin-bottom: 8px; }
   #logoLink.sidebar-brand-link { gap: 0; }
-  .sidebar-brand-link .app-favicon { width: 28px; height: 16px; object-fit: contain; object-position: left center; }
+  .sidebar-brand-link .app-favicon { width: 28px; height: 16px; }
   .sidebar-brand-link .sidebar-brand-title { letter-spacing: -0.01em; }
 
   /* Rows: glyph and word, regular like the chats, one inset. */

@@ -402,6 +402,15 @@ def test_a_tag_inside_a_label_marks_its_key():
     assert not any(i18n_tool.TAG_IN_VALUE in key for key in keys(whole))
 
 
+def test_the_inline_mark_is_an_icon_not_a_word():
+    """{{ brand_mark() }} renders an <svg>. Read as a placeholder it gave the
+    wordmark beside it a key ("{brand_mark} consens.io") no page asks for."""
+    drawn = i18n_tool.jinja_to_html('<span class="lp-mocklogo">{{ brand_mark() }} consens.io</span> <span>Consensus</span>')
+    image = '<span class="lp-mocklogo"><img src="/static/favicon.png" alt=""> consens.io</span> <span>Consensus</span>'
+
+    assert i18n.html_segments(drawn) == i18n.html_segments(image) == ["<0><1/> consens.io</0> <2>Consensus</2>"]
+
+
 def test_no_script_composes_a_sentence_without_an_entry():
     """Scripts, and labels in templates with a tag inside their value."""
     gaps = [f"{gap.source}:{gap.line}: {gap.key}" for gap in i18n_tool.composed_gaps("de")]
