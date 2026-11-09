@@ -139,4 +139,28 @@ describe("Compare: the one run the browser starts besides Agent", () => {
     dom.window.close();
   });
 
+  it("keeps files over the total limit in the composer instead of sending them to every model", async () => {
+    const { window, document, dom } = boot();
+    // base64 of `bytes` bytes, the way the composer holds a file.
+    const file = (name, mime, bytes) => ({ name, mime, size: bytes, data: "A".repeat(4 * Math.ceil(bytes / 3)) });
+    const MB = 1024 * 1024;
+    let pending = [file("a.pdf", "application/pdf", 3.5 * MB), file("b.pdf", "application/pdf", 3.5 * MB)];
+    window.getAttachmentsPayload = () => pending;
+    document.getElementById("questionInput").value = "Compare these";
+    await window.sendQuestion();
+
+    expect(window.fetch).not.toHaveBeenCalled();
+    expect(window.streamSSERequest).not.toHaveBeenCalled();
+    expect(window.App.showPopup).toHaveBeenCalledWith(
+      "The attachments are too large together. The limit is 6 MB per question.");
+    expect(document.getElementById("questionInput").value).toBe("Compare these");
+
+    // The server shrinks an image before it counts it: a PDF beside one goes out.
+    pending = [file("a.pdf", "application/pdf", 5 * MB), file("photo.jpg", "image/jpeg", 1.4 * MB)];
+    const later = window.Date.now() + 1000;
+    window.Date.now = () => later;
+    await window.sendQuestion();
+    expect(window.fetch.mock.calls.map(([url]) => url)).toEqual(["/prepare"]);
+    dom.window.close();
+  });
 });

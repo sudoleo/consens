@@ -277,6 +277,7 @@
   "Add your OpenRouter API key before sending.": "Hinterlege vor dem Senden deinen OpenRouter-API-Schlüssel.",
   "Log in to send your question.": "Melde dich an, um deine Frage zu senden.",
   "An attachment is still being added. Send again when it appears.": "Ein Anhang wird noch hinzugefügt. Sende erneut, sobald er erscheint.",
+  "The attachments are too large together. The limit is 6 MB per question.": "Die Anhänge sind zusammen zu groß. Pro Frage sind 6 MB erlaubt.",
   "Cancel this run": "Diesen Lauf abbrechen",
   "Link copied to clipboard.": "Link in die Zwischenablage kopiert.",
   "This creates a <0>public, read-only page</0> with the question, the answer, what the checking AIs noted and its sources.": "Damit entsteht eine <0>öffentliche, schreibgeschützte Seite</0> mit der Frage, der Antwort, den Anmerkungen der prüfenden KIs und den Quellen.",

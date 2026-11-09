@@ -8294,7 +8294,9 @@ Entwuerfe und gespeicherte Nachrichten zeigen keine bearbeitbaren Datei-Chips.
 Vorschau und Entfernen sind getrennte native Buttons.
 Frontend `attachments.js` baut Payload; Backend `app/services/llm/attachments.py`
 validiert: max **2** Dateien, serverseitig je **5 MB** und zusammen höchstens
-**6 MB**, MIMEs PDF/DOCX/TXT/PNG/JPEG/WebP
+**6 MB** (Compare prüft die Summe ohne Bilder, die der Server erst verkleinert,
+schon beim Senden, `query-send.js` `beginContext`, und lässt Frage und Dateien
+im Feld; Agent lädt jede Datei einzeln hoch und kennt keine Summe), MIMEs PDF/DOCX/TXT/PNG/JPEG/WebP
 (TXT umfasst auch die UI-Endungen MD und CSV; gelesen als UTF-8, UTF-16 mit
 BOM oder Windows-1252 wie CSV aus deutschem Excel, `agent_file_extract.decode_text`,
 für Anhänge und Agent-Dateien gleich). Word- und Textdateien werden

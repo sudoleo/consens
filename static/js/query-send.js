@@ -480,6 +480,19 @@
     }
   }
 
+  const ATTACH_TOTAL_BYTES = 6 * 1024 * 1024;
+
+  // The bytes of the files the server passes on as they are (all but images).
+  function unshrinkableBytes(attachments) {
+    return attachments
+      .filter(item => !String(item.mime || "").startsWith("image/"))
+      .reduce((sum, item) => {
+        const data = String(item.data || "");
+        const padding = data.endsWith("==") ? 2 : data.endsWith("=") ? 1 : 0;
+        return sum + Math.floor(data.length * 3 / 4) - padding;
+      }, 0);
+  }
+
   function validateOwnKeys(providers) {
     const required = new Set(providers.map(provider => provider.keyName));
     return Array.from(required).filter(keyName => !String(localStorage.getItem(keyName) || "").trim());
@@ -494,6 +507,14 @@
     // Files are open to every account; they only need one.
     if (attachments.length && !window.auth?.currentUser) {
       window.App.askToLogIn?.("Log in to send files with your question.", { trigger: document.getElementById("sendButton"), source: "attachments" });
+      return null;
+    }
+    // Every /ask_* refuses more than this together (llm/attachments.py
+    // MAX_ATTACHMENT_TOTAL_BYTES), after the composer was cleared. Agent
+    // uploads each file on its own and has no such limit. Images do not
+    // count: the server shrinks them before it adds up.
+    if (unshrinkableBytes(attachments) > ATTACH_TOTAL_BYTES) {
+      window.App.showPopup?.("The attachments are too large together. The limit is 6 MB per question.");
       return null;
     }
     const providers = selectedProviders(attachments.length);
