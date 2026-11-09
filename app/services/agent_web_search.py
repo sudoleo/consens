@@ -16,8 +16,6 @@ their research stays independent of the agent's (docs/agent-mode.md, "Websuche")
 """
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, wait
-from contextvars import copy_context
 import logging
 import re
 from typing import Annotated
@@ -109,15 +107,12 @@ class WebSearch:
             raise ValueError("queries: at least one search with text.")
         options = {"results": SEARCH_RESULTS, "characters": SEARCH_RESULT_CHARACTERS,
                    "domains": tuple(dict.fromkeys(site(domain) for domain in args.domains)), "since": args.since}
-        pool = ThreadPoolExecutor(len(queries), thread_name_prefix="agent-web-search")
-        try:
-            pending = [pool.submit(copy_context().run, self._one, query, options) for query in queries]
-            # Stop ends the call at once; a request under way ends on its own.
-            while wait(pending, timeout=.1)[1]:
-                loop._check(cancellation)
-        finally:
-            pool.shutdown(wait=False, cancel_futures=True)
-        outcomes = [future.result() for future in pending]
+        outcomes = exa.together([lambda query=query: exa.search(query, **options) for query in queries],
+                                lambda: loop._check(cancellation))
+        for outcome in outcomes:
+            if isinstance(outcome, Exception):
+                logging.warning("Agent web search failed code=%s detail=%s", getattr(outcome, "code", "error"),
+                                str(getattr(outcome, "detail", type(outcome).__name__))[:120])
         found = [outcome for outcome in outcomes if not isinstance(outcome, Exception)]
         if found:
             loop.book_service("search", sum(outcome["cost_nanos"] for outcome in found), searches=len(found))
@@ -149,18 +144,6 @@ class WebSearch:
         if pages:
             result = {"note": UNTRUSTED_NOTE, **result}
         return result
-
-    @staticmethod
-    def _one(query, options):
-        """One search, its failure as a value: the other searches of the call go on."""
-        try:
-            return exa.search(query, **options)
-        except exa.ExaError as exc:
-            logging.warning("Agent web search failed code=%s detail=%s", exc.code, exc.detail[:120])
-            return exc
-        except Exception as exc:
-            logging.warning("Agent web search broke category=%s", type(exc).__name__)
-            return exc
 
     def activity(self, args, result):
         """Trace fields: the searches as written; once done, how many ran and

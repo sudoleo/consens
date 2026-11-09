@@ -21,6 +21,8 @@ meanwhile search inside the model's request again (DelegationLoop).
 """
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, wait
+from contextvars import copy_context
 import logging
 import os
 import random
@@ -55,6 +57,8 @@ RETRY_AFTER_MAX_SECONDS = 3.0
 SEARCH_COST_NANOS = 7_000_000
 PAGE_COST_NANOS = 1_000_000
 TITLE_CHARS = 200
+# The most text of a page Exa gives (``text.maxCharacters``).
+PAGE_CHARACTERS_MAX = 5_000_000
 # After this many failed calls in a row, or at once when Exa refuses the key
 # or the credit is used up, the agent does without Exa for BREAK_SECONDS.
 BREAK_FAILURES = 3
@@ -223,6 +227,28 @@ def _post(url, body, *, seconds, pace=None):
         return data
 
 
+def together(calls, check):
+    """Run ``calls`` side by side and return, in their order, what each
+    returned or the exception it raised. ``check`` is called about ten times
+    a second while any of them runs and may raise (the user's Stop, the
+    turn's end): the caller then goes on at once, and a request under way
+    ends on its own."""
+    pool = ThreadPoolExecutor(max(1, len(calls)), thread_name_prefix="agent-exa")
+
+    def run(call):
+        try:
+            return call()
+        except Exception as exc:
+            return exc
+    try:
+        pending = [pool.submit(copy_context().run, run, call) for call in calls]
+        while wait(pending, timeout=.1)[1]:
+            check()
+    finally:
+        pool.shutdown(wait=False, cancel_futures=True)
+    return [future.result() for future in pending]
+
+
 def _web(value):
     """``value`` when it is an http(s) address without credentials, else ""."""
     if not isinstance(value, str) or not 0 < len(value) <= 2048 or any(c.isspace() or ord(c) < 32 for c in value):
@@ -302,7 +328,7 @@ def page(url, *, characters, fresh=False):
     it has one and fetches the page otherwise; ``fresh`` has it fetched now.
     ``stored``: the answer is the stored copy. Raises ExaError when Exa
     itself does not answer."""
-    body = {"urls": [url], "text": {"maxCharacters": characters}}
+    body = {"urls": [url], "text": {"maxCharacters": min(characters, PAGE_CHARACTERS_MAX)}}
     if fresh:
         body["maxAgeHours"] = 0
     data = _post(CONTENTS_URL, body, seconds=PAGE_SECONDS)
