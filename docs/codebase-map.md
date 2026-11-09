@@ -5191,7 +5191,15 @@ Seit 2026-10-27 speichert ihn auch jeder abgebrochene oder gestoppte Turn mit
 Werkzeugaufrufen, und sein Hinweis lautet dann `FAILED_TURN_RESUME` (darauf
 aufbauen statt wiederholen), damit „Erneut versuchen“ weitermacht. Ein Schritt
 des Chatmodells, der unterwegs abbricht, bevor der Nutzer Text sah, läuft
-vorher einmal neu (`DelegationLoop._answer_attempt`, `_passing_failure`), und
+vorher einmal neu (`DelegationLoop._answer_attempt`, `_passing_failure`),
+seit 2026-11-09 auf einem anderen Endpunkt des Modells
+(`AgentCompletion.endpoint` = `provider` des Streams, beim zweiten Versuch
+`avoid_endpoints` → `provider.ignore`; gibt es keinen anderen, antwortet
+OpenRouter mit 404 vor der ersten Zeile und dieselbe Anfrage geht ohne die
+Liste raus, `agent_client._elsewhere`). Ebenso seitdem ein Schritt, den der
+Filter eines Endpunkts vor dem ersten Wort ablehnte (`ModelDeclined`): jeder
+Endpunkt filtert für sich, die Sitzung des Chats hätte den Versuch an
+denselben zurückgeschickt. Belege tragen den Endpunkt (`endpoint`). Außerdem
 der Stream-Client verwirft keinen Schritt mehr wegen eines einzelnen
 ungewöhnlichen Teilstücks (`AgentCompletion._tool_delta`,
 `_completed_tool_calls`, `TOOL_INDEX_BOUND`); Details `docs/agent-mode.md`,
@@ -5240,7 +5248,8 @@ Server stehen, und jede liest ihre Dokumente in einem Rundgang:
   Kontingent-Tag, in den ein Claim von jetzt bucht (`_expected_daily`), im
   selben Rundgang; nur ein Beleg eines anderen Tages liest seinen eigenen
   nach (T3). Belege tragen seitdem `request_started_at`, `first_token_at`,
-  `stream_ended_at` (`REQUEST_TIMES`, I7).
+  `stream_ended_at` (`REQUEST_TIMES`, I7), seit 2026-11-09 auch `endpoint`
+  (der Endpunkt, der den Aufruf bediente).
 - Sitzungs-Updates schreibt das Journal des Laufs
   (`agent_journal.AgentJournal`, ein Thread `agent-journal` je Lauf; am
   Laufende warten Journal und Arbeitsprotokoll seit 2026-10-29 zusammen

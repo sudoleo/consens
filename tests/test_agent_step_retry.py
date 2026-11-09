@@ -21,22 +21,30 @@ from test_agent_runs import UID, pending, store  # noqa: F401  (fixture)
 class Breaking(Audit):
     """The scripted turn of test_agent_audit, whose steps in ``breaks``
     ({step id: times}) break off before the user sees a word: the provider
-    measured some input, then the stream could not be read."""
+    measured some input, then the stream could not be read. ``error``: what
+    such a step raises instead; ``endpoint``: the endpoint that served it
+    (the stream's ``provider``). ``avoided`` keeps, per request of the chat
+    model, the endpoints it was told to avoid."""
 
-    def __init__(self, breaks, **kwargs):
+    def __init__(self, breaks, *, error=None, endpoint="", **kwargs):
         super().__init__(**kwargs)
         self.breaks = dict(breaks)
+        self.error, self.endpoint = error, endpoint
+        self.avoided = []
 
     def factory(self):
         completion = super().factory()
         script, scripted = self, completion.stream
 
         def stream(**kwargs):
+            if completion.step_id.startswith("completion:"):
+                script.avoided.append(tuple(completion.avoid_endpoints))
             if script.breaks.get(completion.step_id, 0) > 0:
                 script.breaks[completion.step_id] -= 1
                 script.calls.append((completion.step_id, "broken"))
+                completion.endpoint = script.endpoint
                 completion.usage = measured_usage({"prompt_tokens": 50, "completion_tokens": 5}, kwargs["model"])
-                raise ValueError("Invalid tool call index")
+                raise script.error or ValueError("Invalid tool call index")
                 yield  # a generator, like the real stream
             yield from scripted(**kwargs)
         completion.stream = stream
@@ -111,3 +119,59 @@ def test_a_failed_turn_without_calls_keeps_its_plain_note(store):
     contents = [m.get("content") for m in store.messages(UID, loop.chat_id, retry)]
     assert "[This previous turn did not finish successfully. No assistant answer was saved.]" in contents
     assert agent_runs.FAILED_TURN_RESUME not in contents
+
+
+# --- The second attempt goes to another endpoint -------------------------------
+
+def test_the_second_attempt_avoids_the_endpoint_the_first_broke_off_on(store):
+    """What broke an attempt mostly belongs to its endpoint (an outage, a
+    stalled host), and the chat's session would send the retry straight
+    back to it."""
+    script = Breaking({"completion:0": 1}, endpoint="Azure", search=False)
+    loop = without_reviewers(audit_loop(store, script))
+    list(loop.run())
+    assert saved(store, loop)["status"] == "completed"
+    assert script.avoided == [(), ("Azure",)]
+
+
+def test_an_attempt_without_a_known_endpoint_is_retried_as_before(store):
+    script = Breaking({"completion:0": 1}, search=False)
+    loop = without_reviewers(audit_loop(store, script))
+    list(loop.run())
+    assert saved(store, loop)["status"] == "completed" and script.avoided == [(), ()]
+
+
+def test_a_step_one_endpoint_declined_is_asked_of_another(store):
+    """Each endpoint of a model filters for itself: Terra on Azure declined
+    a step twice that OpenAI's own endpoint takes, after four minutes of
+    paid work (2026-11-07). Declined before a word, the step runs once more
+    elsewhere instead of ending the turn."""
+    from app.services.agent_provider_limits import ModelDeclined
+    script = Breaking({"completion:1": 1}, error=ModelDeclined(), endpoint="Azure", search=False, tool_steps=1,
+                      step_tools={0: "note"})
+    loop = with_note_tool(without_reviewers(audit_loop(store, script)))
+    list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER
+    assert script.avoided == [(), (), ("Azure",)]
+
+
+def test_a_step_declined_on_the_other_endpoint_too_ends_the_turn_as_declined(store):
+    from app.services.agent_provider_limits import ModelDeclined
+    script = Breaking({"completion:0": 1, "completion:1": 1}, error=ModelDeclined(), endpoint="Azure", search=False)
+    loop = without_reviewers(audit_loop(store, script))
+    with pytest.raises(ModelDeclined):
+        list(loop.run())
+    turn = saved(store, loop)
+    assert turn["status"] == "failed" and turn["agent_failure"]["code"] == "model_declined"
+    assert script.avoided == [(), ("Azure",)]
+
+
+def test_a_decline_without_a_known_endpoint_is_not_asked_again(store):
+    """The same request to the same endpoint meets the same filter."""
+    from app.services.agent_provider_limits import ModelDeclined
+    script = Breaking({"completion:0": 1}, error=ModelDeclined(), search=False)
+    loop = without_reviewers(audit_loop(store, script))
+    with pytest.raises(ModelDeclined):
+        list(loop.run())
+    assert script.avoided == [()]

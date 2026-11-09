@@ -271,12 +271,19 @@ def _free_rate_limit(error, value):
 PASSING_FAILURE_CODES = frozenset({"provider_error", "provider_timeout"})
 
 
-def _passing_failure(error):
+def _passing_failure(error, value=None):
     """A step that broke off in passing: one more attempt may well succeed
-    (DelegationLoop._answer_attempt)."""
-    from app.services.agent_provider_limits import agent_failure
+    (DelegationLoop._answer_attempt). So may a step an endpoint's own filter
+    declined before a word (ModelDeclined), once ``value`` knows that
+    endpoint: the attempt goes to another one, and each endpoint of a model
+    filters for itself (Terra on Azure declined a step twice that OpenAI's
+    own endpoint takes; Claude on Vertex every attempt of one chat). Without
+    another endpoint it meets the same filter and the turn ends as declined."""
+    from app.services.agent_provider_limits import ModelDeclined, agent_failure
     if isinstance(error, (ModelOutputLimit, AnalysisBudgetExceeded)):
         return False
+    if isinstance(error, ModelDeclined):
+        return bool(getattr(value, "endpoint", ""))
     return agent_failure(error).get("code") in PASSING_FAILURE_CODES
 
 
@@ -1795,8 +1802,12 @@ class DelegationLoop(AgentLoop):
     def _step(self, model, messages, step, registry, cancellation, *, worker=None, searches_enabled=True,
               search_rounds=1, retry_rate_limit=False, retry_passing=False, retry_empty=False, check_cooldown=True,
               server_tools=(), completion=None, answer_candidate=False, hold=False,
-              allow_tools=True, answer_output=0, summary=None):
+              allow_tools=True, answer_output=0, summary=None, avoid_endpoint=""):
         """One claimed, metered model call.
+
+        ``avoid_endpoint``: the endpoint a first attempt of this step broke
+        off on or was declined by; this attempt goes to another one where
+        the model has one (AgentCompletion.avoid_endpoints).
 
         ``answer_candidate``: a step of a turn with comparison tools
         (agent_answer_mode) whose text may turn out to be the answer. Its text streams once it is
@@ -1903,6 +1914,8 @@ class DelegationLoop(AgentLoop):
             value.history_end = self.history_end
         value.published = ""
         value.tool_call_limit = TOOL_CALLS_PER_STEP
+        if avoid_endpoint:
+            value.avoid_endpoints = (avoid_endpoint,)
         if worker is None:
             # The agent's own steps: several calls at once (_parallel_calls),
             # and a call past the limit gets its result.
@@ -2105,7 +2118,7 @@ class DelegationLoop(AgentLoop):
                 value.rate_limited = exc
                 status = "succeeded"
             elif (retry_passing and claimed and not value.published and not (publish_text and value.text)
-                  and _passing_failure(exc)):
+                  and _passing_failure(exc, value)):
                 # Broke off before the user saw a word of it: settled with what
                 # it used (usage, or its bounded estimate) so the retry can
                 # claim the next step; the work log keeps it as failed.
@@ -3052,9 +3065,13 @@ class DelegationLoop(AgentLoop):
 
         In every turn, a step that broke off in passing before the user saw
         any of its text (_passing_failure: the provider failed or fell silent
-        mid-stream, its stream could not be read) runs once more after
-        PASSING_RETRY_SECONDS, on the same conversation: without it, one such
-        step threw away the whole turn's paid work.
+        mid-stream, its stream could not be read, its endpoint's filter
+        declined it) runs once more after PASSING_RETRY_SECONDS, on the same
+        conversation: without it, one such step threw away the whole turn's
+        paid work. The second attempt avoids the endpoint of the first, where
+        the model has another: what broke one attempt (an outage, a stalled
+        host, a filter) mostly belongs to its endpoint, and the chat's
+        session would send the retry straight back to it.
 
         ``step_args`` as for _step."""
         step = f"completion:{index}"
@@ -3091,8 +3108,9 @@ class DelegationLoop(AgentLoop):
             yield self.activity({"step_id": step, "id": "rate_limit", "kind": "progress",
                                  "text": "The model's provider is busy right now. Trying again in a few seconds."})
         yield from self._pause(delay)
+        elsewhere = {"avoid_endpoint": value.endpoint} if passing and getattr(value, "endpoint", "") else {}
         return (yield from self._past_halts(model, messages, step, steps, registry, check_cooldown=False,
-                                            **step_args))[0]
+                                            **step_args, **elsewhere))[0]
 
     def _past_halts(self, model, messages, step, steps, registry, **step_args):
         """The agent's step (_step), once more after a reviewer's halt broke

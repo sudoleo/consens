@@ -525,6 +525,11 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                 # and settled_at, the provider's part and ours.
                 if isinstance(getattr(completion, field, None), datetime):
                     receipt_patch[field] = getattr(completion, field)
+            if isinstance(getattr(completion, "endpoint", None), str) and completion.endpoint:
+                # Which endpoint served the request (the stream's
+                # ``provider``): what a failed step's retry avoids, and where
+                # a model's slow or declined steps ran.
+                receipt_patch["endpoint"] = completion.endpoint
             review_round = getattr(completion, "review_round", None)
             if isinstance(review_round, str) and review_round:
                 # A reviewer's call: live, gate, final, repair

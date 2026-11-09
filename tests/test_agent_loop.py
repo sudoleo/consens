@@ -303,6 +303,61 @@ def test_other_provider_errors_never_resend_the_request(monkeypatch):
     assert len(requests) == 1
 
 
+def test_a_request_told_to_avoid_an_endpoint_ignores_it_and_says_who_served_it(monkeypatch):
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    served = {**packet({"content": "Answer"}), "provider": "OpenAI"}
+    requests, _, _ = transport(monkeypatch, [[served, packet(finish="stop", usage=usage())]] * 2)
+    messages = [{"role": "system", "content": "System"}, {"role": "user", "content": "Hi"}]
+    model = resolve_agent_model("claude-haiku-4-5")
+    plain = AgentCompletion()
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=1)):
+        list(plain.stream(model=model, messages=messages, api_key="test"))
+    assert plain.endpoint == "OpenAI" and "ignore" not in requests[0]["provider"]
+    elsewhere = AgentCompletion()
+    elsewhere.avoid_endpoints = ("Azure",)
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=1)):
+        list(elsewhere.stream(model=model, messages=messages, api_key="test"))
+    assert requests[1]["provider"] == {**requests[0]["provider"], "ignore": ["Azure"]}
+
+
+def test_the_receipt_keeps_the_endpoint_that_served_the_step(store, monkeypatch):
+    served = {**packet({"content": "Answer"}), "provider": "Azure"}
+    transport(monkeypatch, [[served, packet(finish="stop", usage=usage())]])
+    loop = loop_for(store)
+    list(loop.run())
+    assert store.receipt_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["endpoint"] == "Azure"
+
+
+def test_a_model_with_no_other_endpoint_still_gets_its_second_attempt(monkeypatch):
+    """OpenRouter answers 404 before any line when every endpoint of the
+    model is ignored (a pinned host, one endpoint within the data policy):
+    the same request goes out once more without the list."""
+    from app.services.llm.engines import _ProviderHTTPStatusError
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    requests, _, closed = transport(monkeypatch, [
+        [_ProviderHTTPStatusError(404)], [packet({"content": "Answer"}), packet(finish="stop", usage=usage())]])
+    messages = [{"role": "system", "content": "System"}, {"role": "user", "content": "Hi"}]
+    value = AgentCompletion()
+    value.avoid_endpoints = ("Azure",)
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=2)):
+        list(value.stream(model=resolve_agent_model("claude-haiku-4-5"), messages=messages, api_key="test"))
+    assert value.text == "Answer" and closed == [0, 1]
+    assert requests[0]["provider"]["ignore"] == ["Azure"] and "ignore" not in requests[1]["provider"]
+    assert requests[1]["messages"] == requests[0]["messages"]
+
+
+def test_another_refusal_of_an_avoiding_request_stands(monkeypatch):
+    from app.services.llm.engines import _ProviderHTTPStatusError
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    requests, _, _ = transport(monkeypatch, [[_ProviderHTTPStatusError(429)]])
+    value = AgentCompletion()
+    value.avoid_endpoints = ("Azure",)
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=2)), pytest.raises(_ProviderHTTPStatusError):
+        list(value.stream(model=resolve_agent_model("gpt-5.6-luna"), messages=[{"role": "user", "content": "Hi"}],
+                          api_key="test"))
+    assert len(requests) == 1
+
+
 @pytest.mark.real_prices
 def test_native_search_stays_in_selected_model_request_with_real_citations(store, monkeypatch):
     sources = [{"type": "url_citation", "url_citation": {"url": "https://example.com/report", "title": "Report"}},

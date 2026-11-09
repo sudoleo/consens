@@ -5700,6 +5700,26 @@ nahm nur 0–3 an. Seitdem:
   den nächsten Claim), im Arbeitsprotokoll steht er als `failed`. Ein zweiter
   Abbruch beendet den Turn wie bisher. Der 429-Retry bleibt auf Schritte nach
   einem Vergleich beschränkt.
+- *Der zweite Versuch geht an einen anderen Endpunkt* (seit 2026-11-09). Was
+  einen Versuch bricht (Ausfall, hängender Host, Filter), gehört meist zu
+  seinem Endpunkt, und die Sitzung des Chats (`x-session-id`) schickte den
+  Retry genau dorthin zurück. `AgentCompletion.endpoint` merkt sich den
+  `provider` des Streams (z. B. „Azure“), der zweite Versuch sendet ihn als
+  `provider.ignore` (`avoid_endpoints`). Live geprüft (2026-11-09, Haiku 5.5
+  und Terra): OpenRouter nimmt den Namen aus dem Stream, auch gegen die
+  Sitzung, und ignoriert einen unbekannten Namen. Hat das Modell keinen
+  anderen Endpunkt, kommt HTTP 404 vor der ersten Zeile („All providers have
+  been ignored“, nicht abgerechnet), und dieselbe Anfrage geht ohne die Liste
+  raus (`agent_client._elsewhere`). Der Beleg hält den Endpunkt fest
+  (`endpoint`).
+- *Eine Ablehnung durch den Filter eines Endpunkts ist kein Ende mehr*
+  (`ModelDeclined`, seit 2026-11-09): vor dem ersten Wort abgelehnt, läuft der
+  Schritt einmal auf einem anderen Endpunkt (`_passing_failure(exc, value)`,
+  nur wenn der Endpunkt bekannt ist). Jeder Endpunkt filtert für sich: Terra
+  auf Azure lehnte am 2026-11-07 nach vier Minuten bezahlter Arbeit zweimal
+  einen Schritt ab, Claude auf Vertex am 2026-10-28 jeden Versuch eines Chats.
+  Lehnt auch der andere ab (oder gibt es keinen), endet der Turn wie bisher
+  als `model_declined` mit dem Hinweis auf ein anderes Chatmodell.
 - *Ein abgebrochener oder gestoppter Turn hinterlässt sein Arbeitsprotokoll*
   (`agent_work_record`, vorher nur nach VM-Läufen): „Erneut versuchen“
   schickt die Frage als nächste Nachricht, deren Verlauf nach dem

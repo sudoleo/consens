@@ -645,6 +645,32 @@ def _sse_lines(open_lines, payload, fallback=None):
         lines.close()
 
 
+def _elsewhere(open_stream, payload, fallback, routing):
+    """The stream of a request that avoids endpoints (``provider.ignore``,
+    AgentCompletion.avoid_endpoints). Where no other endpoint serves the
+    model within the routing (OpenRouter answers HTTP 404 before any line:
+    a pinned host, a single endpoint that keeps no prompts), the request
+    goes out once more with ``routing``, its routing without them: such a
+    model still gets its second attempt. A refused request is not billed."""
+    lines = open_stream(payload, fallback)
+    try:
+        try:
+            first = next(lines, None)
+        except _ProviderHTTPStatusError as exc:
+            if exc.status_code != 404:
+                raise
+            lines.close()
+            logging.info("Agent retry has no other endpoint, staying model=%s", payload.get("model"))
+            lines = open_stream({**payload, "provider": routing}, fallback and {**fallback, "provider": routing})
+            first = next(lines, None)
+        if first is None:
+            return
+        yield first
+        yield from lines
+    finally:
+        lines.close()
+
+
 def _continues(last, detail):
     """Whether a streamed fragment extends the previous reasoning block."""
     kind = detail["type"]
@@ -711,6 +737,12 @@ class AgentCompletion:
         # re-sends its prompt (DelegationLoop.worker_completion, see stream).
         self.session_id = None
         self.one_off = False
+        # The endpoint that served the request (the stream's ``provider``,
+        # e.g. "Azure"), and endpoints this request must not take: the second
+        # attempt of a step that broke off or was declined goes to another
+        # one (DelegationLoop._answer_attempt).
+        self.endpoint = ""
+        self.avoid_endpoints = ()
         # The chat model's steps: index of the chat's last earlier message,
         # a cache point of its own (with_cache_points, AgentLoop.history_end).
         self.history_end = None
@@ -1110,7 +1142,13 @@ class AgentCompletion:
         # (openrouter_contract.agent_provider_routing); the registry may pin a
         # host (Kimi), a chat with Google data adds zero data retention
         # (google_connections.restricted_model).
-        payload["provider"] = agent_provider_routing(model.request_config.get("provider"))
+        routing = agent_provider_routing(model.request_config.get("provider"))
+        avoid = [name for name in self.avoid_endpoints if name]
+        # OpenRouter takes the endpoint's name as the stream reports it, also
+        # against the session's endpoint, and ignores a name it does not know
+        # (live probe 2026-11-09).
+        payload["provider"] = ({**routing, "ignore": list(dict.fromkeys([*(routing.get("ignore") or []), *avoid]))}
+                               if avoid else routing)
         # All execution-affecting fields are owned by this adapter, never model
         # arguments, user settings or arbitrary registry configuration.
         for field in ("tools", "tool_choice", "plugins", "parallel_tool_calls", "max_tool_calls", "stop_server_tools_when",
@@ -1150,11 +1188,14 @@ class AgentCompletion:
         progress = ProviderProgressWatchdog(_bounded_env_float("AGENT_PROVIDER_STALL_SECONDS", 180, 30, 600))
         with bind_analysis_budget(current_analysis_budget() or AnalysisBudget(seconds=180, max_calls=1)):
             self.request_started_at = datetime.now(timezone.utc)
-            lines = _sse_lines(
-                lambda body: cancellable_sse_lines(OPENROUTER_CHAT_COMPLETIONS_URL, json=body,
-                                                   headers=headers, progress=progress),
-                payload, fallback,
-            )
+
+            def open_stream(body, spare):
+                return _sse_lines(
+                    lambda sent: cancellable_sse_lines(OPENROUTER_CHAT_COMPLETIONS_URL, json=sent,
+                                                       headers=headers, progress=progress),
+                    body, spare,
+                )
+            lines = _elsewhere(open_stream, payload, fallback, routing) if avoid else open_stream(payload, fallback)
             text_capped = False
             try:
                 for _, encoded in _sse_pairs(lines):
@@ -1176,6 +1217,8 @@ class AgentCompletion:
                         if self.first_token_at is None:
                             self.first_token_at = datetime.now(timezone.utc)
                     self.generation_id = str(data.get("id") or self.generation_id)[:200]
+                    if isinstance(data.get("provider"), str) and data["provider"]:
+                        self.endpoint = data["provider"][:80]
                     terminal = self.finish_reason or any(choice.get("finish_reason") for choice in data.get("choices") or [])
                     reported = data.get("usage")
                     if isinstance(reported, dict):
