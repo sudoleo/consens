@@ -432,6 +432,13 @@
         finishFailed(context, apiErrorMessage(prepared.data, "You’ve used today’s allowance."), prepared.data);
         return;
       }
+      // Every /ask_* refuses the same: the question goes back into the box
+      // and the next Send asks (finishFailed, App.aiConsent.refused).
+      if (!prepared.response.ok && unwrapApiError(prepared.data).code === "ai_consent_required") {
+        finishFailed(context, apiErrorMessage(prepared.data, "Agree to sending your questions to the AI providers first."),
+          prepared.data);
+        return;
+      }
       const effectivePrompt = prepared.response.ok && prepared.data?.system_prompt
         ? prepared.data.system_prompt
         : context.config.systemPrompt;

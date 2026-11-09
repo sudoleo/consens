@@ -117,4 +117,26 @@ describe("Compare: the one run the browser starts besides Agent", () => {
     expect(registry.visible().error.message).toBe("All selected model requests failed.");
     dom.window.close();
   });
+
+  it("stops at the consent refusal of /prepare: no model is asked, the question returns, the next Send asks", async () => {
+    const { window, document, registry, dom } = boot();
+    window.App.aiConsent = { ensure: vi.fn(async () => true), refused: vi.fn(() => true) };
+    window.App.userError = vi.fn((data, { fallback } = {}) => data?.detail?.error || fallback);
+    const refusal = { detail: { error: "Agree to sending your questions to the AI providers first.",
+      code: "ai_consent_required" } };
+    window.fetch.mockImplementation(async url => ({
+      ok: url !== "/prepare", status: url === "/prepare" ? 403 : 200,
+      json: async () => (url === "/prepare" ? refusal : {}),
+    }));
+    document.getElementById("questionInput").value = "Which is right?";
+    await window.sendQuestion();
+
+    expect(window.streamSSERequest).not.toHaveBeenCalled();
+    expect(window.App.aiConsent.refused).toHaveBeenCalledWith(expect.objectContaining({ code: "ai_consent_required" }));
+    expect(registry.visible().status).toBe("failed");
+    expect(registry.visible().error.message).toBe("Agree to sending your questions to the AI providers first.");
+    expect(document.getElementById("questionInput").value).toBe("Which is right?");
+    dom.window.close();
+  });
+
 });
