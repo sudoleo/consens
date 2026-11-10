@@ -592,6 +592,8 @@ class DelegationLoop(AgentLoop):
         # step of this turn, the answer and a wrap-up included, uses that lighter level.
         self.routing_lighter = None
         self.identical_calls = {}
+        # Calls whose first failure was not counted (_forget_identical).
+        self.identical_forgiven = set()
         # The run's own size right after its last compaction (_compact).
         self.compacted_to = None
         # Tokens of the file block the agent's last step sent beside the
@@ -1325,6 +1327,7 @@ class DelegationLoop(AgentLoop):
             # The results the repeat guard points to ("Its results are
             # above") are no longer in the conversation: a call may run again.
             self.identical_calls.clear()
+            self.identical_forgiven.clear()
             if self.work_log is not None:
                 # The summary comes next; the user's messages and the kept step
                 # are in the log already, a message the user sent meanwhile not yet.
@@ -1368,9 +1371,11 @@ class DelegationLoop(AgentLoop):
 
     def _forget_identical(self, call):
         """Take back _identical_call's count of ``call`` (run: a call that
-        came to nothing)."""
+        came to nothing), once per call: it gets one more attempt than a
+        call whose result is in hand, never an endless row of them."""
         key = self._identical_key(call) if self.policy.account_budget_only else None
-        if key is not None and self.identical_calls.get(key):
+        if key is not None and self.identical_calls.get(key) and key not in self.identical_forgiven:
+            self.identical_forgiven.add(key)
             self.identical_calls[key] -= 1
 
     @staticmethod
@@ -4007,12 +4012,12 @@ class DelegationLoop(AgentLoop):
                             last_accepted = "error" not in content
                             accepted_tool |= last_accepted
                             ran = ran or call["id"] not in getattr(value, "rejected_calls", ())
-                            if not last_accepted or (isinstance(content, dict)
-                                                     and content.get("status") in {"failed", "refused"}):
+                            if not last_accepted or (isinstance(content, dict) and content.get("status") == "failed"):
                                 # A call that came to nothing is no repetition
-                                # yet: the same call may be what works next
-                                # (a service that was busy, a workspace that
-                                # was starting). FAILED_TOOL_ROUNDS bounds it.
+                                # yet: the same call may be what works next (a
+                                # service that was busy, a workspace that was
+                                # starting). Once per call: what fails the
+                                # same way again is a repetition.
                                 self._forget_identical(call)
                             browser_failed = browser_failed or (name == "browser" and not last_accepted)
                             if self.comparison and self.comparison.finalized:

@@ -4932,10 +4932,11 @@ Werkzeugs dasselbe `{"error"}` wie aus einer Schema-Ablehnung). Jetzt:
   why.“, im Browser „This response ended because the tools it needed kept
   failing.“ mit „Continue“). Ein Aufruf, der gelingt, setzt beide Zähler
   zurück; Schritte nur aus „Not run“-Ergebnissen der App zählen nirgends.
-- Der Wiederholungswächter (`_identical_call`) zählt einen Aufruf nicht, der
-  scheiterte oder dessen Ergebnis `failed`/`refused` ist (`_forget_identical`):
-  Derselbe Aufruf kann der sein, der als Nächstes klappt (ein Dienst war
-  beschäftigt, der Arbeitsplatz startete noch). Nach einer Zusammenfassung
+- Der Wiederholungswächter (`_identical_call`) zählt das erste Scheitern
+  eines Aufrufs nicht (`error` oder Status `failed`; `_forget_identical`,
+  einmal je Aufruf): Derselbe Aufruf kann der sein, der als Nächstes klappt
+  (ein Dienst war beschäftigt, der Arbeitsplatz startete noch). Scheitert er
+  wieder gleich, ist es eine Wiederholung. Nach einer Zusammenfassung
   des Laufs beginnt er neu (`identical_calls.clear()`): Seine Absage verwies
   auf Ergebnisse „above“, die nicht mehr im Gespräch standen.
 - Bricht ein Werkzeug auf Seite der App (Speicher, ein eigener Dienst; alles,

@@ -385,16 +385,24 @@ def test_a_call_that_works_between_failures_starts_the_count_anew(store):
 def test_a_call_that_failed_may_come_again_unchanged(store):
     """The repeat guard counts calls whose results are in hand. A call that
     came to nothing (a service that was busy, a workspace still starting) is
-    no repetition: the same call may be what works next."""
+    no repetition yet: the same call may be what works next. Once: what
+    fails the same way again is one."""
     script = Script()
     loop = chat_loop(store, script)
     busy = ValueError("The service is busy right now; the same call may work in a moment.")
-    seen = with_probe(loop, [busy, busy, busy, {"text": "ok"}, {"text": "ok"}, {"text": "ok"}])
+    seen = with_probe(loop, [busy, {"text": "ok"}, {"text": "ok"}, {"text": "ok"}])
     loop.factory = planned(script, probes(8, same=True))
     list(loop.run())
-    # Three failures, two that worked, then the guard: refused once, and the next identical call ends the turn.
-    assert len(seen) == 5 and "already ran 2 times" in tool_result(loop, "s5_0")["error"]
+    # The failure, two that worked, then the guard: refused once, and the next identical call ends the turn.
+    assert len(seen) == 3 and "already ran 2 times" in tool_result(loop, "s3_0")["error"]
     assert loop.completion.wrap_up["reason"] == "repeat"
+    # A call that only ever fails gets one attempt more than the guard allows, not an endless row.
+    script = Script()
+    loop = chat_loop(store, script)
+    seen = with_probe(loop, [busy])
+    loop.factory = planned(script, probes(8, same=True))
+    list(loop.run())
+    assert len(seen) == 3 and loop.completion.wrap_up["reason"] == "repeat"
 
 
 def test_a_tool_that_breaks_on_the_apps_side_fails_that_call_not_the_turn(store, caplog):
