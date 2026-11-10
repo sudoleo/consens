@@ -496,6 +496,22 @@ def test_each_call_is_one_line_of_what_ran_and_how_it_ended():
     assert len(describe("vm_exec", json.dumps({"command": "echo " + "y" * 5000}), "{}")) <= agent_compaction.RECORD_LINE_CHARS
 
 
+def test_arguments_of_the_wrong_shape_still_make_a_line_of_the_record():
+    """The record is built at the end of a run, before its answer is handed
+    over: a call the registry refused for the shape of its arguments (queries
+    a number, action a list) raised TypeError there, and the turn stayed
+    pending without its answer until the reaper failed it."""
+    refused = {"error": "Invalid arguments."}
+    assert describe("web_search", json.dumps({"queries": 3}), json.dumps(refused)
+                    ) == "web_search -> error: Invalid arguments."
+    assert describe("browser", json.dumps({"action": ["find"], "text": "x"}), json.dumps(refused)
+                    ) == "browser -> error: Invalid arguments."
+    messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "q"},
+                *call("web_search", {"queries": True}, refused), *call("browser", {"action": {}}, refused, 1)]
+    assert work_record(messages, 2).splitlines()[1:3] == [
+        "1. web_search -> error: Invalid arguments.", "2. browser -> error: Invalid arguments."]
+
+
 def test_the_record_lists_the_calls_and_keeps_its_ends_when_long():
     messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}]
     assert work_record(messages, 2) == ""

@@ -426,19 +426,20 @@ def describe(name, arguments, result):
     elif name == "vm_share_file":
         line = f"vm_share_file {path} -> the user got {(data.get('file') or {}).get('name') or 'it'}"
     elif name == "browser":
+        action = args.get("action") if isinstance(args.get("action"), str) else ""
         target = next((args[key] for key in ("url", "ref", "key", "file") if isinstance(args.get(key), str)
                        and args[key].strip()), "")
         # find's and wait's text say what it looked or waited for (type's
         # text stays out: it may be a message).
-        if args.get("action") in {"find", "wait"} and isinstance(args.get("text"), str) and args["text"].strip():
+        if action in {"find", "wait"} and isinstance(args.get("text"), str) and args["text"].strip():
             target = f'"{" ".join(args["text"].split())}"'
         # A place clicked or the strokes dragged, not the points.
-        if args.get("action") == "click" and not target and args.get("x") is not None:
+        if action == "click" and not target and args.get("x") is not None:
             target = f"at {args.get('x')},{args.get('y')}"
-        if args.get("action") == "drag" and isinstance(args.get("strokes"), list):
+        if action == "drag" and isinstance(args.get("strokes"), list):
             count = len(args["strokes"])
             target = "1 stroke" if count == 1 else f"{count} strokes"
-        line = f"browser {args.get('action') or ''} {_short(target, 200)}".rstrip()
+        line = f"browser {action} {_short(target, 200)}".rstrip()
         title = str(data.get("page") or "").split("\n", 1)[0]
         if title.startswith("Page: "):
             line += f" -> {_short(title[6:], 120)}"
@@ -460,7 +461,8 @@ def describe(name, arguments, result):
     elif name == "web_search":
         # What was searched for and where the hits lie: a follow-up message
         # goes on from there (the pages are among the chat's sources).
-        queries = [query for query in args.get("queries") or [] if isinstance(query, str) and query.strip()]
+        queries = args.get("queries") if isinstance(args.get("queries"), list) else []
+        queries = [query for query in queries if isinstance(query, str) and query.strip()]
         line = "web_search " + " | ".join(_short(query, 80) for query in queries[:5])
         hosts = list(dict.fromkeys(
             _host(hit.get("url")) for entry in data.get("searches") or [] if isinstance(entry, dict)
