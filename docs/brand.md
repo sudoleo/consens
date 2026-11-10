@@ -106,3 +106,30 @@ Fläche füllt sich, das Wort kommt dazu. Text erscheint Wort für Wort (75 ms
 versetzt), ein Satz pro Bild. Eine Kurve für alles
 (`cubic-bezier(.22, 1, .36, 1)`), nichts federt, nichts leuchtet. Der Keil darf
 einmal um die Kugel wandern; am Ende steht immer die unveränderte Marke.
+
+### Ident
+
+Der Ident ist diese Regel als Film. Er beginnt auf leerem Grund und endet auf
+dem stehenden Lockup in der Bildmitte, weil das letzte Bild in jedem Player
+stehen bleibt. Es gibt ihn in zwei Fassungen:
+
+| Fassung | Länge | Ablauf |
+|---|---|---|
+| Ident | 6 s | Kreis 0,2–1,25 s, Keil 1,1–2,2 s, Fläche 2,1–2,8 s, Lockup 3,1–4,3 s |
+| Ident mit Satz | 11 s | dieselbe Zeichnung; darunter der Satz der Marke, eine Hälfte pro Bild (0,5–3,7 s und 4–7,2 s), Lockup 7,4–8,6 s |
+
+- Solange das Wort fehlt, steht die Bildmarke allein und 2,3-mal so groß wie im
+  Lockup. Zum Lockup rückt sie nach links und wird kleiner. Das Wort hat dabei
+  ihr Maß und wird erst 0,3 s später sichtbar, weil es am Anfang im schmalen
+  Bild über den Rand ragt.
+- Der Satz steht zweizeilig unter der Marke, 0,72 Schriftgrößen des Lockups
+  groß, damit er im Feed am Handy lesbar bleibt. Marke und Satz sind zusammen
+  mittig; ist der Satz weg, setzt sich die Marke mit dem Lockup in die Mitte.
+  Die Wörter kommen nacheinander und gehen zusammen, bevor sich die Marke bewegt.
+- Die Schriftgröße des Lockups ist 6,8 % der Bildbreite. Im Querformat zählt
+  als Breite höchstens das 1,25-Fache der Bildhöhe, sonst wird die Marke dort
+  zu groß.
+- Der Grund ist die Bühne. Papier nur dort, wo der Ident an einen hellen Film
+  anschließt.
+- 60 Bilder pro Sekunde, H.264, ohne Ton; 1920 × 1080, 1080 × 1350 und
+  1080 × 1080. Die Filme liegen nicht im Repo.
