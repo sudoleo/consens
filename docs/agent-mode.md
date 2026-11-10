@@ -5957,6 +5957,12 @@ nahm nur 0–3 an. Seitdem:
   harten Stopp genug Zeit bleibt; der zweite Versuch meidet den Endpunkt des
   ersten. Der erste Schritt einer Nachricht scheitert weiter sofort: Es ist
   nichts verloren, und der Nutzer nimmt vielleicht lieber ein anderes Modell.
+- *Der Abschluss des Laufs wird wiederholt* (seit 2026-11-10,
+  `_finish_run`, `RUN_END_ATTEMPTS`): `finish_run` hatte einen Versuch. Fiel
+  er in einen kurzen Firestore-Ausfall, blieb der Turn bis zum Ablauf des
+  Lease „pending“, und der Reaper schloss ihn leer, ohne Antwort, Aktivität
+  und Arbeitsbericht. Jetzt bis zu vier Versuche über 3,5 s bei
+  vorübergehenden Fehlern; `finish_run` beendet den Lauf genau einmal.
 - *Der zweite Versuch geht an einen anderen Endpunkt* (seit 2026-11-09). Was
   einen Versuch bricht (Ausfall, hängender Host, Filter), gehört meist zu
   seinem Endpunkt, und die Sitzung des Chats (`x-session-id`) schickte den

@@ -532,3 +532,35 @@ def test_the_work_record_says_what_was_searched_for_and_read():
         "read_source https://example.org/report from 24000 -> completed: Annual report")
     assert describe("read_source", json.dumps({"url": "https://example.org/gone"}),
                     json.dumps({"status": "failed"})) == "read_source https://example.org/gone -> failed"
+
+
+def test_the_runs_closing_write_is_tried_again_through_a_short_outage(store, monkeypatch):
+    """Without it the turn stayed pending until its lease ran out, and the
+    reaper closed it empty: no answer, no activity, no work record."""
+    from google.api_core.exceptions import ServiceUnavailable
+    monkeypatch.setattr(agent_delegation.time, "sleep", lambda seconds: None)
+    script = Script()
+    loop = chat_loop(store, script)
+    real, calls = store.finish_run, []
+
+    def flaky(*args, **kwargs):
+        calls.append(kwargs["status"])
+        if len(calls) < 3:
+            raise ServiceUnavailable("Firestore is briefly away")
+        return real(*args, **kwargs)
+    monkeypatch.setattr(store, "finish_run", flaky)
+    list(loop.run())
+    saved = saved_turn(store, loop)
+    assert calls == ["succeeded"] * 3 and saved["status"] == "completed"
+    assert saved["assistant_response"] == "The first option costs 100."
+    # An error that no further try heals is not tried again.
+    other = chat_loop(store, Script())
+    attempts = []
+
+    def closed(*args, **kwargs):
+        attempts.append(1)
+        raise ValueError("Agent run owner does not match")
+    monkeypatch.setattr(store, "finish_run", closed)
+    with pytest.raises(ValueError):
+        list(other.run())
+    assert len(attempts) == 1

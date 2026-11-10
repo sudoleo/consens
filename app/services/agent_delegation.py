@@ -233,6 +233,9 @@ CLOSE_WAIT_SECONDS = 15
 # Pause before the one retry of a session update after a short database
 # outage (_journal_write; a worker's end record).
 TERMINAL_RETRY_SECONDS = .5
+# Attempts of the run's closing write (_finish_run), TERMINAL_RETRY_SECONDS
+# apart and doubling: 3.5 s in all.
+RUN_END_ATTEMPTS = 4
 
 
 def _transient_store_error(error):
@@ -2394,6 +2397,22 @@ class DelegationLoop(AgentLoop):
         if raise_error and "error" in box and unsettled:
             raise box["error"]
 
+    def _finish_run(self, status):
+        """The run's one closing write (AgentRunStore.finish_run), tried again
+        through a short Firestore outage: it ends the run once however often
+        it is asked. Without it the turn stayed pending until its lease ran
+        out, and the reaper then closed it empty, without the answer, the
+        activity and the work record that were in hand here."""
+        for attempt in range(RUN_END_ATTEMPTS):
+            try:
+                return self.store.finish_run(self.uid, self.chat_id, self.turn_id, completion=self.completion,
+                                             status=status, run_token=self.run_token)
+            except Exception as exc:
+                if attempt + 1 == RUN_END_ATTEMPTS or not _transient_store_error(exc):
+                    raise
+                logging.warning("Agent run end write retry attempt=%d category=%s", attempt + 1, safe_exception(exc))
+                time.sleep(TERMINAL_RETRY_SECONDS * 2 ** attempt)
+
     def _settle_step(self, step, value, status):
         """Retry only the idempotent receipt write, including ambiguous commits."""
         for attempt in range(3):
@@ -4184,8 +4203,7 @@ class DelegationLoop(AgentLoop):
                 self.work_log.close(timeout=max(0., close_wait))
             self.status("run", "finished", status=status, finish_reason=self.completion.finish_reason)
             if self.claimed:
-                self.store.finish_run(self.uid, self.chat_id, self.turn_id, completion=self.completion,
-                                      status=status, run_token=self.run_token)
+                self._finish_run(status)
             else:
                 self.store.release_unclaimed(self.uid, self.chat_id, self.turn_id, failure=getattr(self.completion, "failure", None))
             if self.comparison is not None:
