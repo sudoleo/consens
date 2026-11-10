@@ -183,6 +183,11 @@ def _decode_stringified(arguments, value, unique):
 MAX_TOOLS = 40
 
 
+class ArgumentsTooLong(ValueError):
+    """A call's arguments are longer than its tool takes (ToolRegistry.validate):
+    the run drops them from the conversation (DelegationLoop.run)."""
+
+
 class ToolRegistry:
     def __init__(self, tools=(), *, argument_limit=2048):
         self.default_argument_limit = argument_limit
@@ -205,15 +210,22 @@ class ToolRegistry:
             raise ValueError(" ".join(["Tool is not authorized: unknown tool. Available tools: "
                                        f"{', '.join(self.tools)}.", *self._unknown_notes()]))
         limit = tool.argument_limit or self.default_argument_limit
-        if not isinstance(raw, str) or len(raw) > limit:
-            raise ValueError(f"Tool is not authorized: {tool.name} arguments must be one JSON object "
-                             f"of at most {limit} characters.")
+        if not isinstance(raw, str):
+            raise ValueError(f"{tool.name} did not run: its arguments must be one JSON object.")
+        if len(raw) > limit:
+            # "Tool is not authorized: ... at most N characters" read as a
+            # question of permission, after the model had written tens of
+            # thousands of characters into the call.
+            raise ArgumentsTooLong(f"{tool.name} did not run: its arguments are longer than the {limit:,} "
+                                   f"characters one {tool.name} call takes (as JSON text). Nothing of the call "
+                                   "is kept: send the content in smaller calls.")
         # Reject duplicate JSON keys, rather than silently accepting the last.
         def unique(pairs):
             value = {}
             for key, item in pairs:
                 if key in value:
-                    raise ValueError("Duplicate tool argument")
+                    raise ValueError(f"{tool.name} arguments name \"{str(key)[:60]}\" twice; send each "
+                                     "argument once.")
                 value[key] = item
             return value
         try:

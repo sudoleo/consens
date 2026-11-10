@@ -31,7 +31,7 @@ from app.services.agent_provider_limits import (
     TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelEmptyAnswer, ModelOutputLimit, agent_failure,
     provider_cooldowns,
 )
-from app.services.agent_tools import ReadOnlyTool, ToolRegistry, search_tools
+from app.services.agent_tools import ArgumentsTooLong, ReadOnlyTool, ToolRegistry, search_tools
 from app.services.agent_comparison import SEARCHING_KINDS
 from app.services.prompt_defaults import AGENT_PROVIDER_SEARCH_FACT, AGENT_REVIEW_FACTS as REVIEW_FACTS
 from app.services.llm.agent_client import (
@@ -96,7 +96,7 @@ THINKING_UPDATE_SECONDS = 3
 # its fourth unchanged plan.
 REPEATABLE_TOOLS = frozenset({"wait_agents", "vm_exec", "vm_read_file", "vm_write_file", "vm_edit_file",
                               "vm_share_file", "vm_start_process", "vm_process_output", "vm_stop_process",
-                              "vm_view_image", "vm_render_office", "update_plan", "browser"})
+                              "vm_view_image", "vm_render_office", "vm_install_packages", "update_plan", "browser"})
 # Once a tool's result may have brought outside content into the agent's
 # context (model answers and their sources, pages, emails, calendars, files,
 # a VM's output or the workspace's notes, a worker's report), a settings
@@ -161,6 +161,9 @@ USER_NOTE_OPEN = "[The user wrote this while you were working; it comes from the
 # itself.
 HOLD_TIMEOUT_SECONDS = 30 * 60
 HOLD_TIMEOUT_STOPPED = "Stopped after 30 minutes without your decision."
+# The same in a Watch's scheduled run, where nobody is there to decide
+# (hold_timeout 0): it stops at once.
+HOLD_UNATTENDED_STOPPED = "Stopped: this run was scheduled, and nobody was there to decide."
 # Holds a turn keeps in agent_holds (_end_hold); later ones are not kept.
 HOLDS_KEPT = 20
 # First pause between two attempts to save an open hold (_save_hold), doubled.
@@ -1158,13 +1161,18 @@ class DelegationLoop(AgentLoop):
         each batch of results: the step and how long the user has been
         waiting for the answer (a run whose answer stood after 30 s went on
         looking for pictures for five minutes). The message's
-        limits only once LIMITS_SHOWN_FROM of one is used. New content at
+        limits only once LIMITS_SHOWN_FROM of one is used; a message without
+        the workspace gets the line only from then on (it ran into its 24
+        steps or 15 minutes without a word of them). New content at
         the end only: the cached prefix stays. A fact, never a rule
         (docs/agent-mode.md)."""
-        if self.vm_tools is None or not self.policy.account_budget_only:
+        if not self.policy.account_budget_only or not self.merged:
             return
         steps, seconds = self._turn_steps(), self._turn_seconds()
         elapsed = max(0.0, self._turn_elapsed())
+        if self.vm_tools is None and not ((steps and self.routing_steps >= steps * LIMITS_SHOWN_FROM)
+                                          or (seconds and elapsed >= seconds * LIMITS_SHOWN_FROM)):
+            return
         step = f"step {self.routing_steps}"
         if steps and self.routing_steps >= steps * LIMITS_SHOWN_FROM:
             step += f" of at most {steps}"
@@ -1720,6 +1728,8 @@ class DelegationLoop(AgentLoop):
                 self._log_rejected_call(call, exc)
                 # Refused before any tool ran (run: INVALID_TOOL_ROUNDS).
                 value.__dict__.setdefault("rejected_calls", set()).add(call["id"])
+                if isinstance(exc, ArgumentsTooLong):
+                    value.__dict__.setdefault("oversized_calls", set()).add(call["id"])
             if tool is not None and tool.name == "update_memory":
                 reason = getattr(exc, "code", None) or "invalid_arguments"
         except Exception as exc:
@@ -2549,14 +2559,16 @@ class DelegationLoop(AgentLoop):
         return worker, result
 
     def _prefetch(self, value, over_limit):
-        """The later calls of a step whose calls are all CONCURRENT_TOOLS,
-        started now, while the batch runs the first: {call id: started}.
-        Nothing for a step with another tool, a gate or a pause open, and no
-        call that the repeat guard will refuse."""
+        """The later CONCURRENT_TOOLS calls of a step, started now, while the
+        batch runs its first call: {call id: started}. They read and change
+        nothing, so they also run beside a call of another kind (a plan
+        update or a memory save next to three reads made all of them wait
+        their turn). Nothing with a gate or a pause open, and no call that
+        the repeat guard will refuse."""
         calls = [call for call in value.tool_calls if call["id"] not in over_limit]
         gate = getattr(value, "gate", None)
         if (len(calls) < 2 or self.hold is not None or (gate is not None and gate.call_ids)
-                or not all((call.get("function") or {}).get("name") in CONCURRENT_TOOLS for call in calls)):
+                or not any((call.get("function") or {}).get("name") in CONCURRENT_TOOLS for call in calls[1:])):
             return {}
         reads = sum(1 for call in calls if (call.get("function") or {}).get("name") == "read_source")
         reader = getattr(self.comparison, "reader", None)
@@ -2572,6 +2584,8 @@ class DelegationLoop(AgentLoop):
                 seen[key] = seen.get(key, 0) + 1
                 if seen[key] > limit:
                     continue
+            if (call.get("function") or {}).get("name") not in CONCURRENT_TOOLS:
+                continue
             if (call.get("function") or {}).get("name") == "read_source":
                 # The same part of the same page twice (another spelling
                 # too): the later call waits its turn and finds it read
@@ -3127,7 +3141,8 @@ class DelegationLoop(AgentLoop):
         if decision == "stop" or (decision == "timeout" and not asked):
             if decision == "timeout":
                 # Said as such, not as a plain stop.
-                self.completion.failure = {"code": "hold_timeout", "error": HOLD_TIMEOUT_STOPPED}
+                self.completion.failure = {"code": "hold_timeout", "error": HOLD_TIMEOUT_STOPPED if self.hold_timeout
+                                           else HOLD_UNATTENDED_STOPPED}
                 # As the Stop button does (routers/agent.py stop_agent_request).
                 try:
                     self.store.stop_delegation(self.uid, self.chat_id, self.turn_id)
@@ -3154,6 +3169,10 @@ class DelegationLoop(AgentLoop):
             notes, self.notes = list(self.notes), deque()
         for note in notes:
             self.messages.append({"role": "user", "content": f"{USER_NOTE_OPEN}\n{note['text']}"})
+            # The user's own words, like their message: a settings change
+            # they ask for here quotes them (agent_settings), their links
+            # are theirs.
+            self.answer_conversation.append({"role": "user", "content": note["text"]})
             self.outgoing.put_nowait(self.activity({"step_id": step, "id": f"note-{note.get('id')}",
                                                     "kind": "progress", "text": note["text"], "from_user": True}))
         return bool(notes)
@@ -3683,8 +3702,8 @@ class DelegationLoop(AgentLoop):
         a follow-up message can go on with the work."""
         code = WRAP_UP_REASONS.get(reason)
         seconds, steps = self._turn_seconds(), self._turn_steps()
-        fact = {"time": f"It reached its time limit ({round(seconds / 60)} minutes per message)." if seconds else
-                        "It reached its time limit.",
+        fact = {"time": f"Its time is nearly used up ({round(seconds / 60)} minutes per message, the time its "
+                        "answer and the review of it need included)." if seconds else "It reached its time limit.",
                 "steps": f"It reached its step limit ({steps} steps per message)." if steps else
                          "It reached its step limit.",
                 "repeat": "The same tool request repeated without progress.",
@@ -3828,7 +3847,8 @@ class DelegationLoop(AgentLoop):
                         yield from self._wrap_up(TURN_ALLOWANCE_LIMIT, chain([closing], steps), value)
                         status = "succeeded"
                         break
-                    self.messages.append(value.assistant_message())
+                    step_message = value.assistant_message()
+                    self.messages.append(step_message)
                     if _searched(value):
                         # The step's own web search: results are in view
                         # from here on, also for this step's own calls.
@@ -3995,6 +4015,15 @@ class DelegationLoop(AgentLoop):
                             for call in value.tool_calls:
                                 if call["id"] not in results:
                                     not_run(call, CALL_AT_LIMIT)
+                        oversized = getattr(value, "oversized_calls", None)
+                        if oversized:
+                            # Arguments longer than their tool takes, cut off
+                            # at that length: not valid JSON, up to 100,000
+                            # characters, and re-sent with every later step.
+                            # The call stays, its result says what happened.
+                            step_message["tool_calls"] = [
+                                {**call, "function": {**call["function"], "arguments": "{}"}}
+                                if call["id"] in oversized else call for call in step_message.get("tool_calls") or []]
                         self.messages.extend(results[call["id"]] for call in value.tool_calls if call["id"] in results)
                         if self.workspace_closed and self.workspace_task is not None:
                             # open_workspace ran in this batch: its tools from the next step on.

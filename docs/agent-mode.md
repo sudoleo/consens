@@ -4954,6 +4954,47 @@ Werkzeugs dasselbe `{"error"}` wie aus einer Schema-Ablehnung). Jetzt:
   goes in several calls“) und arbeitet weiter; drei in Folge zählen wie
   abgelehnte Anfragen.
 
+**Was das Modell über seine Aufrufe erfährt (seit 2026-11-10).** Aus dem
+Audit der Werkzeugverträge; alles Fakten, keine Verhaltensvorgaben:
+
+- `AGENT_AUDIT_ANSWER_SECTION` sagt die Ausnahme zu „text beside tool calls
+  shows the user as a note“: Text neben Aufrufen, die nur ein Memory
+  speichern, eine Karte vorbereiten oder den Plan schließen
+  (`agent_answer_mode.SIDE_TOOLS`), ist die Antwort und beendet den Turn. Ohne
+  den Satz wurde „I'll note that, then compare the options.“ neben
+  `update_memory` zur ganzen Antwort. Derselbe Block nennt jetzt in jedem
+  Chat, dass ein Schritt bis zu vier Aufrufe ausführt (vorher nur im
+  Arbeitsplatz-Prompt; in Prod sechs Aufrufe in einem Schritt, zwei „Not
+  run“) und dass Suchen und Lese-Aufrufe nebeneinander laufen.
+- `_prefetch` startet die Lese-Aufrufe eines Schritts (`CONCURRENT_TOOLS`)
+  auch neben Aufrufen anderer Art: Ein Plan-Update neben drei Reads ließ
+  sonst alle nacheinander laufen.
+- Zu lange Argumente: „<tool> did not run: its arguments are longer than the
+  N characters one <tool> call takes … send the content in smaller calls“
+  (`ArgumentsTooLong`) statt „Tool is not authorized: … at most N
+  characters“, das sich wie eine Rechtefrage las. Die abgeschnittenen
+  Argumente (bis 100.000 Zeichen, kein gültiges JSON) verlassen das Gespräch
+  (`{}` im Aufruf), statt mit jedem weiteren Schritt neu gesendet zu werden.
+  Ein doppelt genanntes Argument nennt Werkzeug und Schlüssel.
+- `_note_progress` zeigt die Grenzen der Nachricht ab 80 % auch ohne
+  Arbeitsplatz (24 Schritte, 15 Minuten); die Zeile zu Schritt und Wartezeit
+  bei jedem Schritt bleibt dem Arbeitsplatz vorbehalten. Der Zeit-Fakt des
+  Wrap-ups sagt, dass Antwort und Prüfung in den Minuten enthalten sind.
+- Was der Nutzer in die laufende Antwort schreibt, zählt zu seinen eigenen
+  Worten (`answer_conversation`): Eine Einstellungsänderung, um die er dort
+  bittet, lässt sich belegen.
+- `ask_user` nimmt `choices` wie die Registry (`_decode_stringified`): als
+  JSON-Text gesendet öffnete sich keine Karte. `update_memory` zählt nur
+  wohlgeformte Änderungen gegen die 12 je Nachricht.
+- Arbeitsplatz: `vm_exec` sagt in der Beschreibung, dass jeder Aufruf eine
+  eigene Shell ist (ein `cd`, eine exportierte Variable, ein aktiviertes
+  Environment enden mit dem Aufruf), `timeout_seconds` nennt Standard,
+  Maximum und `vm_start_process`; eine Zeitüberschreitung sagt, wie es
+  weitergeht, und wann die Restzeit der Nachricht die Grenze war.
+  `vm_write_file` hat `append` (`agent_vm.APPEND_SCRIPT`): Eine Datei, die
+  nicht in einen Aufruf passt, entsteht in Teilen. `vm_install_packages` ist
+  wiederholbar (`REPEATABLE_TOOLS`): apt macht beim selben Aufruf weiter.
+
 Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
 (`ToolRegistry.validate`) die Änderung: unbekanntes Tool mit Liste der
 verfügbaren Tools (und `_unknown_notes`: welches Werkzeug Seiten öffnet, dass

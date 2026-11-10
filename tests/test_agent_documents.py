@@ -259,7 +259,7 @@ def test_document_tools_get_a_larger_argument_limit_than_other_tools():
     payload = '{"text": "' + "x" * 30_000 + '"}'
     assert registry.argument_limit == 50_000
     assert registry.validate({"function": {"name": "large", "arguments": payload}})[0].name == "large"
-    with pytest.raises(ValueError, match="not authorized"):
+    with pytest.raises(ValueError, match="did not run: its arguments are longer"):
         registry.validate({"function": {"name": "small", "arguments": payload}})
 
 

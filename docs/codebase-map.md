@@ -4720,7 +4720,10 @@ scheiterte, erst nach `FAILED_TOOL_ROUNDS` (6) enden, mit eigenem Grund
 (`TURN_TOOLS_LIMIT`, „tools“); ein Werkzeug, das auf Seite der App bricht,
 ist das Ergebnis des Aufrufs (`TOOL_BROKE`), und ein am Output-Limit
 abgeschnittener Aufruf wird dem Modell gesagt (`_cut_call`, `CALL_CUT`;
-agent-mode.md „Ein gescheiterter Aufruf ist keine ungültige Anfrage“). Seit
+agent-mode.md „Ein gescheiterter Aufruf ist keine ungültige Anfrage“ und
+„Was das Modell über seine Aufrufe erfährt“: Ausnahme der Nebenwerkzeuge und
+vier Aufrufe je Schritt im Prompt, `ArgumentsTooLong`, `_prefetch` neben
+anderen Aufrufen, `vm_write_file` mit `append`). Seit
 2026-11-10 behält ein Turn, der an einer Grenze endete, seinen
 Arbeitsbericht auch ohne Arbeitsplatz (`_keeps_record`; `web_search` und
 `read_source` stehen darin mit Suchwörtern, Fundstellen und Seiten), damit

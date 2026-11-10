@@ -222,12 +222,13 @@ class _FakeBackend(VMBackend):
             raise VMFileMissing(path)
         return files[path][:limit], len(files[path]) <= limit
 
-    def write_file(self, name, path, data, *, agent=True):
+    def write_file(self, name, path, data, *, agent=True, append=False):
         self._call("write", name, path)
         if not agent:
             self.vm.server_files.append(("write", path))
-        self.vm.vms[name]["files"][path] = data
-        return len(data)
+        files = self.vm.vms[name]["files"]
+        files[path] = files.get(path, b"") + data if append else data
+        return len(files[path])
 
     def checkpoint(self, name, comment):
         self._call("checkpoint", name, comment)
@@ -1525,7 +1526,9 @@ def test_a_command_stopped_by_the_days_vm_time_says_so(store, fake_vm, monkeypat
                                  [("vm_exec", {"command": "make build", "timeout_seconds": 300})]]))
     list(loop.run())
     own, cut = results(loop)
-    assert own["timed_out"] and own["note"] == "The command was stopped after its time limit of 5 seconds."
+    assert own["timed_out"] and own["note"] == ("The command was stopped after its time limit of 5 seconds. "
+                                                 "timeout_seconds takes up to 300; what needs longer runs with "
+                                                 "vm_start_process.")
     assert cut["timed_out"] and cut["note"] == agent_vm_tools.VM_DAY_CUT.format(what="command", seconds=25)
 
 
@@ -1971,6 +1974,8 @@ def test_the_agents_files_go_through_its_own_user_never_the_file_api():
     assert read[6:] == ["bash", "-c", agent_vm.READ_SCRIPT, "read", "/home/agent/a", "11"]
     write = httpx.URL(sockets[5]).params
     assert write.get_list("cmd")[6:] == ["bash", "-c", agent_vm.WRITE_SCRIPT, "write", "/home/agent/new/c.txt"]
+    # Added to the end: the same script with >> for >.
+    assert agent_vm.APPEND_SCRIPT == agent_vm.WRITE_SCRIPT.replace('cat > "$1"', 'cat >> "$1"') != agent_vm.WRITE_SCRIPT
     assert write["stdin"] == "true" and write["dir"] == "/"
     # The bytes on stdin (0x00), then its end (0x04).
     assert sent[:2] == [b"\x00abc", b"\x04"]
@@ -2248,3 +2253,51 @@ def test_the_daily_vm_time_follows_the_tier(monkeypatch, tier, limit):
     from app.services import agent_quota, agent_vm_time
     monkeypatch.setattr(agent_quota, "account_tier", lambda uid, tier_=None: tier)
     assert agent_vm_time.daily_limit(UID) == limit
+
+
+def test_a_long_file_is_written_in_parts(store, fake_vm):
+    """One call takes at most WRITE_CHARS, and a step's output limit can cut
+    a long call in half: with append the agent writes a file in parts."""
+    script = Agent([[("vm_write_file", {"path": "long.txt", "content": "part one\n"})],
+                    [("vm_write_file", {"path": "long.txt", "content": "part two\n", "append": True})]])
+    loop = vm_loop(store, script)
+    list(loop.run())
+    path = f"{chat_path(loop.chat_id)}/long.txt"
+    assert fake_vm.vms[NAME]["files"][path] == b"part one\npart two\n"
+    first, second = results(loop)
+    assert first == {**first, "path": path, "bytes": 9} and "appended" not in first
+    assert second["bytes"] == 18 and second["appended"] is True
+    tool = loop.registry.tools["vm_write_file"]
+    assert "append" in tool.description and f"{agent_vm_tools.WRITE_CHARS:,} characters per call" in tool.description
+    assert list(tool.schema()["function"]["parameters"]["properties"]) == ["path", "content", "append"]
+
+
+@pytest.mark.parametrize("asked, left, expected", [
+    (60, None, "timeout_seconds takes up to 300; what needs longer runs with vm_start_process."),
+    (300, None, "the longest a command may run. What needs longer runs with vm_start_process."),
+    (120, 40, "stopped after 40 seconds, when this message's time for commands ran out."),
+])
+def test_a_command_that_ran_out_of_time_says_how_to_go_on(store, fake_vm, monkeypatch, asked, left, expected):
+    """"The command was stopped after its time limit" alone led to the same
+    call again; a limit the message's time set read as the command's own."""
+    fake_vm.commands["npm install"] = ([("stdout", b"added 12 packages\n")], None, 1.0)
+    script = Agent([[("vm_exec", {"command": "npm install", "timeout_seconds": asked})]])
+    loop = vm_loop(store, script)
+    if left is not None:
+        monkeypatch.setattr(loop, "answer_time_left", lambda: left)
+    list(loop.run())
+    [result] = results(loop)
+    assert result["timed_out"] is True and result["note"].endswith(expected)
+    # What it printed until then comes back with it.
+    assert "added 12 packages" in result["stdout"]
+
+
+def test_the_shell_facts_stand_in_the_tools_description_and_an_install_may_be_called_again(store, fake_vm):
+    from app.services.agent_delegation import REPEATABLE_TOOLS
+    loop = vm_loop(store, Agent([]))
+    description = loop.registry.tools["vm_exec"].description
+    assert "Each call is a shell of its own" in description and "end with the call" in description
+    timeout = loop.registry.tools["vm_exec"].schema()["function"]["parameters"]["properties"]["timeout_seconds"]
+    assert "vm_start_process" in timeout["description"] and "at most 300" in timeout["description"]
+    # apt goes on where it stopped: the same call again is no repetition.
+    assert "vm_install_packages" in REPEATABLE_TOOLS

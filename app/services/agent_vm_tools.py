@@ -228,7 +228,9 @@ class VmExecArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     command: str = Field(min_length=1, max_length=20_000, description="Shell command, run by bash with your login environment.")
     cwd: str = Field(default="", max_length=1024, description="Working directory; default this chat's folder.")
-    timeout_seconds: int = Field(default=EXEC_TIMEOUT_DEFAULT, ge=1, le=EXEC_TIMEOUT_MAX)
+    timeout_seconds: int = Field(default=EXEC_TIMEOUT_DEFAULT, ge=1, le=EXEC_TIMEOUT_MAX, description=(
+        f"After this long the command is stopped ({EXEC_TIMEOUT_DEFAULT} unless given, at most {EXEC_TIMEOUT_MAX}). "
+        "What needs longer, or keeps running like a server, runs with vm_start_process."))
 
 
 class VmReadFileArgs(BaseModel):
@@ -242,6 +244,9 @@ class VmWriteFileArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     path: str = Field(min_length=1, max_length=1024)
     content: str = Field(max_length=WRITE_CHARS)
+    append: bool = Field(default=False, description=(
+        "true: add content to the end of the file instead of replacing it (a file too long for one call is "
+        "written in parts)."))
 
 
 class VmEditFileArgs(BaseModel):
@@ -1186,14 +1191,17 @@ class VMTools:
             self.processes = ProcessTools(self)
         return [self._guarded(tool) for tool in [
             ReadOnlyTool("vm_exec", "Run a shell command in your workspace (bash, in this chat's folder by default). "
-                         "Returns stdout, stderr (their ends when long), exit code and duration.",
+                         "Returns stdout, stderr (their ends when long), exit code and duration. Each call is a "
+                         "shell of its own: files stay, a cd, an exported variable or an activated environment "
+                         "end with the call.",
                          VmExecArgs, self.exec, activity=self._exec_activity, reports=True),
             ReadOnlyTool("vm_install_packages", "Install Ubuntu packages with apt in your workspace (you have no sudo). "
                          "For Python packages use pip or uv yourself, for Node npm in your project.",
                          VmInstallPackagesArgs, self.install, activity=self._install_activity, reports=True),
             ReadOnlyTool("vm_read_file", "Read a text file in your workspace by lines.", VmReadFileArgs, self.read,
                          activity=self._path_activity, reports=True),
-            ReadOnlyTool("vm_write_file", "Write a text file in your workspace (creates folders, replaces the file).",
+            ReadOnlyTool("vm_write_file", "Write a text file in your workspace (creates folders; replaces the file, "
+                         f"or adds to its end with append). At most {WRITE_CHARS:,} characters per call.",
                          VmWriteFileArgs, self.write, argument_limit=TOOL_ARGUMENT_CHARS,
                          activity=self._path_activity, reports=True),
             ReadOnlyTool("vm_edit_file", "Change a text file in your workspace by replacing exact text: old_string must "
@@ -1460,9 +1468,17 @@ class VMTools:
                   "duration_ms": int(outcome.seconds * 1000), "cwd": cwd,
                   "stdout": output.for_model("stdout"), "stderr": output.for_model("stderr")}
         if outcome.timed_out:
-            result["note"] = (VM_DAY_CUT.format(what="command", seconds=timeout)
-                              if day is not None and timeout >= int(day)
-                              else f"The command was stopped after its time limit of {timeout} seconds.")
+            asked = min(args.timeout_seconds, EXEC_TIMEOUT_MAX)
+            result["note"] = (
+                VM_DAY_CUT.format(what="command", seconds=timeout) if day is not None and timeout >= int(day)
+                # Shorter than asked for: what was left of the message's time (_timeout).
+                else f"The command was stopped after {timeout} seconds, when this message's time for commands "
+                     "ran out." if timeout < asked
+                else f"The command was stopped after its time limit of {timeout} seconds. timeout_seconds takes "
+                     f"up to {EXEC_TIMEOUT_MAX}; what needs longer runs with vm_start_process."
+                if timeout < EXEC_TIMEOUT_MAX
+                else f"The command was stopped after {timeout} seconds, the longest a command may run. What "
+                     "needs longer runs with vm_start_process.")
         report({**output.shown(), "exit_code": outcome.exit_code, "timed_out": outcome.timed_out,
                 "duration_ms": result["duration_ms"]})
         return self.session.announce(result)
@@ -1568,9 +1584,9 @@ class VMTools:
         path = vm_path(args.path, self.session.dir)
         self._notes_kept(path)
         size = self._provider("write", lambda: self.session.backend.write_file(
-            self.session.name, path, args.content.encode("utf-8")))
+            self.session.name, path, args.content.encode("utf-8"), **({"append": True} if args.append else {})))
         report({"bytes": size})
-        return self.session.announce({"path": path, "bytes": size})
+        return self.session.announce({"path": path, "bytes": size, **({"appended": True} if args.append else {})})
 
     def edit(self, args, *, cancellation, report=None):
         """Exact replacement on the file's bytes: everything else, line

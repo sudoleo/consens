@@ -431,8 +431,9 @@ class VMBackend:
         VMFileRefused where the agent's user may not read."""
         raise NotImplementedError
 
-    def write_file(self, name, path, data, *, agent=True):
-        """Write ``data`` (creating parent folders); returns its size."""
+    def write_file(self, name, path, data, *, agent=True, append=False):
+        """Write ``data`` (creating parent folders); returns the file's size.
+        ``append`` (the agent's writes only): add it to the file's end."""
         raise NotImplementedError
 
     def checkpoint(self, name, comment):
@@ -511,6 +512,9 @@ READ_SCRIPT = ('[ -e "$1" ] || exit 44; [ -d "$1" ] && exit 45; [ -r "$1" ] || e
                'exec head -c "$2" -- "$1"')
 WRITE_SCRIPT = ('[ -d "$1" ] && exit 45; mkdir -p -- "$(dirname -- "$1")" 2>/dev/null || exit 46; '
                 'cat > "$1" 2>/dev/null || exit 46; stat -c %s -- "$1"')
+# The same, added to the file's end (vm_write_file with append); the size it
+# prints is the whole file's.
+APPEND_SCRIPT = WRITE_SCRIPT.replace('cat > "$1"', 'cat >> "$1"')
 # A folder the agent made read-only (chmod -R a-w, Go's module cache) gets
 # its write bits back first: rm alone failed, and a chat's deletion retried
 # for ever. Its read and search bits too (chmod -R 644
@@ -677,9 +681,12 @@ class SpritesBackend(VMBackend):
             logging.warning("Agent VM request failed operation=read category=%s", safe_exception(exc))
             raise VMUnavailable("read: no connection") from None
 
-    def write_file(self, name, path, data, *, agent=True):
+    def write_file(self, name, path, data, *, agent=True, append=False):
+        if append and not agent:
+            raise ValueError("Only the agent's writes append.")
         if agent:
-            code, out = self._collect(name, agent_argv(["bash", "-c", WRITE_SCRIPT, "write", path], FILE_SECONDS),
+            script = APPEND_SCRIPT if append else WRITE_SCRIPT
+            code, out = self._collect(name, agent_argv(["bash", "-c", script, "write", path], FILE_SECONDS),
                                       limit=64, input=bytes(data))
             error = _file_error(code, path)
             if error is not None:

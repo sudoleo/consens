@@ -52,7 +52,7 @@ class Converter(VMBackend):
             raise VMFileMissing(path)
         return self.files[path][:limit], True
 
-    def write_file(self, name, path, data, *, agent=True):
+    def write_file(self, name, path, data, *, agent=True, append=False):
         assert agent is False
         self.files[path] = data
         return len(data)

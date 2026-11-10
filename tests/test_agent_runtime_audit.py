@@ -149,7 +149,8 @@ def test_a_turn_that_ends_by_itself_has_no_wrap_up(store, fake_vm):
 def test_the_limit_fact_names_each_limit():
     loop = type("Loop", (), {"_turn_seconds": lambda self: 7200, "_turn_steps": lambda self: 200})()
     fact = agent_delegation.DelegationLoop._limit_fact
-    assert fact(loop, agent_delegation.TURN_TIME_LIMIT)[0] == "It reached its time limit (120 minutes per message)."
+    assert fact(loop, agent_delegation.TURN_TIME_LIMIT)[0] == (
+        "Its time is nearly used up (120 minutes per message, the time its answer and the review of it need included).")
     assert "allowance" in fact(loop, agent_delegation.TURN_ALLOWANCE_LIMIT)[1]
     for reason in agent_delegation.WRAP_UP_REASONS:
         text, then = fact(loop, reason)
@@ -287,9 +288,11 @@ def test_the_calls_of_a_step_run_in_order_and_a_fifth_gets_a_result(store, fake_
     assert found["call_0_4"] == {"error": agent_delegation.CALL_OVER_LIMIT}
     assert [ran(fake_vm, command) for command in commands] == [True, True, True, True, False]
     assert every_call_answered(loop)
-    # The prompt says what holds, as a fact.
+    # The prompt says what holds, as a fact, in every chat (not only with the workspace).
+    from app.services.prompt_defaults import AGENT_AUDIT_ANSWER_SECTION
     words = ["", "one", "two", "three", "four"]
-    assert f"up to {words[agent_delegation.TOOL_CALLS_PER_STEP]}." in AGENT_VM_PROMPT
+    assert f"A step runs up to {words[agent_delegation.TOOL_CALLS_PER_STEP]} tool calls" in AGENT_AUDIT_ANSWER_SECTION
+    assert "up to four" not in AGENT_VM_PROMPT
 
 
 def test_the_client_keeps_a_call_past_the_limit_without_its_arguments():

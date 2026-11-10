@@ -139,7 +139,14 @@ def requested(call):
         return None
     arguments = function.get("arguments")
     try:
-        args = AskUserArgs.model_validate(json.loads(arguments) if isinstance(arguments, str) else arguments)
+        value = json.loads(arguments) if isinstance(arguments, str) else arguments
+        if isinstance(value, dict):
+            # As the registry takes it (ToolRegistry.validate): Claude sends
+            # a list as its JSON text now and then, the tool then ran, no
+            # card opened and the result was "could not be asked right now".
+            from app.services.agent_tools import _decode_stringified
+            value = _decode_stringified(AskUserArgs, value, dict)
+        args = AskUserArgs.model_validate(value)
     except Exception:
         return None
     return " ".join(args.request.split()), args.browser, args.secret, list(args.choices)

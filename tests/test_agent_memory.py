@@ -852,3 +852,15 @@ def test_no_copy_promises_undo_under_a_finished_answer():
     assert "under your answer with Undo" not in agent_memory.AUDIT_MEMORY_WRITE_PROMPT
     assert "can undo it" in agent_memory.AUDIT_MEMORY_WRITE_PROMPT
     assert "Let Agent update memory" in agent_memory.AUDIT_MEMORY_READ_ONLY_PROMPT
+
+
+def test_malformed_changes_do_not_use_up_the_messages_changes(store):
+    """The message's changes are counted once they are well-formed: three
+    calls with a malformed change each answered "At most 12 memory changes
+    per message" with nothing saved."""
+    tools = agent_memory.MemoryTools(None, writable_snapshot(store), repository=repo(store))
+    malformed = [{"op": "add", "id": "m1a2b3c", "text": f"Fact {n}."} for n in range(agent_memory.MAX_CHANGES_PER_CALL)]
+    for _ in range(4):
+        with pytest.raises(ValueError, match="Nothing was saved"):
+            tools.apply(malformed)
+    assert tools.proposed == 0

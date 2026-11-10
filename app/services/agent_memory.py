@@ -884,7 +884,6 @@ class MemoryTools:
         with self.lock:
             if self.proposed + len(changes) > MAX_CHANGES_PER_TURN:
                 raise MemoryRefused("turn_limit", f"At most {MAX_CHANGES_PER_TURN} memory changes per message.")
-            self.proposed += len(changes)
         normalized = []
         try:
             for index, change in enumerate(changes):
@@ -892,6 +891,10 @@ class MemoryTools:
                     normalized.append(normalize_change(change, origin="agent"))
                 except AgentMemoryError as exc:
                     raise AgentMemoryError(exc.code, f"Change {index + 1}: {exc.message} Nothing was saved.") from None
+            # Counted once they are well-formed: three calls with a
+            # malformed change used up the message's changes with nothing saved.
+            with self.lock:
+                self.proposed += len(changes)
             loop = self.loop
             result = self.repository.apply(
                 loop.uid, normalized, origin="agent",

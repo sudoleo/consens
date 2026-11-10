@@ -478,7 +478,7 @@ def test_an_odd_id_or_an_oversized_call_still_completes_the_stream():
     assert first["id"] == "functions_double_0" and first["function"]["arguments"] == '{"number": 2}'
     assert second["id"].startswith("call_1_") and len(second["function"]["arguments"]) == 51
     # The registry refuses the oversized call with its limit: the model reads why.
-    with pytest.raises(ValueError, match="at most 2048 characters"):
+    with pytest.raises(ValueError, match="longer than the 2,048 characters"):
         client_registry([]).validate({"function": {"name": "double", "arguments": "x" * 2049}})
 
 
