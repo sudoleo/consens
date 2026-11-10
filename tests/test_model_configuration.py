@@ -635,12 +635,18 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertEqual(high["payload"]["reasoning"], {"effort": "high"})
 
     def test_muse_reasoning_is_pinned_low_because_it_cannot_be_disabled(self):
-        base = build_provider_payload(
-            "meta", question="q", system_prompt="s",
-            model_override=cfg.MUSE_BASE_MODEL, max_output_tokens=123,
-        )
-        self.assertEqual(base["api_model"], "meta/muse-glimmer-30b")
-        self.assertEqual(base["payload"]["reasoning"], {"effort": "low"})
+        # Ember's own default is "max"; Glimmer stays selectable.
+        for model, api_model in (
+            (cfg.MUSE_BASE_MODEL, "meta/muse-ember"),
+            (cfg.MUSE_GLIMMER_MODEL, "meta/muse-glimmer-30b"),
+        ):
+            with self.subTest(model=model):
+                payload = build_provider_payload(
+                    "meta", question="q", system_prompt="s",
+                    model_override=model, max_output_tokens=123,
+                )
+                self.assertEqual(payload["api_model"], api_model)
+                self.assertEqual(payload["payload"]["reasoning"], {"effort": "low"})
         # Muse Spark ist unter ZDR nicht bedienbar und damit nicht waehlbar;
         # seine Request-Policy bleibt fuer eine spaetere Wiederaufnahme stehen.
         self.assertNotIn(cfg.MUSE_PRO_MODEL, cfg.MODEL_CONFIGS)

@@ -131,6 +131,11 @@ class RegistryCoverageTests(unittest.TestCase):
             {"reasoning": {"effort": "low"}},
         )
         self.assertTrue(cfg.MODEL_CONFIGS[cfg.MUSE_BASE_MODEL].accepts_attachments)
+        # Ember is the base; open-weight Glimmer stays selectable.
+        self.assertEqual(cfg.MUSE_BASE_MODEL, "muse-ember")
+        self.assertIn(cfg.MUSE_GLIMMER_MODEL, meta.models)
+        self.assertNotIn(cfg.MUSE_BASE_MODEL, cfg.PREMIUM_MODELS)
+        self.assertNotIn(cfg.MUSE_GLIMMER_MODEL, cfg.PREMIUM_MODELS)
 
     def test_qwen_is_the_tenth_family_and_thinks_low(self):
         qwen = cfg.PROVIDERS["qwen"]

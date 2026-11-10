@@ -1041,7 +1041,7 @@ def _reasoning_admin_meta(data: dict) -> dict:
                     note = "Already low; no verified further reduction."
                 else:
                     note = "Existing behavior preserved; no verified savings control. Provider default is not an off switch."
-            if model in (cfg.MUSE_BASE_MODEL, cfg.MUSE_PRO_MODEL):
+            if model in (cfg.MUSE_BASE_MODEL, cfg.MUSE_GLIMMER_MODEL, cfg.MUSE_PRO_MODEL):
                 note = "Required reasoning; already low. Cannot be switched off."
             previews = {}
             for choice in ("existing", "economy"):

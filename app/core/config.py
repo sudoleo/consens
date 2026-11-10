@@ -211,13 +211,15 @@ KIMI_K3_MODEL = "kimi-k3"  # alte ID, migriert
 GLM_BASE_MODEL = "glm-5.3-flash"
 GLM_PRO_MODEL = "glm-5.3"
 # Meta Superintelligence Labs fuehrt seine Modelle bei OpenRouter unter
-# "meta/" als Muse-Reihe. Basis ist das offene, destillierte Glimmer 30B
-# (0,30/1,20 $ je Mio. Token), Pro das multimodale Spark 1.3 (1,25/4,25 $).
+# "meta/" als Muse-Reihe. Basis ist Ember (0,10/0,50 $ je Mio. Token, 1 Mio.
+# Kontext, liest auch PDFs), ohne offene Gewichte. Glimmer 30B (0,30/1,20 $)
+# bleibt als offenes Meta-Modell waehlbar. Pro ist Spark 1.3 (1,25/4,25 $).
 # Der billigere "muse-spark-1.3-contributor"-Tarif ist bewusst NICHT
 # aufgenommen: dort duerfen Prompts und Antworten in Metas Produkte
 # einfliessen, was der Zusage in Terms/Privacy widerspricht, dass kein
 # Anbieter Prompts sammelt (Routing data_collection=deny).
-MUSE_BASE_MODEL = "muse-glimmer-30b"
+MUSE_BASE_MODEL = "muse-ember"
+MUSE_GLIMMER_MODEL = "muse-glimmer-30b"
 MUSE_PRO_MODEL = "muse-spark-1.3"
 # Alibabas Qwen. Basis ist das offene, dichte
 # Qwen3.8 27B (0,04/1,35 $ je Mio. Token, Text und Bilder, 20 Anbieter, am
@@ -413,7 +415,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
         ),
         _provider(
             "meta", "Meta", "meta/", MUSE_BASE_MODEL, MUSE_PRO_MODEL,
-            {MUSE_BASE_MODEL, MUSE_PRO_MODEL},
+            {MUSE_BASE_MODEL, MUSE_GLIMMER_MODEL, MUSE_PRO_MODEL},
             dom_key="muse", title="Muse", short_label="Muse",
             icon="meta.svg", icon_class="mono-logo", citation_label="Meta Muse",
         ),
@@ -874,7 +876,8 @@ MODEL_LABEL_OVERRIDES = {
     KIMI_K3_MODEL: "Kimi K3",
     GLM_BASE_MODEL: "GLM 5.3 Flash",
     GLM_PRO_MODEL: "GLM 5.3",
-    MUSE_BASE_MODEL: "Muse Glimmer 30B",
+    MUSE_BASE_MODEL: "Muse Ember",
+    MUSE_GLIMMER_MODEL: "Muse Glimmer 30B",
     MUSE_PRO_MODEL: "Muse Spark 1.3",
     QWEN_BASE_MODEL: "Qwen3.8 27B",
     QWEN_PRO_MODEL: "Qwen3.8 Max Prime",
@@ -906,8 +909,10 @@ MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     GLM_PRO_MODEL: {"reasoning": {"effort": "low"}},
     # Muse denkt zwingend (OpenRouter meldet reasoning.mandatory=true); die
     # Modelle kennen kein Abschalten, nur einen Aufwand. "low" haelt die als
-    # Output abgerechneten Reasoning-Tokens klein.
+    # Output abgerechneten Reasoning-Tokens klein. Ember stuende ohne Eintrag
+    # auf seiner Vorgabe "max".
     MUSE_BASE_MODEL: {"reasoning": {"effort": "low"}},
+    MUSE_GLIMMER_MODEL: {"reasoning": {"effort": "low"}},
     MUSE_PRO_MODEL: {"reasoning": {"effort": "low"}},
     # Ebenso zwingend denkend (OpenRouter: mandatory, Standard "medium").
     OPENAI_OSS_MODEL: {"reasoning": {"effort": "low"}},

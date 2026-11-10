@@ -128,10 +128,11 @@ PROVIDER_IMAGE_SUPPORT = {
     "openai", "anthropic", "gemini", "grok", "kimi", "glm", "meta", "qwen",
     "xiaomi", "mistral",
 }
-# Meta steht bewusst nicht hier: Muse Spark 1.3 verarbeitet PDFs nativ, das
-# freie Muse Glimmer 30B nur Text und Bilder. Bis die PDF-Faehigkeit wie bei
-# Anhaengen auf Modellebene aufgeloest wird, bekommt die ganze Familie den
-# Text-Fallback (PDF-Extraktion) statt eines Blocks, den Glimmer ablehnt.
+# Meta steht bewusst nicht hier: Muse Ember und Spark 1.3 verarbeiten PDFs
+# nativ, das waehlbare Muse Glimmer 30B nur Text und Bilder. Bis die
+# PDF-Faehigkeit wie bei Anhaengen auf Modellebene aufgeloest wird, bekommt die
+# ganze Familie den Text-Fallback (PDF-Extraktion) statt eines Blocks, den
+# Glimmer ablehnt.
 # Qwen ebenso: Qwen3.8 27B und Max Prime lesen Text, Bilder und Video, keine PDFs.
 # MiMo V2.6 Flash/Pro ebenso (dazu Audio, das die App nicht anhaengt).
 # Mistral ebenso: Small 2603 liest nur Text und Bilder, nur Medium 3.5 Dateien.

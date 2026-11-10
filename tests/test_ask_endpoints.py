@@ -253,7 +253,7 @@ def test_ask_muse_serves_the_meta_family_and_refuses_the_zdr_less_spark():
 
     assert free.status_code == 200
     assert run.call_args.args[0].key == "meta"
-    # Glimmer liest Bilder, ist also kein Anhang-Sonderfall wie DeepSeek.
+    # Ember liest Bilder, ist also kein Anhang-Sonderfall wie DeepSeek.
     assert len(run.call_args.kwargs["attachments"]) == 1
     assert stale.status_code == 400
     assert run.call_count == 1

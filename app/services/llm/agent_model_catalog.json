@@ -544,6 +544,33 @@
         "is_moderated": false
       }
     },
+    "meta/muse-ember": {
+      "pricing": {
+        "prompt": "0.0000001",
+        "completion": "0.0000005",
+        "web_search": "0.0025",
+        "input_cache_read": "0.000000004",
+        "input_cache_write": "0.000000125"
+      },
+      "reasoning": {
+        "mandatory": true,
+        "supported_efforts": [
+          "max",
+          "xhigh",
+          "high",
+          "medium",
+          "low",
+          "minimal"
+        ],
+        "default_effort": "max"
+      },
+      "context_length": 1048576,
+      "top_provider": {
+        "context_length": 1048576,
+        "max_completion_tokens": 943718,
+        "is_moderated": true
+      }
+    },
     "meta/muse-glimmer-30b": {
       "pricing": {
         "prompt": "0.00000035",

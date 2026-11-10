@@ -10760,18 +10760,21 @@ Antworten mit 400 ab. Weniger als sechs bleibt wie bisher moeglich.
 Set = keines). DeepSeek bleibt mit Anhang stumm; bei GLM kann 5.3 Flash Anhänge
 lesen, GLM 5.3 ist text-only. Frontend und Backend prüfen deshalb das
 tatsächlich gewählte Modell (der Reasoning-Schalter tauscht keins). Meta
-liest beide Modelle Bilder (`PROVIDER_IMAGE_SUPPORT`), steht aber bewusst nicht
-in `PROVIDER_PDF_SUPPORT`: nur Muse Spark 1.3 verarbeitet PDFs nativ, das freie
-Muse Glimmer 30B nicht — die Familie bekommt deshalb den Text-Fallback.
+liest Bilder (`PROVIDER_IMAGE_SUPPORT`), steht aber bewusst nicht
+in `PROVIDER_PDF_SUPPORT`: Muse Ember und Spark 1.3 verarbeiten PDFs nativ, das
+wählbare Muse Glimmer 30B nicht — die Familie bekommt deshalb den Text-Fallback.
 
-**Meta nur mit Glimmer (seit 2026-10-08):** `meta/muse-spark-1.3` ist
-nicht wählbar. Sein einziger OpenRouter-Endpunkt („Meta“) steht nicht in
+**Meta ohne Spark:** Basis ist `meta/muse-ember` (0,10/0,50 $ je Mio., 1 Mio.
+Kontext, keine offenen Gewichte), `meta/muse-glimmer-30b` (offene Gewichte)
+bleibt wählbar. `meta/muse-spark-1.3` ist nicht wählbar. Sein einziger OpenRouter-Endpunkt („Meta“) steht nicht in
 `GET /api/v1/endpoints/zdr`, und ohne die 18+-Bestätigung des Kontos antwortet
 er vorher schon mit `403 … age_18plus`. Spark steht deshalb in
 `ZDR_UNAVAILABLE_MODEL_IDS`; die Familie hat kein wählbares Pro-Modell und
-keinen Alias `Meta-Pro`, der Pro-Judge fällt auf Glimmer zurück
+keinen Alias `Meta-Pro`, der Pro-Judge fällt auf das Basis-Modell zurück
 (`_BASE_PRO_JUDGE_BY_PROVIDER`). `meta/muse-glimmer-30b` läuft unter ZDR
-(Phala/DeepInfra/Together). Muse denkt zwingend, deshalb steht `reasoning.effort` fest auf `low` und ein
+(Phala/DeepInfra/Together). Muse denkt zwingend, deshalb steht `reasoning.effort`
+in `MODEL_REQUEST_CONFIG` fest auf `low` (Ember stünde sonst auf seiner Vorgabe
+`max`), und ein
 zu kleines `max_tokens` liefert nur Reasoning-Tokens und ein leeres Final
 (siehe `_responses_empty_result`). Der Contributor-Tarif
 `meta/muse-spark-1.3-contributor` ist bewusst nicht aufgenommen: Meta darf
