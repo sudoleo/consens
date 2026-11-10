@@ -50,6 +50,18 @@ describe("ConsensusDiagram", () => {
     expect(window.ConsensusDiagram.settled("flowchart LR\n  A --> B")).toBe(true);
   });
 
+  it("says its own words in the page's language, inside an answer nothing translates", async () => {
+    const german = { "Open diagram": "Diagramm öffnen", Diagram: "Diagramm" };
+    const { window, document } = loadScripts(["static/js/diagram-render.js"], {
+      body: '<div data-i18n-skip><pre><code class="language-mermaid">pie\n  "a": 1\n</code></pre></div>',
+      before(page) { page.App = { t: text => german[text] || text, attachments: { openStored() {} } }; },
+    });
+    window.ConsensusDiagram.render(document);
+    expect(document.querySelector(".md-diagram-open").getAttribute("aria-label")).toBe("Diagramm öffnen");
+    await window.ConsensusDiagram.request('pie\n  "a": 1').done;
+    await settle();
+  });
+
   it("answers once for a source, whatever asks", () => {
     const { window } = boot();
     const { request } = window.ConsensusDiagram;

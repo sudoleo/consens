@@ -317,6 +317,13 @@
   }
 
   // ---- A diagram's place -----------------------------------------------------
+  // The answer around a diagram is the model's and never translated, its
+  // attributes included (data-i18n-skip, i18n.js): the app's own words in
+  // it go through App.t here.
+  function say(text) {
+    return window.App && window.App.t ? window.App.t(text) : text;
+  }
+
   function sourceOf(place) {
     const code = place.querySelector(":scope > pre > code");
     return code ? code.textContent.replace(/\n$/, "") : "";
@@ -329,8 +336,6 @@
     if (figure) return figure;
     figure = document.createElement("div");
     figure.className = "md-diagram-figure";
-    // The answer's words are the model's (data-i18n-skip); these are ours.
-    figure.setAttribute("data-i18n-ui", "");
     const image = document.createElement("img");
     image.alt = "";
     // The picture viewer of /app (attachments.js) enlarges it; a public
@@ -340,14 +345,12 @@
       const open = document.createElement("button");
       open.type = "button";
       open.className = "md-diagram-open";
-      open.setAttribute("aria-label", "Open diagram");
+      open.setAttribute("aria-label", say("Open diagram"));
       open.disabled = true;
       open.append(image);
       open.addEventListener("click", () => {
         const shown = place._diagram;
-        // The viewer's title is a file's name, which nothing translates.
-        const title = shown && (shown.title || (window.App.t ? window.App.t("Diagram") : "Diagram"));
-        if (shown) viewer({ name: "diagram.svg", title, mime: "image/svg+xml", data: shown.data, trigger: open });
+        if (shown) viewer({ name: "diagram.svg", title: shown.title || say("Diagram"), mime: "image/svg+xml", data: shown.data, trigger: open });
       });
       figure.append(open);
     } else {
@@ -363,7 +366,7 @@
     const open = figure.querySelector(".md-diagram-open");
     if (open) open.disabled = false;
     place._diagram = result;
-    image.alt = result.title || "Diagram";
+    image.alt = result.title || say("Diagram");
     image.src = `data:image/svg+xml;base64,${result.data}`;
     setSize(place, result.width, result.height);
     place.dataset.drawn = theme;
