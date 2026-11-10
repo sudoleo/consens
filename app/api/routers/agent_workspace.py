@@ -598,7 +598,7 @@ async def workspace_view(websocket: WebSocket):
                     # The relay's setup may wait for one already running (the
                     # account's provisioning): that one's estimate stands.
                     if state == "setup" and agent_workspace.start_until(uid, ("browser",), besides=start) is None:
-                        start.phase("setup")
+                        start.phase("install")
                     elif state == "starting":
                         start.phase("chrome")
                     elif state in {"ready", "error"}:

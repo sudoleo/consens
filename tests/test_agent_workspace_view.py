@@ -20,6 +20,8 @@ from test_agent_runs import AUTH, UID, pending, store  # noqa: F401  (fixture)
 from test_agent_vm import _admin_allowance, fake_vm  # noqa: F401  (fixtures)
 
 NAME = agent_vm.workspace_name(UID)
+# What whoever waits for the browser of a VM made just now is told.
+NEW_VM_SECONDS = agent_workspace.START_SECONDS["setup"] + agent_workspace.START_SECONDS["install"]
 
 
 class Relay:
@@ -99,8 +101,10 @@ def test_the_view_signs_in_with_its_first_message_and_carries_vnc_both_ways(view
 
 def test_the_views_start_says_about_when_it_ends_and_ends_with_ready(view_api, fake_vm):
     """The view counts the browser's start down over its
-    skeleton (start-progress.js): a VM made just now needs its setup
-    (agent_workspace.START_SECONDS), and the relay's starting carries the
+    skeleton (start-progress.js): a VM made just now needs its setup and
+    then the browser's own installation (agent_workspace.START_SECONDS:
+    with the setup's time alone the bar stood at "Almost done…" for the
+    whole installation), and the relay's starting carries the
     estimate. Once ready, the start is over for everyone who waits."""
     from datetime import datetime, timezone
     client, _, _, _ = view_api
@@ -111,7 +115,7 @@ def test_the_views_start_says_about_when_it_ends_and_ends_with_ready(view_api, f
         assert agent_workspace.start_until(UID) is None
     assert [message["state"] for message in messages] == ["connecting", "starting", "ready"]
     left = (datetime.fromisoformat(messages[1]["until"]) - datetime.now(timezone.utc)).total_seconds()
-    assert 55 < left <= agent_workspace.START_SECONDS["setup"]
+    assert NEW_VM_SECONDS - 10 < left <= NEW_VM_SECONDS
     assert "until" not in messages[0] and "until" not in messages[2]
 
 
@@ -138,7 +142,7 @@ def test_the_view_counts_down_while_the_server_wakes_the_vm(view_api, fake_vm, m
         ws.receive_bytes()
     assert [message["state"] for message in messages] == ["connecting", "waking", "starting", "ready"]
     left = (datetime.fromisoformat(messages[1]["until"]) - datetime.now(timezone.utc)).total_seconds()
-    assert 55 < left <= agent_workspace.START_SECONDS["setup"]
+    assert NEW_VM_SECONDS - 10 < left <= NEW_VM_SECONDS
     assert messages[2]["until"] == messages[1]["until"]
 
 

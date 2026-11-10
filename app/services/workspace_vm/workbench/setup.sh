@@ -128,6 +128,24 @@ for shim in "$runtimes"/*; do
 done > /etc/profile.d/consens-pyenv.sh
 chmod 644 /etc/profile.d/consens-pyenv.sh
 
+# pyenv rehashes its shims after every `pip install` (its exec hook
+# pip-rehash) and stops where it cannot write them. They are root's, so for
+# the agent's user every installation that had worked ended with "pyenv:
+# cannot rehash" and exit 1, and `pip install x && python3 …` never reached
+# its second half (test Sprite 2026-11-10). pyenv reads hooks in
+# /etc/pyenv.d after its own: this one hands the command back to pip itself
+# where the rehash could only fail. The agent needs no shim: pip puts its
+# commands in ~/.local/bin, which is on its PATH.
+install -d -m 0755 /etc/pyenv.d/exec
+cat > /etc/pyenv.d/exec/consens-rehash.bash <<'HOOK'
+if [ -n "${PYENV_REHASH_REAL_COMMAND:-}" ] && [ ! -w "${PYENV_ROOT}/shims" ]; then
+  PYENV_COMMAND_PATH="$(pyenv-which "$PYENV_COMMAND")"
+  PYENV_BIN_PATH="${PYENV_COMMAND_PATH%/*}"
+  unset PYENV_REHASH_REAL_COMMAND
+fi
+HOOK
+chmod 644 /etc/pyenv.d/exec/consens-rehash.bash
+
 # Tools every workspace has: ripgrep and poppler-utils (pdftotext and the
 # like, for the PDFs the agent reads) from the Ubuntu mirrors, and Chrome,
 # Google's package. The browser the user shares with the agent runs it as

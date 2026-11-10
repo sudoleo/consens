@@ -617,17 +617,24 @@
   // "Detailed progress" (account setting detailed_progress).
   const detailed = () => App.userSettings?.get?.('detailed_progress') === true;
   // A step in the calm view's words: what it does, never a command, a path
-  // or a place on a page; a file by its name, a page by its site.
+  // or a place on a page; a file by its name, a page by its site, an
+  // installation by its packages: it takes up to a minute, and a line about
+  // the workspace itself reads as a workspace that takes that long to start.
   const calmTools = { vm_exec: 'Working in the workspace…', vm_start_process: 'Working in the workspace…',
-    vm_process_output: 'Working in the workspace…', vm_stop_process: 'Working in the workspace…',
-    vm_install_packages: 'Setting up the workspace…' };
+    vm_process_output: 'Working in the workspace…', vm_stop_process: 'Working in the workspace…' };
   const calmFiles = { vm_read_file: 'Reading “{file}”…', vm_write_file: 'Writing “{file}”…',
     vm_edit_file: 'Editing “{file}”…', vm_share_file: 'Sharing “{file}”…' };
   const calmBrowser = { read: 'Reading the page…', text: 'Reading the page…', find: 'Reading the page…',
     screenshot: 'Looking at the page…', download: 'Downloading a file…', upload: 'Uploading a file…' };
+  const CALM_PACKAGES_CHARS = 40;
   function calmStep(item) {
     if (starting(item)) return item.name === 'browser' ? 'Starting the browser…' : 'Starting the workspace…';
     if (calmTools[item.name]) return calmTools[item.name];
+    if (item.name === 'vm_install_packages') {
+      const packages = Array.isArray(item.packages) ? item.packages.join(', ') : '';
+      return packages && packages.length <= CALM_PACKAGES_CHARS ? App.t('Installing {packages}…', { packages })
+        : tools.vm_install_packages[1];
+    }
     if (calmFiles[item.name]) {
       const file = String(item.path || '').split(/[\\/]/).filter(Boolean).at(-1) || '';
       return file && file.length <= 60 ? App.t(calmFiles[item.name], { file }) : tools[item.name][1];

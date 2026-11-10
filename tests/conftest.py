@@ -81,11 +81,17 @@ def _no_workspace_provisioning(monkeypatch):
     ran on a thread of its own when it ended (every test's account is UID).
     No VM begins marked unresponsive (agent_vm.mark_unresponsive) either,
     no later probe of an earlier test runs into this one (agent_vm.watch),
-    and no account restored itself before (agent_workspace.heal_later)."""
+    and no account restored itself before (agent_workspace.heal_later).
+    The workspace's kit (agent_workspace.kit_later) is off the same way: it
+    runs commands of its own after a message, and no account's is done yet."""
     monkeypatch.setenv("AGENT_WORKSPACE_PROVISION", "off")
+    monkeypatch.setenv("AGENT_WORKSPACE_KIT", "off")
     from app.services import agent_vm, agent_workspace
     agent_workspace._starts.clear()
     agent_workspace._setup_locks.clear()
+    with agent_workspace._kits_lock:
+        agent_workspace._kits.clear()
+        agent_workspace._kits_running.clear()
     with agent_vm._contact_lock:
         agent_vm._unresponsive.clear()
         agent_vm._probe_began.clear()

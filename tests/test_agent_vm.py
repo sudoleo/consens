@@ -954,15 +954,17 @@ def test_installing_never_removes_a_package(store, fake_vm):
     refused, installed = results(loop)
     assert "no apt package name" in refused["error"]
     assert installed["packages"] == ["g++", "python3.12-venv"] and installed["exit_code"] == 0
-    [command] = [c for c in fake_vm.server if "apt-get install" in c]
-    assert command.endswith("apt-get install -y -q --no-remove -- g++ python3.12-venv")
+    [command] = [c for c in fake_vm.server if " install " in c]
+    assert command.endswith("install -y -q --no-remove -- g++ python3.12-venv")
     # The user's browser runs on the same computer: no
     # removal through a conflict either (-y would agree to it), and each
     # name only as a package apt knows, never as a pattern (e.e).
     assert "--no-remove" in command
-    check = command[command.index("known=$(apt-cache pkgnames --all-names"):command.index("apt-get install")]
+    check = command[command.index("known=$(apt-cache pkgnames --all-names"):command.index(" install ")]
     assert "for name in g++ python3.12-venv; do" in check and 'grep -qxF -- "$name"' in check
     assert "exit 100" in check
+    # The workspace's kit may be installing in the background: both apt-get wait for the other.
+    assert command.count("apt-get -o DPkg::Lock::Timeout=120 ") == 2
 
 
 def test_an_install_cut_off_before_is_finished_before_the_next_one(store, fake_vm):
@@ -972,8 +974,8 @@ def test_an_install_cut_off_before_is_finished_before_the_next_one(store, fake_v
     office VM's do it for themselves)."""
     loop = vm_loop(store, Agent([[("vm_install_packages", {"packages": ["jq"]})]]))
     list(loop.run())
-    [command] = [c for c in fake_vm.server if "apt-get install" in c]
-    assert command.index("dpkg --configure -a") < command.index("apt-get install")
+    [command] = [c for c in fake_vm.server if " install " in c]
+    assert command.index("dpkg --configure -a") < command.index(" install ")
 
 
 def test_the_same_command_may_run_again(store, fake_vm):

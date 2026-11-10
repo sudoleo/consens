@@ -5844,7 +5844,9 @@ Detailed progress) baut `renderActivity` statt der vollen Live-Absätze nur
 eine Zeile `calm-status` (bis 2026-11-04 darunter `calm-thought` als dünner,
 eingerückter Untertitel; Max: „passt da nicht hin“): in Alltagsworten, was der Agent
 gerade tut (`calmStep`: Arbeitsplatz-Befehle und Prozesse „Working in the
-workspace…“, Pakete „Setting up the workspace…“, Dateien mit Namen ohne Pfad
+workspace…“, Pakete bei ihrem Namen „Installing ffmpeg…“ (seit 2026-11-10;
+vorher „Setting up the workspace…“, was sich wie ein langsamer Start las),
+Dateien mit Namen ohne Pfad
 „Writing “snake.js”…“, Browser nach Aktion ohne Ref/Koordinate, eine Seite mit
 ihrem Host; andere Werkzeuge in ihren bisherigen Worten), und solange kein
 Schritt läuft, statt dessen der neueste Gedanke seit dem letzten Schritt
@@ -6826,8 +6828,13 @@ nach der Gegenprüfung am selben Tag zurückgenommen). Seit 2026-11-02
 richtet die erste Nachricht eines Kontos ohne Arbeitsplatz die VM im
 Hintergrund ein und startet Chrome einmal (`agent_workspace.provision` aus
 `routers/agent.py`, Notaus `AGENT_WORKSPACE_PROVISION=off`); jeder Start
-wartet auf ein laufendes Setup (`agent_workspace.setup_lock`). Wartende Schritte melden `starting_until`
-(`agent_workspace.Start`/`start_until`, Schätzung `START_SECONDS`, seit 2026-11-06 aus Browser- und Werkbank-Starts, `START_KINDS`), die
+wartet auf ein laufendes Setup (`agent_workspace.setup_lock`). Seit 2026-11-10
+bekommt jeder Arbeitsplatz im Hintergrund eine kleine Grundausstattung
+(`KIT_APT`, `KIT_PYTHON`: ffmpeg und neun Python-Pakete; `kit_later` nach der
+Bereitstellung und nach jeder Nachricht mit Werkbank, `install_kit`,
+`KIT_CHECK`; Notaus `AGENT_WORKSPACE_KIT=off`; `docs/agent-mode.md`,
+„Grundausstattung“), kein Start wartet darauf. Wartende Schritte melden `starting_until`
+(`agent_workspace.Start`/`start_until`, Schätzung `START_SECONDS`, seit 2026-11-06 aus Browser- und Werkbank-Starts, `START_KINDS`; seit 2026-11-10 mit der Installation des Browsers nach dem Setup eines neuen Rechners, die nur zählt, wer auf den Browser wartet: `Start.phase(…, then=…)`, `Start.next`, `BROWSER_PHASES`), die
 Live-Ansicht `until` (auch `waking` während des Weckens, `_waking`); `start-progress.js` (`App.startProgress`) zeigt daraus
 Balken und Restzeit (seit 2026-11-06 auf der Uhr des Servers, die der Date-Header der Agent-Antwort nennt, `serverDate`), seit 2026-11-04 darüber den echten Schritt der Phase (`steps`, Live-Ansicht `STEPS`, Chat `START_STEPS`). Das Bild der Live-Ansicht kommt seit 2026-11-02 von TigerVNCs X-Server
 (`display.sh`, continuous updates, 30 Bilder/s statt rund 13 bei x11vnc;
@@ -10612,6 +10619,10 @@ alte Gemini-ADC-JSON ist entfernt.
   eines Kontos ohne Arbeitsplatz richtet beide VMs im Hintergrund ein; `off` =
   Notaus, VMs erst beim ersten Aufruf (`agent_workspace.provisioning`, seit
   2026-11-02; die Testsuite setzt `off`, `tests/conftest.py`).
+  `AGENT_WORKSPACE_KIT`: leer (Standard) = jeder Arbeitsplatz bekommt im
+  Hintergrund seine Grundausstattung; `off` = Notaus, nichts wird
+  nachinstalliert (`agent_workspace.kit_on`, seit 2026-11-10; die Testsuite
+  setzt `off`).
   GitHub für die VM (seit 2026-10-26): `GITHUB_APP_ID`, `GITHUB_APP_PRIVATE_KEY`,
   `GITHUB_APP_CLIENT_ID`, `GITHUB_APP_CLIENT_SECRET`, `GITHUB_APP_SLUG`, nur im
   Backend (`agent_github.py`, Einrichtung `docs/github-app-setup.md`); fehlt

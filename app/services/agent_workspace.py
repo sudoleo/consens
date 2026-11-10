@@ -62,6 +62,11 @@ talks to the agent; the first call that needs it waits only for what is
 left (setup_lock, the browser's own installation lock). The time a start
 still takes (START_SECONDS, start_until) is what the chat and the live view
 count down.
+
+The kit (KIT_APT, KIT_PYTHON): what the agent kept installing before it
+could work is on every workspace, installed in the background where it is
+missing (kit_later), after the account's provisioning and after a message
+that used the workbench. No start waits for it.
 """
 from __future__ import annotations
 
@@ -72,6 +77,7 @@ import json
 import logging
 from pathlib import Path
 import secrets
+import shlex
 import threading
 import time
 
@@ -167,13 +173,18 @@ VERSION = _version()
 
 
 # How long a start of a VM takes until its first call can run, by what it
-# has to do (seconds, Prod 2026-10-29 to 11-02): a new VM's setup with
-# Chrome (browser 61-63 s, workbench 57 s), the tools after a new version
-# (7 s), a VM waking from cold with Chrome starting (median 15 s after a
-# pause) or from warm (5 s), Chrome's start in the live view. Only what the
-# user is told: the chat's step and the live view count the time left down
-# (start_until); no start waits for them.
-START_SECONDS = {"setup": 65, "update": 10, "cold": 15, "warm": 5, "chrome": 8}
+# has to do (seconds): a new VM's setup with Chrome's package (setup.sh,
+# 55-56 s on two test Sprites 2026-11-10), the browser's own installation
+# at its first start with Chrome's start (install.sh and display.sh, about
+# 40 s: a new account's provisioning took 95-109 s in all, Prod 2026-11-07
+# to 11-09), the tools after a new version (7 s), a VM waking from cold with
+# Chrome starting (median 15 s after a pause) or from warm (5 s), Chrome's
+# start in the live view. Only what the user is told: the chat's step and
+# the live view count the time left down (start_until); no start waits for
+# them.
+START_SECONDS = {"setup": 65, "install": 45, "update": 10, "cold": 15, "warm": 5, "chrome": 8}
+# The phases only the browser goes through: the workbench is ready before them.
+BROWSER_PHASES = frozenset({"install", "chrome"})
 # A start whose end nobody said is forgotten this long after its estimate.
 START_FORGET_SECONDS = 600
 _starts: dict[tuple, dict] = {}
@@ -190,13 +201,27 @@ class Start:
     def __init__(self, uid, kind):
         self.key = (uid, kind)
 
-    def phase(self, phase):
-        """Runs until about START_SECONDS[phase] from now, never earlier than it said before."""
+    def phase(self, phase, then=None):
+        """Runs until about START_SECONDS[phase] from now, never earlier
+        than it said before. ``then``: the phase the browser still goes
+        through after this one (a new VM's setup is followed by the
+        browser's installation), which whoever waits for the browser is
+        told from the beginning (start_until) and ``next`` begins."""
         until = _now() + timedelta(seconds=START_SECONDS[phase])
+        whole = until + timedelta(seconds=START_SECONDS[then] if then else 0)
         with _starts_lock:
             starts = _starts.setdefault(self.key, {})
-            starts[self] = max(until, starts.get(self, until))
+            before = starts.get(self) or {}
+            starts[self] = {
+                "bench": None if phase in BROWSER_PHASES else max(until, before.get("bench") or until),
+                "browser": max(whole, before.get("browser") or whole), "then": then}
         return self
+
+    def next(self):
+        """The phase this one named as following begins; nothing where it named none."""
+        with _starts_lock:
+            then = ((_starts.get(self.key) or {}).get(self) or {}).get("then")
+        return self.phase(then) if then else self
 
     def end(self):
         with _starts_lock:
@@ -210,18 +235,22 @@ class Start:
 START_KINDS = ("browser", "workbench")
 
 
-def start_until(uid, kinds=START_KINDS, besides=None):
+def start_until(uid, kinds=START_KINDS, besides=None, *, bench=False):
     """About when the starts of the account's ``kinds`` still running end
-    (the latest), or None when none runs; ``besides``: a Start left out."""
+    (the latest), or None when none runs; ``besides``: a Start left out.
+    ``bench``: for a call that waits for the workbench alone, which the
+    browser's own phases (BROWSER_PHASES) do not hold up."""
     now = _now()
     latest = None
     with _starts_lock:
         for kind in kinds:
             starts = _starts.get((uid, kind)) or {}
-            for start, until in list(starts.items()):
-                if until + timedelta(seconds=START_FORGET_SECONDS) < now:
+            for start, said in list(starts.items()):
+                if said["browser"] + timedelta(seconds=START_FORGET_SECONDS) < now:
                     starts.pop(start, None)
-                elif start is not besides and (latest is None or until > latest):
+                    continue
+                until = said["bench" if bench else "browser"]
+                if start is not besides and until is not None and (latest is None or until > latest):
                     latest = until
     return latest
 
@@ -463,6 +492,8 @@ def mark_restored(store, uid, by="user"):
             tx.update(workspace, {"restores": int((snapshot.to_dict() or {}).get("restores") or 0) + 1,
                                   "restored_at": _now(), "restored_by": by})
     store._transaction(operation)
+    # The checkpoint may be from before the kit, or from the middle of its installation.
+    forget_kit(uid)
 
 
 def record_for_view(store, uid, *, provider):
@@ -517,7 +548,9 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
     with the network rules where nothing made it yet, its tools and the
     agent's user up to date (prepare), under the setup lock; its name.
     ``start`` (a Start) learns what the start has to do: the setup of a VM
-    made just now, else how it wakes (the provider's status, a hint only: a
+    made just now, which the browser's own installation follows (the
+    browser's caller says when that begins, Start.next), else how it wakes
+    (the provider's status, a hint only: a
     VM that just ran may say "cold" too). ``db``: an older browser VM of its
     own goes once the workspace is ready (retire_old_browser). ``timeout``: at
     most this long for a setup (prepare). A VM the gateway called
@@ -535,13 +568,22 @@ def open_workspace(vm, uid, cancellation=None, *, start=None, db=None, timeout=N
         try:
             # A VM made just now has no version yet: prepare sets its rules.
             created = vm.ensure(name)
+            if created:
+                # A VM made anew (after one deleted by hand) has no kit.
+                forget_kit(uid)
+
+            def setting_up():
+                if created:
+                    start.phase("setup", then="install")
+                else:
+                    start.phase("update")
             if start is not None:
-                phase = "setup" if created else {"cold": "cold", "warm": "warm"}.get(
-                    getattr(vm, "statuses", {}).get(name))
-                if phase:
+                phase = {"cold": "cold", "warm": "warm"}.get(getattr(vm, "statuses", {}).get(name))
+                if created:
+                    setting_up()
+                elif phase:
                     start.phase(phase)
-            prepare(vm, name, cancellation, timeout=timeout,
-                    on_setup=None if start is None else (lambda: start.phase("setup" if created else "update")))
+            prepare(vm, name, cancellation, timeout=timeout, on_setup=None if start is None else setting_up)
         except agent_vm.VMUnavailable as exc:
             if stuck is not None and agent_vm.unresponsive(exc):
                 agent_vm.watch(name, stuck)
@@ -687,17 +729,22 @@ def _provision(store, uid, factory):
     missing. A message that uses the workspace by then keeps the hold of its
     browser calls (the rest would shorten it to two minutes, and a longer
     pause of the agent would let the VM sleep under it); the message rests
-    at its own end (agent_browser._rest)."""
+    at its own end (agent_browser._rest), and the kit comes after it too
+    (kit_later), so its installation never runs beside the agent's own."""
     from app.services import agent_browser
     from app.services.llm.provider_runtime import ProviderCancellation
-    start, vm, began = Start(uid, "browser").phase("setup"), None, time.monotonic()
+    start, vm, began = Start(uid, "browser").phase("setup", then="install"), None, time.monotonic()
     try:
         vm = factory()
         name = open_workspace(vm, uid, db=store.db)
+        start.next()
         agent_browser.helper(vm, name, {"action": "warm"}, agent_browser.CALL_SECONDS, ProviderCancellation())
-        if not in_use(store, uid):
+        idle = not in_use(store, uid)
+        if idle:
             agent_browser.helper(vm, name, {"action": "rest"}, agent_browser.REST_SECONDS, ProviderCancellation())
         logging.info("Agent workspace provisioned seconds=%.1f", time.monotonic() - began)
+        if idle:
+            kit_later(uid, factory=factory)
     except Exception as exc:
         logging.warning("Agent workspace provision failed category=%s", safe_exception(exc))
     finally:
@@ -753,6 +800,149 @@ def prepare(vm, name, cancellation=None, timeout=None, on_setup=None):
         raise SetupFailed("setup")
     vm.write_file(name, VERSION_PATH, VERSION.encode(), agent=False)
     return True
+
+
+# The kit: what the agent kept installing before it could work. 14 of 46
+# messages with the workspace began with an installation (Prod 2026-10-20
+# to 11-10), and `apt install ffmpeg` took 39 s of one: to Max the
+# workspace seemed to start for a minute each time. So ffmpeg and the
+# Python packages for charts, pictures, tables, PDFs, Office files and a
+# page's check are on every workspace (AGENT_VM_PROMPT names them). Small
+# on purpose: a VM's disk is paid for each account for good (the kit is
+# 668 MB and installs in 49 s, test Sprite 2026-11-10), so what only a few
+# need stays the agent's own installation. The Python packages go where the
+# agent's own pip puts them, its site folder: that outlasts a new Python
+# patch release of the provider's image (/.sprite/languages is a layer of
+# its own), no root runs a package's code, and the agent updates them like
+# its own.
+KIT_APT = ("ffmpeg",)
+KIT_PYTHON = ("pillow", "numpy", "pandas", "matplotlib", "pypdf", "python-docx", "openpyxl", "python-pptx",
+              "playwright")
+# What of the kit is missing, as the agent's user sees it, one "apt <name>"
+# or "python <name>" a line: a package by dpkg's status, a Python package by
+# its metadata, which a wheel unpacks last, so a folder half written (a
+# checkpoint taken during the installation, then restored) counts as missing.
+_KIT_PYTHON_CHECK = ("import sys\nfrom importlib import metadata\nfor name in sys.argv[1:]:\n    try:\n"
+                     "        metadata.version(name)\n    except Exception:\n        print('python', name)\n")
+KIT_CHECK = ("for name in " + " ".join(KIT_APT) + "; do [ \"$(dpkg-query -W -f='${Status}' \"$name\" 2>/dev/null)\" "
+             "= 'install ok installed' ] || echo \"apt $name\"; done; python3 -c "
+             + shlex.quote(_KIT_PYTHON_CHECK) + " " + " ".join(KIT_PYTHON))
+# No cache: the wheels would lie in the agent's home a second time.
+KIT_PIP = "python3 -m pip install --user --quiet --no-input --no-cache-dir --disable-pip-version-check {packages}"
+KIT_CHECK_SECONDS = 60
+KIT_SECONDS = 300
+# An account's kit is looked at once per process (kit_later); one that
+# failed, again with a later message, this often at most. _kits: "done" or
+# the failures so far; _kits_running: whether the VM changed under a look
+# still running (forget_kit), whose outcome then says nothing.
+KIT_TRIES = 3
+_kits: dict[str, object] = {}
+_kits_running: dict[str, bool] = {}
+_kits_lock = threading.Lock()
+
+
+def kit_on():
+    """AGENT_WORKSPACE_KIT=off: no kit (the test suite's default, whose fake
+    VMs count their calls, and the switch should an installation ever harm
+    a workspace)."""
+    import os
+    return os.getenv("AGENT_WORKSPACE_KIT", "").strip().lower() != "off"
+
+
+def kit_missing(vm, name, cancellation=None):
+    """``(apt, python)``: the kit's packages the VM lacks (KIT_CHECK)."""
+    from app.services.llm.provider_runtime import ProviderCancellation
+    out = bytearray()
+
+    def keep(stream, chunk):
+        if stream == "stdout" and len(out) < 4096:
+            out.extend(chunk)
+    outcome = vm.exec(name, KIT_CHECK, cwd=HOME, timeout=KIT_CHECK_SECONDS, on_output=keep,
+                      cancellation=cancellation or ProviderCancellation())
+    if outcome.exit_code != 0:
+        raise agent_vm.VMUnavailable(f"kit check: exit {outcome.exit_code}")
+    said = [line.split() for line in out.decode("ascii", "replace").splitlines()]
+    return (tuple(name for name in KIT_APT if ["apt", name] in said),
+            tuple(name for name in KIT_PYTHON if ["python", name] in said))
+
+
+def install_kit(vm, name, cancellation=None):
+    """Installs what of the kit the VM lacks: the apt packages as root, the
+    way vm_install_packages does (its command never removes a package, so
+    the browser's Chrome stays), the Python packages as the agent's user.
+    Returns ``(apt, python)``, the names it installed; raises VMUnavailable
+    when a step failed, after it tried the other."""
+    from app.services.agent_vm_tools import INSTALL_COMMAND, INSTALL_TIMEOUT
+    from app.services.llm.provider_runtime import ProviderCancellation
+    cancellation = cancellation or ProviderCancellation()
+    apt, python = kit_missing(vm, name, cancellation)
+    failed = []
+    if apt:
+        outcome = vm.exec(name, INSTALL_COMMAND.format(packages=" ".join(apt)), cwd=agent_vm.SERVER_HOME,
+                          timeout=INSTALL_TIMEOUT, on_output=_quiet, cancellation=cancellation, agent=False)
+        if outcome.exit_code != 0:
+            failed.append(f"apt exit {outcome.exit_code}")
+    if python:
+        outcome = vm.exec(name, KIT_PIP.format(packages=" ".join(python)), cwd=HOME, timeout=KIT_SECONDS,
+                          on_output=_quiet, cancellation=cancellation)
+        if outcome.exit_code != 0:
+            failed.append(f"pip exit {outcome.exit_code}")
+    if failed:
+        raise agent_vm.VMUnavailable("kit: " + ", ".join(failed))
+    return apt, python
+
+
+def kit_later(uid, *, factory=None):
+    """The account's kit on a thread of its own, where this process has not
+    seen it complete yet: after the account's provisioning and after a
+    message that used the workbench (VMSession._finish), so the
+    installation runs beside no command of the agent's and no start waits
+    for it. Never while the server's safety rules have closed the
+    workspace. Returns the thread, or None."""
+    if not kit_on():
+        return None
+    with _kits_lock:
+        state = _kits.get(uid, 0)
+        if uid in _kits_running or state == "done" or state >= KIT_TRIES:
+            return None
+        _kits_running[uid] = False
+    thread = threading.Thread(target=_kit, args=(uid, factory or agent_vm.backend, state),
+                              name="agent-workspace-kit", daemon=True)
+    thread.start()
+    return thread
+
+
+def _kit(uid, factory, failures):
+    vm, done, began = None, False, time.monotonic()
+    try:
+        from app.services import workspace_guard
+        if workspace_guard.status(uid).closed:
+            return
+        vm = factory()
+        if vm is None:
+            return
+        apt, python = install_kit(vm, agent_vm.workspace_name(uid))
+        done = True
+        if apt or python:
+            logging.info("Agent workspace kit installed seconds=%.1f apt=%d python=%d", time.monotonic() - began,
+                         len(apt), len(python))
+    except Exception as exc:
+        logging.warning("Agent workspace kit failed category=%s", safe_exception(exc))
+    finally:
+        with _kits_lock:
+            if not _kits_running.pop(uid, False):
+                _kits[uid] = "done" if done else failures + 1
+        if vm is not None:
+            vm.close()
+
+
+def forget_kit(uid):
+    """The VM may lack its kit again (restored to a checkpoint, made anew):
+    the next message's end looks."""
+    with _kits_lock:
+        _kits.pop(uid, None)
+        if uid in _kits_running:
+            _kits_running[uid] = True
 
 
 # Makes the chat's folder (as the agent's user, with the folders the file

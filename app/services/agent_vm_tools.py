@@ -218,13 +218,17 @@ INSTALL_TIMEOUT = 300
 # otherwise take out Chrome, its screen or sudo, -y says yes to that) and
 # takes each name only as the name of a package apt knows (apt-get reads a
 # name it does not know that holds . or + as a pattern, e.g. e.e for
-# thousands of packages).
+# thousands of packages). It waits for another apt-get instead of failing
+# at its lock: the workspace's kit installs with the same command in the
+# background (agent_workspace.install_kit).
+INSTALL_LOCK = "-o DPkg::Lock::Timeout=120"
 INSTALL_COMMAND = ("sudo -n env DEBIAN_FRONTEND=noninteractive dpkg --configure -a </dev/null >/dev/null 2>&1; "
                    "find /var/lib/apt/lists -maxdepth 1 -name '*_Packages*' -mmin -1440 2>/dev/null | grep -q . || "
-                   "sudo -n apt-get update -qq; known=$(apt-cache pkgnames --all-names 2>/dev/null); "
+                   f"sudo -n apt-get {INSTALL_LOCK} update -qq; known=$(apt-cache pkgnames --all-names 2>/dev/null); "
                    "for name in {packages}; do printf '%s\\n' \"$known\" | grep -qxF -- \"$name\" || "
                    "{{ echo \"E: Unable to locate package $name\" >&2; exit 100; }}; done; "
-                   "sudo -n env DEBIAN_FRONTEND=noninteractive apt-get install -y -q --no-remove -- {packages}")
+                   f"sudo -n env DEBIAN_FRONTEND=noninteractive apt-get {INSTALL_LOCK} install -y -q --no-remove -- "
+                   "{packages}")
 
 _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 
@@ -692,7 +696,8 @@ class VMSession:
         before the answer (VM_NO_TIME; the job goes on), and never past Stop.
         Meanwhile the waiting call's step says about when the start of the
         account's ``kinds`` ends (``starting_until``,
-        agent_workspace.start_until), for the chat to count down."""
+        agent_workspace.start_until; the workbench's part of it, not the
+        browser's own installation after), for the chat to count down."""
         from app.services import agent_workspace
         left = self._answer_left()
         deadline = None if left is None else time.monotonic() + max(0.0, left - MIN_COMMAND_SECONDS)
@@ -702,7 +707,7 @@ class VMSession:
             while not job.done.wait(.1):
                 cancellation.raise_if_cancelled()
                 if report is not None:
-                    until = agent_workspace.start_until(self.loop.uid, kinds)
+                    until = agent_workspace.start_until(self.loop.uid, kinds, bench=True)
                     if until is not None and until != told:
                         told = until
                         report({"starting_until": until.isoformat()})
@@ -1130,6 +1135,10 @@ class VMSession:
                 self.backend.close()
             except Exception as exc:
                 logging.info("Agent VM backend close failed category=%s", safe_exception(exc))
+        # After the message, never beside its commands: the agent's own pip
+        # writes into the same folder as the kit's.
+        if self.started:
+            agent_workspace.kit_later(self.loop.uid, factory=self._factory)
 
     def _note_net(self):
         """The VM's network counters for the server's safety rules once the

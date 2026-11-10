@@ -327,7 +327,13 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       `workspace-view.test.mjs`.
 - [ ] Neues Konto und Start mit Restzeit (2026-11-02, echter Provider):
       Neues Konto anlegen, eine beliebige Frage an den Agenten stellen.
-      Render-Log binnen ~2 min: `Agent workspace provisioned browser=… workbench=…`.
+      Render-Log binnen ~2 min: `Agent workspace provisioned seconds=…`, etwa
+      eine Minute später `Agent workspace kit installed seconds=… apt=1
+      python=9` (Grundausstattung, 2026-11-10). Danach im Chat „Zeichne mir
+      ein Diagramm von 1 bis 10 als Bild“: Der Agent plottet ohne
+      `pip install`. Ein `pip install`, das er doch ausführt, endet mit Exit 0
+      und ohne „pyenv: cannot rehash“; die ruhige Zeile nennt eine
+      apt-Installation bei ihren Paketen („Installiert jq…“).
       Danach die Live-Ansicht öffnen: Das Bild kommt in wenigen Sekunden, ohne
       „Der Browser wird eingerichtet“. Dann „Öffne example.com“: Der erste
       Browser-Schritt braucht höchstens den Weckstart. Gegenprobe mit einem

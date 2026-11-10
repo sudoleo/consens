@@ -484,6 +484,8 @@ class BrowserTools:
                 status = getattr(backend, "statuses", {}).get(self.name)
                 if status:
                     session.cold["browser"] = status == "cold"
+                # A VM made just now: the helper installs the browser first.
+                start.next()
                 answer = self._helper({"action": "warm"}, CALL_SECONDS, cancellation, backend=backend)
                 # The counters before the agent's commands: in a new boot the
                 # first reading is only where counting starts (merge_net), so

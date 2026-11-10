@@ -1170,7 +1170,7 @@
   "A temporary chat isn’t saved to your chats.": "Ein temporärer Chat wird nicht in deinen Chats gespeichert.",
   "Saving is unavailable right now. Try again.": "Speichern ist gerade nicht möglich. Versuch es noch einmal.",
   "Working in the workspace…": "Arbeitet am Arbeitsplatz…",
-  "Setting up the workspace…": "Richtet den Arbeitsplatz ein…",
+  "Installing {packages}…": "Installiert {packages}…",
   "Reading “{file}”…": "Liest „{file}“…",
   "Writing “{file}”…": "Schreibt „{file}“…",
   "Editing “{file}”…": "Bearbeitet „{file}“…",

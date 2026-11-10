@@ -1259,8 +1259,17 @@ Datensatz die VM schon, richtet sie sie nur ein, wenn es sie nicht gibt
 Nachricht wartet auf ein laufendes Setup der Werkbank, statt ein zweites
 anzustoßen (`agent_workspace.setup_lock`); der Browser hat dafür seine Sperre
 auf der VM. Was ein Start noch braucht, schätzt der Server aus Prod-Werten
-(`START_SECONDS`: Setup 65 s, neue Version 10 s, kalt 15 s, warm 5 s, Chrome in
-der Ansicht 8 s; `Start`, `start_until`): Ein Schritt, der auf den Start wartet,
+(`START_SECONDS`: Setup 65 s, die Installation des Browsers danach 45 s, neue
+Version 10 s, kalt 15 s, warm 5 s, Chrome in der Ansicht 8 s; `Start`,
+`start_until`). Seit 2026-11-10 zählt ein neuer Rechner beides: Bis dahin
+stand für die ganze Bereitstellung die Zeit des Setups (65 s), gemessen
+brauchte sie 95–109 s (Prod 2026-11-07 bis 11-09; auf einer Test-Sprite Setup
+59 s, Browser 28 s), der Balken stand also eine halbe Minute bei „Gleich
+fertig…“. Wer auf den Browser wartet (Browser-Schritt, Live-Ansicht), bekommt
+von Anfang an Setup plus Installation genannt (`Start.phase("setup",
+then="install")`, `Start.next()` beginnt die zweite Phase); ein Schritt, der
+nur die Werkbank braucht, bekommt das Setup und nichts von den Phasen, die
+nur der Browser durchläuft (`BROWSER_PHASES`, `start_until(bench=True)`). Ein Schritt, der auf den Start wartet,
 meldet `starting_until` (`BrowserTools._await_warm`, `VMSession._wait`) und
 endet bei Stop, der Start läuft weiter (beim Warten auf den Browser seit
 2026-11-06; vorher wartete Stop bis zu `CALL_SECONDS` auf ihn), die
@@ -1281,6 +1290,59 @@ nie erfunden (`steps(list)`; Live-Ansicht `STEPS` je Zustand `waking`,
 Wiederherstellungspunkt der Nachricht). Die Aktivität zeigt „Arbeitsplatz geöffnet · <Aufgabe>“, die
 Prüfer sehen den Schritt im Arbeitsprotokoll. `open_workspace` bringt keinen
 Fremdinhalt (`OWN_CONTENT_TOOLS`).
+
+**Grundausstattung (seit 2026-11-10):** Max hatte den Eindruck, der
+Arbeitsplatz fahre jedes Mal eine Minute hoch. Gemessen startet er in einer
+Nachricht in 1–4 s (Median 1,2 s, 13 Starts in 7 Tagen); die Minute war
+`apt install ffmpeg` (39 s), und die ruhige Zeile nannte das „Setting up the
+workspace…“. 14 von 46 Nachrichten mit Arbeitsplatz (2026-10-20 bis 11-10)
+begannen mit einer Installation. Seitdem hat jeder Arbeitsplatz eine kleine
+Grundausstattung (`agent_workspace.KIT_APT`, `KIT_PYTHON`): ffmpeg und für
+`python3` pillow, numpy, pandas, matplotlib, pypdf, python-docx, openpyxl,
+python-pptx und playwright; `AGENT_VM_PROMPT` nennt sie als Fakt, ein Test
+hält Liste und Prompt zusammen. Bewusst klein: Der Speicher einer VM kostet
+je Konto dauerhaft (gemessen 668 MB, davon 441 MB Python-Pakete), was nur
+wenige brauchen, installiert der Agent weiter selbst.
+
+- **Kein Start wartet darauf.** `kit_later` installiert auf einem eigenen
+  Thread, was fehlt (`install_kit`): nach der Bereitstellung eines neuen
+  Kontos, wenn gerade keine Nachricht den Arbeitsplatz nutzt, und nach jeder
+  Nachricht, die die Werkbank benutzt hat (`VMSession._finish`). So bekommen
+  auch bestehende Arbeitsplätze sie, und sie läuft nie neben den Befehlen des
+  Agenten, dessen eigenes pip in denselben Ordner schreibt. Auf einer frischen
+  Test-Sprite dauerte sie 49 s, die Prüfung allein 0,6 s.
+- **Geprüft wird der Rechner, kein Marker.** `KIT_CHECK` fragt dpkg nach dem
+  Paketstatus und Python nach den Metadaten jedes Pakets, die ein Wheel
+  zuletzt entpackt. Ein halb geschriebenes Paket (Checkpoint mitten in der
+  Installation, dann Restore) gilt deshalb als fehlend. Pro Prozess und Konto
+  ein Blick, sobald sie vollständig war; nach einem Restore (`mark_restored`)
+  und bei einer neu angelegten VM wieder (`forget_kit`); eine fehlgeschlagene
+  Installation höchstens `KIT_TRIES`-mal je Prozess.
+- **Wohin.** ffmpeg installiert der Server als root mit demselben Befehl wie
+  `vm_install_packages` (`INSTALL_COMMAND`, entfernt nie ein Paket). Die
+  Python-Pakete installiert das pip des Agenten-Nutzers in dessen eigenen
+  Ordner (`~/.local`, ohne Cache): Der überlebt ein neues Python-Patch-Release
+  im Abbild des Anbieters (`/.sprite/languages` ist eine eigene Schicht des
+  Dateisystems), kein Paketcode läuft als root, und der Agent aktualisiert
+  sie wie seine eigenen.
+- **apt wartet aufeinander.** `INSTALL_COMMAND` trägt
+  `DPkg::Lock::Timeout=120`: Ein `vm_install_packages` des Agenten, während
+  die Grundausstattung installiert, wartet auf die Sperre, statt an ihr zu
+  scheitern (Test-Sprite: `bc` neben der Grundausstattung, Exit 0 nach 23 s).
+- **Notaus** `AGENT_WORKSPACE_KIT=off` (Standard der Testsuite).
+
+Im selben Zug zwei Korrekturen am Rand: Die ruhige Zeile nennt eine
+Installation jetzt bei ihren Paketen („Installing ffmpeg…“, ab 40 Zeichen
+„Installing packages…“; `calmStep`). Und `pip install` endet für den Agenten
+mit seinem eigenen Exit-Code: pyenv ruft nach jeder Installation
+`pyenv rehash` auf, das am root-eigenen Shim-Ordner scheitert, sodass jede
+gelungene Installation des Agenten-Nutzers mit „pyenv: cannot rehash“ und
+Exit 1 endete und `pip install x && python3 …` nie zur zweiten Hälfte kam
+(Test-Sprite 2026-11-10; in Prod seit der Agent als eigener Nutzer arbeitet).
+`setup.sh` legt dafür einen pyenv-Hook nach `/etc/pyenv.d/exec` (pyenv liest
+ihn nach seinen eigenen), der den Befehl dort an pip selbst zurückgibt, wo
+das Rehash nur scheitern kann. Der Nutzer des Anbieters, der die Shims
+schreiben darf, behält das Rehash.
 
 **Flüssigere Live-Ansicht (seit 2026-11-02):** Max fand die Bildrate zu niedrig.
 Gemessen an Test-Sprites mit einer scrollenden Seite, noVNC im Browser und

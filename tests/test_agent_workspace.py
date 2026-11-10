@@ -2048,3 +2048,247 @@ def test_starts_say_about_when_they_end_and_the_latest_counts():
     assert 14 <= left() <= 16
     waking.end()
     assert left() is None
+
+
+def test_a_new_vms_start_counts_the_browsers_installation_for_the_browser_alone():
+    """A new account's VM took 95-109 s until its browser ran (Prod
+    2026-11-07 to 11-09): the setup, then the browser's own installation.
+    The estimate said the setup's 65 s for all of it, so the bar stood at
+    "Almost done…" for the rest. Whoever waits for the browser is told both
+    from the beginning; a call that waits for the workbench is told the
+    setup, and nothing of the installation after it."""
+    uid = "new-vm-account"
+    now = datetime.now(timezone.utc)
+    setup, install = agent_workspace.START_SECONDS["setup"], agent_workspace.START_SECONDS["install"]
+    start = agent_workspace.Start(uid, "browser").phase("setup", then="install")
+
+    def left(**kwargs):
+        until = agent_workspace.start_until(uid, **kwargs)
+        return None if until is None else (until - now).total_seconds()
+    assert setup + install - 1 <= left() <= setup + install + 1
+    assert setup - 1 <= left(bench=True) <= setup + 1
+    # The setup is done: the browser installs, and the workbench waits for nothing.
+    start.next()
+    assert setup + install - 1 <= left() <= setup + install + 1
+    assert left(bench=True) is None
+    # A start that named nothing to follow goes on as it is.
+    waking = agent_workspace.Start(uid, "workbench").phase("cold").next()
+    assert 14 <= left(bench=True) <= 16
+    waking.end()
+    start.end()
+    assert left() is None
+
+
+def test_a_vm_made_just_now_names_the_installation_that_follows_its_setup(fake_vm):
+    """open_workspace knows the VM is new: its start says the setup and
+    what the browser needs after it; one that was there says how it wakes."""
+    said = []
+
+    class Start:
+        def phase(self, phase, then=None):
+            said.append((phase, then))
+    agent_workspace.open_workspace(fake_vm.backend(), UID, start=Start())
+    assert set(said) == {("setup", "install")}
+    del said[:]
+    agent_workspace.open_workspace(fake_vm.backend(), UID, start=Start())
+    assert ("setup", "install") not in said
+
+
+# --- The kit: what every workspace has before the agent asks ------------------------
+
+@pytest.fixture
+def kit(monkeypatch):
+    """On, as in Prod (the suite's default is off, conftest.py)."""
+    monkeypatch.setenv("AGENT_WORKSPACE_KIT", "on")
+
+
+def kit_answers(fake_vm, *lines, exit_code=0):
+    fake_vm.commands[agent_workspace.KIT_CHECK] = ([("stdout", "".join(line + "\n" for line in lines).encode())],
+                                                   exit_code, .1)
+
+
+def test_the_kit_installs_what_is_missing_apt_as_root_and_python_as_the_agent(fake_vm):
+    """14 of 46 messages with the workspace began with an installation, and
+    `apt install ffmpeg` took 39 s of one. The kit's packages are installed
+    where they are missing: ffmpeg with the command vm_install_packages uses
+    (it never removes a package), the Python packages by the agent's own
+    pip into its own folders, never as root."""
+    from app.services.agent_vm_tools import INSTALL_COMMAND
+    name = agent_vm.workspace_name(UID)
+    backend = fake_vm.backend()
+    backend.ensure(name)
+    kit_answers(fake_vm, "apt ffmpeg", "python pillow", "python playwright", "python not-in-the-kit")
+    assert agent_workspace.install_kit(backend, name) == (("ffmpeg",), ("pillow", "playwright"))
+    apt = INSTALL_COMMAND.format(packages="ffmpeg")
+    pip = agent_workspace.KIT_PIP.format(packages="pillow playwright")
+    assert [call[2] for call in fake_vm.calls if call[0] == "exec"] == [agent_workspace.KIT_CHECK, apt, pip]
+    # Only apt ran with the provider's rights.
+    assert fake_vm.server == [apt]
+    assert "--user" in pip and "--no-cache-dir" in pip and "sudo" not in pip
+    # A complete kit costs one look.
+    kit_answers(fake_vm)
+    calls = len(fake_vm.calls)
+    assert agent_workspace.install_kit(backend, name) == ((), ())
+    assert len(fake_vm.calls) == calls + 1
+
+
+def test_the_kits_check_asks_dpkg_and_the_packages_metadata():
+    """What is there, as the agent's user sees it: an apt package by dpkg's
+    status, a Python package by its metadata, which a wheel unpacks last, so
+    one half written (a checkpoint taken during the installation) is
+    installed again. The names are the kit's, and the prompt says them."""
+    from app.services import prompt_defaults
+    check = agent_workspace.KIT_CHECK
+    assert check.startswith("for name in ffmpeg; do ") and "dpkg-query -W -f='${Status}'" in check
+    assert "metadata.version(name)" in check and check.endswith(" " + " ".join(agent_workspace.KIT_PYTHON))
+    for name in (*agent_workspace.KIT_APT, *agent_workspace.KIT_PYTHON):
+        assert name in prompt_defaults.AGENT_VM_PROMPT
+    assert "pip install playwright" not in prompt_defaults.AGENT_VM_PROMPT
+
+
+def test_a_failed_step_of_the_kit_leaves_the_other_its_try(fake_vm):
+    from app.services.agent_vm_tools import INSTALL_COMMAND
+    name = agent_vm.workspace_name(UID)
+    backend = fake_vm.backend()
+    backend.ensure(name)
+    kit_answers(fake_vm, "apt ffmpeg", "python numpy")
+    fake_vm.commands[INSTALL_COMMAND.format(packages="ffmpeg")] = ([("stderr", b"E: no network\n")], 100, 1.0)
+    with pytest.raises(agent_vm.VMUnavailable) as failed:
+        agent_workspace.install_kit(backend, name)
+    assert str(failed.value) == "kit: apt exit 100"
+    assert agent_workspace.KIT_PIP.format(packages="numpy") in [call[2] for call in fake_vm.calls if call[0] == "exec"]
+    # A VM whose check does not run (its python3 gone) is a failure, not a complete kit.
+    kit_answers(fake_vm, exit_code=127)
+    with pytest.raises(agent_vm.VMUnavailable):
+        agent_workspace.install_kit(backend, name)
+
+
+def test_the_kit_is_looked_at_once_per_process_and_again_after_a_restore(store, fake_vm, kit, monkeypatch):
+    """kit_later: one look per process and account once it was complete; a
+    restore may have taken it away (a checkpoint from before, or from the
+    middle of its installation), so the next message's end looks again. One
+    that failed is tried with later messages, KIT_TRIES times at most."""
+    name = agent_vm.workspace_name(UID)
+    fake_vm.backend().ensure(name)
+    agent_workspace.ref(store.db, UID).set({"name": name})
+    kit_answers(fake_vm, "python pandas")
+    agent_workspace.kit_later(UID).join(5)
+    pip = agent_workspace.KIT_PIP.format(packages="pandas")
+    assert [call[2] for call in fake_vm.calls if call[0] == "exec"] == [agent_workspace.KIT_CHECK, pip]
+    assert agent_workspace.kit_later(UID) is None
+    agent_workspace.mark_restored(store, UID)
+    kit_answers(fake_vm)
+    agent_workspace.kit_later(UID).join(5)
+    assert [call[2] for call in fake_vm.calls if call[0] == "exec"].count(agent_workspace.KIT_CHECK) == 2
+    # It never makes a VM: one that is gone is only a failed look.
+    assert not [call for call in fake_vm.calls if call[0] == "ensure"][1:]
+    agent_workspace.forget_kit(UID)
+    kit_answers(fake_vm, exit_code=1)
+    for _ in range(agent_workspace.KIT_TRIES):
+        agent_workspace.kit_later(UID).join(5)
+    assert agent_workspace.kit_later(UID) is None
+    # Off is off.
+    agent_workspace.forget_kit(UID)
+    monkeypatch.setenv("AGENT_WORKSPACE_KIT", "off")
+    assert agent_workspace.kit_later(UID) is None
+
+
+def test_a_restore_during_the_kits_installation_asks_for_another_look(fake_vm, kit):
+    """The look that ran while the VM went back to a checkpoint says nothing
+    about the VM as it is now: it counts neither as done nor as failed, and
+    no second installation starts beside it."""
+    import threading
+    name = agent_vm.workspace_name(UID)
+    backend = fake_vm.backend()
+    backend.ensure(name)
+    entered, release = threading.Event(), threading.Event()
+
+    class Slow(type(backend)):
+        def exec(self, *args, **kwargs):
+            entered.set()
+            release.wait(5)
+            return super().exec(*args, **kwargs)
+    thread = agent_workspace.kit_later(UID, factory=lambda: Slow(fake_vm))
+    assert entered.wait(5)
+    assert agent_workspace.kit_later(UID) is None
+    agent_workspace.forget_kit(UID)
+    assert agent_workspace.kit_later(UID) is None
+    release.set()
+    thread.join(5)
+    assert UID not in agent_workspace._kits
+    agent_workspace.kit_later(UID).join(5)
+    assert agent_workspace._kits[UID] == "done"
+
+
+def test_the_kit_comes_after_the_provisioning_unless_a_message_uses_the_workspace(store, fake_vm, provisioning, kit,
+                                                                                    monkeypatch):
+    """A new account's VM gets its kit once its browser ran, in the
+    background. While a message uses the workspace the kit waits for that
+    message's end (VMSession._finish): the agent's own pip writes into the
+    same folder."""
+    from test_agent_vm import Agent, vm_loop
+    asked = []
+    monkeypatch.setattr(agent_workspace, "kit_later", lambda uid, factory=None: asked.append(uid))
+    agent_workspace.provision(store, UID).join(10)
+    assert asked == [UID]
+    name = agent_vm.workspace_name(UID)
+    loop = vm_loop(store, Agent())
+    agent_workspace.claim(store, UID, loop.chat_id, loop.turn_id, provider="fake")
+    del fake_vm.vms[name]
+    agent_workspace._provisioned.discard(UID)
+    agent_workspace.provision(store, UID).join(10)
+    assert asked == [UID]
+
+
+def test_a_message_that_used_the_workbench_brings_the_kit_at_its_end(store, fake_vm, monkeypatch):
+    """Workspaces from before the kit get it this way, and one restored or
+    made anew gets it back. After the message, on a thread of its own: no
+    start and no command of the agent's waits for it. A message that never
+    reached the workbench asks for nothing."""
+    from test_agent_vm import Agent, vm_loop
+    asked = []
+    monkeypatch.setattr(agent_workspace, "kit_later", lambda uid, factory=None: asked.append((uid, factory)))
+    loop = vm_loop(store, Agent([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    loop.vm_tools.session.closer.join(5)
+    assert asked == [(UID, loop.vm_tools.session._factory)]
+    del asked[:]
+    quiet = vm_loop(store, Agent(), request_id="two")
+    list(quiet.run())
+    if quiet.vm_tools.session.closer is not None:
+        quiet.vm_tools.session.closer.join(5)
+    assert asked == []
+
+
+def test_pip_ends_with_its_own_exit_code_where_pyenv_cannot_rehash(tmp_path):
+    """pyenv's exec hook pip-rehash swaps a wrapper in for pip that runs
+    `pyenv rehash` after an installation and stops where the shims folder
+    is not writable: for the agent's user every `pip install` that worked
+    ended with exit 1 (test Sprite 2026-11-10). setup.sh's hook in
+    /etc/pyenv.d runs after pyenv's own and gives the command back to pip
+    itself there; where the shims can be written nothing changes. In a real
+    bash."""
+    setup = agent_workspace.tool_files()["setup.sh"].decode()
+    begin = setup.index("cat > /etc/pyenv.d/exec/consens-rehash.bash <<'HOOK'\n")
+    hook = setup[begin:setup.index("\nHOOK\n", begin)].split("\n", 1)[1]
+    assert "install -d -m 0755 /etc/pyenv.d/exec" in setup[:begin]
+    assert "chmod 644 /etc/pyenv.d/exec/consens-rehash.bash" in setup[begin:]
+    found = shutil.which("bash")
+    if not found:
+        pytest.skip("no bash")
+    (tmp_path / "writable" / "shims").mkdir(parents=True)
+
+    def after(root, wrapped):
+        # pyenv-exec's state once pip-rehash.bash ran, then this hook sourced, as pyenv does.
+        script = ('pyenv-which() { echo "/versions/3.13/bin/$1"; }\n'
+                  f'PYENV_ROOT="{root}"\nPYENV_COMMAND=pip\nPYENV_COMMAND_PATH=/hooks/pip-rehash/pip\n'
+                  'PYENV_BIN_PATH=/hooks/pip-rehash\n'
+                  + ('PYENV_REHASH_REAL_COMMAND=pip\n' if wrapped else '')
+                  + hook + '\necho "$PYENV_COMMAND_PATH|$PYENV_BIN_PATH|${PYENV_REHASH_REAL_COMMAND:-}"\n')
+        return subprocess.run([found, "-euc", script], check=True, capture_output=True, text=True).stdout.strip()
+    # The agent's user: the shims are not its to write.
+    assert after((tmp_path / "missing").as_posix(), True) == "/versions/3.13/bin/pip|/versions/3.13/bin|"
+    # The provider's user: pyenv rehashes as before.
+    assert after((tmp_path / "writable").as_posix(), True) == "/hooks/pip-rehash/pip|/hooks/pip-rehash|pip"
+    # A command that is no installation was never wrapped.
+    assert after((tmp_path / "missing").as_posix(), False) == "/hooks/pip-rehash/pip|/hooks/pip-rehash|"

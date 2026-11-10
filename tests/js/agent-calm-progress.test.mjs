@@ -86,13 +86,33 @@ describe("the calm live view", () => {
     expect(status()).toBe("Using the browser…");
     step(5, { name: "browser", action: "find", status: "running", query: "Förderfähige Kosten" });
     expect(status()).toBe("Reading the page…");
-    step(6, { name: "vm_install_packages", status: "running", packages: ["ffmpeg"] });
-    expect(status()).toBe("Setting up the workspace…");
     // Steps outside the workspace keep their words.
-    step(7, { name: "web_search", status: "running" });
+    step(6, { name: "web_search", status: "running" });
     expect(status()).toBe("Searching the web…");
-    step(8, { name: "read_source", status: "running", host: "arxiv.org" });
+    step(7, { name: "read_source", status: "running", host: "arxiv.org" });
     expect(status()).toBe("Reading arxiv.org…");
+    activity.dispose(host);
+  });
+
+  it("names an installation by its packages, never as the workspace being set up", () => {
+    // `apt install ffmpeg` took 39 s under "Setting up the workspace…", and
+    // Max read it as a workspace that needs a minute to start.
+    const { activity, events, render, status, wait, host } = setup();
+    const step = (id, packages) => {
+      activity.receive(events, tool({ id: `completion:${id}:call/tool`, name: "vm_install_packages", status: "running",
+        packages }));
+      render();
+      wait(1300);
+    };
+    step(1, ["ffmpeg"]);
+    expect(status()).toBe("Installing ffmpeg…");
+    step(2, ["ffmpeg", "jq"]);
+    expect(status()).toBe("Installing ffmpeg, jq…");
+    // A long list stays one calm line.
+    step(3, ["libavcodec-dev", "libavformat-dev", "libswscale-dev", "libavutil-dev"]);
+    expect(status()).toBe("Installing packages…");
+    step(4, undefined);
+    expect(status()).toBe("Installing packages…");
     activity.dispose(host);
   });
 
