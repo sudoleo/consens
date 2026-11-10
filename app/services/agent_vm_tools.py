@@ -95,8 +95,13 @@ EXEC_TIMEOUT_MAX = 300
 # A command needs at least this long before the answer must start
 # (DelegationLoop.answer_time_left); with less left it is not started.
 MIN_COMMAND_SECONDS = 15
-# Per stream: the end the model reads, and the end kept while it runs.
+# Per stream: what the model reads of it, and the end kept while it runs.
+# Longer output comes with its beginning as well (MODEL_HEAD_CHARS of the
+# MODEL_STREAM_CHARS): the first compiler error, the head of a listing. With
+# the end alone that was lost, and nothing said how to get at it.
 MODEL_STREAM_CHARS = 12_000
+MODEL_HEAD_CHARS = 3_000
+HEAD_BYTES = 4 * MODEL_HEAD_CHARS
 CAPTURE_BYTES = 64 * 1024
 # The activity's view: both streams in arrival order, its end only.
 VIEW_CHARS = 2_000
@@ -369,6 +374,21 @@ def model_text(raw, total, stream):
     return f"[… {omitted:,} earlier bytes of {stream} omitted …]\n{text}" if omitted else text
 
 
+def model_ends(head, raw, total, stream):
+    """A command's stream for the model: all of it up to MODEL_STREAM_CHARS,
+    else its beginning (``head``, the stream's first bytes) and its end
+    (``raw``, its last ones), with what lies between counted and the way to
+    all of it said."""
+    whole, omitted = tail(raw, total, MODEL_STREAM_CHARS)
+    if not omitted:
+        return whole
+    start = clean(head.decode("utf-8", "replace")).rstrip("\ufffd")[:MODEL_HEAD_CHARS]
+    end, _ = tail(raw, total, MODEL_STREAM_CHARS - MODEL_HEAD_CHARS)
+    between = max(0, total - len(start.encode("utf-8")) - len(end.encode("utf-8")))
+    return (f"{start}\n[… {between:,} bytes of {stream} omitted here: its beginning is above, its end below. A "
+            f"command's whole output can go to a file (> out.txt 2>&1) and be read from there …]\n{end}")
+
+
 def file_mime(raw, name):
     """The type a shared file is stored with: pictures and PDFs by their
     bytes, other files by their name, never an image by its name alone."""
@@ -490,6 +510,8 @@ class _Output:
 
     def __init__(self):
         self.streams = {"stdout": bytearray(), "stderr": bytearray()}
+        # Each stream's first HEAD_BYTES (model_ends).
+        self.heads = {"stdout": bytearray(), "stderr": bytearray()}
         self.sizes = {"stdout": 0, "stderr": 0}
         self.view, self.view_size = bytearray(), 0
 
@@ -497,6 +519,9 @@ class _Output:
         buffer = self.streams[stream]
         buffer.extend(chunk)
         del buffer[:-CAPTURE_BYTES]
+        head = self.heads[stream]
+        if len(head) < HEAD_BYTES:
+            head.extend(chunk[:HEAD_BYTES - len(head)])
         self.sizes[stream] += len(chunk)
         self.view.extend(chunk)
         del self.view[:-VIEW_BYTES]
@@ -507,7 +532,7 @@ class _Output:
         return {"output": text, "output_truncated": bool(omitted)}
 
     def for_model(self, stream):
-        return model_text(bytes(self.streams[stream]), self.sizes[stream], stream)
+        return model_ends(bytes(self.heads[stream]), bytes(self.streams[stream]), self.sizes[stream], stream)
 
 
 class _Job:
@@ -1191,7 +1216,8 @@ class VMTools:
             self.processes = ProcessTools(self)
         return [self._guarded(tool) for tool in [
             ReadOnlyTool("vm_exec", "Run a shell command in your workspace (bash, in this chat's folder by default). "
-                         "Returns stdout, stderr (their ends when long), exit code and duration. Each call is a "
+                         "Returns stdout, stderr (their beginning and end when long), exit code and duration. "
+                         "Each call is a "
                          "shell of its own: files stay, a cd, an exported variable or an activated environment "
                          "end with the call.",
                          VmExecArgs, self.exec, activity=self._exec_activity, reports=True),

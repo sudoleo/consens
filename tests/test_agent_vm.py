@@ -2301,3 +2301,28 @@ def test_the_shell_facts_stand_in_the_tools_description_and_an_install_may_be_ca
     assert "vm_start_process" in timeout["description"] and "at most 300" in timeout["description"]
     # apt goes on where it stopped: the same call again is no repetition.
     assert "vm_install_packages" in REPEATABLE_TOOLS
+
+
+def test_long_command_output_reaches_the_model_with_its_beginning_and_its_end(store, fake_vm):
+    """The end alone lost the first compiler error and the head of a
+    listing, and nothing said how to get at them."""
+    from app.services.agent_vm_tools import MODEL_HEAD_CHARS, MODEL_STREAM_CHARS, _Output, model_ends
+    output = _Output()
+    output.add("stdout", b"first error: missing semicolon\n")
+    for _ in range(40):
+        output.add("stdout", b"y" * 2_000 + b"\n")
+    output.add("stdout", b"the end\n")
+    text = output.for_model("stdout")
+    assert text.startswith("first error: missing semicolon\n") and text.endswith("the end\n")
+    assert len(text) < MODEL_STREAM_CHARS + 400
+    marker = text.split("[… ")[1].split(" …]")[0]
+    assert "bytes of stdout omitted here" in marker and "> out.txt 2>&1" in marker
+    # What lies between is counted: beginning + omitted + end is the whole stream.
+    start, end = text.split("\n[… ")[0], text.split(" …]\n")[1]
+    assert len(start) <= MODEL_HEAD_CHARS
+    assert int(marker.split(" bytes")[0].replace(",", "")) == output.sizes["stdout"] - len(start) - len(end)
+    # Output that fits stays as it is, without a marker.
+    assert model_ends(b"short\n", b"short\n", 6, "stderr") == "short\n"
+    short = _Output()
+    short.add("stderr", b"warning\n")
+    assert short.for_model("stderr") == "warning\n" and short.for_model("stdout") == ""

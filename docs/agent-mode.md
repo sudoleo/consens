@@ -4991,6 +4991,11 @@ Audit der Werkzeugverträge; alles Fakten, keine Verhaltensvorgaben:
   Environment enden mit dem Aufruf), `timeout_seconds` nennt Standard,
   Maximum und `vm_start_process`; eine Zeitüberschreitung sagt, wie es
   weitergeht, und wann die Restzeit der Nachricht die Grenze war.
+  Lange Ausgabe kommt mit Anfang und Ende beim Modell an
+  (`agent_vm_tools.model_ends`: die ersten `MODEL_HEAD_CHARS` = 3.000 und die
+  letzten 9.000 Zeichen je Stream, dazwischen die Zahl der ausgelassenen
+  Bytes und der Weg zum Ganzen, `> out.txt 2>&1`); nur mit dem Ende ging der
+  erste Compilerfehler verloren.
   `vm_write_file` hat `append` (`agent_vm.APPEND_SCRIPT`): Eine Datei, die
   nicht in einen Aufruf passt, entsteht in Teilen. `vm_install_packages` ist
   wiederholbar (`REPEATABLE_TOOLS`): apt macht beim selben Aufruf weiter.
