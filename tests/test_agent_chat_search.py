@@ -86,6 +86,13 @@ def test_an_opened_chat_stays_within_its_bound(store, monkeypatch):
         {"position": 2, "status": "completed", "question": "Frage zwei", "assistant_response": "y" * 40})
     opened = search(loop, chat_id=long)
     assert len(opened["messages"]) == 1 and opened["more"].startswith("The chat goes on")
+    # Where to read on is said, and the next part comes from there: the part
+    # a search matched (the latest question) was out of reach before.
+    assert "from_message 1 returns the next part" in opened["more"]
+    rest = search(loop, chat_id=long, from_message=1)
+    assert rest["messages"] == [{"question": "Frage zwei", "answer": "y" * 40}] and rest["from_message"] == 1
+    assert "more" not in rest
+    assert "ends before" in search(loop, chat_id=long, from_message=5)["more"]
 
 
 @pytest.mark.parametrize("which,message", [("google", "Google data"), ("current", "current chat"),

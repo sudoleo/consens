@@ -5009,7 +5009,10 @@ Audit der Werkzeugverträge; alles Fakten, keine Verhaltensvorgaben:
   enthalten (`parts_with_these_words`; bei 0 kamen die ersten Teile der Datei
   wie Treffer zurück), und eine unbekannte id nennt die Dateien des Chats.
   `search_chats` sagt in Feldbeschreibung und Kein-Treffer-Hinweis, dass
-  jedes Wort vorkommen muss.
+  jedes Wort vorkommen muss, und liest einen langen Chat in Teilen weiter
+  (`from_message`; das Ergebnis nennt die nächste Position). Vorher gab es
+  nur den Anfang (24.000 Zeichen), und die Stelle, die eine Suche über die
+  letzte Frage gefunden hatte, war nicht erreichbar.
 
 Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
 (`ToolRegistry.validate`) die Änderung: unbekanntes Tool mit Liste der
