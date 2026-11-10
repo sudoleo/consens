@@ -30,6 +30,12 @@ rests, not the network (quiet). A failure names its cause from Playwright's
 log and the page in front (on_failure). The page's head says whether the
 browser holds cookies for its address (yes or no, never which).
 
+What a page asks during a call comes in its answer too (ASKED): a dialog
+(alert, confirm, prompt, leaving the page) is answered at once, a confirm or
+prompt with Cancel unless the request says accept_dialog (answer_dialog),
+and a file picker a click opens stays empty; upload, also on the button that
+opens one, chooses its file there.
+
 Two things the agent never does here: type into a password field (the user
 signs in in the live view), and act while the user has taken over the
 browser (CONTROL, written by consens.io's server, which also holds the
@@ -188,6 +194,11 @@ PREVIEW_TRIES = ((PREVIEW_WIDTH, PREVIEW_QUALITY), (600, 35), (480, 40))
 # with the reason (failure_text). Not longer: an element a layer covered or
 # a list hid kept the agent waiting for nothing.
 ACT_MS = 3_000
+# upload on what is no file field clicks it and waits this long for the file
+# picker it opens: it comes while the click's handler runs, or a moment
+# later from a menu. A dialog's text in the answer, at most DIALOG_CHARS.
+CHOOSER_SECONDS = 1.0
+DIALOG_CHARS = 300
 
 # What an element says of itself, as read lists it, without what is typed
 # into it. read keeps it on the element
@@ -467,6 +478,15 @@ FIND_JS = r"""
 
 IS_SECRET_JS = r"""el => el.type === 'password' || /password/i.test(el.autocomplete || '') ||
   /one-time-code/i.test(el.autocomplete || '')"""
+
+# A file field, also through the label around the element, which
+# set_input_files takes the same way. Sites mostly hide it (read lists no
+# hidden element) behind a button that opens the file picker.
+FILE_FIELD_JS = r"""el => {
+  const label = el.tagName === 'INPUT' ? null : el.closest('label');
+  const field = (label && label.control) || el;
+  return field.tagName === 'INPUT' && field.type === 'file';
+}"""
 
 # What a click or drag at x,y met. With only "Clicked at 337,623." as its
 # answer, DeepSeek V4.1 Flash spent 20 steps on one move on chess.com,
@@ -779,7 +799,7 @@ def load_playwright():
 # Chrome (serve_one). The connection never outlives the call: while
 # Playwright is connected, Chrome saves downloads into Playwright's own
 # folder (not ~/Downloads, where the user's downloads in the live view are
-# taken from) and closes every dialog no handler takes, also the user's.
+# taken from) and answers every dialog, also the user's (answer_dialog).
 # A call of its own (``with`` below) ends it the same way.
 KEPT = {}
 
@@ -2031,6 +2051,75 @@ def finished_downloads():
             for name in sorted(os.listdir(DOWNLOADS)) if os.path.isfile(os.path.join(DOWNLOADS, name))]
 
 
+# What the pages asked during this call (run), for its answer: each dialog
+# as (type, message, default, answered OK), and the file pickers that opened
+# while it acted (FileChooser; upload takes the one its click opened).
+# Unhandled, Playwright closes a dialog unseen: a confirm got Cancel, and the
+# agent's click on "Delete" did nothing it could tell.
+ASKED = {"dialogs": [], "choosers": []}
+
+
+def answer_dialog(dialog, accept):
+    """Answers a dialog the page shows during the call and notes it (ASKED).
+    An alert has only OK; leaving the page (beforeunload) is what the action
+    asked for, and Playwright's own answer to it. A confirm or prompt gets
+    Cancel unless ``accept`` (the request's accept_dialog), a prompt then its
+    default, which Playwright's accept() would leave empty."""
+    kind = str(dialog.type)
+    message = " ".join(str(dialog.message or "").split())[:DIALOG_CHARS]
+    default = str(dialog.default_value or "")[:DIALOG_CHARS]
+    yes = accept or kind in {"alert", "beforeunload"}
+    try:
+        if not yes:
+            dialog.dismiss()
+        elif kind == "prompt":
+            dialog.accept(default)
+        else:
+            dialog.accept()
+    except Exception:
+        # The page or its dialog went away meanwhile.
+        pass
+    ASKED["dialogs"].append((kind, message, default, yes))
+
+
+def asked_text():
+    """The lines of what the pages asked since the last time (ASKED), which
+    it empties: "" when they asked nothing."""
+    lines = []
+    for kind, message, default, yes in ASKED["dialogs"]:
+        said = f' "{message}"' if message else ""
+        if kind == "beforeunload":
+            lines.append("The page warned before it was left (it may have had unsaved changes); it was left.")
+        elif kind == "alert":
+            lines.append(f"The page showed a message (alert){said}; it was closed with OK.")
+        elif not yes:
+            lines.append(f"The page asked ({kind}){said}; it got Cancel, so what it asked about did not happen. To "
+                         "answer OK, take the same action again with accept_dialog.")
+        elif kind == "prompt":
+            lines.append(f"The page asked (prompt){said}; it got OK with "
+                         + (f'its default "{default}".' if default else "an empty answer."))
+        else:
+            lines.append(f"The page asked ({kind}){said}; it got OK.")
+    if ASKED["choosers"]:
+        lines.append("The page opened a file picker, which closed without a file. To choose one, take upload on the "
+                     "same element (its ref, or x and y) with file.")
+    ASKED["dialogs"].clear()
+    ASKED["choosers"].clear()
+    return "\n".join(lines)
+
+
+def opened_chooser(page):
+    """The file picker the action's click opened, waited for up to
+    CHOOSER_SECONDS; None when none opened."""
+    deadline = time.monotonic() + CHOOSER_SECONDS
+    while not ASKED["choosers"] and time.monotonic() < deadline:
+        # Playwright's events (the picker) arrive only within its own calls.
+        page.wait_for_timeout(POLL_SECONDS * 1000)
+    chooser = ASKED["choosers"][-1] if ASKED["choosers"] else None
+    ASKED["choosers"].clear()
+    return chooser
+
+
 def run(request):
     action = request.get("action")
     if action not in ACTIONS:
@@ -2061,29 +2150,50 @@ def run(request):
         # A function of its own: Playwright marks each handler, which a
         # builtin like list.append does not allow (every action failed).
         caught = []
+        ASKED["dialogs"].clear()
+        ASKED["choosers"].clear()
+        accept = request.get("accept_dialog") is True
+        # Taking the file pickers costs a message to Chrome for every tab,
+        # and only a gesture on the page opens one.
+        listened = ("download", "dialog") + (("filechooser",) if action in WATCHED else ())
 
         def catch(download):
             caught.append(download)
 
+        def ask(dialog):
+            answer_dialog(dialog, accept)
+
+        def chose(chooser):
+            ASKED["choosers"].append(chooser)
+        handlers = {"download": catch, "dialog": ask, "filechooser": chose}
+
         def watch(tab):
-            tab.on("download", catch)
+            for event in listened:
+                tab.on(event, handlers[event])
         for tab in context.pages:
             watch(tab)
         context.on("page", watch)
         try:
-            return on_page(context, page, action, request, query, caught)
+            answer = on_page(context, page, action, request, query, caught)
+            # What a page asked after the action's own lines were written.
+            said = asked_text()
+            if said:
+                answer["text"] = f"{answer.get('text') or ''}\n{said}".lstrip("\n")
+            return answer
         except (UserHasControl, SettingUp):
             raise
         except Exception as exc:
-            raise on_failure(context, page, action, exc) from None
+            failure, said = on_failure(context, page, action, exc), asked_text()
+            raise (type(failure)(f"{failure}\n{said}") if said else failure) from None
         finally:
             # The resident helper keeps the connection: this call's
             # listeners end with the call.
             for tab in context.pages:
-                try:
-                    tab.remove_listener("download", catch)
-                except Exception:
-                    pass
+                for event in listened:
+                    try:
+                        tab.remove_listener(event, handlers[event])
+                    except Exception:
+                        pass
             try:
                 context.remove_listener("page", watch)
             except Exception:
@@ -2162,6 +2272,7 @@ def on_page(context, page, action, request, query, caught):
     acted, page = page, current_page(context)
     if watch is None or page is not acted:
         loaded(page, idle=action != "tab")
+    report = ""
     if watch is not None:
         # The action ran: what the page answers about it never fails
         # its answer (the agent would take it again, a send twice).
@@ -2169,7 +2280,9 @@ def on_page(context, page, action, request, query, caught):
             report = hit_report(watch, page)
         except Exception:
             report = ""
-        done = "\n".join(filter(None, (done, report)))
+    # Right after what the action did: a dialog it led to says why the page
+    # changed or did not.
+    done = "\n".join(filter(None, (done, asked_text(), report)))
     saved = keep_downloads(caught)
     if saved:
         done += "\nDownloaded: " + ", ".join(saved) + "."
@@ -2261,6 +2374,19 @@ def act(context, page, action, request, seen=None):
             seen.append(look_at(frame or page, [], refs=refs))
             if seen[-1] is not None:
                 seen[-1]["tab"] = page
+
+    def click_at():
+        # A place on the page as the screenshot shows it (CSS pixels of the
+        # viewport): for what read lists no element of, such as a canvas,
+        # a map or an app drawn in one.
+        x, y = point(request.get("x"), request.get("y"))
+        # The mouse there first, as the click would move it: what lies at
+        # the point is then what the click reaches, hovered as for it.
+        page.mouse.move(x, y)
+        if seen is not None:
+            seen.append(look_at(page, [(x, y)]))
+        page.mouse.click(x, y)
+        return f"{x},{y}"
     if action == "open":
         target = str(request.get("url") or "")
         if not target:
@@ -2291,17 +2417,7 @@ def act(context, page, action, request, seen=None):
             watch([request.get("ref")], frame)
             target.click(timeout=ACT_MS)
             return f"Clicked {request.get('ref')}."
-        # A place on the page as the screenshot shows it (CSS pixels of the
-        # viewport): for what read lists no element of, such as a canvas,
-        # a map or an app drawn in one.
-        x, y = point(request.get("x"), request.get("y"))
-        # The mouse there first, as the click would move it: what lies at
-        # the point is then what the click reaches, hovered as for it.
-        page.mouse.move(x, y)
-        if seen is not None:
-            seen.append(look_at(page, [(x, y)]))
-        page.mouse.click(x, y)
-        return f"Clicked at {x},{y}."
+        return f"Clicked at {click_at()}."
     if action == "drag":
         return drag(page, request.get("strokes"), seen)
     if action == "type":
@@ -2336,10 +2452,25 @@ def act(context, page, action, request, seen=None):
         # Only a file the server put here for this call.
         if os.path.dirname(os.path.abspath(path)) != os.path.abspath(UPLOADS) or not os.path.isfile(path):
             raise Refused("The file to upload is missing.")
-        frame, target = located(page, ref)
-        watch([ref], frame)
-        target.set_input_files(path, timeout=10_000)
-        return f"Put {os.path.basename(path)} into {ref}."
+        name = os.path.basename(path)
+        if ref:
+            frame, target = located(page, ref)
+            watch([ref], frame)
+            if target.evaluate(FILE_FIELD_JS):
+                target.set_input_files(path, timeout=10_000)
+                return f"Put {name} into {ref}."
+            # A button, a label or a drop zone that opens the file picker.
+            target.click(timeout=ACT_MS)
+            where = ref
+        else:
+            where = f"at {click_at()}"
+        chooser = opened_chooser(page)
+        if chooser is None:
+            # The click ran (it may have opened a menu): its answer, not a failure.
+            return (f"Clicked {where}, which opened no file picker, so no file was chosen. upload goes on a file "
+                    "field or on what opens the file picker.")
+        chooser.set_files(path, timeout=10_000)
+        return f"Clicked {where}, which opened a file picker, and chose {name} in it."
     if action == "key":
         key = str(request.get("key") or "")
         if key not in KEYS:
@@ -2501,7 +2632,7 @@ def answer_for(request):
 # this VM reaches (never a TCP port: a page reaches those), with the same
 # run(). It connects to Chrome for each call and lets go after it (KEPT):
 # connected, Playwright makes Chrome save downloads into its own folder and
-# closes every dialog, also the user's in the live view.
+# answers every dialog, also the user's in the live view.
 #
 # Never twice: a free helper says FREE at once (a call does not wait behind
 # a busy one, another chat's wait or download: it runs itself), then gets

@@ -213,6 +213,38 @@ def test_an_upload_copies_one_file_of_the_workbench_for_that_call(store, fake_vm
         call(browser, action="upload", ref="e3", file="missing.pdf")
 
 
+def test_an_upload_also_goes_on_what_opens_the_file_picker(store, fake_vm):
+    """Sites hide their file field behind a button or a drop zone, which read
+    may list (a ref) or not: upload takes x,y of the screenshot too, and
+    browser.py chooses the file in the picker its click opens."""
+    loop, browser = tools(store)
+    folder = chat_path(loop.chat_id)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[NAME]["files"][f"{folder}/photo.jpg"] = b"\xff\xd8 photo"
+    result = call(browser, action="upload", x=320, y=240, file="photo.jpg")
+    target = f"{agent_workspace.BROWSER_UPLOADS}/photo.jpg"
+    assert fake_vm.requests == [{"action": "upload", "x": 320, "y": 240, "file": target}]
+    assert browser._activity(BrowserArgs(action="upload", x=320, y=240, file="photo.jpg"), result)["at"] == "320,240"
+    with pytest.raises(ValueError, match="upload needs ref"):
+        call(browser, action="upload", file="photo.jpg")
+    assert len(fake_vm.requests) == 1
+
+
+def test_accept_dialog_goes_out_with_an_action_that_changes_the_page(store, fake_vm):
+    """Without it browser.py answers a page's confirm with Cancel and says
+    what it asked; with it the same action answers OK. A read makes the
+    page ask nothing: there it is a mistake, said before anything runs."""
+    loop, browser = tools(store)
+    call(browser, action="click", ref="e4", accept_dialog=True)
+    call(browser, action="key", key="Enter")
+    assert fake_vm.requests == [{"action": "click", "ref": "e4", "accept_dialog": True},
+                                {"action": "key", "key": "Enter"}]
+    with pytest.raises(ValueError, match="accept_dialog goes with"):
+        call(browser, action="read", accept_dialog=True)
+    assert len(fake_vm.requests) == 2
+    assert agent_browser.DIALOG_AFTER <= set(agent_browser.ACTIONS)
+
+
 def downloaded(fake_vm, *files):
     """The browser VM holds ``files`` ({name: bytes}) as finished downloads,
     and the helper names them in its answer like browser.py's main."""

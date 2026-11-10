@@ -2329,6 +2329,33 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   Chrome-Prozess über mehrere Aufrufe, ein alter Chrome ohne Markierung genau
   einmal neu gestartet, `click` an x,y und zwei Striche auf einer Leinwand
   angekommen, auf jspaint mit `drag` eine Baumkrone samt Ästen gezeichnet.
+- **Dialoge und Dateiauswahl (seit 2026-11-10).** Ohne eigenen Handler
+  schloss Playwright jeden Dialog einer Seite ungesehen: Ein `confirm()` bekam
+  Abbrechen, und der Klick des Agenten auf „Löschen“ tat nichts, was er sehen
+  konnte. Jetzt beantwortet `browser.py` jeden Dialog während eines Aufrufs
+  selbst (`answer_dialog`) und nennt ihn in der Antwort gleich nach der
+  Aktion (`ASKED`, `asked_text`; einer während eines `read` am Ende): `alert`
+  mit OK, das Verlassen der Seite (`beforeunload`) wie Playwright mit
+  Verlassen, `confirm` und `prompt` mit Abbrechen, außer die Aktion trägt
+  `accept_dialog` (dann OK, ein `prompt` mit seinem Vorgabewert; Playwrights
+  `accept()` allein schickt einen leeren Text). Nach Abbrechen sagt die
+  Antwort, dass dieselbe Aktion mit `accept_dialog` OK sagt; das Backend nimmt
+  das Feld nur mit Aktionen, die die Seite ändern (`DIALOG_AFTER`). Seiten
+  verstecken ihr Dateifeld meist hinter einem Knopf, einem Label oder einer
+  Ablagefläche (`read` listet keine versteckten Elemente), und
+  `set_input_files` auf dem Knopf scheiterte. `upload` nimmt jetzt außer einem
+  Dateifeld (auch über sein Label, `FILE_FIELD_JS`) jedes Element oder x,y des
+  Screenshots, klickt es, wartet bis `CHOOSER_SECONDS` (1 s) auf die
+  Dateiauswahl, die Playwright während des Aufrufs abfängt (`opened_chooser`),
+  und wählt dort die Datei. Öffnet der Klick keine, sagt die Antwort das,
+  statt zu scheitern: Der Klick lief. Ein `click`, der eine Dateiauswahl
+  öffnet, nennt sie und den Weg über `upload`. Abgefangen wird nur bei
+  Aktionen mit Geste (`WATCHED`): Jeder Listener kostet eine Nachricht an
+  Chrome je Tab. Geprüft mit Attrappen (`tests/test_browser_vm_results.py`)
+  und einmal echt gegen ein lokales Chromium (Bestätigen, Abbrechen, Prompt,
+  Alert, `upload` über Knopf und über x,y auf ein Label). An einer Sprite mit
+  `AllowFileSelectionDialogs: false` ungeprüft; erwartet, dass Chromium die
+  Auswahl für DevTools abfängt, bevor die Richtlinie greift.
 - **Downloads vom Browser auf die Werkbank (seit 2026-10-28).** Was der
   Browser herunterlädt, landet im Chat-Ordner unter `downloads/`: Downloads,
   die eine Aktion startet (ein Klick, Enter, eine Adresse, die eine Datei
@@ -3688,7 +3715,8 @@ Skripte im Session-Scratchpad (`probe_guard.py`, `probe_variants.py`,
 - Strg+S und Strg+O öffnen keinen Dateidialog, Strg+Umschalt+N kein
   Inkognitofenster. Ein `x-terminal-emulator` gibt es auf der Browser-VM nicht;
   openbox' eigenes Menü bot ihn trotzdem an.
-- Weiter funktionierend: `upload` (`set_input_files`, ohne Dialog), ein
+- Weiter funktionierend: `upload` (`set_input_files`, ohne Dialog; seit
+  2026-11-10 auch über einen Knopf, siehe „Dialoge und Dateiauswahl“), ein
   Download per Navigation und die Aktion `download`, Wikipedia und
   example.com.
 - `relay.watch` meldete `example.com`, `www.xvideos.com` (die gesperrte

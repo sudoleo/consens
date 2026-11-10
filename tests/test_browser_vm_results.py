@@ -10,6 +10,7 @@ fakes of Playwright's objects, as in test_agent_workspace.py; its scripts
 run in tests/js/workspace-browser-settle.test.mjs.
 """
 import base64
+import contextlib
 import importlib.util
 import io
 import json
@@ -1001,3 +1002,191 @@ def test_the_hold_is_one_put_with_its_expiry(monkeypatch):
     browser.stay_awake()
     assert [json.loads(argv[-1]) for argv in ran] == [{"expire": "2m"}, {"expire": "10m"}]
     assert all(f"http://sprite/v1/tasks/{browser.AWAKE_TASK}" in argv and "PUT" in argv for argv in ran)
+
+
+# --- What a page asks during a call: dialogs and file pickers ---------------------
+
+class Dialog:
+    """Playwright's Dialog as answer_dialog sees it."""
+
+    def __init__(self, type, message="", default_value=""):
+        self.type, self.message, self.default_value, self.answers = type, message, default_value, []
+
+    def accept(self, prompt_text=None):
+        self.answers.append(("accept", prompt_text))
+
+    def dismiss(self):
+        self.answers.append(("dismiss",))
+
+
+class Chooser:
+    """Playwright's FileChooser: the file upload chose in it."""
+
+    def __init__(self):
+        self.files = []
+
+    def set_files(self, files, timeout):
+        self.files.append(files)
+
+
+@pytest.fixture
+def driven(browser, tmp_path, monkeypatch):
+    """run() as main calls it, on one tab and without Chrome: the request in,
+    its answer's text out."""
+    monkeypatch.setattr(browser, "FRAME_REFS", str(tmp_path / "frame-refs.json"))
+    monkeypatch.setattr(browser, "UPLOADS", str(tmp_path / "uploads"))
+    monkeypatch.setattr(browser, "ensure_browser", lambda: None)
+    monkeypatch.setattr(browser, "watchdog", lambda seconds: None)
+    monkeypatch.setattr(browser, "agent_ports", lambda: set())
+    monkeypatch.setattr(browser, "user_control", lambda: False)
+    os.makedirs(browser.UPLOADS)
+
+    def run(page, **request):
+        context = type("Context", (), {"pages": [page], "on": lambda self, event, handler: None,
+                                       "remove_listener": lambda self, event, handler: None})()
+
+        @contextlib.contextmanager
+        def chrome():
+            yield type("Browser", (), {"contexts": [context]})()
+        monkeypatch.setattr(browser, "chrome", chrome)
+        return browser.run(request)["text"]
+    return run
+
+
+def shows(*dialogs):
+    """An effect: the page shows ``dialogs`` one after another, as Chrome
+    sends them to the listeners of its tab."""
+    def effect(tab):
+        for dialog in dialogs:
+            for handler in list(tab.handlers.get("dialog", [])):
+                handler(dialog)
+    return effect
+
+
+def opens_picker(chooser):
+    """An effect: the page opens a file picker."""
+    def effect(tab):
+        for handler in list(tab.handlers.get("filechooser", [])):
+            handler(chooser)
+    return effect
+
+
+def test_a_confirm_gets_cancel_and_the_answer_says_what_the_page_asked(browser, driven):
+    """Unhandled, Playwright closed every dialog unseen: the agent's click on
+    "Pay" got Cancel from the page's confirm and nothing it could tell
+    changed. Now the answer names the question right after the click, and
+    the same click with accept_dialog answers OK."""
+    page = Shop(browser)
+    asked = Dialog("confirm", "Pay   30 EUR now?")
+    page.effect = shows(asked)
+    said = driven(page, action="click", ref="e5")
+    assert asked.answers == [("dismiss",)]
+    assert said.splitlines()[:3] == [
+        "Clicked e5.",
+        'The page asked (confirm) "Pay 30 EUR now?"; it got Cancel, so what it asked about did not happen. To '
+        "answer OK, take the same action again with accept_dialog.",
+        "No element of the page changed after it."]
+    # The call's listeners end with it: Chrome answers the user's dialogs as before.
+    assert page.handlers["dialog"] == [] and page.handlers["download"] == []
+
+    again = Dialog("confirm", "Pay 30 EUR now?")
+    page.effect = shows(again)
+    said = driven(page, action="click", ref="e5", accept_dialog=True)
+    assert again.answers == [("accept", None)]
+    assert said.splitlines()[1] == 'The page asked (confirm) "Pay 30 EUR now?"; it got OK.'
+
+
+def test_alerts_prompts_and_leaving_a_page_are_answered_as_the_action_asked(browser, driven):
+    """An alert has only OK; a prompt answers its default with accept_dialog
+    (Playwright's accept() alone answers ""); leaving the page is what the
+    action asked for, also without accept_dialog. A dialog during a read
+    (a timer's alert) comes at the end of its answer."""
+    page = Shop(browser)
+    saved, renamed, leaving = Dialog("alert", "Saved."), Dialog("prompt", "New name?", "draft"), Dialog("beforeunload")
+    page.effect = shows(saved, renamed, leaving)
+    said = driven(page, action="key", key="Enter", accept_dialog=True).splitlines()
+    assert saved.answers == [("accept", None)] and renamed.answers == [("accept", "draft")]
+    assert leaving.answers == [("accept", None)]
+    assert said[1:4] == ['The page showed a message (alert) "Saved."; it was closed with OK.',
+                         'The page asked (prompt) "New name?"; it got OK with its default "draft".',
+                         "The page warned before it was left (it may have had unsaved changes); it was left."]
+    unsure = Dialog("prompt", "Your age?")
+    page.effect = shows(unsure)
+    assert driven(page, action="key", key="Enter").splitlines()[1].startswith(
+        'The page asked (prompt) "Your age?"; it got Cancel')
+    assert unsure.answers == [("dismiss",)]
+
+    late, real = Dialog("alert", "Session ends in 1 minute"), page.evaluate
+
+    def evaluate(script, arg=None):
+        if script == browser.SNAPSHOT_JS:
+            shows(late)(page)
+        return real(script, arg)
+    page.evaluate = evaluate
+    said = driven(page, action="read")
+    assert said.endswith('\nThe page showed a message (alert) "Session ends in 1 minute"; it was closed with OK.')
+    # Only a gesture opens a file picker: a read takes none (each costs Chrome a message per tab).
+    fresh = Shop(browser)
+    driven(fresh, action="read")
+    assert "filechooser" not in fresh.handlers and fresh.handlers["dialog"] == []
+
+
+def test_upload_goes_on_the_button_that_opens_the_file_picker(browser, driven, monkeypatch):
+    """Sites hide their file field (read lists no hidden element) behind a
+    button, a label or a drop zone, and set_input_files on the button
+    failed ("Element is not an <input>"). Now upload clicks it and chooses
+    the file in the picker it opens, by ref or at x,y."""
+    upload = os.path.join(browser.UPLOADS, "report.pdf")
+    Path(upload).write_bytes(b"%PDF")
+    page = Shop(browser)
+    picker = Chooser()
+    page.effect = opens_picker(picker)
+    said = driven(page, action="upload", ref="e5", file=upload)
+    assert picker.files == [upload]
+    assert said.startswith("Clicked e5, which opened a file picker, and chose report.pdf in it.\n")
+    assert "The page opened a file picker" not in said and page.handlers["filechooser"] == []
+
+    # At x,y of the screenshot: the same click as click's, then the picker.
+    moved = []
+    page.mouse = type("Mouse", (), {"move": lambda self, x, y: moved.append((x, y)),
+                                    "click": lambda self, x, y: page.act()})()
+    picker = Chooser()
+    page.effect = opens_picker(picker)
+    said = driven(page, action="upload", x=320, y=240, file=upload)
+    assert picker.files == [upload] and moved == [(320, 240)]
+    assert said.startswith("Clicked at 320,240, which opened a file picker, and chose report.pdf in it.")
+
+    # A click that opens none (it opened a menu): its answer, not a failure.
+    monkeypatch.setattr(browser, "CHOOSER_SECONDS", 0.05)
+    page.effect = None
+    said = driven(page, action="upload", ref="e5", file=upload)
+    assert said.startswith("Clicked e5, which opened no file picker, so no file was chosen.")
+
+
+def test_upload_on_a_file_field_sets_it_and_a_click_names_the_picker_it_opened(browser, driven):
+    """A file field (also through its label) takes the file directly; a
+    click that opened a picker says that upload chooses there."""
+    upload = os.path.join(browser.UPLOADS, "photo.jpg")
+    Path(upload).write_bytes(b"jpg")
+    page, put = Shop(browser), []
+
+    class Field(page.Locator):
+        def evaluate(self, script):
+            return script == browser.FILE_FIELD_JS
+
+        def set_input_files(self, files, timeout):
+            put.append((self.ref, files))
+    page.Locator = Field
+    assert driven(page, action="upload", ref="e2", file=upload).startswith("Put photo.jpg into e2.\n")
+    assert put == [("e2", upload)]
+    # Only a file the server put there for this call.
+    with pytest.raises(browser.Refused, match="The file to upload is missing"):
+        driven(page, action="upload", ref="e2", file=str(Path(upload).with_name("other.jpg")))
+
+    page = Shop(browser)
+    page.effect = opens_picker(Chooser())
+    said = driven(page, action="click", ref="e5")
+    assert said.splitlines()[:2] == [
+        "Clicked e5.",
+        "The page opened a file picker, which closed without a file. To choose one, take upload on the same element "
+        "(its ref, or x and y) with file."]

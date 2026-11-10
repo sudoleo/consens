@@ -118,6 +118,9 @@ NO_PICTURES = "Your model cannot look at pictures: read the page with the action
 # canvas, 15 of 45 model steps only asked for the screenshot after a click.
 PICTURE_AFTER = frozenset({"open", "click", "drag", "type", "select", "key", "scroll", "back", "forward", "tab",
                            "wait"})
+# What accept_dialog goes with: the actions after which a page can ask
+# (confirm, prompt), which browser.py answers with Cancel without it.
+DIALOG_AFTER = frozenset({"open", "click", "drag", "type", "select", "upload", "key", "scroll", "back", "forward"})
 # Those that renew the picture on the page's card now and then (PREVIEW_SECONDS); open brings one always.
 PREVIEW_AFTER = PICTURE_AFTER - {"open"}
 # A screenshot the agent shows the user under its answer (show): at most
@@ -136,7 +139,8 @@ class BrowserArgs(BaseModel):
         "page's text (offset). find: where text (up to 200 characters, any "
         "case) appears on the page, up to 20 places, each with the ref of the element it is in (not in its frames: "
         "read lists theirs). click, type "
-        "(text, enter to submit), select (option), upload (file of your workspace): on the element ref; click "
+        "(text, enter to submit), select (option), upload (file of your workspace, on a file field or the button "
+        "that opens the file picker): on the element ref; click and upload "
         "also at x,y of your last screenshot (a canvas, a map, an app read lists nothing of). drag: strokes, each "
         "a list of x,y points of the screenshot, pressed along each (drawing, a slider, drag and drop). A click "
         "or drag at x,y says what lay at its points, each element's box in the screenshot's pixels, and what "
@@ -161,12 +165,17 @@ class BrowserArgs(BaseModel):
     offset: int = Field(default=0, ge=0, le=100_000)
     seconds: int = Field(default=0, ge=0, le=WAIT_MAX)
     file: str = Field(default="", max_length=1024, description="upload: a file in your workspace.")
-    x: Optional[int] = Field(default=None, ge=0, le=MAX_COORDINATE, description="click: x of the screenshot, without ref.")
-    y: Optional[int] = Field(default=None, ge=0, le=MAX_COORDINATE, description="click: y of the screenshot, without ref.")
+    x: Optional[int] = Field(default=None, ge=0, le=MAX_COORDINATE, description=(
+        "click, upload: x of the screenshot, without ref."))
+    y: Optional[int] = Field(default=None, ge=0, le=MAX_COORDINATE, description=(
+        "click, upload: y of the screenshot, without ref."))
     strokes: list[list[list[int]]] = Field(default_factory=list, max_length=MAX_STROKES, description=(
         "drag: strokes, each a list of [x, y] points of the screenshot (2 to 500 per stroke, 2000 in all)."))
     screenshot_after: bool = Field(default=False, description=(
         "With an action that changes the page, or wait: also a picture of the page afterwards, in the same call."))
+    accept_dialog: bool = Field(default=False, description=(
+        "With an action that changes the page: answer OK when the page asks during it (a confirm; a prompt with its "
+        "default). Without it the page gets Cancel; the answer says what the page asked."))
     show: bool = Field(default=False, description=(
         "With screenshot or screenshot_after: also show the user that picture under your answer, as when they ask "
         "to see the page."))
@@ -294,7 +303,7 @@ DOWNLOAD_REFUSED_PICTURE = ("A picture also comes into your workspace without th
 
 def required(args):
     """What an action needs, or ValueError naming it."""
-    need = {"open": "url", "type": "ref", "select": "ref", "upload": "ref", "key": "key",
+    need = {"open": "url", "type": "ref", "select": "ref", "key": "key",
             "tab": "tab", "find": "text"}.get(args.action)
     if need and not getattr(args, need):
         raise ValueError(f"{args.action} needs {need}.")
@@ -316,8 +325,13 @@ def required(args):
             raise ValueError(f"Each point is [x, y], whole pixels from 0 to {MAX_COORDINATE}.")
         if sum(len(stroke) for stroke in args.strokes) > MAX_POINTS:
             raise ValueError(f"At most {MAX_POINTS} points in one drag.")
+    if args.action == "upload" and not args.ref and (args.x is None or args.y is None):
+        raise ValueError("upload needs ref (a file field or the button that opens the file picker), or x and y of "
+                         "your last screenshot.")
     if args.action == "upload" and not args.file.strip():
         raise ValueError("upload needs file, a file in your workspace.")
+    if args.accept_dialog and args.action not in DIALOG_AFTER:
+        raise ValueError(f"accept_dialog goes with {', '.join(sorted(DIALOG_AFTER))}.")
     if args.screenshot_after and args.action not in PICTURE_AFTER:
         raise ValueError(f"screenshot_after goes with {', '.join(sorted(PICTURE_AFTER))}; for a picture now use "
                          "the action screenshot.")
@@ -654,11 +668,12 @@ class BrowserTools:
             raise ValueError(NO_PICTURES)
         if args.screenshot_after:
             request["screenshot_after"] = True
-        for field in ("ref", "text", "enter", "option", "key", "direction", "tab", "offset", "seconds"):
+        for field in ("ref", "text", "enter", "option", "key", "direction", "tab", "offset", "seconds",
+                      "accept_dialog"):
             value = getattr(args, field)
             if value not in ("", 0, False):
                 request[field] = value
-        if args.action == "click" and not args.ref:
+        if args.action in {"click", "upload"} and not args.ref:
             request.update(x=args.x, y=args.y)
         if args.action == "drag":
             request["strokes"] = args.strokes
@@ -918,7 +933,7 @@ class BrowserTools:
             fields["url"] = args.url[:500]
         elif args.ref:
             fields["ref"] = args.ref
-        elif args.action == "click" and args.x is not None and args.y is not None:
+        elif args.action in {"click", "upload"} and args.x is not None and args.y is not None:
             fields["at"] = f"{args.x},{args.y}"
         if args.action == "drag":
             fields["strokes"] = len(args.strokes)
