@@ -2419,7 +2419,9 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   Ports, die der Tunnel hält (`local_ports` in jeder Anfrage). `upload` liest eine Datei der Werkbank als
   Agent (bis 15 MB), legt sie für diesen einen Aufruf in
   `~/.consens/browser/uploads` der Browser-VM und löscht sie danach; der Helfer
-  nimmt nur Dateien aus diesem Ordner. `screenshot` kommt als Bild zum Agenten
+  nimmt nur Dateien aus diesem Ordner und gibt Chrome ihre Bytes, nicht den
+  Pfad (einen Pfad liest Chrome erst beim Absenden, dann ist die Datei schon
+  gelöscht und das Formular scheitert mit `ERR_FILE_NOT_FOUND`). `screenshot` kommt als Bild zum Agenten
   (wie `vm_view_image`, nur für Bildmodelle). Die Prüfer folgen jeder Aktion
   live; bis 2026-10-29 warteten `open`, `click`, `upload`, `key Enter`,
   `key Space` und `type` mit `enter` vorher auf sie (Vorab-Prüfung).

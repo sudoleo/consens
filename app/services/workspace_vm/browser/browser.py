@@ -71,6 +71,7 @@ import contextlib
 import hashlib
 import json
 import math
+import mimetypes
 import os
 import re
 import subprocess
@@ -2480,11 +2481,17 @@ def act(context, page, action, request, seen=None):
         if os.path.dirname(os.path.abspath(path)) != os.path.abspath(UPLOADS) or not os.path.isfile(path):
             raise Refused("The file to upload is missing.")
         name = os.path.basename(path)
+        # Its bytes, not its path: Chrome reads a path only when the form is
+        # sent, and the server deletes the file once this call is over (a
+        # submit in the next call failed with ERR_FILE_NOT_FOUND).
+        with open(path, "rb") as fh:
+            payload = {"name": name, "mimeType": mimetypes.guess_type(name)[0] or "application/octet-stream",
+                       "buffer": fh.read()}
         if ref:
             frame, target = located(page, ref)
             watch([ref], frame)
             if target.evaluate(FILE_FIELD_JS):
-                target.set_input_files(path, timeout=10_000)
+                target.set_input_files(payload, timeout=10_000)
                 return f"Put {name} into {ref}."
             # A button, a label or a drop zone that opens the file picker.
             target.click(timeout=ACT_MS)
@@ -2496,7 +2503,7 @@ def act(context, page, action, request, seen=None):
             # The click ran (it may have opened a menu): its answer, not a failure.
             return (f"Clicked {where}, which opened no file picker, so no file was chosen. upload goes on a file "
                     "field or on what opens the file picker.")
-        chooser.set_files(path, timeout=10_000)
+        chooser.set_files(payload, timeout=10_000)
         return f"Clicked {where}, which opened a file picker, and chose {name} in it."
     if action == "key":
         key = str(request.get("key") or "")

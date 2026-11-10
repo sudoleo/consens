@@ -1019,6 +1019,13 @@ class Dialog:
         self.answers.append(("dismiss",))
 
 
+def chosen(name, mime, content):
+    """The file as upload hands it to Chrome: its bytes, not its path. Chrome
+    reads a path only when the form is sent, and the server deletes the file
+    once the call is over: a later submit failed with ERR_FILE_NOT_FOUND."""
+    return {"name": name, "mimeType": mime, "buffer": content}
+
+
 class Chooser:
     """Playwright's FileChooser: the file upload chose in it."""
 
@@ -1142,7 +1149,7 @@ def test_upload_goes_on_the_button_that_opens_the_file_picker(browser, driven, m
     picker = Chooser()
     page.effect = opens_picker(picker)
     said = driven(page, action="upload", ref="e5", file=upload)
-    assert picker.files == [upload]
+    assert picker.files == [chosen("report.pdf", "application/pdf", b"%PDF")]
     assert said.startswith("Clicked e5, which opened a file picker, and chose report.pdf in it.\n")
     assert "The page opened a file picker" not in said and page.handlers["filechooser"] == []
 
@@ -1153,7 +1160,7 @@ def test_upload_goes_on_the_button_that_opens_the_file_picker(browser, driven, m
     picker = Chooser()
     page.effect = opens_picker(picker)
     said = driven(page, action="upload", x=320, y=240, file=upload)
-    assert picker.files == [upload] and moved == [(320, 240)]
+    assert picker.files == [chosen("report.pdf", "application/pdf", b"%PDF")] and moved == [(320, 240)]
     assert said.startswith("Clicked at 320,240, which opened a file picker, and chose report.pdf in it.")
 
     # A click that opens none (it opened a menu): its answer, not a failure.
@@ -1178,7 +1185,7 @@ def test_upload_on_a_file_field_sets_it_and_a_click_names_the_picker_it_opened(b
             put.append((self.ref, files))
     page.Locator = Field
     assert driven(page, action="upload", ref="e2", file=upload).startswith("Put photo.jpg into e2.\n")
-    assert put == [("e2", upload)]
+    assert put == [("e2", chosen("photo.jpg", "image/jpeg", b"jpg"))]
     # Only a file the server put there for this call.
     with pytest.raises(browser.Refused, match="The file to upload is missing"):
         driven(page, action="upload", ref="e2", file=str(Path(upload).with_name("other.jpg")))
