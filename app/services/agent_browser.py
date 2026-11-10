@@ -145,7 +145,8 @@ class BrowserArgs(BaseModel):
         "a list of x,y points of the screenshot, pressed along each (drawing, a slider, drag and drop). A click "
         "or drag at x,y says what lay at its points, each element's box in the screenshot's pixels, and what "
         "changed after it. key: "
-        "press a key. scroll: direction. download: the file at url (default: the current page's address) with "
+        "press a key. scroll: direction; with ref or x,y the box that scrolls there (a list, a chat, a side "
+        "pane) instead of the page. download: the file at url (default: the current page's address) with "
         "the user's sign-ins. "
         "back, forward. tabs: list them; tab: bring tab number to the front. screenshot: a picture of the page. "
         "wait: seconds, also until the user hands the browser back; with text, until the page shows that text "
@@ -166,9 +167,9 @@ class BrowserArgs(BaseModel):
     seconds: int = Field(default=0, ge=0, le=WAIT_MAX)
     file: str = Field(default="", max_length=1024, description="upload: a file in your workspace.")
     x: Optional[int] = Field(default=None, ge=0, le=MAX_COORDINATE, description=(
-        "click, upload: x of the screenshot, without ref."))
+        "click, upload, scroll: x of the screenshot, without ref."))
     y: Optional[int] = Field(default=None, ge=0, le=MAX_COORDINATE, description=(
-        "click, upload: y of the screenshot, without ref."))
+        "click, upload, scroll: y of the screenshot, without ref."))
     strokes: list[list[list[int]]] = Field(default_factory=list, max_length=MAX_STROKES, description=(
         "drag: strokes, each a list of [x, y] points of the screenshot (2 to 500 per stroke, 2000 in all)."))
     screenshot_after: bool = Field(default=False, description=(
@@ -325,6 +326,8 @@ def required(args):
             raise ValueError(f"Each point is [x, y], whole pixels from 0 to {MAX_COORDINATE}.")
         if sum(len(stroke) for stroke in args.strokes) > MAX_POINTS:
             raise ValueError(f"At most {MAX_POINTS} points in one drag.")
+    if args.action == "scroll" and (args.x is None) != (args.y is None):
+        raise ValueError("scroll takes x and y together (the box there), or ref.")
     if args.action == "upload" and not args.ref and (args.x is None or args.y is None):
         raise ValueError("upload needs ref (a file field or the button that opens the file picker), or x and y of "
                          "your last screenshot.")
@@ -673,7 +676,8 @@ class BrowserTools:
             value = getattr(args, field)
             if value not in ("", 0, False):
                 request[field] = value
-        if args.action in {"click", "upload"} and not args.ref:
+        if not args.ref and (args.action in {"click", "upload"}
+                             or (args.action == "scroll" and args.x is not None)):
             request.update(x=args.x, y=args.y)
         if args.action == "drag":
             request["strokes"] = args.strokes
@@ -933,7 +937,7 @@ class BrowserTools:
             fields["url"] = args.url[:500]
         elif args.ref:
             fields["ref"] = args.ref
-        elif args.action in {"click", "upload"} and args.x is not None and args.y is not None:
+        elif args.action in {"click", "upload", "scroll"} and args.x is not None and args.y is not None:
             fields["at"] = f"{args.x},{args.y}"
         if args.action == "drag":
             fields["strokes"] = len(args.strokes)

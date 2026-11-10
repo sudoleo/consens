@@ -245,6 +245,23 @@ def test_accept_dialog_goes_out_with_an_action_that_changes_the_page(store, fake
     assert agent_browser.DIALOG_AFTER <= set(agent_browser.ACTIONS)
 
 
+def test_a_scroll_names_the_box_by_ref_or_x_y(store, fake_vm):
+    """A chat list or a side pane scrolls in a box of its own: scroll takes a
+    ref or x,y of the screenshot for it (browser.py BOX_SCROLL_JS), and
+    without them scrolls the page as before."""
+    loop, browser = tools(store)
+    call(browser, action="scroll", direction="down", ref="e12")
+    call(browser, action="scroll", direction="up", x=900, y=300)
+    call(browser, action="scroll", direction="down")
+    assert fake_vm.requests == [{"action": "scroll", "direction": "down", "ref": "e12"},
+                                {"action": "scroll", "direction": "up", "x": 900, "y": 300},
+                                {"action": "scroll", "direction": "down"}]
+    assert browser._activity(BrowserArgs(action="scroll", x=900, y=300), None)["at"] == "900,300"
+    with pytest.raises(ValueError, match="scroll takes x and y together"):
+        call(browser, action="scroll", x=900)
+    assert len(fake_vm.requests) == 3
+
+
 def downloaded(fake_vm, *files):
     """The browser VM holds ``files`` ({name: bytes}) as finished downloads,
     and the helper names them in its answer like browser.py's main."""

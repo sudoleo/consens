@@ -1410,15 +1410,42 @@ def counted(lines):
 
 
 # What of read's list is in view: the refs of the elements and the
-# headings as read words them (SNAPSHOT_JS).
+# headings as read words them (SNAPSHOT_JS). In view means in the window and
+# in every box around it that cuts off its content (overflow): the rows a
+# chat list scrolled out of its box are not, though the window holds their
+# place. A fixed element leaves the boxes around it.
 IN_VIEW_JS = r"""
 () => {
   const clean = text => (text || '').replace(/\s+/g, ' ').trim();
   const clip = (text, size) => text.length > size ? text.slice(0, size - 1) + '…' : text;
+  const styles = new Map();
+  const style = node => {
+    if (!styles.has(node)) {
+      const computed = getComputedStyle(node);
+      const cut = /^(hidden|clip|auto|scroll|overlay)$/;
+      styles.set(node, {fixed: computed.position === 'fixed', cuts: computed.display !== 'contents' &&
+        (cut.test(computed.overflowX) || cut.test(computed.overflowY))});
+    }
+    return styles.get(node);
+  };
+  // The DOM's own getters: a form's field named parentElement shadows the
+  // form's (HIT_JS).
+  const parentOf = Object.getOwnPropertyDescriptor(Node.prototype, 'parentElement').get;
+  const rect = node => Element.prototype.getBoundingClientRect.call(node);
   const seen = el => {
-    const box = el.getBoundingClientRect();
-    return box.width > 0 && box.height > 0 && box.bottom > 0 && box.right > 0 && box.top < innerHeight &&
-      box.left < innerWidth;
+    const box = rect(el);
+    if (!(box.width > 0 && box.height > 0 && box.bottom > 0 && box.right > 0 && box.top < innerHeight &&
+          box.left < innerWidth)) return false;
+    for (let node = el, steps = 0; node && node !== document.body && node !== document.documentElement &&
+         steps < 200; node = parentOf.call(node), steps += 1) {
+      if (node !== el && style(node).cuts) {
+        const around = rect(node);
+        if (box.bottom <= around.top || box.top >= around.bottom || box.right <= around.left ||
+            box.left >= around.right) return false;
+      }
+      if (style(node).fixed) break;
+    }
+    return true;
   };
   const refs = [], headings = [];
   for (const el of document.querySelectorAll('[data-consens-ref]')) {
@@ -2480,9 +2507,26 @@ def act(context, page, action, request, seen=None):
         return f"Pressed {key}."
     if action == "scroll":
         direction = -1 if request.get("direction") == "up" else 1
-        watch()
-        moved = page.evaluate(SCROLL_JS, direction)
-        return scrolled(direction, moved)
+        ref, frame = request.get("ref"), None
+        if not ref and request.get("x") is None:
+            watch()
+            return scrolled(direction, page.evaluate(SCROLL_JS, direction))
+        if ref:
+            frame, target = located(page, ref)
+            watch([ref], frame)
+            around = f"around {ref}"
+        else:
+            x, y = point(request.get("x"), request.get("y"))
+            watch()
+            target = page.evaluate_handle("([x, y]) => document.elementFromPoint(x, y)", [x, y])
+            around = f"at {x},{y}"
+        inside = target.evaluate(BOX_SCROLL_JS, direction)
+        if isinstance(inside, dict):
+            return scrolled(direction, inside.get("moved"), f"the box {around} ({_said(inside.get('tag'), 120)})")
+        # No box of its own there: the page, or the frame the ref lies in.
+        moved = (frame or page).evaluate(SCROLL_JS, direction)
+        return (f"Nothing {around} scrolls on its own; the {'frame' if frame else 'page'} instead.\n"
+                + scrolled(direction, moved))
     if action in {"back", "forward"}:
         (page.go_back if action == "back" else page.go_forward)(wait_until="domcontentloaded", timeout=15_000)
         return f"Went {action}."
@@ -2574,22 +2618,53 @@ direction => {
 }
 """
 
+# scroll with a ref or x,y: the box that scrolls there, the element itself
+# or the nearest around it (a chat list, a side pane, a dialog's text), as
+# SCROLL_JS scrolls the page, and its name as HIT_JS words an element
+# (div#chats.list). null when none does: then the page scrolls. Through the
+# DOM's own getters, at most 200 steps up (HIT_JS: a form's fields shadow
+# the form's properties).
+BOX_SCROLL_JS = r"""
+(start, direction) => {
+  const own = name => Object.getOwnPropertyDescriptor(Element.prototype, name).get;
+  const parentOf = Object.getOwnPropertyDescriptor(Node.prototype, 'parentElement').get;
+  const top = own('scrollTop'), height = own('scrollHeight'), view = own('clientHeight'), tagOf = own('localName');
+  const attr = (el, name) => Element.prototype.getAttribute.call(el, name) || '';
+  const scrolls = el => /^(auto|scroll|overlay)$/.test(getComputedStyle(el).overflowY) &&
+    height.call(el) > view.call(el) + 1;
+  let box = start instanceof Element ? start : null;
+  for (let steps = 0; box && box !== document.body && box !== document.documentElement && steps < 200;
+       box = parentOf.call(box), steps += 1) {
+    if (!scrolls(box)) continue;
+    const before = Math.round(top.call(box));
+    Element.prototype.scrollBy.call(box, {top: direction * view.call(box) * 0.8, behavior: 'instant'});
+    const id = attr(box, 'id').slice(0, 40);
+    const classes = attr(box, 'class').trim().split(/\s+/).filter(Boolean).slice(0, 3);
+    return {tag: tagOf.call(box) + (id ? '#' + id : '') + (classes.length ? '.' + classes.join('.') : ''),
+            moved: [before, Math.round(top.call(box)), view.call(box), height.call(box)]};
+  }
+  return null;
+}
+"""
 
-def scrolled(direction, moved):
-    """What a scroll did, from SCROLL_JS's answer."""
+
+def scrolled(direction, moved, box=""):
+    """What a scroll did, from SCROLL_JS's answer, or from BOX_SCROLL_JS's
+    for the box ``box`` names."""
     way = "up" if direction < 0 else "down"
     values = [_whole(value) for value in moved] if isinstance(moved, list) and len(moved) == 4 else []
     if len(values) != 4 or None in values:
-        return f"Scrolled {way}."
+        return f"Scrolled {way} in {box}." if box else f"Scrolled {way}."
     before, top, view, height = values
-    where = f"the view shows {top}-{top + view} of {max(height, top + view)} px"
+    where = f"{'it' if box else 'the view'} shows {top}-{top + view} of {max(height, top + view)} px"
+    whole = "box" if box else "page"
     if top == before:
-        return f"The page did not move: {where}."
+        return f"{box[0].upper() + box[1:]} did not move: {where}." if box else f"The page did not move: {where}."
     if top + view >= height - 1:
-        where += ", the end of the page"
+        where += f", the end of the {whole}"
     elif top <= 0:
-        where += ", the top of the page"
-    return f"Scrolled {way}: {where}."
+        where += f", the top of the {whole}"
+    return f"Scrolled {way} in {box}: {where}." if box else f"Scrolled {way}: {where}."
 
 
 # The step of the agent the current request belongs to (its ``step``), or

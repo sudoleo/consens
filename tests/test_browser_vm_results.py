@@ -1190,3 +1190,53 @@ def test_upload_on_a_file_field_sets_it_and_a_click_names_the_picker_it_opened(b
         "Clicked e5.",
         "The page opened a file picker, which closed without a file. To choose one, take upload on the same element "
         "(its ref, or x and y) with file."]
+
+
+def test_a_scroll_on_a_ref_or_at_x_y_moves_the_box_that_scrolls_there(browser, driven):
+    """A chat list, a side pane or a dialog's text scrolls in a box of its
+    own: scroll moved only the window, and its answer said that the page did
+    not move. With a ref or x,y it moves the box there (BOX_SCROLL_JS); where
+    none scrolls, the page as before."""
+    page, asked = Shop(browser), []
+    page.in_view = (["e10", "e11"], [])
+    boxes = iter([{"tag": "div#chats.list", "moved": [0, 480, 600, 3000]},
+                  {"tag": "div#chats.list", "moved": [480, 0, 600, 3000]},
+                  {"tag": "div#chats.list", "moved": [2400, 2400, 600, 3000]}, None])
+
+    class Row(page.Locator):
+        def evaluate(self, script, arg=None):
+            if script == browser.BOX_SCROLL_JS:
+                asked.append((self.ref, arg))
+                return next(boxes)
+            return False
+    page.Locator = Row
+    said = driven(page, action="scroll", ref="e10", direction="down").splitlines()
+    assert asked == [("e10", 1)]
+    assert said[0] == "Scrolled down in the box around e10 (div#chats.list): it shows 480-1080 of 3000 px."
+    # What is in view comes first, as after a scroll of the page.
+    shown = said.index("In view now (2 of 34 lines; read lists all):")
+    assert said[shown + 1:shown + 3] == ['[e10] link "Product number 10 with a longer name"',
+                                       '[e11] link "Product number 11 with a longer name"']
+    assert driven(page, action="scroll", ref="e10", direction="up").splitlines()[0] == (
+        "Scrolled up in the box around e10 (div#chats.list): it shows 0-600 of 3000 px, the top of the box.")
+    assert driven(page, action="scroll", ref="e10").splitlines()[0] == (
+        "The box around e10 (div#chats.list) did not move: it shows 2400-3000 of 3000 px.")
+    # Nothing around the ref scrolls on its own: the page.
+    assert driven(page, action="scroll", ref="e10").splitlines()[:2] == [
+        "Nothing around e10 scrolls on its own; the page instead.",
+        "Scrolled down: the view shows 648-1368 of 4000 px."]
+
+    # At x,y: the element there, as the screenshot shows it.
+    pointed = []
+
+    class Handle:
+        def evaluate(self, script, arg=None):
+            assert script == browser.BOX_SCROLL_JS
+            return {"tag": "section.pane", "moved": [0, 400, 500, 900]}
+    page.evaluate_handle = lambda script, arg: pointed.append(arg) or Handle()
+    said = driven(page, action="scroll", x=900, y=300)
+    assert pointed == [[900, 300]]
+    assert said.startswith("Scrolled down in the box at 900,300 (section.pane): it shows 400-900 of 900 px, the end "
+                           "of the box.")
+    # Without ref and x,y: the page, as before.
+    assert driven(page, action="scroll", direction="down").startswith("Scrolled down: the view shows 648-1368")

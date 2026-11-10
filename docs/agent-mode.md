@@ -2356,6 +2356,22 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   Alert, `upload` über Knopf und über x,y auf ein Label). An einer Sprite mit
   `AllowFileSelectionDialogs: false` ungeprüft; erwartet, dass Chromium die
   Auswahl für DevTools abfängt, bevor die Richtlinie greift.
+- **Scrollen in einem Kasten der Seite (seit 2026-11-10).** Viele Apps
+  scrollen nicht das Fenster, sondern einen Kasten (Chatliste, Seitenleiste,
+  der Text eines Dialogs): `scroll` bewegte nur das Fenster und sagte „The
+  page did not move“. Mit `ref` oder x,y bewegt `scroll` jetzt den Kasten, der
+  dort scrollt, das Element selbst oder den nächsten darum
+  (`BOX_SCROLL_JS`, 80 % seiner Höhe, sofort), nennt ihn wie `HIT_JS`
+  (`nav#chats.list`) und wo er steht; scrollt dort keiner, scrollt die Seite
+  (bei einer Ref in einem Frame dieser Frame) wie bisher. „In view now“
+  zählt nur noch, was jeder abschneidende Kasten um ein Element zeigt
+  (`IN_VIEW_JS`; ein `position: fixed`-Element verlässt die Kästen): vorher
+  standen die aus der Liste gescrollten Zeilen mit drin, weil das Fenster
+  ihren Platz hält. Beide Skripte gehen über die DOM-eigenen Getter (ein
+  Formularfeld namens `parentElement`, siehe `HIT_JS`). Geprüft mit
+  `tests/js/workspace-browser-scroll.test.mjs`, Attrappen und einmal gegen
+  ein lokales Chromium (Chatliste per Ref, AGB-Kasten per x,y, Rückfall auf
+  die Seite).
 - **Downloads vom Browser auf die Werkbank (seit 2026-10-28).** Was der
   Browser herunterlädt, landet im Chat-Ordner unter `downloads/`: Downloads,
   die eine Aktion startet (ein Klick, Enter, eine Adresse, die eine Datei
