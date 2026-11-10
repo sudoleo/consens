@@ -510,9 +510,9 @@ class SourceReader:
     # --- The tool ----------------------------------------------------------
     def read(self, args, *, cancellation):
         """The tool. Refusals and failed pages are results, not tool errors:
-        three tool errors in a row end the turn (DelegationLoop.run), and a
-        paywalled page or a mis-copied URL must not cost the paid work its
-        answer."""
+        a row of steps with nothing but tool errors ends the turn
+        (DelegationLoop.run, FAILED_TOOL_ROUNDS), and a paywalled page or a
+        mis-copied URL must not cost the paid work its answer."""
         loop = self.loop
         loop._check(cancellation)
         start, fresh = getattr(args, "start", 0), getattr(args, "fresh", False)

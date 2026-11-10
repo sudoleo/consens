@@ -189,7 +189,12 @@ mindestens 2026-10-23 keine, und ein Prüfer schrieb deshalb, der Agent habe
 nichts recherchiert und seine Links nie geöffnet (Chat „Harry Kane und der
 Ballon d'Or“, 2026-10-26). Der Prüfer-Prompt erklärt das; `AgentCompletion`
 loggt solche Schritte mit den Feldnamen ihrer Chunks („Agent search without
-citations“), um die Treffer ohne bezahlte Probe zu finden. Das Gespräch eines
+citations“), um die Treffer ohne bezahlte Probe zu finden. Seit 2026-11-10
+sucht der Agent mit dem Werkzeug `web_search` (agent-mode.md „Websuche“):
+Seine Suchen und Treffer stehen dann als Werkzeugergebnis im Protokoll
+(`data` „web“), die Prüfer lesen es strukturiert, jeder Auszug gleich
+gekürzt (`SEARCH_ENTRY_CHARS`), und ihr Prompt sagt, welcher der beiden Wege
+gilt (`REVIEW_SEARCH_TOOL`, `REVIEW_SEARCH_INSIDE`). Das Gespräch eines
 Prüfers fasst 60 % des Kontextfensters seines Modells nach der Antwort, zu 3
 Zeichen je Token, höchstens 400.000 Zeichen (`session_budget`); der Rest
 bleibt für Suchtreffer. Gezählt wird, was jede weitere Runde erneut sendet,

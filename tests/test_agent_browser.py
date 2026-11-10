@@ -524,9 +524,7 @@ def test_a_failing_browser_vm_costs_only_the_browser(store, fake_vm):
     """A failure costs its call; three in a row, not the first one, the
     browser for the message (runtime audit 2026-10-30, A1)."""
     # One browser call per step: a failed one leaves its step's later browser
-    # calls unrun (CALL_AFTER_BROWSER_FAILURE, test_browser_vm_safety.py). A
-    # command between them keeps the steps from counting as three invalid
-    # rounds in a row (TURN_INVALID_LIMIT).
+    # calls unrun (CALL_AFTER_BROWSER_FAILURE, test_browser_vm_safety.py).
     script = Agent([[("browser", {"action": "read"})], [("browser", {"action": "read"})],
                     [("vm_exec", {"command": "ls"})],
                     [("browser", {"action": "read"})], [("browser", {"action": "read"})],

@@ -624,7 +624,6 @@ def test_an_unreachable_vm_costs_its_tools_never_the_answer(store, fake_vm):
     broken handshake; three in a row, not the first one, turn the workspace
     off for the message (runtime audit 2026-10-30, A1)."""
     fake_vm.fail.add("ensure")
-    # Two calls a step: three failed steps in a row would end the run (TURN_INVALID_LIMIT).
     script = Agent([[("vm_exec", {"command": "ls"}), ("vm_exec", {"command": "pwd"})],
                     [("vm_exec", {"command": "ls -a"}), ("vm_exec", {"command": "whoami"})]])
     loop = vm_loop(store, script)

@@ -119,8 +119,9 @@ class WebSearch:
 
     def search(self, args, *, cancellation):
         """The tool. A search that failed is part of the result, never a tool
-        error: three tool errors in a row end the turn (DelegationLoop.run),
-        and a service that is down must not cost the work its answer."""
+        error: the other searches of the call stand, and a service that is
+        down must not count against the turn (DelegationLoop.run,
+        FAILED_TOOL_ROUNDS)."""
         loop = self.loop
         loop._check(cancellation)
         refusal = self._refusal()
