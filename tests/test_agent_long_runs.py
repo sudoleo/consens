@@ -329,6 +329,24 @@ def test_a_compacted_file_read_keeps_where_it_was_and_the_inputs():
     assert json.loads(stub("vm_exec", "not json"))["compacted"] == OUTPUT_CLEARED
 
 
+def test_a_compacted_first_result_keeps_where_the_agent_works():
+    """The message's first result from the workspace names the chat's
+    folder, the keys and the notes, once. Compacted away, a long run no
+    longer knew its own folder, and running the command again did not bring
+    them back."""
+    from app.services.agent_compaction import NOTES_CLEARED
+    first = {"exit_code": 0, "stdout": "x\n" * 9000, "stderr": "", "cwd": "/home/agent/chats/a-1",
+             "chat_folder": "/home/agent/chats/a-1", "workspace_note": "The workspace was restored.",
+             "workspace_keys": {"names": ["GITHUB_TOKEN"], "folder": "/home/agent/.secrets", "note": "n"},
+             "workspace_notes": {"path": "/home/agent/NOTES.md", "text": "long notes " * 800, "note": ""}}
+    short = json.loads(stub("vm_exec", json.dumps(first)))
+    assert short["chat_folder"] == "/home/agent/chats/a-1" and short["workspace_keys"]["names"] == ["GITHUB_TOKEN"]
+    assert short["workspace_note"] == "The workspace was restored."
+    # The notes' text goes, where they lie stays.
+    assert short["workspace_notes"] == {"path": "/home/agent/NOTES.md", "note": NOTES_CLEARED}
+    assert len(json.dumps(short)) < 2500 and short["compacted"] == OUTPUT_CLEARED
+
+
 def test_a_long_run_compacts_old_output_and_the_work_log_says_so(store, fake_vm, monkeypatch):
     monkeypatch.setattr(agent_compaction, "COMPACT_ABOVE_CHARS", 40_000)
     monkeypatch.setattr(agent_compaction, "KEEP_RECENT_CHARS", 15_000)

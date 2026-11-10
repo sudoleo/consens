@@ -88,6 +88,7 @@ OUTPUT_CLEARED = ("Earlier output cleared to save context; only its end is kept.
                   "need all of it.")
 CONTENT_CLEARED = "File content cleared to save context. Read the file again if you need it."
 PAGE_CLEARED = "Earlier page text cleared to save context; read the page again if you need it."
+NOTES_CLEARED = "The notes' text was cleared here to save context; vm_read_file reads them again."
 
 # The work record (``work_record``): at most RECORD_CHARS, each call's line
 # at most RECORD_LINE_CHARS; a longer record keeps its first RECORD_HEAD
@@ -258,8 +259,17 @@ def stub(name, content):
         result = None
     if not isinstance(result, dict):
         return json.dumps({"compacted": OUTPUT_CLEARED, "end": _tail(str(content))}, ensure_ascii=False)
-    # The first VM result of a message names the attachments (VMSession.announce).
-    inputs = {key: result[key] for key in ("input_dir", "inputs", "inputs_unavailable") if key in result}
+    # The first VM result of a message says where the agent works and what
+    # it found there (VMSession.announce), once: the chat's folder, the
+    # attachments, the keys and whether the workspace was restored stay with
+    # the stub. Without them a long run no longer knew its own folder, and
+    # "Run the command again" did not bring them back. The notes' text goes;
+    # where they lie stays.
+    inputs = {key: result[key] for key in ("chat_folder", "input_dir", "inputs", "inputs_unavailable",
+                                           "workspace_keys", "workspace_note") if key in result}
+    notes = result.get("workspace_notes")
+    if isinstance(notes, dict) and notes.get("path"):
+        inputs["workspace_notes"] = {"path": notes["path"], "note": NOTES_CLEARED}
     if name == "vm_read_file":
         kept = {key: result[key] for key in ("path", "first_line", "last_line", "total_lines", "binary", "bytes")
                 if key in result}

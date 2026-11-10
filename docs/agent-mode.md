@@ -4997,6 +4997,10 @@ Audit der Werkzeugverträge; alles Fakten, keine Verhaltensvorgaben:
   letzten 9.000 Zeichen je Stream, dazwischen die Zahl der ausgelassenen
   Bytes und der Weg zum Ganzen, `> out.txt 2>&1`); nur mit dem Ende ging der
   erste Compilerfehler verloren.
+  Wird das erste Ergebnis einer Nachricht aus dem Arbeitsplatz später
+  gekürzt (`agent_compaction.stub`), bleiben Chat-Ordner, Anhänge, Keys und
+  der Hinweis auf eine Wiederherstellung stehen, von den Notizen der Pfad:
+  Ein langer Lauf wusste sonst seinen eigenen Ordner nicht mehr.
   `vm_write_file` hat `append` (`agent_vm.APPEND_SCRIPT`): Eine Datei, die
   nicht in einen Aufruf passt, entsteht in Teilen. `vm_install_packages` ist
   wiederholbar (`REPEATABLE_TOOLS`): apt macht beim selben Aufruf weiter.
