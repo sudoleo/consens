@@ -95,6 +95,31 @@ def test_an_opened_chat_stays_within_its_bound(store, monkeypatch):
     assert "ends before" in search(loop, chat_id=long, from_message=5)["more"]
 
 
+def test_a_long_chat_is_read_on_to_its_last_message(store, monkeypatch):
+    """A chat holds up to MAX_TURNS_PER_CHAT messages (an hourly watch has 240
+    after ten days). Its turns were read at most 240 deep: from there every
+    part was empty and said "goes on ... from_message 240" again, so the latest
+    question a search had matched stayed out of reach."""
+    from app.services.chat_store import MAX_TURNS_PER_CHAT
+    assert agent_chat_search.TURNS * agent_chat_search.TURN_PAGES >= MAX_TURNS_PER_CHAT
+    monkeypatch.setenv("CHAT_CURSOR_SECRET", "test-chat-cursor-secret-32-bytes")
+    loop = watch_loop(store, Script())
+    long = earlier(store, "Watch", "Frage 1", answer="ok")
+    turns = store._chat_ref(UID, long).collection("turns")
+    for n in range(2, 251):
+        turns.document(f"{n:032x}").set(
+            {"position": n, "status": "completed", "question": f"Frage {n}", "assistant_response": "ok"})
+    start, questions = 0, []
+    while True:
+        part = search(loop, chat_id=long, from_message=start)
+        questions += [message["question"] for message in part["messages"]]
+        if "goes on" not in part.get("more", ""):
+            break
+        assert part["messages"], part["more"]
+        start += len(part["messages"])
+    assert len(questions) == 250 and questions[-1] == "Frage 250"
+
+
 @pytest.mark.parametrize("which,message", [("google", "Google data"), ("current", "current chat"),
                                            ("unknown", "No such chat"), ("bad", "chat_id from a search_chats")])
 def test_what_an_opened_chat_never_is(store, which, message):

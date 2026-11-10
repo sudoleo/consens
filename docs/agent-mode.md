@@ -5058,7 +5058,11 @@ Audit der Werkzeugverträge; alles Fakten, keine Verhaltensvorgaben:
   jedes Wort vorkommen muss, und liest einen langen Chat in Teilen weiter
   (`from_message`; das Ergebnis nennt die nächste Position). Vorher gab es
   nur den Anfang (24.000 Zeichen), und die Stelle, die eine Suche über die
-  letzte Frage gefunden hatte, war nicht erreichbar.
+  letzte Frage gefunden hatte, war nicht erreichbar. Gelesen wird bis zur
+  letzten Nachricht (`TURN_PAGES` deckt `MAX_TURNS_PER_CHAT`, nur die Felder
+  von Frage und Antwort); mit sechs Seiten endete ein Chat über 240
+  Nachrichten (eine stündliche Watch nach zehn Tagen) in einem Zeiger, der
+  immer wieder auf Nachricht 240 zeigte.
 
 Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
 (`ToolRegistry.validate`) die Änderung: unbekanntes Tool mit Liste der
