@@ -6018,6 +6018,33 @@ Tests: `tests/test_agent_web_images.py` (Suche, Abruf, Ablauf),
 `tests/js/agent-workspace.test.mjs` (Collage),
 `tests/js/composer-attachments.test.mjs` (Blättern).
 
+### Diagramme in der Antwort (Mermaid, seit 2026-11-10)
+
+Anlass (Max, 2026-11-10): Modelle arbeiten von sich aus zu wenig mit
+Abbildungen; die Idee war eine leise Anweisung, mehr Bilder zu zeigen.
+Dagegen sprach die eigene Regel (keine Stil-Vorgaben), dass der Agent sich bei
+Bildern schon ohne Schubs verrennt (Delay Sports, „füg mal mehr bilder ein“),
+und dass eine Bildersuche ohne Hinsehen mit jeder Abbildung auch falsch
+beschriftete bringt. Der eigentliche Mangel lag bei Abbildungen: Ein Diagramm
+im Codeblock blieb Text, ein echtes kostete den Arbeitsplatz und matplotlib,
+also Minuten.
+
+- **Der Weg statt der Anweisung:** Die App zeichnet einen ` ```mermaid `-Block
+  als Diagramm (`static/js/diagram-render.js`, `docs/codebase-map.md`
+  „diagram-render.js“). Das kostet keinen Werkzeugaufruf, keine Runde und kein
+  fremdes Bild, und es gilt für jedes Modell.
+- **Der Prompt nennt nur den Fakt**, wie bei Formeln
+  (`AGENT_AUDIT_ANSWER_SECTION`): „a ```mermaid code block shows as the diagram
+  it describes“. Ob eine Antwort ein Diagramm bekommt, entscheidet das Modell.
+  `AGENT_VM_PROMPT` sagt seitdem „one drawn with characters in a code block
+  stays text“: Der alte Satz („one drawn in a code block stays text“) hätte
+  dem neuen Fakt widersprochen.
+- **Wo es nicht gezeichnet wird:** in Mails und Telegram-Nachrichten (dort
+  steht der Code) und überall, wo Mermaid den Block nicht lesen kann (dann
+  bleibt er der Codeblock, den das Modell schrieb).
+- **Offen:** ob Modelle es treffend nutzen oder übertreiben, zeigt erst Prod.
+  Fotos aus dem Web bleiben, wie sie sind (`search_pictures`, `show_image`).
+
 ## Persistenz, Stop und Recovery
 
 `accepted` liefert dem Browser die Turn-ID schon während der Budget-Zulassung.

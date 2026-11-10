@@ -129,8 +129,9 @@ def test_localhost_with_a_port_is_the_workspaces():
     for prompt in (AGENT_VM_PROMPT, AGENT_WORKSPACE_CLOSED_PROMPT):
         assert "the user's own devices are out of your reach" in prompt
     # A chart of prices came as # characters in a code block: with the
-    # workspace a chart is a picture.
-    assert "one drawn in a code block stays text" in AGENT_VM_PROMPT and "vm_share_file" in AGENT_VM_PROMPT
+    # workspace a chart is a picture. (A Mermaid block is drawn by the app,
+    # so the sentence names the characters.)
+    assert "one drawn with characters in a code block stays text" in AGENT_VM_PROMPT and "vm_share_file" in AGENT_VM_PROMPT
     assert "charts and diagrams as pictures" in AGENT_WORKSPACE_CLOSED_PROMPT
 
 

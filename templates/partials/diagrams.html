@@ -1,0 +1,8 @@
+{#
+  Diagrams only for pages with one (app/core/diagram_assets.py): the script
+  draws each ```mermaid block of the answer and imports Mermaid from
+  static/vendor itself.
+#}
+  {% if page_has_diagram() %}
+  <script defer src="{{ asset_url('/static/js/diagram-render.js') }}"></script>
+  {% endif %}

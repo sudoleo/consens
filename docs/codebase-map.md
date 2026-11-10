@@ -2535,6 +2535,68 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Läufen, in denen die Zeile *zwischen* den `$$` als eigener „Satz" landete:
   nur wenn außer LaTeX nichts im Anker steht, wird er nachträglich als Formel
   gesetzt — ein einziges Wort Text lässt ihn Text bleiben.
+- **`diagram-render.js`** (seit 2026-11-10) — ein ` ```mermaid `-Block einer
+  Antwort erscheint als Diagramm, in `/app` und auf Share-/Watch-Seiten.
+  Exponiert `window.ConsensusDiagram.{key,request,settled,warm,render}`.
+  - **Mermaid** 12.3.0 liegt als ES-Module unter
+    `static/vendor/mermaid/<version>/dist/` und wird per `import()` geholt, wenn
+    eine Antwort zum ersten Mal ein Diagramm enthält (Kern plus eine
+    Diagrammart rund 230 KB komprimiert). Die ELK-Layout-Engine ist nicht
+    dabei (1,6 MB, Regex-Lookbehind, den Safari vor 16.4 nicht parst; Mermaid 12
+    nimmt sie sonst als Standard): `configure()` setzt `layout: "dagre"`.
+  - **Das Diagramm ist ein Bild** (`<img>` mit `data:image/svg+xml;base64`,
+    `picture()`), kein SVG im Dokument. Modelltext ist nicht vertrauenswürdig,
+    und ein Bild führt kein Skript aus und lädt nichts nach; Seiten-CSS und
+    die Textläufer der App (Satzmarken, „Licht“ des Streams, Auswahl) reichen
+    nicht hinein. Folgen: Beschriftungen als SVG-Text (`htmlLabels: false`,
+    Safari verschiebt `<foreignObject>` in Bildern), System-Schrift statt
+    Inter (Mermaid misst in der Seite, das Bild kennt keine Web-Schrift; beide
+    nennen `FONT`), Farben beim Zeichnen aus den Tokens gelesen
+    (`--ground`/`--raise`/`--ink`/`--ink-3`/`--agree`, `themeVariables()`:
+    einfarbig, flach, Hausgrün als einziger Akzent) und bei einem
+    Themenwechsel neu gezeichnet (`MutationObserver` auf `class` von `<html>`
+    und `<body>`).
+  - **Was ein Diagramm nicht darf:** `securityLevel: "strict"`; `LOCKED`
+    (Mermaids `secure`) nimmt der `%%{init}%%`-Zeile und dem Front Matter
+    Thema, eigene CSS, Schrift, HTML-Beschriftungen und Layout. Ein Block mit
+    einer Bild-Form (`@{ img: … }`, `LOADS_IMAGE`) wird nie gezeichnet:
+    Mermaid ruft die Adresse beim Zeichnen in der Seite ab; die CSP
+    (`img-src 'self' data:`) ist dafür nur die zweite Schicht.
+  - **Platz:** `markdown-stream.js` (`ensureDiagramBlocks`, ein
+    Renderer-Extension für `code`, weil nur der das Token mit `raw` sieht)
+    schreibt `.md-diagram[data-diagram=<key>]` mit dem Code darin; `key()`
+    ist ein FNV-1a-Hash der Quelle. Dasselbe Diagramm im nächsten Render ist
+    derselbe Knoten (`KEPT_NODES`) und behält seine Zeichnung. Ein Block ohne
+    schließenden Zaun trägt `data-open` und wird nie gezeichnet: Im laufenden
+    Stream ist er ein ruhiges Feld (`.is-pending`, `markOpenDiagrams`, das
+    Mermaid schon lädt: `warm()`), in einer fertigen Antwort Code.
+  - **Nichts springt:** `streamHold()` zeigt den Stream nur bis zum Ende
+    eines fertigen Diagrammblocks, bis `settled()` meldet, dass er gezeichnet
+    oder gescheitert ist (höchstens `HOLD_MS`, 2,5 s); der Text danach kommt
+    unter die Zeichnung statt sie zu verschieben. `diagram.css` (von
+    `style.css` und `public-pages.css` importiert) gibt dem Platz ein
+    16:10-Feld; die Größe eines gezeichneten Diagramms merkt sich der Browser
+    (`localStorage` `consens.diagramSizes`, höchstens 200), sodass ein später
+    geöffneter Chat das Feld von Anfang an in der richtigen Größe hat.
+  - **Scheitern:** Was Mermaid nicht lesen kann, bleibt der Codeblock des
+    Modells (`.is-code`, mit Kopierknopf), ohne Fehlergrafik. Kam Mermaid
+    selbst nicht an (Netz), versucht es ein späterer Blick nach `RETRY_MS`.
+  - **Vergrößern** (nur `/app`): Ein Klick öffnet die Zeichnung im
+    Bildbetrachter (`App.attachments.openStored`, Zoom über `image-zoom.js`).
+  - **Öffentliche Seiten:** `public_markdown._mark_diagram_blocks` lässt nur
+    einem geschlossenen Mermaid-Block die Klasse `language-mermaid` (nh3
+    `tag_attribute_values`; jeder andere Codeblock bleibt ohne Klasse).
+    `templates/partials/diagrams.html` bindet das Skript nur ein, wenn
+    `page_has_diagram()` (`app/core/diagram_assets.py`) die Marke im
+    Template-Kontext findet; `adopt()` macht aus dem Block des Servers einen
+    Platz. Mails und Telegram zeigen den Code.
+  - Der Prompt nennt nur den Fakt (`AGENT_AUDIT_ANSWER_SECTION`: „a
+    ```mermaid code block shows as the diagram it describes“), wie bei
+    Formeln; `docs/agent-mode.md`, „Diagramme in der Antwort“.
+  - Tests: `tests/js/markdown-diagram.test.mjs`,
+    `tests/js/diagram-render.test.mjs`, `tests/test_diagram_assets.py` und
+    im echten Browser unter der Skript-Policy der App
+    `tests/e2e/test_diagram_render.py`.
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`, `morphMarkdown`,
   `renderMarkdownStream`, `keepTextSelection`, ein Parse je Render über
   `renderMarkdownFragment`; jeder Codeblock bekommt seit 2026-10-26 einen
@@ -7454,6 +7516,9 @@ ein Auth-Refresh-Fehler zeigt einen Verbindungs-/Reload-Hinweis.
 mit gepinnten Versionspfaden und Inhalts-Hashes. `scripts/vendor_frontend.mjs`
 kopiert beim Frontend-Build die npm-Dateien und Lizenzen unverändert und prüft
 sie bei `build:check` bytegenau. Das Build-Manifest umfasst auch diese Dateien.
+Dazu kommen ES-Module, die erst bei Bedarf importiert werden: pdf.js
+(Dateivorschau), noVNC (Arbeitsplatz) und Mermaid (Diagramme in Antworten,
+`diagram-render.js`; ohne Source-Maps und ohne die ELK-Layout-Engine).
 Firebase bleibt ein externer gstatic-Import; öffentliche Seiten bleiben unverändert.
 
 **Quellen in der Synthese (seit 2026-09-11):** Neue Consensus-Antworten enthalten keine
@@ -11947,6 +12012,8 @@ zählen nicht):
   `window.currentBookmarkShareResultError`,
   `window.resolveCurrentShareResultId`, `window.clearPreparedBookmarkShareResult`,
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
+  `window.ConsensusDiagram` (diagram-render.js → markdown-stream.js; der
+  Platz eines Diagramms ist `.md-diagram[data-diagram]`, seit 2026-11-10),
   `window.App.reportCriticalError`, `window.renderStoredAuditMarks` (Marken
   eines Agent-Audits, consensus-insights.js → agent-review.js; seit 2026-10-25),
   `App.agentWorkLog.render(host, view)`, `.reset(host)` und `.KINDS` (Arbeitsprotokoll,

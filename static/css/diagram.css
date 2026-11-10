@@ -1,0 +1,70 @@
+/* ==========================================================================
+   A diagram in an answer (diagram-render.js)
+
+   Imported by style.css (/app) and public-pages.css (shared answers and
+   Watch pages). The model's ```mermaid block, drawn as an image at the
+   text's left edge, in the page's own tones and without a frame.
+
+   Its field stands from the first frame and the drawing takes its place.
+   A diagram this browser has drawn before has its own size at once
+   (--diagram-width/-height), as wide as it will be drawn: its own width,
+   the answer's, or what the height limit allows. Any other keeps a 16:10
+   field until it is drawn.
+   ========================================================================== */
+
+.md-diagram {
+  --diagram-max-height: min(640px, 70vh);
+  margin: 18px 0 22px;
+}
+.md-diagram > pre { display: none; margin: 0; }
+/* Not a diagram after all (Mermaid cannot read it), or a block the answer
+   never closed: the code as the model wrote it. */
+.md-diagram.is-code > pre,
+.md-diagram[data-open]:not(.is-pending) > pre { display: block; }
+.md-diagram.is-code > .md-diagram-figure { display: none; }
+
+/* The field: a figure, or a block still being written (.is-pending,
+   markdown-stream.js), which has no figure yet. */
+.md-diagram-figure,
+.md-diagram.is-pending::before {
+  display: block;
+  width: min(420px, 100%);
+  aspect-ratio: 16 / 10;
+  border-radius: var(--radius-sm);
+}
+.md-diagram.is-pending::before { content: ""; }
+.md-diagram.has-size > .md-diagram-figure {
+  width: min(calc(var(--diagram-width) * 1px), 100%,
+    calc(var(--diagram-max-height) * var(--diagram-width) / var(--diagram-height)));
+  aspect-ratio: var(--diagram-width) / var(--diagram-height);
+}
+/* Waiting: the skeleton's tone with its light passing (skeleton.css). */
+.md-diagram:not(.is-drawn) > .md-diagram-figure,
+.md-diagram.is-pending::before {
+  background:
+    linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--ink) 6%, transparent) 50%, transparent 70%)
+      0 0 / 300% 100% no-repeat,
+    color-mix(in srgb, var(--ink) 7%, transparent);
+  animation: diagram-light var(--dur-beat) var(--ease-standard) infinite;
+}
+@keyframes diagram-light {
+  0%, 10% { background-position: 150% 0, 0 0; }
+  70%, 100% { background-position: -50% 0, 0 0; }
+}
+.md-diagram:not(.is-drawn) > .md-diagram-figure img { visibility: hidden; }
+
+.md-diagram-open {
+  display: block; width: 100%; height: 100%; padding: 0; border: 0; border-radius: inherit;
+  background: none; cursor: zoom-in;
+}
+.md-diagram-open:disabled { cursor: default; }
+.md-diagram-open:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
+.md-diagram-figure img { display: block; width: 100%; height: 100%; }
+.md-diagram.is-arriving > .md-diagram-figure img { animation: diagram-in var(--dur-layer) var(--ease-out) both; }
+@keyframes diagram-in { from { opacity: 0; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .md-diagram:not(.is-drawn) > .md-diagram-figure,
+  .md-diagram.is-pending::before { animation: none; background: color-mix(in srgb, var(--ink) 7%, transparent); }
+  .md-diagram.is-arriving > .md-diagram-figure img { animation: none; }
+}

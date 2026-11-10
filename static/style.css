@@ -37,6 +37,8 @@
 @import url('./css/select.css');
 /* Site icons and citation pills, shared with the public pages. */
 @import url('./css/source-pill.css');
+/* A diagram in an answer, shared with the public pages. */
+@import url('./css/diagram.css');
 /* The login / sign-up dialog, standalone after every component layer. */
 @import url('./css/auth-modal.css');
 /* Every layer above the page and how it comes and goes: scrim, dialog

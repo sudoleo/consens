@@ -31,6 +31,10 @@ export async function vendorFrontend(root, checkOnly) {
     // script fallbacks stand in for WebAssembly, which the CSP does not run.
     "pdfjs-dist": ["build/pdf.min.mjs", "build/pdf.worker.min.mjs", "LICENSE",
       "wasm/jbig2_nowasm_fallback.js", "wasm/openjpeg_nowasm_fallback.js"],
+    // Diagrams in an answer (diagram-render.js): ES modules, imported when
+    // an answer first holds one. The entry imports its core chunks and
+    // loads each kind of diagram on demand from the same folder.
+    mermaid: ["dist/mermaid.esm.min.mjs", "LICENSE"],
   };
   // Where a package lands under static/vendor (a scope's @ stays out of URLs).
   const folders = { "@novnc/novnc": "novnc", "pdfjs-dist": "pdfjs" };
@@ -47,6 +51,14 @@ export async function vendorFrontend(root, checkOnly) {
       files.push(...await filesBelow(source, "core"), ...await filesBelow(source, "vendor"));
     }
     if (name === "pdfjs-dist") files.push(...await filesBelow(source, "standard_fonts"), ...await filesBelow(source, "cmaps"));
+    if (name === "mermaid") {
+      // Without the source maps, four times the size of the code, and
+      // without the ELK layout: a third of the rest, with regex lookbehinds
+      // that do not parse in Safari before 16.4. diagram-render.js lays
+      // out with Dagre and lets no diagram choose another layout.
+      files.push(...(await filesBelow(source, "dist/chunks/mermaid.esm.min"))
+        .filter(file => file.endsWith(".mjs") && !path.basename(file).startsWith("elk-")));
+    }
     for (const file of files) {
       const relative = `static/vendor/${folders[name] || name}/${version}/${file}`;
       const target = path.join(root, relative);

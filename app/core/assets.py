@@ -312,9 +312,11 @@ def register_asset_globals(templates) -> None:
     templates.env.globals["asset_url"] = asset_url
     templates.env.globals["frontend_assets"] = frontend_assets
     templates.env.globals["font_preload_urls"] = font_preload_urls
+    from app.core.diagram_assets import register_diagram_globals
     from app.core.math_assets import register_math_globals
 
     register_math_globals(templates)
+    register_diagram_globals(templates)
 
 
 # Local dependencies a stylesheet or ES module pulls in by URL. Their bytes

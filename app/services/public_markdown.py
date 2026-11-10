@@ -211,11 +211,34 @@ def render_public_markdown(md_text, sources=None, excluded_sources=None, site_li
     _normalize_citation_links(tokens, sources)
     _mark_task_items(tokens)
     _neutralize_remote_images(tokens)
+    _mark_diagram_blocks(tokens, text)
     if site_links is not None:
         _link_site_mentions(tokens, site_links)
     html = _MD.renderer.render(tokens, _MD.options, {})
     return nh3.clean(html, url_schemes=_URL_SCHEMES, link_rel=_LINK_REL, attributes=_ALLOWED_ATTRIBUTES,
-                     attribute_filter=_same_origin_images_only)
+                     tag_attribute_values=_DIAGRAM_CLASS, attribute_filter=_same_origin_images_only)
+
+
+# The one class a code block keeps: the page draws it as a diagram
+# (diagram-render.js, app/core/diagram_assets.py).
+_DIAGRAM_CLASS = {"code": {"class": {"language-mermaid"}}}
+_DIAGRAM_INFO = re.compile(r"^mermaid(?:\s|$)", re.IGNORECASE)
+
+
+def _mark_diagram_blocks(tokens, text):
+    """Only a ```mermaid block with its closing fence is a diagram, as in the
+    app (markdown-stream.js fenceClosed): an answer cut off inside one would
+    be drawn half. Every other block loses its language, so its code carries
+    no class."""
+    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    for token in tokens:
+        if token.type != "fence":
+            continue
+        first, after = token.map or (0, 0)
+        # The fence's last line, without the marks of a quote or list around it.
+        closing = re.sub(r"^[\s>]+", "", lines[after - 1]).strip() if first < after - 1 < len(lines) else ""
+        closed = len(closing) >= len(token.markup) >= 3 and closing == token.markup[0] * len(closing)
+        token.info = "mermaid" if closed and _DIAGRAM_INFO.match(token.info.strip()) else ""
 
 
 _PICTURE_REF = re.compile(r"^picture:[A-Za-z0-9_-]{1,64}$")

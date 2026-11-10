@@ -1586,6 +1586,20 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertRegex(body, r'<meta name="katex-assets"\s+data-css="/static/vendor/katex/0\.19\.0/dist/katex\.min\.css\?v=')
         self.assertRegex(body, r"/static/js/math-render\.js\?v=[\w.-]+")
 
+    def test_a_shared_diagram_loads_the_script_that_draws_it(self):
+        # Most shares have none and load nothing for it (partials/diagrams.html).
+        plain = self._share_doc()
+        with patch.object(share_router.snapshots, "get_share", return_value=plain):
+            body = self.client.get("/s/%s-%s" % (plain["slug"], self.share_id)).text
+        self.assertNotIn("diagram-render.js", body)
+
+        snapshots.invalidate_share_cache()
+        doc = self._share_doc(consensus_md="The flow:\n\n```mermaid\nflowchart LR\n  A[Light] --> B[Sugar]\n```\n\nDone.")
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            body = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id)).text
+        self.assertIn('<pre><code class="language-mermaid">flowchart LR\n  A[Light] --&gt; B[Sugar]\n</code></pre>', body)
+        self.assertRegex(body, r'<script defer src="/static/js/diagram-render\.js\?v=[\w.-]+"')
+
     def test_private_share_requires_owner_and_is_never_publicly_cached(self):
         doc = self._share_doc(visibility="private", owner_uid="owner-1")
         path = "/s/%s-%s" % (doc["slug"], self.share_id)

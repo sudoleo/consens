@@ -1097,6 +1097,8 @@
   "Follows the work from its first step.": "Verfolgt die Arbeit ab dem ersten Schritt.",
   "No rounds.": "Keine Runden.",
   "Copy code": "Code kopieren",
+  "Diagram": "Diagramm",
+  "Open diagram": "Diagramm öffnen",
   "Not sent: “{text}”. You had opened another chat before the response ended.": "Nicht gesendet: „{text}“. Du hattest einen anderen Chat geöffnet, bevor die Antwort fertig war.",
   "Not sent: “{text}”. The response it waited for is no longer there.": "Nicht gesendet: „{text}“. Die Antwort, auf die sie gewartet hat, gibt es nicht mehr.",
   "Install": "Installieren",

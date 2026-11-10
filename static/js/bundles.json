@@ -142,6 +142,10 @@
           "file": "static/js/math-render.js",
           "note": "Shared LaTeX preparation; must load before markdown-stream.js."
         },
+        {
+          "file": "static/js/diagram-render.js",
+          "note": "ConsensusDiagram: a ```mermaid block of an answer as its diagram (Mermaid from static/vendor/mermaid, imported when an answer first holds one). markdown-stream.js asks it at runtime; attachments.js enlarges a drawing."
+        },
         "static/js/markdown-stream.js",
         {
           "file": "static/js/task-checks.js",

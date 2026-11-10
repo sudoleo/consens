@@ -8,6 +8,7 @@
 // window.createStreamRenderer, window.streamSSERequest.
 // (readSSEStream bleibt modul-privat.)
 // Call-time-Abhaengigkeiten: DOMPurify, marked (static/vendor), window.ConsensusMath,
+// window.ConsensusDiagram (diagram-render.js),
 // window.addNewTabToLinks, window.linkifySourceTags,
 // window.currentEvidenceSources, window.App.taskChecks (task-checks.js).
 // =====================================================================
@@ -176,6 +177,63 @@ function liftPictureLines(root) {
   });
 }
 
+// --- Diagrams ---------------------------------------------------------------
+// A ```mermaid block is a diagram (diagram-render.js draws it as an image).
+// Here it becomes its place: the code as marked would write it, in a
+// .md-diagram named after its source, so the same diagram in the next render
+// is the same node and keeps its drawing. A block whose closing fence has
+// not arrived carries data-open instead and is never drawn: half a diagram
+// is a syntax error. Without diagram-render.js the block stays code.
+const diagramReadyParsers = new WeakSet();
+const DIAGRAM_LANGUAGE = /^mermaid(?:\s|$)/i;
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, mark => `&#${mark.charCodeAt(0)};`);
+}
+
+// Whether a fenced code token of marked ends with its closing fence.
+function fenceClosed(raw) {
+  const lines = String(raw || "").replace(/\n+$/, "").split("\n");
+  const fence = lines[0].match(/^ {0,3}(`{3,}|~{3,})/);
+  if (!fence || lines.length < 2) return false;
+  const last = lines[lines.length - 1].trim();
+  return last.length >= fence[1].length && last === fence[1][0].repeat(last.length);
+}
+
+function diagramToken(token) {
+  return token?.type === "code" && DIAGRAM_LANGUAGE.test(String(token.lang || "").trim());
+}
+
+function ensureDiagramBlocks(marked) {
+  if (typeof marked?.use !== "function" || diagramReadyParsers.has(marked)) return;
+  diagramReadyParsers.add(marked);
+  // An extension's renderer gets the token (its raw text says whether the
+  // fence is closed); marked 12's own code renderer gets only the code.
+  marked.use({ extensions: [{
+    name: "code",
+    renderer(token) {
+      const diagrams = window.ConsensusDiagram;
+      if (!diagrams || !diagramToken(token)) return false;
+      const place = fenceClosed(token.raw) ? `data-diagram="${escapeHtml(diagrams.key(token.text))}"` : "data-open";
+      return `<div class="md-diagram" ${place}><pre><code class="language-mermaid">${escapeHtml(token.text)}\n</code></pre></div>\n`;
+    }
+  }] });
+}
+
+// A block still being written stands as a quiet field (diagram.css); only a
+// running stream marks it, so a block the finished answer never closed shows
+// its code.
+function markOpenDiagrams(nodes) {
+  for (const node of nodes) {
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    const open = node.matches(".md-diagram[data-open]") ? [node] : node.querySelectorAll(".md-diagram[data-open]");
+    for (const place of open) {
+      place.classList.add("is-pending");
+      window.ConsensusDiagram?.warm?.(place.textContent);
+    }
+  }
+}
+
 // --- Copying a code block -------------------------------------------------
 // Each code block carries a copy button in its corner. An icon
 // without text, so the answer's text (claims, selections, the copied answer)
@@ -262,6 +320,7 @@ function renderMarkdownFragment(md) {
   try {
     ensureTaskMarkers(window.marked);
     ensurePictureRefs(window.marked);
+    ensureDiagramBlocks(window.marked);
     let fragment = window.DOMPurify.sanitize(window.marked.parse(prepared),
       { ...MODEL_HTML_CONFIG, RETURN_DOM_FRAGMENT: true });
     if (typeof fragment === "string") {
@@ -357,6 +416,7 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
   if (linked) window.linkifySourceTags(el, evidenceSources);
 
   if (window.ConsensusMath) window.ConsensusMath.render(el);
+  window.ConsensusDiagram?.render(el);
   noteMarkdownWrite(el, linked ? null : md);
   syncTaskBoxes(el);
 }
@@ -394,17 +454,20 @@ const CARRIED_PROPERTIES = ["sourceData", "sourceGroup"];
 // Claim marks carry their own listeners and state: they never become another
 // element, the new render's node takes their place.
 const MARK_NODES = ".cx-claim, .cx-spot, .claim-badge";
-// A picture's place keeps the picture agent-workspace.js put into it: the
-// same place in the next render is the same node, with what it holds.
-const PICTURE_NODES = ".md-picture";
+// A picture's place keeps the picture agent-workspace.js put into it, a
+// diagram's the drawing of diagram-render.js: the same place in the next
+// render is the same node, with what it holds. A diagram still being
+// written has no name yet and is morphed like any element.
+const KEPT_NODES = ".md-picture, .md-diagram[data-diagram]";
 
 function sameNodeKind(live, next) {
   if (live.nodeType !== next.nodeType) return false;
   if (live.nodeType !== Node.ELEMENT_NODE) return true;
   return live.tagName === next.tagName && live.namespaceURI === next.namespaceURI
     && !live.matches(MARK_NODES) && !next.matches(MARK_NODES)
-    && live.matches(PICTURE_NODES) === next.matches(PICTURE_NODES)
-    && live.getAttribute("data-picture") === next.getAttribute("data-picture");
+    && live.matches(KEPT_NODES) === next.matches(KEPT_NODES)
+    && live.getAttribute("data-picture") === next.getAttribute("data-picture")
+    && live.getAttribute("data-diagram") === next.getAttribute("data-diagram");
 }
 
 function morphNode(live, next) {
@@ -416,7 +479,7 @@ function morphNode(live, next) {
     else live.nodeValue = after;
     return;
   }
-  if (live.matches(PICTURE_NODES)) return;
+  if (live.matches(KEPT_NODES)) return;
   for (const attribute of Array.from(live.attributes)) {
     if (!next.hasAttribute(attribute.name)) live.removeAttribute(attribute.name);
   }
@@ -593,6 +656,7 @@ function renderStreamFragment(md, decorate) {
   enhanceMarkdownTables(holder);
   addCopyButtons(holder);
   if (window.ConsensusMath) window.ConsensusMath.render(holder);
+  window.ConsensusDiagram?.render(holder);
   decorate?.(holder);
   return Array.from(holder.childNodes);
 }
@@ -684,12 +748,33 @@ function holdOpenImage(text) {
 function renderStreamTail(text, decorate) {
   text = holdOpenImage(text);
   const table = pendingTableStart(text);
-  if (table === -1) return renderStreamFragment(closeOpenStrong(holdOpenTask(text)), decorate);
-  const before = text.slice(0, table);
-  const nodes = before.trim() ? renderStreamFragment(closeOpenStrong(before), decorate) : [];
+  const before = table === -1 ? closeOpenStrong(holdOpenTask(text)) : closeOpenStrong(text.slice(0, table));
+  const nodes = table === -1 || before.trim() ? renderStreamFragment(before, decorate) : [];
+  markOpenDiagrams(nodes);
+  if (table === -1) return nodes;
   const rows = text.slice(table).split("\n").filter(line => TABLE_ROW.test(line) && !TABLE_RULE.test(line)).length;
   nodes.push(pendingTable(rows));
   return nodes;
+}
+
+// A finished diagram is drawn a moment after its block arrived, and its
+// size is only known then: text that streamed on below it meanwhile jumped
+// when the drawing came. The end of the first finished diagram block from
+// `from` on whose drawing is not there yet, so the stream shows the text
+// only up to it and what follows comes below the drawing; the length of
+// `text` when nothing is waited for. marked's own lexer finds the block:
+// its `text` is the source the place is drawn from.
+function streamHold(text, from) {
+  const diagrams = window.ConsensusDiagram;
+  if (!diagrams?.settled || typeof window.marked?.lexer !== "function" || !/mermaid/i.test(text.slice(from))) return text.length;
+  let end = from;
+  try {
+    for (const token of window.marked.lexer(text.slice(from))) {
+      end += token.raw.length;
+      if (diagramToken(token) && fenceClosed(token.raw) && !diagrams.settled(token.text)) return Math.min(end, text.length);
+    }
+  } catch (_) { /* A text marked cannot read holds nothing back. */ }
+  return text.length;
 }
 
 // Renders `md` into `el`, reusing the blocks of the previous call when `md`
@@ -706,16 +791,17 @@ function renderMarkdownStream(el, md, { decorate } = {}) {
   }
   let parsed = 0;
   let end;
-  while ((end = nextStreamBlockEnd(md, state.committed)) !== -1) {
-    const block = md.slice(state.committed, end);
+  const shown = md.slice(0, streamHold(md, state.committed));
+  while ((end = nextStreamBlockEnd(shown, state.committed)) !== -1) {
+    const block = shown.slice(state.committed, end);
     // The block the reader saw growing becomes final in its own nodes.
     morphNodes(el, state.tail, renderStreamFragment(block, decorate));
     state.tail = [];
     parsed += block.length;
     state.committed = end;
-    state.committedText = md.slice(0, end);
+    state.committedText = shown.slice(0, end);
   }
-  const tailText = md.slice(state.committed);
+  const tailText = shown.slice(state.committed);
   if (tailText !== state.tailText) {
     state.tail = morphNodes(el, state.tail, tailText.trim() ? renderStreamTail(tailText, decorate) : []);
     state.tailText = tailText;
@@ -768,6 +854,8 @@ function createStreamRenderer(outputEl, isActiveFn) {
     enhanceMarkdownTables(outputEl);
     addCopyButtons(outputEl);
     if (window.ConsensusMath) window.ConsensusMath.render(outputEl);
+    markOpenDiagrams([outputEl]);
+    window.ConsensusDiagram?.render(outputEl);
     syncTaskBoxes(outputEl);
   }
 

@@ -194,6 +194,16 @@ def test_no_prompt_points_to_the_removed_answer_step():
         assert "call answer" not in text and "answer step" not in text and "answer call" not in text, text[:80]
 
 
+def test_the_answer_section_says_what_the_app_draws():
+    """Facts of the app the model cannot know: formulas are typeset and a
+    Mermaid block is drawn (markdown-stream.js, diagram-render.js). The
+    workspace's sentence about charts must not deny it."""
+    section = prompt_defaults.AGENT_AUDIT_ANSWER_SECTION
+    assert "shows as a typeset formula" in section
+    assert "a ```mermaid code block shows as the diagram it describes" in section
+    assert "one drawn in a code block stays text" not in prompt_defaults.AGENT_VM_PROMPT
+
+
 def test_the_agent_prompt_and_its_tools_in_every_chat(store, monkeypatch):
     """One mode: the facts of the app once, compare_models
     with only what the models are asked, no check_text, and memory changes

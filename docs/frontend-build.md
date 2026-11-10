@@ -98,6 +98,16 @@ Vendor-Verzeichnis entfernen. `tests/js/dompurify-vendor.test.mjs` liest die
 DOMPurify-Version aus `package.json` und prüft den ausgelieferten Pfad.
 `asset_url` ergänzt Inhalts-Hashes.
 
+Mermaid (Diagramme in Antworten, `static/js/diagram-render.js`) liegt als
+ES-Module unter `static/vendor/mermaid/<version>/dist/`: der Einstieg
+`mermaid.esm.min.mjs` und seine Chunks, ohne Source-Maps und ohne die
+ELK-Layout-Engine (`elk-*.mjs`: 1,6 MB und Regex-Lookbehind, das
+`tests/js/frontend-syntax.test.mjs` im Frontend verbietet). Bei einem
+Versionsupdate `ENTRY` in `diagram-render.js` anpassen
+(`tests/js/diagram-render.test.mjs` prüft es gegen `package.json`), das alte
+Vendor-Verzeichnis entfernen und `tests/e2e/test_diagram_render.py` laufen
+lassen: Nur dort zeichnet das echte Mermaid, unter der Skript-Policy der App.
+
 **Source-Maps.** Jedes JS-Bundle bekommt eine externe Map
 `static/dist/<name>.<hash>.js.map` (ohne `sourcesContent`, ohne `names`, ohne
 `sourceMappingURL`-Kommentar im Bundle — der Dateinamen-Hash bleibt ein Hash der

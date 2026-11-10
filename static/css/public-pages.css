@@ -6,6 +6,8 @@
 @import url('./public-nav.css');
 /* Site icons and citation pills: the same component as in /app. */
 @import url('./source-pill.css');
+/* A diagram in a shared answer: the same component as in /app. */
+@import url('./diagram.css');
 
 *,
 *::before,

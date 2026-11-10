@@ -15,17 +15,21 @@ const files = {
   'pdfjs-dist': ['build/pdf.min.mjs', 'build/pdf.worker.min.mjs', 'LICENSE', 'wasm/jbig2_nowasm_fallback.js',
     'wasm/openjpeg_nowasm_fallback.js', 'standard_fonts/FoxitSans.pfb', 'standard_fonts/LiberationSans-Regular.ttf',
     'cmaps/UniJIS-UCS2-H.bcmap'],
+  // Diagrams: the entry and every chunk it may import.
+  mermaid: ['dist/mermaid.esm.min.mjs', 'LICENSE', 'dist/chunks/mermaid.esm.min/chunk-A.mjs'],
 };
+// In the package, never copied: the chunks' source maps and the ELK layout.
+const left = { mermaid: ['dist/chunks/mermaid.esm.min/chunk-A.mjs.map', 'dist/chunks/mermaid.esm.min/elk-B.mjs'] };
 // Where a package lands under static/vendor (a scope's @ stays out of URLs).
 const folder = name => ({ '@novnc/novnc': 'novnc', 'pdfjs-dist': 'pdfjs' }[name] || name);
 async function put(root, relative, content) { const full = path.join(root, relative); await fs.mkdir(path.dirname(full), { recursive: true }); await fs.writeFile(full, content); }
 async function fixture() {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'consensio-vendor-')); dirs.push(root);
   await put(root, 'package.json', JSON.stringify({ devDependencies: { marked: '1.0.0', dompurify: '1.0.0', katex: '1.0.0', '@novnc/novnc': '1.0.0',
-    'pdfjs-dist': '1.0.0' } }));
+    'pdfjs-dist': '1.0.0', mermaid: '1.0.0' } }));
   for (const [name, paths] of Object.entries(files)) {
     await put(root, `node_modules/${name}/package.json`, '{"version":"1.0.0"}');
-    for (const file of paths) await put(root, `node_modules/${name}/${file}`, Buffer.from(`${name}/${file}\0binary`));
+    for (const file of [...paths, ...(left[name] || [])]) await put(root, `node_modules/${name}/${file}`, Buffer.from(`${name}/${file}\0binary`));
   }
   return root;
 }
@@ -35,12 +39,15 @@ describe('Vendoring pinned frontend libraries on disk', () => {
     const root = await fixture();
     await put(root, 'static/vendor/marked/0.9.0/keep.js', 'old');
     const inputs = await vendorFrontend(root, false);
-    expect(inputs).toHaveLength(22);
+    expect(inputs).toHaveLength(25);
     expect(inputs.slice(8, 10)).toEqual(['static/vendor/katex/1.0.0/dist/fonts/A.ttf', 'static/vendor/katex/1.0.0/dist/fonts/Z.woff2']);
     expect(inputs.slice(10, 14)).toEqual(['static/vendor/novnc/1.0.0/LICENSE.txt', 'static/vendor/novnc/1.0.0/core/rfb.js',
       'static/vendor/novnc/1.0.0/core/util/b.js', 'static/vendor/novnc/1.0.0/vendor/pako/a.js']);
-    expect(inputs.slice(-3)).toEqual(['static/vendor/pdfjs/1.0.0/standard_fonts/FoxitSans.pfb',
+    expect(inputs.slice(-6, -3)).toEqual(['static/vendor/pdfjs/1.0.0/standard_fonts/FoxitSans.pfb',
       'static/vendor/pdfjs/1.0.0/standard_fonts/LiberationSans-Regular.ttf', 'static/vendor/pdfjs/1.0.0/cmaps/UniJIS-UCS2-H.bcmap']);
+    expect(inputs.slice(-3)).toEqual(['static/vendor/mermaid/1.0.0/dist/mermaid.esm.min.mjs', 'static/vendor/mermaid/1.0.0/LICENSE',
+      'static/vendor/mermaid/1.0.0/dist/chunks/mermaid.esm.min/chunk-A.mjs']);
+    for (const file of left.mermaid) await expect(fs.access(path.join(root, `static/vendor/mermaid/1.0.0/${file}`))).rejects.toThrow();
     for (const [name, paths] of Object.entries(files)) for (const file of paths) {
       expect(await fs.readFile(path.join(root, `static/vendor/${folder(name)}/1.0.0/${file}`))).toEqual(await fs.readFile(path.join(root, `node_modules/${name}/${file}`)));
     }

@@ -1615,6 +1615,14 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   erkennbare Absatz- und Listenabstände, auch bei verschachtelten Listen.
   Markdown-Überschriften bleiben linksbündig mit normaler Groß-/Kleinschreibung;
   Tabellen, Code und Formeln erzeugen keinen horizontalen Seiten-Overflow.
+- [ ] Agent nach einem Ablauf oder Vergleich fragen, der ein Diagramm
+  nahelegt („zeig den Ablauf als Diagramm“): Während der Block geschrieben
+  wird, steht ein ruhiges Feld statt Code; das Diagramm erscheint einfarbig in
+  den Tönen der Seite, der Text danach kommt darunter, ohne zu springen. Hell
+  und dunkel umschalten zeichnet es neu, ein Klick öffnet es im
+  Bildbetrachter. Chat neu laden: Das Feld hat sofort die Größe des Diagramms.
+  Antwort teilen: Die Share-Seite zeigt dasselbe Diagramm. Auf dem iPhone
+  (Safari) ansehen, dort ist es ungeprüft.
 - [ ] Agent-Antwort weiterlesen, während die Prüfer ihre Schlussrunde
   laufen: kein Leeren/Neuschreiben der Antwort und nur ein
   Prüfzyklus, auch bei unvollständigen Vergleichsantworten. Überarbeitung erst nach
