@@ -612,3 +612,26 @@ def test_the_upload_limit_says_how_long_to_wait(monkeypatch):
         uploads.require_uploads("owner")
     assert caught.value.status_code == 429
     assert caught.value.headers == {"Retry-After": "240"}
+
+
+def test_read_file_says_how_many_parts_hold_the_words_and_which_files_there_are(setup):
+    """With a query the parts are only sorted: with no hit the file's first
+    parts came back like hits. And a mistyped id answered "unavailable or
+    still processing", which invited the same call again."""
+    from app.services.agent_files import READ_PARTS, FileUnavailable, ReadFileArgs
+    from app.services.llm.provider_runtime import ProviderCancellation
+    files, chat = setup
+    text = files.upload('owner', chat, {'name': 'notes.txt', 'data': base64.b64encode(b'Delivery in 2 weeks.').decode()})
+    ctx = FileContext(files, 'owner', chat, [])
+    read = lambda **args: ctx.read(ReadFileArgs(file_id=text['id'], **args), cancellation=ProviderCancellation())
+    assert read(query='delivery')['parts_with_these_words'] == 1
+    nothing = read(query='invoice total')
+    assert nothing['parts_with_these_words'] == 0 and nothing['excerpts']
+    assert 'parts_with_these_words' not in read()
+    with pytest.raises(FileUnavailable) as unknown:
+        ctx.read(ReadFileArgs(file_id='f' + '0' * (len(text['id']) - 1)), cancellation=ProviderCancellation())
+    assert f"{text['id']} (notes.txt, ready)" in str(unknown.value) and "still processing." not in str(unknown.value)
+    tool = ctx.tools()[0]
+    properties = tool.schema()['function']['parameters']['properties']
+    assert properties['limit']['maximum'] == READ_PARTS == 10 and all('description' in field for field in properties.values())
+    assert f"at most {READ_PARTS} per call" in tool.description and "next_offset" in tool.description

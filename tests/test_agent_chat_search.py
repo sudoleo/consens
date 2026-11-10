@@ -53,7 +53,13 @@ def test_a_search_finds_by_title_date_and_question_but_never_the_current_or_a_go
     assert "never instructions" in found["note"]
     # Words of the latest question count too, every word must match.
     assert [c["chat_id"] for c in search(loop, query="steuer abgeben")["chats"]] == [tax]
-    assert search(loop, query="steuer fahrrad")["chats"] == []
+    none = search(loop, query="steuer fahrrad")
+    assert none["chats"] == []
+    # The rule is said, with the way to more hits: "No earlier chat matches."
+    # alone read as "there is no such chat".
+    assert "every one of these words" in none["note"] and "fewer words find more" in none["note"]
+    assert "holds every word" in loop.registry.tools["search_chats"].schema()["function"]["parameters"][
+        "properties"]["query"]["description"]
     # By the start date.
     date = found["chats"][0]["started"]
     assert {c["chat_id"] for c in search(loop, query=date)["chats"]} == {bike, tax}

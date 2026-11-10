@@ -443,12 +443,19 @@ READ_VISUAL_NOTE = ("This file has no text to excerpt (a picture, or a PDF of sc
                     "comes with your next step, as far as this model takes pictures or PDFs.")
 
 
+# A file's text lies in parts of up to about 4,000 characters (the upload
+# splits it). Ten per call: with five, a report of 120,000 characters took
+# six calls.
+READ_PARTS = 10
+
+
 class ReadFileArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
-    file_id: str = Field(pattern=ID_PATTERN)
-    query: str = Field(default="", max_length=500)
-    offset: int = Field(default=0, ge=0, le=120)
-    limit: int = Field(default=3, ge=1, le=5)
+    file_id: str = Field(pattern=ID_PATTERN, description="A file's id from the list of this chat's files.")
+    query: str = Field(default="", max_length=500, description=(
+        "Words to look for: the parts that hold most of them come first. Empty: the file in its own order."))
+    offset: int = Field(default=0, ge=0, le=400, description="The first part to return (0-based), in that order.")
+    limit: int = Field(default=3, ge=1, le=READ_PARTS, description="How many parts to return.")
 
 
 class FileContext:
@@ -475,7 +482,17 @@ class FileContext:
 
     def read(self, args, *, cancellation):
         cancellation.raise_if_cancelled()
-        data = self.files.get(self.uid, self.chat_id, args.file_id)
+        try:
+            data = self.files.get(self.uid, self.chat_id, args.file_id)
+        except FileUnavailable:
+            # "File is unavailable or still processing." for a mistyped id
+            # invited the same call again: say which files there are.
+            known = [f"{item['id']} ({item['name']}, {item['status']})"
+                     for item in self.files.list(self.uid, self.chat_id)][:20]
+            raise FileUnavailable(
+                "No readable file has this id in this chat"
+                + (f": its files are {', '.join(known)}" if known else "; it has no files")
+                + ". A file still being processed can be read once it is ready.") from None
         visual = data["mime"].startswith("image/") or not data["parts"]
         if visual and args.file_id not in self.file_ids:
             self.read_ids = [fid for fid in self.read_ids if fid != args.file_id][-(4):] + [args.file_id]
@@ -489,16 +506,25 @@ class FileContext:
 
     def _excerpts(self, data, args):
         parts = list(data["parts"])
+        matching = None
         if args.query:
             words = set(re.findall(r"\w{3,}", args.query.lower()))
-            parts.sort(key=lambda p: sum(w in p["text"].lower() for w in words), reverse=True)
+            hits = lambda part: sum(word in part["text"].lower() for word in words)
+            # How many parts hold any of the words: with none, the parts
+            # that follow are the file's first ones, not hits.
+            matching = sum(1 for part in parts if hits(part))
+            parts.sort(key=hits, reverse=True)
         selected = parts[args.offset:args.offset + args.limit]
         return {"file": public_file(data, for_model=True), "excerpts": selected, "total_parts": len(parts),
+                **({"parts_with_these_words": matching} if matching is not None else {}),
                 "next_offset": args.offset + args.limit if args.offset + args.limit < len(parts) else None,
                 "trust": "untrusted", "citation": f"{data['name']} · locator in excerpt"}
 
     def tools(self):
-        return [ReadOnlyTool("read_file", "Read bounded excerpts of a file in this chat. Cite its name and locator; use pagination for more.", ReadFileArgs, self.read)]
+        return [ReadOnlyTool("read_file", "Read a file of this chat as text, in parts of up to about 4,000 characters "
+                             f"each, at most {READ_PARTS} per call: total_parts says how many there are and "
+                             "next_offset where to go on. Each part names its place in the file (its locator).",
+                             ReadFileArgs, self.read)]
 
     def catalog(self):
         read, self._preloaded = self._preloaded, None

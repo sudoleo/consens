@@ -4994,6 +4994,12 @@ Audit der Werkzeugverträge; alles Fakten, keine Verhaltensvorgaben:
   `vm_write_file` hat `append` (`agent_vm.APPEND_SCRIPT`): Eine Datei, die
   nicht in einen Aufruf passt, entsteht in Teilen. `vm_install_packages` ist
   wiederholbar (`REPEATABLE_TOOLS`): apt macht beim selben Aufruf weiter.
+- `read_file`: jedes Feld ist beschrieben, bis zu `READ_PARTS` (10, vorher 5)
+  Teile je Aufruf; mit `query` nennt das Ergebnis, wie viele Teile die Wörter
+  enthalten (`parts_with_these_words`; bei 0 kamen die ersten Teile der Datei
+  wie Treffer zurück), und eine unbekannte id nennt die Dateien des Chats.
+  `search_chats` sagt in Feldbeschreibung und Kein-Treffer-Hinweis, dass
+  jedes Wort vorkommen muss.
 
 Damit das Modell sich vorher korrigieren kann, nennt jede Ablehnung
 (`ToolRegistry.validate`) die Änderung: unbekanntes Tool mit Liste der
