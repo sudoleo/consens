@@ -1,6 +1,6 @@
 # Analytics (Umami): welches Event was bedeutet
 
-Stand 2026-10-15. Tracking-Code: `templates/partials/analytics.html` (Snippet,
+Stand 2026-11-11. Tracking-Code: `templates/partials/analytics.html` (Snippet,
 Website-ID) und `static/js/analytics-opt-out.js` (Selbst-Ausschluss,
 Bot-Filter, Kampagnen-Parameter, `open_app`). App-Events laufen über
 `window.trackUmamiEvent` (`static/js/app-bootstrap.js`), das Schlüssel wie
@@ -121,11 +121,28 @@ Umami lesbar.
   `localStorage['umami.disabled']`. `?notrack=0` schaltet das Gerät bewusst
   wieder ein (und merkt sich das), `?notrack=1` wieder aus.
 - **Bots mit Webdriver/Headless-Kennung** senden nichts.
+- **Bots mit einem Bildschirm, den kein Gerät hat** senden nichts
+  (`BOT_SCREENS` in `analytics-opt-out.js`, seit 2026-11-11). Sie steuern ein
+  echtes Chrome ohne Webdriver-Flag, melden aber das Fenster, mit dem sie
+  gestartet wurden:
+  - `1280x1200`: die Welle aus Singapur und China seit Mitte September 2026
+    (Chrome auf Windows 10, `en-US`, kein Referrer, genau eine Share- oder
+    Topic-Seite). 541 der 823 Sitzungen in den 30 Tagen bis 2026-11-11.
+  - `800x600` (Chrome ohne Anzeige, 36), `1280x1280` und `1366x1366`
+    (Rechenzentren, 13), `1600x1200` mit Android-Kennung (China, 15).
+  - `0x0`: ein Browser-Fenster, das niemand sieht (eigene Automatisierung).
+
+  Keine dieser Sitzungen außer `0x0` hatte in den 30 Tagen ein Event, fast
+  alle genau einen Seitenaufruf. Taucht eine neue Welle auf, zeigt sie sich
+  wieder als ein Land mit lauter Ein-Seiten-Besuchen: in Umami unter
+  Sessions die Bildschirmgröße ablesen und in `BOT_SCREENS` nachtragen, wenn
+  kein echtes Gerät sie hat.
 - **Lokale Server**: `data-domains` lässt nur consens.io zu.
 
-Was trotzdem durchkommt: eine Bot-Welle aus Singapur seit Mitte September
-2026 (1 Seitenaufruf, 0 Sekunden, kein Webdriver-Flag). In Auswertungen mit
-dem Filter `Country ≠ Singapore` arbeiten.
+Was trotzdem durchkommt: Bots aus Rechenzentren mit glaubwürdigem Bildschirm
+(US-Serverstädte, Linux, eine Seite ohne Aktion). Zahlen von Mitte September
+bis zum Filter im November 2026 enthalten die Welle noch: dort mit
+`Country ≠ Singapore` arbeiten.
 
 ## Kampagnen messen
 

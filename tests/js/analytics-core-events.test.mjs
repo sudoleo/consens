@@ -7,11 +7,14 @@ import { loadScripts, ROOT } from './helpers/appWindow.mjs';
 // docs/analytics.md: the core events and the tracker guards around them.
 const optOut = readFileSync(path.join(ROOT, 'static/js/analytics-opt-out.js'), 'utf8');
 
-function page(url, { stored = {}, webdriver = false } = {}) {
+// jsdom reports a 0x0 screen, which the tracker guard reads as "no display".
+function page(url, { stored = {}, webdriver = false, screen = [1920, 1080], agent = null } = {}) {
   const dom = new JSDOM('<!doctype html><body></body>', { url, runScripts: 'outside-only' });
   const w = dom.window;
   Object.entries(stored).forEach(([key, value]) => w.localStorage.setItem(key, value));
   if (webdriver) Object.defineProperty(w.navigator, 'webdriver', { value: true });
+  Object.defineProperty(w, 'screen', { value: { width: screen[0], height: screen[1] } });
+  if (agent) Object.defineProperty(w.navigator, 'userAgent', { value: agent });
   const tracked = [];
   w.umami = { track: (name, data) => tracked.push([name, data]) };
   w.eval(optOut);
@@ -41,6 +44,25 @@ describe('consensioBeforeSend', () => {
   it('drops automated browsers', () => {
     const { w } = page('https://consens.io/', { webdriver: true });
     expect(w.consensioBeforeSend('event', { url: 'https://consens.io/' })).toBe(false);
+  });
+
+  const ANDROID = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36';
+  const send = options => page('https://consens.io/s/x', options).w.consensioBeforeSend('event', { url: 'https://consens.io/s/x' });
+
+  it.each([
+    [[1280, 1200]], [[800, 600]], [[1280, 1280]], [[1366, 1366]], [[0, 0]],
+  ])('drops a crawler that reports the screen %j', screen => {
+    expect(send({ screen })).toBe(false);
+  });
+
+  it('drops an Android phone that reports a desktop monitor', () => {
+    expect(send({ screen: [1600, 1200], agent: ANDROID })).toBe(false);
+  });
+
+  it.each([
+    [[1920, 1080], null], [[1600, 1200], null], [[1280, 800], null], [[1280, 1024], null], [[393, 852], ANDROID],
+  ])('counts a visitor with the screen %j', (screen, agent) => {
+    expect(send({ screen, agent }).url).toBe('https://consens.io/s/x');
   });
 
   it('puts back campaign tags and nothing else', () => {

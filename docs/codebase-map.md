@@ -641,8 +641,9 @@ begrenzt `data-domains="consens.io,www.consens.io"` das Tracking auf die
 Live-Domain — lokale Server (jeder uvicorn-Port) und Preview-Deploys senden
 gar nichts mehr; neue Domains muessen dort eingetragen werden. Seit 2026-10-07
 ruft der Tracker vor jedem Send `consensioBeforeSend` (`analytics-opt-out.js`):
-Webdriver/Headless senden nichts, `utm_*`/`ref` kommen trotz
-`data-exclude-search` zurueck; `/user_status` liefert `is_admin`, worauf die App
+Webdriver/Headless und Browser mit einem Bildschirm, den kein Geraet hat
+(`BOT_SCREENS`, etwa die 1280x1200-Welle aus Singapur), senden nichts,
+`utm_*`/`ref` kommen trotz `data-exclude-search` zurueck; `/user_status` liefert `is_admin`, worauf die App
 den Betreiber-Browser ausschliesst. Die Kern-Events `open_app`, `signup`,
 `login`, `ask`, `answer` (Helfer `App.trackAsk`/`App.trackAnswer` in
 `app-core.js`, gleich fuer Agent und Pipeline) und die Bedeutung aller

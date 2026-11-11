@@ -27,10 +27,25 @@
     },
   };
 
+  // Screen sizes no visitor's device reports. Crawlers that drive a real
+  // Chrome without the webdriver flag give themselves away here: 1280x1200 is
+  // the wave from Singapore and China that opens one share or topic page and
+  // leaves, 800x600 is what Chrome reports without a display, the squares come
+  // from data centres, and 0x0 is a browser pane nobody is looking at.
+  const BOT_SCREENS = new Set(["0x0", "800x600", "1280x1200", "1280x1280", "1366x1366"]);
+
+  function botScreen(agent) {
+    const screen = window.screen || {};
+    const size = `${screen.width}x${screen.height}`;
+    // The same wave also poses as an Android phone with a desktop monitor;
+    // on a desktop 1600x1200 is a real display.
+    return BOT_SCREENS.has(size) || (size === "1600x1200" && /Android/i.test(agent));
+  }
+
   // Umami calls this (data-before-send) before every pageview and event.
   window.consensioBeforeSend = function (type, payload) {
     const agent = (window.navigator && window.navigator.userAgent) || "";
-    if ((window.navigator && window.navigator.webdriver) || /HeadlessChrome|PhantomJS|Lighthouse/i.test(agent)) {
+    if ((window.navigator && window.navigator.webdriver) || /HeadlessChrome|PhantomJS|Lighthouse/i.test(agent) || botScreen(agent)) {
       return false;
     }
     // data-exclude-search drops the whole query string, which keeps tokens
