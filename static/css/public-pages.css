@@ -8,6 +8,8 @@
 @import url('./source-pill.css');
 /* A diagram in a shared answer: the same component as in /app. */
 @import url('./diagram.css');
+/* Syntax tones in a shared answer's code: the same as in /app. */
+@import url('./code-highlight.css');
 
 *,
 *::before,

@@ -1,5 +1,5 @@
 {
-  "sources": "ad1eb4817d6d",
+  "sources": "9a153f4db5e4",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -17,6 +17,7 @@
     "static/css/base.css",
     "static/css/benchmark.css",
     "static/css/chat-scroll.css",
+    "static/css/code-highlight.css",
     "static/css/components-attachment-viewer.css",
     "static/css/components-consensus-insights.css",
     "static/css/components-consensus-visuals.css",
@@ -88,6 +89,7 @@
     "static/js/bundles.json",
     "static/js/chat-list.js",
     "static/js/chat-scroll.js",
+    "static/js/code-highlight.js",
     "static/js/composer-autosize.js",
     "static/js/composer-collapse.js",
     "static/js/composer-invite.js",
@@ -151,6 +153,8 @@
     "static/style.css",
     "static/vendor/dompurify/3.4.17/LICENSE",
     "static/vendor/dompurify/3.4.17/dist/purify.min.js",
+    "static/vendor/highlightjs/11.12.0/LICENSE",
+    "static/vendor/highlightjs/11.12.0/es/highlight.min.js",
     "static/vendor/katex/0.19.0/LICENSE",
     "static/vendor/katex/0.19.0/dist/contrib/auto-render.min.js",
     "static/vendor/katex/0.19.0/dist/fonts/KaTeX_AMS-Regular.ttf",
@@ -598,20 +602,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.d15ec18e9826.js",
+      "src": "/static/dist/app.1e0bd442d18b.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.80fde07cbe3a.css",
+    "app": "/static/dist/app.30b1e4415615.css",
     "landing": "/static/dist/landing.35290fb9d106.css",
-    "public": "/static/dist/public.3b445fb1ca61.css"
+    "public": "/static/dist/public.f6d736ec7ebc.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "3505e961beb9",
+      "hash": "87f2ad38d9dd",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -619,6 +623,7 @@
         "static/css/auth-modal.css",
         "static/css/base.css",
         "static/css/chat-scroll.css",
+        "static/css/code-highlight.css",
         "static/css/components-attachment-viewer.css",
         "static/css/components-consensus-insights.css",
         "static/css/components-consensus-visuals.css",
@@ -672,8 +677,9 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "5967c370f35c",
+      "hash": "4b0f25ffa58e",
       "inputs": [
+        "static/css/code-highlight.css",
         "static/css/diagram.css",
         "static/css/foundation.css",
         "static/css/public-nav.css",
@@ -686,10 +692,10 @@
     }
   },
   "previous_assets": [
+    "app.80fde07cbe3a.css",
     "app.64a1a17dbb40.css",
-    "app.32ba668dbdcb.css",
+    "app.d15ec18e9826.js",
     "app.13eb8b9360c9.js",
-    "app.338358071759.js",
     "auth.94cd8abedac1.js",
     "auth.58f346823c38.js",
     "demo.274397f8bb1b.js",
@@ -700,7 +706,7 @@
     "head.68a66c7f57d8.js",
     "landing.420b02aadcbb.css",
     "landing.a98e2a7caaea.css",
-    "public.b0b754cf899c.css",
-    "public.974b21068e94.css"
+    "public.3b445fb1ca61.css",
+    "public.b0b754cf899c.css"
   ]
 }

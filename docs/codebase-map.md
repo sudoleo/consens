@@ -2598,20 +2598,57 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     selbst nicht an (Netz), versucht es ein späterer Blick nach `RETRY_MS`.
   - **Vergrößern** (nur `/app`): Ein Klick öffnet die Zeichnung im
     Bildbetrachter (`App.attachments.openStored`, Zoom über `image-zoom.js`).
-  - **Öffentliche Seiten:** `public_markdown._mark_diagram_blocks` lässt nur
+  - **Öffentliche Seiten:** `public_markdown._mark_code_blocks` lässt nur
     einem geschlossenen Mermaid-Block die Klasse `language-mermaid` (nh3
-    `tag_attribute_values`; jeder andere Codeblock bleibt ohne Klasse).
-    `templates/partials/diagrams.html` bindet das Skript nur ein, wenn
-    `page_has_diagram()` (`app/core/diagram_assets.py`) die Marke im
-    Template-Kontext findet; `adopt()` macht aus dem Block des Servers einen
-    Platz. Mails und Telegram zeigen den Code.
+    `tag_attribute_values`). `templates/partials/answer_blocks.html` bindet
+    das Skript nur ein, wenn `page_has_diagram()`
+    (`app/core/answer_assets.py`) die Marke im Template-Kontext findet;
+    `adopt()` macht aus dem Block des Servers einen Platz. Mails und Telegram
+    zeigen den Code.
   - Der Prompt nennt nur den Fakt (`AGENT_AUDIT_ANSWER_SECTION`: „a
     ```mermaid code block shows as the diagram it describes“), wie bei
     Formeln; `docs/agent-mode.md`, „Diagramme in der Antwort“.
   - Tests: `tests/js/markdown-diagram.test.mjs`,
-    `tests/js/diagram-render.test.mjs`, `tests/test_diagram_assets.py` und
+    `tests/js/diagram-render.test.mjs`, `tests/test_answer_assets.py` und
     im echten Browser unter der Skript-Policy der App
     `tests/e2e/test_diagram_render.py`.
+- **`code-highlight.js`** (seit 2026-11-11) — Syntax-Töne in den Codeblöcken
+  einer Antwort, in `/app` und auf Share-/Watch-Seiten. Exponiert
+  `window.ConsensusCode.{key,render,warm}`. Wie bei Formeln und Diagrammen
+  macht es die App, ohne Modellaufruf und ohne Zeile im Prompt.
+  - **highlight.js** 11.12.0 liegt als ein ES-Modul mit seinen 36 gängigen
+    Sprachen unter `static/vendor/highlightjs/<version>/es/` (npm-Paket
+    `@highlightjs/cdn-assets`, 44 KB komprimiert) und wird per `import()`
+    geholt, wenn eine Antwort zum ersten Mal einen Block in einer benannten
+    Sprache enthält. Eine Sprache, die es nicht kennt, und ein Block über
+    60.000 Zeichen bleiben, wie sie sind (`data-lit="plain"`).
+  - **Platz:** `markdown-stream.js` (`codeBlock`, derselbe
+    Renderer-Extension wie für Diagramme) gibt einem Block mit Sprache und
+    schließendem Zaun `pre[data-code=<key>]`, einen Hash aus Sprache und
+    Code. Derselbe Block im nächsten Render ist derselbe Knoten
+    (`KEPT_NODES`) und wird einmal gelesen, nicht bei jedem Chunk und jedem
+    Neuzeichnen der Antwort. Ein Block, der noch geschrieben wird, hat keinen
+    Namen und bleibt wachsender Klartext; die Bibliothek lädt währenddessen
+    (`warm()`).
+  - **Der Text bleibt derselbe:** `tones()` nimmt die Ausgabe nur an, wenn
+    sie aus nichts als `<span class>` besteht und ihr Text Buchstabe für
+    Buchstabe der des Blocks ist. Kopieren, Satzmarken und das „Licht“ des
+    Streams lesen weiter denselben Text; Markup im Code bleibt Text.
+  - **Aussehen:** `code-highlight.css` (von `style.css` und
+    `public-pages.css` importiert), kein eigenes Farbschema: Kommentare im
+    Grau (`--ink-3`), was die Sprache selbst sagt (Schlüsselwörter, Literale,
+    Tag-Namen) im stärkeren Schnitt, Zitiertes (Zeichenketten) im Hausgrün,
+    ein Diff in den Ampelfarben. Die Schnitte einer Festbreitenschrift sind
+    gleich breit, also bricht nichts um, wenn die Töne kommen, und weil es
+    Variablen sind, braucht dunkel kein zweites Lesen.
+  - **Öffentliche Seiten:** `public_markdown._mark_code_blocks` lässt einem
+    geschlossenen Block seine Klasse `language-<name>` nur für die Sprachen in
+    `CODE_LANGUAGES`; `page_has_code()` (`app/core/answer_assets.py`) lädt
+    das Skript nur auf Seiten mit so einem Block, `adopt()` gibt ihm seinen
+    Namen.
+  - Tests: `tests/js/markdown-code.test.mjs`,
+    `tests/js/code-highlight.test.mjs`, `tests/test_answer_assets.py` und im
+    echten Browser `tests/e2e/test_code_highlight.py`.
 - **`markdown-stream.js`** — Markdown-Rendering (`injectMarkdown`, `morphMarkdown`,
   `renderMarkdownStream`, `keepTextSelection`, ein Parse je Render über
   `renderMarkdownFragment`; jeder Codeblock bekommt seit 2026-10-26 einen
@@ -7532,8 +7569,9 @@ mit gepinnten Versionspfaden und Inhalts-Hashes. `scripts/vendor_frontend.mjs`
 kopiert beim Frontend-Build die npm-Dateien und Lizenzen unverändert und prüft
 sie bei `build:check` bytegenau. Das Build-Manifest umfasst auch diese Dateien.
 Dazu kommen ES-Module, die erst bei Bedarf importiert werden: pdf.js
-(Dateivorschau), noVNC (Arbeitsplatz) und Mermaid (Diagramme in Antworten,
-`diagram-render.js`; ohne Source-Maps und ohne die ELK-Layout-Engine).
+(Dateivorschau), noVNC (Arbeitsplatz), Mermaid (Diagramme in Antworten,
+`diagram-render.js`; ohne Source-Maps und ohne die ELK-Layout-Engine) und
+highlight.js (Syntax-Töne in Codeblöcken, `code-highlight.js`).
 Firebase bleibt ein externer gstatic-Import; öffentliche Seiten bleiben unverändert.
 
 **Quellen in der Synthese (seit 2026-09-11):** Neue Consensus-Antworten enthalten keine
@@ -12029,6 +12067,8 @@ zählen nicht):
   `window.isUserPro`, `window.pendingAttachments`, `window.ConsensusMath`,
   `window.ConsensusDiagram` (diagram-render.js → markdown-stream.js; der
   Platz eines Diagramms ist `.md-diagram[data-diagram]`, seit 2026-11-10),
+  `window.ConsensusCode` (code-highlight.js → markdown-stream.js; ein
+  benannter Codeblock ist `pre[data-code]`, seit 2026-11-11),
   `window.App.reportCriticalError`, `window.renderStoredAuditMarks` (Marken
   eines Agent-Audits, consensus-insights.js → agent-review.js; seit 2026-10-25),
   `App.agentWorkLog.render(host, view)`, `.reset(host)` und `.KINDS` (Arbeitsprotokoll,

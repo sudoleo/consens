@@ -39,6 +39,8 @@
 @import url('./css/source-pill.css');
 /* A diagram in an answer, shared with the public pages. */
 @import url('./css/diagram.css');
+/* Syntax tones in a code block, shared with the public pages. */
+@import url('./css/code-highlight.css');
 /* The login / sign-up dialog, standalone after every component layer. */
 @import url('./css/auth-modal.css');
 /* Every layer above the page and how it comes and goes: scrim, dialog

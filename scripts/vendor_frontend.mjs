@@ -35,9 +35,13 @@ export async function vendorFrontend(root, checkOnly) {
     // an answer first holds one. The entry imports its core chunks and
     // loads each kind of diagram on demand from the same folder.
     mermaid: ["dist/mermaid.esm.min.mjs", "LICENSE"],
+    // Syntax tones in code blocks (code-highlight.js): one ES module with
+    // highlight.js and its common languages, imported when an answer first
+    // holds a block in one of them.
+    "@highlightjs/cdn-assets": ["es/highlight.min.js", "LICENSE"],
   };
   // Where a package lands under static/vendor (a scope's @ stays out of URLs).
-  const folders = { "@novnc/novnc": "novnc", "pdfjs-dist": "pdfjs" };
+  const folders = { "@novnc/novnc": "novnc", "pdfjs-dist": "pdfjs", "@highlightjs/cdn-assets": "highlightjs" };
   const pins = JSON.parse(await fs.readFile(path.join(root, "package.json"), "utf8")).devDependencies;
   const inputs = [];
   for (const [name, files] of Object.entries(packages)) {

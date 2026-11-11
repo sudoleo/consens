@@ -1,0 +1,22 @@
+/* ==========================================================================
+   Syntax tones in a code block (code-highlight.js)
+
+   Imported by style.css (/app) and public-pages.css (shared answers and
+   Watch pages). The page's own palette and no theme of its own: a comment
+   steps back into the grey, what the language itself says (keywords,
+   literals, tag names) is set heavier, and what is quoted (strings) takes
+   the house green. A diff keeps the traffic light: added green, removed red.
+
+   The weights of a monospace font share one width, so a block does not
+   reflow when its tones arrive, and the tones are variables: light and dark
+   need no second set.
+   ========================================================================== */
+
+pre code :is(.hljs-comment, .hljs-quote, .hljs-meta, .hljs-doctag) { color: var(--ink-3); }
+pre code :is(.hljs-keyword, .hljs-literal, .hljs-selector-tag, .hljs-name, .hljs-section) { font-weight: 600; }
+pre code :is(.hljs-string, .hljs-regexp, .hljs-symbol, .hljs-addition) { color: var(--agree); }
+pre code .hljs-deletion { color: var(--dispute); }
+pre code .hljs-emphasis { font-style: italic; }
+pre code .hljs-strong { font-weight: 600; }
+/* A comment's or string's own parts (a doc tag, an interpolation) keep its tone. */
+pre code :is(.hljs-comment, .hljs-string) * { color: inherit; font-weight: inherit; }

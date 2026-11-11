@@ -1625,6 +1625,12 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   Bildbetrachter. Chat neu laden: Das Feld hat sofort die Größe des Diagramms.
   Antwort teilen: Die Share-Seite zeigt dasselbe Diagramm. Auf dem iPhone
   (Safari) ansehen, dort ist es ungeprüft.
+- [ ] Agent nach einem kurzen Skript fragen („schreib mir das in Python“):
+  Der Codeblock wächst beim Streamen als Klartext und bekommt mit seinem Ende
+  seine Töne (Schlüsselwörter stärker, Kommentare grau, Zeichenketten im
+  Hausgrün), ohne dass eine Zeile umbricht oder springt. Kopieren liefert
+  genau den Code. Dunkel umschalten, Chat neu laden und die Antwort teilen:
+  überall dieselben Töne.
 - [ ] Agent-Antwort weiterlesen, während die Prüfer ihre Schlussrunde
   laufen: kein Leeren/Neuschreiben der Antwort und nur ein
   Prüfzyklus, auch bei unvollständigen Vergleichsantworten. Überarbeitung erst nach

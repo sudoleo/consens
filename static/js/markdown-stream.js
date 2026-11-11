@@ -8,7 +8,8 @@
 // window.createStreamRenderer, window.streamSSERequest.
 // (readSSEStream bleibt modul-privat.)
 // Call-time-Abhaengigkeiten: DOMPurify, marked (static/vendor), window.ConsensusMath,
-// window.ConsensusDiagram (diagram-render.js),
+// window.ConsensusDiagram (diagram-render.js), window.ConsensusCode
+// (code-highlight.js),
 // window.addNewTabToLinks, window.linkifySourceTags,
 // window.currentEvidenceSources, window.App.taskChecks (task-checks.js).
 // =====================================================================
@@ -212,12 +213,29 @@ function ensureDiagramBlocks(marked) {
   marked.use({ extensions: [{
     name: "code",
     renderer(token) {
+      if (!diagramToken(token)) return codeBlock(token);
       const diagrams = window.ConsensusDiagram;
-      if (!diagrams || !diagramToken(token)) return false;
+      if (!diagrams) return false;
       const place = fenceClosed(token.raw) ? `data-diagram="${escapeHtml(diagrams.key(token.text))}"` : "data-open";
       return `<div class="md-diagram" ${place}><pre><code class="language-mermaid">${escapeHtml(token.text)}\n</code></pre></div>\n`;
     }
   }] });
+}
+
+// --- Syntax tones -------------------------------------------------------------
+// A finished code block that names its language gets its tones from
+// code-highlight.js. Here it gets its name (data-code, from language and
+// code): the same block in the next render is the same node and is read
+// once, not on every chunk and every re-render of the answer. A block still
+// being written has none and stays plain text that grows.
+const CODE_LANGUAGE = /^[a-z0-9+#._-]{1,24}$/;
+
+function codeBlock(token) {
+  const tones = window.ConsensusCode;
+  const language = String(token.lang || "").trim().split(/\s+/)[0].toLowerCase();
+  if (!tones || token.type !== "code" || !CODE_LANGUAGE.test(language) || !fenceClosed(token.raw)) return false;
+  return `<pre data-code="${escapeHtml(tones.key(language, `${token.text}\n`))}"><code class="language-${language}">`
+    + `${escapeHtml(token.text)}\n</code></pre>\n`;
 }
 
 // A block still being written stands as a quiet field (diagram.css); only a
@@ -417,6 +435,7 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
 
   if (window.ConsensusMath) window.ConsensusMath.render(el);
   window.ConsensusDiagram?.render(el);
+  window.ConsensusCode?.render(el);
   noteMarkdownWrite(el, linked ? null : md);
   syncTaskBoxes(el);
 }
@@ -455,10 +474,11 @@ const CARRIED_PROPERTIES = ["sourceData", "sourceGroup"];
 // element, the new render's node takes their place.
 const MARK_NODES = ".cx-claim, .cx-spot, .claim-badge";
 // A picture's place keeps the picture agent-workspace.js put into it, a
-// diagram's the drawing of diagram-render.js: the same place in the next
-// render is the same node, with what it holds. A diagram still being
-// written has no name yet and is morphed like any element.
-const KEPT_NODES = ".md-picture, .md-diagram[data-diagram]";
+// diagram's the drawing of diagram-render.js and a code block the tones of
+// code-highlight.js: the same place in the next render is the same node,
+// with what it holds. A diagram or code block still being written has no
+// name yet and is morphed like any element.
+const KEPT_NODES = ".md-picture, .md-diagram[data-diagram], pre[data-code]";
 
 function sameNodeKind(live, next) {
   if (live.nodeType !== next.nodeType) return false;
@@ -467,7 +487,8 @@ function sameNodeKind(live, next) {
     && !live.matches(MARK_NODES) && !next.matches(MARK_NODES)
     && live.matches(KEPT_NODES) === next.matches(KEPT_NODES)
     && live.getAttribute("data-picture") === next.getAttribute("data-picture")
-    && live.getAttribute("data-diagram") === next.getAttribute("data-diagram");
+    && live.getAttribute("data-diagram") === next.getAttribute("data-diagram")
+    && live.getAttribute("data-code") === next.getAttribute("data-code");
 }
 
 function morphNode(live, next) {
@@ -657,6 +678,7 @@ function renderStreamFragment(md, decorate) {
   addCopyButtons(holder);
   if (window.ConsensusMath) window.ConsensusMath.render(holder);
   window.ConsensusDiagram?.render(holder);
+  window.ConsensusCode?.render(holder);
   decorate?.(holder);
   return Array.from(holder.childNodes);
 }
@@ -677,6 +699,7 @@ function closeOpenStrong(text) {
 // is complete, then appears at once. Each new row changed the automatic
 // column widths, so the header the reader was on slid sideways, by up to 4 cm
 // for the first data row.
+const FENCE_OPEN = /(^|\n)\s{0,3}(```|~~~)/;
 const TABLE_ROW = /^\s{0,3}\|/;
 const TABLE_RULE = /^\s{0,3}\|?\s*:?-+:?\s*(?:\|\s*:?-*:?\s*)*\|?\s*$/;
 
@@ -751,6 +774,8 @@ function renderStreamTail(text, decorate) {
   const before = table === -1 ? closeOpenStrong(holdOpenTask(text)) : closeOpenStrong(text.slice(0, table));
   const nodes = table === -1 || before.trim() ? renderStreamFragment(before, decorate) : [];
   markOpenDiagrams(nodes);
+  // A code block is being written: its tones load before it is finished.
+  if (FENCE_OPEN.test(before)) window.ConsensusCode?.warm?.();
   if (table === -1) return nodes;
   const rows = text.slice(table).split("\n").filter(line => TABLE_ROW.test(line) && !TABLE_RULE.test(line)).length;
   nodes.push(pendingTable(rows));
@@ -856,6 +881,7 @@ function createStreamRenderer(outputEl, isActiveFn) {
     if (window.ConsensusMath) window.ConsensusMath.render(outputEl);
     markOpenDiagrams([outputEl]);
     window.ConsensusDiagram?.render(outputEl);
+    window.ConsensusCode?.render(outputEl);
     syncTaskBoxes(outputEl);
   }
 

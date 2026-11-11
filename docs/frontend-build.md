@@ -108,6 +108,15 @@ Versionsupdate `ENTRY` in `diagram-render.js` anpassen
 Vendor-Verzeichnis entfernen und `tests/e2e/test_diagram_render.py` laufen
 lassen: Nur dort zeichnet das echte Mermaid, unter der Skript-Policy der App.
 
+highlight.js (Syntax-Töne in Codeblöcken, `static/js/code-highlight.js`) kommt
+aus dem npm-Paket `@highlightjs/cdn-assets` und liegt unter
+`static/vendor/highlightjs/<version>/es/highlight.min.js`: ein ES-Modul mit
+den gängigen Sprachen. Bei einem Versionsupdate `ENTRY` in `code-highlight.js`
+anpassen (`tests/js/code-highlight.test.mjs` prüft es gegen `package.json`),
+das alte Vendor-Verzeichnis entfernen und `tests/e2e/test_code_highlight.py`
+laufen lassen. Kennt die neue Fassung andere Sprachnamen, `CODE_LANGUAGES` in
+`app/services/public_markdown.py` nachziehen.
+
 **Source-Maps.** Jedes JS-Bundle bekommt eine externe Map
 `static/dist/<name>.<hash>.js.map` (ohne `sourcesContent`, ohne `names`, ohne
 `sourceMappingURL`-Kommentar im Bundle — der Dateinamen-Hash bleibt ein Hash der

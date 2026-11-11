@@ -1587,11 +1587,12 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertRegex(body, r"/static/js/math-render\.js\?v=[\w.-]+")
 
     def test_a_shared_diagram_loads_the_script_that_draws_it(self):
-        # Most shares have none and load nothing for it (partials/diagrams.html).
+        # Most shares have none and load nothing for it (partials/answer_blocks.html).
         plain = self._share_doc()
         with patch.object(share_router.snapshots, "get_share", return_value=plain):
             body = self.client.get("/s/%s-%s" % (plain["slug"], self.share_id)).text
         self.assertNotIn("diagram-render.js", body)
+        self.assertNotIn("code-highlight.js", body)
 
         snapshots.invalidate_share_cache()
         doc = self._share_doc(consensus_md="The flow:\n\n```mermaid\nflowchart LR\n  A[Light] --> B[Sugar]\n```\n\nDone.")
@@ -1599,6 +1600,15 @@ class SharePageRouteTests(unittest.TestCase):
             body = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id)).text
         self.assertIn('<pre><code class="language-mermaid">flowchart LR\n  A[Light] --&gt; B[Sugar]\n</code></pre>', body)
         self.assertRegex(body, r'<script defer src="/static/js/diagram-render\.js\?v=[\w.-]+"')
+        self.assertNotIn("code-highlight.js", body)
+
+    def test_shared_code_loads_the_script_for_its_syntax_tones(self):
+        doc = self._share_doc(consensus_md="Run this:\n\n```python\nprint(1)\n```\n\nDone.")
+        with patch.object(share_router.snapshots, "get_share", return_value=doc):
+            body = self.client.get("/s/%s-%s" % (doc["slug"], self.share_id)).text
+        self.assertIn('<pre><code class="language-python">print(1)\n</code></pre>', body)
+        self.assertRegex(body, r'<script defer src="/static/js/code-highlight\.js\?v=[\w.-]+"')
+        self.assertNotIn("diagram-render.js", body)
 
     def test_private_share_requires_owner_and_is_never_publicly_cached(self):
         doc = self._share_doc(visibility="private", owner_uid="owner-1")
