@@ -282,7 +282,7 @@
   // `now`: the phase of a running run, or null once it is over. While it
   // waits for the user the clock stands still.
   function updateClock(view, elapsedMs, now, status) {
-    clearInterval(view.clockTimer);
+    clearTimeout(view.clockTimer);
     view.clockTimer = null;
     const ticking = Boolean(now) && now !== 'paused' && now !== 'asking';
     const at = performance.now();
@@ -295,7 +295,15 @@
       setTitle(view, elapsed, now, status);
     };
     tick();
-    if (ticking) view.clockTimer = setInterval(tick, 1000);
+    if (!ticking) return;
+    // Each number shows on its own second. Every render starts this timer
+    // again (an event, the line's next words): counted a full second from
+    // there, a number came up to a second late, and "0s" stood for 1.4 s.
+    const next = () => {
+      const elapsed = view.elapsedMs + performance.now() - view.clockAt;
+      view.clockTimer = setTimeout(() => { tick(); next(); }, 1000 - (elapsed % 1000) + 5);
+    };
+    next();
   }
   // The time a live run waited for the user on this page, so far, on the
   // caller's clock: the wall clock since the start (agent-chat.js).
@@ -337,7 +345,7 @@
   function dispose(host) {
     if (!host) return;
     if (host._agentActivity?.reported) reportStep(host._agentActivity, null);
-    clearInterval(host._agentActivity?.clockTimer);
+    clearTimeout(host._agentActivity?.clockTimer);
     if (host._agentActivity) { host._agentActivity.clockTimer = null; dropLine(host._agentActivity); dropPaced(host._agentActivity); }
     for (const animation of [...activeMotion]) {
       if (host.contains(animation.effect?.target)) cancelMotion(animation);
@@ -693,6 +701,10 @@
   // a change waits until the words on the line stood their time, then the
   // newest change takes the line and the ones in between never show.
   const STATUS_DWELL_MS = 1200, THOUGHT_DWELL_MS = 4000;
+  // "Sending…" stands until the server has the message, usually well under
+  // a second: long enough to be read once, not so long that the line still
+  // says it while the model already thinks.
+  const SENDING_DWELL_MS = 600;
   function pace(view, id, text, dwell) {
     const lines = view.paced ||= new Map();
     const now = performance.now();
@@ -1481,7 +1493,7 @@
   }
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
-    highlights = [], reconnecting = false, vm = null, vmRestore = null } = {}) {
+    highlights = [], reconnecting = false, sending = false, vm = null, vmRestore = null } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -1605,9 +1617,14 @@
     const saving = running && !activeTool && !waiting && !reconnecting && !held && Boolean(review)
       && !['running', 'required', 'pending'].includes(review.status) && Boolean(String(answerText || '').trim());
     const calm = !detailed();
+    // The message is on its way and the server has not answered yet
+    // (agent-chat.js): nothing thinks so far, and on a slow connection that
+    // is where the seconds go.
+    const underway = running && sending && !events.length;
     const heading = running && reconnecting ? 'Reconnecting…'
       : asking ? 'Waiting for you' : held ? 'Paused' : waiting ? 'Waiting for available tokens…' : reviewStage
-      || (activeTool ? (calm ? calmStep(activeTool) : stepLabel(activeTool)) : writing ? 'Writing answer…' : 'Thinking…');
+      || (activeTool ? (calm ? calmStep(activeTool) : stepLabel(activeTool)) : writing ? 'Writing answer…'
+        : underway ? 'Sending…' : 'Thinking…');
     // A complete, checked answer whose run failed afterwards reads as done:
     // the same rule as failureNote.
     const settled = status === 'failed' && !running && answerText
@@ -1685,7 +1702,8 @@
           }
         }
         lines.push({ id: 'calm-status', kind: 'step', current: true, fade: true,
-          text: pace(view, 'calm-status', thought || heading, thought ? THOUGHT_DWELL_MS : STATUS_DWELL_MS) });
+          text: pace(view, 'calm-status', thought || heading,
+            thought ? THOUGHT_DWELL_MS : underway ? SENDING_DWELL_MS : STATUS_DWELL_MS) });
         if (aside) lines.push(aside);
       }
     }

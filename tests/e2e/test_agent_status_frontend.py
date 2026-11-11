@@ -315,3 +315,50 @@ def test_the_calm_line_says_what_the_agent_does_without_its_console(browser, pha
         assert not errors
     finally:
         context.close()
+
+
+@pytest.mark.parametrize("quiet", ["none", "reduce"])
+def test_the_first_seconds_after_send_show_life_before_the_model_speaks(browser, phase4_server, quiet):
+    """From the click on Send the line stands and moves: "Sending…" until the
+    server has the message, however long that takes, then "Thinking…"; its
+    mark breathes all the while, and rests with reduced motion."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": 1280, "height": 900})
+        page.emulate_media(reduced_motion="reduce" if quiet == "reduce" else "no-preference")
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        expect(page.locator("#agentModelDropdown")).to_be_enabled()
+        # The server's answer waits for the test, as on a slow connection.
+        page.evaluate("""() => {
+          const original = window.fetch;
+          window.fetch = async (url, options) => {
+            if (url !== '/agent') return original(url, options);
+            await new Promise(resolve => { window.__serverAnswers = resolve; });
+            return new Response(new ReadableStream({ start(controller) {
+              options.signal.addEventListener('abort', () => controller.error(new DOMException('Stopped', 'AbortError')));
+            }}), {headers:{'Content-Type':'text/event-stream'}});
+          };
+        }""")
+        page.locator("#questionInput").fill("Is a heat pump worth it in an old building?")
+        page.locator("#sendButton").click()
+        status = page.locator("#agentAnswerActivity .agent-progress .agent-current-status")
+        expect(status).to_have_text("Sending…")
+        expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Working for")
+        breathing = status.evaluate("el => getComputedStyle(el, '::before').animationName")
+        assert breathing == ("none" if quiet == "reduce" else "activity-dot-breathe")
+        page.wait_for_function("() => !!window.__serverAnswers")
+        # Past the line's own time: nothing thinks while the message is on its way.
+        page.wait_for_timeout(900)
+        expect(status).to_have_text("Sending…")
+        page.evaluate("() => window.__serverAnswers()")
+        expect(status).to_have_text("Thinking…")
+        expect(page.locator("#agentAnswerActivity .agent-progress > *")).to_have_count(1)
+        assert not errors
+    finally:
+        context.close()

@@ -981,6 +981,11 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
     position: relative; width: fit-content; max-width: 100%; overflow: clip;
   }
   .agent-activity.is-running .agent-activity-current > strong { display: inline-block; }
+  /* The mark breathes like the dot of the step at work in the opened
+     timeline: from the click on Send something on the line moves in every
+     frame, also in the seconds before the model's first word, when the
+     words stand still and the sheen is between two passes. */
+  .agent-current-status::before { animation: activity-dot-breathe var(--dur-beat) var(--ease-standard) infinite; }
   .agent-current-status::after,
   .agent-activity.is-running :is(.agent-activity-tool[data-status="running"], .agent-activity-current) > strong::after {
     content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 250%; pointer-events: none;

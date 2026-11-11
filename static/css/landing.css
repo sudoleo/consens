@@ -918,8 +918,8 @@ img { display: block; max-width: 100%; }
   animation: lpAgentIn var(--dur-layer) var(--ease-out) both;
 }
 
-/* The live row starts with the consens mark and carries one sheen, exactly
-   like .agent-current-status in /app. */
+/* The live row starts with the consens mark, which breathes, and carries one
+   sheen, exactly like .agent-current-status in /app. */
 .lp-agent-step.is-current { font-weight: var(--font-weight-medium); color: var(--ink); }
 .lp-agent-step.is-current > :first-child {
   position: relative;
@@ -934,6 +934,7 @@ img { display: block; max-width: 100%; }
   background: currentColor;
   -webkit-mask: var(--lp-agent-mark) center / contain no-repeat;
   mask: var(--lp-agent-mark) center / contain no-repeat;
+  animation: lpAgentBreathe var(--dur-beat) var(--ease-standard) infinite;
 }
 .lp-agent-step.is-current > :first-child::after {
   content: "";
@@ -1061,6 +1062,7 @@ img { display: block; max-width: 100%; }
 
 @keyframes lpAgentIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 @keyframes lpAgentShine { from { background-position: 100% 0; } to { background-position: -150% 0; } }
+@keyframes lpAgentBreathe { 50% { opacity: .35; } }
 @keyframes lpAgentMask { from { -webkit-mask-position: 100% 0; mask-position: 100% 0; } to { -webkit-mask-position: -150% 0; mask-position: -150% 0; } }
 
 /* --------------------------------------------------------------------------
@@ -1166,6 +1168,7 @@ img { display: block; max-width: 100%; }
 
   .lp-agent-note,
   .lp-agent-step,
+  .lp-agent-step.is-current > :first-child::before,
   .lp-agent-step.is-current > :first-child::after,
   .lp-agent-answer.is-reviewing,
   .lp-prompt-text.is-typing::after,

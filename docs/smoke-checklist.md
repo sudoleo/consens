@@ -1667,8 +1667,14 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   auch im geöffneten Live-Verlauf. Die aktuelle Statuszeile („Thinking…“, aktiver
   Schritt, „Writing answer…“) beginnt mit dem consens-Zeichen in Textfarbe; ein
   einziger Reflex läuft ohne Sprung erst durch das Zeichen, dann durch das Label.
+  Das Zeichen atmet dabei im selben Takt (heller, dunkler), vom Klick auf Senden an.
   Laufzeit, Absätze und fertige Schritte bleiben ohne Reflex; Reduced Motion und
-  Forced Colors zeigen Zeichen und Text vollständig deckend.
+  Forced Colors zeigen Zeichen und Text vollständig deckend und ruhend.
+- [ ] Die ersten Sekunden nach dem Senden: Sofort steht „Sending…“ mit atmendem
+  Zeichen, nach gut einer halben Sekunde „Thinking…“, dann der erste Gedanke
+  oder die Antwort. Die Uhr springt zu jeder vollen Sekunde um (kein „0 Sek.“,
+  das länger als eine Sekunde steht). Mit gedrosseltem Netz (DevTools „Slow 4G“)
+  bleibt „Sending…“ so lange stehen, bis der Server antwortet.
   Frühere Absätze und Arbeitsschritte bleiben erhalten;
   Reasoning-Rohtext erscheint nicht als Fortschritt. Beim Abschluss oder Stop
   verschwinden die Live-Absätze; ein geöffneter Verlauf bleibt offen, solange er

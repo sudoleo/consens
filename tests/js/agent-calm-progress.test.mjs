@@ -116,6 +116,30 @@ describe("the calm live view", () => {
     activity.dispose(host);
   });
 
+  it("says the message is on its way until the server has it, and only then that the model thinks", () => {
+    const { activity, render, status, wait, host } = setup();
+    render({ sending: true });
+    expect(status()).toBe("Sending…");
+    // A slow connection: nothing thinks yet, however long it takes.
+    wait(5000);
+    render({ sending: true });
+    expect(status()).toBe("Sending…");
+    render({ sending: false });
+    expect(status()).toBe("Thinking…");
+    activity.dispose(host);
+  });
+
+  it("lets “Sending…” be read once when the server answers at once, no longer than that", () => {
+    const { activity, render, status, wait, host } = setup();
+    render({ sending: true });
+    wait(150);
+    render({ sending: false });
+    expect(status()).toBe("Sending…");
+    wait(500);
+    expect(status()).toBe("Thinking…");
+    activity.dispose(host);
+  });
+
   it("holds a line a while: a step that comes and goes at once never flashes", () => {
     const { activity, events, render, status, wait, host } = setup();
     render();

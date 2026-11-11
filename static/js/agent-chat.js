@@ -910,6 +910,7 @@
       settings: state.completedTurn?.agent_settings || context.metadata.agentSettings,
       highlights: running ? App.agentDelegation?.liveHighlights?.(context.metadata.chatId, context.metadata.agentTurnId) : [],
       reconnecting: context.metadata.reconnecting === true && context.metadata.offline === true,
+      sending: context.metadata.sending === true,
     });
     // Evidence links and Copy belong to a finished answer. While the run
     // streams they are only cleared once, when this run takes over the view.
@@ -2686,8 +2687,16 @@
     // live poll (agent-live.js): a sequence number already applied is
     // dropped, so a buffered stream that flushes late renders nothing twice.
     const seen = App.agentLive?.sequence();
+    // The server has the message: its response's headers are here, or a
+    // frame of the run where a proxy holds the response back (agent-live.js).
+    const arrived = () => {
+      if (!context.metadata.sending) return;
+      context.metadata.sending = false;
+      scheduleFlush();
+    };
     const deliver = (type, data, seq) => {
       if (seen && !seen.accept(seq, type)) return;
+      arrived();
       if (data && typeof data === "object") handlers[type]?.receive(data);
     };
     const streamHandlers = Object.fromEntries(Object.keys(handlers)
@@ -2760,6 +2769,7 @@
         streamHandlers, { headers, onResponse: response => {
           App.startProgress?.serverDate?.(response?.headers?.get?.("date"));
           live?.responded();
+          arrived();
         },
           onProgress: () => { lastByte = Date.now(); onProgress?.(); live?.bytes(); } }),
         // 45 s without a byte (keepalives come every 15 s): with the live
@@ -3017,7 +3027,9 @@
             googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
             googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true,
             temporary },
-          metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
+          // sending: until the server answers this message (follow, arrived),
+          // the run's line says "Sending…", not "Thinking…".
+          metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '', sending: true,
             ...(retry ? { fileIds: retry.fileIds } : {}),
             ...(temporaryToken ? { temporaryToken } : {}),
             agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },

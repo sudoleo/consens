@@ -5969,7 +5969,20 @@ der neueste vollständige Satz ≤ 120 Zeichen mit mindestens sechs Wörtern und
 Großbuchstaben vorn (`THOUGHT_WORDS`, gegen Fetzen wie „Also maybe share
 nothing.“), bei einer Notiz ihr erster; ein längerer lässt den alten stehen,
 gekürzt wird nichts). Sie behält Zeichen und Schimmer und blendet weich über
-(`fade`). Während Vergleichsmodelle antworten, steht darunter deren Zitat
+(`fade`). **Die ersten Sekunden:** Bis der Server die Nachricht hat, heißt die
+Zeile „Sending…“ statt „Thinking…“ (`sending` aus `agent-chat.js`:
+`metadata.sending` ab dem Klick, beendet von `follow` → `arrived`, sobald die
+Antwort-Header da sind oder, hinter einem puffernden Proxy, das erste Frame
+des Laufs; nie beim Folgen eines schon laufenden Turns). Vorher dachte laut
+Zeile schon etwas nach, während die Nachricht noch unterwegs war. Sie steht
+mindestens `SENDING_DWELL_MS` (0,6 s), damit sie nicht aufblitzt. Das Zeichen
+atmet im Takt (`activity-dot-breathe`, wie der Punkt des laufenden Schritts im
+geöffneten Verlauf), weil bis zum ersten Wort des Modells (gemessen 0,7–2,3 s
+p50 je Modell, dazu rund 0,4 s Vorlauf) sonst nur das Wort stand und der
+Schimmer zwischen zwei Durchgängen. Die Uhr im Kopf (`updateClock`) wartet per
+Timeout auf die nächste volle Sekunde statt eine Sekunde ab dem letzten
+Render: Jede Meldung startet sie neu, und „0 Sek.“ stand sonst bis zu 1,4 s.
+Während Vergleichsmodelle antworten, steht darunter deren Zitat
 (`comparisonLine`), beim Warten auf Tokens der Grund. `pace` hält jeden Text
 seine eigene Zeit (Status 1,2 s, Gedanke 4 s, auch wenn ein Schritt folgt); was dazwischen kommt und geht, erscheint nie, der
 neueste Stand übernimmt per eigenem Timer. Kein „Ran 4 commands“-Stapel, kein

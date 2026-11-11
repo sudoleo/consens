@@ -328,6 +328,40 @@ describe("single-model agent chat", () => {
     expect(d.querySelector('#agentRecover').hidden).toBe(false);
     dom.window.close();
   });
+  it('says “Sending…” from the click until the server answers, then “Thinking…”', async () => {
+    const {window:w, document:d, dom} = boot();
+    await selectAgent(w);
+    // As run-view.js does in the app: every change of the run is drawn.
+    w.App.runRegistry.setProjector(run => { if (run) w.App.agentChat.project(run); });
+    let options;
+    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, _handlers, incoming) => { options = incoming; return new Promise(() => {}); });
+    d.querySelector('#questionInput').value = 'Question on a slow connection';
+    w.App.agentChat.send();
+    const line = () => d.querySelector('#agentAnswerActivity .agent-progress .agent-current-status')?.textContent;
+    // In the click itself, before any request has left.
+    expect(line()).toBe('Sending…');
+    await vi.waitFor(() => expect(options).toBeDefined());
+    expect(line()).toBe('Sending…');
+    // The response's headers are here: the server has the message.
+    options.onResponse({ headers: { get: () => null } });
+    await vi.waitFor(() => expect(line()).toBe('Thinking…'));
+    dom.window.close();
+  });
+  it('takes a frame of the run as the server’s answer where the response itself is held back', async () => {
+    const {window:w, document:d, dom} = boot();
+    await selectAgent(w);
+    w.App.runRegistry.setProjector(run => { if (run) w.App.agentChat.project(run); });
+    let handlers;
+    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, incoming) => { handlers = incoming; return new Promise(() => {}); });
+    d.querySelector('#questionInput').value = 'Question behind a buffering proxy';
+    w.App.agentChat.send();
+    const line = () => d.querySelector('#agentAnswerActivity .agent-progress .agent-current-status')?.textContent;
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    expect(line()).toBe('Sending…');
+    handlers.accepted.receive({ chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32) });
+    await vi.waitFor(() => expect(line()).toBe('Thinking…'));
+    dom.window.close();
+  });
   it('keeps a silent stream open while the server reports the run still running and adopts its saved answer', async () => {
     const {window:w,document:d,dom} = boot();
     await selectAgent(w);
@@ -1335,11 +1369,15 @@ describe("single-model agent chat", () => {
     const host = document.getElementById('agentAnswerActivity');
     let now = 0, tick;
     vi.spyOn(window.performance, 'now').mockImplementation(() => now);
-    vi.spyOn(window, 'setInterval').mockImplementation(callback => { tick = callback; return 123; });
-    const clear = vi.spyOn(window, 'clearInterval');
+    // The clock's timer waits for the next full second, then for each after it.
+    const waits = [];
+    vi.spyOn(window, 'setTimeout').mockImplementation((callback, ms) => { tick = callback; waits.push(ms); return 123; });
+    const clear = vi.spyOn(window, 'clearTimeout');
     activity.render(host, {running:true, elapsedMs:59900});
     const title = host.querySelector('.agent-activity-title');
     expect(title.textContent).toBe('Working for 59s');
+    // 100 ms to the minute, not a full second counted from this render.
+    expect(waits).toEqual([105]);
     expect(title.getAttribute('aria-live')).toBe('off');
     now = 1100; tick();
     expect(title.textContent).toBe('Working for 1m 1s');
