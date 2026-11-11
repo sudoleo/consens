@@ -3019,6 +3019,9 @@ class FollowerTests(unittest.TestCase):
     def test_invalid_email_and_unfollowable_pages_rejected(self):
         with self.assertRaisesRegex(WatchError, "valid email"):
             watch_followers.request_follow(self.share_id, "not-an-email", db=self.db)
+        for address in ("(1)victim@example.com", "victim@example.com,x", "<victim@example.com>"):
+            with self.assertRaisesRegex(WatchError, "valid email"):
+                watch_followers.request_follow(self.share_id, address, db=self.db)
         private_id = "P" * 16
         self.db.stores["shares"][private_id] = dict(share(slug="priv"), visibility="private")
         with self.assertRaisesRegex(WatchError, "cannot be followed"):

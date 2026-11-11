@@ -100,7 +100,11 @@ def _run_transaction(db, operation):
 
     return run(transaction)
 _SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
+# One plain address. A mail header reads comments, angle brackets, quotes
+# and lists as the same or as further recipients, so those spellings would
+# each count as a new address towards the per-address mail limit.
+_EMAIL_PART = r'[^@\s()<>,;:"\[\]\\]'
+_EMAIL_RE = re.compile(rf"^{_EMAIL_PART}+@{_EMAIL_PART}+\.{_EMAIL_PART}{{2,}}$")
 
 
 class TopicError(Exception):

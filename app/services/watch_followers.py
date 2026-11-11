@@ -27,7 +27,11 @@ FOLLOWERS_COLLECTION = "watch_followers"
 MAX_FOLLOWERS_PER_SHARE = 200
 CONFIRM_TOKEN_MAX_AGE_DAYS = 3
 
-_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$")
+# One plain address. A mail header reads comments, angle brackets, quotes
+# and lists as the same or as further recipients, so those spellings would
+# each count as a new address towards the per-address mail limit.
+_EMAIL_PART = r'[^@\s()<>,;:"\[\]\\]'
+_EMAIL_RE = re.compile(rf"^{_EMAIL_PART}+@{_EMAIL_PART}+\.{_EMAIL_PART}{{2,}}$")
 
 
 def normalize_email(value) -> str:

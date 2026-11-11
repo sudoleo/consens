@@ -1376,3 +1376,18 @@ def test_topic_judge_writes_english_statements_while_the_app_keeps_the_answer_la
     judge = captured["judge"]
     assert judge.func is engine.query_differences
     assert judge.keywords == {"output_language": "English", "statement_claims": True}
+
+
+@pytest.mark.parametrize("address", [
+    "(1)victim@example.com",
+    "victim@example.com,x",
+    "<victim@example.com>",
+    '"a"@example.com;b@example.com',
+])
+def test_follow_email_is_one_plain_address(address):
+    # The mail header reads comments, brackets and lists as the same or as
+    # further recipients, so each spelling would get its own daily allowance.
+    with pytest.raises(topics.TopicError) as raised:
+        topics.normalize_email(address)
+    assert raised.value.code == "invalid_email"
+    assert topics.normalize_email(" Victim+news@Example.com ") == "victim+news@example.com"
