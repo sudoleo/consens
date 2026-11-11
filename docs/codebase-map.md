@@ -483,7 +483,11 @@ Drosselung (`rate_limited`, nie ein Upgrade-Angebot) von der Plan-Grenze
 Äußerste Schicht ist `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
 content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` und
 `asset_url()`-URLs mit `?v=<12 hex>` erhalten
-`Cache-Control: public, max-age=31536000, immutable`, jede andere
+`Cache-Control: public, max-age=31536000, immutable`, ebenso (seit 2026-11-11)
+jede Datei unter `static/vendor/<paket>/<x.y.z>/`: Der Versionsordner ist ihr
+Beleg, und die ES-Module von Mermaid und pdf.js importieren einander ohne
+`?v=`-Marke (ein Diagramm fragte sonst bei jedem Seitenaufruf 28 Dateien neu
+an). Eine vendorte Datei wird deshalb nie an Ort und Stelle geändert. Jede andere
 `/static`-Antwort `no-cache` (ETag-Revalidierung), statische Textassets und
 HTML ab 1 KiB gzip bei passendem `Accept-Encoding`. API-JSON und
 `text/event-stream` laufen unverändert Frame für Frame durch (SSE wird nie
@@ -2578,6 +2582,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     16:10-Feld; die Größe eines gezeichneten Diagramms merkt sich der Browser
     (`localStorage` `consens.diagramSizes`, höchstens 200), sodass ein später
     geöffneter Chat das Feld von Anfang an in der richtigen Größe hat.
+  - **Lesbar auf dem Handy (seit 2026-11-11):** Ein Diagramm wird nie kleiner
+    als `--diagram-min-scale` (0,75) seiner eigenen Größe gezeichnet; ein
+    Ablauf aus sechs Schritten hatte auf Handybreite 6-px-Beschriftungen. Ist
+    es dann breiter als die Antwort, wischt man es in seinem Platz zur Seite
+    wie eine Tabelle (`overflow-x: auto` am Platz), und die Seite, an der es
+    weitergeht, läuft weich aus (`.is-cut-start`/`.is-cut-end`, `watchPan()`
+    folgt Größe und Scrollstand).
+  - **Zählen (seit 2026-11-11):** `settled()` fragt nur der Stream einer
+    laufenden Antwort; dort zählt ein Diagramm einmal als `app_diagram` mit
+    `kind` (Mermaids Name der Art, nie ein Wort des Modells) und `outcome`
+    (`drawn`, `syntax`, `refused`, `load`), `docs/analytics.md`.
   - **Scheitern:** Was Mermaid nicht lesen kann, bleibt der Codeblock des
     Modells (`.is-code`, mit Kopierknopf), ohne Fehlergrafik. Kam Mermaid
     selbst nicht an (Netz), versucht es ein späterer Blick nach `RETRY_MS`.
@@ -12139,8 +12154,9 @@ zählen nicht):
   Für die **öffentlichen Seiten und `admin.html`** seit 2026-10-04 ebenfalls:
   Templates nutzen `{{ asset_url('/static/...') }}`; der Hash umfasst die
   transitiven lokalen `@import`-/ESM-Abhängigkeiten, deren eigene URLs
-  unversioniert bleiben. `StaticDeliveryMiddleware` cacht `?v=<12 hex>` und
-  `static/dist` ein Jahr `immutable`, alles andere unter `/static` ist
+  unversioniert bleiben. `StaticDeliveryMiddleware` cacht `?v=<12 hex>`,
+  `static/dist` und Versionsordner unter `static/vendor` ein Jahr
+  `immutable`, alles andere unter `/static` ist
   `no-cache` (ETag-Revalidierung). Handgeschriebene `?v=` verbietet
   `tests/test_frontend_resilience.py`; Details in `docs/frontend-build.md`.
 - **SSE-Antworten (seit 2026-10-08)**: neue Streams nutzen `SSE_HEADERS`

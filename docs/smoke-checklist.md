@@ -1618,7 +1618,9 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
 - [ ] Agent nach einem Ablauf oder Vergleich fragen, der ein Diagramm
   nahelegt („zeig den Ablauf als Diagramm“): Während der Block geschrieben
   wird, steht ein ruhiges Feld statt Code; das Diagramm erscheint einfarbig in
-  den Tönen der Seite, der Text danach kommt darunter, ohne zu springen. Hell
+  den Tönen der Seite, der Text danach kommt darunter, ohne zu springen. Auf
+  Handybreite bleibt ein breiter Ablauf lesbar, lässt sich zur Seite wischen
+  und läuft an der Kante weich aus; die Seite selbst wischt nie mit. Hell
   und dunkel umschalten zeichnet es neu, ein Klick öffnet es im
   Bildbetrachter. Chat neu laden: Das Feld hat sofort die Größe des Diagramms.
   Antwort teilen: Die Share-Seite zeigt dasselbe Diagramm. Auf dem iPhone

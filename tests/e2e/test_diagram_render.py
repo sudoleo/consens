@@ -26,11 +26,14 @@ def _block(source):
     return f'<pre><code class="language-mermaid">{source}\n</code></pre>'
 
 
-def _page(browser, body):
-    context = browser.new_context()
+def _page(browser, body, width='680px', viewport=None, init=None):
+    context = browser.new_context(**({'viewport': viewport} if viewport else {}))
     errors, requested, refused = [], [], []
     page = context.new_page()
     page.on('pageerror', lambda error: errors.append(str(error)))
+    if init:
+        # The page's policy runs no inline script; this one is the browser's.
+        page.add_init_script(init)
 
     def serve(route):
         path = route.request.url.split('share.test', 1)[1].split('?', 1)[0]
@@ -39,7 +42,7 @@ def _page(browser, body):
                 '<!doctype html><html><head><meta charset="utf-8">' + TOKENS
                 + '<link rel="stylesheet" href="/static/css/diagram.css">'
                 + '<script defer src="/static/js/diagram-render.js"></script>'
-                + f'</head><body><main style="width:680px">{body}</main></body></html>'))
+                + f'</head><body style="margin:0"><main style="width:{width}">{body}</main></body></html>'))
             return
         file = ROOT / path.lstrip('/')
         if path.startswith(('/static/vendor/mermaid/', '/static/js/diagram-render.js', '/static/css/diagram.css')) and file.is_file():
@@ -106,6 +109,60 @@ def test_the_drawing_follows_the_page_into_the_dark(browser):
         svg = _drawing(page)
         assert '#f5f5f5' in svg and '#151515' in svg and '#0a0a0a' not in svg
         assert page.locator('.md-diagram-figure').bounding_box() == size
+        assert not errors
+    finally:
+        context.close()
+
+
+def test_a_wide_diagram_stays_readable_on_a_phone_and_pans_in_its_place(browser):
+    steps = ' --&gt; '.join(f'S{index}[Schritt Nummer {index}]' for index in range(1, 8))
+    context, page, errors, _requested, _refused = _page(
+        browser, f'<p>Before</p>{_block("flowchart LR" + chr(10) + "  " + steps)}', width='auto',
+        viewport={'width': 390, 'height': 800})
+    try:
+        expect(page.locator('.md-diagram')).to_have_attribute('data-drawn', 'light', timeout=20000)
+        size = page.evaluate('''() => {
+            const place = document.querySelector(".md-diagram");
+            const figure = place.querySelector(".md-diagram-figure");
+            return { natural: Number(place.style.getPropertyValue("--diagram-width")), shown: figure.getBoundingClientRect().width,
+                     place: [place.clientWidth, place.scrollWidth],
+                     page: [document.documentElement.clientWidth, document.documentElement.scrollWidth] };
+        }''')
+        assert size['natural'] > 900
+        # Three quarters of its own size (15 px labels stay above 11 px), not the 390 px of the screen.
+        assert abs(size['shown'] - 0.75 * size['natural']) < 1
+        assert size['place'][0] <= 390 < size['place'][1]
+        # The page itself never pans.
+        assert size['page'][1] <= size['page'][0]
+        # The side it goes on to fades out, and so does the one left behind.
+        place = page.locator('.md-diagram')
+        expect(place).to_have_class('md-diagram is-arriving has-size is-drawn is-cut-end')
+        place.evaluate('place => { place.scrollLeft = 120; }')
+        expect(place).to_have_class('md-diagram is-arriving has-size is-drawn is-cut-end is-cut-start')
+        place.evaluate('place => { place.scrollLeft = place.scrollWidth; }')
+        expect(place).to_have_class('md-diagram is-arriving has-size is-drawn is-cut-start')
+        assert not errors
+    finally:
+        context.close()
+
+
+def test_a_written_diagram_is_counted_by_kind_and_outcome_without_its_words(browser):
+    context, page, errors, _requested, _refused = _page(
+        browser, '<p>Plain</p>', init='window.events = []; window.trackUmamiEvent = (name, data) => window.events.push([name, data]);')
+    try:
+        page.wait_for_function('() => typeof window.ConsensusDiagram === "object"')
+        # What the stream asks for each finished block of a running answer.
+        page.evaluate('''() => {
+            for (const source of ["flowchart TD\\n  A[Secret plan] --> B", "stateDiagram-v2\\n  [*] --> Idle",
+                                  "xychart-beta\\n  x-axis [Prüfer, Rest]\\n  bar [1, 2]", "Totally private words\\n  A --> B"]) {
+              window.ConsensusDiagram.settled(source);
+            }
+        }''')
+        page.wait_for_function('() => window.events.length === 4', timeout=20000)
+        events = page.evaluate('() => window.events')
+        assert all(name == 'app_diagram' and set(data) == {'kind', 'outcome'} for name, data in events)
+        assert sorted((data['kind'], data['outcome']) for _name, data in events) == [
+            ('flowchart', 'drawn'), ('other', 'syntax'), ('state', 'drawn'), ('xychart', 'syntax')]
         assert not errors
     finally:
         context.close()

@@ -151,6 +151,26 @@ def test_static_cache_policy_revalidates_unversioned_and_pins_content_hashes():
     assert revalidated.status_code == 304
 
 
+def test_a_vendored_library_is_pinned_under_its_version_folder():
+    # Mermaid's and pdf.js's modules import each other by relative path, so
+    # no ?v= mark reaches them: the version in the folder is their proof.
+    import json
+
+    from app.core.static_delivery import static_cache_control
+
+    pins = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))["devDependencies"]
+    client = TestClient(_app())
+    chunk = client.get(f"/static/vendor/mermaid/{pins['mermaid']}/dist/mermaid.esm.min.mjs")
+    assert chunk.status_code == 200 and chunk.headers["cache-control"] == IMMUTABLE_CACHE_CONTROL
+    assert static_cache_control(f"/static/vendor/pdfjs/{pins['pdfjs-dist']}/build/pdf.min.mjs") == IMMUTABLE_CACHE_CONTROL
+    # Not under a version: nothing says its bytes stay.
+    for path in ("/static/vendor/mermaid/latest/dist/mermaid.esm.min.mjs", "/static/vendor/loose.js",
+                 "/static/vendor/mermaid/12.3.0/"):
+        assert static_cache_control(path) == "no-cache", path
+    missing = client.get(f"/static/vendor/mermaid/{pins['mermaid']}/dist/gone.mjs")
+    assert missing.status_code == 404 and "immutable" not in missing.headers.get("cache-control", "")
+
+
 def test_a_font_under_its_name_from_before_the_hash_still_loads():
     # A tab opened before the deploy runs the old
     # stylesheet and fetches italic or latin-ext at its first such letter,

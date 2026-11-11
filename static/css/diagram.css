@@ -10,11 +10,32 @@
    (--diagram-width/-height), as wide as it will be drawn: its own width,
    the answer's, or what the height limit allows. Any other keeps a 16:10
    field until it is drawn.
+
+   It is never drawn smaller than --diagram-min-scale of its own size: a
+   flow of six steps shrunk to a phone's width had labels of 6 px. Wider
+   than the answer then, it pans sideways in its place, as a table does.
    ========================================================================== */
 
 .md-diagram {
   --diagram-max-height: min(640px, 70vh);
+  --diagram-min-scale: 0.75;
   margin: 18px 0 22px;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+/* The side a panning drawing goes on to (diagram-render.js watchPan). */
+.md-diagram.is-cut-end {
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, #000 calc(100% - 36px), transparent);
+}
+.md-diagram.is-cut-start {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 36px);
+  mask-image: linear-gradient(to right, transparent, #000 36px);
+}
+.md-diagram.is-cut-start.is-cut-end {
+  -webkit-mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
+  mask-image: linear-gradient(to right, transparent, #000 36px, #000 calc(100% - 36px), transparent);
 }
 .md-diagram > pre { display: none; margin: 0; }
 /* Not a diagram after all (Mermaid cannot read it), or a block the answer
@@ -34,8 +55,9 @@
 }
 .md-diagram.is-pending::before { content: ""; }
 .md-diagram.has-size > .md-diagram-figure {
-  width: min(calc(var(--diagram-width) * 1px), 100%,
-    calc(var(--diagram-max-height) * var(--diagram-width) / var(--diagram-height)));
+  width: max(calc(var(--diagram-width) * var(--diagram-min-scale) * 1px),
+    min(calc(var(--diagram-width) * 1px), 100%,
+      calc(var(--diagram-max-height) * var(--diagram-width) / var(--diagram-height))));
   aspect-ratio: var(--diagram-width) / var(--diagram-height);
 }
 /* Waiting: the skeleton's tone with its light passing (skeleton.css). */
@@ -58,7 +80,8 @@
   background: none; cursor: zoom-in;
 }
 .md-diagram-open:disabled { cursor: default; }
-.md-diagram-open:focus-visible { outline: var(--focus-ring); outline-offset: 3px; }
+/* Inside its edge: the place clips what stands out of it. */
+.md-diagram-open:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
 .md-diagram-figure img { display: block; width: 100%; height: 100%; }
 .md-diagram.is-arriving > .md-diagram-figure img { animation: diagram-in var(--dur-layer) var(--ease-out) both; }
 @keyframes diagram-in { from { opacity: 0; } }
@@ -67,4 +90,8 @@
   .md-diagram:not(.is-drawn) > .md-diagram-figure,
   .md-diagram.is-pending::before { animation: none; background: color-mix(in srgb, var(--ink) 7%, transparent); }
   .md-diagram.is-arriving > .md-diagram-figure img { animation: none; }
+}
+
+@media print {
+  .md-diagram { overflow: visible; break-inside: avoid; -webkit-mask-image: none; mask-image: none; }
 }

@@ -48,6 +48,12 @@ REVALIDATE_CACHE_CONTROL = "no-cache"
 _CONTENT_VERSION = re.compile(r"(?:^|&)v=[0-9a-f]{12}(?:&|$)")
 _HASHED_DIST = re.compile(r"^/static/dist/[A-Za-z0-9_-]+\.[0-9a-f]{12}\.(?:js|css|mjs)$")
 _HASHED_FONT = re.compile(r"^/static/fonts/(?:[A-Za-z0-9_-]+/)*[A-Za-z0-9_-]+\.[0-9a-f]{12}\.woff2$")
+# A vendored library lives in a folder named after its pinned version
+# (scripts/vendor_frontend.mjs; build:check compares its bytes with the npm
+# package), so a file there never changes under its URL. Its ES modules
+# import each other by relative path, without a content mark: revalidated,
+# one diagram asked for Mermaid's 28 chunks again on every page.
+_VERSIONED_VENDOR = re.compile(r"^/static/vendor/[A-Za-z0-9_-]+/\d+\.\d+\.\d+/[^?]+$")
 _COMPRESSIBLE_STATIC = (
     "text/css",
     "text/javascript",
@@ -97,7 +103,7 @@ def legacy_font_target(path: str, static_root: Path = STATIC_ROOT) -> "str | Non
 
 def static_cache_control(path: str, query_string: str = "") -> "str | None":
     """Cache-Control for a /static response, or None to leave it alone."""
-    if is_hashed_dist_path(path) or _HASHED_FONT.match(path or ""):
+    if is_hashed_dist_path(path) or _HASHED_FONT.match(path or "") or _VERSIONED_VENDOR.match(path or ""):
         return IMMUTABLE_CACHE_CONTROL
     if not (path or "").startswith("/static/"):
         return None

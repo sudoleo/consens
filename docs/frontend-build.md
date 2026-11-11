@@ -222,6 +222,10 @@ ES-`import`/`export from`/`import()` transitiv nachlädt. Die verschachtelten
 URLs selbst bleiben unversioniert. `StaticDeliveryMiddleware` liefert:
 
 - `static/dist/<name>.<hash>` und URLs mit `?v=<12 hex>`: ein Jahr `immutable`;
+- jede Datei unter `static/vendor/<paket>/<x.y.z>/`: ein Jahr `immutable`. Der
+  Versionsordner ist der Beleg (die ES-Module von Mermaid und pdf.js laden
+  einander ohne `?v=`). Eine vendorte Datei wird deshalb nie an Ort und
+  Stelle geändert: neue Bytes heißen neuer Versionsordner;
 - jede andere `/static`-Antwort (verschachtelte Imports, Bilder, alte
   Hand-Marken): `no-cache`, also Revalidierung per ETag (meist 304).
 

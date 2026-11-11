@@ -62,6 +62,39 @@ describe("ConsensusDiagram", () => {
     await settle();
   });
 
+  it("counts a diagram of an answer being written once, by Mermaid's name for it", async () => {
+    const events = [];
+    const { window } = loadScripts(["static/js/diagram-render.js"], {
+      before(page) { page.trackUmamiEvent = (name, data) => events.push([name, { ...data }]); },
+    });
+    const { request, settled } = window.ConsensusDiagram;
+    // A chat opened later draws without asking the stream's question: no count.
+    await request('pie title Costs\n  "a": 1').done;
+    await settle();
+    expect(events).toEqual([]);
+    // The stream asks until the drawing is there; jsdom never loads Mermaid.
+    settled("sequenceDiagram\n  A->>B: hi");
+    settled("sequenceDiagram\n  A->>B: hi");
+    await request("sequenceDiagram\n  A->>B: hi").done;
+    await settle();
+    settled("sequenceDiagram\n  A->>B: hi");
+    expect(events).toEqual([["app_diagram", { kind: "sequence", outcome: "load" }]]);
+    // Refused before Mermaid is asked, and counted as that.
+    settled('---\ntitle: x\n---\n%%{init: {}}%%\ngraph TD\n  A@{ img: "https://example.invalid/x.png" } --> B');
+    await settle();
+    expect(events[1]).toEqual(["app_diagram", { kind: "flowchart", outcome: "refused" }]);
+    // A first line that names no kind sends none of its words.
+    settled(`My secret plan\n${"A --> B\n".repeat(4000)}`);
+    await settle();
+    expect(events[2]).toEqual(["app_diagram", { kind: "other", outcome: "refused" }]);
+    for (const [first, kind] of [["stateDiagram-v2", "state"], ["erDiagram", "er"], ["xychart-beta", "xychart"],
+      ["C4Context", "c4"], ["classDiagram", "class"], ["gitGraph", "git"], ["quadrantChart", "quadrant"]]) {
+      settled(`${first}\n  A@{ img: "x" }`);
+      await settle();
+      expect(events.at(-1)[1]).toEqual({ kind, outcome: "refused" });
+    }
+  });
+
   it("answers once for a source, whatever asks", () => {
     const { window } = boot();
     const { request } = window.ConsensusDiagram;

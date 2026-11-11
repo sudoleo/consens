@@ -237,14 +237,14 @@
       configure(mermaid, theme);
       serial += 1;
       const result = await mermaid.render(`consens-diagram-${serial}`, source);
-      return picture(result.svg);
+      return Object.assign(picture(result.svg), { kind: kindOf(result.diagramType) });
     });
     queue = job.catch(() => {});
     return job;
   }
 
   // ---- Drawings by source ----------------------------------------------------
-  // theme + source -> { state: "pending" | "drawn" | "failed", since, done, picture }.
+  // theme + source -> { state: "pending" | "drawn" | "failed", since, done, picture, kind, outcome, live }.
   const drawings = new Map();
 
   function request(source, theme) {
@@ -254,30 +254,73 @@
     // A diagram Mermaid cannot read stays code; one whose Mermaid did not
     // arrive (the network) is tried again by a later look, not at once.
     if (entry && !(entry.again && Date.now() - entry.since > RETRY_MS)) return entry;
-    entry = { state: "pending", since: Date.now(), picture: null, done: null, again: false };
+    entry = { state: "pending", since: Date.now(), picture: null, done: null, again: false, live: false,
+      kind: sourceKind(source), outcome: "" };
     drawings.set(id, entry);
     for (const old of drawings.keys()) {
       if (drawings.size <= DRAWINGS_KEPT) break;
       if (drawings.get(old).state !== "pending") drawings.delete(old);
     }
     const work = source.trim() && source.length <= MAX_SOURCE_CHARS && !LOADS_IMAGE.test(source) ? draw(source, theme)
-      : Promise.reject(new Error("no diagram"));
+      : Promise.reject(Object.assign(new Error("no diagram"), { refused: true }));
     entry.done = work.then(result => {
       entry.state = "drawn";
       entry.picture = result;
+      entry.kind = result.kind;
+      entry.outcome = "drawn";
       rememberSize(source, result);
     }, error => {
       entry.state = "failed";
       entry.again = Boolean(error && error.again);
+      entry.outcome = entry.again ? "load" : error && error.refused ? "refused" : "syntax";
       entry.since = Date.now();
-    });
+    }).then(() => { if (entry.live) report(source, entry); });
     return entry;
   }
 
-  // Whether the text after this diagram may show: drawn, failed or late.
+  // The stream's question (markdown-stream.js streamHold): whether the text
+  // after this diagram may show, which is once it is drawn, failed or late.
+  // Only an answer that is being written asks, so this is also where a
+  // diagram counts as one a model just wrote.
   function settled(source) {
     const entry = request(String(source || ""));
+    entry.live = true;
+    report(String(source || ""), entry);
     return entry.state !== "pending" || Date.now() - entry.since > HOLD_MS;
+  }
+
+  // ---- Counting ---------------------------------------------------------------
+  // How often a model's diagram is drawn and how often Mermaid cannot read
+  // it (docs/analytics.md, app_diagram): once per diagram of an answer being
+  // written, never for a chat opened later. Its kind is one of Mermaid's
+  // names, never a word of the model's.
+  const KINDS = ["flowchart", "sequence", "class", "state", "er", "gantt", "pie", "xychart", "mindmap", "timeline",
+    "quadrant", "sankey", "git", "journey", "c4", "requirement", "block", "kanban", "architecture", "packet", "radar",
+    "treemap"];
+  function kindOf(name) {
+    const word = String(name || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (word.startsWith("graph")) return "flowchart";
+    return KINDS.find(kind => word.startsWith(kind)) || "other";
+  }
+  // The kind a source names in its first line, after its front matter and
+  // its "%%" lines: what a block that could not be drawn was meant to be.
+  function sourceKind(source) {
+    const lines = String(source || "").split("\n");
+    let index = 0;
+    if (lines[0].trim() === "---") index = lines.findIndex((line, at) => at > 0 && line.trim() === "---") + 1 || lines.length;
+    for (; index < lines.length; index += 1) {
+      const line = lines[index].trim();
+      if (line && !line.startsWith("%%")) return kindOf(line.split(/[^A-Za-z0-9-]/)[0]);
+    }
+    return "other";
+  }
+
+  const reported = new Set();
+  function report(source, entry) {
+    const name = key(source);
+    if (entry.state === "pending" || reported.has(name) || typeof window.trackUmamiEvent !== "function") return;
+    reported.add(name);
+    window.trackUmamiEvent("app_diagram", { kind: entry.kind, outcome: entry.outcome });
   }
 
   // The block is still being written: Mermaid and the diagram's kind (named
@@ -360,6 +403,21 @@
     return figure;
   }
 
+  // A drawing wider than its place pans sideways in it (diagram.css). A side
+  // that hides more of it fades out instead of ending in a cut, so the reader
+  // sees that it goes on; the classes follow the place's size and scroll.
+  function watchPan(place) {
+    if (place._diagramPan) return;
+    place._diagramPan = () => {
+      const hidden = place.scrollWidth - place.clientWidth;
+      place.classList.toggle("is-cut-start", hidden > 1 && place.scrollLeft > 1);
+      place.classList.toggle("is-cut-end", hidden > 1 && place.scrollLeft < hidden - 1);
+    };
+    place.addEventListener("scroll", place._diagramPan, { passive: true });
+    if (typeof ResizeObserver === "function") new ResizeObserver(place._diagramPan).observe(place);
+    place._diagramPan();
+  }
+
   function show(place, result, theme) {
     const figure = figureOf(place);
     const image = figure.querySelector("img");
@@ -372,6 +430,7 @@
     place.dataset.drawn = theme;
     place.classList.remove("is-code");
     place.classList.add("is-drawn");
+    watchPan(place);
   }
 
   function fill(place) {
