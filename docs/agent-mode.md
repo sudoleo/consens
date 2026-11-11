@@ -2690,7 +2690,13 @@ mit `audit_access`). Die
   die Ansicht meldet auch Öffnen und Schließen per
   `consensio:workspace-holder`). Ohne `browser` fragt er vor
   einem Schritt in seinem Namen (Senden, Posten, Buchen, Löschen, AGB): Karte
-  „The agent asks before it goes on“ mit „Allow“ / „Don’t allow“. Der Agent
+  „The agent asks before it goes on“ mit „Allow“ / „Don’t allow“. Hat der
+  Nutzer genau diesen Schritt verlangt, fragt er nicht noch einmal: Der
+  Browser-Absatz in `AGENT_VM_PROMPT` und die Kurzfassung der Prüfer
+  (`agent_audit.BRIEF_TOOLS`) tragen seit 2026-11-11 dieselbe Ausnahme wie der
+  Grundsatz („unless they asked for exactly that“, Max: „angleichen“); vorher
+  gaben Grundsatz und Browser-Absatz auf „schick genau diese Mail ab“ zwei
+  Antworten, und die Prüfer kannten nur die strengere. Der Agent
   bekommt nur das Ergebnis (`agent_ask.ANSWERS`: `handed_back`, `continued`,
   `allowed`, `declined`, `message`, `no_answer`), nie, was der Nutzer im
   Browser tat; eine Nachricht auf der Karte ist die Antwort (Rest des Stapels

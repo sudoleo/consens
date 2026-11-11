@@ -362,8 +362,8 @@ BRIEF_TOOLS = (
     ("browser", "browser acts in the user's Chrome in the same workspace, signed in where the user signed in, "
                 "out of reach of the agent's commands. Sign-ins, passwords and payments are the user's: ask_user "
                 "hands the browser to them, and a step in their name (sending, posting, buying, deleting) waits "
-                "for their yes through ask_user. localhost there is the agent's own servers, where it serves what "
-                "it builds for the user."),
+                "for their yes through ask_user unless the user asked for exactly that. localhost there is the "
+                "agent's own servers, where it serves what it builds for the user."),
     ("note_sign_in", "note_sign_in keeps the list of sites the browser is logged in to, which the agent reads with "
                      "every message and the user sees in their settings."),
     ("ask_user", "A key or token the user gave through ask_user lies in ~/.secrets in the workspace: the agent "

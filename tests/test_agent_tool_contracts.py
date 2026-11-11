@@ -28,6 +28,18 @@ def test_the_prompt_says_when_text_beside_a_call_is_the_answer_and_how_many_call
     assert "run side by side" in AGENT_AUDIT_ANSWER_SECTION and "one after another, in your order, up to four" not in AGENT_VM_PROMPT
 
 
+def test_a_step_the_user_asked_for_exactly_needs_no_second_yes_in_the_browser_either():
+    """The principle lets a step in the user's name go ahead when they asked
+    for exactly that. The browser's paragraph and the reviewers' brief say the
+    rule again and carry the same exception: without it "send exactly this
+    mail" has two answers, and a reviewer holds the sent mail against the agent."""
+    from app.services.agent_audit import tool_brief
+    from app.services.prompt_defaults import AGENT_AUDIT_SYSTEM_PROMPT
+    assert "waits for their yes unless they asked for exactly that" in AGENT_AUDIT_SYSTEM_PROMPT
+    assert "waits for their yes through ask_user unless they asked for exactly that" in AGENT_VM_PROMPT
+    assert "waits for their yes through ask_user unless the user asked for exactly that" in " ".join(tool_brief(["browser"]))
+
+
 class Text(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     text: str = ""
