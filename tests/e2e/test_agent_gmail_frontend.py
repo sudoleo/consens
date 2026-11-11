@@ -51,7 +51,7 @@ def test_gmail_draft_revision_document_download_and_restoration(browser,phase4_s
         consent=page.locator('#agentGoogleChips').get_by_label('Share with the models in this chat',exact=True)
         expect(page.locator('#agentGoogleChips')).to_contain_text('Gmail · owner@example.org')
         consent.check();page.locator('#questionInput').fill('Compare the offers, create a decision brief and prepare an email with the PDF.')
-        page.locator('#sendButton').click()
+        page.locator('#sendButton').click();first_sent=page.evaluate('Date.now()')
         expect(page.locator('#agentGoogleActions')).to_contain_text('Decision-v1.pdf')
         assert requests[0]['google_selection']['gmail'] is True and requests[0]['google_selection']['calendar'] is False
         assert requests[0]['google_data_consent'] is True and not confirmed
@@ -62,9 +62,11 @@ def test_gmail_draft_revision_document_download_and_restoration(browser,phase4_s
         # The chat holds the consent now: no second checkbox.
         expect(consent).to_be_hidden()
         # Send once the first run has ended and nothing holds the message back:
-        # the revision is a new message, never steering or a refusal. Nightly
-        # runs kept showing only v1 here.
-        page.wait_for_function('() => !window.isRunActive() && !App.agentChat.sendBlocker()')
+        # the revision is a new message, never steering or a refusal. The
+        # stubbed answer is there at once, so the second Send can fall into
+        # the 450 ms in which the registry takes a repeated Send for the same
+        # gesture and drops it (run-registry.js claimStartAction).
+        page.wait_for_function('sent => Date.now() - sent >= 450 && !window.isRunActive() && !App.agentChat.sendBlocker()',arg=first_sent)
         with page.expect_request(lambda r: r.url.endswith('/agent') and r.method == 'POST'):
             page.locator('#sendButton').click()
         expect(page.locator('#agentGoogleActions')).to_contain_text('Decision-v2.pdf')
