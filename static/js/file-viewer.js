@@ -1185,7 +1185,6 @@
       // nothing of the file loads by itself (a remote picture is a note).
       content = node('article', 'file-viewer-sheet file-viewer-markdown');
       content.append(window.renderMarkdownFragment(text));
-      window.addNewTabToLinks?.(content);
     } else if (how === 'table') {
       content = table(text, /\.tsv$/i.test(current.item.name) ? '\t' : null);
     } else if (how === 'document') {

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import base64
+import contextlib
 import hashlib
 import io
 import logging
@@ -29,6 +30,11 @@ IMAGE_TARGET_BYTES = 900_000    # Zielgroesse der Neukodierung
 IMAGE_JPEG_QUALITIES = (85, 70, 55)
 MAX_IMAGE_BYTES = 1_500_000     # harte Grenze NACH dem Verkleinern
 IMAGE_MAX_PIXELS = 40_000_000   # Schutz vor kleinen Dateien mit riesiger Dekodierung
+# Every format but JPEG decodes whole: 20 MP are 80 MB as RGBA, in the one
+# server process, and a few KB of zeros can claim them. One such decode at a
+# time; a picture below the free size (a 4K screenshot) never waits.
+IMAGE_MAX_PIXELS_DECODED = 20_000_000
+IMAGE_FREE_DECODE_PIXELS = 9_000_000
 PDF_NATIVE_MAX_BYTES = 2 * 1024 * 1024
 MAX_ATTACHMENT_TOTAL_BYTES = 6 * 1024 * 1024
 MAX_PDF_EXTRACT_CHARS = 24000
@@ -231,6 +237,9 @@ def _looks_like_text(raw: bytes) -> bool:
     return bool(text and text.strip())
 
 
+_whole_decodes = threading.Lock()
+
+
 def shrink_image(raw: bytes, mime: str) -> tuple[bytes, str]:
     """Bild auf Providergroesse bringen: laengste Kante ``IMAGE_MAX_EDGE``,
     Zielgroesse ``IMAGE_TARGET_BYTES``.
@@ -258,57 +267,66 @@ def shrink_image(raw: bytes, mime: str) -> tuple[bytes, str]:
         logger.info("Image attachment could not be decoded category=%s", safe_exception(exc))
         return raw, mime
 
-    if source.width * source.height > IMAGE_MAX_PIXELS:
+    width, height = source.width, source.height
+    # A JPEG decodes already reduced (draft, below); every other format
+    # decodes whole, four bytes a pixel, in the one server process.
+    reduced = source.format == "JPEG"
+    if width * height > (IMAGE_MAX_PIXELS if reduced else IMAGE_MAX_PIXELS_DECODED):
         source.close()
         raise ImagePixelLimitExceeded("image pixel budget exceeded")
 
-    try:
-        source.load()
-    except Image.DecompressionBombError as exc:
-        source.close()
-        raise ImagePixelLimitExceeded("image pixel budget exceeded") from exc
-    except Exception as exc:
-        source.close()
-        logger.info("Image attachment could not be decoded category=%s", safe_exception(exc))
-        return raw, mime
-
-    with source:
-        if max(source.size) <= IMAGE_MAX_EDGE and len(raw) <= IMAGE_TARGET_BYTES:
+    whole = not reduced and width * height > IMAGE_FREE_DECODE_PIXELS
+    with _whole_decodes if whole else contextlib.nullcontext():
+        try:
+            if reduced:
+                source.draft("RGB", (IMAGE_MAX_EDGE, IMAGE_MAX_EDGE))
+            source.load()
+        except Image.DecompressionBombError as exc:
+            source.close()
+            raise ImagePixelLimitExceeded("image pixel budget exceeded") from exc
+        except Exception as exc:
+            source.close()
+            logger.info("Image attachment could not be decoded category=%s", safe_exception(exc))
             return raw, mime
 
-        image = source
-        ratio = IMAGE_MAX_EDGE / max(image.size)
-        if ratio < 1:
-            image = image.resize(
-                (max(1, round(image.width * ratio)), max(1, round(image.height * ratio))),
-                Image.LANCZOS,
-            )
-
-        # JPEG kennt keinen Alphakanal. Fuer das Modell zaehlt das sichtbare
-        # Bild, also kommt die Transparenz auf Weiss.
-        if image.mode in ("RGBA", "LA", "P"):
-            image = image.convert("RGBA")
-            flattened = Image.new("RGB", image.size, (255, 255, 255))
-            flattened.paste(image, mask=image.split()[-1])
-            image = flattened
-        elif image.mode != "RGB":
-            image = image.convert("RGB")
-
-        smallest = None
-        for quality in IMAGE_JPEG_QUALITIES:
-            buffer = io.BytesIO()
-            try:
-                image.save(buffer, format="JPEG", quality=quality, optimize=True)
-            except Exception as exc:
-                logger.warning(
-                    "Image attachment could not be re-encoded category=%s", safe_exception(exc)
-                )
+        with source:
+            # The picture as it was sent decides, not the reduced decode.
+            if max(width, height) <= IMAGE_MAX_EDGE and len(raw) <= IMAGE_TARGET_BYTES:
                 return raw, mime
-            encoded = buffer.getvalue()
-            if smallest is None or len(encoded) < len(smallest):
-                smallest = encoded
-            if len(encoded) <= IMAGE_TARGET_BYTES:
-                break
+
+            image = source
+            ratio = IMAGE_MAX_EDGE / max(image.size)
+            if ratio < 1:
+                image = image.resize(
+                    (max(1, round(image.width * ratio)), max(1, round(image.height * ratio))),
+                    Image.LANCZOS,
+                )
+
+            # JPEG kennt keinen Alphakanal. Fuer das Modell zaehlt das sichtbare
+            # Bild, also kommt die Transparenz auf Weiss.
+            if image.mode in ("RGBA", "LA", "P"):
+                image = image.convert("RGBA")
+                flattened = Image.new("RGB", image.size, (255, 255, 255))
+                flattened.paste(image, mask=image.split()[-1])
+                image = flattened
+            elif image.mode != "RGB":
+                image = image.convert("RGB")
+
+            smallest = None
+            for quality in IMAGE_JPEG_QUALITIES:
+                buffer = io.BytesIO()
+                try:
+                    image.save(buffer, format="JPEG", quality=quality, optimize=True)
+                except Exception as exc:
+                    logger.warning(
+                        "Image attachment could not be re-encoded category=%s", safe_exception(exc)
+                    )
+                    return raw, mime
+                encoded = buffer.getvalue()
+                if smallest is None or len(encoded) < len(smallest):
+                    smallest = encoded
+                if len(encoded) <= IMAGE_TARGET_BYTES:
+                    break
 
     if smallest is None or len(smallest) >= len(raw):
         return raw, mime

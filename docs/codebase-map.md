@@ -412,7 +412,17 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
   „[Image not loaded: …]“ (`neutralizeRemoteMedia`, serverseitig
   `_neutralize_remote_images` plus nh3-`attribute_filter`, der jede
   fremde `img src` entfernt; vor 2026-10-28 luden Share-, Topic-, Watch- und
-  Check-Seiten sie).
+  Check-Seiten sie). Eine Antwort ist nie ein Teil der App (seit 2026-11-11,
+  `MODEL_HTML_CONFIG` in `markdown-stream.js`): Die App findet ihre Elemente
+  per id und `window.<name>`, und eine Antwort steht im selben Dokument, im
+  Verlauf sogar vor dem Composer. Deshalb bekommt jede `id` und jeder `name`
+  einer Antwort das Präfix `user-content-` (`SANITIZE_NAMED_PROPS`), eine
+  Antwort hat keine Bedienelemente (`textarea`, `select`, `button`, `dialog`
+  u. a. verboten), und ihr `style`-Attribut darf nur setzen, wie Worte und
+  Kästen an ihrem Platz aussehen (`keepAnswerStyle` liest die Deklarationen
+  über `element.style`; Position, Abstände, Größen, Transformationen und
+  `z-index` fallen weg). Tests: `tests/js/markdown-answer-isolation.test.mjs`,
+  `tests/e2e/test_answer_html_isolation.py`.
 - **CI**: `.github/workflows/tests.yml` (Backend/Frontend bei jedem Push,
   `dependency-audit` mit pip-audit, nachts zusätzlich Browser/Emulator/Rules;
   fehlgeschlagene Tests als Annotationen über `scripts/ci_annotate_failures.py`,
@@ -10706,7 +10716,20 @@ alte Gemini-ADC-JSON ist entfernt.
   JSON-Routen (`PATH_MAX_REQUEST_BODY_BYTES`: `/api/my/settings` 256 KB,
   `/api/telegram/webhook` und `/api/client-errors` 64 KB). Bis 2026-10-28
   galten 16 MiB überall, geparst vor Auth und Rate Limit (≈ 1 s CPU, 380 MB
-  je Request; Sicherheitsaudit). Ein 422 nennt höchstens
+  je Request; Sicherheitsaudit). Seit 2026-11-11 begrenzt dieselbe Middleware
+  auch die Arbeit, nicht nur die Größe: `json_elements_within` zählt vor dem
+  Parsen die Werte eines JSON-Bodys (jedes `,` `[` `{` außerhalb seiner
+  Strings, höchstens `MAX_JSON_ELEMENTS` = 50.000, sonst 413; linear über
+  `bytes.find/count/replace`, ab 256 KB neben dem Event-Loop), und
+  `BigBodies` vergibt Plätze für Bodys über 1 MiB, die für die ganze Dauer
+  ihrer Anfrage im Speicher liegen: 12 gleichzeitig, 8 je Client
+  (`client_of`: `CF-Connecting-IP`, IPv6 nach /64), sonst 429 mit
+  `Retry-After` in der Form jedes Limits (`code: rate_limited`), abgelehnt
+  bevor ein Byte gelesen ist; ein großer Body hat `BIG_BODY_SECONDS` (180 s)
+  zum Ankommen (408). Sechs Plätze sind eine Compare-Nachricht mit Dateien.
+  Bilder dekodiert `attachments.shrink_image` begrenzt: JPEG verkleinert
+  (`draft`, bis 40 MP), jedes andere Format bis `IMAGE_MAX_PIXELS_DECODED`
+  (20 MP) und über 9 MP nur eines zur selben Zeit. Ein 422 nennt höchstens
   `MAX_VALIDATION_DETAILS` (20) Probleme und zählt den Rest (`omitted`), damit
   ein Body mit vielen Schlüsseln keine riesige Antwort erzeugt.
 - Firebase Web-Config: `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`,

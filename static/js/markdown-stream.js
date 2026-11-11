@@ -10,7 +10,7 @@
 // Call-time-Abhaengigkeiten: DOMPurify, marked (static/vendor), window.ConsensusMath,
 // window.ConsensusDiagram (diagram-render.js), window.ConsensusCode
 // (code-highlight.js),
-// window.addNewTabToLinks, window.linkifySourceTags,
+// window.linkifySourceTags,
 // window.currentEvidenceSources, window.App.taskChecks (task-checks.js).
 // =====================================================================
 
@@ -29,11 +29,47 @@ function reportMarkdownFallback(missingDependency) {
 // answer may therefore trigger a request on its own: no remote images, media,
 // <style> blocks or CSS with url()/functions. Links still need a click.
 // SVG <image>/<feImage> and MathML <mglyph> load their href/src like an <img>.
+//
+// An answer is something to read, never a part of the app. The app finds its
+// own elements by id (document.getElementById, window.<name>), and an answer
+// stands in the same document, in the history even before the composer: an
+// element of the answer with the composer's id would be the one the app
+// reads the next message from. So every id and name in an answer gets a
+// prefix (SANITIZE_NAMED_PROPS, "user-content-"), and an answer has no
+// controls: a field, a button or a dialog of its own could pass for the
+// app's.
 const MODEL_HTML_CONFIG = {
   FORBID_TAGS: ["style", "video", "audio", "source", "picture", "track", "form", "input", "link", "meta",
-    "image", "feimage", "mglyph"],
-  FORBID_ATTR: ["srcset", "poster", "background", "ping"]
+    "image", "feimage", "mglyph",
+    "textarea", "select", "option", "optgroup", "button", "datalist", "fieldset", "output", "dialog"],
+  FORBID_ATTR: ["srcset", "poster", "background", "ping"],
+  SANITIZE_NAMED_PROPS: true
 };
+
+// What an answer's own style attribute may set: how its words and boxes look
+// where they stand. Nothing that takes an element out of its place or lays
+// it over the app (position, margins, sizes, transforms, z-index): a box over
+// the composer could pass for the app's.
+const ANSWER_STYLE_PROPERTIES = new Set(["color", "background-color", "font-weight", "font-style",
+  "text-align", "vertical-align"]);
+const ANSWER_STYLE_FAMILIES = ["text-decoration", "border", "padding"];
+
+function keepsItsPlace(property) {
+  return ANSWER_STYLE_PROPERTIES.has(property)
+    || ANSWER_STYLE_FAMILIES.some(family => property === family || property.startsWith(`${family}-`));
+}
+
+// The browser's own parser reads the declarations (element.style), never a
+// pattern over the attribute's text: what it does not know is no declaration.
+function keepAnswerStyle(el) {
+  const style = el.style;
+  if (!style || typeof style.removeProperty !== "function") { el.removeAttribute("style"); return; }
+  for (const property of Array.from(style)) {
+    if (!keepsItsPlace(property)) style.removeProperty(property);
+  }
+  const kept = style.cssText;
+  if (kept) el.setAttribute("style", kept); else el.removeAttribute("style");
+}
 
 // The browser's own URL parser decides: it drops tabs and newlines and reads
 // "\" as "/", so "/<tab>/host" or "/\host" would leave the site.
@@ -70,7 +106,9 @@ function neutralizeRemoteMedia(root) {
   root.querySelectorAll("[style]").forEach(el => {
     if (/[()\\]|url|image|@import|expression/i.test(el.getAttribute("style") || "")) {
       el.removeAttribute("style");
+      return;
     }
+    keepAnswerStyle(el);
   });
   // SVG's fill, stroke, mask, filter, clip-path and markers take url(...):
   // one that points outside the answer (not "#id") goes, like a remote
@@ -428,7 +466,6 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
   enhanceMarkdownTables(el);
 
   addCopyButtons(el);
-  if (window.addNewTabToLinks) window.addNewTabToLinks(el);
 
   const linked = Array.isArray(evidenceSources) && evidenceSources.length && window.linkifySourceTags;
   if (linked) window.linkifySourceTags(el, evidenceSources);
