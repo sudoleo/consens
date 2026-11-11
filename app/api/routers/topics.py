@@ -18,6 +18,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.core.assets import register_asset_globals
+from app.core.history_cache import HistoryCache
 from app.core import not_found
 from app.core import seo_entity
 from app.core.notice_page import notice_page
@@ -59,19 +60,25 @@ register_asset_globals(templates)
 
 # Rendered public Topic pages are kept for a short while: a page
 # reads up to TOPIC_PAGE_RUNS runs, which made /topics/... the slowest public
-# page (400-700 ms server time) and cost Firestore reads on every view. The
-# admin routes below drop the cache on every change; a scheduled run shows
-# up after at most TOPIC_PAGE_CACHE_SECONDS, within the s-maxage the page
+# page (400-700 ms server time). A Topic page's key carries the Topic's
+# history mark, so a new run shows on the next view; the time bound is for
+# what changes without it (the picture), within the s-maxage the page
 # already allows shared caches.
 TOPIC_PAGE_CACHE_SECONDS = 120
 _TOPIC_PAGE_CACHE_MAX = 200
 _topic_page_cache: OrderedDict = OrderedDict()
 _topic_page_cache_lock = threading.Lock()
+# The record window of each Topic, shared by all versions of its page:
+# crawlers fetch every ?version= one by one, and each read cost up to
+# TOPIC_PAGE_RUNS documents. Kept compact (a full run is tens of kilobytes),
+# valid while topics.history_mark is the same.
+_topic_records = HistoryCache(max_pages=64)
 
 
 def invalidate_topic_pages() -> None:
     with _topic_page_cache_lock:
         _topic_page_cache.clear()
+    _topic_records.clear()
 
 
 def _cached_topic_page(key):
@@ -161,6 +168,21 @@ def _history_points(runs_raw) -> list[dict]:
             "has_snapshot": True,
         })
     return points
+
+
+def _topic_record(topic_id: str) -> dict:
+    """What every version of a Topic page reads from its newest runs: the
+    history points and the window's size and dates. The shown run is read on
+    each view, also because backfill_topic_visuals.py adds figures to a
+    published run without touching the Topic."""
+    runs = topics.list_runs(topic_id, max_items=TOPIC_PAGE_RUNS)
+    return {
+        "run_ids": frozenset(run["id"] for run in runs),
+        "points": _history_points(runs),
+        "size": len(runs),
+        "first_observed_at": runs[0].get("observed_at") if runs else None,
+        "last_observed_at": runs[-1].get("observed_at") if runs else None,
+    }
 
 
 def _sources_view(evidence, preferred_domains):
@@ -377,10 +399,6 @@ def _topic_not_found(request: Request, detail: str = "Topic not found"):
 async def topic_page(
     request: Request, slug: str, version: str = Query(default="", max_length=40)
 ):
-    cache_key = ("topic", slug, version, _page_language(request))
-    cached = _cached_topic_page(cache_key)
-    if cached is not None:
-        return cached
     try:
         topic, retired_slug = await asyncio.to_thread(
             topics.resolve_topic_by_slug, slug
@@ -408,20 +426,27 @@ async def topic_page(
         redirect.headers["Cache-Control"] = "public, max-age=3600"
         return redirect
 
+    # Looked up only now: the Topic just read says whether a run came since.
+    mark = topics.history_mark(topic)
+    cache_key = ("topic", slug, version, _page_language(request), mark)
+    cached = _cached_topic_page(cache_key)
+    if cached is not None:
+        return cached
     # The history is the newest page of the record; it is navigation, not
     # the lookup for an explicit version link.
-    recent_raw = await asyncio.to_thread(
-        topics.list_runs, topic["id"], max_items=TOPIC_PAGE_RUNS
+    recent = await asyncio.to_thread(
+        _topic_records.get_or_load, topic["id"], mark,
+        functools.partial(_topic_record, topic["id"]),
     )
     # Without an explicit version the page shows the answer that stands, not
     # the newest run: a run whose search missed the evidence does not replace
     # it (docs/watch-evidence-model.md).
     standing_id = str(topic.get("accepted_run_id") or topic["latest_run_id"])
     wanted = version or standing_id
-    selected_raw = next((run for run in recent_raw if run["id"] == wanted), None)
-    if selected_raw is None and re.fullmatch(r"[A-Za-z0-9]{1,40}", wanted):
-        # An older, still stored version is loaded directly under the topic
-        # that was already resolved above, so a link never dies of old age.
+    selected_raw = None
+    if wanted in recent["run_ids"] or re.fullmatch(r"[A-Za-z0-9]{1,40}", wanted):
+        # The shown version is read on its own under the topic resolved
+        # above, also one older than the window: a link never dies of old age.
         selected_raw = await asyncio.to_thread(topics.get_run, topic["id"], wanted)
     if not selected_raw:
         return _topic_not_found(request, "Topic version not found")
@@ -430,7 +455,7 @@ async def topic_page(
 
     # The page is built from the parts it shares with Watch pages
     # (partials/check_page.html): state line, direct links, answer, history.
-    points = _history_points(recent_raw)
+    points = recent["points"]
     if not any(point["run_id"] == selected_raw["id"] for point in points):
         points = sorted(
             points + _history_points([selected_raw]), key=lambda point: point["ts"]
@@ -520,18 +545,18 @@ async def topic_page(
     robots = "noindex, follow" if seo.get("noindex") or version else "index, follow"
     # Only when the window reaches back to the first check does its date say
     # when the page was first published.
-    window_complete = bool(recent_raw) and len(recent_raw) >= checks
+    window_complete = bool(recent["size"]) and recent["size"] >= checks
     jsonld = {
         "@context": "https://schema.org",
         "@type": "Article",
         "headline": title[:110],
         "description": meta_description[:300],
         "datePublished": (
-            topics._public_datetime(recent_raw[0].get("observed_at")) if window_complete
+            topics._public_datetime(recent["first_observed_at"]) if window_complete
             else public_topic.get("created_at") or selected["observed_at"]
         ),
         "dateModified": (
-            topics._public_datetime(recent_raw[-1].get("observed_at")) if recent_raw
+            topics._public_datetime(recent["last_observed_at"]) if recent["size"]
             else selected["observed_at"]
         ),
         "mainEntityOfPage": {"@type": "WebPage", "@id": canonical_url},

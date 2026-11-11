@@ -944,6 +944,19 @@ def create_run(
     return _run_transaction(db, publish)
 
 
+def history_mark(topic: dict) -> tuple:
+    """Fields of the Topic document that change whenever a run is added.
+
+    ``create_run`` moves all three in the transaction that adds the run, and
+    nothing deletes runs. Public pages keep a Topic's record while its mark
+    is the same.
+    """
+    return (
+        topic.get("run_count"), str(topic.get("latest_run_id") or ""),
+        topic.get("updated_at"),
+    )
+
+
 def list_runs(topic_id: str, *, db=None, max_items: int = 100) -> list[dict]:
     db = db if db is not None else db_firestore
     ref = db.collection(TOPICS_COLLECTION).document(topic_id).collection("runs")

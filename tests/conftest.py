@@ -261,10 +261,14 @@ def _neutral_user_memory_profile():
 
 @pytest.fixture(autouse=True)
 def _clear_rendered_topic_pages():
-    """Gerenderte Topic-Seiten und der Hub leben 120 s im Prozess
-    -- ohne Reset saehe ein Test die Seite aus dem Speicher des vorigen."""
+    """Gerenderte Topic-Seiten, der Hub und die Verläufe öffentlicher Topic-
+    und Watch-Seiten leben im Prozess -- ohne Reset saehe ein Test die Seite
+    oder den Verlauf aus dem Speicher des vorigen (gleiche IDs, andere Fakes)."""
+    from app.api.routers import share as share_router
     from app.api.routers import topics as topics_router
 
     topics_router.invalidate_topic_pages()
+    share_router._watch_histories.clear()
     yield
     topics_router.invalidate_topic_pages()
+    share_router._watch_histories.clear()

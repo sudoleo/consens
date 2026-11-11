@@ -10,6 +10,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
 from app.core.assets import register_asset_globals
+from app.core.history_cache import HistoryCache
 from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
 from app.core.security import (
@@ -83,6 +84,40 @@ _BEST_MODEL_RE = re.compile(
 _build_watch_history_view = build_history_view
 _build_watch_drift_view = check_page.drift_view
 _watch_state_view = check_page.state_view
+
+# The check history of each page, shared by its versions and its card:
+# crawlers fetch every ?version= one by one, and each read cost up to 100
+# documents. A one-off share keeps its empty history the same way.
+_watch_histories = HistoryCache(max_pages=256)
+
+
+def _watch_history_mark(data, meta) -> tuple:
+    """Fields that change whenever a share's watch_history does.
+
+    ``watch_service.complete_watch_run`` sets the Watch's last run and the
+    share's ``latest_watch_run_id`` in the transaction that adds a check; a
+    history is deleted only with its share. The Watch is read on every view,
+    so a check another process wrote shows at once; the share comes from its
+    own short cache. backfill_watch_links.py moves
+    ``watch_history_revised_at`` with its edits.
+    """
+    meta = meta or {}
+    return (
+        str(meta.get("last_successful_run_id") or ""), meta.get("last_run_at"),
+        str(data.get("latest_watch_run_id") or ""), data.get("last_watch_run_at"),
+        data.get("watch_history_revised_at"),
+    )
+
+
+def _watch_history(share_id, data, meta) -> list:
+    try:
+        return _watch_histories.get_or_load(
+            share_id, _watch_history_mark(data, meta),
+            lambda: snapshots.list_watch_history(share_id),
+        )
+    except Exception as exc:
+        logging.error("list_watch_history failed category=%s", safe_exception(exc))
+        return []
 
 
 def _watch_datetime_view(value, timezone_name=""):
@@ -458,16 +493,10 @@ def share_og_card(request: Request, slug_id: str):
         raise HTTPException(status_code=404, detail="Not found")
 
     try:
-        history_points = snapshots.list_watch_history(share_id)
-    except Exception as exc:
-        logging.error(
-            "share_og_card history failed category=%s", safe_exception(exc)
-        )
-        history_points = []
-    try:
         watch_meta = watch_service.get_public_watch_meta(share_id)
     except Exception:
         watch_meta = None
+    history_points = _watch_history(share_id, data, watch_meta)
     watch_page = _build_watch_page_meta(watch_meta, history_points)
     latest_run_id = _standing_run_id(watch_meta, data)
     try:
@@ -601,19 +630,13 @@ def share_page(request: Request, slug_id: str):
     # immutable version snapshot at render time; the underlying Share document
     # remains the original baseline and keeps its existing API semantics.
     try:
-        history_points = snapshots.list_watch_history(share_id)
-    except Exception as exc:
-        logging.error(
-            "list_watch_history failed category=%s", safe_exception(exc)
-        )
-        history_points = []
-    try:
         current_watch_meta = watch_service.get_public_watch_meta(share_id)
     except Exception as exc:
         logging.error(
             "get_public_watch_meta failed category=%s", safe_exception(exc)
         )
         current_watch_meta = None
+    history_points = _watch_history(share_id, data, current_watch_meta)
     watch_page = _build_watch_page_meta(current_watch_meta, history_points)
 
     requested_version = str(request.query_params.get("version") or "").strip()

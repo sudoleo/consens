@@ -9667,6 +9667,17 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   `?version=`-Ansichten und die OG-Karte nutzen denselben Header; nichts
   Widerrufbares wird mehr `immutable` oder langlebig ausgeliefert. Terms und
   Privacy sagen entsprechend „within a few minutes“ statt „immediately“.
+  Den Watch-Verlauf (`list_watch_history`, bis 100 Dokumente) teilen Seite,
+  alle `?version=`-Ansichten und die OG-Karte über
+  `routers/share._watch_histories` (`HistoryCache`, LRU 256 Seiten, auch der
+  leere Verlauf eines einmaligen Shares). Marke `_watch_history_mark`:
+  `last_successful_run_id`/`last_run_at` der Watch (bei jedem Abruf frisch
+  gelesen, `get_public_watch_meta`) plus `latest_watch_run_id`/
+  `last_watch_run_at`/`watch_history_revised_at` des Shares;
+  `complete_watch_run` schreibt Watch und Share in der Transaktion des Checks,
+  gelöscht wird ein Verlauf nur mit seinem Share. Reads je Abruf: vorher Share
+  (0/1, 60-s-Cache) + Watch (1) + Verlauf (N, mindestens 1) + Version (1), jetzt
+  ohne den Verlauf. Details siehe Kuratierte Topics.
   Verwandte Fragen teilen pro Prozess einen kompakten Kandidatenbestand
   (weiterhin höchstens 400 `indexed`-Dokumente pro Scan, nur `active` und
   `public`, TTL 15 Minuten). Frageausschluss und Ranking erfolgen je Seite im
@@ -9693,13 +9704,35 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   bleibt der vollständige Kompatibilitätsread erhalten. Kein neuer Topic-Index
   oder Backfill nötig; der normale kurze Verlauf kostet N Dokumente plus
   die Count-Aggregation statt zweier Vollabfragen.
+- **Verlauf je Seite im Prozess (`app/core/history_cache.HistoryCache`):**
+  Crawler rufen jede `?version=` einzeln ab, und jeder Abruf las den ganzen
+  Verlauf (bis 100 Dokumente). Jetzt teilt sich jede Seite ihren Verlauf über
+  alle Versionen, gültig genau für eine *Marke* aus dem Elterndokument, das die
+  Route ohnehin liest: beim Topic `topics.history_mark` (`run_count`,
+  `latest_run_id`, `updated_at`; `create_run` setzt alle drei in der
+  Transaktion, die den Run anlegt). Ein Run aus einem anderen Prozess (lokaler
+  Server, gleiche Datenbank) ändert die Marke, die der nächste Abruf liest; es
+  gibt keine reine In-Prozess-Invalidierung und keine TTL. LRU (64 Topics),
+  threadsicher, gleichzeitige Fehlgriffe auf eine Seite warten auf den ersten
+  Read (gestreifte Locks), ein fehlgeschlagener Read wird nicht gespeichert.
+  Gehalten wird nur die kompakte Projektion (`routers/topics._topic_record`:
+  Verlaufspunkte, Fenstergröße, erstes/letztes Datum, Run-IDs), denn ein voller
+  Run wiegt Zehntausende Bytes; die gezeigte Version liest jeder Abruf einzeln
+  per `topics.get_run` (auch weil `scripts/backfill_topic_visuals.py` einem
+  veröffentlichten Run Figuren anhängt, ohne das Topic anzufassen).
+  Reads je Abruf: vorher 1 (Topic) + N Runs (bis 101) + 1 Count, jetzt 1 + 1
+  (Topic + gezeigte Version); der Verlauf nur nach einem neuen Run oder
+  Neustart. `tests/test_public_history_cache.py` zählt das am Fake.
 - Gerenderte Topic-Seiten und der Hub liegen seit 2026-10-20 (Apple-Audit I12)
   `TOPIC_PAGE_CACHE_SECONDS` = 120 s im Prozess (`routers/topics._topic_page_cache`,
-  Schlüssel Slug + `?version` + Sprache, höchstens 200 Seiten, nur 200er); jede Admin-Änderung
-  (Topic anlegen/ändern, Run) leert ihn (`invalidate_topic_pages`), ein geplanter
-  Run erscheint spätestens nach 120 s. `tests/conftest.py` leert ihn vor und nach
-  jedem Test.
-- `/topics/{slug}` liest für Verlauf und aktuelle Ansicht die neuesten 100 Runs
+  höchstens 200 Seiten, nur 200er). Eine Topic-Seite wird erst nach dem Lesen
+  des Topics nachgeschlagen; ihr Schlüssel ist Slug + `?version` + Sprache +
+  `history_mark`, ein neuer Run erscheint also beim nächsten Abruf (ein Treffer
+  kostet 1 Read statt 0). Die 120 s begrenzen nur, was sich ohne Marke ändert
+  (Bild). Admin-Änderungen leeren Seiten und Verläufe (`invalidate_topic_pages`);
+  `tests/conftest.py` leert beides und `routers/share._watch_histories` vor und
+  nach jedem Test.
+- `/topics/{slug}` zeigt den Verlauf der neuesten 100 Runs
   (`TOPIC_PAGE_RUNS`). Ein expliziter `?version=<run_id>` außerhalb dieses
   Fensters wird direkt per `topics.get_run` unter dem bereits aufgelösten Topic
   geladen (Review R33) und in den Verlauf einsortiert; fremde oder unbekannte
@@ -9995,6 +10028,7 @@ app/core/
   network_block.py           Äußerste Middleware: 403 für die Cloud-Netze der Crawler-Welle (BLOCKED_NETWORKS), /api/v1/ bleibt offen
   rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt) + prozesslokale UID-Budgets + Retry-After/Satz für 429 (retry_after_seconds, rate_limit_message)
   not_found.py               HTML-404 für Seiten-Navigationen (wants_html_page, not_found_page)
+  history_cache.py           Verlauf öffentlicher Topic-/Watch-Seiten je Seite, gültig für eine Marke des Elterndokuments (LRU, gestreifte Lade-Locks)
   notice_page.py             Eine öffentliche Hinweisseite (templates/notice.html): Seiten hinter Mail-Links, HTML-429
   observability.py           PII-freie Correlation-IDs (auch im ASGI-Scope), strukturierte Logs + Prozessmetriken
   error_context.py           Inhaltsfreier Alert-Fundort: Repo-Frames, Commit, Instanz, Programmierfehler-Filter
@@ -11509,7 +11543,9 @@ In-Memory-Usage-Zähler. Jeder erfolgreiche Lauf schreibt unter
 `shares/{share_id}/watch_history/{run_id}` genau eine unveränderliche Version:
 kompakte Drift-/Score-Felder plus aktuellen Consensus, Differences, Quellen- und
 Modellmetadaten. Das Share-Dokument bleibt der unveränderliche Original-Baseline-
-Snapshot und erhält nur `latest_watch_run_id`/`last_watch_run_at`; nach drei
+Snapshot und erhält nur `latest_watch_run_id`/`last_watch_run_at` (dazu
+`watch_history_revised_at`, wenn `scripts/backfill_watch_links.py` Checks
+nachträglich ändert: Marke für den Verlaufs-Cache der Seite); nach drei
 Fehlern pausiert die Watch. **Belegmodell (seit 2026-10-01, Vertrag:
 `docs/watch-evidence-model.md`):** jeder Check vergleicht mit der *geltenden*
 Antwort (`watch.accepted_run_id`, Altbestand: letzter Lauf) statt mit dem

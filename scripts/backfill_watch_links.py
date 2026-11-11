@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -104,6 +105,11 @@ def main(argv=None) -> int:
                     writes.append((ref, changes))
                     run.update(changes)
             share_changes = _changes(share, SHARE_FIELDS, mapping, expired)
+            if writes and share_snap.exists:
+                # Public pages keep a check history until this moves
+                # (routers/share._watch_history_mark); written after the
+                # checks, so a page that sees it reads them already changed.
+                share_changes["watch_history_revised_at"] = datetime.now(timezone.utc)
             if share_changes:
                 writes.append((share_ref, share_changes))
                 share.update(share_changes)
