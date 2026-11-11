@@ -449,8 +449,8 @@ synthetisiert daraus einen **Consensus** plus eine strukturierte
 Framework-Parsing greifende `RequestBodyLimitMiddleware`,
 `CustomSecurityMiddleware` (CSP etc.), `CorrelationMiddleware` + slowapi-Limiter,
 `I18nMiddleware` (Sprache, `/de/…`, deutsche HTML-Antworten; siehe §4
-„Deutsch für deutsche Leser“) und als äußerste `StaticDeliveryMiddleware`
-hinzu, mountet
+„Deutsch für deutsche Leser“), `StaticDeliveryMiddleware` und als äußerste
+`NetworkBlockMiddleware` (siehe „Crawler“ unten) hinzu, mountet
 `/static`, registriert globale Exception-Handler und inkludiert alle Router.
 Seit 2026-10-15 fängt ein Handler für Starlettes `HTTPException` (Routing,
 `StaticFiles`; die eigenen Routen werfen FastAPIs Unterklasse) unbekannte Pfade
@@ -496,7 +496,27 @@ minute“; ein Browser, der ein Seitenformular abschickt (`Accept: text/html`),
 bekommt dieselbe Aussage als `templates/notice.html`. Clients unterscheiden so
 Drosselung (`rate_limited`, nie ein Upgrade-Angebot) von der Plan-Grenze
 (`limit_reached`).
-Äußerste Schicht ist `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
+**Crawler (seit 2026-11-11):** Gemessen an 24 Stunden Render-Log sind rund
+500 der 3.540 Anfragen Crawler-Abrufe von `/s/…` und `/topics/…`, gut ein
+Drittel davon mit `?version=`: Jede gespeicherte Version einer Topic- oder
+Watch-Seite ist eine eigene URL, und ein Abruf liest bis zu 100
+Verlaufsdokumente aus Firestore. Zwei Dinge halten das klein:
+- `robots.txt` sperrt `/*?version=` für alle (die Seiten sind ohnehin
+  `noindex`), die Versions-Links in `partials/check_page.html` tragen
+  `rel="nofollow"`. Das hält Crawler fern, die sich an Regeln halten (Meta,
+  Bing, Apple, Petal, Semrush, DotBot).
+- `NetworkBlockMiddleware` (`app/core/network_block.py`) antwortet als
+  äußerste Schicht mit 403 auf alles außer `/api/v1/`, wenn die Adresse aus
+  `CF-Connecting-IP` in `BLOCKED_NETWORKS` liegt: den Zuteilungen von Alibaba
+  Cloud und Tencent Cloud, aus denen die Welle kommt, die auch die
+  Umami-Zahlen füllte (`docs/analytics.md`). Sie liest kein `robots.txt` und
+  wechselt mit fast jedem Abruf die Adresse (177 Adressen für 208 Abrufe),
+  das Limit pro Adresse sieht sie also nie. Ein neuer Eintrag ist immer eine
+  ganze Zuteilung laut Registry (RDAP), nie eine Einzeladresse; Nachbarnetze
+  gehören anderen (47.73/16 Vodafone-Kunden, 47.128/14 Amazon). Im Render-Log
+  erscheinen die abgewiesenen Abrufe als `403`.
+
+Direkt unter der Sperre liegt `StaticDeliveryMiddleware` (`app/core/static_delivery.py`):
 content-gehashte Bundles `static/dist/<gruppe>.<12 hex>.js|css` und
 `asset_url()`-URLs mit `?v=<12 hex>` erhalten
 `Cache-Control: public, max-age=31536000, immutable`, ebenso (seit 2026-11-11)
@@ -9972,6 +9992,7 @@ app/core/
   site.py                    Validierte kanonische PUBLIC_SITE_URL ohne Router-Abhängigkeit
   security.py                Firebase-Init, Token/Tier/Admin-Checks (get_user_tier, is_user_pro, is_user_plus), CSP-Middleware
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
+  network_block.py           Äußerste Middleware: 403 für die Cloud-Netze der Crawler-Welle (BLOCKED_NETWORKS), /api/v1/ bleibt offen
   rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt) + prozesslokale UID-Budgets + Retry-After/Satz für 429 (retry_after_seconds, rate_limit_message)
   not_found.py               HTML-404 für Seiten-Navigationen (wants_html_page, not_found_page)
   notice_page.py             Eine öffentliche Hinweisseite (templates/notice.html): Seiten hinter Mail-Links, HTML-429

@@ -133,7 +133,9 @@ Umami lesbar.
   - `0x0`: ein Browser-Fenster, das niemand sieht (eigene Automatisierung).
 
   Keine dieser Sitzungen außer `0x0` hatte in den 30 Tagen ein Event, fast
-  alle genau einen Seitenaufruf. Taucht eine neue Welle auf, zeigt sie sich
+  alle genau einen Seitenaufruf. Die Cloud-Netze der 1280x1200-Welle weist
+  zusätzlich der Server ab (`docs/codebase-map.md`, „Crawler“); der Filter
+  hier fängt, was aus anderen Netzen kommt. Taucht eine neue Welle auf, zeigt sie sich
   wieder als ein Land mit lauter Ein-Seiten-Besuchen: in Umami unter
   Sessions die Bildschirmgröße ablesen und in `BOT_SCREENS` nachtragen, wenn
   kein echtes Gerät sie hat.

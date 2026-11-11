@@ -37,6 +37,17 @@ class SeoBasicsTests(unittest.TestCase):
         self.assertIn("Allow: /", content)
         self.assertIn(f"Sitemap: {SITE_URL}/sitemap.xml", content)
 
+    def test_robots_txt_keeps_crawlers_out_of_stored_versions(self):
+        lines = robots_txt().splitlines()
+
+        # One group for every crawler, so the rule binds all of them.
+        self.assertEqual(lines.count("User-agent: *"), 1)
+        self.assertIn("Disallow: /*?version=", lines)
+        template = (ROOT / "templates" / "partials" / "check_page.html").read_text(encoding="utf-8")
+        version_links = [line for line in template.splitlines() if 'class="wp-version"' in line and "href=" in line]
+        self.assertEqual(len(version_links), 2)
+        self.assertTrue(all('rel="nofollow"' in line for line in version_links))
+
     def test_sitemap_is_index_of_pages_and_shares(self):
         response = sitemap_xml()
         content = response.body.decode("utf-8")

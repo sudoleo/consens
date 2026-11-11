@@ -88,6 +88,10 @@ def robots_txt():
     return "\n".join([
         "User-agent: *",
         "Allow: /",
+        # Every stored version of a Topic or Watch page is its own URL and
+        # noindex anyway: without this line a crawler reads the whole record
+        # of every page, and that record grows with each check.
+        "Disallow: /*?version=",
         f"Sitemap: {SITE_URL}/sitemap.xml",
         "",
     ])

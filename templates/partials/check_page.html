@@ -137,8 +137,8 @@
 
 {% macro version_link(point, selected, start=false) %}
 {% if point.run_id and point.run_id == selected.id %}<span class="wp-version is-current">Shown above</span>
-{% elif point.has_snapshot and point.run_id %}<a class="wp-version" href="{{ selected.current_url }}?version={{ point.run_id }}">Read this version</a>
-{% elif start and not selected.is_original %}<a class="wp-version" href="{{ selected.original_url }}">Read the first answer</a>{% endif %}
+{% elif point.has_snapshot and point.run_id %}<a class="wp-version" rel="nofollow" href="{{ selected.current_url }}?version={{ point.run_id }}">Read this version</a>
+{% elif start and not selected.is_original %}<a class="wp-version" rel="nofollow" href="{{ selected.original_url }}">Read the first answer</a>{% endif %}
 {% endmacro %}
 
 {# Die Agreement-Kurve nur auf breiten Bildschirmen (CSS blendet sie unter
