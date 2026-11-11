@@ -37,7 +37,7 @@ import logging
 import os
 import re
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app.core.observability import safe_exception
 
@@ -282,6 +282,22 @@ def write(db, turn_ref, captured):
     db.collection(COLLECTION).document(document_id(day)).set(
         {**_increments(counters), "day": day, "updated_at": firestore.SERVER_TIMESTAMP}, merge=True)
     return counters
+
+
+def recent_days(db, days=14, today=None):
+    """The turns of the last ``days`` UTC days by status, oldest first, as
+    ``[{"day": "YYYY-MM-DD", "turns": {status: n}}]``: one read per day, for
+    the admin's overview. A day without a document counts no turn."""
+    today = today or datetime.now(timezone.utc).date()
+    dates = [today - timedelta(days=offset) for offset in range(days - 1, -1, -1)]
+    refs = [db.collection(COLLECTION).document(document_id(day.isoformat())) for day in dates]
+    found = {}
+    for snapshot in db.get_all(refs):
+        if snapshot.exists:
+            turns = (snapshot.to_dict() or {}).get("turns")
+            found[snapshot.id] = {str(key): int(value) for key, value in (turns or {}).items()
+                                  if isinstance(value, (int, float)) and not isinstance(value, bool)}
+    return [{"day": day.isoformat(), "turns": found.get(document_id(day.isoformat()), {})} for day in dates]
 
 
 def _enabled():

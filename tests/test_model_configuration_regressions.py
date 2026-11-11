@@ -655,16 +655,19 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertIn('judge_families: currentJudgeFamilies()', module)
         self.assertIn('judgeModelsContainer', template)
         self.assertIn('judgeFamiliesContainer', template)
-        self.assertIn('data-tab="consensus"', template)
+        # Judges and engines are the Models page's advanced part; #consensus
+        # still opens there.
+        self.assertIn('id="tab-consensus" class="admin-tab-panel" data-page="models"', template)
         self.assertIn('data-tab="models"', template)
+        self.assertIn("consensus: 'models'", module)
         self.assertIn('id="presetModelsContainer"', template)
         self.assertIn('preset_models: currentPresetModels()', module)
         self.assertIn('reasoningFlowOverview', template)
         self.assertIn('reasoningModelOverview', template)
         self.assertIn('function renderReasoningOverview()', module)
         self.assertIn('renderReasoningOverview();', module)
-        self.assertIn('.top-bar-favicon {', css)
-        self.assertIn('width: 30px;', css)
+        self.assertIn('.admin-brand-mark { width: 22px; height: 22px;', css)
+        self.assertIn('brand_mark("admin-brand-mark")', template)
 
     def test_consensus_preset_picker_applies_answers_and_pro_gates_thorough(self):
         module = (ROOT / "static" / "js" / "model-picker.js").read_text(encoding="utf-8")

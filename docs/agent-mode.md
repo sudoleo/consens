@@ -4367,7 +4367,7 @@ nicht.
   geplanten Lauf.
 - Die Watch läuft in dem Chat, in dem sie vorbereitet wurde (Kontext, Dateien
   im Arbeitsplatz, Google-Freigabe sind dort). Eine Watch je Chat.
-- Grenzen je Stufe (Admin → Limits, `agent_watch_*`): Free 2 Watches, höchstens
+- Grenzen je Stufe (Admin → Allowance, `agent_watch_*`): Free 2 Watches, höchstens
   täglich; Plus 5, alle 6 Stunden; Pro 20, stündlich. Dazu Tagesgrenzen für den
   ganzen Server (`agent_watch_max_runs_per_day`, 3000) und jedes Konto
   (`agent_watch_max_runs_per_account_day`, 500), damit ein Konto nie die Läufe
@@ -4652,7 +4652,7 @@ Seit 2026-10-01 teilt Agent das Tageskonto mit Compare, Consensus und Deep
 Think (siehe codebase-map, „Ein Konto in Euro für alle Modi“). Seit 2026-10-31
 zählt es Geld: Das Limit pro Stufe (Free/Plus/Pro/Admin) und die erwarteten
 Kosten eines typischen Laufs liegen in Mikro-Euro in app_config/agent_budget
-und sind in Admin → Limits in Euro speicherbar (Defaults: Free 1 €, Plus
+und sind in Admin → Allowance in Euro speicherbar (Defaults: Free 1 €, Plus
 2,50 €, Pro/Admin 5 € pro UID und UTC-Tag, Reset um 00:00 UTC).
 `AGENT_DAILY_TOKEN_LIMIT` gibt es nicht mehr. Der Button „Reset all
 allowances“ setzt das Konto aller Nutzer über eine neue Budgetgeneration

@@ -1,31 +1,33 @@
-        <section id="tab-configuration" class="admin-tab-panel prompt-config-panel" role="tabpanel" hidden>
-            <form id="promptConfigForm" novalidate>
-                <div class="admin-savebar prompt-config-savebar">
-                    <h2>Prompts &amp; settings</h2>
-                    <span id="promptConfigDirty" class="admin-chip" hidden>Unsaved changes</span>
-                    <button id="reloadPromptConfigBtn" type="button" class="admin-btn secondary" disabled title="Discard the draft and load the saved configuration">Reload saved</button>
-                    <button id="savePromptConfigBtn" type="submit" class="admin-btn" disabled>Save configuration</button>
+        <section id="tab-configuration" class="admin-tab-panel prompt-config-panel" data-page="prompts" hidden>
+            <header class="admin-head">
+                <h1>Prompts</h1>
+                <p>The prompts live in code and change with a deploy. Here you see them and set what is left to set.</p>
+            </header>
+            <form id="promptConfigForm" class="admin-block" novalidate>
+                <div class="admin-block-head">
+                    <h2>Settings</h2>
+                    <span id="promptConfigDirty" class="admin-state is-dirty" hidden>Unsaved changes</span>
+                    <button id="reloadPromptConfigBtn" type="button" class="admin-btn quiet" disabled title="Discard the draft and load the saved settings">Discard</button>
+                    <button id="savePromptConfigBtn" type="submit" class="admin-btn" disabled>Save</button>
                 </div>
-                <p id="promptConfigStatus" class="admin-status-text" role="status" aria-live="polite"></p>
-                <p id="promptConfigMeta" class="section-hint"></p>
+                <p id="promptConfigStatus" class="admin-status" role="status" aria-live="polite"></p>
                 <fieldset id="promptConfigFields" class="prompt-config-fields" disabled>
-                    <div class="admin-section">
-                        <h3>Time reference</h3>
-                        <p class="section-hint">Current date, weekday and time are added automatically for every new request. This timezone is a reference, not the user's location.</p>
-                        <label for="promptReferenceTimezone">Reference timezone</label>
+                    <label class="admin-field" for="promptReferenceTimezone">Reference time zone
                         <input id="promptReferenceTimezone" type="text" maxlength="64" required placeholder="Europe/Berlin" list="promptTimezones" autocomplete="off">
-                        <datalist id="promptTimezones"><option value="Europe/Berlin"><option value="UTC"><option value="America/New_York"><option value="America/Los_Angeles"><option value="Asia/Tokyo"></datalist>
-                    </div>
-                    <details class="admin-section prompt-config-editor">
+                    </label>
+                    <datalist id="promptTimezones"><option value="Europe/Berlin"><option value="UTC"><option value="America/New_York"><option value="America/Los_Angeles"><option value="Asia/Tokyo"></datalist>
+                    <p class="admin-muted">Every request gets the current date and time in this zone. It is a reference, not the user's location.</p>
+                    <details class="admin-fold prompt-config-editor">
                         <summary>Agent delegation</summary>
-                        <p class="section-hint">Off by default: the current quality and total-cost comparison did not meet the savings criterion. Enable for selected use. Settings are frozen for each new run; costs include the orchestrator, workers, search and rework.</p>
+                        <p class="admin-muted">Off: in the last comparison it did not save enough for its quality. Settings freeze per run; costs include orchestrator, workers, search and rework.</p>
                         <div id="delegationConfig" class="delegation-config" hidden></div>
                     </details>
                 </fieldset>
+                <p id="promptConfigMeta" class="admin-muted"></p>
             </form>
-            <div class="admin-section prompt-catalog">
-                <h3>System prompts</h3>
-                <p class="section-hint">Read-only. Prompts are maintained in code; changes ship with a deploy. Conversation history, current date and available tools are supplied automatically at request time.</p>
+            <div class="admin-block prompt-catalog">
+                <h2>System prompts</h2>
+                <p class="admin-muted">Read only. History, date and tools are added when a request goes out.</p>
                 <div id="promptCatalog" class="prompt-catalog-list"></div>
             </div>
         </section>

@@ -25,8 +25,8 @@ function topicSection() {
 
 function topicMarkup() {
     const html = readFileSync(path.join(ROOT, "templates/admin.html"), "utf8");
-    const start = html.indexOf('<div class="topic-admin-actions u-mb-14">');
-    const end = html.indexOf('<section id="tab-seo"');
+    const start = html.indexOf('<section id="tab-topics"');
+    const end = html.indexOf('</section>', start);
     if (start < 0 || end <= start) throw new Error("Topic markup not found in templates/admin.html");
     return html.slice(start, end);
 }

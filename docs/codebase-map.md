@@ -4235,16 +4235,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `tests/js/app-init-storage.test.mjs` bootet dafür die echten Gruppen `head` +
   `app` aus `bundles.json` in jsdom.
 
-Das Admin-Dashboard ist ebenfalls externisiert: `static/css/admin.css` enthält
-die vormals template-lokalen Styles, `static/js/admin.js` Auth, Rendering und
-Aktionen. `static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
-`static/js/admin-prompt-config.js` besitzt den separaten Configuration-Tab:
+Das Admin-Dashboard ist ebenfalls externisiert: `static/css/admin.css` (ein
+Build-Input wie die App-Styles, also nach Änderungen `npm run build`),
+`static/js/admin.js` Auth, Seiten, Rendering und Aktionen.
+`static/js/admin-api.js` kapselt den authentifizierten JSON-Transport;
+`static/js/admin-prompt-config.js` besitzt die Seite Prompts:
 Laden/Speichern von Zeitzone und Delegations-Einstellungen, Änderungsanzeige,
 schreibgeschützte Anzeige der Systemprompts (`#promptCatalog`, je Eintrag ein
 `<details>` mit `<pre id="prompt-{key}">` aus `prompts_readonly`) und Schutz vor
 verspäteten Antworten eines vorherigen Login-Zustands.
-`admin.html` bleibt Markup und trägt nur deklarative `data-*`-Konfiguration.
-Der Configuration-Tab liegt im inkludierten Partial `partials/admin_prompt_config.html`.
+`admin.html` bleibt Markup und trägt nur deklarative `data-*`-Konfiguration;
+`admin-config.js` setzt vor dem ersten Bild das Farbschema der App
+(`localStorage.theme`, sonst System, ohne Speicher dunkel).
+Die Seite Prompts liegt im inkludierten Partial `partials/admin_prompt_config.html`.
 
 **Nicht unter `static/js/`** (älter, eigene Verantwortung):
 - **`static/firebase.js`** (ES-Modul) — Firebase-Init, Login/Logout, Token-Handling,
@@ -6338,7 +6341,7 @@ entfallen: sie standen nur für die Kosten. Der Beleg trägt die Abbuchung als
 seit 2026-10-02 für jedes angemeldete Konto offen (`require_agent_access`);
 Pro bleiben Premium-Modelle und hohe Denkstufen.
 agent_budget_config.py liest die Einstellung mit 30 Sekunden Cache je Prozess/DB.
-Admin → Limits verwendet
+Admin → Allowance verwendet
 GET/PUT /api/admin/agent-budget und POST /api/admin/agent-budget/reset mit
 Admin-Rollenprüfung, strikter Eingabe und erwarteter revision. Jede Änderung
 schreibt eine Audit-Revision. Reset wechselt reset_epoch für alle Agent-Konten,
@@ -8622,7 +8625,7 @@ Agent.
   nächsten Speichern entfernt. Jedes Speichern schreibt `unit: "micro_eur"`;
   ein Dokument ohne diese Marke stammt aus der Token-Zeit (bis 2026-10-31
   schrieb jedes Speichern und jeder Reset die ganze Tabelle in Tokens), seine
-  `tier_limits`/`run_estimates` gelten nicht, bis es neu gespeichert wird. Admin → Limits zeigt eine Tabelle Stufe ×
+  `tier_limits`/`run_estimates` gelten nicht, bis es neu gespeichert wird. Admin → Allowance zeigt eine Tabelle Stufe ×
   (Tokens/Tag, Compare-, Consensus-, Reasoning-Lauf); `PUT
   /api/admin/agent-budget` nimmt `{revision, tier_limits?, run_estimates?}`
   (strikt, Teilwerte werden mit dem Stand gemischt), `GET` liefert zusätzlich
@@ -8730,7 +8733,7 @@ Laufschätzungen der Pipeline (`run_estimates`, Mikro-Euro): Free/Plus 60 000 /
 100 000 / 200 000 (Compare / Consensus / Reasoning), Pro/Admin 150 000 /
 250 000 / 400 000: die Token-Schätzungen unten zum Preis der Stufenmodelle,
 nicht gemessen (Compare/Consensus liefen in den zehn Tagen davor an einem
-Kontotag). Admin → Limits gibt Euro ein (`admin-agent-budget.js` rechnet in
+Kontotag). Admin → Allowance gibt Euro ein (`admin-agent-budget.js` rechnet in
 Mikro-Euro um).
 
 In der Agent-Schleife rechnen alle Stellen, die den Rest des Kontos lesen,
@@ -8773,7 +8776,7 @@ Prod-Daten im Admin nachjustieren.
 | Pro | 50 × 75 000 + 5 × (150 000 − 75 000) Deep-Think-Aufschlag + 750 000 bisheriges Agent-Konto ≈ 4,9 Mio. | 5 000 000 |
 | Admin | wie Pro | 5 000 000 |
 
-Nachjustieren: Admin → Limits. Belastbare Werte liefern die gebuchten
+Nachjustieren: Admin → Allowance. Belastbare Werte liefern die gebuchten
 Operationen (`usage_runs.booked_operations`, `pipeline_used` im Kontodokument)
 nach einigen Tagen Betrieb; die Schätzung pro Lauf sollte etwa dem Median eines
 vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
@@ -9000,7 +9003,7 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Profil (merge, andere Felder bleiben) und ein unveränderliches Dokument in
   `account_tier_audit`; anschließend wird der Tier-Cache verworfen, damit die
   Stufe sofort statt erst nach ≤60 s greift. Ein Konto in Löschung bekommt
-  keine neue Stufe (`persistence_guard`). UI: Admin-Tab **Accounts**.
+  keine neue Stufe (`persistence_guard`). UI: Admin-Seite **Accounts**.
 - **Usage ist persistent und tokenbasiert (seit 2026-10-01):** siehe §4 „Ein
   Konto in Euro für alle Modi". `app/services/usage_repository.py`
   (`FirestoreUsageRepository`) hält weiterhin genau einen Beleg pro logischem
@@ -9875,7 +9878,7 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   Admin-Link `SEO_ADMIN_URL`) oder eine Fehlerzeile. Ein GSC-Fehler endet als
   `report.error` (sanitisiert), verschiebt `next_run_at` normal und gibt den
   Lease frei; ein Telegram-Fehler bricht den Lauf nie.
-- **Admin.** SEO-Tab „SEO pulse“: Schalter (`PUT /api/admin/seo/config`),
+- **Admin.** Pages → „Search“: Schalter (`PUT /api/admin/seo/config`),
   „Run now“ (`POST /api/admin/seo/run`, 6/Stunde, 409 bei laufendem Lease),
   Zeitplanzeile, Fehlerbanner, Wochenzahlen + 12-Wochen-Balken, „What moved“,
   „Set to noindex by the pulse“ mit „Keep indexed“. Status liefert
@@ -10306,7 +10309,7 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   einen benannten Bypass; normale Requests nicht.
 - `account_tier_audit/{id}` — eine unveränderliche Zeile je Stufenwechsel
   (`uid`, `from_tier`, `to_tier`, `changed_by`, `note`, `changed_at`), von
-  `app/services/account_tier.py` geschrieben und im Admin-Tab **Accounts**
+  `app/services/account_tier.py` geschrieben und auf der Admin-Seite **Accounts**
   gelesen. Ein fehlgeschlagener Audit-Write lässt die bereits gesetzte Stufe
   stehen und wird geloggt — der Adminvorgang darf daran nicht scheitern.
   Die Kontolöschung (Bereich `tier_audit`) löscht die Zeilen des Kontos und
@@ -10817,7 +10820,7 @@ alte Gemini-ADC-JSON ist entfernt.
   direkt verwendet. Verwendet ausschließlich
   `https://www.googleapis.com/auth/webmasters.readonly`; fehlende/ungültige
   Werte bleiben für normale App-Flows nicht-fatal und erscheinen sanitisiert im
-  SEO-Puls (Fehlerbanner im Admin-SEO-Tab). Diese Search-Console-Credentials
+  SEO-Puls (Fehlerzeile unter Admin → Pages → Search und in „Needs you“). Diese Search-Console-Credentials
   sind unabhängig vom OpenRouter-LLM-Key.
 - SEO-Puls-Telegram: `TELEGRAM_BOT_TOKEN`, Ziel-Chat wie bei kritischen
   Fehlern (`CRITICAL_ERROR_TELEGRAM_CHAT_ID`, sonst `TELEGRAM_CHAT_ID`) und
@@ -11165,16 +11168,45 @@ konfigurierte Modell-ID); Free darf auch hier keine Pro-/Premium-Engine verwende
   Judges. Provider-
 Modelllisten werden bewusst nicht live gegen Provider-APIs validiert; diese
 Pflege bleibt eine explizite Admin-Aufgabe.
-Das Admin-UI (Tabs: Models / Consensus / Configuration / Limits / Accounts / API /
-Shared Pages / Consensus Watch / Topics / SEO) besitzt unter `/admin#configuration`
-einen unabhängigen Save-/Reload-Bereich für Systemprompts und Referenzzeitzone.
-Die anderen Konfigurations-Tabs bekommen via
+Das Admin-UI hat ein Seitenmenü mit acht Seiten: Overview, Accounts, Pages,
+Topics, Watches und unter „Settings“ Models, Allowance, Prompts. Eine Seite
+zeigt die `<section class="admin-tab-panel">` mit ihrem `data-page`
+(`activateTab`); ältere Hashes nennen einen Abschnitt und öffnen dessen Seite
+dort (`SECTION_PAGES`: `#seo`/`#shares` → Pages, `#api` → Accounts,
+`#consensus` → Models, `#configuration` → Prompts; `SEO_ADMIN_URL` zeigt
+weiter auf `/admin#seo`). **Overview** (Startseite) baut sich aus dem, was die
+anderen Seiten ohnehin laden, plus `GET /api/admin/overview`
+(`agent_audit_metrics.recent_days`: Agent-Turns je Status der letzten 14
+UTC-Tage aus `ops_metrics/agent-audit-{Tag}`, ein Read je Tag): „Needs you“
+nennt ungeprüfte gemeldete Seiten, fehlschlagende und überfällige aktive
+Watches (fällig seit über einer Stunde ohne Lease), einen fehlgeschlagenen
+SEO-Puls und Teile, die nicht geladen haben; dazu Agent-Antworten je Tag,
+Suche der Woche, Zahl der Plus-/Pro-Konten und ein Suchfeld, das ein Konto auf
+Accounts öffnet. Die Zahlen am Menü (Pages, Watches) kommen aus derselben
+Rechnung. **Accounts**: Suche per E-Mail/UID, Plan als Segmentwahl mit
+„Save plan“ (sendet die UID des angezeigten Kontos, aktiv nur bei geändertem
+Plan), Liste Plus/Pro mit E-Mail (`account_tier.emails_of`: Firebase Auth
+`get_users` in 100er-Batches, kein Firestore-Read; ein Fehler lässt die UID
+stehen), letzte Änderungen und eingeklappt die API-Schlüssel (`#tab-api`).
+**Pages**: Moderation (Reported/All) und darunter der SEO-Puls (`#tab-seo`).
+**Watches**: aktive Watches zuerst (fehlschlagende oben) mit Pause/Resume
+(`POST /api/admin/watches/{id}/status`) und Run now, pausierte und beendete
+eingeklappt; die frühere Liste „Former Publisher pages“ ist darin aufgegangen.
+**Models**: Presets (gewählte Familien plus ein leerer Platz, bis sechs),
+Modelllisten je Anbieter eingeklappt mit Zusammenfassung, darunter
+„Advanced“ (`#tab-consensus`): Consensus-Engines, Judges, Chat-Memory,
+Watch-Modelle, Reasoning-Policy. **Allowance**: Tageskonto in Euro, eingeklappt
+die übrigen Limits. Models, Advanced und die Limits sind ein Dokument
+(`POST /api/admin/models`); die Speicherleiste unten erscheint nur bei
+ungespeicherten Änderungen oder einem Speicherergebnis. Prompts besitzt einen
+unabhängigen Save-/Reload-Bereich für Systemprompts und Referenzzeitzone.
+Die Modell-Seiten bekommen via
   `GET /api/admin/models` ein `_meta`-Objekt (Alias-Auflösung, Labels und
   referenzierende Defaults/Presets/Watches/Judges). `app_config/models.reasoning_policy`
   speichert das zentrale Sparprofil (`existing`/`economy`) und Modell-Ausnahmen.
   GET/POST liefern/speichern es über den bestehenden Save-/Reload-/Rollback-Flow;
   fehlende Felder alter Clients erhalten die aktive Policy. Ohne DB-Feld bleibt
-  das bisherige Verhalten erhalten. Der Models-Tab zeigt eine Vorschau je
+  das bisherige Verhalten erhalten. Models → Advanced → „Reasoning effort“ zeigt eine Vorschau je
   Einsatzbereich mit bearbeitbaren Modell-Ausnahmen; geschützte Modelle sind
   zuschaltbar. `cap_model_reasoning` begrenzt verifizierte Modelle auf `low`,
   Mistral auf das unterstützte `none`; Pflicht-Reasoning, unbekannte Modelle und
@@ -11195,22 +11227,19 @@ Die anderen Konfigurations-Tabs bekommen via
   direkt in ihrer Zeile ein Reasoning-Badge. „Provider default“ bedeutet, dass
   consens.io kein `reasoning`-Feld mitsendet. Das „In use“-Badge ist
   informativ und sperrt keine Providerzeile; nichts wird nach einem Save heimlich
-  als „Required“ wieder eingefügt. Der
-„API“-Tab gibt Schlüssel für eine bestehende Firebase-UID aus, zeigt den
-Klartextschlüssel genau einmal zum Kopieren und listet/widerruft danach nur
-Hash-ID, Präfix, Label, UID, Status und Audit-Zeitstempel. Zusätzlich listet er
-als „Former Publisher pages“ die vom entfernten Scheduled Publisher erzeugten
-Legacy-Weekly-Watch-Seiten (`model_tier=free`) mit Link, Lauf-/Indexstatus,
-„Pause watch“/„Resume watch“ je Zeile, „Pause all watches“ und sofortiger
-Admin-Löschaktion; die frühere Publisher-Konfiguration ist entfernt. Der
-SEO-Tab ist der SEO-Puls (§4 „SEO-Puls“). Der separate
-„Consensus Watch“-Tab zeigt die Free-/Pro-Watch-Modellmatrix, operative Watch-Metadaten,
-SMTP-Konfigurationsstatus und admin-only Aktionen für eine echte Testmail sowie den sofortigen Start einer aktiven Watch;
-der eigentliche Lauf bleibt im normalen Lease-/Budget-/Scheduler-Pfad. E2E-Zugriff auf
+  als „Required“ wieder eingefügt. Die
+API-Schlüssel (Accounts, eingeklappt) werden für eine bestehende Firebase-UID
+ausgegeben; der Klartextschlüssel steht genau einmal zum Kopieren da, danach
+nur Hash-ID, Präfix, Label, UID, Status und Audit-Zeitstempel. Der SEO-Teil
+von Pages ist der SEO-Puls (§4 „SEO-Puls“). Watches zeigt operative
+Watch-Metadaten, den SMTP-Status und admin-only Aktionen für eine echte
+Testmail sowie den sofortigen Start einer aktiven Watch; die Free-/Pro-
+Watch-Modellmatrix liegt unter Models → Advanced. Der eigentliche Lauf bleibt
+im normalen Lease-/Budget-/Scheduler-Pfad. E2E-Zugriff auf
 Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
-Der Topics-Tab unter `/admin#topics` lädt/speichert ausschließlich die Topics-
-API; Pause/Archive und Snapshot-Publishing berühren die bestehenden Shared-
-Pages-/Watch-Tabs nicht. `/admin/topics` redirectet auf diesen Tab.
+Die Seite Topics unter `/admin#topics` lädt/speichert ausschließlich die Topics-
+API; Pause/Archive und Snapshot-Publishing berühren Pages und Watches nicht.
+`/admin/topics` redirectet auf diese Seite.
 
 ---
 

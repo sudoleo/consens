@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Dashboard | consens.io</title>
+    <title>Admin | consens.io</title>
     <meta id="adminBootstrapConfig"
           data-firebase-api-key="{{ firebase_api_key | e }}"
           data-firebase-auth-domain="{{ firebase_auth_domain | e }}"
@@ -12,473 +12,184 @@
           data-firebase-messaging-sender-id="{{ firebase_messaging_sender_id | e }}"
           data-firebase-app-id="{{ firebase_app_id | e }}">
     <script src="{{ asset_url('/static/js/admin-config.js') }}"></script>
-<link rel="stylesheet" href="{{ asset_url('/static/style.css') }}">
+    <link rel="stylesheet" href="{{ asset_url('/static/style.css') }}">
     <link rel="stylesheet" href="{{ asset_url('/static/css/admin.css') }}">
 
     <script type="module" src="{{ asset_url('/static/js/admin.js') }}"></script>
 </head>
-<body class="dark-mode">
-    <header class="top-bar">
-        <div class="top-bar-logo">
-            <a href="/" id="logoLink">
-                <img src="/static/favicon.png" alt="Favicon" class="top-bar-favicon">
+<body class="admin-body">
+    <div class="admin-layout">
+        <aside class="admin-side">
+            <a href="/app" class="admin-brand" title="Back to the app">
+                {% from "partials/brand.html" import brand_mark %}{{ brand_mark("admin-brand-mark") }}
+                <span>consens.io</span>
+                <span class="admin-brand-role">Admin</span>
             </a>
-            <span class="top-bar-title">consens.io Admin</span>
-        </div>
-        <div class="top-bar-right">
-            <a href="/topics" class="top-bar-about">Public Topics</a>
-            <a href="/admin/benchmark" class="top-bar-about">Benchmark</a>
-            <a href="/app" class="top-bar-about">Back to App</a>
-        </div>
-    </header>
-
-    <div class="admin-shell">
-        <nav class="admin-tabs" role="tablist" aria-label="Admin sections">
-            <button type="button" data-tab="models" role="tab">Models</button>
-            <button type="button" data-tab="consensus" role="tab">Consensus</button>
-            <button type="button" data-tab="configuration" role="tab">Configuration</button>
-            <button type="button" data-tab="limits" role="tab">Limits</button>
-            <button type="button" data-tab="accounts" role="tab">Accounts</button>
-            <button type="button" data-tab="api" role="tab">API</button>
-            <button type="button" data-tab="shares" role="tab">Shared Pages</button>
-            <button type="button" data-tab="watches" role="tab">Consensus Watch</button>
-            <button type="button" data-tab="topics" role="tab">Topics</button>
-            <button type="button" data-tab="seo" role="tab">SEO</button>
-        </nav>
-
-        <div id="adminSavebar" class="admin-savebar">
-            <span class="dirty-dot" title="Unsaved changes"></span>
-            <h2>Configuration</h2>
-            <span id="statusMessage" role="status"></span>
-            <button id="reloadBtn" type="button" class="admin-btn secondary" title="Discard unsaved changes and reload the saved configuration">Reload</button>
-            <button id="saveBtn" type="button" class="admin-btn">Save Changes</button>
-        </div>
-
-        <section id="tab-models" class="admin-tab-panel" role="tabpanel" hidden>
-            <div class="admin-section reasoning-overview">
-                <h3>Reasoning budget</h3>
-                <p class="section-hint">
-                    Choose one policy, then keep exceptions only where answer quality needs them.
-                    Savings uses <strong>low</strong> for verified models and <strong>none</strong> for Mistral, keeping off/minimal settings intact.
-                    Required reasoning and models without a verified control are preserved.
-                    This reduces reasoning effort, not the model's token price; savings and quality need measurement.
-                </p>
-                <div class="reasoning-toolbar">
-                    <label>Default policy
-                        <select id="reasoningProfile">
-                            <option value="existing">Keep existing behavior</option>
-                            <option value="economy">Savings (recommended)</option>
-                        </select>
-                    </label>
-                    <label>Preview request type
-                        <select id="reasoningScope">
-                            <option value="answers">Standard answers</option>
-                            <option value="reasoning">Answers with Reasoning on</option>
-                            <option value="synthesis">Consensus synthesis</option>
-                            <option value="helpers">Judges &amp; chat memory</option>
-                        </select>
-                    </label>
-                </div>
-                <p id="reasoningSummary" class="section-hint" aria-live="polite"></p>
-                <label class="section-hint"><input id="reasoningShowProtected" type="checkbox"> Also show protected / unchanged models</label>
-                <div id="reasoningControls" class="reasoning-model-grid"></div>
-                <p class="section-hint">Preview applies to the next saved configuration, including the Reasoning switch, API, Watches and Topics using these models.
-                    Use <strong>Save Changes</strong> to activate; <strong>Reload</strong> discards edits.
-                    Memory edit retains its fixed task setting.</p>
-                <details class="reasoning-model-details">
-                    <summary>Saved configuration · technical details</summary>
-                    <div id="reasoningFlowOverview" class="reasoning-flow-grid"></div>
-                    <div id="reasoningModelOverview" class="reasoning-model-grid"></div>
-                </details>
+            <nav class="admin-tabs" aria-label="Admin">
+                <button type="button" data-tab="overview">Overview</button>
+                <button type="button" data-tab="accounts">Accounts</button>
+                <button type="button" data-tab="pages">Pages<span class="admin-tab-count" data-count="pages"></span></button>
+                <button type="button" data-tab="topics">Topics</button>
+                <button type="button" data-tab="watches">Watches<span class="admin-tab-count" data-count="watches"></span></button>
+                <span class="admin-tabs-label">Settings</span>
+                <button type="button" data-tab="models">Models</button>
+                <button type="button" data-tab="limits">Allowance</button>
+                <button type="button" data-tab="prompts">Prompts</button>
+            </nav>
+            <div class="admin-side-foot">
+                <a href="/topics">Public topics</a>
+                <a href="/admin/benchmark">Benchmark</a>
+                <a href="/app">Back to the app</a>
             </div>
-            <p class="section-hint section-hint-compact">
-                Per-provider model lists shown in the app's model pickers (row order = picker order).
-                <strong>Default</strong> sets the Free-tier preselection. <strong>Premium</strong> marks Pro-only models.
-                <strong>Consensus</strong> offers the model in the Consensus picker.
-                <em>In use</em> shows which defaults, presets, Watches or judges currently reference a model.
-                Nothing is silently re-added: update those references when removing a model.
-            </p>
-            <div id="providersContainer" class="providers-grid">
-                <!-- Populated by JavaScript -->
+        </aside>
+
+        <main class="admin-main">
+        <section id="tab-overview" class="admin-tab-panel" data-page="overview" hidden>
+            <header class="admin-head">
+                <h1>Overview</h1>
+                <p id="overviewDate"></p>
+            </header>
+            <div class="admin-block">
+                <h2>Needs you</h2>
+                <ul id="overviewAttention" class="attention-list" aria-live="polite">
+                    <li class="attention-item is-quiet"><span>Looking…</span></li>
+                </ul>
             </div>
-        </section>
-
-        <section id="tab-consensus" class="admin-tab-panel" role="tabpanel" hidden>
-            <div class="admin-section">
-                <h3>Preset Model Sets</h3>
-                <p class="section-hint">
-                    Each preset selects the Agent's reviewers (two to six families; they also answer compare_models and
-                    the Compare grid) and a Consensus engine for the server pipeline. Every outward step waits for all reviewers.
-                    Daily and Open Models accept Free-tier models only; High Quality is always Pro-only.
-                </p>
-                <div id="presetModelsContainer" class="preset-model-cards">
-                    <!-- Populated by JavaScript -->
+            <div class="overview-grid">
+                <div class="overview-card">
+                    <h2>Agent answers</h2>
+                    <p class="overview-figure"><strong id="overviewAgentToday">–</strong><span>today</span></p>
+                    <div id="overviewAgentBars" class="overview-bars" role="img" aria-label="Agent answers per day, last 14 days"></div>
+                    <p id="overviewAgentNote" class="admin-muted"></p>
                 </div>
-            </div>
-
-            <div class="admin-section">
-                <h3>Judges (Differences, claim marks, Resolve)</h3>
-                <p class="section-hint">
-                    Judge models per provider family for the Differences engine, the claim-coverage judge
-                    behind the inline claim marks, and the Resolve round.
-                    Standard engines get the <strong>Standard</strong> judge, Pro engines the
-                    <strong>Pro</strong> judge (always run at provider-compatible reduced effort).
-                </p>
-                <div id="judgeModelsContainer">
-                    <!-- Populated by JavaScript -->
+                <div class="overview-card">
+                    <h2>Search</h2>
+                    <p class="overview-figure"><strong id="overviewSearchImpressions">–</strong><span>impressions last week</span></p>
+                    <p id="overviewSearchNote" class="admin-muted"></p>
+                    <button type="button" class="admin-link" data-go="seo">Search details</button>
                 </div>
-
-                <div class="judge-subhead">Judge assignment</div>
-                <p class="section-hint">
-                    Which family judges which Consensus engine. <strong>Auto</strong> picks the first family with
-                    an available API key from the priority order (OpenAI first, also for OpenAI engines); a manual pick is preferred first and falls
-                    back to Auto if its key is unavailable.
-                </p>
-                <div id="judgeFamiliesContainer">
-                    <!-- Populated by JavaScript -->
-                </div>
-            </div>
-
-            <div class="admin-section">
-                <h3>Chat Memory</h3>
-                <p class="section-hint">
-                    Model that compresses older turns of a conversation into the structured memory a
-                    follow-up is answered with. It runs once per turn from the <strong>third</strong> turn
-                    on — a JSON extraction job, not a reasoning one, so a cheap model is usually the right
-                    pick. The <strong>family</strong> always follows the turn's Consensus engine, because
-                    with own API keys only that provider's key is available; you choose the model inside
-                    each family. If the call fails, the server falls back to a deterministic summary
-                    without an LLM.
-                </p>
-                <div id="chatMemoryModelsContainer">
-                    <!-- Populated by JavaScript -->
-                </div>
-            </div>
-
-            <div class="admin-section">
-                <h3>Consensus Engines</h3>
-                <p class="section-hint">
-                    Ordered list shown in the app's Consensus picker. <strong>Aliases</strong> (e.g. Gemini-Pro)
-                    resolve to a provider model server-side and follow config updates automatically;
-                    direct model IDs must exist in a provider list on the Models tab.
-                    The first entry is preselected for new users.
-                </p>
-                <div id="consensusModelsList">
-                    <!-- Populated by JavaScript -->
-                </div>
-                <div class="consensus-add-row">
-                    <select id="consensusAddSelect" aria-label="Add consensus engine"></select>
-                    <button id="consensusAddBtn" type="button" class="add-btn u-mt-0">+ Add</button>
+                <div class="overview-card">
+                    <h2>Accounts</h2>
+                    <p class="overview-figure"><strong id="overviewAccountsPaid">–</strong><span>on Plus or Pro</span></p>
+                    <form id="overviewFindForm" class="admin-find">
+                        <input id="overviewFind" type="search" maxlength="320" autocomplete="off" spellcheck="false" placeholder="Email or UID" aria-label="Find an account by email or UID">
+                        <button type="submit" class="admin-btn secondary">Find</button>
+                    </form>
                 </div>
             </div>
         </section>
 
-        {% include "partials/admin_prompt_config.html" %}
-
-        <section id="tab-limits" class="admin-tab-panel" role="tabpanel" hidden>
-            <form id="agentBudgetForm" class="admin-section">
-                <h3>Daily allowance in euros</h3>
-                <p class="section-hint">
-                    One account per user and UTC day for Compare, Consensus, Reasoning runs and Agent.
-                    Every call counts what it cost: OpenRouter's cost of the call (cache, reasoning and
-                    web search included), else its catalog price, at a fixed 1 € = 1.15 $. A run starts
-                    only when the euros left cover its <strong>expected run</strong> cost below; it then
-                    books what it measured and may end slightly below zero. Agent reserves before every
-                    call. Users see the allowance in percent only. Changes apply within 30 seconds.
-                </p>
-                <div class="token-budget-table">
-                    <table class="token-budget-grid">
-                        <caption class="visually-hidden">Daily allowance and expected run cost per tier, in euros</caption>
-                        <thead>
-                            <tr>
-                                <th scope="col">Tier</th>
-                                <th scope="col">€ per day</th>
-                                <th scope="col">Compare run (€)</th>
-                                <th scope="col">Consensus run (€)</th>
-                                <th scope="col">Reasoning run (€)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="agentBudgetRows"></tbody>
-                    </table>
-                </div>
-                <div class="agent-budget-controls">
-                    <button id="saveAgentBudget" type="submit" class="admin-btn" disabled>Save allowance</button>
-                    <button id="resetAgentBudgets" type="button" class="admin-btn secondary" disabled>Reset all allowances</button>
-                    <button id="reloadAgentBudget" type="button" class="admin-btn secondary" disabled>Reload</button>
-                </div>
-                <p id="agentBudgetMeta" class="section-hint"></p>
-                <p id="agentBudgetStatus" role="status" aria-live="polite"></p>
+        <section id="tab-accounts" class="admin-tab-panel" data-page="accounts" hidden>
+            <header class="admin-head">
+                <h1>Accounts</h1>
+                <p>Find anyone by email or UID and change their plan. It applies at once and every change is logged.</p>
+            </header>
+            <form id="accountTierForm" class="admin-find">
+                <input id="accountTierIdentifier" type="search" maxlength="320" autocomplete="off" spellcheck="false" placeholder="Email or UID" aria-label="Email or UID">
+                <button id="lookupAccountTierBtn" type="submit" class="admin-btn">Find</button>
             </form>
-            <p class="section-hint section-hint-compact">
-                Input, output and Watch limits per account tier. Limits apply after the daily reset.
-                The Reasoning switch is open to every tier; its output cap is the larger of the tier's
-                output limit and <em>Reasoning output tokens</em>.
-            </p>
-            <div id="limitsContainer" class="limits-grid">
-                <!-- Populated by JavaScript -->
+            <p id="accountTierStatus" class="admin-status" role="status"></p>
+            <div id="accountTierDetail" class="account-card" hidden>
+                <div id="accountTierWho" class="account-who"></div>
+                <fieldset class="segmented" id="accountTierChoice">
+                    <legend class="visually-hidden">Plan</legend>
+                    <label><input type="radio" name="accountTier" value="free"><span>Free</span></label>
+                    <label><input type="radio" name="accountTier" value="plus"><span>Plus</span></label>
+                    <label><input type="radio" name="accountTier" value="pro"><span>Pro</span></label>
+                </fieldset>
+                <p class="admin-muted account-plan-hint">Plus: Free models with Resolve, more storage and the largest allowance, safe for testers. Pro: everything, frontier models included.</p>
+                <div class="account-save">
+                    <input id="accountTierNote" type="text" maxlength="300" autocomplete="off" placeholder="Note (optional)" aria-label="Note for the change log">
+                    <button id="saveAccountTierBtn" type="button" class="admin-btn" disabled>Save plan</button>
+                </div>
+                <p id="accountTierFacts" class="admin-muted"></p>
             </div>
+
+            <div class="admin-block">
+                <div class="admin-block-head">
+                    <h2>Plus and Pro</h2>
+                    <span id="accountTiersStatus" class="admin-status" role="status"></span>
+                    <button id="reloadAccountTiersBtn" type="button" class="admin-btn quiet">Reload</button>
+                </div>
+                <div id="accountTiersContainer" class="admin-list"></div>
+            </div>
+            <details class="admin-fold">
+                <summary>Recent plan changes</summary>
+                <div id="accountTierChangesContainer" class="admin-list"></div>
+            </details>
         </section>
 
-        <section id="tab-accounts" class="admin-tab-panel" role="tabpanel" hidden>
-            <div class="admin-section">
-                <h3>Account tier</h3>
-                <p class="section-hint">
-                    <strong>Free</strong> — base models, small daily quota, attachments.
-                    <strong>Plus</strong> — exactly the Free model choice, but
-                    Resolve rounds, more file storage and the largest run quota. Give this to testers: they cannot trigger a
-                    frontier-model cost.
-                    <strong>Pro</strong> — everything, including frontier models.
-                    A change takes effect immediately; every change is written to an audit log.
+        <section id="tab-api" class="admin-tab-panel" data-page="accounts" hidden>
+            <details class="admin-fold" id="apiKeysFold">
+                <summary>API keys <span id="apiKeysCount" class="admin-count"></span></summary>
+                <p class="admin-muted">
+                    A key runs Consensus as its owner, with the owner's plan and daily allowance, on the Open Models
+                    families (DeepSeek processes in China). Run content expires after 30 days.
+                    Only a SHA-256 hash is stored; the full key shows once.
                 </p>
-                <div class="api-key-form">
-                    <div class="api-key-field">
-                        <label for="accountTierIdentifier">Firebase UID or email</label>
-                        <input id="accountTierIdentifier" type="text" maxlength="320" autocomplete="off" spellcheck="false" placeholder="UID or name@example.com">
-                    </div>
-                    <div class="api-key-field">
-                        <label for="accountTierSelect">Tier</label>
-                        <select id="accountTierSelect">
-                            <option value="free">Free</option>
-                            <option value="plus">Plus</option>
-                            <option value="pro">Pro</option>
-                        </select>
-                    </div>
-                    <div class="api-key-field">
-                        <label for="accountTierNote">Note (optional)</label>
-                        <input id="accountTierNote" type="text" maxlength="300" autocomplete="off" placeholder="Asked by email for attachments, 2026-08-31">
-                    </div>
-                    <button id="lookupAccountTierBtn" type="button" class="admin-btn secondary">Look up</button>
-                    <button id="saveAccountTierBtn" type="button" class="admin-btn">Set tier</button>
-                    <span id="accountTierStatus" class="admin-status-text" role="status"></span>
-                </div>
-                <div id="accountTierDetail" class="account-tier-detail" hidden></div>
-            </div>
-
-            <div class="admin-section">
-                <h3>Accounts above Free</h3>
-                <p class="section-hint">Every account currently tagged Plus or Pro, plus the most recent tier changes.</p>
-                <div class="publisher-config-actions">
-                    <button id="reloadAccountTiersBtn" type="button" class="admin-btn secondary">Reload</button>
-                    <span id="accountTiersStatus" class="admin-status-text" role="status"></span>
-                </div>
-                <div id="accountTiersContainer"></div>
-                <h4 class="account-tier-subhead">Recent changes</h4>
-                <div id="accountTierChangesContainer"></div>
-            </div>
-        </section>
-
-        <section id="tab-api" class="admin-tab-panel" role="tabpanel" hidden>
-            <div class="admin-section">
-                <h3>Consensus API keys</h3>
-                <p class="section-hint">
-                    Issue a key for an active, e-mail-verified Firebase user. The key inherits that
-                    UID's tier and its daily allowance in euros (shared with the app). All v1 runs use the server-selected Open Models
-                    families, including DeepSeek processing in China.
-                    Run content expires after 30 days.
-                    Only a SHA-256 hash is stored; the full key is shown exactly once and should be copied directly
-                    into a secret manager.
-                </p>
-                <div class="api-key-form">
-                    <div class="api-key-field">
-                        <label for="apiKeyUid">Owner Firebase UID</label>
+                <div class="admin-form-row">
+                    <label class="admin-field">Owner UID
                         <input id="apiKeyUid" type="text" maxlength="128" autocomplete="off" spellcheck="false" placeholder="Firebase UID">
-                    </div>
-                    <div class="api-key-field">
-                        <label for="apiKeyLabel">Label</label>
-                        <input id="apiKeyLabel" type="text" maxlength="80" autocomplete="off" placeholder="Production, CI, local development...">
-                    </div>
-                    <button id="issueApiKeyBtn" type="button" class="admin-btn">Issue API key</button>
-                    <div class="api-key-scope-options">
-                        <span>Included: Consensus runs, publish/list/revoke own shares.</span>
-                        <label title="Only an admin UID may receive this scope. It can make eligible public pages indexable without another UI review.">
-                            <input id="apiKeyDirectIndex" type="checkbox">
-                            Direct indexing (admin UID only)
-                        </label>
-                    </div>
+                    </label>
+                    <label class="admin-field">Label
+                        <input id="apiKeyLabel" type="text" maxlength="80" autocomplete="off" placeholder="CI, local development…">
+                    </label>
+                    <button id="issueApiKeyBtn" type="button" class="admin-btn">Issue key</button>
                 </div>
+                <label class="admin-check" title="Only an admin UID may receive this. Such a key can make eligible pages indexable without review.">
+                    <input id="apiKeyDirectIndex" type="checkbox"> May make pages indexable (admin UID only)
+                </label>
 
                 <div id="issuedApiKeyPanel" class="api-key-secret" role="region" aria-live="polite" hidden>
                     <strong>Copy this key now</strong>
-                    <p>It cannot be retrieved again. Dismissing this notice removes the plaintext key from the page.</p>
-                    <div class="api-key-secret-row">
+                    <p class="admin-muted">It cannot be shown again. Dismiss removes it from the page.</p>
+                    <div class="admin-form-row">
                         <input id="issuedApiKeyValue" type="text" readonly autocomplete="off" spellcheck="false" aria-label="New API key">
                         <button id="copyIssuedApiKeyBtn" type="button" class="admin-btn">Copy</button>
-                        <button id="dismissIssuedApiKeyBtn" type="button" class="admin-btn secondary">Dismiss</button>
+                        <button id="dismissIssuedApiKeyBtn" type="button" class="admin-btn quiet">Dismiss</button>
                     </div>
                 </div>
 
-                <div class="api-key-toolbar">
-                    <div class="api-key-field">
-                        <label for="apiKeyFilterUid">Filter by owner UID</label>
-                        <input id="apiKeyFilterUid" type="text" maxlength="128" autocomplete="off" spellcheck="false" placeholder="Leave empty for all keys">
-                    </div>
-                    <button id="reloadApiKeysBtn" type="button" class="admin-btn secondary">Reload keys</button>
-                    <span id="apiKeysStatus" class="admin-status-text" role="status"></span>
+                <div class="admin-form-row">
+                    <label class="admin-field">Filter by owner UID
+                        <input id="apiKeyFilterUid" type="text" maxlength="128" autocomplete="off" spellcheck="false" placeholder="Empty shows every key">
+                    </label>
+                    <button id="reloadApiKeysBtn" type="button" class="admin-btn quiet">Reload</button>
                 </div>
-                <div id="apiKeysContainer">
-                    <!-- Populated by JavaScript -->
-                </div>
-            </div>
-
-            <div class="admin-section">
-                <h3>Former Publisher pages</h3>
-                <p class="section-hint">
-                    Pages the retired Scheduled Publisher created, each with a weekly Free-model Watch
-                    that still reruns until you pause it. Deleting a page also removes its Watch schedule,
-                    Watch history, and follower subscriptions.
-                </p>
-                <div class="watch-admin-toolbar">
-                    <button id="pauseAllPublisherWatchesBtn" type="button" class="admin-btn">Pause all watches</button>
-                    <button id="reloadPublisherWatchesBtn" type="button" class="admin-btn secondary">Reload pages</button>
-                    <span id="publisherWatchesStatus" class="admin-status-text" role="status"></span>
-                </div>
-                <div id="publisherWatchesContainer">
-                    <!-- Populated by JavaScript -->
-                </div>
-            </div>
+                <p id="apiKeysStatus" class="admin-status" role="status"></p>
+                <div id="apiKeysContainer" class="admin-list"></div>
+            </details>
         </section>
 
-        <section id="tab-shares" class="admin-tab-panel" role="tabpanel" hidden>
-            <div class="admin-section">
-                <h3>Shared Pages Moderation</h3>
-                <p class="section-hint">
-                    Reported pages first (review-priority, then report count). <strong>Index</strong> puts a page
-                    into sitemap-shares.xml and removes its noindex — only do this for eligible pages.
-                    <strong>Delete</strong> permanently removes the page and all Watch-bound data.
-                </p>
-                <div class="shares-toolbar">
-                    <button id="loadReportedSharesBtn" type="button" class="admin-btn secondary">Load reported</button>
-                    <button id="loadAllSharesBtn" type="button" class="admin-btn secondary">Load all</button>
-                    <span id="sharesStatus" class="admin-status-text"></span>
+        <section id="tab-shares" class="admin-tab-panel" data-page="pages" hidden>
+            <header class="admin-head">
+                <h1>Pages</h1>
+                <p>Answers people shared. Reported shows every page with a report, most reports first.</p>
+            </header>
+            <div class="admin-toolbar">
+                <div class="segmented" role="group" aria-label="Show pages">
+                    <button id="loadReportedSharesBtn" type="button" aria-pressed="true">Reported</button>
+                    <button id="loadAllSharesBtn" type="button" aria-pressed="false">All</button>
                 </div>
-                <div id="sharesContainer">
-                    <!-- Populated by JavaScript -->
-                </div>
+                <span id="sharesStatus" class="admin-status" role="status"></span>
             </div>
+            <div id="sharesContainer" class="admin-list"></div>
         </section>
 
-        <section id="tab-watches" class="admin-tab-panel" role="tabpanel" hidden>
-            <div class="admin-section">
-                <h3>Consensus Watch diagnostics</h3>
-                <p class="section-hint">
-                    Test SMTP independently or start an active watch immediately through the normal leased scheduler path.
-                    Manual runs make real model calls, write history, advance their schedule, and apply their configured e-mail rule.
-                </p>
-                <h4>Watch models by user tier</h4>
-                <p class="section-hint">Choose one answer model per enabled provider and a separate Consensus engine for the Free/Plus profile and the Pro profile. Plus deliberately uses the same model profile as Free; only its limits and optional daily interval differ. At least two answer providers are required. Premium models stay listed for Free/Plus but are locked (“Pro only”). An arrow (→) marks a variant that sends a different API model. The <strong>Actually runs</strong> row shows what the next run will really use — a configured provider that gets skipped is named there with its reason. Personal watches follow the owner's current tier.</p>
-                <div id="watchModelConfig" class="watch-model-grid"></div>
-                <div class="watch-admin-toolbar">
-                    <button id="loadWatchesBtn" type="button" class="admin-btn secondary">Reload watches</button>
-                    <button id="sendWatchTestMailBtn" type="button" class="admin-btn">Send test e-mail</button>
-                    <span id="smtpConfigState" class="admin-chip">SMTP unknown</span>
-                    <span id="watchesStatus" class="admin-status-text" role="status"></span>
+        <section id="tab-seo" class="admin-tab-panel" data-page="pages" hidden>
+            <div class="admin-block">
+                <div class="admin-block-head">
+                    <h2>Search</h2>
+                    <label class="admin-switch"><input id="seoPulseEnabled" type="checkbox"><span>Weekly pulse</span></label>
+                    <button id="runSeoPulseBtn" type="button" class="admin-btn quiet">Run now</button>
                 </div>
-                <div id="watchesContainer">
-                    <!-- Populated by JavaScript -->
-                </div>
-            </div>
-        </section>
-
-        <section id="tab-topics" class="admin-tab-panel" role="tabpanel" hidden>
-            <div class="admin-section">
-                <h3>Public Topic tickers</h3>
-                <p class="section-hint">
-                    A Topic reruns one stable research question with the selected answer models.
-                    Each run searches for current sources, builds Consensus and Agreement, detects
-                    material opinion movement, and appends an immutable point to the public timeline.
-                    Seed links and manual Consensus text are not required.
-                </p>
-                <div class="topic-admin-actions u-mb-14">
-                    <button id="newAdminTopicBtn" type="button" class="admin-btn">New Topic</button>
-                    <button id="reloadAdminTopicsBtn" type="button" class="admin-btn secondary">Reload</button>
-                    <span id="topicAdminStatus" class="topic-status-line" role="status"></span>
-                </div>
-                <div class="topic-admin-layout">
-                    <aside id="adminTopicList" class="topic-admin-list" aria-label="Topics"></aside>
-                    <div>
-                        <p id="topicEditorEmpty" class="section-hint">Select a Topic or create a new one.</p>
-                        <form id="topicAdminForm" class="topic-admin-form" hidden>
-                            <div class="topic-form-grid">
-                                <label>Title<input id="adminTopicTitle" maxlength="140" required></label>
-                                <label>URL slug<input id="adminTopicSlug" maxlength="80" required>
-                                    <span id="adminTopicSlugHistory" class="section-hint" hidden></span>
-                                </label>
-                                <label class="wide">Ticker question<input id="adminTopicQuestion" maxlength="500" required placeholder="What is the current evidence about...?"></label>
-                                <label>Category<input id="adminTopicCategory" maxlength="80" required></label>
-                                <label>Status
-                                    <select id="adminTopicStatus">
-                                        <option value="active">Active - public and scheduled</option>
-                                        <option value="paused">Paused - public, no runs</option>
-                                        <option value="archived">Archived - hidden</option>
-                                    </select>
-                                </label>
-                                <label>Collection interval
-                                    <select id="adminTopicInterval">
-                                        <option value="manual">Manual only</option>
-                                        <option value="daily">Daily</option>
-                                        <option value="weekly">Weekly</option>
-                                        <option value="biweekly">Every two weeks</option>
-                                        <option value="monthly">Monthly</option>
-                                    </select>
-                                </label>
-                                <label class="wide">Public summary<textarea id="adminTopicSummary" rows="3" maxlength="1200"></textarea></label>
-                            </div>
-
-                            <div>
-                                <h4 class="u-mb-5">Models that collect the new state</h4>
-                                <p class="section-hint">Enable at least two providers. The stored configuration uses concrete provider-to-model IDs, just like Watch model profiles.</p>
-                                <div id="topicModelPlan" class="topic-model-grid"></div>
-                            </div>
-
-                            <div class="topic-form-grid">
-                                <label class="wide">Preferred source domains (one per line)<textarea id="adminTopicDomains" rows="3" placeholder="openai.com"></textarea></label>
-                                <label class="wide">Research guidance<textarea id="adminTopicSourceNotes" rows="3" maxlength="3000" placeholder="Prefer primary sources and official release notes."></textarea></label>
-                                <label class="wide">Benchmark chart: model names as Artificial Analysis writes them (one per line, up to 4)<textarea id="adminTopicBenchmark" rows="2" placeholder="Gemini 4"></textarea></label>
-                            </div>
-
-                            <details>
-                                <summary>Search appearance</summary>
-                                <div class="topic-form-grid u-mt-10">
-                                    <label>SEO title<input id="adminTopicSeoTitle" maxlength="160"></label>
-                                    <label>Meta description<input id="adminTopicSeoDescription" maxlength="300"></label>
-                                    <label class="wide"><span><input id="adminTopicNoindex" class="checkbox-auto-width" type="checkbox"> Keep out of search indexes</span></label>
-                                </div>
-                            </details>
-
-                            <p id="topicScheduleState" class="section-hint"></p>
-                            <div class="topic-admin-actions">
-                                <button id="saveAdminTopicBtn" type="button" class="admin-btn">Save configuration</button>
-                                <button id="runAdminTopicBtn" type="button" class="admin-btn secondary">Run now</button>
-                                <a id="openAdminTopicBtn" class="admin-btn secondary" target="_blank" rel="noopener">Open public ticker</a>
-                            </div>
-                            <div>
-                                <h4>Timeline history</h4>
-                                <div id="topicRunHistory" class="topic-run-history"></div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section id="tab-seo" class="admin-tab-panel" role="tabpanel" hidden>
-            <div class="admin-section">
-                <h3>SEO pulse</h3>
-                <p class="section-hint">
-                    Every Monday at 09:00 (Berlin) the pulse reads Search Console, sends a short
-                    Telegram note and sets indexed share pages to noindex that had no click and fewer
-                    than 10 impressions in 90 days. Nothing else runs on its own.
-                </p>
-                <div class="publisher-config-actions">
-                    <label class="seo-pulse-toggle"><input id="seoPulseEnabled" type="checkbox" class="checkbox-auto-width"> Weekly pulse</label>
-                    <button id="runSeoPulseBtn" type="button" class="admin-btn">Run now</button>
-                    <span id="seoStatus" class="admin-status-text" role="status"></span>
-                </div>
-                <p id="seoPulseSchedule" class="section-hint"></p>
-                <div id="seoPulseError" class="seo-alert is-error" role="alert" hidden></div>
+                <p class="admin-muted">Mondays at 09:00 Berlin time the pulse reads Search Console, sends a Telegram note and sets share pages with no click and under 10 impressions in 90 days to noindex.</p>
+                <p id="seoPulseSchedule" class="admin-muted"></p>
+                <p id="seoStatus" class="admin-status" role="status"></p>
+                <div id="seoPulseError" class="admin-error" role="alert" hidden></div>
 
                 <div class="seo-pulse-week">
-                    <h4 id="seoPulseWeek" class="seo-block-title">No report yet</h4>
+                    <h3 id="seoPulseWeek">No report yet</h3>
                     <div class="seo-pulse-body">
                         <div class="seo-figures">
                             <div class="seo-figure"><span>Impressions</span><strong id="seoPulseImpressions">–</strong><span id="seoPulseImpressionsPrev"></span></div>
@@ -489,13 +200,235 @@
                     </div>
                 </div>
 
-                <h4 class="seo-block-title">What moved</h4>
+                <h3>What moved</h3>
                 <ul id="seoPulseMovers" class="seo-movers"></ul>
 
-                <h4 class="seo-block-title">Set to noindex by the pulse</h4>
-                <div id="seoPulseNoindexed" class="seo-pulse-list"></div>
+                <details class="admin-fold">
+                    <summary>Set to noindex by the pulse <span id="seoPulseNoindexedCount" class="admin-count"></span></summary>
+                    <div id="seoPulseNoindexed" class="admin-list"></div>
+                </details>
             </div>
         </section>
+
+        <section id="tab-topics" class="admin-tab-panel" data-page="topics" hidden>
+            <header class="admin-head">
+                <h1>Topics</h1>
+                <p>Public tickers: one research question, rerun on a schedule, each run a new point on the timeline.</p>
+            </header>
+            <div class="topic-admin-actions">
+                <button id="newAdminTopicBtn" type="button" class="admin-btn">New topic</button>
+                <button id="reloadAdminTopicsBtn" type="button" class="admin-btn quiet">Reload</button>
+                <span id="topicAdminStatus" class="topic-status-line" role="status"></span>
+            </div>
+            <div class="topic-admin-layout">
+                <aside id="adminTopicList" class="topic-admin-list" aria-label="Topics"></aside>
+                <div class="topic-admin-editor">
+                    <p id="topicEditorEmpty" class="admin-muted">Pick a topic or create one.</p>
+                    <form id="topicAdminForm" class="topic-admin-form" hidden>
+                        <div class="topic-form-grid">
+                            <label>Title<input id="adminTopicTitle" maxlength="140" required></label>
+                            <label>URL slug<input id="adminTopicSlug" maxlength="80" required>
+                                <span id="adminTopicSlugHistory" class="admin-muted" hidden></span>
+                            </label>
+                            <label class="wide">Question<input id="adminTopicQuestion" maxlength="500" required placeholder="What is the current evidence about…?"></label>
+                            <label>Category<input id="adminTopicCategory" maxlength="80" required></label>
+                            <label>Status
+                                <select id="adminTopicStatus">
+                                    <option value="active">Active: public and scheduled</option>
+                                    <option value="paused">Paused: public, no runs</option>
+                                    <option value="archived">Archived: hidden</option>
+                                </select>
+                            </label>
+                            <label>Runs
+                                <select id="adminTopicInterval">
+                                    <option value="manual">Only by hand</option>
+                                    <option value="daily">Daily</option>
+                                    <option value="weekly">Weekly</option>
+                                    <option value="biweekly">Every two weeks</option>
+                                    <option value="monthly">Monthly</option>
+                                </select>
+                            </label>
+                            <label class="wide">Public summary<textarea id="adminTopicSummary" rows="3" maxlength="1200"></textarea></label>
+                        </div>
+
+                        <div>
+                            <h3>Models</h3>
+                            <p class="admin-muted">At least two families. Sources are searched on every run; no seed links needed.</p>
+                            <div id="topicModelPlan" class="topic-model-grid"></div>
+                        </div>
+
+                        <details class="admin-fold">
+                            <summary>Sources and benchmark chart</summary>
+                            <div class="topic-form-grid">
+                                <label class="wide">Preferred source domains, one per line<textarea id="adminTopicDomains" rows="3" placeholder="openai.com"></textarea></label>
+                                <label class="wide">Research guidance<textarea id="adminTopicSourceNotes" rows="3" maxlength="3000" placeholder="Prefer primary sources and official release notes."></textarea></label>
+                                <label class="wide">Benchmark chart: model names as Artificial Analysis writes them, one per line, up to 4<textarea id="adminTopicBenchmark" rows="2" placeholder="Gemini 4"></textarea></label>
+                            </div>
+                        </details>
+                        <details class="admin-fold">
+                            <summary>Search appearance</summary>
+                            <div class="topic-form-grid">
+                                <label>SEO title<input id="adminTopicSeoTitle" maxlength="160"></label>
+                                <label>Meta description<input id="adminTopicSeoDescription" maxlength="300"></label>
+                                <label class="wide admin-check"><input id="adminTopicNoindex" type="checkbox"> Keep out of search indexes</label>
+                            </div>
+                        </details>
+
+                        <p id="topicScheduleState" class="admin-muted"></p>
+                        <div class="topic-admin-actions">
+                            <button id="saveAdminTopicBtn" type="button" class="admin-btn">Save</button>
+                            <button id="runAdminTopicBtn" type="button" class="admin-btn secondary">Run now</button>
+                            <a id="openAdminTopicBtn" class="admin-btn quiet" target="_blank" rel="noopener">Open public page</a>
+                        </div>
+                        <div>
+                            <h3>Timeline</h3>
+                            <div id="topicRunHistory" class="topic-run-history"></div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <section id="tab-watches" class="admin-tab-panel" data-page="watches" hidden>
+            <header class="admin-head">
+                <h1>Watches</h1>
+                <p>Every Watch and its next run. Run now makes real model calls and follows the Watch's e-mail rule.</p>
+            </header>
+            <div class="admin-toolbar">
+                <span id="smtpConfigState" class="admin-state">Mail unknown</span>
+                <button id="sendWatchTestMailBtn" type="button" class="admin-btn quiet">Send test e-mail</button>
+                <button id="loadWatchesBtn" type="button" class="admin-btn quiet">Reload</button>
+                <span id="watchesStatus" class="admin-status" role="status"></span>
+            </div>
+            <div id="watchesContainer" class="admin-list"></div>
+        </section>
+
+        <section id="tab-models" class="admin-tab-panel" data-page="models" hidden>
+            <header class="admin-head">
+                <h1>Models</h1>
+                <p>What each preset runs and what the pickers offer. Nothing changes until you save.</p>
+            </header>
+            <p id="modelsLoadError" class="admin-error" role="alert" hidden></p>
+            <div class="admin-block">
+                <h2>Presets</h2>
+                <p class="admin-muted">Each preset sends two to six model families as reviewers and has one Consensus engine. Daily and Open Models take Free models only.</p>
+                <div id="presetModelsContainer" class="preset-grid"></div>
+            </div>
+            <div class="admin-block">
+                <h2>Models in the pickers</h2>
+                <p class="admin-muted">Row order is picker order. <strong>Free default</strong> is preselected for Free accounts, <strong>Pro only</strong> locks a model for everyone else, <strong>Consensus</strong> offers it as engine. A model <em>in use</em> is still referenced by a preset, Watch or judge.</p>
+                <div id="providersContainer" class="provider-list"></div>
+            </div>
+        </section>
+
+        <section id="tab-consensus" class="admin-tab-panel" data-page="models" hidden>
+            <div class="admin-block">
+                <h2>Advanced</h2>
+                <p class="admin-muted">Rarely needed. Watches, Topics, the API and Compare runs use these.</p>
+                <details class="admin-fold">
+                    <summary>Consensus engines</summary>
+                    <p class="admin-muted">The Consensus picker in this order; the first one is preselected. Aliases such as Gemini-Pro follow the provider's current model.</p>
+                    <div id="consensusModelsList"></div>
+                    <div class="consensus-add-row">
+                        <select id="consensusAddSelect" aria-label="Add consensus engine"></select>
+                        <button id="consensusAddBtn" type="button" class="admin-btn secondary">Add</button>
+                    </div>
+                </details>
+                <details class="admin-fold">
+                    <summary>Judges</summary>
+                    <p class="admin-muted">They find the differences, mark claims and run Resolve. Standard engines use the Standard judge, Pro engines the Pro judge at reduced effort.</p>
+                    <div id="judgeModelsContainer"></div>
+                    <h3>Who judges which engine</h3>
+                    <p class="admin-muted">Auto takes the first family with a key in priority order, OpenAI first. A manual pick goes first and falls back to Auto.</p>
+                    <div id="judgeFamiliesContainer"></div>
+                </details>
+                <details class="admin-fold">
+                    <summary>Chat memory</summary>
+                    <p class="admin-muted">Condenses older turns from the third turn on. The family follows the turn's engine; pick a cheap model in each. Without it a plain summary is used.</p>
+                    <div id="chatMemoryModelsContainer"></div>
+                </details>
+                <details class="admin-fold">
+                    <summary>Watch models</summary>
+                    <p class="admin-muted">One answer model per family and a Consensus engine for each profile, at least two families. Plus deliberately uses the same model profile as Free. <strong>Actually runs</strong> names what the next run uses and why a family drops out.</p>
+                    <div id="watchModelConfig" class="watch-model-grid"></div>
+                </details>
+                <details class="admin-fold reasoning-overview">
+                    <summary>Reasoning effort</summary>
+                    <p class="admin-muted">Savings asks verified models for <strong>low</strong> effort (Mistral: none) and leaves fixed settings alone. It lowers effort, not the price per token.</p>
+                    <div class="reasoning-toolbar">
+                        <label class="admin-field">Policy
+                            <select id="reasoningProfile">
+                                <option value="existing">Keep model defaults</option>
+                                <option value="economy">Savings</option>
+                            </select>
+                        </label>
+                        <label class="admin-field">Preview for
+                            <select id="reasoningScope">
+                                <option value="answers">Standard answers</option>
+                                <option value="reasoning">Answers with Reasoning on</option>
+                                <option value="synthesis">Consensus synthesis</option>
+                                <option value="helpers">Judges and chat memory</option>
+                            </select>
+                        </label>
+                    </div>
+                    <p id="reasoningSummary" class="admin-muted" aria-live="polite"></p>
+                    <label class="admin-check"><input id="reasoningShowProtected" type="checkbox"> Show models that keep their setting</label>
+                    <div id="reasoningControls" class="reasoning-model-grid"></div>
+                    <details class="admin-fold reasoning-model-details">
+                        <summary>Saved settings per request</summary>
+                        <div id="reasoningFlowOverview" class="reasoning-flow-grid"></div>
+                        <div id="reasoningModelOverview" class="reasoning-model-grid"></div>
+                    </details>
+                </details>
+            </div>
+        </section>
+
+        {% include "partials/admin_prompt_config.html" %}
+
+        <section id="tab-limits" class="admin-tab-panel" data-page="limits" hidden>
+            <header class="admin-head">
+                <h1>Allowance</h1>
+                <p>What one account may spend per UTC day on Compare, Consensus, Reasoning and Agent. Users only see a percentage.</p>
+            </header>
+            <form id="agentBudgetForm" class="admin-block">
+                <div class="token-budget-table">
+                    <table class="token-budget-grid">
+                        <caption class="visually-hidden">Daily allowance and expected run cost per plan, in euros</caption>
+                        <thead>
+                            <tr>
+                                <th scope="col">Plan</th>
+                                <th scope="col">€ per day</th>
+                                <th scope="col">Compare run</th>
+                                <th scope="col">Consensus run</th>
+                                <th scope="col">Reasoning run</th>
+                            </tr>
+                        </thead>
+                        <tbody id="agentBudgetRows"></tbody>
+                    </table>
+                </div>
+                <p class="admin-muted">A run starts only if what is left covers its expected cost, then books what it really cost. Costs come from OpenRouter at 1 € = 1.15 $. Changes apply within 30 seconds.</p>
+                <div class="agent-budget-controls">
+                    <button id="saveAgentBudget" type="submit" class="admin-btn" disabled>Save allowance</button>
+                    <button id="reloadAgentBudget" type="button" class="admin-btn quiet" disabled>Reload</button>
+                    <button id="resetAgentBudgets" type="button" class="admin-btn quiet danger" disabled>Reset today for everyone</button>
+                </div>
+                <p id="agentBudgetStatus" class="admin-status" role="status" aria-live="polite"></p>
+                <p id="agentBudgetMeta" class="admin-muted"></p>
+            </form>
+            <details class="admin-fold">
+                <summary>Detailed limits</summary>
+                <p class="admin-muted">Words, output tokens and Watches per plan, the share-page quality filter and Memory edits. They apply from the next daily reset and save with the bar below.</p>
+                <div id="limitsContainer" class="limits-grid"></div>
+            </details>
+        </section>
+        </main>
+    </div>
+
+    <div id="adminSavebar" class="admin-savebar" role="region" aria-label="Unsaved model settings" hidden>
+        <span class="dirty-dot" aria-hidden="true"></span>
+        <span id="statusMessage" role="status"></span>
+        <button id="reloadBtn" type="button" class="admin-btn quiet">Discard</button>
+        <button id="saveBtn" type="button" class="admin-btn">Save</button>
     </div>
 </body>
 </html>

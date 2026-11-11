@@ -13,98 +13,130 @@ const agentBudgetPanel = createAgentBudgetPanel(shareAdminRequest);
 let providers = [];
 const limitGroups = [
     {
-        title: 'Input / Context Limits',
+        title: 'Input words',
         fields: [
-            ['free_max_words', 'Free input words'],
-            ['plus_max_words', 'Plus input words'],
-            ['pro_max_words', 'Pro input words']
+            ['free_max_words', 'Free'],
+            ['plus_max_words', 'Plus'],
+            ['pro_max_words', 'Pro']
         ]
     },
     {
-        title: 'Output Token Limits',
+        title: 'Output tokens',
         fields: [
-            ['free_max_tokens', 'Free output tokens'],
-            ['plus_max_tokens', 'Plus output tokens'],
-            ['pro_max_tokens', 'Pro output tokens'],
-            ['reasoning_max_tokens', 'Reasoning output tokens (all tiers, at least the tier limit)']
+            ['free_max_tokens', 'Free'],
+            ['plus_max_tokens', 'Plus'],
+            ['pro_max_tokens', 'Pro'],
+            ['reasoning_max_tokens', 'With Reasoning on (every plan, at least its own limit)']
         ]
     },
     {
-        title: 'Consensus Limits',
+        title: 'Consensus output tokens',
         fields: [
-            ['consensus_max_tokens', 'Consensus output tokens'],
-            ['differences_max_tokens', 'Differences output tokens'],
-            ['coverage_max_tokens', 'Coverage output tokens']
+            ['consensus_max_tokens', 'Consensus'],
+            ['differences_max_tokens', 'Differences'],
+            ['coverage_max_tokens', 'Claim coverage']
         ]
     },
     {
-        title: 'Consensus Watch Limits',
+        title: 'Consensus Watches',
         fields: [
-            ['watch_free_active_limit', 'Free active watches'],
-            ['watch_plus_active_limit', 'Plus active watches'],
-            ['watch_pro_active_limit', 'Pro active watches'],
-            ['watch_max_runs_per_day', 'Global runs per day'],
+            ['watch_free_active_limit', 'Active, Free'],
+            ['watch_plus_active_limit', 'Active, Plus'],
+            ['watch_pro_active_limit', 'Active, Pro'],
+            ['watch_max_runs_per_day', 'Runs per day, all accounts'],
             ['watch_probe_max_per_day', 'Evidence probes per day (0 = off)'],
-            ['watch_daily_interval_requires_pro', 'Daily interval Pro-only (1 = yes, 0 = Free too)'],
-            ['watch_plus_daily_interval_allowed', 'Plus may use the daily interval (1 = yes)']
+            ['watch_daily_interval_requires_pro', 'Daily runs only for Pro (1 = yes, 0 = Free too)'],
+            ['watch_plus_daily_interval_allowed', 'Plus may run daily (1 = yes)']
         ]
     },
     {
-        title: 'Agent Watch Limits',
+        title: 'Agent Watches',
         fields: [
-            ['agent_watch_free_active_limit', 'Free active Agent Watches'],
-            ['agent_watch_plus_active_limit', 'Plus active Agent Watches'],
-            ['agent_watch_pro_active_limit', 'Pro active Agent Watches'],
-            ['agent_watch_free_min_hours', 'Free shortest interval (hours)'],
-            ['agent_watch_plus_min_hours', 'Plus shortest interval (hours)'],
-            ['agent_watch_pro_min_hours', 'Pro shortest interval (hours)'],
-            ['agent_watch_max_runs_per_day', 'Global Agent Watch runs per day']
+            ['agent_watch_free_active_limit', 'Active, Free'],
+            ['agent_watch_plus_active_limit', 'Active, Plus'],
+            ['agent_watch_pro_active_limit', 'Active, Pro'],
+            ['agent_watch_free_min_hours', 'Shortest interval in hours, Free'],
+            ['agent_watch_plus_min_hours', 'Shortest interval in hours, Plus'],
+            ['agent_watch_pro_min_hours', 'Shortest interval in hours, Pro'],
+            ['agent_watch_max_runs_per_day', 'Runs per day, all accounts']
         ]
     },
     {
-        title: 'Share Index Quality Filter',
+        title: 'Share pages in search',
         fields: [
-            ['share_min_consensus_chars', 'Min consensus characters'],
-            ['share_min_sources', 'Min sources'],
-            ['share_min_models', 'Min models consulted'],
-            ['share_question_min_chars', 'Min question characters'],
-            ['share_question_max_chars', 'Max question characters']
+            ['share_min_consensus_chars', 'Consensus at least (characters)'],
+            ['share_min_sources', 'Sources at least'],
+            ['share_min_models', 'Models at least'],
+            ['share_question_min_chars', 'Question at least (characters)'],
+            ['share_question_max_chars', 'Question at most (characters)']
         ]
     }
 ];
 let globalModelsData = {};
 
+document.body.classList.toggle('dark-mode', document.documentElement.classList.contains('dark-mode'));
+
 // ==============================
-// Tabs
+// Pages
 // ==============================
-const TAB_IDS = ['models', 'consensus', 'configuration', 'limits', 'accounts', 'api', 'shares', 'watches', 'topics', 'seo'];
-function activateTab(tabId) {
-    if (!TAB_IDS.includes(tabId)) tabId = 'models';
-    if (tabId !== 'api') clearIssuedApiKey();
-    TAB_IDS.forEach(id => {
-        document.getElementById(`tab-${id}`).hidden = id !== tabId;
-        const btn = document.querySelector(`.admin-tabs button[data-tab="${id}"]`);
-        btn.classList.toggle('active', id === tabId);
-        btn.setAttribute('aria-selected', id === tabId ? 'true' : 'false');
+// A page shows one or more sections. Older links name a section (#seo in the
+// SEO pulse's Telegram note, #api, #consensus); they open its page there.
+const PAGES = ['overview', 'accounts', 'pages', 'topics', 'watches', 'models', 'limits', 'prompts'];
+const SECTION_PAGES = { shares: 'pages', seo: 'pages', api: 'accounts', consensus: 'models', configuration: 'prompts' };
+function activateTab(target) {
+    const name = String(target || '');
+    const page = PAGES.includes(name) ? name : SECTION_PAGES[name] || 'overview';
+    if (page !== 'accounts') clearIssuedApiKey();
+    document.querySelectorAll('.admin-tab-panel').forEach(panel => {
+        panel.hidden = panel.dataset.page !== page;
     });
-    document.getElementById('adminSavebar').hidden = ['topics', 'accounts', 'configuration'].includes(tabId);
-    history.replaceState(null, '', `#${tabId}`);
+    document.querySelectorAll('.admin-tabs button[data-tab]').forEach(btn => {
+        const current = btn.dataset.tab === page;
+        btn.classList.toggle('active', current);
+        if (current) btn.setAttribute('aria-current', 'page');
+        else btn.removeAttribute('aria-current');
+    });
+    history.replaceState(null, '', `#${name && name !== page && SECTION_PAGES[name] ? name : page}`);
+    const section = SECTION_PAGES[name] && document.getElementById(`tab-${name}`);
+    if (section && section.dataset.page === page && name !== 'configuration') {
+        // A section that is one fold (the API keys) opens with the jump.
+        if (section.firstElementChild?.tagName === 'DETAILS') section.firstElementChild.open = true;
+        section.scrollIntoView({ block: 'start' });
+    } else {
+        window.scrollTo(0, 0);
+    }
 }
 
-document.querySelectorAll('.admin-tabs button').forEach(btn => {
+document.querySelectorAll('.admin-tabs button[data-tab]').forEach(btn => {
     btn.addEventListener('click', () => activateTab(btn.dataset.tab));
+});
+document.querySelectorAll('[data-go]').forEach(link => {
+    link.addEventListener('click', () => activateTab(link.dataset.go));
 });
 activateTab((location.hash || '').replace('#', ''));
 
 // ==============================
-// Dirty-Tracking
+// Unsaved model settings
 // ==============================
+// Models, Advanced and Detailed limits are one document with one Save. The
+// bar shows only while there is something to save or a save result to read.
+function syncSavebar() {
+    const bar = document.getElementById('adminSavebar');
+    const status = document.getElementById('statusMessage');
+    const dirty = bar.classList.contains('is-dirty');
+    if (!status.dataset.message) status.textContent = dirty ? 'Unsaved model settings' : '';
+    bar.hidden = !dirty && !status.dataset.message;
+    document.getElementById('saveBtn').hidden = !dirty;
+    document.getElementById('reloadBtn').hidden = !dirty;
+}
 function markDirty(event) {
     if (event?.target?.closest?.('#agentBudgetForm')) return;
     document.getElementById('adminSavebar').classList.add('is-dirty');
+    syncSavebar();
 }
 function clearDirty() {
     document.getElementById('adminSavebar').classList.remove('is-dirty');
+    syncSavebar();
 }
 // Alle Eingaben in den Konfig-Tabs (nicht Shares) markieren als dirty.
 ['tab-models', 'tab-consensus', 'tab-limits'].forEach(id => {
@@ -119,7 +151,9 @@ window.addEventListener('beforeunload', (event) => {
 });
 // Aenderungen an den Provider-Listen in die abhaengigen Dropdowns
 // (Judges, Consensus-Add) spiegeln.
-document.getElementById('tab-models').addEventListener('change', () => {
+document.getElementById('tab-models').addEventListener('change', (event) => {
+    // A preset pick changes no provider list; the preset redraws itself.
+    if (event.target.closest('#presetModelsContainer')) return;
     renderJudgeSelects();
     renderConsensusAddSelect();
     renderPresetModels();
@@ -270,7 +304,7 @@ function renderReasoningControls() {
     const table = document.createElement('table');
     table.className = 'reasoning-budget-table';
     const head = table.createTHead().insertRow();
-    ['Model / usage', 'Policy', 'Preview for selected request type', 'Why / protection'].forEach(text => {
+    ['Model', 'Policy', 'Effective', 'Why'].forEach(text => {
         const th = document.createElement('th');
         th.scope = 'col';
         th.textContent = text;
@@ -299,14 +333,14 @@ function renderReasoningControls() {
         name.title = control.model;
         const usage = document.createElement('small');
         const reasons = dependencyReasons(control.provider, control.model);
-        usage.textContent = `${providerLabel(control.provider)} · ${reasons.length ? reasons.join(', ') : 'Available in picker'}`;
+        usage.textContent = `${providerLabel(control.provider)} · ${reasons.length ? reasons.join(', ') : 'in the picker'}`;
         modelCell.append(name, usage);
         const policyCell = row.insertCell();
         if (control.supported) {
             const select = document.createElement('select');
             select.dataset.reasoningModel = control.model;
             select.setAttribute('aria-label', `Reasoning policy for ${control.label}`);
-            [['', 'Follow default'], ['economy', 'Always use savings'], ['existing', 'Keep existing · quality exception']].forEach(([value, label]) => {
+            [['', 'Follow policy'], ['economy', 'Always save'], ['existing', 'Keep default (quality)']].forEach(([value, label]) => {
                 select.add(new Option(label, value));
             });
             select.value = override || '';
@@ -320,20 +354,20 @@ function renderReasoningControls() {
             };
             policyCell.appendChild(select);
         } else {
-            policyCell.textContent = 'Protected / unchanged';
+            policyCell.textContent = 'Keeps its setting';
         }
         const valueCell = row.insertCell();
         valueCell.textContent = reasoningText({ reasoning: preview });
         if (differs) {
             const before = document.createElement('small');
-            before.textContent = `Previously: ${reasoningText({ reasoning: original })}`;
+            before.textContent = `Was: ${reasoningText({ reasoning: original })}`;
             valueCell.appendChild(before);
             valueCell.className = 'reasoning-budget-changed';
         }
         row.insertCell().textContent = control.note;
     });
     container.appendChild(table);
-    document.getElementById('reasoningSummary').textContent = `${changed} of ${controls.length} models changed vs. original behavior for this request type · ${exceptions} explicit exceptions · ${protectedModels} models protected / unchanged. Low is an effort setting, not a hard token or euro limit.`;
+    document.getElementById('reasoningSummary').textContent = `${changed} of ${controls.length} models changed for this request · ${exceptions} ${exceptions === 1 ? 'exception' : 'exceptions'} · ${protectedModels} keep their setting.`;
 }
 
 function renderWatchModelConfig() {
@@ -501,6 +535,16 @@ function currentPresetModels() {
     return result;
 }
 
+// An engine as a person reads it: the family and the model's name; an alias
+// names the model it currently stands for.
+function engineLabel(model) {
+    const alias = (meta().aliases || {})[model];
+    if (alias) return `${model} (now ${alias.label})`;
+    const provider = providers.find(p => (globalModelsData[p] || []).includes(model));
+    const label = labelFor(model) || model;
+    return provider ? `${providerLabel(provider)} · ${label}` : label;
+}
+
 function isLockedConsensusModel(model) {
     const alias = (meta().aliases || {})[model];
     if (alias && model.endsWith('-Pro')) return true;
@@ -540,20 +584,30 @@ function renderPresetModels() {
         const answerEntries = Object.entries(configuredAnswers).slice(0, 6);
         const card = document.createElement('div');
         card.className = 'preset-model-card';
-        const title = document.createElement('h4');
+        const title = document.createElement('h3');
         title.textContent = definition.label;
-        if (definition.pro_only) title.appendChild(chip('', 'Pro', 'This preset is available to Pro users only.'));
+        if (definition.pro_only) {
+            const pro = document.createElement('span');
+            pro.className = 'pro-badge';
+            pro.textContent = 'Pro';
+            pro.title = 'Only Pro accounts can pick this preset.';
+            title.appendChild(pro);
+        }
         card.appendChild(title);
 
+        // The chosen families and one empty slot to add another; up to six.
         for (let index = 0; index < 6; index += 1) {
             const field = document.createElement('div');
             field.className = 'preset-model-field';
+            field.hidden = index > answerEntries.length;
             const label = document.createElement('label');
-            label.textContent = `Answer ${index + 1}`;
+            label.textContent = `Model ${index + 1}`;
             const select = document.createElement('select');
             select.dataset.presetId = definition.id;
             select.dataset.presetAnswerIndex = String(index);
-            select.setAttribute('aria-label', `${definition.label} answer ${index + 1} model`);
+            select.setAttribute('aria-label', `${definition.label} model ${index + 1}`);
+            label.htmlFor = select.id = `preset-${definition.id}-${index}`;
+            select.add(new Option(index < answerEntries.length ? 'None (remove)' : 'Add a model…', ''));
             providers.forEach(provider => {
                 currentProviderModels(provider).forEach(model => {
                     appendPresetOption(
@@ -567,23 +621,28 @@ function renderPresetModels() {
             });
             const selected = answerEntries[index];
             select.value = selected ? JSON.stringify(selected) : '';
-            select.addEventListener('change', markDirty);
+            select.addEventListener('change', () => {
+                markDirty();
+                renderPresetModels();
+                document.getElementById(select.id)?.focus();
+            });
             field.appendChild(label);
             field.appendChild(select);
             card.appendChild(field);
         }
 
         const consensusField = document.createElement('div');
-        consensusField.className = 'preset-model-field';
+        consensusField.className = 'preset-model-field preset-engine';
         const consensusLabel = document.createElement('label');
-        consensusLabel.textContent = 'Consensus';
+        consensusLabel.textContent = 'Engine';
         const consensusSelect = document.createElement('select');
         consensusSelect.dataset.presetId = definition.id;
         consensusSelect.dataset.presetSlot = 'consensus';
-        consensusSelect.setAttribute('aria-label', `${definition.label} consensus model`);
+        consensusSelect.setAttribute('aria-label', `${definition.label} Consensus engine`);
+        consensusLabel.htmlFor = consensusSelect.id = `preset-${definition.id}-engine`;
         consensusListValues().forEach(model => {
-            appendPresetOption(consensusSelect, model, consensusDescription(model),
-                !definition.pro_only && isLockedConsensusModel(model));
+            appendPresetOption(consensusSelect, model, engineLabel(model),
+                !definition.pro_only && isLockedConsensusModel(model), false);
         });
         consensusSelect.value = configured.consensus || '';
         consensusSelect.addEventListener('change', markDirty);
@@ -608,15 +667,22 @@ function renderUI() {
     const defaults = globalModelsData.defaults || {};
 
     providers.forEach(p => {
-        const section = document.createElement('div');
-        section.className = 'admin-section';
+        // One fold per provider: the summary says what matters at a glance,
+        // the rows are there when a model is added or moved.
+        const section = document.createElement('details');
+        section.className = 'admin-fold provider-fold';
 
-        const title = document.createElement('h3');
+        const summary = document.createElement('summary');
+        const title = document.createElement('span');
         title.textContent = providerLabel(p);
-        section.appendChild(title);
+        const info = document.createElement('span');
+        info.className = 'admin-count';
+        summary.append(title, info);
+        section.appendChild(summary);
 
         const listContainer = document.createElement('div');
         listContainer.id = `list-${p}`;
+        listContainer.className = 'model-list';
 
         const models = globalModelsData[p] || [];
         models.forEach(m => {
@@ -628,13 +694,18 @@ function renderUI() {
 
         const addBtn = document.createElement('button');
         addBtn.type = 'button';
-        addBtn.className = 'add-btn';
-        addBtn.textContent = '+ Add Model';
+        addBtn.className = 'admin-btn quiet add-btn';
+        addBtn.textContent = 'Add model';
         addBtn.onclick = () => {
-            listContainer.appendChild(createModelRow(p, '', false, false, false));
+            const row = createModelRow(p, '', false, false, false);
+            listContainer.appendChild(row);
+            row.querySelector('input[type="text"]').focus();
             markDirty();
+            summarizeProvider(section);
         };
         section.appendChild(addBtn);
+        section.addEventListener('change', () => summarizeProvider(section));
+        summarizeProvider(section);
 
         container.appendChild(section);
     });
@@ -647,6 +718,18 @@ function renderUI() {
     renderWatchModelConfig();
 }
 
+function summarizeProvider(section) {
+    const info = section.querySelector('summary .admin-count');
+    if (!info) return;
+    const rows = Array.from(section.querySelectorAll('.model-row'));
+    const named = rows.map(row => row.querySelector('input[type="text"]').value.trim()).filter(Boolean);
+    const chosen = rows.find(row => row.querySelector('.default-radio')?.checked);
+    const fallback = chosen?.querySelector('input[type="text"]').value.trim() || '';
+    const parts = [`${named.length} ${named.length === 1 ? 'model' : 'models'}`];
+    if (fallback) parts.push(`Free default ${labelFor(fallback) || fallback}`);
+    info.textContent = parts.join(' · ');
+}
+
 function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) {
     const row = document.createElement('div');
     row.className = 'model-row';
@@ -657,24 +740,28 @@ function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) 
     upBtn.type = 'button';
     upBtn.className = 'icon-btn';
     upBtn.textContent = '↑';
-    upBtn.title = 'Move up (picker order)';
+    upBtn.title = 'Move up';
+    upBtn.setAttribute('aria-label', `Move ${modelName || 'model'} up`);
     upBtn.onclick = () => { moveRow(row, -1); markDirty(); };
 
     const downBtn = document.createElement('button');
     downBtn.type = 'button';
     downBtn.className = 'icon-btn';
     downBtn.textContent = '↓';
-    downBtn.title = 'Move down (picker order)';
+    downBtn.title = 'Move down';
+    downBtn.setAttribute('aria-label', `Move ${modelName || 'model'} down`);
     downBtn.onclick = () => { moveRow(row, 1); markDirty(); };
 
     const input = document.createElement('input');
     input.type = 'text';
     input.value = modelName;
-    input.placeholder = 'Model identifier (e.g. gpt-5.5)';
+    input.placeholder = 'Model id, e.g. gpt-5.5';
+    input.setAttribute('aria-label', 'Model id');
+    input.spellcheck = false;
     const modelLabel = modelName ? labelFor(modelName) : '';
-    if (modelLabel && modelLabel !== modelName) {
-        input.title = (input.title ? input.title + ' · ' : '') + `Shown as “${modelLabel}”`;
-    }
+    const shownAs = document.createElement('span');
+    shownAs.className = 'model-label';
+    if (modelLabel && modelLabel !== modelName) shownAs.textContent = modelLabel;
     input.addEventListener('focus', () => {
         row.dataset.previousModelName = input.value.trim();
     });
@@ -709,25 +796,26 @@ function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) 
     }
 
     const defaultLabel = document.createElement('label');
-    defaultLabel.title = 'Free default for this provider (shown before a manual pick). Must not be a Premium model.';
+    defaultLabel.title = 'Preselected for Free accounts in this family. Cannot be Pro only.';
     const defaultRadio = document.createElement('input');
     defaultRadio.type = 'radio';
     defaultRadio.className = 'default-radio';
     defaultRadio.name = `default-${provider}`;
     defaultRadio.checked = !!isDefault;
     defaultLabel.appendChild(defaultRadio);
-    defaultLabel.appendChild(document.createTextNode(' Default'));
+    defaultLabel.appendChild(document.createTextNode(' Free default'));
 
     const premiumLabel = document.createElement('label');
+    premiumLabel.title = 'Only Pro accounts may pick this model.';
     const premiumCheckbox = document.createElement('input');
     premiumCheckbox.type = 'checkbox';
     premiumCheckbox.className = 'premium-checkbox';
     premiumCheckbox.checked = isPremium;
     premiumLabel.appendChild(premiumCheckbox);
-    premiumLabel.appendChild(document.createTextNode(' Premium'));
+    premiumLabel.appendChild(document.createTextNode(' Pro only'));
 
     const consensusLabel = document.createElement('label');
-    consensusLabel.title = 'Offer this model in the Consensus picker (ordered in the Consensus tab).';
+    consensusLabel.title = 'Offer this model as Consensus engine (order under Advanced).';
     const consensusCheckbox = document.createElement('input');
     consensusCheckbox.type = 'checkbox';
     consensusCheckbox.className = 'consensus-checkbox';
@@ -750,7 +838,9 @@ function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) 
         ? `Remove model; then update: ${dependencies.join(', ')}`
         : 'Remove model';
     removeBtn.disabled = false;
+    removeBtn.setAttribute('aria-label', `Remove ${modelName || 'model'}`);
     removeBtn.onclick = () => {
+        const section = row.closest('.provider-fold');
         if (consensusCheckbox.checked) removeConsensusListValue(input.value.trim());
         row.remove();
         renderJudgeSelects();
@@ -758,15 +848,20 @@ function createModelRow(provider, modelName, isPremium, isConsensus, isDefault) 
         renderPresetModels();
         renderWatchModelConfig();
         markDirty();
+        if (section) summarizeProvider(section);
     };
+
+    const name = document.createElement('div');
+    name.className = 'model-name';
+    name.append(input, shownAs, flags);
+    const toggles = document.createElement('div');
+    toggles.className = 'model-toggles';
+    toggles.append(defaultLabel, premiumLabel, consensusLabel);
 
     row.appendChild(upBtn);
     row.appendChild(downBtn);
-    row.appendChild(input);
-    row.appendChild(flags);
-    row.appendChild(defaultLabel);
-    row.appendChild(premiumLabel);
-    row.appendChild(consensusLabel);
+    row.appendChild(name);
+    row.appendChild(toggles);
     row.appendChild(removeBtn);
 
     return row;
@@ -1125,7 +1220,7 @@ function renderLimits() {
 
     limitGroups.forEach(group => {
         const section = document.createElement('div');
-        section.className = 'admin-section';
+        section.className = 'limit-group';
 
         const title = document.createElement('h3');
         title.textContent = group.title;
@@ -1157,20 +1252,16 @@ function renderLimits() {
 
     const memory = globalModelsData.memory_edit || {};
     const section = document.createElement('div');
-    section.className = 'admin-section';
+    section.className = 'limit-group';
     const title = document.createElement('h3');
-    title.textContent = 'Edit Memory';
+    title.textContent = 'Memory edits';
     section.appendChild(title);
-    const hint = document.createElement('p');
-    hint.className = 'section-hint';
-    hint.textContent = 'Server-authoritative Luna patching, plan limits and persistent cost controls.';
-    section.appendChild(hint);
 
     const enabledRow = document.createElement('div');
     enabledRow.className = 'limit-row';
     const enabledLabel = document.createElement('label');
     enabledLabel.htmlFor = 'memory-edit-enabled';
-    enabledLabel.textContent = 'Feature enabled';
+    enabledLabel.textContent = 'On';
     const enabled = document.createElement('input');
     enabled.type = 'checkbox';
     enabled.id = 'memory-edit-enabled';
@@ -1183,7 +1274,7 @@ function renderLimits() {
     modelRow.className = 'limit-row';
     const modelLabel = document.createElement('label');
     modelLabel.htmlFor = 'memory-edit-model';
-    modelLabel.textContent = 'OpenAI model';
+    modelLabel.textContent = 'Model (OpenAI)';
     const modelSelect = document.createElement('select');
     modelSelect.id = 'memory-edit-model';
     modelSelect.dataset.memoryEditKey = 'memory_edit_model';
@@ -1202,17 +1293,17 @@ function renderLimits() {
     section.appendChild(modelRow);
 
     const fields = [
-        ['memory_free_chars', 'Free Memory note characters'],
-        ['memory_plus_chars', 'Plus Memory note characters'],
-        ['memory_pro_chars', 'Pro Memory note characters'],
-        ['memory_free_ai_edits_daily', 'Free AI edits / UTC day'],
-        ['memory_plus_ai_edits_daily', 'Plus AI edits / UTC day'],
-        ['memory_pro_ai_edits_daily', 'Pro AI edits / UTC day'],
-        ['memory_ai_edits_per_minute', 'AI edits / minute'],
-        ['memory_global_calls_daily', 'Global calls / UTC day'],
-        ['memory_edit_input_chars', 'Correction input characters'],
+        ['memory_free_chars', 'Memory size, Free (characters)'],
+        ['memory_plus_chars', 'Memory size, Plus (characters)'],
+        ['memory_pro_chars', 'Memory size, Pro (characters)'],
+        ['memory_free_ai_edits_daily', 'Edits per day, Free'],
+        ['memory_plus_ai_edits_daily', 'Edits per day, Plus'],
+        ['memory_pro_ai_edits_daily', 'Edits per day, Pro'],
+        ['memory_ai_edits_per_minute', 'Edits per minute'],
+        ['memory_global_calls_daily', 'Calls per day, all accounts'],
+        ['memory_edit_input_chars', 'Correction length (characters)'],
         ['memory_edit_output_tokens', 'Patch output tokens'],
-        ['memory_edit_timeout_seconds', 'Provider timeout seconds']
+        ['memory_edit_timeout_seconds', 'Timeout in seconds']
     ];
     fields.forEach(([key, labelText]) => {
         const row = document.createElement('div');
@@ -1238,33 +1329,42 @@ function renderLimits() {
 // ==============================
 function setStatus(message, isError) {
     const el = document.getElementById('statusMessage');
+    el.dataset.message = message || '';
     el.textContent = message || '';
-    el.className = isError ? 'error' : 'success';
+    el.className = message ? (isError ? 'error' : 'success') : '';
+    syncSavebar();
 }
 
+let modelsLoadError = '';
 async function fetchModels(idToken) {
+    const notice = document.getElementById('modelsLoadError');
     try {
         const response = await fetch('/api/admin/models', {
             headers: { 'Authorization': `Bearer ${idToken}` }
         });
         if (!response.ok) {
-            throw new Error('Failed to fetch models. Admin access required.');
+            throw new Error('The model settings could not be loaded. Reload the page to try again.');
         }
         globalModelsData = await response.json();
         providers = Array.isArray(meta().provider_keys)
             ? meta().provider_keys.slice()
             : [];
+        modelsLoadError = '';
+        notice.hidden = true;
         renderUI();
         clearDirty();
     } catch (err) {
-        setStatus(err.message, true);
+        modelsLoadError = err.message;
+        notice.textContent = err.message;
+        notice.hidden = false;
     }
+    renderOverview();
 }
 
 async function reloadModels() {
     const user = auth.currentUser;
     if (!user) return;
-    setStatus('Reloading…', false);
+    if (!confirm('Discard your unsaved model changes?')) return;
     await fetchModels(await user.getIdToken());
     setStatus('', false);
 }
@@ -1342,12 +1442,13 @@ async function saveModels() {
         data.watch_consensus_models[select.dataset.watchConsensusTier] = select.value;
     });
     for (const tier of ['free', 'pro']) {
+        const profile = tier === 'free' ? 'Free/Plus' : 'Pro';
         if (Object.keys(data.watch_models[tier]).length < 2) {
-            setStatus(`Select at least two ${tier} Watch models.`, true);
+            setStatus(`Watch models: pick at least two families for ${profile}.`, true);
             return;
         }
         if (!data.watch_consensus_models[tier]) {
-            setStatus(`Select a ${tier} Watch consensus engine.`, true);
+            setStatus(`Watch models: pick a Consensus engine for ${profile}.`, true);
             return;
         }
     }
@@ -1357,7 +1458,7 @@ async function saveModels() {
         // 2 to 6 families (the defaults have two or three).
         const families = Object.keys(answers).length;
         if (families < 2 || families > 6 || !configured.consensus) {
-            setStatus(`${definition.label} must select two to six different model families and one consensus engine.`, true);
+            setStatus(`${definition.label} needs two to six model families and an engine.`, true);
             return;
         }
     }
@@ -1373,7 +1474,7 @@ async function saveModels() {
         });
 
         if (response.ok) {
-            setStatus('Configuration saved.', false);
+            setStatus('Saved. Live now.', false);
             clearDirty();
             // Normalisierten Server-Stand nachladen (ensures/drops sichtbar machen).
             await fetchModels(idToken);
@@ -1401,18 +1502,20 @@ document.getElementById('consensusAddBtn').addEventListener('click', () => {
     }
 });
 
-// === Shared Pages Moderation ===
+// === Shared pages ===
 let currentSharesFilter = 'reported';
 
 function sharesStatus(message, isError) {
     const el = document.getElementById('sharesStatus');
     el.textContent = message || '';
-    el.className = isError ? 'error' : 'success';
+    el.className = 'admin-status' + (message ? (isError ? ' error' : ' success') : '');
 }
 
 let loadedShares = [];
 let sharesNextCursor = null;
 let sharesRequestId = 0;
+// Reported pages nobody has reviewed yet: the Overview and the menu count them.
+let unreviewedShares = null;
 
 // Paged moderation list: the server filters and orders before limiting and
 // says whether more rows exist, so nothing relevant hides behind a window.
@@ -1423,6 +1526,8 @@ async function loadShares(filter, { append = false } = {}) {
         loadedShares = [];
         sharesNextCursor = null;
     }
+    document.getElementById('loadReportedSharesBtn').setAttribute('aria-pressed', String(filter === 'reported'));
+    document.getElementById('loadAllSharesBtn').setAttribute('aria-pressed', String(filter !== 'reported'));
     sharesStatus('Loading…', false);
     let data;
     const cursor = append && sharesNextCursor ? `&cursor=${encodeURIComponent(sharesNextCursor)}` : '';
@@ -1430,12 +1535,21 @@ async function loadShares(filter, { append = false } = {}) {
         data = await shareAdminRequest('GET', `/api/admin/shares?filter=${filter}${cursor}`);
     } catch (err) {
         if (requestId === sharesRequestId) sharesStatus(err.message, true);
+        if (filter === 'reported' && unreviewedShares === null) {
+            unreviewedShares = 0;
+            overviewFailed('shares', 'Reported pages did not load', 'pages');
+        }
         return;
     }
     if (requestId !== sharesRequestId) return;
+    overviewErrors.delete('shares');
     loadedShares = loadedShares.concat(data.shares || []);
     sharesNextCursor = data.has_more ? data.next_cursor : null;
-    sharesStatus(sharesNextCursor ? `${loadedShares.length} loaded · more available` : '', false);
+    sharesStatus(sharesNextCursor ? `${loadedShares.length} shown, more below` : '', false);
+    if (filter === 'reported' && !append) {
+        unreviewedShares = loadedShares.filter(share => share.needs_review && share.status !== 'blocked').length;
+        renderOverview();
+    }
     renderShares(loadedShares, data.site_url || '');
 }
 
@@ -1451,107 +1565,119 @@ async function moderateShare(shareId, payload, confirmText) {
 
 async function deleteShare(shareId, question, statusFn = sharesStatus) {
     const label = question || shareId;
-    if (!confirm(`Permanently delete "${label}"? The page, its Watch schedule, history, and followers will be removed immediately. This cannot be undone.`)) return;
-    statusFn('Deleting page…', false);
+    if (!confirm(`Delete "${label}" for good? The page, its Watch, history and followers go at once. This cannot be undone.`)) return;
+    statusFn('Deleting…', false);
     try {
         await shareAdminRequest('DELETE', `/api/admin/shares/${encodeURIComponent(shareId)}`);
-        await Promise.all([
-            loadShares(currentSharesFilter),
-            loadPublisherWatches(),
-            loadAdminWatches()
-        ]);
+        await Promise.all([loadShares(currentSharesFilter), loadAdminWatches()]);
     } catch (err) {
         statusFn(err.message, true);
     }
+}
+
+function formatAdminDay(value) {
+    if (!value) return '';
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? String(value)
+        : date.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// One status word with a dot: red asks for a look, green is live in search.
+function stateWord(text, tone, title) {
+    const span = document.createElement('span');
+    span.className = 'admin-state' + (tone ? ` is-${tone}` : '');
+    span.textContent = text;
+    if (title) span.title = title;
+    return span;
 }
 
 function renderShares(shares, siteUrl) {
     const container = document.getElementById('sharesContainer');
     container.innerHTML = '';
     if (!shares.length) {
-        container.textContent = currentSharesFilter === 'reported'
-            ? 'No reported shares.' : 'No shares found.';
+        const empty = document.createElement('p');
+        empty.className = 'admin-empty';
+        empty.textContent = currentSharesFilter === 'reported' ? 'No reported pages.' : 'No pages yet.';
+        container.appendChild(empty);
         return;
     }
     shares.forEach(share => {
         const row = document.createElement('div');
-        row.className = 'share-mod-row';
+        row.className = 'admin-row share-mod-row';
 
+        const main = document.createElement('div');
+        main.className = 'admin-row-main';
         const link = document.createElement('a');
-        link.className = 'share-mod-question';
+        link.className = 'admin-row-title';
         link.textContent = share.question || '(untitled)';
         link.href = siteUrl + share.path;
         link.target = '_blank';
         link.rel = 'noopener';
-        row.appendChild(link);
 
-        if (share.needs_review) row.appendChild(badge('review', 'needs review'));
-        if (share.index_requested) row.appendChild(badge('review', 'listing requested', 'The owner asked for this page to be indexed on Google.'));
+        const states = document.createElement('div');
+        states.className = 'admin-row-meta';
         if (share.reports_count > 0) {
             const reasons = Object.entries(share.report_reasons || {})
                 .map(([k, v]) => `${k}: ${v}`).join(', ');
-            row.appendChild(badge('reported', `${share.reports_count} report(s)`, reasons));
+            states.appendChild(stateWord(
+                share.reports_count === 1 ? '1 report' : `${share.reports_count} reports`,
+                share.needs_review ? 'alert' : '', reasons));
         }
-        row.appendChild(badge('', share.status));
-        if (share.visibility === 'private') row.appendChild(badge('', 'private'));
-        if (share.indexed) row.appendChild(badge('indexed', 'indexed'));
-        else if (share.visibility !== 'private' && share.index_eligible && share.status === 'active') row.appendChild(badge('', 'eligible'));
+        if (share.needs_review) states.appendChild(stateWord('needs review', 'alert'));
+        if (share.index_requested) states.appendChild(stateWord('listing requested', 'warn', 'The owner asked for this page to be in Google.'));
+        if (share.status === 'blocked') states.appendChild(stateWord('blocked', 'alert'));
+        if (share.visibility === 'private') states.appendChild(stateWord('private'));
+        if (share.indexed) states.appendChild(stateWord('in search', 'ok'));
+        else if (share.visibility !== 'private' && share.index_eligible && share.status === 'active') states.appendChild(stateWord('could be listed'));
+        const when = document.createElement('span');
+        when.textContent = `shared ${formatAdminDay(share.created_at) || '–'}`
+            + (share.last_reported_at ? ` · last report ${formatAdminDay(share.last_reported_at)}` : '');
+        when.title = share.share_id;
+        states.appendChild(when);
+        main.append(link, states);
 
         const actions = document.createElement('div');
-        actions.className = 'share-mod-actions';
-        if (share.status === 'blocked') {
-            actions.appendChild(actionBtn('Unblock', () =>
-                moderateShare(share.share_id, { action: 'unblock' })));
-        } else if (share.status === 'active') {
-            actions.appendChild(actionBtn('Block', () =>
-                moderateShare(share.share_id, { action: 'block' },
-                    'Block this page? It will return 410 for all visitors.')));
-            if (share.indexed) {
-                actions.appendChild(actionBtn('De-index', () =>
-                    moderateShare(share.share_id, { indexed: false })));
-            } else if (share.visibility !== 'private') {
-                actions.appendChild(actionBtn('Index', () =>
-                    moderateShare(share.share_id, { indexed: true },
-                        share.index_eligible ? '' :
-                        'This page does NOT meet the quality filter. Index anyway?')));
-            }
-        }
+        actions.className = 'admin-row-actions share-mod-actions';
         if (share.needs_review && share.status !== 'blocked') {
             actions.appendChild(actionBtn('Mark reviewed', () =>
                 moderateShare(share.share_id, { indexed: !!share.indexed })));
         }
+        if (share.status === 'blocked') {
+            actions.appendChild(actionBtn('Unblock', () =>
+                moderateShare(share.share_id, { action: 'unblock' })));
+        } else if (share.status === 'active') {
+            if (share.indexed) {
+                actions.appendChild(actionBtn('Remove from search', () =>
+                    moderateShare(share.share_id, { indexed: false })));
+            } else if (share.visibility !== 'private') {
+                actions.appendChild(actionBtn('List in search', () =>
+                    moderateShare(share.share_id, { indexed: true },
+                        share.index_eligible ? '' :
+                        'This page does not meet the quality filter. List it anyway?')));
+            }
+            actions.appendChild(actionBtn('Block', () =>
+                moderateShare(share.share_id, { action: 'block' },
+                    'Block this page? Every visitor gets “gone” (410).')));
+        }
         const remove = actionBtn('Delete', () => deleteShare(share.share_id, share.question));
-        remove.className = 'danger';
+        remove.classList.add('danger');
         actions.appendChild(remove);
-        row.appendChild(actions);
 
-        const meta = document.createElement('div');
-        meta.className = 'share-mod-meta';
-        meta.textContent = `${share.share_id} · created ${share.created_at || '–'}`
-            + (share.last_reported_at ? ` · last report ${share.last_reported_at}` : '');
-        row.appendChild(meta);
-
+        row.append(main, actions);
         container.appendChild(row);
     });
     if (sharesNextCursor) {
-        const more = actionBtn('Load more', () => loadShares(currentSharesFilter, { append: true }));
+        const more = actionBtn('Show more', () => loadShares(currentSharesFilter, { append: true }));
         more.id = 'loadMoreSharesBtn';
-        more.className = 'admin-btn secondary';
+        more.className = 'admin-btn quiet admin-more';
         container.appendChild(more);
     }
-}
-
-function badge(kind, text, title) {
-    const span = document.createElement('span');
-    span.className = 'share-mod-badge' + (kind ? ` ${kind}` : '');
-    span.textContent = text;
-    if (title) span.title = title;
-    return span;
 }
 
 function actionBtn(label, onClick) {
     const btn = document.createElement('button');
     btn.type = 'button';
+    btn.className = 'admin-btn quiet';
     btn.textContent = label;
     btn.onclick = onClick;
     return btn;
@@ -1560,117 +1686,23 @@ function actionBtn(label, onClick) {
 document.getElementById('loadReportedSharesBtn').addEventListener('click', () => loadShares('reported'));
 document.getElementById('loadAllSharesBtn').addEventListener('click', () => loadShares('all'));
 
-// === Scheduled Publisher Watch pages ===
-function publisherWatchesStatus(message, isError) {
-    const el = document.getElementById('publisherWatchesStatus');
-    el.textContent = message || '';
-    el.className = isError ? 'error' : 'success';
-}
-
-function renderPublisherWatches(watches) {
-    const container = document.getElementById('publisherWatchesContainer');
-    container.innerHTML = '';
-    const publisherWatches = watches.filter(watch => watch.model_tier === 'free');
-    if (!publisherWatches.length) {
-        container.textContent = 'No automation-created Watch pages found.';
-        return;
-    }
-    publisherWatches.forEach(watch => {
-        const row = document.createElement('div');
-        row.className = 'watch-admin-row';
-
-        const question = document.createElement('a');
-        question.className = 'watch-admin-question';
-        question.href = watch.share_path || '#';
-        question.target = '_blank';
-        question.rel = 'noopener';
-        question.textContent = watch.question || '(untitled)';
-
-        const actions = document.createElement('div');
-        actions.className = 'share-mod-actions';
-        const paused = watch.status !== 'active';
-        actions.appendChild(actionBtn(paused ? 'Resume watch' : 'Pause watch', () =>
-            setPublisherWatchStatus(watch, paused ? 'active' : 'paused')));
-        const remove = actionBtn('Delete page', () =>
-            deleteShare(watch.share_id, watch.question, publisherWatchesStatus));
-        remove.className = 'danger';
-        actions.appendChild(remove);
-
-        const metaLine = document.createElement('div');
-        metaLine.className = 'watch-admin-meta';
-        metaLine.textContent = [
-            `Watch: ${watch.status}`,
-            `Listing: ${watch.indexed ? 'indexed' : watch.index_requested ? 'requested' : 'noindex'}`,
-            `Schedule: ${watch.interval}${watch.run_weekday ? ` on ${watch.run_weekday}` : ''}${watch.run_time ? ` at ${watch.run_time} (${watch.timezone})` : ''}`,
-            `Next: ${formatAdminTime(watch.next_run_at)}`,
-            `Last: ${formatAdminTime(watch.last_run_at)}`,
-            `Share ID: ${watch.share_id}`
-        ].join(' | ');
-        row.append(question, actions, metaLine);
-        container.appendChild(row);
-    });
-}
-
-async function setPublisherWatchStatus(watch, status) {
-    publisherWatchesStatus(status === 'paused' ? 'Pausing…' : 'Resuming…', false);
-    try {
-        await shareAdminRequest('POST', `/api/admin/watches/${encodeURIComponent(watch.id)}/status`, { status });
-        await loadPublisherWatches();
-    } catch (err) {
-        publisherWatchesStatus(err.message, true);
-    }
-}
-
-async function pauseAllPublisherWatches() {
-    const button = document.getElementById('pauseAllPublisherWatchesBtn');
-    button.disabled = true;
-    publisherWatchesStatus('Pausing…', false);
-    try {
-        const data = await shareAdminRequest('GET', '/api/admin/watches');
-        const active = (data.watches || []).filter(w => w.model_tier === 'free' && w.status === 'active');
-        for (const watch of active) {
-            await shareAdminRequest('POST', `/api/admin/watches/${encodeURIComponent(watch.id)}/status`, { status: 'paused' });
-        }
-        await loadPublisherWatches();
-        publisherWatchesStatus(`${active.length} watch(es) paused.`, false);
-    } catch (err) {
-        publisherWatchesStatus(err.message, true);
-    } finally {
-        button.disabled = false;
-    }
-}
-
-// `pending` lets the first admin load share one /api/admin/watches request
-// between this list and the Watches tab (each costs up to ~200 reads).
-async function loadPublisherWatches(pending) {
-    publisherWatchesStatus('Loading...', false);
-    try {
-        const data = await (pending instanceof Promise ? pending : shareAdminRequest('GET', '/api/admin/watches'));
-        renderPublisherWatches(data.watches || []);
-        publisherWatchesStatus('', false);
-    } catch (err) {
-        publisherWatchesStatus(err.message, true);
-    }
-}
-
-document.getElementById('reloadPublisherWatchesBtn').addEventListener('click', loadPublisherWatches);
-document.getElementById('pauseAllPublisherWatchesBtn').addEventListener('click', pauseAllPublisherWatches);
-
 // === Account tier (Free / Plus / Pro) ===
 // Eigener Speicherpfad: die Stufe ist eine Kontoaenderung, keine
 // Modellkonfiguration -- sie geht deshalb nicht ueber die Savebar.
 const TIER_LABELS = { free: 'Free', plus: 'Plus', pro: 'Pro' };
+let shownAccount = null;
+let elevatedAccounts = null;
 
 function accountTierStatus(message, isError) {
     const el = document.getElementById('accountTierStatus');
     el.textContent = message || '';
-    el.className = isError ? 'error' : 'success';
+    el.className = 'admin-status' + (message ? (isError ? ' error' : ' success') : '');
 }
 
 function accountTiersStatus(message, isError) {
     const el = document.getElementById('accountTiersStatus');
     el.textContent = message || '';
-    el.className = isError ? 'error' : 'success';
+    el.className = 'admin-status' + (message ? (isError ? ' error' : ' success') : '');
 }
 
 function tierChip(tier) {
@@ -1678,67 +1710,77 @@ function tierChip(tier) {
     return chip(`tier-${value}`, TIER_LABELS[value]);
 }
 
+function chosenTier() {
+    return document.querySelector('input[name="accountTier"]:checked')?.value || '';
+}
+
+function syncAccountTierSave() {
+    const button = document.getElementById('saveAccountTierBtn');
+    button.disabled = !shownAccount || !chosenTier() || chosenTier() === shownAccount.tier;
+}
+
+function money(nanoUsd) {
+    const usd = Number(nanoUsd || 0) / 1e9;
+    return `$${usd < 1 ? usd.toFixed(3) : usd.toFixed(2)}`;
+}
+
 function renderAccountTierDetail(account) {
     const panel = document.getElementById('accountTierDetail');
-    panel.innerHTML = '';
+    shownAccount = account || null;
     if (!account) {
         panel.hidden = true;
+        syncAccountTierSave();
         return;
     }
-    const head = document.createElement('div');
-    head.className = 'api-key-name';
-    const who = document.createElement('span');
-    who.textContent = account.email || account.uid;
-    head.append(who, tierChip(account.tier));
-    if (account.role === 'admin') head.appendChild(chip('', 'admin'));
+    const who = document.getElementById('accountTierWho');
+    who.innerHTML = '';
+    const name = document.createElement('strong');
+    name.textContent = account.email || account.uid;
+    const uid = document.createElement('span');
+    uid.className = 'admin-muted admin-mono';
+    uid.textContent = account.uid;
+    who.append(name, uid);
+    if (account.role === 'admin') who.appendChild(chip('', 'admin'));
 
-    const meta = document.createElement('div');
-    meta.className = 'api-key-meta';
+    document.querySelectorAll('input[name="accountTier"]').forEach(radio => {
+        radio.checked = radio.value === account.tier;
+    });
+
     // Genau die Faehigkeiten, die der Server aus der Stufe ableitet -- damit
     // im Dashboard nichts anderes steht als im Lauf gilt.
-    meta.textContent = [
-        `UID: ${account.uid}`,
-        `Frontier models: ${account.premium_models ? 'yes' : 'no'}`,
-        `Attachments: ${account.attachments ? 'yes' : 'no'}`,
-        `Resolve: ${account.resolve ? 'yes' : 'no'}`,
-        `Changed: ${formatAdminTime(account.tier_updated_at)}`,
-        account.tier_note ? `Note: ${account.tier_note}` : ''
-    ].filter(Boolean).join(' | ');
-
-    panel.append(head, meta);
-    const usage = document.createElement('div');
-    usage.className = 'api-key-meta';
     const agentUsage = account.agent_usage || {};
-    const cost = Number(agentUsage.estimated_cost_nano_usd || 0) / 1e9;
-    const measuredCost = Number(agentUsage.provider_cost_nano_usd || 0) / 1e9;
-    const estimatedCost = Math.max(0, cost - measuredCost);
-    usage.textContent = `Agent · recorded total: $${cost.toFixed(6)} USD `
-        + `($${measuredCost.toFixed(6)} provider cost, ~$${estimatedCost.toFixed(6)} estimated) · `
-        + `${Number(agentUsage.input_tokens || 0).toLocaleString()} input / `
-        + `${Number(agentUsage.output_tokens || 0).toLocaleString()} output tokens · `
-        + `${Number(agentUsage.calls || 0)} calls`
-        + (agentUsage.unmetered_calls ? ` · ${agentUsage.unmetered_calls} without token usage data` : '')
-        + (agentUsage.incomplete_calls ? ` · ${agentUsage.incomplete_calls} with partial usage data` : '')
-        + (agentUsage.unsettled_calls ? ` · ${agentUsage.unsettled_calls} pending/unsettled` : '');
-    panel.append(usage);
+    const facts = [
+        `Frontier models ${account.premium_models ? 'yes' : 'no'}`,
+        `Attachments ${account.attachments ? 'yes' : 'no'}`,
+        `Resolve ${account.resolve ? 'yes' : 'no'}`,
+        `Agent so far ${money(agentUsage.estimated_cost_nano_usd)} in ${Number(agentUsage.calls || 0)} calls`,
+    ];
+    if (account.tier_updated_at) facts.push(`plan changed ${formatAdminDay(account.tier_updated_at)}`);
+    if (account.tier_note) facts.push(`note: ${account.tier_note}`);
+    const factLine = document.getElementById('accountTierFacts');
+    factLine.textContent = facts.join(' · ');
+    const measured = Number(agentUsage.provider_cost_nano_usd || 0);
+    factLine.title = `Provider cost ${money(measured)}, estimated ${money(Math.max(0, Number(agentUsage.estimated_cost_nano_usd || 0) - measured))}; `
+        + `${Number(agentUsage.input_tokens || 0).toLocaleString()} input and ${Number(agentUsage.output_tokens || 0).toLocaleString()} output tokens`
+        + (agentUsage.unsettled_calls ? `; ${agentUsage.unsettled_calls} not settled yet` : '');
+    document.getElementById('accountTierNote').value = '';
     panel.hidden = false;
+    syncAccountTierSave();
 }
 
 async function lookupAccountTier() {
-    const identifier = document.getElementById('accountTierIdentifier').value.trim();
+    const field = document.getElementById('accountTierIdentifier');
+    const identifier = field.value.trim();
     if (!identifier) {
-        accountTierStatus('Enter a UID or an email address.', true);
-        document.getElementById('accountTierIdentifier').focus();
+        accountTierStatus('Enter an email or a UID.', true);
+        field.focus();
         return;
     }
-    accountTierStatus('Looking up...', false);
+    accountTierStatus('Looking…', false);
     try {
         const data = await shareAdminRequest(
             'GET', `/api/admin/account-tier?identifier=${encodeURIComponent(identifier)}`);
         renderAccountTierDetail(data.account);
-        // Der Select zeigt die Ist-Stufe, damit "Set tier" ohne weiteres
-        // Zutun nichts veraendert.
-        document.getElementById('accountTierSelect').value = data.account.tier;
         accountTierStatus('', false);
     } catch (err) {
         renderAccountTierDetail(null);
@@ -1747,66 +1789,59 @@ async function lookupAccountTier() {
 }
 
 async function saveAccountTier() {
-    const identifier = document.getElementById('accountTierIdentifier').value.trim();
-    const tier = document.getElementById('accountTierSelect').value;
+    if (!shownAccount) return;
+    const tier = chosenTier();
     const note = document.getElementById('accountTierNote').value.trim();
-    if (!identifier) {
-        accountTierStatus('Enter a UID or an email address.', true);
-        document.getElementById('accountTierIdentifier').focus();
-        return;
-    }
-    if (!confirm(`Set ${identifier} to ${TIER_LABELS[tier] || tier}?`)) return;
     const button = document.getElementById('saveAccountTierBtn');
     button.disabled = true;
-    accountTierStatus('Saving...', false);
+    accountTierStatus('Saving…', false);
     try {
-        const data = await shareAdminRequest('PUT', '/api/admin/account-tier', { identifier, tier, note });
+        const data = await shareAdminRequest('PUT', '/api/admin/account-tier', { identifier: shownAccount.uid, tier, note });
         renderAccountTierDetail(data.account);
         const from = TIER_LABELS[data.account.previous_tier] || data.account.previous_tier;
-        accountTierStatus(`Tier changed: ${from} -> ${TIER_LABELS[data.account.tier]}.`, false);
+        accountTierStatus(`${data.account.email || data.account.uid} is now ${TIER_LABELS[data.account.tier]} (was ${from}).`, false);
         await loadAccountTiers();
     } catch (err) {
         accountTierStatus(err.message, true);
-    } finally {
-        button.disabled = false;
+        syncAccountTierSave();
     }
+}
+
+function openAccount(identifier) {
+    activateTab('accounts');
+    document.getElementById('accountTierIdentifier').value = identifier;
+    lookupAccountTier();
 }
 
 function renderAccountTiers(accounts) {
     const container = document.getElementById('accountTiersContainer');
     container.innerHTML = '';
     if (!accounts.length) {
-        container.textContent = 'No account is above Free.';
+        const empty = document.createElement('p');
+        empty.className = 'admin-empty';
+        empty.textContent = 'Everyone is on Free.';
+        container.appendChild(empty);
         return;
     }
     accounts.forEach(account => {
-        const row = document.createElement('div');
-        row.className = 'api-key-row';
-        const main = document.createElement('div');
-        main.className = 'api-key-main';
-        const name = document.createElement('div');
-        name.className = 'api-key-name';
+        const row = document.createElement('button');
+        row.type = 'button';
+        row.className = 'admin-row account-row';
+        const main = document.createElement('span');
+        main.className = 'admin-row-main';
         const who = document.createElement('span');
-        who.textContent = account.uid;
-        name.append(who, tierChip(account.tier));
-        const meta = document.createElement('div');
-        meta.className = 'api-key-meta';
+        who.className = 'admin-row-title';
+        who.textContent = account.email || account.uid;
+        const meta = document.createElement('span');
+        meta.className = 'admin-row-meta';
         meta.textContent = [
-            `Changed: ${formatAdminTime(account.tier_updated_at)}`,
-            account.tier_updated_by ? `By: ${account.tier_updated_by}` : '',
-            account.tier_note ? `Note: ${account.tier_note}` : ''
-        ].filter(Boolean).join(' | ');
-        main.append(name, meta);
-
-        const actions = document.createElement('div');
-        actions.className = 'api-key-actions';
-        const open = actionBtn('Open', () => {
-            document.getElementById('accountTierIdentifier').value = account.uid;
-            lookupAccountTier();
-        });
-        open.className = 'admin-btn secondary';
-        actions.appendChild(open);
-        row.append(main, actions);
+            account.tier_updated_at ? `since ${formatAdminDay(account.tier_updated_at)}` : '',
+            account.tier_note || ''
+        ].filter(Boolean).join(' · ');
+        main.append(who, meta);
+        row.title = account.uid;
+        row.append(main, tierChip(account.tier));
+        row.addEventListener('click', () => openAccount(account.uid));
         container.appendChild(row);
     });
 }
@@ -1815,35 +1850,49 @@ function renderAccountTierChanges(changes) {
     const container = document.getElementById('accountTierChangesContainer');
     container.innerHTML = '';
     if (!changes.length) {
-        container.textContent = 'No tier change has been recorded yet.';
+        const empty = document.createElement('p');
+        empty.className = 'admin-empty';
+        empty.textContent = 'No plan change yet.';
+        container.appendChild(empty);
         return;
     }
     changes.forEach(entry => {
         const row = document.createElement('div');
-        row.className = 'api-key-meta';
-        row.textContent = [
-            formatAdminTime(entry.changed_at),
-            `${entry.uid}: ${TIER_LABELS[entry.from_tier] || entry.from_tier} -> ${TIER_LABELS[entry.to_tier] || entry.to_tier}`,
-            entry.changed_by ? `by ${entry.changed_by}` : '',
-            entry.note || ''
-        ].filter(Boolean).join(' | ');
+        row.className = 'admin-row is-compact';
+        const main = document.createElement('div');
+        main.className = 'admin-row-main';
+        const what = document.createElement('span');
+        what.className = 'admin-row-title';
+        what.textContent = `${entry.email || entry.uid}: ${TIER_LABELS[entry.from_tier] || entry.from_tier} → ${TIER_LABELS[entry.to_tier] || entry.to_tier}`;
+        what.title = entry.uid;
+        const meta = document.createElement('span');
+        meta.className = 'admin-row-meta';
+        meta.textContent = [formatAdminTime(entry.changed_at), entry.note || ''].filter(Boolean).join(' · ');
+        main.append(what, meta);
+        row.appendChild(main);
         container.appendChild(row);
     });
 }
 
 async function loadAccountTiers() {
-    accountTiersStatus('Loading...', false);
+    accountTiersStatus('Loading…', false);
     try {
         const data = await shareAdminRequest('GET', '/api/admin/account-tiers');
-        renderAccountTiers(data.accounts || []);
+        elevatedAccounts = data.accounts || [];
+        renderAccountTiers(elevatedAccounts);
         renderAccountTierChanges(data.changes || []);
         accountTiersStatus('', false);
     } catch (err) {
         accountTiersStatus(err.message, true);
     }
+    renderOverview();
 }
 
-document.getElementById('lookupAccountTierBtn').addEventListener('click', lookupAccountTier);
+document.getElementById('accountTierForm').addEventListener('submit', event => {
+    event.preventDefault();
+    lookupAccountTier();
+});
+document.getElementById('accountTierChoice').addEventListener('change', syncAccountTierSave);
 document.getElementById('saveAccountTierBtn').addEventListener('click', saveAccountTier);
 document.getElementById('reloadAccountTiersBtn').addEventListener('click', loadAccountTiers);
 
@@ -1851,7 +1900,7 @@ document.getElementById('reloadAccountTiersBtn').addEventListener('click', loadA
 function apiKeysStatus(message, isError) {
     const el = document.getElementById('apiKeysStatus');
     el.textContent = message || '';
-    el.className = isError ? 'error' : 'success';
+    el.className = 'admin-status' + (message ? (isError ? ' error' : ' success') : '');
 }
 
 function clearIssuedApiKey() {
@@ -1877,41 +1926,47 @@ async function copyIssuedApiKey() {
 function renderApiKeys(keys) {
     const container = document.getElementById('apiKeysContainer');
     container.innerHTML = '';
+    const active = keys.filter(key => key.status === 'active').length;
+    document.getElementById('apiKeysCount').textContent = active ? `${active} active` : '';
     if (!keys.length) {
-        container.textContent = 'No API keys found.';
+        const empty = document.createElement('p');
+        empty.className = 'admin-empty';
+        empty.textContent = 'No API keys.';
+        container.appendChild(empty);
         return;
     }
     keys.forEach(key => {
         const row = document.createElement('div');
-        row.className = 'api-key-row';
+        row.className = 'admin-row';
 
         const main = document.createElement('div');
-        main.className = 'api-key-main';
-        const name = document.createElement('div');
-        name.className = 'api-key-name';
-        const label = document.createElement('span');
-        label.textContent = key.label || 'Unlabelled key';
+        main.className = 'admin-row-main';
+        const name = document.createElement('span');
+        name.className = 'admin-row-title';
+        name.textContent = key.label || 'Unlabelled key';
         const prefix = document.createElement('span');
-        prefix.className = 'api-key-prefix';
-        prefix.textContent = `${key.prefix || 'cns_live_'}...`;
-        name.append(label, prefix, chip('', key.status || 'unknown'));
+        prefix.className = 'admin-mono admin-muted';
+        prefix.textContent = ` ${key.prefix || 'cns_live_'}…`;
+        name.appendChild(prefix);
 
         const metadata = document.createElement('div');
-        metadata.className = 'api-key-meta';
-        metadata.textContent = [
-            `UID: ${key.uid || 'unknown'}`,
-            `Scopes: ${(key.scopes || []).join(', ') || 'legacy defaults'}`,
-            `Created: ${formatAdminTime(key.created_at)}`,
-            `Last used: ${formatAdminTime(key.last_used_at)}`,
-            `Key ID: ${key.key_id || 'unknown'}`
-        ].join(' | ');
+        metadata.className = 'admin-row-meta';
+        metadata.appendChild(stateWord(key.status || 'unknown', key.status === 'active' ? 'ok' : ''));
+        const facts = document.createElement('span');
+        facts.textContent = [
+            `owner ${key.uid || 'unknown'}`,
+            (key.scopes || []).join(', ') || 'legacy scopes',
+            `last used ${formatAdminTime(key.last_used_at)}`,
+        ].join(' · ');
+        facts.title = `Created ${formatAdminTime(key.created_at)} · key id ${key.key_id || 'unknown'}`;
+        metadata.appendChild(facts);
         main.append(name, metadata);
 
         const actions = document.createElement('div');
-        actions.className = 'api-key-actions';
+        actions.className = 'admin-row-actions';
         if (key.status === 'active') {
             const revoke = actionBtn('Revoke', () => revokeApiKey(key));
-            revoke.className = 'admin-btn secondary';
+            revoke.classList.add('danger');
             actions.appendChild(revoke);
         }
         row.append(main, actions);
@@ -1977,11 +2032,13 @@ document.getElementById('reloadApiKeysBtn').addEventListener('click', loadApiKey
 document.getElementById('copyIssuedApiKeyBtn').addEventListener('click', copyIssuedApiKey);
 document.getElementById('dismissIssuedApiKeyBtn').addEventListener('click', clearIssuedApiKey);
 
-// === Consensus Watch diagnostics ===
+// === Watches ===
+let adminWatches = null;
+
 function watchesStatus(message, isError) {
     const el = document.getElementById('watchesStatus');
     el.textContent = message || '';
-    el.className = isError ? 'error' : 'success';
+    el.className = 'admin-status' + (message ? (isError ? ' error' : ' success') : '');
 }
 
 function formatAdminTime(value) {
@@ -1990,32 +2047,76 @@ function formatAdminTime(value) {
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
-function renderAdminWatches(watches) {
-    const container = document.getElementById('watchesContainer');
-    container.innerHTML = '';
-    if (!watches.length) {
-        container.textContent = 'No Consensus Watches exist.';
-        return;
-    }
-    watches.forEach(watch => {
-        const row = document.createElement('div');
-        row.className = 'watch-admin-row';
-        const question = document.createElement('a');
-        question.className = 'watch-admin-question';
-        question.href = watch.share_path || '#';
-        question.target = '_blank';
-        question.rel = 'noopener';
-        question.textContent = watch.question || '(untitled)';
+function watchSchedule(watch) {
+    const day = watch.run_weekday ? ` on ${watch.run_weekday}` : '';
+    const time = watch.run_time ? ` at ${watch.run_time}` : '';
+    return `${watch.interval}${day}${time}`;
+}
 
-        const actions = document.createElement('div');
-        actions.className = 'watch-admin-actions';
+// Due for more than an hour and not running: the scheduler did not get to it.
+const WATCH_OVERDUE_MS = 60 * 60 * 1000;
+function watchOverdue(watch) {
+    if (watch.status !== 'active' || !watch.next_run_at) return false;
+    const leased = watch.claimed_until && new Date(watch.claimed_until).getTime() > Date.now();
+    return !leased && Date.now() - new Date(watch.next_run_at).getTime() > WATCH_OVERDUE_MS;
+}
+
+function watchRow(watch) {
+    const row = document.createElement('div');
+    row.className = 'admin-row watch-admin-row';
+    const main = document.createElement('div');
+    main.className = 'admin-row-main';
+    const question = document.createElement('a');
+    question.className = 'admin-row-title';
+    question.href = watch.share_path || '#';
+    question.target = '_blank';
+    question.rel = 'noopener';
+    question.textContent = watch.question || '(untitled)';
+
+    const meta = document.createElement('div');
+    meta.className = 'admin-row-meta';
+    const failing = watch.status === 'active' && Number(watch.consecutive_failures) > 0;
+    meta.appendChild(stateWord(watch.status, failing ? 'alert' : watch.status === 'active' ? 'ok' : ''));
+    if (failing) {
+        meta.appendChild(stateWord(
+            Number(watch.consecutive_failures) === 1 ? 'last run failed' : `${watch.consecutive_failures} runs failed`, 'alert'));
+    }
+    const overdue = watchOverdue(watch);
+    if (overdue) meta.appendChild(stateWord(`overdue since ${formatAdminDay(watch.next_run_at)}`, 'warn'));
+    const when = document.createElement('span');
+    when.textContent = watch.status !== 'active' ? `last ran ${formatAdminTime(watch.last_run_at)}`
+        : overdue ? `${watchSchedule(watch)} · last ran ${formatAdminTime(watch.last_run_at)}`
+            : `${watchSchedule(watch)} · next ${formatAdminTime(watch.next_run_at)}`;
+    when.title = `${watch.timezone || ''} · mail ${watch.email_mode} · owner ${watch.owner_uid}`;
+    meta.appendChild(when);
+    main.append(question, meta);
+
+    const actions = document.createElement('div');
+    actions.className = 'admin-row-actions watch-admin-actions';
+    if (watch.status === 'active' || watch.status === 'paused') {
+        const paused = watch.status === 'paused';
+        const toggle = actionBtn(paused ? 'Resume' : 'Pause', async () => {
+            toggle.disabled = true;
+            watchesStatus(paused ? 'Resuming…' : 'Pausing…', false);
+            try {
+                await shareAdminRequest('POST', `/api/admin/watches/${encodeURIComponent(watch.id)}/status`,
+                    { status: paused ? 'active' : 'paused' });
+                await loadAdminWatches();
+            } catch (err) {
+                toggle.disabled = false;
+                watchesStatus(err.message, true);
+            }
+        });
+        actions.appendChild(toggle);
+    }
+    if (watch.status === 'active') {
         const queue = actionBtn('Run now', async () => {
-            if (!confirm('Run this watch now? This performs real LLM calls and applies its configured e-mail rule.')) return;
+            if (!confirm('Run this Watch now? It makes real model calls and may send its e-mail.')) return;
             queue.disabled = true;
-            watchesStatus('Starting watch…', false);
+            watchesStatus('Starting…', false);
             try {
                 await shareAdminRequest('POST', `/api/admin/watches/${encodeURIComponent(watch.id)}/run`, {});
-                watchesStatus('Watch queued and scheduler started. Reload shortly to see the result.', false);
+                watchesStatus('Started. Reload in a minute to see the result.', false);
                 await loadAdminWatches();
             } catch (err) {
                 watchesStatus(err.message, true);
@@ -2023,45 +2124,78 @@ function renderAdminWatches(watches) {
                 queue.disabled = false;
             }
         });
-        queue.className = 'admin-btn secondary';
         const leaseActive = watch.claimed_until && new Date(watch.claimed_until).getTime() > Date.now();
-        queue.disabled = watch.status !== 'active' || leaseActive;
-        queue.title = watch.status !== 'active' ? 'Only active watches can run' : 'Start now through the normal leased scheduler path';
+        queue.disabled = leaseActive;
+        queue.title = leaseActive ? 'Running right now' : 'Start through the normal scheduler';
         actions.appendChild(queue);
-
-        const metaLine = document.createElement('div');
-        metaLine.className = 'watch-admin-meta';
-        metaLine.textContent = [
-            `Status: ${watch.status}`,
-            `Mode: ${watch.email_mode}`,
-            `Interval: ${watch.interval}${watch.run_weekday ? ` on ${watch.run_weekday}` : ''}${watch.run_time ? ` at ${watch.run_time} (${watch.timezone})` : ''}`,
-            `Next: ${formatAdminTime(watch.next_run_at)}`,
-            `Last: ${formatAdminTime(watch.last_run_at)}`,
-            `Failures: ${watch.consecutive_failures}`,
-            `Owner: ${watch.owner_uid}`
-        ].join(' · ');
-        row.append(question, actions, metaLine);
-        container.appendChild(row);
-    });
+    }
+    row.append(main, actions);
+    return row;
 }
 
+function renderAdminWatches(watches) {
+    const container = document.getElementById('watchesContainer');
+    container.innerHTML = '';
+    if (!watches.length) {
+        const empty = document.createElement('p');
+        empty.className = 'admin-empty';
+        empty.textContent = 'No Watches yet.';
+        container.appendChild(empty);
+        return;
+    }
+    // Active first, failing on top; the rest waits in a fold.
+    const failures = watch => Number(watch.consecutive_failures) || 0;
+    const active = watches.filter(watch => watch.status === 'active')
+        .sort((a, b) => failures(b) - failures(a));
+    const rest = watches.filter(watch => watch.status !== 'active');
+    active.forEach(watch => container.appendChild(watchRow(watch)));
+    if (!active.length) {
+        const empty = document.createElement('p');
+        empty.className = 'admin-empty';
+        empty.textContent = 'No active Watch.';
+        container.appendChild(empty);
+    }
+    if (rest.length) {
+        const fold = document.createElement('details');
+        fold.className = 'admin-fold';
+        const summary = document.createElement('summary');
+        summary.textContent = 'Paused and finished ';
+        const count = document.createElement('span');
+        count.className = 'admin-count';
+        count.textContent = String(rest.length);
+        summary.appendChild(count);
+        fold.appendChild(summary);
+        rest.forEach(watch => fold.appendChild(watchRow(watch)));
+        container.appendChild(fold);
+    }
+}
+
+// `pending` lets the first admin load share its /api/admin/watches request
+// (up to ~200 reads) with the Overview.
 async function loadAdminWatches(pending) {
     watchesStatus('Loading…', false);
     try {
         const data = await (pending instanceof Promise ? pending : shareAdminRequest('GET', '/api/admin/watches'));
-        document.getElementById('smtpConfigState').textContent = data.smtp_configured ? 'SMTP configured' : 'SMTP not configured';
-        renderAdminWatches(data.watches || []);
+        const smtp = document.getElementById('smtpConfigState');
+        smtp.textContent = data.smtp_configured ? 'Mail ready' : 'Mail not set up';
+        smtp.className = 'admin-state ' + (data.smtp_configured ? 'is-ok' : 'is-alert');
+        adminWatches = data.watches || [];
+        overviewErrors.delete('watches');
+        renderAdminWatches(adminWatches);
         watchesStatus('', false);
     } catch (err) {
         watchesStatus(err.message, true);
+        if (adminWatches === null) adminWatches = [];
+        overviewErrors.set('watches', ['Watches did not load', 'watches']);
     }
+    renderOverview();
 }
 
-document.getElementById('loadWatchesBtn').addEventListener('click', loadAdminWatches);
+document.getElementById('loadWatchesBtn').addEventListener('click', () => loadAdminWatches());
 document.getElementById('sendWatchTestMailBtn').addEventListener('click', async function () {
-    if (!confirm('Send a real SMTP test message to your verified admin e-mail address?')) return;
+    if (!confirm('Send a real test e-mail to your admin address?')) return;
     this.disabled = true;
-    watchesStatus('Sending test e-mail…', false);
+    watchesStatus('Sending…', false);
     try {
         const data = await shareAdminRequest('POST', '/api/admin/watches/test-email', {});
         watchesStatus(`Test e-mail accepted for ${data.recipient}.`, false);
@@ -2070,6 +2204,125 @@ document.getElementById('sendWatchTestMailBtn').addEventListener('click', async 
     } finally {
         this.disabled = false;
     }
+});
+
+// === Overview ===
+// Built from what the other pages load anyway, plus the Agent's daily
+// counters (one read per day). Each part draws as soon as its data is there.
+let agentDays = null;
+let seoOverview = null;
+// A part that failed to load says so here instead of looking like "nothing".
+const overviewErrors = new Map();
+function overviewFailed(key, text, page) {
+    overviewErrors.set(key, [text, page]);
+    renderOverview();
+}
+
+function setCount(page, value) {
+    const el = document.querySelector(`.admin-tab-count[data-count="${page}"]`);
+    if (el) el.textContent = value ? String(value) : '';
+}
+
+function attentionItem(text, page, tone = 'alert') {
+    const item = document.createElement('li');
+    item.className = `attention-item is-${tone}`;
+    const label = document.createElement('span');
+    label.textContent = text;
+    item.appendChild(label);
+    if (page) {
+        const go = document.createElement('button');
+        go.type = 'button';
+        go.className = 'admin-link';
+        go.textContent = 'Open';
+        go.setAttribute('aria-label', `Open: ${text}`);
+        go.addEventListener('click', () => activateTab(page));
+        item.appendChild(go);
+    }
+    return item;
+}
+
+function renderAgentDays() {
+    const bars = document.getElementById('overviewAgentBars');
+    const note = document.getElementById('overviewAgentNote');
+    if (!agentDays) return;
+    const total = day => Object.values(day.turns || {}).reduce((sum, n) => sum + (Number(n) || 0), 0);
+    const today = agentDays[agentDays.length - 1] || { turns: {} };
+    document.getElementById('overviewAgentToday').textContent = String(total(today));
+    const max = Math.max(1, ...agentDays.map(total));
+    bars.innerHTML = '';
+    agentDays.forEach(day => {
+        const bar = document.createElement('span');
+        bar.className = 'overview-bar';
+        bar.style.height = `${Math.max(3, Math.round((total(day) / max) * 100))}%`;
+        bar.title = `${formatAdminDay(day.day)}: ${total(day)}`;
+        bars.appendChild(bar);
+    });
+    const fortnight = agentDays.reduce((sum, day) => sum + total(day), 0);
+    const failed = agentDays.reduce((sum, day) => sum + (Number(day.turns?.failed) || 0), 0);
+    note.textContent = `${fortnight} in 14 days` + (failed ? ` · ${failed} failed` : '');
+}
+
+function renderOverview() {
+    const list = document.getElementById('overviewAttention');
+    if (!list) return;
+    const items = [];
+    if (modelsLoadError) items.push(attentionItem('Model settings did not load', 'models'));
+    if (unreviewedShares) {
+        items.push(attentionItem(unreviewedShares === 1 ? '1 reported page waits for review'
+            : `${unreviewedShares} reported pages wait for review`, 'pages'));
+    }
+    const failing = (adminWatches || []).filter(watch => watch.status === 'active' && Number(watch.consecutive_failures) > 0);
+    if (failing.length) {
+        items.push(attentionItem(failing.length === 1 ? '1 Watch keeps failing' : `${failing.length} Watches keep failing`, 'watches'));
+    }
+    const overdue = (adminWatches || []).filter(watchOverdue);
+    if (overdue.length) {
+        items.push(attentionItem(overdue.length === 1 ? '1 active Watch is overdue' : `${overdue.length} active Watches are overdue`, 'watches', 'warn'));
+    }
+    if (seoOverview?.report?.error) items.push(attentionItem('The last SEO pulse failed', 'seo'));
+    overviewErrors.forEach(([text, page]) => items.push(attentionItem(text, page, 'warn')));
+    setCount('pages', unreviewedShares);
+    setCount('watches', new Set([...failing, ...overdue]).size);
+
+    const loaded = unreviewedShares !== null && adminWatches !== null && seoOverview !== null;
+    list.innerHTML = '';
+    if (items.length) items.forEach(item => list.appendChild(item));
+    else list.appendChild(attentionItem(loaded ? 'Nothing needs you.' : 'Looking…', '', loaded ? 'ok' : 'quiet'));
+
+    if (elevatedAccounts) {
+        const plus = elevatedAccounts.filter(account => account.tier === 'plus').length;
+        const pro = elevatedAccounts.filter(account => account.tier === 'pro').length;
+        document.getElementById('overviewAccountsPaid').textContent = String(plus + pro);
+        document.getElementById('overviewAccountsPaid').title = `${plus} Plus, ${pro} Pro`;
+    }
+    const report = seoOverview?.report;
+    if (report && !report.error) {
+        document.getElementById('overviewSearchImpressions').textContent = String(report.week?.impressions ?? '–');
+        const clicks = report.week?.clicks ?? 0;
+        document.getElementById('overviewSearchNote').textContent =
+            `${seoChange(report.week?.impressions || 0, report.prev_week?.impressions || 0).replace('prev', 'week before')} · ${clicks} ${clicks === 1 ? 'click' : 'clicks'}`;
+    } else if (seoOverview) {
+        document.getElementById('overviewSearchNote').textContent = report?.error ? 'Last run failed.' : 'No report yet.';
+    }
+    renderAgentDays();
+}
+
+async function loadOverview() {
+    document.getElementById('overviewDate').textContent = new Date().toLocaleDateString('en-GB',
+        { weekday: 'long', day: 'numeric', month: 'long' });
+    try {
+        const data = await shareAdminRequest('GET', '/api/admin/overview');
+        agentDays = data.agent_days || [];
+    } catch (err) {
+        document.getElementById('overviewAgentNote').textContent = err.message;
+    }
+    renderOverview();
+}
+
+document.getElementById('overviewFindForm').addEventListener('submit', event => {
+    event.preventDefault();
+    const value = document.getElementById('overviewFind').value.trim();
+    if (value) openAccount(value);
 });
 
 // === Public Topic tickers ===
@@ -2391,7 +2644,7 @@ document.getElementById('adminTopicSlug').addEventListener('input', () => { topi
 function seoStatus(message, isError) {
     const el = document.getElementById('seoStatus');
     el.textContent = message || '';
-    el.className = 'admin-status-text ' + (isError ? 'error' : 'success');
+    el.className = 'admin-status' + (message ? (isError ? ' error' : ' success') : '');
 }
 
 function formatSeoDay(iso) {
@@ -2428,7 +2681,7 @@ function renderSeoMovers(report) {
     ];
     if (!moved.length) {
         const li = document.createElement('li');
-        li.className = 'section-hint';
+        li.className = 'admin-empty';
         li.textContent = report ? 'Nothing moved.' : 'No report yet.';
         list.appendChild(li);
         return;
@@ -2454,15 +2707,17 @@ function renderSeoMovers(report) {
 
 function renderSeoNoindexed(entries) {
     const box = document.getElementById('seoPulseNoindexed');
+    const count = document.getElementById('seoPulseNoindexedCount');
+    if (count) count.textContent = entries.length ? String(entries.length) : '';
     box.innerHTML = '';
-    box.classList.toggle('section-hint', !entries.length);
+    box.classList.toggle('admin-empty', !entries.length);
     if (!entries.length) {
         box.textContent = 'None so far.';
         return;
     }
     entries.forEach(entry => {
         const row = document.createElement('div');
-        row.className = 'seo-pulse-row';
+        row.className = 'admin-row seo-pulse-row';
         const link = document.createElement('a');
         link.href = entry.path;
         link.target = '_blank';
@@ -2481,8 +2736,13 @@ function renderSeoNoindexed(entries) {
                 seoStatus(err.message, true);
             }
         });
-        keep.className = 'admin-btn secondary';
-        row.append(link, meta, keep);
+        keep.className = 'admin-btn quiet';
+        const main = document.createElement('div');
+        main.className = 'admin-row-main';
+        link.className = 'admin-row-title';
+        meta.className = 'admin-row-meta';
+        main.append(link, meta);
+        row.append(main, keep);
         box.appendChild(row);
     });
 }
@@ -2514,11 +2774,17 @@ function renderSeoPulse(data) {
 
 async function loadSeoPulse() {
     try {
-        renderSeoPulse(await shareAdminRequest('GET', '/api/admin/seo'));
+        const data = await shareAdminRequest('GET', '/api/admin/seo');
+        renderSeoPulse(data);
         seoStatus('', false);
+        seoOverview = data;
+        overviewErrors.delete('seo');
     } catch (err) {
         seoStatus(err.message, true);
+        seoOverview = seoOverview || {};
+        overviewErrors.set('seo', ['Search data did not load', 'seo']);
     }
+    renderOverview();
 }
 
 document.getElementById('runSeoPulseBtn').addEventListener('click', async function () {
@@ -2552,16 +2818,14 @@ onAuthStateChanged(auth, async (user) => {
     if (user) {
         const idToken = await user.getIdToken();
         fetchModels(idToken);
-        const watches = shareAdminRequest('GET', '/api/admin/watches');
-        watches.catch(() => {});
-        loadPublisherWatches(watches);
-        loadApiKeys();
+        loadOverview();
         loadShares('reported');
-        loadAdminWatches(watches);
-        loadAdminTopics();
+        loadAdminWatches();
         loadSeoPulse();
+        loadAccountTiers();
+        loadApiKeys();
+        loadAdminTopics();
     } else {
-        setStatus('Please log in to access the admin panel.', true);
         window.location.href = '/';
     }
 });

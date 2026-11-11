@@ -871,7 +871,7 @@ def test_topic_templates_expose_timeline_evidence_follow_and_admin_controls():
     assert 'class="topics-row"' in hub
     assert 'id="tab-topics"' in admin
     assert 'id="runAdminTopicBtn"' in admin
-    assert "Seed links and manual Consensus text are not required." in admin
+    assert "Sources are searched on every run; no seed links needed." in admin
     assert 'href="/topics"' in nav
 
 

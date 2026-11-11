@@ -98,15 +98,25 @@ class FakeDb:
             "account_tier_audit": {},
             "account_deletion_jobs": {},
         }
+        # Firebase Auth's addresses by UID, and every batch it was asked for.
+        self.emails = {}
+        self.email_batches = []
 
     def collection(self, name):
         return FakeCollection(self.stores.setdefault(name, {}))
+
+    def get_users(self, identifiers):
+        uids = [identifier.uid for identifier in identifiers]
+        self.email_batches.append(uids)
+        return SimpleNamespace(users=[SimpleNamespace(uid=uid, email=self.emails[uid])
+                                      for uid in uids if uid in self.emails])
 
 
 @pytest.fixture
 def db():
     fake = FakeDb()
     with patch.object(account_tier, "db_firestore", fake), \
+         patch.object(account_tier.auth, "get_users", fake.get_users), \
          patch.object(account_tier.persistence_guard, "ensure_account_write_allowed",
                       lambda **kwargs: None):
         yield fake
@@ -248,6 +258,29 @@ def test_recent_changes_are_readable(db):
     changes = account_tier.list_recent_changes()
     assert changes[0]["to_tier"] == "plus"
     assert changes[0]["changed_at"].startswith("2026-08-31")
+
+
+def test_the_lists_name_each_account_by_its_address(db):
+    db.stores["users"].update({f"uid-{n}": {"tier": "plus"} for n in range(150)})
+    db.emails.update({f"uid-{n}": f"user{n}@example.test" for n in range(149)})
+    db.stores["account_tier_audit"]["a"] = {"uid": "uid-3", "from_tier": "free", "to_tier": "plus"}
+
+    accounts = {item["uid"]: item["email"] for item in account_tier.list_elevated_accounts()}
+    changes = account_tier.list_recent_changes()
+
+    assert accounts["uid-7"] == "user7@example.test"
+    # An account without an address keeps its place in the list, by UID.
+    assert accounts["uid-149"] == ""
+    assert changes[0]["email"] == "user3@example.test"
+    # Firebase Auth answers at most 100 identifiers per call.
+    assert [len(batch) for batch in db.email_batches] == [100, 50, 1]
+
+
+def test_a_failed_address_lookup_leaves_the_list_intact(db):
+    db.stores["users"]["uid-1"] = {"tier": "pro"}
+    with patch.object(account_tier.auth, "get_users", side_effect=RuntimeError("auth down")):
+        accounts = account_tier.list_elevated_accounts()
+    assert accounts == [{**accounts[0], "uid": "uid-1", "tier": "pro", "email": ""}]
 
 
 def test_account_deletion_removes_the_accounts_audit_rows(db):

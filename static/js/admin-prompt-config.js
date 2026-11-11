@@ -31,7 +31,7 @@ export function createPromptConfigPanel(request) {
             const summary = document.createElement('summary');
             summary.textContent = entry.label;
             const usedFor = document.createElement('p');
-            usedFor.className = 'section-hint';
+            usedFor.className = 'admin-muted';
             usedFor.textContent = entry.used_for;
             const source = document.createElement('p');
             source.className = 'prompt-catalog-source';
@@ -67,13 +67,13 @@ export function createPromptConfigPanel(request) {
         });
         meta.textContent = config.revision
             ? `Revision ${config.revision}${config.updated_at ? ' · Saved ' + new Date(config.updated_at).toLocaleString() : ''}`
-            : 'Using app defaults · No saved configuration yet';
+            : 'App defaults, nothing saved yet';
         meta.title = config.updated_by ? `Last saved by ${config.updated_by}` : '';
     }
     async function load() {
         if (!user || busy) return;
         const token = generation;
-        busy = true; sync(); message('Loading configuration…');
+        busy = true; sync(); message('Loading…');
         try {
             const result = await request('GET', '/api/admin/prompt-config');
             if (token !== generation) return;
@@ -81,8 +81,8 @@ export function createPromptConfigPanel(request) {
             delegationInputs.clear(); delegation.replaceChildren();
             delegation.hidden = !result.config.delegation;
             const budgetNote = document.createElement('p');
-            budgetNote.className = 'section-hint';
-            budgetNote.textContent = 'Agent Chat uses the daily allowance in euros in Limits. Active responses have no time, round, search or cost cap. Worker concurrency and message sizes below still apply.';
+            budgetNote.className = 'admin-muted';
+            budgetNote.textContent = 'The Agent spends the daily allowance in euros (Allowance), with no cap on time, rounds, search or cost per answer. The worker and message limits below still apply.';
             delegation.append(budgetNote);
             const legacyLimits = new Set(['max_calls', 'max_tools', 'seconds', 'max_tokens', 'max_cost_nano_usd',
                 'max_messages', 'context_chars', 'worker_calls', 'max_searches']);
@@ -123,12 +123,12 @@ export function createPromptConfigPanel(request) {
         if (!form.reportValidity()) return;
         const token = generation;
         const payload = { revision: saved.revision, config: draft() };
-        busy = true; sync(); message('Saving configuration…');
+        busy = true; sync(); message('Saving…');
         try {
             const result = await request('PUT', '/api/admin/prompt-config', payload);
             if (token !== generation) return;
             display(result.config);
-            message(`Saved. New requests use this configuration within ${cacheSeconds} seconds.`);
+            message(`Saved. New requests use it within ${cacheSeconds} seconds.`);
         } catch (error) {
             if (token === generation) message(error.message, true);
         } finally {
@@ -153,7 +153,7 @@ export function createPromptConfigPanel(request) {
             delegationInputs.clear(); delegation.replaceChildren(); delegation.hidden = true;
             catalog.replaceChildren();
             meta.textContent = '';
-            message(uid ? '' : 'Log in as an admin to edit configuration.');
+            message(uid ? '' : 'Log in as an admin to change these settings.');
             sync();
             if (uid) return load();
         },

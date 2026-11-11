@@ -557,26 +557,42 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       aus `components-consensus-visuals.css`, ohne Drift einer Landing-Kopie.
 
 ## Admin
-- [ ] Reasoning budget: Sparprofil wählen, Vorschau für Antworten/Reasoning an/
-      Consensus/Hilfsaufrufe wechseln, Modell-Ausnahme setzen und entfernen.
-      Geschützte Modelle einblenden; reine Vorschau markiert nichts als geändert.
-      Save und Reload erhalten die Policy; Reload vor Save verwirft Änderungen.
-      Mistral zeigt im Sparprofil `none`, Kimi K3.1 Pro und Muse bleiben `low`.
-- [ ] `/admin` authentifiziert, wechselt alle Tabs und lädt/speichert Models,
-      Limits, API, Shares, Watches, Topics und SEO mit dem externen
-      `admin.js`/`admin-api.js`; Formular-Submit lädt die Seite nicht neu.
-- [ ] Light-/Dark-unabhängiges Admin-Layout hat nach der Auslagerung nach
-      `admin.css` keine fehlenden Abstände, abgeschnittenen Tabellen oder
-      ungestylten Dialoge. Die Browser-Konsole meldet keine Modul-/CSP-Fehler.
-- [ ] `/admin#seo` (SEO-Puls): Schalter speichert und überlebt Reload, die
-      Zeitplanzeile nennt den nächsten Montag 09:00 bzw. „paused“. „Run now“
+- [ ] Overview (Startseite von `/admin`): „Needs you“ nennt gemeldete, noch
+      ungeprüfte Seiten, fehlschlagende und überfällige Watches und einen
+      fehlgeschlagenen SEO-Puls, sonst „Nothing needs you.“; „Open“ führt auf
+      die Seite. Agent-Balken für 14 Tage, Suche der Woche, Zahl Plus/Pro; eine
+      E-Mail im Suchfeld öffnet das Konto unter Accounts. Die Zahlen am Menü
+      stimmen mit „Needs you“ überein.
+- [ ] Accounts: Konto per E-Mail finden, Plan umschalten, „Save plan“ wird erst
+      bei geändertem Plan aktiv; nach dem Speichern nennt die Statuszeile den
+      Wechsel, die Liste Plus/Pro zeigt E-Mails und öffnet ein Konto per Klick.
+- [ ] Reasoning effort (Models → Advanced): Policy wählen, Vorschau für
+      Antworten/Reasoning an/Consensus/Hilfsaufrufe wechseln, Modell-Ausnahme
+      setzen und entfernen. Modelle mit festem Wert einblenden; reine Vorschau
+      markiert nichts als geändert. Save und Discard erhalten bzw. verwerfen die
+      Policy. Mistral zeigt im Sparprofil `none`, Kimi K3.1 Pro und Muse `low`.
+- [ ] Models: Preset-Modell wählen öffnet den nächsten leeren Platz, „None
+      (remove)“ nimmt eines heraus; die Speicherleiste erscheint erst mit einer
+      Änderung, bleibt beim Seitenwechsel sichtbar, Save speichert,
+      Discard fragt und verwirft.
+- [ ] `/admin` authentifiziert, wechselt alle Seiten und lädt/speichert Models,
+      Allowance, API-Schlüssel, Pages, Watches, Topics und Search mit dem
+      externen `admin.js`/`admin-api.js`; Formular-Submit lädt die Seite nicht
+      neu. Alte Links `#seo`, `#api`, `#consensus`, `#configuration` öffnen
+      ihre Seite an der richtigen Stelle.
+- [ ] Hell und dunkel (folgt der App-Einstellung) sowie 390 px: keine
+      fehlenden Abstände, abgeschnittenen Tabellen oder seitliches Scrollen;
+      das Menü wird oben eine wischbare Zeile. Die Browser-Konsole meldet keine
+      Modul-/CSP-Fehler.
+- [ ] `/admin#seo` (Pages → Search): Schalter speichert und überlebt Reload,
+      die Zeitplanzeile nennt den nächsten Montag 09:00 bzw. „Paused“. „Run now“
       füllt Wochenzahlen, 12-Wochen-Balken und „What moved“ und schickt die
-      Telegram-Notiz; ohne GSC-Credentials erscheint das Fehlerbanner statt
+      Telegram-Notiz; ohne GSC-Credentials erscheint die Fehlerzeile statt
       leerer Zahlen.
 - [ ] „Keep indexed“ unter „Set to noindex by the pulse“ entfernt die Zeile, die
-      Share-Seite liefert wieder `index, follow`. API-Tab „Former Publisher
-      pages“: „Pause watch“/„Resume watch“ und „Pause all watches“ ändern den
-      Status sichtbar.
+      Share-Seite liefert wieder `index, follow`. Watches: „Pause“/„Resume“
+      ändern den Status sichtbar, pausierte Watches stehen unter „Paused and
+      finished“.
 
 ## Kern-Flow
 - [x] Keine Verschiebung (09.10.2026): Senden bringt die neue Frage einmal nach

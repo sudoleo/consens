@@ -133,8 +133,9 @@ def test_admin_dashboard_exposes_safe_api_key_management_section():
     template = open("templates/admin.html", encoding="utf-8").read()
     admin_source = open("static/js/admin.js", encoding="utf-8").read()
 
-    assert 'data-tab="api"' in template
-    assert 'id="tab-api"' in template
+    # The keys sit on the Accounts page; an old #api link still opens them.
+    assert 'id="tab-api" class="admin-tab-panel" data-page="accounts"' in template
+    assert "api: 'accounts'" in admin_source
     assert 'id="apiKeyUid"' in template
     assert 'id="issuedApiKeyPanel"' in template
     assert 'id="issuedApiKeyValue"' in template

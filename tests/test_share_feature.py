@@ -1113,7 +1113,7 @@ class ModerationAndCleanupTests(unittest.TestCase):
         admin_js = (root / "static" / "js" / "admin.js").read_text(encoding="utf-8")
         dialog_js = (root / "static" / "js" / "share-dialog.js").read_text(encoding="utf-8")
         self.assertIn("sharesNextCursor = data.has_more ? data.next_cursor : null", admin_js)
-        self.assertIn("'Load more'", admin_js)
+        self.assertIn("'Show more'", admin_js)
         self.assertIn("&cursor=${encodeURIComponent(sharesNextCursor)}", admin_js)
         self.assertIn("if (data.has_more)", dialog_js)
         self.assertIn("Older links are not listed here.", dialog_js)

@@ -22,6 +22,7 @@ from app.core.config import get_limits_config, load_models_from_db, normalize_li
 from app.services import share_snapshots as snapshots
 from app.services import (
     account_tier,
+    agent_audit_metrics,
     agent_budget_config,
     mailer,
     persistence_guard,
@@ -279,6 +280,20 @@ def admin_save_prompt_config(request: Request, data: AdminPromptConfigRequest):
     except Exception as exc:
         logging.error("Admin prompt config write failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Prompt configuration could not be saved. Reload to check the saved revision before retrying.") from None
+
+
+@router.get("/api/admin/overview")
+@limiter.limit("30/minute")
+async def admin_get_overview(request: Request):
+    """The Agent's answers per day of the last two weeks for the admin's
+    start page; the rest of the overview comes from the other admin lists."""
+    await asyncio.to_thread(_require_admin, request, {})
+    try:
+        days = await asyncio.to_thread(agent_audit_metrics.recent_days, db_firestore)
+    except Exception as exc:
+        logging.error("admin_get_overview failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="The Agent's numbers could not be loaded.") from None
+    return {"agent_days": days}
 
 
 @router.get("/api/admin/seo")

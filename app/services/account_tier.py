@@ -199,6 +199,25 @@ def set_tier(identifier: str, tier, *, admin_uid: str, note: str = "", db=None) 
     return _with_agent_usage(account, uid, previous, db)
 
 
+def emails_of(uids) -> dict[str, str]:
+    """E-mail per UID for the admin's lists, in batches of 100 (one Auth call
+    each, no database read). A failed batch leaves its UIDs without an
+    address: the list still shows them, by UID."""
+    unique = list(dict.fromkeys(uid for uid in uids if uid))
+    found: dict[str, str] = {}
+    for start in range(0, len(unique), 100):
+        batch = unique[start:start + 100]
+        try:
+            result = auth.get_users([auth.UidIdentifier(uid) for uid in batch])
+        except Exception as exc:
+            logging.warning("account tier email batch failed category=%s", safe_exception(exc))
+            continue
+        for user in getattr(result, "users", None) or []:
+            if getattr(user, "email", None):
+                found[user.uid] = user.email
+    return found
+
+
 def list_elevated_accounts(db=None) -> list[dict]:
     """Alle Konten oberhalb von Free. "premium" ist der historische Pro-Tag."""
     db = db if db is not None else db_firestore
@@ -211,7 +230,11 @@ def list_elevated_accounts(db=None) -> list[dict]:
             seen[doc.id] = _serialize(doc.id, doc.to_dict() or {})
     accounts = list(seen.values())
     accounts.sort(key=lambda item: (item["tier"], item["uid"]))
-    return accounts[:LIST_LIMIT]
+    accounts = accounts[:LIST_LIMIT]
+    emails = emails_of(account["uid"] for account in accounts)
+    for account in accounts:
+        account["email"] = emails.get(account["uid"], "")
+    return accounts
 
 
 def list_recent_changes(limit: int = 25, db=None) -> list[dict]:
@@ -233,6 +256,9 @@ def list_recent_changes(limit: int = 25, db=None) -> list[dict]:
             "note": str(data.get("note") or ""),
             "changed_at": changed_at.isoformat() if isinstance(changed_at, datetime) else "",
         })
+    emails = emails_of(entry["uid"] for entry in entries)
+    for entry in entries:
+        entry["email"] = emails.get(entry["uid"], "")
     return entries
 
 
