@@ -9650,7 +9650,7 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   die Count-Aggregation statt zweier Vollabfragen.
 - Gerenderte Topic-Seiten und der Hub liegen seit 2026-10-20 (Apple-Audit I12)
   `TOPIC_PAGE_CACHE_SECONDS` = 120 s im Prozess (`routers/topics._topic_page_cache`,
-  Schlüssel Slug + `?version`, höchstens 200 Seiten, nur 200er); jede Admin-Änderung
+  Schlüssel Slug + `?version` + Sprache, höchstens 200 Seiten, nur 200er); jede Admin-Änderung
   (Topic anlegen/ändern, Run) leert ihn (`invalidate_topic_pages`), ein geplanter
   Run erscheint spätestens nach 120 s. `tests/conftest.py` leert ihn vor und nach
   jedem Test.

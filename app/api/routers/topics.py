@@ -87,6 +87,12 @@ def _cached_topic_page(key):
     return HTMLResponse(content=body, status_code=status_code, headers=headers)
 
 
+def _page_language(request) -> str:
+    # The page names the other language in its footer, so each language
+    # keeps its own cached copy.
+    return getattr(request.state, "language", None) or "en"
+
+
 def _remember_topic_page(key, response):
     headers = {
         name: value for name, value in response.headers.items()
@@ -275,7 +281,7 @@ TOPIC_PAGE_RATE = "60/minute"
 @router.get("/topics", response_class=HTMLResponse)
 @limiter.limit(TOPIC_PAGE_RATE)
 async def topics_hub(request: Request):
-    cached = _cached_topic_page(("hub",))
+    cached = _cached_topic_page(("hub", _page_language(request)))
     if cached is not None:
         return cached
     try:
@@ -326,7 +332,7 @@ async def topics_hub(request: Request):
     })
     response.headers["Cache-Control"] = "public, max-age=60, s-maxage=300"
     # A failed read is not kept: the next visitor tries again.
-    return response if failed else _remember_topic_page(("hub",), response)
+    return response if failed else _remember_topic_page(("hub", _page_language(request)), response)
 
 
 @router.get("/sitemap-topics.xml")
@@ -371,7 +377,7 @@ def _topic_not_found(request: Request, detail: str = "Topic not found"):
 async def topic_page(
     request: Request, slug: str, version: str = Query(default="", max_length=40)
 ):
-    cache_key = ("topic", slug, version)
+    cache_key = ("topic", slug, version, _page_language(request))
     cached = _cached_topic_page(cache_key)
     if cached is not None:
         return cached

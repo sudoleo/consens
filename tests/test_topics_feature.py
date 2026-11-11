@@ -1378,6 +1378,28 @@ def test_topic_judge_writes_english_statements_while_the_app_keeps_the_answer_la
     assert judge.keywords == {"output_language": "English", "statement_claims": True}
 
 
+def test_cached_topic_hub_keeps_each_language_its_own_switch(monkeypatch):
+    from app.core.i18n_middleware import I18nMiddleware
+
+    monkeypatch.setattr(topics, "list_public_topics", lambda: [])
+    topics_router._topic_page_cache.clear()
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    app.add_middleware(I18nMiddleware)
+    client = TestClient(app)
+
+    german = client.get("/de/topics", headers={"accept-language": "de"})
+    english = client.get("/topics", headers={"accept-language": "en"})
+
+    assert german.status_code == english.status_code == 200
+    assert 'href="?lang=en"' in german.text
+    # The footer offers the other language; a page cached for a German
+    # reader would leave an English one without a way to German.
+    assert 'href="?lang=de"' in english.text
+    assert 'href="?lang=en"' not in english.text
+
+
 @pytest.mark.parametrize("address", [
     "(1)victim@example.com",
     "victim@example.com,x",
