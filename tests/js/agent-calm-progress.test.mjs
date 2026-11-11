@@ -131,31 +131,19 @@ describe("the calm live view", () => {
     activity.dispose(host);
   });
 
-  it("says “Sending…” only on a slow connection, and what happens next once the server has the message", () => {
-    const { activity, render, status, wait, host } = setup();
+  it("goes from “Analyzing your message…” straight to the model's first thought", () => {
+    // Max 2026-11-11: “Sending…” after “Analyzing” made no sense; the next
+    // line after it is a step of the model.
+    const { activity, events, render, status, wait, host } = setup();
+    render();
+    wait(8000);
     render();
     expect(status()).toBe("Analyzing your message…");
-    wait(3000);
-    render({ sending: true });
-    expect(status()).toBe("Sending…");
-    wait(5000);
-    render({ sending: true });
-    expect(status()).toBe("Sending…");
-    render({ sending: false });
-    expect(status()).toBe("Analyzing your message…");
-    activity.dispose(host);
-  });
-
-  it("lets “Sending…” be read once when the server answers right after it took the line", () => {
-    const { activity, render, status, wait, host } = setup();
+    activity.receive(events, { version: 1, step_id: "completion:0", kind: "reasoning", id: "r1", format: "summary",
+      text: "**Checking the assumptions**\n\nFirst the dates.", append: true });
     render();
-    wait(3000);
-    render({ sending: true });
-    wait(100);
-    render({ sending: false });
-    expect(status()).toBe("Sending…");
-    wait(600);
-    expect(status()).toBe("Analyzing your message…");
+    wait(1300);
+    expect(status()).toBe("Checking the assumptions");
     activity.dispose(host);
   });
 

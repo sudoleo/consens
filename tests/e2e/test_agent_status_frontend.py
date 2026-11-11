@@ -320,9 +320,9 @@ def test_the_calm_line_says_what_the_agent_does_without_its_console(browser, pha
 @pytest.mark.parametrize("quiet", ["none", "reduce"])
 def test_the_first_seconds_after_send_show_life_before_the_model_speaks(browser, phase4_server, quiet):
     """From the click on Send the line says what happens to the message and
-    moves: its mark breathes, and rests with reduced motion. "Sending…" comes
-    only when the server takes seconds to answer, "Thinking…" only once the
-    model has shown a sign of its own."""
+    moves: its mark breathes, and rests with reduced motion. It stays while
+    the server takes seconds to answer (no word about the transport after
+    it); "Thinking…" comes only once the model has shown a sign of its own."""
     context, page = _real_firebase_page(browser, phase4_server)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -356,8 +356,9 @@ def test_the_first_seconds_after_send_show_life_before_the_model_speaks(browser,
         breathing = status.evaluate("el => getComputedStyle(el, '::before').animationName")
         assert breathing == ("none" if quiet == "reduce" else "activity-dot-breathe")
         page.wait_for_function("() => !!window.__serverAnswers")
-        # Seconds without the server's answer: a slow connection, said as it is.
-        expect(status).to_have_text("Sending…", timeout=8000)
+        # Seconds without the server's answer change nothing.
+        page.wait_for_timeout(3500)
+        expect(status).to_have_text("Analyzing your message…")
         page.evaluate("() => window.__serverAnswers()")
         expect(status).to_have_text("Analyzing your message…")
         # The model's first sign: a pause from here on is its thinking.

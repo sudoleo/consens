@@ -1692,10 +1692,10 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
 - [ ] Die ersten Sekunden nach dem Senden: Sofort steht „Analyzing your
   message…“ mit atmendem Zeichen, bis der erste Gedanke oder die Antwort kommt;
   „Thinking…“ erst in späteren Pausen des Laufs. Die Uhr springt zu jeder vollen
-  Sekunde um (kein „0 Sek.“, das länger als eine Sekunde steht). Mit
-  gedrosseltem Netz (DevTools „Slow 4G“) oder großem Anhang steht nach drei
-  Sekunden ohne Server-Antwort „Sending…“, danach wieder „Analyzing your
-  message…“.
+  Sekunde um (kein „0 Sek.“, das länger als eine Sekunde steht). Auch mit
+  gedrosseltem Netz (DevTools „Slow 4G“) oder großem Anhang bleibt „Analyzing
+  your message…“ stehen, bis das Modell den ersten Schritt zeigt; nie
+  „Sending…“ dazwischen.
   Frühere Absätze und Arbeitsschritte bleiben erhalten;
   Reasoning-Rohtext erscheint nicht als Fortschritt. Beim Abschluss oder Stop
   verschwinden die Live-Absätze; ein geöffneter Verlauf bleibt offen, solange er

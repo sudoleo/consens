@@ -701,10 +701,6 @@
   // a change waits until the words on the line stood their time, then the
   // newest change takes the line and the ones in between never show.
   const STATUS_DWELL_MS = 1200, THOUGHT_DWELL_MS = 4000;
-  // "Sending…" (a slow connection) gives way soon after the server has the
-  // message: long enough to be read once, not so long that the line still
-  // says it while the model already works.
-  const SENDING_DWELL_MS = 600;
   function pace(view, id, text, dwell) {
     const lines = view.paced ||= new Map();
     const now = performance.now();
@@ -1493,7 +1489,7 @@
   }
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
-    highlights = [], reconnecting = false, sending = false, vm = null, vmRestore = null } = {}) {
+    highlights = [], reconnecting = false, vm = null, vmRestore = null } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -1622,15 +1618,14 @@
     // away): it has the message and nothing of it shows yet. The line says
     // what happens to the message, from the click on; "Thinking…" there
     // reads as "nothing happens yet", and it stays for the pauses later in
-    // the run, when the model has already shown its work.
+    // the run, when the model has already shown its work. On a slow
+    // connection too: the next line is the model's, a word about the
+    // transport after "Analyzing" would read as a step back.
     const opening = running && !events.some(item => ['reasoning', 'progress', 'tool', 'hold'].includes(item.kind));
-    // sending (agent-chat.js): the message has been on its way for seconds
-    // and the server has not answered. A slow connection is said as it is.
-    const underway = opening && sending;
     const heading = running && reconnecting ? 'Reconnecting…'
       : asking ? 'Waiting for you' : held ? 'Paused' : waiting ? 'Waiting for available tokens…' : reviewStage
       || (activeTool ? (calm ? calmStep(activeTool) : stepLabel(activeTool)) : writing ? 'Writing answer…'
-        : underway ? 'Sending…' : opening ? 'Analyzing your message…' : 'Thinking…');
+        : opening ? 'Analyzing your message…' : 'Thinking…');
     // A complete, checked answer whose run failed afterwards reads as done:
     // the same rule as failureNote.
     const settled = status === 'failed' && !running && answerText
@@ -1708,8 +1703,7 @@
           }
         }
         lines.push({ id: 'calm-status', kind: 'step', current: true, fade: true,
-          text: pace(view, 'calm-status', thought || heading,
-            thought ? THOUGHT_DWELL_MS : underway ? SENDING_DWELL_MS : STATUS_DWELL_MS) });
+          text: pace(view, 'calm-status', thought || heading, thought ? THOUGHT_DWELL_MS : STATUS_DWELL_MS) });
         if (aside) lines.push(aside);
       }
     }

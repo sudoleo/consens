@@ -328,15 +328,11 @@ describe("single-model agent chat", () => {
     expect(d.querySelector('#agentRecover').hidden).toBe(false);
     dom.window.close();
   });
-  it('says what happens to the message from the click on, “Sending…” only on a slow connection, “Thinking…” once the model shows its work', async () => {
+  it('says what happens to the message from the click on, on a slow connection too, and “Thinking…” once the model shows its work', async () => {
     const {window:w, document:d, dom} = boot();
     await selectAgent(w);
     // As run-view.js does in the app: every change of the run is drawn.
     w.App.runRegistry.setProjector(run => { if (run) w.App.agentChat.project(run); });
-    // The timer that calls a send slow, run by hand.
-    const timer = w.setTimeout.bind(w);
-    let slow;
-    w.setTimeout = (fn, ms, ...args) => ms === 3000 ? (slow = fn, 998) : timer(fn, ms, ...args);
     let handlers, options;
     w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, incoming, request) => {
       handlers = incoming; options = request; return new Promise(() => {});
@@ -347,40 +343,17 @@ describe("single-model agent chat", () => {
     // In the click itself, before any request has left.
     expect(line()).toBe('Analyzing your message…');
     await vi.waitFor(() => expect(options).toBeDefined());
+    // Seconds without the server's answer change nothing: no word about
+    // the transport comes after “Analyzing” (Max 2026-11-11).
+    await new Promise(resolve => setTimeout(resolve, 3100));
     expect(line()).toBe('Analyzing your message…');
-    // Three seconds without the server's answer.
-    slow();
-    expect(line()).toBe('Sending…');
-    // The response's headers are here: the server has the message.
     options.onResponse({ headers: { get: () => null } });
-    await vi.waitFor(() => expect(line()).toBe('Analyzing your message…'));
+    expect(line()).toBe('Analyzing your message…');
     handlers.activity.receive({ version: 1, step_id: 'completion:0', kind: 'reasoning', id: 'r1', format: 'summary',
       text: 'Checking the assumptions.', append: true });
     await vi.waitFor(() => expect(line()).toBe('Thinking…'));
     dom.window.close();
-  });
-  it('takes a frame of the run as the server’s answer where the response itself is held back', async () => {
-    const {window:w, document:d, dom} = boot();
-    await selectAgent(w);
-    w.App.runRegistry.setProjector(run => { if (run) w.App.agentChat.project(run); });
-    const timer = w.setTimeout.bind(w);
-    let slow;
-    w.setTimeout = (fn, ms, ...args) => ms === 3000 ? (slow = fn, 998) : timer(fn, ms, ...args);
-    let handlers;
-    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, incoming) => { handlers = incoming; return new Promise(() => {}); });
-    d.querySelector('#questionInput').value = 'Question behind a buffering proxy';
-    w.App.agentChat.send();
-    const line = () => d.querySelector('#agentAnswerActivity .agent-progress .agent-current-status')?.textContent;
-    await vi.waitFor(() => expect(handlers).toBeDefined());
-    slow();
-    expect(line()).toBe('Sending…');
-    handlers.accepted.receive({ chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32) });
-    await vi.waitFor(() => expect(line()).toBe('Analyzing your message…'));
-    // A send the server has answered is never called slow afterwards.
-    slow();
-    expect(line()).toBe('Analyzing your message…');
-    dom.window.close();
-  });
+  }, 10000);
   it('keeps a silent stream open while the server reports the run still running and adopts its saved answer', async () => {
     const {window:w,document:d,dom} = boot();
     await selectAgent(w);

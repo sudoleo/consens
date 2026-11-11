@@ -910,7 +910,6 @@
       settings: state.completedTurn?.agent_settings || context.metadata.agentSettings,
       highlights: running ? App.agentDelegation?.liveHighlights?.(context.metadata.chatId, context.metadata.agentTurnId) : [],
       reconnecting: context.metadata.reconnecting === true && context.metadata.offline === true,
-      sending: context.metadata.sending === true && context.metadata.slowSend === true,
     });
     // Evidence links and Copy belong to a finished answer. While the run
     // streams they are only cleared once, when this run takes over the view.
@@ -2687,16 +2686,8 @@
     // live poll (agent-live.js): a sequence number already applied is
     // dropped, so a buffered stream that flushes late renders nothing twice.
     const seen = App.agentLive?.sequence();
-    // The server has the message: its response's headers are here, or a
-    // frame of the run where a proxy holds the response back (agent-live.js).
-    const arrived = () => {
-      if (!context.metadata.sending) return;
-      context.metadata.sending = false;
-      scheduleFlush();
-    };
     const deliver = (type, data, seq) => {
       if (seen && !seen.accept(seq, type)) return;
-      arrived();
       if (data && typeof data === "object") handlers[type]?.receive(data);
     };
     const streamHandlers = Object.fromEntries(Object.keys(handlers)
@@ -2769,7 +2760,6 @@
         streamHandlers, { headers, onResponse: response => {
           App.startProgress?.serverDate?.(response?.headers?.get?.("date"));
           live?.responded();
-          arrived();
         },
           onProgress: () => { lastByte = Date.now(); onProgress?.(); live?.bytes(); } }),
         // 45 s without a byte (keepalives come every 15 s): with the live
@@ -2966,10 +2956,6 @@
     registry.setStatus(context.runId, "failed", { message: context.consensus.error.message });
     if (!context.metadata.agentReview && context.basis && registry.visible()?.runId === context.runId) registry.selectConversationBasis(context.basis);
   }
-  // A message the server has not answered after this long is on a slow
-  // connection (or its files still upload): the line says so. Sooner, an
-  // ordinary send on a busy day would flash "Sending…" between two lines.
-  const SLOW_SEND_MS = 3000;
   async function send(recovery = null, { retry = null } = {}) {
     if (recovery) return recoverAnswer(recovery);
     if (!canUse()) {
@@ -3031,9 +3017,7 @@
             googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
             googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true,
             temporary },
-          // sending: until the server answers this message (follow, arrived).
-          // Once that takes SLOW_SEND_MS, the run's line says "Sending…".
-          metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '', sending: true,
+          metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
             ...(retry ? { fileIds: retry.fileIds } : {}),
             ...(temporaryToken ? { temporaryToken } : {}),
             agentActivity: [], agentSettings: { ...settings, label: catalog?.models.find(model => model.id === settings.model_id)?.label } },
@@ -3057,11 +3041,6 @@
       registry.setStatus(context.runId, "running");
     };
     if (registry.batch) registry.batch(begin); else begin();
-    const slowSend = refused ? 0 : setTimeout(() => {
-      if (context.metadata.sending !== true || !registry.isExecuting(context.runId)) return;
-      context.metadata.slowSend = true;
-      registry.update(context.runId, () => {});
-    }, SLOW_SEND_MS);
     if (refused) {
       // Nothing started: a temporary chat begun for it ends, the switch stays on.
       if (temporaryToken && !basis && !retry) { temporaryChat?.leave?.("refused"); temporaryChat?.arm?.(true); }
@@ -3134,7 +3113,6 @@
       if (signal.aborted || error.name === "AbortError" || !registry.isAuthCurrent(context)) return;
       failRun(context, error);
     } finally {
-      clearTimeout(slowSend);
       context.controllers.query = null;
       App.attachments?.markUploading?.(context.runId, []);
       // Only a known end clears the record for a reload; Stop and logout
