@@ -5969,13 +5969,21 @@ der neueste vollständige Satz ≤ 120 Zeichen mit mindestens sechs Wörtern und
 Großbuchstaben vorn (`THOUGHT_WORDS`, gegen Fetzen wie „Also maybe share
 nothing.“), bei einer Notiz ihr erster; ein längerer lässt den alten stehen,
 gekürzt wird nichts). Sie behält Zeichen und Schimmer und blendet weich über
-(`fade`). **Die ersten Sekunden:** Bis der Server die Nachricht hat, heißt die
-Zeile „Sending…“ statt „Thinking…“ (`sending` aus `agent-chat.js`:
-`metadata.sending` ab dem Klick, beendet von `follow` → `arrived`, sobald die
-Antwort-Header da sind oder, hinter einem puffernden Proxy, das erste Frame
-des Laufs; nie beim Folgen eines schon laufenden Turns). Vorher dachte laut
-Zeile schon etwas nach, während die Nachricht noch unterwegs war. Sie steht
-mindestens `SENDING_DWELL_MS` (0,6 s), damit sie nicht aufblitzt. Das Zeichen
+(`fade`). **Die ersten Sekunden:** Ab dem Klick heißt die Zeile „Analyzing your
+message…“, bis das Modell sein erstes eigenes Zeichen gibt (`opening`: kein
+Ereignis `reasoning`, `progress`, `tool` oder `hold`; die ersten Worte einer
+Antwort nehmen die Zeilen ohnehin weg). „Thinking…“ steht erst in den Pausen
+danach. Max 2026-11-11: „‚Denkt nach‘ ist kein Feedback, jeder User weiß, dass
+dann nichts passiert“; ein Balken und live einlaufende Gedanken waren
+angeboten, er wollte es schlicht („sowas wie ‚wird analysiert‘ instant nach
+Absenden“). Vor dem ersten Token schickt das Modell nichts (unser TTFT
+entspricht OpenRouters eigener Latenz), mehr als ein Wort gibt es dort also
+nicht zu zeigen. „Sending…“ steht nur bei langsamer Verbindung oder großem
+Anhang: `agent-chat.js` setzt `metadata.sending` beim Klick und nach
+`SLOW_SEND_MS` (3 s) ohne Server-Antwort `metadata.slowSend`; `follow` →
+`arrived` beendet es, sobald die Antwort-Header da sind oder, hinter einem
+puffernden Proxy, das erste Frame des Laufs. Es steht mindestens
+`SENDING_DWELL_MS` (0,6 s), damit es nicht aufblitzt. Das Zeichen
 atmet im Takt (`activity-dot-breathe`, wie der Punkt des laufenden Schritts im
 geöffneten Verlauf), weil bis zum ersten Wort des Modells (gemessen 0,7–2,3 s
 p50 je Modell, dazu rund 0,4 s Vorlauf) sonst nur das Wort stand und der

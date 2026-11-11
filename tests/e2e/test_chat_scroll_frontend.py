@@ -249,7 +249,7 @@ def test_reasoning_lines_at_the_end_of_the_page_keep_the_chat_still(browser, pha
         page.locator("#questionInput").fill("Is a heat pump worth it in an old building?")
         page.locator("#sendButton").click()
         page.wait_for_function("() => !!window.__emitAgent")
-        expect(page.locator("#agentAnswerActivity .agent-progress .agent-current-status")).to_have_text("Thinking…")
+        expect(page.locator("#agentAnswerActivity .agent-progress .agent-current-status")).to_have_text("Analyzing your message…")
         # The question has reached the top: the page ends right below the turn.
         page.wait_for_function("() => !document.body.classList.contains('chat-scroll-following')")
         page.wait_for_timeout(400)

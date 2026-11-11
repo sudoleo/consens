@@ -116,43 +116,62 @@ describe("the calm live view", () => {
     activity.dispose(host);
   });
 
-  it("says the message is on its way until the server has it, and only then that the model thinks", () => {
-    const { activity, render, status, wait, host } = setup();
-    render({ sending: true });
-    expect(status()).toBe("Sending…");
-    // A slow connection: nothing thinks yet, however long it takes.
+  it("says from the click on what happens to the message, and “Thinking…” only once the model has shown its work", () => {
+    const { activity, events, render, status, wait, host } = setup();
+    render();
+    expect(status()).toBe("Analyzing your message…");
+    // Nothing of the model yet: the words stay, however long it takes.
     wait(5000);
-    render({ sending: true });
-    expect(status()).toBe("Sending…");
-    render({ sending: false });
+    render();
+    expect(status()).toBe("Analyzing your message…");
+    // A step came and went: a pause from here on is the model thinking.
+    activity.receive(events, tool({ name: "web_search", status: "succeeded" }));
+    render();
     expect(status()).toBe("Thinking…");
     activity.dispose(host);
   });
 
-  it("lets “Sending…” be read once when the server answers at once, no longer than that", () => {
+  it("says “Sending…” only on a slow connection, and what happens next once the server has the message", () => {
     const { activity, render, status, wait, host } = setup();
+    render();
+    expect(status()).toBe("Analyzing your message…");
+    wait(3000);
     render({ sending: true });
-    wait(150);
+    expect(status()).toBe("Sending…");
+    wait(5000);
+    render({ sending: true });
+    expect(status()).toBe("Sending…");
+    render({ sending: false });
+    expect(status()).toBe("Analyzing your message…");
+    activity.dispose(host);
+  });
+
+  it("lets “Sending…” be read once when the server answers right after it took the line", () => {
+    const { activity, render, status, wait, host } = setup();
+    render();
+    wait(3000);
+    render({ sending: true });
+    wait(100);
     render({ sending: false });
     expect(status()).toBe("Sending…");
-    wait(500);
-    expect(status()).toBe("Thinking…");
+    wait(600);
+    expect(status()).toBe("Analyzing your message…");
     activity.dispose(host);
   });
 
   it("holds a line a while: a step that comes and goes at once never flashes", () => {
     const { activity, events, render, status, wait, host } = setup();
     render();
-    expect(status()).toBe("Thinking…");
+    expect(status()).toBe("Analyzing your message…");
     // A quick read starts and ends before the line stood its time.
     wait(300);
     activity.receive(events, tool({ name: "vm_read_file", status: "running", path: "/home/sprite/notes.md" }));
     render();
-    expect(status()).toBe("Thinking…");
+    expect(status()).toBe("Analyzing your message…");
     activity.receive(events, tool({ name: "vm_read_file", status: "succeeded", path: "/home/sprite/notes.md" }));
     activity.receive(events, tool({ id: "completion:2:call/tool", name: "web_search", status: "running" }));
     render();
-    expect(status()).toBe("Thinking…");
+    expect(status()).toBe("Analyzing your message…");
     // When its time is up, the newest takes the line, without a new report.
     wait(1000);
     expect(status()).toBe("Searching the web…");

@@ -328,22 +328,34 @@ describe("single-model agent chat", () => {
     expect(d.querySelector('#agentRecover').hidden).toBe(false);
     dom.window.close();
   });
-  it('says “Sending…” from the click until the server answers, then “Thinking…”', async () => {
+  it('says what happens to the message from the click on, “Sending…” only on a slow connection, “Thinking…” once the model shows its work', async () => {
     const {window:w, document:d, dom} = boot();
     await selectAgent(w);
     // As run-view.js does in the app: every change of the run is drawn.
     w.App.runRegistry.setProjector(run => { if (run) w.App.agentChat.project(run); });
-    let options;
-    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, _handlers, incoming) => { options = incoming; return new Promise(() => {}); });
+    // The timer that calls a send slow, run by hand.
+    const timer = w.setTimeout.bind(w);
+    let slow;
+    w.setTimeout = (fn, ms, ...args) => ms === 3000 ? (slow = fn, 998) : timer(fn, ms, ...args);
+    let handlers, options;
+    w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, incoming, request) => {
+      handlers = incoming; options = request; return new Promise(() => {});
+    });
     d.querySelector('#questionInput').value = 'Question on a slow connection';
     w.App.agentChat.send();
     const line = () => d.querySelector('#agentAnswerActivity .agent-progress .agent-current-status')?.textContent;
     // In the click itself, before any request has left.
-    expect(line()).toBe('Sending…');
+    expect(line()).toBe('Analyzing your message…');
     await vi.waitFor(() => expect(options).toBeDefined());
+    expect(line()).toBe('Analyzing your message…');
+    // Three seconds without the server's answer.
+    slow();
     expect(line()).toBe('Sending…');
     // The response's headers are here: the server has the message.
     options.onResponse({ headers: { get: () => null } });
+    await vi.waitFor(() => expect(line()).toBe('Analyzing your message…'));
+    handlers.activity.receive({ version: 1, step_id: 'completion:0', kind: 'reasoning', id: 'r1', format: 'summary',
+      text: 'Checking the assumptions.', append: true });
     await vi.waitFor(() => expect(line()).toBe('Thinking…'));
     dom.window.close();
   });
@@ -351,15 +363,22 @@ describe("single-model agent chat", () => {
     const {window:w, document:d, dom} = boot();
     await selectAgent(w);
     w.App.runRegistry.setProjector(run => { if (run) w.App.agentChat.project(run); });
+    const timer = w.setTimeout.bind(w);
+    let slow;
+    w.setTimeout = (fn, ms, ...args) => ms === 3000 ? (slow = fn, 998) : timer(fn, ms, ...args);
     let handlers;
     w.streamSSERequest.mockImplementationOnce((_url, _body, _signal, incoming) => { handlers = incoming; return new Promise(() => {}); });
     d.querySelector('#questionInput').value = 'Question behind a buffering proxy';
     w.App.agentChat.send();
     const line = () => d.querySelector('#agentAnswerActivity .agent-progress .agent-current-status')?.textContent;
     await vi.waitFor(() => expect(handlers).toBeDefined());
+    slow();
     expect(line()).toBe('Sending…');
     handlers.accepted.receive({ chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32) });
-    await vi.waitFor(() => expect(line()).toBe('Thinking…'));
+    await vi.waitFor(() => expect(line()).toBe('Analyzing your message…'));
+    // A send the server has answered is never called slow afterwards.
+    slow();
+    expect(line()).toBe('Analyzing your message…');
     dom.window.close();
   });
   it('keeps a silent stream open while the server reports the run still running and adopts its saved answer', async () => {
@@ -1336,7 +1355,7 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  it('shows useful run details when opened during thinking, before any progress or tool event', () => {
+  it('shows useful run details when opened in the first seconds, before any progress or tool event', () => {
     const {window: w, document: d, dom} = boot();
     const host = d.getElementById('agentAnswerActivity');
     w.App.agentActivity.render(host, {running:true, settings:{label:'DeepSeek V4.1 Flash',reasoning_effort:'high'}});
@@ -1345,7 +1364,7 @@ describe("single-model agent chat", () => {
     expect(details.open).toBe(true);
     // The model at the end of the history, what it does now as the timeline's last entry.
     expect(details.querySelector('.agent-activity-run-details').textContent).toBe('DeepSeek V4.1 Flash · High reasoning');
-    expect(details.querySelector('.agent-activity-timeline > :last-child').textContent).toBe('Thinking…');
+    expect(details.querySelector('.agent-activity-timeline > :last-child').textContent).toBe('Analyzing your message…');
     w.App.agentActivity.render(host, {running:true,settings:{label:'DeepSeek V4.1 Flash',reasoning_effort:'high'},responding:true});
     expect(details.querySelector('[role="status"]').textContent).toBe('Writing answer…');
     expect(details.open).toBe(true);

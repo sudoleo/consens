@@ -75,12 +75,12 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         page.locator("#questionInput").fill("Welche Option passt zu meinem Budget von 100 Euro?")
         page.locator("#sendButton").click()
         preview = page.locator("#agentAnswerActivity .agent-progress")
-        expect(preview.locator('.agent-current-status')).to_have_text('Thinking…')
+        expect(preview.locator('.agent-current-status')).to_have_text('Analyzing your message…')
         thinking_details = page.locator('#agentAnswerActivity details')
         thinking_details.locator('.agent-activity-title').click()
         # Before any step: what it does now, then the model it runs on (its
         # default reasoning goes unsaid).
-        expect(thinking_details.locator('.agent-activity-current')).to_have_text('Thinking…')
+        expect(thinking_details.locator('.agent-activity-current')).to_have_text('Analyzing your message…')
         expect(thinking_details.locator('.agent-activity-run-details')).to_have_text('DeepSeek V4.1 Flash')
         page.wait_for_function("""() => {
           const host = document.getElementById('agentAnswerActivity');
@@ -264,7 +264,7 @@ def test_the_calm_line_says_what_the_agent_does_without_its_console(browser, pha
         page.locator("#questionInput").fill("Build the snake game and test it")
         page.locator("#sendButton").click()
         preview = page.locator("#agentAnswerActivity .agent-progress")
-        expect(preview.locator(".agent-current-status")).to_have_text("Thinking…")
+        expect(preview.locator(".agent-current-status")).to_have_text("Analyzing your message…")
         page.wait_for_function("() => !!window.__emitAgent")
         page.evaluate("""() => {
           __emitAgent({version:1, step_id:'completion:1', kind:'reasoning', id:'r1', format:'summary',
@@ -319,9 +319,10 @@ def test_the_calm_line_says_what_the_agent_does_without_its_console(browser, pha
 
 @pytest.mark.parametrize("quiet", ["none", "reduce"])
 def test_the_first_seconds_after_send_show_life_before_the_model_speaks(browser, phase4_server, quiet):
-    """From the click on Send the line stands and moves: "Sending…" until the
-    server has the message, however long that takes, then "Thinking…"; its
-    mark breathes all the while, and rests with reduced motion."""
+    """From the click on Send the line says what happens to the message and
+    moves: its mark breathes, and rests with reduced motion. "Sending…" comes
+    only when the server takes seconds to answer, "Thinking…" only once the
+    model has shown a sign of its own."""
     context, page = _real_firebase_page(browser, phase4_server)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -340,7 +341,9 @@ def test_the_first_seconds_after_send_show_life_before_the_model_speaks(browser,
           window.fetch = async (url, options) => {
             if (url !== '/agent') return original(url, options);
             await new Promise(resolve => { window.__serverAnswers = resolve; });
+            const encoder = new TextEncoder();
             return new Response(new ReadableStream({ start(controller) {
+              window.__emitAgent = event => controller.enqueue(encoder.encode('event: activity\\ndata: ' + JSON.stringify(event) + '\\n\\n'));
               options.signal.addEventListener('abort', () => controller.error(new DOMException('Stopped', 'AbortError')));
             }}), {headers:{'Content-Type':'text/event-stream'}});
           };
@@ -348,15 +351,19 @@ def test_the_first_seconds_after_send_show_life_before_the_model_speaks(browser,
         page.locator("#questionInput").fill("Is a heat pump worth it in an old building?")
         page.locator("#sendButton").click()
         status = page.locator("#agentAnswerActivity .agent-progress .agent-current-status")
-        expect(status).to_have_text("Sending…")
+        expect(status).to_have_text("Analyzing your message…")
         expect(page.locator("#agentAnswerActivity .agent-activity-title")).to_contain_text("Working for")
         breathing = status.evaluate("el => getComputedStyle(el, '::before').animationName")
         assert breathing == ("none" if quiet == "reduce" else "activity-dot-breathe")
         page.wait_for_function("() => !!window.__serverAnswers")
-        # Past the line's own time: nothing thinks while the message is on its way.
-        page.wait_for_timeout(900)
-        expect(status).to_have_text("Sending…")
+        # Seconds without the server's answer: a slow connection, said as it is.
+        expect(status).to_have_text("Sending…", timeout=8000)
         page.evaluate("() => window.__serverAnswers()")
+        expect(status).to_have_text("Analyzing your message…")
+        # The model's first sign: a pause from here on is its thinking.
+        page.wait_for_function("() => !!window.__emitAgent")
+        page.evaluate("""() => __emitAgent({version:1, step_id:'completion:0', kind:'reasoning', id:'r1',
+          format:'summary', text:'Checking the assumptions.', append:true})""")
         expect(status).to_have_text("Thinking…")
         expect(page.locator("#agentAnswerActivity .agent-progress > *")).to_have_count(1)
         assert not errors

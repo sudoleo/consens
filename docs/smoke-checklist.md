@@ -470,7 +470,7 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       nur im Firmennetz. Automatisiert: `agent-live.test.mjs`,
       `test_agent_live.py`, `test_agent_chat_frontend.py::test_buffering_proxy_*`.
 - [ ] Lauf ohne Verbindung (2026-10-08, Prod, am besten am Handy): Agent-Frage
-      mit Vergleich senden, sobald „Thinking…“ steht 1) WLAN/Mobilfunk für
+      mit Vergleich senden, sobald die Statuszeile steht 1) WLAN/Mobilfunk für
       ~20 s aus → Aktivität zeigt „Reconnecting…“, nach dem Einschalten läuft
       der Fortschritt weiter und die Antwort kommt genau einmal; 2) App
       wechseln oder Bildschirm sperren, nach 1–2 min zurück → Fortschritt bzw.
@@ -1664,17 +1664,20 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   Meldungen sind dezent dunkelgrau im hellen und hellgrau im dunklen Modus,
   auch im geöffneten und gespeicherten Verlauf. Schritte bleiben schwarz bzw. weiß.
   Nur aktive Arbeitsschritte tragen einen ruhigen, schmalen Lichtreflex (2,4 s),
-  auch im geöffneten Live-Verlauf. Die aktuelle Statuszeile („Thinking…“, aktiver
+  auch im geöffneten Live-Verlauf. Die aktuelle Statuszeile („Analyzing your
+  message…“, „Thinking…“, aktiver
   Schritt, „Writing answer…“) beginnt mit dem consens-Zeichen in Textfarbe; ein
   einziger Reflex läuft ohne Sprung erst durch das Zeichen, dann durch das Label.
   Das Zeichen atmet dabei im selben Takt (heller, dunkler), vom Klick auf Senden an.
   Laufzeit, Absätze und fertige Schritte bleiben ohne Reflex; Reduced Motion und
   Forced Colors zeigen Zeichen und Text vollständig deckend und ruhend.
-- [ ] Die ersten Sekunden nach dem Senden: Sofort steht „Sending…“ mit atmendem
-  Zeichen, nach gut einer halben Sekunde „Thinking…“, dann der erste Gedanke
-  oder die Antwort. Die Uhr springt zu jeder vollen Sekunde um (kein „0 Sek.“,
-  das länger als eine Sekunde steht). Mit gedrosseltem Netz (DevTools „Slow 4G“)
-  bleibt „Sending…“ so lange stehen, bis der Server antwortet.
+- [ ] Die ersten Sekunden nach dem Senden: Sofort steht „Analyzing your
+  message…“ mit atmendem Zeichen, bis der erste Gedanke oder die Antwort kommt;
+  „Thinking…“ erst in späteren Pausen des Laufs. Die Uhr springt zu jeder vollen
+  Sekunde um (kein „0 Sek.“, das länger als eine Sekunde steht). Mit
+  gedrosseltem Netz (DevTools „Slow 4G“) oder großem Anhang steht nach drei
+  Sekunden ohne Server-Antwort „Sending…“, danach wieder „Analyzing your
+  message…“.
   Frühere Absätze und Arbeitsschritte bleiben erhalten;
   Reasoning-Rohtext erscheint nicht als Fortschritt. Beim Abschluss oder Stop
   verschwinden die Live-Absätze; ein geöffneter Verlauf bleibt offen, solange er
@@ -1690,7 +1693,7 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   eine Sekunde auf, ein Gedanke steht ein paar Sekunden. Klick auf den Kopf zeigt
   alles. Schalter an: sofort die vollen Zeilen, auch mitten im Lauf.
 - [ ] Duration-Verlauf auch direkt beim Abschluss und nach erneutem Öffnen prüfen:
-  Bereits während „Thinking…“ sind Modell, Reasoning-Einstellung und aktuelle
+  Bereits in den ersten Sekunden sind Modell, Reasoning-Einstellung und aktuelle
   Phase sichtbar. Ein laufender Vergleich zeigt seine Frage;
   noch nicht verfügbare Ergebnisse öffnen keinen leeren Antwortleser.
   vorhandene Meldungen bleiben bei unvollständigem Abschluss-Snapshot erhalten.

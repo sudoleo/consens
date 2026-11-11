@@ -144,6 +144,7 @@
   "Reconnecting…": "Verbindet neu…",
   "Waiting for available tokens…": "Wartet auf verfügbare Tokens…",
   "Thinking…": "Denkt nach…",
+  "Analyzing your message…": "Analysiert deine Nachricht…",
   "Waiting for your confirmation below": "Wartet unten auf deine Bestätigung",
   "Active model calls are using the available allowance. This response will continue automatically.": "Laufende Modellaufrufe nutzen gerade das verfügbare Kontingent. Diese Antwort geht automatisch weiter.",
   "Working…": "Arbeitet…",
