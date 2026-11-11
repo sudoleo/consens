@@ -558,8 +558,9 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
 
 ## Admin
 - [ ] Overview (Startseite von `/admin`): „Needs you“ nennt gemeldete, noch
-      ungeprüfte Seiten, fehlschlagende und überfällige Watches und einen
-      fehlgeschlagenen SEO-Puls, sonst „Nothing needs you.“; „Open“ führt auf
+      ungeprüfte Seiten, Agent-Watches mit fehlgeschlagenem letztem Blick oder
+      überfällig, und einen fehlgeschlagenen SEO-Puls, sonst „Nothing needs
+      you.“; archivierte Consensus-Watches lösen nichts aus. „Open“ führt auf
       die Seite. Agent-Balken für 14 Tage, Suche der Woche, Zahl Plus/Pro; eine
       E-Mail im Suchfeld öffnet das Konto unter Accounts. Die Zahlen am Menü
       stimmen mit „Needs you“ überein.
@@ -590,9 +591,10 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       Telegram-Notiz; ohne GSC-Credentials erscheint die Fehlerzeile statt
       leerer Zahlen.
 - [ ] „Keep indexed“ unter „Set to noindex by the pulse“ entfernt die Zeile, die
-      Share-Seite liefert wieder `index, follow`. Watches: „Pause“/„Resume“
-      ändern den Status sichtbar, pausierte Watches stehen unter „Paused and
-      finished“.
+      Share-Seite liefert wieder `index, follow`. Watches: laufende
+      Agent-Watches mit Zeitplan, nächstem Lauf und Besitzer-E-Mail, pausierte
+      und beendete unter „Paused and ended“; die Consensus-Watches stehen als
+      „Archived Consensus Watches“ ohne Knöpfe darunter.
 
 ## Kern-Flow
 - [x] Keine Verschiebung (09.10.2026): Senden bringt die neue Frage einmal nach

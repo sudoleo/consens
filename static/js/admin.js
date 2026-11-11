@@ -83,10 +83,15 @@ document.body.classList.toggle('dark-mode', document.documentElement.classList.c
 // SEO pulse's Telegram note, #api, #consensus); they open its page there.
 const PAGES = ['overview', 'accounts', 'pages', 'topics', 'watches', 'models', 'limits', 'prompts'];
 const SECTION_PAGES = { shares: 'pages', seo: 'pages', api: 'accounts', consensus: 'models', configuration: 'prompts' };
+let currentPage = '';
+// The archived Consensus Watches load with the first visit of Watches.
+let consensusWatchesRequested = false;
 function activateTab(target) {
     const name = String(target || '');
     const page = PAGES.includes(name) ? name : SECTION_PAGES[name] || 'overview';
+    currentPage = page;
     if (page !== 'accounts') clearIssuedApiKey();
+    if (page === 'watches' && !consensusWatchesRequested && auth.currentUser) loadAdminWatches();
     document.querySelectorAll('.admin-tab-panel').forEach(panel => {
         panel.hidden = panel.dataset.page !== page;
     });
@@ -2033,7 +2038,12 @@ document.getElementById('copyIssuedApiKeyBtn').addEventListener('click', copyIss
 document.getElementById('dismissIssuedApiKeyBtn').addEventListener('click', clearIssuedApiKey);
 
 // === Watches ===
+// A Watch runs the Agent (agent_watches.py). The Consensus Watches before
+// them stay as a record while they are archived: no run, no pause.
+let agentWatchList = null;
+let lateAfterMs = 2 * 60 * 60 * 1000;
 let adminWatches = null;
+let consensusArchived = true;
 
 function watchesStatus(message, isError) {
     const el = document.getElementById('watchesStatus');
@@ -2047,21 +2057,97 @@ function formatAdminTime(value) {
     return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
+const WATCH_INTERVALS = { hourly: 'hourly', every_6_hours: 'every 6 hours', daily: 'daily', weekly: 'weekly' };
 function watchSchedule(watch) {
     const day = watch.run_weekday ? ` on ${watch.run_weekday}` : '';
     const time = watch.run_time ? ` at ${watch.run_time}` : '';
-    return `${watch.interval}${day}${time}`;
+    return `${WATCH_INTERVALS[watch.interval] || watch.interval}${day}${time}`;
 }
 
-// Due for more than an hour and not running: the scheduler did not get to it.
-const WATCH_OVERDUE_MS = 60 * 60 * 1000;
-function watchOverdue(watch) {
-    if (watch.status !== 'active' || !watch.next_run_at) return false;
-    const leased = watch.claimed_until && new Date(watch.claimed_until).getTime() > Date.now();
-    return !leased && Date.now() - new Date(watch.next_run_at).getTime() > WATCH_OVERDUE_MS;
+// An hour past LATE_AFTER and not looking: the scheduler skips a late
+// morning run on purpose, so only a wait beyond that is a fault.
+function agentWatchOverdue(watch) {
+    if (watch.status !== 'active' || watch.looking || !watch.next_run_at) return false;
+    return Date.now() - new Date(watch.next_run_at).getTime() > lateAfterMs + 60 * 60 * 1000;
 }
 
-function watchRow(watch) {
+const FAILED_LOOKS = new Set(['failed', 'not_started', 'cannot_run']);
+function agentWatchFailing(watch) {
+    const looks = watch.looks || [];
+    return watch.status === 'active' && looks.length > 0 && FAILED_LOOKS.has(looks[looks.length - 1].outcome);
+}
+
+const LOOK_WORDS = {
+    finding: 'found something', needs_you: 'needs its owner', done: 'reached its goal', quiet: 'nothing new',
+    failed: 'failed', not_started: 'did not start', cannot_run: 'cannot run', chat_gone: 'chat deleted',
+    google_data: 'chat holds Google data', already_ran: 'already ran',
+};
+
+function agentWatchRow(watch) {
+    const row = document.createElement('div');
+    row.className = 'admin-row';
+    const main = document.createElement('div');
+    main.className = 'admin-row-main';
+    const task = document.createElement('span');
+    task.className = 'admin-row-title';
+    task.textContent = watch.task || '(no task)';
+    task.title = watch.goal ? `Done when: ${watch.goal}` : '';
+
+    const meta = document.createElement('div');
+    meta.className = 'admin-row-meta';
+    const failing = agentWatchFailing(watch);
+    const overdue = agentWatchOverdue(watch);
+    if (watch.looking) meta.appendChild(stateWord('looking now', 'ok'));
+    else if (watch.status === 'active') meta.appendChild(stateWord('running', failing ? 'alert' : 'ok'));
+    else meta.appendChild(stateWord(watch.status === 'paused' ? 'paused' : `ended${watch.ended ? `: ${watch.ended.replace(/_/g, ' ')}` : ''}`));
+    if (failing) meta.appendChild(stateWord(`last look ${LOOK_WORDS[watch.looks.at(-1).outcome] || 'failed'}`, 'alert'));
+    if (overdue) meta.appendChild(stateWord(`overdue since ${formatAdminTime(watch.next_run_at)}`, 'warn'));
+    const when = document.createElement('span');
+    const last = (watch.looks || []).at(-1);
+    when.textContent = [
+        watchSchedule(watch),
+        watch.status === 'active' && !overdue && watch.next_run_at ? `next ${formatAdminTime(watch.next_run_at)}` : '',
+        last && !failing ? `last ${LOOK_WORDS[last.outcome] || last.outcome}` : '',
+        watch.owner_email || watch.uid,
+    ].filter(Boolean).join(' · ');
+    if (last?.summary) when.title = last.summary;
+    meta.appendChild(when);
+    main.append(task, meta);
+    row.appendChild(main);
+    return row;
+}
+
+function renderAgentWatches(watches) {
+    const container = document.getElementById('agentWatchesContainer');
+    container.innerHTML = '';
+    // Failing and overdue ones on top; paused and ended wait in a fold.
+    const trouble = watch => (agentWatchFailing(watch) || agentWatchOverdue(watch) ? 0 : 1);
+    const running = watches.filter(watch => watch.status === 'active').sort((a, b) => trouble(a) - trouble(b));
+    const rest = watches.filter(watch => watch.status !== 'active');
+    running.forEach(watch => container.appendChild(agentWatchRow(watch)));
+    if (!running.length) {
+        const empty = document.createElement('p');
+        empty.className = 'admin-empty';
+        empty.textContent = 'No Watch is running.';
+        container.appendChild(empty);
+    }
+    if (rest.length) container.appendChild(watchFold('Paused and ended', rest.map(agentWatchRow)));
+}
+
+function watchFold(title, rows) {
+    const fold = document.createElement('details');
+    fold.className = 'admin-fold';
+    const summary = document.createElement('summary');
+    summary.textContent = `${title} `;
+    const count = document.createElement('span');
+    count.className = 'admin-count';
+    count.textContent = String(rows.length);
+    summary.appendChild(count);
+    fold.append(summary, ...rows);
+    return fold;
+}
+
+function consensusWatchRow(watch) {
     const row = document.createElement('div');
     row.className = 'admin-row watch-admin-row';
     const main = document.createElement('div');
@@ -2072,24 +2158,16 @@ function watchRow(watch) {
     question.target = '_blank';
     question.rel = 'noopener';
     question.textContent = watch.question || '(untitled)';
-
     const meta = document.createElement('div');
     meta.className = 'admin-row-meta';
-    const failing = watch.status === 'active' && Number(watch.consecutive_failures) > 0;
-    meta.appendChild(stateWord(watch.status, failing ? 'alert' : watch.status === 'active' ? 'ok' : ''));
-    if (failing) {
-        meta.appendChild(stateWord(
-            Number(watch.consecutive_failures) === 1 ? 'last run failed' : `${watch.consecutive_failures} runs failed`, 'alert'));
-    }
-    const overdue = watchOverdue(watch);
-    if (overdue) meta.appendChild(stateWord(`overdue since ${formatAdminDay(watch.next_run_at)}`, 'warn'));
+    meta.appendChild(stateWord(consensusArchived ? 'archived' : watch.status));
     const when = document.createElement('span');
-    when.textContent = watch.status !== 'active' ? `last ran ${formatAdminTime(watch.last_run_at)}`
-        : overdue ? `${watchSchedule(watch)} · last ran ${formatAdminTime(watch.last_run_at)}`
-            : `${watchSchedule(watch)} · next ${formatAdminTime(watch.next_run_at)}`;
+    when.textContent = `${watchSchedule(watch)} · last ran ${formatAdminTime(watch.last_run_at)}`;
     when.title = `${watch.timezone || ''} · mail ${watch.email_mode} · owner ${watch.owner_uid}`;
     meta.appendChild(when);
     main.append(question, meta);
+    row.appendChild(main);
+    if (consensusArchived) return row;
 
     const actions = document.createElement('div');
     actions.className = 'admin-row-actions watch-admin-actions';
@@ -2129,69 +2207,55 @@ function watchRow(watch) {
         queue.title = leaseActive ? 'Running right now' : 'Start through the normal scheduler';
         actions.appendChild(queue);
     }
-    row.append(main, actions);
+    row.appendChild(actions);
     return row;
 }
 
 function renderAdminWatches(watches) {
     const container = document.getElementById('watchesContainer');
     container.innerHTML = '';
-    if (!watches.length) {
-        const empty = document.createElement('p');
-        empty.className = 'admin-empty';
-        empty.textContent = 'No Watches yet.';
-        container.appendChild(empty);
-        return;
-    }
-    // Active first, failing on top; the rest waits in a fold.
-    const failures = watch => Number(watch.consecutive_failures) || 0;
-    const active = watches.filter(watch => watch.status === 'active')
-        .sort((a, b) => failures(b) - failures(a));
-    const rest = watches.filter(watch => watch.status !== 'active');
-    active.forEach(watch => container.appendChild(watchRow(watch)));
-    if (!active.length) {
-        const empty = document.createElement('p');
-        empty.className = 'admin-empty';
-        empty.textContent = 'No active Watch.';
-        container.appendChild(empty);
-    }
-    if (rest.length) {
-        const fold = document.createElement('details');
-        fold.className = 'admin-fold';
-        const summary = document.createElement('summary');
-        summary.textContent = 'Paused and finished ';
-        const count = document.createElement('span');
-        count.className = 'admin-count';
-        count.textContent = String(rest.length);
-        summary.appendChild(count);
-        fold.appendChild(summary);
-        rest.forEach(watch => fold.appendChild(watchRow(watch)));
-        container.appendChild(fold);
-    }
+    if (!watches.length) return;
+    container.appendChild(watchFold(consensusArchived ? 'Archived Consensus Watches' : 'Consensus Watches',
+        watches.map(consensusWatchRow)));
 }
 
-// `pending` lets the first admin load share its /api/admin/watches request
-// (up to ~200 reads) with the Overview.
-async function loadAdminWatches(pending) {
-    watchesStatus('Loading…', false);
+async function loadAgentWatches() {
     try {
-        const data = await (pending instanceof Promise ? pending : shareAdminRequest('GET', '/api/admin/watches'));
-        const smtp = document.getElementById('smtpConfigState');
-        smtp.textContent = data.smtp_configured ? 'Mail ready' : 'Mail not set up';
-        smtp.className = 'admin-state ' + (data.smtp_configured ? 'is-ok' : 'is-alert');
-        adminWatches = data.watches || [];
-        overviewErrors.delete('watches');
-        renderAdminWatches(adminWatches);
-        watchesStatus('', false);
+        const data = await shareAdminRequest('GET', '/api/admin/agent-watches');
+        agentWatchList = data.watches || [];
+        if (Number(data.late_after_seconds) > 0) lateAfterMs = Number(data.late_after_seconds) * 1000;
+        overviewErrors.delete('agent-watches');
+        renderAgentWatches(agentWatchList);
     } catch (err) {
         watchesStatus(err.message, true);
-        if (adminWatches === null) adminWatches = [];
-        overviewErrors.set('watches', ['Watches did not load', 'watches']);
+        if (agentWatchList === null) agentWatchList = [];
+        overviewErrors.set('agent-watches', ['Watches did not load', 'watches']);
     }
     renderOverview();
 }
 
-document.getElementById('loadWatchesBtn').addEventListener('click', () => loadAdminWatches());
+// The Consensus Watches cost up to ~200 reads; they load when the page opens.
+async function loadAdminWatches() {
+    consensusWatchesRequested = true;
+    watchesStatus('Loading…', false);
+    try {
+        const data = await shareAdminRequest('GET', '/api/admin/watches');
+        const smtp = document.getElementById('smtpConfigState');
+        smtp.textContent = data.smtp_configured ? 'Mail ready' : 'Mail not set up';
+        smtp.className = 'admin-state ' + (data.smtp_configured ? 'is-ok' : 'is-alert');
+        consensusArchived = data.archived !== false;
+        adminWatches = data.watches || [];
+        renderAdminWatches(adminWatches);
+        watchesStatus('', false);
+    } catch (err) {
+        watchesStatus(err.message, true);
+    }
+}
+
+document.getElementById('loadWatchesBtn').addEventListener('click', () => {
+    loadAgentWatches();
+    loadAdminWatches();
+});
 document.getElementById('sendWatchTestMailBtn').addEventListener('click', async function () {
     if (!confirm('Send a real test e-mail to your admin address?')) return;
     this.disabled = true;
@@ -2271,20 +2335,20 @@ function renderOverview() {
         items.push(attentionItem(unreviewedShares === 1 ? '1 reported page waits for review'
             : `${unreviewedShares} reported pages wait for review`, 'pages'));
     }
-    const failing = (adminWatches || []).filter(watch => watch.status === 'active' && Number(watch.consecutive_failures) > 0);
+    const failing = (agentWatchList || []).filter(agentWatchFailing);
     if (failing.length) {
-        items.push(attentionItem(failing.length === 1 ? '1 Watch keeps failing' : `${failing.length} Watches keep failing`, 'watches'));
+        items.push(attentionItem(failing.length === 1 ? 'The last look of 1 Watch failed' : `The last look of ${failing.length} Watches failed`, 'watches'));
     }
-    const overdue = (adminWatches || []).filter(watchOverdue);
+    const overdue = (agentWatchList || []).filter(agentWatchOverdue);
     if (overdue.length) {
-        items.push(attentionItem(overdue.length === 1 ? '1 active Watch is overdue' : `${overdue.length} active Watches are overdue`, 'watches', 'warn'));
+        items.push(attentionItem(overdue.length === 1 ? '1 Watch is overdue' : `${overdue.length} Watches are overdue`, 'watches', 'warn'));
     }
     if (seoOverview?.report?.error) items.push(attentionItem('The last SEO pulse failed', 'seo'));
     overviewErrors.forEach(([text, page]) => items.push(attentionItem(text, page, 'warn')));
     setCount('pages', unreviewedShares);
     setCount('watches', new Set([...failing, ...overdue]).size);
 
-    const loaded = unreviewedShares !== null && adminWatches !== null && seoOverview !== null;
+    const loaded = unreviewedShares !== null && agentWatchList !== null && seoOverview !== null;
     list.innerHTML = '';
     if (items.length) items.forEach(item => list.appendChild(item));
     else list.appendChild(attentionItem(loaded ? 'Nothing needs you.' : 'Looking…', '', loaded ? 'ok' : 'quiet'));
@@ -2820,7 +2884,8 @@ onAuthStateChanged(auth, async (user) => {
         fetchModels(idToken);
         loadOverview();
         loadShares('reported');
-        loadAdminWatches();
+        loadAgentWatches();
+        if (currentPage === 'watches') loadAdminWatches();
         loadSeoPulse();
         loadAccountTiers();
         loadApiKeys();

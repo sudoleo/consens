@@ -24,6 +24,7 @@ from app.services import (
     account_tier,
     agent_audit_metrics,
     agent_budget_config,
+    agent_watches,
     mailer,
     persistence_guard,
     prompt_config,
@@ -493,10 +494,30 @@ def admin_list_watches(
     return {
         "status": "success",
         "smtp_configured": mailer.is_configured(),
+        # Archived, these never run again (watch_scheduler.run_watch_tick):
+        # the admin shows them as a record, without run or pause.
+        "archived": cfg.consensus_watches_archived(),
         "watches": page["items"],
         "next_cursor": page["next_cursor"],
         "has_more": page["has_more"],
     }
+
+
+@router.get("/api/admin/agent-watches")
+@limiter.limit("30/minute")
+def admin_list_agent_watches(request: Request):
+    """Every account's Agent Watch with its owner's address, for the admin's
+    Watches page and its overview (read only: users manage their Watches)."""
+    _require_admin(request, {})
+    try:
+        watches = agent_watches.list_all()
+        emails = account_tier.emails_of(watch["uid"] for watch in watches)
+    except Exception as exc:
+        logging.error("admin_list_agent_watches failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="The Watches could not be loaded.") from None
+    for watch in watches:
+        watch["owner_email"] = emails.get(watch["uid"], "")
+    return {"watches": watches, "late_after_seconds": int(agent_watches.LATE_AFTER.total_seconds())}
 
 
 @router.post("/api/admin/watches/{watch_id}/run")

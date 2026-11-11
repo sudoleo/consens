@@ -292,7 +292,7 @@
         <section id="tab-watches" class="admin-tab-panel" data-page="watches" hidden>
             <header class="admin-head">
                 <h1>Watches</h1>
-                <p>Every Watch and its next run. Run now makes real model calls and follows the Watch's e-mail rule.</p>
+                <p>Every account's Watches with their next look. People change their own on their Watches page.</p>
             </header>
             <div class="admin-toolbar">
                 <span id="smtpConfigState" class="admin-state">Mail unknown</span>
@@ -300,6 +300,7 @@
                 <button id="loadWatchesBtn" type="button" class="admin-btn quiet">Reload</button>
                 <span id="watchesStatus" class="admin-status" role="status"></span>
             </div>
+            <div id="agentWatchesContainer" class="admin-list"></div>
             <div id="watchesContainer" class="admin-list"></div>
         </section>
 

@@ -1,5 +1,6 @@
-"""The admin's start page: the Agent's answers per day, one read per day."""
-from datetime import date
+"""The admin's start page: the Agent's answers per day, one read per day,
+and every account's Watches for the Watches page."""
+from datetime import date, datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -9,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from app.api.routers import admin as admin_router
 from app.core.rate_limit import limiter
+from app.services import account_tier, agent_watches
 from app.services import agent_audit_metrics as metrics
 
 
@@ -79,3 +81,69 @@ def test_the_overview_answers_with_the_days_or_says_it_could_not(client):
         response = client.get("/api/admin/overview")
     assert response.status_code == 503
     assert "db down" not in response.text
+
+
+class WatchesDb:
+    def __init__(self, documents):
+        self.documents = documents
+        self.limits = []
+
+    def collection(self, name):
+        assert name == agent_watches.COLLECTION
+        return self
+
+    def limit(self, value):
+        self.limits.append(value)
+        return self
+
+    def stream(self):
+        return [SimpleNamespace(id=doc_id, to_dict=lambda data=data: dict(data))
+                for doc_id, data in self.documents.items()]
+
+
+def at(day, hour=8):
+    return datetime(2026, 11, day, hour, tzinfo=timezone.utc)
+
+
+def test_every_watch_comes_running_first_by_next_run_then_paused_then_ended():
+    db = WatchesDb({
+        "ended": {"uid": "u1", "task": "Old", "status": "done", "ended": "goal_reached"},
+        "later": {"uid": "u2", "task": "Later", "status": "active", "interval": "daily",
+                  "next_run_at": at(12)},
+        "paused": {"uid": "u1", "task": "Paused", "status": "paused", "next_run_at": at(10)},
+        "sooner": {"uid": "u3", "task": "Sooner", "status": "active", "interval": "hourly",
+                   "next_run_at": at(11), "looks": [{"at": at(11, 7), "outcome": "failed"}]},
+    })
+    watches = agent_watches.list_all(db=db)
+
+    assert [watch["id"] for watch in watches] == ["sooner", "later", "paused", "ended"]
+    assert db.limits == [agent_watches.ADMIN_LIST_LIMIT]
+    assert watches[0]["uid"] == "u3"
+    assert watches[0]["looks"] == [{"at": at(11, 7).isoformat(), "outcome": "failed", "summary": ""}]
+    assert watches[3]["ended"] == "goal_reached"
+
+
+def test_the_admin_list_names_each_owner_by_address(client):
+    listed = [{"id": "w1", "uid": "u1", "status": "active"}, {"id": "w2", "uid": "u2", "status": "paused"}]
+    admin = (patch.object(admin_router, "extract_id_token", return_value="token"),
+             patch.object(admin_router, "verify_user_token", return_value="admin-uid"),
+             patch.object(admin_router, "is_user_admin", return_value=True))
+    with admin[0], admin[1], admin[2], \
+         patch.object(agent_watches, "list_all", return_value=listed), \
+         patch.object(account_tier, "emails_of", return_value={"u1": "one@example.test"}):
+        body = client.get("/api/admin/agent-watches").json()
+    assert [(watch["id"], watch["owner_email"]) for watch in body["watches"]] == [("w1", "one@example.test"), ("w2", "")]
+    assert body["late_after_seconds"] == int(agent_watches.LATE_AFTER.total_seconds())
+    with admin[0], admin[1], patch.object(admin_router, "is_user_admin", return_value=False):
+        assert client.get("/api/admin/agent-watches").status_code == 403
+
+
+def test_the_consensus_watch_list_says_whether_they_are_archived(client):
+    page = {"items": [], "next_cursor": "", "has_more": False}
+    admin = (patch.object(admin_router, "extract_id_token", return_value="token"),
+             patch.object(admin_router, "verify_user_token", return_value="admin-uid"),
+             patch.object(admin_router, "is_user_admin", return_value=True))
+    with admin[0], admin[1], admin[2], \
+         patch.object(admin_router.watch_service, "list_watches_for_admin_page", return_value=page), \
+         patch.object(admin_router.cfg, "consensus_watches_archived", return_value=True):
+        assert client.get("/api/admin/watches").json()["archived"] is True

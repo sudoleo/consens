@@ -11178,9 +11178,10 @@ weiter auf `/admin#seo`). **Overview** (Startseite) baut sich aus dem, was die
 anderen Seiten ohnehin laden, plus `GET /api/admin/overview`
 (`agent_audit_metrics.recent_days`: Agent-Turns je Status der letzten 14
 UTC-Tage aus `ops_metrics/agent-audit-{Tag}`, ein Read je Tag): „Needs you“
-nennt ungeprüfte gemeldete Seiten, fehlschlagende und überfällige aktive
-Watches (fällig seit über einer Stunde ohne Lease), einen fehlgeschlagenen
-SEO-Puls und Teile, die nicht geladen haben; dazu Agent-Antworten je Tag,
+nennt ungeprüfte gemeldete Seiten, laufende Agent-Watches, deren letzter Blick
+fehlschlug (`failed`, `not_started`, `cannot_run`) oder die eine Stunde über
+`agent_watches.LATE_AFTER` fällig sind, einen fehlgeschlagenen SEO-Puls und
+Teile, die nicht geladen haben; dazu Agent-Antworten je Tag,
 Suche der Woche, Zahl der Plus-/Pro-Konten und ein Suchfeld, das ein Konto auf
 Accounts öffnet. Die Zahlen am Menü (Pages, Watches) kommen aus derselben
 Rechnung. **Accounts**: Suche per E-Mail/UID, Plan als Segmentwahl mit
@@ -11189,9 +11190,16 @@ Plan), Liste Plus/Pro mit E-Mail (`account_tier.emails_of`: Firebase Auth
 `get_users` in 100er-Batches, kein Firestore-Read; ein Fehler lässt die UID
 stehen), letzte Änderungen und eingeklappt die API-Schlüssel (`#tab-api`).
 **Pages**: Moderation (Reported/All) und darunter der SEO-Puls (`#tab-seo`).
-**Watches**: aktive Watches zuerst (fehlschlagende oben) mit Pause/Resume
-(`POST /api/admin/watches/{id}/status`) und Run now, pausierte und beendete
-eingeklappt; die frühere Liste „Former Publisher pages“ ist darin aufgegangen.
+**Watches**: die Agent-Watches aller Konten, nur lesend
+(`GET /api/admin/agent-watches`: `agent_watches.list_all`, ein Read je
+Watch, höchstens 300, laufende nach nächstem Lauf, dann pausierte, dann
+beendete; dazu die E-Mail des Besitzers), laufende mit Problem oben,
+pausierte und beendete eingeklappt. Darunter eingeklappt die
+Consensus-Watches (`GET /api/admin/watches`, erst beim ersten Öffnen der
+Seite geladen); solange `archived` (`cfg.consensus_watches_archived`) gilt,
+ohne Pause/Resume und Run now, sonst mit
+(`POST /api/admin/watches/{id}/status`, `…/run`). Die frühere Liste
+„Former Publisher pages“ ist darin aufgegangen.
 **Models**: Presets (gewählte Familien plus ein leerer Platz, bis sechs),
 Modelllisten je Anbieter eingeklappt mit Zusammenfassung, darunter
 „Advanced“ (`#tab-consensus`): Consensus-Engines, Judges, Chat-Memory,
@@ -11231,11 +11239,10 @@ Die Modell-Seiten bekommen via
 API-Schlüssel (Accounts, eingeklappt) werden für eine bestehende Firebase-UID
 ausgegeben; der Klartextschlüssel steht genau einmal zum Kopieren da, danach
 nur Hash-ID, Präfix, Label, UID, Status und Audit-Zeitstempel. Der SEO-Teil
-von Pages ist der SEO-Puls (§4 „SEO-Puls“). Watches zeigt operative
-Watch-Metadaten, den SMTP-Status und admin-only Aktionen für eine echte
-Testmail sowie den sofortigen Start einer aktiven Watch; die Free-/Pro-
-Watch-Modellmatrix liegt unter Models → Advanced. Der eigentliche Lauf bleibt
-im normalen Lease-/Budget-/Scheduler-Pfad. E2E-Zugriff auf
+von Pages ist der SEO-Puls (§4 „SEO-Puls“). Watches zeigt dazu den
+SMTP-Status und eine echte Testmail; die Free-/Pro-Modellmatrix der
+Consensus-Watches liegt unter Models → Advanced. Ein Lauf bleibt im normalen
+Lease-/Budget-/Scheduler-Pfad. E2E-Zugriff auf
 Admin-Endpunkte: `MOCK_ADMIN=1` (wirkt nur zusammen mit `MOCK_AUTH=1`).
 Die Seite Topics unter `/admin#topics` lädt/speichert ausschließlich die Topics-
 API; Pause/Archive und Snapshot-Publishing berühren Pages und Watches nicht.

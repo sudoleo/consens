@@ -724,6 +724,22 @@ _days_purged = None  # the date of this process's last purge_days
 
 # --- the schedule's runs ---------------------------------------------------
 
+ADMIN_LIST_LIMIT = 300
+
+
+def list_all(*, db=None, limit: int = ADMIN_LIST_LIMIT) -> list[dict]:
+    """Every account's Watches for the admin, running ones first by their
+    next run, then paused, then ended: one read per Watch."""
+    db = _db(db)
+    watches = []
+    for snapshot in db.collection(COLLECTION).limit(limit).stream():
+        data = snapshot.to_dict() or {}
+        watches.append({**serialize(snapshot.id, data), "uid": str(data.get("uid") or "")})
+    order = {STATUS_ACTIVE: 0, STATUS_PAUSED: 1}
+    watches.sort(key=lambda watch: (order.get(watch["status"], 2), watch["next_run_at"] or "~"))
+    return watches
+
+
 def _stream(query):
     """The scheduler's reads: no retries and a short deadline, so a slow
     Firestore costs one tick, not a retry series (watch_service.earliest_next_run_at)."""
