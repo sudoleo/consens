@@ -229,19 +229,25 @@ picture's green edge, never the terminal's; an amber reminder after
 request stays its quiet line while the user has the browser) or what the agent
 waits for there (`agentWaits`, set by `agent-chat.js renderHold` for an
 `ask_user` browser card, with "Take over"); the one-line hint above the picture
-gives way to the bar; since 2026-10-29 `agent-activity.js` shows each `open`
-of the `browser` tool as a card (`.agent-page-card`, `pageCard`; before, a
-"Watch live" link on every browser step): the page's picture (`preview`, a
+gives way to the bar; `agent-activity.js` shows an `open` of the `browser`
+tool as a card (`.agent-page-card`, `pageCard`) when the agent opened the page
+for the user (`for_user` in the tool's arguments and the step's activity,
+`showsPage`; since 2026-11-11, Max: the browser shows up in the chat only
+where the user is to do something with it; a page the agent opens for itself
+is a step line like any other browser step, and once it opens one the pinned
+card goes; from 2026-10-29 to then every `open` was a card, before that a
+"Watch live" link stood on every browser step): the page's picture (`preview`, a
 720-px JPEG from `browser.py preview` since 2026-10-30, smaller only when over
 64 KB (`PREVIEW_TRIES`), Chrome's scaled viewport via CDP,
 checked by `agent_browser.preview_url` and reported into the activity only,
 never into the agent's result), title, "host · opened in the browser" and
 Open; while it opens the picture's place waits in the skeleton's light; in
-the timeline the picture stands on top. The page opened last also stands
-pinned under the run's line (`.agent-page-pin`, `pinPage`; open steps are no
-live lines since 2026-10-29): since 2026-10-30 the same card as in the
+the timeline the picture stands on top. The user's page, while it is the one
+opened last, also stands
+pinned under the run's line (`.agent-page-pin`, `pinPage`; its open step is no
+live line): since 2026-10-30 the same card as in the
 timeline, and it shows the page as it is now: an action that can change the
-page (`agent_browser.PREVIEW_AFTER`) asks the helper for a new picture once
+user's page (`agent_browser.PREVIEW_AFTER`, `BrowserTools.for_user`) asks the helper for a new picture once
 the last is `PREVIEW_SECONDS` (12 s) old, its activity carries `page_title`
 and `page_url`, and the pinned card takes the newest picture after the open
 with them, swapping it without the waiting light (Max: a 64-px tile in one

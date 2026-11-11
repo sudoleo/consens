@@ -1101,15 +1101,19 @@
     details.addEventListener('toggle', () => { if (details.open) output.scrollTop = output.scrollHeight; });
     return details;
   }
-  // An opened page is a card, like the browser card in Claude: the page as
-  // the agent's browser showed it (agent_browser.preview_url), its title, the
-  // site, and Open for the live view (workspace-view.js). While it opens, the
-  // picture's place waits in the skeleton's light.
+  // A page the agent opened for the user (agent_browser for_user) is a card,
+  // like the browser card in Claude: the page as the agent's browser showed
+  // it (agent_browser.preview_url), its title, the site, and Open for the
+  // live view (workspace-view.js). While it opens, the picture's place waits
+  // in the skeleton's light. A page the agent reads or works on itself is a
+  // step like any other: the browser shows up in the chat only where the
+  // user is to do something with it.
   const opensPage = item => item?.name === 'browser' && item.action === 'open';
+  const showsPage = item => opensPage(item) && item.for_user === true;
   const pagePicture = item => typeof item.preview === 'string' && item.preview.startsWith('data:image/jpeg;base64,')
     ? item.preview : '';
   function stepView(className, item) {
-    return opensPage(item) ? pageCard(className) : vmView(className);
+    return showsPage(item) ? pageCard(className) : vmView(className);
   }
   // Its own surface inside the entry: the timeline draws its dot and rail
   // on the entry itself (agent-chat.css). The same card stands pinned under
@@ -1177,19 +1181,22 @@
     open.textContent = App.t('Open');
     open.setAttribute('aria-label', App.t('Open the browser'));
   }
-  // The page the browser shows, so it does not fold away with the earlier
-  // steps while the browser is still open: one card under the run's line
-  // with the page opened last, changed in place when the agent opens
-  // another, still there while the answer comes and after it; a page that
-  // did not open leaves the one before. The timeline keeps a card per page;
-  // open, it holds this one too.
+  // The page the agent opened for the user, so it does not fold away with
+  // the earlier steps while the browser shows it: one card under the run's
+  // line, changed in place when the agent opens another for them, still
+  // there while the answer comes and after it; a page that did not open
+  // leaves the one before. Once the agent opens a page of its own, the
+  // user's is no longer in front and the card goes. The timeline keeps a
+  // card per page opened for the user; open, it holds this one too.
   // It shows the page as it is now, so the reader sees where the agent is:
   // the newest picture a later step on it brought
   // (agent_browser.PREVIEW_SECONDS), with the title and address that step's
   // page had.
   function pinPage(view, tools) {
     const at = tools.findLastIndex(item => opensPage(item) && !['failed', 'cancelled'].includes(item.status));
-    if (at < 0) { view.pin.hidden = true; view.pin.replaceChildren(); view.pinCard = null; return; }
+    if (at < 0 || !showsPage(tools[at])) {
+      view.pin.hidden = true; view.pin.replaceChildren(); view.pinCard = null; return;
+    }
     const opened = tools[at];
     let now = null;
     for (let index = tools.length - 1; index > at && !now; index -= 1) {
@@ -1527,8 +1534,8 @@
       vmRestoreEl.className = "agent-vm-restore workspace-only";
       vmRestoreEl.textContent = "Restore the workspace to before this message";
       vmRestoreEl.hidden = true;
-      // The page the browser opened last, under the run's line: it stays while
-      // the run goes on, the answer comes and after it (pinPage).
+      // The page the agent opened for the user, under the run's line: it stays
+      // while the run goes on, the answer comes and after it (pinPage).
       const pin = document.createElement('div'); pin.className = 'agent-page-pin'; pin.hidden = true;
       const preview = document.createElement('div'); preview.className = 'agent-progress';
       preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');
@@ -1655,8 +1662,8 @@
       ? [{id:item.id, text:item.text, kind:item.from_user ? 'user' : 'progress'}]
       : isReasoning.has(item) ? [{id:item.id, text:compact(item), kind:'progress'}]
         : isTool.has(item) && item.name === 'update_plan' ? []
-        // An opened page stands pinned above the lines (pinPage), not among them.
-        : isTool.has(item) && opensPage(item) ? []
+        // A page opened for the user stands pinned above the lines (pinPage), not among them.
+        : isTool.has(item) && showsPage(item) ? []
         : isTool.has(item) && vmTools.has(item.name) ? [{id:`vm:${item.id}`, kind:'vm', item}]
         : isTool.has(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly), kind:'step', status:item.status,
           current:running && !waiting && !reconnecting && !held && item === activeTool},

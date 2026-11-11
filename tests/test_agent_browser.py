@@ -440,20 +440,60 @@ def test_an_action_brings_the_picture_after_it_when_asked(store, fake_vm, monkey
 JPEG = b"\xff\xd8\xff\xe0" + b"1" * 64
 
 
-def test_an_opened_page_brings_its_picture_to_the_card_never_to_the_agent(store, fake_vm):
-    """The card of an open step in the chat shows the page (agent-activity.js):
-    the helper's small JPEG stays in the activity."""
-    script = Agent([[("browser", {"action": "open", "url": "https://kfw.de/"})], [("browser", {"action": "read"})]])
-    fake_vm.browser = lambda request: {"status": "ok", "text": 'Opened https://kfw.de/\nPage: "KfW"',
+def test_a_page_opened_for_the_user_brings_its_picture_to_the_card_never_to_the_agent(store, fake_vm):
+    """The card in the chat shows a page the agent opened for the user
+    (for_user, agent-activity.js showsPage): the helper's small JPEG stays in
+    the activity."""
+    script = Agent([[("browser", {"action": "open", "url": "http://localhost:3000/", "for_user": True})],
+                    [("browser", {"action": "read"})]])
+    fake_vm.browser = lambda request: {"status": "ok", "text": 'Opened http://localhost:3000/\nPage: "Tic-tac-toe"',
                                        "preview": base64.b64encode(JPEG).decode()}
     loop = vm_loop(store, script)
     list(loop.run())
     saved = [e for e in store.get_turn(UID, loop.chat_id, loop.turn_id)["agent_activity"] if e.get("name") == "browser"]
     assert saved[0]["preview"] == "data:image/jpeg;base64," + base64.b64encode(JPEG).decode()
-    assert saved[0]["status"] == "succeeded" and saved[0]["title"] == "KfW"
+    assert saved[0]["status"] == "succeeded" and saved[0]["title"] == "Tic-tac-toe" and saved[0]["for_user"] is True
     # Only an open has a card; the agent's results never carry the picture.
-    assert "preview" not in saved[1]
+    assert "preview" not in saved[1] and "for_user" not in saved[1]
     assert all("preview" not in json.dumps(result) and "/9j/" not in json.dumps(result) for result in results(loop))
+
+
+def test_a_page_the_agent_opens_for_itself_has_no_card_and_no_picture(store, fake_vm, monkeypatch):
+    """The browser shows up in the chat only where the user is to do
+    something with it (Max): a page the agent reads or works on itself is a
+    step like any other. Its activity carries neither the mark of a card nor
+    a picture, and no later action asks the helper for one."""
+    monkeypatch.setattr(agent_browser, "PREVIEW_AFTER", agent_browser.PICTURE_AFTER - {"open"})
+    picture = base64.b64encode(JPEG).decode()
+    # The helper pictures every opened page; the server passes it on for the user's only.
+    fake_vm.browser = lambda request: {"status": "ok", "text": 'Opened https://kfw.de/\nPage: "KfW"\nURL: https://kfw.de/',
+                                       **({"preview": picture} if request["action"] == "open" or request.get("preview")
+                                          else {})}
+    loop, browser = tools(store)
+    reported = []
+
+    def act(**fields):
+        args = BrowserArgs(**fields)
+        return args, browser.call(args, cancellation=ProviderCancellation(), report=reported.append)
+    args, result = act(action="open", url="https://kfw.de/")
+    act(action="click", ref="e4")
+    assert "for_user" not in browser._activity(args, result) and "for_user" not in browser._activity(args, None)
+    assert not any("preview" in fields for fields in reported)
+    assert [request.get("preview") for request in fake_vm.requests] == [None, None]
+    # A page for the user after it: its card, and its picture renewed from then on.
+    args, result = act(action="open", url="http://localhost:3000/", for_user=True)
+    act(action="click", ref="e4")
+    assert browser._activity(args, None)["for_user"] is True
+    assert [request.get("preview") for request in fake_vm.requests][2:] == [None, None]
+    assert sum(1 for fields in reported if "preview" in fields) == 1
+    # The agent's own page in front again: the user's card is over, and so are its pictures.
+    act(action="open", url="https://kfw.de/")
+    browser.previewed_at = None
+    act(action="click", ref="e4")
+    assert fake_vm.requests[-1].get("preview") is None
+    assert sum(1 for fields in reported if "preview" in fields) == 1
+    with pytest.raises(ValueError, match="for_user goes with the action open"):
+        act(action="read", for_user=True)
 
 
 def test_a_screenshot_the_agent_shows_lands_under_its_answer_with_the_page_as_its_source(
@@ -506,9 +546,10 @@ def test_a_screenshot_the_agent_shows_lands_under_its_answer_with_the_page_as_it
 
 def test_the_pages_card_gets_a_new_picture_now_and_then_as_the_agent_works(store, fake_vm, monkeypatch):
     """A card that kept the page as it opened would show nobody where the
-    agent is. An action that can change the page asks for a new
-    picture once the last is PREVIEW_SECONDS old; the card takes the title
-    and address of that step's page; the agent never sees the picture."""
+    agent is. On a page opened for the user, an action that can change the
+    page asks for a new picture once the last is PREVIEW_SECONDS old; the
+    card takes the title and address of that step's page; the agent never
+    sees the picture."""
     monkeypatch.setattr(agent_browser, "PREVIEW_AFTER", agent_browser.PICTURE_AFTER - {"open"})
     clock = {"now": 1000.0}
     monkeypatch.setattr(agent_browser.time, "monotonic", lambda: clock["now"])
@@ -520,6 +561,9 @@ def test_the_pages_card_gets_a_new_picture_now_and_then_as_the_agent_works(store
 
     def act(**fields):
         return browser.call(BrowserArgs(**fields), cancellation=ProviderCancellation(), report=reported.append)
+    # The page in front is the user's (its open brought no picture here).
+    act(action="open", url="https://shop.example/", for_user=True)
+    fake_vm.requests.clear()
     act(action="click", ref="e4")
     clock["now"] += 3
     act(action="click", ref="e5")

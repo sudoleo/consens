@@ -2572,7 +2572,17 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
 - **Einstiege** wie bisher: im Chat über (+) → „Workspace“
   (`#attachWorkspaceOption`), auf dem Startbildschirm über den Knopf in der
   Reihe des Feldes (`#composerWorkspaceButton`, ab 701 px), über „Öffnen“ auf der Karte
-  jeder Seite, die der Agent öffnet (`agent-activity.js` `.agent-page-card`,
+  einer Seite, die der Agent für den Nutzer öffnet (`browser` `open` mit
+  `for_user`, Aktivitätsfeld `for_user`, `agent-activity.js` `showsPage`,
+  `.agent-page-card`; seit 2026-11-11, Max: Der Browser erscheint im Chat nur,
+  wo der Nutzer etwas mit ihm tun soll. Vorher bekam jede geöffnete Seite eine
+  Karte, auch die, die der Agent nur für sich las. Eine eigene Seite ist jetzt
+  ein Schritt wie jeder andere, „Opened <Titel>“ mit der gelesenen Seite als
+  Ausgabe, ohne Bild; öffnet der Agent danach eine eigene Seite, geht die
+  angeheftete Karte, weil die Seite des Nutzers nicht mehr vorn ist. Der Server
+  reicht das Bild des Helfers nur für die Seite des Nutzers weiter und fragt
+  nur dort nach neuen, `BrowserTools.for_user`. Die Übergabe per `ask_user`
+  hat ihre eigene Karte über dem Feld und braucht keine Seitenkarte;
   seit 2026-10-29 mit dem Bild der Seite, Titel und Website; vorher „Live
   ansehen“ an jedem `browser`-Schritt; seit 2026-10-30 zeigt die angeheftete
   Karte die Seite, wie sie jetzt ist: Aktionen, die die Seite ändern können,

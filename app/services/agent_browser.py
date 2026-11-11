@@ -90,9 +90,11 @@ WAIT_MAX = 120
 ANSWER_BYTES = 12 * 1024 * 1024
 # The activity's view of the page after an action.
 VIEW_CHARS = 2_000
-# The opened page's picture on its card in the chat (browser.py preview):
-# a JPEG up to this size, in the activity only, never in
-# the agent's result. Measured 2-22 KB at 480 px. The card
+# The card in the chat is for a page the agent opened for the user
+# (for_user), never for one it reads or works on itself (Max: the browser
+# shows up in the chat only where the user is to do something with it). Its
+# picture (browser.py preview): a JPEG up to this size, in the activity only,
+# never in the agent's result. Measured 2-22 KB at 480 px. The card
 # shows the page as it is now: an action that can change it (PICTURE_AFTER)
 # brings a new picture when the last is PREVIEW_SECONDS old (Max: a card
 # that keeps the page as it opened shows nobody where the agent is).
@@ -121,7 +123,8 @@ PICTURE_AFTER = frozenset({"open", "click", "drag", "type", "select", "key", "sc
 # What accept_dialog goes with: the actions after which a page can ask
 # (confirm, prompt), which browser.py answers with Cancel without it.
 DIALOG_AFTER = frozenset({"open", "click", "drag", "type", "select", "upload", "key", "scroll", "back", "forward"})
-# Those that renew the picture on the page's card now and then (PREVIEW_SECONDS); open brings one always.
+# Those that renew the picture on the card of the user's page now and then
+# (PREVIEW_SECONDS); its open brings one always.
 PREVIEW_AFTER = PICTURE_AFTER - {"open"}
 # A screenshot the agent shows the user under its answer (show): at most
 # this many per message. Asked "can
@@ -163,6 +166,9 @@ class BrowserArgs(BaseModel):
     direction: Literal["", "up", "down"] = ""
     tab: int = Field(default=0, ge=0, le=100)
     new_tab: bool = False
+    for_user: bool = Field(default=False, description=(
+        "open: true when the user is to look at or use this page themselves, such as an app you built for them: "
+        "the chat then shows it on a card, where they open it live."))
     offset: int = Field(default=0, ge=0, le=100_000)
     seconds: int = Field(default=0, ge=0, le=WAIT_MAX)
     file: str = Field(default="", max_length=1024, description="upload: a file in your workspace.")
@@ -340,6 +346,8 @@ def required(args):
                          "the action screenshot.")
     if args.show and not (args.action == "screenshot" or args.screenshot_after):
         raise ValueError("show goes with the action screenshot or with screenshot_after.")
+    if args.for_user and args.action != "open":
+        raise ValueError("for_user goes with the action open.")
 
 
 def helper(backend, name, request, timeout, cancellation):
@@ -391,7 +399,9 @@ class BrowserTools:
         self._timing = None
         # The address of the page in front, as the last answer said (None before it).
         self.page_url = None
-        # When the page's card in the chat last got a picture (PREVIEW_SECONDS).
+        # The page in front was opened for the user (for_user): it has a card in the chat.
+        self.for_user = False
+        # When that card last got a picture (PREVIEW_SECONDS).
         self.previewed_at = None
         # Screenshots shown to the user in this message: digest -> what the agent heard (show).
         self.shown = {}
@@ -409,8 +419,9 @@ class BrowserTools:
                        "open, back, forward, tab, another address and a large change. scroll says where the view is "
                        "now. download returns the file's name, bytes and Content-Type; an empty file comes back "
                        "refused and nothing is saved. A file the page downloads, also one the user downloads there, "
-                       "comes into your chat folder's downloads folder. The user sees the page in front on a card in "
-                       "the chat, its picture renewed as you work, and opens it live from there.",
+                       "comes into your chat folder's downloads folder. A page you open with for_user stands on a "
+                       "card in the chat, its picture renewed as you work, and the user opens it live from there; "
+                       "the pages you read or work on yourself show only as steps of your work.",
             BrowserArgs, self.call, activity=self._activity, reports=True),
             # Where the browser is logged in (agent_workspace.note_sign_in).
             ReadOnlyTool(
@@ -683,8 +694,8 @@ class BrowserTools:
             request.update(x=args.x, y=args.y)
         if args.action == "drag":
             request["strokes"] = args.strokes
-        # A new picture for the page's card: always for an opened page, else now and then.
-        pictured = args.action == "open" or (args.action in PREVIEW_AFTER and (
+        # A new picture for the card of the user's page: always when it opens, else now and then.
+        pictured = args.for_user if args.action == "open" else (self.for_user and args.action in PREVIEW_AFTER and (
             self.previewed_at is None or time.monotonic() - self.previewed_at >= PREVIEW_SECONDS))
         if pictured and args.action != "open":
             request["preview"] = True
@@ -782,6 +793,9 @@ class BrowserTools:
         if status == "user":
             from app.services.agent_vm_tools import VM_USER_HAS_BROWSER
             raise ValueError(VM_USER_HAS_BROWSER)
+        if args.action == "open":
+            # The page in front is this one now: the user's, or the agent's own.
+            self.for_user = args.for_user
         shown = preview_url(answer.get("preview")) if pictured else ""
         if shown:
             self.previewed_at = time.monotonic()
@@ -937,6 +951,9 @@ class BrowserTools:
         fields = {"action": args.action}
         if args.action == "open":
             fields["url"] = args.url[:500]
+            if args.for_user:
+                # The page's card in the chat (agent-activity.js showsPage).
+                fields["for_user"] = True
         elif args.ref:
             fields["ref"] = args.ref
         elif args.action in {"click", "upload", "scroll"} and args.x is not None and args.y is not None:
@@ -962,7 +979,7 @@ class BrowserTools:
             head = lines[1] if args.action == "open" and len(lines) > 1 else lines[0]
             if head.startswith("Page: "):
                 fields["title"] = head[6:].strip().strip('"')[:200]
-            # The page's card in the chat shows the page as it is now (pinPage):
+            # The card of the user's page shows the page as it is now (pinPage):
             # its title and address after any action, beside the step's own fields.
             title = re.search(r'^Page: "(.*)"$', result["page"], re.M)
             address = re.search(r"^URL: (\S+)", result["page"], re.M)

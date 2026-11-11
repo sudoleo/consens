@@ -342,15 +342,17 @@ describe("a step in the workspace's browser", () => {
   // command in the shell.
   const step = fields => vm({ name: "browser", ...fields });
   const PREVIEW = "data:image/jpeg;base64,/9j/4AAQ";
-  // An opened page is a card (agent_browser.preview_url): its picture, title
-  // and site, and Open for the live view.
-  it("shows an opened page as a card that waits for its picture and opens the live view", () => {
+  // A page the agent opened for the user (for_user) is a card
+  // (agent_browser.preview_url): its picture, title and site, and Open for
+  // the live view.
+  it("shows a page opened for the user as a card that waits for its picture and opens the live view", () => {
     const { app, host, activity } = setup();
     const opened = [];
     app.window.App.workspaceView = { open: () => opened.push(true) };
     app.document.body.classList.add("viewer-has-workspace");
     const events = [];
-    activity.receive(events, step({ status: "running", action: "open", url: "https://www.kfw.de/inlandsfoerderung/" }));
+    activity.receive(events, step({ status: "running", action: "open", for_user: true,
+      url: "https://www.kfw.de/inlandsfoerderung/" }));
     activity.render(host, { running: true, status: "running", events });
     // Pinned under the run's line, not among the live lines.
     const pin = host.querySelector(".agent-page-pin");
@@ -367,8 +369,8 @@ describe("a step in the workspace's browser", () => {
     expect(live.hasAttribute("data-i18n-skip")).toBe(true);
     // The picture and the title arrive; the card shows them.
     activity.receive(events, step({ status: "running", preview: PREVIEW }));
-    activity.receive(events, step({ status: "succeeded", action: "open", url: "https://www.kfw.de/inlandsfoerderung/",
-      title: "Heizungsförderung für Privatpersonen | KfW" }));
+    activity.receive(events, step({ status: "succeeded", action: "open", for_user: true,
+      url: "https://www.kfw.de/inlandsfoerderung/", title: "Heizungsförderung für Privatpersonen | KfW" }));
     activity.render(host, { running: true, status: "running", events });
     expect(live.querySelector(".agent-page-shot img").getAttribute("src")).toBe(PREVIEW);
     expect(live.querySelector(".agent-page-title").textContent).toBe("Heizungsförderung für Privatpersonen | KfW");
@@ -378,7 +380,7 @@ describe("a step in the workspace's browser", () => {
     expect(open.textContent).toBe("Open");
     open.click();
     expect(opened).toEqual([true]);
-    // The timeline holds a card per page in its order.
+    // The timeline holds a card per page opened for the user, in its order.
     const saved = host.querySelector(".agent-activity-content .agent-page-card");
     expect(saved.classList.contains("agent-activity-tool")).toBe(true);
     expect(saved.querySelector(".agent-page-shot img").getAttribute("src")).toBe(PREVIEW);
@@ -388,11 +390,11 @@ describe("a step in the workspace's browser", () => {
 
   // The card folded away with the earlier steps while the
   // browser was still open. It stays, changed in place, also after the run.
-  it("keeps the page the browser shows pinned while the run goes on, and after it", () => {
+  it("keeps the user's page pinned while the run goes on, and after it", () => {
     const { host, activity } = setup();
     const events = [];
-    activity.receive(events, step({ status: "succeeded", action: "open", url: "https://kfw.de/", title: "KfW",
-      preview: PREVIEW }));
+    activity.receive(events, step({ status: "succeeded", action: "open", for_user: true, url: "https://kfw.de/",
+      title: "KfW", preview: PREVIEW }));
     for (const [n, action] of [[2, "read"], [3, "click"], [4, "scroll"]]) {
       activity.receive(events, step({ id: `completion:1:call_${n}/tool`, status: "succeeded", action, ref: "e1" }));
     }
@@ -405,9 +407,9 @@ describe("a step in the workspace's browser", () => {
     expect(host.querySelector(".agent-progress .agent-page-card")).toBeNull();
     // Another page: the same card, now with it; one that fails leaves it.
     activity.receive(events, step({ id: "completion:1:call_6/tool", status: "succeeded", action: "open",
-      url: "https://bafa.de/", title: "BAFA" }));
+      for_user: true, url: "https://bafa.de/", title: "BAFA" }));
     activity.receive(events, step({ id: "completion:1:call_7/tool", status: "failed", action: "open",
-      url: "https://down.example/" }));
+      for_user: true, url: "https://down.example/" }));
     activity.render(host, { running: true, status: "running", events });
     expect(host.querySelector(".agent-page-pin .agent-page-card")).toBe(card);
     expect(card.querySelector(".agent-page-title").textContent).toBe("BAFA");
@@ -429,7 +431,7 @@ describe("a step in the workspace's browser", () => {
   it("shows the page as it is now on the pinned card, from the newest picture a later step brought", () => {
     const { host, activity } = setup();
     const events = [];
-    activity.receive(events, step({ status: "succeeded", action: "open", url: "https://www.bild.de/",
+    activity.receive(events, step({ status: "succeeded", action: "open", for_user: true, url: "https://www.bild.de/",
       title: "Aktuelle Nachrichten | BILD.de", preview: PREVIEW }));
     activity.render(host, { running: true, status: "running", events });
     const card = host.querySelector(".agent-page-pin .agent-page-card");
@@ -451,7 +453,7 @@ describe("a step in the workspace's browser", () => {
       .toBe(PREVIEW);
     // Another page opened later starts the card anew from its own picture.
     activity.receive(events, step({ id: "completion:1:call_4/tool", status: "succeeded", action: "open",
-      url: "https://www.welt.de/", title: "WELT", preview: PREVIEW }));
+      for_user: true, url: "https://www.welt.de/", title: "WELT", preview: PREVIEW }));
     activity.render(host, { running: true, status: "running", events });
     expect(img.getAttribute("src")).toBe(PREVIEW);
     expect(card.querySelector(".agent-page-title").textContent).toBe("WELT");
@@ -460,11 +462,11 @@ describe("a step in the workspace's browser", () => {
   it("shows a card without a picture for a page saved without one, and only valid pictures", () => {
     const { host, activity } = setup();
     const events = [];
-    activity.receive(events, step({ status: "succeeded", action: "open", url: "https://github.com" }));
+    activity.receive(events, step({ status: "succeeded", action: "open", for_user: true, url: "https://github.com" }));
     activity.receive(events, step({ id: "completion:1:call_2/tool", status: "succeeded", action: "open",
-      url: "https://evil.example", title: "Evil", preview: "javascript:alert(1)" }));
+      for_user: true, url: "https://evil.example", title: "Evil", preview: "javascript:alert(1)" }));
     activity.receive(events, step({ id: "completion:1:call_3/tool", status: "failed", action: "open",
-      url: "https://down.example" }));
+      for_user: true, url: "https://down.example" }));
     activity.render(host, { running: false, status: "completed", events });
     const [plain, evil, failed] = host.querySelectorAll(".agent-activity-content .agent-page-card");
     expect(plain.querySelector(".agent-page-shot").hidden).toBe(true);
@@ -475,6 +477,55 @@ describe("a step in the workspace's browser", () => {
     expect(failed.dataset.outcome).toBe("failed");
     // Without a workspace on the account there is nothing to open.
     expect(plain.querySelector(".agent-page-open").hidden).toBe(true);
+  });
+
+  // The browser shows up in the chat only where the user is to do something
+  // with it (Max): a page the agent reads or works on itself is a step like
+  // any other, with no card and no picture.
+  it("shows a page the agent opened for itself as its line, never as a card", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, step({ status: "running", action: "open", url: "https://www.kfw.de/inlandsfoerderung/" }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(host.querySelector(".agent-page-pin").hidden).toBe(true);
+    expect(host.querySelector(".agent-page-card")).toBeNull();
+    const live = host.querySelector(".agent-progress .agent-vm");
+    expect(live.querySelector(".agent-vm-verb").textContent).toBe("Opening");
+    expect(live.querySelector(".agent-vm-target").textContent).toBe("kfw.de");
+    // A picture that came anyway (an older saved step) makes no card of it.
+    activity.receive(events, step({ status: "succeeded", action: "open", url: "https://www.kfw.de/inlandsfoerderung/",
+      title: "KfW", preview: PREVIEW, page: 'Opened https://www.kfw.de/inlandsfoerderung/\nPage: "KfW"' }));
+    activity.render(host, { running: false, status: "completed", events, answerText: "Done." });
+    expect(host.querySelector(".agent-page-pin").hidden).toBe(true);
+    expect(host.querySelector(".agent-page-card")).toBeNull();
+    const saved = host.querySelector(".agent-activity-content .agent-vm");
+    expect(saved.querySelector(".agent-vm-verb").textContent).toBe("Opened");
+    expect(saved.querySelector(".agent-vm-target").textContent).toBe("KfW");
+    expect(saved.querySelector(".agent-vm-output").textContent).toContain('Page: "KfW"');
+  });
+
+  it("takes the user's card away once the agent opens a page of its own", () => {
+    const { host, activity } = setup();
+    const events = [];
+    activity.receive(events, step({ status: "succeeded", action: "open", for_user: true,
+      url: "http://localhost:3000/", title: "Tic-tac-toe", preview: PREVIEW }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(host.querySelector(".agent-page-pin .agent-page-title").textContent).toBe("Tic-tac-toe");
+    // Its own page is in front now: the card would open another page than it names.
+    activity.receive(events, step({ id: "completion:1:call_2/tool", status: "succeeded", action: "open",
+      url: "https://developer.mozilla.org/", title: "MDN" }));
+    activity.render(host, { running: true, status: "running", events });
+    expect(host.querySelector(".agent-page-pin").hidden).toBe(true);
+    expect(host.querySelector(".agent-page-pin .agent-page-card")).toBeNull();
+    // The timeline keeps both: the user's page as its card, the agent's own as a line.
+    expect(host.querySelectorAll(".agent-activity-content .agent-page-card")).toHaveLength(1);
+    expect(host.querySelector(".agent-activity-content .agent-vm:not(.agent-page-card) .agent-vm-target").textContent)
+      .toBe("MDN");
+    // Opened for the user again, the card is back.
+    activity.receive(events, step({ id: "completion:1:call_3/tool", status: "succeeded", action: "open",
+      for_user: true, url: "http://localhost:3000/", title: "Tic-tac-toe" }));
+    activity.render(host, { running: false, status: "completed", events, answerText: "Done." });
+    expect(host.querySelector(".agent-page-pin .agent-page-title").textContent).toBe("Tic-tac-toe");
   });
 
   it("shows any other browser step as its line, the page it read as the output", () => {
