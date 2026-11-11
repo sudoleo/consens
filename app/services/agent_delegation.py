@@ -2617,6 +2617,9 @@ class DelegationLoop(AgentLoop):
                 try:
                     wanted = json.loads((call.get("function") or {}).get("arguments") or "{}")
                     page = (url_key(str(wanted.get("url") or "")), wanted.get("start") or 0, bool(wanted.get("fresh")))
+                    # A list or an object as start: the tool refuses it in
+                    # its turn, here it must not end the whole turn.
+                    hash(page)
                 except (TypeError, ValueError, AttributeError):
                     page = None
                 if page in pages:
@@ -3165,8 +3168,11 @@ class DelegationLoop(AgentLoop):
         if decision == "stop" or (decision == "timeout" and not asked):
             if decision == "timeout":
                 # Said as such, not as a plain stop.
-                self.completion.failure = {"code": "hold_timeout", "error": HOLD_TIMEOUT_STOPPED if self.hold_timeout
-                                           else HOLD_UNATTENDED_STOPPED}
+                # ``unattended``: the app says its own sentence for a code
+                # and needs to know which of the two this was.
+                self.completion.failure = ({"code": "hold_timeout", "error": HOLD_TIMEOUT_STOPPED} if self.hold_timeout
+                                           else {"code": "hold_timeout", "error": HOLD_UNATTENDED_STOPPED,
+                                                 "unattended": True})
                 # As the Stop button does (routers/agent.py stop_agent_request).
                 try:
                     self.store.stop_delegation(self.uid, self.chat_id, self.turn_id)

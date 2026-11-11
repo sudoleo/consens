@@ -570,6 +570,22 @@ def test_after_outside_content_only_the_users_own_words_carry_a_change(store):
     assert prepare(settings_loop(store), claim_counts="on")["status"] == "prepared"
 
 
+def test_a_note_into_the_running_answer_keeps_the_message_it_follows_quotable(store):
+    loop = settings_loop(store, question="Nimm die offenen Modelle. Und wie hoch ist der Eiffelturm?")
+    loop.answer_conversation = [
+        {"role": "user", "content": "Schalte die Zählung der Aussagen ein."},
+        {"role": "assistant", "content": "Vorbereitet."},
+        *loop.answer_conversation,
+        {"role": "user", "content": "Bitte in Metern."},
+    ]
+    loop.outside_in_view = True
+    assert prepare(loop, comparison_lineup="balanced", evidence="Nimm die offenen Modelle")["status"] == "prepared"
+    assert prepare(loop, comparison_lineup="balanced", evidence="Bitte in Metern")["status"] == "prepared"
+    # An earlier message of the chat is not this message.
+    with pytest.raises(ValueError, match="needs evidence"):
+        prepare(loop, claim_counts="on", evidence="Schalte die Zählung der Aussagen ein")
+
+
 def test_a_refusal_says_when_the_card_still_shows_an_earlier_change(store):
     loop = settings_loop(store)
     prepare(loop, claim_counts="on")

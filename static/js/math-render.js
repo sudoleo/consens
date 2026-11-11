@@ -21,14 +21,26 @@
   ];
 
   // Zusammenhaengende Formelabschnitte in den von KaTeX erkannten Formen.
-  const MATH_SPAN_RE = new RegExp(
-    "\\$\\$[\\s\\S]*?\\$\\$"
-    + "|\\\\\\[[\\s\\S]*?\\\\\\]"
-    + "|\\\\\\([\\s\\S]*?\\\\\\)"
-    + "|\\\\begin\\{(equation|align|alignat|gather|CD)\\*?\\}"
-    + "[\\s\\S]*?\\\\end\\{\\1\\*?\\}",
-    "g"
-  );
+  // Anfang und Ende werden getrennt gesucht: ein einziges Muster mit
+  // "[\s\S]*?" dazwischen liest von jedem Anfang ohne Ende wieder bis zum
+  // Schluss des Textes, viele offene "\[" hielten die Seite sekundenlang an.
+  const MATH_OPEN_RE =
+    /\$\$|\\\[|\\\(|\\begin\{(equation|align|alignat|gather|CD)\*?\}/g;
+  const MATH_CLOSE = { "$$": "$$", "\\[": "\\]", "\\(": "\\)" };
+
+  function mathSpanEnd(text, kind, isEnvironment, from) {
+    if (!isEnvironment) {
+      const found = text.indexOf(MATH_CLOSE[kind], from);
+      return found < 0 ? -1 : found + MATH_CLOSE[kind].length;
+    }
+    const plain = text.indexOf("\\end{" + kind + "}", from);
+    const starred = text.indexOf("\\end{" + kind + "*}", from);
+    if (plain < 0 && starred < 0) return -1;
+    if (starred < 0 || (plain >= 0 && plain < starred)) {
+      return plain + kind.length + 6;
+    }
+    return starred + kind.length + 7;
+  }
 
   // Inline-Math als "$...$" ist die Schreibweise, die die Modelle am
   // haeufigsten liefern - KaTeX kennt sie ab Werk NICHT, und genau dasselbe
@@ -63,8 +75,12 @@
   // Quelltext in eckigen Klammern. Als abgesetzte Formel gilt nur ein Paar,
   // das innen an beiden Klammern Leerraum hat, einen \befehl enthaelt, keine
   // Leerzeile ueberspannt und kein Link/Quellenverweis ist ("[S1]", "[x](url)").
+  // Der Leerraum innen gehoert allein den Klammern, der Inhalt beginnt und
+  // endet auf einem sichtbaren Zeichen: darf auch er mit Leerraum beginnen
+  // oder enden, probiert "[" vor vielen Leerzeichen ohne "]" jede Aufteilung
+  // dieser Leerzeichen durch und der Tab steht.
   const BARE_DISPLAY_RE =
-    /(^|[^\\\]\w])\[(\s+)((?:[^[\]\n]|\n(?![ \t]*\n))+?)(\s+)\](?![(\[:])/g;
+    /(^|[^\\\]\w])\[(\s+)(?=[^\s[\]])((?:[^[\]\n]|\n(?![ \t]*\n))*?[^\s[\]])(\s+)\](?![(\[:])/g;
   const MAX_DISPLAY_MATH_CHARS = 2000;
 
   function bareBracketsToDisplay(text) {
@@ -225,11 +241,24 @@
   function withMathSegments(text, onMath, onPlain) {
     let out = "";
     let cursor = 0;
-    let match;
-    MATH_SPAN_RE.lastIndex = 0;
-    while ((match = MATH_SPAN_RE.exec(text)) !== null) {
-      out += onPlain(text.slice(cursor, match.index)) + onMath(match[0]);
-      cursor = match.index + match[0].length;
+    let opening;
+    // Fehlt einer Art ab hier das Ende, fehlt es auch jedem spaeteren Anfang.
+    const unclosed = {};
+    MATH_OPEN_RE.lastIndex = 0;
+    while ((opening = MATH_OPEN_RE.exec(text)) !== null) {
+      const kind = opening[1] || opening[0];
+      const end = unclosed[kind]
+        ? -1
+        : mathSpanEnd(text, kind, Boolean(opening[1]), MATH_OPEN_RE.lastIndex);
+      if (end < 0) {
+        unclosed[kind] = true;
+        MATH_OPEN_RE.lastIndex = opening.index + 1;
+        continue;
+      }
+      out += onPlain(text.slice(cursor, opening.index))
+        + onMath(text.slice(opening.index, end));
+      cursor = end;
+      MATH_OPEN_RE.lastIndex = end;
     }
     return out + onPlain(text.slice(cursor));
   }

@@ -631,6 +631,13 @@ def test_read_file_says_how_many_parts_hold_the_words_and_which_files_there_are(
     with pytest.raises(FileUnavailable) as unknown:
         ctx.read(ReadFileArgs(file_id='f' + '0' * (len(text['id']) - 1)), cancellation=ProviderCancellation())
     assert f"{text['id']} (notes.txt, ready)" in str(unknown.value) and "still processing." not in str(unknown.value)
+    # An expired file is still listed until the cleanup takes it: the answer
+    # is that it expired, not its own id as one of the readable files.
+    files.ref('owner', chat, text['id']).update(
+        {'expires_at': (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()})
+    with pytest.raises(FileUnavailable, match='This file expired') as expired:
+        read()
+    assert text['id'] not in str(expired.value)
     tool = ctx.tools()[0]
     properties = tool.schema()['function']['parameters']['properties']
     assert properties['limit']['maximum'] == READ_PARTS == 10 and all('description' in field for field in properties.values())

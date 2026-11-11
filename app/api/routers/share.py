@@ -69,8 +69,12 @@ _SHARE_ERROR_STATUS = {
 }
 
 # "BestModel: Grok" (ggf. mit Markdown-Sternchen) im Differences-Freitext.
+# No two neighbouring parts may match the same blank, and the line starts on
+# its own blanks only: "\s*\**\s*" from every line start of a long run of
+# line breaks made one stored text cost seconds on each visit of its page.
 _BEST_MODEL_RE = re.compile(
-    r"^\s*\**\s*Best\s*Model\s*\**\s*[:\-]\s*(.+?)\s*$",
+    r"^[^\S\n]*(?:\*+[^\S\n]*)?Best\s*Model\s*(?:\*+\s*)?[:\-]\s*"
+    r"(\S(?:.*\S)?)?[^\S\n]*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -738,7 +742,7 @@ def share_page(request: Request, slug_id: str):
         match = _BEST_MODEL_RE.search(fallback_text)
         if match:
             if not best_model_display:
-                best_model_display = match.group(1).strip()
+                best_model_display = (match.group(1) or "").strip()
             fallback_text = _BEST_MODEL_RE.sub("", fallback_text).strip()
         if not has_structured_differences:
             differences_fallback_html = render_public_markdown(

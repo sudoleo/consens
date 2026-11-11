@@ -1695,6 +1695,31 @@ class SharePageRouteTests(unittest.TestCase):
         self.assertNotIn("very</strong> credible", body)
         self.assertNotIn("No substantive contradictions between the responses", body)
 
+    def test_best_model_line_is_found_in_time_that_grows_with_the_text(self):
+        import time
+
+        pattern = share_router._BEST_MODEL_RE
+        for text, name, rest in (
+            ("Text.\n\n  **BestModel**: Grok  \n\nMore.", "Grok", "Text.\n\n\n\nMore."),
+            ("best model -\nGemini 3 Pro\r\nMore.", "Gemini 3 Pro", "\nMore."),
+            ("A\nBestModel:\nB", "B", "A\n"),
+            ("A\nBestModel:", "", "A\n"),
+        ):
+            match = pattern.search(text)
+            self.assertEqual((match.group(1) or "").strip(), name, text)
+            self.assertEqual(pattern.sub("", text), rest, text)
+        self.assertIsNone(pattern.search("The best model here is unclear."))
+
+        started = time.perf_counter()
+        for text in (
+            "x" + "\n" * 50_000 + "y",
+            "\n" + " " * 50_000 + "y",
+            "BestModel: a" + " " * 50_000 + "b" + " " * 50_000 + "\r",
+            "Best" + " \n" * 30_000 + "Model" + "\n " * 30_000,
+        ):
+            pattern.sub("", text)
+        self.assertLess(time.perf_counter() - started, 2)
+
     def test_related_questions_section_rendered(self):
         doc = self._share_doc()
         related = [

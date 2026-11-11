@@ -1018,6 +1018,7 @@
   "Not allowed within a minute without your decision": "Ohne deine Entscheidung in unter einer Minute nicht erlaubt",
   "Not allowed after 30 minutes without a decision": "Nach 30 Minuten ohne Entscheidung nicht erlaubt",
   "Stopped after 30 minutes without your decision.": "Ohne deine Entscheidung nach 30 Minuten gestoppt.",
+  "Stopped: this run was scheduled, and nobody was there to decide.": "Gestoppt: Der Lauf war geplant, und niemand war da, um zu entscheiden.",
   "Message the agent…": "Nachricht an den Agenten…",
   "Or write to the agent…": "Oder schreib dem Agenten…",
   "Paste the key above": "Füg den Key oben ein",

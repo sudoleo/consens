@@ -426,6 +426,23 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('says of a scheduled run that nobody was there to decide', async () => {
+    const {window:w,document:d,dom} = boot();
+    d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div><div id="bookmarksContainer"></div>');
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementationOnce(async (_u, _p, _s, handlers) => {
+      handlers.accepted.receive({ chat_id: 'a'.repeat(32), turn_id: 'c'.repeat(32) });
+      return { ok: false, status: 200, streamed: true,
+        data: { error: 'Response stopped.', code: 'hold_timeout', unattended: true } };
+    });
+    d.getElementById('questionInput').value = 'Lösche die alten Dateien';
+    await w.App.agentChat.send();
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(d.getElementById('agentAnswerError').textContent)
+      .toBe('Stopped: this run was scheduled, and nobody was there to decide.');
+    dom.window.close();
+  });
+
   // An answer written at a limit of its message is no failure: the page says
   // which limit in the app's words and offers to go on with the work.
   it('says which limit ended a response and continues the work in the same chat', async () => {

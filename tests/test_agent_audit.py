@@ -1994,6 +1994,16 @@ def test_a_halt_without_a_decision_stops_the_response_after_its_time(store, monk
                                                    "error": agent_delegation.HOLD_TIMEOUT_STOPPED}
 
 
+def test_a_halt_in_a_scheduled_run_says_that_nobody_was_there(store):
+    loop = audit_loop(store, Audit(tool_steps=2, live={"anthropic": halting_live}))
+    loop.hold_timeout = 0  # as a Watch's scheduled run has it (watch_run)
+    with pytest.raises(ProviderCancelled):
+        list(loop.run())
+    # ``unattended`` tells the app which of its two sentences to show.
+    assert saved(store, loop)["agent_failure"] == {
+        "code": "hold_timeout", "error": agent_delegation.HOLD_UNATTENDED_STOPPED, "unattended": True}
+
+
 def test_a_halt_while_the_agent_writes_its_answer_holds_the_answer_until_the_user_decides(store):
     def halt_once(step):
         if step == "completion:0":

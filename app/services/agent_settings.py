@@ -658,11 +658,17 @@ class SettingsTools:
         return result
 
     def _asked(self, evidence) -> bool:
-        """Is ``evidence`` a quote of the user's own words in their latest message?"""
+        """Is ``evidence`` a quote of the user's own words in their latest
+        message? A note they sent into the running answer stands after that
+        message and belongs to it: the change may be asked for in either."""
         from app.services.agent_memory import evidence_matches, user_words
-        latest = next((message["content"] for message in reversed(getattr(self.loop, "answer_conversation", []))
-                       if message.get("role") == "user"), "")
-        return bool(evidence) and evidence_matches(evidence, [user_words(latest)])
+        latest = []
+        for message in reversed(getattr(self.loop, "answer_conversation", [])):
+            if message.get("role") == "assistant":
+                break
+            if message.get("role") == "user":
+                latest.append(user_words(message["content"]))
+        return bool(evidence) and evidence_matches(evidence, latest)
 
     def _chat_model(self, args, pro, changes, settings, notes, kept):
         catalog, models, current, _default = self._models()

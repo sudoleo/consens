@@ -1204,6 +1204,18 @@ it('ends the review in the disclosure when it was stopped or never started, and 
   expect(w.App.agentReview.failureNote({ error: 'stopped' }, auditReview('running'), 'Exact answer.')).not.toBe('');
   dom.window.close();
 });
+it("keeps a finished reviewer's marks on the text when the review then stops", () => {
+  const {window: w, document: d, dom} = setup();
+  const body = d.getElementById('answer'); body.dataset.markdown = 'Exact answer.';
+  w.App.agentReview.render(body, earlyReview(), { question: 'Q', key: 't1' });
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  const stopped = { ...earlyReview(), status: 'cancelled' };
+  w.App.agentReview.render(body, stopped, { question: 'Q', key: 't1' });
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(2);
+  expect(w.renderStoredAuditMarks.mock.calls[1][1]).toBe(stopped.audit);
+  expect(d.querySelector('.agent-review-status').textContent).toBe('Review stopped');
+  dom.window.close();
+});
 // A review stopped
 // before its final round keeps what the reviewers found while the agent
 // worked (`live`); the row offers Notes and the disclosure "Read the notes".

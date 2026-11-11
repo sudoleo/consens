@@ -54,17 +54,27 @@ _CODE_SEGMENT_RE = re.compile(r"(```.*?(?:```|$)|`[^`\n]*`)", re.DOTALL)
 # Verdoppeln erhaelt sie im HTML, damit KaTeX sie auf Share-Seiten findet.
 _MATH_DELIMITER_RE = re.compile(r"\\([\[\]()])")
 # Same complete spans and CommonMark punctuation protection as math-render.js.
-_MATH_SPAN_RE = re.compile(
-    r"\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)"
-    r"|\\begin\{(equation|align|alignat|gather|CD)\*?\}"
-    r".*?\\end\{\1\*?\}",
-    re.DOTALL,
+# Opener and closer are looked up apart: one pattern with ".*?" between them
+# reads to the end of the text again from every opener that is never closed,
+# and an answer of many unclosed "\[" kept a share page busy for seconds.
+_MATH_OPEN_RE = re.compile(
+    r"\$\$|\\\[|\\\(|\\begin\{(equation|align|alignat|gather|CD)\*?\}"
 )
+_MATH_CLOSE = {"$$": "$$", "\\[": "\\]", "\\(": "\\)"}
+_MATH_END_RES = {
+    name: re.compile(r"\\end\{" + name + r"\*?\}")
+    for name in ("equation", "align", "alignat", "gather", "CD")
+}
 _MARKDOWN_PUNCTUATION_RE = re.compile(r"[!-/:-@\x5b-\x60{-~]")
 # "[ P(\text{a}) = \frac12 ]" without the backslashes of \[ \] (some models
 # write it so): same guards as bareBracketsToDisplay in math-render.js.
+# The blanks inside the brackets belong to the brackets alone, the body
+# starts and ends on a visible character. With a body that may also start or
+# end on a blank, "[" before a long run of blanks and no "]" is tried in
+# every split of that run (4,000 blanks held a share page for over a minute).
 _BARE_DISPLAY_RE = re.compile(
-    r"(^|[^\\\]\w])\[(\s+)((?:[^\[\]\n]|\n(?![ \t]*\n))+?)(\s+)\](?![(\[:])"
+    r"(^|[^\\\]\w])\[(\s+)(?=[^\s\[\]])"
+    r"((?:[^\[\]\n]|\n(?![ \t]*\n))*?[^\s\[\]])(\s+)\](?![(\[:])"
 )
 _LATEX_COMMAND_RE = re.compile(r"\\[A-Za-z]")
 
@@ -169,15 +179,42 @@ def _bare_brackets_to_display(text):
     return _BARE_DISPLAY_RE.sub(wrap, text)
 
 
+def _math_spans(text):
+    """Yield (start, end) of each complete formula, left to right."""
+    unclosed = set()
+    position = 0
+    while True:
+        opening = _MATH_OPEN_RE.search(text, position)
+        if opening is None:
+            return
+        kind = opening[1] or opening[0]
+        end = -1
+        if kind not in unclosed:
+            if opening[1]:
+                closing = _MATH_END_RES[kind].search(text, opening.end())
+                end = closing.end() if closing else -1
+            else:
+                closer = _MATH_CLOSE[kind]
+                found = text.find(closer, opening.end())
+                end = found + len(closer) if found >= 0 else -1
+        if end < 0:
+            # No closer from here on means none for any later opener either.
+            unclosed.add(kind)
+            position = opening.start() + 1
+            continue
+        yield opening.start(), end
+        position = end
+
+
 def _preserve_math_delimiters(md_text):
     def protect_segment(segment):
         segment = _bare_brackets_to_display(segment)
         pieces = []
         cursor = 0
-        for match in _MATH_SPAN_RE.finditer(segment):
-            pieces.append(_MATH_DELIMITER_RE.sub(r"\\\\\1", segment[cursor:match.start()]))
-            pieces.append(_MARKDOWN_PUNCTUATION_RE.sub(lambda char: "\\" + char[0], match[0]))
-            cursor = match.end()
+        for start, end in _math_spans(segment):
+            pieces.append(_MATH_DELIMITER_RE.sub(r"\\\\\1", segment[cursor:start]))
+            pieces.append(_MARKDOWN_PUNCTUATION_RE.sub(lambda char: "\\" + char[0], segment[start:end]))
+            cursor = end
         pieces.append(_MATH_DELIMITER_RE.sub(r"\\\\\1", segment[cursor:]))
         return "".join(pieces)
 

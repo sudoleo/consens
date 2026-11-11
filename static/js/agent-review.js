@@ -1047,9 +1047,10 @@
     host._auditContext = context;
     const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
     // The marks of exactly this answer: of every reviewer once the review is
-    // done, before that of those whose final round is in.
+    // done, before that of those whose final round is in. A review that then
+    // stops keeps them (notesOnly): a mark that showed never goes away.
     overText(body, raw, () => {
-      if (exact && (done || early)) window.renderStoredAuditMarks?.(body, review.audit, fallback, turnSources, {
+      if (exact && (done || early || notesOnly)) window.renderStoredAuditMarks?.(body, review.audit, fallback, turnSources, {
         openNotes: () => open('differences', { trigger: document.activeElement }) });
       window.linkifyAgentSources?.(body, turnSources);
     });

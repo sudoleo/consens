@@ -93,6 +93,9 @@ CUT_NOTE = ("The page goes on ({length} characters in all): read_source with the
             "returns that part, start {next} the next one.")
 STORED_NOTE = ("This is the reader's stored copy, which can be days old; fresh: true fetches the page as it is "
                "now.")
+# The address led to another page (a redirect to the front page, a moved
+# article): its text is not the cited page's.
+ELSEWHERE_NOTE = "The address led to another page, {fetched}: this text is that page's, not the one you asked for."
 # The helper's fetch cuts a page at READ_CONTENT_TOKENS without saying so; a
 # text of at least this many characters may end before its page does (a
 # 15-page PDF arrived as 15,900 characters).
@@ -608,9 +611,12 @@ class SourceReader:
                      text=text, chars=len(text), truncated=cut, retrieved_at=datetime.now(timezone.utc).isoformat(),
                      **({"fetched_url": page["url"]} if url_key(page["url"]) != url_key(url) else {}))
         stored = page["stored"] and not record.get("fresh")
-        notes = [UNTRUSTED_NOTE, *([CUT_NOTE.format(length=length, next=start + len(text))] if cut else []),
+        elsewhere = not _same_page(page["url"], url)
+        notes = [UNTRUSTED_NOTE, *([ELSEWHERE_NOTE.format(fetched=page["url"])] if elsewhere else []),
+                 *([CUT_NOTE.format(length=length, next=start + len(text))] if cut else []),
                  *([STORED_NOTE] if stored else [])]
         return {"status": "completed", "note": " ".join(notes), "url": url,
+                **({"fetched_url": page["url"]} if elsewhere else {}),
                 **({"cited_url": record["cited_url"]} if record.get("cited_url") else {}),
                 "title": record["title"], **({"published": page["published"]} if page["published"] else {}),
                 "text_cut": cut, **({"next_start": start + len(text)} if cut else {}),

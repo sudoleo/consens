@@ -169,3 +169,32 @@ def test_markers_before_the_sentence_end_move_as_before_in_linear_time():
     html = render_public_markdown("Claim " + "[S1]" * 8_000 + " " * 8_000 + "end", sources)
     assert time.perf_counter() - started < 2
     assert "#src-1" in html
+
+
+def test_unclosed_brackets_and_formulas_cost_no_more_than_their_length():
+    # One uvicorn process holds the GIL while a share page renders: each of
+    # these took seconds to minutes with a pattern that tried every split.
+    import time
+    from app.services.public_markdown import _math_spans, render_public_markdown
+
+    backslash = chr(92)
+    started = time.perf_counter()
+    render_public_markdown("a [" + " " * 20_000 + "x")
+    render_public_markdown("a [ x" + (" " * 200 + "y") * 100)
+    list(_math_spans((backslash + "[ x ") * 50_000))
+    list(_math_spans((backslash + "( " + backslash + "begin{align} $$") * 20_000 + "$"))
+    assert time.perf_counter() - started < 2
+
+    text = (
+        "$$a$$ " + backslash + "[ b " + backslash + "] " + backslash + "( open "
+        + backslash + "begin{align*} c " + backslash + "end{align} "
+        + backslash + "begin{CD} never closed"
+    )
+    assert [text[start:end] for start, end in _math_spans(text)] == [
+        "$$a$$",
+        backslash + "[ b " + backslash + "]",
+        backslash + "begin{align*} c " + backslash + "end{align}",
+    ]
+    html = render_public_markdown("So [ " + backslash + "frac12 ] and [ plain ] and [  ]")
+    assert backslash + "[ " + backslash + "frac12 " + backslash + "]" in html
+    assert "[ plain ]" in html

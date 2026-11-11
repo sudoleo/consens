@@ -876,6 +876,36 @@ def test_partial_text_gives_way_before_the_review_exceeds_its_storage(store):
     assert saved[0]["comparisons"][0]["failed_models"][0]["model"] == "m"
 
 
+def test_a_comparison_whose_first_save_fails_leaves_nothing_behind(store):
+    """The turn goes on after a tool that broke: a comparison no model was
+    asked for must not stay saved as collecting answers, nor take a place."""
+    from app.services.agent_comparison import AuditCompareArgs, ComparisonTools
+    saved = []
+    class Loop:
+        class store:
+            @staticmethod
+            def save_review(*args):
+                if not saved:
+                    saved.append(None)
+                    raise RuntimeError("database away")
+                saved.append(args[4])
+        uid = chat_id = turn_id = run_token = "x"
+        policy = AgentPolicy()
+        outgoing = type("Q", (), {"put_nowait": staticmethod(lambda item: None)})
+        _check = staticmethod(lambda cancellation: None)
+    tools = ComparisonTools(Loop(), {})
+    earlier = {"id": "c", "answers": [], "failed_models": [], "status": "completed"}
+    version = {"status": "reviewed", "comparison_ids": ["c"], "checks": ["kept"]}
+    tools.comparisons, tools.versions, tools.review, tools.finalized = [earlier], [version], {"checks": ["kept"]}, True
+    with pytest.raises(RuntimeError, match="database away"):
+        tools.compare(AuditCompareArgs(question="What does option one cost?", context=""), cancellation=None)
+    assert tools.comparisons == [earlier]
+    assert tools.versions == [{"status": "reviewed", "comparison_ids": ["c"], "checks": ["kept"]}]
+    assert tools.review == {"checks": ["kept"]} and tools.finalized is True
+    tools.checkpoint()
+    assert [c["id"] for c in saved[-1]["comparisons"]] == ["c"]
+
+
 @pytest.mark.parametrize("depth,expected", [("quick", "Answer briefly"), ("full", "as thoroughly as the task needs"),
                                              (None, "as thoroughly as the task needs")])
 def test_depth_sets_the_answer_models_length_guidance(store, depth, expected):

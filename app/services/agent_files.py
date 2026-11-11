@@ -487,8 +487,12 @@ class FileContext:
         except FileUnavailable:
             # "File is unavailable or still processing." for a mistyped id
             # invited the same call again: say which files there are.
-            known = [f"{item['id']} ({item['name']}, {item['status']})"
-                     for item in self.files.list(self.uid, self.chat_id)][:20]
+            listed = self.files.list(self.uid, self.chat_id)
+            if any(item["id"] == args.file_id and item["status"] in {"ready", "partial"} for item in listed):
+                # The chat lists this file as ready and it cannot be read:
+                # it expired. That reason, not its own id as the way out.
+                raise
+            known = [f"{item['id']} ({item['name']}, {item['status']})" for item in listed][:20]
             raise FileUnavailable(
                 "No readable file has this id in this chat"
                 + (f": its files are {', '.join(known)}" if known else "; it has no files")

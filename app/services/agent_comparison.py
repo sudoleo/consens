@@ -415,6 +415,7 @@ class ComparisonTools:
         asked = list(self.models)
         comparison = {"id": uuid4().hex, **args.model_dump(include={"question", "context", "file_ids", "depth"}),
                       "asked": asked, "status": "running", "answers": [], "failed_models": []}
+        before = (self.review, self.finalized, dict(self.versions[-1]) if self.versions else None)
         self.comparisons.append(comparison)
         # New evidence: an earlier version's review no longer stands.
         self.review = None
@@ -422,7 +423,17 @@ class ComparisonTools:
         if self.versions:
             self.versions[-1].update(status="required", comparison_ids=[c["id"] for c in self.comparisons])
             self.versions[-1].pop("checks", None)
-        self.checkpoint()
+        try:
+            self.checkpoint()
+        except BaseException:
+            # No model was asked: the turn goes on after a failed tool, and a
+            # comparison left here would be saved as collecting answers for
+            # good and take one of the message's places.
+            self.comparisons.remove(comparison)
+            self.review, self.finalized = before[:2]
+            if self.versions:
+                self.versions[-1] = before[2]
+            raise
         depth = args.depth
         prompt = json.dumps({"question": args.question, "context": args.context}, ensure_ascii=False)
         cid = comparison["id"]

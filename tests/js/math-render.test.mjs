@@ -165,6 +165,22 @@ describe("ConsensusMath.prepareMarkdown", () => {
     expect(throughMarkdown(math.prepareMarkdown(source))).toBe(source);
   });
 
+  it("braucht fuer offene Klammern und Formeln ohne Ende nur ihre Laenge", () => {
+    // Jede dieser Eingaben hielt den Tab mit einem Muster, das alle
+    // Aufteilungen durchprobiert, sekunden- bis minutenlang an.
+    const started = performance.now();
+    math.prepareMarkdown("a [" + " ".repeat(20000) + "x");
+    math.prepareMarkdown("a [ x" + (" ".repeat(200) + "y").repeat(100));
+    math.prepareMarkdown(String.raw`\[ x `.repeat(50000));
+    math.prepareMarkdown(String.raw`\( \begin{align} `.repeat(20000));
+    expect(performance.now() - started).toBeLessThan(2000);
+
+    const source = String.raw`$$a$$ \[ b \] \( open \begin{align*} c_1 \end{align} \begin{CD} d_2`;
+    expect(math.stripMath(source)).toBe(String.raw`    \( open   \begin{CD} d_2`);
+    expect(math.stripMath(String.raw`\begin{gather} x \end{gather*} y \end{gather}`))
+      .toBe(String.raw`  y \end{gather}`);
+  });
+
   it("macht aus $...$ die von KaTeX erkannte Form", () => {
     const source = String.raw`Also $6{,}7 / 5{,}7 - 1 \approx 17{,}5\%$.`;
     expect(throughMarkdown(math.prepareMarkdown(source))).toBe(

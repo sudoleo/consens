@@ -714,8 +714,10 @@
     }
     if (code === 'agent_tokens_exhausted') return { text: `You’ve used today’s allowance. It resets at ${resetTime()}.` };
     // A pause nobody decided: why it stopped, also under a partial answer.
+    // In a Watch's scheduled run nobody was there to wait for (unattended).
     if (code === 'hold_timeout') {
-      return { text: 'Stopped after 30 minutes without your decision.', actions: retry ? [['retry', 'Retry']] : [] };
+      return { text: failure.unattended ? 'Stopped: this run was scheduled, and nobody was there to decide.'
+        : 'Stopped after 30 minutes without your decision.', actions: retry ? [['retry', 'Retry']] : [] };
     }
     // The answer is complete; only its sidebar entry was not saved. Said even
     // under a checked answer, which failureNote treats as settled: the
@@ -2918,7 +2920,8 @@
       fallback: notSent ? undefined : "The answer couldn’t be completed. Try again." });
     context.consensus.status = "error";
     context.consensus.error = { message: reason, code,
-      required_tokens: failure.required_tokens, available_tokens: failure.available_tokens };
+      required_tokens: failure.required_tokens, available_tokens: failure.available_tokens,
+      ...(failure.unattended ? { unattended: true } : {}) };
     // "ask" went out with the POST; a refusal still ends that run as
     // failed, like a refused pipeline run (query-send.js finishFailed).
     const asked = context.metadata.requestSent === true;

@@ -8,7 +8,7 @@ import json
 import pytest
 
 from app.services import agent_quota, agent_read_source, exa
-from app.services.agent_read_source import (CUT_NOTE, DIRECT_MIN_SECONDS, PAGE_LENGTH_CHARS, READ_TEXT_CHARS,
+from app.services.agent_read_source import (CUT_NOTE, DIRECT_MIN_SECONDS, ELSEWHERE_NOTE, PAGE_LENGTH_CHARS, READ_TEXT_CHARS,
                                             READS_PER_MESSAGE, STORED_NOTE, UNTRUSTED_NOTE, ReadSourceArgs)
 from app.services.llm.provider_runtime import ProviderCancellation
 from test_agent_runs import UID, store  # noqa: F401  (fixture)
@@ -20,7 +20,7 @@ def pages(monkeypatch):
     """Exa with a key; exa.page answers from ``pages.found`` (url -> text,
     a failure reason in a dict, or an exception) and records every call."""
     class Pages:
-        found, calls = {}, []
+        found, calls, led_to = {}, [], {}
 
     def page(url, *, characters, fresh=False):
         Pages.calls.append({"url": url, "characters": characters, "fresh": fresh})
@@ -29,10 +29,10 @@ def pages(monkeypatch):
             raise outcome
         if isinstance(outcome, dict):
             return {"status": "failed", "cost_nanos": 0, **outcome}
-        return {"status": "completed", "url": url, "title": "Report", "text": outcome[:characters],
+        return {"status": "completed", "url": Pages.led_to.get(url, url), "title": "Report", "text": outcome[:characters],
                 "published": "2026-10-01", "stored": not fresh, "cost_nanos": 1_000_000}
 
-    Pages.found, Pages.calls = {}, []
+    Pages.found, Pages.calls, Pages.led_to = {}, [], {}
     monkeypatch.setenv(exa.KEY_ENV, "key")
     monkeypatch.setenv("AGENT_READ_SOURCES", "1")
     monkeypatch.setattr(exa, "page", page)
@@ -76,6 +76,18 @@ def test_a_read_asks_exa_itself_without_a_model_call(store, monkeypatch, pages):
     assert receipt["operation"] == "page" and receipt["usage"]["estimated_cost_nano_usd"] == 1_000_000
     assert receipt["usage"]["web_search_requests"] == 0
     assert receipt["quota_charged"] == agent_quota.measured_charge(receipt["usage"]) > 0
+
+
+def test_a_read_that_lands_on_another_page_says_whose_text_it_is(store, monkeypatch, pages):
+    fake_fetch(monkeypatch)
+    front, spelled = "https://example.org/", "https://example.org/other?utm=1"
+    pages.led_to = {CITED: front, spelled: "http://www.example.org/other/"}
+    loop, events, saved = run(store, Plan([[read_call()], [read_call(spelled)]]))
+    moved, same = results(loop)
+    assert moved["status"] == "completed" and moved["url"] == CITED and moved["fetched_url"] == front
+    assert ELSEWHERE_NOTE.format(fetched=front) in moved["note"]
+    # Another spelling of the same page is the page asked for.
+    assert "fetched_url" not in same and "another page" not in same["note"]
 
 
 def test_a_long_page_is_read_on_from_where_the_last_read_ended(store, monkeypatch, pages):
@@ -238,3 +250,13 @@ def test_after_a_summary_of_the_run_a_page_read_before_comes_back_with_its_text(
     assert back["status"] == "completed" and back["untrusted_page_text"] == PAGE
     assert "summary" in back["note"] and len(pages.calls) == 1
     assert reader.read(ReadSourceArgs(url=CITED), cancellation=ProviderCancellation())["status"] == "already_read"
+
+
+def test_a_start_that_is_no_number_is_refused_and_the_turn_goes_on(store, monkeypatch, pages):
+    fake_fetch(monkeypatch)
+    plan = Plan([[read_call(), read_call(start=[5]), read_call(start={"at": 5})]])
+    loop, events, saved = run(store, plan)
+    assert saved["status"] == "completed" and saved["assistant_response"] == ANSWER
+    first, *refused = results(loop)
+    assert first["status"] == "completed"
+    assert all("start" in json.dumps(result) and "untrusted_page_text" not in result for result in refused), refused

@@ -4412,8 +4412,9 @@ Geprüft am Abend von 2026-11-03 (Review vor dem Deploy):
   `agent_watches.HISTORY_CHARS` Zeichen des Chats, damit der hundertste Lauf
   so viel kostet wie der erste.
 - **Niemand ist da:** `hold_timeout` ist 0. `ask_user` hört sofort, dass keine
-  Antwort kam; ein Prüfer-Halt beendet den Lauf (`hold_timeout`) und wird dem
-  Nutzer gemailt.
+  Antwort kam; ein Prüfer-Halt beendet den Lauf (`hold_timeout`, im
+  gespeicherten `agent_failure` mit `unattended: true`, damit die App „niemand
+  war da“ statt „nach 30 Minuten“ sagt) und wird dem Nutzer gemailt.
 - **Im Namen des Nutzers:** Was der Auftrag sagt, tut der Lauf ohne Rückfrage
   (Max, 2026-11-03: „darum gehts ja bei Agenten“); Starten der Watch war die
   Freigabe. Für alles darüber hinaus meldet er sich mit `needs_user`.
@@ -5745,7 +5746,10 @@ Ledger). Gemessen in der Probe: ein Abruf mit Luna 0,007–0,066 ct und
 **Wohin der Text geht.**
 - Als Toolergebnis an den Agenten (`untrusted_page_text`, mit `title`,
   `text_cut` und `cited_by`) und damit ins Arbeitsprotokoll, wo die Prüfer ihn
-  lesen.
+  lesen. Führte die Adresse beim direkten Lesen auf eine andere Seite
+  (Weiterleitung auf die Startseite, verschobener Artikel; `_same_page`),
+  nennt das Ergebnis sie als `fetched_url` und sagt in `note`, dass der Text
+  von dort stammt (`ELSEWHERE_NOTE`).
 - In den Review-Snapshot als `read_sources` (Ziel-URL, ggf. `cited_url` und
   `fetched_url`, Host, Titel, Text, Zeichen, `retrieved_at`, `cited_by` mit
   Vergleich und Familie bzw. Label, `model`; bei Fehlern `status: failed` und
