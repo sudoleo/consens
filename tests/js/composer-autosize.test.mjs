@@ -217,4 +217,32 @@ describe('composer autosize', () => {
     expect(writes).toEqual([400]);
     app.dom.window.close();
   });
+
+  // Chrome moves the page at once and reports it only in the frame: a second
+  // key in the same frame finds the page already moved by the first.
+  it('keeps the place from before the first of several keys in one frame', () => {
+    const app = boot(); app.tick();
+    const { window } = app;
+    let y = 400;
+    const writes = [];
+    Object.defineProperty(window, 'scrollY', { configurable: true, get: () => y });
+    Object.defineProperty(window, 'innerHeight', { configurable: true, get: () => 800 });
+    window.scrollTo = options => { writes.push(options.top); y = options.top; };
+    app.field.getBoundingClientRect = () => ({ width: 350, top: 700, bottom: 752, height: 52 });
+    const key = () => {
+      app.field.dispatchEvent(new window.InputEvent('beforeinput', { inputType: 'insertText', data: 'a' }));
+      y += 42;
+    };
+
+    key(); key(); key();
+    window.dispatchEvent(new window.Event('scroll'));
+    expect(writes).toEqual([400]);
+    expect(y).toBe(400);
+    // The next frame's keys start from where the page is then.
+    app.tick();
+    key(); key();
+    window.dispatchEvent(new window.Event('scroll'));
+    expect(writes).toEqual([400, 400]);
+    app.dom.window.close();
+  });
 });

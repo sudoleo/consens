@@ -3032,6 +3032,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Body-Ende, `aria-hidden`, `contain: layout style`) mit den Groessen-Styles
   des Feldes: das Feld selbst schrumpft nie fuer die Messung, die Seite wird nie
   kuerzer (Apple-Audit A12) und die Hoehe hat einen Startwert zum Gleiten (B5).
+  Tippen verschiebt den Chat nie: Chrome holt den Cursor des sticky Composers
+  ins Bild, als stuende er am Seitenende (42 px je Taste), verschiebt die Seite
+  sofort und meldet es erst im Frame. Der Waechter (`beforeinput` merkt
+  `scrollY`, `scroll` setzt zurueck, der naechste Frame beendet ihn) haelt die
+  Stelle von vor der ersten Taste eines Frames, auch wenn schnelle Tasten sich
+  einen Frame teilen; ein Feld unter der Handy-Tastatur bleibt dem Browser.
   `tests/js/composer-autosize.test.mjs` prueft diese Ereignisgrenzen; der Smoke-
   Browserfall prueft echtes Layout inklusive der abgeschlossenen Transition.
 - **Hero ↔ Thread gleitet (2026-10-03)** — `.input-section` hat keine

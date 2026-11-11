@@ -412,3 +412,61 @@ def test_a_live_short_turn_keeps_the_page_height_still(browser, phase4_server, h
         assert samples[0][0] == height
     finally:
         context.close()
+
+
+# Chrome brings the caret of the sticky composer into view as if it stood at
+# the page's end, 42px down per key, and reports the move only in the frame.
+# Fast keys share a frame; the second one once kept the moved place, and a
+# reader further up the chat slid down with every such pair.
+def test_typing_fast_in_the_composer_keeps_a_reader_further_up_still(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({"width": 1440, "height": 900})
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True, "limit": 500}))
+        page.route("**/usage", lambda r: _json(r, {"tier": "pro", "is_pro": True, "remaining": 500, "total_limit": 500}))
+        page.route("**/api/my/memory", lambda r: _json(r, {"memory": {"content": "", "revision": 0}}))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        page.evaluate("""() => {
+          window.streamSSERequest = async (_url, body, _signal, handlers) => {
+            const text = Array.from({length:60}, (_, i) => `Paragraph ${i}. An earlier answer with enough material to read.`).join('\\n\\n');
+            handlers.delta.append(text);
+            return {ok:true, data:{chat_id:'a'.repeat(32), turn_id:'b'.repeat(32), response:text,
+              turn:{id:'b'.repeat(32), question:body.question, consensus:text, status:'completed', execution_mode:'agent', sources:[], model_answers:{},
+                agent_settings:{model_id:body.model_id,label:'DeepSeek V4.1 Flash'}},
+              bookmark_meta:{id:body.bookmark_id,title:body.question,query:body.question,mode:'Agent',has_consensus:true}}};
+          };
+        }""")
+        page.locator("#questionInput").fill("First message")
+        page.locator("#sendButton").click()
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        page.wait_for_timeout(500)
+        page.mouse.move(700, 300)
+        page.mouse.wheel(0, 1200)
+        page.wait_for_timeout(500)
+        page.locator("#questionInput").click()
+        page.wait_for_timeout(200)
+        start = page.evaluate("scrollY")
+        assert 0 < start < page.evaluate("document.scrollingElement.scrollHeight - innerHeight - 200")
+        page.evaluate("""() => {
+          window.__moved = [];
+          const tick = () => {
+            if (scrollY !== window.__start) __moved.push(scrollY);
+            if (!window.__stop) requestAnimationFrame(tick);
+          };
+          window.__start = scrollY;
+          requestAnimationFrame(tick);
+        }""")
+        page.keyboard.type("kannst du diese aussage mit bildern belegen?")
+        page.wait_for_timeout(300)
+        page.evaluate("window.__stop = true")
+        assert page.evaluate("__moved") == []
+        assert page.evaluate("scrollY") == start
+        assert page.locator("#questionInput").input_value() == "kannst du diese aussage mit bildern belegen?"
+        assert not errors
+    finally:
+        context.close()

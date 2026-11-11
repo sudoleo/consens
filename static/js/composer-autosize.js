@@ -146,10 +146,16 @@
     // is in view, the caret is too: the page keeps the place it had before
     // the key. A field under a phone's keyboard is left to the browser. The
     // browser's scroll arrives before the next frame, which ends the guard.
-    let typingTop = null;
+    // Keys that share a frame keep the place from before the first of them:
+    // the browser moves the page at once and reports it only in the frame, so
+    // a second key read the moved place as the one to keep, and the page
+    // stayed 42px further down for every such pair (fast typing in a long
+    // chat, word by word).
+    let typingTop = null, typingFrame = null;
     questionInput.addEventListener("beforeinput", () => {
-      if (typingTop === null) requestAnimationFrame(() => { typingTop = null; });
+      if (typingFrame !== null) return;
       typingTop = composerInView(questionInput) ? window.scrollY : null;
+      typingFrame = requestAnimationFrame(() => { typingFrame = null; typingTop = null; });
     });
     window.addEventListener("scroll", () => {
       if (typingTop === null || Math.abs(window.scrollY - typingTop) <= .5) return;
