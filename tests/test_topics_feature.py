@@ -1413,3 +1413,18 @@ def test_follow_email_is_one_plain_address(address):
         topics.normalize_email(address)
     assert raised.value.code == "invalid_email"
     assert topics.normalize_email(" Victim+news@Example.com ") == "victim+news@example.com"
+
+
+def test_source_url_at_the_stored_length_is_valid_topic_evidence():
+    from app.services import share_snapshots
+
+    # Sources are stored with URLs up to 2000 characters; a Topic check that
+    # rejected one of them would throw away the whole run.
+    long_url = "https://example.com/report?" + "a" * 2500
+    sources = share_snapshots.sanitize_sources(
+        [{"id": "S1", "title": "Report", "url": long_url}]
+    )
+    evidence, excluded = topic_runner.split_evidence_from_sources(sources, {})
+    items = evidence + excluded
+    assert len(items) == 1
+    assert topics._valid_url(items[0]["url"]) == items[0]["url"]

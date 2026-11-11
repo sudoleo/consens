@@ -164,7 +164,8 @@ def _valid_url(value) -> str:
         not parsed
         or parsed.scheme not in {"http", "https"}
         or not parsed.netloc
-        or len(url) > 1500
+        # As long as a stored source URL may be (share_snapshots.sanitize_sources).
+        or len(url) > 2000
     ):
         raise TopicError("bad_request", "Each evidence item needs a valid http(s) URL.")
     return url
