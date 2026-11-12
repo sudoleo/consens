@@ -1636,13 +1636,20 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
 - [ ] Agent nach einem Ablauf oder Vergleich fragen, der ein Diagramm
   nahelegt („zeig den Ablauf als Diagramm“): Während der Block geschrieben
   wird, steht ein ruhiges Feld statt Code; das Diagramm erscheint einfarbig in
-  den Tönen der Seite, der Text danach kommt darunter, ohne zu springen. Auf
-  Handybreite bleibt ein breiter Ablauf lesbar, lässt sich zur Seite wischen
-  und läuft an der Kante weich aus; die Seite selbst wischt nie mit. Hell
-  und dunkel umschalten zeichnet es neu, ein Klick öffnet es im
-  Bildbetrachter. Chat neu laden: Das Feld hat sofort die Größe des Diagramms.
-  Antwort teilen: Die Share-Seite zeigt dasselbe Diagramm. Auf dem iPhone
-  (Safari) ansehen, dort ist es ungeprüft.
+  den Tönen der Seite und in Inter, der Text danach kommt darunter, ohne zu
+  springen. Es passt ohne Wischen in die Antwort; ein breiter Ablauf steht
+  dafür notfalls hochkant, ein Zeitplan (Gantt) nutzt die volle Breite, kein
+  Wort ist mitten im Wort umbrochen oder abgeschnitten. Auf Handybreite
+  bleibt ein Gantt-Diagramm oder eine Torte lesbar, lässt sich zur Seite
+  wischen und läuft an der Kante weich aus; die Seite selbst wischt nie mit.
+  Hell und dunkel umschalten zeichnet es neu. Ein Klick öffnet es fast in
+  Fenstergröße; ein sehr breites oder hohes Diagramm beginnt dort lesbar
+  vergrößert und lässt sich ziehen, wischen oder mit den Pfeiltasten
+  verschieben, Doppelklick oder 0 zeigt es ganz, Esc schließt. Chat neu
+  laden: Das Feld hat sofort die Größe des Diagramms. Antwort teilen: Die
+  Share-Seite zeigt dasselbe Diagramm, ein Klick vergrößert es dort ebenso.
+  Auf dem iPhone (Safari) ansehen, dort ist es ungeprüft (Schrift im Bild,
+  Vergrößern).
 - [ ] Agent nach einem kurzen Skript fragen („schreib mir das in Python“):
   Der Codeblock wächst beim Streamen als Klartext und bekommt mit seinem Ende
   seine Töne (Schlüsselwörter stärker, Kommentare grau, Zeichenketten im

@@ -152,6 +152,34 @@ describe('zooming into a picture (image-zoom.js)', () => {
     expect(img.style.transform).toBe('');
   });
 
+  it('starts enlarged at its top left corner and pans with the arrow keys only while enlarged', () => {
+    const { window, document, frame, img } = boot();
+    const zoom = window.App.imageZoom.attach(img, { frame, active: () => true });
+    const { clamp, zoomAt } = window.App.imageZoom;
+    // Fitted, the arrows stay the page's: a gallery pages with them.
+    const idle = key(window, 'ArrowRight');
+    document.body.dispatchEvent(idle);
+    expect(idle.defaultPrevented).toBe(false);
+    zoom.startAt(1);
+    expect(img.style.transform).toBe('');
+    zoom.startAt(3);
+    const start = clamp(zoomAt(FITTED, 3, { x: BASE.left, y: BASE.top }, BASE), BASE, FRAME);
+    expectState(img, start);
+    // Its corner is the frame's: where a wide or tall diagram begins.
+    expect(BASE.left + start.x).toBeCloseTo(FRAME.left, 6);
+    expect(BASE.top + start.y).toBeCloseTo(FRAME.top, 6);
+    const right = key(window, 'ArrowRight');
+    document.body.dispatchEvent(right);
+    expect(right.defaultPrevented).toBe(true);
+    const moved = clamp({ scale: 3, x: start.x - 0.2 * FRAME.width, y: start.y }, BASE, FRAME);
+    expectState(img, moved);
+    document.body.dispatchEvent(key(window, 'ArrowDown'));
+    expectState(img, clamp({ scale: 3, x: moved.x, y: moved.y - 0.2 * FRAME.height }, BASE, FRAME));
+    // Back past its start it stops at the edge.
+    for (let step = 0; step < 6; step += 1) document.body.dispatchEvent(key(window, 'ArrowLeft'));
+    expect(BASE.left + transformOf(img).x).toBeCloseTo(FRAME.left, 6);
+  });
+
   it('pinches with two fingers, pans with one, toggles with a double tap and takes the touches from the page', () => {
     const { window, frame, img } = boot();
     const zoom = window.App.imageZoom.attach(img, { frame });

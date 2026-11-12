@@ -5,19 +5,22 @@
    Watch pages). The model's ```mermaid block, drawn as an image at the
    text's left edge, in the page's own tones and without a frame.
 
-   Its field stands from the first frame and the drawing takes its place.
-   A diagram this browser has drawn before has its own size at once
-   (--diagram-width/-height), as wide as it will be drawn: its own width,
-   the answer's, or what the height limit allows. Any other keeps a 16:10
-   field until it is drawn.
+   It is laid out for the answer's width (diagram-render.js), so it
+   usually fits as it is. Its field stands from the first frame and the
+   drawing takes its place. A diagram this browser has drawn before at
+   this width has its own size at once (--diagram-width/-height), as wide
+   as it will be drawn: its own width or the answer's. A tall one stands at
+   its own size and the page scrolls past it, as past text. Any other keeps
+   a 16:10 field until it is drawn.
 
-   It is never drawn smaller than --diagram-min-scale of its own size: a
-   flow of six steps shrunk to a phone's width had labels of 6 px. Wider
-   than the answer then, it pans sideways in its place, as a table does.
+   It is never drawn smaller than --diagram-min-scale of its own size, so
+   its 14 px labels stay at 10.5 px or more: a flow of six steps shrunk to a
+   phone's width had labels of 6 px. Wider than the answer then, it pans
+   sideways in its place, as a table does; diagram-render.js turns a flow
+   that would come out too small first.
    ========================================================================== */
 
 .md-diagram {
-  --diagram-max-height: min(640px, 70vh);
   --diagram-min-scale: 0.75;
   margin: 18px 0 22px;
   overflow-x: auto;
@@ -55,9 +58,7 @@
 }
 .md-diagram.is-pending::before { content: ""; }
 .md-diagram.has-size > .md-diagram-figure {
-  width: max(calc(var(--diagram-width) * var(--diagram-min-scale) * 1px),
-    min(calc(var(--diagram-width) * 1px), 100%,
-      calc(var(--diagram-max-height) * var(--diagram-width) / var(--diagram-height))));
+  width: max(calc(var(--diagram-width) * var(--diagram-min-scale) * 1px), min(calc(var(--diagram-width) * 1px), 100%));
   aspect-ratio: var(--diagram-width) / var(--diagram-height);
 }
 /* Waiting: the skeleton's tone with its light passing (skeleton.css). */
@@ -85,6 +86,64 @@
 .md-diagram-figure img { display: block; width: 100%; height: 100%; }
 .md-diagram.is-arriving > .md-diagram-figure img { animation: diagram-in var(--dur-layer) var(--ease-out) both; }
 @keyframes diagram-in { from { opacity: 0; } }
+
+/* Enlarged on a page without the app's viewer (diagram-render.js
+   enlarge()): the window less a margin, the drawing in the middle of a
+   stage that scrolls when it is larger. Auto margins, not centring: a
+   centred drawing larger than its stage could not be scrolled to its start. */
+.md-diagram-viewer {
+  --viewer-margin: clamp(8px, 2.4vw, 32px);
+  box-sizing: border-box;
+  width: calc(100vw - 2 * var(--viewer-margin));
+  height: calc(100dvh - 2 * var(--viewer-margin));
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-lg);
+  background: var(--ground);
+  color: var(--ink);
+  box-shadow: var(--lift);
+}
+.md-diagram-viewer::backdrop { background: rgba(0, 0, 0, 0.32); }
+.md-diagram-viewer-stage {
+  box-sizing: border-box;
+  display: flex;
+  width: 100%;
+  height: 100%;
+  padding: 16px;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.md-diagram-viewer-stage > img { display: block; flex: none; margin: auto; max-width: none; }
+.md-diagram-viewer-stage:focus-visible { outline: var(--focus-ring, 2px solid currentColor); outline-offset: -4px; }
+.md-diagram-viewer-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--raise);
+  color: var(--ink);
+  cursor: pointer;
+}
+.md-diagram-viewer-close svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+.md-diagram-viewer-close:focus-visible { outline: var(--focus-ring, 2px solid currentColor); outline-offset: 2px; }
 
 @media (prefers-reduced-motion: reduce) {
   .md-diagram:not(.is-drawn) > .md-diagram-figure,

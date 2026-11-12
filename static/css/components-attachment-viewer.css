@@ -32,6 +32,51 @@ dialog.modal.attachment-viewer-dialog[open] {
   overflow: hidden;
 }
 
+/* A picture, a drawing or a PDF (attachments.js setStage): the preview takes
+   the window, less a margin, so a diagram is larger here than in the
+   answer. attachments.js sizes the picture to the body (fitPicture); one
+   that would be too small to read fitted starts enlarged and pans
+   (image-zoom.js). The surface is the page's ground: a drawing's tones are
+   set against it. */
+dialog.modal.attachment-viewer-dialog.is-stage {
+  --viewer-margin: clamp(8px, 2.4vw, 32px);
+  padding: var(--viewer-margin);
+}
+
+dialog.modal.attachment-viewer-dialog.is-stage > .modal-content.attachment-viewer {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  background: var(--ground);
+}
+
+.attachment-viewer-dialog.is-stage .attachment-viewer-body {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.attachment-viewer-dialog.is-stage .attachment-viewer-image {
+  flex: none;
+  max-width: none;
+  max-height: none;
+}
+
+/* A drawing is drawn anew at any size: no corner rounds its edge away. */
+.attachment-viewer-image.is-drawing {
+  border-radius: 0;
+}
+
+.attachment-viewer-dialog.is-stage .attachment-viewer-frame {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+}
+
+.attachment-viewer-dialog.is-stage .attachment-viewer-body.is-gallery {
+  min-height: 0;
+}
+
 .attachment-viewer-head {
   display: flex;
   align-items: center;

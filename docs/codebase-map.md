@@ -1630,6 +1630,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Die Vorschau (`#attachmentViewerModal`) zentriert ohne `[open]`-Bindung:
   beim Ausblenden behält der Dialog sein `display`, die Zentrierung fiel aber
   mit `[open]` weg und das Bild sprang dafür nach links oben (bis 2026-10-22).
+  Seit 2026-11-12 nimmt sie für Bilder, Diagramme und PDFs das Fenster bis
+  auf einen Rand ein (`setStage()`, Klasse `.is-stage`, Fläche `--ground`);
+  Text und Hinweise bleiben in der Karte. `fitPicture()` passt ein Bild in
+  den Platz neben Quelle und Knöpfen ein und lässt es bis aufs Doppelte
+  wachsen; ein Diagramm, das eingepasst unter 0,75 seiner Größe fiele, und
+  ein sehr schmales oder flaches Foto starten vergrößert an ihrem Anfang
+  (`image-zoom.js` `startAt`). Ein neues Fenstermaß passt es neu ein.
   Entfernen (×) ist an beiden Stellen derselbe neutrale Knopf, nie rot: es ist
   kein Alarm. Der einzige Farbträger ist die DeepSeek-Notiz in der
   Ampel-Gelbstufe `--partial-bg` (vorher ein eigenes Amber `#f59e0b`).
@@ -2590,15 +2597,34 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     und ein Bild führt kein Skript aus und lädt nichts nach; Seiten-CSS und
     die Textläufer der App (Satzmarken, „Licht“ des Streams, Auswahl) reichen
     nicht hinein. Folgen: Beschriftungen als SVG-Text (`htmlLabels: false`,
-    Safari verschiebt `<foreignObject>` in Bildern), System-Schrift statt
-    Inter (Mermaid misst in der Seite, das Bild kennt keine Web-Schrift; beide
-    nennen `FONT`), Farben beim Anfordern aus den Tokens gelesen
-    (`--ground`/`--raise`/`--ink`/`--ink-3`/`--agree`, `themeVariables()`:
-    einfarbig, flach, Hausgrün als einziger Akzent; zeigt die Seite das
-    andere Thema, gilt `FALLBACK`) und bei einem Themenwechsel neu gezeichnet
-    (`MutationObserver` auf `class` von `<html>` und `<body>`). Beim
-    Anfordern, weil eine Zeichnung bei schnellem Hin- und Herschalten in der
-    Warteschlange steht, bis die Seite schon das andere Thema zeigt.
+    Safari verschiebt `<foreignObject>` in Bildern), Farben beim Anfordern
+    aus den Tokens gelesen (`--ground`/`--ink`/`--ink-3`/`--agree`,
+    `palette()`; zeigt die Seite das andere Thema, gilt `FALLBACK`) und bei
+    einem Themenwechsel neu gezeichnet (`MutationObserver` auf `class` von
+    `<html>` und `<body>`). Beim Anfordern, weil eine Zeichnung bei schnellem
+    Hin- und Herschalten in der Warteschlange steht, bis die Seite schon das
+    andere Thema zeigt.
+  - **Aussehen (seit 2026-11-12):** Die Schrift ist Inter wie in der App: Das
+    Bild lädt nichts nach, also reist die lateinische Inter-Datei, die jede
+    Seite vorlädt (`partials/font_preload.html`), als Daten im Bild mit
+    (`loadFont()`, `@font-face` der Familie `consens-diagram`); dieselben
+    Bytes sind in der Seite ein `FontFace` gleichen Namens, mit dem Mermaid
+    die Beschriftungen misst. Ohne die Datei fallen beide auf die
+    System-Schrift zurück. Beschriftungen 14 px, Titel 15 px halbfett,
+    Achsen 12–13 px grau; Umbruch erst bei 200 px (Mermaid 12 brach bei 120
+    px mitten im Wort, „Mehrheitsbeschlu/ss“). Formen sind ein Ton des
+    Grunds ohne Rahmen mit runden Ecken (7,5 % Tinte), Gruppen (Subgraphen)
+    ein blasserer Ton dahinter (3,5 %) mit grauem Namen, Linien 1,25 px in
+    `--ink-3`, Hausgrün nur als Akzent (erste Reihe eines Diagramms, laufende
+    Gantt-Aufgabe, Heute-Linie). `themeVariables()` setzt Mermaids Farben,
+    `themeCSS()` die Regeln der App darüber (Mermaids `themeCSS` des Modells
+    bleibt gesperrt), `tidy()` räumt das SVG auf (Filter weg, runde Ecken,
+    doppelte oder zu dichte Gantt-Datumsmarken weg, Lebenslinien einer
+    Sequenz auf ihre Höhe gekürzt, Titel eines Zeitstrahls in Überschriftgröße).
+    `picture()` misst die Tinte der Zeichnung in einem verborgenen Platz der
+    Seite (`inked()`, nachdem alles entfernt ist, was laden oder laufen
+    könnte) und vergrößert den Rahmen darauf: Titel und Wörter neben einem
+    Balken werden nie abgeschnitten.
   - **Was ein Diagramm nicht darf:** `securityLevel: "strict"`; `LOCKED`
     (Mermaids `secure`) nimmt der `%%{init}%%`-Zeile und dem Front Matter
     Thema, eigene CSS, Schrift, HTML-Beschriftungen und Layout. Ein Block mit
@@ -2624,13 +2650,29 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     16:10-Feld; die Größe eines gezeichneten Diagramms merkt sich der Browser
     (`localStorage` `consens.diagramSizes`, höchstens 200), sodass ein später
     geöffneter Chat das Feld von Anfang an in der richtigen Größe hat.
+  - **Breite (seit 2026-11-12):** Ein Diagramm wird für die Breite seines
+    Platzes gezeichnet (`widthOf()`, in 20-px-Stufen `span()`), sodass es in
+    der Regel ohne Wischen in die Antwort passt. Ein Gantt-Diagramm spannt sich
+    über diese Breite, mindestens `GANTT_LEAST` (760 px; schmaler standen
+    Aufgabennamen übereinander), ein Balkendiagramm (`xychart`) ebenso, eine
+    Sequenz bekommt auf dem Handy schmalere Teilnehmer (`settings()`). Würde
+    ein Ablauf (`flowchart`/`graph`) oder ein Zeitstrahl (`timeline`) kleiner
+    als `TURN_BELOW` (0,85) gezeigt, zeichnet `draw()` ihn auch andersherum
+    (`turned()`: LR ↔ TD) und nimmt die Fassung, die größer erscheint; der
+    Bildbetrachter bekommt die, die im Fenster größer ist (`forViewer()`).
+    Kein Satz im Prompt dafür: Das Modell schreibt, was es meint, die App
+    passt es ein. Hohe Diagramme stehen in eigener Größe, die Seite scrollt an
+    ihnen vorbei. Ändert der Platz seine Breite um eine Stufe (Handy gedreht,
+    Panel daneben geöffnet), zeichnet `watchPan()` ihn nach 200 ms neu. Die
+    gemerkte Größe (`consens.diagramSizes`) gilt je Quelle und Stufe
+    (`<key>@<Breite>`).
   - **Lesbar auf dem Handy (seit 2026-11-11):** Ein Diagramm wird nie kleiner
-    als `--diagram-min-scale` (0,75) seiner eigenen Größe gezeichnet; ein
-    Ablauf aus sechs Schritten hatte auf Handybreite 6-px-Beschriftungen. Ist
-    es dann breiter als die Antwort, wischt man es in seinem Platz zur Seite
-    wie eine Tabelle (`overflow-x: auto` am Platz), und die Seite, an der es
-    weitergeht, läuft weich aus (`.is-cut-start`/`.is-cut-end`, `watchPan()`
-    folgt Größe und Scrollstand).
+    als `--diagram-min-scale` (0,75: 14-px-Beschriftungen bleiben bei
+    10,5 px) seiner eigenen Größe gezeichnet. Ist es dann breiter als die
+    Antwort (Gantt, Torte oder viele Teilnehmer auf dem Handy), wischt man es
+    in seinem Platz zur Seite wie eine Tabelle (`overflow-x: auto` am Platz),
+    und die Seite, an der es weitergeht, läuft weich aus
+    (`.is-cut-start`/`.is-cut-end`, `watchPan()` folgt Größe und Scrollstand).
   - **Zählen (seit 2026-11-11):** `settled()` fragt nur der Stream einer
     laufenden Antwort; dort zählt ein Diagramm einmal als `app_diagram` mit
     `kind` (Mermaids Name der Art, nie ein Wort des Modells) und `outcome`
@@ -2638,8 +2680,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   - **Scheitern:** Was Mermaid nicht lesen kann, bleibt der Codeblock des
     Modells (`.is-code`, mit Kopierknopf), ohne Fehlergrafik. Kam Mermaid
     selbst nicht an (Netz), versucht es ein späterer Blick nach `RETRY_MS`.
-  - **Vergrößern** (nur `/app`): Ein Klick öffnet die Zeichnung im
-    Bildbetrachter (`App.attachments.openStored`, Zoom über `image-zoom.js`).
+  - **Vergrößern:** Ein Klick (oder Enter auf `.md-diagram-open`) öffnet die
+    Zeichnung in `/app` im Bildbetrachter (`App.attachments.openStored` mit
+    `drawing: true`: Bühne in Fenstergröße, Zoom über `image-zoom.js`), auf
+    Seiten ohne ihn (Share, Watch) in einem eigenen `<dialog
+    class="md-diagram-viewer">` (`enlarge()`): so groß, wie das Fenster
+    erlaubt, höchstens doppelt so groß wie gezeichnet; ein Diagramm, das
+    eingepasst unter 0,75 seiner Größe fiele, steht in lesbarer Größe und
+    scrollt im Dialog (Wischen, Rad, Pfeiltasten). Esc, das Kreuz und ein
+    Klick daneben schließen, der Fokus kehrt zum Diagramm zurück.
   - **Öffentliche Seiten:** `public_markdown._mark_code_blocks` lässt nur
     einem geschlossenen Mermaid-Block die Klasse `language-mermaid` (nh3
     `tag_attribute_values`). `templates/partials/answer_blocks.html` bindet
@@ -2845,7 +2894,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `+`/`-`/`0`; 1× bis 4× (bzw. bis zu den eigenen Pixeln, höchstens 8×),
   kleiner als der Rahmen mittig, größer ohne Lücke am Rand. Der Seiten-Zoom
   springt nicht mit (`touch-action: none` am Bild, Strg+Rad und `gesture*`
-  abgefangen). `attach(img, {frame, active})` → `{zoomed, reset, detach}`;
+  abgefangen). Vergrößert verschieben die Pfeiltasten das Bild um ein
+  Fünftel des Rahmens; eingepasst gehören sie der Seite (die Galerie blättert
+  damit). `attach(img, {frame, active})` → `{zoomed, reset, startAt, detach}`;
+  `startAt(scale)` zeigt das Bild vergrößert ab seiner linken oberen Ecke;
   Klassen `is-zoomed` am Rahmen, `is-panning`/`is-settling` am Bild, das
   Aussehen steht beim Aufrufer. Einziger Aufrufer: der Anhang-Viewer
   (`attachments.js` `zoomable`, Rahmen `#attachmentViewerBody`). Die

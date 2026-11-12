@@ -20,6 +20,8 @@ CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
 TOKENS = ('<style>:root{--ground:#ffffff;--raise:#f3f3f3;--ink:#0a0a0a;--ink-3:#5e5e5e;--agree:#217863}'
           '.dark-mode{--ground:#050505;--raise:#151515;--ink:#f5f5f5;--ink-3:#a1a1a1;--agree:#6dc0a4}</style>')
 FLOW = 'flowchart LR\n  A[Frage &amp; Antwort für Ägypten] --&gt; B{Suche nötig?}\n  B -- ja --&gt; C[Zeile eins&lt;br&gt;Zeile zwei]'
+# The Latin Inter every page preloads (partials/font_preload.html).
+FONT = '/' + next((ROOT / 'static/fonts/inter').glob('InterVariable-latin.*.woff2')).relative_to(ROOT).as_posix()
 
 
 def _block(source):
@@ -40,11 +42,15 @@ def _page(browser, body, width='680px', viewport=None, init=None):
         if path == '/s/example':
             route.fulfill(content_type='text/html', headers={'Content-Security-Policy': CSP}, body=(
                 '<!doctype html><html><head><meta charset="utf-8">' + TOKENS
+                + f'<link rel="preload" href="{FONT}" as="font" type="font/woff2" crossorigin>'
                 + '<link rel="stylesheet" href="/static/css/diagram.css">'
                 + '<script defer src="/static/js/diagram-render.js"></script>'
                 + f'</head><body style="margin:0"><main style="width:{width}">{body}</main></body></html>'))
             return
         file = ROOT / path.lstrip('/')
+        if path == FONT:
+            route.fulfill(body=file.read_bytes(), content_type='font/woff2')
+            return
         if path.startswith(('/static/vendor/mermaid/', '/static/js/diagram-render.js', '/static/css/diagram.css')) and file.is_file():
             if '/vendor/' in path:
                 requested.append(path.split('/dist/', 1)[1])
@@ -88,9 +94,13 @@ def test_a_block_is_drawn_as_an_image_of_its_own_size(browser):
         svg = _drawing(page)
         # Mermaid sets a label word by word.
         assert all(word in svg for word in ('Frage', '&amp;', 'Ägypten', 'nötig?', 'Zeile', 'zwei'))
-        # Labels are SVG text (Safari misplaces HTML labels in an image), flat, in the page's tones.
+        # Labels are SVG text (Safari misplaces HTML labels in an image), flat, in the page's tones:
+        # shapes a tone of the ground (7.5 % ink) without a frame of their own, words in ink.
         assert '<foreignObject' not in svg and '<filter' not in svg and 'drop-shadow(' not in svg
-        assert '#f3f3f3' in svg and '#0a0a0a' in svg
+        assert '#ededed' in svg and '#0a0a0a' in svg
+        # The app's Inter inside the image, the same file the page measured its labels with.
+        assert '@font-face{font-family:"consens-diagram";src:url(data:font/woff2;base64,' in svg
+        assert page.evaluate('document.fonts.check(\'14px "consens-diagram"\')')
         assert page.locator('.md-diagram img').get_attribute('alt') == 'Diagram'
         assert requested[0] == 'mermaid.esm.min.mjs' and all(name.endswith('.mjs') for name in requested)
         assert not refused and not errors
@@ -107,7 +117,7 @@ def test_the_drawing_follows_the_page_into_the_dark(browser):
         page.evaluate('document.documentElement.classList.add("dark-mode")')
         expect(place).to_have_attribute('data-drawn', 'dark')
         svg = _drawing(page)
-        assert '#f5f5f5' in svg and '#151515' in svg and '#0a0a0a' not in svg
+        assert '#f5f5f5' in svg and '#171717' in svg and '#0a0a0a' not in svg
         assert page.locator('.md-diagram-figure').bounding_box() == size
         assert not errors
     finally:
@@ -133,28 +143,74 @@ def test_a_drawing_that_waits_through_a_quick_switch_keeps_its_themes_colors(bro
         page.evaluate('document.documentElement.classList.add("dark-mode")')
         expect(place).to_have_attribute('data-drawn', 'dark')
         svg = _drawing(page)
-        assert '#f5f5f5' in svg and '#151515' in svg and '#0a0a0a' not in svg
+        assert '#f5f5f5' in svg and '#171717' in svg and '#0a0a0a' not in svg
+        assert not errors
+    finally:
+        context.close()
+
+
+SIZE = '''() => {
+    const place = document.querySelector(".md-diagram");
+    const figure = place.querySelector(".md-diagram-figure");
+    return { natural: [Number(place.style.getPropertyValue("--diagram-width")), Number(place.style.getPropertyValue("--diagram-height"))],
+             shown: figure.getBoundingClientRect().width, place: [place.clientWidth, place.scrollWidth],
+             page: [document.documentElement.clientWidth, document.documentElement.scrollWidth] };
+}'''
+
+
+def test_a_long_flow_laid_out_sideways_stands_on_a_phone(browser):
+    steps = ' --&gt; '.join(f'S{index}[Schritt Nummer {index}]' for index in range(1, 8))
+    context, page, errors, _requested, _refused = _page(
+        browser, f'<p>Before</p>{_block("flowchart LR" + chr(10) + "  " + steps)}', width='auto',
+        viewport={'width': 390, 'height': 800})
+    try:
+        place = page.locator('.md-diagram')
+        expect(place).to_have_attribute('data-drawn', 'light', timeout=20000)
+        size = page.evaluate(SIZE)
+        # Sideways it was some 1,500 px wide; top to bottom it fits the phone at its own size.
+        assert size['natural'][1] > 2 * size['natural'][0] and size['natural'][0] <= 390
+        assert size['shown'] == size['natural'][0]
+        assert size['place'][1] <= size['place'][0] and size['page'][1] <= size['page'][0]
+        expect(place).to_have_class('md-diagram is-arriving has-size is-drawn')
+        assert not errors
+    finally:
+        context.close()
+
+
+def test_a_gantt_chart_spans_the_answer_and_a_sequence_ends_with_its_last_message(browser):
+    gantt = ('gantt\n  title Jensen Huang / Nvidia – Verlauf Nov. 2026\n  dateFormat YYYY-MM-DD\n  axisFormat %d.%m.\n'
+             '  section Skandal\n  Board äußert Vertrauen + unabhängige Untersuchung :a1, 2026-11-08, 2d\n'
+             '  Bericht über zweite Affäre (NYT) :a2, 2026-11-11, 1d\n  Noch keine Entscheidung :active, a4, 2026-11-12, 1d')
+    sequence = 'sequenceDiagram\n  A-&gt;&gt;B: Frage\n  B--&gt;&gt;A: Antwort'
+    context, page, errors, _requested, _refused = _page(browser, _block(gantt) + _block(sequence), width='680px')
+    try:
+        expect(page.locator('.md-diagram.is-drawn')).to_have_count(2, timeout=20000)
+        sizes = page.evaluate('''() => [...document.querySelectorAll(".md-diagram")].map(place =>
+            [Number(place.style.getPropertyValue("--diagram-width")), Number(place.style.getPropertyValue("--diagram-height")),
+             place.scrollWidth <= place.clientWidth])''')
+        # Mermaid would have taken the whole window (1280 px); laid out at 760 px (GANTT_LEAST), with
+        # every word beside a bar inside its frame, it fits the answer's 680 px without panning.
+        assert 700 <= sizes[0][0] <= 800 and sizes[0][2]
+        # Without its participants repeated below, Mermaid's lifelines ran 2,000 px down.
+        assert sizes[1][1] < 400 and sizes[1][2]
+        svg = _drawing(page, '.md-diagram:nth-child(1)')
+        assert 'Jensen Huang' in svg and 'Untersuchung' in svg
         assert not errors
     finally:
         context.close()
 
 
 def test_a_wide_diagram_stays_readable_on_a_phone_and_pans_in_its_place(browser):
-    steps = ' --&gt; '.join(f'S{index}[Schritt Nummer {index}]' for index in range(1, 8))
+    people = ''.join(f'  P{index}-&gt;&gt;P{index + 1}: Nachricht {index}\n' for index in range(1, 7))
     context, page, errors, _requested, _refused = _page(
-        browser, f'<p>Before</p>{_block("flowchart LR" + chr(10) + "  " + steps)}', width='auto',
+        browser, f'<p>Before</p>{_block("sequenceDiagram" + chr(10) + people)}', width='auto',
         viewport={'width': 390, 'height': 800})
     try:
         expect(page.locator('.md-diagram')).to_have_attribute('data-drawn', 'light', timeout=20000)
-        size = page.evaluate('''() => {
-            const place = document.querySelector(".md-diagram");
-            const figure = place.querySelector(".md-diagram-figure");
-            return { natural: Number(place.style.getPropertyValue("--diagram-width")), shown: figure.getBoundingClientRect().width,
-                     place: [place.clientWidth, place.scrollWidth],
-                     page: [document.documentElement.clientWidth, document.documentElement.scrollWidth] };
-        }''')
-        assert size['natural'] > 900
-        # Three quarters of its own size (15 px labels stay above 11 px), not the 390 px of the screen.
+        size = page.evaluate(SIZE)
+        assert size['natural'][0] > 600
+        # Three quarters of its own size (14 px labels stay at 10.5 px), not the 390 px of the screen.
+        size['natural'] = size['natural'][0]
         assert abs(size['shown'] - 0.75 * size['natural']) < 1
         assert size['place'][0] <= 390 < size['place'][1]
         # The page itself never pans.
@@ -224,10 +280,38 @@ def test_nothing_of_the_models_loads_or_runs(browser):
     try:
         expect(page.locator('.md-diagram')).to_have_attribute('data-drawn', 'light', timeout=20000)
         page.locator('.md-diagram img').click()
-        svg = _drawing(page)
+        svg = _drawing(page, '.md-diagram')
         assert '<foreignObject' not in svg and '<image' not in svg and '<script' not in svg
         assert 'javascript:' not in svg and 'leak.test/css.png' not in svg and '#cde498' not in svg
         assert page.evaluate('window.pwned') is None
+        assert not refused and not errors
+    finally:
+        context.close()
+
+
+def test_a_page_without_the_apps_viewer_enlarges_a_drawing_in_a_dialog_of_its_own(browser):
+    steps = ' --&gt; '.join(f'S{index}[Schritt {index}]' for index in range(1, 4))
+    context, page, errors, _requested, refused = _page(browser, _block('flowchart LR\n  ' + steps),
+                                                       viewport={'width': 1280, 'height': 800})
+    try:
+        expect(page.locator('.md-diagram')).to_have_attribute('data-drawn', 'light', timeout=20000)
+        opener = page.get_by_role('button', name='Open diagram')
+        opener.focus()
+        page.keyboard.press('Enter')
+        dialog = page.locator('dialog.md-diagram-viewer')
+        expect(dialog).to_have_attribute('open', '')
+        shown = page.evaluate('''() => {
+            const img = document.querySelector(".md-diagram-viewer img");
+            return { src: img.src === document.querySelector(".md-diagram img").src, width: img.getBoundingClientRect().width,
+                     own: Number(document.querySelector(".md-diagram").style.getPropertyValue("--diagram-width")),
+                     focus: document.activeElement.className };
+        }''')
+        # Larger than in the answer: up to twice its own size in a window of 1280 px.
+        assert shown['src'] and shown['width'] >= min(2 * shown['own'], 1100) - 2
+        assert shown['focus'] == 'md-diagram-viewer-stage'
+        page.keyboard.press('Escape')
+        expect(dialog).not_to_have_attribute('open', '')
+        assert page.evaluate('document.activeElement.className') == 'md-diagram-open'
         assert not refused and not errors
     finally:
         context.close()

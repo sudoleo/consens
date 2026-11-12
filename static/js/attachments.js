@@ -255,18 +255,84 @@
     // an older response stale so it can never paint into the wrong preview.
     let viewerToken = 0;
     // The picture shown zooms (image-zoom.js): pinch, double tap or click,
-    // + / - / 0, inside the body. Each picture starts fitted.
+    // + / - / 0, the arrow keys, inside the body.
     let viewerZoom = null;
     function zoomable(img) {
       if (viewerZoom) viewerZoom.detach();
       viewerZoom = window.App?.imageZoom?.attach(img, { frame: viewerBody,
         active: function () { return Boolean(viewerOverlay?.hasAttribute("open")); } }) || null;
+      return viewerZoom;
     }
+
+    // Pictures, drawings and PDFs take the window, less a margin
+    // (components-attachment-viewer.css .is-stage); text and notes keep the
+    // card.
+    function setStage(on) {
+      if (viewerOverlay) viewerOverlay.classList.toggle("is-stage", Boolean(on));
+    }
+
+    // A picture as large as the window allows: fitted into the body, beside
+    // the source and actions under it, and grown up to PICTURE_GROWS times
+    // its own size (a drawing is drawn anew at any size; a small photo grows
+    // soft). A drawing that would show smaller than DRAWING_READABLE of its
+    // own size (labels under 10.5 px, as in the chat: diagram.css) starts
+    // enlarged at its beginning, and so does a strip of a photo (a page
+    // screenshot, a panorama: one side over STRIP times the other) that
+    // would fill less than THIN_SHARE of the body across or down: it pans
+    // from there, and a double click or 0 shows it whole. A photo of an
+    // ordinary shape stays fitted, also across a phone.
+    const PICTURE_GROWS = 2;
+    const DRAWING_READABLE = 0.75;
+    const STRIP = 3;
+    const THIN_SHARE = 0.45;
+    let viewerPicture = null;
+    function fitPicture(img, drawing) {
+      viewerPicture = { img: img, drawing: Boolean(drawing) };
+      img.classList.toggle("is-drawing", Boolean(drawing));
+      const place = function () {
+        if (!viewerPicture || viewerPicture.img !== img || !img.isConnected) return;
+        const width = img.naturalWidth, height = img.naturalHeight;
+        if (!(width > 0 && height > 0)) { zoomable(img); return; }
+        const style = getComputedStyle(viewerBody);
+        const gap = parseFloat(style.rowGap) || 0;
+        const roomWidth = viewerBody.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+        let roomHeight = viewerBody.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0);
+        for (const child of viewerBody.children) if (child !== img) roomHeight -= child.offsetHeight + gap;
+        if (!(roomWidth > 0 && roomHeight > 0)) { zoomable(img); return; }
+        const scale = Math.min(roomWidth / width, roomHeight / height, PICTURE_GROWS);
+        img.style.width = Math.max(1, Math.floor(width * scale)) + "px";
+        img.style.height = Math.max(1, Math.floor(height * scale)) + "px";
+        const zoom = zoomable(img);
+        if (!zoom) return;
+        if (drawing && scale < DRAWING_READABLE) zoom.startAt(DRAWING_READABLE / scale);
+        else if (!drawing && height > STRIP * width && width * scale < THIN_SHARE * roomWidth) {
+          zoom.startAt(Math.min(roomWidth / (width * scale), 1 / scale));
+        } else if (!drawing && width > STRIP * height && height * scale < THIN_SHARE * roomHeight) {
+          zoom.startAt(Math.min(roomHeight / (height * scale), 1 / scale));
+        }
+      };
+      // It zooms at once; it is sized after the source and the actions under
+      // it are in (they follow in the same task), and once its own size is
+      // known, before it is painted at the size it loaded with.
+      zoomable(img);
+      if (img.complete && img.naturalWidth) Promise.resolve().then(place);
+      else img.addEventListener("load", place, { once: true });
+    }
+    // A new size of the window fits the picture again.
+    let refitFrame = 0;
+    window.addEventListener("resize", function () {
+      if (!viewerPicture || !viewerOverlay?.hasAttribute("open")) return;
+      window.cancelAnimationFrame(refitFrame);
+      refitFrame = window.requestAnimationFrame(function () {
+        if (viewerPicture) fitPicture(viewerPicture.img, viewerPicture.drawing);
+      });
+    });
 
     // The preview is a native <dialog> (App.modalDialog): focus goes in and
     // back, Tab stays inside, Escape and the backdrop close it. Its content
     // is emptied once it has faded out, not while it still shows.
     function releaseViewerContent() {
+      viewerPicture = null;
       if (viewerZoom) {
         viewerZoom.detach();
         viewerZoom = null;
@@ -462,7 +528,7 @@
           img.alt = att.name;
           img.src = image;
           viewerBody.appendChild(img);
-          zoomable(img);
+          fitPicture(img, false);
           // A picture from the web names the page it came from (agent_web_images.py).
           if (att.page && att.host) {
             const source = document.createElement("a");
@@ -563,6 +629,8 @@
       releaseViewerContent();
       viewerTitle.textContent = att.title || att.name;
       showGalleryPlace(att);
+      const mime = String(att.mime || "");
+      setStage(Boolean(att.fileId || att.data) && !att.previewOnly && (mime.indexOf("image/") === 0 || mime === "application/pdf"));
 
       if (att.fileId && window.App?.agentWorkspace?.openFile) {
         showStoredAttachment(att);
@@ -595,7 +663,7 @@
         img.alt = att.name;
         img.src = "data:" + att.mime + ";base64," + att.data;
         viewerBody.appendChild(img);
-        zoomable(img);
+        fitPicture(img, att.drawing);
       } else if (att.mime.indexOf("text/") === 0 && att.data.length * 3 / 4 <= TEXT_PREVIEW_BYTES) {
         try {
           viewerBody.appendChild(textPreview(base64Text(att.data), att.name));

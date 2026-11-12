@@ -3,13 +3,15 @@
 // Two fingers or a trackpad pinch (Ctrl + wheel; Safari's gesture events)
 // zoom about the point under them or the cursor, a double tap or click
 // toggles between fitted and enlarged, an enlarged picture pans by dragging
-// or a two-finger scroll, and + / - / 0 zoom from the keyboard. It never gets
-// smaller than fitted, and once larger than its frame it leaves no gap at an
-// edge. The browser's own page zoom stays where it is: the picture takes its
+// or a two-finger scroll, + / - / 0 zoom from the keyboard and the arrow keys
+// pan an enlarged picture. It never gets smaller than fitted, and once larger
+// than its frame it leaves no gap at an edge. The browser's own page zoom stays where it is: the picture takes its
 // touches (touch-action: none), and Ctrl + wheel and Safari's gestures over
 // the frame are cancelled.
 //
-// App.imageZoom.attach(img, { frame, active }) -> { zoomed(), reset(), detach() }.
+// App.imageZoom.attach(img, { frame, active }) -> { zoomed(), reset(), startAt(scale), detach() }.
+// startAt(scale) shows the picture enlarged from its top left corner, where
+// a wide or tall diagram begins, instead of fitted (attachments.js).
 // The picture keeps its layout box; a transform (origin top left) moves it
 // inside ``frame``, an ancestor that clips it while zoomed. ``active()`` says
 // whether the keys are its (an open dialog). Classes for the caller's CSS:
@@ -39,6 +41,9 @@
   const TAP_NEAR = 30;
   // The jump's transition in CSS (--dur-state) ends well before this.
   const SETTLE_MS = 400;
+  // An arrow key moves an enlarged picture by this share of its frame.
+  const PAN_SHARE = 0.2;
+  const ARROWS = Object.freeze({ ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] });
   const FITTED = Object.freeze({ scale: 1, x: 0, y: 0 });
 
   // ---- The math --------------------------------------------------------------
@@ -259,7 +264,12 @@
       if (event.key === '+' || event.key === '=') zoomTo(state.scale * STEP, null, true);
       else if (event.key === '-') zoomTo(state.scale / STEP, null, true);
       else if (event.key === '0') apply({ ...FITTED }, state.scale > 1);
-      else return;
+      else if (ARROWS[event.key] && state.scale > 1 && !event.shiftKey) {
+        const { base, frame: room } = measure();
+        const [right, down] = ARROWS[event.key];
+        apply(clamp({ scale: state.scale, x: state.x - right * room.width * PAN_SHARE,
+          y: state.y - down * room.height * PAN_SHARE }, base, room), true);
+      } else return;
       event.preventDefault();
     }
     // A new size of the window fits the picture again.
@@ -278,6 +288,11 @@
     return {
       zoomed: () => state.scale > 1,
       reset() { apply({ ...FITTED }); },
+      startAt(scale) {
+        if (!(scale > 1)) return;
+        const { base, frame: room, max } = measure();
+        apply(clamp(zoomAt(state, scale, { x: base.left, y: base.top }, base, max), base, room));
+      },
       detach() {
         for (const [target, type, handler, options] of listeners) target.removeEventListener(type, handler, options);
         clearTimeout(settleTimer);
