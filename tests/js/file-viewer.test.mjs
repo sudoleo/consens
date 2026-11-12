@@ -4,13 +4,14 @@ import { loadScripts } from './helpers/appWindow.mjs';
 // The app's sanitizer and Markdown renderer, as on the page (markdown-stream.js).
 const MARKDOWN = ['static/vendor/marked/12.0.2/marked.min.js', 'static/vendor/dompurify/3.4.17/dist/purify.min.js',
   'static/js/markdown-stream.js'];
-function boot() {
+function boot({ before } = {}) {
   return loadScripts([...MARKDOWN, 'static/js/file-viewer.js'], { body: '<main><button id="card">card</button></main>', before(window) {
     // App.t as in English (app-text.js): the values go into the sentence.
     window.App = { t: (text, params) => String(text).replace(/\{(\w+)\}/g, (all, name) => (params && name in params ? String(params[name]) : all)),
       showPopup: vi.fn() };
     // jsdom has no TextDecoder; every browser does.
     window.TextDecoder = TextDecoder;
+    before?.(window);
   } });
 }
 const text = (body, mime = 'text/plain') => async () => ({ blob: new Blob([body], { type: mime }), mime });
@@ -92,6 +93,20 @@ describe('file preview (file-viewer.js)', () => {
     await vi.waitFor(() => expect(document.querySelector('.file-viewer-notice')).not.toBeNull());
     expect(document.querySelector('.file-viewer-notice').textContent).toContain('There is no preview of this file.');
     expect([...document.querySelectorAll('.file-viewer-notice button')].map(b => b.textContent)).toEqual(['Download']);
+    dom.window.close();
+  });
+
+  it('draws a Mermaid block of a Markdown file, whose code the sheet hides', async () => {
+    // A stand-in for diagram-render.js: the drawing itself needs a browser.
+    const drawn = [];
+    const { window, document, dom } = boot({ before(window) {
+      window.ConsensusDiagram = { key: source => `k${source.length}`, warm() {},
+        render(root) { root.querySelectorAll('.md-diagram[data-diagram]').forEach(place => drawn.push(place)); } };
+    } });
+    window.App.fileViewer.open({ key: 'd', name: 'flow.md', load: text('# Flow\n\n```mermaid\nflowchart LR\n  A --> B\n```\n') });
+    await vi.waitFor(() => expect(document.querySelector('.file-viewer-markdown .md-diagram')).not.toBeNull());
+    // diagram.css hides the code inside a diagram's place: only its drawing shows the block.
+    expect(drawn).toEqual([document.querySelector('.file-viewer-markdown .md-diagram')]);
     dom.window.close();
   });
 

@@ -1203,6 +1203,8 @@
     if (content._cut) notes.push(node('p', 'file-viewer-sheet-note', `Showing the first ${MAX_LINES} lines. Download the file for the rest.`));
     if (content._rowsCut) notes.push(node('p', 'file-viewer-sheet-note', `Showing the first ${MAX_ROWS} rows. Download the file for the rest.`));
     ui.pages.replaceChildren(...notes, content);
+    // diagram.css hides the code of a Mermaid block: its place shows the drawing.
+    if (how === 'markdown') window.ConsensusDiagram?.render(content);
     const lines = content._lines ?? (text ? text.split('\n').length : 0);
     const counted = how === 'code' || how === 'text';
     ui.count.textContent = counted ? (lines === 1 ? '1 line' : `${lines} lines`) : '';
