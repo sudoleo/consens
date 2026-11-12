@@ -2592,17 +2592,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     nicht hinein. Folgen: Beschriftungen als SVG-Text (`htmlLabels: false`,
     Safari verschiebt `<foreignObject>` in Bildern), System-Schrift statt
     Inter (Mermaid misst in der Seite, das Bild kennt keine Web-Schrift; beide
-    nennen `FONT`), Farben beim Zeichnen aus den Tokens gelesen
+    nennen `FONT`), Farben beim Anfordern aus den Tokens gelesen
     (`--ground`/`--raise`/`--ink`/`--ink-3`/`--agree`, `themeVariables()`:
-    einfarbig, flach, Hausgrün als einziger Akzent) und bei einem
-    Themenwechsel neu gezeichnet (`MutationObserver` auf `class` von `<html>`
-    und `<body>`).
+    einfarbig, flach, Hausgrün als einziger Akzent; zeigt die Seite das
+    andere Thema, gilt `FALLBACK`) und bei einem Themenwechsel neu gezeichnet
+    (`MutationObserver` auf `class` von `<html>` und `<body>`). Beim
+    Anfordern, weil eine Zeichnung bei schnellem Hin- und Herschalten in der
+    Warteschlange steht, bis die Seite schon das andere Thema zeigt.
   - **Was ein Diagramm nicht darf:** `securityLevel: "strict"`; `LOCKED`
     (Mermaids `secure`) nimmt der `%%{init}%%`-Zeile und dem Front Matter
     Thema, eigene CSS, Schrift, HTML-Beschriftungen und Layout. Ein Block mit
-    einer Bild-Form (`@{ img: … }`, `LOADS_IMAGE`) wird nie gezeichnet:
+    einer Bild-Form (`@{ img: … }`, `loadsImage()`) wird nie gezeichnet:
     Mermaid ruft die Adresse beim Zeichnen in der Seite ab; die CSP
-    (`img-src 'self' data:`) ist dafür nur die zweite Schicht.
+    (`img-src 'self' data:`) ist dafür nur die zweite Schicht. Die Daten in
+    `@{ … }` sind YAML (Schlüssel in Anführungszeichen, Alias, Escapes),
+    deshalb sperrt jedes `img` und jeder Backslash darin den Block; sie enden
+    wie in Mermaids Lexer am ersten `}` außerhalb doppelter Anführungszeichen.
   - **Platz:** `markdown-stream.js` (`ensureDiagramBlocks`, ein
     Renderer-Extension für `code`, weil nur der das Token mit `raw` sieht)
     schreibt `.md-diagram[data-diagram=<key>]` mit dem Code darin; `key()`

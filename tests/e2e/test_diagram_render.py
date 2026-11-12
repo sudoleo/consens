@@ -114,6 +114,31 @@ def test_the_drawing_follows_the_page_into_the_dark(browser):
         context.close()
 
 
+def test_a_drawing_that_waits_through_a_quick_switch_keeps_its_themes_colors(browser):
+    # Dark and straight back to light: the dark drawing waits behind a long
+    # one and is drawn while the page is light again. It is kept as the dark
+    # one, so the next switch to dark shows it in dark colors.
+    context, page, errors, _requested, _refused = _page(browser, _block('flowchart LR\n  A[One] --&gt; B[Two]'))
+    try:
+        place = page.locator('.md-diagram')
+        expect(place).to_have_attribute('data-drawn', 'light', timeout=20000)
+        page.evaluate('''async () => {
+            const long = "flowchart TD\\n" + Array.from({ length: 150 }, (_, i) => `  n${i} --> n${i + 1}`).join("\\n");
+            window.ConsensusDiagram.request(long, "light");
+            document.documentElement.classList.add("dark-mode");
+            await new Promise(resolve => setTimeout(resolve, 0));
+            document.documentElement.classList.remove("dark-mode");
+            await window.ConsensusDiagram.request("flowchart LR\\n  A[One] --> B[Two]", "dark").done;
+        }''')
+        page.evaluate('document.documentElement.classList.add("dark-mode")')
+        expect(place).to_have_attribute('data-drawn', 'dark')
+        svg = _drawing(page)
+        assert '#f5f5f5' in svg and '#151515' in svg and '#0a0a0a' not in svg
+        assert not errors
+    finally:
+        context.close()
+
+
 def test_a_wide_diagram_stays_readable_on_a_phone_and_pans_in_its_place(browser):
     steps = ' --&gt; '.join(f'S{index}[Schritt Nummer {index}]' for index in range(1, 8))
     context, page, errors, _requested, _refused = _page(

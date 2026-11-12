@@ -110,6 +110,25 @@ describe('file preview (file-viewer.js)', () => {
     dom.window.close();
   });
 
+  it('gives a Markdown file the formulas and code tones of an answer, and a text file none', async () => {
+    // Stand-ins for math-render.js and code-highlight.js: they draw in a browser.
+    const drawn = [];
+    const { window, document, dom } = boot({ before(window) {
+      window.ConsensusMath = { prepareMarkdown: md => md, render: root => drawn.push(['math', root.isConnected]) };
+      window.ConsensusCode = { key: () => 'c', warm() {},
+        render: root => drawn.push(['code', root.isConnected, root.querySelectorAll('pre[data-code]').length]) };
+    } });
+    const fence = '```';
+    window.App.fileViewer.open({ key: 'p', name: 'notes.md', load: text(`# Notes\n\n${fence}python\nprint(1)\n${fence}\n`) });
+    await vi.waitFor(() => expect(document.querySelector('.file-viewer-markdown pre')).not.toBeNull());
+    expect(drawn).toEqual([['math', true], ['code', true, 1]]);
+    drawn.length = 0;
+    window.App.fileViewer.open({ key: 't', name: 'notes.txt', load: text(`${fence}python\nprint(1)\n${fence}\n`) });
+    await vi.waitFor(() => expect(document.querySelector('.file-viewer-plain')).not.toBeNull());
+    expect(drawn).toEqual([]);
+    dom.window.close();
+  });
+
   it('reads a German Excel CSV and UTF-16 text, and says where a long table stops', async () => {
     const { window, document, dom } = boot();
     const viewer = window.App.fileViewer;

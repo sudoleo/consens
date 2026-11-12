@@ -95,6 +95,26 @@ describe("ConsensusDiagram", () => {
     }
   });
 
+  it("refuses an image shape however its YAML spells the key, and only that", async () => {
+    const events = [];
+    const { window } = loadScripts(["static/js/diagram-render.js"], {
+      before(page) { page.trackUmamiEvent = (name, data) => events.push(data.outcome); },
+    });
+    const outcome = async source => {
+      window.ConsensusDiagram.settled(source);
+      await window.ConsensusDiagram.request(source).done;
+      await settle();
+      return events.at(-1);
+    };
+    for (const data of ['"img": "/x.png"', "'img': '/x.png'", 'IMG: "/x.png"', 'label: "}", img: "/x.png"',
+      '"\\x69mg": "/x.png"', "k: &k img, *k : /x.png", "? img\n  : /x.png"]) {
+      expect(await outcome(`flowchart LR\n  A@{ ${data} } --> B`), data).toBe("refused");
+    }
+    // Shape data without a picture is drawn (jsdom never loads Mermaid: "load").
+    expect(await outcome('flowchart LR\n  A@{ shape: cyl, label: "Images {x}" } --> B')).toBe("load");
+    expect(await outcome("flowchart LR\n  A[img] --> B")).toBe("load");
+  });
+
   it("answers once for a source, whatever asks", () => {
     const { window } = boot();
     const { request } = window.ConsensusDiagram;

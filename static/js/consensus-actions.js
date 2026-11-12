@@ -199,6 +199,13 @@
           ref.replaceWith(document.createTextNode(text));
         });
         clone.querySelectorAll(".src-ref-sep").forEach(el => el.remove());
+        // A drawn diagram shows a picture and hides its source (diagram.css);
+        // the copied text carries the source, as a code block would.
+        clone.querySelectorAll(".md-diagram").forEach(place => {
+          const source = place.querySelector(":scope > pre");
+          if (source) place.replaceWith(source);
+          else place.remove();
+        });
         clone.style.position = "absolute";
         clone.style.left = "-99999px";
         clone.style.top = "0";

@@ -39,7 +39,24 @@
   // draws, in the page. Nothing in an answer loads on its own
   // (markdown-stream.js), so such a block stays code; the CSP's img-src
   // would refuse a foreign host as well.
-  const LOADS_IMAGE = /@\{[^}]*\bimg\s*:/i;
+  // The data in "@{ … }" is YAML, so the key may come quoted, as an alias or
+  // spelled in escapes: any "img" in it, or any backslash, refuses the
+  // block. Mermaid's lexer ends the data at the first "}" outside double
+  // quotes, and so does this.
+  function loadsImage(source) {
+    const text = String(source || "");
+    for (let start = text.indexOf("@{"); start !== -1; start = text.indexOf("@{", start + 2)) {
+      let end = start + 2;
+      let quoted = false;
+      for (; end < text.length; end += 1) {
+        if (text[end] === '"') quoted = !quoted;
+        else if (text[end] === "}" && !quoted) break;
+      }
+      const data = text.slice(start + 2, end);
+      if (/img/i.test(data) || data.includes("\\")) return true;
+    }
+    return false;
+  }
 
   // FNV-1a over the source: the name of a diagram's place. Two renders of
   // the same source are the same place (markdown-stream.js keeps its node).
@@ -55,7 +72,7 @@
 
   // ---- The app's colors ------------------------------------------------------
   // An image sees no CSS variable of the page, so the palette is read from
-  // the tokens (variables.css, public-tokens.css) when a diagram is drawn.
+  // the tokens (variables.css, public-tokens.css) when a diagram is asked for.
   function themeName() {
     return document.documentElement.classList.contains("dark-mode")
       || Boolean(document.body && document.body.classList.contains("dark-mode")) ? "dark" : "light";
@@ -75,9 +92,10 @@
     return channels.every(Number.isFinite) ? channels.map(channel => Math.max(0, Math.min(255, Math.round(channel)))) : null;
   }
 
+  // A page in the other theme has the other theme's variables.
   function tokens(theme) {
     const fallback = FALLBACK[theme];
-    if (!document.body) return fallback;
+    if (!document.body || themeName() !== theme) return fallback;
     const probe = document.createElement("span");
     probe.style.position = "absolute";
     probe.style.visibility = "hidden";
@@ -173,19 +191,20 @@
   }
 
   let configured = "";
-  function configure(mermaid, theme) {
-    if (configured === theme) return;
+  function configure(mermaid, variables) {
+    const name = JSON.stringify(variables);
+    if (configured === name) return;
     mermaid.initialize({
       startOnLoad: false, securityLevel: "strict", suppressErrorRendering: true, secure: LOCKED,
       // Labels as SVG text: HTML labels sit in <foreignObject>, which Safari
       // misplaces inside an image.
-      htmlLabels: false, theme: "base", themeVariables: themeVariables(theme), fontFamily: FONT,
+      htmlLabels: false, theme: "base", themeVariables: variables, fontFamily: FONT,
       // Mermaid 12 lays out with ELK unless told otherwise: 1.6 MB more to
       // load, with regex lookbehinds Safari before 16.4 cannot parse. Dagre
       // is in the core's reach and draws the same diagrams.
       layout: "dagre"
     });
-    configured = theme;
+    configured = name;
   }
 
   function base64(text) {
@@ -228,13 +247,17 @@
   }
 
   // One drawing at a time: Mermaid's settings are global, and a theme
-  // change between two drawings sets them anew.
+  // change between two drawings sets them anew. The colors are the theme's
+  // when it was asked for: by the drawing's turn in the queue the page may
+  // show the other one, and the drawing is kept under the theme it was
+  // asked for.
   let queue = Promise.resolve();
   let serial = 0;
   function draw(source, theme) {
+    const variables = themeVariables(theme);
     const job = queue.then(async () => {
       const mermaid = await load().catch(() => { throw Object.assign(new Error("Mermaid did not load"), { again: true }); });
-      configure(mermaid, theme);
+      configure(mermaid, variables);
       serial += 1;
       const result = await mermaid.render(`consens-diagram-${serial}`, source);
       return Object.assign(picture(result.svg), { kind: kindOf(result.diagramType) });
@@ -261,7 +284,7 @@
       if (drawings.size <= DRAWINGS_KEPT) break;
       if (drawings.get(old).state !== "pending") drawings.delete(old);
     }
-    const work = source.trim() && source.length <= MAX_SOURCE_CHARS && !LOADS_IMAGE.test(source) ? draw(source, theme)
+    const work = source.trim() && source.length <= MAX_SOURCE_CHARS && !loadsImage(source) ? draw(source, theme)
       : Promise.reject(Object.assign(new Error("no diagram"), { refused: true }));
     entry.done = work.then(result => {
       entry.state = "drawn";
