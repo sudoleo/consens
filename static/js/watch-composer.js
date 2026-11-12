@@ -23,8 +23,9 @@
   const TIMED = new Set(['daily', 'weekly']);
   const WEEKDAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
   const DEFAULT_TIME = '08:00';
+  // The server's bounds (agent_watches.TASK_MIN_CHARS, TASK_MAX_CHARS, GOAL_MAX_CHARS).
   const TASK_MIN = 8;
-  const TASK_MAX = 500;
+  const TASK_MAX = 1000;
   const GOAL_MAX = 200;
   // The segment's word for each interval (one "watch schedule" context:
   // German "Täglich", not the preset's "Alltag").

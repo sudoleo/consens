@@ -61,7 +61,9 @@ STATUS_PAUSED = "paused"
 STATUS_DONE = "done"
 
 TASK_MIN_CHARS = 8
-TASK_MAX_CHARS = 500
+# Room for a daily brief of several parts in the user's own words (one ran to
+# 760 characters), so the agent never shortens a request to fit the card.
+TASK_MAX_CHARS = 1000
 GOAL_MAX_CHARS = 200
 FINDING_MAX_CHARS = 600
 REASON_MAX_CHARS = 300

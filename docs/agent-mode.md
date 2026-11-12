@@ -4349,7 +4349,7 @@ Anlass des Blocks: Am 2026-10-11 antwortete GPT-6 Luna auf „kannst du mich
 erinnern …“, consens.io könne niemanden benachrichtigen. Das Tool legt
 **nichts** an:
 
-- Es prüft den Auftrag (8–500 Zeichen, eine Anweisung an sich selbst, die ohne
+- Es prüft den Auftrag (8–1.000 Zeichen, eine Anweisung an sich selbst, die ohne
   den Rest des Chats steht), ein optionales Ziel („fertig, wenn …“, ≤ 200),
   das Intervall (`hourly`, `every_6_hours`, `daily`, `weekly`) und für
   daily/weekly Uhrzeit und Wochentag.

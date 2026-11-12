@@ -710,8 +710,9 @@ def build_agent_watch_message(*, recipient: str, outcome: str, task: str, goal: 
     """One Agent Watch run (agent_watches.py) worth telling: what the agent
     found with the page it saw it on, what it needs from the user (also a
     reviewer's halt nobody was there to decide), or the goal it waited for."""
+    from app.services.agent_watches import TASK_MAX_CHARS
     summary = _normalized(summary)[:600]
-    task = _normalized(task)[:500]
+    task = _normalized(task)[:TASK_MAX_CHARS]
     goal = _normalized(goal)[:200]
     if outcome == "needs_you":
         summary = summary or _t("A reviewer stopped the run before a step. Open the chat to decide.")

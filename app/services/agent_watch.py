@@ -169,7 +169,8 @@ class WatchTools:
 
     def mock_turn(self, question: str) -> None:
         """MOCK_LLM only: "Watch: <task>" prepares a Watch, for browser tests of the card."""
-        match = re.match(r"^\s*watch:\s*(.{8,500})$", str(question or ""), re.IGNORECASE | re.DOTALL)
+        match = re.match(rf"^\s*watch:\s*(.{{{TASK_MIN_CHARS},{TASK_MAX_CHARS}}})$", str(question or ""),
+                         re.IGNORECASE | re.DOTALL)
         if not match:
             return
         try:

@@ -289,7 +289,7 @@ def test_no_watch_tool_with_google_data_in_a_temporary_chat_or_without_compariso
 
 @pytest.mark.parametrize("arguments,problem", [
     ({"task": "Check"}, "task"),
-    ({"task": "Check " + "x" * 500}, "task"),
+    ({"task": "Check " + "x" * agent_watches.TASK_MAX_CHARS}, "task"),
     ({"task": TASK, "goal": "x" * 201}, "goal"),
     ({"task": TASK, "interval": "monthly"}, "interval"),
     ({"task": TASK, "run_time": "8 am"}, "run_time"),
@@ -301,6 +301,19 @@ def test_the_schema_bounds_what_the_model_may_propose(store, arguments, problem)
     with pytest.raises(ValueError) as error:
         loop.registry.validate(call)
     assert problem in str(error.value)
+
+
+def test_a_daily_brief_of_several_parts_fits_the_task_as_the_user_wrote_it(store):
+    brief = ("Prepare a daily bulletin in English: (1) today's medium and high impact economic calendar for "
+             "the USA, the EU, China, Germany, Japan and Canada from three named calendars, with a fixed heading "
+             "and link; (2) the latest closing prices and chart links for four named stocks and one currency "
+             "pair; (3) flag any figure that is missing or uncertain. ") * 2 + "Send it before the markets open."
+    assert 700 < len(brief) <= agent_watches.TASK_MAX_CHARS
+    loop = watch_loop(store, WatchScript())
+    call = {"id": "c", "type": "function",
+            "function": {"name": "prepare_watch", "arguments": json.dumps({"task": brief})}}
+    _tool, args = loop.registry.validate(call)
+    assert args.task == brief
 
 
 @pytest.mark.usefixtures("no_watch_writes")

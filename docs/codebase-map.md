@@ -2434,7 +2434,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   in einem geplanten Lauf) prüft Auftrag/Ziel/Intervall, fragt lesend
   `agent_watches.outlook` (hat der Chat schon eine; freie Plätze; Intervalle
   der Stufe, ein zu kurzes wird das kürzeste erlaubte mit `note`) und
-  speichert den Vorschlag als `turn.agent_watch` (`task` 8–500, `goal` ≤ 200,
+  speichert den Vorschlag als `turn.agent_watch` (`task` 8–1000, `goal` ≤ 200,
   `interval` `hourly|every_6_hours|daily|weekly`, `run_time`, `run_weekday`;
   nur bei `pending`). Den Kartenhinweis trägt das Toolergebnis
   (`agent_watch.INSTRUCTIONS`); kein eigenes SSE-Event. `App.agentWatch.render(body,
@@ -11100,7 +11100,13 @@ letzten Lauf (eigene Konten per E-Mail-Marker `maxl.plack`/`ml.plack`/`nodon`
 Antwortanfang, Ablauf aus den Receipts (Vergleichsdauer, langsamstes Modell,
 Ausfälle, Schreib- und Prüfdauer, Judge-Timeouts, langsamster Judge-Call,
 Kosten; gestoppte Judge-Calls, meist Hedge-Verlierer, getrennt als
-`judge_hedges_stopped` und nicht in der Prüfdauer) und Prüfstatus, dazu
+`judge_hedges_stopped` und nicht in der Prüfdauer), Werkzeugaufrufe aus dem
+Arbeitsprotokoll (`flow.tools` je Name, `flow.refused_calls` als „Werkzeug:
+Feld“ für Aufrufe, die das Register vor dem Werkzeug ablehnte, nie Werte,
+`flow.tool_errors`), die Watch des Turns (`watch.proposed`/`watch.started`
+aus `agent_watches`, `watch.scheduled_run` für einen geplanten Lauf laut
+`agent_settings.watch_run`; dessen gleiche Frage zählt nicht als
+`repeated_question_after_seconds`) und Prüfstatus, dazu
 gezählte Warnungen aus dem Render-Log (alle Konten, auch eigene; das Log kennt
 kein Konto, `server_warnings_scope` sagt das im JSON). `collect` gibt JSON aus und merkt sich
 den Stand in `pending.json`, `save` übernimmt ihn nach `state.json` (beides

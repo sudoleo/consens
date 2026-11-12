@@ -14,8 +14,10 @@ The scheduled task runs unattended, so every step is one fixed command that
 
 collect   every turn of an external account since the last saved run (the
           first run looks back 26 hours) as compact JSON: question, how the
-          agent handled it (phases, models, failures, answer check), answer
-          excerpt, cost; plus counted server warnings of the same window.
+          agent handled it (phases, models, failures, tool calls and refused
+          ones, answer check), its Watch (proposed, started, or a scheduled
+          run), answer excerpt, cost; plus counted server warnings of the
+          same window.
           Users appear as pseudonyms (U + hash), never with e-mail or ID.
 save      stores how far collect got, so the next run starts there.
 """
@@ -177,6 +179,60 @@ def review_summary(turn: dict) -> dict:
     return out
 
 
+# A call the tool registry refused before the tool ran (agent_tools.ToolRegistry.validate).
+REFUSED_CALL = re.compile(r"^Invalid (\S+) arguments - (.*?)\. Expected arguments", re.DOTALL)
+
+
+def turn_tools(turn_ref) -> dict:
+    """The turn's tool calls from its work log, content-free: how often each
+    tool ran, which calls were refused (tool and the fields it failed on,
+    never a value) and which tools answered with an error. A refused call
+    shows nowhere else on the turn, and the server log has no account."""
+    from app.services.agent_sessions import work_log_entries
+    calls, refused, errors = Counter(), Counter(), Counter()
+    for snapshot in turn_ref.collection("work_log").stream():
+        for entry in work_log_entries(snapshot.to_dict()):
+            if entry.get("kind") != "tool":
+                continue
+            name = str(entry.get("name") or "?")
+            calls[name] += 1
+            try:
+                result = json.loads(entry.get("content") or "")
+            except ValueError:
+                continue  # a long result the log keeps shortened: never a refusal
+            error = result.get("error") if isinstance(result, dict) else None
+            if not isinstance(error, str):
+                continue
+            match = REFUSED_CALL.match(error)
+            if match:
+                fields = sorted({problem.split(":", 1)[0].strip() for problem in match.group(2).split("; ")})
+                refused[f"{match.group(1)}: {', '.join(fields)}"] += 1
+            else:
+                errors[name] += 1
+    out = {"tools": dict(calls.most_common())} if calls else {}
+    if refused:
+        out["refused_calls"] = dict(refused)
+    if errors:
+        out["tool_errors"] = dict(errors)
+    return out
+
+
+def watch_summary(turn_id: str, turn: dict, started: dict) -> dict:
+    """The turn's part in a Watch: one it proposed (and whether the user
+    started it), or this turn being a scheduled run of one."""
+    from app.services.agent_watches import _outcome
+    out = {}
+    proposal = turn.get("agent_watch")
+    if isinstance(proposal, dict):
+        out["proposed"] = proposal.get("interval") or "daily"
+        out["started"] = started.get(turn_id) or "no"
+    # Only a run that reports something keeps ``agent_watch_run``; every run
+    # carries ``watch_run`` in its settings (routers/agent.py _quiet_watch_run).
+    if (turn.get("agent_settings") or {}).get("watch_run"):
+        out["scheduled_run"] = _outcome(turn)[0]
+    return out
+
+
 def render_warnings(start: datetime, end: datetime) -> dict:
     """WARNING/ERROR lines of the app log in the window, counted by pattern."""
     key = os.environ.get("RENDER_API_KEY", "")
@@ -207,6 +263,7 @@ def render_warnings(start: datetime, end: datetime) -> dict:
 def cmd_collect(args) -> int:
     _env()
     from app.core.security import db_firestore as db
+    from google.cloud.firestore_v1.base_query import FieldFilter
     now = datetime.now(timezone.utc)
     state = load_json(STATE_FILE)
     since = (datetime.fromisoformat(state["last_seen"]) if state.get("last_seen") and not args.hours
@@ -218,7 +275,7 @@ def cmd_collect(args) -> int:
         chats = list(user.collection("chats").where("updated_at", ">", since).stream())
         if not chats:
             continue
-        calls = None
+        calls = started = None
         for chat in chats:
             chat_data = chat.to_dict() or {}
             if chat_data.get("temporary"):
@@ -232,6 +289,10 @@ def cmd_collect(args) -> int:
                     calls = [c.to_dict() for c in user.collection("llm_calls").where("created_at", ">", since).stream()]
                 steps = [dict(c) for c in calls if c.get("turn_id") == doc.id]
                 agents = {a.id: a.to_dict() or {} for a in doc.reference.collection("agents").stream()} if steps else {}
+                if started is None and isinstance(turn.get("agent_watch"), dict):
+                    started = {(w.to_dict() or {}).get("turn_id"): (w.to_dict() or {}).get("status")
+                               for w in db.collection("agent_watches").where(
+                                   filter=FieldFilter("uid", "==", uid)).stream()}
                 created_at = turn.get("created_at")
                 newest = max(newest, created_at) if hasattr(created_at, "astimezone") else newest
                 failure = (turn.get("agent_failure") or {}).get("code")
@@ -246,10 +307,15 @@ def cmd_collect(args) -> int:
                     "answer_chars": len(turn.get("assistant_response") or turn.get("consensus") or ""),
                     "answer_start": clip(turn.get("assistant_response") or turn.get("consensus"), ANSWER_CHARS),
                     "settings": {k: (turn.get("agent_settings") or {}).get(k) for k in ("label", "reasoning_effort", "answer_mode")},
-                    "flow": turn_flow(turn, steps, agents),
+                    "flow": {**turn_flow(turn, steps, agents), **turn_tools(doc.reference)},
                     "check": review_summary(turn),
                 }
-                if previous and previous.get("question") == turn.get("question"):
+                watch = watch_summary(doc.id, turn, started or {})
+                if watch:
+                    entry["watch"] = watch
+                # A Watch asks its task again on every run: that is no user repeating themselves.
+                if (previous and previous.get("question") == turn.get("question")
+                        and "scheduled_run" not in watch):
                     entry["repeated_question_after_seconds"] = seconds(previous.get("created_at"), created_at)
                 previous = turn
                 turns.append((created_at, entry))
