@@ -143,12 +143,16 @@ class ChatSearch:
             raise ValueError("Use a chat_id from a search_chats result.")
         if chat_id == self.loop.chat_id:
             raise ValueError("That is the current chat: its messages are in view already.")
-        chat = self.loop.store._chat_ref(self.loop.uid, chat_id).get().to_dict() or {}
+        from app.services.chat_store import ChatNotFound
+        try:
+            chat = self.loop.store._chat_ref(self.loop.uid, chat_id).get().to_dict() or {}
+        except ChatNotFound:
+            # An id in another form than the store's (a title, one the model made up).
+            raise ValueError("No such chat: use a chat_id from a search_chats result.") from None
         if chat.get("status") != "active" or chat.get("temporary"):
             raise ValueError("No such chat: use a chat_id from a search_chats result.")
         if chat.get("google_data"):
             raise ValueError("That chat used Google data, which stays in its own chat.")
-        from app.services.chat_store import ChatNotFound
         messages, used, more, finished, cursor = [], 0, False, 0, ""
         for _ in range(TURN_PAGES):
             try:

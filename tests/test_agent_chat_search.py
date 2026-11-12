@@ -121,11 +121,14 @@ def test_a_long_chat_is_read_on_to_its_last_message(store, monkeypatch):
 
 
 @pytest.mark.parametrize("which,message", [("google", "Google data"), ("current", "current chat"),
-                                           ("unknown", "No such chat"), ("bad", "chat_id from a search_chats")])
+                                           ("unknown", "No such chat"), ("bad", "chat_id from a search_chats"),
+                                           # An id in another form than the store's: not "cannot be read right now".
+                                           ("made_up", "No such chat")])
 def test_what_an_opened_chat_never_is(store, which, message):
     loop = watch_loop(store, Script())
     google = earlier(store, "Mails", "Lies meine Mails", google_data=True)
-    chat_id = {"google": google, "current": loop.chat_id, "unknown": "f" * 32, "bad": "../x"}[which]
+    chat_id = {"google": google, "current": loop.chat_id, "unknown": "f" * 32, "bad": "../x",
+               "made_up": "Fahrradkauf-Berlin"}[which]
     with pytest.raises(ValueError, match=message):
         search(loop, chat_id=chat_id)
 
