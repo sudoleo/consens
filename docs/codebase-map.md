@@ -6568,12 +6568,13 @@ Anfrage ab bzw. bricht ab, `_summary_unwritten`), läuft die Nachricht mit dem
 vollen Verlauf bzw. allen Schritten weiter: Der Schritt wird wie ein
 abgebrochener als `succeeded` abgerechnet (`value.summary_failure`), damit der
 nächste seinen Index beanspruchen kann. Der Filter von GPT-6.1 Terra auf Azure
-lehnt die Zusammenfassungs-Anfrage eines Laufs ab, dessen eigene Schritte er
-durchlässt (fünf von fünf bis 2026-11-12; Auslöser ist der Satz, der die
-Arbeit „so far, everything after the user's question“ zusammenfassen lässt,
-Kommentar an `RUN_SUMMARY_REQUEST`); eine vom Filter gestoppte fällt deshalb
-sofort weg (`_filter_stopped`), ohne den zweiten Versuch eines abgebrochenen
-Schritts, der denselben Filter träfe. Darunter bleibt die Kürzung: Ein längerer Chat behält seit 2026-10-15 seine neuesten
+lehnte jede Zusammenfassungs-Anfrage eines Laufs ab, dessen eigene Schritte er
+durchließ (fünf von fünf bis 2026-11-12), wegen des Satzes, der „a summary of
+your work on it so far, everything after the user's question“ verlangte;
+`RUN_SUMMARY_REQUEST` ist so umformuliert, dass sie und der Schritt danach
+durchgehen (Kommentar dort). Eine vom Filter gestoppte fällt sofort weg
+(`_filter_stopped`), ohne den zweiten Versuch eines abgebrochenen Schritts,
+der denselben Filter träfe. Darunter bleibt die Kürzung: Ein längerer Chat behält seit 2026-10-15 seine neuesten
 Nachrichten (`history_start`): die ältesten fallen in Schritten von
 `HISTORY_STEP_TURNS` (4) weg, damit der Verlauf ein paar Nachrichten lang am
 selben Punkt beginnt und im Prompt-Cache bleibt; der App-Kontext der neuen

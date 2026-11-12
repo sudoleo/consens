@@ -73,6 +73,14 @@ def stored(store, loop):
 
 # --- The pieces -------------------------------------------------------------------
 
+def test_the_run_summary_request_leaves_out_the_sentence_azure_declines():
+    """Azure's filter declined every run summary of GPT-6.1 Terra, at 0
+    tokens, for the sentence asking for "a summary of your work on it so
+    far, everything after the user's question" (probes 2026-11-12)."""
+    assert "everything after the user's question" not in RUN_SUMMARY_REQUEST
+    assert "summary of your work" not in RUN_SUMMARY_REQUEST
+
+
 def test_a_summary_is_never_the_users_words_and_is_bounded():
     message = summary_message("  notes  ")
     assert message["role"] == "user" and is_summary(message["content"])

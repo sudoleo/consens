@@ -157,17 +157,17 @@ HISTORY_SUMMARY_REQUEST = (
     "came up; what you did and found, including the work records; what is still open. Leave out what no longer "
     "matters. Write notes for yourself in the conversation's language, at most about 1,200 words, without tool "
     "calls or searches.")
-# Azure's filter declines this request for GPT-6.1 Terra at 0 tokens: its
-# sentence asking for a summary of the work "so far, everything after the
-# user's question" trips it (probes 2026-11-12; the rest passes). Terra's runs
-# go on without their summary (agent_delegation._filter_stopped).
+# Notes "replace" the steps rather than "a summary of your work so far,
+# everything after the user's question": Azure's filter declined every run
+# summary of GPT-6.1 Terra for that sentence, at 0 tokens, while this wording
+# and the step after its summary pass (probes 2026-11-12).
 RUN_SUMMARY_REQUEST = (
-    "App request, not the user's: the context of this message has grown long. Write a summary of your work on it "
-    "so far, everything after the user's question, that will replace those steps: from now on you see the question "
-    "and this summary, not the steps themselves. Keep what you need to finish: the plan and what is done; what you "
-    "found with where it came from (addresses, file paths, commands and how they ended, error messages); decisions "
-    "and why; messages the user sent during the work, word for word; what is left and your next step. Write notes "
-    "for yourself, at most about 1,500 words, without tool calls or searches; the work continues after the summary.")
+    "App request, not the user's: the context of this message has grown long. Your steps on it so far will be "
+    "replaced by notes you write now; after that you see the question and these notes, not the steps. Keep what "
+    "you need to finish: the plan and what is done; what you found with where it came from (addresses, file paths, "
+    "commands and how they ended, error messages); decisions and why; messages the user sent during the work, word "
+    "for word; what is left and your next step. Write the notes for yourself, at most about 1,500 words, without "
+    "tool calls or searches; the work continues after them.")
 
 
 @dataclass

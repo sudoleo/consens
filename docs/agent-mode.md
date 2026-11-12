@@ -5003,13 +5003,14 @@ jeder Schritt einmal neu; stoppt ihn der Filter des Anbieters
 auch mit Text), fällt er sofort weg. GPT-6.1 Terra
 auf Azure lehnte jede Lauf-Zusammenfassung ab (fünf von fünf bis 2026-11-12,
 0 Tokens, mit eigener Absagezeile), während alle Schritte davor und danach
-durchgingen. Proben am 2026-11-12 (kostenlos, wo abgelehnt) zeigen den
-Auslöser: der Satz, der die Zusammenfassung der Arbeit „so far, everything
-after the user's question“ verlangt; ohne ihn geht der Rest durch, auch in
-einer Umformulierung („Your steps on it so far will be replaced by notes you
-write now …“). Nicht übernommen: Die fertige Zusammenfassung steht danach als
-Nutzer-Nachricht im Verlauf, und ob Azure die Folgeschritte damit durchlässt,
-ist ungeprüft; ein abgelehnter Folgeschritt beendete den Lauf. Der zweite
+durchgingen. Proben am 2026-11-12 (kostenlos, wo abgelehnt) zeigten den
+Auslöser: den Satz, der „a summary of your work on it so far, everything
+after the user's question“ verlangte. `RUN_SUMMARY_REQUEST` lässt seitdem
+Notizen die Schritte ersetzen („Your steps on it so far will be replaced by
+notes you write now …“); so geht die Anfrage bei Terra auf Azure durch, und
+ebenso der Schritt danach mit der fertigen Zusammenfassung als App-Nachricht.
+`HISTORY_SUMMARY_REQUEST` hat ein ähnliches Muster („Write a summary of the
+conversation above …“) und ist dort ungeprüft. Der zweite
 Versuch traf am selben Endpunkt denselben Filter und an einem anderen ein
 HTTP 400 von OpenRouter (verschlüsseltes Reasoning, siehe „Der zweite Versuch
 geht an einen anderen Endpunkt“), kostenlos, aber mit rund 2,5 s Wartezeit und
