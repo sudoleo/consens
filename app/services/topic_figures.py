@@ -1,14 +1,18 @@
 """Figures drawn from a Topic's answer.
 
-Models answer in text; people take in a timeline, a status board or a few
-bars faster. After a check, one cheap Judge call
-(``consensus_engine.query_answer_figures``) fills up to two of three fixed
-templates from the finished answer:
+Models answer in text; people take in a chart faster. After a check, one
+cheap Judge call (``consensus_engine.query_answer_figures``) fills up to two
+of three fixed templates from the finished answer:
 
-* ``timeline`` -- dated events (announcements, releases, rollouts),
-* ``status``   -- things and how settled they are (confirmed / claimed / not
-  confirmed),
+* ``lineup``   -- the members of one family or list, one row each, with where
+  each stands (available / limited / announced / confirmed / claimed / not
+  confirmed) and its date, if the answer gives one,
+* ``timeline`` -- dated events (the steps of a rollout, announcements),
 * ``numbers``  -- comparable numbers in one unit (prices, scores).
+
+Rows with dates share one time axis, so a reader sees order, gaps and where
+the check itself stands. ``status`` is the lineup as earlier runs stored it
+(three standings, no dates) and is drawn the same way.
 
 consens.io draws them itself (HTML/CSS, no image model, nothing copied from
 another site), so they are sharp, follow the theme and are real text for
@@ -20,13 +24,18 @@ prompt:
   items is dropped.
 * **Disagreement shows.** An item the answer marks as disputed is drawn as
   disputed instead of being settled by the figure.
+* **A figure, not a list.** Rows that all stand the same only repeat the
+  list under them: with dates they are drawn as a timeline, without they are
+  dropped.
 * The answer itself is never changed; the figure sits under the heading it
   belongs to.
 """
 
 from __future__ import annotations
 
+import calendar
 import logging
+import math
 import re
 from datetime import date
 
@@ -38,13 +47,19 @@ from app.services.public_markdown import markdown_to_plaintext
 MAX_FIGURES = 2
 MIN_ITEMS = 2
 MAX_ITEMS = 8
-KINDS = ("timeline", "status", "numbers")
-STATUSES = ("confirmed", "claimed", "not_confirmed")
+KINDS = ("timeline", "lineup", "status", "numbers")
+# Kinds whose rows are things with a standing; "status" is the stored
+# spelling of earlier runs.
+LINEUP_KINDS = ("lineup", "status")
 STATUS_LABELS = {
+    "available": "Available",
+    "limited": "Limited access",
+    "announced": "Announced",
     "confirmed": "Confirmed",
     "claimed": "Claimed, not settled",
     "not_confirmed": "Not confirmed",
 }
+STATUSES = tuple(STATUS_LABELS)
 _PLACEHOLDER = "TOPICFIGURESLOT{}"
 
 _MONTHS = {
@@ -70,7 +85,7 @@ _DATE_PATTERNS = (
     (re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+" + _MONTH_RE + r",?\s+(\d{4})\b", re.I), ("d", "M", "y"), "day"),
     (re.compile(_MONTH_RE + r",?\s+(\d{4})\b", re.I), ("M", "y"), "month"),
     # "2026–2030": a span of years, placed at its first year.
-    (re.compile(r"\b(19\d{2}|20\d{2})" + _RANGE_RE + r"(19\d{2}|20\d{2})\b"), ("y", "y2"), "years"),
+    (re.compile(r"\b(19\d{2}|20\d{2})\s*(?:[-–—]|to|or)\s*(19\d{2}|20\d{2})\b"), ("y", "y2"), "years"),
     (re.compile(r"\b(19\d{2}|20\d{2})\b"), ("y",), "year"),
 )
 # A value that is only a year or a span of years ("2031", "around 2027",
@@ -203,19 +218,22 @@ def clean_figures(raw, answer_md: str) -> list[dict]:
                 continue
             entry = {"label": label, "note": note, "disputed": item.get("disputed") is True}
             if kind == "timeline":
-                written = _short(item.get("date"), 40)
-                parsed = parse_date(written)
-                if not parsed or not _in(written, haystack):
+                written = _written_date(item.get("date"), haystack)
+                if not written:
                     continue
-                entry.update({"date": written, "sort": parsed[0].isoformat(), "precision": parsed[1]})
-            elif kind == "status":
-                # A status board lists names; "68% on CWE-Bench" or a price is
-                # a number and belongs in a numbers figure, if anywhere.
-                if (not isinstance(item.get("status"), str) or item["status"] not in STATUSES
-                        or not _in(label, haystack)
-                        or re.search(r"[%$€£]", label)):
+                entry.update(written)
+            elif kind in LINEUP_KINDS:
+                # A lineup lists names; "68% on CWE-Bench" or a price is a
+                # number and belongs in a numbers figure, if anywhere.
+                if not _in(label, haystack) or re.search(r"[%$€£]", label):
                     continue
-                entry["status"] = item["status"]
+                status = item.get("status")
+                entry["status"] = status if isinstance(status, str) and status in STATUSES else ""
+                written = _written_date(item.get("date"), haystack)
+                if written:
+                    entry.update(written)
+                elif not entry["status"]:
+                    continue
             else:
                 value = _short(item.get("value"), 24)
                 number = _number(value)
@@ -223,8 +241,20 @@ def clean_figures(raw, answer_md: str) -> list[dict]:
                     continue
                 entry.update({"value": value, "number": number, "unit": _short(item.get("unit"), 60)})
             items.append(entry)
+        if kind in LINEUP_KINDS:
+            # A standing every row shares tells them apart no better than
+            # none: the rows are then dated things, a timeline, and the
+            # undated ones have nothing left to say.
+            kind = "lineup" if len({entry["status"] for entry in items}) > 1 else "timeline"
         if kind == "timeline":
+            items = [
+                {key: value for key, value in entry.items() if key != "status"}
+                for entry in items if entry.get("sort")
+            ]
             items.sort(key=lambda entry: entry["sort"])
+        elif kind == "lineup":
+            # Dated rows in order, the rest after them as the answer lists them.
+            items.sort(key=lambda entry: (not entry.get("sort"), entry.get("sort", "")))
         _quiet_notes(items)
         if len(items) < MIN_ITEMS:
             continue
@@ -241,6 +271,22 @@ def clean_figures(raw, answer_md: str) -> list[dict]:
         if len(figure["items"]) > len(best.get(figure["kind"], {}).get("items", [])):
             best[figure["kind"]] = figure
     return [figure for figure in figures if best.get(figure["kind"]) is figure][:MAX_FIGURES]
+
+
+def _written_date(value, haystack: str) -> dict | None:
+    """The fields of a date the answer states, or None."""
+    written = _short(value, 40)
+    parsed = parse_date(written)
+    if not parsed or not _in(written, haystack):
+        return None
+    return {"date": written, "sort": parsed[0].isoformat(), "precision": parsed[1]}
+
+
+def _plain_list(items) -> bool:
+    """Every row stands the same and none has a date: the figure would only
+    repeat the list in the text under it."""
+    return (len({entry.get("status") for entry in items}) == 1
+            and not any(entry.get("date") for entry in items))
 
 
 _FIRST_PERSON_RE = re.compile(r"\b(?:i|i'm|i've|my|we|our|me)\b", re.IGNORECASE)
@@ -287,6 +333,7 @@ def build(question: str, answer_md: str, *, query=None, keys=None, engine: str =
 # writes them; a run imported by hand may not have them).
 _ITEM_FIELDS = {
     "timeline": {"date": str},
+    "lineup": {"status": str},
     "status": {"status": str},
     "numbers": {"value": str, "number": (int, float), "unit": str},
 }
@@ -297,12 +344,16 @@ def _stored_item(kind: str, item):
         return None
     if any(not isinstance(item.get(name), types) for name, types in _ITEM_FIELDS[kind].items()):
         return None
-    if kind == "status" and item["status"] not in STATUSES:
-        return None
     if kind == "numbers" and isinstance(item["number"], bool):
         return None
     note = item.get("note")
-    return {**item, "note": note if isinstance(note, str) else "", "disputed": item.get("disputed") is True}
+    entry = {**item, "note": note if isinstance(note, str) else "", "disputed": item.get("disputed") is True}
+    if kind in LINEUP_KINDS:
+        entry["date"] = item["date"] if isinstance(item.get("date"), str) else ""
+        # A row says where a thing stands, when, or both.
+        if item["status"] not in STATUSES + ("",) or not (item["status"] or _date_parts(entry["date"])):
+            return None
+    return entry
 
 
 def stored_figures(value) -> list[dict]:
@@ -317,7 +368,7 @@ def stored_figures(value) -> list[dict]:
         if not isinstance(figure, dict) or figure.get("kind") not in KINDS or not isinstance(figure.get("items"), list):
             continue
         items = [entry for entry in (_stored_item(figure["kind"], item) for item in figure["items"]) if entry]
-        if len(items) < MIN_ITEMS:
+        if len(items) < MIN_ITEMS or (figure["kind"] in LINEUP_KINDS and _plain_list(items)):
             continue
         title, heading = figure.get("title"), figure.get("after_heading")
         figures.append({**figure, "items": items,
@@ -330,24 +381,41 @@ def stored_figures(value) -> list[dict]:
 # Drawing
 # ----------------------------------------------------------------------------
 
-_GLYPHS = {
-    "confirmed": (
-        '<svg class="af-glyph is-confirmed" viewBox="0 0 16 16" aria-hidden="true">'
-        '<circle cx="8" cy="8" r="8" fill="currentColor"/><path d="M4.6 8.2l2.2 2.2 4.6-4.7" '
-        'fill="none" stroke="var(--af-on-glyph)" stroke-width="1.8" stroke-linecap="round" '
-        'stroke-linejoin="round"/></svg>'
-    ),
-    "claimed": (
-        '<svg class="af-glyph is-claimed" viewBox="0 0 16 16" aria-hidden="true">'
-        '<circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'
-        '<path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/></svg>'
-    ),
-    "not_confirmed": (
-        '<svg class="af-glyph is-not-confirmed" viewBox="0 0 16 16" aria-hidden="true">'
-        '<circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'
-        '<path d="M5 8h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>'
-    ),
+_CHECK = (
+    '<circle cx="8" cy="8" r="8" fill="currentColor"/><path d="M4.6 8.2l2.2 2.2 4.6-4.7" '
+    'fill="none" stroke="var(--af-on-glyph)" stroke-width="1.8" stroke-linecap="round" '
+    'stroke-linejoin="round"/>'
+)
+_HALF = (
+    '<circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+    '<path d="M8 1.5a6.5 6.5 0 0 1 0 13z" fill="currentColor"/>'
+)
+_RING_DOT = (
+    '<circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+    '<circle cx="8" cy="8" r="2.6" fill="currentColor"/>'
+)
+_RING_DASH = (
+    '<circle cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.6"/>'
+    '<path d="M5 8h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>'
+)
+# Four shapes for six standings: there (check), partly (half), named only
+# (ring with a dot), nothing official (ring with a dash). The word next to the
+# shape says which of the six it is.
+_GLYPH_SHAPES = {
+    "available": _CHECK, "confirmed": _CHECK, "limited": _HALF, "claimed": _HALF,
+    "announced": _RING_DOT, "not_confirmed": _RING_DASH,
 }
+_GLYPHS = {
+    status: f'<svg class="af-glyph is-{status.replace("_", "-")}" viewBox="0 0 16 16" '
+            f'aria-hidden="true">{shape}</svg>'
+    for status, shape in _GLYPH_SHAPES.items()
+}
+
+# A mark narrower than this share of the axis is drawn as a dot at its middle;
+# a wider one as a bar from its first to its last day.
+_DOT_BELOW_PERCENT = 3.5
+_AXIS_PAD = 0.045
+_MAX_TICKS = 7
 
 
 def _date_label(entry: dict) -> str:
@@ -368,77 +436,189 @@ def _date_label(entry: dict) -> str:
     return f"{day:%b} {day.day}, {day.year}"
 
 
-def _timeline(figure: dict) -> str:
-    # Order and place from the written dates, not from what an older version
-    # of this module stored: a reading fixed later fixes old figures too.
-    items = []
-    for entry in figure["items"]:
-        parts = _date_parts(entry.get("date"))
-        if parts:
-            entry = {**entry, "sort": parts[0].isoformat(), "precision": parts[1]}
-        if entry.get("sort"):
-            items.append(entry)
-    # On the same day a single date comes before a span that starts there.
-    items.sort(key=lambda entry: (entry["sort"], entry.get("precision") == "days"))
-    if not items:
-        return ""
-    days = [date.fromisoformat(entry["sort"]).toordinal() for entry in items]
-    first, last = days[0], days[-1]
-    span = max(1, last - first)
+def _day_span(written) -> tuple[int, int] | None:
+    """First and last day (ordinals) a written date covers: "October 2026" is
+    a month, "2030–2033" four years. Drawn that wide, so a figure never claims
+    more precision than the answer."""
+    parts = _date_parts(written)
+    if not parts:
+        return None
+    day, precision, last = parts
+    try:
+        if precision == "days" and last:
+            first, final = day, day.replace(day=last)
+        elif precision == "month":
+            first = day.replace(day=1)
+            final = day.replace(day=calendar.monthrange(day.year, day.month)[1])
+        elif precision == "years" and last:
+            first, final = date(day.year, 1, 1), date(max(last, day.year), 12, 31)
+        elif precision == "year":
+            first, final = date(day.year, 1, 1), date(day.year, 12, 31)
+        else:
+            first = final = day
+    except ValueError:
+        first = final = day
+    return first.toordinal(), max(final.toordinal(), first.toordinal())
 
-    def at(day):
-        # A margin on both sides keeps the outer dots off the edge.
-        return 4 + 92 * (day - first) / span if last > first else 50
 
-    track = ['<div class="af-track" aria-hidden="true"><span class="af-axis"></span>']
-    for index, (entry, day) in enumerate(zip(items, days)):
-        if index:
-            left, right = at(days[index - 1]), at(day)
-            gap = day - days[index - 1]
-            precise = entry["precision"] in ("day", "days") and items[index - 1]["precision"] in ("day", "days")
-            label = ""
-            if precise and gap and right - left >= 18:
-                label = f'<span class="af-gap">{gap} day{"s" if gap != 1 else ""}</span>'
-            track.append(
-                f'<span class="af-span{" is-disputed" if entry["disputed"] else ""}" '
-                f'style="left:{left:.1f}%;width:{right - left:.1f}%">{label}</span>'
-            )
-        track.append(f'<span class="af-dot{" is-disputed" if entry["disputed"] else ""}" style="left:{at(day):.1f}%"></span>')
-    track.append("</div>")
+def _tick_unit(days: float) -> str:
+    """What the axis counts in: weeks for up to three weeks, half months up
+    to six, months up to about two years, years beyond."""
+    return "week" if days <= 21 else "half" if days <= 45 else "month" if days <= 800 else "year"
+
+
+_MONTH_DAYS = {"week": (1, 8, 15, 22), "half": (1, 15), "month": (1,)}
+
+
+def _axis(spans, as_of: date | None):
+    """The shared time axis for dated rows: (start, end, marker, unit).
+
+    The check's own day joins the axis when it lies inside the dates or not
+    far behind the last one: then the reader sees how long ago that was.
+    A forecast decades ahead is not stretched back to today. The axis opens
+    at the round date before the first mark, so no mark stands left of the
+    first label."""
+    first = min(lo for lo, _hi in spans)
+    last = max(hi for _lo, hi in spans)
+    marker = None
+    if as_of is not None:
+        today = as_of.toordinal()
+        if first <= today <= last:
+            marker = today
+        elif today > last and today - last <= max(1.5 * (last - first), 45):
+            marker = last = today
+    if last == first:
+        first, last = first - 15, last + 15
+    unit = _tick_unit(last - first)
+    opening = date.fromordinal(first)
+    if unit == "year":
+        opening = date(opening.year, 1, 1)
+    else:
+        opening = opening.replace(day=max(day for day in _MONTH_DAYS[unit] if day <= opening.day))
+    first = opening.toordinal()
+    pad = max(1.0, _AXIS_PAD * (last - first))
+    return first - pad, last + pad, marker, unit
+
+
+def _ticks(start: float, end: float, unit: str) -> list[tuple[float, str]]:
+    """Round dates along the axis, at most a handful of labels."""
+    first, last = date.fromordinal(math.ceil(start)), date.fromordinal(math.floor(end))
+    ticks = []
+    if unit in ("week", "half"):
+        day = first
+        while day <= last:
+            if day.day in _MONTH_DAYS[unit]:
+                ticks.append((day.toordinal(), f"{day:%b} {day.day}"))
+            day = date.fromordinal(day.toordinal() + 1)
+        return ticks
+    if unit == "month":
+        months = []
+        year, month = first.year, first.month
+        if first.day > 1:
+            year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+        while date(year, month, 1) <= last:
+            months.append(date(year, month, 1))
+            year, month = (year + 1, 1) if month == 12 else (year, month + 1)
+        step = max(1, math.ceil(len(months) / _MAX_TICKS))
+        for day in months:
+            if (day.year * 12 + day.month - 1) % step:
+                continue
+            # The year only at its turn: every row says its own, and a first
+            # label carrying one ran into the next on a short axis.
+            label = f"{day:%b} {day.year}" if day.month == 1 else f"{day:%b}"
+            ticks.append((day.toordinal(), label))
+        return ticks
+    years = [year for year in range(first.year, last.year + 1) if first <= date(year, 1, 1) <= last]
+    step = next((size for size in (1, 2, 5, 10, 20, 25, 50) if len(years) / size <= _MAX_TICKS), 100)
+    return [(date(year, 1, 1).toordinal(), str(year)) for year in years if year % step == 0]
+
+
+def _edge(position: float) -> str:
+    """A label near an edge of the axis hangs inward instead of over it."""
+    return " is-start" if position < 12 else " is-end" if position > 88 else ""
+
+
+def _chart(figure: dict, as_of: date | None = None) -> str:
+    """Rows on one grid: standing, name, the place on a shared time axis, date.
+
+    One drawing for timelines and lineups. Order and place come from the
+    written dates, not from what an older version of this module stored: a
+    reading fixed later fixes old figures too."""
+    lineup = figure["kind"] in LINEUP_KINDS
     rows = []
-    for entry in items:
-        rows.append(
-            f'<li class="af-event{" is-disputed" if entry["disputed"] else ""}">'
-            f'<time datetime="{escape(entry["sort"])}">{escape(_date_label(entry))}</time>'
-            f'<span class="af-label">{escape(entry["label"])}</span>'
-            + (f'<span class="af-note">{escape(entry["note"])}</span>' if entry["note"] else "")
-            + "</li>"
-        )
-    # Two events sit under the two ends of the track: first left, last right.
-    # A third lies wherever its date puts it, so more fold into a grid
-    # instead of pretending to sit under their dots.
-    ends = " is-ends" if len(items) == 2 else ""
-    return "".join(track) + f'<ol class="af-events{ends}" style="--af-count:{len(items)}">{"".join(rows)}</ol>'
-
-
-def _status(figure: dict) -> str:
-    columns = []
-    for status in STATUSES:
-        items = [entry for entry in figure["items"] if entry["status"] == status]
-        if not items:
+    for entry in figure["items"]:
+        span = _day_span(entry.get("date"))
+        if not span and not lineup:
             continue
-        rows = "".join(
-            ('<li class="is-disputed">' if entry["disputed"] else "<li>")
-            + f'<span class="af-label">{escape(entry["label"])}</span>'
-            + (f'<span class="af-note">{escape(entry["note"])}</span>' if entry["note"] else "")
-            + "</li>"
-            for entry in items
+        rows.append({**entry, "span": span})
+    if not rows:
+        return ""
+    # Dated rows in order (on the same day a single date before a span that
+    # starts there), undated ones after them as stored.
+    rows.sort(key=lambda row: (row["span"] is None, row["span"] or (0, 0)))
+    spans = [row["span"] for row in rows if row["span"]]
+    has_state = lineup and any(row.get("status") for row in rows)
+    has_when = bool(spans)
+    has_axis = len(spans) >= 2
+    columns = ("s" if has_state else "") + "n" + ("p" if has_axis else "") + ("w" if has_when else "")
+
+    def at(day: float) -> float:
+        return 100 * (day - start) / (end - start)
+
+    out = [f'<div class="af-chart is-{columns}" role="list" style="--af-rows:{len(rows) + 2}">']
+    if has_axis:
+        start, end, marker, unit = _axis(spans, as_of)
+        ticks = [(at(day), label) for day, label in _ticks(start, end, unit)]
+        grid = "".join(f'<i style="left:{left:.1f}%"></i>' for left, _label in ticks)
+        if marker is not None:
+            grid += f'<i class="af-asof" style="left:{at(marker):.1f}%"></i>'
+        out.append(f'<div class="af-grid" aria-hidden="true">{grid}</div>')
+        labels = "".join(
+            f'<span class="af-tick{_edge(left)}" style="left:{left:.1f}%">{escape(label)}</span>'
+            for left, label in ticks
         )
-        columns.append(
-            f'<div class="af-column is-{status}"><p class="af-column-head">{_GLYPHS[status]}'
-            f"{escape(STATUS_LABELS[status])}</p><ul>{rows}</ul></div>"
+        out.append(f'<div class="af-scale" aria-hidden="true"><span class="af-plot">{labels}</span></div>')
+    for index, row in enumerate(rows):
+        cells = []
+        if has_state:
+            status = row.get("status") if row.get("status") in STATUS_LABELS else ""
+            cells.append(
+                f'<span class="af-state">{_GLYPHS[status]}{escape(STATUS_LABELS[status])}</span>'
+                if status else '<span class="af-state"></span>'
+            )
+        cells.append(
+            f'<span class="af-name"><span class="af-label">{escape(row["label"])}</span>'
+            + (f'<span class="af-note">{escape(row["note"])}</span>' if row["note"] else "")
+            + "</span>"
         )
-    return f'<div class="af-board">{"".join(columns)}</div>'
+        if has_axis:
+            mark = ""
+            if row["span"]:
+                left, right = at(row["span"][0]), at(row["span"][1])
+                mark = (
+                    f'<i class="af-mark" style="left:{(left + right) / 2:.1f}%"></i>'
+                    if right - left < _DOT_BELOW_PERCENT
+                    else f'<i class="af-range" style="left:{left:.1f}%;width:{right - left:.1f}%"></i>'
+                )
+            cells.append(f'<span class="af-plot" aria-hidden="true">{mark}</span>')
+        if has_when:
+            cells.append(
+                f'<time class="af-when" datetime="{date.fromordinal(row["span"][0]).isoformat()}">'
+                f"{escape(_date_label(row))}</time>" if row["span"] else '<span class="af-when"></span>'
+            )
+        out.append(
+            f'<div class="af-line{" is-disputed" if row["disputed"] else ""}" role="listitem" '
+            f'style="grid-row:{index + 2}">{"".join(cells)}</div>'
+        )
+    if has_axis and marker is not None:
+        left = at(marker)
+        out.append(
+            f'<div class="af-foot" aria-hidden="true" style="grid-row:{len(rows) + 2}"><span class="af-plot">'
+            f'<span class="af-asof-label{" is-start" if left < 25 else ""}" style="left:{left:.1f}%">'
+            f"checked {as_of:%b} {as_of.day}</span></span></div>"
+        )
+    out.append("</div>")
+    return "".join(out)
 
 
 def _numbers(figure: dict) -> str:
@@ -471,7 +651,7 @@ _KIND_HEADS = {
         'stroke-linecap="round" aria-hidden="true"><path d="M1.5 8h13"/>'
         '<circle cx="4" cy="8" r="1.8" fill="currentColor"/><circle cx="12" cy="8" r="1.8" fill="currentColor"/></svg>'
     )),
-    "status": ("Overview", (
+    "lineup": ("Overview", (
         '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" '
         'stroke-linecap="round" aria-hidden="true"><path d="M6.5 4h7M6.5 8h7M6.5 12h7"/>'
         '<circle cx="3" cy="4" r="1.2" fill="currentColor"/><circle cx="3" cy="8" r="1.2" fill="currentColor"/>'
@@ -484,23 +664,26 @@ _KIND_HEADS = {
 }
 
 
-def figure_html(figure: dict, *, answered_on: str = "") -> Markup:
+def figure_html(figure: dict, *, answered_on: str = "", as_of: date | None = None) -> Markup:
     """One figure as safe HTML; every text from the answer is escaped.
 
-    A small head (symbol + kind) marks it as a figure, not more text."""
+    A small head (symbol + kind) marks it as a figure, not more text.
+    ``as_of`` is the day of the check the answer comes from; a time axis
+    marks it."""
     figure = years_as_timeline(figure)
-    body = {"timeline": _timeline, "status": _status, "numbers": _numbers}[figure["kind"]](figure)
+    kind = "lineup" if figure["kind"] in LINEUP_KINDS else figure["kind"]
+    body = _numbers(figure) if kind == "numbers" else _chart(figure, as_of)
     disputed = any(entry.get("disputed") for entry in figure["items"])
     caption = "Drawn by consens.io from this answer"
     caption += f" of {answered_on}" if answered_on else ""
     caption += ". Every date, number and name is taken from it."
     if disputed:
         caption += " Dashed: the sources or models disagree."
-    kind_label, kind_icon = _KIND_HEADS[figure["kind"]]
+    kind_label, kind_icon = _KIND_HEADS[kind]
     head = f'<p class="af-kind">{kind_icon}{escape(kind_label)}</p>'
     title = f'<p class="af-title">{escape(figure["title"])}</p>' if figure.get("title") else ""
     return Markup(
-        f'<figure class="af af-{figure["kind"]}">{head}{title}{body}'
+        f'<figure class="af af-{kind}">{head}{title}{body}'
         f'<figcaption class="af-cap">{escape(caption)}</figcaption></figure>'
     )
 
@@ -542,10 +725,11 @@ def place(answer_md: str, figures) -> tuple[str, list[dict]]:
     return "\n".join(out), placed
 
 
-def fill(answer_html: str, figures, *, answered_on: str = "") -> Markup:
+def fill(answer_html: str, figures, *, answered_on: str = "", as_of: date | None = None) -> Markup:
     html = str(answer_html or "")
     for index, figure in enumerate(figures or []):
         slot = _PLACEHOLDER.format(index)
-        html = html.replace(f"<p>{slot}</p>", str(figure_html(figure, answered_on=answered_on)))
+        drawn = figure_html(figure, answered_on=answered_on, as_of=as_of)
+        html = html.replace(f"<p>{slot}</p>", str(drawn))
         html = html.replace(slot, "")
     return Markup(html)

@@ -603,7 +603,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `share.py` | `/api/share` (POST), `/api/share/{id}` (DELETE), `/api/my/shares` (neueste zuerst, in Firestore sortiert über Index `shares(owner_uid, created_at desc)`, `?cursor=`, Antwort mit `has_more`/`next_cursor`; der Dialog zeigt einen Hinweis, wenn ältere Links fehlen), `/api/share/{id}/report`, öffentliche Seite `/s/{slug_id}` mit Vorschaukarte `/s/{slug_id}/og.png` (Frage, Agreement, Modell-/Widerspruchszahl, Antwortdatum; für Watches seit 2026-10-20 „Watch · <Kopfzeile der Seite>“ und Modellzahl ohne Score), `/questions` (Watch-Zeilen mit der Kopfzeile ihrer Seite), `sitemap-shares.xml`. |
 | `agent_watches.py` | Watches, die den Agenten laufen lassen (seit 2026-11-03, `app/services/agent_watches.py`): `POST /agent/watches` `{chat_id, turn_id, interval?, run_time?, run_weekday?, timezone}` startet den Vorschlag des Turns (Auftrag und Ziel vom gespeicherten Turn, 201 `{watch}`; Fehler `{error, code}`: `already_watched` 409, `limit_reached` 429, `interval_not_allowed` 403, `temporary_chat`/`google_data` 422, `no_proposal`/`chat_not_found` 404), `GET /agent/watches?chat_id=` (die Watches des Kontos, mit `chat_id` die des Chats, dazu `active_count`, `active_limit`, `intervals` der Stufe), `POST /agent/watches/{id}/stop` (Ende durch den Nutzer; seit 2026-11-05 nimmt das Ende einer Watch, die die Seite mit eigenem Chat anlegte und die noch nie lief, diesen leeren Chat ohne Seitenleisten-Eintrag samt Watch mit, `agent_watches._drop_unused_chat`). Seit dem Abend von 2026-11-03 auch mit eigenem Auftrag: `{chat_id, task, goal}` in diesem Chat (die Pille unter der Antwort), `{task, goal}` ohne Chat legt einen eigenen Chat an (Titel aus dem Auftrag, erster Lauf sofort, `invalid_task` 422); `POST …/pause`, `POST …/resume` (`limit_reached` 429, ein Intervall, das die Stufe nicht mehr hat, wird ihr kürzestes), `POST …/seen` (der Befund ist gelesen), `PATCH /agent/watches/{id}` `{email_enabled?, telegram_enabled?, goal?, interval?, run_time?, run_weekday?, timezone?}` (seit 2026-11-04 auch Ziel und Zeitplan einer laufenden oder pausierten Watch, `agent_watches.update`: ein neuer Zeitplan zählt ab jetzt, ein unverändert gespeicherter (Intervall, Uhrzeit, Tag und Zeitzone gleich) lässt nächsten Lauf und `retry_of` stehen, die Stufe entscheidet das Intervall, ohne Stufe die von Free, `interval_not_allowed` 403; eine beendete behält beides, `ended` 409; `""` als Ziel lässt sie laufen, bis der Nutzer sie beendet). Jede Watch trägt seit 2026-11-04 `looks` (ihre letzten 30 Läufe, älteste zuerst, je `{at, outcome, summary}`, ein Befund als eine Zeile von höchstens 280 Zeichen; eine Watch von davor zeigt ihren letzten Lauf allein, außer er war `already_ran`) und `looking` (ein Lauf geht gerade, `running` jünger als `RUN_STALE_AFTER`) für den Puls der Seite. `GET|POST /agent-watch/unsubscribe?token=` ist der Link „Stop emails“ der Mail (`List-Unsubscribe` One-Click): GET fragt (`notice.html`), POST schaltet nur die Mails der Watch aus, sie läuft weiter. |
 | `watch.py` | Consensus Watch (seit 2026-11-03 archiviert, `cfg.consensus_watches_archived`: `POST /api/watch`, Zielvorschläge und `PATCH status=active` antworten 410 `watch_archived`, Löschen geht; `/api/my/watches` trägt `archived`): `/api/watch` (POST), `/api/watch/goal-suggestions` (POST, bis zu drei beobachtbare Ziele zur Frage über einen Judge-Call auf Betreiberkosten, 6/min pro IP und `GOAL_SUGGESTIONS_PER_HOUR` = 20 pro Konto und Stunde, darüber `{"status": "limited", "goals": []}`; ein Fehler liefert eine leere Liste), `/api/my/watches` (inkl. Original-Baseline-Score, kompakter History mit Drift-Signal je Watch, `resolution`, `last_probe` und autoritativer Plan-/Active-/Resolved-Metadaten für die UI), `/api/watch/{id}` (PATCH/DELETE; PATCH auch `requirements` = „Details that matter“ und `reject_match`; `status=active` auf einer abgeschlossenen Watch braucht ein neues oder leeres Ziel, neue Details oder `reject_match: true` = „Not what I wanted“, siehe [watch-evidence-model.md](watch-evidence-model.md) „Details und abgelehnte Treffer“), `/api/watch/{id}/image/{token}` (GET ohne Login, 60/min: die gespeicherte Watch-Vorschau aus `watch_images`, nur mit passendem Inhalts-Token, `Cache-Control: private` 30 Tage; siehe §4 „Watch-Bild“), `/api/watch/{id}/image` (DELETE, Owner: Bild entfernen, danach wird nie wieder eins gesucht), Morning-Brief-Einstellungen `/api/my/watch-brief` (GET/PATCH), nutzergebundene Telegram-Verbindung `/api/my/telegram` (GET/DELETE), `/api/my/telegram/link|test` (POST) und der per Secret-Header geschützte `/api/telegram/webhook` (Secret als Bytes verglichen, vor dem Lesen des Bodys; Body höchstens 64 KB, ein kaputtes Update wird quittiert); außerdem öffentliche, HMAC-signierte Mail-Links `/watch/unsubscribe`, `/watch/resume`, `/watch/brief/unsubscribe` und `/watch/follow/confirm|unsubscribe` (GET prüft nur den Token und fragt per Button, erst der POST auf dieselbe URL handelt; Seiten aus `templates/notice.html`, siehe §4 „Links in Mails“). Fehler kommen als `{error, code, …details}` (`WatchError.details`, z. B. `already_watched` mit `watch_id`; `limit_reached` ist die Plan-Grenze, eine Drosselung ist immer `rate_limited`). PATCH nimmt auch `visibility` (`private`/`public`, gleiche Prüfung wie beim Anlegen; ändert Seite und Watch in einer Transaktion, privat heißt raus aus dem Google-Index samt Anfrage; Follower-Mails ruhen, solange die Seite privat ist). `/api/my/watches` liefert je Watch die volle `question` sowie `checking` (Check läuft, Lease aktiv) und `due` (aktiv, `next_run_at` erreicht). |
-| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (unbekannter Slug: HTML-404 für Browser, JSON für Skripte; `?version=<run_id>`; seit 2026-10-15 aus denselben Teilen wie die Watch-Seiten gebaut, siehe §4 „Kuratierte Topics“), `/api/topics/{topic_id}/image/{token}` (GET ohne Login, 60/min: das Topic-Bild aus `topic_images`, nur mit passendem Inhalts-Token, öffentlich 30 Tage cachebar), `/topics/{slug}/og.png` (GET ohne Login, 60/min: Vorschaukarte mit Seitentitel, Modellzahl und letzter Prüfung aus `og_image.card_png`; 404 wie die Seite für archivierte, unveröffentlichte und unbekannte Topics; eine Stunde cachebar, steht auch als `image` im Article-JSON-LD), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe` (GET fragt, POST handelt wie bei den Watch-Links); der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy beantwortet Cache-Treffer ohne Limit (eine geteilte Seite braucht ~13 Domains, Apple-Audit I7); nur ein Abruf bei Google zählt, `FAVICON_LOOKUPS_PER_MINUTE` = 60 je IP (prozesslokal über `api_uid_limiter`; dessen Aufräumlauf über 4.096 Schlüssel nutzt das Fenster jedes Schlüssels und läuft höchstens alle 5 s, viele Favicon-Besucher setzen so keine Stundenlimits zurück), darüber kommt der Globus mit `no-store` statt eines 429. Dazu acht parallele Requests, ein eigener Vierer-Executor, zwei Sekunden Upstream-Zeit sowie ein 2.000-Einträge-LRU einschließlich 24-h-Negativcache. Angefragt wird `sz=128`; ein Icon unter `favicons.MIN_ICON_PX` = 64 px gilt als keins (Globus statt eines unscharfen Logos bei 20 px × DPR 3, Apple-Audit I13). Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
+| `topics.py` | Eigenständige öffentliche Topic-Ticker: Hub `/topics`, versionierte Detailseite `/topics/{slug}` (unbekannter Slug: HTML-404 für Browser, JSON für Skripte; `?version=<run_id>`; seit 2026-10-15 aus denselben Teilen wie die Watch-Seiten gebaut, siehe §4 „Kuratierte Topics“), `/api/topics/{topic_id}/image/{token}` (GET ohne Login, 60/min: das Topic-Bild aus `topic_images`, nur mit passendem Inhalts-Token, öffentlich 30 Tage cachebar), `/api/topics/{topic_id}/picture/{token}` (GET ohne Login, 120/min: ein Bild der Direktlink-Karten aus `topic_images/{topic_id}_{token}`, `topic_pictures.load_picture`, 30 Tage cachebar, `X-Robots-Tag: noindex`), `/topics/{slug}/og.png` (GET ohne Login, 60/min: Vorschaukarte mit Seitentitel, Modellzahl und letzter Prüfung aus `og_image.card_png`; 404 wie die Seite für archivierte, unveröffentlichte und unbekannte Topics; eine Stunde cachebar, steht auch als `image` im Article-JSON-LD), `sitemap-topics.xml`, Double-Opt-in-Follow unter `/api/topics/{slug}/follow` + `/topic-follow/confirm|unsubscribe` (GET fragt, POST handelt wie bei den Watch-Links); der Versand-Claim ist persistent gehasht und besitzt Resend-, Empfänger- und globales Stundenbudget. Der Favicon-Proxy beantwortet Cache-Treffer ohne Limit (eine geteilte Seite braucht ~13 Domains, Apple-Audit I7); nur ein Abruf bei Google zählt, `FAVICON_LOOKUPS_PER_MINUTE` = 60 je IP (prozesslokal über `api_uid_limiter`; dessen Aufräumlauf über 4.096 Schlüssel nutzt das Fenster jedes Schlüssels und läuft höchstens alle 5 s, viele Favicon-Besucher setzen so keine Stundenlimits zurück), darüber kommt der Globus mit `no-store` statt eines 429. Dazu acht parallele Requests, ein eigener Vierer-Executor, zwei Sekunden Upstream-Zeit sowie ein 2.000-Einträge-LRU einschließlich 24-h-Negativcache. Angefragt wird `sz=128`; ein Icon unter `favicons.MIN_ICON_PX` = 64 px gilt als keins (Globus statt eines unscharfen Logos bei 20 px × DPR 3, Apple-Audit I13). Admin-CRUD liegt unter `/api/admin/topics`. Ein leeres `POST /api/admin/topics/{id}/runs` führt den konfigurierten Research-/Consensus-Run aus; ein Payload mit `consensus_md` bleibt als expliziter Legacy-Import verfügbar. |
 | `api_v1.py` | Nutzergebundene asynchrone Consensus-API: Run-Start/Status/Löschung unter `/api/v1/consensus/runs`, transaktional idempotentes Publizieren erfolgreicher Runs per `POST .../{run_id}/share`, eigene Share-Liste/-Details/-Widerruf unter `/api/v1/shares` sowie direkte Admin-Indexfreigabe per `PUT /api/v1/shares/{share_id}/indexing`. Der frühere Scheduled Publisher (`GET /api/v1/publisher/config`, Header `X-Consensus-Publisher`, `POST /api/v1/shares/{share_id}/watch`) ist seit 2026-10-04 entfernt (siehe §4 „SEO-Puls“). Auth über gescopte `X-API-Key`s, Run-Idempotenz über den Pflichtheader `Idempotency-Key`; Pydantic-Modelle bilden den Vertrag in `/openapi.json` ab. |
 
 Gemeinsame OpenRouter-URLs/Headers liegen dependency-frei in
@@ -9902,47 +9902,117 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   oder Stockfoto; es ersetzt Suche, Symbol und `dismissed`. Seit 2026-10-15:
   Mathe = IMO-Goldmedaille aus dem Nature-Artikel, AGI = Prognose-Grafik der
   AI-Impacts-Umfrage (LessWrong-Spiegel).
-- **Abbildungen aus der Antwort** (`app/services/topic_figures.py`, seit
-  2026-10-15): Nach jedem Check füllt ein Judge-Call
-  (`consensus_engine.query_answer_figures`, Differences-Judge-Kette,
-  Structured Output) aus der bereinigten Antwort höchstens zwei von drei festen
-  Vorlagen: `timeline` (datierte Ereignisse), `status` (bestätigt / behauptet /
-  nicht bestätigt), `numbers` (vergleichbare Zahlen einer Einheit). Die Regeln
-  liegen im Code, nicht im Prompt (`clean_figures`): jedes Datum, jede Zahl und
-  jeder Status-Name muss wörtlich in der Antwort stehen, sonst fällt der
-  Eintrag; unter zwei Einträgen fällt die Abbildung; je Vorlage nur eine
-  (die vollere); Status-Namen ohne `%`/Währung; eine Zahlen-Abbildung, deren Werte nur Jahre
-  oder Jahresspannen sind, wird als Zeitleiste gezeichnet (`years_as_timeline`,
-  auch für schon gespeicherte); Notizen in Ich-Form, doppelte
-  oder den Namen wiederholende Notizen fallen weg; „disputed“ wird gestrichelt
-  in Bernstein gezeichnet. Gespeichert als `figures` am Run (ältere Versionen
-  behalten ihre eigene), gezeichnet als HTML/CSS (`figure_html`, `.af-*` in
-  `public-pages.css`, alle Texte escaped; eigene Fläche mit Kopfzeile
-  „Timeline“/„Overview“/„In numbers“ samt Symbol, damit sie nicht als Fließtext
-  gelesen wird) unter der Überschrift, zu der sie
-  gehört (`place`/`fill`; liegt die im letzten Drittel, rückt sie nach dem
-  ersten Absatz nach oben). Ein Fehlschlag kostet nur die Abbildung, nie den
-  Check; in Unit-/E2E-/Mock-Läufen wird kein Modell gefragt. Probe 2026-10-15
-  auf den drei Live-Antworten: 6–39 s, 17 von 19 Einträgen bestanden.
-  Nachtrag für bestehende Runs: `scripts/backfill_topic_visuals.py`
-  (`--figures` übernimmt schon erzeugte Abbildungen, `--apply` = Prod-Write).
+- **Bilder auf den Direktlinks** (`app/services/topic_pictures.py`): Leser
+  erwarten auf einer Themenseite echte Bilder, und die zitierten Seiten legen
+  ihr Vorschaubild selbst fest (`og:image`, sonst das ihres Artikels im
+  JSON-LD; `watch_images.page_preview`). Nach jedem Check holt ein
+  Hintergrundlauf (`schedule_after_run`, derselbe eine Worker wie das
+  Topic-Bild, nie in Unit-/E2E-/Mock-Läufen) diese Bilder für die Seiten der
+  **geltenden** Antwort: erst die Direktlinks in ihrer Reihenfolge, dann die
+  übrigen Quellen, höchstens 8 Seiten, höchstens 4 Bilder. Kein Modell wird
+  gefragt; was ein Bild liefern darf, ist eine Regel über die Quelle
+  (`candidate_pages`): nur Primärquellen, Dokumentation und Forschung, dazu
+  Berichte von den bevorzugten Domains des Topics. Andere Berichte, Community
+  und Gerüchte nie (Inhaltsfarmen bebildern mit generierten und Stockbildern).
+  Eine Seite, die den schlichten Client abweist (403), hat kein Bild; es wird
+  nichts umgangen. Logoartige, flache, hochformatige und zu kleine Bilder
+  fallen weg (`watch_images.make_thumbnail` mit breitem Format, 640 px), ebenso
+  ein Bild, das zwei Seiten derselben Site teilen (deren Teilen-Grafik; nach
+  Adresse oder Bytes). Eine Seite mit gespeichertem Bild wird nicht erneut
+  geholt, eine ohne Bild nach drei Läufen nicht mehr gefragt
+  (`pictures.misses`). Gespeichert: die Bytes je Bild unter
+  `topic_images/{topic_id}_{token}` (Token = Inhalts-Hash), die Liste im Feld
+  `pictures` des Topics (`items` mit Token, Maßen, Quell-URL, Titel;
+  `misses`); beim Neuschreiben werden unbenutzte Bytes gelöscht. Ausgeliefert
+  über `/api/topics/{id}/picture/{token}` (30 Tage, immutable), nie in
+  og:image/JSON-LD. Die Seite hängt das Bild per URL an den passenden
+  Direktlink (`with_pictures`, nur ohne `?version=`); ab zwei Bildern zeichnet
+  `check_page.direct_links` eine Reihe Bildkarten (festes Feld im Format
+  1200 × 630, darunter Titel und Domain; eine Karte ohne Bild zeigt das Icon
+  der Seite im selben Feld), mit weniger bleiben die Kacheln wie bisher.
+  Watch-Seiten teilen das Makro und reichen keine Bilder durch. Nachtrag für
+  bestehende Topics: `scripts/backfill_topic_visuals.py --pictures` (ohne
+  Judge; Trockenlauf nennt je Seite Bild oder Grund, `--out` speichert die
+  Vorschauen, `--apply` = Prod-Write).
+- **Abbildungen aus der Antwort** (`app/services/topic_figures.py`): Nach
+  jedem Check füllt ein Judge-Call (`consensus_engine.query_answer_figures`,
+  Differences-Judge-Kette, Structured Output) aus der bereinigten Antwort
+  höchstens zwei von drei festen Vorlagen: `lineup` (die Mitglieder einer
+  Familie oder Liste, je Zeile ein Stand `available | limited | announced |
+  confirmed | claimed | not_confirmed` und, wenn die Antwort eines nennt, ihr
+  Datum), `timeline` (datierte Ereignisse), `numbers` (vergleichbare Zahlen
+  einer Einheit). `status` ist das Lineup, wie es Runs vor 2026-11-12
+  gespeichert haben (drei Stände, keine Daten), und wird gleich gezeichnet.
+  Die Regeln liegen im Code, nicht im Prompt (`clean_figures`): jedes Datum,
+  jede Zahl und jeder Name muss wörtlich in der Antwort stehen, sonst fällt
+  der Eintrag (im Lineup nur das Datum, die Zeile behält ihren Stand); unter
+  zwei Einträgen fällt die Abbildung; je Vorlage nur eine (die vollere);
+  Namen ohne `%`/Währung; tragen alle Zeilen eines Lineups denselben Stand,
+  sagt er nichts: mit Daten wird es eine Zeitleiste, ohne fällt es weg
+  (`_plain_list`, auch für gespeicherte: sechs Modelle, alle „Confirmed“,
+  wiederholten nur die Liste darunter); eine Zahlen-Abbildung, deren Werte
+  nur Jahre sind, wird als Zeitleiste gezeichnet (`years_as_timeline`);
+  Notizen in Ich-Form, doppelte oder den Namen wiederholende Notizen fallen
+  weg. **Zeichnung** (`_chart`, eine für Zeitleiste und Lineup): Zeilen auf
+  einem Raster aus Stand (Zeichen + Wort), Name mit Notiz, Platz auf einer
+  gemeinsamen Zeitachse und Datum. Die Achse (`_axis`, `_ticks`) beginnt an
+  einem runden Datum vor der ersten Marke und zählt je nach Spanne in Wochen,
+  halben Monaten, Monaten oder Jahren; ein Datum wird so breit gezeichnet,
+  wie die Antwort genau war (`_day_span`: „October 2026“ ein Monat,
+  „2030–2033“ vier Jahre, „2026 or 2027“ zwei; schmaler als 3,5 % der Achse
+  ein Punkt). Der Tag des Checks steht als Linie in Hausgrün auf der Achse
+  („checked Nov 12“), wenn er zwischen den Daten liegt oder höchstens das
+  1,5-Fache der Spanne (mindestens 45 Tage) dahinter; sonst nicht, damit ein
+  alter Zeitstrahl nicht in die Ecke rückt. Vier Zeichen für sechs Stände
+  (Haken, halb, Ring mit Punkt, Ring mit Strich), Farbe nur auf dem Zeichen;
+  „disputed“ gestrichelt in Bernstein. Unter 700 px fällt die Achse weg, jede
+  Zeile nennt ihr Datum rechts. HTML/CSS ohne Listen-Elemente (`.af-chart`,
+  Subgrid, `.af-*` in `public-pages.css`), alle Texte escaped, eigene Fläche
+  mit Kopfzeile „Timeline“/„Overview“/„In numbers“. Gespeichert als `figures`
+  am Run (ältere Versionen behalten ihre eigene), platziert unter der
+  Überschrift, zu der sie gehört (`place`/`fill`; liegt die im letzten
+  Drittel, rückt sie nach dem ersten Absatz nach oben). Ein Fehlschlag kostet
+  nur die Abbildung, nie den Check; in Unit-/E2E-/Mock-Läufen wird kein
+  Modell gefragt. Nachtrag für bestehende Runs:
+  `scripts/backfill_topic_visuals.py` (`--figures` übernimmt schon erzeugte
+  Abbildungen, `--redo-figures` ersetzt die gespeicherten nach einer
+  Vorlagenänderung, `--apply` = Prod-Write).
+- **Offene Widersprüche** (seit 2026-11-12): Kritische Widersprüche (Judge:
+  `contradiction`, nicht `minor`, zwei Seiten) stehen offen unter der Antwort
+  („Where the models disagree“, `check_page.open_contradictions`, höchstens
+  drei), als dieselben Karten wie in der App und auf Share-Seiten
+  (`templates/partials/difference_card.html`, von `share.html` und
+  `check_page.html` importiert; die Kartenregeln in `public-pages.css` gelten
+  unter `:is(#differencesView, .diff-view)`). Die Stelle, um die es geht
+  (`consensus_anchor`), trägt im Antworttext dieselbe Marke wie der Kopf ihrer
+  Karte: `check_page.mark_passages` setzt vor dem Rendern ein Tokenpaar in das
+  Markdown, `fill_marks` macht daraus `<mark class="wp-mark" data-diff>`,
+  aber nur, wenn das gerenderte Stück in einem Inline-Element bleibt (sonst
+  bleibt der Text unmarkiert); die Tokens sind geklammert, damit Fettdruck
+  direkt daneben noch schließt. Ein Klick auf die Marke öffnet und zeigt die
+  Karte (`check-page.js` `passageMarks`). Kleinere Unterschiede bleiben in
+  „How the models compared“.
 - **Benchmark-Abbildung** (`app/services/topic_benchmarks.py`, seit
   2026-10-31): Topics über eine Modellfamilie nennen sie im Feld
   `benchmark.models` (bis zu 4 Namen, wie Artificial Analysis sie schreibt;
   Admin-Feld „Benchmark chart“). Nach jedem Check liest der Runner einmal den
   Artificial Analysis Intelligence Index (freie Daten-API
-  `GET /api/v2/data/llms/models`, Header `x-api-key` aus
-  `ARTIFICIAL_ANALYSIS_API_KEY`, 6 h im Prozess gecacht, 1000 Abrufe/Tag) und
-  speichert am Run `benchmark` = Datum + Balken: die Modelle der Familie
-  (je Modell die beste Einstellung, „(High)“/„(Low)“ zusammengefasst, höchstens
-  drei) neben dem besten Modell jedes anderen Labors (fünf). „Gemini 4“ trifft
+  `GET /api/v2/language/models/free`, Header `x-api-key` aus
+  `ARTIFICIAL_ANALYSIS_API_KEY`, seitenweise über `?page=` bis `has_more`
+  endet, 6 h im Prozess gecacht; das freie Kontingent sind 100 Abrufe am Tag,
+  ein Lesen kostet einen je Seite) und speichert am Run `benchmark` = Datum +
+  Balken: die Modelle der Familie (je Modell die beste Einstellung,
+  „(High)“/„(Low)“ zusammengefasst, höchstens drei) neben dem besten Modell
+  jedes anderen Labors (fünf), je mit dem Release-Datum, das Artificial
+  Analysis führt („Google · released Oct 28, 2026“). „Gemini 4“ trifft
   „Gemini 4 Carbon (High)“, nie „Gemini 4.5 Pro“; Punkt-Releases („GPT-6.1“)
   werden eigens genannt. Die Zahlen stammen nicht aus der Antwort und stehen
   deshalb **nach** ihr, vor den Quellen, mit der Pflicht-Attribution
   (Link auf artificialanalysis.ai, „as of …“). Ohne Einstellung, ohne Key, in
   Unit-/E2E-/Mock-Läufen oder bei API-Fehlern entsteht keine Abbildung, der
-  Check läuft trotzdem. Anlass: Gemini 4 Carbon (28.10.) fehlte in der
-  Antwort, weil zwei von drei Suchen die Ankündigung nicht fanden.
+  Check läuft trotzdem. Der Vorgänger-Endpunkt `/api/v2/data/llms/models`
+  antwortet seit 2026-11-04 mit 410; bis zur Umstellung am 2026-11-12 fehlte
+  die Abbildung deshalb still in jedem Check.
 - **Hub `/topics`**: eine flache Zeile pro Topic mit Titel, dem ersten ganzen
   Satz von `accepted_lead` (`lead_sentences(limit=150, min_sentence=30)`,
   höchstens drei Zeilen; sonst Leitfrage), einer leisen Meta-Zeile

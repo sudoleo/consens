@@ -4,9 +4,10 @@ A Topic about a model family ("Gemini 4") names that family in its
 ``benchmark.models`` setting. After each check the runner reads the
 Artificial Analysis Intelligence Index once (free data API, key in
 ``ARTIFICIAL_ANALYSIS_API_KEY``) and stores a snapshot on the run: the
-family's models next to the best model of each other lab. The page draws it
-like the answer's figures (HTML/CSS bars, no copied image) with the
-attribution the API requires.
+family's models next to the best model of each other lab, each with the
+release date Artificial Analysis lists for it. The page draws it like the
+answer's figures (HTML/CSS bars, no copied image) with the attribution the
+API requires.
 
 Unlike ``topic_figures``, these numbers do not come from the answer: they
 are third-party measurements, labelled and dated as such, and they show up
@@ -28,7 +29,7 @@ from markupsafe import Markup, escape
 
 from app.core.observability import safe_exception
 
-API_URL = "https://artificialanalysis.ai/api/v2/data/llms/models"
+API_URL = "https://artificialanalysis.ai/api/v2/language/models/free"
 API_KEY_ENV = "ARTIFICIAL_ANALYSIS_API_KEY"
 # Attribution is a condition of the free API.
 SOURCE_URL = "https://artificialanalysis.ai/"
@@ -39,8 +40,10 @@ MAX_OWN = 3
 MAX_OTHERS = 5
 MIN_ITEMS = 2
 TIMEOUT_SECONDS = 15
-# One read serves every Topic of a scheduler tick; the API allows 1,000 a day.
+# The list comes in pages, one request each, and the free tier allows 100
+# requests a day: one read serves every Topic for hours.
 CACHE_SECONDS = 6 * 60 * 60
+MAX_PAGES = 12
 
 _CACHE: dict = {"at": 0.0, "rows": None}
 _LOCK = threading.Lock()
@@ -89,6 +92,14 @@ def _score(row):
     return float(value)
 
 
+def _released(value) -> str:
+    """A release date as an ISO day, or "" (the API leaves it out for some)."""
+    try:
+        return date.fromisoformat(str(value or "")[:10]).isoformat()
+    except ValueError:
+        return ""
+
+
 def select(rows, patterns, *, fetched_on: str) -> dict | None:
     """The chart for one Topic: its family's models and the best of each other lab."""
     best: dict[str, dict] = {}
@@ -104,6 +115,7 @@ def select(rows, patterns, *, fetched_on: str) -> dict | None:
             "creator_id": str(creator.get("id") or creator.get("name") or ""),
             "score": round(score, 1),
             "own": _matches(name, patterns),
+            "released": _released(row.get("release_date")),
         }
         key = _norm(_VARIANT_RE.sub("", name))
         if key not in best or item["score"] > best[key]["score"]:
@@ -128,7 +140,10 @@ def select(rows, patterns, *, fetched_on: str) -> dict | None:
         "source": "artificial_analysis",
         "metric": METRIC,
         "fetched_on": fetched_on,
-        "items": [{key: item[key] for key in ("name", "creator", "score", "own")} for item in items],
+        "items": [
+            {key: item[key] for key in ("name", "creator", "score", "own", "released")}
+            for item in items
+        ],
     }
 
 
@@ -144,17 +159,22 @@ def fetch_models(*, get=requests.get) -> list[dict]:
     with _LOCK:
         if _CACHE["rows"] is not None and time.monotonic() - _CACHE["at"] < CACHE_SECONDS:
             return _CACHE["rows"]
-    response = get(
-        API_URL, headers={"x-api-key": key, "Accept": "application/json"},
-        timeout=TIMEOUT_SECONDS,
-    )
-    if getattr(response, "status_code", 0) != 200:
-        raise BenchmarkUnavailable(f"HTTP {getattr(response, 'status_code', 'error')}")
-    body = response.json()
-    rows = body.get("data") if isinstance(body, dict) else None
-    if not isinstance(rows, list):
-        raise BenchmarkUnavailable("unexpected response")
-    rows = [row for row in rows if isinstance(row, dict)]
+    rows = []
+    for page in range(1, MAX_PAGES + 1):
+        response = get(
+            API_URL, headers={"x-api-key": key, "Accept": "application/json"},
+            params={"page": page}, timeout=TIMEOUT_SECONDS,
+        )
+        if getattr(response, "status_code", 0) != 200:
+            raise BenchmarkUnavailable(f"HTTP {getattr(response, 'status_code', 'error')}")
+        body = response.json()
+        data = body.get("data") if isinstance(body, dict) else None
+        if not isinstance(data, list):
+            raise BenchmarkUnavailable("unexpected response")
+        rows.extend(row for row in data if isinstance(row, dict))
+        paging = body.get("pagination")
+        if not data or not isinstance(paging, dict) or paging.get("has_more") is not True:
+            break
     with _LOCK:
         _CACHE.update(at=time.monotonic(), rows=rows)
     return rows
@@ -194,6 +214,7 @@ def stored(value) -> dict | None:
         items.append({
             "name": item["name"], "creator": creator if isinstance(creator, str) else "",
             "score": score, "own": item.get("own") is True,
+            "released": _released(item.get("released")),
         })
     if len(items) < MIN_ITEMS or not any(item["own"] for item in items):
         return None
@@ -211,13 +232,22 @@ def _value(score) -> str:
     return f"{score:.1f}".removesuffix(".0")
 
 
+def _note(item: dict) -> str:
+    """Who made the model and when it came out, as far as the data says."""
+    parts = [item.get("creator") or ""]
+    if item.get("released"):
+        day = date.fromisoformat(item["released"])
+        parts.append(f"released {day:%b} {day.day}, {day.year}")
+    return " · ".join(part for part in parts if part)
+
+
 def figure_html(snapshot: dict) -> Markup:
     """The chart as safe HTML; names from the API are escaped."""
     top = max(item["score"] for item in snapshot["items"])
     rows = "".join(
         f'<li class="af-row {"is-own" if item["own"] else "is-other"}">'
         f'<span class="af-label">{escape(item["name"])}'
-        + (f'<span class="af-note">{escape(item["creator"])}</span>' if item["creator"] else "")
+        + (f'<span class="af-note">{escape(_note(item))}</span>' if _note(item) else "")
         + f'</span><span class="af-bar" aria-hidden="true"><i style="width:{max(100 * item["score"] / top, 1.5):.1f}%"></i></span>'
         f'<span class="af-value">{escape(_value(item["score"]))}</span></li>'
         for item in snapshot["items"]

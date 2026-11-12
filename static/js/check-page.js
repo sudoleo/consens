@@ -273,6 +273,29 @@
     });
   }
 
+  // ---- A marked passage leads to its contradiction -------------------------
+
+  // The answer marks the passage the models contradict each other on; the
+  // card that says who holds which side stands under the answer. A click on
+  // the mark goes there (a link inside the passage keeps its own target).
+  function passageMarks() {
+    document.addEventListener("click", function (event) {
+      var target = event.target;
+      if (!target.closest || target.closest("a")) return;
+      var mark = target.closest(".wp-mark[data-diff]");
+      var card = mark && document.getElementById("topicDiff" + mark.getAttribute("data-diff"));
+      if (!card) return;
+      card.open = true;
+      card.classList.remove("is-arrived");
+      card.scrollIntoView({ block: "center", behavior: reducedMotion ? "auto" : "smooth" });
+      // Restart the highlight when the same mark is clicked twice.
+      void card.offsetWidth;
+      card.classList.add("is-arrived");
+      var summary = card.querySelector("summary");
+      if (summary) summary.focus({ preventScroll: true });
+    });
+  }
+
   function start() {
     clampQuestion();
     dropMissingImage();
@@ -281,6 +304,7 @@
     animateDisclosures();
     revealCheck();
     quoteToggles();
+    passageMarks();
   }
 
   if (document.readyState === "loading") {

@@ -4,6 +4,7 @@ The figure may only show what the answer states; everything else is dropped
 before it is stored or drawn.
 """
 
+import re
 from datetime import date, timedelta
 
 from fastapi import FastAPI
@@ -45,6 +46,22 @@ def figure(kind, items, title="A figure", after=""):
     return {"kind": kind, "title": title, "after_heading": after, "items": items}
 
 
+def written_dates(html) -> list[str]:
+    """The dates of a drawn chart, row by row."""
+    return re.findall(r'<time class="af-when"[^>]*>([^<]+)</time>', str(html))
+
+
+def marks(html) -> list[tuple[str, float]]:
+    """Each mark on the time axis: its shape and where it starts (percent)."""
+    return [(shape, float(left)) for shape, left in
+            re.findall(r'<i class="af-(mark|range)" style="left:([0-9.]+)%', str(html))]
+
+
+def tick_labels(html) -> list[tuple[float, str]]:
+    return [(float(left), label) for left, label in
+            re.findall(r'class="af-tick[^"]*" style="left:([0-9.]+)%">([^<]+)<', str(html))]
+
+
 def test_only_what_the_answer_states_survives():
     raw = {"figures": [
         figure("timeline", [
@@ -68,7 +85,8 @@ def test_only_what_the_answer_states_survives():
 
     figures = topic_figures.clean_figures(raw, ANSWER)
 
-    assert [f["kind"] for f in figures] == ["timeline", "status"]  # at most two
+    # At most two; a status board of an earlier prompt is stored as a lineup.
+    assert [f["kind"] for f in figures] == ["timeline", "lineup"]
     timeline, status = figures
     assert [entry["date"] for entry in timeline["items"]] == ["2026-09-30", "October 13, 2026"]
     assert timeline["after_heading"] == "Release date"
@@ -85,7 +103,7 @@ def test_a_figure_needs_two_items_and_one_template_appears_once():
         figure("numbers", [item("Input", value="$2", unit="per 1M tokens")]),
     ]}
     figures = topic_figures.clean_figures(raw, ANSWER)
-    assert [(f["kind"], f["title"]) for f in figures] == [("status", "Fuller")]
+    assert [(f["kind"], f["title"]) for f in figures] == [("lineup", "Fuller")]
     assert topic_figures.clean_figures({"figures": "nope"}, ANSWER) == []
     assert topic_figures.clean_figures(None, ANSWER) == []
 
@@ -114,6 +132,9 @@ def test_dates_are_read_the_way_answers_write_them():
     assert topic_figures._date_label({"date": "October 7–8, 2026"}) == "Oct 7–8, 2026"
     # A named month no pattern reads is no date, never January 1st.
     assert topic_figures.parse_date("Q4 of October-ish") is None
+    # "late 2026 or 2027" names two years: a span, drawn from the first to the last.
+    assert topic_figures.parse_date("late 2026 or 2027") == (date(2026, 1, 1), "years")
+    assert topic_figures._date_label({"date": "late 2026 or 2027"}) == "2026–2027"
 
 
 def test_a_stored_timeline_is_ordered_by_its_written_dates_when_drawn():
@@ -124,17 +145,12 @@ def test_a_stored_timeline_is_ordered_by_its_written_dates_when_drawn():
         {"label": "First introduction", "note": "", "disputed": False, "date": "early September 2026",
          "sort": "2026-09-01", "precision": "month"},
     ]}
-    html = str(topic_figures.figure_html(stored))
-    assert html.index("Sep 2026") < html.index("Oct 7–8, 2026")
-    assert "is-ends" in html  # two events: under the two ends of the track
+    assert written_dates(topic_figures.figure_html(stored)) == ["Sep 2026", "Oct 7–8, 2026"]
 
     stored["items"].append({"label": "Rollout starts", "note": "", "disputed": False,
                             "date": "October 7, 2026"})
-    html = str(topic_figures.figure_html(stored))
-    # A single day comes before the span that starts on it, and three events
-    # no longer claim to sit under their dots.
-    assert html.index("Sep 2026") < html.index("Oct 7, 2026") < html.index("Oct 7–8, 2026")
-    assert "is-ends" not in html
+    # A single day comes before the span that starts on it.
+    assert written_dates(topic_figures.figure_html(stored)) == ["Sep 2026", "Oct 7, 2026", "Oct 7–8, 2026"]
 
 
 def test_figures_are_drawn_as_escaped_html_with_disagreement_marked():
@@ -167,7 +183,7 @@ def test_a_figure_sits_under_its_heading_but_never_after_the_closing_summary():
         "items": [{"label": "A", "note": "", "disputed": False, "status": "confirmed"},
                   {"label": "B", "note": "", "disputed": False, "status": "not_confirmed"}],
     }])
-    assert str(html).startswith('<figure class="af af-status">') and "TOPICFIGURESLOT" not in str(html)
+    assert str(html).startswith('<figure class="af af-lineup">') and "TOPICFIGURESLOT" not in str(html)
 
 
 def test_build_never_costs_the_check():
@@ -225,16 +241,139 @@ def test_a_topic_check_stores_its_figures_and_the_page_draws_them(monkeypatch):
     assert "How it rolled out" in text
     answer = text.split('id="wpAnswerHeading"', 1)[1]
     assert answer.index("Release date</h2>") < answer.index("af-timeline") < answer.index("broader availability")
-    assert "Sep 30, 2026" in text and "13 days" in text
+    # Each event is a row on one time axis and says its date in words.
+    assert 'class="af-chart is-npw"' in text
+    assert '<time class="af-when" datetime="2026-09-30">Sep 30, 2026</time>' in text
     assert "TOPICFIGURESLOT" not in text
 
 
 def test_figure_lists_do_not_inherit_the_answer_list_indent():
     """The figures sit inside the answer (.share-md), whose ol/ul rules are
-    one step more specific than a bare class: the figure lists need two."""
+    one step more specific than a bare class: the one figure list needs two,
+    and the row chart is built without list elements."""
     css = open("static/css/public-pages.css", encoding="utf-8").read()
-    for selector in (".af .af-events {", ".af .af-column ul {", ".af .af-rows {"):
-        assert selector in css
+    assert ".af .af-rows {" in css
+    chart = str(topic_figures.figure_html({"kind": "timeline", "title": "", "after_heading": "", "items": [
+        {"label": "A", "note": "", "disputed": False, "date": "2026-09-30"},
+        {"label": "B", "note": "", "disputed": False, "date": "2026-10-13"},
+    ]}))
+    assert "<ol" not in chart and "<ul" not in chart and chart.count('role="listitem"') == 2
+
+
+LINEUP_ANSWER = """Grok 5 is not out yet.
+
+- Grok 4.6: released 2026-08-12.
+- Grok 4.7: released 2026-09-21, the latest shipped flagship.
+- Grok 4.8: announced by Elon Musk, limited rollout expected.
+- Grok 5: xAI said it is in training; no release date.
+"""
+
+
+def test_a_lineup_says_where_each_member_stands_and_when():
+    raw = {"figures": [figure("lineup", [
+        item("Grok 5", status="not_confirmed", note="in training"),
+        item("Grok 4.8", status="announced", date="2026-11-30"),  # a date the answer never gives
+        item("Grok 4.7", status="available", date="2026-09-21"),
+        item("Grok 4.6", status="available", date="2026-08-12"),
+        item("Grok 6", status="not_confirmed"),  # a name the answer never gives
+        item("Grok 4.9", status="none"),  # neither a standing nor a date
+    ], title="Grok models")]}
+
+    lineup, = topic_figures.clean_figures(raw, LINEUP_ANSWER)
+
+    assert lineup["kind"] == "lineup"
+    # Dated rows in order, the rest after them as the answer lists them; an
+    # unstated date is dropped, the row keeps its standing.
+    assert [(e["label"], e["status"], e.get("date", "")) for e in lineup["items"]] == [
+        ("Grok 4.6", "available", "2026-08-12"), ("Grok 4.7", "available", "2026-09-21"),
+        ("Grok 5", "not_confirmed", ""), ("Grok 4.8", "announced", ""),
+    ]
+    html = str(topic_figures.figure_html(lineup, as_of=date(2026, 11, 12)))
+    assert html.startswith('<figure class="af af-lineup">') and 'class="af-chart is-snpw"' in html
+    assert html.count('class="af-glyph is-available"') == 2 and ">Announced</span>" in html
+    assert written_dates(html) == ["Aug 12, 2026", "Sep 21, 2026"]
+    # Two marks, in time order from left to right; undated rows have none.
+    assert [shape for shape, _left in marks(html)] == ["mark", "mark"]
+    assert marks(html)[0][1] < marks(html)[1][1]
+
+
+def test_rows_that_all_stand_the_same_are_a_list_not_a_figure():
+    """gpt-6-release-date: six models, all "Confirmed", right above
+    the same six as bullets."""
+    same = [item("Grok 4.6", status="available"), item("Grok 4.7", status="available")]
+    assert topic_figures.clean_figures({"figures": [figure("lineup", same)]}, LINEUP_ANSWER) == []
+    stored = [{"kind": "status", "title": "", "after_heading": "", "items": [
+        {"label": "A", "note": "x", "disputed": False, "status": "confirmed"},
+        {"label": "B", "note": "y", "disputed": False, "status": "confirmed"},
+    ]}]
+    assert topic_figures.stored_figures(stored) == []
+    # Dates make it a figure again: the rows differ in when. A standing they
+    # all share says nothing, so it is a timeline (when-will-agi-arrive: five
+    # forecasters, each "Claimed, not settled").
+    dated = [item("Grok 4.6", status="available", date="2026-08-12"),
+             item("Grok 4.7", status="available", date="2026-09-21"),
+             item("Grok 4.8", status="available")]
+    timeline, = topic_figures.clean_figures({"figures": [figure("lineup", dated)]}, LINEUP_ANSWER)
+    assert timeline["kind"] == "timeline"
+    assert [(entry["label"], "status" in entry) for entry in timeline["items"]] == [
+        ("Grok 4.6", False), ("Grok 4.7", False),
+    ]
+
+
+def test_a_lineup_without_any_standing_is_a_timeline():
+    answer = "Dario Amodei expects it by 2027, Demis Hassabis around 2030, a survey says 2047."
+    raw = {"figures": [figure("lineup", [
+        item("Demis Hassabis", date="2030"), item("Dario Amodei", date="2027"), item("a survey", date="2047"),
+    ])]}
+    timeline, = topic_figures.clean_figures(raw, answer)
+    assert timeline["kind"] == "timeline"
+    assert [entry["label"] for entry in timeline["items"]] == ["Dario Amodei", "Demis Hassabis", "a survey"]
+
+
+def test_the_time_axis_shows_the_day_of_the_check_only_when_it_is_near():
+    timeline = {"kind": "timeline", "title": "", "after_heading": "", "items": [
+        {"label": "Announced", "note": "", "disputed": False, "date": "30 September 2026"},
+        {"label": "Available", "note": "", "disputed": True, "date": "13 October 2026"},
+    ]}
+    near = str(topic_figures.figure_html(timeline, as_of=date(2026, 11, 7)))
+    assert 'class="af-asof"' in near and ">checked Nov 7<" in near
+    # Round dates along the axis; it opens at one, left of the first mark.
+    assert [label for _left, label in tick_labels(near)] == ["Sep 15", "Oct 1", "Oct 15", "Nov 1"]
+    assert tick_labels(near)[0][0] < marks(near)[0][1]
+    assert 'class="af-line is-disputed"' in near
+    # A check long after the last event would squeeze the events into a corner.
+    far = str(topic_figures.figure_html(timeline, as_of=date(2027, 6, 1)))
+    assert "af-asof" not in far and "checked" not in far
+    assert "af-asof" not in str(topic_figures.figure_html(timeline))
+
+
+def test_a_date_is_drawn_as_wide_as_the_answer_was_precise():
+    forecasts = {"kind": "timeline", "title": "", "after_heading": "", "items": [
+        {"label": "Lab leaders", "note": "", "disputed": False, "date": "2026–2030"},
+        {"label": "Forecasters", "note": "", "disputed": False, "date": "2033"},
+        {"label": "Survey", "note": "", "disputed": False, "date": "2047"},
+    ]}
+    html = str(topic_figures.figure_html(forecasts, as_of=date(2026, 11, 12)))
+    # A span of years is a bar from its first to its last year; the check
+    # lies inside the forecasts and is marked.
+    assert marks(html)[0][0] == "range" and "af-asof" in html
+    assert [label for _left, label in tick_labels(html)] == ["2030", "2035", "2040", "2045"]
+    october = (date(2026, 10, 1).toordinal(), date(2026, 10, 31).toordinal())
+    assert topic_figures._day_span("October 2026") == october
+    assert topic_figures._day_span("October 7–8, 2026") == (october[0] + 6, october[0] + 7)
+    assert topic_figures._day_span("soon") is None
+
+
+def test_a_status_board_of_an_earlier_run_is_drawn_as_a_lineup():
+    stored = topic_figures.stored_figures([{"kind": "status", "title": "Availability", "after_heading": "", "items": [
+        {"label": "Gemini 4 Argon", "note": "you can use it today", "disputed": False, "status": "confirmed"},
+        {"label": "Gemini 4 Carbon", "note": "", "disputed": False, "status": "not_confirmed"},
+        {"label": "Broken", "note": "", "disputed": False, "status": "shipped"},  # no such standing
+    ]}])
+    html = str(topic_figures.figure_html(stored[0]))
+    assert 'class="af-chart is-sn"' in html and html.count('role="listitem"') == 2
+    assert ">Confirmed</span>" in html and ">Not confirmed</span>" in html
+    assert "af-plot" not in html and "af-when" not in html
 
 
 def test_years_are_drawn_on_a_timeline_not_as_bars():

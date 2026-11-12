@@ -1319,17 +1319,17 @@ canvas {
 /* Differences on the share page: the app's cards
    (components-consensus-insights.css, drawn by check_page.difference_cards),
    not the boxed cards above and in public-shell.css, which the Watch
-   pages' "How the models compared" keeps. Under #differencesView so they win
+   pages' "How the models compared" keeps. Under :is(#differencesView, .diff-view) so they win
    over those at any order. No box, no rail, no capitals: rows parted by a
    hairline, a dot that carries the weight, the claims in reading size. */
-#differencesView .diff-verdict {
+:is(#differencesView, .diff-view) .diff-verdict {
   margin: 0 0 6px;
   color: var(--ink-2);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-regular);
 }
 
-#differencesView .diff-card {
+:is(#differencesView, .diff-view) .diff-card {
   margin: 0;
   padding: 0;
   border: 0;
@@ -1339,9 +1339,9 @@ canvas {
   box-shadow: none;
 }
 
-#differencesView .diff-cards > .diff-card:first-child { border-top: 0; }
+:is(#differencesView, .diff-view) .diff-cards > .diff-card:first-child { border-top: 0; }
 
-#differencesView .diff-card-summary {
+:is(#differencesView, .diff-view) .diff-card-summary {
   display: flex;
   flex-direction: column;
   gap: 5px;
@@ -1350,20 +1350,20 @@ canvas {
   list-style: none;
 }
 
-#differencesView .diff-card-summary::-webkit-details-marker { display: none; }
+:is(#differencesView, .diff-view) .diff-card-summary::-webkit-details-marker { display: none; }
 
-#differencesView .sev-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
-#differencesView .diff-card-claim:has(> .sev-dot) { padding-left: 15px; text-indent: -15px; }
-#differencesView .diff-card-claim > .sev-dot { display: inline-block; margin-right: 8px; vertical-align: middle; translate: 0 -1px; }
-#differencesView .sev-dot.is-crit { background: #cf5a4a; }
-#differencesView .sev-dot.is-warn { background: #d99b46; }
-#differencesView .sev-dot.is-info { background: color-mix(in srgb, var(--sidebar-text-muted) 55%, transparent); }
-.dark-mode #differencesView .sev-dot.is-crit { background: #e58a79; }
-.dark-mode #differencesView .sev-dot.is-warn { background: #e8b968; }
+:is(#differencesView, .diff-view) .sev-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+:is(#differencesView, .diff-view) .diff-card-claim:has(> .sev-dot) { padding-left: 15px; text-indent: -15px; }
+:is(#differencesView, .diff-view) .diff-card-claim > .sev-dot { display: inline-block; margin-right: 8px; vertical-align: middle; translate: 0 -1px; }
+:is(#differencesView, .diff-view) .sev-dot.is-crit { background: #cf5a4a; }
+:is(#differencesView, .diff-view) .sev-dot.is-warn { background: #d99b46; }
+:is(#differencesView, .diff-view) .sev-dot.is-info { background: color-mix(in srgb, var(--sidebar-text-muted) 55%, transparent); }
+.dark-mode :is(#differencesView, .diff-view) .sev-dot.is-crit { background: #e58a79; }
+.dark-mode :is(#differencesView, .diff-view) .sev-dot.is-warn { background: #e8b968; }
 
-#differencesView .diff-card-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
+:is(#differencesView, .diff-view) .diff-card-tags { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; }
 
-#differencesView .diff-type-tag {
+:is(#differencesView, .diff-view) .diff-type-tag {
   color: var(--ink-2);
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-regular);
@@ -1371,7 +1371,7 @@ canvas {
   text-transform: none;
 }
 
-#differencesView .diff-card-claim {
+:is(#differencesView, .diff-view) .diff-card-claim {
   color: var(--ink);
   font-size: var(--font-size-sm);
   font-weight: var(--font-weight-semibold);
@@ -1379,11 +1379,11 @@ canvas {
   overflow-wrap: anywhere;
 }
 
-#differencesView .diff-card-body { padding: 0 0 13px; }
+:is(#differencesView, .diff-view) .diff-card-body { padding: 0 0 13px; }
 
-#differencesView .diff-sides { display: flex; flex-direction: column; gap: 24px; padding-top: 4px; }
+:is(#differencesView, .diff-view) .diff-sides { display: flex; flex-direction: column; gap: 24px; padding-top: 4px; }
 
-#differencesView .diff-versus-mark {
+:is(#differencesView, .diff-view) .diff-versus-mark {
   display: block;
   color: var(--ink-2);
   font-size: var(--font-size-xs);
@@ -1393,14 +1393,14 @@ canvas {
 
 /* Wie in der App (components-consensus-insights.css): der Satz der Antwort
    als Kopf, in der Farbe seiner Marke; "In the answer" / "In contrast" davor. */
-#differencesView .diff-position-lead {
+:is(#differencesView, .diff-view) .diff-position-lead {
   color: var(--ink-2);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-ui);
 }
-#differencesView .diff-card-topic { color: var(--ink-2); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
-#differencesView .diff-card-claim.is-answer-text { font-weight: var(--font-weight-regular); }
-#differencesView .diff-answer-mark {
+:is(#differencesView, .diff-view) .diff-card-topic { color: var(--ink-2); font-size: var(--font-size-xs); line-height: var(--line-height-ui); }
+:is(#differencesView, .diff-view) .diff-card-claim.is-answer-text { font-weight: var(--font-weight-regular); }
+:is(#differencesView, .diff-view) .diff-answer-mark {
   --diff-paint: var(--cx-mark-note, #ececed);
   padding: 0.1em 0;
   border-radius: 3px;
@@ -1409,20 +1409,20 @@ canvas {
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
-#differencesView .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, #f6dcdd); }
-.dark-mode #differencesView .diff-answer-mark { --diff-paint: var(--cx-mark-note, color-mix(in srgb, var(--ink) 9%, transparent)); }
-.dark-mode #differencesView .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, rgba(255, 123, 114, 0.19)); color: #ffb3ab; }
+:is(#differencesView, .diff-view) .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, #f6dcdd); }
+.dark-mode :is(#differencesView, .diff-view) .diff-answer-mark { --diff-paint: var(--cx-mark-note, color-mix(in srgb, var(--ink) 9%, transparent)); }
+.dark-mode :is(#differencesView, .diff-view) .diff-card.is-major .diff-answer-mark { --diff-paint: var(--cx-mark-major, rgba(255, 123, 114, 0.19)); color: #ffb3ab; }
 /* A reviewer's note (share.html "Notes"): doubtful in the
    app's amber, incomplete in the grey above, wrong in the red above. Its
    kind follows the reviewer's name in the line, in the colour of its mark;
    its source closes the note. */
-#differencesView .diff-card.is-split .diff-answer-mark { --diff-paint: var(--cx-mark-split, #fae6c2); }
-.dark-mode #differencesView .diff-card.is-split .diff-answer-mark { --diff-paint: var(--cx-mark-split, rgba(242, 179, 42, 0.17)); }
-#differencesView .share-note.is-wrong .share-note-kind { color: #c0392b; }
-#differencesView .share-note.is-doubtful .share-note-kind { color: #a8650f; }
-.dark-mode #differencesView .share-note.is-wrong .share-note-kind { color: #ff8a7a; }
-.dark-mode #differencesView .share-note.is-doubtful .share-note-kind { color: #e8b968; }
-#differencesView .share-note-source {
+:is(#differencesView, .diff-view) .diff-card.is-split .diff-answer-mark { --diff-paint: var(--cx-mark-split, #fae6c2); }
+.dark-mode :is(#differencesView, .diff-view) .diff-card.is-split .diff-answer-mark { --diff-paint: var(--cx-mark-split, rgba(242, 179, 42, 0.17)); }
+:is(#differencesView, .diff-view) .share-note.is-wrong .share-note-kind { color: #c0392b; }
+:is(#differencesView, .diff-view) .share-note.is-doubtful .share-note-kind { color: #a8650f; }
+.dark-mode :is(#differencesView, .diff-view) .share-note.is-wrong .share-note-kind { color: #ff8a7a; }
+.dark-mode :is(#differencesView, .diff-view) .share-note.is-doubtful .share-note-kind { color: #e8b968; }
+:is(#differencesView, .diff-view) .share-note-source {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1434,14 +1434,14 @@ canvas {
   overflow-wrap: anywhere;
   text-decoration: none;
 }
-#differencesView .share-note-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+:is(#differencesView, .diff-view) .share-note-source:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
 @media (hover: hover) and (pointer: fine) {
-  #differencesView .share-note-source:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+  :is(#differencesView, .diff-view) .share-note-source:hover { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
 }
 /* Under an answer nobody objected to: one quiet line, no box. */
 .share-review-clean { margin: 14px 0 0; color: var(--ink-2); font-size: var(--font-size-sm); }
 
-#differencesView .diff-position {
+:is(#differencesView, .diff-view) .diff-position {
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -1452,14 +1452,14 @@ canvas {
   background: none;
 }
 
-#differencesView .diff-position-stance {
+:is(#differencesView, .diff-view) .diff-position-stance {
   color: var(--ink);
   font-size: var(--font-size-read);
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
 
-#differencesView .diff-position-meta {
+:is(#differencesView, .diff-view) .diff-position-meta {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -1470,16 +1470,16 @@ canvas {
   line-height: var(--line-height-ui);
 }
 
-#differencesView .diff-position-meta > :not(:first-child)::before {
+:is(#differencesView, .diff-view) .diff-position-meta > :not(:first-child)::before {
   content: "\00b7";
   display: inline-block;
   margin-right: 8px;
   color: var(--ink-2);
 }
 
-#differencesView .diff-position-label { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px 14px; }
-#differencesView .diff-position-label.is-group { gap: 2px 6px; }
-#differencesView .diff-position-label.is-group .diff-position-name {
+:is(#differencesView, .diff-view) .diff-position-label { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 2px 14px; }
+:is(#differencesView, .diff-view) .diff-position-label.is-group { gap: 2px 6px; }
+:is(#differencesView, .diff-view) .diff-position-label.is-group .diff-position-name {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1488,8 +1488,8 @@ canvas {
   white-space: nowrap;
 }
 
-#differencesView .diff-position-model { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
-#differencesView .diff-position-icon {
+:is(#differencesView, .diff-view) .diff-position-model { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+:is(#differencesView, .diff-view) .diff-position-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1498,11 +1498,11 @@ canvas {
   flex: 0 0 16px;
   font-weight: var(--font-weight-semibold);
 }
-#differencesView .diff-position-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
-.dark-mode #differencesView .diff-position-icon img.is-mono { filter: invert(1); }
-#differencesView .diff-position-count { margin-left: 2px; }
+:is(#differencesView, .diff-view) .diff-position-icon img { display: block; width: 100%; height: 100%; object-fit: contain; }
+.dark-mode :is(#differencesView, .diff-view) .diff-position-icon img.is-mono { filter: invert(1); }
+:is(#differencesView, .diff-view) .diff-position-count { margin-left: 2px; }
 
-#differencesView .diff-quote-toggle {
+:is(#differencesView, .diff-view) .diff-quote-toggle {
   min-height: 0;
   padding: 0;
   border: 0;
@@ -1513,13 +1513,13 @@ canvas {
   cursor: pointer;
 }
 
-#differencesView .diff-quote-toggle:focus-visible {
+:is(#differencesView, .diff-view) .diff-quote-toggle:focus-visible {
   outline: var(--focus-ring);
   outline-offset: 2px;
   color: var(--ink);
 }
 @media (hover: hover) and (pointer: fine) {
-  #differencesView .diff-quote-toggle:hover {
+  :is(#differencesView, .diff-view) .diff-quote-toggle:hover {
     color: var(--ink);
     text-decoration: underline;
     text-decoration-color: var(--line);
@@ -1527,7 +1527,7 @@ canvas {
   }
 }
 
-#differencesView .diff-position-quote {
+:is(#differencesView, .diff-view) .diff-position-quote {
   margin: 0;
   padding: 0 0 0 10px;
   border-left: 1px solid var(--line);
@@ -1538,9 +1538,9 @@ canvas {
   overflow-wrap: anywhere;
 }
 
-#differencesView .diff-position-quote[hidden] { display: none; }
+:is(#differencesView, .diff-view) .diff-position-quote[hidden] { display: none; }
 
-#differencesView .diff-verify {
+:is(#differencesView, .diff-view) .diff-verify {
   margin: 12px 0 0;
   padding: 0;
   border: 0;
@@ -1556,14 +1556,14 @@ canvas {
 
 /* "Best answer" in the same quiet voice: a word in the secondary grey before
    the model, not a capitalised green pill. */
-#differencesView .share-best-model {
+:is(#differencesView, .diff-view) .share-best-model {
   gap: 8px;
   border-top-color: color-mix(in srgb, var(--sidebar-border) 45%, transparent);
   color: var(--ink);
   font-size: var(--font-size-sm);
 }
 
-#differencesView .share-best-model-label {
+:is(#differencesView, .diff-view) .share-best-model-label {
   padding: 0;
   border: 0;
   border-radius: 0;
@@ -2174,6 +2174,50 @@ canvas {
   .wp-link:hover .wp-link-arrow { color: var(--heading); transform: translate(1px, -1px); }
 }
 
+/* Direktlinks mit dem Vorschaubild ihrer Seite (topic_pictures): eine Reihe
+   gleich breiter Karten, das Bild oben in einem festen Feld, darunter Titel
+   und Domain. Das Feld steht, bevor das Bild lädt; eine Karte ohne Bild zeigt
+   darin das Icon der Seite. Das Feld hat das Format, in dem Seiten ihr
+   Vorschaubild anlegen (1200 x 630): solche Bilder tragen Schrift bis an den
+   Rand, ein 16:9-Feld schnitte sie an. */
+.wp-links-list.has-pictures {
+  grid-template-columns: none;
+  grid-auto-columns: minmax(0, 1fr);
+  grid-auto-flow: column;
+}
+.wp-links-list.has-pictures > li:last-child:nth-child(odd) { grid-column: auto; }
+.wp-links-list.has-pictures .wp-link {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto 1fr auto;
+  align-items: start;
+  gap: 0 6px;
+  overflow: hidden;
+  padding: 0 0 12px;
+}
+/* The picture covers the top of the card, so the hairline of the plain tile
+   would only frame the text: here one tone step is the whole state. */
+.wp-links-list.has-pictures .wp-link:focus-visible { box-shadow: none; }
+@media (hover: hover) and (pointer: fine) {
+  .wp-links-list.has-pictures .wp-link:hover { box-shadow: none; }
+}
+.wp-link-picture {
+  display: grid;
+  grid-column: 1 / -1;
+  place-items: center;
+  aspect-ratio: 40 / 21;
+  margin-bottom: 10px;
+  overflow: hidden;
+}
+.wp-link-picture > img:not(.site-icon) { display: block; width: 100%; height: 100%; object-fit: cover; }
+.wp-link-picture .wp-link-icon { --site-icon-size: 28px; }
+.dark-mode .wp-link-picture > img:not(.site-icon) { filter: brightness(0.9); }
+.wp-links-list.has-pictures .wp-link-body { display: contents; }
+.wp-links-list.has-pictures .wp-link-title { grid-column: 1 / -1; grid-row: 2; margin-bottom: 6px; padding: 0 12px; }
+.wp-links-list.has-pictures .wp-link > .wp-link-icon { --site-icon-size: 16px; grid-column: 1; grid-row: 3; align-self: center; margin-left: 12px; }
+.wp-links-list.has-pictures .wp-link-domain { grid-column: 2; grid-row: 3; align-self: center; padding-right: 12px; }
+.wp-links-list.has-pictures .wp-link-arrow { display: none; }
+
 /* Namen der Quellen im Text (source_links.site_mentions): das Wort bleibt,
    davor das Favicon, darunter eine leise Linie -- sichtbar als Weg zur
    Seite, ohne den Lesefluss zu brechen. */
@@ -2211,6 +2255,28 @@ canvas {
 .wp-follow { margin-top: 36px; padding: 18px 20px; border: 1px solid var(--border); border-radius: var(--radius-lg); }
 .wp-follow h2 { margin: 0; color: var(--heading); font-size: var(--font-size-base); font-weight: var(--font-weight-bold); }
 .wp-follow > p:first-of-type { margin: 4px 0 0; color: var(--muted); font-size: var(--font-size-sm); }
+
+/* Offene Widersprüche unter der Antwort (check_page.html, contradictions):
+   dieselben Karten wie in der App und auf Share-Seiten (.diff-view), offen
+   statt gefaltet. Die strittige Stelle trägt im Antworttext dieselbe Marke
+   wie der Kopf ihrer Karte und führt per Klick dorthin (check-page.js). */
+.wp-split { margin-top: 36px; }
+.wp-split .diff-cards { max-width: 720px; }
+.wp-mark {
+  --diff-paint: var(--cx-mark-major, #f6dcdd);
+  padding: 0.1em 0;
+  border-radius: 3px;
+  background-color: var(--diff-paint);
+  box-shadow: -0.09em 0 0 var(--diff-paint), 0.09em 0 0 var(--diff-paint);
+  color: inherit;
+  cursor: pointer;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.dark-mode .wp-mark { --diff-paint: var(--cx-mark-major, rgba(255, 123, 114, 0.19)); }
+.diff-card.is-arrived .diff-card-summary { animation: wp-arrived var(--dur-beat) var(--ease-out); }
+@keyframes wp-arrived { from { background: var(--raise); } to { background: transparent; } }
+@media (prefers-reduced-motion: reduce) { .diff-card.is-arrived .diff-card-summary { animation: none; } }
 
 /* Zeitleiste: Punkte an einer Linie. Nur Bewegungen sind farbig. */
 .wp-history { margin-top: 40px; }
@@ -2492,7 +2558,7 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 
 /* ==========================================================================
    Abbildungen aus der Antwort (app/services/topic_figures.py):
-   Zeitleiste, Status-Tafel, Zahlen. Gezeichnet von consens.io
+   Zeitleiste, Lineup, Zahlen. Gezeichnet von consens.io
    auf eigener Fläche mit Kopfzeile, damit sie als Abbildung erkennbar ist;
    Semantikfarbe nur auf dem Zeichen, Streit gestrichelt in Bernstein.
    ========================================================================== */
@@ -2526,35 +2592,66 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 .af-cap { margin-top: 14px; padding-top: 8px; border-top: 1px solid var(--line-soft, var(--border)); color: var(--muted); font-size: var(--font-size-xs); }
 .af-label { color: var(--text); }
 .af-note { display: block; margin-top: 2px; color: var(--muted); font-size: var(--font-size-xs); }
-.af .is-disputed > .af-label::after,
+.af-line.is-disputed .af-label::after,
 .af-row.is-disputed .af-value::after { content: " · disputed"; color: var(--partial); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); }
 
-/* Die Listen sitzen im Antworttext (.share-md ol/ul) und brauchen deshalb
-   eine Stufe mehr Spezifität, sonst erben sie dessen Einzug. */
-/* Zeitleiste: Punkte maßstabsgetreu auf einer Achse, darunter die Ereignisse. */
-.af-track { position: relative; height: 34px; margin: 0 0 8px; }
-.af-axis { position: absolute; left: 0; right: 0; top: 16px; height: 1px; background: var(--border); }
-.af-span { position: absolute; top: 13px; height: 7px; border-radius: 4px; background: color-mix(in srgb, var(--heading) 22%, transparent); }
-.af-span.is-disputed { background: none; border: 1.5px dashed var(--partial); }
-.af-gap { position: absolute; left: 50%; top: -15px; transform: translateX(-50%); color: var(--muted); font-size: var(--font-size-xs); white-space: nowrap; }
-.af-dot { position: absolute; top: 10px; width: 13px; height: 13px; border-radius: 50%; background: var(--heading); border: 3px solid var(--af-surface); transform: translateX(-50%); }
-.af-dot.is-disputed { background: var(--partial); }
-.af .af-events { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 160px), 1fr)); gap: 12px 22px; }
-.af-event { min-width: 0; }
-.af .af-events.is-ends { grid-template-columns: repeat(var(--af-count), minmax(0, 1fr)); }
-.af .af-events.is-ends .af-event:last-child:not(:first-child) { text-align: right; }
-.af-event time { display: block; color: var(--heading); font-weight: var(--font-weight-semibold); font-variant-numeric: tabular-nums; }
-
-/* Status-Tafel: eine Spalte je Stand, Form + Farbe im Kopf. */
-.af-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px 26px; }
-.af-column { min-width: 0; }
-.af-column-head { display: flex; align-items: center; gap: 8px; margin: 0 0 8px; color: var(--heading); font-weight: var(--font-weight-semibold); }
-.af .af-column ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.af-column li { padding-top: 8px; border-top: 1px solid var(--line-soft, var(--border)); }
+/* Zeilen auf einem Raster (Zeitleiste und Lineup): Stand, Name, Platz auf
+   der gemeinsamen Zeitachse, Datum. Das Raster gehört dem Diagramm, jede
+   Zeile übernimmt es (subgrid): Stand und Datum aller Zeilen stehen in einer
+   Flucht, ohne feste Breiten. Keine Listen-Elemente, damit der Einzug des
+   Antworttexts (.share-md ol/ul) nicht hineinreicht. */
+.af-chart { display: grid; column-gap: 18px; }
+.af-chart.is-snpw { grid-template-columns: auto minmax(0, 1fr) minmax(150px, 1.3fr) auto; }
+.af-chart.is-npw { grid-template-columns: minmax(0, 1fr) minmax(170px, 1.3fr) auto; }
+.af-chart.is-snw { grid-template-columns: auto minmax(0, 1fr) auto; }
+.af-chart.is-sn { grid-template-columns: auto minmax(0, 1fr); }
+.af-chart.is-nw { grid-template-columns: minmax(0, 1fr) auto; }
+.af-line,
+.af-scale,
+.af-foot { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; }
+.af-line { align-items: center; padding: 9px 0; border-top: 1px solid var(--line-soft, var(--border)); }
+.af-line .af-label { color: var(--heading); font-weight: var(--font-weight-semibold); }
+.af-name { min-width: 0; }
+.af-state { display: inline-flex; align-items: center; gap: 7px; color: var(--heading); white-space: nowrap; }
+.af-when { color: var(--heading); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .af-glyph { flex: none; width: 16px; height: 16px; }
+.af-glyph.is-available,
 .af-glyph.is-confirmed { color: var(--agree); }
+.af-glyph.is-limited,
 .af-glyph.is-claimed { color: var(--partial); }
+.af-glyph.is-announced { color: var(--heading); }
 .af-glyph.is-not-confirmed { color: var(--muted); }
+
+/* Die Achse liegt als eine Ebene über allen Zeilen in der Spalte der
+   Zeitachse: Hilfslinien an runden Daten, in Hausgrün der Tag des Checks. */
+.af-chart.is-snpw > .af-grid,
+.af-chart.is-snpw > .af-scale > .af-plot,
+.af-chart.is-snpw > .af-foot > .af-plot { grid-column: 3; }
+.af-chart.is-npw > .af-grid,
+.af-chart.is-npw > .af-scale > .af-plot,
+.af-chart.is-npw > .af-foot > .af-plot { grid-column: 2; }
+.af-grid { grid-row: 1 / span var(--af-rows); position: relative; pointer-events: none; }
+.af-grid i { position: absolute; top: 20px; bottom: 0; width: 1px; background: var(--line, var(--border)); }
+.af-chart:has(> .af-foot) .af-grid i:not(.af-asof) { bottom: 20px; }
+.af-grid .af-asof { width: 1.5px; margin-left: -0.25px; background: var(--agree); }
+.af-plot { position: relative; align-self: stretch; min-height: 20px; }
+.af-scale { grid-row: 1; height: 20px; }
+.af-foot { height: 20px; }
+.af-tick,
+.af-asof-label { position: absolute; color: var(--muted); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
+.af-tick { top: 0; transform: translateX(-50%); }
+.af-tick.is-start { transform: none; }
+.af-tick.is-end { transform: translateX(-100%); }
+/* Neben der Linie, nie auf ihr: links davon, am linken Rand rechts. */
+.af-asof-label { bottom: 0; transform: translateX(calc(-100% - 6px)); }
+.af-asof-label.is-start { transform: translateX(6px); }
+/* Der Hof in Flächenfarbe hebt die Marke von den Hilfslinien ab. */
+.af-mark,
+.af-range { position: absolute; top: 50%; background: var(--heading); box-shadow: 0 0 0 3px var(--af-surface); }
+.af-mark { width: 11px; height: 11px; margin: -5.5px 0 0 -5.5px; border-radius: 50%; }
+.af-range { height: 9px; min-width: 9px; margin-top: -4.5px; border-radius: 5px; }
+.af-line.is-disputed .af-mark { background: var(--partial); }
+.af-line.is-disputed .af-range { background: var(--af-surface); border: 1.5px dashed var(--partial); box-shadow: none; }
 
 /* Zahlen: Balken nur, wenn alle dieselbe Einheit haben. */
 .af-unit { margin: -8px 0 12px; color: var(--muted); font-size: var(--font-size-xs); }
@@ -2576,8 +2673,17 @@ details.wp-disclosure[open]:not(.is-closing) .wp-disclosure-hide { display: inli
 
 @media (max-width: 700px) {
   .af { padding: 14px 16px 12px; }
-  .af .af-events.is-ends { grid-template-columns: minmax(0, 1fr); }
-  .af .af-events.is-ends .af-event:last-child:not(:first-child) { text-align: left; }
+  /* Schmal: die Zeitachse fällt weg, jede Zeile nennt ihr Datum rechts. */
+  .af-chart { display: block; }
+  .af-grid,
+  .af-scale,
+  .af-foot,
+  .af-line .af-plot { display: none; }
+  .af-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 12px; }
+  .af-name { flex: 1 1 0; }
+  .af-when { flex: none; }
+  .af-state { order: 3; flex: 1 1 100%; color: var(--text); font-size: var(--font-size-xs); }
+  .af-state .af-glyph { width: 13px; height: 13px; align-self: center; }
   .af-rows.has-bars .af-row { grid-template-columns: minmax(0, 1fr) auto; }
   .af-rows.has-bars .af-bar { grid-column: 1 / -1; grid-row: 2; }
 }

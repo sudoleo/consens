@@ -34,11 +34,13 @@ from app.core.security import (
 )
 from app.services import (
     check_page, drift_signal, favicons, mailer, og_image, source_links,
-    topic_benchmarks, topic_figures, topic_images, topic_runner, topics,
+    topic_benchmarks, topic_figures, topic_images, topic_pictures, topic_runner, topics,
 )
 from app.services.history_view import PAGE_CHART_WIDTH, build_history_view, day_label
+from app.services import share_snapshots
 from app.services.public_markdown import (
     lead_sentences,
+    render_inline_markdown,
     render_public_markdown,
     strip_chat_framing,
 )
@@ -499,28 +501,44 @@ async def topic_page(
     preferred_domains = (topic.get("source_rules") or {}).get("preferred_domains") or []
     answer_md = strip_chat_framing(selected["consensus_md"])
     sources, source_list, hidden = _sources_view(selected["evidence"], preferred_domains)
-    # Figures drawn from this answer sit under the heading they belong to.
-    figure_md, figures = topic_figures.place(answer_md, selected["figures"])
-    answered = selected_raw.get("observed_at")
-    answer_html = topic_figures.fill(
-        render_public_markdown(
-            figure_md, sources,
-            excluded_sources=list(selected_raw.get("excluded_evidence") or []) + hidden,
-            site_links=source_links.site_mentions(source_list, answer_md),
-        ),
-        figures,
-        answered_on=(
-            f"{answered:%b} {answered.day}, {answered.year}" if isinstance(answered, datetime) else ""
-        ),
-    )
-    # Third-party measurements close the answer; they are not part of it.
-    if selected["benchmark"]:
-        answer_html += topic_benchmarks.figure_html(selected["benchmark"])
     differences_data = selected_raw.get("differences_data")
     differences_data = differences_data if isinstance(differences_data, dict) else {}
     differences = [
         item for item in differences_data.get("differences") or [] if isinstance(item, dict)
     ]
+    # A Topic promises to show where the models disagree: the critical
+    # contradictions stand open under the answer as the app's cards, and the
+    # passage each is about is marked in the text. The rest stays folded.
+    open_contradictions = check_page.open_contradictions(check_page.difference_cards(
+        differences, share_snapshots.PROVIDERS_BY_LABEL, render_inline_markdown,
+    ))
+    marked_md = check_page.mark_passages(
+        answer_md, differences, [card["index"] for card in open_contradictions],
+    )
+    # Figures drawn from this answer sit under the heading they belong to.
+    figure_md, figures = topic_figures.place(marked_md, selected["figures"])
+    answered = selected_raw.get("observed_at")
+    answer_html = topic_figures.fill(
+        check_page.fill_marks(render_public_markdown(
+            figure_md, sources,
+            excluded_sources=list(selected_raw.get("excluded_evidence") or []) + hidden,
+            site_links=source_links.site_mentions(source_list, answer_md),
+        )),
+        figures,
+        answered_on=(
+            f"{answered:%b} {answered.day}, {answered.year}" if isinstance(answered, datetime) else ""
+        ),
+        as_of=answered.date() if isinstance(answered, datetime) else None,
+    )
+    # Third-party measurements close the answer; they are not part of it.
+    if selected["benchmark"]:
+        answer_html += topic_benchmarks.figure_html(selected["benchmark"])
+
+    key_links = source_links.key_links(source_list, answer_md)
+    if not version:
+        # The stored pictures belong to the answer that stands; an older
+        # version keeps its plain cards.
+        key_links = topic_pictures.with_pictures(topic["id"], topic, key_links)
 
     canonical_url = f"{SITE_URL}/topics/{public_topic['slug']}"
     page_url = canonical_url + (f"?version={selected['id']}" if version else "")
@@ -580,7 +598,7 @@ async def topic_page(
         "page_state": page_state,
         "state_detail": state_detail,
         "state_more_href": state_more_href,
-        "key_links": source_links.key_links(source_list, answer_md),
+        "key_links": key_links,
         "answer_html": answer_html,
         # Topics are written in English, also on a German page (docs/i18n.md).
         "content_lang": "en",
@@ -598,6 +616,7 @@ async def topic_page(
         ),
         "consulted_models": _consulted_models(selected["models"]),
         "differences": differences,
+        "open_contradictions": open_contradictions,
         "is_current": current,
         "canonical_url": canonical_url,
         "page_url": page_url,
@@ -681,6 +700,32 @@ def topic_image(request: Request, topic_id: str, token: str):
         content=content,
         media_type=content_type,
         headers={"Cache-Control": "public, max-age=2592000, immutable"},
+    )
+
+
+@router.get("/api/topics/{topic_id}/picture/{token}")
+@limiter.limit("120/minute")
+def topic_picture(request: Request, topic_id: str, token: str):
+    """A picture on a Direct-links card (topic_pictures), served by consens.io.
+
+    The token is the hash of the bytes, so the address never shows anything
+    else and may be cached like the Topic's own picture.
+    """
+    try:
+        found = topic_pictures.load_picture(topic_id, token)
+    except Exception as exc:
+        logging.warning("topic_picture failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=503, detail="Image unavailable")
+    if not found:
+        raise HTTPException(status_code=404, detail="Not found")
+    content, content_type = found
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={
+            "Cache-Control": "public, max-age=2592000, immutable",
+            "X-Robots-Tag": "noindex",
+        },
     )
 
 

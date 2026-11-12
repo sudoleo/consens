@@ -69,4 +69,22 @@ describe("check-page.js after the Apple audit", () => {
     window.dispatchEvent(new window.HashChangeEvent("hashchange"));
     expect(document.getElementById("watch-run-check-3").classList.contains("is-flash")).toBe(true);
   });
+  it("leads from a marked passage to the contradiction it is about", async () => {
+    const { document } = await boot(
+      `<div class="share-md"><p><mark class="wp-mark" data-diff="2">A <a href="https://x.example/">source</a> says so.</mark></p></div>
+       <details class="diff-card" id="topicDiff2"><summary class="diff-card-summary">Claim</summary><div>Sides</div></details>`,
+    );
+    const card = document.getElementById("topicDiff2");
+    let scrolled = null;
+    card.scrollIntoView = (options) => { scrolled = options; };
+    // A link inside the passage keeps its own target.
+    document.querySelector(".wp-mark a").click();
+    expect(card.open).toBe(false);
+    document.querySelector(".wp-mark").click();
+    expect(card.open).toBe(true);
+    expect(card.classList.contains("is-arrived")).toBe(true);
+    // Reduced motion (matchMedia above): no smooth scrolling.
+    expect(scrolled).toEqual({ block: "center", behavior: "auto" });
+    expect(document.activeElement).toBe(card.querySelector("summary"));
+  });
 });

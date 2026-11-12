@@ -50,6 +50,8 @@
 
     {{ check.answer(topic.lead_question or ("The answer then" if page_state.back else "Current answer"), answer_html, sources, heading_class="wp-answer-question") }}
 
+    {{ check.contradictions(open_contradictions) }}
+
     {% if topic.status == "active" %}
     <section class="wp-follow" aria-labelledby="topicFollowHeading">
       <h2 id="topicFollowHeading">Get an email when this answer changes</h2>

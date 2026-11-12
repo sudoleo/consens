@@ -400,3 +400,98 @@ def review_cards(review_notes, providers, render_inline):
                       "answer_html": render_inline(_SOURCE_TAGS.sub("", note["sentence"]).strip()), "notes": items})
     return {"reviewers": [model_view(row["provider"], models) for row in review_notes["reviewers"]],
             "cards": cards, "counts": counts, "withheld": review_notes.get("withheld", 0)}
+
+
+OPEN_CONTRADICTIONS = 3
+
+
+def open_contradictions(cards: dict, limit: int = OPEN_CONTRADICTIONS) -> list[dict]:
+    """The cards a page states openly instead of folding them away: critical
+    contradictions with two sides. There a reader learns how firm the answer
+    is; smaller differences stay in "How the models compared".
+    ``cards`` as difference_cards returns them."""
+    every = list(cards.get("cards") or []) + list(cards.get("smaller") or [])
+    return [card for card in every if card["rank"] == 0 and card["versus"]][:limit]
+
+
+# Bracketed, so a token next to "**" reads as punctuation and the emphasis
+# around the passage still opens and closes.
+_MARK_OPEN, _MARK_CLOSE = "⟦WPMARK{}OPEN⟧", "⟦WPMARK{}CLOSE⟧"
+_MARK_TOKEN = re.compile(r"⟦WPMARK\d+(?:OPEN|CLOSE)⟧")
+# A passage that opens a list item or heading is marked after that marker.
+_BLOCK_LEAD = re.compile(r"\s*(?:[-*+]|\d+[.)]|#{1,6}|>)\s+")
+_HTML_TAG = re.compile(r"<(/?)([a-zA-Z][a-zA-Z0-9]*)[^>]*>")
+_MARKABLE_TAGS = frozenset({"strong", "em", "b", "i", "a", "code", "span", "sup", "sub", "s", "del", "u"})
+_VOID_TAGS = frozenset({"br", "img", "wbr"})
+
+
+def _occurrence(text: str, needle: str, number: int) -> int:
+    position = -1
+    for _ in range(max(0, number) + 1):
+        position = text.find(needle, position + 1)
+        if position < 0:
+            break
+    return position if position >= 0 else text.find(needle)
+
+
+def mark_passages(answer_md: str, differences, indexes) -> str:
+    """Token pairs around the passage each of these differences is about
+    (its ``consensus_anchor``), for fill_marks after rendering. Markdown in,
+    Markdown out: the passage itself is untouched."""
+    text = str(answer_md or "")
+    spans = []
+    for index in indexes:
+        diff = differences[index] if 0 <= index < len(differences) else {}
+        anchor = str(diff.get("consensus_anchor") or "").strip()
+        if not anchor or "\n" in anchor:
+            continue
+        try:
+            occurrence = int(diff.get("anchor_occurrence") or 0)
+        except (TypeError, ValueError):
+            occurrence = 0
+        start = _occurrence(text, anchor, occurrence)
+        if start < 0:
+            continue
+        end = start + len(anchor)
+        lead = _BLOCK_LEAD.match(anchor)
+        start += lead.end() if lead else 0
+        if end <= start or any(a < end and start < b for a, b, _index in spans):
+            continue
+        spans.append((start, end, index))
+    for start, end, index in sorted(spans, reverse=True):
+        text = (text[:start] + _MARK_OPEN.format(index) + text[start:end]
+                + _MARK_CLOSE.format(index) + text[end:])
+    return text
+
+
+def _inline_and_balanced(html: str) -> bool:
+    """Whether this stretch of rendered HTML can sit inside one <mark>."""
+    stack = []
+    for closing, name, in _HTML_TAG.findall(html):
+        name = name.lower()
+        if name in _VOID_TAGS:
+            continue
+        if name not in _MARKABLE_TAGS:
+            return False
+        if not closing:
+            stack.append(name)
+        elif not stack or stack.pop() != name:
+            return False
+    return not stack
+
+
+def fill_marks(html: str) -> str:
+    """Rendered tokens become a mark that points at its card; a pair the
+    renderer split across elements is dropped, the text stays as it was."""
+    html = str(html or "")
+    for opened in re.finditer(r"⟦WPMARK(\d+)OPEN⟧", html):
+        index = opened.group(1)
+        open_token, close_token = _MARK_OPEN.format(index), _MARK_CLOSE.format(index)
+        start, end = html.find(open_token), html.find(close_token)
+        if start < 0 or end < start:
+            continue
+        inner = html[start + len(open_token):end]
+        if _inline_and_balanced(inner):
+            html = (html[:start] + f'<mark class="wp-mark" data-diff="{index}">' + inner + "</mark>"
+                    + html[end + len(close_token):])
+    return _MARK_TOKEN.sub("", html)

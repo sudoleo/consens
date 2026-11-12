@@ -12,7 +12,7 @@ from app.core.background_tasks import task_succeeded
 from app.core.observability import correlation_scope, record_metric, safe_exception
 from app.services import (
     drift_signal, mailer, notification_delivery, notification_outbox, topic_benchmarks,
-    topic_figures, topic_images, topic_pipeline, topics,
+    topic_figures, topic_images, topic_pictures, topic_pipeline, topics,
 )
 from app.services.public_markdown import strip_chat_framing
 from app.services.llm.mock_llm import mock_llm_enabled
@@ -266,6 +266,12 @@ def execute_claimed_topic(claimed: dict, *, actor_uid: str, db=None,
         topic_images.schedule_after_run(claimed["id"], claimed, evidence)
     except Exception as exc:
         logging.warning("Topic image scheduling failed category=%s", safe_exception(exc))
+    try:
+        # Pictures for the Direct-links cards, from the pages the standing
+        # answer cites (topic_pictures.py); same worker, same rule.
+        topic_pictures.schedule_after_run(claimed["id"])
+    except Exception as exc:
+        logging.warning("Topic picture scheduling failed category=%s", safe_exception(exc))
     return run
 
 

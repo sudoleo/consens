@@ -17,23 +17,23 @@ from test_topics_feature import NOW, FakeFirestore, run_payload, topic_payload
 DAY = date(2026, 10, 31)
 
 
-def row(name, creator, score, creator_id=None):
+def row(name, creator, score, creator_id=None, released=None):
     return {
-        "id": name.lower().replace(" ", "-"), "name": name,
+        "id": name.lower().replace(" ", "-"), "name": name, "release_date": released,
         "model_creator": {"id": creator_id or creator.lower(), "name": creator},
         "evaluations": {"artificial_analysis_intelligence_index": score},
     }
 
 
 ROWS = [
-    row("Gemini 4 Carbon (High)", "Google", 59.0),
+    row("Gemini 4 Carbon (High)", "Google", 59.0, released="2026-10-28"),
     row("Gemini 4 Carbon (Low)", "Google", 54.2),
     row("Gemini 4 Argon", "Google", 55.4),
     row("Gemini 4.5 Pro", "Google", 70.0),  # another family, same lab
     row("Gemini 3.5 Flash", "Google", 48.0),
     row("GPT-6.1 (xhigh)", "OpenAI", 57.3),
     row("GPT-6.1 mini", "OpenAI", 50.0),
-    row("Claude Opus 5.5", "Anthropic", 56.8),
+    row("Claude Opus 5.5", "Anthropic", 56.8, released="not a date"),
     row("Grok 4.7", "xAI", 52.1),
     row("DeepSeek V4.1", "DeepSeek", 49.9),
     row("Kimi K3", "Moonshot", 48.7),
@@ -59,7 +59,12 @@ def test_the_family_stands_next_to_the_best_model_of_each_other_lab():
     # One bar per model (its best setting), one per other lab, none for the
     # own lab's other families.
     assert snapshot["fetched_on"] == "2026-10-31"
-    assert snapshot["items"][0] == {"name": "Gemini 4 Carbon (High)", "creator": "Google", "score": 59.0, "own": True}
+    assert snapshot["items"][0] == {
+        "name": "Gemini 4 Carbon (High)", "creator": "Google", "score": 59.0, "own": True,
+        "released": "2026-10-28",
+    }
+    # A release date the API leaves out or garbles is no date.
+    assert [item["released"] for item in snapshot["items"][1:3]] == ["", ""]
 
 
 def test_no_chart_without_a_benchmarked_model_of_the_family():
@@ -102,9 +107,14 @@ def test_the_api_is_read_with_the_key_and_cached(monkeypatch):
     monkeypatch.delenv(topic_benchmarks.API_KEY_ENV, raising=False)
     calls = []
 
-    def get(url, headers, timeout):
-        calls.append((url, headers["x-api-key"]))
-        return Response(200, {"status": 200, "data": ROWS[:2] + ["junk"]})
+    def get(url, headers, params, timeout):
+        calls.append((url, headers["x-api-key"], params["page"]))
+        # The list comes in pages; "has_more" says whether to ask again.
+        first = params["page"] == 1
+        return Response(200, {
+            "tier": "free", "data": (ROWS[:2] + ["junk"]) if first else ROWS[2:3],
+            "pagination": {"page": params["page"], "has_more": first},
+        })
 
     try:
         topic_benchmarks.fetch_models(get=get)
@@ -112,9 +122,10 @@ def test_the_api_is_read_with_the_key_and_cached(monkeypatch):
     except topic_benchmarks.BenchmarkUnavailable:
         pass
     monkeypatch.setenv(topic_benchmarks.API_KEY_ENV, "secret")
-    assert len(topic_benchmarks.fetch_models(get=get)) == 2
-    assert len(topic_benchmarks.fetch_models(get=get)) == 2
-    assert calls == [(topic_benchmarks.API_URL, "secret")]
+    assert len(topic_benchmarks.fetch_models(get=get)) == 3
+    assert len(topic_benchmarks.fetch_models(get=get)) == 3
+    assert calls == [(topic_benchmarks.API_URL, "secret", 1), (topic_benchmarks.API_URL, "secret", 2)]
+    assert topic_benchmarks.API_URL.endswith("/api/v2/language/models/free")
 
     monkeypatch.setattr(topic_benchmarks, "_CACHE", {"at": 0.0, "rows": None})
     try:
@@ -148,6 +159,9 @@ def test_the_chart_is_escaped_dated_and_attributed():
     assert "as of Oct 31, 2026" in html
     assert html.count('class="af-row is-own"') == 3
     assert ">59</span>" in html and ">57.3</span>" in html
+    # Who made it and when it came out, as far as the data says.
+    assert '<span class="af-note">Google · released Oct 28, 2026</span>' in html
+    assert '<span class="af-note">Anthropic</span>' in html
     # The top bar fills the row; the others are drawn to scale.
     assert 'style="width:100.0%"' in html
 

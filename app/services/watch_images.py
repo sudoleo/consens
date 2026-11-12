@@ -491,6 +491,19 @@ def page_article(html: str, base_url: str):
     return _parse(html, base_url)[1]
 
 
+def page_preview(html: str, base_url: str) -> list[str]:
+    """Bild-URLs, die die Seite selbst fürs Teilen festlegt: ``og:image``,
+    dann die ihres Artikels im JSON-LD. Anders als ``page_article`` auch für
+    Seiten, die sich nicht als Artikel ausweisen (eine Ankündigung, eine
+    Modellkarte) -- wer sie aufruft, hat die Seite schon als Quelle gewählt."""
+    soup = BeautifulSoup(html, "html.parser")
+    images = _image_urls(
+        [_meta(soup, "og:image:secure_url", "og:image", "twitter:image")], base_url,
+    )
+    article = _json_ld_article(soup, base_url)
+    return list(dict.fromkeys(images + (article[1] if article else [])))
+
+
 def _looks_like_logo(url: str, *, article: bool = False) -> bool:
     path = urlsplit(url).path.lower()
     if any(marker in path for marker in ("no-image", "no_image", "default-image", "default_image")):
@@ -522,20 +535,25 @@ _ORIENTATION = {
 }
 
 
-def make_thumbnail(content: bytes):
+def make_thumbnail(content: bytes, *, box=None, aspect=(1 / 3, 3)):
     """Kleines WebP (Kante <= THUMB_SIDE) oder None, wenn es kein Foto ist.
 
     Nur vier Decoder; JPEG wird per draft() gleich verkleinert dekodiert,
     andere Formate nur bis MAX_PIXELS_DECODED -- ein 6000er-Original darf den
     einen Prod-Prozess nicht um Hunderte MB aufblähen.
+
+    ``box`` (Breite, Höhe) und ``aspect`` (kleinstes, größtes Seitenverhältnis)
+    geben dieselbe Prüfung für ein anderes Format her (topic_pictures: breite
+    Kartenbilder).
     """
+    box = tuple(box) if box else (THUMB_SIDE, THUMB_SIDE)
     try:
         with Image.open(io.BytesIO(content), formats=_IMAGE_FORMATS) as source:
             width, height = source.size
             limit = MAX_PIXELS if source.format == "JPEG" else MAX_PIXELS_DECODED
             if min(width, height) < MIN_SIDE or width * height > limit:
                 return None
-            if not (1 / 3 <= width / height <= 3):
+            if not (aspect[0] <= width / height <= aspect[1]):
                 return None
             orientation = None
             if source.format == "JPEG":
@@ -545,8 +563,7 @@ def make_thumbnail(content: bytes):
                     orientation = source.getexif().get(0x0112)
                 except Exception:
                     orientation = None
-                source.draft("RGB", (THUMB_SIDE * 2, THUMB_SIDE * 2))
-            box = (THUMB_SIDE, THUMB_SIDE)
+                source.draft("RGB", (box[0] * 2, box[1] * 2))
             if source.mode in ("RGB", "RGBA"):
                 # Erst verkleinern, dann kopieren: nur ein großer Puffer lebt.
                 source.thumbnail(box, Image.Resampling.LANCZOS)

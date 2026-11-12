@@ -3243,8 +3243,10 @@ def pick_watch_picture_words(task: str, goal: str, api_keys: dict, differences_m
     raise RuntimeError(f"Watch picture words failed: {last_error}")
 
 
-ANSWER_FIGURE_KINDS = ("timeline", "status", "numbers")
-ANSWER_FIGURE_STATUSES = ("confirmed", "claimed", "not_confirmed", "none")
+ANSWER_FIGURE_KINDS = ("lineup", "timeline", "numbers")
+ANSWER_FIGURE_STATUSES = (
+    "available", "limited", "announced", "confirmed", "claimed", "not_confirmed", "none",
+)
 _ANSWER_FIGURE_ITEM = {
     "type": "object",
     "properties": {
@@ -3299,13 +3301,26 @@ def query_answer_figures(question: str, answer: str, api_keys: dict,
         "there, and never add a fact, an estimate or a source of your own.\n"
         "Templates (pick a template only where it really helps; return "
         '{"figures": []} when none does):\n'
-        "- timeline: dated events in order (announcements, releases, rollouts). "
-        "Each item: label = the event in a few words, date = the date as written. "
-        "Only items with a date.\n"
-        "- status: things and how settled they are (models or variants that are "
-        "confirmed or not, problems solved or only claimed). Each item: label = "
-        "the thing's name as written, status = confirmed | claimed | "
-        "not_confirmed.\n"
+        "- lineup: the members of one family or list, one row each (the models "
+        "or versions of a product line, the people or groups behind forecasts, "
+        "the cases of one kind). Each item: label = the member's name as "
+        "written; status = where it stands: available (released, people can "
+        "use it) | limited (released to a restricted group only) | announced "
+        "(officially announced or named, not usable yet) | confirmed (a result "
+        "or fact that is verified) | claimed (asserted, not verified or not "
+        "settled) | not_confirmed (rumored, expected or denied, nothing "
+        "official) | none (no such standing, e.g. a forecast); date = when "
+        "that standing came about or is forecast for (released, announced, "
+        "solved, expected by), as written, or \"\" when the answer gives no "
+        "such date; a date about something else (a paper it builds on, a "
+        "founding) is not its date. One lineup holds every member the answer "
+        "names, whatever its standing and with or without a date: never split "
+        "one family into two figures by standing or by heading.\n"
+        "- timeline: dated events in order (the steps of one rollout, "
+        "announcements). Each item: label = the event in a few words, date = "
+        "the date as written. Only items with a date; the day the answer "
+        "itself was written is not an event. Not for what a lineup already "
+        "shows.\n"
         "- numbers: comparable numbers in the SAME unit (prices, scores). Each "
         "item: label = what the number is, value = the number as written "
         "(e.g. \"$2\" or \"68%\"), unit = the unit in words (e.g. \"per 1M "

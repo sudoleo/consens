@@ -1238,6 +1238,16 @@ Server.
       je eine Zeile mit Bild (falls vorhanden), Titel, Antwortanfang und
       „Changed on …“/„No change …“. Navigation, Footer, Light/Dark, Focus States
       und Mobile-Layout bleiben ohne horizontalen Overflow.
+- [ ] Bilder, Abbildungen und Widersprüche auf `/topics/{slug}`: Tragen
+      mindestens zwei Direktlinks ein Quellenbild, sind alle Karten Bildkarten
+      gleicher Höhe (ohne Bild: Seiten-Icon auf ruhiger Kachel), nichts springt
+      beim Laden. Zeitleiste und Lineup zeichnen Zeilen auf einer gemeinsamen
+      Zeitachse mit runden Daten und der Linie „checked …“; unter 700 px steht
+      das Datum rechts in der Zeile, ohne Achse und ohne horizontalen Overflow.
+      Gibt es einen kritischen Widerspruch, steht „Where the models disagree“
+      offen unter den Quellen, die Stelle ist im Text markiert, ein Klick auf
+      die Marke zeigt die Karte (Link in der Marke behält sein Ziel), „Show
+      quote“ klappt das Zitat auf. Light/Dark prüfen.
 - [ ] `/topics/{slug}` sieht aus wie eine Watch-Seite, mit ruhigerem Kopf:
       Kicker nur Kategorie (eine Zeile), Titel, Bild rechts (Handy: neben dem
       Kicker), eine einzeilige Zustandszeile („Changed on …“ springt in den

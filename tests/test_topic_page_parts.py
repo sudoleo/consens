@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.routers import topics as topics_router
+from app.services import check_page
+from app.services.public_markdown import render_public_markdown
 from app.core.rate_limit import limiter
 from app.services import (
     source_redirects, topic_images, topic_pipeline, topics, watch_images, watch_symbols,
@@ -239,3 +241,112 @@ def test_an_editor_can_set_a_real_picture_over_a_dismissed_search(monkeypatch):
     page = client().get("/topics/gpt-6")
     assert f'/api/topics/{topic["id"]}/image/{state["token"]}' in page.text
     assert 'href="https://www.nature.com/articles/d41586-025-02343-x"' in page.text
+
+
+SPLIT_ANSWER = """Grok 5 is not out yet.
+
+## What xAI has announced
+
+- **Announced by Elon Musk on 2026-09-14** on X.
+- xAI said that **“Grok 5 is currently in training.”**
+- Status: unreleased.
+"""
+
+
+def contradiction(claim, anchor, other, severity="major", **fields):
+    return {
+        "type": "contradiction", "severity": severity, "claim": claim,
+        "consensus_anchor": anchor, "anchor_occurrence": 0,
+        "positions": [
+            {"in_answer": True, "stance": claim, "models": ["Grok", "Gemini"], "quote": "as they wrote it"},
+            {"stance": other, "models": ["OpenAI"], "quote": ""},
+        ],
+        **fields,
+    }
+
+
+SPLITS = [
+    contradiction("Grok 4.8 was announced.", "**Announced by Elon Musk on 2026-09-14** on X.",
+                  "There is no primary-source confirmation.", verify="Check the posts."),
+    contradiction("The rollout reached everyone.", "Status: unreleased.", "It reached paid users only.",
+                  severity="minor"),
+    contradiction("xAI said Grok 5 is in training.", "xAI said that **“Grok 5 is currently in training.”**",
+                  "There is no confirmed announcement of Grok 5."),
+    {"type": "emphasis", "claim": "Weight", "positions": []},
+]
+
+
+def test_a_marked_passage_survives_the_emphasis_around_it():
+    """grok-5-release-date: a passage ending in bold kept its asterisks,
+    because the token after "**" read as a letter and the bold never closed."""
+    marked = check_page.mark_passages(SPLIT_ANSWER, SPLITS, [0, 2])
+    html = check_page.fill_marks(render_public_markdown(marked, []))
+
+    assert ('<mark class="wp-mark" data-diff="0"><strong>Announced by Elon Musk on 2026-09-14</strong> on X.</mark>'
+            in html)
+    assert ('<mark class="wp-mark" data-diff="2">xAI said that <strong>“Grok 5 is currently in training.”</strong></mark>'
+            in html)
+    assert "WPMARK" not in html and "**" not in html and "\u27e6" not in html
+    # Nothing but the marks changed.
+    plain = render_public_markdown(SPLIT_ANSWER, [])
+    assert html.replace('<mark class="wp-mark" data-diff="0">', "").replace(
+        '<mark class="wp-mark" data-diff="2">', "").replace("</mark>", "") == plain
+
+
+def test_a_passage_the_renderer_splits_is_left_unmarked():
+    # The anchor starts inside the bold run: a mark there would cross it.
+    crossing = [{"consensus_anchor": "Elon Musk on 2026-09-14** on X."}]
+    html = check_page.fill_marks(render_public_markdown(check_page.mark_passages(SPLIT_ANSWER, crossing, [0]), []))
+    assert html == render_public_markdown(SPLIT_ANSWER, [])
+    # No anchor, an anchor over two lines, an anchor the answer does not contain: no token at all.
+    for anchor in ("", "- **Announced by Elon Musk on 2026-09-14** on X.\n- xAI said", "Not in the answer."):
+        assert check_page.mark_passages(SPLIT_ANSWER, [{"consensus_anchor": anchor}], [0]) == SPLIT_ANSWER
+    # A passage that opens a list item is marked after the bullet.
+    bullet = [{"consensus_anchor": "- Status: unreleased."}]
+    assert "- \u27e6WPMARK0OPEN\u27e7Status: unreleased.\u27e6WPMARK0CLOSE\u27e7" in check_page.mark_passages(
+        SPLIT_ANSWER, bullet, [0])
+    assert check_page.fill_marks("left \u27e6WPMARK7OPEN\u27e7 alone") == "left  alone"
+
+
+def test_a_topic_page_states_its_critical_contradictions_openly(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(topic["id"], run_payload(
+        consensus_md=SPLIT_ANSWER, differences_data={"differences": SPLITS},
+    ), actor_uid="admin", db=db, now=NOW)
+
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    text = TestClient(app).get("/topics/gpt-6").text
+
+    # The two critical contradictions as the app's cards, open, each with an
+    # id its marked passage points at; the minor one stays in the fold.
+    section = text.split('<section class="wp-split diff-view"', 1)[1].split("</section>", 1)[0]
+    assert ">Where the models disagree</h2>" in section
+    assert section.count('<details class="diff-card is-contradiction is-major"') == 2
+    assert 'id="topicDiff0" open>' in section and 'id="topicDiff2" open>' in section
+    assert "topicDiff1" not in text and "It reached paid users only." not in section
+    assert "In contrast" in section and "There is no primary-source confirmation." in section
+    assert "Worth verifying: Check the posts." in section
+    answer = text.split('id="wpAnswerHeading"', 1)[1].split('<section class="wp-split', 1)[0]
+    assert answer.count('<mark class="wp-mark" data-diff=') == 2
+    assert text.index('id="wpAnswerHeading"') < text.index("wp-split diff-view") < text.index('id="wpHistoryHeading"')
+    # The fold keeps every difference, as before.
+    fold = text.split('<details class="wp-more wp-disclosure">', 1)[1]
+    assert "It reached paid users only." in fold and "There is no primary-source confirmation." in fold
+
+
+def test_a_topic_without_a_critical_contradiction_has_no_such_section(monkeypatch):
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(topic["id"], run_payload(
+        consensus_md=SPLIT_ANSWER, differences_data={"differences": SPLITS[1:2] + SPLITS[3:]},
+    ), actor_uid="admin", db=db, now=NOW)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    text = TestClient(app).get("/topics/gpt-6").text
+    assert "wp-split" not in text and "wp-mark" not in text

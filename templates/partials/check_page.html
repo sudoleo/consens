@@ -83,15 +83,25 @@
 {# Direkt zu den Seiten, um die es geht (source_links.key_links): wer ein
    Thema verfolgt, will selbst nachsehen, nicht erst die Quellenliste am Ende
    suchen. Navigation, kein Beleg einzelner Sätze. On a phone a swipeable row,
-   so the answer starts on the first screen. #}
+   so the answer starts on the first screen.
+   A link may carry the preview picture of its page (``link.picture``, Topic
+   pages: topic_pictures). From two pictures on, every card is a picture
+   card with the same box, so the row has one height before any picture
+   loads; a card without one shows the site's icon on a quiet tile. One
+   picture alone would leave three bare tiles: then the cards stay plain. #}
 {% macro direct_links(links) %}
 {% if links %}
+{% set pictured = links | selectattr("picture") | list | length >= 2 %}
 <section class="wp-links" aria-labelledby="wpLinksHeading">
   <h2 id="wpLinksHeading" class="wp-label">Direct links</h2>
-  <ul class="wp-links-list">
+  <ul class="wp-links-list{% if pictured %} has-pictures{% endif %}">
     {% for link in links %}
     <li>
       <a class="wp-link" href="{{ link.url }}" target="_blank" rel="nofollow noopener noreferrer">
+        {% if pictured %}
+        {% if link.picture %}<span class="wp-link-picture"><img src="{{ link.picture.url }}" alt="" width="{{ link.picture.width }}" height="{{ link.picture.height }}" loading="lazy" decoding="async"></span>
+        {% else %}<span class="wp-link-picture is-empty" aria-hidden="true">{{ favicon(link.domain, "wp-link-icon", 28) }}</span>{% endif %}
+        {% endif %}
         {{ favicon(link.domain, "wp-link-icon", 20) }}
         <span class="wp-link-body">
           <span class="wp-link-title">{{ link.title }}</span>
@@ -277,4 +287,21 @@
   {% endif %}
   </div>
 </details>
+{% endmacro %}
+
+{# Where the models contradict each other on something that matters
+   (check_page.open_contradictions): the same cards as in the app and on a
+   shared answer, open instead of folded. It tells the reader how firm the
+   answer above is; the passage in question is marked there and jumps here
+   (check-page.js). #}
+{% macro contradictions(cards) %}
+{% if cards %}
+{% from "partials/difference_card.html" import difference_card %}
+<section class="wp-split diff-view" aria-labelledby="wpSplitHeading">
+  <h2 id="wpSplitHeading" class="wp-label">Where the models disagree</h2>
+  <div class="diff-cards">
+    {% for card in cards %}{{ difference_card(card, open=True, anchor_prefix="topicDiff") }}{% endfor %}
+  </div>
+</section>
+{% endif %}
 {% endmacro %}
