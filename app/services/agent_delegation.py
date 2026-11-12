@@ -347,10 +347,10 @@ def _filter_stopped(error, value):
     stopped with a line of text, which the client reads as a stream that
     broke off (GPT-6.1 Terra on Azure answers "I'm sorry, but I cannot assist
     with that request." at 0 tokens). A summary step stopped so is left out
-    at once, without the retry a step that broke off gets: Terra on Azure
-    stopped each of its run summaries while every step around them passed,
-    and the retry met the same filter on the same endpoint and an HTTP 400
-    on another."""
+    at once, without the retry a step that broke off gets: the filter reads
+    the app's summary request (agent_compaction.RUN_SUMMARY_REQUEST), so the
+    retry meets it again, and the run's encrypted reasoning keeps the retry
+    on the same endpoint (agent_client._elsewhere)."""
     return isinstance(error, ModelDeclined) or getattr(value, "finish_reason", "") == "content_filter"
 
 

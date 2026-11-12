@@ -157,6 +157,10 @@ HISTORY_SUMMARY_REQUEST = (
     "came up; what you did and found, including the work records; what is still open. Leave out what no longer "
     "matters. Write notes for yourself in the conversation's language, at most about 1,200 words, without tool "
     "calls or searches.")
+# Azure's filter declines this request for GPT-6.1 Terra at 0 tokens: its
+# sentence asking for a summary of the work "so far, everything after the
+# user's question" trips it (probes 2026-11-12; the rest passes). Terra's runs
+# go on without their summary (agent_delegation._filter_stopped).
 RUN_SUMMARY_REQUEST = (
     "App request, not the user's: the context of this message has grown long. Write a summary of your work on it "
     "so far, everything after the user's question, that will replace those steps: from now on you see the question "

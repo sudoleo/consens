@@ -5451,8 +5451,10 @@ vorher einmal neu (`DelegationLoop._answer_attempt`, `_passing_failure`),
 seit 2026-11-09 auf einem anderen Endpunkt des Modells
 (`AgentCompletion.endpoint` = `provider` des Streams, beim zweiten Versuch
 `avoid_endpoints` → `provider.ignore`; gibt es keinen anderen, antwortet
-OpenRouter mit 404 vor der ersten Zeile und dieselbe Anfrage geht ohne die
-Liste raus, `agent_client._elsewhere`). Ebenso seitdem ein Schritt, den der
+OpenRouter mit 404 vor der ersten Zeile, und hält verschlüsseltes Reasoning im
+Verlauf die Anfrage an ihrem Endpunkt, mit 400 (`reason=reasoning_pinned`,
+Läufe von GPT-6.1 Terra auf Azure, sobald ein Schritt gedacht hat): dann geht
+dieselbe Anfrage ohne die Liste raus, `agent_client._elsewhere`). Ebenso seitdem ein Schritt, den der
 Filter eines Endpunkts vor dem ersten Wort ablehnte (`ModelDeclined`): jeder
 Endpunkt filtert für sich, die Sitzung des Chats hätte den Versuch an
 denselben zurückgeschickt. Eine Zusammenfassungs-Anfrage, die der Filter
@@ -6567,10 +6569,11 @@ vollen Verlauf bzw. allen Schritten weiter: Der Schritt wird wie ein
 abgebrochener als `succeeded` abgerechnet (`value.summary_failure`), damit der
 nächste seinen Index beanspruchen kann. Der Filter von GPT-6.1 Terra auf Azure
 lehnt die Zusammenfassungs-Anfrage eines Laufs ab, dessen eigene Schritte er
-durchlässt (fünf von fünf bis 2026-11-12); eine vom Filter gestoppte fällt
-deshalb sofort weg (`_filter_stopped`), ohne den zweiten Versuch eines
-abgebrochenen Schritts, der am selben Endpunkt wieder abgelehnt wurde und an
-einem anderen HTTP 400 bekam. Darunter bleibt die Kürzung: Ein längerer Chat behält seit 2026-10-15 seine neuesten
+durchlässt (fünf von fünf bis 2026-11-12; Auslöser ist der Satz, der die
+Arbeit „so far, everything after the user's question“ zusammenfassen lässt,
+Kommentar an `RUN_SUMMARY_REQUEST`); eine vom Filter gestoppte fällt deshalb
+sofort weg (`_filter_stopped`), ohne den zweiten Versuch eines abgebrochenen
+Schritts, der denselben Filter träfe. Darunter bleibt die Kürzung: Ein längerer Chat behält seit 2026-10-15 seine neuesten
 Nachrichten (`history_start`): die ältesten fallen in Schritten von
 `HISTORY_STEP_TURNS` (4) weg, damit der Verlauf ein paar Nachrichten lang am
 selben Punkt beginnt und im Prompt-Cache bleibt; der App-Kontext der neuen

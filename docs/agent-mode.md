@@ -5003,10 +5003,18 @@ jeder Schritt einmal neu; stoppt ihn der Filter des Anbieters
 auch mit Text), fällt er sofort weg. GPT-6.1 Terra
 auf Azure lehnte jede Lauf-Zusammenfassung ab (fünf von fünf bis 2026-11-12,
 0 Tokens, mit eigener Absagezeile), während alle Schritte davor und danach
-durchgingen. Der zweite Versuch traf am selben Endpunkt denselben Filter und
-an einem anderen ein HTTP 400 von OpenRouter, kostenlos, aber mit rund 2,5 s
-Wartezeit und der Zeile „Die Antwort des Modells brach ab. Dieser Schritt
-läuft noch einmal.“
+durchgingen. Proben am 2026-11-12 (kostenlos, wo abgelehnt) zeigen den
+Auslöser: der Satz, der die Zusammenfassung der Arbeit „so far, everything
+after the user's question“ verlangt; ohne ihn geht der Rest durch, auch in
+einer Umformulierung („Your steps on it so far will be replaced by notes you
+write now …“). Nicht übernommen: Die fertige Zusammenfassung steht danach als
+Nutzer-Nachricht im Verlauf, und ob Azure die Folgeschritte damit durchlässt,
+ist ungeprüft; ein abgelehnter Folgeschritt beendete den Lauf. Der zweite
+Versuch traf am selben Endpunkt denselben Filter und an einem anderen ein
+HTTP 400 von OpenRouter (verschlüsseltes Reasoning, siehe „Der zweite Versuch
+geht an einen anderen Endpunkt“), kostenlos, aber mit rund 2,5 s Wartezeit und
+der Zeile „Die Antwort des Modells brach ab. Dieser Schritt läuft noch
+einmal.“
 
 Die gespeicherte Aktivität eines Turns bekommt den Platz, den der Rest des
 Turn-Dokuments (1 MiB) übrig lässt, abzüglich 64 kB Reserve, höchstens
@@ -6156,8 +6164,14 @@ nahm nur 0–3 an. Seitdem:
   Sitzung, und ignoriert einen unbekannten Namen. Hat das Modell keinen
   anderen Endpunkt, kommt HTTP 404 vor der ersten Zeile („All providers have
   been ignored“, nicht abgerechnet), und dieselbe Anfrage geht ohne die Liste
-  raus (`agent_client._elsewhere`). Der Beleg hält den Endpunkt fest
-  (`endpoint`).
+  raus (`agent_client._elsewhere`). Ebenso, wenn der Verlauf verschlüsseltes
+  Reasoning trägt, das nur der gemiedene Endpunkt lesen kann: OpenRouter
+  antwortet dann HTTP 400 („can only be processed by the provider that
+  created it“, Log `reason=reasoning_pinned`). Das trifft Läufe von GPT-6.1
+  Terra auf Azure, sobald ein Schritt gedacht hat (Format
+  `azure-openai-responses-v1`, Probe 2026-11-12); die Probe vom 2026-11-09 war
+  eine Einzelanfrage ohne Reasoning im Verlauf. Der Beleg hält den Endpunkt
+  fest (`endpoint`).
 - *Eine Ablehnung durch den Filter eines Endpunkts ist kein Ende mehr*
   (`ModelDeclined`, seit 2026-11-09): vor dem ersten Wort abgelehnt, läuft der
   Schritt einmal auf einem anderen Endpunkt (`_passing_failure(exc, value)`,

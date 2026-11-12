@@ -346,6 +346,49 @@ def test_a_model_with_no_other_endpoint_still_gets_its_second_attempt(monkeypatc
     assert requests[1]["messages"] == requests[0]["messages"]
 
 
+# OpenRouter's answer to a retry of GPT-6.1 Terra that avoided Azure after
+# earlier steps on Azure (live probe 2026-11-12, not billed).
+REASONING_PINNED = {"error": {
+    "message": "Your request contains encrypted reasoning or compaction content that can only be processed by the "
+               "provider that created it (azure), but your request's provider.ignore preference excludes that "
+               "provider. Allow azure or start a new conversation without the encrypted items.",
+    "code": 400, "metadata": {"pinned_provider_slug": "azure", "accepting_provider_slugs": "azure",
+                              "excluding_preferences": ["request_ignore"],
+                              "failed_routing_step": "Filter by Encrypted Payload Endpoint"}}}
+
+
+def _avoiding_retry(monkeypatch, refusal):
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    requests, _, _ = transport(monkeypatch, [
+        [refusal], [packet({"content": "Answer"}), packet(finish="stop", usage=usage())]])
+    value = AgentCompletion()
+    value.avoid_endpoints = ("Azure",)
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=2)):
+        # An OpenAI model: no explicit cache points whose own 400 fallback runs first.
+        list(value.stream(model=resolve_agent_model("gpt-5.5"), api_key="test",
+                          messages=[{"role": "system", "content": "System"}, {"role": "user", "content": "Hi"}]))
+    return value, requests
+
+
+def test_a_retry_held_by_its_encrypted_reasoning_goes_back_to_its_endpoint(monkeypatch):
+    """Terra's steps on Azure leave encrypted reasoning that only Azure can
+    read: a retry that avoided Azure never reached a model."""
+    from app.core.observability import provider_error_diagnostic
+    from app.services.llm.engines import _ProviderHTTPStatusError
+    diagnostic = provider_error_diagnostic(REASONING_PINNED["error"])
+    assert diagnostic == "reason=reasoning_pinned"
+    value, requests = _avoiding_retry(monkeypatch, _ProviderHTTPStatusError(400, diagnostic=diagnostic))
+    assert value.text == "Answer"
+    assert requests[0]["provider"]["ignore"] == ["Azure"] and "ignore" not in requests[1]["provider"]
+    assert requests[1]["messages"] == requests[0]["messages"]
+
+
+def test_any_other_refusal_of_a_retry_stays_a_refusal(monkeypatch):
+    from app.services.llm.engines import _ProviderHTTPStatusError
+    with pytest.raises(_ProviderHTTPStatusError):
+        _avoiding_retry(monkeypatch, _ProviderHTTPStatusError(400, diagnostic="reason=unclassified"))
+
+
 def test_another_refusal_of_an_avoiding_request_stands(monkeypatch):
     from app.services.llm.engines import _ProviderHTTPStatusError
     from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget

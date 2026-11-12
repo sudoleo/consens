@@ -124,6 +124,9 @@ def safe_exception(exc: BaseException) -> str:
 # Upstream failure classes recognised in an OpenRouter error. Only the class
 # name on the left ever reaches a log, never the matched provider text.
 _PROVIDER_REASONS = (
+    # OpenRouter's own 400 when encrypted reasoning in the conversation can
+    # only go back to the endpoint that wrote it, and the request excludes it.
+    ("reasoning_pinned", ("can only be processed by the provider that created it", "encrypted payload")),
     ("thought_signature", ("thought signature", "thought_signature", "thoughtsignature")),
     ("reasoning_replay", ("thinking block", "reasoning_details", "reasoning item", "encrypted_content", "signature")),
     ("context_length", ("context length", "context window", "context_length", "maximum context",

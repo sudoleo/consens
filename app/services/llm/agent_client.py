@@ -649,18 +649,23 @@ def _elsewhere(open_stream, payload, fallback, routing):
     """The stream of a request that avoids endpoints (``provider.ignore``,
     AgentCompletion.avoid_endpoints). Where no other endpoint serves the
     model within the routing (OpenRouter answers HTTP 404 before any line:
-    a pinned host, a single endpoint that keeps no prompts), the request
-    goes out once more with ``routing``, its routing without them: such a
-    model still gets its second attempt. A refused request is not billed."""
+    a pinned host, a single endpoint that keeps no prompts), or where the
+    conversation holds encrypted reasoning only the avoided endpoint can read
+    (HTTP 400, reason ``reasoning_pinned``: GPT-6.1 Terra's steps on Azure
+    leave such blocks), the request goes out once more with
+    ``routing``, its routing without them: such a model still gets its second
+    attempt. A refused request is not billed."""
     lines = open_stream(payload, fallback)
     try:
         try:
             first = next(lines, None)
         except _ProviderHTTPStatusError as exc:
-            if exc.status_code != 404:
+            pinned = exc.status_code == 400 and "reason=reasoning_pinned" in str(exc.safe_diagnostic or "")
+            if exc.status_code != 404 and not pinned:
                 raise
             lines.close()
-            logging.info("Agent retry has no other endpoint, staying model=%s", payload.get("model"))
+            logging.info("Agent retry %s, staying model=%s",
+                         "is held by its reasoning" if pinned else "has no other endpoint", payload.get("model"))
             lines = open_stream({**payload, "provider": routing}, fallback and {**fallback, "provider": routing})
             first = next(lines, None)
         if first is None:
