@@ -49,9 +49,21 @@ def test_an_answer_cannot_stand_in_for_the_composer(browser, phase4_server):
         _choose_mode(page, "agent")
         expect(page.locator("#agentModelDropdown")).to_be_enabled()
 
+        last_send = [0]
+
         def send(text, answer):
             page.locator("textarea#questionInput:not([hidden])").fill(text)
-            page.locator("button#sendButton").click()
+            # The mocked answer is there at once. A Send within 450 ms of the
+            # last one is taken for the same gesture and dropped on purpose
+            # (run-registry.js claimStartAction), and the composer may still
+            # glide off the start screen; no person types the next message
+            # that fast.
+            page.wait_for_function(
+                "last => Date.now() - last >= 450 && !document.body.classList.contains('composer-gliding')",
+                arg=last_send[0])
+            with page.expect_request(lambda r: r.url.endswith("/agent") and r.method == "POST"):
+                page.locator("button#sendButton").click()
+                last_send[0] = page.evaluate("Date.now()")
             expect(page.locator("#agentAnswerBody")).to_contain_text(answer)
             page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded' && !window.isRunActive()")
 
