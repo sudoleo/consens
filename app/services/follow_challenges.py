@@ -132,6 +132,38 @@ def claim_confirmation_send(
         return True
 
 
+def release_confirmation_send(
+    *,
+    resource_type: str,
+    resource_id: str,
+    email: str,
+    db,
+) -> None:
+    """Lift the resend cooldown of a claim whose mail did not go out.
+
+    Only the caller that just claimed calls this, right after its send
+    failed; within the cooldown no other claim can have succeeded since.
+    The challenge stays: a link from an earlier mail keeps working. The
+    recipient and hourly budgets stay spent, they cap attempts.
+    """
+    challenge_ref = _challenge_ref(
+        resource_type=resource_type, resource_id=resource_id, email=email, db=db
+    )
+
+    def release(tx):
+        snapshot = _get(challenge_ref, tx)
+        if not snapshot.exists:
+            return
+        data = dict(snapshot.to_dict() or {})
+        data["last_sent_at"] = None
+        if tx is None:
+            challenge_ref.set(data)
+        else:
+            tx.set(challenge_ref, data)
+
+    _run(db, release)
+
+
 def get_confirmation_challenge(
     *,
     resource_type: str,

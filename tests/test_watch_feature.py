@@ -3087,6 +3087,16 @@ class FollowerTests(unittest.TestCase):
                 [],
             )
 
+    def test_a_confirmation_mail_that_did_not_go_out_can_be_asked_for_again(self):
+        first = watch_followers.request_follow(self.share_id, "retry@example.com", db=self.db)
+        self.assertTrue(first["token"])
+        # Within the resend cooldown no second mail goes out.
+        self.assertEqual(watch_followers.request_follow(self.share_id, "retry@example.com", db=self.db)["token"], "")
+        watch_followers.release_follow(self.share_id, "Retry@Example.com", db=self.db)
+        self.assertTrue(watch_followers.request_follow(self.share_id, "retry@example.com", db=self.db)["token"])
+        # A link from an earlier mail keeps working.
+        self.assertEqual(watch_followers.confirm_follow(first["token"], db=self.db)["email"], "retry@example.com")
+
     def test_cleanup_or_removed_watch_invalidates_outstanding_confirm_link(self):
         email = "cleanup@example.com"
         pending = watch_followers.request_follow(self.share_id, email, db=self.db)
@@ -3123,6 +3133,27 @@ class FollowRouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("Check your inbox", response.json()["message"])
         send.assert_awaited_once()
+
+    def test_follow_route_frees_the_cooldown_when_the_mail_does_not_go_out(self):
+        pending = {"email": "a@example.com", "question": "Q", "token": "tok123"}
+        share_id = "F" * 16
+        for configured, status in ((True, 502), (False, 503)):
+            limiter.reset()
+            with patch.object(watch_router.watch_followers, "request_follow", return_value=pending), \
+                    patch.object(watch_router.watch_followers, "release_follow") as release, \
+                    patch.object(watch_router.mailer, "is_configured", return_value=configured), \
+                    patch.object(watch_router.mailer, "send_message", new_callable=AsyncMock, return_value=False):
+                response = self.client.post(f"/api/share/{share_id}/follow", json={"email": "a@example.com"})
+            self.assertEqual(response.status_code, status)
+            release.assert_called_once_with(share_id, "a@example.com")
+        # A mail that went out keeps its cooldown.
+        limiter.reset()
+        with patch.object(watch_router.watch_followers, "request_follow", return_value=pending), \
+                patch.object(watch_router.watch_followers, "release_follow") as release, \
+                patch.object(watch_router.mailer, "is_configured", return_value=True), \
+                patch.object(watch_router.mailer, "send_message", new_callable=AsyncMock, return_value=True):
+            self.assertEqual(self.client.post(f"/api/share/{share_id}/follow", json={"email": "a@example.com"}).status_code, 200)
+        release.assert_not_called()
 
     def test_follow_route_is_generic_for_existing_followers(self):
         pending = {"email": "a@example.com", "question": "Q", "token": ""}

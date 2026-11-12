@@ -744,6 +744,36 @@ def test_topic_confirm_consumes_challenge_atomically_with_follower_write(monkeyp
     assert challenge_paths[0] not in db.documents
 
 
+def test_a_topic_follow_mail_that_did_not_go_out_can_be_asked_for_again(monkeypatch):
+    monkeypatch.setenv("WATCH_UNSUBSCRIBE_SECRET", "topic-test-secret")
+    db = FakeFirestore()
+    monkeypatch.setattr(topics, "db_firestore", db)
+    topic = topics.create_topic(topic_payload(), actor_uid="admin", db=db, now=NOW)
+    topics.create_run(topic["id"], run_payload(), actor_uid="admin", db=db, now=NOW)
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.include_router(topics_router.router)
+    client = TestClient(app)
+    path = f"/api/topics/{topic['slug']}/follow"
+    configured = mock.Mock(side_effect=[False, True, True])
+    send = mock.AsyncMock(side_effect=[False, True])
+    monkeypatch.setattr(topics_router.mailer, "is_configured", configured)
+    monkeypatch.setattr(topics_router.mailer, "send_message", send)
+    limiter.reset()
+
+    assert client.post(path, json={"email": "again@example.com"}).status_code == 503
+    assert client.post(path, json={"email": "again@example.com"}).status_code == 502
+    # Neither mail went out: the third try sends one instead of answering
+    # "Check your inbox" during the resend cooldown.
+    assert client.post(path, json={"email": "again@example.com"}).status_code == 200
+    assert send.await_count == 2
+    limiter.reset()
+    # That one went out: its cooldown holds.
+    assert client.post(path, json={"email": "again@example.com"}).status_code == 200
+    assert send.await_count == 2
+    limiter.reset()
+
+
 def test_topic_notification_delivery_is_deduplicated_and_multipart():
     db = FakeFirestore()
     db.documents[(topics.FOLLOWERS_COLLECTION, "follower")] = {

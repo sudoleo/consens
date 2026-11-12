@@ -757,6 +757,15 @@ async def topic_favicon(request: Request, d: str = Query(default="", max_length=
     return _favicon_response(data, content_type, transient=overloaded)
 
 
+async def _release_follow(topic_id: str, email: str) -> None:
+    # A release that fails only keeps the cooldown; the answer stays the
+    # mail's own failure.
+    try:
+        await asyncio.to_thread(topics.release_follow, topic_id, email)
+    except Exception as exc:
+        logging.warning("release_follow failed category=%s", safe_exception(exc))
+
+
 @router.post("/api/topics/{slug}/follow")
 @limiter.limit("3/minute")
 async def follow_topic(request: Request, slug: str, data: dict = Body(default={})):
@@ -773,17 +782,22 @@ async def follow_topic(request: Request, slug: str, data: dict = Body(default={}
         logging.error("follow_topic failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error processing follow request")
     if pending["token"]:
-        if not mailer.is_configured():
-            raise HTTPException(status_code=503, detail="Email delivery is not configured.")
-        topic_url = f"{SITE_URL}/topics/{pending['slug']}"
-        confirm_url = SITE_URL + "/topic-follow/confirm?token=" + pending["token"]
-        sent = await mailer.send_message(mailer.build_topic_follow_confirm_message(
-            recipient=pending["email"],
-            title=pending["title"],
-            confirm_url=confirm_url,
-            topic_url=topic_url,
-            language=request_language(request),
-        ))
+        sent = False
+        try:
+            if not mailer.is_configured():
+                raise HTTPException(status_code=503, detail="Email delivery is not configured.")
+            topic_url = f"{SITE_URL}/topics/{pending['slug']}"
+            confirm_url = SITE_URL + "/topic-follow/confirm?token=" + pending["token"]
+            sent = await mailer.send_message(mailer.build_topic_follow_confirm_message(
+                recipient=pending["email"],
+                title=pending["title"],
+                confirm_url=confirm_url,
+                topic_url=topic_url,
+                language=request_language(request),
+            ))
+        finally:
+            if not sent:
+                await _release_follow(topic["id"], pending["email"])
         if not sent:
             raise HTTPException(
                 status_code=502,

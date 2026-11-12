@@ -10594,6 +10594,11 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
 - `follow_challenges/{sha256(scope:resource:email)}` — ausschließlich gehashte
   Double-Opt-in-Challenges mit 15-Minuten-Resendfenster, höchstens fünf Sends
   pro Empfänger/UTC-Tag und global höchstens 500/Stunde; kein E-Mail-Klartext.
+  Geht die Bestätigungsmail nicht raus (SMTP fehlt 503, Versand scheitert
+  502), gibt der Router das Resendfenster wieder frei
+  (`release_confirmation_send` über `topics.release_follow` bzw.
+  `watch_followers.release_follow`); die Budgets bleiben verbraucht, die
+  Challenge und damit ein Link aus einer früheren Mail bleiben gültig.
 - `shares` — unveränderliche Snapshots (Slug, `visibility=public|private`,
   `indexed`, `status`, `owner_uid`, `question_hash`, optional interne
   `source_api_run_id`, Legacy-`publication_source=scheduled_publisher` und

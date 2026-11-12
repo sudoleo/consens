@@ -489,18 +489,32 @@ async def follow_share(request: Request, share_id: str, data: dict = Body(defaul
         logging.error("follow_share failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="Error processing follow request")
     if pending["token"]:
-        if not mailer.is_configured():
-            raise HTTPException(status_code=503, detail="Email delivery is not configured.")
-        share_url = SITE_URL + "/s/" + share_id
-        confirm_url = SITE_URL + "/watch/follow/confirm?token=" + pending["token"]
-        sent = await mailer.send_message(mailer.build_follow_confirm_message(
-            recipient=pending["email"], question=pending["question"],
-            confirm_url=confirm_url, share_url=share_url,
-            language=request_language(request),
-        ))
+        sent = False
+        try:
+            if not mailer.is_configured():
+                raise HTTPException(status_code=503, detail="Email delivery is not configured.")
+            share_url = SITE_URL + "/s/" + share_id
+            confirm_url = SITE_URL + "/watch/follow/confirm?token=" + pending["token"]
+            sent = await mailer.send_message(mailer.build_follow_confirm_message(
+                recipient=pending["email"], question=pending["question"],
+                confirm_url=confirm_url, share_url=share_url,
+                language=request_language(request),
+            ))
+        finally:
+            if not sent:
+                await _release_follow(share_id, pending["email"])
         if not sent:
             raise HTTPException(status_code=502, detail="Confirmation email could not be sent. Please try again later.")
     return {"status": "success", "message": "Check your inbox and confirm to start following."}
+
+
+async def _release_follow(share_id: str, email: str) -> None:
+    # A release that fails only keeps the cooldown; the answer stays the
+    # mail's own failure.
+    try:
+        await asyncio.to_thread(watch_followers.release_follow, share_id, email)
+    except Exception as exc:
+        logging.warning("release_follow failed category=%s", safe_exception(exc))
 
 
 _FOLLOW_EYEBROW = "Question you follow"

@@ -102,6 +102,15 @@ def request_follow(share_id: str, email, db=None) -> dict:
     }
 
 
+def release_follow(share_id: str, email: str, db=None) -> None:
+    """The confirmation mail of request_follow did not go out: the reader
+    may ask again at once instead of after the resend cooldown."""
+    db = db if db is not None else db_firestore
+    follow_challenges.release_confirmation_send(
+        resource_type="watch", resource_id=share_id, email=normalize_email(email), db=db,
+    )
+
+
 def parse_follow_confirm_token(token: str) -> tuple[str, str]:
     """(share_id, email) of a confirmation link; reads and writes nothing."""
     payload = parse_token_payload(token)
