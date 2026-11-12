@@ -1315,8 +1315,10 @@ wenige brauchen, installiert der Agent weiter selbst.
   Paketstatus und Python nach den Metadaten jedes Pakets, die ein Wheel
   zuletzt entpackt. Ein halb geschriebenes Paket (Checkpoint mitten in der
   Installation, dann Restore) gilt deshalb als fehlend. Pro Prozess und Konto
-  ein Blick, sobald sie vollständig war; nach einem Restore (`mark_restored`)
-  und bei einer neu angelegten VM wieder (`forget_kit`); eine fehlgeschlagene
+  ein Blick, sobald sie vollständig war; nach einem Restore (gleich nach dem
+  Zurücksetzen, vor jedem Firestore-Vermerk, der scheitern kann: Route und
+  `mark_restored`) und bei einer neu angelegten VM wieder (`forget_kit`);
+  eine fehlgeschlagene
   Installation höchstens `KIT_TRIES`-mal je Prozess.
 - **Wohin.** ffmpeg installiert der Server als root mit demselben Befehl wie
   `vm_install_packages` (`INSTALL_COMMAND`, entfernt nie ein Paket). Die

@@ -484,6 +484,9 @@ def mark_restored(store, uid, by="user"):
     """The workspace went back to a checkpoint: every chat's next message
     that uses it is told (claim), who did it too (``by``: "user", or "heal"
     when it was stuck)."""
+    # The checkpoint may be from before the kit, or from the middle of its
+    # installation; also when the note below cannot be written.
+    forget_kit(uid)
     workspace = ref(store.db, uid)
 
     def operation(tx):
@@ -492,8 +495,6 @@ def mark_restored(store, uid, by="user"):
             tx.update(workspace, {"restores": int((snapshot.to_dict() or {}).get("restores") or 0) + 1,
                                   "restored_at": _now(), "restored_by": by})
     store._transaction(operation)
-    # The checkpoint may be from before the kit, or from the middle of its installation.
-    forget_kit(uid)
 
 
 def record_for_view(store, uid, *, provider):

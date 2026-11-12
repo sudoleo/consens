@@ -141,6 +141,29 @@ def test_the_workspace_is_restored_only_while_no_chat_uses_it_and_every_chat_hea
     assert agent_workspace.claim(store, UID, other, "next", provider="fake").restored is True
 
 
+def test_the_kit_is_looked_at_again_after_a_restore_whose_note_cannot_be_written(admin_api, fake_vm, monkeypatch):
+    """The checkpoint may be from before the kit (agent_workspace.kit_later):
+    once the VM went back, the next message's end looks again, also when
+    Firestore then refuses the chat's and the workspace's note."""
+    from app.services import agent_workspace
+    from app.services.agent_runs import AgentRunStore
+    client, store, _ = admin_api
+    chat, turn_id, _ = vm_turn(store)
+    monkeypatch.setitem(agent_workspace._kits, UID, "done")
+
+    def unwritable(self, operation):
+        raise RuntimeError("firestore unavailable")
+    monkeypatch.setattr(AgentRunStore, "_transaction", unwritable)
+    response = client.post(f"/agent/chats/{chat}/turns/{turn_id}/vm-restore", headers=AUTH)
+    assert response.status_code == 200 and ("restore", agent_vm.workspace_name(UID), "v3") in fake_vm.calls
+    assert UID not in agent_workspace._kits
+    # A stuck workspace's heal (mark_restored by itself) forgets it too.
+    agent_workspace._kits[UID] = "done"
+    with pytest.raises(RuntimeError):
+        agent_workspace.mark_restored(store, UID, by="heal")
+    assert UID not in agent_workspace._kits
+
+
 def test_the_next_message_is_told_once(admin_api, fake_vm):
     client, store, _ = admin_api
     chat, turn_id, _ = vm_turn(store)
