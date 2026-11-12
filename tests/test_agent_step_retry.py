@@ -142,10 +142,9 @@ def test_an_attempt_without_a_known_endpoint_is_retried_as_before(store):
 
 
 def test_a_step_one_endpoint_declined_is_asked_of_another(store):
-    """Each endpoint of a model filters for itself: Terra on Azure declined
-    a step twice that OpenAI's own endpoint takes, after four minutes of
-    paid work (2026-11-07). Declined before a word, the step runs once more
-    elsewhere instead of ending the turn."""
+    """Each endpoint of a model filters for itself. Declined before a word,
+    the step runs once more elsewhere instead of ending the turn and its
+    paid work."""
     from app.services.agent_provider_limits import ModelDeclined
     script = Breaking({"completion:1": 1}, error=ModelDeclined(), endpoint="Azure", search=False, tool_steps=1,
                       step_tools={0: "note"})

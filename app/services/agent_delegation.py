@@ -28,8 +28,8 @@ from app.services.agent_loop import AgentLoop
 from app.services.agent_progress import ReasoningProgress, StreamProgress
 from app.services.agent_policy import supports_delegation
 from app.services.agent_provider_limits import (
-    TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelEmptyAnswer, ModelOutputLimit, agent_failure,
-    provider_cooldowns,
+    TURN_OUTPUT_LIMIT, AgentProviderCooldown, AgentRunInterrupted, ModelDeclined, ModelEmptyAnswer, ModelOutputLimit,
+    agent_failure, provider_cooldowns,
 )
 from app.services.agent_tools import ArgumentsTooLong, ReadOnlyTool, ToolRegistry, search_tools
 from app.services.agent_comparison import SEARCHING_KINDS
@@ -312,11 +312,11 @@ PASSING_FAILURE_CODES = frozenset({"provider_error", "provider_timeout"})
 def _passing_failure(error, value=None):
     """A step that broke off in passing: one more attempt may well succeed
     (DelegationLoop._answer_attempt). So may a step an endpoint's own filter
-    declined before a word (ModelDeclined), once ``value`` knows that
-    endpoint: the attempt goes to another one, and each endpoint of a model
-    filters for itself (Terra on Azure declined a step twice that OpenAI's
-    own endpoint takes; Claude on Vertex every attempt of one chat). Without
-    another endpoint it meets the same filter and the turn ends as declined."""
+    declined (ModelDeclined), once ``value`` knows that endpoint: the attempt
+    goes to another one, and each endpoint of a model filters for itself
+    (Claude on Vertex declined every attempt of one chat). Without another
+    endpoint it meets the same filter and the turn ends as declined. A
+    declined summary request is not asked again (_filter_stopped)."""
     from app.services.agent_provider_limits import ModelDeclined, agent_failure
     if isinstance(error, (ModelOutputLimit, AnalysisBudgetExceeded)):
         return False
@@ -340,6 +340,18 @@ def _summary_unwritten(error):
     likely fail the same way."""
     from app.services.agent_provider_limits import agent_failure
     return agent_failure(error).get("code") in SUMMARY_SKIP_CODES
+
+
+def _filter_stopped(error, value):
+    """The provider's filter ended the step: declined before a word, or
+    stopped with a line of text, which the client reads as a stream that
+    broke off (GPT-6.1 Terra on Azure answers "I'm sorry, but I cannot assist
+    with that request." at 0 tokens). A summary step stopped so is left out
+    at once, without the retry a step that broke off gets: Terra on Azure
+    stopped each of its run summaries while every step around them passed,
+    and the retry met the same filter on the same endpoint and an HTTP 400
+    on another."""
+    return isinstance(error, ModelDeclined) or getattr(value, "finish_reason", "") == "content_filter"
 
 
 def _waited(seconds):
@@ -2249,7 +2261,8 @@ class DelegationLoop(AgentLoop):
                 value.rate_limited = exc
                 status = "succeeded"
             elif (retry_passing and claimed and not (publish_text and value.text)
-                  and (not value.published or self.merged) and _passing_failure(exc, value)):
+                  and (not value.published or self.merged) and _passing_failure(exc, value)
+                  and not (summary and _filter_stopped(exc, value))):
                 # Broke off before the user saw a word of it, or while its
                 # answer was showing in a turn whose text can go back
                 # (_answer_attempt retracts it): settled with what it used
@@ -2261,6 +2274,7 @@ class DelegationLoop(AgentLoop):
             elif summary and claimed and _summary_unwritten(exc):
                 # Settled like a step that broke off: the agent's next step
                 # claims the next index, the summary is left out (_summarize).
+                # One the filter stopped comes here at once (_filter_stopped).
                 value.summary_failure = exc
                 status, log_status = "succeeded", "failed"
             else:
@@ -3233,9 +3247,10 @@ class DelegationLoop(AgentLoop):
         In every turn, a step that broke off in passing before the user saw
         any of its text (_passing_failure: the provider failed or fell silent
         mid-stream, its stream could not be read, its endpoint's filter
-        declined it) runs once more after PASSING_RETRY_SECONDS, on the same
-        conversation: without it, one such step threw away the whole turn's
-        paid work. The second attempt avoids the endpoint of the first, where
+        declined it, though not a summary request: _filter_stopped) runs
+        once more after PASSING_RETRY_SECONDS, on the same conversation:
+        without it, one such step threw away the whole turn's paid work.
+        The second attempt avoids the endpoint of the first, where
         the model has another: what broke one attempt (an outage, a stalled
         host, a filter) mostly belongs to its endpoint, and the chat's
         session would send the retry straight back to it.

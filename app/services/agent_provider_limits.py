@@ -78,9 +78,10 @@ class ModelEmptyAnswer(ModelOutputLimit):
 class ModelDeclined(RuntimeError):
     """The provider's own safety filter stopped the answer before a word.
 
-    Sending the same message again meets the same filter (2026-10-28: Claude
-    on Vertex stopped every attempt of one chat at once, 0 tokens), so no
-    retry; another chat model may well answer it."""
+    Sending the same message to the same endpoint meets the same filter
+    (2026-10-28: Claude on Vertex stopped every attempt of one chat at once,
+    0 tokens); another endpoint of the model (agent_delegation._passing_failure)
+    or another chat model may well answer it."""
     def __init__(self, message=None):
         super().__init__(message or "This chat model declined to answer this request. Another chat model may answer it.")
 

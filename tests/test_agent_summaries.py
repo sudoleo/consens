@@ -7,6 +7,8 @@ No test calls a provider.
 """
 import json
 
+import pytest
+
 from app.services import agent_compaction, agent_delegation
 from app.services.agent_compaction import (HISTORY_SUMMARY_OPEN, HISTORY_SUMMARY_PARTIAL, HISTORY_SUMMARY_REQUEST,
                                            RUN_SUMMARY_OPEN, RUN_SUMMARY_REQUEST, SUMMARY_CLOSE, history_keep,
@@ -343,9 +345,22 @@ def test_a_run_summary_that_does_not_work_out_is_not_tried_again(store, fake_vm,
 
 def refused(completion):
     """The provider's filter ends the summary request with its refusal line,
-    as GPT-6.1 Terra did twice in a row while the run's own steps passed."""
+    as GPT-6.1 Terra on Azure did with each of its run summaries while every
+    step around them passed; the client reads a stop with text as a stream
+    that broke off."""
     completion.text, completion.finish_reason = "I'm sorry, but I cannot assist with that request.", "content_filter"
+    completion.endpoint = "Azure"
     raise AgentStreamIncomplete("finish=content-filter native=content-filter text=49 tool_parts=0 output_tokens=0")
+
+
+def declined_on_azure(completion):
+    completion.endpoint = "Azure"
+    raise ModelDeclined()
+
+
+def broke_off(completion):
+    completion.endpoint = "Azure"
+    raise AgentStreamIncomplete("finish=stop native=stop text=0 tool_parts=0 output_tokens=0")
 
 
 def declined(completion):
@@ -358,36 +373,44 @@ def every_step_after_a_command(monkeypatch):
                             m.get("role") == "tool" for m in messages[start:]))
 
 
-def test_a_run_summary_the_provider_refuses_leaves_the_run_going(store, fake_vm, monkeypatch):
+def summarized_run(store, monkeypatch, reply):
+    """A run of three commands whose every step after one is due for a
+    summary, and the summary request gets ``reply``. Returns the script, the
+    loop and the run's events."""
     monkeypatch.setattr(agent_delegation, "PASSING_RETRY_SECONDS", 0)
     every_step_after_a_command(monkeypatch)
-    calls = [[("vm_exec", {"command": f"make step{n}"})] for n in range(3)]
-    script = Summarizer(calls, reply=refused)
+    script = Summarizer([[("vm_exec", {"command": f"make step{n}"})] for n in range(3)], reply=reply)
     loop = vm_loop(store, script)
-    events = list(loop.run())
+    return script, loop, list(loop.run())
+
+
+def assert_the_run_went_on_whole(store, fake_vm, script, loop):
     turn = stored(store, loop)
-    assert turn["status"] == "completed" and turn["assistant_response"] == ANSWER
-    # The broken-off summary tried once more, then the run went on with all its steps.
-    assert len(script.summary_requests()) == 2
+    assert turn["status"] == "completed" and turn["assistant_response"] == ANSWER and "agent_failure" not in turn
     assert all(f"make step{n}" in json.dumps(fake_vm.calls, default=str) for n in range(3))
     assert all(not is_summary(str(m.get("content"))) for m in script.seen[-1])
-    assert any(e.get("type") == "activity" and e.get("text") == agent_delegation.PASSING_RETRY_TEXT for e in events)
     # Every step settled, so each next one could claim its index; none was skipped.
     receipts = [store.receipt_ref(UID, loop.chat_id, loop.turn_id, f"completion:{n}").get()
                 for n in range(len(script.seen))]
     assert all(r.exists and r.to_dict()["status"] == "succeeded" for r in receipts)
 
 
-def test_a_declined_run_summary_is_not_tried_again_and_the_run_answers(store, fake_vm, monkeypatch):
-    every_step_after_a_command(monkeypatch)
-    calls = [[("vm_exec", {"command": f"make step{n}"})] for n in range(3)]
-    script = Summarizer(calls, reply=declined)
-    loop = vm_loop(store, script)
-    list(loop.run())
+def test_a_run_summary_that_broke_off_tries_once_more_and_the_run_goes_on(store, fake_vm, monkeypatch):
+    script, loop, events = summarized_run(store, monkeypatch, broke_off)
+    assert len(script.summary_requests()) == 2
+    assert any(e.get("type") == "activity" and e.get("text") == agent_delegation.PASSING_RETRY_TEXT for e in events)
+    assert_the_run_went_on_whole(store, fake_vm, script, loop)
+
+
+@pytest.mark.parametrize("reply", [refused, declined_on_azure])
+def test_a_run_summary_the_filter_stops_is_left_out_at_once(store, fake_vm, monkeypatch, reply):
+    """Asked once more, it met the same filter on the same endpoint and an
+    HTTP 400 on another; the user waited for it and read that the model's
+    reply broke off."""
+    script, loop, events = summarized_run(store, monkeypatch, reply)
     assert len(script.summary_requests()) == 1
-    turn = stored(store, loop)
-    assert turn["status"] == "completed" and turn["assistant_response"] == ANSWER
-    assert "agent_failure" not in turn
+    assert not any(e.get("text") == agent_delegation.PASSING_RETRY_TEXT for e in events)
+    assert_the_run_went_on_whole(store, fake_vm, script, loop)
 
 
 def test_a_declined_history_summary_leaves_the_history_whole(store):

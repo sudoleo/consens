@@ -5403,7 +5403,11 @@ OpenRouter mit 404 vor der ersten Zeile und dieselbe Anfrage geht ohne die
 Liste raus, `agent_client._elsewhere`). Ebenso seitdem ein Schritt, den der
 Filter eines Endpunkts vor dem ersten Wort ablehnte (`ModelDeclined`): jeder
 Endpunkt filtert für sich, die Sitzung des Chats hätte den Versuch an
-denselben zurückgeschickt. Belege tragen den Endpunkt (`endpoint`). Außerdem
+denselben zurückgeschickt. Eine Zusammenfassungs-Anfrage, die der Filter
+stoppt, bekommt keinen zweiten Versuch (`_filter_stopped`: `ModelDeclined`
+oder `finish_reason` `content_filter`, auch mit Text; GPT-6.1 Terra auf Azure
+schickt bei 0 Tokens eine eigene Absagezeile, die der Client als
+abgebrochenen Stream liest). Belege tragen den Endpunkt (`endpoint`). Außerdem
 der Stream-Client verwirft keinen Schritt mehr wegen eines einzelnen
 ungewöhnlichen Teilstücks (`AgentCompletion._tool_delta`,
 `_completed_tool_calls`, `TOOL_INDEX_BOUND`); Details `docs/agent-mode.md`,
@@ -6509,9 +6513,12 @@ eine Zusammenfassung (kein Text, abgeschnitten, oder der Anbieter lehnt die
 Anfrage ab bzw. bricht ab, `_summary_unwritten`), läuft die Nachricht mit dem
 vollen Verlauf bzw. allen Schritten weiter: Der Schritt wird wie ein
 abgebrochener als `succeeded` abgerechnet (`value.summary_failure`), damit der
-nächste seinen Index beanspruchen kann. Der Filter von GPT-6.1 Terra hat die
-Zusammenfassungs-Anfrage eines Laufs zweimal abgelehnt, dessen eigene Schritte
-er durchließ; vorher endete der ganze Turn dann als `provider_error`. Darunter bleibt die Kürzung: Ein längerer Chat behält seit 2026-10-15 seine neuesten
+nächste seinen Index beanspruchen kann. Der Filter von GPT-6.1 Terra auf Azure
+lehnt die Zusammenfassungs-Anfrage eines Laufs ab, dessen eigene Schritte er
+durchlässt (fünf von fünf bis 2026-11-12); eine vom Filter gestoppte fällt
+deshalb sofort weg (`_filter_stopped`), ohne den zweiten Versuch eines
+abgebrochenen Schritts, der am selben Endpunkt wieder abgelehnt wurde und an
+einem anderen HTTP 400 bekam. Darunter bleibt die Kürzung: Ein längerer Chat behält seit 2026-10-15 seine neuesten
 Nachrichten (`history_start`): die ältesten fallen in Schritten von
 `HISTORY_STEP_TURNS` (4) weg, damit der Verlauf ein paar Nachrichten lang am
 selben Punkt beginnt und im Prompt-Cache bleibt; der App-Kontext der neuen

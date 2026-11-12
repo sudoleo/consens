@@ -4997,7 +4997,16 @@ Eine Zusammenfassung ist nie Nutzertext (`is_summary`: kein Memory-Beleg,
 im Arbeitsprotokoll Daten des Agenten). Was nicht klappt (kein Text, zu kurz,
 abgeschnitten, ein Tool-Aufruf statt Text), ändert nichts; die eines Laufs
 wird in dieser Nachricht nicht noch einmal versucht. Ein Aufruf darin läuft
-nie und öffnet kein Prüfer-Tor.
+nie und öffnet kein Prüfer-Tor. Bricht der Schritt unterwegs ab, läuft er wie
+jeder Schritt einmal neu; stoppt ihn der Filter des Anbieters
+(`_filter_stopped`: `ModelDeclined` oder `finish_reason` `content_filter`,
+auch mit Text), fällt er sofort weg. GPT-6.1 Terra
+auf Azure lehnte jede Lauf-Zusammenfassung ab (fünf von fünf bis 2026-11-12,
+0 Tokens, mit eigener Absagezeile), während alle Schritte davor und danach
+durchgingen. Der zweite Versuch traf am selben Endpunkt denselben Filter und
+an einem anderen ein HTTP 400 von OpenRouter, kostenlos, aber mit rund 2,5 s
+Wartezeit und der Zeile „Die Antwort des Modells brach ab. Dieser Schritt
+läuft noch einmal.“
 
 Die gespeicherte Aktivität eines Turns bekommt den Platz, den der Rest des
 Turn-Dokuments (1 MiB) übrig lässt, abzüglich 64 kB Reserve, höchstens
@@ -6152,11 +6161,13 @@ nahm nur 0–3 an. Seitdem:
 - *Eine Ablehnung durch den Filter eines Endpunkts ist kein Ende mehr*
   (`ModelDeclined`, seit 2026-11-09): vor dem ersten Wort abgelehnt, läuft der
   Schritt einmal auf einem anderen Endpunkt (`_passing_failure(exc, value)`,
-  nur wenn der Endpunkt bekannt ist). Jeder Endpunkt filtert für sich: Terra
-  auf Azure lehnte am 2026-11-07 nach vier Minuten bezahlter Arbeit zweimal
-  einen Schritt ab, Claude auf Vertex am 2026-10-28 jeden Versuch eines Chats.
-  Lehnt auch der andere ab (oder gibt es keinen), endet der Turn wie bisher
-  als `model_declined` mit dem Hinweis auf ein anderes Chatmodell.
+  nur wenn der Endpunkt bekannt ist). Jeder Endpunkt filtert für sich: Claude
+  auf Vertex lehnte am 2026-10-28 jeden Versuch eines Chats ab. (Der Turn
+  von Terra auf Azure, der am 2026-11-07 nach vier Minuten bezahlter Arbeit
+  an zwei Ablehnungen endete, scheiterte an seiner Lauf-Zusammenfassung; die
+  bekommt keinen zweiten Versuch mehr, siehe „Zusammenfassungen“.) Lehnt auch
+  der andere ab (oder gibt es keinen), endet der Turn wie bisher als
+  `model_declined` mit dem Hinweis auf ein anderes Chatmodell.
 - *Ein abgebrochener oder gestoppter Turn hinterlässt sein Arbeitsprotokoll*
   (`agent_work_record`, vorher nur nach VM-Läufen): „Erneut versuchen“
   schickt die Frage als nächste Nachricht, deren Verlauf nach dem
