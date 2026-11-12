@@ -53,6 +53,17 @@ describe("an answer is never a part of the app", () => {
     expect(output.textContent).toContain("Confirm");
   });
 
+  it("cannot work the app's controls through a label", () => {
+    const { document, output } = render('Read <label for="sendButton" style="color: blue">the sources</label> first.',
+      '<button id="sendButton"></button><input id="memoryEnabledSwitch" type="checkbox">');
+    let sent = 0;
+    document.getElementById("sendButton").addEventListener("click", () => { sent += 1; });
+    output.querySelector("label")?.click();
+    expect(sent).toBe(0);
+    expect(output.querySelector("[for]")).toBeNull();
+    expect(output.textContent).toContain("the sources");
+  });
+
   it("cannot name itself as something the app looks up on window", () => {
     const { window, output } = render('<a id="linkifySourceTags"></a><a name="currentEvidenceSources"></a><img name="App" src="data:image/png;base64,AAAA">');
     expect(output.querySelector("a").id).toBe("user-content-linkifySourceTags");

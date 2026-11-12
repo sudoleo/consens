@@ -37,12 +37,14 @@ function reportMarkdownFallback(missingDependency) {
 // reads the next message from. So every id and name in an answer gets a
 // prefix (SANITIZE_NAMED_PROPS, "user-content-"), and an answer has no
 // controls: a field, a button or a dialog of its own could pass for the
-// app's.
+// app's. Nor does it reach the app's: a label's "for" names the app's id as
+// it stands (the prefix covers only id and name), and a click on it is a
+// click on that button or switch.
 const MODEL_HTML_CONFIG = {
   FORBID_TAGS: ["style", "video", "audio", "source", "picture", "track", "form", "input", "link", "meta",
     "image", "feimage", "mglyph",
     "textarea", "select", "option", "optgroup", "button", "datalist", "fieldset", "output", "dialog"],
-  FORBID_ATTR: ["srcset", "poster", "background", "ping"],
+  FORBID_ATTR: ["srcset", "poster", "background", "ping", "for"],
   SANITIZE_NAMED_PROPS: true
 };
 
