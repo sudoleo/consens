@@ -14,6 +14,7 @@ import re
 
 from app.core import assets as assets_module
 from app.core.assets import frontend_assets
+from tests.asset_tree import own_asset_tree  # noqa: F401  (fixture)
 from tests.frontend_order import loads_before
 
 
@@ -169,29 +170,23 @@ def test_reasoning_exhaustion_offers_the_cheaper_run():
     assert "--blocked-tone: var(--partial)" in shell
 
 
-def test_css_cache_busting_needs_no_manual_bump(monkeypatch):
+def test_css_cache_busting_needs_no_manual_bump(monkeypatch, own_asset_tree):
     """Die Marke kommt aus dem Inhalt (app/core/assets.py), also kann sie
     nicht vergessen werden: mit einer handgepflegten ?v= lieferte der Server
     nach einer vergessenen Marke altes CSS aus, und die Karte erschien
     ungestylt."""
     template = read("templates/index.html")
-    shell = ROOT / "static" / "css" / "shell.css"
+    shell = own_asset_tree / "static" / "css" / "shell.css"
 
     assert not re.search(r'href="/static/style\.css\?v=', template)
 
     # Source mode: in built mode the hash comes from the build output, and
     # test_frontend_build.py is what keeps that output in sync with the sources.
     monkeypatch.setenv("FRONTEND_DEV", "1")
-    assets_module._cache.clear()
 
-    original = shell.read_bytes()
     before = frontend_assets().style
-    try:
-        shell.write_bytes(original + b"\n/* touched by the test */\n")
-        assets_module._cache.clear()
-        after = frontend_assets().style
-    finally:
-        shell.write_bytes(original)
-        assets_module._cache.clear()
+    shell.write_bytes(shell.read_bytes() + b"\n/* touched by the test */\n")
+    assets_module._cache.clear()
+    after = frontend_assets().style
 
     assert before != after

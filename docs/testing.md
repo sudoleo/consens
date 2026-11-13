@@ -588,6 +588,10 @@ Workern fehl. Sie laufen deshalb gleichzeitig im eigenen Job `backend-tempo`
 (`-m tempo`), der `backend`-Job lässt sie aus (`-m "not tempo"`). Neue Tests, die
 Zeiten oder Zeitverhältnisse prüfen, bekommen den Marker. Tests dürfen sich über
 Dateigrenzen hinweg keine Dateien, festen Ports oder Prozesszustände teilen.
+Ein Test, der eine Quelldatei unter `static/` ändert, ändert deshalb nie den
+Checkout, sondern die Kopie aus der Fixture `own_asset_tree`
+(`tests/asset_tree.py`): sonst liest ein anderer Worker die Datei halb
+geschrieben, und `test_dist_is_not_stale` meldet einen veralteten Build.
 `.\dev.ps1 check backend` läuft lokal weiter seriell; parallel lokal (belegt
 alle 4 Kerne, nur ohne laufende Peer-Sessions):
 

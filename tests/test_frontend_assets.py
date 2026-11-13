@@ -13,6 +13,7 @@ import re
 import pytest
 
 from app.core import assets
+from tests.asset_tree import own_asset_tree  # noqa: F401  (fixture)
 
 
 @pytest.mark.parametrize("path", ["/app", "/app/watches"])
@@ -83,31 +84,23 @@ def test_every_source_url_carries_a_content_hash(source_mode):
         assert re.search(r"\?v=[0-9a-f]{12}$", tag.src), tag.src
 
 
-def test_editing_a_file_changes_its_url(source_mode, tmp_path, monkeypatch):
-    target = assets.ROOT / "static" / "js" / "app-state.js"
-    original = target.read_bytes()
+def test_editing_a_file_changes_its_url(source_mode, own_asset_tree):
+    target = own_asset_tree / "static" / "js" / "app-state.js"
     before = assets.asset_url("/static/js/app-state.js")
-    try:
-        target.write_bytes(original + b"\n// touched by the test\n")
-        assets._cache.clear()
-        after = assets.asset_url("/static/js/app-state.js")
-    finally:
-        target.write_bytes(original)
+    target.write_bytes(target.read_bytes() + b"\n// touched by the test\n")
+    assets._cache.clear()
+    after = assets.asset_url("/static/js/app-state.js")
 
     assert before != after
 
 
-def test_style_url_changes_when_an_imported_sheet_changes(source_mode):
-    target = assets.ROOT / "static" / "css" / "shell.css"
-    original = target.read_bytes()
+def test_style_url_changes_when_an_imported_sheet_changes(source_mode, own_asset_tree):
+    target = own_asset_tree / "static" / "css" / "shell.css"
     before = assets.frontend_assets().style
-    try:
-        # style.css itself is untouched -- only a file it @imports changes.
-        target.write_bytes(original + b"\n/* touched by the test */\n")
-        assets._cache.clear()
-        after = assets.frontend_assets().style
-    finally:
-        target.write_bytes(original)
+    # style.css itself is untouched -- only a file it @imports changes.
+    target.write_bytes(target.read_bytes() + b"\n/* touched by the test */\n")
+    assets._cache.clear()
+    after = assets.frontend_assets().style
 
     assert before != after, "an @import edit must bust the aggregated sheet"
 
@@ -193,27 +186,25 @@ def test_no_manual_version_marks_hide_inside_app_javascript_imports():
     # admin.js -> import ... from "/static/js/admin-api.js"
     ("/static/js/admin.js", "static/js/admin-api.js"),
 ])
-def test_nested_import_change_changes_the_entry_url(entry, nested, source_mode):
+def test_nested_import_change_changes_the_entry_url(entry, nested, source_mode, own_asset_tree):
     """Nested @import/ESM URLs carry no version of their own, so the entry
     URL must change when any file in its import closure changes. (In built
     mode a public stylesheet entry is served as its bundle instead, see
     below.)"""
 
-    target = assets.ROOT / nested
+    target = own_asset_tree / nested
     original = target.read_bytes()
     before = assets.asset_url(entry)
-    try:
-        target.write_bytes(original + b"\n/* touched by the test */\n")
-        after = assets.asset_url(entry)
-    finally:
-        target.write_bytes(original)
+    target.write_bytes(original + b"\n/* touched by the test */\n")
+    after = assets.asset_url(entry)
+    target.write_bytes(original)
 
     assert re.search(r"\?v=[0-9a-f]{12}$", before)
     assert before != after
     assert assets.asset_url(entry) == before
 
 
-def test_public_stylesheets_are_served_as_their_bundle_while_it_is_current(monkeypatch):
+def test_public_stylesheets_are_served_as_their_bundle_while_it_is_current(monkeypatch, own_asset_tree):
     """landing.css and public-pages.css reach typography.css through a
     three-level @import chain, every nested file revalidated on each visit
     before the first paint can happen. In built mode asset_url hands out
@@ -231,13 +222,11 @@ def test_public_stylesheets_are_served_as_their_bundle_while_it_is_current(monke
         assert "@import" not in css
         assert "../fonts/inter/InterVariable-latin." in css
 
-    target = assets.ROOT / "static" / "css" / "foundation.css"
+    target = own_asset_tree / "static" / "css" / "foundation.css"
     original = target.read_bytes()
-    try:
-        target.write_bytes(original + b"\n/* touched by the test */\n")
-        stale = assets.asset_url("/static/css/public-pages.css")
-    finally:
-        target.write_bytes(original)
+    target.write_bytes(original + b"\n/* touched by the test */\n")
+    stale = assets.asset_url("/static/css/public-pages.css")
+    target.write_bytes(original)
     assert re.fullmatch(r"/static/css/public-pages\.css\?v=[0-9a-f]{12}", stale)
     assert assets.asset_url("/static/css/public-pages.css").startswith("/static/dist/")
 
