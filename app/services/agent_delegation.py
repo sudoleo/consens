@@ -2030,8 +2030,11 @@ class DelegationLoop(AgentLoop):
             # The main model's file block follows this message's question, not
             # the newest tool result: the same bytes at the same place in every
             # step, so the provider caches the image/PDF instead of charging it
-            # in full again per step. Workers keep their own prompt last.
-            anchor = None if worker else min(self.turn_start, len(messages))
+            # in full again per step. Workers keep their own prompt last; the
+            # agent's correction pass (agent_review_feedback) continues the
+            # agent's own conversation and reads its cache the same way.
+            anchored = worker is None or getattr(worker, "kind", None) == "correction"
+            anchor = min(self.turn_start, len(messages)) if anchored else None
             question = messages[(len(messages) if anchor is None else anchor) - 1].get("content", "")
             messages = self.file_context.messages(messages, model, file_ids=ids, query=str(question)[-500:], anchor=anchor)
             if worker is None:
@@ -3420,6 +3423,11 @@ class DelegationLoop(AgentLoop):
         review it never costs the answer: a Stop or a lost run ends it."""
         auditor = self.comparison.auditor
         if auditor.feedback is None or self.cancellation.cancelled or self.watch_error is not None:
+            return
+        if not self.handed_over:
+            # The chat is still this run's (its hand-over failed): a pass
+            # would hold the next message back. The findings stay open.
+            auditor.close_feedback("busy")
             return
         if not auditor.correction_due():
             auditor.correct(self.cancellation)

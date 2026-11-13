@@ -56,7 +56,7 @@ REQUEST_TIMES = ("request_started_at", "first_token_at", "stream_ended_at")
 # activity, review or work log, which take up to about a megabyte.
 HISTORY_FIELDS = ("status", "question", "assistant_response", "consensus", "app_context",
                   "agent_work_record", "sources", "agent_answer_fixed_at", "agent_history_summary",
-                  "agent_correcting")
+                  "agent_answer_revision")
 
 
 def early_marks(review):
@@ -258,21 +258,27 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                                          fields=HISTORY_FIELDS, checked=checked)
 
     @staticmethod
-    def history_current(page, target):
+    def history_current(page, target, corrected=None):
         """Whether ``page``, read before ``target`` was created, still holds
         every earlier turn as it is: none of them pending (one that finished
         or was swept in between is read again), all of them there (a single
-        page). Else messages reads its own. A turn whose answer the agent
-        is correcting (``agent_correcting``, agent_review_feedback) is read
-        again too: its correction is kept only if it was saved before this
-        message's turn was created (AgentSessionStore.save_review ``latest``)."""
+        page). Else messages reads its own. ``corrected``: the chat's newest
+        correction of an answer as the turn's creation saw it (create_turn
+        ``chat_answer_corrected``, "<turn>:<revision>", agent_review_feedback):
+        a page that holds that turn at another revision was read before the
+        correction was saved."""
+        if isinstance(corrected, str) and ":" in corrected:
+            turn_id, revision = corrected.split(":", 1)
+            if any(snapshot.id == turn_id and (snapshot.to_dict() or {}).get("agent_answer_revision") != revision
+                   for snapshot in page["snapshots"]):
+                return False
         earlier = [(s.to_dict() or {}) for s in page["snapshots"]]
         earlier = [turn for turn in earlier if turn.get("position", 0) < target["position"]]
-        return (all(in_history(turn) and not turn.get("agent_correcting") for turn in earlier)
+        return (all(in_history(turn) for turn in earlier)
                 and (page.get("has_more") or len(earlier) == target["position"] - 1))
 
     def messages(self, uid, chat_id, target, model=None, config=None, sources=None, context=None, first_page=None,
-                 history_chars=None, summary=None):
+                 history_chars=None, summary=None, corrected=None):
         """The conversation for the target turn. ``sources``, a list, receives
         the saved sources of the earlier turns it includes (read_source may
         open them; agent_read_source, "Sources from the chat itself").
@@ -280,7 +286,8 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         (create_turn ``app_context``); an earlier turn's question comes back
         with its own, so the prompt continues the one that turn first sent.
         ``first_page``: history_page read beside the turn's creation, used
-        where history_current says it still holds.
+        where history_current says it still holds (``corrected``: the chat's
+        newest correction as the turn's creation saw it).
 
         A chat longer than CONTEXT_CHAR_LIMIT keeps its newest messages
         (history_start) and tells the model so in this message's app context.
@@ -312,7 +319,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         while True:
             # Agent answers live on the turn itself. Do not issue an empty
             # model_answers subcollection query for every message in history.
-            if not cursor and first_page is not None and self.history_current(first_page, target):
+            if not cursor and first_page is not None and self.history_current(first_page, target, corrected):
                 page = first_page
             else:
                 page = self.history_page(uid, chat_id, cursor)

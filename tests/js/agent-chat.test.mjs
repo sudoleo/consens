@@ -372,6 +372,28 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(line()).toBe('Thinking…'));
     dom.window.close();
   }, 10000);
+  it('sends findings_to_agent only where the account switched it on', async () => {
+    const {window:w,document:d,dom} = boot();
+    await selectAgent(w);
+    w.streamSSERequest.mockImplementation(() => new Promise(() => {}));
+    d.querySelector('#questionInput').value = 'First question';
+    w.App.agentChat.send();
+    await vi.waitFor(() => expect(w.streamSSERequest).toHaveBeenCalledTimes(1));
+    // Off: the request is the one it always was.
+    expect('findings_to_agent' in w.streamSSERequest.mock.calls[0][1]).toBe(false);
+    dom.window.close();
+  });
+  it('sends findings_to_agent with the message once the account switched it on', async () => {
+    const {window:w,document:d,dom} = boot();
+    await selectAgent(w);
+    w.App.userSettings.set('findings_to_agent', true);
+    w.streamSSERequest.mockImplementation(() => new Promise(() => {}));
+    d.querySelector('#questionInput').value = 'Second question';
+    w.App.agentChat.send();
+    await vi.waitFor(() => expect(w.streamSSERequest).toHaveBeenCalledTimes(1));
+    expect(w.streamSSERequest.mock.calls[0][1].findings_to_agent).toBe(true);
+    dom.window.close();
+  });
   it('keeps a silent stream open while the server reports the run still running and adopts its saved answer', async () => {
     const {window:w,document:d,dom} = boot();
     await selectAgent(w);
@@ -1500,7 +1522,7 @@ describe("single-model agent chat", () => {
   });
 
   it('retains progress paragraphs and confirmed steps when the auxiliary status window rotates', () => {
-    const { window, dom } = boot();
+    const { window, document, dom } = boot();
     const events = [];
     for (let i = 0; i < 90; i++) {
       window.App.agentActivity.receive(events, {version:1,id:`p${i}`,kind:'progress',text:`Check ${i}`});
@@ -1907,6 +1929,26 @@ describe("single-model agent chat", () => {
     handlers.handover.receive({ response: "Answer.", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
       turn: { ...HANDED_TURN, agent_review: handedReview("running") }, bookmark_meta: { id: "saved" } });
   }
+
+  it("follows the review after the hand-over long enough for the final round and the agent's correction", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const delays = [];
+    const timer = window.setTimeout.bind(window);
+    window.setTimeout = (fn, ms, ...args) => { delays.push(ms); return timer(fn, ms, ...args); };
+    let handlers;
+    window.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(() => {}); });
+    document.getElementById("questionInput").value = "Question";
+    const pending = window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    handlers.delta.append("Answer.");
+    handOver(handlers);
+    await pending;
+    // agent_audit FINAL_ROUND_SECONDS 90 + REVIEWER_JOIN_SECONDS 10, then
+    // agent_review_feedback CORRECTION_SECONDS 120: the page still listens.
+    expect(Math.max(...delays.filter(Number.isFinite))).toBeGreaterThanOrEqual((90 + 10 + 120) * 1000);
+    dom.window.close();
+  });
 
   it("takes the answer as done at the hand-over and sends a waiting message then, not after the review", async () => {
     const { window, document, dom } = boot();

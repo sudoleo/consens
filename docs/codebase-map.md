@@ -6956,16 +6956,23 @@ Korrekturdurchgang (`_finish_review` → `_correct_answer` → App-Aufruf
 `FINAL_FINDINGS`, `ComparisonTools.correct` legt Version 2 an, die erste
 bleibt; Marken korrigierter Befunde fallen weg, `corrected_out`, die Seite
 zeigt Marken erst nach dem Durchgang; App-Eintrag `answer_corrected`). Die
-Korrektur prüft kein Prüfer nach. Gegen den Wettlauf mit der nächsten
-Nachricht startet und speichert sie nur, solange der Turn der neueste des
-Chats ist (`AgentSessionStore.begin_correction`, `save_review(latest=True)`
-→ `NewerTurn`, Turn-Feld `agent_correcting`, das `history_current` neu lesen
-lässt). Offene Befunde stehen am Chat als `agent_open_findings` (mit
-`turn_id`; `save_review(chat_fields=…)`), die Route liest die Einstellung
-selbst (`_findings_to_agent`) und nimmt sie in den App-Kontext der nächsten
-Frage (`open_findings_context`). Systemprompt: `review_facts` ersetzt den
+Korrektur prüft kein Prüfer nach, und was der Agent bekommt, lesen die
+Prüfer nie (`review_entry` → `redacted`, `delivered_for_reviewers`). Nur
+sichere Stellen gehen in den Durchgang (`safe_place`, `kept_shape`); jeder
+Fehler danach setzt Antwort und Marken zurück. Gegen den Wettlauf mit der
+nächsten Nachricht startet und speichert sie nur, solange der Turn der
+neueste des Chats ist (`AgentSessionStore.begin_correction`,
+`save_review(latest=True)` → `NewerTurn`); das Speichern setzt
+`agent_answer_revision` am Turn und `agent_answer_corrected` am Chat, die
+`create_turn` als `chat_answer_corrected` zurückgibt und
+`history_current(..., corrected)` prüft. Ohne Übergabe kein Durchgang. Offene
+Befunde stehen am Chat als `agent_open_findings` (mit `turn_id`;
+`save_review(chat_fields=…)`); die Seite schickt die Einstellung mit
+(`AgentRequest.findings_to_agent`), die Route nimmt die offenen Befunde in den
+App-Kontext der nächsten Frage (`open_findings_context`). Systemprompt: `review_facts` ersetzt den
 Satz `_REVIEW_MARKS` durch `MARKS_SHARED`. Zähler `findings_to_agent` in
-`agent_audit_metrics`. Tests: `tests/test_agent_review_feedback.py`.
+`agent_audit_metrics`. Tests: `tests/test_agent_review_feedback.py`,
+`tests/test_agent_review_feedback_robust.py`.
 
 Im Browser (nur mit `audit.feedback`; ohne sie bleibt jedes Byte wie oben):
 Solange der Durchgang des Agenten nicht `done` ist, zeigt die Antwort keine
@@ -9351,7 +9358,8 @@ der Agent kann sie weder lesen noch ändern, `agent_settings.ELSEWHERE`),
 „Pass findings to the agent“; fehlt = aus; `app-ui.js` bindet
 `#findingsToAgentSwitch`, `agent-mode.js` blendet die Zeile
 `#findingsToAgentSetting` bei Prüfern `off` aus, die Einstellungssuche
-überspringt ausgeblendete Zeilen; die Route liest sie am Konto, die Seite schickt sie nicht mit;
+überspringt ausgeblendete Zeilen; die Seite schickt sie mit jeder Nachricht, nur wenn an
+(`AgentRequest.findings_to_agent`, wie `reviewers`);
 der Agent kennt sie aus `read_settings`, ändern kann er sie nicht; siehe
 „Befunde an den Agenten“ in §4).
 **Ausgemustert (2026-10-31):** `agent_preferences` (Antworttiefe, Antwortstart,

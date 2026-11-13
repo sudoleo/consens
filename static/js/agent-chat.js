@@ -2843,7 +2843,10 @@
   // stream, or the poll behind it, until the run's end: each lands on the
   // turn wherever it stands now, under the live answer or in the history
   // after the next message took the live surface.
-  const REVIEW_TAIL_MS = 180000;
+  // The final round (agent_audit FINAL_ROUND_SECONDS plus the stop of late
+  // reviewers) and, with findings_to_agent, the agent's correction pass
+  // (agent_review_feedback CORRECTION_SECONDS) fit, with room to save.
+  const REVIEW_TAIL_MS = 300000;
   const structuredCopy = value => (typeof structuredClone === "function" ? structuredClone(value) : JSON.parse(JSON.stringify(value)));
   function followReview(context, { streaming = null, live = null } = {}) {
     context.metadata.reviewTail = true;
@@ -3129,6 +3132,9 @@
         timezone: deviceTimezone(),
         // Who checks this message's work: what the composer showed (Settings > Agent).
         reviewers: App.words.reviewerSetting(),
+        // Whether the reviewers' findings reach the agent (Settings > Agent); sent only
+        // when on, so a message without it is the request it always was.
+        ...(App.userSettings?.get?.("findings_to_agent") === true ? { findings_to_agent: true } : {}),
       };
       // A reload ends a temporary chat (temporary-chat.js): nothing to follow then.
       if (!context.config.temporary) rememberPending(context, body);

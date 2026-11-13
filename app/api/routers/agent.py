@@ -203,6 +203,11 @@ class AgentRequest(BaseModel):
     # Kept with the turn (agent_settings.reviewers), no part of the request's
     # identity: a turn recovers after the setting changed.
     reviewers: Literal["always", "workspace", "off"] = "always"
+    # Whether the reviewers' findings reach the agent (account setting
+    # ``findings_to_agent``, agent_review_feedback): sent like ``reviewers``,
+    # so no message pays a read for it; older pages send none = off. No part
+    # of the request's identity either.
+    findings_to_agent: bool = False
     # The browser's IANA zone (Intl): the date in the message's app context.
     # A name the server does not know counts as none (the app's zone).
     timezone: str | None = Field(default=None, max_length=64)
@@ -402,21 +407,8 @@ def _turn_reads(uid, payload, store):
         # turn's creation found the chat live.
         "history": lambda: store.history_page(uid, chat_id, checked=True),
         "catalog": lambda: files.list(uid, chat_id, checked=True),
-        "findings": lambda: _findings_to_agent(uid),
     }
     return {name: _TURN_READS.submit(job) for name, job in jobs.items()}
-
-
-def _findings_to_agent(uid):
-    """The account's findings_to_agent (agent_review_feedback), read by the
-    server and not sent by the page: off wherever it cannot be read."""
-    try:
-        from app.services.user_settings import FirestoreUserSettingsRepository
-        values, _, _ = FirestoreUserSettingsRepository(db_firestore).get(uid)
-        return values.get("findings_to_agent") is True
-    except Exception as exc:
-        logging.info("Agent findings setting unreadable category=%s", safe_exception(exc))
-        return False
 
 
 def sweep_after(store, uid, chat_id, recover):
@@ -643,7 +635,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         if watch_run:
             from app.services import agent_watches
             app_context += "\n" + agent_watches.run_context(watch_run)
-        findings_to_agent = payload.reviewers != "off" and reads is not None and reads["findings"].result()
+        findings_to_agent = payload.findings_to_agent and payload.reviewers != "off"
         if findings_to_agent:
             # The previous answer's open findings, saved on the chat while
             # that answer was the chat's newest (AnswerAudit._save_open).
@@ -695,7 +687,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         messages = store.messages(uid, payload.chat_id, turn, model=model, config=config, sources=chat_sources,
                                   context=app_context, first_page=_first_history_page(reads["history"]),
                                   history_chars=_watch_history_chars() if watch_run else None,
-                                  summary=history_summary)
+                                  summary=history_summary, corrected=turn.get("chat_answer_corrected"))
         cancellation = ProviderCancellation()
         loop = DelegationLoop(store=store, uid=uid, chat_id=payload.chat_id, turn_id=turn["id"],
                          model=model, messages=messages, api_key=key or "", cancellation=cancellation,

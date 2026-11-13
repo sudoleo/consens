@@ -202,6 +202,8 @@ class ComparisonTools:
         self._save_lock = threading.Lock()
         self._snapshots = self._saved = 0
         self._latest = None
+        # A corrected answer's save (``latest``) is still to come.
+        self._latest_due = False
         self._raw, self._failures, self._running = {}, {}, {}
         # Text a model had written before it stopped or failed. Kept for the
         # reader, marked incomplete; never part of what the agent reads.
@@ -253,19 +255,29 @@ class ComparisonTools:
         held; a caller whose snapshot is saved that way returns without a
         write of its own, so six answers arriving together are not six writes
         in a row. ``latest``: the save of a corrected answer
-        (AgentSessionStore.save_review), never folded into another one."""
+        (AgentSessionStore.save_review); a newer snapshot that folds it in
+        is saved as one too, never without its check. A latest save that
+        failed is not carried on: its caller puts the answer back."""
         with self.lock:
             data = self._checkpoint(status)
             self._snapshots += 1
             number = self._snapshots
-            self._latest = (number, data, self.text, dict(self.chat_fields), latest)
+            self._latest_due = self._latest_due or latest
+            self._latest = (number, data, self.text, dict(self.chat_fields))
         with self._save_lock:
             if number <= self._saved:
                 return
-            newest, data, text, fields, latest = self._latest
+            with self.lock:
+                newest, data, text, fields = self._latest
+                latest = self._latest_due
             extra = {**({"chat_fields": fields} if fields else {}), **({"latest": True} if latest else {})}
-            self.loop.store.save_review(self.loop.uid, self.loop.chat_id, self.loop.turn_id, self.loop.run_token,
-                                        data, text, **extra)
+            try:
+                self.loop.store.save_review(self.loop.uid, self.loop.chat_id, self.loop.turn_id,
+                                            self.loop.run_token, data, text, **extra)
+            finally:
+                if latest:
+                    with self.lock:
+                        self._latest_due = False
             self._saved = newest
             self.loop.outgoing.put_nowait({"type": "review", "review": data})
 

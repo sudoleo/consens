@@ -1363,6 +1363,5 @@
   "The agent received two findings of the reviewers.": "Der Agent hat zwei Befunde der Prüfer bekommen.",
   "The agent received three findings of the reviewers.": "Der Agent hat drei Befunde der Prüfer bekommen.",
   "Check the reviewers' findings on the answer.": "Die Befunde der Prüfer zur Antwort durchgehen.",
-  "The correction was stopped; the answer stands as reviewed.": "Die Korrektur wurde gestoppt; die Antwort bleibt, wie sie geprüft wurde.",
-  "The correction did not complete; the answer stands as reviewed.": "Die Korrektur wurde nicht fertig; die Antwort bleibt, wie sie geprüft wurde."
+  "The correction was stopped; the answer stands as reviewed.": "Die Korrektur wurde gestoppt; die Antwort bleibt, wie sie geprüft wurde."
 }

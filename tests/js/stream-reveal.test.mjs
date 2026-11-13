@@ -348,4 +348,16 @@ describe("stream-reveal: a fixed answer rewritten in place", () => {
     expect(lit()).toBe(0);
     expect(below.animate).not.toHaveBeenCalled();
   });
+
+  it("only rewrites, without light or motion, with Streaming animation off", () => {
+    const { window, document, reveal, el, lit } = boot({ streaming: false });
+    window.injectMarkdown(el, BEFORE, []);
+    const below = document.createElement("section");
+    el.after(below);
+    below.animate = vi.fn();
+    reveal.rewrite(el, () => window.morphMarkdown(el, AFTER));
+    expect(el.textContent).toContain("Tickets cost 24 euros since 2025.");
+    expect(lit()).toBe(0);
+    expect(below.animate).not.toHaveBeenCalled();
+  });
 });

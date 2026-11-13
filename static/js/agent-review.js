@@ -692,7 +692,13 @@
   // agent's correction (renderAudit): agent-chat.js renders the answer
   // through this, so the next frame does not put the first version back.
   function shownText(body, text) {
-    return body?._corrected && body._corrected.from === text ? body._corrected.to : text;
+    const corrected = body?._corrected;
+    if (!corrected) return text;
+    if (corrected.from === text) return corrected.to;
+    // The body shows another answer now (the live surface is reused): the
+    // correction no longer belongs to it.
+    if (corrected.to !== text) body._corrected = null;
+    return text;
   }
   // Every mark once, in the order of the answer, then those whose passage
   // the answer does not hold. A mark over several sentences sits on each

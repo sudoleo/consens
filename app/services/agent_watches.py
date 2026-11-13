@@ -854,16 +854,23 @@ def run_context(watch: dict) -> str:
     return RUN_NOTE.format(goal=f" It ends once this goal is met: {goal}." if goal else "")
 
 
-def _reviewers(uid: str, db) -> str:
-    """Who checks a run's work: the account's setting, as the composer sends it."""
+def _review_settings(uid: str, db) -> tuple[str, bool]:
+    """Who checks a run's work and whether their findings reach the agent:
+    the account's settings, as the composer sends them (one read)."""
     try:
         from app.services.user_settings import FirestoreUserSettingsRepository
         values, _, _ = FirestoreUserSettingsRepository(db).get(uid)
-        value = values.get("reviewers")
     except Exception as exc:
         logging.info("Agent watch reviewers setting unreadable category=%s", safe_exception(exc))
-        value = None
-    return value if value in {"always", "workspace", "off"} else "always"
+        values = {}
+    value = values.get("reviewers")
+    return (value if value in {"always", "workspace", "off"} else "always",
+            values.get("findings_to_agent") is True)
+
+
+def _reviewers(uid: str, db) -> str:
+    """Who checks a run's work: the account's setting, as the composer sends it."""
+    return _review_settings(uid, db)[0]
 
 
 def _retry_soon(watch_id: str, run: dict, *, db, now: datetime) -> None:
@@ -969,9 +976,11 @@ def start_run(run: dict, *, db=None, now: datetime | None = None) -> bool:
     with _running_lock:
         _running[watch_id] = uid
     try:
+        reviewers, findings = _review_settings(uid, db)
         payload = agent_router.AgentRequest(
             chat_id=run["chat_id"], client_request_id=run["request_id"], bookmark_id=run["bookmark_id"],
-            question=run_question(run), timezone=run.get("timezone") or None, reviewers=_reviewers(uid, db))
+            question=run_question(run), timezone=run.get("timezone") or None, reviewers=reviewers,
+            findings_to_agent=findings)
         response = agent_router.start_agent_turn(uid, payload, watch_run=watch_run)
     except HTTPException as exc:
         _forget(watch_id)

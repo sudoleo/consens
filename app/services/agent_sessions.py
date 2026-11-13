@@ -352,9 +352,13 @@ class AgentSessionStore:
         """Checkpoint exact text and review state before expensive work.
         ``chat_fields``: fields of the chat, written only while this turn is
         the chat's newest (agent_review_feedback: agent_open_findings).
-        ``latest``: only while no newer message of the chat started, else
-        NewerTurn: a corrected answer must not change under a message that
-        read it; the turn's ``agent_correcting`` ends with this save."""
+        ``latest``: the save of a corrected answer, only while no newer
+        message of the chat started, else NewerTurn: a corrected answer must
+        not change under a message that read it. It marks turn and chat with
+        one revision (turn ``agent_answer_revision``, chat
+        ``agent_answer_corrected`` = "<turn>:<revision>"): a message whose
+        turn is created after it finds its history read ahead of it out of
+        date (AgentRunStore.history_current) and reads it again."""
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
         def operation(tx):
@@ -367,19 +371,20 @@ class AgentSessionStore:
             if latest and chat.get("agent_turn_id") != turn_id:
                 raise NewerTurn("A newer message of the chat started")
             patch = {"agent_review": review, "assistant_response": text}
+            chat_patch = dict(chat_fields) if chat_fields and chat.get("agent_turn_id") == turn_id else {}
             if latest:
-                patch["agent_correcting"] = firestore.DELETE_FIELD
+                revision = uuid4().hex
+                patch["agent_answer_revision"] = revision
+                chat_patch["agent_answer_corrected"] = f"{turn_id}:{revision}"
             tx.update(turn_ref, patch)
-            if chat_fields and chat.get("agent_turn_id") == turn_id:
-                tx.update(chat_ref, chat_fields)
+            if chat_patch:
+                tx.update(chat_ref, chat_patch)
         self._agent_transaction(uid, operation)
 
     def begin_correction(self, uid, chat_id, turn_id, *, run_token):
-        """The correction pass of the turn's answer may start: no newer
-        message of the chat has started, and from now on one that starts
-        reads its history after this turn's correction is saved or given up
-        (``agent_correcting``, agent_runs.AgentRunStore.history_current).
-        False when a newer message runs or the run no longer holds the turn."""
+        """Whether the correction pass of the turn's answer may start: no
+        newer message of the chat has started (its result could not be kept,
+        save_review ``latest``) and the run still holds the turn. Reads only."""
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
         def operation(tx):
@@ -390,7 +395,6 @@ class AgentSessionStore:
                     or chat.get("status") != "active" or turn.get("status") != "pending"
                     or chat.get("agent_turn_id") != turn_id):
                 return False
-            tx.update(turn_ref, {"agent_correcting": True})
             return True
         return self._agent_transaction(uid, operation)
 

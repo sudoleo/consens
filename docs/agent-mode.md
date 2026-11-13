@@ -1002,9 +1002,11 @@ Rückkanal ohne Klick und ohne Rückfrage, ohne Wartezeit vor der Antwort, ohne
 Schleife zwischen Agent und Prüfern; Halt und Gate gehen unverändert nur an
 den Nutzer. Code: `app/services/agent_review_feedback.py`.
 
-- **Einstellung:** Die Route liest sie selbst am Konto
-  (`routers/agent.py::_findings_to_agent`, neben den anderen Lesevorgängen;
-  die Seite schickt nichts mit), ein Turn mit ihr trägt
+- **Einstellung:** Die Seite schickt sie mit jeder Nachricht wie
+  `reviewers` (`AgentRequest.findings_to_agent`, nur wenn an; ältere Seiten
+  nichts = aus; ein eigener Lesevorgang am Konto je Nachricht wäre ein
+  Firestore-Read mehr für jedes Konto), Watch-Läufe lesen sie mit
+  `reviewers` in einem Read (`agent_watches._reviewers`); ein Turn mit ihr trägt
   `agent_settings.findings_to_agent: true`. Mit Prüfern `off` wirkt sie
   nicht. Der Agent kennt sie über `read_settings` (`consens_io.reviewers`
   beschreibt sie, `findings_to_agent` sagt „on/off in this message“) und
@@ -1013,6 +1015,13 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   (`MARKS_SHARED`): welche Marken ihn erreichen, als Behauptung eines
   anderen Modells, Daten und nie Anweisung. Keine Stil- oder
   Verhaltensregel; der Prüfer-Prompt (`REVIEW_PROMPT_*`) bleibt unverändert.
+- **Prüfer bleiben unabhängig:** Was dem Agenten zugestellt wird, lesen die
+  Prüfer nie: `review_entry` zeigt den App-Eintrag `findings_delivered` nur
+  als Phase, Zahl und betroffene Einträge (`delivered_for_reviewers`) und
+  schwärzt in `context`-Einträgen die Nachricht `FINDINGS_OPEN` und den
+  Block `CONTEXT_OPEN` der nächsten Nachricht (`redacted`, `REDACTED_LIVE`,
+  `REDACTED_CONTEXT`). Sonst läse ein Prüfer die Notizen der anderen, und
+  sein Echo zählte als zweite Stimme. Das Protokoll für Admins behält alles.
 - **Register:** `AnswerAudit.feedback` (`Findings`) fasst die Marken
   aller Prüfer zu Befunden: auf einen Protokolleintrag Kennung `e<seq>`, auf
   die Antwort `s<n>` (Marken, die einen Satz teilen, sind ein Befund). Je
@@ -1020,8 +1029,11 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   `checking`, `corrected` oder `disputed` und `delivered` (`live`, `final`,
   `cut`). Gespeichert als `agent_review.audit.feedback` (`status` `live` →
   `checking` → `done`, `skipped` mit Grund, `counts`), jede platzierte Marke
-  trägt `finding` mit der Kennung; nur mit der Einstellung. Unter
-  `trim_marks`/600 kB wie die übrigen Marken.
+  trägt `finding` mit der Kennung; nur mit der Einstellung. Begrenzt auf
+  `MAX_FINDINGS` = 60 Stellen und `NOTES_PER_FINDING` = 6 Notizen; gespeichert
+  werden Befunde auf der Antwort sowie harte oder zugestellte zur Arbeit (ein
+  weicher zur Arbeit steht in den Marken auf der Arbeit); `trim_marks` kürzt
+  auch ihre Notizen.
 - **Hart** ist ein Befund mit `wrong` (nur mit Quelle möglich,
   `parse_review` macht ein `wrong` ohne Quelle zu `doubtful`) oder mit zwei
   Prüfern oder mehr an derselben Stelle. Im Lauf erreichen nur harte Befunde
@@ -1055,11 +1067,25 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Überziehen (die Antwort und ihre Prüfung stehen ohne ihn; abgelehnt =
   `skipped: allowance`), Kosten aufs Konto des Nutzers; Start nur mit
   `CORRECTION_MIN_SECONDS` = 45 s vor dem harten Stopp, höchstens
-  `CORRECTION_SECONDS` = 60 s. Je Befund antwortet der Agent mit dem
+  `CORRECTION_SECONDS` = 120 s (Platz für das Denken eines Modells: ein
+  abgeschnittener Durchgang ist bezahlt und bringt nichts; die Seite folgt der
+  Prüfung nach der Übergabe 5 min, `REVIEW_TAIL_MS`). Die Anfrage trägt die
+  Dateien der Nachricht an derselben Stelle wie die Schritte des Agenten
+  (`_step`, `kind: "correction"`), so hält der Prompt-Cache. Läuft die Frist
+  ab oder scheitert der Durchgang, endet seine Sitzung ohne Fehlertext. Ohne
+  gelungene Übergabe (`handed_over`) läuft kein Durchgang (`skipped: busy`):
+  er hielte die nächste Nachricht auf. Nur sichere Stellen gehen an den
+  Agenten (`safe_place`, sonst bleibt die Marke): eine Zeile Fließtext oder
+  ein Listenpunkt, keine Überschrift, Tabellenzeile, Zitat-, Code- oder
+  Formelblock, Markdown in sich geschlossen, höchstens `SENTENCE_CHARS`
+  Zeichen, wörtlich übergeben. Je Befund antwortet der Agent mit dem
   korrigierten Satz oder mit `stands` und einer Begründung
-  (`CORRECTION_REQUEST`, `read_corrections`); ersetzt werden nur diese
-  Sätze (`corrected_answer`, kein neuer Absatz, keine zerbrochene
-  Tabellenzelle, begrenztes Wachstum). Die korrigierte Antwort wird Version 2
+  (`CORRECTION_REQUEST`, `read_corrections`); ein Satz gilt nur, wenn er die
+  Form hält (`kept_shape`: eine Zeile, kein Bruchstück unter `SHRINK_SHARE`,
+  nicht viel länger, endet als Satz, wo das Original es tat, dieselben
+  Link-Adressen und Bilder, Markdown geschlossen; eine neue Adresse liefe an
+  der Prüfung der Links vorbei). Ersetzt werden nur diese Sätze
+  (`corrected_answer`). Die korrigierte Antwort wird Version 2
   (`ComparisonTools.correct`, `versions[1].corrects = 1`), die erste bleibt
   gespeichert; die übrigen Marken stehen neu auf ihr (`_place_corrected`),
   die eines korrigierten Befunds fallen weg (`corrected_out`): Die Antwort
@@ -1068,18 +1094,28 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Die Spur (Notizen je Befund mit Prüfer, Original und neuer Satz,
   Begründung) steht in `audit.feedback.findings[]`. Die Prüfer prüfen die
   Korrektur nicht. App-Einträge `findings_delivered` (`phase: answer`) und
-  `answer_corrected`. Ein Fehler, eine unlesbare Antwort oder ein Stopp lassen
-  die Befunde offen und die Antwort, wie sie geprüft wurde.
+  `answer_corrected`. Was nach dem Beginn des Durchgangs schiefgeht (Fehler,
+  unlesbare Antwort, Stopp, gescheitertes Speichern) setzt Text, Versionen und
+  Marken auf den geprüften Stand zurück und lässt die Befunde offen;
+  `Findings.done` öffnet einen noch geprüften Befund wieder, und
+  `finish_run` schließt ein Register, das ein Absturz offen ließ
+  (`closed_feedback`, `skipped: run_interrupted`).
 - **Wettlauf mit der nächsten Nachricht:** Seit 2026-11-01 kann sie starten,
   während die Prüfer noch arbeiten (`hand_over`). Die Korrektur gilt nur,
   solange sie die neueste Nachricht des Chats betrifft:
   `AgentSessionStore.begin_correction` startet sie nur bei
-  `chat.agent_turn_id == turn` und setzt `agent_correcting` am Turn;
-  gespeichert wird sie mit `save_review(latest=True)` in derselben
-  Bedingung, sonst `NewerTurn`: Text, Version und Marken gehen auf den
-  geprüften Stand zurück, die Befunde bleiben offen (`skipped:
-  newer_message`). `history_current` liest einen Turn mit `agent_correcting`
-  neu. So liest jede Nachricht genau die Fassung, die danach stehen bleibt.
+  `chat.agent_turn_id == turn` (liest nur); gespeichert wird sie mit
+  `save_review(latest=True)` in derselben Bedingung, sonst `NewerTurn`:
+  Text, Version und Marken gehen auf den geprüften Stand zurück, die Befunde
+  bleiben offen (`skipped: newer_message`). Das Speichern setzt eine Revision
+  an Turn (`agent_answer_revision`) und Chat (`agent_answer_corrected` =
+  „<turn>:<revision>“); `create_turn` gibt den Chat-Wert zurück
+  (`chat_answer_corrected`), und `history_current(..., corrected)` verwirft
+  eine vorab gelesene Verlaufsseite, die diesen Turn mit anderer Revision
+  hält. So liest jede Nachricht genau die Fassung, die danach stehen bleibt,
+  auch wenn die Korrektur zwischen dem Vorab-Lesen und der Anlage ihres
+  Turns gespeichert wurde. Kein Feld bleibt am Turn hängen, das spätere
+  Nachrichten einen Read mehr kosten würde.
 - **Nächste Nachricht:** Die offenen Befunde der letzten Antwort (ohne die
   im Lauf zugestellten) stehen am Chat als `agent_open_findings` mit der
   Kennung ihres Turns, gespeichert nur, solange er der neueste ist

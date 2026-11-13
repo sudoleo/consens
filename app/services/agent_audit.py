@@ -192,7 +192,6 @@ EARLY_MARKS_GRACE_SECONDS = .3
 # The agent's correction pass of a reviewed answer (findings_to_agent,
 # agent_review_feedback), as its helper session ends without a result.
 CORRECTION_STOPPED = "The correction was stopped; the answer stands as reviewed."
-CORRECTION_FAILED = "The correction did not complete; the answer stands as reviewed."
 
 # Most severe first. The mark of a sentence takes its most severe kind.
 KINDS = ("wrong", "doubtful", "incomplete")
@@ -496,8 +495,23 @@ def review_entry(entry, text, limit=ENTRY_CHARS, *, brief=None, answer=None, com
                          if isinstance(source, dict) else source for source in content["sources"]]
                 content["sources"] = (pages if len(_dumps(pages)) <= limit // 4
                                       else f"[{len(pages)} pages, each answer lists those it cites]")
+    if entry.get("kind") == "app" and entry.get("name") == "findings_delivered":
+        # Reviewers learn that the agent got findings, never what they say
+        # (agent_review_feedback.REDACTED_LIVE).
+        from app.services.agent_review_feedback import delivered_for_reviewers
+        content = delivered_for_reviewers(content if isinstance(content, dict) else _loads(text))
+    elif entry.get("kind") == "context":
+        from app.services.agent_review_feedback import redacted
+        content = redacted(content)
     item["content"] = _fit(content, limit)
     return item
+
+
+def _loads(text):
+    try:
+        return json.loads(text)
+    except (TypeError, ValueError):
+        return {}
 
 
 def round_message(number, entries, *, limit=ENTRY_CHARS, answer=None, earlier=None, opening=None, brief=None,
@@ -1416,6 +1430,13 @@ def trim_marks(audit):
         item["note"] = _text(item.get("note"), TRIMMED_NOTE_CHARS)
         if item.get("quote"):
             item["quote"] = _text(item["quote"], 200)
+    # The findings' trace (findings_to_agent): shorter notes, the corrected
+    # sentences whole, as the answer holds them.
+    for finding in (audit.get("feedback") or {}).get("findings") or []:
+        for note in finding.get("notes") or []:
+            note["note"] = _text(note.get("note"), TRIMMED_NOTE_CHARS)
+        if finding.get("reason"):
+            finding["reason"] = _text(finding["reason"], TRIMMED_NOTE_CHARS)
 
 
 # --- One reviewer -------------------------------------------------------------
@@ -2642,116 +2663,122 @@ class AnswerAudit:
         return found
 
     def correction_due(self):
-        """Whether the reviewed answer has findings for the correction pass."""
-        return bool(self.feedback is not None and self.claims is not None and self.sessions
-                    and self.feedback.correctable(peek=True))
+        """Whether the reviewed answer has findings the correction pass can take."""
+        if self.feedback is None or self.claims is None or not self.sessions:
+            return False
+        return bool(self.feedback.correctable(self.tools.text)[0])
 
     def correct(self, cancellation):
         """The agent's one correction pass after the review
-        (agent_review_feedback): its hard findings on the answer go to the
-        agent's model on its own conversation, as data; for each it gives the
+        (agent_review_feedback): the findings on the answer go to the agent's
+        model on its own conversation, as data; for each it gives the
         corrected sentence or why the sentence stands. Only those sentences
         change, the first version stays saved (ComparisonTools.correct) and
-        the reviewers do not review the result. Never fails the turn: what
-        goes wrong leaves the findings open; only the user's Stop raises.
-        The pass starts only while no newer message of the chat runs, and
-        its result is kept only if none started meanwhile (NewerTurn): a
-        message that read the first version must not see it change."""
+        the reviewers do not review the result.
+
+        Never costs the answer or the marks: whatever goes wrong after the
+        pass began puts text, versions and marks back as reviewed and leaves
+        the findings open; only the user's Stop raises, after the same. The
+        pass starts only while no newer message of the chat runs, and its
+        result is kept only if none started meanwhile (NewerTurn): a message
+        that read the first version must not see it change."""
         from app.services import agent_review_feedback as fb
-        from app.services.agent_sessions import NewerTurn
         feedback, tools, loop = self.feedback, self.tools, self.tools.loop
         if feedback is None or not self.sessions:
             return {"status": "none"}
         if self.claims is None:
             # The review failed as a whole: nothing to correct, and the page
             # must not wait for a pass.
-            return self._close_feedback(None)
-        due = feedback.correctable()
+            return self.close_feedback(None)
         answer = tools.text
-        items = fb.correction_items(answer, due)
-        due = [finding for finding in due if finding["id"] in items]
+        due, rest, items = feedback.correctable(answer)
         if not due:
-            return self._close_feedback(None)
+            return self.close_feedback(None)
         left = loop._hard_stop_left() if callable(getattr(loop, "_hard_stop_left", None)) else None
         if left is not None and left < fb.CORRECTION_MIN_SECONDS:
-            return self._close_feedback("no_time")
+            return self.close_feedback("no_time")
         try:
             latest = loop.store.begin_correction(loop.uid, loop.chat_id, loop.turn_id, run_token=loop.run_token)
         except Exception as exc:
             logging.warning("Agent correction not started category=%s", safe_exception(exc))
-            return self._close_feedback("unavailable")
+            return self.close_feedback("unavailable")
         if not latest:
-            return self._close_feedback("newer_message")
-        feedback.checking(due)
-        sent = [{**feedback._sent(finding), "sentence": items[finding["id"]][2]} for finding in due]
-        if self.work_log is not None:
-            self.work_log.app("findings_delivered", {"phase": "answer", "findings": sent})
-        self._save()
-        results, skipped = {}, None
-        try:
-            value = self._correction_request(fb.correction_message(due, items), cancellation,
-                                             None if left is None else min(fb.CORRECTION_SECONDS, left - REVIEW_TIME_MARGIN))
-            results = fb.read_corrections(value.text, items)
-            if not results:
-                skipped = "unreadable"
-        except ProviderCancelled:
-            if loop.cancellation.cancelled or cancellation.cancelled:
-                feedback.settle({}, "stopped")
-                self._close_feedback("stopped")
-                raise
-            skipped = "no_time"
-        except Exception as exc:
-            from app.services.agent_quota import AgentTokenBudgetExceeded
-            skipped = "allowance" if isinstance(exc, AgentTokenBudgetExceeded) else "failed"
-            logging.warning("Agent correction failed category=%s", safe_exception(exc))
-        text = fb.corrected_answer(answer, items, results)
-        settled = {key: ("corrected", items[key][2], result[1]) if result[0] == "corrected" else result
-                   for key, result in results.items()}
+            return self.close_feedback("newer_message")
+        feedback.cut(rest)
         with tools.lock:
             kept = (tools.text, [dict(version) for version in tools.versions], self.claims, self.unplaced,
-                    self.process, feedback.state())
-        if text != answer:
-            self._place_corrected(text, settled)
-        feedback.settle(settled, skipped)
-        if self.work_log is not None:
-            self.work_log.app("answer_corrected", {
-                "findings": [{"id": key, "state": result[0],
-                              **({"sentence": result[2]} if result[0] == "corrected" else {"stands": result[1]})}
-                             for key, result in settled.items()],
-                **({"skipped": skipped} if skipped else {})})
+                    self.process)
+        feedback.checking(due)
+        reviewed = feedback.state()
         try:
-            self._save_open(latest=True)
-        except NewerTurn:
-            # A newer message started while the agent checked: it read the
-            # first version, which therefore stands; the findings stay open.
+            if self.work_log is not None:
+                self.work_log.app("findings_delivered", {"phase": "answer", "findings": [
+                    {**feedback._sent(finding), "sentence": items[finding["id"]][2]} for finding in due]})
+            self._save()
+            results, skipped = {}, None
+            try:
+                value = self._correction_request(fb.correction_message(due, items), cancellation,
+                                                 fb.CORRECTION_SECONDS if left is None
+                                                 else min(fb.CORRECTION_SECONDS, left - REVIEW_TIME_MARGIN))
+                results = fb.read_corrections(value.text, items)
+                if not results:
+                    skipped = "unreadable"
+            except ProviderCancelled:
+                if loop.cancellation.cancelled or cancellation.cancelled:
+                    raise
+                skipped = "no_time"
+            except Exception as exc:
+                from app.services.agent_quota import AgentTokenBudgetExceeded
+                skipped = "allowance" if isinstance(exc, AgentTokenBudgetExceeded) else "failed"
+                logging.warning("Agent correction failed category=%s", safe_exception(exc))
+            text = fb.corrected_answer(answer, items, results)
+            settled = {key: ("corrected", items[key][2], result[1]) if result[0] == "corrected" else result
+                       for key, result in results.items()}
+            if text != answer:
+                self._place_corrected(text, settled)
+            feedback.settle(settled, skipped)
+            if self.work_log is not None:
+                self.work_log.app("answer_corrected", {
+                    "findings": [{"id": key, "state": result[0],
+                                  **({"sentence": result[2]} if result[0] == "corrected" else {"stands": result[1]})}
+                                 for key, result in settled.items()],
+                    **({"skipped": skipped} if skipped else {})})
+            self._save_open(latest=text != answer)
+        except BaseException as exc:
+            from app.services.agent_sessions import NewerTurn
+            # A newer message started while the agent checked (it read the
+            # first version, which therefore stands), the save failed, or
+            # anything else broke: the answer and its marks as reviewed.
             with tools.lock:
-                tools.text, tools.versions, self.claims, self.unplaced, self.process, state = kept
-                feedback.restore(state)
-            feedback.settle({}, "newer_message")
-            self._close_feedback("newer_message")
-        except Exception as exc:
-            logging.warning("Agent corrected answer not saved category=%s", safe_exception(exc))
-            with tools.lock:
-                tools.text, tools.versions, self.claims, self.unplaced, self.process, state = kept
-                feedback.restore(state)
-            feedback.settle({}, "unavailable")
-            self._close_feedback("unavailable")
-        return {"status": feedback.status, "corrected": sum(1 for r in settled.values() if r[0] == "corrected")}
+                tools.text, tools.versions, self.claims, self.unplaced, self.process = kept
+            feedback.restore(reviewed)
+            stopped = isinstance(exc, ProviderCancelled) or not isinstance(exc, Exception)
+            reason = "stopped" if stopped else "newer_message" if isinstance(exc, NewerTurn) else "failed"
+            if not stopped and not isinstance(exc, NewerTurn):
+                logging.warning("Agent correction not kept category=%s", safe_exception(exc))
+            self.close_feedback(reason)
+            if stopped:
+                raise
+        return {"status": feedback.status, "corrected": feedback.counts["corrected"]}
 
     def _correction_request(self, message, cancellation, seconds):
         """The correction as one request of the agent's chat model on its own
-        conversation (the agent's tools listed, not callable: the request
-        reads the run's cached prefix), as a helper session of the run: the
-        chat's lock went with the hand-over, a helper's steps still claim
-        (AgentSessionStore._claim_delegated), within the daily allowance
-        (no overdraft: the answer and its review stand without it)."""
+        conversation, as a helper session of the run: the agent's tools
+        listed and not callable and the message's files where its steps had
+        them (DelegationLoop._step, ``kind`` "correction"), so the request
+        reads the run's cached prefix. A helper: the chat's lock went with
+        the hand-over, and a helper's steps still claim
+        (AgentSessionStore._claim_delegated), within the daily allowance (no
+        overdraft: the answer and its review stand without it). Past
+        ``seconds`` it stops; its session then ends quietly, as one that
+        failed: the page shows no error for a pass that brought nothing."""
         from app.services.agent_delegation import Worker
         loop = self.tools.loop
         model = loop._routing_model()
         messages = [*loop.messages, {"role": "user", "content": message}]
         worker = Worker(uuid4().hex, model, messages)
         worker.kind = "correction"
-        worker.file_ids = []
+        worker.file_ids = loop.file_context.selection() if getattr(loop, "file_context", None) else []
         title = "Correction"
         loop._publish(worker, patch={
             "title": title, "kind": "correction", "comparison_id": None,
@@ -2759,31 +2786,31 @@ class AnswerAudit:
             "model": model.settings(), "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat()})
         cut = ProviderCancellation()
         unregister = cancellation.register(cut)
-        timer = None
-        if seconds is not None:
-            timer = threading.Timer(max(1., seconds), cut.cancel)
-            timer.daemon = True
-            timer.start()
+        timer = threading.Timer(max(.1, seconds), cut.cancel)
+        timer.daemon = True
+        timer.start()
         try:
             value = self.tools.worker_request(worker, model, messages, cancellation=cut,
                                               slots=threading.BoundedSemaphore(1), registry=loop.registry)
         except BaseException as exc:
-            from app.services.agent_provider_limits import agent_failure
-            stopped = isinstance(exc, ProviderCancelled) or not isinstance(exc, Exception)
-            failure = ({"code": "stopped", "error": CORRECTION_STOPPED} if stopped
-                       else {"code": agent_failure(exc).get("code") or "provider_error", "error": CORRECTION_FAILED})
-            loop._terminal(worker, "stopped" if stopped else "failed", failure["error"], failure)
+            if not isinstance(exc, Exception) or (isinstance(exc, ProviderCancelled) and cancellation.cancelled):
+                loop._terminal(worker, "stopped", CORRECTION_STOPPED, {"code": "stopped"})
+            else:
+                from app.services.agent_provider_limits import agent_failure
+                code = ("no_time" if isinstance(exc, ProviderCancelled)
+                        else agent_failure(exc).get("code") or "provider_error")
+                loop._state(worker, "stopped" if code == "no_time" else "failed", failure={"code": code})
             raise
         finally:
-            if timer is not None:
-                timer.cancel()
+            timer.cancel()
             unregister()
         loop._state(worker, "completed", finish_reason=value.finish_reason)
         return value
 
     def _place_corrected(self, text, settled):
         """The corrected answer becomes the review's version, and the marks
-        stand on it: a corrected finding's marks on its new sentence."""
+        stand on it, those of a corrected finding gone (corrected_out)."""
+        from app.services.agent_review_feedback import corrected_out
         sentences = {key: result[2] for key, result in settled.items() if result[0] == "corrected"}
         reviews, number = [], 0
         for label, marks, live in getattr(self, "_final_reviews", None) or self._reviews():
@@ -2793,7 +2820,6 @@ class AnswerAudit:
                 key = self.feedback.marks.get(number)
                 moved.append({**mark, "quote": sentences[key]} if key in sentences and mark.get("quote") else mark)
             reviews.append((label, moved, live))
-        from app.services.agent_review_feedback import corrected_out
         self.tools.correct(text)
         self._place(text, reviews)
         with self.tools.lock:
@@ -2801,20 +2827,22 @@ class AnswerAudit:
             self.claims = corrected_out(self.claims, set(sentences))
             self.unplaced = [item for item in self.unplaced if item.get("finding") not in sentences]
 
-    def _close_feedback(self, skipped):
+    def close_feedback(self, skipped):
         """The register ends without a (kept) correction: its open findings
-        go with the next message all the same."""
+        go with the next message all the same, their marks show. Never raises."""
         self.feedback.done(skipped)
         try:
             self._save_open()
         except Exception as exc:
+            self._unsaved = True
             logging.warning("Agent review findings not saved category=%s", safe_exception(exc))
         return {"status": "done", **({"skipped": skipped} if skipped else {})}
 
     def _save_open(self, latest=False):
         """Saves the review, and on the chat the answer's open findings for
         its next message (``agent_open_findings`` with this turn's id,
-        agent_review_feedback.open_findings_context)."""
+        agent_review_feedback.open_findings_context). ``latest``: the save of
+        a corrected answer (AgentSessionStore.save_review)."""
         found = self.feedback.open_findings()
         loop = self.tools.loop
         self.tools.chat_fields = {"agent_open_findings": {"turn_id": loop.turn_id, **found}} if found else {}

@@ -1035,6 +1035,10 @@ class ChatStore:
             # Whether the chat holds Google data, as this transaction saw it:
             # the Agent route's own read came before (routers/agent.py).
             turn["chat_google_data"] = bool(chat_data.get("google_data"))
+            # The chat's newest corrected answer as this transaction saw it
+            # (agent_review_feedback): the history read before may predate it.
+            if chat_data.get("agent_answer_corrected"):
+                turn["chat_answer_corrected"] = chat_data["agent_answer_corrected"]
         return turn
 
     def fail_turn(

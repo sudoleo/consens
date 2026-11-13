@@ -381,19 +381,25 @@ def test_an_unusable_correction_leaves_the_answer_and_the_findings_open(store):
     assert feedback["skipped"] == "unreadable" and not any(f["state"] == "checking" for f in feedback["findings"])
 
 
-def test_the_history_reads_a_correcting_turn_again():
+def test_a_history_read_before_a_correction_is_read_again():
+    """The next message's history is read beside its turn's creation; a
+    correction saved in between makes that read out of date."""
     from app.services.agent_runs import AgentRunStore
 
     class Snap:
-        def __init__(self, data):
-            self.data = data
+        def __init__(self, id_, data):
+            self.id, self.data = id_, data
 
         def to_dict(self):
             return self.data
-    page = {"snapshots": [Snap({"position": 1, "status": "pending", "agent_answer_fixed_at": 1})]}
+    page = {"snapshots": [Snap("t1", {"position": 1, "status": "pending", "agent_answer_fixed_at": 1})]}
     assert AgentRunStore.history_current(page, {"position": 2})
-    page["snapshots"][0].data["agent_correcting"] = True
-    assert not AgentRunStore.history_current(page, {"position": 2})
+    assert not AgentRunStore.history_current(page, {"position": 2}, "t1:r1")
+    page["snapshots"][0].data["agent_answer_revision"] = "r1"
+    assert AgentRunStore.history_current(page, {"position": 2}, "t1:r1")
+    # A finished turn never makes every later read a second one.
+    assert AgentRunStore.history_current(
+        {"snapshots": [Snap("t0", {"position": 1, "status": "completed"})]}, {"position": 2}, "t1:r1")
 
 
 def asked(calls, question):
@@ -405,8 +411,7 @@ def asked(calls, question):
     raise AssertionError(f"No request asked {question!r}")
 
 
-def test_the_route_reads_the_setting_and_passes_the_open_findings_on(api, monkeypatch):
-    from app.api.routers import agent
+def test_the_route_runs_with_the_setting_its_page_sent_and_passes_the_open_findings_on(api):
     client, store, calls = api
     chat_id = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]["id"]
     first = {"chat_id": chat_id, "question": "Hi", "client_request_id": "f-1", "bookmark_id": "bm_f"}
@@ -416,17 +421,15 @@ def test_the_route_reads_the_setting_and_passes_the_open_findings_on(api, monkey
         {"on": "answer", "kind": "wrong", "reviewers": 2, "quote": "A helpful answer", "note": "Not helpful.",
          "source": RATES}]}
     store._chat_ref(UID, chat_id).update({"agent_open_findings": open_findings})
-    # Off: the next message does not hear of them.
-    monkeypatch.setattr(agent, "_findings_to_agent", lambda uid: False)
+    # Off (a page that sends nothing): the next message does not hear of them.
     assert client.post("/agent", json={**first, "client_request_id": "f-2", "question": "Two"},
                        headers=AUTH).status_code == 200
     assert fb.CONTEXT_OPEN not in asked(calls, "Two")
     # On, the message after the one that left them reads them as data.
     store._chat_ref(UID, chat_id).update({"agent_open_findings": {
         **open_findings, "turn_id": store._chat_ref(UID, chat_id).get().to_dict()["agent_turn_id"]}})
-    monkeypatch.setattr(agent, "_findings_to_agent", lambda uid: True)
-    assert client.post("/agent", json={**first, "client_request_id": "f-3", "question": "Three"},
-                       headers=AUTH).status_code == 200
+    assert client.post("/agent", json={**first, "client_request_id": "f-3", "question": "Three",
+                                       "findings_to_agent": True}, headers=AUTH).status_code == 200
     question = asked(calls, "Three")
     assert fb.CONTEXT_OPEN in question and "Not helpful." in question
     turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Three")

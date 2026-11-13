@@ -1555,6 +1555,9 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
   // The answer's next frame keeps the corrected text (agent-chat.js renderAnswerBody).
   expect(w.App.agentReview.shownText(body, ORIGINAL)).toBe(CORRECTED);
   expect(w.App.agentReview.shownText(body, 'Another answer.')).toBe('Another answer.');
+  // The reused answer surface shows another turn now: the correction no longer belongs to it.
+  expect(body._corrected).toBe(null);
+  expect(w.App.agentReview.shownText(body, ORIGINAL)).toBe(ORIGINAL);
   // Every note is counted once, the corrected sentence's too.
   expect(notesCell(d).getAttribute('aria-label')).toBe('Notes 2');
   notesCell(d).click();
