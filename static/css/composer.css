@@ -291,15 +291,21 @@ body.file-viewer-docked:not(.is-hero) .composer-reviewers-label[data-short]::aft
   overscroll-behavior: contain; scrollbar-width: thin; z-index: 1600;
 }
 .chat-input-container .agent-model-controls .model-picker-option {
-  display: flex; flex-wrap: wrap; gap: 3px; min-height: 42px; padding: 10px 30px 10px 11px;
+  display: flex; flex-wrap: wrap; gap: 3px; min-height: 42px; padding: 10px 11px;
   color: var(--ink); font-size: var(--font-size-ui); line-height: 1.4; border-radius: var(--radius-xs);
 }
+/* Room for the check only where it stands, as in Apple's lists: a Pro or
+   Early access at the end of a row ends on the row's right edge. Preset rows
+   keep the column on every row so their stacks of marks line up. */
+.chat-input-container .agent-model-controls .model-picker-option.is-selected,
+.chat-input-container .agent-model-controls .model-picker-preset-option { padding-right: 30px; }
 @media (hover: hover) and (pointer: fine) {
   .chat-input-container .agent-model-controls .model-picker-option:hover { background: var(--hover); }
 }
 .chat-input-container .agent-model-controls .model-picker-option:focus-visible { outline: var(--focus-ring); outline-offset: -2px; background: var(--hover); }
 .chat-input-container .agent-model-controls .model-picker-option-label { white-space: normal; overflow-wrap: anywhere; }
-.model-picker-option-description { flex-basis: 100%; font-size: var(--font-size-xs); color: var(--ink-3); font-weight: 400; line-height: 1.5; }
+/* Last in the row, so a badge stays on the name's line. */
+.model-picker-option-description { order: 1; flex-basis: 100%; font-size: var(--font-size-xs); color: var(--ink-3); font-weight: 400; line-height: 1.5; }
 /* Rows that lead to another level (sections, Custom, a provider) and the
    way back keep name and chevron on one line; the chevron marks the end. */
 .chat-input-container .agent-model-controls .model-picker-option:is(.model-picker-row-open, .model-picker-back-option, .model-picker-custom-option, .model-picker-preset-option, .model-picker-group-option) {

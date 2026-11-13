@@ -607,14 +607,11 @@
   transform: rotate(45deg) scale(1);
 }
 
-/* Optik kommt zentral von .pro-badge (layout.css) — hier nur Flex/Abstand. */
+/* Optik kommt zentral von .pro-badge (layout.css), hier nur der Platz. Es
+   endet an der rechten Kante der Zeile; in der gewählten Zeile vor dem Haken. */
 .model-picker-pro-badge {
   flex: 0 0 auto;
   margin-right: 0;
-}
-
-.model-picker-option.is-selected .model-picker-pro-badge:last-child {
-  margin-right: 14px;
 }
 
 .dark-mode .model-picker-menu {

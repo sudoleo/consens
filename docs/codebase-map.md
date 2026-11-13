@@ -1873,8 +1873,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Plus und Pro zeigen nur das Badge (`planLabel.hidden`), nie „Pro Pro"; das
   Badge trägt den Namen der Stufe und ist bei Plus neutral statt golden
   (`.pro-badge.is-plus`) — Gold gehört den teuren Modellen, die Plus nicht hat.
-  Seit 2026-10-22 ist `.pro-badge` überall ein getöntes Etikett („Pro“ in
-  tiefem Gold auf zarter Goldfläche, ohne Rand, Glanz und Schatten). Die **Wortmarke**
+  `.pro-badge` ist überall nur das Wort in Gold, ohne Fläche, Rand und
+  Schatten, in Größe und Zeilenhöhe des Umfelds (wie Zusatztext am Zeilenende
+  in Apples Listen); Plus steht da wie „Free“. Im Modellmenü endet es an der
+  rechten Kante der Zeile; nur die gewählte Zeile hält die Spalte des Hakens
+  frei, Preset-Zeilen alle (ihre Logo-Stapel stehen untereinander). Die **Wortmarke**
   ist aus demselben Grund aus dem Footer (unter dem Account-Icon) nach oben in
   `.sidebar-brand-row` gewandert; unten bleibt nur die Meta-Zeile.
 - **Navigation/Settings-Shell** (`templates/index.html`, `layout.css`,
@@ -4825,7 +4828,7 @@ Request-Identität behalten „default“. `/agent/models` meldet je Modell
 blendet für Nicht-Pro dann „Auto“ aus und wählt Medium. Ausnahme seit 2026-10-07: das Standard-Chatmodell
 (`default_agent_model_id()`, derzeit Claude Sonnet 5.5) ist als Chatmodell für
 jede Stufe frei; `/agent/models` meldet es mit `premium: false` und
-`early_access: true`, der Picker zeigt ein neutrales „Early access“-Badge
+`early_access: true`, der Picker zeigt „Early access“ als grauen Zusatztext
 (`.pro-badge.is-neutral`). Als Vergleichsmodell bleibt es Pro. Begründung und
 Blindtest in `docs/agent-mode.md`. Uploads (`POST /agent/chats/{chat}/files`) folgen
 der Anhangregel ab Plus (`require_uploads`); Liste, Download und Löschen

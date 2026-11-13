@@ -214,31 +214,30 @@ body:has(.sidebar.active) .brand-float {
   flex: 0 0 auto;
 }
 
-/* Einheitliches Pro-Badge im App-Gold — die eine Quelle für alle
-   Pro-Kennzeichnungen (#proBadge im Kontingent-Panel, #accountTierLabel im
-   Konto-Menue, .diff-resolve-pro-chip, .model-picker-pro-badge). Die
-   Kontext-Klassen steuern nur Layout (flex/margin), nicht die Optik.
-   Ein ruhiges Etikett wie Apples getoente Knoepfe: Gold als
-   zarte Flaeche, das Wort in tiefem Gold und normal geschrieben ("Pro"),
-   ohne Rand, Glanzkante und farbigen Schatten. */
+/* Die eine Pro-Kennzeichnung (#proBadge im Kontingent-Panel,
+   .model-picker-pro-badge, Admin-Presets); Kontext-Klassen steuern nur das
+   Layout. Wie der Zusatztext am Ende einer Zeile in Apples Listen und Menüs
+   (SwiftUI .badge in einer List, NSMenuItemBadge): nur das Wort, in Gold, in
+   Größe und Zeilenhöhe des Umfelds. Eine getönte Fläche dahinter wirkte
+   gebastelt. */
 .pro-badge {
   display: inline-flex;
   align-items: center;
-  padding: 3px 6px;
+  padding: 0;
   border: 0;
-  border-radius: 5px;
-  background: color-mix(in srgb, #c9a232 17%, transparent);
-  color: #7a5e16;
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: 0.01em;
-  line-height: var(--line-height-solid);
+  border-radius: 0;
+  background: none;
+  color: #866512;
+  font-size: inherit;
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0;
+  line-height: inherit;
+  white-space: nowrap;
   box-shadow: none;
 }
 
 .dark-mode .pro-badge {
-  background: color-mix(in srgb, #d4af37 19%, transparent);
-  color: #e6ca74;
+  color: #e2c26a;
 }
 
 /* JS blendet es für Pro- und Plus-Nutzer ein und beschriftet es mit dem
@@ -248,13 +247,18 @@ body:has(.sidebar.active) .brand-float {
 }
 
 /* Plus ist die Stufe zwischen Free und Pro und bleibt deshalb neutral: Gold
-   ist die Farbe der teuren Modelle, und die hat Plus gerade nicht. */
+   ist die Farbe der teuren Modelle, und die hat Plus gerade nicht. Es steht
+   da wie "Free". Andere Hinweise ("Early access") sind grauer Zusatztext. */
 .pro-badge.is-plus,
+.dark-mode .pro-badge.is-plus {
+  color: inherit;
+  font-weight: inherit;
+}
+
 .pro-badge.is-neutral,
-.dark-mode .pro-badge.is-plus,
 .dark-mode .pro-badge.is-neutral {
-  background: color-mix(in srgb, var(--ink) 7%, transparent);
-  color: var(--ink-2);
+  color: var(--ink-3);
+  font-weight: var(--font-weight-regular);
 }
 
 /* Early access: a plain text link on the plan line under
