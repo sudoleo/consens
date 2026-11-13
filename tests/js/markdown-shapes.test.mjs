@@ -247,6 +247,15 @@ describe("Steps", () => {
     expect(output.querySelector("ol.md-steps li").textContent).toContain("Zero rates");
   });
 
+  it("takes a title that is a paragraph of its own, with the item going on below it", () => {
+    const output = render("<ol><li><p><strong>Check first: do you need a permit?</strong></p><p>Some trades need one.</p></li>"
+      + "<li><p><strong>Members and fees</strong></p><ul><li>Chamber</li><li>Insurance</li></ul></li></ol>");
+    expect(output.querySelector("ol").classList.contains("md-steps")).toBe(true);
+    // A bold paragraph with nothing below it is no title.
+    expect(render("<ol><li><p><strong>Only bold</strong></p></li><li><p><strong>Also bold</strong></p></li></ol>")
+      .querySelector(".md-steps")).toBeNull();
+  });
+
   it("leaves plain, partly titled and all-bold lists and bullet lists alone", () => {
     expect(render("<ol><li>One</li><li>Two</li></ol>").querySelector(".md-steps")).toBeNull();
     expect(render("<ol><li><strong>One.</strong> Text</li><li>Two</li></ol>").querySelector(".md-steps")).toBeNull();

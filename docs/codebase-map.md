@@ -2789,6 +2789,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     Wort hinter jeder Jahreszahl (`1500 m`) oder lauter runde Hunderter
     gelten als Mengen. → `table.md-timeline` bleibt Tabelle, Kopfzeile nur
     für Vorleser und Suche, Datum und Punkt auf der Schiene der Schritte.
+    Daten über zwölf Zeichen (`has-long-dates`) brechen am Handy zweizeilig
+    in einer schmaleren Spalte um.
   - **Balken** (`bars`, `parseAmount`): eine Spalte vergleichbarer Beträge
     (eine Einheit, nichts Negatives, ab drei Zeilen, keine Jahreszahlen oder
     laufenden Nummern, deutsche und englische Schreibweise) bekommt je Zelle
@@ -2798,8 +2800,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     deren Bezeichnung ganz fett ist und einen Balken hat → `tr.md-pick`,
     fett und Balken in `--agree`; mehrere oder keine → alles grau.
   - **Schritte** (`steps`): nummerierte Liste, deren Punkte alle mit fettem
-    Titel beginnen → `ol.md-steps`; ein Punkt oder Doppelpunkt am Titelende
-    fällt weg (Auslassungspunkte bleiben). Im wachsenden Teil eines Streams
+    Titel beginnen (Text folgt im selben Absatz, oder der Titel ist ein
+    eigener Absatz und der Punkt geht darunter weiter) → `ol.md-steps`; ein
+    Punkt oder Doppelpunkt am Titelende und ein harter Umbruch danach fallen
+    weg (Auslassungspunkte bleiben). Im wachsenden Teil eines Streams
     (`renderMarkdownFragment(md, { growing: true })`) darf der letzte Punkt
     noch nur Titel oder leer sein, damit die Liste nicht erst als normale
     Liste erscheint und dann auf die Schiene springt.

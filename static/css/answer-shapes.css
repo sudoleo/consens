@@ -270,4 +270,15 @@ table.md-timeline > tbody > tr:not(:last-child) > td:first-child::before {
   table.md-timeline > tbody > tr > td:first-child { padding-inline-end: 1.6em; }
   table.md-timeline > tbody > tr > td:first-child::after { inset-inline-end: calc(0.8em - 3.5px); }
   table.md-timeline > tbody > tr:not(:last-child) > td:first-child::before { inset-inline-end: calc(0.8em - 0.5px); }
+
+  /* A long date ("Juli bis Dezember 2022") breaks onto two lines in a
+     narrower column, so the event beside it keeps most of the width. */
+  /* Its two lines sit closer than the event's; the padding keeps the first
+     on the event's first line (1.7em of the answer in this cell's 0.88em). */
+  table.md-timeline.has-long-dates > tbody > tr > td:first-child {
+    width: 8.5em;
+    padding-top: calc((1.7em / 0.88 - 1.35em) / 2);
+    line-height: 1.35;
+    white-space: normal;
+  }
 }

@@ -229,6 +229,10 @@ describe("incremental streamed Markdown", () => {
     const el = document.createElement("div");
     window.renderMarkdownStream(el, "**What you need:**\n-");
     expect(el.querySelector("h2")).toBeNull();
+    // Nested, the dash under an item made the item a heading.
+    const nested = document.createElement("div");
+    window.renderMarkdownStream(nested, "- a\n  - b\n      -");
+    expect(nested.querySelector("h2")).toBeNull();
     const paragraph = el.querySelector("p");
     window.renderMarkdownStream(el, "**What you need:**\n- Your ID");
     expect(el.querySelector("p")).toBe(paragraph);

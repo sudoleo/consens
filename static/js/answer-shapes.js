@@ -136,6 +136,8 @@
     if (years.every(year => year !== null && year % 100 === 0)) return false;
     if (points.every(point => /^\d{4}$/.test(point.text)) && years.every(year => year % 50 === 0)) return false;
     table.classList.add("md-timeline");
+    // "Juli bis Dezember 2022" on one line took half a phone's width.
+    if (Math.max(...points.map(point => point.text.length)) > 12) table.classList.add("has-long-dates");
     return true;
   }
 
@@ -290,10 +292,14 @@
     root.querySelectorAll?.("ol").forEach(list => {
       if (list.classList.contains("md-task-list")) return;
       const items = Array.from(list.children).filter(child => child.tagName === "LI");
+      // A title, not a sentence that happens to start bold or is bold
+      // throughout: words follow it in its paragraph, or it is a paragraph
+      // of its own and the item goes on below it (text, a list).
       const titled = item => {
         const title = titleOf(item);
-        // A title, not a sentence that happens to start bold or is bold throughout.
-        return Boolean(title) && textOf(title.first).length <= 80 && textOf(title.host).length > textOf(title.first).length;
+        if (!title || textOf(title.first).length > 80) return false;
+        if (textOf(title.host).length > textOf(title.first).length) return true;
+        return title.host !== item && Boolean(title.host.nextElementSibling);
       };
       const last = items[items.length - 1];
       const open = growing && last && (!textOf(last) || (titleOf(last) && textOf(titleOf(last).first).length <= 80));

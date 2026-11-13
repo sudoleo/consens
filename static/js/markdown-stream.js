@@ -817,8 +817,8 @@ function holdOpenImage(text) {
 // A last line that is only the start of a list item or a rule ("1", "1.",
 // "-", "*", "1. **") stood for a chunk as something else: a paragraph, or
 // after a paragraph "-" even turned it into a heading. It waits for the
-// words after it.
-const OPEN_ITEM_START = /(^|\n)[ \t]{0,3}(?:\d{1,9}[.)]?|[-*+=_]+)(?:[ \t]+\**)?[ \t]*$/;
+// words after it. At any indent: "- a\n    -" made the item a heading too.
+const OPEN_ITEM_START = /(^|\n)[ \t]*(?:\d{1,9}[.)]?|[-*+=_]+)(?:[ \t]+\**)?[ \t]*$/;
 
 function holdOpenItemStart(text) {
   if (/(^|\n)\s{0,3}(```|~~~)/.test(text)) return text;
