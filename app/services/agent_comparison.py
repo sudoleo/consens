@@ -324,7 +324,8 @@ class ComparisonTools:
             self._checkpoint_on_the_way()
 
     def worker_request(self, worker, model, messages, *, cancellation, slots, budget=None, searching=False,
-                       search_rounds=1, one_off=True, keep_truncated=False, review_round=None, registry=None):
+                       search_rounds=1, one_off=True, keep_truncated=False, review_round=None, registry=None,
+                       avoid_endpoint="", on_completion=None):
         """One paid request of ``worker`` at its next step index
         (``agent:{id}:{n}``), within ``slots``. An answer that ended without a
         word (ModelEmptyAnswer) is chance, not a limit: a searching call gets
@@ -337,7 +338,11 @@ class ComparisonTools:
         next round), so its prompt is cached for it. ``review_round``: a
         reviewer's kind of round for its receipt (worker_completion).
         ``registry``: tools the request carries without calling them (the
-        agent's, where it continues the agent's conversation)."""
+        agent's, where it continues the agent's conversation).
+        ``avoid_endpoint``: an endpoint this request goes elsewhere than, where
+        the model has another (DelegationLoop._step). ``on_completion``: called
+        with each request's completion as it starts, whose ``endpoint`` says
+        where it runs once its stream says so."""
         loop = self.loop
         with bind_provider_cancellation(cancellation), bind_analysis_budget(budget or loop.budget):
             while not slots.acquire(timeout=.1):
@@ -346,12 +351,14 @@ class ComparisonTools:
                 for attempt in range(2 if searching else 1):
                     step = f"agent:{worker.id}:{worker.calls}"
                     worker.calls += 1
+                    completion = loop.worker_completion(worker, one_off=one_off, review_round=review_round)
+                    if on_completion is not None:
+                        on_completion(completion)
                     generator = loop._step(model, messages, step, registry or ToolRegistry(), cancellation,
                                            worker=worker, searches_enabled=searching, search_rounds=search_rounds,
                                            **({"allow_tools": False} if registry is not None else {}),
-                                           retry_empty=attempt == 0 and searching,
-                                           completion=loop.worker_completion(worker, one_off=one_off,
-                                                                             review_round=review_round))
+                                           **({"avoid_endpoint": avoid_endpoint} if avoid_endpoint else {}),
+                                           retry_empty=attempt == 0 and searching, completion=completion)
                     try:
                         while True:
                             next(generator)

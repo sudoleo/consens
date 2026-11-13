@@ -566,7 +566,24 @@ ohne brauchbare Antwort nach `final_hedge_seconds` (p90 der letzten
 Schlussrunden des Modells im Prozess, mindestens 12 s, sonst 30 s) dieselbe
 Anfrage auf neuer Sitzung, die erste brauchbare gewinnt; nach
 `FINAL_ROUND_SECONDS` (90 s) `no_time` mit den Live-Befunden (Einzelheiten
-in [agent-work-log.md](agent-work-log.md), „Fehler“).
+in [agent-work-log.md](agent-work-log.md), „Fehler“). Der Hedge meidet das
+Endpoint der laufenden Anfrage (`FinalRequest.endpoint` aus deren Stream,
+`worker_request(avoid_endpoint=…)`, `DelegationLoop._step`); hat das Modell
+kein anderes oder ist das Endpoint noch unbekannt (die Anfrage hing vor
+ihrem ersten Chunk), geht er wie geroutet (`agent_client._elsewhere`: 404
+oder `reasoning_pinned` → dieselbe Anfrage ohne die Ausnahme). ZDR- und
+Google-Daten-Routing bleiben, die Ausnahme kommt nur hinzu.
+Was die Schlussrunde lang macht (Prod, 14 Tage bis 2026-11-13, 316
+Anfragen, `scripts/audit_report.py`-Daten): fast nur das Nachdenken des
+Prüfers. Ihre Dauer folgt den Ausgabe-Tokens (Korrelation 0,92, davon rund
+90 % Reasoning), kaum der Länge der Antwort (0,36); Haiku 5.5 Median 8,7 s
+/ p90 15,8 s, DeepSeek V4.1 Flash 10,0 s / 33,8 s mit 6.000–10.000
+Reasoning-Tokens in den langsamen Runden bei 150–350 Tokens/s je
+Endpoint. Der Hedge denkt ebenso lange und gewann deshalb nur 3 von 20
+Malen, wo die erste Anfrage nichts lieferte; in einem Lauf liefen Anfrage
+und Hedge auf demselben langsamen Endpoint (Parasail) und brachten nach
+90 s keine Marken. Weniger Suchrunden oder niedrigere Denkstufen der Prüfer
+sind als Hebel ausgeschlossen (Qualität, Max).
 Scheitert die Prüfung als Ganzes (Fehler, Speicherbudget auch nach
 `trim_marks`, das erst die zitierten Worte und lange Anmerkungen kürzt),
 endet sie als `failed` mit `audit_unavailable`, der Turn trotzdem

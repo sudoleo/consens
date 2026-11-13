@@ -1468,10 +1468,13 @@ class FinalRequest:
     """One request of a reviewer's final round on a thread of its own
     (ReviewerSession._final_request): the round's ``kind`` "final", its
     "repair" or its "hedge". Once its thread is done: ``value`` and
-    ``marks``, or ``error`` and the reply's ``shape``, and ``seconds``."""
+    ``marks``, or ``error`` and the reply's ``shape``, and ``seconds``.
+    ``completion``: the request's own as it runs, whose ``endpoint`` says
+    where; ``avoid_endpoint``: one it goes elsewhere than (a hedge)."""
 
-    def __init__(self, session, worker, messages, kind, known, results, slots):
+    def __init__(self, session, worker, messages, kind, known, results, slots, avoid_endpoint=""):
         self.session, self.worker, self.messages, self.kind = session, worker, messages, kind
+        self.avoid_endpoint, self.completion = avoid_endpoint, None
         self.cancellation = ProviderCancellation()
         self._unregister = session.cancellation.register(self.cancellation)
         self.started = time.monotonic()
@@ -1488,7 +1491,8 @@ class FinalRequest:
         try:
             value = session.tools.worker_request(
                 self.worker, session.model, self.messages, cancellation=self.cancellation, slots=slots,
-                searching=True, search_rounds=REVIEW_SEARCH_ROUNDS, one_off=True, review_round=self.kind)
+                searching=True, search_rounds=REVIEW_SEARCH_ROUNDS, one_off=True, review_round=self.kind,
+                avoid_endpoint=self.avoid_endpoint, on_completion=self._started)
             self.marks, self.value = parse_review(value.text, known=known, final=True), value
         except BaseException as exc:
             self.error = exc
@@ -1501,6 +1505,14 @@ class FinalRequest:
             if ending is not None:
                 self._end(*ending)
             results.put(self)
+
+    def _started(self, completion):
+        self.completion = completion
+
+    @property
+    def endpoint(self):
+        """Where the request runs, once its stream said so; "" before."""
+        return str(getattr(self.completion, "endpoint", "") or "")
 
     def stop(self, state, failure, text=None):
         """The round needs this request no more (another reply won, its time
@@ -1942,9 +1954,15 @@ class ReviewerSession:
                 break
             if hedge is None and now >= hedge_at and not self.cancellation.cancelled:
                 # The same messages as the request at work, on a new session
-                # (and OpenRouter session), within a slot of its own.
+                # (and OpenRouter session), within a slot of its own, and on
+                # another endpoint than that request's where the model has
+                # one (DelegationLoop._step; with none, the same one again).
+                # A final round's time is its reviewer's thinking: the hedge
+                # thinks as long, so it wins only where the first request's
+                # endpoint is slow or hangs, and there only elsewhere.
+                at_work = next((request.endpoint for request in reversed(running) if request.kind != "hedge"), "")
                 hedge = self._ask(self._open(own=True), list(self.messages), "hedge", known, results,
-                                  threading.BoundedSemaphore(1))
+                                  threading.BoundedSemaphore(1), avoid_endpoint=at_work)
                 running.append(hedge)
                 self.hedged = True
             # Stopped, no hedge comes any more: wait for the running requests
@@ -2008,9 +2026,10 @@ class ReviewerSession:
         self.chars += len(self.messages[-2]["content"]) + len(_dumps(reply))
         return winner.value, winner.marks
 
-    def _ask(self, worker, messages, kind, known, results, slots=None):
+    def _ask(self, worker, messages, kind, known, results, slots=None, avoid_endpoint=""):
         """One request of the final round on its own thread (FinalRequest)."""
-        request = FinalRequest(self, worker, messages, kind, known, results, slots or self.audit.slots)
+        request = FinalRequest(self, worker, messages, kind, known, results, slots or self.audit.slots,
+                               avoid_endpoint=avoid_endpoint)
         self.requests.append(request)
         return request
 

@@ -517,6 +517,76 @@ def test_a_final_round_that_hangs_gets_its_hedge_and_the_first_reply_wins(store,
     assert review["audit"]["reviewers"][1]["final_ms"] >= 300
 
 
+def test_the_hedge_goes_to_another_endpoint_than_the_request_at_work(store, monkeypatch):
+    """A final round's time is its reviewer's thinking, which the hedge
+    repeats: it wins only where the first request's endpoint is slow or
+    hangs (14 days of Prod to 2026-11-13: 3 of 20; a DeepSeek round whose
+    request and hedge both ran on Parasail ended without marks after 90 s)."""
+    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .3)
+    asked, seen = [], []
+
+    def final(messages):
+        asked.append(messages)
+        return held(30)(messages) if len(asked) == 1 else REVIEWS["openai"]
+    script = Audit({"anthropic": REVIEWS["anthropic"], "openai": final})
+    factory = script.factory
+
+    def tracing():
+        value = factory()
+        stream = value.stream
+
+        def wrapped(*, model, messages, **kwargs):
+            if model.model.startswith("openai/") and any(
+                    m["role"] == "user" and str(m.get("content")).startswith("Final round.") for m in messages):
+                seen.append(tuple(getattr(value, "avoid_endpoints", ()) or ()))
+                if len(seen) == 1:
+                    # The first request's stream names its endpoint.
+                    value.endpoint = "Parasail"
+            return stream(model=model, messages=messages, **kwargs)
+        value.stream = wrapped
+        return value
+    script.factory = tracing
+    loop = audit_loop(store, script)
+    loop.factory = tracing
+    list(loop.run())
+    assert seen == [(), ("Parasail",)]
+    assert saved(store, loop)["agent_review"]["audit"]["reviewers"][1]["status"] == "completed"
+
+
+def test_a_hedge_without_a_known_endpoint_goes_where_routing_sends_it(store, monkeypatch):
+    """A request that hung before its first chunk names no endpoint: the
+    hedge then avoids nothing (a model with one endpoint keeps its hedge
+    there too: OpenRouter answers 404 and the request goes as routed,
+    agent_client._elsewhere)."""
+    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .3)
+    asked, seen = [], []
+
+    def final(messages):
+        asked.append(messages)
+        return held(30)(messages) if len(asked) == 1 else REVIEWS["openai"]
+    script = Audit({"anthropic": REVIEWS["anthropic"], "openai": final})
+    factory = script.factory
+
+    def tracing():
+        value = factory()
+        stream = value.stream
+
+        def wrapped(*, model, messages, **kwargs):
+            if model.model.startswith("openai/") and any(
+                    m["role"] == "user" and str(m.get("content")).startswith("Final round.") for m in messages):
+                seen.append(tuple(getattr(value, "avoid_endpoints", ()) or ()))
+            return stream(model=model, messages=messages, **kwargs)
+        value.stream = wrapped
+        return value
+    script.factory = tracing
+    loop = audit_loop(store, script)
+    loop.factory = tracing
+    list(loop.run())
+    assert seen == [(), ()]
+
+
 def test_a_final_round_that_hangs_twice_ends_in_time_with_its_live_marks(store, monkeypatch):
     monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .2)
     monkeypatch.setattr(agent_audit, "FINAL_ROUND_SECONDS", .6)

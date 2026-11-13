@@ -6799,7 +6799,10 @@ läuft einmal in neuer Sitzung (`ReviewerSession._mendable`); scheitert sie
 dann noch, gelten seine Live-Befunde (`live`). Seit 2026-10-29 läuft jede
 Anfrage der Schlussrunde als `FinalRequest` auf eigenem Thread
 (`_final_request`): nach `final_hedge_seconds` ein Hedge auf neuer Sitzung
-(`_open(own=True)`, Beleg `hedge`), die erste brauchbare Antwort gewinnt, die
+(`_open(own=True)`, Beleg `hedge`), auf einem anderen Endpoint als die
+laufende Anfrage, wo das Modell eines hat (`FinalRequest.endpoint`,
+`worker_request(avoid_endpoint=…)`; Begründung und Messung in
+`docs/agent-mode.md`), die erste brauchbare Antwort gewinnt, die
 andere endet `superseded` (`agent-delegation.js` `reviewerRows` lässt sie
 nicht für den Prüfer sprechen); `FINAL_ROUND_SECONDS` begrenzt alles
 (`ReviewCancellation.overtime`, `no_time`). Runden passen in den Platz des Prüfergesprächs
