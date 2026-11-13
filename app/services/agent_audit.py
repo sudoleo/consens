@@ -88,10 +88,16 @@ ENTRY_CHARS = 12_000
 # of the user's chosen models: read as its structure up to this, each answer
 # shortened alike where they do not fit, so the reviewers see all of them.
 COMPARISON_ENTRY_CHARS = 60_000
-# A web_search result holds up to five searches of five pages each: read as
-# its structure up to this, the excerpts shortened alike, so the reviewers
-# see every page found (cut as one text, the first search hid the others).
-SEARCH_ENTRY_CHARS = 24_000
+# A web_search result holds up to agent_web_search.QUERIES_PER_CALL searches
+# of five pages with 2,000 characters of excerpts each: read as its structure
+# and whole, since a reviewer that reads less of a page than the agent did
+# marks what stands further down in it as unsourced. Only a tight round
+# shortens the excerpts, all alike (cut as one text, the first search hid the
+# others).
+SEARCH_ENTRY_CHARS = 100_000
+# A read_source result holds up to agent_read_source.READ_TEXT_CHARS of a
+# page: whole for the same reason.
+READ_ENTRY_CHARS = 30_000
 TIGHT_ENTRY_CHARS = 1_500
 MIN_ENTRY_CHARS = 300
 ENTRY_ITEMS = 20
@@ -471,6 +477,8 @@ def review_entry(entry, text, limit=ENTRY_CHARS, *, brief=None, answer=None, com
     searched = entry.get("kind") == "tool" and entry.get("name") == "web_search"
     if searched and limit >= ENTRY_CHARS:
         limit = max(limit, SEARCH_ENTRY_CHARS)
+    if entry.get("kind") == "tool" and entry.get("name") == "read_source" and limit >= ENTRY_CHARS:
+        limit = max(limit, READ_ENTRY_CHARS)
     content = text
     if brief is not None and entry.get("seq") == brief["seq"]:
         content = brief["content"]

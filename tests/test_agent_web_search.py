@@ -373,13 +373,12 @@ def test_absent_in_google_chats_and_while_exa_is_set_aside(store, searches, monk
 def test_the_reviewers_read_every_page_of_a_search_and_know_how_the_agent_searches():
     many = {"note": UNTRUSTED_NOTE, "searches": [
         {"query": f"search {number}", "results": [hit(f"https://example.org/{number}/{rank}", text="x" * 2000)
-                                                  for rank in range(5)]} for number in range(5)]}
+                                                  for rank in range(5)]} for number in range(QUERIES_PER_CALL)]}
     entry = {"seq": 7, "actor": "agent", "kind": "tool", "name": "web_search", "data": "web", "format": "text"}
     read = review_entry(entry, json.dumps(many))
-    # As its structure, every excerpt shortened alike: no search hides the others.
-    assert read["data"] == "web" and isinstance(read["content"], dict)
-    assert [search["query"] for search in read["content"]["searches"]] == [f"search {n}" for n in range(5)]
-    assert all(len(search["results"]) == 5 for search in read["content"]["searches"])
+    # As its structure and whole, the largest result a call can return too: a
+    # reviewer that read less of a page than the agent did called the rest unsourced.
+    assert read["data"] == "web" and read["content"] == many
     assert ENTRY_CHARS < len(json.dumps(read["content"])) <= SEARCH_ENTRY_CHARS
     # In a tight round it gives way like every entry.
     assert len(json.dumps(review_entry(entry, json.dumps(many), limit=1500)["content"])) <= 1500 + 200
@@ -401,3 +400,12 @@ def test_a_service_call_adds_its_price_to_a_sum_without_counting_as_a_model_call
     assert ledger["used"] == 10 + agent_quota.measured_charge(service_usage(7_000_000)) and ledger["revision"] == 1
     assert ledger["agent_usage"] == {"calls": 3, "service_calls": 1, "estimated_cost_nano_usd": 7_000_000,
                                      "provider_cost_nano_usd": 7_000_000}
+
+
+def test_the_reviewers_read_as_much_of_a_page_as_the_agent_did():
+    from app.services.agent_read_source import READ_TEXT_CHARS
+    page = json.dumps({"url": "https://example.org/report", "text": "x" * (READ_TEXT_CHARS - 20) + " the last figure"})
+    entry = {"seq": 9, "actor": "agent", "kind": "tool", "name": "read_source", "data": "web", "format": "text"}
+    assert "the last figure" in json.dumps(review_entry(entry, page)["content"])
+    # In a tight round it gives way like every entry.
+    assert len(json.dumps(review_entry(entry, page, limit=1500)["content"])) <= 1500 + 200

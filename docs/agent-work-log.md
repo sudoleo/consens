@@ -192,8 +192,8 @@ loggt solche Schritte mit den Feldnamen ihrer Chunks („Agent search without
 citations“), um die Treffer ohne bezahlte Probe zu finden. Seit 2026-11-10
 sucht der Agent mit dem Werkzeug `web_search` (agent-mode.md „Websuche“):
 Seine Suchen und Treffer stehen dann als Werkzeugergebnis im Protokoll
-(`data` „web“), die Prüfer lesen es strukturiert, jeder Auszug gleich
-gekürzt (`SEARCH_ENTRY_CHARS`), und ihr Prompt sagt, welcher der beiden Wege
+(`data` „web“), die Prüfer lesen es strukturiert und ganz
+(`SEARCH_ENTRY_CHARS`; erst eine enge Runde kürzt, jeden Auszug gleich), und ihr Prompt sagt, welcher der beiden Wege
 gilt (`REVIEW_SEARCH_TOOL`, `REVIEW_SEARCH_INSIDE`). Das Gespräch eines
 Prüfers fasst 60 % des Kontextfensters seines Modells nach der Antwort, zu 3
 Zeichen je Token, höchstens 400.000 Zeichen (`session_budget`); der Rest

@@ -5435,8 +5435,9 @@ damit der App:
   Suchen fanden, steht einmal, danach unter `also_above`),
 - im Arbeitsprotokoll als Web-Inhalt (`agent_work_log.TOOL_DATA`), den die
   Prüfer strukturiert lesen (`agent_audit.review_entry`,
-  `SEARCH_ENTRY_CHARS`: jeder Auszug gleich gekürzt, keine Suche verdeckt die
-  anderen),
+  `SEARCH_ENTRY_CHARS`: ganz, so viel wie der Agent selbst las; erst eine enge
+  Runde kürzt, dann jeden Auszug gleich, damit keine Suche die anderen
+  verdeckt),
 - in `DelegationLoop.search_sources` (was `read_source`, die Linkprüfung und
   ein Watch als „von dieser Nachricht gefunden“ kennen),
 - in der Timeline: die Suchwörter (`queries`), die Zahl der gelaufenen
