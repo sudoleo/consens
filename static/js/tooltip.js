@@ -18,6 +18,11 @@
 // A tooltip that repeats the element's own visible text is not shown;
 // `data-tooltip-overflow` is the exception: the element's own text, shown
 // only while the element cuts it off (a chat title in the sidebar).
+//
+// An open menu is never covered: a mark's tooltip does not reach into a
+// menu the mark holds (the model menu inside its chip), a control whose
+// menu is open has none, and a line that would lie over an open menu or
+// card moves to the mark's other side or is not shown.
 // =====================================================================
 (function () {
   "use strict";
@@ -27,6 +32,9 @@
   const CHAIN_MS = 800;   // moving on to the next mark within this: no wait
   const TOUCH_MS = 2600;
   const INTERACTIVE = "a[href], button, input, select, textarea, summary, label, [role='button'], [role='menuitem'], [role='option'], [role='tab'], [contenteditable='true']";
+  const MARK = "[data-tooltip], [title], [data-tooltip-title], [data-tooltip-overflow]";
+  const POPUP = "[data-popover], [role='menu'], [role='listbox'], [role='dialog'], dialog";
+  const EXPANDED = "[aria-expanded='true']";
 
   let tip = null;
   let target = null;
@@ -67,7 +75,19 @@
   }
 
   function findTarget(node) {
-    return node?.closest?.("[data-tooltip], [title], [data-tooltip-title], [data-tooltip-overflow]") || null;
+    const element = node?.closest?.(MARK) || null;
+    const popup = element && node.closest(POPUP);
+    if (popup && popup !== element && element.contains(popup)) return null;
+    return element;
+  }
+
+  function coversOpenPopover(element, rect) {
+    for (const popover of document.querySelectorAll("[data-popover]")) {
+      if (popover.contains(element) || !App.popover?.isOpen?.(popover)) continue;
+      const box = popover.getBoundingClientRect();
+      if (rect.left < box.right && rect.right > box.left && rect.top < box.bottom && rect.bottom > box.top) return true;
+    }
+    return false;
   }
 
   function park(element) {
@@ -89,12 +109,17 @@
     node.style.top = "0px";
     const size = node.getBoundingClientRect();
     const gap = 6;
-    let top = box.bottom + gap;
-    if (top + size.height > window.innerHeight - 8) top = Math.max(8, box.top - gap - size.height);
     let left = box.left + box.width / 2 - size.width / 2;
     left = Math.max(8, Math.min(left, window.innerWidth - size.width - 8));
+    const below = box.bottom + gap;
+    const above = Math.max(8, box.top - gap - size.height);
+    const sides = below + size.height > window.innerHeight - 8 ? [above] : [below, above];
+    const top = sides.find(y => !coversOpenPopover(element,
+      { left, right: left + size.width, top: y, bottom: y + size.height }));
+    if (top === undefined) return false;
     node.style.left = `${Math.round(left)}px`;
     node.style.top = `${Math.round(top)}px`;
+    return true;
   }
 
   // Inside an open modal dialog the tooltip lives in that dialog: the page
@@ -106,13 +131,14 @@
   function show(element) {
     const text = textOf(element);
     if (!text || !element.isConnected) return;
+    if (element.matches(EXPANDED) || element.querySelector(EXPANDED)) return;
     const node = ensure();
     const parent = host(element);
     if (node.parentElement !== parent) parent.append(node);
     node.textContent = text;
+    if (!place(element)) return;
     node.removeAttribute("aria-hidden");
     node.classList.add("visible");
-    place(element);
     target = element;
     const described = (element.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean);
     if (!described.includes(node.id)) element.setAttribute("aria-describedby", [...described, node.id].join(" "));

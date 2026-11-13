@@ -334,6 +334,52 @@ describe("one tooltip (E12)", () => {
     expect(tip.classList.contains("visible")).toBe(false);
   });
 
+  it("never covers an open menu", () => {
+    vi.useFakeTimers();
+    const ctx = loadScripts(["static/js/popover.js", "static/js/tooltip.js"], {
+      body: `<div id="chip" title="How many models answer side by side">
+          <button id="display" aria-expanded="false">1 model</button>
+          <div id="menu" role="listbox"><div id="option" role="option">Claude Haiku</div></div>
+        </div>
+        <button id="send" title="Write a message to send" aria-label="Send"></button>
+        <button id="far" title="Settings" aria-label="Open settings"></button>`,
+    });
+    contexts.push(ctx);
+    const { window, document } = ctx;
+    const rect = (left, top, right, bottom) => () => ({ left, top, right, bottom, width: right - left, height: bottom - top });
+    const menu = document.getElementById("menu");
+    const display = document.getElementById("display");
+    menu.getBoundingClientRect = rect(400, 300, 700, 736);
+    document.getElementById("send").getBoundingClientRect = rect(560, 740, 600, 760);
+    document.getElementById("far").getBoundingClientRect = rect(20, 20, 60, 60);
+    window.App.tooltip.init();
+    window.App.popover.register(menu, { close: () => {} });
+    const tip = document.querySelector(".global-tooltip");
+    const shown = (element) => {
+      pointer(window, "pointerover", element);
+      vi.advanceTimersByTime(600);
+      const visible = tip.classList.contains("visible");
+      pointer(window, "pointerout", element);
+      return visible;
+    };
+
+    expect(shown(display)).toBe(true);
+    window.App.popover.opened(menu, { trigger: display });
+    display.setAttribute("aria-expanded", "true");
+    // Inside the chip's menu the chip's line has nothing to explain.
+    expect(shown(document.getElementById("option"))).toBe(false);
+    // The control whose menu is open says nothing over it.
+    expect(shown(display)).toBe(false);
+    expect(document.getElementById("chip").getAttribute("title")).toBe("How many models answer side by side");
+    // The send button sits under the menu's edge: its line above would cover it.
+    expect(shown(document.getElementById("send"))).toBe(false);
+    expect(shown(document.getElementById("far"))).toBe(true);
+
+    window.App.popover.closed(menu);
+    display.setAttribute("aria-expanded", "false");
+    expect(shown(document.getElementById("send"))).toBe(true);
+  });
+
   // A cut-off chat title is shown whole as it was asked; a title that is the
   // page's own word arrives translated from its element.
   it("shows a chat title as asked on a German page, and the page's words in German", async () => {

@@ -1393,7 +1393,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   zweiten zeichnet. Wiederholt ein Tooltip nur den sichtbaren Text, erscheint
   er nicht; Ausnahme `data-tooltip-overflow` (seit 2026-10-22, Chat-Titel der
   Sidebar): der eigene Text, aber nur solange das Element ihn abschneidet
-  (`scrollWidth > clientWidth`).
+  (`scrollWidth > clientWidth`). Ein offenes Menü wird nie verdeckt: der
+  Tooltip einer Marke reicht nicht in ein Menü hinein, das sie enthält
+  (`[data-popover]`, `role=menu|listbox|dialog`, etwa das Modellmenü im Chip
+  mit `title`), eine Marke mit `aria-expanded="true"` (in sich oder darin)
+  zeigt keinen, und einer, der auf einem offenen Popover läge
+  (`App.popover.isOpen`), weicht auf die andere Seite aus oder entfällt.
 - **Bewegungs-Regeln (`static/css/motion.css`, Apple-Audit C8, C10, C11, C13,
   C14):** Theme-Wechsel ohne Verschmieren, ein Spinner (`.spinner` und die
   übrigen Ladezeichen: Spur + Bogen in `currentColor`, eine Drehung je
