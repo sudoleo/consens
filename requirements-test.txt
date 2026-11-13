@@ -1,6 +1,6 @@
 -r requirements.txt
 
-pytest==9.1.1
+pytest==9.2.0
 # The CI's backend job runs the suite on every core (docs/testing.md "CI").
 pytest-xdist==3.8.0
 # The dataset conversion regression is part of the regular suite.
