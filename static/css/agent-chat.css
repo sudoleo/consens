@@ -687,24 +687,41 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
 }
 @media (pointer: coarse) { .agent-review-findings-link { padding-block: 12px; } }
 /* The sentences the agent checks carry the table loader's material
-   (skeleton.css, .stream-table-pending): its tone, its light band and its
-   pace, swept along each line. The text stays readable and selectable, the
-   span takes no room; without motion (Settings or the system) only the
-   tone stands. A ghost of the tone fades where the sweep ended. */
+   (skeleton.css, .stream-table-pending): its tone and a band of light at its
+   beat, swept along each line. On text the loader's ink band all but
+   vanished, so the band is the house green a corrected sentence is then
+   rewritten in (stream-reveal.js), a tint with a soft rise and fall, never a
+   glow. It glides at an even pace: the loader's curve crossed the line in a
+   fifth of the beat, a flick too quick to catch beside the words. The text
+   stays readable (ink keeps over 6:1 on the band's peak in both themes) and
+   selectable, the span takes no room. Without motion (Settings or the
+   system) a stronger tone stands alone. Near black the same ink step reads
+   smaller, so the dark tones are a step stronger (as --hover-mix). A ghost
+   of the tone fades where the sweep ended. */
 .cx-claim.is-agent-checking {
+  --checking-ink: 12%;
   padding: 0.1em 0;
   border-radius: 3px;
-  background-color: color-mix(in srgb, var(--ink) 8%, transparent);
+  background-color: color-mix(in srgb, var(--ink) var(--checking-ink), transparent);
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
+.dark-mode .cx-claim.is-agent-checking { --checking-ink: 15%; }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   .cx-claim.is-agent-checking:not(.is-still) {
-    background-image: linear-gradient(100deg, transparent 38%, color-mix(in srgb, var(--ink) 6%, transparent) 50%, transparent 62%);
+    --checking-ink: 10%;
+    background-image: linear-gradient(100deg, transparent 37%,
+      color-mix(in srgb, var(--stream-light) 9%, transparent) 41.5%,
+      color-mix(in srgb, var(--stream-light) 25%, transparent) 45.5%,
+      color-mix(in srgb, var(--stream-light) 34%, transparent) 50%,
+      color-mix(in srgb, var(--stream-light) 25%, transparent) 54.5%,
+      color-mix(in srgb, var(--stream-light) 9%, transparent) 58.5%,
+      transparent 63%);
     background-repeat: no-repeat;
     background-size: 300% 100%;
-    animation: agent-checking-sweep var(--dur-beat) var(--ease-standard) infinite;
+    animation: agent-checking-sweep var(--dur-beat) var(--ease-linear) infinite;
   }
+  .dark-mode .cx-claim.is-agent-checking:not(.is-still) { --checking-ink: 12%; }
 }
 @media (forced-colors: active) {
   .cx-claim.is-agent-checking { background: none; text-decoration: underline dotted GrayText; }
@@ -713,7 +730,8 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
   0%, 10% { background-position: 100% 0; }
   70%, 100% { background-position: 0% 0; }
 }
-.agent-checking-ghost { position: fixed; z-index: 0; border-radius: 3px; background: color-mix(in srgb, var(--ink) 8%, transparent); pointer-events: none; }
+.agent-checking-ghost { position: fixed; z-index: 0; border-radius: 3px; background: color-mix(in srgb, var(--ink) 10%, transparent); pointer-events: none; }
+.dark-mode .agent-checking-ghost { background: color-mix(in srgb, var(--ink) 12%, transparent); }
 /* Too narrow for the score and every link in one line (an open Agent panel,
    German): the score takes its own line above, as on a phone. */
 @container agent-review (max-width: 720px) {

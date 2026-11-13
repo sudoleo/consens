@@ -6986,10 +6986,11 @@ Marke, Notes wartet, und während die Prüfer prüfen sagt die Leiste weiter
 (`feedback.status` `checking`), tragen genau die Sätze seiner Befunde (die
 Claims, deren `dissent[].finding` einer mit `state` `checking` ist) den
 Schimmer des Tabellen-Ladens (`consensus-insights.js` `renderAuditChecking`:
-`.cx-claim.is-agent-checking` ohne Rolle und Klick, `agent-chat.css` Ton und
-Lichtband von `.skeleton`, Takt `--dur-beat`; ohne Bewegung durch System oder
-`stream_animation` nur der Ton, `.is-still`), die Prüfer-Marken der Leiste
-gehen, und eine Zeile darunter sagt „The agent is checking 3 notes…“ (die
+`.cx-claim.is-agent-checking` ohne Rolle und Klick, `agent-chat.css`: Ton von
+`.skeleton` mit einem Lichtband im Hausgrün `--stream-light`, gleichmäßig
+(`--ease-linear`) im Takt `--dur-beat` über jede Zeile; ohne Bewegung durch
+System oder `stream_animation` ein kräftigerer Ton allein, `.is-still`), die
+Prüfer-Marken der Leiste gehen, und eine Zeile darunter sagt „The agent is checking 3 notes…“ (die
 Anmerkungen der geprüften Befunde, `checkingNotes`; `.agent-review-findings`,
 die Live-Region sagt es einmal). Sichtbar heißt es überall „notes“ /
 „Anmerkungen“, nie „findings“ / „Befunde“. Am Ende gleitet der
