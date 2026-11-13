@@ -1367,7 +1367,7 @@
   "Not checked by the agent: past its limit for one answer.": "Vom Agenten nicht geprüft: mehr Anmerkungen, als er für eine Antwort nimmt.",
   "Not checked by the agent: the correction did not finish.": "Vom Agenten nicht geprüft: Die Korrektur wurde nicht fertig.",
   "Not checked by the agent: the correction was stopped.": "Vom Agenten nicht geprüft: Die Korrektur wurde gestoppt.",
-  "Not checked by the agent: it can't change this spot without breaking the formatting.": "Vom Agenten nicht geprüft: Er kann diese Stelle nicht ändern, ohne die Formatierung zu zerstören.",
+  "Not checked by the agent: it can’t change this spot without breaking the formatting.": "Vom Agenten nicht geprüft: Er kann diese Stelle nicht ändern, ohne die Formatierung zu zerstören.",
   "Checking the reviewers’ notes…": "Geht die Anmerkungen der Prüfer durch…",
   "Checked the reviewers’ notes": "Anmerkungen der Prüfer durchgegangen",
   "Couldn’t check the reviewers’ notes": "Anmerkungen der Prüfer nicht durchgegangen",

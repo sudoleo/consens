@@ -2608,7 +2608,7 @@
             cut: "Not checked by the agent: past its limit for one answer.",
             unfinished: "Not checked by the agent: the correction did not finish.",
             stopped: "Not checked by the agent: the correction was stopped.",
-            place: "Not checked by the agent: it can't change this spot without breaking the formatting.",
+            place: "Not checked by the agent: it can’t change this spot without breaking the formatting.",
           };
           function auditFindingVerdict(items, audit) {
             const feedback = audit && audit.feedback;

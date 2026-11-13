@@ -250,7 +250,7 @@ it("says on the hover preview of a mark whether and how the agent looked at its 
   expect(disputed.querySelector(".cx-card-note")).toBeNull();
   const note = audit => preview(audit).querySelector(".cx-card-note").textContent;
   expect(note(verdictAudit({ state: "open", delivered: "cut" }))).toBe("Not checked by the agent: past its limit for one answer.");
-  expect(note(verdictAudit({ state: "open" }))).toBe("Not checked by the agent: it can't change this spot without breaking the formatting.");
+  expect(note(verdictAudit({ state: "open" }))).toBe("Not checked by the agent: it can’t change this spot without breaking the formatting.");
   expect(note(verdictAudit({ state: "open", delivered: "final" }, { skipped: "failed" })))
     .toBe("Not checked by the agent: the correction did not finish.");
   expect(note(verdictAudit({ state: "open", delivered: "final" }, { skipped: "stopped" })))
