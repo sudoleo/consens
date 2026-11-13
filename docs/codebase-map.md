@@ -9994,7 +9994,10 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   unter `:is(#differencesView, .diff-view)`). Die Stelle, um die es geht
   (`consensus_anchor`), trägt im Antworttext dieselbe Marke wie der Kopf ihrer
   Karte: `check_page.mark_passages` setzt vor dem Rendern ein Tokenpaar in das
-  Markdown, `fill_marks` macht daraus `<mark class="wp-mark" data-diff>`,
+  Markdown, an dem Satz oder der Tabellenzelle, die die Engine-Zerlegung
+  (`_enumerate_consensus_sentences`) mit `anchor_occurrence` meint, nicht am
+  ersten gleichen Wortlaut (Rückfall für Anker ohne solchen Satz),
+  `fill_marks` macht daraus `<mark class="wp-mark" data-diff>`,
   aber nur, wenn das gerenderte Stück in einem Inline-Element bleibt (sonst
   bleibt der Text unmarkiert); die Tokens sind geklammert, damit Fettdruck
   direkt daneben noch schließt. Ein Klick auf die Marke öffnet und zeigt die

@@ -293,6 +293,24 @@ def test_a_marked_passage_survives_the_emphasis_around_it():
         '<mark class="wp-mark" data-diff="2">', "").replace("</mark>", "") == plain
 
 
+def test_a_passage_is_marked_where_the_engine_numbered_it():
+    """anchor_occurrence counts whole sentences and table cells of the
+    engine's split; the same words earlier inside a longer sentence (or a
+    link) are not that passage."""
+    answer = ("Gemini 4 Pro is Available to everyone, "
+              "[Gemini 4 Ultra](https://example.com/Gemini 4 Ultra) only to testers.\n\n"
+              "| Model | Status |\n|---|---|\n| Gemini 4 Pro | Available |\n| Gemini 4 Ultra | Limited |\n")
+    cell = contradiction("Ultra is out.", "Gemini 4 Ultra", "Ultra is not out.", sentence_id=4)
+    status = contradiction("Pro is out.", "Available", "Pro is limited.", sentence_id=3)
+    html = check_page.fill_marks(render_public_markdown(
+        check_page.mark_passages(answer, [cell, status], [0, 1]), []))
+
+    assert '<td><mark class="wp-mark" data-diff="0">Gemini 4 Ultra</mark></td>' in html
+    assert '<td><mark class="wp-mark" data-diff="1">Available</mark></td>' in html
+    assert "<mark" not in html.split("<table", 1)[0]
+    assert "WPMARK" not in html
+
+
 def test_a_passage_the_renderer_splits_is_left_unmarked():
     # The anchor starts inside the bold run: a mark there would cross it.
     crossing = [{"consensus_anchor": "Elon Musk on 2026-09-14** on X."}]

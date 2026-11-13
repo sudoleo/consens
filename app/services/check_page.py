@@ -434,11 +434,31 @@ def _occurrence(text: str, needle: str, number: int) -> int:
     return position if position >= 0 else text.find(needle)
 
 
+def _sentence_span(numbered, anchor: str, number: int):
+    """Where the engine's own split of the answer has this anchor: its
+    ``anchor_occurrence`` counts the earlier sentences and table cells that
+    read the same (consensus_engine._sentence_reference), not every place the
+    words occur. A short anchor such as a table cell is often also part of a
+    longer sentence above it, or of a link's address. None where no sentence
+    reads so (an anchor the judge copied by hand)."""
+    from app.services.llm.consensus_engine import MAX_DIFF_TEXT_CHARS, _clip, _visible_sentence_key
+    sentences, spans = numbered
+    key = _visible_sentence_key(anchor)
+    found = [span for sentence, span in zip(sentences, spans)
+             if _visible_sentence_key(_clip(sentence, MAX_DIFF_TEXT_CHARS)) == key]
+    if not found:
+        return None
+    return found[number] if 0 <= number < len(found) else found[0]
+
+
 def mark_passages(answer_md: str, differences, indexes) -> str:
     """Token pairs around the passage each of these differences is about
     (its ``consensus_anchor``), for fill_marks after rendering. Markdown in,
     Markdown out: the passage itself is untouched."""
+    from app.services.llm.consensus_engine import _enumerate_consensus_sentences
     text = str(answer_md or "")
+    sentence_spans = []
+    numbered = (_enumerate_consensus_sentences(text, limit=None, spans=sentence_spans)[1], sentence_spans)
     spans = []
     for index in indexes:
         diff = differences[index] if 0 <= index < len(differences) else {}
@@ -449,12 +469,16 @@ def mark_passages(answer_md: str, differences, indexes) -> str:
             occurrence = int(diff.get("anchor_occurrence") or 0)
         except (TypeError, ValueError):
             occurrence = 0
-        start = _occurrence(text, anchor, occurrence)
-        if start < 0:
-            continue
-        end = start + len(anchor)
-        lead = _BLOCK_LEAD.match(anchor)
-        start += lead.end() if lead else 0
+        sentence = _sentence_span(numbered, anchor, occurrence)
+        if sentence is not None:
+            start, end = sentence
+        else:
+            start = _occurrence(text, anchor, occurrence)
+            if start < 0:
+                continue
+            end = start + len(anchor)
+            lead = _BLOCK_LEAD.match(anchor)
+            start += lead.end() if lead else 0
         if end <= start or any(a < end and start < b for a, b, _index in spans):
             continue
         spans.append((start, end, index))
