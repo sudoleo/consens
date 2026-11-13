@@ -645,6 +645,57 @@ def _sse_lines(open_lines, payload, fallback=None):
         lines.close()
 
 
+# Models whose provider refused a request with tool_choice "none" in this
+# process (HTTP 400 before any line): their requests that may call no tool go
+# without the tool list from then on. Muse Ember refuses it on Meta and on
+# Google (live probe 2026-11-13: the same request with "auto", or without
+# tools, went through), which failed its closing steps and the correction
+# pass of agent_review_feedback.
+_TOOL_CHOICE_NONE_REFUSED = set()
+_TOOL_FIELDS = ("tools", "tool_choice", "parallel_tool_calls")
+
+
+def _without_tools(body):
+    return None if body is None else {key: value for key, value in body.items() if key not in _TOOL_FIELDS}
+
+
+def _without_tool_choice_none(open_request, payload, fallback):
+    """The stream of ``payload``. A request that lists tools but may call
+    none (tool_choice "none": a closing step, a summary, a correction) keeps
+    them for the prompt cache; refused for it (HTTP 400 before any line, not
+    billed), it goes once more without the tool list, which such a request
+    never needed, and the model's later ones go without it at once. A
+    provider that requires the tools of a conversation with tool calls
+    accepts "none" and never gets here."""
+    if payload.get("tool_choice") != "none":
+        yield from open_request(payload, fallback)
+        return
+    model = payload.get("model")
+    if model in _TOOL_CHOICE_NONE_REFUSED:
+        yield from open_request(_without_tools(payload), _without_tools(fallback))
+        return
+    lines = open_request(payload, fallback)
+    try:
+        try:
+            first = next(lines, None)
+        except _ProviderHTTPStatusError as exc:
+            if exc.status_code != 400:
+                raise
+            lines.close()
+            lines = open_request(_without_tools(payload), _without_tools(fallback))
+            first = next(lines, None)
+            _TOOL_CHOICE_NONE_REFUSED.add(model)
+            logging.warning("Provider refused tool_choice none, sending without the tool list model=%s diagnostic=%s",
+                            model, exc.safe_diagnostic)
+            record_metric("tool_choice_none_refused", str(model), outcome="failure")
+        if first is None:
+            return
+        yield first
+        yield from lines
+    finally:
+        lines.close()
+
+
 def _elsewhere(open_stream, payload, fallback, routing):
     """The stream of a request that avoids endpoints (``provider.ignore``,
     AgentCompletion.avoid_endpoints). Where no other endpoint serves the
@@ -1207,7 +1258,9 @@ class AgentCompletion:
                                                        headers=headers, progress=progress),
                     body, spare,
                 )
-            lines = _elsewhere(open_stream, payload, fallback, routing) if avoid else open_stream(payload, fallback)
+            lines = _without_tool_choice_none(
+                lambda body, spare: _elsewhere(open_stream, body, spare, routing) if avoid else open_stream(body, spare),
+                payload, fallback)
             text_capped = False
             try:
                 for _, encoded in _sse_pairs(lines):

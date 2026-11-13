@@ -939,3 +939,48 @@ def test_a_recursive_argument_model_is_refused_at_registration():
         children: list["Node"] = []
     with pytest.raises(ValueError, match="recursive"):
         ToolRegistry([ReadOnlyTool("tree", "Tree", Node, lambda a, **kw: {})])
+
+
+TOOL_SPEC = {"type": "function", "function": {"name": "lookup", "description": "Look something up.",
+                                              "parameters": {"type": "object", "properties": {}}}}
+
+
+def test_a_refused_tool_choice_none_goes_again_without_the_tool_list(monkeypatch):
+    """Muse Ember refuses tool_choice "none" (HTTP 400 before any line, on Meta
+    and Google: live probe 2026-11-13); a request that may call no tool goes
+    once more without the tool list, and the model's later ones go so at once."""
+    from app.services.llm.engines import _ProviderHTTPStatusError
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    monkeypatch.setattr(agent_client, "_TOOL_CHOICE_NONE_REFUSED", set())
+    requests, _, _ = transport(monkeypatch, [
+        [_ProviderHTTPStatusError(400)],
+        [packet({"content": "Answer"}), packet(finish="stop", usage=usage())],
+        [packet({"content": "Later"}), packet(finish="stop", usage=usage())],
+    ])
+    model = resolve_agent_model("muse-ember")
+    messages = [{"role": "system", "content": "System"}, {"role": "user", "content": "Hi"}]
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=3)):
+        value = AgentCompletion()
+        list(value.stream(model=model, messages=messages, api_key="test", tools=[TOOL_SPEC], allow_tool_calls=False))
+        assert value.text == "Answer"
+        list(AgentCompletion().stream(model=model, messages=messages, api_key="test", tools=[TOOL_SPEC],
+                                      allow_tool_calls=False))
+    assert requests[0]["tool_choice"] == "none" and requests[0]["tools"]
+    for later in requests[1:]:
+        assert not {"tools", "tool_choice", "parallel_tool_calls"} & set(later)
+    assert len(requests) == 3 and model.model in agent_client._TOOL_CHOICE_NONE_REFUSED
+
+
+@pytest.mark.parametrize("allow, second", [(True, None), (False, 400)])
+def test_a_tool_choice_refusal_is_no_reason_where_none_was_not_sent_or_did_not_help(monkeypatch, allow, second):
+    from app.services.llm.engines import _ProviderHTTPStatusError
+    from app.services.llm.provider_runtime import AnalysisBudget, bind_analysis_budget
+    monkeypatch.setattr(agent_client, "_TOOL_CHOICE_NONE_REFUSED", set())
+    requests, _, _ = transport(monkeypatch, [[_ProviderHTTPStatusError(400)], [_ProviderHTTPStatusError(second or 400)]])
+    messages = [{"role": "system", "content": "System"}, {"role": "user", "content": "Hi"}]
+    with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=2)), pytest.raises(_ProviderHTTPStatusError):
+        list(AgentCompletion().stream(model=resolve_agent_model("muse-ember"), messages=messages, api_key="test",
+                                      tools=[TOOL_SPEC], allow_tool_calls=allow))
+    # "auto" is sent once; "none" once more without tools, and a second refusal stands.
+    assert len(requests) == (1 if allow else 2)
+    assert not agent_client._TOOL_CHOICE_NONE_REFUSED

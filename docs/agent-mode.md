@@ -1073,12 +1073,17 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Dateien der Nachricht an derselben Stelle wie die Schritte des Agenten
   (`_step`, `kind: "correction"`), so hält der Prompt-Cache, und läuft auf
   der OpenRouter-Sitzung des Agenten (`provider_session`, mit seinen
-  Cache-Punkten): Das Reasoning seiner früheren Schritte ist vom Endpoint
-  verschlüsselt, der es schrieb, und nur dort lesbar. Auf einer eigenen
-  Sitzung lehnte ein anderes Endpoint den ersten Prod-Durchgang mit Muse
-  Ember (Schritte auf „Google“) mit HTTP 400 ab. Ein abgelehnter Durchgang
-  loggt den Grund ohne Text (`provider_diagnostic`, etwa
-  `reason=reasoning_pinned`). Läuft die Frist
+  Cache-Punkten): dort liegt das Gespräch im Cache, und das Reasoning seiner
+  früheren Schritte kann an das Endpoint gebunden sein, das es schrieb
+  (`reasoning_pinned`, wie bei Terra auf Azure). Der erste Prod-Durchgang mit
+  Muse Ember scheiterte aber an etwas anderem: Muse Ember lehnt
+  `tool_choice: "none"` ab (HTTP 400 auf Meta und Google, Probe 2026-11-13;
+  mit `auto` oder ohne Werkzeugliste ging dieselbe Anfrage durch). Eine solche
+  Anfrage geht deshalb einmal ohne Werkzeugliste noch einmal, und alle
+  weiteren des Modells im Prozess gleich so
+  (`agent_client._without_tool_choice_none`); das gilt auch für die
+  Abschluss- und Zusammenfassungsschritte des Agenten. Ein abgelehnter
+  Durchgang loggt den Grund ohne Text (`provider_diagnostic`). Läuft die Frist
   ab oder scheitert der Durchgang, endet seine Sitzung ohne Fehlertext. Ohne
   gelungene Übergabe (`handed_over`) läuft kein Durchgang (`skipped: busy`):
   er hielte die nächste Nachricht auf. Nur sichere Stellen gehen an den

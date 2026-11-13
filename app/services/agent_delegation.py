@@ -2065,12 +2065,11 @@ class DelegationLoop(AgentLoop):
         value = completion if completion is not None else self.factory()
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
         # The agent's correction pass (agent_review_feedback) continues the
-        # agent's own conversation: its earlier steps' reasoning, encrypted
-        # by the endpoint that wrote it, is readable there alone (OpenRouter's
-        # HTTP 400, reason reasoning_pinned; a correction on a session of its
-        # own was refused on Muse Ember's other endpoint in Prod). So it goes
-        # on the agent's session, to the same endpoint, with the agent's
-        # cache points.
+        # agent's own conversation: on the agent's session it reaches the
+        # endpoint that cached that conversation and wrote its reasoning,
+        # which an endpoint of another session may not read (OpenRouter's
+        # HTTP 400, reason reasoning_pinned, as GPT-6.1 Terra's on Azure),
+        # with the agent's cache points.
         continues_agent = worker is None or getattr(worker, "kind", None) == "correction"
         if continues_agent:
             value.history_end = self.history_end
