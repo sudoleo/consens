@@ -681,12 +681,13 @@ def _without_tool_choice_none(open_request, payload, fallback):
         except _ProviderHTTPStatusError as exc:
             if exc.status_code != 400:
                 raise
+            diagnostic = exc.safe_diagnostic
             lines.close()
             lines = open_request(_without_tools(payload), _without_tools(fallback))
             first = next(lines, None)
             _TOOL_CHOICE_NONE_REFUSED.add(model)
             logging.warning("Provider refused tool_choice none, sending without the tool list model=%s diagnostic=%s",
-                            model, exc.safe_diagnostic)
+                            model, diagnostic)
             record_metric("tool_choice_none_refused", str(model), outcome="failure")
         if first is None:
             return
