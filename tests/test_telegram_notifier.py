@@ -225,6 +225,17 @@ def test_fix_context_survives_truncation_to_the_telegram_limit():
     assert "app/module_7.py" in text and "app/module_8.py" not in text
 
 
+def test_fix_context_survives_telegrams_utf16_count():
+    # Telegram zaehlt UTF-16-Einheiten: das Emoji im Kopf zaehlt doppelt, und
+    # send_bot_message schneidet am Ende ab, also in der fix-context-Zeile.
+    report = _server_report(details="d" * 5_000, stack="s" * 5_000,
+                            frames=[f"app/module_{index}.py:{index}:{'f' * 150}" for index in range(8)])
+    text = telegram_notifier._critical_error_message(report)
+    assert telegram_notifier.plain_length(text) <= telegram_notifier.TEXT_LIMIT
+    assert telegram_notifier.clip_plain(text) == text
+    assert text.splitlines()[-1].startswith("fix-context: fp=")
+
+
 def test_fingerprint_follows_the_innermost_frame_not_the_message():
     base = telegram_notifier.critical_fingerprint(_server_report())
     assert telegram_notifier.critical_fingerprint(_server_report(message="other")) == base

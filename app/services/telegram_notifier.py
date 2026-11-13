@@ -441,10 +441,11 @@ def _critical_error_message(report: Mapping, *, fingerprint: str = "", suppresse
         lines.extend(("", f"Details: {details}"))
     if stack:
         lines.extend(("", f"Stack: {stack}"))
-    # Der fix-context-Block ueberlebt jede Kuerzung: gekuerzt wird davor.
+    # Der fix-context-Block ueberlebt jede Kuerzung: gekuerzt wird davor, in
+    # Telegrams UTF-16-Einheiten (das Emoji im Kopf zaehlt doppelt).
     tail = "\n\n" + _fix_context(report, fingerprint, frames)[:1_500]
     body = "\n".join(lines)
-    return body[: 4096 - len(tail)] + tail
+    return clip_plain(body, TEXT_LIMIT - _units(tail)) + tail
 
 
 def _critical_target(report: Mapping):
