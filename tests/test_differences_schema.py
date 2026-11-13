@@ -486,12 +486,12 @@ class JudgePolicyTests(unittest.TestCase):
     def test_pro_engine_gets_openai_pro_judge(self):
         (provider, api_model, _), tier = _resolve_differences_engine("OpenAI-Pro", self.ALL_KEYS)
         self.assertEqual(provider, "openai")
-        self.assertEqual(api_model, "openai/gpt-5.5")
+        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.OPENAI_PRO_MODEL, "openai"))
         self.assertEqual(tier, "pro")
 
         (provider, api_model, _), tier = _resolve_differences_engine("Gemini-Pro", self.ALL_KEYS)
         self.assertEqual(provider, "openai")
-        self.assertEqual(api_model, "openai/gpt-5.5")
+        self.assertEqual(api_model, cfg.openrouter_model_id(cfg.OPENAI_PRO_MODEL, "openai"))
         self.assertEqual(tier, "pro")
 
     def test_missing_common_key_fails_open_to_own_standard_judge(self):
@@ -522,7 +522,7 @@ class JudgePolicyTests(unittest.TestCase):
         (p1, m1, _), _, tier1 = attempts[0]
         (p3, m3, _), _, tier3 = attempts[2]
         (p4, m4, _), _, tier4 = attempts[3]
-        self.assertEqual((p1, m1, tier1), ("openai", "openai/gpt-5.5", "pro"))
+        self.assertEqual((p1, m1, tier1), ("openai", cfg.openrouter_model_id(cfg.OPENAI_PRO_MODEL, "openai"), "pro"))
         self.assertEqual((p3, m3, tier3), ("gemini", cfg.openrouter_model_id(cfg.GEMINI_PRO_MODEL, "gemini"), "pro"))
         # Letzte Stufe: Standard-Judge der Fallback-Familie
         self.assertEqual((p4, m4, tier4), ("gemini", cfg.openrouter_model_id(cfg.GEMINI_FLASH_MODEL, "gemini"), "standard"))

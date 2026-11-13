@@ -176,7 +176,7 @@ def test_one_reviewers_halt_asks_the_user_and_the_call_runs_on_their_go(store, s
     waiter.join(5)
     holds = [e["hold"] for e in events if e.get("type") == "hold" and e.get("hold")]
     assert len(holds) == 1 and holds[0]["gate"] is True and holds[0]["kind"] == "injection"
-    assert holds[0]["reason"] == HALT_REASON and holds[0]["reviewer"] == "GPT-5.4 mini"
+    assert holds[0]["reason"] == HALT_REASON and holds[0]["reviewer"] == "GPT-6 Luna"
     assert holds[0]["step_kind"] == "call" and holds[0]["step"].startswith("update_memory: ")
     assert REMEMBERED in holds[0]["step"]
     # The card says the change in words, never its JSON (UX audit 2026-10-29 C1).
@@ -201,7 +201,7 @@ def test_a_halt_answered_with_a_message_leaves_the_call_unrun(store, stand_in):
     waiter.join(5)
     holds = [e["hold"] for e in events if e.get("type") == "hold" and e.get("hold")]
     # Both halted: one card with both reasons.
-    assert len(holds) == 1 and [r["reviewer"] for r in holds[0]["reasons"]] == ["Claude Haiku 4.5", "GPT-5.4 mini"]
+    assert len(holds) == 1 and [r["reviewer"] for r in holds[0]["reasons"]] == ["Claude Haiku 4.5", "GPT-6 Luna"]
     assert ran == []
     results = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     assert results == [{"error": agent_delegation.HOLD_STEERED}]

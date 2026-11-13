@@ -539,7 +539,7 @@ def loop_after(store, script, chat_id, request_id, question):
         model=resolve_agent_model("claude-haiku-4-5"), messages=store.messages(UID, chat, turn),
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}),
         agent_preferences=AgentPreferences(vm="on")))
 
 

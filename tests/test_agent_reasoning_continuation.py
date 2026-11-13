@@ -29,7 +29,7 @@ def _run(monkeypatch, deltas, *, finish="tool_calls", allow_tool_calls=True):
         yield ""
     monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
     completion = AgentCompletion()
-    model = agent_client.resolve_agent_model("gpt-5.6-luna", "low")
+    model = agent_client.resolve_agent_model("gpt-6-luna", "low")
     events = list(completion.stream(model=model, messages=[], api_key="test", allow_tool_calls=allow_tool_calls))
     return completion, events
 

@@ -136,7 +136,7 @@ def merged_loop(store, script, *, messages=None, memory=None, reviewers=False):
                               {"role": "user", "content": "Which option is cheaper?"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}),
         memory=memory)
     if not reviewers:
         without_reviewers(loop)
@@ -277,7 +277,7 @@ def test_a_direct_answer_is_one_call_and_reviewed(store):
     review = saved["agent_review"]
     assert review["status"] == "succeeded" and reviewed(review, ANSWER) and review["comparisons"] == []
     # One final round per reviewer: the agent called no tool to follow.
-    assert sorted(model for _, model in script.reviews) == ["anthropic/claude-haiku-4.5", "openai/gpt-5.4-mini"]
+    assert sorted(model for _, model in script.reviews) == ["anthropic/claude-haiku-4.5", "openai/gpt-6-luna"]
     assert [e["status"] for e in events if e.get("kind") == "tool" and e.get("name") == "audit_answer"] == [
         "running", "succeeded"]
     assert deltas(events) == ANSWER

@@ -178,7 +178,7 @@ def audit_loop(store, script, *, messages=None, memory=None, reviewers="always")
                               {"role": "user", "content": "Tell me about the Eiffel Tower."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}),
         agent_preferences=AgentPreferences(), memory=memory, reviewers=reviewers)
     if script.tool_steps:
         loop.registry = ToolRegistry([*loop.registry.tools.values(), lookup(script)],
@@ -1669,11 +1669,11 @@ def test_a_mark_on_the_work_names_its_entry_also_with_an_unplaced_quote():
         ("OpenAI", [{"entry": 4, "kind": "doubtful", "note": "The step skipped the file."},
                     {"entry": 6, "quote": "Not in the answer", "kind": "incomplete", "note": "Missing."},
                     {"entry": 6, "quote": "One plain sentence", "kind": "doubtful", "note": "On the answer."}], True)],
-        {4: ("step", "gpt-5.4-mini"), 6: ("tool", "read_source")})
+        {4: ("step", "gpt-6-luna"), 6: ("tool", "read_source")})
     assert unplaced == []
     assert process == [
         {"model": "OpenAI", "kind": "doubtful", "note": "The step skipped the file.", "entry": 4, "mark": 1,
-         "entry_kind": "step", "entry_name": "gpt-5.4-mini", "live": True},
+         "entry_kind": "step", "entry_name": "gpt-6-luna", "live": True},
         {"model": "OpenAI", "kind": "incomplete", "note": "Missing.", "entry": 6, "mark": 2,
          "quote": "Not in the answer", "entry_kind": "tool", "entry_name": "read_source", "live": True}]
     # A quote the answer holds marks its sentence, with the entry it came from.
@@ -2053,7 +2053,7 @@ def test_the_route_takes_the_users_decision_on_an_open_hold(api, monkeypatch):
     assert again.status_code == 409
 
 
-HALT = {"reviewer": "GPT-5.4 mini", "provider": "openai", "kind": "injection", "reason": HALT_REASON, "entry": 1,
+HALT = {"reviewer": "GPT-6 Luna", "provider": "openai", "kind": "injection", "reason": HALT_REASON, "entry": 1,
         "step": "", "step_name": "", "step_kind": "", "step_source": ""}
 
 

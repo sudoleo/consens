@@ -40,8 +40,8 @@ class ExistingModelFlowTests(unittest.TestCase):
     def test_normal_pro_models_keep_api_names_without_low_payloads(self):
         cases = [
             ("openai", "gpt-5.5", "openai/gpt-5.5"),
-            ("anthropic", cfg.ANTHROPIC_PRO_MODEL, "anthropic/claude-opus-4.8"),
-            ("gemini", cfg.GEMINI_PRO_MODEL, "google/gemini-3.1-pro-preview"),
+            ("anthropic", cfg.ANTHROPIC_PRO_MODEL, "anthropic/claude-opus-5.5"),
+            ("gemini", cfg.GEMINI_PRO_MODEL, "google/gemini-4-carbon"),
         ]
 
         for provider, model_id, api_model in cases:
@@ -91,7 +91,7 @@ class ExistingModelFlowTests(unittest.TestCase):
             "mistralai/mistral-small-2603",
         )
         self.assertEqual(
-            cfg.virtual_model_ids()[cfg.ANTHROPIC_PRO_MODEL],
+            cfg.openrouter_model_id("claude-opus-4-8", "anthropic"),
             "anthropic/claude-opus-4.8",
         )
 
@@ -291,7 +291,7 @@ class ExistingModelFlowTests(unittest.TestCase):
         self.assertEqual(cfg.API_CONSENSUS_PRESET, "balanced")
         # High Quality: three strong reviewers from three labs.
         self.assertEqual(presets["thorough"]["models"], {
-            "anthropic": cfg.ANTHROPIC_PRO_MODEL, "gemini": cfg.GEMINI_PRO_MODEL, "grok": cfg.GROK_PRO_MODEL,
+            "anthropic": cfg.ANTHROPIC_PRO_MODEL, "gemini": cfg.GEMINI_38_FLASH_MODEL, "grok": cfg.GROK_PRO_MODEL,
         })
         self.assertEqual(presets["thorough"]["label"], "High Quality")
         self.assertTrue(set(presets["thorough"]["models"].values()) <= cfg.PREMIUM_MODELS)
@@ -546,7 +546,7 @@ class ExistingModelFlowTests(unittest.TestCase):
     def test_admin_meta_exposes_virtual_api_models(self):
         """Die UI muss zeigen koennen, was tatsaechlich beim Provider ankommt."""
         meta = _admin_meta({})
-        self.assertEqual(meta["api_models"]["claude-haiku-4-5"], "anthropic/claude-haiku-4.5")
+        self.assertEqual(meta["api_models"][cfg.DEFAULT_MISTRAL_MODEL], "mistralai/mistral-small-2603")
         self.assertNotIn(cfg.GROK_NO_REASONING_MODEL, meta["api_models"])
 
     def test_admin_meta_exposes_the_effective_reasoning_policy(self):
@@ -719,13 +719,13 @@ class ExistingModelFlowTests(unittest.TestCase):
 
     def test_watch_models_are_separate_for_free_and_pro(self):
         normalized = normalize_models_document({
-            "openai": [cfg.DEFAULT_OPENAI_MODEL, "gpt-5.5"],
+            "openai": [cfg.DEFAULT_OPENAI_MODEL, cfg.OPENAI_PRO_MODEL],
             "mistral": [cfg.DEFAULT_MISTRAL_MODEL, cfg.MISTRAL_PRO_MODEL],
             "anthropic": [cfg.DEFAULT_ANTHROPIC_MODEL, cfg.ANTHROPIC_PRO_MODEL],
             "gemini": [cfg.DEFAULT_GEMINI_MODEL],
             "deepseek": [cfg.DEEPSEEK_FLASH_MODEL],
             "grok": [cfg.DEFAULT_GROK_MODEL],
-            "premium": ["gpt-5.5", cfg.MISTRAL_PRO_MODEL, cfg.ANTHROPIC_PRO_MODEL],
+            "premium": [cfg.OPENAI_PRO_MODEL, cfg.MISTRAL_PRO_MODEL, cfg.ANTHROPIC_PRO_MODEL],
             "watch_models": {
                 "free": {
                     "openai": cfg.DEFAULT_OPENAI_MODEL,
@@ -733,7 +733,7 @@ class ExistingModelFlowTests(unittest.TestCase):
                     "anthropic": cfg.ANTHROPIC_PRO_MODEL,
                 },
                 "pro": {
-                    "openai": "gpt-5.5",
+                    "openai": cfg.OPENAI_PRO_MODEL,
                     "mistral": cfg.MISTRAL_PRO_MODEL,
                     "anthropic": cfg.ANTHROPIC_PRO_MODEL,
                 },

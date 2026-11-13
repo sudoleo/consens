@@ -313,7 +313,7 @@ def vm_loop(store, script, *, chat_id=None, request_id="one", vm="on", file_cont
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Analyse my data."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}),
         agent_preferences=AgentPreferences(vm=vm), file_context=file_context,
         # A chat with Google data always carries the user's consent (the
         # route refuses it without).
@@ -1624,7 +1624,7 @@ def test_an_admin_with_everything_on_gets_every_tool(store, fake_vm, tmp_path, m
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Analyse my data."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=Agent().factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}),
         agent_preferences=AgentPreferences(vm="on"),
         file_context=FileContext(files, UID, chat_id, [upload["id"]]),
         memory=MemorySnapshot(available=True, enabled=True, auto=True))

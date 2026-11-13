@@ -76,7 +76,7 @@ def test_compare_models_states_the_per_message_comparison_limit(store):
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=Script().factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}))
     assert loop.registry.tools["compare_models"].description.endswith(" At most 4 times per message.")
     assert "comparisons per message" not in loop.messages[0]["content"]
     bounded = make_loop(store, Script())

@@ -448,7 +448,7 @@ def test_recovering_a_failed_turn_never_calls_a_model_and_names_its_request(api)
     response = client.post("/agent", json=payload, headers=AUTH)
     assert response.status_code == 200, response.text
     assert response.json()["turn"]["status"] == "failed"
-    other = {**payload, "comparison_models": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}}
+    other = {**payload, "comparison_models": {"openai": "gpt-6-luna", "anthropic": "claude-haiku-4-5"}}
     assert client.post("/agent", json=other, headers=AUTH).status_code == 409
     for preferences in (LEGACY_PREFERENCES, {"depth": "deep"}):
         assert client.post("/agent", json={**payload, "agent_preferences": preferences}, headers=AUTH).status_code == 200
@@ -695,14 +695,14 @@ def test_high_reasoning_levels_are_pro(api, monkeypatch):
     monkeypatch.setattr(agent, "is_user_pro", lambda uid: False)
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
     payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "first", "bookmark_id": "bm1",
-        "model_id": "gpt-5.6-luna", "reasoning_effort": "high"}
+        "model_id": "gpt-6-luna", "reasoning_effort": "high"}
     response = client.post("/agent", json=payload, headers=AUTH)
     assert response.status_code == 403 and "Pro" in response.json()["detail"]
     assert store.get_chat(UID, chat_id)["turn_count"] == 0 and not calls
     assert "event: final" in client.post("/agent", json={**payload, "reasoning_effort": "low"}, headers=AUTH).text
 
 
-@pytest.mark.parametrize("model_id", ["gpt-5.6-luna", "gpt-5.6-sol"])
+@pytest.mark.parametrize("model_id", ["gpt-6-luna", "gpt-6.1-sol"])
 def test_model_effort_snapshot_switch_and_recovery_identity(api, monkeypatch, model_id):
     client, store, calls = api
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]
@@ -748,7 +748,7 @@ def test_reasoning_stream_formats_are_bounded_and_never_leak_encrypted_data(monk
         yield ""
     monkeypatch.setattr(agent_client, "cancellable_sse_lines", lines)
     completion = AgentCompletion()
-    model = agent_client.resolve_agent_model("gpt-5.6-luna", "medium")
+    model = agent_client.resolve_agent_model("gpt-6-luna", "medium")
     events = list(completion.stream(model=model, messages=[], api_key="test"))
     assert requests[0]["reasoning"]["effort"] == "medium"
     assert requests[0]["provider"] == {"sort": "throughput", "data_collection": "deny", "preferred_max_latency": {"p50": 2, "p90": 5}}
@@ -763,10 +763,10 @@ def test_reasoning_stream_formats_are_bounded_and_never_leak_encrypted_data(monk
 
 @pytest.mark.real_prices
 def test_selected_model_prices_and_mandatory_provider_routes(monkeypatch):
-    model = agent_client.resolve_agent_model("gpt-5.6-luna", "low")
+    model = agent_client.resolve_agent_model("gpt-6-luna", "low")
     usage = measured_usage({"prompt_tokens": 1000, "completion_tokens": 100,
         "prompt_tokens_details": {"cached_tokens": 200}}, model)
-    assert usage["estimated_cost_nano_usd"] == 284000
+    assert usage["estimated_cost_nano_usd"] == 132000
     from app.core import config as cfg
     monkeypatch.setenv("AGENT_MODEL", cfg.MODEL_CONFIGS[cfg.KIMI_PRO_MODEL].api_model)
     kimi = agent_client.resolve_agent_model(reasoning_effort="low")
@@ -873,7 +873,7 @@ def test_agent_history_never_queries_empty_model_answers(store, monkeypatch):
 
 
 @pytest.mark.real_prices
-@pytest.mark.parametrize("model_id", ["moonshotai/kimi-k3.1-pro", "openai/gpt-4o"])
+@pytest.mark.parametrize("model_id", ["moonshotai/kimi-k3.1-pro", "openai/gpt-6.1-terra"])
 def test_configured_default_uses_its_own_prices_context_and_routing(monkeypatch, model_id):
     from app.core import config as cfg
     from decimal import Decimal

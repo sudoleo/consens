@@ -103,14 +103,19 @@ DEFAULT_LIMITS = {
     "watch_plus_daily_interval_allowed": 1,
 }
 
-OPENAI_LUNA_MODEL = "gpt-5.6-luna"
+# Eigene Konstante statt OPENAI_LUNA_MODEL: Prod speichert genau diese ID,
+# und die Admin-Speicherung nimmt ein Modell ausserhalb der OpenAI-Liste nur
+# an, solange es dem Code-Default gleicht (admin.update_models). Ein Wechsel
+# des Memory-Edit-Modells ist eine eigene Entscheidung, kein Nebeneffekt des
+# Familien-Defaults.
+MEMORY_EDIT_MODEL = "gpt-5.6-luna"
 
 # Persistente Admin-Konfiguration fuer explizite User-Memory-Edits. Diese
 # Defaults sind absichtlich konservativ und werden fuer jedes fehlende oder
 # ungueltige Firestore-Feld einzeln verwendet.
 DEFAULT_MEMORY_EDIT_CONFIG = {
     "memory_edit_enabled": True,
-    "memory_edit_model": OPENAI_LUNA_MODEL,
+    "memory_edit_model": MEMORY_EDIT_MODEL,
     "memory_free_chars": 12_000,
     "memory_plus_chars": 18_000,
     "memory_pro_chars": 24_000,
@@ -143,8 +148,15 @@ REASONING_EFFORT_ON = "high"
 REASONING_EFFORT_FOR_JUDGE = "low"
 REASONING_EFFORT_FOR_JUDGE_BY_PROVIDER = {"mistral": "none"}
 REASONING_EFFORT_FOR_MEMORY_EDIT = "none"
-DEFAULT_OPENAI_MODEL = "gpt-5.4-mini"
-OPENAI_SOL_MODEL = "gpt-5.6-sol"
+# Je Familie die aktuelle Generation, wie die Admin-Listen in Prod. Alte IDs
+# leben nur noch als Literale dort, wo gespeicherte Antworten oder Pins sie
+# brauchen (MODEL_LABEL_OVERRIDES, share_snapshots, benchmark/config.py);
+# migriert werden sie nicht, sonst truegen alte Antworten den neuen Namen.
+OPENAI_LUNA_MODEL = "gpt-6-luna"
+DEFAULT_OPENAI_MODEL = OPENAI_LUNA_MODEL
+OPENAI_TERRA_MODEL = "gpt-6.1-terra"
+OPENAI_SOL_MODEL = "gpt-6.1-sol"
+OPENAI_ASTRA_MODEL = "gpt-6-astra"
 # Offene Modelle (Gewichte auf Hugging Face) fuer das Preset "Open Models".
 # gpt-oss-120b liest nur Text und denkt zwingend (Stufe "low", siehe
 # MODEL_REQUEST_CONFIG); im Preset steht Qwen3.8 27B statt seiner,
@@ -153,13 +165,14 @@ OPENAI_OSS_MODEL = "gpt-oss-120b"
 GEMMA_MODEL = "gemma-4-31b-it"
 DEFAULT_MISTRAL_MODEL = "mistral-small-latest"
 MISTRAL_PRO_MODEL = "mistral-medium-3-5"
-DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"
-ANTHROPIC_PRO_MODEL = "claude-opus-4-8"
+DEFAULT_ANTHROPIC_MODEL = "claude-haiku-5.5"
+ANTHROPIC_SONNET_MODEL = "claude-sonnet-5.5"
+ANTHROPIC_PRO_MODEL = "claude-opus-5.5"
 DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
-GEMINI_36_FLASH_MODEL = "gemini-3.6-flash"
-GEMINI_35_FLASH_MODEL = "gemini-3.5-flash"
-GEMINI_PRO_MODEL = "gemini-3.1-pro-preview"
+GEMINI_38_FLASH_MODEL = "gemini-3.8-flash"
+GEMINI_HYDROGEN_MODEL = "gemini-4-hydrogen"
+GEMINI_PRO_MODEL = "gemini-4-carbon"
 # V4.1 Flash statt V4 Flash. Prod-Receipts 2026-09-30 bis 10-14: V4 Flash
 # brauchte als Vergleichsantwort im Median 63 s (bis 299 s) und war in 10 von
 # 16 Laeufen das langsamste Modell; V4.1 Flash 18 s (hoechstens 39 s), pro
@@ -196,7 +209,10 @@ DEFAULT_GROK_MODEL = GROK_BASE_MODEL
 # Modelle hinter den "<Familie>-Pro"-Aliassen, soweit sie nicht schon oben
 # stehen. Bewusst benannt, damit die Provider-Registry ohne Stringliterale
 # auskommt.
-OPENAI_PRO_MODEL = "gpt-5.5"
+# OpenAI-Pro ist Sol, nicht Astra: Astra kostet 10/50 $ je Mio. Token, das
+# Fuenffache von Sol (2/10) und mehr als das Doppelte von Opus 5.5 (4/20),
+# und der Alias treibt Konsens-Engine und Pro-Bewerter.
+OPENAI_PRO_MODEL = OPENAI_SOL_MODEL
 GROK_PRO_MODEL = "grok-4.7"
 KIMI_BASE_MODEL = "kimi-k2.6"
 # K3.1 Pro statt K3: auf der Moonshot-Route, die Kimi faehrt,
@@ -361,12 +377,10 @@ PROVIDERS: dict[str, ProviderConfig] = {
         _provider(
             "openai", "OpenAI", "openai/", DEFAULT_OPENAI_MODEL, OPENAI_PRO_MODEL,
             {
-                "gpt-5-nano", "gpt-5-mini", "gpt-4.1", "gpt-4o",
-                "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4",
-                OPENAI_PRO_MODEL, DEFAULT_OPENAI_MODEL,
-                OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, OPENAI_OSS_MODEL,
+                OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, OPENAI_TERRA_MODEL,
+                OPENAI_ASTRA_MODEL, OPENAI_OSS_MODEL,
             },
-            required=(OPENAI_LUNA_MODEL, OPENAI_SOL_MODEL, OPENAI_OSS_MODEL),
+            required=(OPENAI_LUNA_MODEL, OPENAI_OSS_MODEL),
             title="ChatGPT", short_label="OpenAI",
             icon="chatgpt.png", icon_class="chatgpt-logo",
             text_only_models=(OPENAI_OSS_MODEL,),
@@ -377,19 +391,17 @@ PROVIDERS: dict[str, ProviderConfig] = {
         ),
         _provider(
             "anthropic", "Anthropic", "anthropic/", DEFAULT_ANTHROPIC_MODEL, ANTHROPIC_PRO_MODEL,
-            {DEFAULT_ANTHROPIC_MODEL, ANTHROPIC_PRO_MODEL},
+            {DEFAULT_ANTHROPIC_MODEL, ANTHROPIC_SONNET_MODEL, ANTHROPIC_PRO_MODEL},
             dom_key="claude", title="Claude", icon="claude.png",
             citation_label="Anthropic Claude",
         ),
         _provider(
             "gemini", "Gemini", "google/", DEFAULT_GEMINI_MODEL, GEMINI_PRO_MODEL,
             {
-                GEMINI_FLASH_MODEL, GEMINI_36_FLASH_MODEL, "gemini-3.1-flash-lite",
-                "gemini-2.5-flash",
-                GEMINI_35_FLASH_MODEL,
-                GEMINI_PRO_MODEL, "gemini-2.5-pro", GEMMA_MODEL,
+                GEMINI_FLASH_MODEL, GEMINI_38_FLASH_MODEL, GEMINI_HYDROGEN_MODEL,
+                GEMINI_PRO_MODEL, GEMMA_MODEL,
             },
-            required=(GEMINI_36_FLASH_MODEL, GEMINI_35_FLASH_MODEL, GEMMA_MODEL),
+            required=(GEMINI_38_FLASH_MODEL, GEMMA_MODEL),
             icon="gemini-icon.png", citation_label="Google Gemini",
         ),
         _provider(
@@ -524,9 +536,9 @@ def _consensus_alias_providers() -> list[ProviderConfig]:
 
 
 DEFAULT_CONSENSUS_MODELS = [
-    GEMINI_35_FLASH_MODEL,
-    GEMINI_36_FLASH_MODEL,
+    GEMINI_38_FLASH_MODEL,
     OPENAI_LUNA_MODEL,
+    OPENAI_TERRA_MODEL,
     *(provider.label for provider in _consensus_alias_providers()),
     *(
         f"{provider.label}-Pro" for provider in _consensus_alias_providers()
@@ -603,11 +615,12 @@ _BASE_CONSENSUS_PRESET_MODELS = {
     },
     # Drei starke Pruefer aus drei Laboren statt sechs: sechs
     # teure Modelle pruefen jeden Schritt und jede Aktion wartet auf alle; ohne
-    # OpenAI, aus dem das Standard-Chatmodell kommt.
+    # OpenAI, aus dem das Standard-Chatmodell kommt. Gemini mit 3.8 Flash wie
+    # die Prod-Aufstellung, nicht mit dem Pro-Modell Gemini 4 Carbon.
     "thorough": {
         "answers": {
             "anthropic": ANTHROPIC_PRO_MODEL,
-            "gemini": GEMINI_PRO_MODEL,
+            "gemini": GEMINI_38_FLASH_MODEL,
             "grok": GROK_PRO_MODEL,
         },
         "consensus": "Gemini-Pro",
@@ -835,12 +848,10 @@ def ensure_default_models_allowed():
 ensure_default_models_allowed()
 
 PREMIUM_MODELS = {
-    "gpt-5", "gpt-5.1", "gpt-5.2", "gpt-5.4",
-    "gpt-5.5",
-    OPENAI_SOL_MODEL,
-    ANTHROPIC_PRO_MODEL,
+    OPENAI_TERRA_MODEL, OPENAI_SOL_MODEL, OPENAI_ASTRA_MODEL,
+    ANTHROPIC_SONNET_MODEL, ANTHROPIC_PRO_MODEL,
     MISTRAL_PRO_MODEL,
-    GEMINI_PRO_MODEL, GEMINI_35_FLASH_MODEL, "gemini-2.5-pro",
+    GEMINI_38_FLASH_MODEL, GEMINI_HYDROGEN_MODEL, GEMINI_PRO_MODEL,
     DEEPSEEK_PRO_MODEL,
     GROK_PRO_MODEL,
 }
@@ -854,20 +865,33 @@ PREMIUM_MODELS.difference_update(DEPRECATED_GROK_MODELS)
 ALL_ALLOWED_MODELS = _all_allowed_models()
 
 MODEL_LABEL_OVERRIDES = {
-    OPENAI_LUNA_MODEL: "GPT-5.6 Luna",
-    OPENAI_SOL_MODEL: "GPT-5.6 Sol",
-    "gpt-5.5": "GPT-5.5",
-    DEFAULT_OPENAI_MODEL: "GPT-5.4 mini",
-    DEFAULT_ANTHROPIC_MODEL: "Claude Haiku 4.5",
+    OPENAI_LUNA_MODEL: "GPT-6 Luna",
+    OPENAI_TERRA_MODEL: "GPT-6.1 Terra",
+    OPENAI_SOL_MODEL: "GPT-6.1 Sol",
+    OPENAI_ASTRA_MODEL: "GPT-6 Astra",
+    DEFAULT_ANTHROPIC_MODEL: "Claude Haiku 5.5",
+    ANTHROPIC_SONNET_MODEL: "Claude Sonnet 5.5",
+    ANTHROPIC_PRO_MODEL: "Claude Opus 5.5",
     DEFAULT_GEMINI_MODEL: "Gemini 3.5 Flash-Lite",
+    GEMINI_38_FLASH_MODEL: "Gemini 3.8 Flash",
+    GEMINI_HYDROGEN_MODEL: "Gemini 4 Hydrogen",
+    GEMINI_PRO_MODEL: "Gemini 4 Carbon",
+    # Nicht mehr waehlbare Modelle als Literale: gespeicherte Antworten,
+    # Share-Seiten und Benchmark-Laeufe tragen diese IDs und behalten ihren
+    # Namen, auch wenn die Konstanten oben weiterziehen.
+    "gpt-5.6-luna": "GPT-5.6 Luna",
+    "gpt-5.6-sol": "GPT-5.6 Sol",
+    "gpt-5.5": "GPT-5.5",
+    "gpt-5.4-mini": "GPT-5.4 mini",
+    "claude-haiku-4-5": "Claude Haiku 4.5",
+    "claude-opus-4-8": "Claude Opus 4.8",
+    "gemini-3.6-flash": "Gemini 3.6 Flash",
+    "gemini-3.5-flash": "Gemini 3.5 Flash",
+    "gemini-3.1-pro-preview": "Gemini 3.1",
     # Grok ohne Reasoning-Zusatz: die Stufe ist eine Einstellung, kein Modell.
     "grok-4.5": "Grok 4.5",
     "mistral-small-latest": "Mistral Small 4",
     MISTRAL_PRO_MODEL: "Mistral Medium 3.5",
-    ANTHROPIC_PRO_MODEL: "Claude Opus 4.8",
-    GEMINI_36_FLASH_MODEL: "Gemini 3.6 Flash",
-    GEMINI_35_FLASH_MODEL: "Gemini 3.5 Flash",
-    GEMINI_PRO_MODEL: "Gemini 3.1",
     DEEPSEEK_FLASH_MODEL: "DeepSeek V4.1 Flash",
     DEEPSEEK_PRO_MODEL: "DeepSeek V4.1 Flash 1017",
     DEEPSEEK_V4_PRO_MODEL: "DeepSeek V4 Pro",
@@ -1109,10 +1133,13 @@ REASONING_POLICY = {"profile": "existing", "models": {}}
 
 
 def reasoning_savings_models() -> set[str]:
-    """Verified savings controls; see docs/reasoning-policy.md for sources."""
+    """Verified savings controls; see docs/reasoning-policy.md for sources.
+
+    GPT-5.5 stays a literal: the low cap was verified for it, not for
+    whichever model the OpenAI-Pro alias names today."""
     return {
         DEFAULT_MISTRAL_MODEL, MISTRAL_PRO_MODEL, GROK_PRO_MODEL,
-        OPENAI_PRO_MODEL,
+        "gpt-5.5",
     }
 
 

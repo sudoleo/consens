@@ -267,6 +267,7 @@ class BenchmarkRunner:
         sample_role: str = "benchmark",
         sample_manifest: str | None = None,
     ):
+        config.register_pins()
         self.models = list(models)
         self.consensus_model = consensus_model
         self.system_prompt = system_prompt

@@ -139,7 +139,7 @@ def chat_loop(store, plan, *, google_selection=None, google_data=False, policy=N
                   *(conversation or [{"role": "user", "content": "Price?"}])],
         api_key="test", cancellation=ProviderCancellation(), policy=policy or AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=plan.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}),
         google_selection=google_selection, google_data=google_data, chat_sources=chat_sources))
 
 

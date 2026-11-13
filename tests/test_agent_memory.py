@@ -300,7 +300,7 @@ def memory_loop(store, script, *, snapshot=None, question="I moved to Munich las
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": question}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}),
         memory=snapshot)
     script.loop = loop
     return without_reviewers(loop)
@@ -478,7 +478,7 @@ def test_mock_runs_can_exercise_the_memory_flow(store):
 
 def test_anthropic_requests_carry_automatic_cache_control(monkeypatch):
     assert prompt_cache_control(resolve_agent_model("claude-haiku-4-5")) == {"type": "ephemeral"}
-    assert prompt_cache_control(type("M", (), {"model": "openai/gpt-5.4-mini"})()) is None
+    assert prompt_cache_control(type("M", (), {"model": "openai/gpt-6-luna"})()) is None
     from app.services.llm.agent_client import AgentCompletion
     requests, _, _ = transport(monkeypatch, [[packet({"content": "Hi"}, finish="stop",
                                                      usage={"prompt_tokens": 5, "completion_tokens": 1})]])

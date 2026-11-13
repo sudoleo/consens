@@ -87,7 +87,7 @@ def advised_loop(store, script, *, on_note=None, reviewers="always"):
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Tell me about the Eiffel Tower."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}),
         agent_preferences=AgentPreferences(), reviewers=reviewers)
     notes = []
 

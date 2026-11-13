@@ -102,7 +102,7 @@ def make_loop(store, script, *, messages=None, delegation=False, models=None, pr
         model=resolve_agent_model("claude-haiku-4-5"), messages=messages or [{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare options"}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection(models or {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}),
+        comparison_models=comparison_selection(models or {"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}),
         agent_preferences=preferences)
     if not reviewers:
         without_reviewers(loop)
@@ -135,7 +135,7 @@ def test_only_the_chat_models_steps_share_the_chats_provider_session(store):
     assert all(one_off == step.startswith("agent:") for step, _, one_off in script.sessions)
     # Both comparison models ran as helpers.
     assert {model for step, model in script.calls if step.startswith("agent:")} == {
-        "anthropic/claude-haiku-4.5", "openai/gpt-5.4-mini"}
+        "anthropic/claude-haiku-4.5", "openai/gpt-6-luna"}
 
 
 @pytest.mark.parametrize("compares", [1, 2])
@@ -215,7 +215,7 @@ def test_a_rate_limited_comparison_model_is_named_and_the_others_answer(store):
     from app.services.agent_provider_limits import AgentProviderCooldown
     script = Script()
     loop = make_loop(store, script)
-    loop.comparison.models = comparison_selection({'anthropic': 'claude-haiku-4-5', 'openai': 'gpt-5.4-mini',
+    loop.comparison.models = comparison_selection({'anthropic': 'claude-haiku-4-5', 'openai': 'gpt-6-luna',
                                                   'gemini': 'gemini-3.5-flash-lite'})
     original = loop.comparison.call
     def call(model, messages, **kwargs):
@@ -636,7 +636,7 @@ def test_comparison_models_get_their_own_completion_limit():
     from app.core import config as cfg
     from app.services.agent_comparison import COMPARISON_OUTPUT_CEILING
     from app.services.llm.agent_client import _CATALOG
-    chosen = {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}
+    chosen = {"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}
     models = comparison_selection(chosen)
     for provider, model in models.items():
         catalog = _CATALOG["models"][model.model]["top_provider"].get("max_completion_tokens") or COMPARISON_OUTPUT_CEILING
@@ -698,7 +698,7 @@ def test_an_answer_that_ends_without_a_word_gets_one_more_attempt(store, empties
     assert saved["status"] == "completed"
 
 
-THREE = {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini", "gemini": "gemini-3.5-flash-lite"}
+THREE = {"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna", "gemini": "gemini-3.5-flash-lite"}
 
 
 def test_the_step_after_the_last_comparison_writes_the_answer(store):

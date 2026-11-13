@@ -88,7 +88,7 @@ def watch_loop(store, script, *, watch_outlook=None, question="Tell me when IRON
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": question}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.for_chat(config),
         delegation_config=config, completion_factory=script.factory,
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"})
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"})
         if comparisons else None,
         agent_preferences=preferences, google_data=google_data, watch_run=watch_run, temporary=temporary)
     if loop.watch_tools:

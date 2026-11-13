@@ -451,7 +451,7 @@ class SanitizerTests(unittest.TestCase):
         self.assertTrue(pro["pro"])
         self.assertEqual(icon_file(pro["icon"]), "claude.png")
         self.assertTrue(pro["model"])  # konkretes Modell aufgelöst
-        direct = snapshots.consensus_model_view(snapshots.cfg.GEMINI_36_FLASH_MODEL)
+        direct = snapshots.consensus_model_view(snapshots.cfg.GEMINI_38_FLASH_MODEL)
         self.assertEqual(direct["provider"], "Gemini")
         self.assertFalse(direct["pro"])
         kimi = snapshots.consensus_model_view("Kimi-Pro")

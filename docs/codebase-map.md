@@ -11198,12 +11198,35 @@ Kimi/GLM bei ihrer Aufnahme zusätzlich wählbar). Bilder nativ, PDFs über den
 Text-Fallback. Das Logo (`xiaomi.svg`, „mi“-Marke, einfarbig) ist von Hand gezeichnet.
 
 Code-Fallback-Modell-IDs und Labels liegen in `app/core/config.py`
-(`ALLOWED_*_MODELS`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
+(`PROVIDERS[key].models`, `PREMIUM_MODELS`, `DEFAULT_MODEL_BY_PROVIDER`,
 `FREE_DEFAULT_MODEL_BY_PROVIDER`, `MODEL_LABEL_OVERRIDES`). In Produktion sind
 Providerlisten, Reihenfolge, Free-Defaults und Premium-Zuordnung aus
 `app_config/models` autoritativ. Ebenfalls in `config.py`: die festen
 Produkt-Metadaten `CONSENSUS_PRESET_DEFINITIONS` und Basiswerte ausschließlich
 für ein fehlendes/noch nicht migriertes Dokument.
+
+**Familien-Konstanten und abgelöste IDs.** `DEFAULT_<FAMILIE>_MODEL` und
+`<FAMILIE>_PRO_MODEL` zeigen auf dieselbe Generation wie die Prod-Listen (seit
+2026-11-13: OpenAI GPT-6 Luna / GPT-6.1 Sol, dazu `OPENAI_TERRA_MODEL` und
+`OPENAI_ASTRA_MODEL`; Claude Haiku / Opus 5.5 mit `ANTHROPIC_SONNET_MODEL`;
+Gemini 3.5 Flash-Lite / Gemini 4 Carbon mit `GEMINI_38_FLASH_MODEL` und
+`GEMINI_HYDROGEN_MODEL`). OpenAI-Pro ist Sol statt Astra (Astra kostet das
+Fünffache von Sol). Diese Konstanten treiben die Familien-Aliasse
+(`CONSENSUS_ENGINE_ALIASES`), den Fallback in `engines.py` für Aufrufe ohne
+Modellwahl und den Code-Fallback ohne Firestore. Abgelöste IDs werden nie über
+`PROVIDER_MODEL_MIGRATIONS` umgebogen: `get_model_label` läuft über
+`canonical_model_id`, alte Antworten und Share-Seiten trügen sonst den Namen des
+Nachfolgers. Sie leben als Literale dort, wo Gespeichertes sie trägt:
+`MODEL_LABEL_OVERRIDES`, `share_snapshots._CONSENSUS_ENGINE_MODELS` (Engine-Key
+alter Share-Seiten → damaliges Modell), die Benchmark-Pins in
+`benchmark/config.py` (`OPENROUTER_MODEL_ALIASES` behält dafür
+`claude-opus-4-8`/`claude-haiku-4-5`), `MEMORY_EDIT_MODEL` (Prod speichert
+`gpt-5.6-luna`, die Admin-Speicherung nimmt es nur als Code-Default an) und die
+geprüfte Sparstufe für GPT-5.5 in `reasoning_savings_models()`. Direkte
+Konsens-Modelle alter Seiten (`gpt-5.6-luna`), die in keiner Admin-Liste mehr
+stehen, benennt `consensus_model_view` über `get_model_label` und findet die
+Familie am Wortstamm der ID (`_retired_model_family`).
+`tests/test_retired_model_labels.py` hält das fest.
 Firestore `preset_models` speichert pro Daily/Open Models (ID: `balanced`)/High
 Quality (ID: `thorough`) unter `answers` zwei bis sechs unterschiedliche
 Familienmodelle (`MIN_PRESET_FAMILIES` bis `MAX_RUN_FAMILIES`, die Admin-Seite
@@ -11332,7 +11355,7 @@ Free- und Pro-Zugriff; alte interne Low-Aliasse sowie nicht mehr im
 OpenRouter-Katalog vorhandene Legacy-Modell-IDs stehen als Tombstones in
 `REMOVED_MODEL_IDS` und werden beim Laden/Speichern aus bestehenden Admin-Daten
 entfernt. Gemini
-  3.5 Flash-Lite ist der Code-/Firestore-Free-Default, Gemini 3.6 Flash ist eine
+  3.5 Flash-Lite ist der Code-/Firestore-Free-Default, Gemini 3.8 Flash ist eine
   direkte Modell-ID. Gemini-Payloads senden modellgenerationsunabhängig keine
   optionale `temperature`, damit neue Admin-IDs nicht an geänderten
   Sampling-Schemas scheitern. Bekannte tote Preview-IDs bleiben Tombstones.

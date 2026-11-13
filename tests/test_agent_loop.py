@@ -225,7 +225,7 @@ def test_a_chats_first_message_marks_only_its_system_prompt(store, monkeypatch):
 
 def test_providers_that_cache_on_their_own_get_the_plain_conversation(store, monkeypatch):
     requests, _, _ = transport(monkeypatch, [[packet({"content": "Answer"}), packet(finish="stop", usage=usage())]])
-    loop, messages = follow_up_loop(store, model="gpt-5.6-luna")
+    loop, messages = follow_up_loop(store, model="gpt-6-luna")
     list(loop.run())
     assert requests[0]["messages"] == messages and "cache_control" not in requests[0]
 
@@ -365,7 +365,7 @@ def _avoiding_retry(monkeypatch, refusal):
     value.avoid_endpoints = ("Azure",)
     with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=2)):
         # An OpenAI model: no explicit cache points whose own 400 fallback runs first.
-        list(value.stream(model=resolve_agent_model("gpt-5.5"), api_key="test",
+        list(value.stream(model=resolve_agent_model("gpt-6-luna"), api_key="test",
                           messages=[{"role": "system", "content": "System"}, {"role": "user", "content": "Hi"}]))
     return value, requests
 
@@ -396,7 +396,7 @@ def test_another_refusal_of_an_avoiding_request_stands(monkeypatch):
     value = AgentCompletion()
     value.avoid_endpoints = ("Azure",)
     with bind_analysis_budget(AnalysisBudget(seconds=30, max_calls=2)), pytest.raises(_ProviderHTTPStatusError):
-        list(value.stream(model=resolve_agent_model("gpt-5.6-luna"), messages=[{"role": "user", "content": "Hi"}],
+        list(value.stream(model=resolve_agent_model("gpt-6-luna"), messages=[{"role": "user", "content": "Hi"}],
                           api_key="test"))
     assert len(requests) == 1
 

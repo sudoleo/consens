@@ -115,6 +115,35 @@ def _no_real_link_checks(monkeypatch):
     monkeypatch.setattr(agent_answer_links, "link_gone", unknown)
 
 
+# Models the suite runs on that the code's lists no longer carry. Claude Haiku
+# 4.5 is the only model with client tools (agent_policy.supports_client_tools)
+# and one of few with a tested delegation entry in the catalog; the agent
+# mechanics tests and their shared helpers drive it as chat and comparison
+# model.
+SUITE_ONLY_MODELS = {"anthropic": ("claude-haiku-4-5",)}
+
+
+@pytest.fixture(autouse=True)
+def model_lists():
+    """Adds SUITE_ONLY_MODELS, and afterwards puts every family's model list
+    back as the test found it: a test that widens a list (the benchmark's
+    pins, benchmark.config.register_pins) must not hand that to the next
+    test in the same worker."""
+    import app.core.config as cfg
+
+    before = {key: set(provider.models) for key, provider in cfg.PROVIDERS.items()}
+    all_allowed = cfg.ALL_ALLOWED_MODELS
+    for key, models in SUITE_ONLY_MODELS.items():
+        cfg.PROVIDERS[key].models.update(models)
+    cfg.ALL_ALLOWED_MODELS = cfg._all_allowed_models()
+    cfg.rebuild_model_configs()
+    yield
+    for key, provider in cfg.PROVIDERS.items():
+        cfg._replace_set(provider.models, before[key])
+    cfg.ALL_ALLOWED_MODELS = all_allowed
+    cfg.rebuild_model_configs()
+
+
 @pytest.fixture
 def deepseek_default_agent(monkeypatch):
     """Agent mechanics tests (costs, replay, ordering) were written against

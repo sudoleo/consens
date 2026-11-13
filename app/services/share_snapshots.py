@@ -87,6 +87,19 @@ PROVIDER_CITATION_LABELS = {
 PROVIDERS_BY_LABEL = {provider.label: provider for provider in cfg.PROVIDERS.values()}
 # Reverse-Map: Zitations-Label -> Provider-Key (Labels sind eindeutig).
 _CITATION_LABEL_TO_PROVIDER = {v: k for k, v in PROVIDER_CITATION_LABELS.items()}
+# Wortstamm einer Modell-ID -> Familie ("gpt" -> OpenAI, "gemma" -> Gemini).
+# Alte Konsens-Seiten speichern direkte Modell-IDs ("gpt-5.6-luna"), die in
+# keiner Admin-Liste mehr stehen; ihre Familie steckt nur noch in der ID.
+_FAMILY_BY_MODEL_STEM = {
+    re.match(r"[a-z]+", model_id).group(): provider.label
+    for provider in cfg.PROVIDERS.values()
+    for model_id in provider.required_models
+}
+
+
+def _retired_model_family(model_id):
+    stem = re.match(r"[a-z]+", model_id) if "-" in model_id and " " not in model_id else None
+    return _FAMILY_BY_MODEL_STEM.get(stem.group()) if stem else None
 
 _UMLAUT_MAP = str.maketrans({
     "ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss",
@@ -311,15 +324,17 @@ def build_included_models(included_providers, model_labels=None):
 # Konsens-Engine-Key -> konkretes Modell (deterministisch, analog zu
 # cfg.CONSENSUS_ENGINE_ALIASES). Der Snapshot speichert nur den Engine-Key,
 # das konkrete Modell wird hier rekonstruiert – gilt auch für Alt-Snapshots.
+# Deshalb Literale, wo cfg weitergezogen ist: eine Share-Seite nennt das
+# Modell, das die Engine damals war, nicht den heutigen Alias.
 _CONSENSUS_ENGINE_MODELS = {
-    "OpenAI": cfg.DEFAULT_OPENAI_MODEL,
+    "OpenAI": "gpt-5.4-mini",
     "OpenAI-Pro": "gpt-5.5",
     "Mistral": cfg.DEFAULT_MISTRAL_MODEL,
     "Mistral-Pro": cfg.MISTRAL_PRO_MODEL,
-    "Anthropic": cfg.DEFAULT_ANTHROPIC_MODEL,
-    "Anthropic-Pro": cfg.ANTHROPIC_PRO_MODEL,
+    "Anthropic": "claude-haiku-4-5",
+    "Anthropic-Pro": "claude-opus-4-8",
     "Gemini": cfg.GEMINI_FLASH_MODEL,
-    "Gemini-Pro": cfg.GEMINI_PRO_MODEL,
+    "Gemini-Pro": "gemini-3.1-pro-preview",
     "DeepSeek": cfg.DEFAULT_DEEPSEEK_MODEL,
     "DeepSeek-Pro": cfg.DEEPSEEK_PRO_MODEL,
     "Grok": cfg.DEFAULT_GROK_MODEL,
@@ -371,6 +386,11 @@ def consensus_model_view(consensus_model, model_label=""):
             (key for key in PROVIDERS_BY_LABEL if key.lower() == str(config.provider or "").lower()),
             None,
         )
+    elif not model_label and model_id is None and _retired_model_family(raw):
+        # A model that has left the admin lists keeps the name and logo the
+        # page showed while it was listed.
+        model_label = cfg.get_model_label(raw)
+        provider = provider or _retired_model_family(raw)
     return {
         "provider": provider or "",
         "label": PROVIDER_CITATION_LABELS.get(provider) if provider else raw,

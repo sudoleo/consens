@@ -46,7 +46,7 @@ def test_user_api_key_requests_require_login():
             "question": "hello",
             "useOwnKeys": True,
             "openrouter_key": "sk-user-key",
-            "model": "gpt-5.4-mini",
+            "model": "gpt-6-luna",
         },
     )
 

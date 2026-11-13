@@ -82,7 +82,9 @@ INCLUDE_SYNTH_ALONE = True  # vierte Vergleichsgroesse "Synthesizer allein" (Pla
 # einschliesslich pooled_v1 liefen mit label_mode "names" (V0-Prompt).
 DEFAULT_LABEL_MODE = "anon_shuffled"
 
-BENCHMARK_GEMINI_MODEL = cfg.GEMINI_35_FLASH_MODEL
+# Interne IDs als Literale wie bei OpenAI und Grok: die Familien-Konstanten in
+# cfg ziehen mit neuen Modellen weiter, der Benchmark bleibt auf seinem Pin.
+BENCHMARK_GEMINI_MODEL = "gemini-3.5-flash"
 
 
 @dataclass(frozen=True)
@@ -100,7 +102,7 @@ class BenchmarkModel:
 MODELS: tuple[BenchmarkModel, ...] = (
     BenchmarkModel("openai", "gpt-5.5", "openai/gpt-5.5", "provider_default"),
     BenchmarkModel("mistral", cfg.MISTRAL_PRO_MODEL, "mistralai/mistral-medium-3-5", "provider_default"),
-    BenchmarkModel("anthropic", cfg.ANTHROPIC_PRO_MODEL, "anthropic/claude-opus-4.8", "provider_default"),
+    BenchmarkModel("anthropic", "claude-opus-4-8", "anthropic/claude-opus-4.8", "provider_default"),
     BenchmarkModel("gemini", BENCHMARK_GEMINI_MODEL, "google/gemini-3.5-flash", "provider_default"),
     # Seit 2026-10-29 V4.1 Flash 1017: die App migriert V4 Pro dorthin, ein
     # V4-Pro-Pin liesse sich nicht mehr ausfuehren. final_v1 lief mit V4 Pro.
@@ -146,6 +148,15 @@ def resolve_pins() -> list[dict]:
             }
         )
     return rows
+
+
+def register_pins() -> None:
+    """Makes the pins selectable in this process. The code's model lists in
+    cfg carry only the current generation; the Consensus engine resolves the
+    synthesis model (Gemini 3.5 Flash) through them by its bare ID."""
+    for model in MODELS:
+        cfg.PROVIDERS[model.provider].models.add(model.internal_id)
+    cfg.rebuild_model_configs()
 
 
 def assert_pins_match_config() -> None:

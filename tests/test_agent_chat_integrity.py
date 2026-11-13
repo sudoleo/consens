@@ -164,7 +164,7 @@ def test_the_app_starts_the_review_without_more_agent_requests(store):
     # The comparison step and the step that writes the answer.
     assert len([s for s, _ in script.calls if s.startswith("completion:")]) == 2
     # Each reviewer gave its final round on the fixed answer.
-    assert {model for _, model in script.reviews} == {"anthropic/claude-haiku-4.5", "openai/gpt-5.4-mini"}
+    assert {model for _, model in script.reviews} == {"anthropic/claude-haiku-4.5", "openai/gpt-6-luna"}
 
 
 def test_repeated_invalid_tools_end_with_the_answer_without_exhausting_daily_allowance(store):

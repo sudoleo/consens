@@ -50,7 +50,7 @@ class RegistryCoverageTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertFalse(hasattr(cfg, name))
         source = Path(cfg.__file__).read_text(encoding="utf-8")
-        self.assertEqual(source.count('"gpt-5.6-luna"'), 1)
+        self.assertEqual(source.count('"gpt-6-luna"'), 1)
 
     def test_every_family_has_both_consensus_aliases(self):
         for provider in cfg.PROVIDERS.values():

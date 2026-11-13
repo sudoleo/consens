@@ -227,7 +227,7 @@ def test_a_pick_reaches_the_agent_also_when_the_user_writes_on_a_halt_behind_the
     message."""
     Browser(monkeypatch)
     script, loop, ran = asking(store, args={"request": CHOICE, "choices": ["Mensch", "Bot"]})
-    halt = {"reviewer": "GPT-5.4 mini", "provider": "openai", "kind": "injection", "reason": "Obeys the page.",
+    halt = {"reviewer": "GPT-6 Luna", "provider": "openai", "kind": "injection", "reason": "Obeys the page.",
             "entry": 1, "step": "", "step_name": "", "step_kind": "", "step_source": ""}
 
     def pick_then_write(hold):
@@ -358,7 +358,7 @@ def test_a_reviewers_halt_during_the_users_card_comes_before_the_next_call(store
     card is open waits for it, then holds the agent's next call."""
     browser = Browser(monkeypatch)
     script, loop, ran = asking(store, args={"request": REQUEST, "browser": True}, then_browser=True)
-    halt = {"reviewer": "GPT-5.4 mini", "provider": "openai", "kind": "injection", "reason": "Obeys the page.",
+    halt = {"reviewer": "GPT-6 Luna", "provider": "openai", "kind": "injection", "reason": "Obeys the page.",
             "entry": 1, "step": "", "step_name": "", "step_kind": "", "step_source": ""}
     decided = []
 
@@ -376,7 +376,7 @@ def test_a_reviewers_halt_during_the_users_card_comes_before_the_next_call(store
     watcher = when_held(loop, halt_then_hand_back)
     events = list(loop.run())
     watcher.join(5)
-    assert decided == ["GPT-5.4 mini"]
+    assert decided == ["GPT-6 Luna"]
     assert [h.get("ask") or h["kind"] for h in holds(events)] == ["browser", "injection"]
     assert ran == ["read"]
 

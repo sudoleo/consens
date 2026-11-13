@@ -35,7 +35,7 @@ def model_document():
 
 @pytest.mark.parametrize("provider,model,expected", [
     ("mistral", cfg.MISTRAL_PRO_MODEL, {"effort": "none"}),
-    ("openai", cfg.OPENAI_PRO_MODEL, {"effort": "low"}),
+    ("openai", "gpt-5.5", {"effort": "low"}),
     ("grok", cfg.GROK_PRO_MODEL, {"effort": "low"}),
     ("meta", cfg.MUSE_BASE_MODEL, {"effort": "low"}),
     ("kimi", cfg.KIMI_PRO_MODEL, {"effort": "low"}),
@@ -146,9 +146,9 @@ def test_a_retired_override_never_blocks_the_model_config():
     """grok-4.3 was a savings model until it became the free base Grok.
     A stored override for it must not leave prod on code
     defaults; admin saves still refuse unknown models."""
-    stale = {"profile": "economy", "models": {"grok-4.3": "existing", cfg.OPENAI_PRO_MODEL: "existing"}}
+    stale = {"profile": "economy", "models": {"grok-4.3": "existing", "gpt-5.5": "existing"}}
     _load({**model_document(), "reasoning_policy": stale})
-    assert cfg.get_reasoning_policy() == {"profile": "economy", "models": {cfg.OPENAI_PRO_MODEL: "existing"}}
+    assert cfg.get_reasoning_policy() == {"profile": "economy", "models": {"gpt-5.5": "existing"}}
     with pytest.raises(ValueError, match="Unsupported reasoning override: grok-4.3"):
         cfg.validate_reasoning_policy(stale)
 

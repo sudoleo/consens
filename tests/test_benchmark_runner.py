@@ -101,7 +101,7 @@ class ManifestModelConfigTests(unittest.TestCase):
         self.assertEqual(models["mistral"]["reasoning_settings"], {"effort": "high"})
         self.assertFalse(models["mistral"]["alias_status"]["latest_alias"])
 
-        self.assertEqual(models["anthropic"]["internal_id"], config.cfg.ANTHROPIC_PRO_MODEL)
+        self.assertEqual(models["anthropic"]["internal_id"], "claude-opus-4-8")
         self.assertIsNone(models["anthropic"]["reasoning_settings"])
         self.assertEqual(models["gemini"]["internal_id"], config.BENCHMARK_GEMINI_MODEL)
         self.assertIsNone(models["gemini"]["reasoning_settings"])

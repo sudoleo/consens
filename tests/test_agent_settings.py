@@ -253,13 +253,13 @@ def test_a_refused_part_leaves_the_rest_on_the_card(store):
 
 def test_the_real_catalog_applies_the_same_rules_as_the_run(store):
     """No catalog seam: agent_model_options() and the registry decide."""
-    loop = settings_loop(store, model="gpt-5.6-luna", effort="low", catalog=None)
+    loop = settings_loop(store, model="gpt-6-luna", effort="low", catalog=None)
     result = prepare(loop, reasoning="max")
     assert change(result, "Reasoning")["to"] == "Medium" and "Max is available on Pro" in change(result, "Reasoning")["reason"]
-    assert "is available on Pro" in change(prepare(loop, chat_model="GPT-5.6 Sol"), "Chat model")["reason"]
-    pro = settings_loop(store, model="gpt-5.6-luna", effort="low", catalog=None, pro=True)
-    assert prepare(pro, chat_model="GPT-5.6 Sol", reasoning="max")["status"] == "prepared"
-    assert proposal(store, pro)["settings"]["agent_model"] == {"model_id": "gpt-5.6-sol", "reasoning_effort": "max"}
+    assert "is available on Pro" in change(prepare(loop, chat_model="GPT-6.1 Sol"), "Chat model")["reason"]
+    pro = settings_loop(store, model="gpt-6-luna", effort="low", catalog=None, pro=True)
+    assert prepare(pro, chat_model="GPT-6.1 Sol", reasoning="max")["status"] == "prepared"
+    assert proposal(store, pro)["settings"]["agent_model"] == {"model_id": "gpt-6.1-sol", "reasoning_effort": "max"}
 
 
 def test_outages_and_finished_turns_are_readable_refusals(store):
@@ -345,13 +345,13 @@ def test_read_settings_names_the_models_of_this_message_and_of_each_lineup(store
     """Live, the agent could not say how many models "Daily" asks."""
     from app.core import config as cfg
     monkeypatch.setitem(cfg.CONSENSUS_PRESET_MODELS, "fast",
-                        {"answers": {"openai": "gpt-5.4-mini", "anthropic": "claude-haiku-4-5"}, "consensus": "Gemini"})
+                        {"answers": {"openai": "gpt-6-luna", "anthropic": "claude-haiku-4-5"}, "consensus": "Gemini"})
     # This message runs what the page sent, whatever the account saved.
     read = settings_loop(store, account={"consensus_preset": "balanced"}).settings_tools.read(agent_settings.ReadSettings())
     lineup = read["comparison_lineup"]
     assert lineup["now"] == "Open Models"
-    assert lineup["models_this_message"] == [cfg.get_model_label("claude-haiku-4-5"), cfg.get_model_label("gpt-5.4-mini")]
-    assert lineup["models_per_lineup"]["Daily"] == [cfg.get_model_label("gpt-5.4-mini"), cfg.get_model_label("claude-haiku-4-5")]
+    assert lineup["models_this_message"] == [cfg.get_model_label("claude-haiku-4-5"), cfg.get_model_label("gpt-6-luna")]
+    assert lineup["models_per_lineup"]["Daily"] == [cfg.get_model_label("gpt-6-luna"), cfg.get_model_label("claude-haiku-4-5")]
     # A Pro lineup is named with its models too: the agent can say what Pro would add.
     assert set(lineup["models_per_lineup"]) == {"Daily", "Open Models", "High Quality"}
     assert len(lineup["models_per_lineup"]["Open Models"]) == len(cfg.CONSENSUS_PRESET_MODELS["balanced"]["answers"])

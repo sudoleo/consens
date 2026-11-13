@@ -248,7 +248,7 @@ def test_offers_comparison_documents_and_gmail_draft_through_real_agent_loop(gma
     loop=DelegationLoop(store=store,uid=UID,chat_id=chat,turn_id=turn['id'],model=resolve_agent_model('claude-haiku-4-5'),
         messages=[{'role':'system','content':'Complete the task.'},{'role':'user','content':'Compare these offers, create a decision brief and prepare an email with both document formats.'}],
         api_key='test',cancellation=ProviderCancellation(),policy=AgentPolicy.from_config({**config,'enabled':True}),delegation_config=config,completion_factory=Workflow,
-        comparison_models=comparison_selection({'anthropic':'claude-haiku-4-5','openai':'gpt-5.4-mini'}),file_context=FileContext(files,UID,chat,[source['id']]),
+        comparison_models=comparison_selection({'anthropic':'claude-haiku-4-5','openai':'gpt-6-luna'}),file_context=FileContext(files,UID,chat,[source['id']]),
         google_selection=GoogleSelection(connection_id=cid,calendar=True,calendar_ids=['primary'],gmail=True,consent=True),google_data_consent=True)
     script.loop=without_reviewers(loop)
     events=list(loop.run())

@@ -142,7 +142,7 @@ def test_the_answer_is_written_from_the_actual_document_results(setup):
         messages=[{"role": "system", "content": "Answer."}, {"role": "user", "content": "Compare the offers and write a brief."}],
         api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
         delegation_config=config, completion_factory=Workflow, file_context=FileContext(files, UID, chat, []),
-        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
+        comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}))
     script.loop = without_reviewers(loop)
     events = list(loop.run())
     saved = store.get_turn(UID, chat, turn["id"])
@@ -185,7 +185,7 @@ def test_the_file_list_travels_with_the_message_not_the_system_prompt(setup):
                       {"role": "user", "content": with_app_context("Compare the offers.", "Current date: today.")}],
             api_key="test", cancellation=ProviderCancellation(), policy=AgentPolicy.from_config({**config, "enabled": True}),
             delegation_config=config, completion_factory=AgentCompletion, file_context=FileContext(files, UID, chat, []),
-            comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}))
+            comparison_models=comparison_selection({"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}))
 
     files.upload(UID, chat, {"name": "offer.txt", "data": base64.b64encode(b"Price: 42 EUR").decode()})
     first = loop()

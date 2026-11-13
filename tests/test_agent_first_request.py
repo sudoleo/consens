@@ -30,7 +30,7 @@ pytestmark = pytest.mark.usefixtures("deepseek_default_agent")
 # claim (one batched read, the commit). Everything else is read beside them
 # (run_agent's _turn_reads) or after the request left (the allowance).
 ROUND_TRIPS_BEFORE_THE_REQUEST = 4
-COMPARISON_MODELS = {"anthropic": "claude-haiku-4-5", "openai": "gpt-5.4-mini"}
+COMPARISON_MODELS = {"anthropic": "claude-haiku-4-5", "openai": "gpt-6-luna"}
 
 
 class Trips:

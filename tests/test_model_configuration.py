@@ -356,7 +356,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertNotEqual(normalized["defaults"].get("openai"), removed)
 
     def test_new_gemini_models_are_direct_and_temperature_free(self):
-        for model_id in (cfg.DEFAULT_GEMINI_MODEL, cfg.GEMINI_35_FLASH_MODEL, cfg.GEMINI_36_FLASH_MODEL):
+        for model_id in (cfg.DEFAULT_GEMINI_MODEL, cfg.GEMINI_38_FLASH_MODEL, cfg.GEMINI_HYDROGEN_MODEL, cfg.GEMINI_PRO_MODEL):
             with self.subTest(model=model_id):
                 request = build_provider_payload(
                     "gemini",
@@ -568,7 +568,7 @@ class ModelConfigurationTests(unittest.TestCase):
         enforced = _server_enforced_models()["gemini"]
         self.assertEqual(enforced, [])
         self.assertIn(cfg.DEFAULT_GEMINI_MODEL, cfg.PROVIDERS["gemini"].models)
-        self.assertIn(cfg.GEMINI_36_FLASH_MODEL, cfg.PROVIDERS["gemini"].models)
+        self.assertIn(cfg.GEMINI_38_FLASH_MODEL, cfg.PROVIDERS["gemini"].models)
 
     def test_admin_premium_is_limited_to_configured_provider_models(self):
         normalized = normalize_models_document({
@@ -742,9 +742,9 @@ class ModelConfigurationTests(unittest.TestCase):
             cfg.DEFAULT_OPENAI_MODEL, cfg.PROVIDERS["openai"].models, "OpenAI", is_pro=False
         )
         with self.assertRaises(HTTPException) as denied:
-            validate_model("gpt-5.5", cfg.PROVIDERS["openai"].models, "OpenAI", is_pro=False)
+            validate_model(cfg.OPENAI_PRO_MODEL, cfg.PROVIDERS["openai"].models, "OpenAI", is_pro=False)
         self.assertEqual(denied.exception.status_code, 403)
-        validate_model("gpt-5.5", cfg.PROVIDERS["openai"].models, "OpenAI", is_pro=True)
+        validate_model(cfg.OPENAI_PRO_MODEL, cfg.PROVIDERS["openai"].models, "OpenAI", is_pro=True)
 
         # Auch DeepSeek Pro kommt ohne Pro nicht am Backend-Gate vorbei.
         with self.assertRaises(HTTPException) as deepseek_denied:
