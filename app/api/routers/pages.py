@@ -579,7 +579,7 @@ def read_root(request: Request):
         "max_run_families": cfg.MAX_RUN_FAMILIES,
         "default_families": default_families,
         "default_models": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER,
-        "pro_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
+        "pro_default_models": cfg.FREE_DEFAULT_MODEL_BY_PROVIDER,
         "consensus_default_models": cfg.DEFAULT_MODEL_BY_PROVIDER,
         "consensus_models": consensus_models,
         "consensus_presets": consensus_presets,

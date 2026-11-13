@@ -85,6 +85,25 @@ def test_a_guest_gets_the_google_entries_every_account_has(monkeypatch):
     assert 'data-google-for-everyone="{&#34;drive&#34;: false, &#34;gmail&#34;: false}"' in TestClient(main.app).get("/app").text
 
 
+def test_pro_starts_a_family_on_the_default_the_admin_set(monkeypatch):
+    """The code's base model can be one the admin lists no longer offer
+    (Claude Haiku 4.5 after the lists moved on); Pro then started on an
+    option that was not there."""
+    import html as html_lib
+    import json
+    from fastapi.testclient import TestClient
+    import main
+    from app.core import config as cfg
+    monkeypatch.setitem(cfg.FREE_DEFAULT_MODEL_BY_PROVIDER, "anthropic", "claude-haiku-5.5")
+    page = TestClient(main.app).get("/app").text
+
+    def models(attribute):
+        return json.loads(html_lib.unescape(re.search(rf'{attribute}="([^"]*)"', page).group(1)))
+
+    assert models("data-pro-models") == models("data-free-models")
+    assert models("data-pro-models")["anthropic"] == "claude-haiku-5.5"
+
+
 def test_the_mail_strip_follows_the_composer():
     html = read("templates/index.html")
     # After the composer in the DOM: on the start screen it stands under the
