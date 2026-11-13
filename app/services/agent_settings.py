@@ -557,7 +557,7 @@ class SettingsTools:
             "reviewers": "Settings > Agent > Reviewers: Always (the default), Only in the workspace (from the agent's "
                          "first step there on) or Off. Without reviewers nobody marks the answer or pauses the work; "
                          "the user's own decisions on cards and the Stop button remain. Settings > Agent > Pass "
-                         "findings to the agent: Off (the default) or On. On, a finding the reviewers hold for "
+                         "notes to the agent: Off (the default) or On. On, a finding the reviewers hold for "
                          "solid (a statement called wrong with a source, or a place two reviewers mark) reaches "
                          "the agent while it works, and once its answer stands every finding on it does: the agent "
                          "corrects the sentence in place or says why it stands. A corrected sentence carries no "

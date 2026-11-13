@@ -566,6 +566,12 @@ def turn_detail(turn_id: object, data: object, model_answers: dict[str, dict]) -
         # the transcript shows it in its place (routers/bookmarks.py).
         if source.get("status") == "pending" and source.get("agent_answer_fixed_at") is not None:
             result["agent_answer_fixed"] = True
+        # With findings_to_agent the header above the answer gives the time
+        # until the answer stood, not until its review and correction ended
+        # (agent-activity.js savedDuration).
+        settings = source.get("agent_settings") if isinstance(source.get("agent_settings"), dict) else {}
+        if settings.get("findings_to_agent") is True and source.get("agent_answer_fixed_at") is not None:
+            result["agent_answer_fixed_at"] = source["agent_answer_fixed_at"]
         # The turn has a work log (agent_work_log): its view loads it through
         # its own endpoint.
         if source.get("work_log_expires_at"):

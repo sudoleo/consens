@@ -631,7 +631,7 @@
     return review?.mode === 'audit' && Boolean(review.audit);
   }
   // --- The reviewers' findings and the agent ---------------------------------
-  // With Settings › Agent › Pass findings to the agent (agent_review_feedback.py)
+  // With Settings › Agent › Pass notes to the agent (agent_review_feedback.py)
   // the review carries `audit.feedback`, and every placed mark the id of its
   // finding (`finding`). After the review the agent takes each solid finding
   // once: it corrects the sentence (state "corrected": the answer's next
@@ -682,7 +682,11 @@
       improved: findings.filter(finding => finding.on === 'answer' && finding.state === 'corrected').length,
       attempted: findings.some(finding => finding.delivered === 'final') };
   }
-  const checkingWords = count => (count === 1 ? 'The agent is checking 1 finding…' : `The agent is checking ${count} findings…`);
+  // The notes of the findings the agent checks now: one word for them
+  // everywhere the page speaks of this pass ("notes", as under Notes).
+  const checkingNotes = pass => pass.checking.reduce((sum, finding) =>
+    sum + Math.max(1, Array.isArray(finding.notes) ? finding.notes.length : 0), 0);
+  const checkingWords = count => (count === 1 ? 'The agent is checking 1 note…' : `The agent is checking ${count} notes…`);
   // What came of a finished pass: its head (sentences improved, or that a
   // correction was not possible: the user's Stop says so, every other reason
   // alike) and the notes still open, each a phrase of its own for the
@@ -698,6 +702,27 @@
     if (!pass.attempted) return null;
     const head = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved` : '';
     return head || open ? { head, open } : null;
+  }
+  // The head of a turn's activity (agent-activity.js setNote), with notes
+  // passed to the agent: while the review or the agent's pass goes on after
+  // the answer stood (`ended` false), that it is still being checked; then
+  // that it was, and the one thing that came of it. The rest of what came of
+  // it stands under the answer. Null without such a check, or for a review
+  // that did not finish: the head says what it always said.
+  function headNote(review, ended) {
+    if (!isAudit(review) || !review.audit.feedback) return null;
+    const audit = review.audit, pass = passOf(audit);
+    if (ended === false && (!AUDIT_ENDED.has(review.status) || pass.status !== 'done')) {
+      const count = pass.status === 'checking' ? checkingNotes(pass) : 0;
+      return { live: true, parts: [!count ? 'checking…' : count === 1 ? 'checking 1 note…' : `checking ${count} notes…`] };
+    }
+    if (!['succeeded', 'partial'].includes(review.status)) return null;
+    const count = auditMarks(audit).length + auditWork(audit).length;
+    const failed = pass.status === 'done' && pass.skipped && !pass.improved && count;
+    const result = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved`
+      : failed ? (pass.skipped === 'stopped' ? 'correction stopped' : 'correction not possible')
+        : count === 1 ? '1 note open' : count ? `${count} notes open` : 'no objections';
+    return { live: false, parts: ['checked', result] };
   }
   // The pass ended without checking what it got (agent-activity.js names
   // its step so).
@@ -1056,7 +1081,7 @@
     const hold = withheld(review, options.ended);
     const fixed = correctedFindings(audit).length;
     const pass = passOf(audit), summary = !hold && passSummary(audit);
-    const checking = hold && pass?.status === 'checking' ? pass.checking.length : 0;
+    const checking = hold && pass?.status === 'checking' ? checkingNotes(pass) : 0;
     // The comparisons by what their cards show: an answer's text only through being there.
     const shown = JSON.stringify(comparisons, (key, value) => UNSHOWN_TEXT.has(key) && typeof value === 'string'
       ? value !== '' : key === 'sources' ? undefined : value);
@@ -1284,7 +1309,7 @@
     host._auditStatus = status;
     status.setAttribute('role', 'status'); status.dataset.state = pending ? 'running' : review.status;
     const shown = checking.length ? '' : exact || notesOnly ? rowStatus(review, { pending, empty }) : '';
-    const said = shown || (checking.length ? checkingWords(checking.length) : exact && done ? rowAnnouncement(review) : '');
+    const said = shown || (checking.length ? checkingWords(checkingNotes(pass)) : exact && done ? rowAnnouncement(review) : '');
     if (status.textContent !== App.t(said)) status.textContent = said;
     status.classList.toggle('visually-hidden', !shown);
     status.hidden = !said;
@@ -1310,7 +1335,7 @@
     // agent checks, how many findings; then what came of it, which opens the
     // notes with their trace. Said by the live region while it checks.
     if (checking.length) {
-      const line = phrases(node('p', 'agent-review-findings is-checking'), [checkingWords(checking.length)]);
+      const line = phrases(node('p', 'agent-review-findings is-checking'), [checkingWords(checkingNotes(pass))]);
       line.setAttribute('aria-hidden', 'true');
       host.append(line);
     } else if (summary) {
@@ -1613,5 +1638,5 @@
     return (review && activityContexts.get(review) || []).find(c => c.key === key) || contextsByKey.get(key) || null;
   }
   App.agentReview = { render, renderActivity, failureNote, wrapUpNote, failureReason, contextFor, shownText,
-    correctionUnchecked };
+    correctionUnchecked, headNote };
 })();

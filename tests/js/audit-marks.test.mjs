@@ -153,7 +153,7 @@ it("lists a note over several sentences once, and not at all where one of its se
   expect(rows("The bridge is 30 metres long.", "It opened in 1890 for visitors.")).toEqual([0, 1]);
 });
 
-// Settings › Agent › Pass findings to the agent (agent_review_feedback.py):
+// Settings › Agent › Pass notes to the agent (agent_review_feedback.py):
 // every mark names its finding. A sentence the agent corrected keeps no mark
 // (the server drops its claim; a review that still holds it shows none
 // either), one whose finding it disputed keeps its mark, and its card adds

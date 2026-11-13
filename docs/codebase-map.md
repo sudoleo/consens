@@ -6972,7 +6972,8 @@ Befunde stehen am Chat als `agent_open_findings` (mit `turn_id`;
 (`AgentRequest.findings_to_agent`), die Route nimmt die offenen Befunde in den
 App-Kontext der nächsten Frage (`open_findings_context`). Systemprompt: `review_facts` ersetzt den
 Satz `_REVIEW_MARKS` durch `MARKS_SHARED`. Zähler `findings_to_agent` in
-`agent_audit_metrics`. Tests: `tests/test_agent_review_feedback.py`,
+`agent_audit_metrics`. `chat_store.turn_detail` gibt mit der Einstellung `agent_answer_fixed_at` mit (Kopfzeile:
+Zeit bis zur Antwort, nicht bis zum Ende der Prüfung). Tests: `tests/test_agent_review_feedback.py`,
 `tests/test_agent_review_feedback_robust.py`.
 
 Im Browser (nur mit `audit.feedback`; ohne sie bleibt jedes Byte wie oben):
@@ -6985,8 +6986,10 @@ Schimmer des Tabellen-Ladens (`consensus-insights.js` `renderAuditChecking`:
 `.cx-claim.is-agent-checking` ohne Rolle und Klick, `agent-chat.css` Ton und
 Lichtband von `.skeleton`, Takt `--dur-beat`; ohne Bewegung durch System oder
 `stream_animation` nur der Ton, `.is-still`), die Prüfer-Marken der Leiste
-gehen, und eine Zeile darunter sagt „The agent is checking 2 findings…“
-(`.agent-review-findings`, die Live-Region sagt es einmal). Am Ende gleitet der
+gehen, und eine Zeile darunter sagt „The agent is checking 3 notes…“ (die
+Anmerkungen der geprüften Befunde, `checkingNotes`; `.agent-review-findings`,
+die Live-Region sagt es einmal). Sichtbar heißt es überall „notes“ /
+„Anmerkungen“, nie „findings“ / „Befunde“. Am Ende gleitet der
 Ton über den alten Zeilen aus (`checkingFade`, `.agent-checking-ghost`), die
 Marken streichen sich auf oder die neuen Sätze laufen im Licht ein. Danach
 sagt dieselbe Zeile, was daraus wurde, als Knopf zu Notes (`passSummary`):
@@ -6995,7 +6998,17 @@ die stehenden Anmerkungen wie in Notes), bei `skipped` ruhig „Correction not
 possible · 8 notes open“ (der Stopp des Nutzers „Correction stopped“), ohne
 Durchgang nichts; Notes beginnt mit derselben Zeile, die Aktivität nennt den
 Kopf („1 sentence improved“) und den Schritt eines gescheiterten Durchgangs
-„Couldn’t check the reviewers’ findings“ (`correctionUnchecked`). Karte und
+„Couldn’t check the reviewers’ notes“ (`correctionUnchecked`). Der Kopf über
+der Antwort (`agent-activity.js` `setNote`, `agent-review.js` `headNote`, nur
+nach der Übergabe, nicht während der Lauf läuft) sagt es dort, wo der Leser
+liest: „Answer in 14s · checking…“, dann „… · checking 3 notes…“, am Ende „…
+· checked · 1 sentence improved“ (sonst „2 notes open“, „no objections“,
+„correction not possible“/„… stopped“; eine nicht beendete Prüfung lässt den
+Kopf wie ohne Einstellung), in einer Zeile (`.has-check-note`: kein Umbruch,
+schmal mit „…“). Seine Zeit bleibt die bis zur fertigen Antwort:
+`savedDuration` nimmt mit `feedback` `agent_answer_fixed_at`, und die
+Live-Ansicht ohne dieses Feld die Übergabe dieser Seite (`agent-chat.js`
+`readyAt`); vorher sprang sie mit dem Laufende von 15 auf 31 s. Karte und
 Hover-Vorschau einer stehenden Marke (und ihre Passage in Notes) sagen, was der
 Agent daraus machte (`consensus-insights.js` `auditFindingVerdict`): „The agent
 disagrees“ über seinem Grund, oder „Not checked by the agent“ mit Grund, wo er
@@ -9387,7 +9400,7 @@ unter der Zeile `#reviewersNote`, `App.words.reviewerSetting()` liest sie, der
 Browser schickt sie mit jeder Nachricht, siehe „Prüfer nach Einstellung“ in §4;
 der Agent kann sie weder lesen noch ändern, `agent_settings.ELSEWHERE`),
 `findings_to_agent` (seit 2026-11-13, Settings → Agent neben den Prüfern,
-„Pass findings to the agent“; fehlt = aus; `app-ui.js` bindet
+„Pass notes to the agent“; fehlt = aus; `app-ui.js` bindet
 `#findingsToAgentSwitch`, `agent-mode.js` blendet die Zeile
 `#findingsToAgentSetting` bei Prüfern `off` aus, die Einstellungssuche
 überspringt ausgeblendete Zeilen; die Seite schickt sie mit jeder Nachricht, nur wenn an

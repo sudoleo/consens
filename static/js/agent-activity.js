@@ -24,9 +24,9 @@
     // The comparison models review the answer (judge_answer and check_text:
     // the comparison mode, in older saved turns).
     audit_answer: ['Answer review', 'Reviewing the answer…', 'Reviewed the answer'],
-    // With Settings › Agent › Pass findings to the agent, the agent checks the
-    // reviewers' findings on its reviewed answer once (agent_review_feedback.py).
-    correct_answer: ['Correction', 'Checking the reviewers’ findings…', 'Checked the reviewers’ findings'],
+    // With Settings › Agent › Pass notes to the agent, the agent checks the
+    // reviewers' notes on its reviewed answer once (agent_review_feedback.py).
+    correct_answer: ['Correction', 'Checking the reviewers’ notes…', 'Checked the reviewers’ notes'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
     wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
     send_agent: ['Follow up', 'Following up with a model…', 'Followed up with a model'],
@@ -170,7 +170,7 @@
     // The agent's pass over the findings ran, but could not check what it
     // got (agent-review.js correctionUnchecked): not "Checked".
     if (item.status === 'succeeded' && item.name === 'correct_answer' && App.agentReview?.correctionUnchecked?.(review)) {
-      return 'Couldn’t check the reviewers’ findings';
+      return 'Couldn’t check the reviewers’ notes';
     }
     if (item.status === 'succeeded' && item.name === 'prepare_settings_change' && settingsOutcomes[item.outcome]) {
       return settingsOutcomes[item.outcome];
@@ -198,9 +198,13 @@
   // pauses and the agent's questions). The server's turn clock leaves that
   // out as well (_turn_elapsed), and the head stands still while it waits:
   // else a pause that ran into its 30 minutes reads "Thought for 32m 4s".
+  // With notes passed to the agent its review and its pass go on after the
+  // answer stands: the head counts until then (agent_answer_fixed_at, the
+  // hand-over), never the review after it.
   function savedDuration(turn) {
     const start = Date.parse(turn?.created_at);
-    const end = Date.parse(turn?.completed_at || turn?.failed_at);
+    const ready = turn?.agent_review?.audit?.feedback ? Date.parse(turn?.agent_answer_fixed_at) : NaN;
+    const end = Number.isFinite(ready) ? ready : Date.parse(turn?.completed_at || turn?.failed_at);
     if (!(Number.isFinite(start) && Number.isFinite(end) && end >= start)) return null;
     const waited = Number.isFinite(turn?.agent_wait_seconds) && turn.agent_wait_seconds > 0 ? turn.agent_wait_seconds * 1000 : 0;
     return Math.max(0, end - start - waited);
@@ -225,15 +229,19 @@
   // a word without German of its own stands in English before "0 Sek.".
   const HEAD_VERBS = Object.freeze({ working: 'Working for', reviewing: 'Reviewing',
     paused: 'Paused', asking: 'Waiting for you', succeeded: 'Thought for', failed: 'Failed after',
-    cancelled: 'Stopped after' });
+    cancelled: 'Stopped after', ready: 'Answer in' });
   // "Working for 12s" while it works, "Reviewing · 2m 19s" while the
   // reviewers check the written answer, "Paused · 1m 4s" (the clock stands
   // still) while it waits for the user, "Thought for 3m 7s" once it is done.
-  function titleParts(ms, now, status) {
+  // `ready`: the head of an answer whose check goes on or went on after it
+  // stood (notes passed to the agent, agent-review.js headNote): "Answer in
+  // 14s", the time until it stood, and what the check says after it.
+  function titleParts(ms, now, status, ready = false) {
     if (!Number.isFinite(ms)) return { verb: now ? PHASE_WORDS[now] : statuses[status] || 'Activity', gap: '', time: '' };
     const time = durationText(ms);
     if (now) return { verb: HEAD_VERBS[now], gap: now === 'working' ? ' ' : ' · ', time };
-    const settled = status === 'failed' ? 'failed' : statuses[status] === statuses.cancelled ? 'cancelled' : 'succeeded';
+    const settled = status === 'failed' ? 'failed' : statuses[status] === statuses.cancelled ? 'cancelled'
+      : ready ? 'ready' : 'succeeded';
     return { verb: HEAD_VERBS[settled], gap: ' ', time };
   }
   // The clock ticks in a field of fixed width, so the chevron and the model
@@ -245,8 +253,8 @@
   // the head once to its new width.
   const SETTLED_VERBS = { running: HEAD_VERBS.working, done: HEAD_VERBS.succeeded };
   const SLOTS = ["seconds", "minutes", "long"];
-  function setTitle(view, ms, now, status) {
-    const { verb, gap, time } = titleParts(ms, now, status);
+  function setTitle(view, ms, now, status, ready) {
+    const { verb, gap, time } = titleParts(ms, now, status, ready);
     const label = `${verb}${gap}${time}`;
     if (view.title.dataset.label === window.App.t(label)) return;
     view.title.dataset.label = label;
@@ -289,7 +297,7 @@
   }
   // `now`: the phase of a running run, or null once it is over. While it
   // waits for the user the clock stands still.
-  function updateClock(view, elapsedMs, now, status) {
+  function updateClock(view, elapsedMs, now, status, ready = false) {
     clearTimeout(view.clockTimer);
     view.clockTimer = null;
     const ticking = Boolean(now) && now !== 'paused' && now !== 'asking';
@@ -300,7 +308,7 @@
     view.clockRunning = ticking;
     const tick = () => {
       const elapsed = view.elapsedMs === null ? null : view.elapsedMs + (view.clockRunning ? performance.now() - view.clockAt : 0);
-      setTitle(view, elapsed, now, status);
+      setTitle(view, elapsed, now, status, ready);
     };
     tick();
     if (!ticking) return;
@@ -312,6 +320,41 @@
       view.clockTimer = setTimeout(() => { tick(); next(); }, 1000 - (elapsed % 1000) + 5);
     };
     next();
+  }
+  // After the time, what the check of an answer says that goes on after it
+  // stood (agent-review.js headNote: "checking…", then "checked · 1 sentence
+  // improved"), each phrase alone for the translation. The chevron glides
+  // to the head's new width as for a new verb. Nothing without such a check.
+  function setNote(view, note) {
+    const parts = note?.parts || [];
+    const key = parts.join('\n');
+    if ((view.checkNoteKey || '') === key) return;
+    view.checkNoteKey = key;
+    const from = view.title.isConnected ? view.title.getBoundingClientRect().width : 0;
+    view.details.classList.toggle('has-check-note', parts.length > 0);
+    if (!parts.length) {
+      view.checkNote?.remove();
+      view.checkNote = null;
+    } else {
+      if (!view.checkNote) {
+        view.checkNote = document.createElement('span');
+        view.checkNote.className = 'agent-activity-after';
+        view.title.append(view.checkNote);
+      }
+      view.checkNote.replaceChildren();
+      for (const part of parts) {
+        const phrase = document.createElement('span');
+        phrase.textContent = part;
+        view.checkNote.append(document.createTextNode(' · '), phrase);
+      }
+    }
+    if (!from) return;
+    cancelMotion(view.slotMotion);
+    const to = view.title.getBoundingClientRect().width;
+    view.slotMotion = to && from !== to ? motion(view.title, [
+      { width: `${from}px`, minWidth: `${from}px`, overflow: 'clip', whiteSpace: 'nowrap' },
+      { width: `${to}px`, minWidth: `${to}px`, overflow: 'clip', whiteSpace: 'nowrap' },
+    ]) : null;
   }
   // The time a live run waited for the user on this page, so far, on the
   // caller's clock: the wall clock since the start (agent-chat.js).
@@ -1649,8 +1692,11 @@
     // The clock leaves out the time the run waited for the user here, as the
     // saved duration does (savedDuration).
     const waited = waitedMs(view, now === 'paused' || now === 'asking');
+    // An answer whose check goes on after it stood says so in the head.
+    const note = running ? null : App.agentReview?.headNote?.(review, reviewEnded) || null;
+    setNote(view, note);
     updateClock(view, running && Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs - waited) : elapsedMs, now,
-      settled ? 'succeeded' : status);
+      settled ? 'succeeded' : status, Boolean(note));
     renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings);
     view.details.classList.toggle("is-running", running);
     if (view.details.dataset.status !== status) view.details.dataset.status = status;

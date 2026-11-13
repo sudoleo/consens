@@ -331,7 +331,7 @@ def test_off_the_agent_reads_the_setting_as_it_is(store):
     loop = feedback_loop(store, Audit(), findings=False)
     about = SettingsTools(loop)._about()
     assert about["findings_to_agent"] == "off in this message"
-    assert "Pass findings to the agent: Off (the default) or On" in about["reviewers"]
+    assert "Pass notes to the agent: Off (the default) or On" in about["reviewers"]
     assert "whether their findings reach you" in ELSEWHERE
     on = feedback_loop(store, Audit(), findings=True)
     assert SettingsTools(on)._about()["findings_to_agent"] == "on in this message"
@@ -501,3 +501,17 @@ def test_a_sentence_whose_bold_runs_on_goes_with_the_next_one_on_its_line():
     other = answer.replace("ja. Neue", "ja.\nNeue")
     assert fb.correction_items(other, [_finding_on(other, "Krebsarten in fünf Jahren")]) == {}
 
+
+
+def test_the_page_gets_the_time_the_answer_stood_where_the_review_corrects_it():
+    """With findings_to_agent the header says how long the answer took, not
+    its review and correction after it (agent-activity.js savedDuration)."""
+    from datetime import datetime, timezone
+    from app.services.chat_store import turn_detail
+    fixed = datetime(2026, 11, 13, 16, 9, tzinfo=timezone.utc)
+    base = {"execution_mode": "agent", "status": "completed", "question": "Q", "assistant_response": "A",
+            "agent_answer_fixed_at": fixed}
+    on = turn_detail("t" * 32, {**base, "agent_settings": {"findings_to_agent": True}}, {})
+    assert on["agent_answer_fixed_at"] == fixed
+    off = turn_detail("t" * 32, {**base, "agent_settings": {"reviewers": "always"}}, {})
+    assert "agent_answer_fixed_at" not in off

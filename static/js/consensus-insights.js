@@ -2582,7 +2582,7 @@
             return card;
           }
 
-          // With Settings › Agent › Pass findings to the agent the review
+          // With Settings › Agent › Pass notes to the agent the review
           // carries `feedback` (agent_review_feedback.py), and each mark the
           // id of its finding. A sentence the agent corrected has no mark; one
           // whose finding it disputed keeps its mark, with the agent's reason.

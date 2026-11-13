@@ -153,3 +153,95 @@ describe("run details on a German page", () => {
     app.dom.window.close();
   });
 });
+
+// Settings › Agent › Pass notes to the agent: the review and the agent's pass
+// over its notes go on after the answer stood, and a sentence may still
+// change. The head says so up there, where the reader looks, instead of
+// "Thought for", and then what came of it; its time stays the time until the
+// answer stood. Without the setting the head is as it always was.
+describe("activity head of an answer whose check goes on after it stood", () => {
+  const boot = () => {
+    const app = loadScripts(["static/js/agent-review.js", "static/js/agent-activity.js"], { body: '<div id="host"></div>' });
+    return { app, host: app.document.getElementById("host"), activity: app.window.App.agentActivity };
+  };
+  const note = (text, finding) => ({ model: "DeepSeek", kind: "doubtful", note: text, finding });
+  function review({ status = "succeeded", feedback } = {}) {
+    const claims = [
+      { anchor: "First.", kind: "doubtful", audit: true, agree: [], dissent: [{ ...note("One.", "s1"), mark: 1 }] },
+      { anchor: "Second.", kind: "doubtful", audit: true, agree: [], dissent: [{ ...note("Two.", "s2"), mark: 2 }] }];
+    return { mode: "audit", status, answer_version: 1, answer_hash: "h", versions: [{ id: 1, text: "First. Second.", hash: "h" }],
+      audit: { reviewers: [{ provider: "deepseek", provider_label: "DeepSeek", status: status === "running" ? "running" : "completed" }],
+        claims, unplaced: [], process: [], ...(feedback ? { feedback } : {}) } };
+  }
+  const findings = (state, extra = {}) => [
+    { id: "s1", on: "answer", kind: "doubtful", voices: 1, hard: false, state, notes: [note("One.")], ...extra },
+    { id: "s2", on: "answer", kind: "doubtful", voices: 1, hard: false, state, notes: [note("Two."), note("Too.")], ...extra }];
+  const head = host => host.querySelector(".agent-activity-title").textContent;
+
+  it("says the answer is still being checked, then what came of it, at the time it stood", () => {
+    const { app, host, activity } = boot();
+    const render = (rev, ended) => activity.render(host, { running: false, status: "succeeded", elapsedMs: 14300, events: [],
+      review: rev, reviewEnded: ended });
+    render(review({ status: "running", feedback: { status: "live", findings: findings("open") } }), false);
+    expect(head(host)).toBe("Answer in 14s · checking…");
+    expect(host.querySelector(".agent-activity").classList.contains("has-check-note")).toBe(true);
+    // Each phrase alone for the translation.
+    expect([...host.querySelectorAll(".agent-activity-after > span")].map(span => span.textContent)).toEqual(["checking…"]);
+    render(review({ feedback: { status: "checking", findings: findings("checking", { delivered: "final" }) } }), false);
+    expect(head(host)).toBe("Answer in 14s · checking 3 notes…");
+    const one = review({ feedback: { status: "checking", findings: findings("checking", { delivered: "final" }).slice(0, 1) } });
+    render(one, false);
+    expect(head(host)).toBe("Answer in 14s · checking 1 note…");
+    // Settled: the one thing that came of it; the rest stands under the answer.
+    const improved = review({ feedback: { status: "done", findings: [
+      { ...findings("corrected", { delivered: "final" })[0], before: "First.", after: "First, fixed." },
+      { ...findings("disputed", { delivered: "final" })[1], reason: "It stands." }] } });
+    improved.audit.claims = improved.audit.claims.slice(1);
+    render(improved, true);
+    expect(head(host)).toBe("Answer in 14s · checked · 1 sentence improved");
+    expect([...host.querySelectorAll(".agent-activity-after > span")].map(span => span.textContent))
+      .toEqual(["checked", "1 sentence improved"]);
+    render(review({ feedback: { status: "done", findings: findings("disputed", { delivered: "final", reason: "So." }) } }), true);
+    expect(head(host)).toBe("Answer in 14s · checked · 2 notes open");
+    const quiet = review({ feedback: { status: "done", findings: [] } });
+    quiet.audit.claims = [];
+    render(quiet, true);
+    expect(head(host)).toBe("Answer in 14s · checked · no objections");
+    render(review({ feedback: { status: "done", skipped: "failed", findings: findings("open", { delivered: "final" }) } }), true);
+    expect(head(host)).toBe("Answer in 14s · checked · correction not possible");
+    render(review({ feedback: { status: "done", skipped: "stopped", findings: findings("open", { delivered: "final" }) } }), true);
+    expect(head(host)).toBe("Answer in 14s · checked · correction stopped");
+    // A run that ended in the middle of the pass: what the review has.
+    render(review({ feedback: { status: "checking", findings: findings("checking", { delivered: "final" }) } }), true);
+    expect(head(host)).toBe("Answer in 14s · checked · 2 notes open");
+    // A review that did not finish: the head says what it always said.
+    render(review({ status: "failed", feedback: { status: "done", findings: [] } }), true);
+    expect(head(host)).toBe("Thought for 14s");
+    expect(host.querySelector(".agent-activity-after")).toBeNull();
+    expect(host.querySelector(".agent-activity").classList.contains("has-check-note")).toBe(false);
+    app.dom.window.close();
+  });
+
+  it("leaves the head of a review without the setting as it was, also while that review runs", () => {
+    const today = boot(), live = boot();
+    today.activity.render(today.host, { running: false, status: "succeeded", elapsedMs: 14300, events: [], review: review({ status: "running" }) });
+    live.activity.render(live.host, { running: false, status: "succeeded", elapsedMs: 14300, events: [], review: review({ status: "running" }),
+      reviewEnded: false });
+    expect(head(live.host)).toBe("Thought for 14s");
+    expect(live.host.innerHTML).toBe(today.host.innerHTML);
+    today.app.dom.window.close();
+    live.app.dom.window.close();
+  });
+
+  it("counts a saved turn until its answer stood, never the review after it", () => {
+    const { app, activity } = boot();
+    const turn = { created_at: "2026-11-13T17:00:00.000Z", agent_answer_fixed_at: "2026-11-13T17:00:14.300Z",
+      completed_at: "2026-11-13T17:00:32.500Z", agent_review: review({ feedback: { status: "done", findings: [] } }) };
+    expect(activity.savedDuration(turn)).toBe(14300);
+    // Without the setting the turn's end counts, as before.
+    expect(activity.savedDuration({ ...turn, agent_review: review() })).toBe(32500);
+    // A turn that does not say when its answer stood.
+    expect(activity.savedDuration({ ...turn, agent_answer_fixed_at: undefined })).toBe(32500);
+    app.dom.window.close();
+  });
+});

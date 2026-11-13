@@ -566,7 +566,7 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
-  // Settings › Agent › Pass findings to the agent: the agent's own pass over
+  // Settings › Agent › Pass notes to the agent: the agent's own pass over
   // the reviewers' findings is a row of the panel, never a voice in the stack,
   // and its JSON reply reads as what it did with each finding.
   it("lists the agent's correction as a session with its reply in words, not as a voice in the stack", async () => {

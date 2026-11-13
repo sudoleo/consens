@@ -2023,7 +2023,7 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
-  // Settings › Agent › Pass findings to the agent: the review shows nothing
+  // Settings › Agent › Pass notes to the agent: the review shows nothing
   // at the sentences while the run or the review after its hand-over goes on
   // (agent-review.js withheld), and an answer the agent corrected stays
   // corrected in every later frame (agent-review.js shownText).
@@ -2060,6 +2060,42 @@ describe("single-model agent chat", () => {
   // A hand-over's stream that ends without the run's end: the page follows
   // no further, so the answer shows its review as it has it instead of one
   // still under way (no endless sweep, agent-review.js).
+  // With notes passed to the agent its review and pass go on after the
+  // hand-over: the head keeps the time until the answer stood, also once the
+  // run's end (later, with the review in it) has landed.
+  it("keeps the head's time at the hand-over for an answer whose check goes on", async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    let clock = 1_000_000;
+    w.Date.now = () => clock;
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), shownText: (_body, text) => text, headNote: () => null };
+    const render = vi.spyOn(w.App.agentActivity, "render");
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById("questionInput").value = "Question";
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    const checked = { ...handedReview("running"), audit: { ...handedReview("running").audit, feedback: { status: "live", findings: [] } } };
+    handlers.delta.append("Answer.");
+    clock += 14_000;
+    handlers.handover.receive({ response: "Answer.", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
+      turn: { ...HANDED_TURN, agent_review: checked }, bookmark_meta: { id: "saved" } });
+    await pending;
+    w.App.agentChat.project(run);
+    const ready = render.mock.calls.at(-1)[1].elapsedMs;
+    expect(ready).toBe(run.finishedAt - run.startedAt);
+    clock += 18_000;
+    resolve({ ok: true, data: { response: "Answer.", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
+      turn: { ...HANDED_TURN, status: "completed", created_at: new Date(run.startedAt).toISOString(),
+        completed_at: new Date(clock).toISOString(), agent_review: { ...checked, status: "succeeded",
+          audit: { ...checked.audit, feedback: { status: "done", findings: [] } } } } } });
+    await vi.waitFor(() => expect(run.consensus.completedTurn.status).toBe("completed"));
+    w.App.agentChat.project(run);
+    expect(render.mock.calls.at(-1)[1].elapsedMs).toBe(ready);
+    dom.window.close();
+  });
+
   it("draws the answer once more when it stops following the review without the run's end", async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);

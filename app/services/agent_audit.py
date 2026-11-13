@@ -2803,7 +2803,7 @@ class AnswerAudit:
         title = "Correction"
         loop._publish(worker, patch={
             "title": title, "kind": "correction", "comparison_id": None,
-            "assignment": {"goal": title, "context": "Check the reviewers' findings on the answer."},
+            "assignment": {"goal": title, "context": "Check the reviewers' notes on the answer."},
             "model": model.settings(), "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat()})
         cut = ProviderCancellation()
         unregister = cancellation.register(cut)

@@ -329,7 +329,7 @@ def test_the_next_message_goes_while_the_reviewers_review(browser, phase4_server
         context.close()
 
 
-# Settings › Agent › Pass findings to the agent (agent_review_feedback.py): the
+# Settings › Agent › Pass notes to the agent (agent_review_feedback.py): the
 # reviewers' solid findings reach the agent, which corrects the ticket price
 # and keeps the arena floor with a reason; the spectators stay a plain note.
 TICKET = ("A standard ticket costs 18 euros and includes the Roman Forum, according to the "
@@ -428,7 +428,7 @@ def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, pha
         body = page.locator("#agentAnswerBody")
         expect(body).to_contain_text("A standard ticket costs 18 euros")
         row = page.locator("#agentAnswer .agent-review")
-        expect(row.locator(".agent-review-findings")).to_have_text("The agent is checking 2 findings…")
+        expect(row.locator(".agent-review-findings")).to_have_text("The agent is checking 2 notes…")
         expect(row.locator(".agent-review-reviewers")).to_be_hidden()
         expect(row.locator('.agent-evidence-link[data-section="differences"]')).to_be_disabled()
         swept = body.locator(".cx-claim.is-agent-checking")
@@ -493,6 +493,14 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
         expect(body.locator(".is-agent-checking")).to_have_count(0)
         line = page.locator("#agentAnswer .agent-review-findings")
         expect(line).to_have_text("1 sentence improved · 3 notes open")
+        # The head above the answer says it too, at the time the answer stood.
+        head = page.locator("#agentAnswer .agent-activity-title")
+        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked · 1 sentence improved$"))
+        page.wait_for_timeout(400)
+        if width >= 1200:
+            # Room enough: the whole line, nothing cut off.
+            assert head.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+        _snapshot(page, f"header-settled-{width}-{'dark' if dark else 'light'}")
         page.wait_for_timeout(1500)
         # One rewrite, in the light (dark mode too); the reduced-motion case is unit-tested.
         rewrites = page.evaluate("() => window.__rewrites")
@@ -534,6 +542,39 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
         context.close()
 
 
+@pytest.mark.parametrize("width", [1280, 390])
+def test_the_head_says_the_answer_is_still_being_checked(browser, phase4_server, width):
+    """The head above the answer, where the reader looks, says that the
+    answer is still being checked while the review and the agent's pass go
+    on, at the time the answer stood, on one line. The answer under it is the
+    run's real one (the sweep of the agent's pass); the head is drawn as after
+    the hand-over, whose stream this harness cannot keep open (a hand-over's
+    stream that ends stops following, agent-chat.js followReview)."""
+    context, page, errors = open_audit_page(browser, phase4_server, width, False,
+                                            feedback_events("checking", handover=False), hang_live=True)
+    try:
+        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_text("The agent is checking 2 notes…")
+        head = page.locator("#agentAnswer .agent-activity-title")
+        draw = """([review]) => { const host = document.querySelector('#agentAnswer .agent-activity').parentElement;
+            App.agentActivity.render(host, { running: false, status: 'succeeded', elapsedMs: 14300,
+              events: App.runRegistry.visible().metadata.agentActivity || [], review, reviewEnded: false }); }"""
+        line = head.evaluate("el => parseFloat(getComputedStyle(el).lineHeight)")
+        summary = page.locator("#agentAnswer .agent-activity > summary")
+        before = summary.bounding_box()["height"]
+        for stage, words in (("live", "checking…"), ("checking", "checking 2 notes…")):
+            page.evaluate(draw, [feedback_review(stage)])
+            expect(head).to_have_text(f"Answer in 14s · {words}")
+            # One line, whatever the width: the head never pushes the answer down.
+            assert head.bounding_box()["height"] <= line * 1.5, head.bounding_box()
+            # Nor does the row around it grow: the answer under it stays where it is.
+            assert summary.bounding_box()["height"] == before, (summary.bounding_box(), before)
+            page.wait_for_timeout(300)
+            _snapshot(page, f"header-{stage}-{width}")
+        assert errors == []
+    finally:
+        context.close()
+
+
 def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser, phase4_server):
     """The pass failed: the sweep ends, every mark stands as reviewed, one
     calm line says the correction was not possible, and the card of a mark
@@ -551,6 +592,8 @@ def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser,
             expect(marked.filter(has_text=text)).not_to_have_count(0)
         line = page.locator("#agentAnswer .agent-review-findings")
         expect(line).to_have_text("Correction not possible · 4 notes open")
+        expect(page.locator("#agentAnswer .agent-activity-title")).to_have_text(
+            re.compile(r"^Answer in \d+s · checked · correction not possible$"))
         # In the row's quiet ink, never an error colour.
         colors = line.evaluate("""el => [getComputedStyle(el).color,
             getComputedStyle(el.closest('.agent-review').querySelector('.agent-evidence-link')).color]""")
@@ -571,7 +614,7 @@ def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser,
         page.keyboard.press("Escape")
         # The activity does not claim the findings were checked.
         page.locator("#agentAnswer .agent-activity > summary").click()
-        expect(page.locator("#agentAnswer .agent-activity")).to_contain_text("Couldn’t check the reviewers’ findings")
+        expect(page.locator("#agentAnswer .agent-activity")).to_contain_text("Couldn’t check the reviewers’ notes")
         assert errors == []
     finally:
         context.close()

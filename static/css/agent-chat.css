@@ -922,6 +922,17 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-time, .agent-vm-clock { display: inline-block; text-align: left; white-space: nowrap; }
 :is(.agent-activity-time, .agent-vm-clock)[data-unit="seconds"] { min-width: 3ch; }
 :is(.agent-activity-time, .agent-vm-clock)[data-unit="minutes"] { min-width: 6.4ch; }
+/* After the time, what the check of an answer says that goes on after it
+   stood (notes passed to the agent, agent-activity.js setNote): in the
+   head's quiet ink, never wrapping the head onto a second line; a narrow
+   column ends it with "…" (the full words stand under the answer). */
+.agent-activity-after { color: var(--ink-3); font-weight: var(--font-weight-regular); }
+.agent-activity.has-check-note > summary { flex-wrap: nowrap; }
+/* The words give way, never the model icons and the panel button after them. */
+.agent-activity.has-check-note > summary > :not(.agent-activity-title) { flex-shrink: 0; }
+.agent-activity.has-check-note .agent-activity-title { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* Its clock stands still: no slot for a wider time before the words. */
+.agent-activity.has-check-note .agent-activity-time { min-width: 0; }
 .agent-activity-chevron { width: 1em; height: 1em; margin-left: 1px; color: var(--ink-3); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transition: transform var(--dur-state) var(--ease-standard); }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(180deg); }
 .agent-activity.is-closing .agent-activity-chevron { transform: none; }

@@ -1459,7 +1459,7 @@ it('names the limit a response ended at and whether a follow-up can go on', () =
   expect(note(null)).toBeNull();
 });
 
-// --- Findings for the agent (Settings › Agent › Pass findings to the agent) ---
+// --- Findings for the agent (Settings › Agent › Pass notes to the agent) ---
 // The review as agent_review_feedback leaves it at each stage: while the
 // reviewers review ("live"), while the agent checks their findings
 // ("checking"), and once its pass is through ("done": s1 corrected, its claim
@@ -1546,14 +1546,14 @@ it('shows no mark while the reviewers review and the agent checks their findings
   expect(w.renderAuditChecking.mock.calls[0][3]).toEqual({ still: false });
   const line = d.querySelector('.agent-review-findings');
   expect([line.textContent, line.getAttribute('aria-hidden'), line.querySelector('button')]).toEqual(
-    ['The agent is checking 2 findings…', 'true', null]);
+    ['The agent is checking 2 notes…', 'true', null]);
   // Said once, by the live region; the reviewers' marks have done their part.
-  expect([status.textContent, status.classList.contains('visually-hidden')]).toEqual(['The agent is checking 2 findings…', true]);
+  expect([status.textContent, status.classList.contains('visually-hidden')]).toEqual(['The agent is checking 2 notes…', true]);
   expect(d.querySelector('.agent-review-reviewers').hidden).toBe(true);
   expect([notesCell(d).disabled, notesCell(d).textContent]).toEqual([true, 'Notes']);
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, feedbackReview('checking'), ORIGINAL, { ended: false });
-  expect(details.querySelector('h4').textContent).toBe('The agent is checking 2 findings…');
+  expect(details.querySelector('h4').textContent).toBe('The agent is checking 2 notes…');
   expect(details.querySelector('.agent-activity-check')).toBeNull();
   expect(w.App.streamReveal.rewrite).not.toHaveBeenCalled();
   expect(body.textContent).toBe(ORIGINAL);

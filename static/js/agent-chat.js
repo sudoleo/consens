@@ -920,8 +920,14 @@
     const wordsOnly = paintOnly === context.runId && Boolean(activity?._agentActivity)
       && activity._answerKey === answerKey;
     if (activity && !unsent) activity._answerKey = answerKey;
+    // With notes passed to the agent the head counts until the answer stood,
+    // never the review after it (agent-activity.js savedDuration): a saved
+    // turn that does not say when that was keeps this page's hand-over.
+    const readyAt = (state.completedTurn?.agent_review || context.metadata.agentReview)?.audit?.feedback
+      && !state.completedTurn?.agent_answer_fixed_at && context.finishedAt
+      ? Math.max(0, context.finishedAt - context.startedAt) : null;
     if (!unsent && !wordsOnly) App.agentActivity?.render(activity, {
-      elapsedMs: App.agentActivity.savedDuration(state.completedTurn)
+      elapsedMs: readyAt ?? App.agentActivity.savedDuration(state.completedTurn)
         ?? Math.max(0, (context.finishedAt || Date.now()) - context.startedAt),
       events: state.completedTurn?.agent_activity || context.metadata.agentActivity || [],
       usage: state.completedTurn?.agent_usage || context.metadata.agentUsage, running: registry.isExecuting(context.runId),

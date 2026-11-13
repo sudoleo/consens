@@ -238,12 +238,12 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       scripts/audit_report.py --days 1` → die Läufe stehen mit Zeiten drin.
       Automatisiert: `test_agent_audit.py`, `test_agent_audit_tempo.py`,
       `agent-live.test.mjs`, `agent-chat.test.mjs`.
-- [ ] Befunde an den Agenten (2026-11-13, echter Provider, Einstellungen →
-      Agent → „Befunde an den Agenten geben“ an; bei Prüfern „Aus“ ist die
+- [ ] Anmerkungen an den Agenten (2026-11-13, echter Provider, Einstellungen →
+      Agent → „Anmerkungen an den Agenten geben“ an; bei Prüfern „Aus“ ist die
       Zeile weg, die Einstellungssuche findet sie dann nicht). Eine Frage mit
       einer leicht veralteten Zahl („Was kostet ein Ticket fürs Kolosseum?“)
       → die Antwort steht sofort, ohne Marken; die Leiste sagt „Antwort wird
-      geprüft…“, dann „Der Agent prüft 2 Befunde…“ in einer Zeile darunter,
+      geprüft…“, dann „Der Agent prüft 2 Anmerkungen…“ in einer Zeile darunter,
       und genau deren Sätze tragen den grauen Schimmer des Tabellen-Ladens
       (lesbar, markierbar, nichts verrutscht); nie erscheint eine Farbe, die
       wieder verschwindet. Danach: nur der korrigierte Satz läuft im grünen
@@ -252,10 +252,13 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       „1 Satz verbessert · 3 Anmerkungen offen“ und öffnet per Klick Notes;
       bestrittene Stellen tragen ihre Marke, schon die Hover-Vorschau nennt
       „Der Agent widerspricht“ mit Grund, nicht geprüfte „Vom Agenten nicht
-      geprüft“ mit Grund, wo er bekannt ist. Ein Befund über mehrere Tabellenzellen ist eine Passage (ein
+      geprüft“ mit Grund, wo er bekannt ist. Der Kopf über der Antwort sagt
+      dabei „Antwort in 14 Sek. · wird geprüft…“, dann „… · prüft 2
+      Anmerkungen…“, am Ende „… · geprüft · 1 Satz verbessert“, in einer
+      Zeile, und seine Zeit springt nicht auf die Dauer der Prüfung. Ein Befund über mehrere Tabellenzellen ist eine Passage (ein
       Hover, eine Karte). Scheitert der Durchgang (Kontingent fast leer,
       Zeitüberschreitung): Schimmer weg, alle Marken, ruhig „Korrektur nicht
-      möglich · N Anmerkungen offen“, in der Aktivität „Befunde der Prüfer
+      möglich · N Anmerkungen offen“, in der Aktivität „Anmerkungen der Prüfer
       nicht durchgegangen“. Zweiter Tab, Reload und abgelaufener Nachlauf
       zeigen nie einen endlosen Schimmer.
       Notes: „Vom Agenten korrigiert“ mit altem (durchgestrichen) und neuem
