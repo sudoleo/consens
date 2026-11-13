@@ -343,7 +343,7 @@ Dateien, Dokumenten und Google (`agent_watch.AUDIT_PROMPT`,
 `agent_settings.AUDIT_PROMPT`, `agent_memory.AUDIT_MEMORY_*`,
 `agent_files.AUDIT_UNTRUSTED`; im Admin „Agent: tool blocks“) und mit dem
 Arbeitsplatz VM, GitHub und Plan. Der Agent sucht seit 2026-11-09 mit dem
-Werkzeug `web_search` (Exa, bis zu 5 Suchen je Aufruf nebeneinander, siehe
+Werkzeug `web_search` (Exa, bis zu 8 Suchen je Aufruf nebeneinander, siehe
 „Websuche“); wo es fehlt, in jedem Schritt mit bis zu `AGENT_SEARCH_ROUNDS`
 (5) Runden in der Anfrage des Modells, unabhängig vom Rest des Tageskontos
 (die Suche wird gebucht, nicht reserviert, siehe „Reservierung“; nur wenn das
@@ -5009,8 +5009,13 @@ after the user's question“ verlangte. `RUN_SUMMARY_REQUEST` lässt seitdem
 Notizen die Schritte ersetzen („Your steps on it so far will be replaced by
 notes you write now …“); so geht die Anfrage bei Terra auf Azure durch, und
 ebenso der Schritt danach mit der fertigen Zusammenfassung als App-Nachricht.
-`HISTORY_SUMMARY_REQUEST` hat ein ähnliches Muster („Write a summary of the
-conversation above …“) und ist dort ungeprüft. Der zweite
+`HISTORY_SUMMARY_REQUEST` hatte dasselbe Muster („Write a summary of the
+conversation above that will replace it“) und wurde für Terra ebenso mit
+0 Tokens abgelehnt (Prod-Log 2026-11-12, zweimal in einem Chat, dessen
+Schritte durchgingen). Sie folgt jetzt dem Wortlaut der Lauf-Bitte („The
+conversation above will be replaced by notes you write now …“); gegen Azure
+ist diese Fassung selbst nicht geprobt, das Prod-Log zeigt es an
+`Agent summary unusable kind=history`. Der zweite
 Versuch traf am selben Endpunkt denselben Filter und an einem anderen ein
 HTTP 400 von OpenRouter (verschlüsseltes Reasoning, siehe „Der zweite Versuch
 geht an einen anderen Endpunkt“), kostenlos, aber mit rund 2,5 s Wartezeit und
@@ -5195,7 +5200,7 @@ verweisen hierher.
 
 **Der Agent sucht mit einem eigenen Werkzeug (seit 2026-11-09, Max).**
 `web_search` (`agent_web_search.py`) ist ein Werkzeug der App: Der Agent ruft
-es wie jedes andere, mit bis zu 5 Suchen je Aufruf (`queries`; dazu optional
+es wie jedes andere, mit bis zu 8 Suchen je Aufruf (`queries`; dazu optional
 `domains` und `since`), die App fragt Exa direkt (`exa.py`,
 `POST /search`, Typ `auto`, 5 Seiten à 2000 Zeichen Auszüge je Suche) und
 lässt die Suchen eines Aufrufs nebeneinander laufen. Die Treffer gehören
@@ -5296,7 +5301,7 @@ schnell anfangen (`openrouter_contract.agent_provider_routing`).
 Produktentscheidung, keine Modell-Sonderlösung:
 
 - Agent (seit 2026-10-31 in jedem Chat-Lauf, im Audit seit 2026-10-25): Er
-  recherchiert die ganze Antwort selbst. Mit `web_search` bis zu 5 Suchen je
+  recherchiert die ganze Antwort selbst. Mit `web_search` bis zu 8 Suchen je
   Aufruf, so viele Aufrufe, wie ein Schritt fasst (`TOOL_CALLS_PER_STEP`),
   ohne Grenze je Nachricht außer Tageskonto, Zeit und Schritten; ohne das
   Werkzeug in jedem Schritt bis zu `AGENT_SEARCH_ROUNDS` (5) Runden in der

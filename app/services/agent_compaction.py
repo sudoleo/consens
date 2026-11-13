@@ -149,14 +149,18 @@ RUN_SUMMARY_OPEN = ("[consens.io summary of your work on this message so far, wr
 RUN_STATE_OPEN = "[As the app has it now:]"
 PLAN_MARKS = {"completed": "[x]", "in_progress": "[in progress]", "pending": "[ ]"}
 SUMMARY_CLOSE = "[end of summary]"
+# Notes "replace" the conversation, in RUN_SUMMARY_REQUEST's wording: asked
+# to "write a summary of the conversation above that will replace it",
+# Azure's filter declined GPT-6.1 Terra's history summaries at 0 tokens, in
+# chats whose own steps it let through. This wording is not probed itself.
 HISTORY_SUMMARY_REQUEST = (
-    "App request, not the user's: this chat has grown long. Write a summary of the conversation above that will "
-    "replace it: from now on you see this summary and the newest messages, not the older messages themselves. Keep "
+    "App request, not the user's: this chat has grown long. The conversation above will be replaced by notes you "
+    "write now; after that you see these notes and the newest messages, not the older messages themselves. Keep "
     "what you need to go on as if you had read everything: what the user wants and asked for, in their words where "
     "they matter; their preferences and decisions; facts, numbers, names, addresses, file paths and results that "
     "came up; what you did and found, including the work records; what is still open. Leave out what no longer "
-    "matters. Write notes for yourself in the conversation's language, at most about 1,200 words, without tool "
-    "calls or searches.")
+    "matters. Write the notes for yourself in the conversation's language, at most about 1,200 words, without "
+    "tool calls or searches.")
 # Notes "replace" the steps rather than "a summary of your work so far,
 # everything after the user's question": Azure's filter declined every run
 # summary of GPT-6.1 Terra for that sentence, at 0 tokens, while this wording

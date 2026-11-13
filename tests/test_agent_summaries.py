@@ -81,6 +81,14 @@ def test_the_run_summary_request_leaves_out_the_sentence_azure_declines():
     assert "summary of your work" not in RUN_SUMMARY_REQUEST
 
 
+def test_the_history_summary_request_asks_as_the_run_summary_request_does():
+    """Azure's filter declined Terra's history summaries too, asked for as
+    "a summary of the conversation above that will replace it"."""
+    assert "Write a summary" not in HISTORY_SUMMARY_REQUEST
+    assert "will be replaced by notes you write now" in HISTORY_SUMMARY_REQUEST
+    assert "will be replaced by notes you write now" in " ".join(RUN_SUMMARY_REQUEST.split())
+
+
 def test_a_summary_is_never_the_users_words_and_is_bounded():
     message = summary_message("  notes  ")
     assert message["role"] == "user" and is_summary(message["content"])

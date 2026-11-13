@@ -26,7 +26,10 @@ from app.services import exa
 from app.services.agent_read_source import host_of, url_key
 from app.services.agent_tools import ReadOnlyTool, SEARCH_RESULT_CHARACTERS, SEARCH_RESULTS
 
-QUERIES_PER_CALL = 5
+# GPT-6.1 Terra sends six to eight searches for a question of many parts; a
+# call refused for one search too many costs a whole model step, the extra
+# searches a few tenths of a second (exa.py paces them).
+QUERIES_PER_CALL = 8
 QUERY_CHARS = 400
 DOMAINS_PER_CALL = 5
 # A search needs up to exa.SEARCH_SECONDS; closer to the answer's deadline
