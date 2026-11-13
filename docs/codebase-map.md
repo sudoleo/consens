@@ -10172,7 +10172,7 @@ app/core/
   security.py                Firebase-Init, Token/Tier/Admin-Checks (get_user_tier, is_user_pro, is_user_plus), CSP-Middleware
   request_limits.py          ASGI-Bodylimit vor JSON-/Form-Parsing (Content-Length + chunked)
   network_block.py           Äußerste Middleware: 403 für die Cloud-Netze der Crawler-Welle (BLOCKED_NETWORKS), /api/v1/ bleibt offen
-  rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt) + prozesslokale UID-Budgets + Retry-After/Satz für 429 (retry_after_seconds, rate_limit_message)
+  rate_limit.py              slowapi-Limiter (Client-IP aus Cloudflares CF-Connecting-IP; XFF nur Rückfall ohne Cloudflare, weil Render dort nur anhängt; IPv6 zählt je /64, address_key, wie request_limits.client_of) + prozesslokale UID-Budgets + Retry-After/Satz für 429 (retry_after_seconds, rate_limit_message)
   not_found.py               HTML-404 für Seiten-Navigationen (wants_html_page, not_found_page)
   history_cache.py           Verlauf öffentlicher Topic-/Watch-Seiten je Seite, gültig für eine Marke des Elterndokuments (LRU, gestreifte Lade-Locks)
   notice_page.py             Eine öffentliche Hinweisseite (templates/notice.html): Seiten hinter Mail-Links, HTML-429

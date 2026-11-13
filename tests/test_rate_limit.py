@@ -89,6 +89,16 @@ class ClientIpKeyTests(unittest.TestCase):
         )
         self.assertEqual(client_ip_key(request), "198.51.100.23")
 
+    def test_ipv6_counts_by_its_64(self):
+        # Ein Anschluss bekommt ein ganzes /64; jede Adresse darin ist
+        # derselbe Kunde (request_limits.client_of zählt genauso).
+        def key(address):
+            return client_ip_key(make_request(headers={"CF-Connecting-IP": address}))
+
+        self.assertEqual(key("2001:db8::1"), key("2001:db8::ffff:1234"))
+        self.assertNotEqual(key("2001:db8::1"), key("2001:db8:0:1::1"))
+        self.assertEqual(key("::ffff:198.51.100.23"), "198.51.100.23")
+
     def test_api_key_bucket_hashes_secret(self):
         request = make_request(headers={"X-API-Key": "cns_live_super-secret"})
         bucket = api_key_rate_key(request)

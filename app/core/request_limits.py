@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
-import ipaddress
 import json
 import os
 import re
 import threading
+
+from app.core.rate_limit import address_key
 
 
 # Ceiling for every route (MAX_REQUEST_BODY_BYTES), reached only by uploads.
@@ -113,15 +114,7 @@ def client_of(headers: dict, client) -> str:
         raw = (headers.get(b"x-forwarded-for") or b"").decode("latin-1").split(",", 1)[0].strip()
     if not raw and client:
         raw = str(client[0])
-    try:
-        address = ipaddress.ip_address(raw)
-    except ValueError:
-        return raw or "unknown"
-    if address.version == 4:
-        return str(address)
-    if address.ipv4_mapped is not None:
-        return str(address.ipv4_mapped)
-    return str(ipaddress.ip_network(f"{address}/64", strict=False).network_address)
+    return address_key(raw) or "unknown"
 
 
 class BigBodies:

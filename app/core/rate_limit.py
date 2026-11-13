@@ -1,4 +1,5 @@
 import hashlib
+import ipaddress
 import math
 import os
 import threading
@@ -7,6 +8,21 @@ from collections import defaultdict, deque
 
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+
+
+def address_key(raw: str) -> str:
+    """One customer's address: an IPv6 address by its /64, which a single
+    connection gets whole (any address in it is the same client), an
+    IPv4-mapped one as IPv4. Anything else stays as it came."""
+    try:
+        address = ipaddress.ip_address(raw)
+    except ValueError:
+        return raw
+    if address.version == 4:
+        return str(address)
+    if address.ipv4_mapped is not None:
+        return str(address.ipv4_mapped)
+    return str(ipaddress.ip_network(f"{address}/64", strict=False).network_address)
 
 
 def client_ip_key(request):
@@ -22,17 +38,17 @@ def client_ip_key(request):
     wechselnder gefälschter XFF-Adresse liefen alle durch ein 30/min-Limit,
     ohne Fälschung kam ab dem 31. ein 429. Deshalb gilt XFF nur noch als
     Rückfall ohne Cloudflare (lokale Server, E2E-Proxys); lokal ohne Header
-    zählt ``request.client.host``.
+    zählt ``request.client.host``. IPv6 zählt je /64 (address_key).
     """
     connecting = request.headers.get("cf-connecting-ip", "").strip()
     if connecting:
-        return connecting
+        return address_key(connecting)
     forwarded = request.headers.get("x-forwarded-for", "")
     if forwarded:
         client_ip = forwarded.split(",", 1)[0].strip()
         if client_ip:
-            return client_ip
-    return get_remote_address(request)
+            return address_key(client_ip)
+    return address_key(get_remote_address(request))
 
 
 def api_key_rate_key(request):
