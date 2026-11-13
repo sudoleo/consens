@@ -1071,7 +1071,14 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   abgeschnittener Durchgang ist bezahlt und bringt nichts; die Seite folgt der
   Prüfung nach der Übergabe 5 min, `REVIEW_TAIL_MS`). Die Anfrage trägt die
   Dateien der Nachricht an derselben Stelle wie die Schritte des Agenten
-  (`_step`, `kind: "correction"`), so hält der Prompt-Cache. Läuft die Frist
+  (`_step`, `kind: "correction"`), so hält der Prompt-Cache, und läuft auf
+  der OpenRouter-Sitzung des Agenten (`provider_session`, mit seinen
+  Cache-Punkten): Das Reasoning seiner früheren Schritte ist vom Endpoint
+  verschlüsselt, der es schrieb, und nur dort lesbar. Auf einer eigenen
+  Sitzung lehnte ein anderes Endpoint den ersten Prod-Durchgang mit Muse
+  Ember (Schritte auf „Google“) mit HTTP 400 ab. Ein abgelehnter Durchgang
+  loggt den Grund ohne Text (`provider_diagnostic`, etwa
+  `reason=reasoning_pinned`). Läuft die Frist
   ab oder scheitert der Durchgang, endet seine Sitzung ohne Fehlertext. Ohne
   gelungene Übergabe (`handed_over`) läuft kein Durchgang (`skipped: busy`):
   er hielte die nächste Nachricht auf. Nur sichere Stellen gehen an den

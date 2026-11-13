@@ -2064,7 +2064,15 @@ class DelegationLoop(AgentLoop):
         log_status = None
         value = completion if completion is not None else self.factory()
         value.step_id, value.tool_argument_limit = step, registry.argument_limit
-        if not worker:
+        # The agent's correction pass (agent_review_feedback) continues the
+        # agent's own conversation: its earlier steps' reasoning, encrypted
+        # by the endpoint that wrote it, is readable there alone (OpenRouter's
+        # HTTP 400, reason reasoning_pinned; a correction on a session of its
+        # own was refused on Muse Ember's other endpoint in Prod). So it goes
+        # on the agent's session, to the same endpoint, with the agent's
+        # cache points.
+        continues_agent = worker is None or getattr(worker, "kind", None) == "correction"
+        if continues_agent:
             value.history_end = self.history_end
         value.published = ""
         value.tool_call_limit = TOOL_CALLS_PER_STEP
@@ -2158,7 +2166,7 @@ class DelegationLoop(AgentLoop):
                 streaming = self._halt_scope(halt)
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
                                       native_searches=searches, allow_tool_calls=allow_tools,
-                                      session_id=None if worker else self.provider_session)
+                                      session_id=self.provider_session if continues_agent else None)
                 try:
                     for event in source:
                         self._check(halt or cancellation)

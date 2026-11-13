@@ -431,3 +431,52 @@ def test_the_pass_takes_the_reviewers_source_where_its_page_exists(store, monkey
         loop = feedback_loop(store, Audit(reviews, answer=answer, live={"anthropic": agent_side(correct)}))
         list(loop.run())
         assert (after in raw_turn(store, loop)["assistant_response"]) is kept, status
+
+
+def test_the_pass_goes_to_the_agents_endpoint_with_its_reasoning(store):
+    """The agent's earlier steps leave reasoning that only the endpoint that
+    wrote it can read (OpenRouter's HTTP 400 reasoning_pinned): Prod's first
+    pass on Muse Ember, on a session of its own, was refused. The pass
+    continues the agent's conversation on the agent's session, its tool step
+    and the reasoning replayed as they were."""
+    seen = {}
+    script = Audit(tool_steps=1, live={"anthropic": agent_side(fix_tickets)})
+    factory = script.factory
+
+    def recording():
+        value = factory()
+        stream = value.stream
+
+        def wrapped(*, model, messages, **kwargs):
+            if correction_request(messages) is not None:
+                seen.update(session=kwargs.get("session_id"), history_end=value.history_end, messages=messages,
+                            tools=[tool["function"]["name"] for tool in kwargs.get("tools") or []
+                                   if tool.get("type") == "function"],
+                            allow=kwargs.get("allow_tool_calls"))
+            return stream(model=model, messages=messages, **kwargs)
+        value.stream = wrapped
+        return value
+    script.factory = recording
+    loop = feedback_loop(store, script)
+    loop.factory = recording
+    list(loop.run())
+    assert seen["session"] == loop.provider_session and seen["history_end"] == loop.history_end
+    # The agent's tool step stands in the request as the agent sent it, its tools listed and not callable.
+    assert any(m.get("role") == "assistant" and m.get("tool_calls") for m in seen["messages"])
+    assert any(m.get("role") == "tool" for m in seen["messages"])
+    assert "lookup" in seen["tools"] and seen["allow"] is False
+    # The reviewers' own sessions are theirs.
+    assert FIXED in raw_turn(store, loop)["assistant_response"]
+
+
+def test_a_refused_pass_logs_why_without_any_text(store, caplog):
+    from app.services.llm.engines import _ProviderHTTPStatusError
+
+    def refused(findings):
+        raise _ProviderHTTPStatusError(400, diagnostic="provider=Google reason=reasoning_pinned")
+    loop = feedback_loop(store, Audit(live={"anthropic": agent_side(refused)}))
+    with caplog.at_level("WARNING"):
+        list(loop.run())
+    assert "diagnostic=provider=Google reason=reasoning_pinned" in caplog.text
+    review = raw_turn(store, loop)["agent_review"]
+    assert review["audit"]["feedback"]["skipped"] == "failed" and _marks_kept(review)

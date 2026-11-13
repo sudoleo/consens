@@ -2734,7 +2734,9 @@ class AnswerAudit:
             except Exception as exc:
                 from app.services.agent_quota import AgentTokenBudgetExceeded
                 skipped = "allowance" if isinstance(exc, AgentTokenBudgetExceeded) else "failed"
-                logging.warning("Agent correction failed category=%s", safe_exception(exc))
+                from app.core.observability import provider_diagnostic
+                logging.warning("Agent correction failed category=%s diagnostic=%s", safe_exception(exc),
+                                provider_diagnostic(exc))
             text = fb.corrected_answer(answer, items, results)
             settled = {key: ("corrected", items[key][2], result[1]) if result[0] == "corrected" else result
                        for key, result in results.items()}
@@ -2759,7 +2761,9 @@ class AnswerAudit:
             stopped = isinstance(exc, ProviderCancelled) or not isinstance(exc, Exception)
             reason = "stopped" if stopped else "newer_message" if isinstance(exc, NewerTurn) else "failed"
             if not stopped and not isinstance(exc, NewerTurn):
-                logging.warning("Agent correction not kept category=%s", safe_exception(exc))
+                from app.core.observability import provider_diagnostic
+                logging.warning("Agent correction not kept category=%s diagnostic=%s", safe_exception(exc),
+                                provider_diagnostic(exc))
             self.close_feedback(reason)
             if stopped:
                 raise
