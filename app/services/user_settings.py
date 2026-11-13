@@ -108,6 +108,11 @@ class UserSettings(_Strict):
     # with what its composer showed; the agent never changes it
     # (agent_settings.ELSEWHERE).
     reviewers: Optional[Literal["always", "workspace", "off"]] = None
+    # Whether the reviewers' hard findings reach the agent, while it works
+    # and in one correction of its answer (agent_review_feedback.py). None is
+    # off: the agent never learns of a mark. The server reads it itself
+    # (routers/agent.py), the agent never changes it (agent_settings.ELSEWHERE).
+    findings_to_agent: Optional[bool] = None
 
     @field_validator("system_prompt")
     @classmethod

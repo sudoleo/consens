@@ -37,7 +37,7 @@ Prüfung erst am Ende zu spät und zu langsam; die Prüfer müssen Schritt halte
 | `context` | `_step`, direkt vor der Anfrage | Was die Anfrage trägt, je Akteur nur, was noch nicht im Protokoll steht. Nach Position im Gespräch des Akteurs: im ersten Schritt Systemprompt (mit Memory-Block), Verlauf (frühere Fragen und Antworten) und Frage mit App-Kontext, danach alles, was der Lauf anhängt, etwa Hinweise der App und Nachrichten von Workern, auch derselbe Hinweis ein zweites Mal. Was nur die einzelne Anfrage trägt (Dateiblock, Notiz eines Schritts, geänderter Systemprompt), einmal je Text. Die eigenen Nachrichten des Modells in diesem Lauf sind seine `step`-Einträge. |
 | `step` | Ende jedes `_step` (Agent und Worker), nach der Abrechnung | Modell, Status, lesbares Reasoning (`reasoning.text`, `reasoning.summary`), Text, Tool-Aufrufe mit Argumenten, Suchtreffer (`sources` mit den Auszügen aus `citations`, nur wenn der Anbieter sie schickt), Abschlussgrund, Verbrauch (mit der Zahl der Suchen) |
 | `tool` | Ergebnis von `_execute` | Das vollständige Ergebnis, wie es in den Kontext des Agenten geht: gelesene Seiten, Dateiauszüge, Gmail/Kalender, Memory-Antworten, Befehle und Dateien der Agent-VM (Exit-Code, gekürzte Ausgaben, Dauer), Fehler. Seit 2026-10-30 mit den Feldern `started_at` (UTC, ISO) und `duration_ms` des Aufrufs (I4) |
-| `app` | Eingriffe der App | Zurücknahme eines gezeigten Texts (`retract`), Memory-Sperre (`memory_locked`, bis 2026-11-02), Antwort fixiert (`answer_fixed`), alte VM-Ausgabe im Gespräch gekürzt (`compacted`: Anzahl, Zeichen vorher/nachher, `tool_call_ids`; die `tool`-Einträge behalten das volle Ergebnis), seit 2026-10-30 die Grenze, an der die Arbeit endete (`limit`: `{reason, steps, seconds, text}`, `reason` = `time`, `steps`, `repeat`, `invalid`, `allowance` oder `context`; dieselben Werte ohne `text` als `agent_wrap_up` am Turn, I1). Der Plan des Agenten (`update_plan`) steht als sein Aufruf im `step` und als `tool` mit Herkunft `agent`, der letzte im `end`-Eintrag als `plan` |
+| `app` | Eingriffe der App | Zurücknahme eines gezeigten Texts (`retract`), Memory-Sperre (`memory_locked`, bis 2026-11-02), Antwort fixiert (`answer_fixed`), alte VM-Ausgabe im Gespräch gekürzt (`compacted`: Anzahl, Zeichen vorher/nachher, `tool_call_ids`; die `tool`-Einträge behalten das volle Ergebnis), seit 2026-10-30 die Grenze, an der die Arbeit endete (`limit`: `{reason, steps, seconds, text}`, `reason` = `time`, `steps`, `repeat`, `invalid`, `allowance` oder `context`; dieselben Werte ohne `text` als `agent_wrap_up` am Turn, I1), mit der Kontoeinstellung `findings_to_agent` die Zustellung harter Befunde an den Agenten (`findings_delivered`: `phase` `work` vor seinem nächsten Schritt oder `answer` im Korrekturdurchgang, je Befund Kennung, Art, Zahl der Prüfer, Notizen mit Quelle und der Schritt bzw. Satz) und das Ergebnis der Korrektur (`answer_corrected`: je Befund `corrected` mit dem neuen Satz oder `disputed` mit der Begründung des Agenten, `skipped` mit Grund), siehe [agent-mode.md](agent-mode.md) „Befunde an den Agenten“. Der Plan des Agenten (`update_plan`) steht als sein Aufruf im `step` und als `tool` mit Herkunft `agent`, der letzte im `end`-Eintrag als `plan` |
 | `end` | Ende des Laufs | Status, Abschlussgrund, Antwort, Fehler, Gesamtverbrauch |
 
 Worker (`start_agent`) schreiben in dasselbe Protokoll, mit ihrer ID als
@@ -356,8 +356,7 @@ Agent-Panel.
 2. **Prüfer lesen das Protokoll** (umgesetzt 2026-10-25): Runden während des
    Laufs, Schlussrunde mit der Antwort, Befunde zum Ablauf. Hat
    `agent_audit.review_input` ersetzt.
-3. **Später, je mit eigener Entscheidung:** Befunde gehen an den Agenten, der
-   darauf antwortet; automatische Abgleiche (zitierte URLs und Zitate gegen das
+3. **Später, je mit eigener Entscheidung:** automatische Abgleiche (zitierte URLs und Zitate gegen das
    Protokoll); eigene Einträge für die laufende Ausgabe eines Befehls. Seit
    2026-10-25 stehen Befehle und Dateien der Agent-VM ([agent-mode.md](agent-mode.md),
    „Agent VM“) als `tool`-Einträge mit Herkunft `vm` im Protokoll, sobald sie
@@ -400,13 +399,22 @@ Agent-Panel.
    `browser` tragen die Herkunft `web`, `vm_install_packages` die Herkunft
    `vm`. Ablauf: [agent-mode.md](agent-mode.md), „Vorab-Prüfung“ und „Der
    Agent fragt den Nutzer“.
+6. **Befunde an den Agenten** (umgesetzt 2026-11-13, Max: als Kontoeinstellung,
+   Standard aus; aus ist alles wie vorher): Mit `findings_to_agent` gehen
+   Befunde als Daten an den Agenten, im Lauf nur harte (`wrong` mit Quelle,
+   oder dieselbe Stelle von zwei Prüfern) vor seinem nächsten Schritt, nach
+   der geprüften Antwort alle einmal im Korrekturdurchgang. Die Prüfer prüfen die
+   Korrektur nicht erneut, Halt und Gate bleiben beim Nutzer. Ablauf:
+   [agent-mode.md](agent-mode.md), „Befunde an den Agenten“.
 
 ## Entscheidungen (Max, 2026-10-25)
 
 - **Memory geht an die Prüfer**, wie alles, was der Agent sieht. Heute sehen
   Vergleichsmodelle Memory nicht.
 - **Aufbewahrung 30 Tage** für die Inhalte, Befunde bleiben.
-- **Live-Befunde gehen noch nicht an den Agenten** (Etappe 3).
+- **Live-Befunde gehen nicht an den Agenten.** Seit 2026-11-13 nur mit der
+  Kontoeinstellung `findings_to_agent` (Standard aus) und nur harte Befunde
+  (Etappe 6).
 - **Keine Rollen:** Alle Prüfer sind gleich und prüfen unabhängig.
 
 Tests: `tests/test_agent_work_log.py`, `tests/test_agent_audit.py`,

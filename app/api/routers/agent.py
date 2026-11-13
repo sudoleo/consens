@@ -402,8 +402,21 @@ def _turn_reads(uid, payload, store):
         # turn's creation found the chat live.
         "history": lambda: store.history_page(uid, chat_id, checked=True),
         "catalog": lambda: files.list(uid, chat_id, checked=True),
+        "findings": lambda: _findings_to_agent(uid),
     }
     return {name: _TURN_READS.submit(job) for name, job in jobs.items()}
+
+
+def _findings_to_agent(uid):
+    """The account's findings_to_agent (agent_review_feedback), read by the
+    server and not sent by the page: off wherever it cannot be read."""
+    try:
+        from app.services.user_settings import FirestoreUserSettingsRepository
+        values, _, _ = FirestoreUserSettingsRepository(db_firestore).get(uid)
+        return values.get("findings_to_agent") is True
+    except Exception as exc:
+        logging.info("Agent findings setting unreadable category=%s", safe_exception(exc))
+        return False
 
 
 def sweep_after(store, uid, chat_id, recover):
@@ -630,6 +643,16 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         if watch_run:
             from app.services import agent_watches
             app_context += "\n" + agent_watches.run_context(watch_run)
+        findings_to_agent = payload.reviewers != "off" and reads is not None and reads["findings"].result()
+        if findings_to_agent:
+            # The previous answer's open findings, saved on the chat while
+            # that answer was the chat's newest (AnswerAudit._save_open).
+            from app.services.agent_review_feedback import open_findings_context
+            saved = chat_data.get("agent_open_findings")
+            if isinstance(saved, dict) and saved.get("turn_id") and saved["turn_id"] == chat_data.get("agent_turn_id"):
+                found = open_findings_context(saved)
+                if found:
+                    app_context += "\n" + found
         sweep.result()
         turn = store.create_turn(
             uid, payload.chat_id, question=payload.question, mode="Agent", deep_search=False,
@@ -644,6 +667,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                             "comparison_selection": payload.comparison_models,
                             "agent_preferences": preferences.model_dump(),
                             "reviewers": payload.reviewers,
+                            **({"findings_to_agent": True} if findings_to_agent else {}),
                             **({"temporary": True} if temporary else {}),
                             **({"watch_run": watch_run} if watch_run else {}),
                             "comparison_models": {p: m.snapshot() for p, m in comparisons.items()},
@@ -681,6 +705,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
                          chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
+                         findings_to_agent=findings_to_agent,
                          watch_run=watch_run, history_summary=history_summary or None,
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),
                          mock_answer="Agent test answer: " + payload.question if mock_llm_enabled() else None)

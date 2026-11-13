@@ -287,3 +287,65 @@ describe("stream-reveal: the light", () => {
     expect(el.classList.contains("is-stream-revealing")).toBe(false);
   });
 });
+
+// The agent corrected sentences of its fixed answer after the review
+// (findings_to_agent, agent-review.js): only they come into view again, in
+// the same light; what moved below them glides instead of jumping.
+describe("stream-reveal: a fixed answer rewritten in place", () => {
+  const BEFORE = "Tickets cost 18 euros. The arena opened in 80 AD.\n\nIt held about 50,000 spectators.";
+  const AFTER = "Tickets cost 24 euros since 2025. The arena opened in 80 AD.\n\nIt held about 50,000 spectators.";
+  // The letters each highlight step covers, by step (0: not in view yet).
+  const steps = window => {
+    const covered = new Map();
+    for (const [name, ranges] of window.CSS.highlights) {
+      const step = Number(name.split("-").at(-1));
+      for (const range of ranges) covered.set(step, (covered.get(step) || "") + range.toString());
+    }
+    return covered;
+  };
+
+  it("lights up only the sentences that changed, from the first frame, and leaves no highlight after", () => {
+    const { window, reveal, el, run, unseen, lit } = boot();
+    window.injectMarkdown(el, BEFORE, []);
+    reveal.rewrite(el, () => window.morphMarkdown(el, AFTER));
+    expect(el.textContent).toContain("Tickets cost 24 euros since 2025.");
+    // Before any frame ran: the new sentence is not in view yet, nothing else is touched.
+    const sentence = "Tickets cost 24 euros since 2025.";
+    const pieces = [...steps(window).values()];
+    expect(steps(window).get(0)?.length).toBeGreaterThan(sentence.length - 3);
+    expect(pieces.join("").length).toBe(sentence.length);
+    expect(pieces.every(piece => sentence.includes(piece))).toBe(true);
+    run(200);
+    expect(lit()).toBeGreaterThan(0);
+    run(3000);
+    expect(unseen()).toBe(0);
+    expect(lit()).toBe(0);
+  });
+
+  it("lets what stands below a longer sentence glide down to its place", () => {
+    const { window, document, reveal, el } = boot();
+    window.injectMarkdown(el, BEFORE, []);
+    const below = document.createElement("section");
+    el.after(below);
+    let top = 100;
+    below.getBoundingClientRect = () => ({ top });
+    below.animate = vi.fn();
+    reveal.rewrite(el, () => { window.morphMarkdown(el, AFTER); top = 124; });
+    expect(below.animate).toHaveBeenCalledTimes(1);
+    const [frames, timing] = below.animate.mock.calls[0];
+    expect(frames).toEqual([{ transform: "translateY(-24px)" }, { transform: "none" }]);
+    expect(timing.duration).toBeLessThan(300);
+  });
+
+  it("only rewrites, without light or motion, under reduced motion", () => {
+    const { window, document, reveal, el, lit } = boot({ reduced: true });
+    window.injectMarkdown(el, BEFORE, []);
+    const below = document.createElement("section");
+    el.after(below);
+    below.animate = vi.fn();
+    reveal.rewrite(el, () => window.morphMarkdown(el, AFTER));
+    expect(el.textContent).toContain("Tickets cost 24 euros since 2025.");
+    expect(lit()).toBe(0);
+    expect(below.animate).not.toHaveBeenCalled();
+  });
+});

@@ -238,6 +238,26 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       scripts/audit_report.py --days 1` → die Läufe stehen mit Zeiten drin.
       Automatisiert: `test_agent_audit.py`, `test_agent_audit_tempo.py`,
       `agent-live.test.mjs`, `agent-chat.test.mjs`.
+- [ ] Befunde an den Agenten (2026-11-13, echter Provider, Einstellungen →
+      Agent → „Befunde an den Agenten geben“ an; bei Prüfern „Aus“ ist die
+      Zeile weg, die Einstellungssuche findet sie dann nicht). Eine Frage mit
+      einer leicht veralteten Zahl („Was kostet ein Ticket fürs Kolosseum?“)
+      → die Antwort steht sofort, ohne Marken; die Leiste sagt „Antwort wird
+      geprüft…“, bis der Agent die Befunde durchgegangen ist; nie erscheint
+      eine Farbe, die wieder verschwindet. Danach: nur der korrigierte Satz
+      läuft im grünen Licht neu ein, der Text darunter gleitet, nichts
+      scrollt, kein Panel öffnet sich, der Fokus bleibt; bestrittene Stellen
+      tragen ihre Marke, die Karte nennt „Der Agent widerspricht“ mit Grund.
+      Notes: „Vom Agenten korrigiert“ mit altem (durchgestrichen) und neuem
+      Satz und den Anmerkungen. Gegenprobe: während der Agent prüft, einen
+      Teil der Antwort markieren → der Text bleibt, bis die Auswahl weg ist,
+      dann läuft die Korrektur ein. Mit „Streaming-Animation“ aus oder
+      reduzierter Bewegung: Korrektur ohne Licht und ohne Gleiten. Neu laden
+      → korrigierter Text, nur die übrigen Marken, keine Animation. Aktivität:
+      „Befunde der Prüfer durchgegangen“; Agent-Panel: Zeile „Korrektur“ ohne
+      Icon im Modellstapel. Automatisiert: `agent-review.test.mjs`,
+      `audit-marks.test.mjs`, `stream-reveal.test.mjs`,
+      `test_agent_audit_frontend.py`.
 - [ ] `compare_models` (2026-10-31, jedes Konto, Daily mit drei Modellen,
       echter Provider; `docs/agent-mode.md`):
       „Was sagen andere KIs dazu: Lohnt sich eine Wärmepumpe im Altbau? Mach

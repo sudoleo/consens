@@ -1458,3 +1458,188 @@ it('names the limit a response ended at and whether a follow-up can go on', () =
   expect(note(turn('steps', { status: 'pending' }))).toBeNull();
   expect(note(null)).toBeNull();
 });
+
+// --- Findings for the agent (Settings › Agent › Pass findings to the agent) ---
+// The review as agent_review_feedback leaves it at each stage: while the
+// reviewers review ("live"), while the agent checks their findings
+// ("checking"), and once its pass is through ("done": s1 corrected, its claim
+// gone and the answer's second version; s2 disputed, its mark kept).
+const ORIGINAL = 'Tickets cost 18 euros. The arena opened in 80 AD.';
+const CORRECTED = 'Tickets cost 24 euros since 2025. The arena opened in 80 AD.';
+function feedbackReview(stage) {
+  const review = auditReview('succeeded');
+  review.versions = [{ id: 1, text: ORIGINAL, hash: 'h1', status: 'succeeded', comparison_ids: [] }];
+  review.answer_hash = 'h1';
+  delete review.audit.issues;
+  const wrong = { model: 'OpenAI', kind: 'wrong', note: 'The ticket costs 24 euros since 2025.',
+    source: 'https://example.org/tickets', target: '18 euros', mark: 1, finding: 's1' };
+  const doubt = { model: 'Anthropic', kind: 'doubtful', note: 'Some sources say 72 AD.', mark: 2, finding: 's2' };
+  review.audit.claims = [
+    { anchor: 'Tickets cost 18 euros.', kind: 'wrong', audit: true, agree: [], dissent: [wrong] },
+    { anchor: 'The arena opened in 80 AD.', kind: 'doubtful', audit: true, agree: [], dissent: [doubt] }];
+  review.audit.unplaced = [];
+  const findings = [{ id: 's1', on: 'answer', kind: 'wrong', voices: 1, hard: true, state: 'open' },
+    { id: 's2', on: 'answer', kind: 'doubtful', voices: 2, hard: true, state: 'open' }];
+  review.audit.feedback = { status: 'live', findings, counts: { delivered: 0, corrected: 0, disputed: 0, cut: 0 } };
+  if (stage === 'checking') {
+    review.audit.feedback.status = 'checking';
+    for (const finding of findings) Object.assign(finding, { state: 'checking', delivered: 'final' });
+  } else if (stage === 'done') {
+    review.audit.feedback.status = 'done';
+    Object.assign(findings[0], { state: 'corrected', delivered: 'final', before: 'Tickets cost 18 euros.',
+      after: 'Tickets cost 24 euros since 2025.', notes: [{ model: 'OpenAI', kind: 'wrong', note: wrong.note, source: wrong.source }] });
+    Object.assign(findings[1], { state: 'disputed', delivered: 'final', reason: 'The opening games were held in 80 AD.' });
+    review.versions.push({ id: 2, text: CORRECTED, hash: 'h2', status: 'succeeded', comparison_ids: [], corrects: 1 });
+    review.answer_version = 2; review.answer_hash = 'h2';
+    review.audit.claims = [review.audit.claims[1]];
+  } else if (stage === 'skipped') {
+    Object.assign(review.audit.feedback, { status: 'done', skipped: 'no_time' });
+  }
+  return review;
+}
+function feedbackSetup() {
+  const app = setup();
+  app.window.App.streamReveal = { rewrite: vi.fn((body, change) => change()) };
+  const body = app.document.getElementById('answer');
+  app.window.injectMarkdown(body, ORIGINAL);
+  body.dataset.markdown = ORIGINAL;
+  return { ...app, body };
+}
+const notesCell = d => d.querySelector('.agent-evidence-link[data-section="differences"]');
+
+it('without the setting a review renders as before, also while its run goes on', () => {
+  const today = setup(), live = setup();
+  for (const { document: d } of [today, live]) d.getElementById('answer').dataset.markdown = 'Exact answer.';
+  today.window.App.agentReview.render(today.document.getElementById('answer'), auditReview('succeeded'), { key: 't1' });
+  live.window.App.agentReview.render(live.document.getElementById('answer'), auditReview('succeeded'), { key: 't1', ended: false });
+  expect(live.window.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(live.document.body.innerHTML).toBe(today.document.body.innerHTML);
+  const details = [today, live].map(({ document: d, window: w }, index) => {
+    const host = d.createElement('div');
+    w.App.agentReview.renderActivity(host, auditReview('succeeded'), 'Exact answer.', index ? { ended: false } : undefined);
+    return host.innerHTML;
+  });
+  expect(details[1]).toBe(details[0]);
+});
+
+it('shows no mark while the reviewers review and the agent checks their findings, then the review at once', () => {
+  const { window: w, document: d, body } = feedbackSetup();
+  for (const stage of ['live', 'checking']) {
+    w.App.agentReview.render(body, feedbackReview(stage), { key: 't1', ended: false });
+    expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+    expect(d.querySelector('.agent-review-status').textContent).toBe('Reviewing the answer…');
+    expect([notesCell(d).disabled, notesCell(d).textContent]).toEqual([true, 'Notes']);
+    const details = d.createElement('div');
+    w.App.agentReview.renderActivity(details, feedbackReview(stage), ORIGINAL, { ended: false });
+    expect(details.querySelector('h4').textContent).toBe('Reviewing the answer…');
+    expect(details.querySelector('.agent-activity-check')).toBeNull();
+  }
+  // No light before the change: nothing at the sentences while the agent checks.
+  expect(w.App.streamReveal.rewrite).not.toHaveBeenCalled();
+  expect(body.textContent).toBe(ORIGINAL);
+  w.App.agentReview.render(body, feedbackReview('done'), { key: 't1', ended: false });
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(notesCell(d).disabled).toBe(false);
+});
+
+it('rewrites a corrected sentence in place in the light, with no mark on it and its trace under Notes', () => {
+  const { window: w, document: d, body } = feedbackSetup();
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  const done = feedbackReview('done');
+  w.App.agentReview.render(body, done, { key: 't1', ended: false });
+  expect(w.App.streamReveal.rewrite).toHaveBeenCalledTimes(1);
+  expect(w.App.streamReveal.rewrite.mock.calls[0][0]).toBe(body);
+  expect([body.dataset.markdown, body.textContent]).toEqual([CORRECTED, CORRECTED]);
+  // The marks go on the corrected text: only the disputed finding's claim.
+  expect(w.renderStoredAuditMarks.mock.calls[0][1].claims.map(claim => claim.anchor)).toEqual(['The arena opened in 80 AD.']);
+  // The answer's next frame keeps the corrected text (agent-chat.js renderAnswerBody).
+  expect(w.App.agentReview.shownText(body, ORIGINAL)).toBe(CORRECTED);
+  expect(w.App.agentReview.shownText(body, 'Another answer.')).toBe('Another answer.');
+  // Every note is counted once, the corrected sentence's too.
+  expect(notesCell(d).getAttribute('aria-label')).toBe('Notes 2');
+  notesCell(d).click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  const fixed = panel.querySelector('.agent-audit-corrected');
+  expect(fixed.closest('.agent-audit-group').querySelector('h5').textContent).toBe('Corrected by the agent');
+  expect(fixed.querySelector('del').textContent).toBe('Tickets cost 18 euros.');
+  expect(fixed.querySelector('ins').textContent).toBe('Tickets cost 24 euros since 2025.');
+  expect(fixed.querySelector('.agent-audit-text').textContent).toBe('The ticket costs 24 euros since 2025.');
+  // Where the agent disagreed, its reason follows the reviewers' note.
+  const disputed = [...panel.querySelectorAll('.agent-audit-passage')].find(passage => passage.textContent.includes('72 AD'));
+  const reply = disputed.querySelector('.agent-audit-reply');
+  expect([reply.querySelector('.agent-audit-kind').textContent, reply.querySelector('.agent-audit-text').textContent])
+    .toEqual(['The agent disagrees', 'The opening games were held in 80 AD.']);
+  expect([...panel.querySelectorAll('.agent-audit-tally > span')].map(span => span.textContent)).toEqual(['1 wrong', '1 doubtful']);
+  // The activity counts the same, and names the correction.
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, done, CORRECTED, { ended: true });
+  expect(details.querySelector('.agent-activity-check').textContent)
+    .toBe('2 notes · 1 passage marked in the text · 1 passage corrected by the agent');
+});
+
+it('lands a correction only once the reader lets go of a selection in the answer', () => {
+  const { window: w, document: d, body } = feedbackSetup();
+  // As markdown-stream.js: a body that shows its text unmarked is not rendered again.
+  w.isPlainMarkdown = (el, md) => el.textContent === md;
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  const range = d.createRange();
+  range.setStart(body.firstChild, 13);
+  range.setEnd(body.firstChild, 21);
+  w.getSelection().removeAllRanges();
+  w.getSelection().addRange(range);
+  w.App.agentReview.render(body, feedbackReview('done'), { key: 't1', ended: false });
+  // The text under the selection stays, and so does the selection.
+  expect(body.textContent).toBe(ORIGINAL);
+  expect(w.getSelection().toString()).toBe('18 euros');
+  expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  expect(d.querySelector('.agent-review-status').textContent).toBe('Reviewing the answer…');
+  expect(w.App.agentReview.shownText(body, ORIGINAL)).toBe(ORIGINAL);
+  // While it is held, nothing lands.
+  d.dispatchEvent(new w.Event('selectionchange'));
+  expect(body.textContent).toBe(ORIGINAL);
+  w.getSelection().removeAllRanges();
+  d.dispatchEvent(new w.Event('selectionchange'));
+  expect(body.textContent).toBe(CORRECTED);
+  expect(w.App.streamReveal.rewrite).toHaveBeenCalledTimes(1);
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+});
+
+it('shows the review as it is when the agent\'s pass ends without a change', () => {
+  const { window: w, body } = feedbackSetup();
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  // Skipped, failed or out of time: the findings stay open, the marks as without the setting.
+  w.App.agentReview.render(body, feedbackReview('skipped'), { key: 't1', ended: false });
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(w.renderStoredAuditMarks.mock.calls[0][1].claims).toHaveLength(2);
+  expect(body.textContent).toBe(ORIGINAL);
+  expect(w.App.streamReveal.rewrite).not.toHaveBeenCalled();
+  expect(body.closest('section').textContent).not.toMatch(/time|skipped|correct/i);
+});
+
+it('shows the marks of a run that ended before the agent\'s pass was through', () => {
+  for (const evidence of [{ key: 't1', ended: true }, { key: 't1' }]) {
+    const { window: w, body } = feedbackSetup();
+    w.App.agentReview.render(body, feedbackReview('checking'), evidence);
+    expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  }
+});
+
+it('opens a corrected answer after a reload as it stands, without the light', () => {
+  // Saved with the corrected text, or a copy that still names the first one.
+  for (const shown of [CORRECTED, ORIGINAL]) {
+    const { window: w, body } = feedbackSetup();
+    w.injectMarkdown(body, shown);
+    body.dataset.markdown = shown;
+    w.App.agentReview.render(body, feedbackReview('done'), { key: 't1', ended: true });
+    expect(body.textContent).toBe(CORRECTED);
+    expect(w.App.streamReveal.rewrite).not.toHaveBeenCalled();
+    expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  }
+});
+
+it('takes the corrected text for a reviewed answer that failed afterwards', () => {
+  const { window: w } = setup();
+  const done = feedbackReview('done');
+  expect(w.App.agentReview.failureNote({ error: 'x' }, done, ORIGINAL)).toBe('');
+  expect(w.App.agentReview.failureNote({ error: 'x' }, done, 'Something else.')).not.toBe('');
+});

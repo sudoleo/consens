@@ -2869,7 +2869,13 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `stream_animation` (Settings → Display → Streaming animation, seit 2026-11-13;
   davor hing das Licht mit an `letter_animations`) wahr; sonst malt `agent-chat.js` wie vorher jeden Frame, was angekommen ist.
   Ausschalten mitten im Stream: der direkte Maler schreibt, das Modul gibt die
-  Antwort über `_markdownWrites` ab. Tests: `tests/js/stream-reveal.test.mjs`.
+  Antwort über `_markdownWrites` ab. Seit 2026-11-13 auch `rewrite(body,
+  change)`: Sätze, die `change()` in einer fixierten Antwort neu schreibt (die
+  Korrektur des Agenten, siehe „Befunde an den Agenten“ in §4), kommen im selben
+  Licht ins Bild (Satzvergleich vorher/nachher, längste gemeinsame Folge, nur
+  die neuen Sätze, ab dem ersten Frame verborgen), was darunter steht, gleitet
+  `SETTLE_MS` an seinen Platz (WAAPI-Transform); ohne `active()` steht die
+  Änderung einfach. Tests: `tests/js/stream-reveal.test.mjs`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
   `dataset.consensusAnswer` / `dataset.consensusSources`; `window.currentEvidenceSources`.
   Zwei Darstellungen: **im Chat-Fliesstext** (Container ist bzw. liegt in
@@ -6917,6 +6923,62 @@ Fixieren der Antwort wartet auf das Laufende (`agent-chat.js`
 Modell-Calls: `tests/test_agent_audit_tempo.py`. Details: `docs/agent-mode.md`,
 „Ein Modus: der Agent arbeitet, die gewählten Modelle prüfen“.
 
+**Befunde an den Agenten** (seit 2026-11-13, Kontoeinstellung
+`findings_to_agent`, Standard aus; Details `docs/agent-mode.md` „Befunde an
+den Agenten“): Aus ist alles wie oben. An: `agent_review_feedback.py`
+(`Findings`, Register als `AnswerAudit.feedback`, Snapshot
+`audit.feedback`, Marken mit `finding`) gibt Befunde als Daten an den
+Agenten: im Lauf nur harte (`wrong` mit Quelle oder zwei Prüfer an derselben
+Stelle) vor seinem nächsten Schritt (`DelegationLoop._deliver_findings`,
+`AnswerAudit.take_findings`, höchstens `LIVE_FINDINGS` je Lauf, App-Eintrag
+`findings_delivered`), nach der Schlussrunde in genau einem
+Korrekturdurchgang (`_finish_review` → `_correct_answer` → App-Aufruf
+`correct_answer` → `AnswerAudit.correct`, Helfer-Sitzung `kind:
+"correction"` auf dem Gespräch des Agenten ohne Überziehen,
+`CORRECTION_MIN_SECONDS`/`CORRECTION_SECONDS`, alle Befunde der Antwort bis
+`FINAL_FINDINGS`, `ComparisonTools.correct` legt Version 2 an, die erste
+bleibt; Marken korrigierter Befunde fallen weg, `corrected_out`, die Seite
+zeigt Marken erst nach dem Durchgang; App-Eintrag `answer_corrected`). Die
+Korrektur prüft kein Prüfer nach. Gegen den Wettlauf mit der nächsten
+Nachricht startet und speichert sie nur, solange der Turn der neueste des
+Chats ist (`AgentSessionStore.begin_correction`, `save_review(latest=True)`
+→ `NewerTurn`, Turn-Feld `agent_correcting`, das `history_current` neu lesen
+lässt). Offene Befunde stehen am Chat als `agent_open_findings` (mit
+`turn_id`; `save_review(chat_fields=…)`), die Route liest die Einstellung
+selbst (`_findings_to_agent`) und nimmt sie in den App-Kontext der nächsten
+Frage (`open_findings_context`). Systemprompt: `review_facts` ersetzt den
+Satz `_REVIEW_MARKS` durch `MARKS_SHARED`. Zähler `findings_to_agent` in
+`agent_audit_metrics`. Tests: `tests/test_agent_review_feedback.py`.
+
+Im Browser (nur mit `audit.feedback`; ohne sie bleibt jedes Byte wie oben):
+Solange der Durchgang des Agenten nicht `done` ist, zeigt die Antwort keine
+Marke, die Leiste sagt weiter „Reviewing the answer…“ (Notes wartet), die
+Aktivitätskarte ebenso (`agent-review.js` `withheld`). Dafür sagen die Aufrufer,
+ob Lauf und Nachlauf noch gehen (`evidence.ended` bzw. `renderActivity(…,
+{ended})`: `agent-chat.js` `!running && !reviewTail`, Verlauf und Basis
+`status !== 'pending'`, `agent-activity.js` `reviewEnded`); ohne Angabe oder
+nach dem Laufende (Absturz vor `done`) stehen die Marken wie ohne Einstellung.
+Kommt Version 2 (`versions[].corrects`), schreibt `renderAudit` die Antwort
+selbst um (`correctionOf`, `body._corrected`; `agent-chat.js`
+`renderAnswerBody` rendert über `App.agentReview.shownText` weiter die
+korrigierte), live im Licht nur der geänderten Sätze
+(`App.streamReveal.rewrite`, nur wo der Body diese Antwort eben noch
+zurückgehalten zeigte, `_feedbackSeen`; nach Reload ohne Animation). Hält der
+Leser eine Auswahl in der Antwort, wartet die Korrektur bis zum nächsten
+`selectionchange` ohne Auswahl darin (`holdForSelection`). Korrigierte
+Befunde haben keine Marke (`renderStoredAuditMarks` und die Zähler
+überspringen Einträge mit ihrem `finding`), bestrittene behalten sie, Karte
+und Notes nennen danach den Grund („The agent disagrees“). Notes zeigt unter
+„Corrected by the agent“ je Korrektur vorher/nachher (`del`/`ins`) mit den
+Anmerkungen (`feedback.findings[].notes`); sie zählen in Notes und Aktivität
+mit („1 passage corrected by the agent“). Aktivität: Schritt `correct_answer`
+(„Checked the reviewers’ findings“, wie `audit_answer` ein `answerChecks`),
+Agent-Panel: Sitzung `correction` ohne Icon im Modellstapel, ihre JSON-Antwort
+in Worten (`agent-delegation.js` `correctionReply`). Tests:
+`tests/js/agent-review.test.mjs`, `audit-marks.test.mjs`,
+`stream-reveal.test.mjs`, `agent-chat.test.mjs`, `agent-delegation.test.mjs`,
+`tests/e2e/test_agent_audit_frontend.py`.
+
 **compare_models und die Prüfer** (seit 2026-10-31, Details `docs/agent-mode.md`
 „Die gewählten Modelle fragen“): Der Agent hat `compare_models` in jedem
 Chat-Lauf (Mechanik unter „Werkzeuge des Agenten und `compare_models`“ oben).
@@ -9267,7 +9329,14 @@ die ruhige Zeile; `app-ui.js` bindet `#detailedProgressSwitch` über
 fehlt = `always`; `agent-mode.js` bindet `#reviewersSetting` samt der Folgen
 unter der Zeile `#reviewersNote`, `App.words.reviewerSetting()` liest sie, der
 Browser schickt sie mit jeder Nachricht, siehe „Prüfer nach Einstellung“ in §4;
-der Agent kann sie weder lesen noch ändern, `agent_settings.ELSEWHERE`).
+der Agent kann sie weder lesen noch ändern, `agent_settings.ELSEWHERE`),
+`findings_to_agent` (seit 2026-11-13, Settings → Agent neben den Prüfern,
+„Pass findings to the agent“; fehlt = aus; `app-ui.js` bindet
+`#findingsToAgentSwitch`, `agent-mode.js` blendet die Zeile
+`#findingsToAgentSetting` bei Prüfern `off` aus, die Einstellungssuche
+überspringt ausgeblendete Zeilen; die Route liest sie am Konto, die Seite schickt sie nicht mit;
+der Agent kennt sie aus `read_settings`, ändern kann er sie nicht; siehe
+„Befunde an den Agenten“ in §4).
 **Ausgemustert (2026-10-31):** `agent_preferences` (Antworttiefe, Antwortstart,
 Agent-Freiheit, Antwortprüfung, Way of working, VM) mit dem Vergleichsmodus des
 Agenten: ein alter Tab, der sie noch schickt, bekommt sie einzeln in

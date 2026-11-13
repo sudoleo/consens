@@ -81,8 +81,8 @@ PRO_LEVELS_NOTE = "High, Extra high and Max need Pro on every model; no other mo
 # Whether reviewers check the agent's work (``reviewers``) is the user's
 # alone: a page the agent read must never switch off its own
 # review, not even through a card.
-ELSEWHERE = ("The system prompt, memory, privacy, connections, notifications and whether reviewers check your work "
-             "are in Settings; the mode (Agent or Compare) is in the (+) menu of a new chat. You cannot change them.")
+ELSEWHERE = ("The system prompt, memory, privacy, connections, notifications, whether reviewers check your work "
+             "and whether their findings reach you are in Settings; the mode (Agent or Compare) is in the (+) menu of a new chat. You cannot change them.")
 SITE = "https://consens.io"
 TIER_LABELS = {"free": "Free", "plus": "Plus", "pro": "Pro", "admin": "Admin"}
 
@@ -556,7 +556,15 @@ class SettingsTools:
                        f"{int(TEMPORARY_CHAT_DELETED_WITHIN.total_seconds() // 3600)} hours after its last message.",
             "reviewers": "Settings > Agent > Reviewers: Always (the default), Only in the workspace (from the agent's "
                          "first step there on) or Off. Without reviewers nobody marks the answer or pauses the work; "
-                         "the user's own decisions on cards and the Stop button remain.",
+                         "the user's own decisions on cards and the Stop button remain. Settings > Agent > Pass "
+                         "findings to the agent: Off (the default) or On. On, a finding the reviewers hold for "
+                         "solid (a statement called wrong with a source, or a place two reviewers mark) reaches "
+                         "the agent while it works, and once its answer stands every finding on it does: the agent "
+                         "corrects the sentence in place or says why it stands. A corrected sentence carries no "
+                         "mark (the review's details keep what was noted and the original); a disputed or "
+                         "unsettled finding keeps its mark, with the agent's reason where it gave one.",
+            "findings_to_agent": ("on in this message" if getattr(self.loop, "findings_to_agent", False)
+                                  else "off in this message"),
             "sharing": "Publishing is a separate action: Share makes an answer public, readable at its link without "
                        "an account, and the operator may let selected shared pages appear in search engines. The "
                        "user can revoke a link in the share dialog; a revoked share is deleted for good after "

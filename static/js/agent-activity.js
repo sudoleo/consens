@@ -24,6 +24,9 @@
     // The comparison models review the answer (judge_answer and check_text:
     // the comparison mode, in older saved turns).
     audit_answer: ['Answer review', 'Reviewing the answer…', 'Reviewed the answer'],
+    // With Settings › Agent › Pass findings to the agent, the agent checks the
+    // reviewers' findings on its reviewed answer once (agent_review_feedback.py).
+    correct_answer: ['Correction', 'Checking the reviewers’ findings…', 'Checked the reviewers’ findings'],
     start_agent: ['Ask a model', 'Asking another model…', 'Asked another model'],
     wait_agents: ['Wait for models', 'Waiting for model responses…', 'Received model updates'],
     send_agent: ['Follow up', 'Following up with a model…', 'Followed up with a model'],
@@ -71,7 +74,7 @@
   // Tools whose success leaves an external write waiting for the user.
   const reviewTools = new Set(['prepare_calendar_event', 'prepare_gmail_draft']);
   // Checks the app runs once the answer is written (DelegationLoop._finish_review).
-  const answerChecks = new Set(['judge_answer', 'audit_answer']);
+  const answerChecks = new Set(['judge_answer', 'audit_answer', 'correct_answer']);
   const toolName = name => tools[name]?.[0] || 'Tool';
   // "Searched the web · 3 sources: skat.dk, virk.dk, borger.dk" says what the
   // answer now rests on; the bare verb said nothing a reader could check.
@@ -1496,7 +1499,7 @@
   }
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
-    highlights = [], reconnecting = false, vm = null, vmRestore = null } = {}) {
+    highlights = [], reconnecting = false, vm = null, vmRestore = null, reviewEnded } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -1932,7 +1935,7 @@
     view.timeline.classList.toggle('has-current', Boolean(currentStep));
     view.current.classList.toggle('is-paused', held);
     hide(view.content, !progress.length && !reasoning.length && !tools.length && !holds.length);
-    App.agentReview?.renderActivity(view.insights, review, answerText);
+    App.agentReview?.renderActivity(view.insights, review, answerText, { ended: reviewEnded });
     view.timeline.classList.toggle('has-insights', !view.insights.hidden);
     const noteText = progress.length || !view.insights.hidden ? '' : reasoning.length ? (reasoning[0].summary_source === "excerpt" || reasoning[0].format === "text"
       ? "Short excerpts from the model’s reasoning." : "Model-provided reasoning summary.") : truncated ? "Reasoning highlights only."
@@ -1991,7 +1994,7 @@
     render(host, { events, usage: turn?.agent_usage, status, truncated: turn?.agent_reasoning_truncated,
       finishReason: turn?.agent_finish_reason, elapsedMs:savedDuration(turn),
       review: turn?.agent_review, answerText: turn?.assistant_response ?? turn?.consensus ?? '', settings: turn?.agent_settings,
-      vm: turn?.agent_vm, vmRestore: options.vmRestore || null });
+      vm: turn?.agent_vm, vmRestore: options.vmRestore || null, reviewEnded: turn?.status !== 'pending' });
   }
   App.agentActivity = { receive, render, renderTurn, label, reveal, dispose, savedDuration, toolName, phase, PHASE_WORDS };
 })();

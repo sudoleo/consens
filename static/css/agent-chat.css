@@ -133,6 +133,11 @@
 .agent-session-detail p { margin: 0 0 8px; white-space: pre-wrap; font-size: var(--font-size-xs); }
 .agent-session-detail .agent-judge-purpose { color: var(--ink-2); line-height: 1.7; }
 .agent-session-detail .agent-judge-note { color: var(--ink-3); font-size: var(--font-size-xs); line-height: 1.6; }
+/* The agent's correction of its answer (agent-delegation.js correctionReply):
+   per finding its verdict, then the sentence or the reason. */
+.agent-session-detail .agent-correction-reply { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 8px; }
+.agent-correction-item > strong { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: 600; }
+.agent-session-detail .agent-correction-item > p { margin: 2px 0 0; }
 .agent-token-breakdown { display: flex; gap: 28px; margin: 14px 0; padding: 10px 0; border-top: 1px solid var(--line-soft); border-bottom: 1px solid var(--line-soft); }
 .agent-token-breakdown dt { color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-token-breakdown dd { margin: 3px 0 0; font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
@@ -805,6 +810,14 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 :is(.agent-audit-note, .agent-audit-kind)[data-kind="wrong"] .agent-audit-kind, .agent-audit-kind[data-kind="wrong"] { color: var(--kind-wrong); }
 :is(.agent-audit-note, .agent-audit-kind)[data-kind="doubtful"] .agent-audit-kind, .agent-audit-kind[data-kind="doubtful"] { color: var(--kind-doubtful); }
 .agent-audit-text { margin: 0; color: var(--ink); }
+/* With findings passed to the agent (agent-review.js): its reason where it
+   keeps a sentence, in ink; a sentence it corrected as what stood, struck
+   through and quiet, over what stands now. */
+.agent-audit-reply .agent-audit-kind { color: var(--ink-2); }
+.agent-audit-change { display: grid; gap: var(--space-1); margin: 0 0 var(--space-2); }
+.agent-audit-change > .agent-audit-quote { margin: 0; }
+.agent-audit-change > del.agent-audit-before { color: var(--ink-3); text-decoration-line: line-through; text-decoration-color: var(--ink-3); }
+.agent-audit-change > ins.agent-audit-after { color: var(--ink); text-decoration: none; }
 /* Its source: the text link, a finger's height on a phone. */
 .agent-audit-source { justify-self: start; font-size: var(--font-size-xs); }
 /* "Other notes", "On the work": a section, not a label. */

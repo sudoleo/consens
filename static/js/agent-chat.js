@@ -518,7 +518,8 @@
         vmRestore: basis.currentTurn?.agent_vm?.checkpoint && basis.currentTurn?.status !== 'pending'
           ? () => restoreVm(basis.chatId, basis.currentTurn.id || basis.turnId) : null });
       App.agentReview?.render(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review,
-        { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question });
+        { sources: basis.currentTurn?.sources, events: basis.currentTurn?.agent_activity, key: basis.turnId, question: basis.question,
+          ended: basis.currentTurn?.status !== 'pending' });
       App.passageCheck?.apply(document.getElementById("agentAnswerBody"), basis.currentTurn?.agent_review);
       App.agentMemory?.render(document.getElementById('agentAnswerBody'), {
         key: `${basis.chatId}:${basis.turnId}`, changes: basis.currentTurn?.agent_memory,
@@ -613,6 +614,9 @@
   function renderAnswerBody(body, text, mode) {
     if (!body) return;
     const written = mode === 'full' && body.dataset.renderMode === 'stream';
+    // An answer the agent corrected after its review stays corrected
+    // (agent-review.js rewrote it in place); the run still names the first text.
+    if (mode === 'full') text = App.agentReview?.shownText?.(body, text) ?? text;
     // The run ends with the same text the review already rendered in full
     // with its claim marks: switching to 'full' must keep that DOM. Rendering
     // it again dropped every mark and rebuilt it, a visible flicker.
@@ -929,6 +933,7 @@
       settings: state.completedTurn?.agent_settings || context.metadata.agentSettings,
       highlights: running ? App.agentDelegation?.liveHighlights?.(context.metadata.chatId, context.metadata.agentTurnId) : [],
       reconnecting: context.metadata.reconnecting === true && context.metadata.offline === true,
+      reviewEnded: !running && !context.metadata.reviewTail,
     });
     // Evidence links and Copy belong to a finished answer. While the run
     // streams they are only cleared once, when this run takes over the view.
@@ -952,9 +957,11 @@
     // end of the review changes a word, not the row.
     if (!running || framed || fixed) {
       const live = running && !fixed;
+      // `ended`: the run and the review that follows its hand-over are over.
       App.agentReview?.render(answerBody, live ? null : state.completedTurn?.agent_review || liveReview,
         { sources: state.completedTurn?.sources, events: live ? [] : state.completedTurn?.agent_activity || context.metadata.agentActivity,
-          key: state.completedTurn?.id || context.runId, question: context.question, reveal: Boolean(context.metadata.revealMarks) });
+          key: state.completedTurn?.id || context.runId, question: context.question, reveal: Boolean(context.metadata.revealMarks),
+          ended: !running && !context.metadata.reviewTail });
     }
     // A pasted text the Agent checked (turns saved before 2026-10-31): the
     // result card above the answer.
@@ -2894,7 +2901,7 @@
     const activity = node.querySelector(".agent-answer-activity");
     if (activity) App.agentActivity?.renderTurn(activity, saved);
     App.agentReview?.render(body, saved.agent_review, { sources: saved.sources, events: saved.agent_activity,
-      key: saved.id || id, question: saved.question, reveal: true });
+      key: saved.id || id, question: saved.question, reveal: true, ended: !context.metadata.reviewTail });
     node.dataset.turnKey = App.followup?.turnKey?.(saved) || node.dataset.turnKey;
   }
   // The end the server reported (terminal frame, polled frame or saved

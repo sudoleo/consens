@@ -1119,6 +1119,19 @@
                 </label>
                 <p id="reviewersNote" class="settings-reviewers-note" hidden></p>
               </div>
+              {#- Off unless switched on (account setting findings_to_agent,
+                  read by the server itself): app-ui.js binds the switch,
+                  agent-mode.js hides the row while the reviewers are off. -#}
+              <div class="settings-section" id="findingsToAgentSetting"
+                data-settings-keywords="befunde findings anmerkungen notes korrektur korrigieren correct correction verbessern improve prüfer reviewers einwand objection widersprechen disagree agent antwort answer">
+                <label for="findingsToAgentSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Pass findings to the agent</strong>
+                    <small>When a reviewer calls a statement wrong with a source, or two reviewers mark the same passage, the Agent checks it and corrects the sentence or says why it stands.</small>
+                  </span>
+                  <input type="checkbox" id="findingsToAgentSwitch">
+                </label>
+              </div>
               {#- Off unless switched on (account setting detailed_progress):
                   agent-activity.js shows the Agent's live lines in full
                   instead of its calm line; app-ui.js binds the switch. -#}

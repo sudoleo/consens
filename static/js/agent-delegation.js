@@ -99,6 +99,30 @@
     const agent = view.agents.get(id);
     return agent?.kind === "audit" ? reviewerRows(view).get(id) || agent : agent;
   }
+  // The agent's correction of its reviewed answer replies in JSON
+  // (agent_review_feedback.read_corrections): per finding the sentence as it
+  // should stand, or why it stands. Shown in words; false when the reply is
+  // not of that form (its text then shows as it is).
+  function correctionReply(host, text) {
+    let data = null;
+    const raw = String(text || "");
+    try { data = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1)); } catch (_) { return false; }
+    const findings = (Array.isArray(data?.findings) ? data.findings : [])
+      .filter(item => typeof item?.sentence === "string" || typeof item?.stands === "string");
+    if (!findings.length) return false;
+    const list = node("ul", "agent-correction-reply");
+    for (const item of findings) {
+      const entry = node("li", "agent-correction-item");
+      const corrected = typeof item.sentence === "string";
+      entry.append(node("strong", "", corrected ? "Corrected" : "Stands"));
+      const words = node("p", "", corrected ? item.sentence : item.stands);
+      words.setAttribute("data-i18n-skip", "");
+      entry.append(words);
+      list.append(entry);
+    }
+    host.append(list);
+    return true;
+  }
   // A row's sessions: one, or a reviewer's in order.
   function loadRow(view, agent) {
     for (const id of agent.sessions || [agent.id]) loadDetail(view, id);
@@ -650,8 +674,8 @@
     }
     for (const [key, label] of Object.entries({ goal: "Goal", context: "Context", constraints: "Constraints", expected_output: "Expected result", acceptance_criteria: "Checks" })) {
       if (!detail.assignment?.[key]) continue;
-      // A comparison answer's goal only repeats its row title.
-      if (agent.kind === "comparison" && key === "goal") continue;
+      // A comparison answer's goal only repeats its row title, a correction's its role.
+      if ((agent.kind === "comparison" || agent.kind === "correction") && key === "goal") continue;
       if (agent.kind === "judge" && key === "context") continue;
       // A reviewer's saved assignment only names its task, as its row title does.
       if (agent.kind === "audit") continue;
@@ -669,6 +693,7 @@
         .filter(Number.isFinite)));
     else for (const message of [...detail.messages.values()].sort((a, b) => a.seq - b.seq)) {
       if (agent.kind === "judge" && message.kind === "result") continue;
+      if (agent.kind === "correction" && message.kind === "result" && correctionReply(row.body, message.text)) continue;
       const from = message.sender === "orchestrator" ? "Orchestrator" : agent.title;
       const to = message.recipient === "orchestrator" ? "Orchestrator" : agent.title;
       const item = node("div", "agent-message"); item.dataset.messageId = message.id;
@@ -797,9 +822,10 @@
       }
       const models = new Map();
       for (const agent of view.agents.values()) {
-        // Judges and the helper that opens a source (read_source) are not
-        // voices of the answer: no icon in the stack, a row in the panel.
-        if (agent.kind === "judge" || agent.kind === "source") continue;
+        // Judges, the helper that opens a source (read_source) and the
+        // agent's own correction of its answer are not voices of the answer:
+        // no icon in the stack, a row in the panel.
+        if (agent.kind === "judge" || agent.kind === "source" || agent.kind === "correction") continue;
         const key = agent.model?.model || agent.id;
         if (!models.has(key)) models.set(key, []);
         models.get(key).push(agent);
@@ -920,6 +946,7 @@
       }
       setText(row.title, agent.model?.label || agent.title);
       setText(row.role, agent.kind === 'comparison' ? 'Independent answer' : agent.kind === 'audit' ? 'Reviewer'
+        : agent.kind === 'correction' ? 'Correction'
         : agent.kind === 'check' ? (agent.textOnly ? 'Your text, sentence by sentence' : 'Differences and coverage') : agent.title);
       row.role.hidden = row.role.textContent === row.title.textContent;
       // The state through App.t first: the line glued to the time matches no

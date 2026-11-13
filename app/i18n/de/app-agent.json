@@ -1349,5 +1349,20 @@
   "This Watch has ended.": "Diese Watch ist beendet.",
   "Next look": "Nächster Blick",
   "Page not found: the app opened this link after the answer, and the site says there is no such page.": "Seite nicht gefunden: Die App hat den Link nach der Antwort aufgerufen, die Website kennt diese Seite nicht.",
-  "{label}, page not found": "{label}, Seite nicht gefunden"
+  "{label}, page not found": "{label}, Seite nicht gefunden",
+  "Correction": "Korrektur",
+  "Checking the reviewers’ findings…": "Geht die Befunde der Prüfer durch…",
+  "Checked the reviewers’ findings": "Befunde der Prüfer durchgegangen",
+  "Corrected": "Korrigiert",
+  "Stands": "Bleibt",
+  "The agent disagrees": "Der Agent widerspricht",
+  "Corrected by the agent": "Vom Agenten korrigiert",
+  "1 passage corrected by the agent": "1 Stelle vom Agenten korrigiert",
+  "{fixed} passages corrected by the agent": "{fixed} Stellen vom Agenten korrigiert",
+  "The agent received a finding of the reviewers.": "Der Agent hat einen Befund der Prüfer bekommen.",
+  "The agent received two findings of the reviewers.": "Der Agent hat zwei Befunde der Prüfer bekommen.",
+  "The agent received three findings of the reviewers.": "Der Agent hat drei Befunde der Prüfer bekommen.",
+  "Check the reviewers' findings on the answer.": "Die Befunde der Prüfer zur Antwort durchgehen.",
+  "The correction was stopped; the answer stands as reviewed.": "Die Korrektur wurde gestoppt; die Antwort bleibt, wie sie geprüft wurde.",
+  "The correction did not complete; the answer stands as reviewed.": "Die Korrektur wurde nicht fertig; die Antwort bleibt, wie sie geprüft wurde."
 }

@@ -566,6 +566,33 @@ describe("Agent sidebar", () => {
     dom.window.close();
   });
 
+  // Settings › Agent › Pass findings to the agent: the agent's own pass over
+  // the reviewers' findings is a row of the panel, never a voice in the stack,
+  // and its JSON reply reads as what it did with each finding.
+  it("lists the agent's correction as a session with its reply in words, not as a voice in the stack", async () => {
+    const correction = { ...agent(1, "completed", "b".repeat(32)), kind: "correction", title: "Correction" };
+    const reply = '{"findings": [{"id": "s1", "sentence": "Tickets cost 24 euros since 2025."}, '
+      + '{"id": "s2", "stands": "The opening games were held in 80 AD."}]}';
+    const { window: w, document: d, dom } = boot(async url => ({ ok: true, json: async () => url.includes("b".repeat(32))
+      ? { agent: { assignment: { goal: "Correction", context: "Check the reviewers' findings on the answer." } },
+          messages: [{ id: "m1", seq: 1, sender: "b".repeat(32), recipient: "orchestrator", kind: "result", text: reply }] }
+      : { agents: [agent(1, "completed"), correction], status: "succeeded" } }));
+    receive(w, agent(1, "completed")); receive(w, correction);
+    w.App.agentDelegation.project({ chatId, turnId });
+    await settle();
+    expect(d.querySelectorAll(".agent-inline-model")).toHaveLength(1);
+    const row = [...d.querySelectorAll(".agent-session")].find(session => session.textContent.includes("Correction"));
+    expect(row.querySelector(".agent-session-role").textContent).toBe("Correction");
+    row.querySelector("summary").click();
+    await vi.waitFor(() => expect(row.querySelectorAll(".agent-correction-item")).toHaveLength(2));
+    expect([...row.querySelectorAll(".agent-correction-item")].map(item => [item.querySelector("strong").textContent,
+      item.querySelector("p").textContent])).toEqual([["Corrected", "Tickets cost 24 euros since 2025."],
+      ["Stands", "The opening games were held in 80 AD."]]);
+    expect(row.querySelector(".agent-session-detail").textContent).not.toMatch(/Goal|→|\{/);
+    expect(row.querySelector(".agent-session-detail").textContent).toContain("Check the reviewers' findings on the answer.");
+    dom.window.close();
+  });
+
   it("shows a failed comparison model's reason as a plain note without routing labels", async () => {
     const failed = { ...agent(1, "failed"), kind: "comparison", title: "Comparison 1 · Haiku" };
     const note = "The provider did not finish this answer. The comparison uses the other answers.";

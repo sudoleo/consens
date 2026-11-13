@@ -428,9 +428,10 @@ def _counters(days):
 
 # The anonymous fields of workspace turns and wrap-ups (agent_audit_metrics,
 # since 2026-10-30): every turn that used the workspace, in audit mode or not,
-# deleted chats included.
+# deleted chats included; and the reviewers' findings that reached the agent
+# (``findings_to_agent``: turns, delivered, corrected, disputed, cut).
 WORKSPACE_FIELDS = ("ws_turns", "ws_steps", "ws_active_s", "ws_first_call_s", "ws_first_result_s", "ws_failures",
-                    "wrap_up")
+                    "wrap_up", "findings_to_agent")
 
 
 def workspace(counters):

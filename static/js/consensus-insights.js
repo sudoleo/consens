@@ -2561,9 +2561,36 @@
               if (source) side.appendChild(source);
               card.appendChild(side);
             });
+            // The agent's answer to them, where it keeps its sentence: after
+            // the reviewers' notes, in their form.
+            if (claim.reply) {
+              const reply = cardSide({ text: claim.reply, plain: true }, [], ctx, { label: "The agent disagrees" });
+              reply.classList.add("cx-card-reply");
+              card.appendChild(reply);
+            }
             const actions = cardActions(ctx, { differenceLabel: "Notes", differenceGlyph: "notes", answers: [] });
             if (actions) card.appendChild(actions);
             return card;
+          }
+
+          // With Settings › Agent › Pass findings to the agent the review
+          // carries `feedback` (agent_review_feedback.py), and each mark the
+          // id of its finding. A sentence the agent corrected has no mark; one
+          // whose finding it disputed keeps its mark, with the agent's reason.
+          function auditFindings(audit) {
+            const found = new Map();
+            (Array.isArray(audit.feedback?.findings) ? audit.feedback.findings : []).forEach(function (finding) {
+              if (finding && typeof finding.id === "string") found.set(finding.id, finding);
+            });
+            return found;
+          }
+
+          function auditReply(items, findings) {
+            for (const item of items) {
+              const finding = findings.get(item.finding);
+              if (finding?.state === "disputed" && typeof finding.reason === "string" && finding.reason.trim()) return finding.reason;
+            }
+            return "";
           }
 
           // Marks a reviewed Agent answer (agent-review.js). `audit` is the
@@ -2575,7 +2602,10 @@
             hidePreviewWithin(body);
             const navigation = options.navigation || { canOpen: function () { return false; }, open: function () {} };
             const openNotes = typeof options.openNotes === "function" ? options.openNotes : null;
-            const valid = function (item) { return item && typeof item.note === "string" && item.note.trim(); };
+            const findings = auditFindings(audit);
+            const valid = function (item) {
+              return item && typeof item.note === "string" && item.note.trim() && findings.get(item.finding)?.state !== "corrected";
+            };
             const claims = (Array.isArray(audit.claims) ? audit.claims : []).filter(function (claim) {
               return claim && claim.anchor && Array.isArray(claim.dissent) && claim.dissent.some(valid);
             });
@@ -2589,6 +2619,8 @@
             claims.forEach(function (claim) {
               const shown = { anchor: claim.anchor, kind: AUDIT_CLASSES[claim.kind] ? claim.kind : "doubtful",
                 dissent: claim.dissent.filter(valid) };
+              const reply = auditReply(shown.dissent, findings);
+              if (reply) shown.reply = reply;
               const probe = locateAnchor(body, claim.anchor, claim.anchor_occurrence);
               if (probe && !markedByBlock.has(probe.block)) markedByBlock.set(probe.block, []);
               const result = probe && markSentence(body, claim.anchor, AUDIT_CLASSES[shown.kind],
@@ -2647,6 +2679,8 @@
                   const quote = cardNode("q", "claims-fallback-quote", String(item.quote || ""));
                   quote.setAttribute("data-i18n-skip", "");
                   const note = { anchor: String(item.quote || ""), kind: kind, dissent: [item], unplaced: true };
+                  const reply = auditReply([item], findings);
+                  if (reply) note.reply = reply;
                   row.setAttribute("aria-label", auditLabel(note));
                   row.addEventListener("click", function () {
                     openCard(row, null, function (ctx) {

@@ -325,7 +325,8 @@
           answer.append(failure);
         }
         window.App.agentReview?.render(answerBody, turnData.agent_review,
-          {sources: turnSources, events: turnData.agent_activity, key: turnData.id || turnData.turn_id, question: turnData.question});
+          {sources: turnSources, events: turnData.agent_activity, key: turnData.id || turnData.turn_id, question: turnData.question,
+            ended: turnData.status !== "pending"});
         // A pasted text the Agent checked: its result card above the answer.
         window.App.passageCheck?.apply(answerBody, turnData.agent_review);
         window.App.agentMemory?.render(answerBody, { key: turnId, changes: turnData.agent_memory });

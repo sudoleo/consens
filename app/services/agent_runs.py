@@ -55,7 +55,8 @@ REQUEST_TIMES = ("request_started_at", "first_token_at", "stream_ended_at")
 # What the conversation needs of an earlier turn (messages): not its
 # activity, review or work log, which take up to about a megabyte.
 HISTORY_FIELDS = ("status", "question", "assistant_response", "consensus", "app_context",
-                  "agent_work_record", "sources", "agent_answer_fixed_at", "agent_history_summary")
+                  "agent_work_record", "sources", "agent_answer_fixed_at", "agent_history_summary",
+                  "agent_correcting")
 
 
 def early_marks(review):
@@ -261,10 +262,13 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         """Whether ``page``, read before ``target`` was created, still holds
         every earlier turn as it is: none of them pending (one that finished
         or was swept in between is read again), all of them there (a single
-        page). Else messages reads its own."""
+        page). Else messages reads its own. A turn whose answer the agent
+        is correcting (``agent_correcting``, agent_review_feedback) is read
+        again too: its correction is kept only if it was saved before this
+        message's turn was created (AgentSessionStore.save_review ``latest``)."""
         earlier = [(s.to_dict() or {}) for s in page["snapshots"]]
         earlier = [turn for turn in earlier if turn.get("position", 0) < target["position"]]
-        return (all(in_history(turn) for turn in earlier)
+        return (all(in_history(turn) and not turn.get("agent_correcting") for turn in earlier)
                 and (page.get("has_more") or len(earlier) == target["position"] - 1))
 
     def messages(self, uid, chat_id, target, model=None, config=None, sources=None, context=None, first_page=None,
@@ -817,6 +821,15 @@ class AgentRunStore(AgentSessionStore, ChatStore):
                         if not review["read_sources"]:
                             review.pop("read_sources")
                         patch["agent_review"] = review
+                if review:
+                    # A correction pass a crash or the reaper broke off
+                    # (findings_to_agent): its findings stay open and their
+                    # marks show; the page never waits for it again.
+                    from app.services.agent_review_feedback import closed_feedback
+                    saved = patch.get("agent_review", review)
+                    closed = closed_feedback(saved)
+                    if closed is not saved:
+                        patch["agent_review"] = closed
                 # Last: the activity takes the room the rest of the turn leaves.
                 if completion.activity or not fixed:
                     patch["agent_activity"] = bounded_activity(completion.activity, activity_budget(turn_data, patch))

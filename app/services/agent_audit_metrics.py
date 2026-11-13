@@ -28,7 +28,10 @@ their own (``ws_*``), its status, steps, active time (pauses for the user
 left out), the first call into the workspace (browser or VM: how long it
 took, how far into the message it came, whether it failed) and the
 workspace's outages (VM unavailable or busy, browser off). Every turn that
-ended its work at a limit counts its reason (``wrap_up``).
+ended its work at a limit counts its reason (``wrap_up``). With the account's
+findings_to_agent (agent_review_feedback) ``findings_to_agent`` counts the
+turns and the findings that reached the agent, that it corrected or disputed
+and that its limits cut.
 """
 from __future__ import annotations
 
@@ -116,6 +119,11 @@ def capture(loop):
     wrap_up = getattr(loop.completion, "wrap_up", None)
     if isinstance(wrap_up, dict):
         captured["wrap_up"] = wrap_up.get("reason")
+    feedback = loop.comparison.auditor.feedback
+    if feedback is not None:
+        # findings_to_agent: how many findings reached the agent, how many it
+        # corrected or disputed, how many the limits cut (counts, no text).
+        captured["findings"] = dict(feedback.counts)
     vm_tools = getattr(loop, "vm_tools", None)
     if vm_tools is not None:
         # The workspace on demand (DelegationLoop._open_workspace): how often
@@ -206,6 +214,14 @@ def turn_counters(turn, captured):
     if captured.get("review_setting"):
         # The user's reviewers setting (always, workspace, off).
         _add(counters, "review_setting", label(captured["review_setting"]))
+    findings = captured.get("findings")
+    if isinstance(findings, dict):
+        _add(counters, "findings_to_agent", "turns")
+        for key in ("delivered", "corrected", "disputed", "cut"):
+            count = findings.get(key)
+            if isinstance(count, int) and not isinstance(count, bool) and count > 0:
+                node = counters.setdefault("findings_to_agent", {})
+                node[key] = node.get(key, 0) + count
     if review:
         _add(counters, "reviews", label(review.get("status")))
     ended = captured.get("ended_at")

@@ -66,7 +66,7 @@ ACTIVITY = [
 ]
 
 
-def open_audit_page(browser, server, width, dark, events, *, hang_live=False):
+def open_audit_page(browser, server, width, dark, events, *, hang_live=False, before_send=None):
     context, page = _real_firebase_page(browser, server, has_touch=width < 700)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -96,6 +96,8 @@ def open_audit_page(browser, server, width, dark, events, *, hang_live=False):
     _choose_mode(page, "agent")
     page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); "
                   "document.body.classList.toggle('dark-mode', dark); }", dark)
+    if before_send:
+        before_send(page)
     page.locator("#questionInput").fill(QUESTION)
     page.locator("#sendButton").click()
     return context, page, errors
@@ -322,6 +324,168 @@ def test_the_next_message_goes_while_the_reviewers_review(browser, phase4_server
         _snapshot(page, f"audit-handover-{width}")
         page.locator("#questionInput").fill("And the opening hours?")
         expect(page.locator("#sendButton")).not_to_have_attribute("title", re.compile("after"))
+        assert errors == []
+    finally:
+        context.close()
+
+
+# Settings › Agent › Pass findings to the agent (agent_review_feedback.py): the
+# reviewers' solid findings reach the agent, which corrects the ticket price
+# and keeps the arena floor with a reason; the spectators stay a plain note.
+TICKET = ("A standard ticket costs 18 euros and includes the Roman Forum, according to the "
+          "[official site](https://colosseo.it/en/).")
+FIXED_TICKET = TICKET.replace("18 euros", "24 euros since 2025")
+CORRECTED = ANSWER.replace(TICKET, FIXED_TICKET)
+FLOOR_REASON = "The city reopened the arena with its rebuilt floor in 2023."
+FINDING_OF = {MARKS["OpenAI"][0]["note"]: "s1", MARKS["OpenAI"][1]["note"]: "s2", MARKS["Xiaomi"][0]["note"]: "s3"}
+
+
+def feedback_review(stage):
+    """The review with findings for the agent as the server saves it: while
+    the reviewers review ("live"), while the agent checks ("checking"), once
+    its pass is through ("done": s1 corrected, its claim gone and the answer's
+    second version; s2 disputed)."""
+    done = stage == "done"
+    saved = review("succeeded" if stage != "live" else "running", "completed" if stage != "live" else "running")
+    findings = [
+        {"id": "s1", "on": "answer", "kind": "wrong", "voices": 1, "hard": True, "state": "open"},
+        {"id": "s2", "on": "answer", "kind": "doubtful", "voices": 2, "hard": True, "state": "open"},
+        {"id": "s3", "on": "answer", "kind": "doubtful", "voices": 1, "hard": False, "state": "open"},
+        {"id": "e7", "on": "work", "entry": 7, "kind": "incomplete", "voices": 1, "hard": False, "state": "open"}]
+    if stage == "checking":
+        for finding in findings[:2]:
+            finding.update(state="checking", delivered="final")
+    if done:
+        findings[0].update(state="corrected", delivered="final", before=TICKET, after=FIXED_TICKET, notes=[
+            {"model": "OpenAI", "kind": "wrong", "note": MARKS["OpenAI"][0]["note"], "source": TICKETS}])
+        findings[1].update(state="disputed", delivered="final", reason=FLOOR_REASON)
+        kept = {"OpenAI": MARKS["OpenAI"][1:], "Xiaomi": MARKS["Xiaomi"]}
+        claims, unplaced, process = agent_audit.place_marks(
+            CORRECTED, [(label, kept[label], False) for _, label, _ in REVIEWERS], {7: ("tool", "vm_exec")})
+        saved["audit"].update(claims=claims, unplaced=unplaced, process=process)
+        digest = hashlib.sha256(CORRECTED.encode()).hexdigest()
+        saved["versions"].append({"id": 2, "text": CORRECTED, "hash": digest, "status": "succeeded", "corrects": 1})
+        saved.update(answer_version=2, answer_hash=digest)
+    if "claims" not in saved["audit"]:
+        claims, unplaced, process = agent_audit.place_marks(
+            ANSWER, [(label, MARKS[label], False) for _, label, _ in REVIEWERS], {7: ("tool", "vm_exec")})
+        saved["audit"].update(claims=claims, unplaced=unplaced, process=process)
+    for claim in saved["audit"]["claims"]:
+        for item in claim["dissent"]:
+            item["finding"] = FINDING_OF[item["note"]]
+    for item in saved["audit"]["process"]:
+        item["finding"] = "e7"
+    saved["audit"]["feedback"] = {"status": "done" if done else stage, "findings": findings,
+                                  "counts": {"delivered": 2 if stage != "live" else 0, "corrected": int(done),
+                                             "disputed": int(done), "cut": 0}}
+    return saved
+
+
+def feedback_events(*stages, final=False):
+    handed = {"id": TURN, "question": QUESTION, "status": "pending", "execution_mode": "agent", "mode": "Agent",
+              "consensus": ANSWER, "sources": [], "model_answers": {}, "agent_review": feedback_review("live"),
+              "agent_activity": ACTIVITY, "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5",
+                                                             "policy": {"delegation": True}}}
+    events = [("started", {"chat_id": CHAT, "turn_id": TURN, "delegation": True})]
+    events += [("activity", event) for event in ACTIVITY]
+    events += [("delegation", {"version": 1, "chat_id": CHAT, "turn_id": TURN, "agent": agent})
+               for agent in reviewer_sessions("working")]
+    events += [("delta", {"text": ANSWER}), ("answer_check", {}), ("review", {"review": feedback_review("live")}),
+               ("handover", {"chat_id": CHAT, "turn_id": TURN, "response": ANSWER, "turn": handed,
+                             "bookmark_meta": {"id": "bm", "title": QUESTION, "query": QUESTION, "mode": "Agent",
+                                               "has_consensus": True}})]
+    events += [("review", {"review": feedback_review(stage)}) for stage in stages]
+    if final:
+        corrected = {"version": 1, "id": "server_correct_answer", "kind": "tool", "name": "correct_answer",
+                     "status": "succeeded"}
+        saved = {**handed, "status": "completed", "consensus": CORRECTED, "agent_review": feedback_review("done"),
+                 "agent_activity": [*ACTIVITY, corrected]}
+        events.append(("final", {"chat_id": CHAT, "turn_id": TURN, "response": CORRECTED, "turn": saved,
+                                 "token_budget": {"remaining": 140057, "limit": 250000},
+                                 "bookmark_meta": {"id": "bm", "title": QUESTION, "query": QUESTION, "mode": "Agent",
+                                                   "has_consensus": True}}))
+    return events
+
+
+def test_no_mark_shows_while_the_agent_checks_the_reviewers_findings(browser, phase4_server):
+    """With findings passed to the agent, a mark could go with the sentence
+    it marks: the answer stands unmarked and the row goes on reviewing until
+    the agent's pass is through."""
+    context, page, errors = open_audit_page(browser, phase4_server, 1280, False, feedback_events("checking"),
+                                            hang_live=True)
+    try:
+        body = page.locator("#agentAnswerBody")
+        expect(body).to_contain_text("A standard ticket costs 18 euros")
+        row = page.locator("#agentAnswer .agent-review")
+        expect(row.locator(".agent-review-status")).to_have_text("Reviewing the answer…")
+        expect(row.locator('.agent-evidence-link[data-section="differences"]')).to_be_disabled()
+        page.wait_for_timeout(800)
+        expect(body.locator(".cx-claim")).to_have_count(0)
+        # The switch beside the reviewers: off by default, bound to the
+        # account setting, gone while the reviewers are off.
+        state = page.evaluate("""() => {
+            const row = document.getElementById('findingsToAgentSetting');
+            const box = document.getElementById('findingsToAgentSwitch');
+            const before = [row.hidden, box.checked];
+            box.click();
+            const on = App.userSettings.get('findings_to_agent');
+            App.userSettings.set('reviewers', 'off');
+            const off = row.hidden;
+            App.userSettings.set('reviewers', 'always');
+            return [...before, on, off, row.hidden];
+        }""")
+        assert state == [False, False, True, True, False], state
+        assert errors == []
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
+def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser, phase4_server, width, dark):
+    """The corrected sentence is rewritten in place without a mark; the one
+    the agent keeps has its mark and the agent's reason; the trace of both is
+    under Notes."""
+    events = feedback_events("checking", "done", final=True)
+    # What each rewrite left hidden in its first frame: the light really ran.
+    watch = """() => { const reveal = App.streamReveal, rewrite = reveal.rewrite; window.__rewrites = [];
+        reveal.rewrite = (body, change) => { const result = rewrite(body, change);
+            window.__rewrites.push([...CSS.highlights.values()].reduce((sum, ranges) => sum + ranges.size, 0));
+            return result; }; }"""
+    context, page, errors = open_audit_page(browser, phase4_server, width, dark, events,
+                                            before_send=lambda page: page.evaluate(watch))
+    try:
+        body = page.locator("#agentAnswerBody")
+        expect(body).to_contain_text("A standard ticket costs 24 euros since 2025")
+        expect(body).not_to_contain_text("18 euros")
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        # No mark on the corrected sentence; the kept one and the open note keep theirs.
+        marked = body.locator(".cx-claim.is-audit")
+        expect(marked.filter(has_text="The arena floor was rebuilt in 2023.")).not_to_have_count(0)
+        expect(marked.filter(has_text="It held about 50,000 spectators")).not_to_have_count(0)
+        expect(marked.filter(has_text="24 euros")).to_have_count(0)
+        page.wait_for_timeout(1500)
+        # One rewrite, in the light (dark mode too); the reduced-motion case is unit-tested.
+        rewrites = page.evaluate("() => window.__rewrites")
+        assert len(rewrites) == 1 and rewrites[0] > 0, rewrites
+        # The light is gone once the sentence stands, and nothing was left unseen.
+        assert page.evaluate("() => [...CSS.highlights.keys()].every(name => !CSS.highlights.get(name).size)")
+        _snapshot(page, f"findings-corrected-{width}-{'dark' if dark else 'light'}")
+        marked.filter(has_text="The arena floor was rebuilt in 2023.").first.click()
+        card = page.locator("#claimPopover .cx-card-audit")
+        expect(card).to_contain_text(FLOOR_REASON)
+        expect(card.locator(".cx-card-reply .cx-card-tag")).to_have_text("The agent disagrees")
+        page.keyboard.press("Escape")
+        notes = page.locator('#agentAnswer .agent-evidence-link[data-section="differences"]')
+        notes.click()
+        reader = page.locator(".agent-audit-panel")
+        expect(reader).to_be_visible()
+        fixed = reader.locator(".agent-audit-corrected")
+        expect(fixed.locator("del")).to_contain_text("18 euros")
+        expect(fixed.locator("ins")).to_contain_text("24 euros since 2025")
+        expect(fixed).to_contain_text("Since 2025 the standard ticket costs 24 euros")
+        expect(reader.locator(".agent-audit-reply")).to_contain_text(FLOOR_REASON)
+        page.wait_for_timeout(500)
+        _snapshot(page, f"findings-notes-{width}-{'dark' if dark else 'light'}")
         assert errors == []
     finally:
         context.close()

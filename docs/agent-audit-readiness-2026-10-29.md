@@ -634,7 +634,12 @@ A-M1 läuft. Ab Paket 2 ersetzt `scripts/audit_report.py` diese Handarbeit.
 
 ## 9. Bewusst nicht im Umfang
 
-- Rückkanal der Befunde an den Agenten (Max' Produktentscheidung).
+- Rückkanal der Befunde an den Agenten als Standard (Max' Produktentscheidung).
+  Seit 2026-11-13 gibt es ihn als Kontoeinstellung `findings_to_agent`,
+  Standard aus: im Lauf nur harte Befunde vor dem nächsten Schritt, nach der
+  geprüften Antwort alle in einem Korrekturdurchgang, ohne erneute Prüfung
+  ([agent-mode.md](agent-mode.md), „Befunde an den Agenten“). Aus ist der
+  Lauf wie vorher; Halt und Gate gehen weiter nur an den Nutzer.
 - Wieder ein Gate je Browser-Klick ([agent-mode.md](agent-mode.md)
   „Vorab-Prüfung“: seit 2026-10-29 bewusst entfernt). Die Lücke
   „Klick überholt eine laufende Live-Runde“ wird über A-M3/A-M4 gemessen,

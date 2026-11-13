@@ -492,7 +492,8 @@ def test_the_agent_is_the_first_settings_category_and_memory_the_second():
     settings = template[template.index('class="settings-layout"'):template.index('id="helpModal"')]
     assert "Beta" not in settings
     agent_panel = settings[settings.index('id="agentSettingsSection"'):settings.index('id="memorySettingsSection"')]
-    for control_id in ("runModeSetting", "reviewersSetting", "detailedProgressSwitch", "agentWorkspaceSettings"):
+    for control_id in ("runModeSetting", "reviewersSetting", "findingsToAgentSwitch", "detailedProgressSwitch",
+                       "agentWorkspaceSettings"):
         assert f'id="{control_id}"' in agent_panel
     # Compare's own instruction under its title, after the Agent's rows.
     compare = agent_panel.index('<h4 class="settings-group-title">Compare</h4>')

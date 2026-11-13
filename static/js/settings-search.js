@@ -161,7 +161,8 @@
   function settingsOf(panel) {
     const heading = panel.querySelector(".settings-category-heading h3");
     const shared = [heading?.textContent || "", panel.dataset.settingsKeywords || ""].map(piece);
-    return Array.from(panel.querySelectorAll(".settings-group > .settings-section")).map(row => ({
+    // A row the page hides (one that does not apply now) is no match.
+    return Array.from(panel.querySelectorAll(".settings-group > .settings-section")).filter(row => !row.hidden).map(row => ({
       row,
       pieces: shared.concat(textNodes(row).map(node => piece(node.data)),
         [piece(row.dataset.settingsKeywords || "")]),

@@ -154,6 +154,7 @@ describe("the local copy", () => {
     ["stream_animation", "off"],
     ["reviewers", "never"],
     ["reviewers", false],
+    ["findings_to_agent", "yes"],
     ["agent_model", { model_id: "openai gpt", reasoning_effort: "low" }],
     ["compare_models", { "Open<AI>": { enabled: true } }],
     ["compare_models", { OpenAI: { enabled: "yes" } }],

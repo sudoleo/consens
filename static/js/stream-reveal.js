@@ -20,7 +20,11 @@
 // The first word of an answer comes into view at once, within about a tenth
 // of a second of its arrival: its pace has no history yet,
 // so it has its own lead and the short end of the light.
-// Exports: App.streamReveal { active, stream, settle }.
+// A fixed answer whose sentences change in place (the agent corrected them
+// after its review) shows them the same way: rewrite(body, change) brings
+// the sentences change() wrote anew into view in the light, and what moved
+// below them glides to its new place instead of jumping.
+// Exports: App.streamReveal { active, stream, settle, rewrite }.
 // =====================================================================
 (() => {
   const App = window.App = window.App || {};
@@ -84,6 +88,8 @@
     && typeof window.CSSStyleSheet === "function" && "adoptedStyleSheets" in document;
   const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)");
   const tracked = new Set();
+  // Sentences rewritten in a fixed answer, coming into view (rewrite).
+  const relit = new Set();
   const colorIndex = new Map();
   const highlights = new Map();
   let sheet = null;
@@ -239,7 +245,7 @@
       if (!colors.has(element)) colors.set(element, getComputedStyle(element).color);
       return colors.get(element);
     };
-    for (const state of tracked) {
+    for (const state of [...tracked, ...relit]) {
       state.spans = state.spans.filter(span => now - span.start - (span.to - span.from - 1) * span.letter < span.ms);
       for (const span of state.spans) {
         // Each letter has its own moment; before it, it is not in view (0).
@@ -337,7 +343,8 @@
       if (state.settled) drop(state);
       else tracked.delete(state);
     }
-    if (tracked.size) schedule();
+    for (const state of relit) if (!state.spans.length || !state.body.isConnected) relit.delete(state);
+    if (tracked.size || relit.size) schedule();
   }
 
   function schedule() {
@@ -415,7 +422,130 @@
     schedule();
   }
 
+  // --- A fixed answer rewritten in place ------------------------------------
+  // A rewritten passage comes into view within REWRITE_MS, at a stream's pace;
+  // what moves below it glides for SETTLE_MS.
+  const REWRITE_MS = 900;
+  const SETTLE_MS = 220;
+  const SETTLE_EASE = "cubic-bezier(0.2, 0, 0, 1)";
+  const BLOCKS = ["p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "td", "th", "blockquote", "pre", "dt", "dd",
+    "figcaption", "summary"].join(",");
+  // A sentence ends at its mark (and a closing quote or bracket) before a
+  // space, or at the end of its block.
+  const SENTENCE_END = /[.!?…]+["'”’)\]]*(?=\s)|\n/g;
+
+  // The text of `body` as its text nodes hold it, blocks a line apart.
+  function prose(body) {
+    const nodes = [];
+    const starts = [];
+    let text = "";
+    let block = null;
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const owner = node.parentElement?.closest(BLOCKS) || body;
+      if (text && owner !== block) text += "\n";
+      block = owner;
+      nodes.push(node);
+      starts.push(text.length);
+      text += node.data;
+    }
+    return { text, nodes, starts };
+  }
+
+  function sentences(text) {
+    const list = [];
+    let from = 0;
+    const add = to => {
+      const piece = text.slice(from, to);
+      const key = piece.trim();
+      const lead = piece.length - piece.trimStart().length;
+      if (key) list.push({ from: from + lead, to: from + lead + key.length, key });
+      from = to;
+    };
+    for (const match of text.matchAll(SENTENCE_END)) add(match.index + match[0].length);
+    add(text.length);
+    return list;
+  }
+
+  // The sentences of `after` that `before` does not have: what the two share
+  // at their start and end stays, the middle is matched sentence by sentence
+  // (longest common subsequence), so two corrections far apart do not light
+  // up everything between them.
+  function rewritten(before, after) {
+    let head = 0;
+    while (head < before.length && head < after.length && before[head].key === after[head].key) head += 1;
+    let tail = 0;
+    while (tail < before.length - head && tail < after.length - head
+      && before[before.length - 1 - tail].key === after[after.length - 1 - tail].key) tail += 1;
+    const old = before.slice(head, before.length - tail);
+    const now = after.slice(head, after.length - tail);
+    if (!old.length || !now.length || old.length * now.length > 250000) return now;
+    const width = now.length + 1;
+    const common = new Uint16Array((old.length + 1) * width);
+    for (let i = old.length - 1; i >= 0; i -= 1) {
+      for (let j = now.length - 1; j >= 0; j -= 1) {
+        common[i * width + j] = old[i].key === now[j].key ? common[(i + 1) * width + j + 1] + 1
+          : Math.max(common[(i + 1) * width + j], common[i * width + j + 1]);
+      }
+    }
+    const fresh = [];
+    let i = 0;
+    let j = 0;
+    while (j < now.length) {
+      if (i < old.length && old[i].key === now[j].key) {
+        i += 1;
+        j += 1;
+      } else if (i < old.length && common[(i + 1) * width + j] >= common[i * width + j + 1]) {
+        i += 1;
+      } else {
+        fresh.push(now[j]);
+        j += 1;
+      }
+    }
+    return fresh;
+  }
+
+  // `change()` rewrites some sentences of the fixed answer in `body`. Those
+  // it wrote anew come into view letter by letter in the light, one after
+  // another; the rest stands as it was. Blocks below them, in the answer and
+  // after it, glide from where they stood. Nothing scrolls, and the first
+  // frame already hides the new letters. Without the look (active() false)
+  // the change simply stands.
+  function rewrite(body, change) {
+    if (!active() || !body?.isConnected) return change();
+    const before = sentences(prose(body).text);
+    const moving = [...body.children];
+    for (let next = body.nextElementSibling; next; next = next.nextElementSibling) moving.push(next);
+    const tops = new Map(moving.map(element => [element, element.getBoundingClientRect().top]));
+    const result = change();
+    const after = prose(body);
+    const fresh = rewritten(before, sentences(after.text));
+    if (fresh.length) {
+      const length = fresh.reduce((sum, sentence) => sum + sentence.to - sentence.from, 0);
+      const speed = Math.min(MAX_CPS, Math.max(MIN_CPS, length / (REWRITE_MS / 1000)));
+      const letter = 1000 / speed;
+      const now = performance.now();
+      let start = now;
+      const state = { body, nodes: after.nodes, starts: after.starts, spans: [] };
+      for (const sentence of fresh) {
+        state.spans.push({ from: sentence.from, to: sentence.to, start, letter, ms: lightMs(speed) });
+        start += (sentence.to - sentence.from) * letter;
+      }
+      relit.add(state);
+      draw(now);
+      schedule();
+    }
+    for (const [element, top] of tops) {
+      if (!element.isConnected || typeof element.animate !== "function") continue;
+      const shift = top - element.getBoundingClientRect().top;
+      if (Math.abs(shift) < 1) continue;
+      element.animate([{ transform: `translateY(${shift}px)` }, { transform: "none" }],
+        { duration: SETTLE_MS, easing: SETTLE_EASE });
+    }
+    return result;
+  }
+
   // The answer's first letters come in while the live lines above them fade
   // out (agent-activity.js handoff).
-  App.streamReveal = { active, stream, settle };
+  App.streamReveal = { active, stream, settle, rewrite };
 })();

@@ -1981,6 +1981,40 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // Settings › Agent › Pass findings to the agent: the review shows nothing
+  // at the sentences while the run or the review after its hand-over goes on
+  // (agent-review.js withheld), and an answer the agent corrected stays
+  // corrected in every later frame (agent-review.js shownText).
+  it("tells the review whether its run still goes on, and keeps the text the review shows", async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(),
+      shownText: vi.fn((_body, text) => (text === "Answer." ? "Answer, corrected." : text)) };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById("questionInput").value = "Question";
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    handlers.delta.append("Answer.");
+    handOver(handlers);
+    await pending;
+    handlers.review.receive({ review: handedReview("succeeded") });
+    w.App.agentChat.project(run);
+    const body = d.getElementById("agentAnswerBody");
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, expect.anything(), expect.objectContaining({ ended: false }));
+    expect(w.App.agentReview.renderActivity.mock.calls.at(-1)[3]).toEqual({ ended: false });
+    expect(body.dataset.markdown).toBe("Answer, corrected.");
+    resolve({ ok: true, data: { response: "Answer.", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
+      turn: { ...HANDED_TURN, status: "completed", agent_review: handedReview("succeeded") } } });
+    await vi.waitFor(() => expect(run.consensus.completedTurn.status).toBe("completed"));
+    w.App.agentChat.project(run);
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(body, expect.anything(), expect.objectContaining({ ended: true }));
+    expect(w.App.agentReview.renderActivity.mock.calls.at(-1)[3]).toEqual({ ended: true });
+    expect(body.dataset.markdown).toBe("Answer, corrected.");
+    dom.window.close();
+  });
+
   it("sends a message into a response that reads them and lets it go once the run read it", async () => {
     const { window, document, dom } = boot({ setup(w) {
       // The account has the workspace: a running response reads messages.

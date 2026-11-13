@@ -347,6 +347,10 @@
     // "off". agent-chat.js sends it with every message, agent-mode.js says
     // it beside the composer's reviewers.
     reviewers: patternSetting("consensio.reviewers.v1", /^(always|workspace|off)$/),
+    // Off unless true: the reviewers' solid findings reach the Agent, which
+    // corrects its answer or says why it stands. The server reads it from
+    // the account itself; the page never sends it with a message.
+    findings_to_agent: booleanSetting("consensio.findingsToAgent.v1"),
   });
   const NAMES = Object.freeze(Object.keys(DEFINITIONS));
 

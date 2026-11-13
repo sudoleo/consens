@@ -61,6 +61,11 @@ HOLD_NO_CHOICES = "This pause has no answers to choose from. Let it continue, wr
 _LOCK_TIMES = threading.Lock()
 
 
+class NewerTurn(TurnStatusConflict):
+    """The chat runs a newer message: a correction of this turn's answer
+    would contradict what that message already read (agent_review_feedback)."""
+
+
 class NotesFull(TurnStatusConflict):
     """A message into the run would exceed USER_NOTES_MAX (decide_hold)."""
 
@@ -343,8 +348,13 @@ class AgentSessionStore:
             return True
         return self._agent_transaction(uid, operation)
 
-    def save_review(self, uid, chat_id, turn_id, run_token, review, text):
-        """Checkpoint exact text and review state before expensive work."""
+    def save_review(self, uid, chat_id, turn_id, run_token, review, text, *, chat_fields=None, latest=False):
+        """Checkpoint exact text and review state before expensive work.
+        ``chat_fields``: fields of the chat, written only while this turn is
+        the chat's newest (agent_review_feedback: agent_open_findings).
+        ``latest``: only while no newer message of the chat started, else
+        NewerTurn: a corrected answer must not change under a message that
+        read it; the turn's ``agent_correcting`` ends with this save."""
         root_ref = self.receipt_ref(uid, chat_id, turn_id)
         turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
         def operation(tx):
@@ -354,8 +364,35 @@ class AgentSessionStore:
             if (root.get("run_token") != run_token or root.get("run_status") != "running"
                     or chat.get("status") != "active" or turn.get("status") != "pending"):
                 raise TurnStatusConflict("Agent review is closed")
-            tx.update(turn_ref, {"agent_review": review, "assistant_response": text})
+            if latest and chat.get("agent_turn_id") != turn_id:
+                raise NewerTurn("A newer message of the chat started")
+            patch = {"agent_review": review, "assistant_response": text}
+            if latest:
+                patch["agent_correcting"] = firestore.DELETE_FIELD
+            tx.update(turn_ref, patch)
+            if chat_fields and chat.get("agent_turn_id") == turn_id:
+                tx.update(chat_ref, chat_fields)
         self._agent_transaction(uid, operation)
+
+    def begin_correction(self, uid, chat_id, turn_id, *, run_token):
+        """The correction pass of the turn's answer may start: no newer
+        message of the chat has started, and from now on one that starts
+        reads its history after this turn's correction is saved or given up
+        (``agent_correcting``, agent_runs.AgentRunStore.history_current).
+        False when a newer message runs or the run no longer holds the turn."""
+        root_ref = self.receipt_ref(uid, chat_id, turn_id)
+        turn_ref, chat_ref = self._turn_ref(uid, chat_id, turn_id), self._chat_ref(uid, chat_id)
+        def operation(tx):
+            tombstone, *snapshots = self._read_all(tx, (persistence_guard.deletion_ref(self.db, uid), root_ref, turn_ref, chat_ref))
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx, snapshot=tombstone)
+            root, turn, chat = (snapshot.to_dict() or {} for snapshot in snapshots)
+            if (root.get("run_token") != run_token or root.get("run_status") != "running"
+                    or chat.get("status") != "active" or turn.get("status") != "pending"
+                    or chat.get("agent_turn_id") != turn_id):
+                return False
+            tx.update(turn_ref, {"agent_correcting": True})
+            return True
+        return self._agent_transaction(uid, operation)
 
     def save_work_log(self, uid, chat_id, turn_id, entries, *, expires_at, incomplete=False):
         """Append work log entries of the run (agent_work_log.WorkLog).

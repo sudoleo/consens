@@ -152,3 +152,53 @@ it("lists a note over several sentences once, and not at all where one of its se
   expect(rows("The Eiffel Tower is 330 metres tall.", "It opened in 1890 for visitors.")).toEqual([1, 0]);
   expect(rows("The bridge is 30 metres long.", "It opened in 1890 for visitors.")).toEqual([0, 1]);
 });
+
+// Settings › Agent › Pass findings to the agent (agent_review_feedback.py):
+// every mark names its finding. A sentence the agent corrected keeps no mark
+// (the server drops its claim; a review that still holds it shows none
+// either), one whose finding it disputed keeps its mark, and its card adds
+// the agent's reason after the reviewers' notes.
+it("keeps a disputed finding's mark with the agent's reason and shows none for a corrected one", () => {
+  const { window, document } = boot(ANSWER);
+  const audit = structuredClone(AUDIT);
+  audit.claims[0].dissent[0].finding = "s1";
+  audit.claims[1].dissent.forEach(item => { item.finding = "s2"; });
+  audit.unplaced = [];
+  audit.feedback = { status: "done", counts: { delivered: 2, corrected: 1, disputed: 1, cut: 0 }, findings: [
+    { id: "s1", on: "answer", kind: "incomplete", voices: 1, hard: true, state: "corrected",
+      before: "It was built in 1889 for the World's Fair.", after: "It was built in 1889 for the Exposition Universelle." },
+    { id: "s2", on: "answer", kind: "wrong", voices: 2, hard: true, state: "disputed",
+      reason: "The site lists 14 euros for the second floor, which the answer names." }] };
+  const body = document.getElementById("consensusAnswerBody");
+  expect(window.renderStoredAuditMarks(body, audit, document.getElementById("consensusClaimsFallback"), [])).toBe(true);
+  expect(marks(document).map(mark => mark.textContent)).toEqual(["Tickets to the top cost 14 euros."]);
+  expect(body.textContent).not.toContain("The agent disagrees");
+  marks(document)[0].click();
+  const card = document.querySelector("#claimPopover .cx-card-audit");
+  const sides = [...card.querySelectorAll(".cx-card-side")];
+  const reply = sides.at(-1);
+  expect(reply.classList.contains("cx-card-reply")).toBe(true);
+  expect(reply.querySelector(".cx-card-claim").textContent).toBe("The site lists 14 euros for the second floor, which the answer names.");
+  expect(reply.querySelector(".cx-card-tag").textContent).toBe("The agent disagrees");
+  // The reviewers' notes stand before it, as without the setting.
+  expect(card.textContent).toContain("The top costs 36.10 euros.");
+});
+
+it("draws the marks of a review without findings for the agent exactly as before", () => {
+  const plain = boot(ANSWER), passed = boot(ANSWER);
+  const audit = structuredClone(AUDIT);
+  plain.window.renderStoredAuditMarks(plain.document.getElementById("consensusAnswerBody"), AUDIT,
+    plain.document.getElementById("consensusClaimsFallback"), []);
+  // Findings the agent left open: the same marks, the same card.
+  audit.claims.forEach((claim, index) => claim.dissent.forEach(item => { item.finding = `s${index + 1}`; }));
+  audit.feedback = { status: "done", skipped: "no_time", counts: {}, findings: [
+    { id: "s1", on: "answer", kind: "incomplete", voices: 1, hard: false, state: "open" },
+    { id: "s2", on: "answer", kind: "wrong", voices: 2, hard: true, state: "open" }] };
+  passed.window.renderStoredAuditMarks(passed.document.getElementById("consensusAnswerBody"), audit,
+    passed.document.getElementById("consensusClaimsFallback"), []);
+  expect(passed.document.getElementById("consensusAnswerBody").innerHTML)
+    .toBe(plain.document.getElementById("consensusAnswerBody").innerHTML);
+  marks(passed.document)[1].click();
+  marks(plain.document)[1].click();
+  expect(passed.document.getElementById("claimPopover").innerHTML).toBe(plain.document.getElementById("claimPopover").innerHTML);
+});

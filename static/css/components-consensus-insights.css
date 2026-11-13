@@ -295,6 +295,9 @@
 .cx-card-side[data-kind] .cx-card-tag { font-weight: var(--font-weight-medium); color: var(--kind-incomplete); }
 .cx-card-side[data-kind="wrong"] .cx-card-tag { color: var(--kind-wrong); }
 .cx-card-side[data-kind="doubtful"] .cx-card-tag { color: var(--kind-doubtful); }
+/* The agent's reason for a finding it disputes (findings_to_agent): after
+   the reviewers' notes, in their form, in ink rather than a kind's colour. */
+.cx-card-reply .cx-card-tag { font-weight: var(--font-weight-medium); color: var(--ink-2); }
 .cx-audit-kind { color: var(--kind-incomplete); }
 .cx-audit-kind[data-kind="wrong"] { color: var(--kind-wrong); }
 .cx-audit-kind[data-kind="doubtful"] { color: var(--kind-doubtful); }

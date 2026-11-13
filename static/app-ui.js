@@ -264,6 +264,7 @@ function bindAppUiControls() {
   bindSettingSwitch("letterAnimationsSwitch", "letter_animations", true);
   bindSettingSwitch("streamAnimationSwitch", "stream_animation", true);
   bindSettingSwitch("detailedProgressSwitch", "detailed_progress", false);
+  bindSettingSwitch("findingsToAgentSwitch", "findings_to_agent", false);
 }
 
 if (document.readyState === "loading") {

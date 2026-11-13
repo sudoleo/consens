@@ -541,5 +541,6 @@
   "A quick note": "Kurz vorab",
   "Your answers come from AI models by these providers:": "Deine Antworten kommen von KI-Modellen dieser Anbieter:",
   "Your question only goes to the models working on it, not to all of them. Through OpenRouter they get your question, attached files and the chat so far, and your memory if it’s on.": "Deine Frage geht nur an die Modelle, die daran arbeiten, nicht an alle. Sie bekommen über OpenRouter deine Frage, angehängte Dateien und den bisherigen Chat, dazu dein Gedächtnis, wenn es an ist.",
-  "More in the privacy notice": "Mehr dazu in der Datenschutzerklärung"
+  "More in the privacy notice": "Mehr dazu in der Datenschutzerklärung",
+  "<0>Pass findings to the agent</0> <1>When a reviewer calls a statement wrong with a source, or two reviewers mark the same passage, the Agent checks it and corrects the sentence or says why it stands.</1>": "<0>Befunde an den Agenten geben</0> <1>Nennt ein Prüfer eine Aussage mit Quelle falsch oder markieren zwei Prüfer dieselbe Stelle, sieht sich der Agent das an und korrigiert den Satz oder sagt, warum er so stehen bleibt.</1>"
 }

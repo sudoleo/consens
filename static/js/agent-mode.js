@@ -667,6 +667,9 @@
       note.hidden = !REVIEWER_NOTES[setting];
       note.textContent = REVIEWER_NOTES[setting] || "";
     }
+    // Without reviewers there are no findings to pass on.
+    const findings = document.getElementById("findingsToAgentSetting");
+    if (findings) findings.hidden = setting === "off";
   }
   document.getElementById("reviewersSetting")?.addEventListener("change", function () {
     const value = ["always", "workspace", "off"].includes(this.value) ? this.value : "always";

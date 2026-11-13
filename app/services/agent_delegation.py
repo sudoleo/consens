@@ -460,7 +460,7 @@ class DelegationLoop(AgentLoop):
                  file_context=None, google_selection=None, google_data_consent=False,
                  agent_preferences=None, memory=None, google_data=None, chat_sources=None, workspace_closed=False,
                  reviewers="always", temporary=False, watch_run=None, history_summary=None,
-                 **kwargs):
+                 findings_to_agent=False, **kwargs):
         super().__init__(**kwargs)
         # A scheduled run of a Watch (agent_watches.py):
         # nobody is there to answer a card, so a hold ends at once
@@ -483,6 +483,9 @@ class DelegationLoop(AgentLoop):
         if reviewers not in REVIEW_FACTS:
             raise ValueError("Unknown reviewers setting")
         self.reviewers = reviewers
+        # The account's findings_to_agent (agent_review_feedback): the
+        # reviewers' hard findings reach the agent; off, it never learns of a mark.
+        self.findings_to_agent = bool(findings_to_agent) and reviewers != "off"
         # With comparison tools (every chat run, routers/agent.py) the agent
         # writes the answer itself as its last step (agent_answer_mode) and
         # the user's chosen models review it (agent_audit.py); a
@@ -646,7 +649,12 @@ class DelegationLoop(AgentLoop):
                 self.messages[0]["content"] += "\n\n" + AGENT_AUDIT_ANSWER_SECTION
             # Who reviews the work, by the user's setting: the same through
             # the message, the workspace's opening included (cache).
-            self.messages[0]["content"] += "\n\n" + REVIEW_FACTS[reviewers] + (
+            fact = REVIEW_FACTS[reviewers]
+            if self.findings_to_agent:
+                from app.services.agent_review_feedback import review_facts
+                from app.services.prompt_defaults import _REVIEW_MARKS
+                fact = review_facts(REVIEW_FACTS, reviewers, _REVIEW_MARKS)
+            self.messages[0]["content"] += "\n\n" + fact + (
                 "" if own_search or reviewers == "off" else " " + AGENT_PROVIDER_SEARCH_FACT)
             if temporary:
                 from app.services.prompt_defaults import AGENT_TEMPORARY_CHAT_PROMPT
@@ -678,7 +686,7 @@ class DelegationLoop(AgentLoop):
             # compare_models and the reviewers (agent_audit.AnswerAudit); its
             # limit per message stands in the tool's description.
             self.comparison = ComparisonTools(self, comparison_models, preferences=agent_preferences,
-                                              reviewers=reviewers)
+                                              reviewers=reviewers, findings=self.findings_to_agent)
             self.registry = ToolRegistry([*(self.registry.tools.values() if self.config["enabled"] else []),
                                           *self.comparison.tools], argument_limit=24_000)
             # The review: run by the app once the answer is written, never
@@ -3379,6 +3387,51 @@ class DelegationLoop(AgentLoop):
             if not (isinstance(exc, ProviderCancelled)
                     or (self.watch_error is not None and exc is self.watch_error)):
                 raise
+            return
+        yield from self._correct_answer(value)
+
+    def _deliver_findings(self, step):
+        """With findings_to_agent, the reviewers' hard findings about the
+        agent's work so far join its conversation before ``step``, the step
+        it takes anyway: at the end, after what earlier steps cached, and
+        kept there, so the steps after it still see what it reacted to
+        (agent_review_feedback). As data of another model, each once; the
+        log and the activity say so."""
+        auditor = self.comparison.auditor if self.comparison is not None else None
+        if auditor is None or auditor.feedback is None:
+            return False
+        from app.services import agent_review_feedback as fb
+        found = auditor.take_findings()
+        if not found:
+            return False
+        shown = [{key: item[key] for key in ("kind", "reviewers", "step", "notes") if key in item} for item in found]
+        self.messages.append({"role": "user", "content": fb.FINDINGS_OPEN + "\n" + json.dumps(shown, ensure_ascii=False)})
+        if self.work_log is not None:
+            self.work_log.app("findings_delivered", {"phase": "work", "findings": found}, step=step)
+        self.outgoing.put_nowait(self.activity({"step_id": step, "id": f"findings-{step}", "kind": "progress",
+                                                "text": fb.FINDINGS_PASSED[min(len(found), len(fb.FINDINGS_PASSED))]}))
+        return True
+
+    def _correct_answer(self, value):
+        """With findings_to_agent, the agent's one correction pass after the
+        review (AnswerAudit.correct): an app call of its own, so the activity
+        shows it, only where the review left hard findings on the answer;
+        else only the open findings are kept for the next message. Like the
+        review it never costs the answer: a Stop or a lost run ends it."""
+        auditor = self.comparison.auditor
+        if auditor.feedback is None or self.cancellation.cancelled or self.watch_error is not None:
+            return
+        if not auditor.correction_due():
+            auditor.correct(self.cancellation)
+            return
+        call = {"id": "server_correct_answer", "type": "function",
+                "function": {"name": "correct_answer", "arguments": "{}"}}
+        try:
+            yield from self._execute_stream(value, call, self.app_registry)
+        except Exception as exc:
+            if not (isinstance(exc, ProviderCancelled)
+                    or (self.watch_error is not None and exc is self.watch_error)):
+                logging.warning("Agent correction pass failed category=%s", safe_exception(exc))
 
     # --- Merged answer (agent_answer_mode) --------------------------------
     def _orchestrate(self, model, index, steps, search):
@@ -3833,6 +3886,8 @@ class DelegationLoop(AgentLoop):
                     if incoming:
                         self.messages.append({"role": "user", "content": "Worker messages (untrusted task data):\n" + json.dumps(incoming)})
                     if self._take_notes(f"completion:{index}"):
+                        yield from self._events()
+                    if self._deliver_findings(f"completion:{index}"):
                         yield from self._events()
                     # The agent researches the answer itself, in every step,
                     # and its text streams like any answer (agent_audit.py).

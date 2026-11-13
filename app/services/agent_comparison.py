@@ -182,12 +182,13 @@ def comparison_selection(value=None):
 
 
 class ComparisonTools:
-    def __init__(self, loop, models, *, preferences=None, reviewers="always"):
+    def __init__(self, loop, models, *, preferences=None, reviewers="always", findings=False):
         """The agent's compare_models and the review of its answer: the
         user's chosen models follow the agent's work log and review its
         fixed answer (agent_audit.AnswerAudit), as the user's ``reviewers``
         setting says. No judge runs, also not on the answers of
-        compare_models: they advise the agent, and the reviewers read them."""
+        compare_models: they advise the agent, and the reviewers read them.
+        ``findings``: the account's findings_to_agent (agent_review_feedback)."""
         from app.services.agent_audit import AnswerAudit
         self.loop, self.models = loop, models
         self.preferences = preferences or AgentPreferences()
@@ -213,15 +214,22 @@ class ComparisonTools:
         # The fixed answer's links that lead nowhere (agent_answer_links.LinkCheck),
         # saved only when there are any.
         self.links = None
-        self.auditor = AnswerAudit(self, setting=reviewers)
+        self.auditor = AnswerAudit(self, setting=reviewers, findings=findings)
+        # Fields of the chat a review save writes while this turn is the
+        # chat's newest (agent_review_feedback: agent_open_findings); empty
+        # without findings.
+        self.chat_fields = {}
         # Every chosen model, every answer awaited, the depth the agent's.
         limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
         self.tools = [ReadOnlyTool("compare_models", AUDIT_COMPARE + (
             f" At most {limit} times per message." if limit else ""), AuditCompareArgs, self.compare)]
         # The review: run by the app once the answer is written, never
-        # offered to the agent.
+        # offered to the agent; so is the agent's one correction of it.
         self.app_tools = [ReadOnlyTool("audit_answer", "Have the user's comparison models review the fixed answer.",
                                        AuditAnswerArgs, self.audit)]
+        if self.auditor.feedback is not None:
+            self.app_tools.append(ReadOnlyTool("correct_answer", "The agent checks the reviewers' hard findings on "
+                                               "its answer.", AuditAnswerArgs, self.correct_answer))
 
     def snapshot(self, status=None):
         data = {"version": 1, "status": status or (self.review or {}).get("status", "required"),
@@ -236,7 +244,7 @@ class ComparisonTools:
             data["links"] = self.links
         return data
 
-    def checkpoint(self, status=None):
+    def checkpoint(self, status=None, *, latest=False):
         """Saves the review as it is now, and returns once it (or a newer
         one) is saved. The snapshot is taken under ``self.lock``, the database
         write only holds it when the caller does: a write does not stop the
@@ -244,18 +252,20 @@ class ComparisonTools:
         next saves the newest snapshot, which holds everything the older ones
         held; a caller whose snapshot is saved that way returns without a
         write of its own, so six answers arriving together are not six writes
-        in a row."""
+        in a row. ``latest``: the save of a corrected answer
+        (AgentSessionStore.save_review), never folded into another one."""
         with self.lock:
             data = self._checkpoint(status)
             self._snapshots += 1
             number = self._snapshots
-            self._latest = (number, data, self.text)
+            self._latest = (number, data, self.text, dict(self.chat_fields), latest)
         with self._save_lock:
             if number <= self._saved:
                 return
-            newest, data, text = self._latest
+            newest, data, text, fields, latest = self._latest
+            extra = {**({"chat_fields": fields} if fields else {}), **({"latest": True} if latest else {})}
             self.loop.store.save_review(self.loop.uid, self.loop.chat_id, self.loop.turn_id, self.loop.run_token,
-                                        data, text)
+                                        data, text, **extra)
             self._saved = newest
             self.loop.outgoing.put_nowait({"type": "review", "review": data})
 
@@ -302,7 +312,7 @@ class ComparisonTools:
             self._checkpoint_on_the_way()
 
     def worker_request(self, worker, model, messages, *, cancellation, slots, budget=None, searching=False,
-                       search_rounds=1, one_off=True, keep_truncated=False, review_round=None):
+                       search_rounds=1, one_off=True, keep_truncated=False, review_round=None, registry=None):
         """One paid request of ``worker`` at its next step index
         (``agent:{id}:{n}``), within ``slots``. An answer that ended without a
         word (ModelEmptyAnswer) is chance, not a limit: a searching call gets
@@ -313,7 +323,9 @@ class ComparisonTools:
         ``truncated``); a reviewer's JSON is worthless when cut off.
         ``one_off=False``: a later request continues this one (a reviewer's
         next round), so its prompt is cached for it. ``review_round``: a
-        reviewer's kind of round for its receipt (worker_completion)."""
+        reviewer's kind of round for its receipt (worker_completion).
+        ``registry``: tools the request carries without calling them (the
+        agent's, where it continues the agent's conversation)."""
         loop = self.loop
         with bind_provider_cancellation(cancellation), bind_analysis_budget(budget or loop.budget):
             while not slots.acquire(timeout=.1):
@@ -322,8 +334,9 @@ class ComparisonTools:
                 for attempt in range(2 if searching else 1):
                     step = f"agent:{worker.id}:{worker.calls}"
                     worker.calls += 1
-                    generator = loop._step(model, messages, step, ToolRegistry(), cancellation, worker=worker,
-                                           searches_enabled=searching, search_rounds=search_rounds,
+                    generator = loop._step(model, messages, step, registry or ToolRegistry(), cancellation,
+                                           worker=worker, searches_enabled=searching, search_rounds=search_rounds,
+                                           **({"allow_tools": False} if registry is not None else {}),
                                            retry_empty=attempt == 0 and searching,
                                            completion=loop.worker_completion(worker, one_off=one_off,
                                                                              review_round=review_round))
@@ -772,6 +785,22 @@ class ComparisonTools:
                 self.checkpoint()
             except Exception:
                 logging.warning("Agent comparison could not save its final evidence state")
+
+    def correct(self, text):
+        """The agent corrected sentences of the reviewed answer
+        (agent_review_feedback): a new version beside the first, which stays
+        saved; the answer is the corrected text from here on."""
+        with self.lock:
+            last = self.versions[-1]
+            self.versions.append({"id": len(self.versions) + 1, "text": text, "hash": answer_hash(text),
+                                  "status": last.get("status", "required"),
+                                  "comparison_ids": list(last.get("comparison_ids") or []), "corrects": last["id"]})
+            self.text = text
+
+    def correct_answer(self, args, *, cancellation):
+        """correct_answer: the app's own call after the review
+        (DelegationLoop._correct_answer); never offered to the model."""
+        return self.auditor.correct(cancellation)
 
     def audit(self, args, *, cancellation):
         """audit_answer: the app's own call once the answer is fixed

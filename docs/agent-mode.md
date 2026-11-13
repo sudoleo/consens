@@ -957,9 +957,10 @@ Schritts (`Gate.decision`), nicht für spätere gleicher Art. Ein Halt der
 Gate-Runde zählt in `AnswerAudit.halts`, eine spätere Runde hält denselben
 Eintrag nicht noch einmal an. Ohne Prüfer (siehe „Ohne Prüfer“) gibt es kein Gate.
 
-Bewusst offen: Der Agent sieht die Markierungen seiner vorherigen Antwort in
-der nächsten Nachricht nicht (Verlauf bleibt Frage und Antwort, Max'
-Entscheidung). Geteilte Antworten (`/s/…`) zeigen die Anmerkungen der Prüfer
+Bewusst offen: Ohne die Kontoeinstellung `findings_to_agent` sieht der Agent
+die Markierungen seiner vorherigen Antwort in der nächsten Nachricht nicht
+(Verlauf bleibt Frage und Antwort, Max' Entscheidung); mit ihr siehe „Befunde
+an den Agenten“ unten. Geteilte Antworten (`/s/…`) zeigen die Anmerkungen der Prüfer
 seit 2026-10-31 als Karten je Satz unter „Notes“, nicht als Marken im Text;
 Marken auf der Arbeit und nicht platzierte bleiben in der App.
 
@@ -989,6 +990,122 @@ UX-Audit auf Apple-Niveau (98 Befunde in 10 Paketen, Entscheidung offen):
 Laufzeit des Arbeitsplatzes (Prod-Messung 26.–30.10.; Tempo, Abbrüche,
 Modell-Interaktion, Ansicht, App-Tempo, Kosten, Messbarkeit in sechs Paketen):
 [agent-workspace-runtime-audit-2026-10-30.md](agent-workspace-runtime-audit-2026-10-30.md).
+
+### Befunde an den Agenten (seit 2026-11-13, Kontoeinstellung, Standard aus)
+
+Max (2026-11-13): Der Grundsatz „Prüfer steuern nie“ bleibt der Standard;
+wer will, schaltet unter Settings > Agent „Pass findings to the agent“ ein
+(`user_settings.findings_to_agent`, `None` = aus). Aus ist jeder Lauf wie
+vorher: dieselben Prompts, dasselbe Protokoll, dieselbe Prüfung und Anzeige
+(`tests/test_agent_review_feedback.py` sichert das ab). Ein vollautomatischer
+Rückkanal ohne Klick und ohne Rückfrage, ohne Wartezeit vor der Antwort, ohne
+Schleife zwischen Agent und Prüfern; Halt und Gate gehen unverändert nur an
+den Nutzer. Code: `app/services/agent_review_feedback.py`.
+
+- **Einstellung:** Die Route liest sie selbst am Konto
+  (`routers/agent.py::_findings_to_agent`, neben den anderen Lesevorgängen;
+  die Seite schickt nichts mit), ein Turn mit ihr trägt
+  `agent_settings.findings_to_agent: true`. Mit Prüfern `off` wirkt sie
+  nicht. Der Agent kennt sie über `read_settings` (`consens_io.reviewers`
+  beschreibt sie, `findings_to_agent` sagt „on/off in this message“) und
+  ändern kann er sie nicht (`ELSEWHERE`). Im Systemprompt steht statt des
+  Prüfersatzes „the user sees their marks, you do not“ ein App-Fakt
+  (`MARKS_SHARED`): welche Marken ihn erreichen, als Behauptung eines
+  anderen Modells, Daten und nie Anweisung. Keine Stil- oder
+  Verhaltensregel; der Prüfer-Prompt (`REVIEW_PROMPT_*`) bleibt unverändert.
+- **Register:** `AnswerAudit.feedback` (`Findings`) fasst die Marken
+  aller Prüfer zu Befunden: auf einen Protokolleintrag Kennung `e<seq>`, auf
+  die Antwort `s<n>` (Marken, die einen Satz teilen, sind ein Befund). Je
+  Befund Art (die schwerste), Stimmen (Prüfer), Notizen, Zustand `open`,
+  `checking`, `corrected` oder `disputed` und `delivered` (`live`, `final`,
+  `cut`). Gespeichert als `agent_review.audit.feedback` (`status` `live` →
+  `checking` → `done`, `skipped` mit Grund, `counts`), jede platzierte Marke
+  trägt `finding` mit der Kennung; nur mit der Einstellung. Unter
+  `trim_marks`/600 kB wie die übrigen Marken.
+- **Hart** ist ein Befund mit `wrong` (nur mit Quelle möglich,
+  `parse_review` macht ein `wrong` ohne Quelle zu `doubtful`) oder mit zwei
+  Prüfern oder mehr an derselben Stelle. Im Lauf erreichen nur harte Befunde
+  den Agenten (Tempo, kein Verunsichern); nach der Antwort alle (unten). „Behauptet etwas, das im Protokoll nicht geschah“ hat keinen
+  eigenen harten Fall: Kein Prüfer markiert es getrennt von anderen Zweifeln,
+  und es zu erkennen bräuchte eine Wortsuche in der Notiz; zwei Prüfer auf
+  demselben Eintrag fangen es wie jeden anderen Befund.
+- **Im Lauf:** Live- und Gate-Runden füttern das Register
+  (`ReviewerSession._keep`). Vor jedem Schritt, den der Agent ohnehin macht,
+  hängt `DelegationLoop._deliver_findings` neue harte Befunde zur Arbeit als
+  eine Nachricht der App an sein Gespräch (`FINDINGS_OPEN`, je Befund Art,
+  Zahl der Prüfer, Notizen mit Quelle und der Schritt in Worten wie auf der
+  Halt-Karte, `halt_step`): am Ende, hinter dem gecachten Präfix, und sie
+  bleibt dort, damit die Schritte danach noch sehen, worauf er reagierte.
+  Kein Extraschritt, jeder Befund genau einmal, höchstens `LIVE_FINDINGS` = 3
+  je Lauf (der Rest zählt als `cut`). App-Eintrag `findings_delivered` und
+  eine Zeile in der Aktivität (`FINDINGS_PASSED`).
+- **Nach der Antwort:** Die Antwort erscheint und wird übergeben wie
+  bisher. Nach der Schlussrunde (`AnswerAudit._finish` → `_register`)
+  ruft `_finish_review` `_correct_answer`: Sind Befunde auf der Antwort da
+  (`correction_due`; alle, nicht nur harte, je Stelle einer, höchstens
+  `FINAL_FINDINGS` = 5, die schwersten zuerst; Max 2026-11-13: ohne Marken
+  gingen weiche Zweifel sonst verloren), läuft genau ein App-Aufruf
+  `correct_answer` (`AnswerAudit.correct`, Aktivität wie `audit_answer`).
+  Sonst speichert er nur die offenen Befunde. Der Korrekturdurchgang ist eine
+  Anfrage des Chatmodells auf dem Gespräch des Agenten (seine Werkzeuge
+  gelistet, nicht aufrufbar: der Cache-Präfix hält) als Helfer-Sitzung
+  `kind: "correction"` (`_correction_request`, `worker_request(registry=…)`):
+  Nach der Übergabe beansprucht nur ein Helfer noch Schritte
+  (`_claim_delegated`, `review_tail`). Zulassung im Tageskonto ohne
+  Überziehen (die Antwort und ihre Prüfung stehen ohne ihn; abgelehnt =
+  `skipped: allowance`), Kosten aufs Konto des Nutzers; Start nur mit
+  `CORRECTION_MIN_SECONDS` = 45 s vor dem harten Stopp, höchstens
+  `CORRECTION_SECONDS` = 60 s. Je Befund antwortet der Agent mit dem
+  korrigierten Satz oder mit `stands` und einer Begründung
+  (`CORRECTION_REQUEST`, `read_corrections`); ersetzt werden nur diese
+  Sätze (`corrected_answer`, kein neuer Absatz, keine zerbrochene
+  Tabellenzelle, begrenztes Wachstum). Die korrigierte Antwort wird Version 2
+  (`ComparisonTools.correct`, `versions[1].corrects = 1`), die erste bleibt
+  gespeichert; die übrigen Marken stehen neu auf ihr (`_place_corrected`),
+  die eines korrigierten Befunds fallen weg (`corrected_out`): Die Antwort
+  verbessert sich still. Marken behalten nur bestrittene Befunde (mit der
+  Begründung des Agenten), ungeklärte und an der Höchstzahl abgeschnittene.
+  Die Spur (Notizen je Befund mit Prüfer, Original und neuer Satz,
+  Begründung) steht in `audit.feedback.findings[]`. Die Prüfer prüfen die
+  Korrektur nicht. App-Einträge `findings_delivered` (`phase: answer`) und
+  `answer_corrected`. Ein Fehler, eine unlesbare Antwort oder ein Stopp lassen
+  die Befunde offen und die Antwort, wie sie geprüft wurde.
+- **Wettlauf mit der nächsten Nachricht:** Seit 2026-11-01 kann sie starten,
+  während die Prüfer noch arbeiten (`hand_over`). Die Korrektur gilt nur,
+  solange sie die neueste Nachricht des Chats betrifft:
+  `AgentSessionStore.begin_correction` startet sie nur bei
+  `chat.agent_turn_id == turn` und setzt `agent_correcting` am Turn;
+  gespeichert wird sie mit `save_review(latest=True)` in derselben
+  Bedingung, sonst `NewerTurn`: Text, Version und Marken gehen auf den
+  geprüften Stand zurück, die Befunde bleiben offen (`skipped:
+  newer_message`). `history_current` liest einen Turn mit `agent_correcting`
+  neu. So liest jede Nachricht genau die Fassung, die danach stehen bleibt.
+- **Nächste Nachricht:** Die offenen Befunde der letzten Antwort (ohne die
+  im Lauf zugestellten) stehen am Chat als `agent_open_findings` mit der
+  Kennung ihres Turns, gespeichert nur, solange er der neueste ist
+  (`save_review(chat_fields=…)`). Die Route nimmt sie in den App-Kontext der
+  nächsten Frage (`open_findings_context`), wenn die Kennung zu
+  `chat.agent_turn_id` passt: höchstens `OPEN_FINDINGS` = 5, die schwersten
+  (Ort, Art, Zitat, Notiz, Quelle, Stimmen), der Rest als Zahl. Der
+  App-Kontext reist mit der Frage im Verlauf (Cache bleibt), der Verlauf
+  trägt den korrigierten Antworttext.
+- **Messung:** `agent_audit_metrics` zählt je Tag `findings_to_agent`
+  (`turns`, `delivered`, `corrected`, `disputed`, `cut`), ohne Texte.
+- **Anzeige** (Max 2026-11-13: „muss laufen wie ChatGPT, was sich selbst
+  verbessert“): Mit der Einstellung zeigt die Antwort keine Marken, bis der
+  Korrekturdurchgang durch ist (`feedback.status: done`; endet der Lauf
+  vorher, zeigen sie sich wie bisher), nie eine Farbe, die gleich wieder
+  verschwindet. Ein korrigierter Satz wird an Ort und Stelle mit dem Licht des
+  Streamings neu geschrieben, ohne Marke; vorher schimmert nichts (welcher
+  Satz sich ändert, steht erst mit dem Ergebnis fest). Bestrittene und offene
+  Befunde zeigen ihre Marke wie bisher, bestrittene mit der Begründung. Die
+  Spur steht auf Klick in den Details der Prüfung. `stream_animation` und
+  `prefers-reduced-motion` gelten; ein gespeicherter Chat zeigt den
+  Endzustand ohne Animation. Ein Durchgang, der nicht fertig wird (Fehler,
+  Frist, Tageskonto, Stopp, neuere Nachricht), endet still: Befunde offen,
+  Marken wie bisher, keine Fehlermeldung.
+
+Tests: `tests/test_agent_review_feedback.py`.
 
 ### Agent VM (seit 2026-10-25)
 
