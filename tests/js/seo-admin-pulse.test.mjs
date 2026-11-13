@@ -43,9 +43,13 @@ function bootSeoTab() {
     );
     const { window } = dom;
     window.requests = [];
+    window.overviews = [];
     const script = window.document.createElement("script");
     script.textContent = [
         "window.shareAdminRequest = async function (method, url, body) { window.requests.push([method, url, body]); return window.nextResponse; };",
+        // The Overview lives above the SEO section and reads the same pulse.
+        "var seoOverview = null; var overviewErrors = new Map([['seo', ['Search data did not load', 'seo']]]);",
+        "window.renderOverview = function () { window.overviews.push({ failed: !!seoOverview?.report?.error, errors: overviewErrors.size }); };",
         "window.formatAdminTime = function (value) { return value ? 'T' : 'never'; };",
         "window.actionBtn = function (label, onClick) { const b = document.createElement('button'); b.textContent = label; b.onclick = onClick; return b; };",
         seoModuleSource(),
@@ -116,5 +120,19 @@ describe("SEO pulse tab", () => {
         await keep.onclick();
         expect(window.requests).toEqual([["POST", "/api/admin/seo/shares/ZZZZZZZZZZZZZZZZ/keep", {}]]);
         expect(doc.getElementById("seoPulseNoindexed").textContent).toBe("None so far.");
+    });
+
+    it("tells the Overview what a run by hand brought", async () => {
+        const window = bootSeoTab();
+        const doc = window.document;
+        window.nextResponse = { enabled: true, report: { error: "Search Console did not answer." }, history: [], noindexed: [] };
+        await window.loadSeoPulse();
+        expect(window.overviews.at(-1)).toEqual({ failed: true, errors: 0 });
+
+        window.nextResponse = { enabled: true, report: REPORT, history: [], noindexed: [] };
+        doc.getElementById("runSeoPulseBtn").click();
+        await new Promise(resolve => window.setTimeout(resolve, 0));
+        expect(doc.getElementById("seoStatus").textContent).toBe("Done. The note went to Telegram.");
+        expect(window.overviews.at(-1)).toEqual({ failed: false, errors: 0 });
     });
 });

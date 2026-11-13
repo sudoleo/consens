@@ -157,8 +157,9 @@ window.addEventListener('beforeunload', (event) => {
 // Aenderungen an den Provider-Listen in die abhaengigen Dropdowns
 // (Judges, Consensus-Add) spiegeln.
 document.getElementById('tab-models').addEventListener('change', (event) => {
-    // A preset pick changes no provider list; the preset redraws itself.
-    if (event.target.closest('#presetModelsContainer')) return;
+    // A preset pick changes no provider list; the preset redraws itself. By
+    // then its select has left the page, so only its own mark still tells.
+    if (event.target.dataset.presetId) return;
     renderJudgeSelects();
     renderConsensusAddSelect();
     renderPresetModels();
@@ -1552,17 +1553,36 @@ async function loadShares(filter, { append = false } = {}) {
     sharesNextCursor = data.has_more ? data.next_cursor : null;
     sharesStatus(sharesNextCursor ? `${loadedShares.length} shown, more below` : '', false);
     if (filter === 'reported' && !append) {
-        unreviewedShares = loadedShares.filter(share => share.needs_review && share.status !== 'blocked').length;
+        unreviewedShares = countUnreviewed(loadedShares);
         renderOverview();
     }
     renderShares(loadedShares, data.site_url || '');
+}
+
+function countUnreviewed(shares) {
+    return shares.filter(share => share.needs_review && share.status !== 'blocked').length;
+}
+
+// After a page was reviewed or deleted. The list under All is paged by time
+// and cannot say how many reported pages still wait, so that is asked anew.
+async function reloadShares() {
+    const filter = currentSharesFilter;
+    await loadShares(filter);
+    if (filter === 'reported') return;
+    try {
+        const data = await shareAdminRequest('GET', '/api/admin/shares?filter=reported');
+        unreviewedShares = countUnreviewed(data.shares || []);
+        renderOverview();
+    } catch {
+        // The list itself loaded; the count stays as it was until the next load.
+    }
 }
 
 async function moderateShare(shareId, payload, confirmText) {
     if (confirmText && !confirm(confirmText)) return;
     try {
         await shareAdminRequest('POST', `/api/admin/shares/${encodeURIComponent(shareId)}/moderate`, payload);
-        await loadShares(currentSharesFilter);
+        await reloadShares();
     } catch (err) {
         sharesStatus(err.message, true);
     }
@@ -1574,7 +1594,7 @@ async function deleteShare(shareId, question, statusFn = sharesStatus) {
     statusFn('Deleting…', false);
     try {
         await shareAdminRequest('DELETE', `/api/admin/shares/${encodeURIComponent(shareId)}`);
-        await Promise.all([loadShares(currentSharesFilter), loadAdminWatches()]);
+        await Promise.all([reloadShares(), loadAdminWatches()]);
     } catch (err) {
         statusFn(err.message, true);
     }
@@ -2793,7 +2813,7 @@ function renderSeoNoindexed(entries) {
             keep.disabled = true;
             seoStatus('Re-indexing…', false);
             try {
-                renderSeoPulse(await shareAdminRequest('POST', `/api/admin/seo/shares/${encodeURIComponent(entry.share_id)}/keep`, {}));
+                showSeoPulse(await shareAdminRequest('POST', `/api/admin/seo/shares/${encodeURIComponent(entry.share_id)}/keep`, {}));
                 seoStatus('Indexed again; the pulse will leave it alone.', false);
             } catch (err) {
                 keep.disabled = false;
@@ -2836,26 +2856,32 @@ function renderSeoPulse(data) {
     renderSeoNoindexed(data.noindexed || []);
 }
 
+// Every answer of the server is the pulse as it is now: the Overview reads
+// the same one, or it keeps saying what a later run has already changed.
+function showSeoPulse(data) {
+    renderSeoPulse(data);
+    seoOverview = data;
+    overviewErrors.delete('seo');
+    renderOverview();
+}
+
 async function loadSeoPulse() {
     try {
-        const data = await shareAdminRequest('GET', '/api/admin/seo');
-        renderSeoPulse(data);
+        showSeoPulse(await shareAdminRequest('GET', '/api/admin/seo'));
         seoStatus('', false);
-        seoOverview = data;
-        overviewErrors.delete('seo');
     } catch (err) {
         seoStatus(err.message, true);
         seoOverview = seoOverview || {};
         overviewErrors.set('seo', ['Search data did not load', 'seo']);
+        renderOverview();
     }
-    renderOverview();
 }
 
 document.getElementById('runSeoPulseBtn').addEventListener('click', async function () {
     this.disabled = true;
     seoStatus('Reading Search Console…', false);
     try {
-        renderSeoPulse(await shareAdminRequest('POST', '/api/admin/seo/run', {}));
+        showSeoPulse(await shareAdminRequest('POST', '/api/admin/seo/run', {}));
         seoStatus('Done. The note went to Telegram.', false);
     } catch (err) {
         seoStatus(err.message, true);
@@ -2866,7 +2892,7 @@ document.getElementById('runSeoPulseBtn').addEventListener('click', async functi
 
 document.getElementById('seoPulseEnabled').addEventListener('change', async function () {
     try {
-        renderSeoPulse(await shareAdminRequest('PUT', '/api/admin/seo/config', { enabled: this.checked }));
+        showSeoPulse(await shareAdminRequest('PUT', '/api/admin/seo/config', { enabled: this.checked }));
         seoStatus(this.checked ? 'Weekly pulse on.' : 'Weekly pulse paused.', false);
     } catch (err) {
         this.checked = !this.checked;
