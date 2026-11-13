@@ -1082,10 +1082,23 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   korrigierten Satz oder mit `stands` und einer Begründung
   (`CORRECTION_REQUEST`, `read_corrections`); ein Satz gilt nur, wenn er die
   Form hält (`kept_shape`: eine Zeile, kein Bruchstück unter `SHRINK_SHARE`,
-  nicht viel länger, endet als Satz, wo das Original es tat, dieselben
-  Link-Adressen und Bilder, Markdown geschlossen; eine neue Adresse liefe an
-  der Prüfung der Links vorbei). Ersetzt werden nur diese Sätze
-  (`corrected_answer`). Die korrigierte Antwort wird Version 2
+  nicht viel länger und höchstens ein Satz mehr, endet als Satz, wo das
+  Original es tat, dieselben Bilder, Markdown geschlossen, gleich viele Links,
+  jeder auf eine Adresse, die er schon hatte, oder auf eine Quelle, die ein
+  Prüfer für diesen Befund nannte). Eine solche neue Adresse gilt nur, wenn
+  die Seite öffentlich ist und nicht fehlt (`new_links`, `links_found`: wie
+  die Prüfung der Links der Antwort, nur 404/410 fehlt; nicht prüfbar zählt
+  als fehlend), sonst bleibt der Satz mit seiner Marke; in Chats mit
+  Google-Daten keine (`_finding_sources`). Andere neue Adressen liefen an der
+  Prüfung der Links vorbei. Die Anfrage nennt diese Regeln als Fakt der App
+  und bittet bei Widerspruch um eine Begründung in einem Satz (an der Marke
+  sonst nach `REASON_CHARS` abgeschnitten). Live-Probe 2026-11-13 (8 Fälle,
+  GPT-6.1 Terra und Claude Opus 5.5): keine falsch nachgegebene Korrektur,
+  irrende Prüfer und eine eingeschleuste Anweisung bestritten, 1–9 s je
+  Durchgang; beide guten Korrekturen mit Link wurden verworfen, weil das
+  Modell die Quelle des Prüfers verlinkte (daher diese Regel), Opus machte
+  aus einem Satz drei (daher „höchstens ein Satz mehr“). Ersetzt werden nur
+  diese Sätze (`corrected_answer`). Die korrigierte Antwort wird Version 2
   (`ComparisonTools.correct`, `versions[1].corrects = 1`), die erste bleibt
   gespeichert; die übrigen Marken stehen neu auf ihr (`_place_corrected`),
   die eines korrigierten Befunds fallen weg (`corrected_out`): Die Antwort

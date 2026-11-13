@@ -2720,7 +2720,11 @@ class AnswerAudit:
                 value = self._correction_request(fb.correction_message(due, items), cancellation,
                                                  fb.CORRECTION_SECONDS if left is None
                                                  else min(fb.CORRECTION_SECONDS, left - REVIEW_TIME_MARGIN))
-                results = fb.read_corrections(value.text, items)
+                results = fb.read_corrections(value.text, items, self._finding_sources(due))
+                for key, urls in fb.new_links(results, items).items():
+                    # A link to a reviewer's source stands only where its page exists.
+                    if not fb.links_found(urls):
+                        results.pop(key)
                 if not results:
                     skipped = "unreadable"
             except ProviderCancelled:
@@ -2760,6 +2764,19 @@ class AnswerAudit:
             if stopped:
                 raise
         return {"status": feedback.status, "corrected": feedback.counts["corrected"]}
+
+    def _finding_sources(self, findings):
+        """{id: the reviewers' sources for that finding}, which a corrected
+        sentence may link instead (agent_review_feedback.kept_shape); none in
+        a chat with Google data, where no address from it is ever opened
+        (agent_answer_links)."""
+        loop = self.tools.loop
+        google = getattr(loop, "google_tools", None) or (
+            callable(getattr(loop, "_chat_google_data", None)) and loop._chat_google_data())
+        if google:
+            return {}
+        return {finding["id"]: {note["source"] for note in finding["notes"] if note.get("source")}
+                for finding in findings}
 
     def _correction_request(self, message, cancellation, seconds):
         """The correction as one request of the agent's chat model on its own

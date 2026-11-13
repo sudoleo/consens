@@ -344,3 +344,90 @@ def test_a_watch_run_reads_the_setting_with_the_reviewers_in_one_read(store):
          "field_revisions": {"reviewers": 1, "findings_to_agent": 1}})
     assert agent_watches._review_settings(UID, store.db) == ("always", True)
     assert agent_watches._reviewers(UID, store.db) == "always"
+
+
+# --- What real models replied (live probe 2026-11-13, GPT-6.1 Terra and Claude Opus 5.5) -----------
+
+DESTATIS = "https://www.destatis.de/DE/Themen/Gesellschaft-Umwelt/Bevoelkerung/Bevoelkerungsstand/_inhalt.html"
+PRESS = "https://www.destatis.de/DE/Presse/Pressemitteilungen/2025/06/PD25_208_124.html"
+POPULATION = (f"Laut [Statistischem Bundesamt]({DESTATIS}) lebten Ende 2024 **rund 85 Millionen Menschen** "
+              "in Deutschland.")
+
+
+def test_a_link_may_point_to_the_source_the_reviewer_named_instead():
+    """Both models corrected the figure and linked the reviewer's source:
+    a good correction the app turned down while links had to stay as they were."""
+    items = {"s1": (0, len(POPULATION), POPULATION)}
+    after = POPULATION.replace(DESTATIS, PRESS).replace("85 Millionen", "83,6 Millionen")
+    reply = json.dumps({"findings": [{"id": "s1", "sentence": after}]})
+    assert fb.read_corrections(reply, items) == {}
+    assert fb.read_corrections(reply, items, {"s1": {PRESS}}) == {"s1": ("corrected", after)}
+    assert fb.new_links({"s1": ("corrected", after)}, items) == {"s1": [PRESS]}
+    # Any other address, or a link less, still leaves the sentence as it was.
+    other = after.replace(PRESS, "https://example.org/population")
+    assert fb.read_corrections(json.dumps({"findings": [{"id": "s1", "sentence": other}]}), items,
+                               {"s1": {PRESS}}) == {}
+    dropped = "Ende 2024 lebten **rund 83,6 Millionen Menschen** in Deutschland."
+    assert fb.read_corrections(json.dumps({"findings": [{"id": "s1", "sentence": dropped}]}), items,
+                               {"s1": {PRESS}}) == {}
+
+
+def test_a_correction_takes_at_most_one_sentence_more():
+    before = "Die Abgabefrist für die Steuererklärung 2025 ist der 31. Juli 2026."
+    items = {"s1": (0, len(before), before)}
+    opus = ("Wer die Erklärung selbst erstellt, musste sie bis zum 31. Juli 2026 abgeben, und diese Frist ist bereits "
+            "abgelaufen. Wer einen Steuerberater oder Lohnsteuerhilfeverein beauftragt, hat länger Zeit: regulär bis "
+            "Ende Februar 2027. Da der 28. Februar 2027 ein Sonntag ist, verschiebt sich die Frist auf Montag, den "
+            "1. März 2027.")
+    assert fb.read_corrections(json.dumps({"findings": [{"id": "s1", "sentence": opus}]}), items) == {}
+    two = ("Die Abgabefrist für die Steuererklärung 2025 ist der 31. Juli 2026. Mit Steuerberater gilt sie bis "
+           "zum 1. März 2027.")
+    assert fb.read_corrections(json.dumps({"findings": [{"id": "s1", "sentence": two}]}), items)["s1"][0] == "corrected"
+    # Figures with points are no sentence ends.
+    everest = "Er ist 8.611 Meter hoch und liegt auf der Grenze zwischen Nepal und China."
+    fixed = ("Er ist 8.849 Meter hoch (gemeinsame Vermessung von China und Nepal 2020) und liegt auf der Grenze "
+             "zwischen Nepal und China.")
+    assert fb.read_corrections(json.dumps({"findings": [{"id": "s1", "sentence": fixed}]}),
+                               {"s1": (0, len(everest), everest)})["s1"][0] == "corrected"
+
+
+def test_a_reviewers_source_that_leads_nowhere_keeps_the_sentence(store, monkeypatch):
+    from app.services import agent_answer_links
+
+    async def gone(url, **kwargs):
+        return 404 if url == PRESS else None
+
+    async def public(url):
+        return "127.0.0.1" not in url
+    monkeypatch.setattr(agent_answer_links, "link_gone", gone)
+    monkeypatch.setattr(fb, "_public", public)
+    assert not fb.links_found([PRESS])
+    assert fb.links_found(["https://www.destatis.de/DE/Home/_inhalt.html"])
+    # An address the check never opens (not public) is no link to add.
+    assert not fb.links_found(["http://127.0.0.1:8000/page"])
+
+
+def test_the_pass_takes_the_reviewers_source_where_its_page_exists(store, monkeypatch):
+    from app.services import agent_answer_links
+    from app.services.llm.provider_runtime import ProviderCancelled  # noqa: F401
+    answer = ("Deutschland ist das bevölkerungsreichste Land der EU. " + POPULATION
+              + " Das Wachstum der letzten Jahre geht fast nur auf Zuwanderung zurück.")
+    reviews = {"anthropic": json.dumps({"marks": [{"quote": "lebten Ende 2024 rund 85 Millionen Menschen",
+                                                   "kind": "wrong", "note": "Laut Destatis 83,6 Millionen.",
+                                                   "source": PRESS}]}),
+               "openai": json.dumps({"marks": []})}
+    after = POPULATION.replace(DESTATIS, PRESS).replace("85 Millionen", "83,6 Millionen")
+
+    def correct(findings):
+        return json.dumps({"findings": [{"id": f["id"], "sentence": after} for f in findings]})
+
+    async def public(url):
+        return True
+    monkeypatch.setattr(fb, "_public", public)
+    for status, kept in ((None, True), (404, False)):
+        async def gone(url, **kwargs):
+            return status
+        monkeypatch.setattr(agent_answer_links, "link_gone", gone)
+        loop = feedback_loop(store, Audit(reviews, answer=answer, live={"anthropic": agent_side(correct)}))
+        list(loop.run())
+        assert (after in raw_turn(store, loop)["assistant_response"]) is kept, status

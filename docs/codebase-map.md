@@ -6958,7 +6958,8 @@ bleibt; Marken korrigierter Befunde fallen weg, `corrected_out`, die Seite
 zeigt Marken erst nach dem Durchgang; App-Eintrag `answer_corrected`). Die
 Korrektur prüft kein Prüfer nach, und was der Agent bekommt, lesen die
 Prüfer nie (`review_entry` → `redacted`, `delivered_for_reviewers`). Nur
-sichere Stellen gehen in den Durchgang (`safe_place`, `kept_shape`); jeder
+sichere Stellen gehen in den Durchgang (`safe_place`, `kept_shape`: höchstens ein Satz mehr, Links nur auf
+die alte Adresse oder die geprüfte Quelle des Prüfers, `links_found`); jeder
 Fehler danach setzt Antwort und Marken zurück. Gegen den Wettlauf mit der
 nächsten Nachricht startet und speichert sie nur, solange der Turn der
 neueste des Chats ist (`AgentSessionStore.begin_correction`,
