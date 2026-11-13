@@ -350,6 +350,13 @@ def feedback_review(stage):
     second version; s2 disputed), or when the pass failed ("failed": both
     open again, the marks as reviewed)."""
     done = stage == "done"
+    if stage == "unreviewed":
+        # The reviewers did not finish (Max's run of 2026-11-13: the one
+        # reviewer ran out of time): no marks, the register closed.
+        saved = review("failed", "failed")
+        saved["audit"]["feedback"] = {"status": "done", "findings": [],
+                                      "counts": {"delivered": 0, "corrected": 0, "disputed": 0, "cut": 0}}
+        return saved
     saved = review("succeeded" if stage != "live" else "running", "completed" if stage != "live" else "running")
     findings = [
         {"id": "s1", "on": "answer", "kind": "wrong", "voices": 1, "hard": True, "state": "open"},
@@ -570,6 +577,68 @@ def test_the_head_says_the_answer_is_still_being_checked(browser, phase4_server,
             assert summary.bounding_box()["height"] == before, (summary.bounding_box(), before)
             page.wait_for_timeout(300)
             _snapshot(page, f"header-{stage}-{width}")
+        assert errors == []
+    finally:
+        context.close()
+
+
+# Every state the head shows from the click on, sampled in each frame and on
+# each change: its words, and whether its time stands in view.
+HEAD_SAMPLER = """() => { window.__heads = [];
+    const sample = () => { const title = document.querySelector('#agentAnswer .agent-activity-title');
+        if (!title) return;
+        const time = title.querySelector('.agent-activity-time'), box = title.getBoundingClientRect();
+        const at = time.getBoundingClientRect();
+        const shown = Boolean(time.textContent) && at.width > 0 && at.right <= box.right + 1
+            && getComputedStyle(time).visibility !== 'hidden';
+        const last = window.__heads.at(-1), text = title.textContent;
+        if (!last || last.text !== text || last.shown !== shown || Math.abs(last.width - box.width) > .5)
+            window.__heads.push({ text, shown, width: Math.round(box.width), scroll: title.scrollWidth, client: title.clientWidth }); };
+    new MutationObserver(sample).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
+    const frame = () => { sample(); requestAnimationFrame(frame); }; frame(); }"""
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_the_head_turns_to_the_check_without_a_half_state(browser, phase4_server, width):
+    """From the run's clock to "Answer in 14s · checking…" and on: the head
+    never shows its words without the time, never hides the time behind
+    "…", and settles at the width of its words."""
+    context, page, errors = open_audit_page(browser, phase4_server, width, False,
+                                            feedback_events("live", "checking", "done", final=True),
+                                            before_send=lambda page: page.evaluate(HEAD_SAMPLER))
+    try:
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        head = page.locator("#agentAnswer .agent-activity-title")
+        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked · 1 sentence improved$"))
+        page.wait_for_timeout(600)
+        heads = page.evaluate("() => window.__heads")
+        checking = [entry for entry in heads if entry["text"].startswith("Answer in")]
+        assert checking, heads
+        assert all(re.match(r"^Answer in \d+s( · |$)", entry["text"]) and entry["shown"] for entry in checking), heads
+        # Settled: the box is as wide as its words.
+        if width >= 1200:
+            assert heads[-1]["scroll"] <= heads[-1]["client"] + 1, heads[-1]
+        assert errors == []
+    finally:
+        context.close()
+
+
+def test_the_head_ends_on_not_checked_when_the_reviewers_did_not_finish(browser, phase4_server):
+    """After "checking…" the head never falls back to "Thought for": the
+    reviewers did not finish, and it says so, as the line under the answer."""
+    events = feedback_events("live", final=True, end="unreviewed")
+    context, page, errors = open_audit_page(browser, phase4_server, 1280, False, events,
+                                            before_send=lambda page: page.evaluate(HEAD_SAMPLER))
+    try:
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        head = page.locator("#agentAnswer .agent-activity-title")
+        expect(head).to_have_text(re.compile(r"^Answer in \d+s · not checked$"))
+        expect(page.locator("#agentAnswer .agent-review-status")).to_have_text("Not reviewed – the reviewers did not finish")
+        page.wait_for_timeout(500)
+        heads = page.evaluate("() => window.__heads")
+        assert all(entry["shown"] for entry in heads if entry["text"].startswith("Answer in")), heads
+        assert not [entry for entry in heads if entry["text"].startswith("Thought for")], heads
+        _snapshot(page, "header-not-checked-1280")
         assert errors == []
     finally:
         context.close()

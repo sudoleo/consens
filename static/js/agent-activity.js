@@ -229,7 +229,7 @@
   // a word without German of its own stands in English before "0 Sek.".
   const HEAD_VERBS = Object.freeze({ working: 'Working for', reviewing: 'Reviewing',
     paused: 'Paused', asking: 'Waiting for you', succeeded: 'Thought for', failed: 'Failed after',
-    cancelled: 'Stopped after', ready: 'Answer in' });
+    cancelled: 'Stopped after', ready: 'Answer in', readyUntimed: 'Answer ready' });
   // "Working for 12s" while it works, "Reviewing · 2m 19s" while the
   // reviewers check the written answer, "Paused · 1m 4s" (the clock stands
   // still) while it waits for the user, "Thought for 3m 7s" once it is done.
@@ -237,6 +237,8 @@
   // stood (notes passed to the agent, agent-review.js headNote): "Answer in
   // 14s", the time until it stood, and what the check says after it.
   function titleParts(ms, now, status, ready = false) {
+    // Its time not known (yet): what it is, never the verb without its number.
+    if (!Number.isFinite(ms) && ready && !now) return { verb: HEAD_VERBS.readyUntimed, gap: '', time: '' };
     if (!Number.isFinite(ms)) return { verb: now ? PHASE_WORDS[now] : statuses[status] || 'Activity', gap: '', time: '' };
     const time = durationText(ms);
     if (now) return { verb: HEAD_VERBS[now], gap: now === 'working' ? ' ' : ' · ', time };
@@ -253,10 +255,16 @@
   // the head once to its new width.
   const SETTLED_VERBS = { running: HEAD_VERBS.working, done: HEAD_VERBS.succeeded };
   const SLOTS = ["seconds", "minutes", "long"];
-  function setTitle(view, ms, now, status, ready) {
-    const { verb, gap, time } = titleParts(ms, now, status, ready);
+  // `note`: what the check of the answer says after its time (agent-review.js
+  // headNote), set together with the time, so the head changes once and
+  // glides once.
+  function setTitle(view, ms, now, status, note = null) {
+    const { verb, gap, time } = titleParts(ms, now, status, Boolean(note));
     const label = `${verb}${gap}${time}`;
-    if (view.title.dataset.label === window.App.t(label)) return;
+    const parts = note?.parts || [];
+    const said = parts.join('\n');
+    const noted = (view.checkNoteKey || '') !== said;
+    if (view.title.dataset.label === window.App.t(label) && !noted) return;
     view.title.dataset.label = label;
     const verbEl = view.title.querySelector(".agent-activity-verb-text");
     const gapEl = view.title.querySelector(".agent-activity-gap");
@@ -271,7 +279,7 @@
     const slot = now || !unit || !view.liveSlot ? unit
       : SLOTS[Math.max(SLOTS.indexOf(view.liveSlot), SLOTS.indexOf(unit))];
     const resize = view.title.isConnected && Boolean(verbEl.textContent) && (verbEl.textContent !== window.App.t(verb)
-      || gapEl.textContent !== gap || (Boolean(timeEl.dataset.unit) && timeEl.dataset.unit !== slot));
+      || gapEl.textContent !== gap || (Boolean(timeEl.dataset.unit) && timeEl.dataset.unit !== slot) || noted);
     const from = resize ? view.title.getBoundingClientRect().width : 0;
     if (resize) cancelMotion(view.slotMotion);
     if (verbEl.textContent !== window.App.t(verb)) verbEl.textContent = verb;
@@ -286,18 +294,23 @@
     if (gapEl.textContent !== gap) gapEl.textContent = gap;
     if (timeEl.textContent !== window.App.t(time)) timeEl.textContent = time;
     timeEl.dataset.unit = slot;
+    if (noted) writeNote(view, parts);
     if (!resize) return;
     // The chevron glides to its new place while the new words open up (none
     // with reduced motion, motion()); the words keep to one line meanwhile.
+    // A head that grows starts at least as wide as its words up to the time:
+    // the glide uncovers what follows the number, never the number itself.
     const to = view.title.getBoundingClientRect().width;
-    view.slotMotion = from && to && from !== to ? motion(view.title, [
-      { width: `${from}px`, minWidth: `${from}px`, overflow: 'clip', whiteSpace: 'nowrap' },
+    const core = time ? Math.ceil(timeEl.getBoundingClientRect().right - view.title.getBoundingClientRect().left) : 0;
+    const start = from && to > from ? Math.max(from, Math.min(to, core)) : from;
+    view.slotMotion = start && to && start !== to ? motion(view.title, [
+      { width: `${start}px`, minWidth: `${start}px`, overflow: 'clip', whiteSpace: 'nowrap' },
       { width: `${to}px`, minWidth: `${to}px`, overflow: 'clip', whiteSpace: 'nowrap' },
     ]) : null;
   }
   // `now`: the phase of a running run, or null once it is over. While it
   // waits for the user the clock stands still.
-  function updateClock(view, elapsedMs, now, status, ready = false) {
+  function updateClock(view, elapsedMs, now, status, note = null) {
     clearTimeout(view.clockTimer);
     view.clockTimer = null;
     const ticking = Boolean(now) && now !== 'paused' && now !== 'asking';
@@ -308,7 +321,7 @@
     view.clockRunning = ticking;
     const tick = () => {
       const elapsed = view.elapsedMs === null ? null : view.elapsedMs + (view.clockRunning ? performance.now() - view.clockAt : 0);
-      setTitle(view, elapsed, now, status, ready);
+      setTitle(view, elapsed, now, status, note);
     };
     tick();
     if (!ticking) return;
@@ -323,14 +336,10 @@
   }
   // After the time, what the check of an answer says that goes on after it
   // stood (agent-review.js headNote: "checking…", then "checked · 1 sentence
-  // improved"), each phrase alone for the translation. The chevron glides
-  // to the head's new width as for a new verb. Nothing without such a check.
-  function setNote(view, note) {
-    const parts = note?.parts || [];
-    const key = parts.join('\n');
-    if ((view.checkNoteKey || '') === key) return;
-    view.checkNoteKey = key;
-    const from = view.title.isConnected ? view.title.getBoundingClientRect().width : 0;
+  // improved"), each phrase alone for the translation (setTitle). Nothing
+  // without such a check.
+  function writeNote(view, parts) {
+    view.checkNoteKey = parts.join('\n');
     view.details.classList.toggle('has-check-note', parts.length > 0);
     if (!parts.length) {
       view.checkNote?.remove();
@@ -348,13 +357,6 @@
         view.checkNote.append(document.createTextNode(' · '), phrase);
       }
     }
-    if (!from) return;
-    cancelMotion(view.slotMotion);
-    const to = view.title.getBoundingClientRect().width;
-    view.slotMotion = to && from !== to ? motion(view.title, [
-      { width: `${from}px`, minWidth: `${from}px`, overflow: 'clip', whiteSpace: 'nowrap' },
-      { width: `${to}px`, minWidth: `${to}px`, overflow: 'clip', whiteSpace: 'nowrap' },
-    ]) : null;
   }
   // The time a live run waited for the user on this page, so far, on the
   // caller's clock: the wall clock since the start (agent-chat.js).
@@ -1694,9 +1696,8 @@
     const waited = waitedMs(view, now === 'paused' || now === 'asking');
     // An answer whose check goes on after it stood says so in the head.
     const note = running ? null : App.agentReview?.headNote?.(review, reviewEnded) || null;
-    setNote(view, note);
     updateClock(view, running && Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs - waited) : elapsedMs, now,
-      settled ? 'succeeded' : status, Boolean(note));
+      settled ? 'succeeded' : status, note);
     renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings);
     view.details.classList.toggle("is-running", running);
     if (view.details.dataset.status !== status) view.details.dataset.status = status;

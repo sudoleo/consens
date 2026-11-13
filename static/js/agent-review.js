@@ -703,26 +703,31 @@
     const head = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved` : '';
     return head || open ? { head, open } : null;
   }
-  // The head of a turn's activity (agent-activity.js setNote), with notes
-  // passed to the agent: while the review or the agent's pass goes on after
-  // the answer stood (`ended` false), that it is still being checked; then
-  // that it was, and the one thing that came of it. The rest of what came of
-  // it stands under the answer. Null without such a check, or for a review
-  // that did not finish: the head says what it always said.
+  // The head of a turn's activity (agent-activity.js), with notes passed to
+  // the agent: while the review or the agent's pass goes on after the answer
+  // stood (`ended` false), that it is still being checked; then how the check
+  // ended, in the sense of the line under the answer: checked (by every
+  // reviewer or in part) and the one thing that came of it, stopped by the
+  // user, or not checked (the reviewers did not finish). Null without such a
+  // check: the head says what it always said.
   function headNote(review, ended) {
     if (!isAudit(review) || !review.audit.feedback) return null;
     const audit = review.audit, pass = passOf(audit);
-    if (ended === false && (!AUDIT_ENDED.has(review.status) || pass.status !== 'done')) {
+    const checking = () => {
       const count = pass.status === 'checking' ? checkingNotes(pass) : 0;
-      return { live: true, parts: [!count ? 'checking…' : count === 1 ? 'checking 1 note…' : `checking ${count} notes…`] };
-    }
-    if (!['succeeded', 'partial'].includes(review.status)) return null;
+      return [!count ? 'checking…' : count === 1 ? 'checking 1 note…' : `checking ${count} notes…`];
+    };
+    if (ended === false && (!AUDIT_ENDED.has(review.status) || pass.status !== 'done')) return { live: true, parts: checking() };
+    // A review this view saw no end of (a saved turn still under way).
+    if (!AUDIT_ENDED.has(review.status)) return { live: false, parts: checking() };
+    if (review.status === 'cancelled') return { live: false, parts: ['check stopped'] };
+    if (!AUDIT_DONE.has(review.status) || review.status === 'failed') return { live: false, parts: ['not checked'] };
     const count = auditMarks(audit).length + auditWork(audit).length;
     const failed = pass.status === 'done' && pass.skipped && !pass.improved && count;
     const result = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved`
       : failed ? (pass.skipped === 'stopped' ? 'correction stopped' : 'correction not possible')
         : count === 1 ? '1 note open' : count ? `${count} notes open` : 'no objections';
-    return { live: false, parts: ['checked', result] };
+    return { live: false, parts: [review.status === 'partial' ? 'checked in part' : 'checked', result] };
   }
   // The pass ended without checking what it got (agent-activity.js names
   // its step so).

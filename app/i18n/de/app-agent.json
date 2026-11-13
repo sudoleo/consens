@@ -1387,5 +1387,8 @@
   "checked": "geprüft",
   "correction stopped": "Korrektur gestoppt",
   "correction not possible": "Korrektur nicht möglich",
-  "no objections": "keine Einwände"
+  "no objections": "keine Einwände",
+  "not checked": "nicht geprüft",
+  "checked in part": "teilweise geprüft",
+  "check stopped": "Prüfung gestoppt"
 }

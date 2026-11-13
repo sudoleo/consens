@@ -255,7 +255,11 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       geprüft“ mit Grund, wo er bekannt ist. Der Kopf über der Antwort sagt
       dabei „Antwort in 14 Sek. · wird geprüft…“, dann „… · prüft 2
       Anmerkungen…“, am Ende „… · geprüft · 1 Satz verbessert“, in einer
-      Zeile, und seine Zeit springt nicht auf die Dauer der Prüfung. Ein Befund über mehrere Tabellenzellen ist eine Passage (ein
+      Zeile, und seine Zeit springt nicht auf die Dauer der Prüfung; der
+      Wechsel nach dem Stream zeigt nie „Antwort in“ ohne Zahl. Schafft der
+      Prüfer es nicht (Zeitlimit), endet er mit „… · nicht geprüft“, bei
+      einem Teil der Prüfer „teilweise geprüft · …“, nach Stopp „Prüfung
+      gestoppt“. Ein Befund über mehrere Tabellenzellen ist eine Passage (ein
       Hover, eine Karte). Scheitert der Durchgang (Kontingent fast leer,
       Zeitüberschreitung): Schimmer weg, alle Marken, ruhig „Korrektur nicht
       möglich · N Anmerkungen offen“, in der Aktivität „Anmerkungen der Prüfer

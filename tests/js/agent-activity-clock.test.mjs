@@ -214,11 +214,62 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     // A run that ended in the middle of the pass: what the review has.
     render(review({ feedback: { status: "checking", findings: findings("checking", { delivered: "final" }) } }), true);
     expect(head(host)).toBe("Answer in 14s · checked · 2 notes open");
-    // A review that did not finish: the head says what it always said.
-    render(review({ status: "failed", feedback: { status: "done", findings: [] } }), true);
-    expect(head(host)).toBe("Thought for 14s");
-    expect(host.querySelector(".agent-activity-after")).toBeNull();
-    expect(host.querySelector(".agent-activity").classList.contains("has-check-note")).toBe(false);
+    app.dom.window.close();
+  });
+
+  // However the check ends, the head says it, in the sense of the line under
+  // the answer: never "Thought for" after "checking…" (Max's run of
+  // 2026-11-13: the one reviewer ran out of time, the head fell back).
+  it("ends with a true word for every end of the check", () => {
+    const { app, host, activity } = boot();
+    const end = (status, feedback = { status: "done", findings: findings("open") }, extra = {}) => {
+      const rev = review({ status, feedback });
+      Object.assign(rev.audit, extra);
+      activity.render(host, { running: false, status: "succeeded", elapsedMs: 17000, events: [], review: rev, reviewEnded: true });
+      return head(host);
+    };
+    // The reviewers did not finish ("Not reviewed – the reviewers did not finish").
+    expect(end("failed", { status: "live", findings: [] }, { issues: [{ code: "reviewers_unavailable" }, { code: "no_time" }] }))
+      .toBe("Answer in 17s · not checked");
+    expect(end("missing")).toBe("Answer in 17s · not checked");
+    // Some of them did ("1 of 2 reviewed").
+    expect(end("partial")).toBe("Answer in 17s · checked in part · 2 notes open");
+    expect(end("partial", { status: "done", skipped: "no_time", findings: findings("open", { delivered: "final" }) }))
+      .toBe("Answer in 17s · checked in part · correction not possible");
+    // The user stopped it ("Review stopped").
+    expect(end("cancelled")).toBe("Answer in 17s · check stopped");
+    // A saved turn whose review this view saw no end of.
+    expect(end("running", { status: "live", findings: [] })).toBe("Answer in 17s · checking…");
+    expect(host.querySelector(".agent-activity").classList.contains("has-check-note")).toBe(true);
+    app.dom.window.close();
+  });
+
+  // From the run's clock to the check and on, each state whole: never the
+  // verb without its number (Max's run: "Answer in" with a gap, a second
+  // before "Answer in 17s · checking…").
+  it("never shows its words without the time on the way from the run to the check", () => {
+    const { app, host, activity } = boot();
+    const states = [];
+    const render = spec => {
+      activity.render(host, { events: [], status: "succeeded", ...spec });
+      states.push(head(host));
+    };
+    const live = review({ status: "running", feedback: { status: "live", findings: findings("open") } });
+    render({ running: true, status: "running", elapsedMs: 16000, review: live });
+    // The stream ended and the chat was handed over; the review goes on.
+    render({ running: false, elapsedMs: 17000, review: live, reviewEnded: false });
+    render({ running: false, elapsedMs: null, review: live, reviewEnded: false });
+    render({ running: false, elapsedMs: 17000, review: review({ feedback: { status: "checking",
+      findings: findings("checking", { delivered: "final" }) } }), reviewEnded: false });
+    render({ running: false, elapsedMs: 17000, review: review({ feedback: { status: "done",
+      findings: findings("disputed", { delivered: "final", reason: "So." }) } }), reviewEnded: true });
+    expect(states).toEqual(["Reviewing · 16s", "Answer in 17s · checking…", "Answer in 17s · checking…",
+      "Answer in 17s · checking 3 notes…", "Answer in 17s · checked · 2 notes open"]);
+    // A head that never knew its time says what it is, never "Answer in" alone.
+    const fresh = boot();
+    fresh.activity.render(fresh.host, { running: false, status: "succeeded", elapsedMs: null, events: [], review: live, reviewEnded: false });
+    expect(head(fresh.host)).toBe("Answer ready · checking…");
+    fresh.app.dom.window.close();
     app.dom.window.close();
   });
 

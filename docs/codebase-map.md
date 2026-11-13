@@ -7003,9 +7003,15 @@ der Antwort (`agent-activity.js` `setNote`, `agent-review.js` `headNote`, nur
 nach der Übergabe, nicht während der Lauf läuft) sagt es dort, wo der Leser
 liest: „Answer in 14s · checking…“, dann „… · checking 3 notes…“, am Ende „…
 · checked · 1 sentence improved“ (sonst „2 notes open“, „no objections“,
-„correction not possible“/„… stopped“; eine nicht beendete Prüfung lässt den
-Kopf wie ohne Einstellung), in einer Zeile (`.has-check-note`: kein Umbruch,
-schmal mit „…“). Seine Zeit bleibt die bis zur fertigen Antwort:
+„correction not possible“/„… stopped“; „checked in part“ bei `partial`,
+„check stopped“ bei `cancelled`, „not checked“ bei `failed`/`missing`/`off`, ein
+gespeicherter, noch laufender bleibt „checking…“; nie fällt er nach
+„checking…“ auf „Thought for“ zurück), in einer Zeile (`.has-check-note`: kein
+Umbruch, schmal mit „…“, die Zeit dann Text wie die Wörter, damit „…“ nie die
+Zahl verdeckt). Zeit und Worte ändern sich in einem Schritt und gleiten einmal
+(`setTitle(…, note)`, `writeNote`); ein wachsender Kopf beginnt mindestens so
+breit wie seine Wörter bis zur Zeit. Ohne bekannte Zeit heißt er „Answer ready ·
+…“, nie „Answer in“ ohne Zahl. Seine Zeit bleibt die bis zur fertigen Antwort:
 `savedDuration` nimmt mit `feedback` `agent_answer_fixed_at`, und die
 Live-Ansicht ohne dieses Feld die Übergabe dieser Seite (`agent-chat.js`
 `readyAt`); vorher sprang sie mit dem Laufende von 15 auf 31 s. Karte und
