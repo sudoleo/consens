@@ -662,15 +662,6 @@
       return { ...finding, notes };
     });
   }
-  // The agent's reason for a finding of `items` it disputes, if any.
-  function disputeOf(items, audit) {
-    const findings = findingsOf(audit);
-    for (const item of items) {
-      const finding = findings.get(item?.finding);
-      if (finding?.state === 'disputed' && typeof finding.reason === 'string' && finding.reason.trim()) return finding.reason;
-    }
-    return '';
-  }
   // While the agent may still correct its answer, nothing of the review
   // stands at the sentences: a mark could go with the sentence it marks.
   // `ended` false: the run (or its review) still goes on. Once it ended
@@ -678,6 +669,87 @@
   function withheld(review, ended) {
     const feedback = review?.audit?.feedback;
     return Boolean(feedback) && feedback.status !== 'done' && ended === false;
+  }
+  // The agent's pass over the findings: those it checks now, those it
+  // improved, whether it got any, and why a pass did not run or was not kept
+  // (`skipped`, agent_review_feedback). Null without findings for the agent.
+  function passOf(audit) {
+    const feedback = audit?.feedback;
+    if (!feedback) return null;
+    const findings = [...findingsOf(audit).values()];
+    return { status: feedback.status, skipped: typeof feedback.skipped === 'string' ? feedback.skipped : '',
+      checking: findings.filter(finding => finding.state === 'checking'),
+      improved: findings.filter(finding => finding.on === 'answer' && finding.state === 'corrected').length,
+      attempted: findings.some(finding => finding.delivered === 'final') };
+  }
+  const checkingWords = count => (count === 1 ? 'The agent is checking 1 finding…' : `The agent is checking ${count} findings…`);
+  // What came of a finished pass: its head (sentences improved, or that a
+  // correction was not possible: the user's Stop says so, every other reason
+  // alike) and the notes still open, each a phrase of its own for the
+  // translation. Null where no pass ran and nothing is to be said.
+  function passSummary(audit) {
+    const pass = passOf(audit);
+    if (!pass || pass.status !== 'done') return null;
+    const count = auditMarks(audit).length + auditWork(audit).length;
+    const open = count === 1 ? '1 note open' : count ? `${count} notes open` : '';
+    if (pass.skipped && !pass.improved) {
+      return count ? { head: pass.skipped === 'stopped' ? 'Correction stopped' : 'Correction not possible', open } : null;
+    }
+    if (!pass.attempted) return null;
+    const head = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved` : '';
+    return head || open ? { head, open } : null;
+  }
+  // The pass ended without checking what it got (agent-activity.js names
+  // its step so).
+  function correctionUnchecked(review) {
+    const pass = passOf(isAudit(review) ? review.audit : null);
+    return Boolean(pass && pass.status === 'done' && pass.skipped && pass.skipped !== 'stopped' && !pass.improved);
+  }
+  // Phrases in one line, " · " between them.
+  function phrases(el, parts) {
+    for (const [index, text] of parts.filter(Boolean).entries()) {
+      if (index) el.append(document.createTextNode(' · '));
+      el.append(node('span', '', text));
+    }
+    return el;
+  }
+  const stillMotion = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+    || App.userSettings?.get?.('stream_animation') === false;
+  // The sweep over the sentences being checked ends where they stood: a
+  // quiet tone over their old lines fades out while the marks or the new
+  // words come in (never a cut from grey to colour).
+  function checkingFade(body) {
+    const spans = body.querySelectorAll('.cx-claim.is-agent-checking');
+    if (!spans.length || stillMotion() || typeof Element.prototype.animate !== 'function') return () => {};
+    const rects = [...spans].flatMap(span => [...span.getClientRects()]).filter(rect => rect.width && rect.height);
+    return () => {
+      for (const rect of rects) {
+        const ghost = node('div', 'agent-checking-ghost');
+        ghost.setAttribute('aria-hidden', 'true');
+        Object.assign(ghost.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` });
+        document.body.append(ghost);
+        const fade = ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: CHECKING_FADE_MS, easing: 'ease-out' });
+        fade.onfinish = fade.oncancel = () => ghost.remove();
+      }
+    };
+  }
+  const CHECKING_FADE_MS = 260;
+  // A view that sees no end of the pass (a tab that does not follow the run)
+  // stops the sweep after the server's own deadline for it
+  // (agent_review_feedback CORRECTION_SECONDS) and its save, and shows the
+  // review as it has it.
+  const CHECKING_LIMIT_MS = 180000;
+  // One deadline per sweep (`key`: the answer and the findings checked); a
+  // render of the same sweep keeps it, any other ends it.
+  function sweepUntil(body, key, end) {
+    if ((body._sweep || '') === key) return;
+    clearTimeout(body._sweepTimer);
+    body._sweep = key;
+    if (!key) return;
+    const raw = body.dataset.markdown;
+    body._sweepTimer = setTimeout(() => {
+      if (body.isConnected && body._sweep === key && body.dataset.markdown === raw) end();
+    }, CHECKING_LIMIT_MS);
   }
   // The text on screen when the review's answer is the agent's correction of
   // it (`corrects`): {from, to} versions, else null.
@@ -747,8 +819,12 @@
   // The passages of the answer that carry a colour; only these are "marked".
   function auditPassages(audit) {
     const findings = findingsOf(audit);
-    return (audit?.claims || []).filter(claim => claim?.anchor
-      && (claim.dissent || []).some(item => item && !corrected(item, findings))).length;
+    const marked = (audit?.claims || []).filter(claim => claim?.anchor
+      && (claim.dissent || []).some(item => item && !corrected(item, findings)));
+    if (!audit?.feedback) return marked.length;
+    // With findings for the agent, one finding is one passage, however many
+    // sentences (or table cells) it spans (consensus-insights.js).
+    return new Set(marked.map((claim, index) => (claim.dissent || []).find(item => item?.finding)?.finding || `#${index}`)).size;
   }
   const reviewerLabel = reviewer => reviewer?.provider_label || reviewer?.provider;
   function reviewerName(reviewer, fallback = '') {
@@ -807,7 +883,7 @@
   // One passage of the answer: its words once, then every reviewer's note on
   // them, the most serious first, as the mark's card shows them, so the same
   // passage never stands twice, far apart.
-  function auditPassage(quote, items, audit) {
+  function auditPassage(quote, items, audit, onAnswer = true) {
     const passage = node('section', 'agent-audit-passage');
     if (quote) {
       const words = node('q', 'agent-audit-quote', String(quote));
@@ -816,10 +892,12 @@
     }
     const list = node('ul', 'agent-audit-notes');
     for (const item of [...items].sort((a, b) => KIND_RANK[kindOf(a)] - KIND_RANK[kindOf(b)])) list.append(auditNote(item, audit));
-    // The agent's answer to them, where it keeps its sentence.
-    const reason = disputeOf(items, audit);
-    if (reason) list.append(agentReply(reason));
+    // What the agent made of them, in the words of the mark's card
+    // (consensus-insights.js): its reason, or that it has not checked them.
+    const verdict = onAnswer ? window.auditFindingVerdict?.(items, audit) : null;
+    if (verdict?.reply) list.append(agentReply(verdict.reply));
     passage.append(list);
+    if (verdict?.unchecked) passage.append(node('p', 'agent-review-note agent-audit-unchecked', verdict.unchecked));
     return passage;
   }
   function agentReply(reason) {
@@ -894,7 +972,9 @@
     const marks = auditMarks(audit), work = auditWork(audit);
     const fixed = correctedFindings(audit), fixedNotes = fixed.flatMap(finding => finding.notes);
     const status = auditStatus(review);
+    const pass = !status && passSummary(audit);
     if (status) panel.append(node('p', 'agent-evidence-status', status));
+    else if (pass) panel.append(phrases(node('p', 'agent-evidence-status'), [pass.head, pass.open]));
     if (marks.length + work.length + fixedNotes.length) panel.append(auditTally([...marks, ...work, ...fixedNotes]));
     if (AUDIT_DONE.has(review.status) && reviewers.some(r => r.status === 'completed')) {
       panel.append(node('p', 'agent-review-note', 'Unmarked text means no objection, not confirmed.'));
@@ -915,7 +995,7 @@
     }
     if (work.length) {
       const section = node('section', 'agent-audit-group');
-      section.append(node('h5', 'agent-audit-work-head', 'On the work'), auditPassage('', work, audit));
+      section.append(node('h5', 'agent-audit-work-head', 'On the work'), auditPassage('', work, audit, false));
       panel.append(section);
     }
     // Who found nothing, and who gave no (final) review: once each, the same
@@ -975,11 +1055,13 @@
     // answer: the review goes on.
     const hold = withheld(review, options.ended);
     const fixed = correctedFindings(audit).length;
+    const pass = passOf(audit), summary = !hold && passSummary(audit);
+    const checking = hold && pass?.status === 'checking' ? pass.checking.length : 0;
     // The comparisons by what their cards show: an answer's text only through being there.
     const shown = JSON.stringify(comparisons, (key, value) => UNSHOWN_TEXT.has(key) && typeof value === 'string'
       ? value !== '' : key === 'sources' ? undefined : value);
     const signature = JSON.stringify(['audit', review.status, review.answer_hash, reviewers, total, passages, shown,
-      ...(audit.feedback ? [hold, fixed] : [])]);
+      ...(audit.feedback ? [hold, fixed, checking, summary] : [])]);
     if (host._activitySignature === signature) return;
     host._activitySignature = signature;
     host.replaceChildren();
@@ -995,7 +1077,7 @@
     // One line says who reviews and how far it is, not twice over like a
     // form; the outcome stands under it.
     const names = reviewers.map(r => reviewerName(r)).filter(Boolean);
-    card.append(node('h4', '', !ended ? 'Reviewing the answer…'
+    card.append(node('h4', '', checking ? checkingWords(checking) : !ended ? 'Reviewing the answer…'
       : names.length ? (done ? `Reviewed by ${names.join(', ')}` : `Reviewers: ${names.join(', ')}`)
       : count === 1 ? '1 reviewer' : `${count} reviewers`));
     // A failed review says so once, in the line below.
@@ -1003,7 +1085,7 @@
     if (missing.length) card.append(node('p', '', `No review: ${missing.join(', ')}`));
     const found = [total === 1 ? '1 note' : total ? `${total} notes` : '',
       passages === 1 ? '1 passage marked in the text' : passages ? `${passages} passages marked in the text` : '',
-      fixed === 1 ? '1 passage corrected by the agent' : fixed ? `${fixed} passages corrected by the agent` : ''].filter(Boolean);
+      summary?.head || ''].filter(Boolean);
     const outcome = review.status !== 'succeeded' && review.status !== 'partial'
       ? { cancelled: 'Review stopped', failed: 'Not reviewed – the reviewers did not finish' }[review.status] || 'Not reviewed'
       : found.length ? '' : 'No objections.';
@@ -1151,6 +1233,11 @@
     // While the agent may still correct the answer, the review shows nothing
     // at the sentences and the row goes on reviewing.
     const hold = deferred || withheld(review, evidence.ended);
+    // The agent checks findings now: their sentences carry the sweep, the line
+    // under the row says how many (both only while this view follows the run).
+    const pass = passOf(review.audit);
+    const checking = !deferred && hold && exact && pass?.status === 'checking' ? pass.checking : [];
+    const summary = !hold && exact ? passSummary(review.audit) : null;
     // The rewritten sentences come into view in the light only where this
     // answer stood under the running review a moment ago, never on a reload.
     const lineage = review.versions?.[0]?.hash || '';
@@ -1174,8 +1261,11 @@
       host = node('section', 'agent-review'); placeRow(body, host, raw); body._agentReview = host;
       host.setAttribute('aria-label', 'Answer evidence');
     } else if (empty) placeRow(body, host, raw);
+    const still = stillMotion();
+    sweepUntil(body, checking.length ? `${lineage}|${checking.map(finding => finding.id).join(',')}` : '',
+      () => render(body, review, { ...evidence, ended: true }));
     const signature = JSON.stringify(['audit', review, raw, exact, turnSources, body._agentRenderSerial || 0,
-      ...(review.audit.feedback ? [hold] : [])]);
+      ...(review.audit.feedback ? [hold, still] : [])]);
     if (host.dataset.signature === signature) {
       // An equal review object (the run's end): the activity's buttons find
       // the same contexts, with the turn's sources.
@@ -1193,8 +1283,8 @@
     const status = host._auditStatus || node('span', 'agent-review-status');
     host._auditStatus = status;
     status.setAttribute('role', 'status'); status.dataset.state = pending ? 'running' : review.status;
-    const shown = exact || notesOnly ? rowStatus(review, { pending, empty }) : '';
-    const said = shown || (exact && done ? rowAnnouncement(review) : '');
+    const shown = checking.length ? '' : exact || notesOnly ? rowStatus(review, { pending, empty }) : '';
+    const said = shown || (checking.length ? checkingWords(checking.length) : exact && done ? rowAnnouncement(review) : '');
     if (status.textContent !== App.t(said)) status.textContent = said;
     status.classList.toggle('visually-hidden', !shown);
     status.hidden = !said;
@@ -1204,7 +1294,8 @@
     const marks = host._auditReviewers || node('span', 'agent-review-reviewers');
     host._auditReviewers = marks;
     marks.setAttribute('aria-hidden', 'true');
-    marks.hidden = !pending;
+    // The reviewers are through while the agent checks their findings.
+    marks.hidden = !pending || checking.length > 0;
     if (pending) reviewerMarks(marks, review.audit?.reviewers || []);
     for (const child of [...host.children]) if (child !== status && child !== marks) child.remove();
     const tabs = evidenceNav();
@@ -1215,16 +1306,35 @@
     const context = auditContext(review, evidence, turnSources);
     host._auditContext = context;
     const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
+    // The pass in one calm line under the row (findings_to_agent): while the
+    // agent checks, how many findings; then what came of it, which opens the
+    // notes with their trace. Said by the live region while it checks.
+    if (checking.length) {
+      const line = phrases(node('p', 'agent-review-findings is-checking'), [checkingWords(checking.length)]);
+      line.setAttribute('aria-hidden', 'true');
+      host.append(line);
+    } else if (summary) {
+      const line = node('p', 'agent-review-findings');
+      const button = phrases(node('button', 'agent-review-findings-link'), [summary.head, summary.open]);
+      button.type = 'button';
+      button.setAttribute('aria-controls', 'modelAnswerReader');
+      button.addEventListener('click', () => open('differences', { trigger: button }));
+      line.append(button);
+      host.append(line);
+    }
     // The marks of exactly this answer: of every reviewer once the review is
     // done, before that of those whose final round is in. A review that then
     // stops keeps them (notesOnly): a mark that showed never goes away.
+    const fadeChecking = checking.length ? () => {} : checkingFade(body);
     const place = () => overText(body, raw, () => {
       if (exact && !hold && (done || early || notesOnly)) window.renderStoredAuditMarks?.(body, review.audit, fallback, turnSources, {
         openNotes: () => open('differences', { trigger: document.activeElement }) });
+      if (checking.length) window.renderAuditChecking?.(body, review.audit, new Set(checking.map(finding => finding.id)), { still });
       window.linkifyAgentSources?.(body, turnSources);
     });
     if (relight && App.streamReveal?.rewrite) App.streamReveal.rewrite(body, place);
     else place();
+    fadeChecking();
     body._markSignature = null;
     const count = auditCount(review.audit);
     // The answers the agent asked for (compare_models), read in their own
@@ -1267,6 +1377,7 @@
   function renderReview(body, review, evidence) {
     // A correction held for a selection is this render's to decide (renderAudit).
     body._heldCorrection = null;
+    if (!isAudit(review)) sweepUntil(body, '', null);
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const raw = body.dataset.markdown ?? version?.text;
     const turnSources = sourcesOf(body, review, evidence, raw);
@@ -1501,5 +1612,6 @@
     // review object; the last built context of the comparison still opens.
     return (review && activityContexts.get(review) || []).find(c => c.key === key) || contextsByKey.get(key) || null;
   }
-  App.agentReview = { render, renderActivity, failureNote, wrapUpNote, failureReason, contextFor, shownText };
+  App.agentReview = { render, renderActivity, failureNote, wrapUpNote, failureReason, contextFor, shownText,
+    correctionUnchecked };
 })();

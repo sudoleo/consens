@@ -675,6 +675,45 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
   0%, 100% { opacity: .3; }
   50% { opacity: .95; }
 }
+/* The agent's pass over the reviewers' findings (agent-review.js, only with
+   findings_to_agent): one calm line under the row, while it checks and with
+   what came of it, which opens the notes. Never in a colour of its own. */
+.agent-review > .agent-review-findings { order: 3; flex: 1 0 100%; min-height: 32px; margin: 0; color: var(--ink-3); line-height: 32px; }
+/* Inline, not flex: the " · " between the phrases keeps its spaces. */
+.agent-review-findings-link { display: inline-block; margin-left: -8px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: inherit; font: inherit; line-height: 20px; text-align: start; cursor: pointer; }
+.agent-review-findings-link:focus-visible { outline: var(--focus-ring); outline-offset: 0; }
+@media (hover: hover) and (pointer: fine) {
+  .agent-review-findings-link:hover { background: var(--hover); color: var(--ink-2); }
+}
+@media (pointer: coarse) { .agent-review-findings-link { padding-block: 12px; } }
+/* The sentences the agent checks carry the table loader's material
+   (skeleton.css, .stream-table-pending): its tone, its light band and its
+   pace, swept along each line. The text stays readable and selectable, the
+   span takes no room; without motion (Settings or the system) only the
+   tone stands. A ghost of the tone fades where the sweep ended. */
+.cx-claim.is-agent-checking {
+  padding: 0.1em 0;
+  border-radius: 3px;
+  background-color: color-mix(in srgb, var(--ink) 8%, transparent);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+  .cx-claim.is-agent-checking:not(.is-still) {
+    background-image: linear-gradient(100deg, transparent 38%, color-mix(in srgb, var(--ink) 6%, transparent) 50%, transparent 62%);
+    background-repeat: no-repeat;
+    background-size: 300% 100%;
+    animation: agent-checking-sweep var(--dur-beat) var(--ease-standard) infinite;
+  }
+}
+@media (forced-colors: active) {
+  .cx-claim.is-agent-checking { background: none; text-decoration: underline dotted GrayText; }
+}
+@keyframes agent-checking-sweep {
+  0%, 10% { background-position: 100% 0; }
+  70%, 100% { background-position: 0% 0; }
+}
+.agent-checking-ghost { position: fixed; z-index: 0; border-radius: 3px; background: color-mix(in srgb, var(--ink) 8%, transparent); pointer-events: none; }
 /* Too narrow for the score and every link in one line (an open Agent panel,
    German): the score takes its own line above, as on a phone. */
 @container agent-review (max-width: 720px) {
@@ -814,6 +853,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    keeps a sentence, in ink; a sentence it corrected as what stood, struck
    through and quiet, over what stands now. */
 .agent-audit-reply .agent-audit-kind { color: var(--ink-2); }
+.agent-audit-passage > .agent-audit-unchecked { margin: var(--space-2) 0 0; }
 .agent-audit-change { display: grid; gap: var(--space-1); margin: 0 0 var(--space-2); }
 .agent-audit-change > .agent-audit-quote { margin: 0; }
 .agent-audit-change > del.agent-audit-before { color: var(--ink-3); text-decoration-line: line-through; text-decoration-color: var(--ink-3); }

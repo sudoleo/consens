@@ -243,11 +243,21 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Zeile weg, die Einstellungssuche findet sie dann nicht). Eine Frage mit
       einer leicht veralteten Zahl („Was kostet ein Ticket fürs Kolosseum?“)
       → die Antwort steht sofort, ohne Marken; die Leiste sagt „Antwort wird
-      geprüft…“, bis der Agent die Befunde durchgegangen ist; nie erscheint
-      eine Farbe, die wieder verschwindet. Danach: nur der korrigierte Satz
-      läuft im grünen Licht neu ein, der Text darunter gleitet, nichts
-      scrollt, kein Panel öffnet sich, der Fokus bleibt; bestrittene Stellen
-      tragen ihre Marke, die Karte nennt „Der Agent widerspricht“ mit Grund.
+      geprüft…“, dann „Der Agent prüft 2 Befunde…“ in einer Zeile darunter,
+      und genau deren Sätze tragen den grauen Schimmer des Tabellen-Ladens
+      (lesbar, markierbar, nichts verrutscht); nie erscheint eine Farbe, die
+      wieder verschwindet. Danach: nur der korrigierte Satz läuft im grünen
+      Licht neu ein, der Schimmer klingt aus, der Text darunter gleitet,
+      nichts scrollt, kein Panel öffnet sich, der Fokus bleibt; die Zeile sagt
+      „1 Satz verbessert · 3 Anmerkungen offen“ und öffnet per Klick Notes;
+      bestrittene Stellen tragen ihre Marke, schon die Hover-Vorschau nennt
+      „Der Agent widerspricht“ mit Grund, nicht geprüfte „Vom Agenten nicht
+      geprüft“ mit Grund, wo er bekannt ist. Ein Befund über mehrere Tabellenzellen ist eine Passage (ein
+      Hover, eine Karte). Scheitert der Durchgang (Kontingent fast leer,
+      Zeitüberschreitung): Schimmer weg, alle Marken, ruhig „Korrektur nicht
+      möglich · N Anmerkungen offen“, in der Aktivität „Befunde der Prüfer
+      nicht durchgegangen“. Zweiter Tab, Reload und abgelaufener Nachlauf
+      zeigen nie einen endlosen Schimmer.
       Notes: „Vom Agenten korrigiert“ mit altem (durchgestrichen) und neuem
       Satz und den Anmerkungen. Gegenprobe: während der Agent prüft, einen
       Teil der Antwort markieren → der Text bleibt, bis die Auswahl weg ist,

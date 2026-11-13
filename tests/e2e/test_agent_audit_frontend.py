@@ -336,7 +336,10 @@ TICKET = ("A standard ticket costs 18 euros and includes the Roman Forum, accord
           "[official site](https://colosseo.it/en/).")
 FIXED_TICKET = TICKET.replace("18 euros", "24 euros since 2025")
 CORRECTED = ANSWER.replace(TICKET, FIXED_TICKET)
-FLOOR_REASON = "The city reopened the arena with its rebuilt floor in 2023."
+# A reason of a real one's length, in German as the agent writes it to a
+# German user, for the look of the hover preview.
+FLOOR_REASON = ("Der neue Boden wurde 2021 beschlossen und 2023 in seinem ersten Abschnitt fertig; der Satz meint "
+                "diesen Abschnitt, den die Seite des Parks so nennt.")
 FINDING_OF = {MARKS["OpenAI"][0]["note"]: "s1", MARKS["OpenAI"][1]["note"]: "s2", MARKS["Xiaomi"][0]["note"]: "s3"}
 
 
@@ -344,7 +347,8 @@ def feedback_review(stage):
     """The review with findings for the agent as the server saves it: while
     the reviewers review ("live"), while the agent checks ("checking"), once
     its pass is through ("done": s1 corrected, its claim gone and the answer's
-    second version; s2 disputed)."""
+    second version; s2 disputed), or when the pass failed ("failed": both
+    open again, the marks as reviewed)."""
     done = stage == "done"
     saved = review("succeeded" if stage != "live" else "running", "completed" if stage != "live" else "running")
     findings = [
@@ -352,9 +356,9 @@ def feedback_review(stage):
         {"id": "s2", "on": "answer", "kind": "doubtful", "voices": 2, "hard": True, "state": "open"},
         {"id": "s3", "on": "answer", "kind": "doubtful", "voices": 1, "hard": False, "state": "open"},
         {"id": "e7", "on": "work", "entry": 7, "kind": "incomplete", "voices": 1, "hard": False, "state": "open"}]
-    if stage == "checking":
+    if stage in ("checking", "failed"):
         for finding in findings[:2]:
-            finding.update(state="checking", delivered="final")
+            finding.update(state="checking" if stage == "checking" else "open", delivered="final")
     if done:
         findings[0].update(state="corrected", delivered="final", before=TICKET, after=FIXED_TICKET, notes=[
             {"model": "OpenAI", "kind": "wrong", "note": MARKS["OpenAI"][0]["note"], "source": TICKETS}])
@@ -375,13 +379,17 @@ def feedback_review(stage):
             item["finding"] = FINDING_OF[item["note"]]
     for item in saved["audit"]["process"]:
         item["finding"] = "e7"
-    saved["audit"]["feedback"] = {"status": "done" if done else stage, "findings": findings,
+    saved["audit"]["feedback"] = {"status": "done" if stage in ("done", "failed") else stage, "findings": findings,
+                                  **({"skipped": "failed"} if stage == "failed" else {}),
                                   "counts": {"delivered": 2 if stage != "live" else 0, "corrected": int(done),
                                              "disputed": int(done), "cut": 0}}
     return saved
 
 
-def feedback_events(*stages, final=False):
+def feedback_events(*stages, final=False, end="done", handover=True):
+    """The run's frames. ``handover=False``: a stream that stays with the run
+    (the harness answers it at once, and a hand-over's stream that ends
+    without its final frame stops following, agent-chat.js followReview)."""
     handed = {"id": TURN, "question": QUESTION, "status": "pending", "execution_mode": "agent", "mode": "Agent",
               "consensus": ANSWER, "sources": [], "model_answers": {}, "agent_review": feedback_review("live"),
               "agent_activity": ACTIVITY, "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5",
@@ -390,37 +398,56 @@ def feedback_events(*stages, final=False):
     events += [("activity", event) for event in ACTIVITY]
     events += [("delegation", {"version": 1, "chat_id": CHAT, "turn_id": TURN, "agent": agent})
                for agent in reviewer_sessions("working")]
-    events += [("delta", {"text": ANSWER}), ("answer_check", {}), ("review", {"review": feedback_review("live")}),
-               ("handover", {"chat_id": CHAT, "turn_id": TURN, "response": ANSWER, "turn": handed,
-                             "bookmark_meta": {"id": "bm", "title": QUESTION, "query": QUESTION, "mode": "Agent",
-                                               "has_consensus": True}})]
+    events += [("delta", {"text": ANSWER}), ("answer_check", {}), ("review", {"review": feedback_review("live")})]
+    if handover:
+        events.append(("handover", {"chat_id": CHAT, "turn_id": TURN, "response": ANSWER, "turn": handed,
+                                    "bookmark_meta": {"id": "bm", "title": QUESTION, "query": QUESTION, "mode": "Agent",
+                                                      "has_consensus": True}}))
     events += [("review", {"review": feedback_review(stage)}) for stage in stages]
     if final:
         corrected = {"version": 1, "id": "server_correct_answer", "kind": "tool", "name": "correct_answer",
                      "status": "succeeded"}
-        saved = {**handed, "status": "completed", "consensus": CORRECTED, "agent_review": feedback_review("done"),
+        text = CORRECTED if end == "done" else ANSWER
+        saved = {**handed, "status": "completed", "consensus": text, "agent_review": feedback_review(end),
                  "agent_activity": [*ACTIVITY, corrected]}
-        events.append(("final", {"chat_id": CHAT, "turn_id": TURN, "response": CORRECTED, "turn": saved,
+        events.append(("final", {"chat_id": CHAT, "turn_id": TURN, "response": text, "turn": saved,
                                  "token_budget": {"remaining": 140057, "limit": 250000},
                                  "bookmark_meta": {"id": "bm", "title": QUESTION, "query": QUESTION, "mode": "Agent",
                                                    "has_consensus": True}}))
     return events
 
 
-def test_no_mark_shows_while_the_agent_checks_the_reviewers_findings(browser, phase4_server):
+@pytest.mark.parametrize("width", [1280, 390])
+def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, phase4_server, width):
     """With findings passed to the agent, a mark could go with the sentence
-    it marks: the answer stands unmarked and the row goes on reviewing until
-    the agent's pass is through."""
-    context, page, errors = open_audit_page(browser, phase4_server, 1280, False, feedback_events("checking"),
-                                            hang_live=True)
+    it marks: no mark yet, but the sentences the agent checks carry the table
+    loader's sweep, and one line under the row says how many."""
+    context, page, errors = open_audit_page(browser, phase4_server, width, False,
+                                            feedback_events("checking", handover=False), hang_live=True)
     try:
         body = page.locator("#agentAnswerBody")
         expect(body).to_contain_text("A standard ticket costs 18 euros")
         row = page.locator("#agentAnswer .agent-review")
-        expect(row.locator(".agent-review-status")).to_have_text("Reviewing the answer…")
+        expect(row.locator(".agent-review-findings")).to_have_text("The agent is checking 2 findings…")
+        expect(row.locator(".agent-review-reviewers")).to_be_hidden()
         expect(row.locator('.agent-evidence-link[data-section="differences"]')).to_be_disabled()
-        page.wait_for_timeout(800)
-        expect(body.locator(".cx-claim")).to_have_count(0)
+        swept = body.locator(".cx-claim.is-agent-checking")
+        expect(swept.filter(has_text="A standard ticket costs 18 euros")).not_to_have_count(0)
+        expect(swept.filter(has_text="The arena floor was rebuilt in 2023.")).not_to_have_count(0)
+        expect(swept.filter(has_text="It held about 50,000 spectators")).to_have_count(0)
+        expect(body.locator(".cx-claim.is-audit")).to_have_count(0)
+        # The loader's sweep, its pace; the text keeps its place and stays selectable.
+        style = swept.first.evaluate("""el => { const s = getComputedStyle(el);
+            return [s.animationName, s.animationDuration, s.userSelect, s.pointerEvents]; }""")
+        assert style[0] == "agent-checking-sweep" and style[1] == "1.8s" and style[2] != "none", style
+        height = body.evaluate("""el => { const before = el.getBoundingClientRect().height;
+            el.querySelectorAll('.is-agent-checking').forEach(span => span.classList.remove('is-agent-checking'));
+            const after = el.getBoundingClientRect().height;
+            el.querySelectorAll('.cx-claim:not(.is-audit)').forEach(span => span.classList.add('is-agent-checking'));
+            return [before, after]; }""")
+        assert height[0] == height[1], height
+        page.wait_for_timeout(700)
+        _snapshot(page, f"findings-checking-{width}")
         # The switch beside the reviewers: off by default, bound to the
         # account setting, gone while the reviewers are off.
         state = page.evaluate("""() => {
@@ -463,22 +490,38 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
         expect(marked.filter(has_text="The arena floor was rebuilt in 2023.")).not_to_have_count(0)
         expect(marked.filter(has_text="It held about 50,000 spectators")).not_to_have_count(0)
         expect(marked.filter(has_text="24 euros")).to_have_count(0)
+        expect(body.locator(".is-agent-checking")).to_have_count(0)
+        line = page.locator("#agentAnswer .agent-review-findings")
+        expect(line).to_have_text("1 sentence improved · 3 notes open")
         page.wait_for_timeout(1500)
         # One rewrite, in the light (dark mode too); the reduced-motion case is unit-tested.
         rewrites = page.evaluate("() => window.__rewrites")
         assert len(rewrites) == 1 and rewrites[0] > 0, rewrites
         # The light is gone once the sentence stands, and nothing was left unseen.
         assert page.evaluate("() => [...CSS.highlights.keys()].every(name => !CSS.highlights.get(name).size)")
-        _snapshot(page, f"findings-corrected-{width}-{'dark' if dark else 'light'}")
+        _snapshot(page, f"findings-improved-{width}-{'dark' if dark else 'light'}")
+        if width >= 1200:
+            # The hover preview of the kept sentence says what the agent made of it.
+            floor = marked.filter(has_text="The arena floor was rebuilt in 2023.").first
+            floor.hover()
+            preview = page.locator(".insight-preview")
+            expect(preview).to_be_visible()
+            expect(preview.locator(".cx-card-reply .cx-card-tag")).to_have_text("The agent disagrees")
+            expect(preview).to_contain_text(FLOOR_REASON)
+            page.wait_for_timeout(400)
+            _snapshot(page, "findings-hover-disputed-1280")
+            page.mouse.move(0, 0)
+            expect(preview).not_to_be_visible()
         marked.filter(has_text="The arena floor was rebuilt in 2023.").first.click()
         card = page.locator("#claimPopover .cx-card-audit")
         expect(card).to_contain_text(FLOOR_REASON)
         expect(card.locator(".cx-card-reply .cx-card-tag")).to_have_text("The agent disagrees")
         page.keyboard.press("Escape")
-        notes = page.locator('#agentAnswer .agent-evidence-link[data-section="differences"]')
-        notes.click()
+        # The line opens the notes with the trace.
+        line.locator("button").click()
         reader = page.locator(".agent-audit-panel")
         expect(reader).to_be_visible()
+        expect(reader.locator(".agent-evidence-status")).to_have_text("1 sentence improved · 3 notes open")
         fixed = reader.locator(".agent-audit-corrected")
         expect(fixed.locator("del")).to_contain_text("18 euros")
         expect(fixed.locator("ins")).to_contain_text("24 euros since 2025")
@@ -486,6 +529,49 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
         expect(reader.locator(".agent-audit-reply")).to_contain_text(FLOOR_REASON)
         page.wait_for_timeout(500)
         _snapshot(page, f"findings-notes-{width}-{'dark' if dark else 'light'}")
+        assert errors == []
+    finally:
+        context.close()
+
+
+def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser, phase4_server):
+    """The pass failed: the sweep ends, every mark stands as reviewed, one
+    calm line says the correction was not possible, and the card of a mark
+    that the agent did not check says so."""
+    events = feedback_events("checking", "failed", final=True, end="failed")
+    context, page, errors = open_audit_page(browser, phase4_server, 1280, False, events)
+    try:
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        body = page.locator("#agentAnswerBody")
+        expect(body).to_contain_text("A standard ticket costs 18 euros")
+        expect(body.locator(".is-agent-checking")).to_have_count(0)
+        marked = body.locator(".cx-claim.is-audit")
+        for text in ("A standard ticket costs 18 euros", "The arena floor was rebuilt in 2023.",
+                     "It held about 50,000 spectators"):
+            expect(marked.filter(has_text=text)).not_to_have_count(0)
+        line = page.locator("#agentAnswer .agent-review-findings")
+        expect(line).to_have_text("Correction not possible · 4 notes open")
+        # In the row's quiet ink, never an error colour.
+        colors = line.evaluate("""el => [getComputedStyle(el).color,
+            getComputedStyle(el.closest('.agent-review').querySelector('.agent-evidence-link')).color]""")
+        assert colors[0] != "rgb(0, 0, 0)" and "255, 0, 0" not in colors[0], colors
+        page.wait_for_timeout(1200)
+        _snapshot(page, "findings-not-possible-1280")
+        ticket = marked.filter(has_text="A standard ticket costs 18 euros").first
+        ticket.hover()
+        preview = page.locator(".insight-preview")
+        expect(preview).to_be_visible()
+        expect(preview.locator(".cx-card-note")).to_have_text("Not checked by the agent: the correction did not finish.")
+        page.wait_for_timeout(400)
+        _snapshot(page, "findings-hover-unchecked-1280")
+        page.mouse.move(0, 0)
+        ticket.click()
+        card = page.locator("#claimPopover .cx-card-audit")
+        expect(card.locator(".cx-card-note")).to_have_text("Not checked by the agent: the correction did not finish.")
+        page.keyboard.press("Escape")
+        # The activity does not claim the findings were checked.
+        page.locator("#agentAnswer .agent-activity > summary").click()
+        expect(page.locator("#agentAnswer .agent-activity")).to_contain_text("Couldn’t check the reviewers’ findings")
         assert errors == []
     finally:
         context.close()

@@ -184,21 +184,130 @@ it("keeps a disputed finding's mark with the agent's reason and shows none for a
   expect(card.textContent).toContain("The top costs 36.10 euros.");
 });
 
-it("draws the marks of a review without findings for the agent exactly as before", () => {
+it("draws the marks of findings the agent left open as before, and says on the card it has not checked them", () => {
   const plain = boot(ANSWER), passed = boot(ANSWER);
   const audit = structuredClone(AUDIT);
   plain.window.renderStoredAuditMarks(plain.document.getElementById("consensusAnswerBody"), AUDIT,
     plain.document.getElementById("consensusClaimsFallback"), []);
-  // Findings the agent left open: the same marks, the same card.
+  // A pass that ran out of time: the same marks; the card adds one quiet line.
   audit.claims.forEach((claim, index) => claim.dissent.forEach(item => { item.finding = `s${index + 1}`; }));
   audit.feedback = { status: "done", skipped: "no_time", counts: {}, findings: [
-    { id: "s1", on: "answer", kind: "incomplete", voices: 1, hard: false, state: "open" },
-    { id: "s2", on: "answer", kind: "wrong", voices: 2, hard: true, state: "open" }] };
+    { id: "s1", on: "answer", kind: "incomplete", voices: 1, hard: false, state: "open", delivered: "final" },
+    { id: "s2", on: "answer", kind: "wrong", voices: 2, hard: true, state: "open", delivered: "final" }] };
   passed.window.renderStoredAuditMarks(passed.document.getElementById("consensusAnswerBody"), audit,
     passed.document.getElementById("consensusClaimsFallback"), []);
   expect(passed.document.getElementById("consensusAnswerBody").innerHTML)
     .toBe(plain.document.getElementById("consensusAnswerBody").innerHTML);
   marks(passed.document)[1].click();
   marks(plain.document)[1].click();
+  const card = passed.document.querySelector("#claimPopover .cx-card-audit");
+  const note = card.querySelector(".cx-card-note");
+  expect(note.textContent).toBe("Not checked by the agent: the correction did not finish.");
+  expect(card.querySelector(".cx-card-reply")).toBeNull();
+  note.remove();
   expect(passed.document.getElementById("claimPopover").innerHTML).toBe(plain.document.getElementById("claimPopover").innerHTML);
+  // Without findings for the agent the card has no such line.
+  expect(plain.document.querySelector("#claimPopover .cx-card-note")).toBeNull();
+});
+
+// One finding of the reviewers (one mark over three table cells, or a
+// sentence two reviewers mark) is one passage with findings for the agent:
+// one hover, one card, one tab stop, in its most serious colour. Without them
+// each sentence keeps its own mark, as place_marks puts them.
+const CELLS = "<table><thead><tr><th>Plan</th><th>Price</th><th>Seats</th></tr></thead>"
+  + "<tbody><tr><td>Basic plan.</td><td>12 euros a month.</td><td>Two seats.</td></tr></tbody></table>";
+function cellsAudit(feedback) {
+  const note = { model: "DeepSeek", kind: "incomplete", note: "The price leaves out VAT.", mark: 7, finding: "s7" };
+  const audit = { unplaced: [], claims: ["Basic plan.", "12 euros a month.", "Two seats."].map((anchor, index) => ({
+    anchor, kind: index === 1 ? "doubtful" : "incomplete", audit: true, agree: [],
+    dissent: [index === 1 ? { ...note, kind: "doubtful" } : { ...note }] })) };
+  if (feedback) audit.feedback = { status: "done", counts: {}, findings: [
+    { id: "s7", on: "answer", kind: "doubtful", voices: 1, hard: false, state: "open", delivered: "cut" }] };
+  return audit;
+}
+it("shows a finding over several table cells as one passage, and leaves the marks without findings as they were", () => {
+  const off = boot(CELLS);
+  off.window.renderStoredAuditMarks(off.document.getElementById("consensusAnswerBody"), cellsAudit(false),
+    off.document.getElementById("consensusClaimsFallback"), []);
+  const separate = marks(off.document);
+  expect(separate).toHaveLength(3);
+  expect(new Set(separate.map(mark => mark.cxGroup)).size).toBe(3);
+  expect(separate.filter(mark => mark.getAttribute("role") === "button")).toHaveLength(3);
+
+  const { window, document } = boot(CELLS);
+  window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), cellsAudit(true),
+    document.getElementById("consensusClaimsFallback"), []);
+  const cells = marks(document);
+  expect(cells).toHaveLength(3);
+  expect(new Set(cells.map(mark => mark.cxGroup)).size).toBe(1);
+  expect(cells.filter(mark => mark.getAttribute("role") === "button")).toHaveLength(1);
+  expect(cells.every(mark => mark.classList.contains("is-split") && !mark.classList.contains("is-minor"))).toBe(true);
+  cells[2].click();
+  const card = document.querySelector("#claimPopover .cx-card-audit");
+  expect(card.querySelectorAll(".cx-card-side[data-kind]")).toHaveLength(1);
+  expect(card.textContent).toContain("The price leaves out VAT.");
+  expect(card.querySelector(".cx-card-note").textContent).toBe("Not checked by the agent: past its limit for one answer.");
+});
+
+// The hover preview of a coloured sentence says what the agent made of its
+// finding, as its card does: its reason, or that it has not checked it and
+// why, where that is known. (The reason is a real one, from Max's run of
+// 2026-11-13.)
+const REASON = "Der neue Boden wurde 2021 beschlossen und 2023 in seinem ersten Abschnitt fertig; der Satz meint diesen Abschnitt, den die Seite des Parks so nennt.";
+function verdictAudit(finding, feedback = {}) {
+  const audit = structuredClone(AUDIT);
+  audit.unplaced = [];
+  audit.claims[1].dissent.forEach(item => { item.finding = "s2"; });
+  audit.feedback = { status: "done", counts: {}, findings: finding ? [{ id: "s2", on: "answer", kind: "wrong", voices: 2,
+    hard: true, ...finding }] : [], ...feedback };
+  return audit;
+}
+function preview(audit) {
+  const { window, document } = boot(ANSWER);
+  window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit,
+    document.getElementById("consensusClaimsFallback"), []);
+  const mark = marks(document).find(span => span.textContent.startsWith("Tickets"));
+  return mark.cxGroup.controls[0].preview({ interactive: false });
+}
+it("says on the hover preview of a mark whether and how the agent looked at its finding", () => {
+  const disputed = preview(verdictAudit({ state: "disputed", delivered: "final", reason: REASON }));
+  expect(disputed.querySelector(".cx-card-reply .cx-card-tag").textContent).toBe("The agent disagrees");
+  expect(disputed.querySelector(".cx-card-reply .cx-card-claim").textContent).toBe(REASON);
+  expect(disputed.querySelector(".cx-card-note")).toBeNull();
+  const note = audit => preview(audit).querySelector(".cx-card-note").textContent;
+  expect(note(verdictAudit({ state: "open", delivered: "cut" }))).toBe("Not checked by the agent: past its limit for one answer.");
+  expect(note(verdictAudit({ state: "open" }))).toBe("Not checked by the agent: no place it could safely rewrite.");
+  expect(note(verdictAudit({ state: "open", delivered: "final" }, { skipped: "failed" })))
+    .toBe("Not checked by the agent: the correction did not finish.");
+  expect(note(verdictAudit({ state: "open", delivered: "final" }, { skipped: "stopped" })))
+    .toBe("Not checked by the agent: the correction was stopped.");
+  // The pass read it and left it as it was, without a word: no reason to give.
+  expect(note(verdictAudit({ state: "open", delivered: "final" }))).toBe("Not checked by the agent.");
+  // A run that ended in the middle of the pass.
+  expect(note(verdictAudit({ state: "checking", delivered: "final" }, { status: "checking" })))
+    .toBe("Not checked by the agent: the correction did not finish.");
+  // Without findings for the agent: the preview as it always was.
+  const plain = preview({ ...structuredClone(AUDIT), unplaced: [] });
+  expect(plain.querySelector(".cx-card-note, .cx-card-reply")).toBeNull();
+});
+
+// While the agent checks findings: their sentences carry the loader's sweep,
+// nothing else; the text stays as it is and nothing becomes a control.
+it("sweeps exactly the sentences of the findings the agent checks", () => {
+  const { window, document } = boot(ANSWER);
+  const body = document.getElementById("consensusAnswerBody");
+  const audit = structuredClone(AUDIT);
+  audit.claims[0].dissent.forEach(item => { item.finding = "s1"; });
+  audit.claims[1].dissent.forEach(item => { item.finding = "s2"; });
+  const text = body.textContent;
+  expect(window.renderAuditChecking(body, audit, new Set(["s2"]))).toBe(1);
+  const swept = [...body.querySelectorAll(".cx-claim")];
+  expect(swept.map(span => span.textContent)).toEqual(["Tickets to the top cost 14 euros."]);
+  expect(swept[0].className).toBe("cx-claim is-agent-checking");
+  expect(swept[0].hasAttribute("role") || swept[0].hasAttribute("tabindex")).toBe(false);
+  expect(body.textContent).toBe(text);
+  const still = boot(ANSWER);
+  const stillBody = still.document.getElementById("consensusAnswerBody");
+  still.window.renderAuditChecking(stillBody, audit, new Set(["s1", "s2"]), { still: true });
+  expect([...stillBody.querySelectorAll(".cx-claim")].map(span => span.classList.contains("is-still"))).toEqual([true, true]);
 });

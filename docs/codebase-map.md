@@ -6977,12 +6977,43 @@ Satz `_REVIEW_MARKS` durch `MARKS_SHARED`. Zähler `findings_to_agent` in
 
 Im Browser (nur mit `audit.feedback`; ohne sie bleibt jedes Byte wie oben):
 Solange der Durchgang des Agenten nicht `done` ist, zeigt die Antwort keine
-Marke, die Leiste sagt weiter „Reviewing the answer…“ (Notes wartet), die
-Aktivitätskarte ebenso (`agent-review.js` `withheld`). Dafür sagen die Aufrufer,
+Marke, Notes wartet, und während die Prüfer prüfen sagt die Leiste weiter
+„Reviewing the answer…“ (`agent-review.js` `withheld`). Prüft der Agent
+(`feedback.status` `checking`), tragen genau die Sätze seiner Befunde (die
+Claims, deren `dissent[].finding` einer mit `state` `checking` ist) den
+Schimmer des Tabellen-Ladens (`consensus-insights.js` `renderAuditChecking`:
+`.cx-claim.is-agent-checking` ohne Rolle und Klick, `agent-chat.css` Ton und
+Lichtband von `.skeleton`, Takt `--dur-beat`; ohne Bewegung durch System oder
+`stream_animation` nur der Ton, `.is-still`), die Prüfer-Marken der Leiste
+gehen, und eine Zeile darunter sagt „The agent is checking 2 findings…“
+(`.agent-review-findings`, die Live-Region sagt es einmal). Am Ende gleitet der
+Ton über den alten Zeilen aus (`checkingFade`, `.agent-checking-ghost`), die
+Marken streichen sich auf oder die neuen Sätze laufen im Licht ein. Danach
+sagt dieselbe Zeile, was daraus wurde, als Knopf zu Notes (`passSummary`):
+„1 sentence improved · 3 notes open“ (verbessert = Befunde `corrected`, offen =
+die stehenden Anmerkungen wie in Notes), bei `skipped` ruhig „Correction not
+possible · 8 notes open“ (der Stopp des Nutzers „Correction stopped“), ohne
+Durchgang nichts; Notes beginnt mit derselben Zeile, die Aktivität nennt den
+Kopf („1 sentence improved“) und den Schritt eines gescheiterten Durchgangs
+„Couldn’t check the reviewers’ findings“ (`correctionUnchecked`). Karte und
+Hover-Vorschau einer stehenden Marke (und ihre Passage in Notes) sagen, was der
+Agent daraus machte (`consensus-insights.js` `auditFindingVerdict`): „The agent
+disagrees“ über seinem Grund, oder „Not checked by the agent“ mit Grund, wo er
+bekannt ist: `delivered` `cut` (über seiner Grenze je Antwort), `skipped` oder
+kein Ende (Korrektur nicht fertig bzw. gestoppt), nie zugestellt (keine Stelle,
+die er sicher umschreiben kann). Alle Sätze eines Befunds (eine Marke über mehrere
+Sätze oder Tabellenzellen) sind eine Passage: ein Hover, eine Karte, ein
+Tab-Stopp, in der Farbe seiner schwersten Anmerkung; Aktivität und Zähler
+zählen ihn einmal (`auditPassages`). Ohne Einstellung bleibt jeder Satz eine
+eigene Marke, wie `place_marks` sie legt. Dafür sagen die Aufrufer,
 ob Lauf und Nachlauf noch gehen (`evidence.ended` bzw. `renderActivity(…,
 {ended})`: `agent-chat.js` `!running && !reviewTail`, Verlauf und Basis
 `status !== 'pending'`, `agent-activity.js` `reviewEnded`); ohne Angabe oder
-nach dem Laufende (Absturz vor `done`) stehen die Marken wie ohne Einstellung.
+nach dem Laufende (Absturz vor `done`) stehen die Marken wie ohne Einstellung,
+ohne Schimmer. Ein Nachlauf, der ohne Turn endet, zeichnet die Antwort neu
+(`followReview`), und eine Ansicht, die kein Ende des Durchgangs sieht, zeigt
+nach `CHECKING_LIMIT_MS` (180 s, über `CORRECTION_SECONDS` des Servers) die
+Prüfung, wie sie ist (`sweepUntil`).
 Kommt Version 2 (`versions[].corrects`), schreibt `renderAudit` die Antwort
 selbst um (`correctionOf`, `body._corrected`; `agent-chat.js`
 `renderAnswerBody` rendert über `App.agentReview.shownText` weiter die
@@ -6995,8 +7026,8 @@ Befunde haben keine Marke (`renderStoredAuditMarks` und die Zähler
 überspringen Einträge mit ihrem `finding`), bestrittene behalten sie, Karte
 und Notes nennen danach den Grund („The agent disagrees“). Notes zeigt unter
 „Corrected by the agent“ je Korrektur vorher/nachher (`del`/`ins`) mit den
-Anmerkungen (`feedback.findings[].notes`); sie zählen in Notes und Aktivität
-mit („1 passage corrected by the agent“). Aktivität: Schritt `correct_answer`
+Anmerkungen (`feedback.findings[].notes`); sie zählen in Notes mit.
+Aktivität: Schritt `correct_answer`
 („Checked the reviewers’ findings“, wie `audit_answer` ein `answerChecks`),
 Agent-Panel: Sitzung `correction` ohne Icon im Modellstapel, ihre JSON-Antwort
 in Worten (`agent-delegation.js` `correctionReply`). Tests:

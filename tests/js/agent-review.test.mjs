@@ -1493,13 +1493,22 @@ function feedbackReview(stage) {
     review.answer_version = 2; review.answer_hash = 'h2';
     review.audit.claims = [review.audit.claims[1]];
   } else if (stage === 'skipped') {
+    // The pass got both findings and ran out of time: they are open again.
     Object.assign(review.audit.feedback, { status: 'done', skipped: 'no_time' });
+    for (const finding of findings) finding.delivered = 'final';
   }
   return review;
 }
 function feedbackSetup() {
   const app = setup();
   app.window.App.streamReveal = { rewrite: vi.fn((body, change) => change()) };
+  app.window.renderAuditChecking = vi.fn(() => 1);
+  // What the agent made of a finding, as consensus-insights.js says it on a mark.
+  app.window.auditFindingVerdict = (items, audit) => {
+    const finding = (audit.feedback?.findings || []).find(found => items.some(item => item?.finding === found.id));
+    return finding?.state === 'disputed' ? { reply: finding.reason }
+      : finding?.state === 'open' ? { unchecked: 'Not checked by the agent: the correction did not finish.' } : null;
+  };
   const body = app.document.getElementById('answer');
   app.window.injectMarkdown(body, ORIGINAL);
   body.dataset.markdown = ORIGINAL;
@@ -1524,22 +1533,69 @@ it('without the setting a review renders as before, also while its run goes on',
 
 it('shows no mark while the reviewers review and the agent checks their findings, then the review at once', () => {
   const { window: w, document: d, body } = feedbackSetup();
-  for (const stage of ['live', 'checking']) {
-    w.App.agentReview.render(body, feedbackReview(stage), { key: 't1', ended: false });
-    expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
-    expect(d.querySelector('.agent-review-status').textContent).toBe('Reviewing the answer…');
-    expect([notesCell(d).disabled, notesCell(d).textContent]).toEqual([true, 'Notes']);
-    const details = d.createElement('div');
-    w.App.agentReview.renderActivity(details, feedbackReview(stage), ORIGINAL, { ended: false });
-    expect(details.querySelector('h4').textContent).toBe('Reviewing the answer…');
-    expect(details.querySelector('.agent-activity-check')).toBeNull();
-  }
-  // No light before the change: nothing at the sentences while the agent checks.
+  w.App.agentReview.render(body, feedbackReview('live'), { key: 't1', ended: false });
+  const status = d.querySelector('.agent-review-status');
+  expect([status.textContent, status.classList.contains('visually-hidden')]).toEqual(['Reviewing the answer…', false]);
+  expect(d.querySelector('.agent-review-findings')).toBeNull();
+  expect(w.renderAuditChecking).not.toHaveBeenCalled();
+  // The agent checks: its findings' sentences carry the sweep, one line under
+  // the row says how many; still no mark, the notes still wait.
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  expect([...w.renderAuditChecking.mock.calls[0][2]]).toEqual(['s1', 's2']);
+  expect(w.renderAuditChecking.mock.calls[0][3]).toEqual({ still: false });
+  const line = d.querySelector('.agent-review-findings');
+  expect([line.textContent, line.getAttribute('aria-hidden'), line.querySelector('button')]).toEqual(
+    ['The agent is checking 2 findings…', 'true', null]);
+  // Said once, by the live region; the reviewers' marks have done their part.
+  expect([status.textContent, status.classList.contains('visually-hidden')]).toEqual(['The agent is checking 2 findings…', true]);
+  expect(d.querySelector('.agent-review-reviewers').hidden).toBe(true);
+  expect([notesCell(d).disabled, notesCell(d).textContent]).toEqual([true, 'Notes']);
+  const details = d.createElement('div');
+  w.App.agentReview.renderActivity(details, feedbackReview('checking'), ORIGINAL, { ended: false });
+  expect(details.querySelector('h4').textContent).toBe('The agent is checking 2 findings…');
+  expect(details.querySelector('.agent-activity-check')).toBeNull();
   expect(w.App.streamReveal.rewrite).not.toHaveBeenCalled();
   expect(body.textContent).toBe(ORIGINAL);
   w.App.agentReview.render(body, feedbackReview('done'), { key: 't1', ended: false });
   expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(w.renderAuditChecking).toHaveBeenCalledTimes(1);
   expect(notesCell(d).disabled).toBe(false);
+});
+
+it('sweeps without motion where motion is off, and never sweeps a run that ended', () => {
+  const still = feedbackSetup();
+  still.window.App.userSettings = { get: name => (name === 'stream_animation' ? false : undefined) };
+  still.window.App.agentReview.render(still.body, feedbackReview('checking'), { key: 't1', ended: false });
+  expect(still.window.renderAuditChecking.mock.calls[0][3]).toEqual({ still: true });
+  const reduced = feedbackSetup();
+  reduced.window.matchMedia = query => ({ matches: query.includes('reduce') });
+  reduced.window.App.agentReview.render(reduced.body, feedbackReview('checking'), { key: 't1', ended: false });
+  expect(reduced.window.renderAuditChecking.mock.calls[0][3]).toEqual({ still: true });
+  // A stored turn, or one whose run is over: its review as it stands, no sweep.
+  for (const evidence of [{ key: 't1', ended: true }, { key: 't1' }]) {
+    const { window: w, document: d, body } = feedbackSetup();
+    w.App.agentReview.render(body, feedbackReview('checking'), evidence);
+    expect(w.renderAuditChecking).not.toHaveBeenCalled();
+    expect(d.querySelector('.agent-review-findings')).toBeNull();
+  }
+});
+
+it('ends a sweep it sees no end of after the pass\'s own deadline, also through renders of the same state', () => {
+  vi.useFakeTimers();
+  const { window: w, document: d, body } = feedbackSetup();
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  vi.advanceTimersByTime(100000);
+  // Another frame of the run with the same state keeps the deadline.
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  vi.advanceTimersByTime(79000);
+  expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(2000);
+  // No end came: the review shows its marks, the sweep and its line are gone.
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(w.renderAuditChecking).toHaveBeenCalledTimes(1);
+  expect(d.querySelector('.agent-review-findings')).toBeNull();
+  vi.useRealTimers();
 });
 
 it('rewrites a corrected sentence in place in the light, with no mark on it and its trace under Notes', () => {
@@ -1573,11 +1629,21 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
   expect([reply.querySelector('.agent-audit-kind').textContent, reply.querySelector('.agent-audit-text').textContent])
     .toEqual(['The agent disagrees', 'The opening games were held in 80 AD.']);
   expect([...panel.querySelectorAll('.agent-audit-tally > span')].map(span => span.textContent)).toEqual(['1 wrong', '1 doubtful']);
+  // The reader opens with what came of the pass.
+  expect(panel.querySelector('.agent-evidence-status').textContent).toBe('1 sentence improved · 1 note open');
   // The activity counts the same, and names the correction.
   const details = d.createElement('div');
   w.App.agentReview.renderActivity(details, done, CORRECTED, { ended: true });
   expect(details.querySelector('.agent-activity-check').textContent)
-    .toBe('2 notes · 1 passage marked in the text · 1 passage corrected by the agent');
+    .toBe('2 notes · 1 passage marked in the text · 1 sentence improved');
+  // One calm line under the row says it too, and opens the notes.
+  const line = d.querySelector('.agent-review-findings');
+  expect([...line.querySelectorAll('span')].map(span => span.textContent)).toEqual(['1 sentence improved', '1 note open']);
+  const opened = w.App.answerReader.openContext.mock.calls.length;
+  line.querySelector('button').click();
+  expect(w.App.answerReader.openContext.mock.calls.length).toBe(opened + 1);
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
+  expect(w.App.agentReview.correctionUnchecked(done)).toBe(false);
 });
 
 it('lands a correction only once the reader lets go of a selection in the answer', () => {
@@ -1596,6 +1662,7 @@ it('lands a correction only once the reader lets go of a selection in the answer
   expect(w.getSelection().toString()).toBe('18 euros');
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
   expect(d.querySelector('.agent-review-status').textContent).toBe('Reviewing the answer…');
+  expect(d.querySelector('.agent-review-findings')).toBeNull();
   expect(w.App.agentReview.shownText(body, ORIGINAL)).toBe(ORIGINAL);
   // While it is held, nothing lands.
   d.dispatchEvent(new w.Event('selectionchange'));
@@ -1607,16 +1674,38 @@ it('lands a correction only once the reader lets go of a selection in the answer
   expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
 });
 
-it('shows the review as it is when the agent\'s pass ends without a change', () => {
-  const { window: w, body } = feedbackSetup();
+it('says calmly when a correction was not possible, and shows the review as it is', () => {
+  const { window: w, document: d, body } = feedbackSetup();
   w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
-  // Skipped, failed or out of time: the findings stay open, the marks as without the setting.
-  w.App.agentReview.render(body, feedbackReview('skipped'), { key: 't1', ended: false });
+  // Failed or out of time: the findings stay open, the marks as without the setting.
+  const skipped = feedbackReview('skipped');
+  w.App.agentReview.render(body, skipped, { key: 't1', ended: false });
   expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
   expect(w.renderStoredAuditMarks.mock.calls[0][1].claims).toHaveLength(2);
   expect(body.textContent).toBe(ORIGINAL);
   expect(w.App.streamReveal.rewrite).not.toHaveBeenCalled();
-  expect(body.closest('section').textContent).not.toMatch(/time|skipped|correct/i);
+  const line = d.querySelector('.agent-review-findings');
+  expect([...line.querySelectorAll('span')].map(span => span.textContent)).toEqual(['Correction not possible', '2 notes open']);
+  // Its reason stays in the record; no error word, no colour of its own.
+  expect(d.querySelector('.agent-review').textContent).not.toMatch(/time|skipped|fail|error/i);
+  expect(line.dataset.state).toBeUndefined();
+  expect(w.App.agentReview.correctionUnchecked(skipped)).toBe(true);
+  // The notes say per passage that the agent has not checked it, as the mark does.
+  d.querySelector('.agent-review-findings button').click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect([...panel.querySelectorAll('.agent-audit-unchecked')].map(line => line.textContent)).toEqual([
+    'Not checked by the agent: the correction did not finish.', 'Not checked by the agent: the correction did not finish.']);
+  // The user's own Stop is said as such.
+  const stopped = feedbackReview('skipped');
+  stopped.audit.feedback.skipped = 'stopped';
+  w.App.agentReview.render(body, stopped, { key: 't1', ended: true });
+  expect(d.querySelector('.agent-review-findings').textContent).toBe('Correction stopped · 2 notes open');
+  expect(w.App.agentReview.correctionUnchecked(stopped)).toBe(false);
+  // A pass with nothing to check says nothing.
+  const quiet = feedbackReview('live');
+  quiet.audit.feedback.status = 'done';
+  w.App.agentReview.render(body, quiet, { key: 't1', ended: true });
+  expect(d.querySelector('.agent-review-findings')).toBeNull();
 });
 
 it('shows the marks of a run that ended before the agent\'s pass was through', () => {

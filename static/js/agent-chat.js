@@ -2859,7 +2859,13 @@
       context.metadata.reviewTail = false;
       // A run that failed after the hand-over still names its saved turn.
       const turn = result?.data?.turn || result?.data?.saved_answer?.turn;
-      if (!turn || !registry.isAuthCurrent(context)) return;
+      if (!registry.isAuthCurrent(context)) return;
+      if (!turn) {
+        // Followed no further: the answer on screen shows the review as it
+        // has it (agent-review.js, `ended`) instead of one still under way.
+        if (registry.isVisible(context.runId)) registry.update(context.runId, () => {});
+        return;
+      }
       receiveBudget(result.data.token_budget, context.auth.uid);
       reviewArrived(context, turn.agent_review, turn);
     };

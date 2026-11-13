@@ -2563,10 +2563,19 @@
             });
             // The agent's answer to them, where it keeps its sentence: after
             // the reviewers' notes, in their form.
-            if (claim.reply) {
-              const reply = cardSide({ text: claim.reply, plain: true }, [], ctx, { label: "The agent disagrees" });
-              reply.classList.add("cx-card-reply");
+            // What the agent made of them (findings_to_agent), on the card and
+            // its hover preview alike: its reason, under its own words, or
+            // that it has not checked them.
+            if (claim.verdict?.reply) {
+              const reply = cardNode("div", "cx-card-side cx-card-reply");
+              const said = cardNode("div", "cx-card-meta");
+              said.appendChild(cardNode("span", "cx-card-tag", "The agent disagrees"));
+              const reason = cardNode("div", "cx-card-claim", claim.verdict.reply);
+              reason.setAttribute("data-i18n-skip", "");
+              reply.append(said, reason);
               card.appendChild(reply);
+            } else if (claim.verdict?.unchecked) {
+              card.appendChild(cardNote(claim.verdict.unchecked));
             }
             const actions = cardActions(ctx, { differenceLabel: "Notes", differenceGlyph: "notes", answers: [] });
             if (actions) card.appendChild(actions);
@@ -2593,6 +2602,64 @@
             return "";
           }
 
+          // What the agent made of the finding of `items` (findings_to_agent),
+          // for a mark's card and hover preview and for the notes (agent-
+          // review.js): its reason where it disputes it, else that it has not
+          // checked it, with why where that is known: past the findings it
+          // takes for one answer (delivered "cut"), a pass that did not run or
+          // finish (`skipped`, or no end yet), no place it could rewrite
+          // safely (never delivered). Null without findings for the agent.
+          const UNCHECKED = {
+            plain: "Not checked by the agent.",
+            cut: "Not checked by the agent: past its limit for one answer.",
+            unfinished: "Not checked by the agent: the correction did not finish.",
+            stopped: "Not checked by the agent: the correction was stopped.",
+            place: "Not checked by the agent: no place it could safely rewrite.",
+          };
+          function auditFindingVerdict(items, audit) {
+            const feedback = audit && audit.feedback;
+            if (!feedback || !Array.isArray(items)) return null;
+            const findings = auditFindings(audit);
+            const reply = auditReply(items.filter(Boolean), findings);
+            if (reply) return { reply: reply };
+            const finding = findings.get(items.find(function (item) { return item && item.finding; })?.finding);
+            if (finding && (finding.state === "corrected" || finding.state === "disputed")) return null;
+            const skipped = typeof feedback.skipped === "string" ? feedback.skipped : "";
+            const why = finding?.delivered === "cut" ? "cut"
+              : skipped ? (skipped === "stopped" ? "stopped" : "unfinished")
+                : feedback.status !== "done" ? "unfinished"
+                  : finding && !finding.delivered ? "place" : "plain";
+            return { unchecked: UNCHECKED[why] };
+          }
+
+          function auditVerdict(shown, findings, audit) {
+            const verdict = auditFindingVerdict(shown.dissent, audit);
+            if (verdict) shown.verdict = verdict;
+          }
+
+          const AUDIT_SEVERITY = { incomplete: 1, doubtful: 2, wrong: 3 };
+
+          // While the agent checks findings (findings_to_agent, agent-review.js):
+          // the sentences of the findings `ids` carry the loader's sweep
+          // (agent-chat.css .is-agent-checking), no mark and no control;
+          // `still` without the sweep. Returns how many sentences it found.
+          function renderAuditChecking(body, audit, ids, options = {}) {
+            if (!body || !audit || !ids || !ids.size) return 0;
+            const markedByBlock = new Map();
+            let found = 0;
+            (Array.isArray(audit.claims) ? audit.claims : []).forEach(function (claim) {
+              if (!claim || !claim.anchor || !(claim.dissent || []).some(function (item) { return item && ids.has(item.finding); })) return;
+              const probe = locateAnchor(body, claim.anchor, claim.anchor_occurrence);
+              if (!probe) return;
+              if (!markedByBlock.has(probe.block)) markedByBlock.set(probe.block, []);
+              const result = markSentence(body, claim.anchor, "is-agent-checking", markedByBlock.get(probe.block), claim.anchor_occurrence);
+              if (!result) return;
+              found += 1;
+              if (options.still) result.spans.forEach(function (span) { span.classList.add("is-still"); });
+            });
+            return found;
+          }
+
           // Marks a reviewed Agent answer (agent-review.js). `audit` is the
           // review's audit part: claims (one per marked sentence) and unplaced
           // notes (their quote is not in the answer's sentences), which join
@@ -2616,11 +2683,14 @@
             // (agent_audit.place_marks): listed once, and not where one of
             // its sentences shows it.
             const missed = [], placedMarks = new Set();
+            // With findings for the agent, the sentences of one finding (a
+            // mark over several sentences or table cells) are one passage: one
+            // card, one hover, one tab stop, in the colour of its most
+            // serious note. Without them each sentence stands alone.
+            const passages = [], byFinding = new Map();
             claims.forEach(function (claim) {
               const shown = { anchor: claim.anchor, kind: AUDIT_CLASSES[claim.kind] ? claim.kind : "doubtful",
                 dissent: claim.dissent.filter(valid) };
-              const reply = auditReply(shown.dissent, findings);
-              if (reply) shown.reply = reply;
               const probe = locateAnchor(body, claim.anchor, claim.anchor_occurrence);
               if (probe && !markedByBlock.has(probe.block)) markedByBlock.set(probe.block, []);
               const result = probe && markSentence(body, claim.anchor, AUDIT_CLASSES[shown.kind],
@@ -2631,9 +2701,40 @@
               }
               shown.dissent.forEach(function (item) { if (item.mark != null) placedMarks.add(item.mark); });
               result.spans.forEach(function (span) { span.classList.add("is-audit"); });
-              const context = { spans: result.spans, navigation: navigation, openInDrawer: openNotes };
-              attachPassageControl(result, auditLabel(shown), function () {
-                openCard(result.spans[0], result.spans, function (ctx) {
+              const key = audit.feedback ? shown.dissent.find(function (item) { return item.finding; })?.finding : null;
+              const joined = key ? byFinding.get(key) : null;
+              if (joined) {
+                result.spans.forEach(function (span) { if (!joined.spans.includes(span)) joined.spans.push(span); });
+                joined.shown.anchor += " " + claim.anchor;
+                shown.dissent.forEach(function (item) {
+                  if (!joined.shown.dissent.some(function (seen) { return seen === item || (item.mark != null && seen.mark === item.mark); })) {
+                    joined.shown.dissent.push(item);
+                  }
+                });
+                if (AUDIT_SEVERITY[shown.kind] > AUDIT_SEVERITY[joined.shown.kind]) joined.shown.kind = shown.kind;
+                joined.joined = true;
+              } else {
+                const passage = { spans: result.spans.slice(), shown: shown };
+                passages.push(passage);
+                if (key) byFinding.set(key, passage);
+              }
+              const targets = shown.dissent.map(function (item) {
+                return typeof item.target === "string" ? item.target.trim() : "";
+              }).filter(Boolean);
+              if (targets.length) spots.push({ spans: result.spans, targets: targets });
+            });
+            passages.forEach(function (passage) {
+              const shown = passage.shown, spans = passage.spans;
+              auditVerdict(shown, findings, audit);
+              if (passage.joined) {
+                spans.forEach(function (span) {
+                  Object.values(AUDIT_CLASSES).forEach(function (cls) { span.classList.remove(cls); });
+                  span.classList.add(AUDIT_CLASSES[shown.kind]);
+                });
+              }
+              const context = { spans: spans, navigation: navigation, openInDrawer: openNotes };
+              attachPassageControl({ spans: spans }, auditLabel(shown), function () {
+                openCard(spans[0], spans, function (ctx) {
                   return auditCard(shown, Object.assign(ctx, context));
                 }, "audit");
               }, function (ctx) {
@@ -2641,11 +2742,7 @@
               });
               // A sentence a reviewer calls wrong is a contradiction for the
               // highlight filters (matchesHighlightFilter).
-              if (shown.kind === "wrong" && result.spans[0]?.cxGroup) result.spans[0].cxGroup.hasContradiction = true;
-              const targets = shown.dissent.map(function (item) {
-                return typeof item.target === "string" ? item.target.trim() : "";
-              }).filter(Boolean);
-              if (targets.length) spots.push({ spans: result.spans, targets: targets });
+              if (shown.kind === "wrong" && spans[0]?.cxGroup) spans[0].cxGroup.hasContradiction = true;
             });
             spots.forEach(function (entry) { wrapSpots(entry.spans, entry.targets); });
             missed.forEach(function (item) {
@@ -2679,8 +2776,7 @@
                   const quote = cardNode("q", "claims-fallback-quote", String(item.quote || ""));
                   quote.setAttribute("data-i18n-skip", "");
                   const note = { anchor: String(item.quote || ""), kind: kind, dissent: [item], unplaced: true };
-                  const reply = auditReply([item], findings);
-                  if (reply) note.reply = reply;
+                  auditVerdict(note, findings, audit);
                   row.setAttribute("aria-label", auditLabel(note));
                   row.addEventListener("click", function () {
                     openCard(row, null, function (ctx) {
@@ -3524,6 +3620,8 @@
           window.renderConsensusInsights = renderConsensusInsights;
           window.renderStoredConsensusClaims = renderStoredConsensusClaims;
           window.renderStoredAuditMarks = renderStoredAuditMarks;
+          window.renderAuditChecking = renderAuditChecking;
+          window.auditFindingVerdict = auditFindingVerdict;
           window.renderStoredDifferenceCards = renderStoredDifferenceCards;
           window.resetConsensusInsights = resetConsensusInsights;
           window.jumpToModelAnswer = jumpToModelAnswer;

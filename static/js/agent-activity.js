@@ -165,8 +165,13 @@
   }
   // A settings change says what came of it (agent_settings.py `outcome`).
   const settingsOutcomes = { refused: 'Settings change not prepared', unchanged: 'Settings already in place' };
-  function stepLabel(item, textOnly = false) {
+  function stepLabel(item, textOnly = false, review = null) {
     if (item.status === 'succeeded' && textOnly && textOnlySteps[item.name]) return textOnlySteps[item.name];
+    // The agent's pass over the findings ran, but could not check what it
+    // got (agent-review.js correctionUnchecked): not "Checked".
+    if (item.status === 'succeeded' && item.name === 'correct_answer' && App.agentReview?.correctionUnchecked?.(review)) {
+      return 'Couldn’t check the reviewers’ findings';
+    }
     if (item.status === 'succeeded' && item.name === 'prepare_settings_change' && settingsOutcomes[item.outcome]) {
       return settingsOutcomes[item.outcome];
     }
@@ -860,7 +865,7 @@
   // A step in the timeline says what happened in the words of the live run
   // ("Searched the web"); its sources follow as the answer's pills.
   const failedSteps = { failed: "Failed", blocked: "Skipped · allowance kept for the answer", cancelled: "Stopped", unknown: "Usage unavailable" };
-  function historyTitle(item, textOnly, linked) {
+  function historyTitle(item, textOnly, linked, review) {
     if (item.status === 'succeeded' && linked && !textOnly) {
       if (item.name === 'web_search') return tools.web_search[2];
       if (item.name === 'read_source' && item.read === 'completed') return tools.read_source[2];
@@ -869,7 +874,7 @@
       const count = Number.isInteger(item.count) && item.count > 0 ? ` · ${item.count} ${item.count === 1 ? "search" : "searches"}` : "";
       return `${toolName(item.name)} · ${failedSteps[item.status]}${count}`;
     }
-    return stepLabel(item, textOnly);
+    return stepLabel(item, textOnly, review);
   }
   function sourcePill(url, title) {
     // sources.js builds the answer's pill (favicon, domain, preview on hover).
@@ -1668,7 +1673,7 @@
         // A page opened for the user stands pinned above the lines (pinPage), not among them.
         : isTool.has(item) && showsPage(item) ? []
         : isTool.has(item) && vmTools.has(item.name) ? [{id:`vm:${item.id}`, kind:'vm', item}]
-        : isTool.has(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly), kind:'step', status:item.status,
+        : isTool.has(item) ? [{id:`step:${item.id}`, text:stepLabel(item, textOnly, review), kind:'step', status:item.status,
           current:running && !waiting && !reconnecting && !held && item === activeTool},
           // The one place where the run waits on the user: say so, and link to the card.
           ...(item.status === 'succeeded' && reviewTools.has(item.name)
@@ -1895,7 +1900,7 @@
             } catch (_) { /* Ignore invalid provider URLs. */ }
           }
           const title = document.createElement("strong");
-          title.textContent = historyTitle(item, textOnly, pills.length > 0);
+          title.textContent = historyTitle(item, textOnly, pills.length > 0, review);
           node.replaceChildren(title);
           if (item.text) {
             const text = document.createElement("p");

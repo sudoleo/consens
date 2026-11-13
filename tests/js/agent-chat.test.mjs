@@ -2057,6 +2057,37 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  // A hand-over's stream that ends without the run's end: the page follows
+  // no further, so the answer shows its review as it has it instead of one
+  // still under way (no endless sweep, agent-review.js).
+  it("draws the answer once more when it stops following the review without the run's end", async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn(), shownText: (_body, text) => text };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById("questionInput").value = "Question";
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    handlers.delta.append("Answer.");
+    handOver(handlers);
+    await pending;
+    w.App.agentChat.project(run);
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(d.getElementById("agentAnswerBody"), expect.anything(),
+      expect.objectContaining({ ended: false }));
+    const updates = [];
+    w.addEventListener("consensio:run-registry-change", event => {
+      if (event.detail.type === "updated" && event.detail.runId === run.runId) updates.push(event.detail);
+    });
+    resolve({ ok: true, status: 200, streamed: true, data: {} });
+    await vi.waitFor(() => expect(updates).not.toHaveLength(0));
+    w.App.agentChat.project(run);
+    expect(w.App.agentReview.render).toHaveBeenLastCalledWith(d.getElementById("agentAnswerBody"), expect.anything(),
+      expect.objectContaining({ ended: true }));
+    dom.window.close();
+  });
+
   it("sends a message into a response that reads them and lets it go once the run read it", async () => {
     const { window, document, dom } = boot({ setup(w) {
       // The account has the workspace: a running response reads messages.
