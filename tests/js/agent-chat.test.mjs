@@ -241,8 +241,8 @@ describe("single-model agent chat", () => {
     d.querySelector('.agent-model-picker .model-picker-display').click();
     const rows = [...d.querySelectorAll('.agent-model-picker button[data-model-group]')];
     expect(rows.map(row => row.dataset.modelGroup)).toEqual(['openai', 'anthropic', 'other']);
-    expect(rows.map(row => row.firstElementChild.className)).toEqual(Array(3).fill('model-picker-group-mark'));
-    expect(rows.map(row => row.querySelector('.model-picker-group-mark img')?.className ?? null))
+    expect(rows.map(row => row.firstElementChild.className)).toEqual(Array(3).fill('model-picker-family-mark'));
+    expect(rows.map(row => row.querySelector('.model-picker-family-mark img')?.className ?? null))
       .toEqual(['logo-openai', 'logo-anthropic', null]);
     expect(rows.every(row => row.firstElementChild.getAttribute('aria-hidden') === 'true')).toBe(true);
     expect(rows.map(row => row.querySelector('.model-picker-option-label').textContent)).toEqual(['OpenAI', 'Anthropic', 'Other models']);

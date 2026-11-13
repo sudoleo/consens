@@ -100,8 +100,8 @@ def test_all_pro_chat_models_are_grouped_by_provider(browser, phase4_server, wid
             assert menu['x'] >= 0 and menu['x'] + menu['width'] <= width
             assert menu['y'] >= 0 and menu['y'] + menu['height'] <= 900
             expect(page.locator('.agent-model-picker button[data-model-group]')).to_have_count(len(cfg.PROVIDERS))
-            expect(page.locator('.agent-model-picker button[data-model-group] > .model-picker-group-mark > img')).to_have_count(len(cfg.PROVIDERS))
-            page.wait_for_function("() => [...document.querySelectorAll('.agent-model-picker .model-picker-group-mark > img')]"
+            expect(page.locator('.agent-model-picker button[data-model-group] > .model-picker-family-mark > img')).to_have_count(len(cfg.PROVIDERS))
+            page.wait_for_function("() => [...document.querySelectorAll('.agent-model-picker .model-picker-family-mark > img')]"
                                    ".every(img => img.complete && img.naturalWidth > 0)")
             expect(page.locator('.agent-model-picker button[data-value]')).to_have_count(0)
             first = page.locator('.agent-model-picker button[data-model-group]').first

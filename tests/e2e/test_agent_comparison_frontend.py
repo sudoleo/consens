@@ -66,6 +66,44 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         context.close()
 
 
+def test_reviewer_rows_carry_logos_and_the_menu_holds_still_while_choosing(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server)
+    try:
+        page.set_viewport_size({"width": 1280, "height": 900})
+        page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route('**/agent/models', lambda r: _json(r, CATALOG))
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, 'agent')
+        # In Agent the reviewers' chip beside the model chip.
+        chip = page.locator('#composerModelPicker')
+        chip.click()
+        menu = page.locator('.agent-model-picker .model-picker-menu')
+        expect(menu).to_be_visible()
+        custom = page.locator('.agent-model-picker .model-picker-custom-option')
+        if custom.is_visible():
+            custom.click()
+        rows = page.locator('.agent-model-picker .model-picker-row-open')
+        expect(rows.first).to_be_visible()
+        expect(page.locator('.agent-model-picker .model-picker-row-open > .model-picker-family-mark > img')).to_have_count(rows.count())
+        page.wait_for_function("() => [...document.querySelectorAll('.agent-model-picker .model-picker-family-mark > img')]"
+                               ".every(img => img.complete && img.naturalWidth > 0)")
+        left = menu.bounding_box()['x']
+        chip_width = chip.bounding_box()['width']
+        # Another reviewer changes the chip's words and width under the menu;
+        # the menu's own scroll must not carry it after the chip's left end.
+        page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="false"]:not(:disabled)').first.click()
+        page.wait_for_function("w => Math.abs(document.getElementById('composerModelPicker').getBoundingClientRect().width - w) > 8", arg=chip_width)
+        menu.hover()
+        page.mouse.wheel(0, 240)
+        page.wait_for_function("() => document.querySelector('.agent-model-picker .model-picker-menu').scrollTop > 0")
+        page.evaluate("() => new Promise(requestAnimationFrame)")
+        # Its right end may round by a pixel; following the left end moved
+        # the menu by the whole change in width.
+        assert abs(menu.bounding_box()['x'] - left) < 2
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width", [390, 369, 320])
 def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, phase4_server, width):
     context, page = _real_firebase_page(browser, phase4_server, has_touch=True,

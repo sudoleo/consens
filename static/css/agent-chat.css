@@ -823,7 +823,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .chat-input-container .agent-model-controls .model-picker-group-option { min-height: 44px; }
 }
 /* The composer's rows keep a 3px gap: the logo brings its own room. */
-.chat-input-container .agent-model-controls .model-picker-group-mark { margin-right: 6px; }
+.chat-input-container .agent-model-controls .model-picker-family-mark { margin-right: 6px; }
 
 /* Softer trace paragraphs; high-contrast steps carry the active reflection. */
 /* One colour system around the answer: the answer itself is --ink; everything

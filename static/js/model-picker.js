@@ -826,6 +826,17 @@
     state.menu.append(button);
   }
 
+  // A family's logo before its name, decorative (the name carries it). A
+  // family outside the registry ("Other models") keeps an empty slot, so
+  // every name starts in the same column.
+  function createFamilyMark(provider) {
+    const mark = document.createElement('span');
+    mark.className = 'model-picker-family-mark'; mark.setAttribute('aria-hidden', 'true');
+    const known = (window.App.modelPrefs || []).some(pref => pref.provider === provider);
+    if (known && typeof window.App.createModelMark === 'function') mark.append(window.App.createModelMark(provider));
+    return mark;
+  }
+
   function renderModelGroups(select, state, groups) {
     state.menu.setAttribute('role', 'menu');
     for (const group of groups) {
@@ -840,12 +851,7 @@
       button.classList.toggle('is-current-group', !!selected);
       button.disabled = group.disabled || options.every(option => option.disabled);
       button.setAttribute('aria-label', `${group.label}, ${options.length} models${selected ? `, selected: ${window.App.getModelOptionLabel(selected)}` : ''}`);
-      // A family outside the registry ("Other models") keeps an empty slot,
-      // so every name starts in the same column.
-      const mark = document.createElement('span');
-      mark.className = 'model-picker-group-mark'; mark.setAttribute('aria-hidden', 'true');
-      const family = (window.App.modelPrefs || []).find(pref => pref.provider === group.dataset.modelGroup);
-      if (family && typeof window.App.createModelMark === 'function') mark.append(window.App.createModelMark(family.provider));
+      const mark = createFamilyMark(group.dataset.modelGroup);
       const label = document.createElement('span');
       label.className = 'model-picker-option-label'; label.textContent = group.label;
       const count = document.createElement('span');
@@ -1053,7 +1059,7 @@
     hint.className = "model-picker-preset-hint";
     hint.textContent = currentOptionLabel(providerSelect);
     label.append(name, hint);
-    open.appendChild(label);
+    open.append(createFamilyMark(pref.provider), label);
     const chevron = document.createElement("span");
     chevron.className = "model-picker-option-chevron";
     chevron.setAttribute("aria-hidden", "true");
@@ -1336,10 +1342,17 @@
     const below = bottomEdge - trigger.bottom - 8;
     const upward = above > below;
     const width = Math.min(state.menuWidth || 320, rightEdge - leftEdge);
+    // Opened, the menu holds its distance to the trigger's right end. The
+    // Reviewers chip changes its words under a click ("1 model" / "2
+    // models") and grows to the left; following its left end, the menu slid
+    // sideways at the next scroll, under the pointer.
+    const wanted = state.menuFromRight == null ? trigger.left : trigger.right + state.menuFromRight;
+    const left = Math.max(leftEdge, Math.min(wanted, rightEdge - width));
+    if (state.menuFromRight == null) state.menuFromRight = left - trigger.right;
     Object.assign(state.menu.style, {
       boxSizing: 'border-box',
       width: `${width}px`, maxHeight: `${Math.max(0, Math.min(420, upward ? above : below))}px`,
-      left: `${Math.max(leftEdge, Math.min(trigger.left, rightEdge - width)) - bounds.left - parent.clientLeft}px`,
+      left: `${left - bounds.left - parent.clientLeft}px`,
       right: 'auto',
       top: upward ? 'auto' : `${trigger.bottom - bounds.top - parent.clientTop + 8}px`,
       bottom: upward ? `${bounds.bottom - parent.clientTop - trigger.top + 8}px` : 'auto'
@@ -1430,6 +1443,7 @@
     composerPickerResize?.disconnect();
     const composer = state.host.closest('.input-section');
     if (composer) composerPickerResize?.observe(composer);
+    state.menuFromRight = null;
     fitComposerPicker(state);
     // A shortcut (Reasoning, Reviewers, a notice) lands inside the
     // level it named, ready for the keyboard.
