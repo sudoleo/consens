@@ -154,6 +154,13 @@ describe("Agent settings card", () => {
     expect(rows()).toEqual(["Chat model in new chats: Claude Opus 4.8 → Claude Sonnet 5.5"]);
   });
 
+  it("names the level Auto runs at on that model (agent-chat.js effortLabel)", () => {
+    const level = boot({ storage: { "consensio.agentModel.v1": JSON.stringify({ model_id: "sonnet", reasoning_effort: "default" }) } });
+    level.window.App.agentChat.effortLabel = (id, effort) => (effort || "default") === "default" ? "Auto · High" : "Medium";
+    level.render({ settings: { agent_model: { model_id: "sonnet", reasoning_effort: "medium" } }, notes: {} });
+    expect(level.rows()).toEqual(["Reasoning in new chats: Auto · High → Medium"]);
+  });
+
   it("compares new chats by model and level, as the server does", () => {
     // agent_settings.py prepares the pick when new chats would start with
     // another model or level; none stored is the default model on Auto.

@@ -1202,6 +1202,12 @@
       label.className = "model-picker-option-label";
       label.textContent = window.App.getModelOptionLabel(option);
       item.appendChild(label);
+      if (option.dataset.modelDetail) {
+        const detail = document.createElement("span");
+        detail.className = "model-picker-option-detail";
+        detail.textContent = option.dataset.modelDetail;
+        label.append(" ", detail);
+      }
       if (option.dataset.description) {
         const description = document.createElement("span");
         description.className = "model-picker-option-description";

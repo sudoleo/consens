@@ -38,6 +38,11 @@
     xhigh: ["Extra high", "Explore the question in greater depth"],
     max: ["Max", "Use the highest supported reasoning effort"],
   };
+  // Auto with the level it runs at, whole for translation (docs/i18n.md).
+  const autoCopy = {
+    none: "Auto · Off", minimal: "Auto · Minimal", low: "Auto · Low", medium: "Auto · Medium",
+    high: "Auto · High", xhigh: "Auto · Extra high", max: "Auto · Max",
+  };
 
   function selectionKey() {
     const context = registry.visible();
@@ -86,6 +91,14 @@
   // offers it (free_default_effort), so the picker shows Medium instead.
   function autoEffort(model) {
     return window.App?.state?.get?.("isUserPro") !== true && model?.free_default_effort ? model.free_default_effort : null;
+  }
+  // The level Auto runs at for this account, as the server resolves the
+  // request (agent_client.auto_efforts); null where the model's default is
+  // not known: the picker then says only "Auto".
+  function autoLevel(model) {
+    const levels = model?.auto_effort;
+    const level = levels?.[window.App?.state?.get?.("isUserPro") === true ? "pro" : "free"];
+    return autoCopy[level] ? level : null;
   }
   function visibleEfforts(model) {
     const efforts = model?.reasoning_efforts || ["default"];
@@ -278,15 +291,18 @@
     const model = catalog?.models.find(item => item.id === select.value);
     const efforts = visibleEfforts(model);
     const waitingEffort = ready ? "" : App.firstFrame?.agentEffort?.() || "";
-    const effortSignature = JSON.stringify([model?.id, efforts, efforts.map(effortLocked), waitingEffort]);
+    const level = autoLevel(model);
+    const effortSignature = JSON.stringify([model?.id, efforts, efforts.map(effortLocked), waitingEffort, level]);
     if (effort.dataset.options !== effortSignature) {
       effort.replaceChildren(...efforts.map(value => {
         const option = document.createElement("option");
         option.value = value;
         const [copyLabel, description] = effortCopy[value] || [value, "Reasoning effort"];
-        const label = waitingEffort || copyLabel;
+        const label = waitingEffort || (value === "default" && level ? autoCopy[level] : copyLabel);
         option.textContent = label;
-        option.dataset.modelLabel = label;
+        // In the menu the level stands quietly after "Auto" (model-picker.js).
+        option.dataset.modelLabel = waitingEffort || copyLabel;
+        if (value === "default" && level && !waitingEffort) option.dataset.modelDetail = effortCopy[level][0];
         option.dataset.description = description;
         option.disabled = effortLocked(value);
         if (option.disabled) option.dataset.modelBadge = "Pro";
@@ -326,6 +342,12 @@
     selections.delete(`${catalogOwner}:draft`);
     render();
     return true;
+  }
+  // A level's words for a model, Auto with the level it runs at there.
+  function effortLabel(id, effort) {
+    const value = effort || "default";
+    const level = value === "default" ? autoLevel(catalog?.models.find(item => item.id === canonicalId(id))) : null;
+    return level ? autoCopy[level] : effortCopy[value]?.[0] || value;
   }
   function modelLabel(id) {
     return catalog?.models.find(item => item.id === canonicalId(id))?.label || null;
@@ -3172,7 +3194,7 @@
     // Agent's composer is on screen (also while its access is still loading).
     looksAgent,
     // The settings card (agent-settings.js): the next message's pick, its labels, and applying one.
-    pick: () => selection(), modelLabel, applyPick,
+    pick: () => selection(), modelLabel, effortLabel, applyPick,
     render: () => renderShell(), renderShell, project, send, steer, steering, revealPendingReview, syncPendingReview,
     // firebase.js: a chat opened while its newest turn runs elsewhere.
     followRunning,

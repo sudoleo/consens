@@ -282,21 +282,12 @@ class _Choice:
         """Levels the model offers that need Pro."""
         return [effort for effort in _offered(self.model) if effort not in self.levels]
 
-    def default_level(self) -> str:
-        """The level Auto runs at, with the run's rules (agent_client.reasoning_active):
-        off when the registry switches reasoning off or the model reasons only
-        on request, else the pinned or the model's default level."""
+    def default_level(self) -> str | None:
+        """The level Auto runs at for this account (agent_client.auto_efforts),
+        or None where the model's default is not known."""
         if self.auto != "default":
             return self.auto
-        reasoning = self.model.get("default_reasoning") or {}
-        if reasoning.get("enabled") is False:
-            return "none"
-        if reasoning.get("effort") in REASONING_LEVELS:
-            return reasoning["effort"]
-        if reasoning.get("default_enabled") is False:
-            return "none"
-        effort = reasoning.get("default_effort")
-        return effort if effort in REASONING_LEVELS else "medium"
+        return (self.model.get("auto_effort") or {}).get("pro" if self.pro else "free")
 
     def carry(self, effort, auto_before):
         """A level carried over from another model: Auto stays Auto (on this
@@ -311,11 +302,14 @@ class _Choice:
         DeepSeek V4.1 Flash without Pro, Auto runs at the model's own High
         while Low is the highest level to pick: "think harder" must never
         become Low (live probe 2026-10-17)."""
-        return _level(self.default_level() if effort == "default" else effort)
+        # An unknown default counts as Medium, the most common one.
+        return _level((self.default_level() or "medium") if effort == "default" else effort)
 
     def _name(self, effort) -> str:
         if effort == "default":
-            return f"Auto (on {self.label} it runs at {EFFORT_LABELS[self.default_level()]})"
+            level = self.default_level()
+            return (f"Auto (on {self.label} it runs at {EFFORT_LABELS[level]})" if level else
+                    f"Auto ({self.label}'s own setting)")
         return EFFORT_LABELS[effort]
 
     def pick(self, wanted):

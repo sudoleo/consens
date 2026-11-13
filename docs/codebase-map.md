@@ -4825,7 +4825,16 @@ eingetragene Pro-Stufe („high“) wird Medium; ohne Medium bleibt
 Auto), `run_agent` löst damit auf, die gespeicherte Auswahl und die
 Request-Identität behalten „default“. `/agent/models` meldet je Modell
 `free_default_effort`; `agent-chat.js` (`autoEffort`/`visibleEfforts`/`effortFor`)
-blendet für Nicht-Pro dann „Auto“ aus und wählt Medium. Ausnahme seit 2026-10-07: das Standard-Chatmodell
+blendet für Nicht-Pro dann „Auto“ aus und wählt Medium. Wo „Auto“ steht, nennt
+der Picker die Stufe, mit der es wirklich läuft („Auto · Max“, im Menü „Auto“
+mit leisem `.model-picker-option-detail`): `/agent/models` meldet je Modell
+`auto_effort: {pro, free}` aus `agent_client.auto_efforts`, das die Anfrage wie
+`run_agent` auflöst (`_resolve_effort` mit „default“ bzw. `free_default_effort`)
+und mit `running_effort` liest (gesendete Stufe, sonst `default_effort` des
+OpenRouter-Katalogs, „none“ ohne Reasoning; dieselbe Funktion bemisst
+`_answer_reserve`). Nennt der Katalog keine Vorgabe, ist der Wert `null` und
+der Picker schreibt nur „Auto“. `agent-chat.js` `autoLevel`/`effortLabel`
+(auch für die Einstellungskarte, `agent-settings.js`). Ausnahme seit 2026-10-07: das Standard-Chatmodell
 (`default_agent_model_id()`, derzeit Claude Sonnet 5.5) ist als Chatmodell für
 jede Stufe frei; `/agent/models` meldet es mit `premium: false` und
 `early_access: true`, der Picker zeigt „Early access“ als grauen Zusatztext
@@ -11390,8 +11399,11 @@ er vorher schon mit `403 … age_18plus`. Spark steht deshalb in
 keinen Alias `Meta-Pro`, der Pro-Judge fällt auf das Basis-Modell zurück
 (`_BASE_PRO_JUDGE_BY_PROVIDER`). `meta/muse-glimmer-30b` läuft unter ZDR
 (Phala/DeepInfra/Together). Muse denkt zwingend, deshalb steht `reasoning.effort`
-in `MODEL_REQUEST_CONFIG` fest auf `low` (Ember stünde sonst auf seiner Vorgabe
-`max`), und ein
+in `MODEL_REQUEST_CONFIG` fest auf `low`. Ausnahme: Ember als Chatmodell des
+Agenten (`CHAT_MODEL_OWN_REASONING`, `chat_request_config` für `agent_model()`/
+`agent_models()`) schickt unter Auto keine Stufe und denkt auf seiner Vorgabe
+`max`; als Prüfer, in `compare_models` (`metered_model`), in der Consensus
+Engine und in Hilfsaufrufen bleibt es `low`. Ein
 zu kleines `max_tokens` liefert nur Reasoning-Tokens und ein leeres Final
 (siehe `_responses_empty_result`). Der Contributor-Tarif
 `meta/muse-spark-1.3-contributor` ist bewusst nicht aufgenommen: Meta darf

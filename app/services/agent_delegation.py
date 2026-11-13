@@ -35,7 +35,7 @@ from app.services.agent_tools import ArgumentsTooLong, ReadOnlyTool, ToolRegistr
 from app.services.agent_comparison import SEARCHING_KINDS
 from app.services.prompt_defaults import AGENT_PROVIDER_SEARCH_FACT, AGENT_REVIEW_FACTS as REVIEW_FACTS
 from app.services.llm.agent_client import (
-    AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, reasoning_active, resolve_agent_model,
+    AgentCompletion, agent_models, answer_output_limit, lighter_reasoning, resolve_agent_model, running_effort,
     routing_output_limit,
 )
 from app.services.llm import agent_model_metadata
@@ -1084,10 +1084,7 @@ class DelegationLoop(AgentLoop):
             metadata = agent_model_metadata.snapshot().get(self.model.model) or {}
         except Exception:
             metadata = {}
-        effort = "none"
-        if reasoning_active(self.model, metadata):
-            effort = ((self.model.request_config.get("reasoning") or {}).get("effort")
-                      or (metadata.get("reasoning") or {}).get("default_effort") or "high")
+        effort = running_effort(self.model, metadata) or "high"
         return ANSWER_RESERVE_SECONDS.get(effort, ANSWER_RESERVE_SECONDS["high"])
 
     def answer_time_left(self):

@@ -105,7 +105,7 @@ def agent_model(*, _metadata=None) -> AgentModel:
     # listed once and premium/access checks see the ID they know.
     return AgentModel(**values, selection_id=entry.internal_id if entry else values["model"], context_length=metadata["context_length"],
                       web_search_usd_per_request=defaults.web_search_usd_per_request,
-                      request_config=dict(entry.request_config or {}) if entry else {})
+                      request_config=cfg.chat_request_config(entry) if entry else {})
 
 
 def default_agent_model_id() -> str:
@@ -324,7 +324,7 @@ def agent_models(*, _metadata=None):
             cache_read_usd_per_million=per_million("input_cache_read", pricing["prompt"]),
             cache_write_usd_per_million=per_million("input_cache_write", pricing["prompt"]),
             web_search_usd_per_request=pricing.get("web_search"),
-            pricing_version=metadata.get('_version', _CATALOG['version']), request_config=dict(entry.request_config or {}),
+            pricing_version=metadata.get('_version', _CATALOG['version']), request_config=cfg.chat_request_config(entry),
             context_length=metadata["context_length"],
         ), metadata))
     return result
@@ -345,10 +345,11 @@ def agent_model_options():
          "available": True, "premium": model.selection_id in cfg.PREMIUM_MODELS,
          "early_access": False,
          "reasoning_efforts": _choices(model, metadata),
-         "default_reasoning": model.request_config.get("reasoning", metadata.get("reasoning") or {}),
          "reasoning_available": bool(metadata.get("reasoning")),
          # What Auto becomes without Pro (null: the model's own default).
          "free_default_effort": _free_default_effort(model, metadata),
+         # The level Auto really runs at, by tier (null: not known).
+         "auto_effort": auto_efforts(model, metadata),
          "delegation_by_effort": {effort: supports_delegation(_resolve_effort(model, metadata, effort))
                                   for effort in _choices(model, metadata)},
          "tools_by_effort": {effort: list(tools_for_model(model))
@@ -475,6 +476,25 @@ def _resolve_effort(model, metadata, reasoning_effort):
     if reasoning:
         config["reasoning"] = reasoning
     return replace(model, request_config=config, reasoning_effort=reasoning_effort)
+
+
+def running_effort(model, metadata):
+    """The level a request of ``model`` reasons at: "none" where it does not
+    reason (reasoning_active), else the level it sends or the catalog's
+    default_effort; None when neither names one."""
+    if not reasoning_active(model, metadata):
+        return "none"
+    effort = ((model.request_config.get("reasoning") or {}).get("effort")
+              or (metadata.get("reasoning") or {}).get("default_effort"))
+    return effort if effort in _EFFORTS else None
+
+
+def auto_efforts(model, metadata):
+    """What Auto runs at by tier, ``{"pro": level, "free": level}``, resolved
+    as the turn resolves it (the route sends free_default_effort without
+    Pro). A level is None where the model's default is not known."""
+    resolved = lambda effort: running_effort(_resolve_effort(model, metadata, effort), metadata)
+    return {"pro": resolved("default"), "free": resolved(_free_default_effort(model, metadata) or "default")}
 
 
 SERVER_TOOL_USAGE_FIELDS = ("server_tool_use_details", "server_tool_use")

@@ -933,8 +933,8 @@ MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     GLM_PRO_MODEL: {"reasoning": {"effort": "low"}},
     # Muse denkt zwingend (OpenRouter meldet reasoning.mandatory=true); die
     # Modelle kennen kein Abschalten, nur einen Aufwand. "low" haelt die als
-    # Output abgerechneten Reasoning-Tokens klein. Ember stuende ohne Eintrag
-    # auf seiner Vorgabe "max".
+    # Output abgerechneten Reasoning-Tokens klein. Fuer Ember gilt das nur
+    # ausserhalb des Agent-Chats (CHAT_MODEL_OWN_REASONING).
     MUSE_BASE_MODEL: {"reasoning": {"effort": "low"}},
     MUSE_GLIMMER_MODEL: {"reasoning": {"effort": "low"}},
     MUSE_PRO_MODEL: {"reasoning": {"effort": "low"}},
@@ -954,6 +954,22 @@ MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     MIMO_BASE_MODEL: {"reasoning": {"enabled": False}},
     MIMO_PRO_MODEL: {"reasoning": {"enabled": False}},
 }
+
+# As the Agent's chat model these reason at their own default under Auto
+# (Ember: "max"), the pin above holds for reviewers, compare_models, the
+# Consensus Engine and helper calls. Ember as a searching agent: answers
+# complete at its default, about 10 s slower and 0.4 cents dearer than at
+# "low" (probe 2026-11-14); the reviewers' final round has a 90 s cap and
+# keeps "low".
+CHAT_MODEL_OWN_REASONING = frozenset({MUSE_BASE_MODEL})
+
+
+def chat_request_config(entry) -> dict[str, Any]:
+    """A registry entry's request_config for the Agent's chat model."""
+    config = dict(entry.request_config or {})
+    if entry.internal_id in CHAT_MODEL_OWN_REASONING:
+        config.pop("reasoning", None)
+    return config
 
 # Die Produktkonfiguration verwendet stabile, providerneutrale interne IDs.
 # Provider-Requests laufen dagegen über OpenRouter und benötigen dessen

@@ -1861,6 +1861,36 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it("names the level Auto runs at for the account, and only a known one", async () => {
+    const catalog = structuredClone(CATALOG);
+    catalog.models[0] = { ...catalog.models[0], auto_effort: { pro: "max", free: "low" } };
+    catalog.models[1] = { ...catalog.models[1], auto_effort: { pro: null, free: null } };
+    for (const [pro, words, detail] of [[true, "Auto · Max", "Max"], [false, "Auto · Low", "Low"]]) {
+      const { window, document, dom } = boot({ catalog, setup(w) { w.App.state = { get: key => key === "isUserPro" ? pro : undefined, set() {} }; } });
+      await selectAgent(window);
+      const auto = document.getElementById("agentReasoningEffort").querySelector('option[value="default"]');
+      // The whole words for the chip and the (+) menu; in the menu "Auto"
+      // with the level as a quiet addition (model-picker.js).
+      expect(auto.textContent).toBe(words);
+      expect(auto.dataset.modelLabel).toBe("Auto");
+      expect(auto.dataset.modelDetail).toBe(detail);
+      window.App.openModelPicker(document.getElementById("agentModelDropdown"), { secondary: true });
+      const row = document.querySelector('[data-setting-value="default"]');
+      expect(row.querySelector(".model-picker-option-label").textContent).toBe(`Auto ${detail}`);
+      expect(row.querySelector(".model-picker-option-detail").textContent).toBe(detail);
+      window.App.collapseExpandedModelPicker();
+      expect(window.App.agentChat.effortLabel(catalog.models[0].id, "default")).toBe(words);
+      expect(window.App.agentChat.effortLabel(catalog.models[0].id, "high")).toBe("High");
+      // Unknown: only "Auto", never a guessed level.
+      expect(window.App.agentChat.effortLabel(catalog.models[1].id, "default")).toBe("Auto");
+      // Auto still sends "default": the server resolves the level itself.
+      document.getElementById("questionInput").value = "Question";
+      await window.App.agentChat.send();
+      expect(window.streamSSERequest.mock.calls[0][1].reasoning_effort).toBe("default");
+      dom.window.close();
+    }
+  });
+
   // A message typed while a response runs is never lost and always on screen:
   // into the run when it reads messages, else in the queue.
   it("queues a message typed during a response and sends it once the response is done", async () => {

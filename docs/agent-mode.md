@@ -102,6 +102,24 @@ damit der Agent auch ohne Live-Katalog startet; die Landing-Mockups zeigen sein
 Label (`agent_model_label()`). Hilfsagenten (Delegation) sind mit dem neuen Standard nicht geprüft;
 die Delegation ist ohnehin standardmäßig aus.
 
+**Auto zeigt seine Stufe.** Im Picker, im (+)-Menü und auf der
+Einstellungskarte steht bei „Auto“ die Stufe, mit der die Anfrage für dieses
+Modell und Konto wirklich läuft: „Auto · Max“ (Muse Ember mit Pro), „Auto · Low“
+(GLM, Kimi K3.1 Pro, Qwen: fest eingetragen), „Auto · Off“ (Kimi K2.6, MiMo,
+Modelle, die nur auf Anfrage denken), „Auto · High“ (DeepSeek V4.1 Flash auch
+ohne Pro, es bietet kein Medium). Ohne Pro ersetzt Medium „Auto“, wo das Modell
+es anbietet (unten). Quelle ist der Server (`auto_effort: {pro, free}` in
+`/agent/models`), der die Anfrage wie der Lauf auflöst; ohne gesendete Stufe
+gilt `default_effort` aus dem OpenRouter-Katalog. Fehlt der, steht nur „Auto“.
+Die Lauf-Zeile unter der Antwort nennt Auto wie bisher nicht.
+
+Muse Ember denkt als Chatmodell unter Auto auf seiner Vorgabe Max
+(`CHAT_MODEL_OWN_REASONING` in `app/core/config.py`). Probe als suchender
+Agent, zwei Suchfragen: low 19/24 s, Vorgabe 32/42 s, 0,4–0,6 gegen 0,8–1,0
+Cent, keine Antwort leer oder abgeschnitten. Als Prüfer, in `compare_models`
+und in der Consensus Engine bleibt es auf `low`: Die Prüfung nach der Antwort
+hat einen Deckel von 90 s.
+
 Preise, Kontextgrenzen und Reasoning-Stufen werden aus dem öffentlichen
 OpenRouter-Modellkatalog nachgeladen und fünf Minuten zwischengespeichert.
 Neue Admin-Modelle benötigen deshalb keinen zusätzlichen Codeeintrag.
@@ -4782,7 +4800,9 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
 - **Auto zählt mit seiner echten Stufe:** Ohne Pro läuft Auto auf DeepSeek
   V4.1 Flash mit dessen Standard High, wählbar ist nur Low. „Denk
   gründlicher“ wird dort nie Low; die Stufenwahl vergleicht Auto mit der
-  Stufe, auf der es läuft (aus bei `enabled`/`default_enabled: false`).
+  Stufe, auf der es läuft (`auto_effort` der Modellliste, aus
+  `agent_client.auto_efforts`). Ist die Vorgabe des Modells unbekannt, heißt
+  es „Auto (… own setting)“, nie eine geratene Stufe.
 - **Was geht:** Chatmodell (`chat_model`), Reasoning-Stufe (auch „eine
   höher/tiefer“), Vergleichs-Lineup (`comparison_lineup`: Daily, Open Models,
   High Quality; seine Modelle sind die Prüfer) und die Anzeige von

@@ -90,6 +90,10 @@
   function modelLabel(id) {
     return App.agentChat?.modelLabel?.(id) || id;
   }
+  // Auto with the level it runs at on that model (agent-chat.js effortLabel).
+  function effortLabel(id, effort) {
+    return App.agentChat?.effortLabel?.(id, effort) || EFFORTS[effort || 'default'];
+  }
 
   // What each change replaces on this page now; equal ones drop out.
   function rows(proposal) {
@@ -107,9 +111,10 @@
         const chatDiffers = now.model_id !== value.model_id || (now.reasoning_effort || 'default') !== effort;
         if (chatDiffers) {
           add('Chat model', modelLabel(now.model_id), modelLabel(value.model_id));
-          add('Reasoning', EFFORTS[now.reasoning_effort || 'default'], EFFORTS[effort]);
+          add('Reasoning', effortLabel(now.model_id, now.reasoning_effort), effortLabel(value.model_id, effort));
         } else if (account.model_id === value.model_id) {
-          add('Reasoning in new chats', EFFORTS[account.reasoning_effort || 'default'], EFFORTS[effort]);
+          add('Reasoning in new chats', effortLabel(account.model_id, account.reasoning_effort),
+            effortLabel(value.model_id, effort));
         } else {
           add('Chat model in new chats', modelLabel(account.model_id), modelLabel(value.model_id));
         }

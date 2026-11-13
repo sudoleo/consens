@@ -233,6 +233,10 @@
   white-space: nowrap;
 }
 
+/* The level Auto runs at: a quiet addition to its name, not a badge. */
+.model-picker-option-detail { color: var(--ink-3); }
+.model-picker-option-detail::before { content: "· "; }
+
 .model-picker-group-option { min-height: 36px; gap: 12px; }
 .model-picker-group-option.is-current-group { background: var(--selected); }
 .model-picker-group-count { color: var(--ink-3); font-size: var(--font-size-xs); font-variant-numeric: tabular-nums; }
