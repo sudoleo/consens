@@ -2759,6 +2759,22 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   und meldet den degradierten Zustand, statt eine Promise-Rejection auszulösen.
   `injectMarkdown(el, md, evidenceSources?)` akzeptiert optional turnbezogene
   Quellen; ohne dritten Parameter gilt weiter `window.currentEvidenceSources`.
+  **Formen, die die Antwort zeichnet:** Drei Strukturen, die Modelle ohnehin
+  schreiben, bekommen in `/app` eine eigene Form, allein aus der Struktur
+  gelesen (keine neue Syntax, kein Prompt, kein Wort einer Sprache).
+  `figuresFromTable`: eine Tabelle mit genau einer Zeile und zwei bis vier
+  kurzen Werten mit Ziffer wird zu `dl.md-figures` (Wert groß, Spaltenkopf
+  darunter). `drawTableBars`: eine Spalte vergleichbarer Beträge
+  (`parseAmount`: eine Einheit, nichts Negatives, ab drei Zeilen, keine
+  Jahreszahlen oder laufenden Nummern, deutsche und englische Schreibweise)
+  bekommt je Zelle `span.md-bar > i` mit dem Anteil am Spaltenmaximum; eine
+  letzte Zeile, die die übrigen summiert, bleibt ohne Balken. Bei Bezeichnung
+  plus genau einer Betragsspalte steht der Balken neben dem Betrag
+  (`table.md-bar-rows`, Breite des Betrags in `--md-bar-amount`).
+  `markStepLists`: eine nummerierte Liste, deren Punkte alle mit einem fetten
+  Titel beginnen, wird zu `ol.md-steps` (Nummern auf einer Schiene, Titel auf
+  eigener Zeile). Optik in `components-consensus.css`. Öffentliche Seiten
+  (`public_markdown.py`) zeichnen diese Formen nicht.
   **Checklisten (seit 2026-10-21):** `- [ ] Punkt` / `- [x] Punkt` werden zu
   Kästchen. marked zeichnet das Kästchen als Formularfeld, das
   `MODEL_HTML_CONFIG` zu Recht verbietet (vorher verschwand es, der Punkt las

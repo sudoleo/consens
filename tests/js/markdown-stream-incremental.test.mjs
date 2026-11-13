@@ -196,7 +196,7 @@ describe("incremental streamed Markdown", () => {
       set(value) { parses += 1; descriptor.set.call(this, value); }
     });
     const el = document.createElement("div");
-    window.injectMarkdown(el, "Text with **bold** and a [link](https://a.example/).\n\n| A | B |\n|---|---|\n| 1 | 2 |", []);
+    window.injectMarkdown(el, "Text with **bold** and a [link](https://a.example/).\n\n| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |", []);
     window.renderMarkdownStream(document.createElement("div"), "Streaming *text* and more");
     expect(parses).toBe(0);
     expect(el.querySelector("strong")?.textContent).toBe("bold");

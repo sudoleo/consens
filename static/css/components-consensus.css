@@ -418,7 +418,129 @@ body.agent-mode-transitioning:not(.agent-mode-enabled) .response-section > .resp
   margin-bottom: 0;
 }
 
+/* Shapes the answer draws (markdown-stream.js): figures, bars, steps. No box
+   and no tinted plate; tone and hairlines carry them like the table. */
+
+/* A table of one row: each value large over its heading. */
+.md-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 1.1em 1.75em;
+  margin: 1.5em 0;
+}
+
+.md-figures > div {
+  display: flex;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.md-figures dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.9em;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+
+.md-figures dt {
+  margin-top: 0.4em;
+  color: var(--ink-3);
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+
+/* An amount's bar: a thin measure under the number, as wide as its share of
+   the column's largest. */
+.md-bar {
+  display: block;
+  height: 2px;
+  margin-top: 7px;
+  border-radius: 1px;
+  background: var(--line-soft);
+}
+
+.md-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink-3);
+}
+
+/* Label and one amount: the bar runs beside the amount instead. */
+.markdown-table.md-bar-rows { min-width: 0; }
+
+.markdown-table.md-bar-rows .md-bar-cell {
+  position: relative;
+  width: 62%;
+}
+
+/* The label keeps its words whole; the bar gives way first. */
+.markdown-table.md-bar-rows td:first-child { overflow-wrap: break-word; }
+
+/* On the amount's line, also where the label beside it wraps. */
+.markdown-table.md-bar-rows .md-bar {
+  position: absolute;
+  inset-inline-start: 0;
+  top: calc(10px + 0.775em);
+  width: calc(100% - var(--md-bar-amount, 8ch) - 1.4em);
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 3px;
+  background: none;
+}
+
+/* Steps: the list's numbers on a rail, each title on its own line. */
+.consensus-answer-body ol.md-steps {
+  padding-inline-start: 0;
+  list-style: none;
+  counter-reset: md-step;
+}
+
+.consensus-answer-body ol.md-steps > li {
+  position: relative;
+  padding-inline-start: 2.1em;
+  counter-increment: md-step;
+}
+
+.consensus-answer-body ol.md-steps > li + li { margin-top: 0.9em; }
+
+.md-steps > li::before {
+  content: counter(md-step);
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.14em;
+  width: 1.3em;
+  color: var(--ink-3);
+  font-size: 0.82em;
+  font-weight: var(--font-weight-semibold);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.md-steps > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(0.53em - 0.5px);
+  top: 1.75em;
+  bottom: -0.65em;
+  width: 1px;
+  background: var(--line);
+}
+
+.md-steps > li > :is(strong, b):first-child,
+.md-steps > li > p:first-child > :is(strong, b):first-child {
+  display: block;
+}
+
 @media (max-width: 640px) {
+  .md-figures { gap: 1em 1.25em; }
+  .md-figures dd { font-size: 1.55em; }
+  .markdown-table.md-bar-rows .md-bar-cell { width: 50%; }
+
   .markdown-table-wrap {
     margin-block: 1.2em;
   }

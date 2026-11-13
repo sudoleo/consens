@@ -391,6 +391,7 @@ function renderMarkdownFragment(md) {
     const adopted = fragment.ownerDocument === document ? fragment : document.adoptNode(fragment);
     liftPictureLines(adopted);
     enhanceTaskLists(adopted);
+    markStepLists(adopted);
     nestModelHeadings(adopted);
     return adopted;
   } catch (error) {
@@ -430,13 +431,136 @@ function markNumericTableColumns(table) {
   }
 }
 
+// --- Shapes the answer draws -------------------------------------------------
+// Models write every answer as headings, paragraphs and lists. The app gives
+// three structures they already write a form of their own, read from the
+// structure alone (no syntax a model would have to learn, no word of any
+// language): a table of one row stands as its figures, a column of amounts
+// gets bars, a numbered list of titled items stands on a rail.
+
+// "12.000 €", "€1,200.50", "4,6 t", "35 %": the amount and its unit. Both
+// thousands conventions occur; a lone separator before exactly three digits
+// is read as thousands.
+const AMOUNT = /^([€$£¥]\s?)?(\d[\d.,\s]*)(\s?[^\d\s.,()+-][^\d()]{0,9})?$/;
+
+function parseAmount(text) {
+  const match = String(text || "").replace(/[  ]/g, " ").trim().match(AMOUNT);
+  if (!match) return null;
+  let digits = match[2].replace(/\s/g, "");
+  if (/[.,]$/.test(digits)) return null;
+  const dot = digits.lastIndexOf("."), comma = digits.lastIndexOf(",");
+  if (dot !== -1 && comma !== -1) {
+    const decimal = dot > comma ? "." : ",";
+    digits = digits.split(decimal === "." ? "," : ".").join("").replace(decimal, ".");
+  } else if (dot !== -1 || comma !== -1) {
+    const mark = dot !== -1 ? "." : ",";
+    const parts = digits.split(mark);
+    digits = parts.length > 2 || parts[1].length === 3 ? parts.join("") : parts.join(".");
+  }
+  const value = Number(digits);
+  return Number.isFinite(value) ? { value, unit: (match[1] || match[3] || "").trim() } : null;
+}
+
+// A table of one row has nothing to compare: its two to four short values
+// are the figures of the answer, each over its heading.
+function figuresFromTable(table) {
+  const head = table.tHead?.rows.length === 1 ? Array.from(table.tHead.rows[0].cells) : [];
+  const rows = Array.from(table.tBodies || []).flatMap(body => Array.from(body.rows || []));
+  const cells = rows.length === 1 ? Array.from(rows[0].cells) : [];
+  if (head.length < 2 || head.length > 4 || cells.length !== head.length) return false;
+  const short = cell => cell.textContent.trim().length <= 18 && !cell.querySelector("br, img, a, code");
+  if (!cells.every(cell => short(cell) && /\d/.test(cell.textContent))) return false;
+  if (!head.every(cell => cell.textContent.trim())) return false;
+
+  const doc = table.ownerDocument || document;
+  const list = doc.createElement("dl");
+  list.className = "md-figures";
+  head.forEach((label, index) => {
+    const group = doc.createElement("div");
+    const term = doc.createElement("dt");
+    const value = doc.createElement("dd");
+    term.append(...label.childNodes);
+    value.append(...cells[index].childNodes);
+    group.append(term, value);
+    list.append(group);
+  });
+  table.replaceWith(list);
+  return true;
+}
+
+// Bars under the amounts of a column that can be compared: one unit, nothing
+// negative, three rows or more. Years and running numbers are not amounts,
+// and a last row that sums the others would dwarf them, so it gets no bar.
+function drawTableBars(table) {
+  const rows = Array.from(table.tBodies || []).flatMap(body => Array.from(body.rows || []));
+  const columnCount = Math.max(0, ...rows.map(row => row.cells.length));
+  const drawn = [];
+  for (let column = 1; column < columnCount; column += 1) {
+    let cells = rows.map(row => row.cells[column]);
+    if (cells.length < 3 || cells.some(cell => !cell || cell.querySelector(".md-bar"))) continue;
+    let amounts = cells.map(cell => parseAmount(cell.textContent));
+    if (amounts.some(amount => !amount) || new Set(amounts.map(amount => amount.unit)).size > 1) continue;
+    let values = amounts.map(amount => amount.value);
+    const others = values.slice(0, -1).reduce((sum, value) => sum + value, 0);
+    if (values.length >= 3 && others > 0 && Math.abs(values[values.length - 1] - others) <= others * 0.005) {
+      cells = cells.slice(0, -1);
+      values = values.slice(0, -1);
+    }
+    const plain = !amounts[0].unit && values.every(Number.isInteger);
+    if (plain && values.every(value => value >= 1900 && value <= 2100)) continue;
+    if (plain && values.every((value, index) => value === index + 1)) continue;
+    const max = Math.max(...values);
+    if (!(max > 0) || new Set(values).size < 2) continue;
+
+    Array.from(table.rows).forEach(row => row.cells[column]?.classList.add("is-numeric"));
+    cells.forEach((cell, index) => {
+      const bar = (table.ownerDocument || document).createElement("span");
+      bar.className = "md-bar";
+      bar.setAttribute("aria-hidden", "true");
+      const fill = bar.appendChild((table.ownerDocument || document).createElement("i"));
+      fill.style.width = `${Math.max(1, Math.round(values[index] / max * 1000) / 10)}%`;
+      cell.classList.add("md-bar-cell");
+      cell.append(bar);
+    });
+    drawn.push(column);
+  }
+  // Label and one amount: the bar has the row to itself, beside the amount.
+  if (drawn.length === 1 && columnCount === 2) {
+    table.classList.add("md-bar-rows");
+    const longest = Math.max(...Array.from(table.rows).map(row => (row.cells[1]?.textContent || "").trim().length));
+    table.style.setProperty("--md-bar-amount", `${longest}ch`);
+  }
+}
+
+// A numbered list whose every item opens with its title in bold is a way to
+// go: the numbers stand on a rail, each title on a line of its own.
+function markStepLists(root) {
+  root.querySelectorAll?.("ol").forEach(list => {
+    const items = Array.from(list.children).filter(child => child.tagName === "LI");
+    const titled = item => {
+      const host = item.firstElementChild?.tagName === "P" ? item.firstElementChild : item;
+      const first = Array.from(host.childNodes).find(node => node.nodeType !== 3 || node.nodeValue.trim());
+      return first?.nodeType === 1 && (first.tagName === "STRONG" || first.tagName === "B")
+        // A title, not a sentence that happens to start bold or is bold throughout.
+        && first.textContent.trim().length <= 80 && host.textContent.trim().length > first.textContent.trim().length;
+    };
+    if (items.length && !list.classList.contains("md-task-list") && items.every(titled)) {
+      list.classList.add("md-steps");
+      const start = Number(list.getAttribute("start"));
+      if (start > 1) list.style.counterReset = `md-step ${start - 1}`;
+    }
+  });
+}
+
 function enhanceMarkdownTables(root) {
   const tables = Array.from(root?.querySelectorAll?.("table") || []);
   tables.forEach((table, index) => {
     if (table.closest(".markdown-table-wrap")) return;
+    if (figuresFromTable(table)) return;
 
     table.classList.add("markdown-table");
     markNumericTableColumns(table);
+    drawTableBars(table);
 
     const headings = Array.from(table.querySelectorAll("thead th"))
       .map(cell => cell.textContent.trim())
