@@ -10942,7 +10942,11 @@ alte Gemini-ADC-JSON ist entfernt.
   zum Ankommen (408). Sechs Plätze sind eine Compare-Nachricht mit Dateien.
   Bilder dekodiert `attachments.shrink_image` begrenzt: JPEG verkleinert
   (`draft`, bis 40 MP), jedes andere Format bis `IMAGE_MAX_PIXELS_DECODED`
-  (20 MP) und über 9 MP nur eines zur selben Zeit. Ein 422 nennt höchstens
+  (20 MP) und über 9 MP nur eines zur selben Zeit. Was als JPEG zählt
+  (auch Pillows `MPO`: HDR- und Tiefenfotos vom Handy) und wie es im
+  Seitenverhältnis verkleinert dekodiert, steht einmal in
+  `services/image_decode.py`; `watch_images`, `agent_web_images` und
+  `agent_vm_tools.model_picture` nutzen dasselbe. Ein 422 nennt höchstens
   `MAX_VALIDATION_DETAILS` (20) Probleme und zählt den Rest (`omitted`), damit
   ein Body mit vielen Schlüsseln keine riesige Antwort erzeugt.
 - Firebase Web-Config: `FIREBASE_API_KEY`, `FIREBASE_AUTH_DOMAIN`,

@@ -71,7 +71,7 @@ from PIL import Image, ImageOps
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.core.observability import safe_exception
-from app.services import picture_search, watch_images
+from app.services import image_decode, picture_search, watch_images
 from app.services.agent_tools import ReadOnlyTool
 
 # Per message; a picture shown twice stays one file.
@@ -199,11 +199,12 @@ def encode(raw):
             width, height = source.size
             # JPEG decodes already shrunk (draft); the others whole, so fewer
             # pixels: a huge PNG must not swell the one server process.
-            limit = MAX_PIXELS if source.format == "JPEG" else watch_images.MAX_PIXELS_DECODED
+            jpeg = image_decode.is_jpeg(source)
+            limit = MAX_PIXELS if jpeg else watch_images.MAX_PIXELS_DECODED
             if width * height > limit:
                 return None
-            if source.format == "JPEG":
-                source.draft("RGB", (MAX_SIDE, MAX_SIDE))
+            if jpeg:
+                image_decode.draft(source, (MAX_SIDE, MAX_SIDE))
             image = ImageOps.exif_transpose(source)
             alpha = image.mode in ("RGBA", "LA", "PA") or (image.mode == "P" and "transparency" in image.info)
             image = image.convert("RGBA" if alpha else "RGB")

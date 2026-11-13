@@ -445,18 +445,19 @@ def model_picture(mime, raw):
     upright, without its metadata); ``raw`` when it cannot be decoded within
     bounds, which leaves it to the provider."""
     from PIL import Image, ImageOps
-    from app.services import watch_images
+    from app.services import image_decode, watch_images
     try:
         with Image.open(io.BytesIO(raw)) as source:
             width, height = source.size
             if max(width, height) <= PICTURE_SIDE and len(raw) <= PICTURE_SENT_BYTES:
                 return mime, raw
             # JPEG decodes already shrunk (draft); the others whole, so fewer pixels.
-            limit = PICTURE_DECODED_PIXELS if source.format == "JPEG" else watch_images.MAX_PIXELS_DECODED
+            jpeg = image_decode.is_jpeg(source)
+            limit = PICTURE_DECODED_PIXELS if jpeg else watch_images.MAX_PIXELS_DECODED
             if width * height > limit:
                 return mime, raw
-            if source.format == "JPEG":
-                source.draft("RGB", (PICTURE_SIDE, PICTURE_SIDE))
+            if jpeg:
+                image_decode.draft(source, (PICTURE_SIDE, PICTURE_SIDE))
             image = ImageOps.exif_transpose(source)
             alpha = image.mode in ("RGBA", "LA", "PA") or (image.mode == "P" and "transparency" in image.info)
             image = image.convert("RGBA" if alpha else "RGB")

@@ -50,7 +50,7 @@ from bs4 import BeautifulSoup
 from PIL import Image, ImageDraw, ImageStat
 
 from app.core.observability import record_metric, safe_exception
-from app.services import persistence_guard, watch_symbols
+from app.services import image_decode, persistence_guard, watch_symbols
 from app.services.source_documents import pinned_target
 
 
@@ -550,20 +550,21 @@ def make_thumbnail(content: bytes, *, box=None, aspect=(1 / 3, 3)):
     try:
         with Image.open(io.BytesIO(content), formats=_IMAGE_FORMATS) as source:
             width, height = source.size
-            limit = MAX_PIXELS if source.format == "JPEG" else MAX_PIXELS_DECODED
+            jpeg = image_decode.is_jpeg(source)
+            limit = MAX_PIXELS if jpeg else MAX_PIXELS_DECODED
             if min(width, height) < MIN_SIDE or width * height > limit:
                 return None
             if not (aspect[0] <= width / height <= aspect[1]):
                 return None
             orientation = None
-            if source.format == "JPEG":
+            if jpeg:
                 # Nur JPEG-Fotos tragen eine Kamera-Ausrichtung; PNG würde für
                 # getexif() schon voll dekodiert.
                 try:
                     orientation = source.getexif().get(0x0112)
                 except Exception:
                     orientation = None
-                source.draft("RGB", (box[0] * 2, box[1] * 2))
+                image_decode.draft(source, (box[0] * 2, box[1] * 2))
             if source.mode in ("RGB", "RGBA"):
                 # Erst verkleinern, dann kopieren: nur ein großer Puffer lebt.
                 source.thumbnail(box, Image.Resampling.LANCZOS)

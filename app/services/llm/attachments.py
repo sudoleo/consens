@@ -13,6 +13,7 @@ from collections import OrderedDict
 from fastapi import HTTPException
 
 from app.core.observability import safe_exception
+from app.services import image_decode
 
 logger = logging.getLogger(__name__)
 
@@ -270,7 +271,7 @@ def shrink_image(raw: bytes, mime: str) -> tuple[bytes, str]:
     width, height = source.width, source.height
     # A JPEG decodes already reduced (draft, below); every other format
     # decodes whole, four bytes a pixel, in the one server process.
-    reduced = source.format == "JPEG"
+    reduced = image_decode.is_jpeg(source)
     if width * height > (IMAGE_MAX_PIXELS if reduced else IMAGE_MAX_PIXELS_DECODED):
         source.close()
         raise ImagePixelLimitExceeded("image pixel budget exceeded")
@@ -279,7 +280,7 @@ def shrink_image(raw: bytes, mime: str) -> tuple[bytes, str]:
     with _whole_decodes if whole else contextlib.nullcontext():
         try:
             if reduced:
-                source.draft("RGB", (IMAGE_MAX_EDGE, IMAGE_MAX_EDGE))
+                image_decode.draft(source, (IMAGE_MAX_EDGE, IMAGE_MAX_EDGE))
             source.load()
         except Image.DecompressionBombError as exc:
             source.close()
