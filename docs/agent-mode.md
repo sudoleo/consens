@@ -4442,6 +4442,14 @@ Geprüft am Abend von 2026-11-03 (Review vor dem Deploy):
   Adresse in einem ihrer Werkzeugergebnisse), nie eine nur aus dem Chat oder
   dem eigenen Text. `finish_watch` beendet die Watch, wenn ihr Ziel erreicht
   ist. Beide stehen am Turn (`agent_watch_run`).
+- **Die Mail holt in den Chat:** Die Mail trägt nur `summary` (höchstens 600
+  Zeichen) und den Link zum Chat; was der Auftrag verlangt (ein Bulletin, ein
+  Bericht), steht in der Antwort des Laufs. Das sagen `RUN_PROMPT`, die
+  Beschreibung von `report_finding` und sein Ergebnis (`agent_watch.REPORTED`).
+  Vorher hieß das Ergebnis „Answer briefly“: ein Bulletin-Lauf schrieb 126
+  Zeichen in den Chat, versuchte den ganzen Text in `summary` zu schreiben
+  (zweimal abgelehnt) und der Nutzer stellte dieselbe Frage im Chat neu
+  (2026-11-13).
 
 Am Ende des Laufs (`agent_watches.turn_ended`, nach den Prüfern) vermerkt die
 Watch den Lauf (`last_run`: `quiet`, `finding`, `needs_you`, `done`, `failed`).

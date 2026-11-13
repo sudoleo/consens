@@ -52,7 +52,11 @@ INSTRUCTIONS = {
 # What a scheduled run is, in its system prompt (WatchRunTools).
 RUN_PROMPT = """THIS WATCH RUN
 
-This message is a scheduled run of a Watch the user started in this chat, and the user is not here. Do its task with your tools as the user would, and decide yourself how to look. Starting the Watch was the user's permission for what its task says; nobody can answer a question now, so for anything beyond the task use report_finding with needs_user. The user hears of this run only through report_finding: at most once, only when there is something new for them, with a page you opened in this run as evidence. A run with nothing new ends with a short answer and no report. Once the Watch's goal is met, call finish_watch."""
+This message is a scheduled run of a Watch the user started in this chat, and the user is not here. Do its task with your tools as the user would, and decide yourself how to look. Starting the Watch was the user's permission for what its task says; nobody can answer a question now, so for anything beyond the task use report_finding with needs_user. The user hears of this run only through report_finding: at most once, only when there is something new for them, with a page you opened in this run as evidence. Its summary is the email, which links to this chat; your answer to this message is what the user reads when they open it, so what the task asked for stands there itself. A run with nothing new ends with a short answer and no report. Once the Watch's goal is met, call finish_watch."""
+
+# report_finding's result.
+REPORTED = ("The user gets this summary by email once this run ends, with a link to this chat. Your answer is "
+            "what they open it for: what the task asked for itself, not a note that it was sent.")
 
 # The run's app context (agent_watches.run_context).
 RUN_NOTE = "This message is a scheduled Watch run; the user is away.{goal}"
@@ -182,7 +186,8 @@ class WatchTools:
 class ReportFinding(Strict):
     summary: str = Field(
         min_length=3, max_length=600,
-        description="What is new for the user, in one or two sentences in their language: the email's first line.")
+        description="What is new for the user, in one or two sentences in their language: the email's text. "
+                    "What the task asked for in full stands in your answer.")
     evidence_url: str = Field(
         min_length=8, max_length=URL_MAX_CHARS,
         description="The address of a page you opened or found in this run that shows it.")
@@ -215,7 +220,8 @@ class WatchRunTools:
         return [
             ReadOnlyTool("report_finding",
                          "Tell the user what this Watch run found for them, with the page you saw it on. "
-                         "They get it by email once this run ends.", ReportFinding, self.report),
+                         "They get the summary by email once this run ends, with a link to this chat and your answer.",
+                         ReportFinding, self.report),
             ReadOnlyTool("finish_watch", "End this Watch: its goal is met. No further runs.",
                          FinishWatch, self.finish),
         ]
@@ -252,8 +258,9 @@ class WatchRunTools:
         except Exception as exc:
             logging.warning("agent watch finding not saved category=%s", type(exc).__name__)
             raise ValueError("The finding could not be saved right now. Say it in your answer.") from None
-        return {"status": "reported", "instruction": "The user gets this by email once this run ends. "
-                                                     "Answer briefly with what you found."}
+        # The mail brings the user to the chat: a report or bulletin the task
+        # asks for has to stand in the answer, the mail only carries the summary.
+        return {"status": "reported", "instruction": REPORTED}
 
     def finish(self, args, *, cancellation=None):
         if cancellation is not None:

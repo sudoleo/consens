@@ -379,6 +379,19 @@ def test_a_finding_needs_a_page_this_run_saw(store):
                                  "needs_user": False}}
 
 
+def test_the_mail_brings_the_user_to_the_chat_where_the_answer_is_the_report():
+    """A bulletin run answered in 126 characters that it had "reported" the
+    bulletin: the mail carries the summary and a link, nothing else does."""
+    result = agent_watch.REPORTED
+    assert "link to this chat" in result and "not a note that it was sent" in result
+    assert "briefly" not in result
+    assert "your answer to this message is what the user reads" in agent_watch.RUN_PROMPT
+    tool = next(tool for tool in agent_watch.WatchRunTools(None).tools() if tool.name == "report_finding")
+    assert "link to this chat and your answer" in tool.description
+    summary = tool.schema()["function"]["parameters"]["properties"]["summary"]
+    assert summary["maxLength"] == 600 and "stands in your answer" in summary["description"]
+
+
 def test_a_search_result_counts_as_seen_with_its_title_and_finish_ends_the_watch(store):
     loop = watch_loop(store, WatchScript(), watch_run=RUN)
     loop.search_sources.append({"url": PAGE, "title": "IRONMAN Hamburg"})

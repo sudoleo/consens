@@ -2469,7 +2469,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Nachricht oder eine Adresse in einem ihrer Werkzeugergebnisse, nie nur aus
   dem Chat) und `finish_watch` (`reason`), beide in `SIDE_TOOLS` und
   `OWN_CONTENT_TOOLS`, gespeichert als `turn.agent_watch_run`
-  (`finding`, `done`), dazu `agent_watch.RUN_PROMPT`. Niemand wartet auf
+  (`finding`, `done`), dazu `agent_watch.RUN_PROMPT`. Die Mail trägt nur
+  `summary` und den Link zum Chat, der volle Bericht steht in der Antwort
+  des Laufs (`agent_watch.REPORTED`). Niemand wartet auf
   eine Karte: `hold_timeout` 0, `ask_user` hört sofort „keine Antwort“, ein
   Prüfer-Halt endet als `hold_timeout` und wird gemeldet.
 - **Agent-Einstellungen (`app/services/agent_settings.py`, `agent-settings.js`,
