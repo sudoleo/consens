@@ -214,6 +214,49 @@
     return true;
   }
 
+  // --- Two sections side by side ---------------------------------------------
+  // Models write for and against far more often as two sections, each a
+  // heading and one bullet list, than as a table. Two such sections in a
+  // row, their headings of the same level, the second ending where the next
+  // heading of its level or above (or a rule, or the answer) begins, stand
+  // side by side like the two sides of a table. A third such section next to
+  // them makes a series rather than a pair, and long points would stand as
+  // narrow walls of text: both keep the sections as they are. The headings
+  // stay headings, for the outline a screen reader and a search engine read.
+  const level = node => (/^H[1-6]$/.test(node?.tagName || "") ? Number(node.tagName[1]) : 0);
+  const shortList = node => node?.tagName === "UL" && !node.classList.contains("md-task-list")
+    && node.children.length >= 2 && node.children.length <= 8
+    && Array.from(node.children).every(item => item.tagName === "LI" && textOf(item).length <= 360
+      && !item.querySelector("ul, ol, pre, table, img, .md-diagram"));
+  const isSection = (nodes, at) => level(nodes[at]) > 0 && textOf(nodes[at]).length <= 100 && shortList(nodes[at + 1]);
+
+  function facingSections(root) {
+    const nodes = Array.from(root?.children || []);
+    let drawn = 0;
+    for (let at = 0; at + 3 < nodes.length; at += 1) {
+      const head = level(nodes[at]);
+      if (!isSection(nodes, at) || !isSection(nodes, at + 2) || level(nodes[at + 2]) !== head) continue;
+      const after = nodes[at + 4];
+      if (after && !(level(after) && level(after) <= head) && after.tagName !== "HR") continue;
+      if (at >= 2 && level(nodes[at - 2]) === head && isSection(nodes, at - 2)) continue;
+      if (after && level(after) === head && isSection(nodes, at + 4)) continue;
+      const doc = docOf(root);
+      const box = doc.createElement("div");
+      box.className = "md-facing";
+      root.insertBefore(box, nodes[at]);
+      [at, at + 2].forEach(index => {
+        const side = doc.createElement("div");
+        side.className = "md-facing-side";
+        nodes[index].classList.add("md-facing-head");
+        side.append(nodes[index], nodes[index + 1]);
+        box.append(side);
+      });
+      drawn += 1;
+      at += 3;
+    }
+    return drawn;
+  }
+
   // --- Bars -----------------------------------------------------------------
   // Bars under the amounts of a column that can be compared: one unit,
   // nothing negative, three rows or more. Years and running numbers are not
@@ -370,6 +413,7 @@
       if (decorated) drawn.add(decorated);
     });
     if (steps(root)) drawn.add("steps");
+    if (facingSections(root)) drawn.add("facing");
     return [...drawn];
   }
 
@@ -386,7 +430,7 @@
     return found;
   }
 
-  window.AnswerShapes = { parseAmount, replaceTable, decorateTable, steps, draw, present, isFacing };
+  window.AnswerShapes = { parseAmount, replaceTable, decorateTable, steps, facingSections, draw, present, isFacing };
 
   // A public page names the answers it draws on its script tag
   // (partials/answer_blocks.html); in /app the renderer asks instead.

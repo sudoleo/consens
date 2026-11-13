@@ -473,6 +473,7 @@ function injectMarkdown(el, md, evidenceSources = window.currentEvidenceSources)
   el.replaceChildren(renderMarkdownFragment(md));
 
   enhanceMarkdownTables(el);
+  window.AnswerShapes?.facingSections(el);
 
   addCopyButtons(el);
 
@@ -721,6 +722,8 @@ function renderStreamFragment(md, decorate, { growing = false } = {}) {
   const holder = document.createElement("div");
   holder.append(renderMarkdownFragment(md, { growing }));
   enhanceMarkdownTables(holder);
+  // A pair of sections is fixed as one block (sectionsAhead).
+  window.AnswerShapes?.facingSections(holder);
   addCopyButtons(holder);
   if (window.ConsensusMath) window.ConsensusMath.render(holder);
   window.ConsensusDiagram?.render(holder);
@@ -860,6 +863,92 @@ function streamHold(text, from) {
   return text.length;
 }
 
+// Two sections side by side (answer-shapes.js facingSections) arrive one
+// after the other: the first would stand full width until the second came
+// and then narrow under the reader's eye. So a heading that may open such a
+// pair waits, with its list and the next section, as quiet rows (like a
+// table) until what follows decides: then the pair appears at once as two
+// sides, or the sections as they are. The rule itself is facingSections',
+// asked on the finished tokens, so the stream and the full render agree.
+// Returns { hold, pair }: where the undecided text starts (-1 for none), and
+// the text range of a pair that is decided and may be fixed in one block.
+// `back` is where to read from for the section before (a third section next
+// to the pair makes a series); `decided` remembers verdicts by position.
+function sectionsAhead(text, from, back = from, decided = new Map(), { pairs = true } = {}) {
+  const none = { hold: -1, pair: null };
+  const shapes = window.AnswerShapes;
+  if (!shapes?.facingSections || typeof window.marked?.lexer !== "function"
+      || !/(^|\n) {0,3}#{1,6}(\s|$)/.test(text.slice(from))) return none;
+  let tokens;
+  try { tokens = window.marked.lexer(text.slice(back)); } catch (_) { return none; }
+  const blocks = [];
+  let position = back;
+  for (const token of tokens) {
+    if (token.type !== "space") blocks.push({ token, start: position, end: position + token.raw.length });
+    position += token.raw.length;
+  }
+  // A token is complete once another one follows it; the last may still grow,
+  // so its kind is read from how it begins: "## " is a heading of level 2,
+  // "- word" a bullet list, a lone "#" or "-" may still become anything.
+  const complete = index => index < blocks.length - 1;
+  const kind = index => {
+    const block = blocks[index];
+    if (!block) return "open";
+    if (complete(index)) {
+      const { token } = block;
+      if (token.type === "heading") return `h${token.depth}`;
+      if (token.type === "list") return token.ordered ? "other" : "list";
+      return token.type === "hr" ? "hr" : "other";
+    }
+    const raw = block.token.raw;
+    const heading = raw.match(/^ {0,3}(#{1,6})[ \t]/);
+    if (heading) return `h${heading[1].length}`;
+    if (/^ {0,3}[-*+_][-*+_ \t]*$/.test(raw) || /^ {0,3}#{1,6}$/.test(raw)) return "open";
+    return /^ {0,3}[-*+][ \t]+\S/.test(raw) ? "list" : "other";
+  };
+  const verdict = index => {
+    const depth = blocks[index].token.depth;
+    const level = at => (/^h\d$/.test(kind(at)) ? Number(kind(at)[1]) : 0);
+    if (!complete(index)) return "hold";
+    if (kind(index + 1) === "open") return "hold";
+    if (kind(index + 1) !== "list") return "no";
+    if (!complete(index + 1) || kind(index + 2) === "open") return "hold";
+    if (level(index + 2) !== depth) return "no";
+    if (!complete(index + 2) || kind(index + 3) === "open") return "hold";
+    if (kind(index + 3) !== "list") return "no";
+    if (!complete(index + 3) || kind(index + 4) === "open") return "hold";
+    if (kind(index + 4) !== "hr" && !(level(index + 4) && level(index + 4) <= depth)) return "no";
+    // A third section next to it: what follows that one decides as well.
+    if (level(index + 4) === depth && (kind(index + 5) === "open"
+        || (kind(index + 5) === "list" && !complete(index + 5)))) return "hold";
+    const first = Math.max(0, index - 2), last = Math.min(index + 5, blocks.length - 2);
+    const holder = document.createElement("div");
+    holder.append(renderMarkdownFragment(text.slice(blocks[first].start, blocks[last].end)));
+    shapes.facingSections(holder);
+    const title = renderMarkdownFragment(blocks[index].token.raw).textContent.trim();
+    return holder.querySelector(".md-facing .md-facing-head")?.textContent.trim() === title ? "pair" : "no";
+  };
+  for (let index = 0; index < blocks.length; index += 1) {
+    const { token, start } = blocks[index];
+    if (start < from || token.type !== "heading") continue;
+    let result = decided.get(start);
+    if (!result) {
+      result = verdict(index);
+      if (result !== "hold") decided.set(start, result);
+    }
+    if (result === "hold") return { hold: start, pair: null };
+    if (result === "pair" && pairs) return { hold: -1, pair: { start, end: blocks[index + 4].start } };
+  }
+  return none;
+}
+
+// Quiet rows for the held sections: one per line that has arrived.
+function pendingSections(text) {
+  const box = pendingTable(Math.min(16, text.split("\n").filter(line => line.trim()).length));
+  box.classList.add("stream-sections-pending");
+  return box;
+}
+
 // Renders `md` into `el`, reusing the blocks of the previous call when `md`
 // only grew. Returns the number of characters that were parsed.
 function renderMarkdownStream(el, md, { decorate } = {}) {
@@ -870,12 +959,26 @@ function renderMarkdownStream(el, md, { decorate } = {}) {
   // invalidates the reuse; so does text that did not only grow.
   if (!state || !md.startsWith(state.committedText) || el.childNodes.length !== state.nodeCount) {
     el.replaceChildren();
-    state = el._markdownStream = { committedText: "", committed: 0, tail: [], tailText: "", nodeCount: 0 };
+    state = el._markdownStream = { committedText: "", committed: 0, tail: [], tailText: "", nodeCount: 0,
+      starts: [], decided: new Map() };
   }
   let parsed = 0;
-  let end;
-  const shown = md.slice(0, streamHold(md, state.committed));
-  while ((end = nextStreamBlockEnd(shown, state.committed)) !== -1) {
+  let shown, held;
+  for (;;) {
+    const back = state.starts.length > 1 ? state.starts[state.starts.length - 2] : 0;
+    const ahead = sectionsAhead(md, state.committed, back, state.decided);
+    held = ahead.hold === -1 ? "" : md.slice(ahead.hold);
+    shown = md.slice(0, Math.min(streamHold(md, state.committed), ahead.hold === -1 ? md.length : ahead.hold));
+    const pair = ahead.pair;
+    let end;
+    if (pair && state.committed === pair.start) {
+      end = pair.end;
+    } else {
+      end = nextStreamBlockEnd(shown, state.committed);
+      // A pair that does not start on a block boundary still gets its own block.
+      if (pair && state.committed < pair.start && (end === -1 || end > pair.start)) end = pair.start;
+    }
+    if (end === -1 || end > shown.length) break;
     const block = shown.slice(state.committed, end);
     // The block the reader saw growing becomes final in its own nodes. The
     // shown tail may already hold what follows the block (a heading under a
@@ -886,13 +989,17 @@ function renderMarkdownStream(el, md, { decorate } = {}) {
     morphNodes(el, state.tail.slice(0, final.length), final);
     state.tail = kept;
     parsed += block.length;
+    state.starts.push(state.committed);
     state.committed = end;
     state.committedText = shown.slice(0, end);
   }
   const tailText = shown.slice(state.committed);
-  if (tailText !== state.tailText) {
-    state.tail = morphNodes(el, state.tail, tailText.trim() ? renderStreamTail(tailText, decorate) : []);
-    state.tailText = tailText;
+  const tailKey = `${tailText}\u0000${held}`;
+  if (tailKey !== state.tailText) {
+    const nodes = tailText.trim() ? renderStreamTail(tailText, decorate) : [];
+    if (held.trim()) nodes.push(pendingSections(held));
+    state.tail = morphNodes(el, state.tail, nodes);
+    state.tailText = tailKey;
     parsed += tailText.length;
   }
   if (parsed) {
@@ -933,13 +1040,17 @@ function createStreamRenderer(outputEl, isActiveFn) {
   let renderTimer = null;
   let lastRenderAt = 0;
   let started = false;
+  const decided = new Map();
 
   function render() {
     renderTimer = null;
     if (isActiveFn && !isActiveFn()) return;
     lastRenderAt = Date.now();
-    outputEl.replaceChildren(renderMarkdownFragment(text, { growing: true }));
+    const ahead = sectionsAhead(text, 0, 0, decided, { pairs: false });
+    outputEl.replaceChildren(renderMarkdownFragment(ahead.hold === -1 ? text : text.slice(0, ahead.hold), { growing: true }));
     enhanceMarkdownTables(outputEl);
+    window.AnswerShapes?.facingSections(outputEl);
+    if (ahead.hold !== -1) outputEl.append(pendingSections(text.slice(ahead.hold)));
     addCopyButtons(outputEl);
     if (window.ConsensusMath) window.ConsensusMath.render(outputEl);
     markOpenDiagrams([outputEl]);

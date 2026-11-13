@@ -119,6 +119,37 @@ describe("Two sides", () => {
   });
 });
 
+describe("Two sections side by side", () => {
+  const section = (title, items, tag = "h2") => `<${tag}>${title}</${tag}><ul>${items.map(item => `<li>${item}</li>`).join("")}</ul>`;
+  const buy = section("What speaks for buying", ["You build wealth", "Nobody can give you notice"]);
+  const rent = section("What speaks for renting", ["You can move", "No repairs", "Capital stays free"]);
+
+  it("stands two sections of a heading and a short list each side by side, headings kept", () => {
+    const output = render(`<p>It depends.</p>${buy}${rent}<h2>How to compare</h2><p>Count everything.</p>`);
+    const sides = output.querySelectorAll(".md-facing > .md-facing-side");
+    expect(sides).toHaveLength(2);
+    expect(sides[0].querySelector("h2.md-facing-head").textContent).toBe("What speaks for buying");
+    expect(sides[1].querySelectorAll("li")).toHaveLength(3);
+    // The answer goes on below as before.
+    expect(output.querySelector(".md-facing").nextElementSibling.textContent).toBe("How to compare");
+    expect(render(`${buy}${rent}`).querySelector(".md-facing")).not.toBeNull();
+    expect(render(`${buy}${rent}<hr><p>More.</p>`).querySelector(".md-facing")).not.toBeNull();
+  });
+
+  it("keeps sections that go on, a series of three, other levels and long or nested points", () => {
+    const facing = html => render(html).querySelector(".md-facing");
+    expect(facing(`${buy}${rent}<p>One more thing about renting.</p>`)).toBeNull();
+    expect(facing(`${buy}${rent}<h3>Below renting</h3><p>Detail.</p>`)).toBeNull();
+    expect(facing(`${buy}${rent}${section("What speaks for a third way", ["Wait", "See"])}`)).toBeNull();
+    expect(facing(`${buy}${section("Renting", ["Move", "Repairs"], "h3")}`)).toBeNull();
+    expect(facing(`${buy}${section("Renting", ["x".repeat(361), "Short"])}`)).toBeNull();
+    expect(facing(`${buy}${section("Renting", ["Move"])}`)).toBeNull();
+    expect(facing(`${buy}<h2>Renting</h2><ul><li>Move<ul><li>far</li></ul></li><li>Repairs</li></ul>`)).toBeNull();
+    expect(facing(`${buy}<h2>Steps</h2><ol><li>One</li><li>Two</li></ol>`)).toBeNull();
+    expect(facing(`${buy}<h2>Check</h2><ul class="md-task-list"><li>One</li><li>Two</li></ul>`)).toBeNull();
+  });
+});
+
 describe("Timeline", () => {
   it("puts a table of dates and events on the rail and keeps it a table", () => {
     const output = render(table(["Year", "What changed"], [

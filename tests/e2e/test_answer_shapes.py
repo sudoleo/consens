@@ -47,6 +47,17 @@ ANSWER = """Für ein Einfamilienhaus von 1995 ist die **Luft-Wärmepumpe** meist
 2. **Drei Angebote einholen:** Die Preise streuen stark, auch regional.
 3. **Förderung beantragen.** Der Antrag muss vor dem Auftrag gestellt sein.
 
+### Was für Kaufen spricht
+
+- **Vermögen:** Jede Tilgung baut etwas auf.
+- **Sicherheit:** Niemand kann wegen Eigenbedarfs kündigen.
+
+### Was für Mieten spricht
+
+- **Flexibilität:** Ein Umzug für den Job ist einfach.
+- **Kapital:** Das Eigenkapital bleibt frei.
+- **Kein Risiko:** Reparaturen trägt der Vermieter.
+
 ### Was sich geändert hat
 
 | Jahr | Was passiert ist |
@@ -127,6 +138,9 @@ def test_shapes_stand_where_they_appear_while_the_answer_streams(browser, viewpo
         # The steps stood on their rail from their first words, never as a plain list first.
         assert result['bareLists'] == 0
         assert result['shapes'] == ['figures', 'facing', 'timeline', 'bars', 'pick', 'steps']
+        # The table's two sides and the two sections that stood as quiet rows until they were a pair.
+        assert page.locator('.md-facing').count() == 2
+        assert page.locator('.md-facing h3.md-facing-head').count() == 2
         answer = page.locator('#answer')
         # Every word stays readable and copyable: the shapes rearrange, they drop nothing.
         text = answer.inner_text()

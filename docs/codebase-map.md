@@ -2782,6 +2782,23 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     nicht). → `div.md-facing` mit zwei `.md-facing-side`, je
     `p.md-facing-head` + `ul[aria-labelledby]`, leere Zellen fallen weg;
     Haarlinie dazwischen, unter 640 px untereinander.
+  - **Zwei Abschnitte nebeneinander** (`facingSections`): Modelle schreiben
+    Dafür/Dagegen meist als zwei Abschnitte statt als Tabelle. Zwei direkt
+    aufeinanderfolgende Überschriften derselben Stufe mit je genau einer
+    Aufzählung (2–8 Punkte, je höchstens 360 Zeichen, keine Unterlisten),
+    danach Überschrift gleicher oder höherer Stufe, Linie oder Ende → dieselbe
+    `div.md-facing`; die Überschriften bleiben Überschriften
+    (`.md-facing-head`). Ein dritter solcher Abschnitt daneben ist eine Reihe
+    und bleibt, wie er ist. Im Stream (`sectionsAhead` in
+    `markdown-stream.js`) wartet eine Überschrift, die so ein Paar öffnen
+    kann, samt Liste und zweitem Abschnitt als ruhige Zeilen
+    (`.stream-sections-pending`, wie bei Tabellen), bis das Folgende
+    entscheidet; dann erscheint das Paar am Stück als ein Block, sonst die
+    Abschnitte, wie sie sind. Entschieden wird mit `facingSections` selbst an
+    den fertigen Teilen, halbfertige nach ihrem Anfang („## “ = Überschrift,
+    „- Wort“ = Aufzählung, „#“/„-“ allein = offen). Auch der Vergleichsmodus
+    (`createStreamRenderer`) hält so zurück. Folge: Jede Überschrift am Ende
+    erscheint erst, wenn das nächste Stück beginnt.
   - **Zeitstrahl** (`timeline`): zwei Spalten, ab drei Zeilen, die erste nur
     Zeitpunkte (`when`: Jahr 1000–2199, volles Datum in den üblichen
     Reihenfolgen, `12.3.`, `3/2024`, `09:30`, umgebende Wörter erlaubt, aber

@@ -6,6 +6,7 @@ function boot() {
   return loadScripts([
     "static/vendor/marked/12.0.2/marked.min.js",
     "static/vendor/dompurify/3.4.17/dist/purify.min.js",
+    "static/js/answer-shapes.js",
     "static/js/markdown-stream.js",
   ]);
 }
@@ -214,14 +215,56 @@ describe("incremental streamed Markdown", () => {
   it("keeps a list's number back until its words follow, and the heading above in its node", () => {
     const { window, document } = boot();
     const el = document.createElement("div");
+    // A heading at the end waits for what follows it (it may open two sections side by side).
     window.renderMarkdownStream(el, "| A | B |\n|---|---|\n| 1 | 2 |\n\n### Steps\n\n");
-    const heading = el.querySelector("h3");
+    expect(el.querySelector("h3")).toBeNull();
     window.renderMarkdownStream(el, "| A | B |\n|---|---|\n| 1 | 2 |\n\n### Steps\n\n1");
     expect(el.querySelector("p")).toBeNull();
+    const heading = el.querySelector("h3");
+    expect(heading.textContent).toBe("Steps");
     window.renderMarkdownStream(el, "| A | B |\n|---|---|\n| 1 | 2 |\n\n### Steps\n\n1. **Ask**");
     expect(el.querySelector("ol li").textContent).toBe("Ask");
+    window.renderMarkdownStream(el, "| A | B |\n|---|---|\n| 1 | 2 |\n\n### Steps\n\n1. **Ask** offers\n2. **Go** now\n\nMore.");
     // The table's block was fixed under the heading: the heading stayed the same node.
     expect(el.querySelector("h3")).toBe(heading);
+  });
+
+  const PAIR = "It depends on three things.\n\n## For buying\n\n- You build wealth over the years\n- Nobody can give you notice\n\n"
+    + "## For renting\n\n- You can move when the job asks\n- No repairs to pay for\n- The capital stays free\n\n"
+    + "## How to compare\n\nCount every cost, not only the rate.\n";
+  const SECTIONS = "It depends.\n\n## For buying\n\n- Wealth\n- Safety\n\nOne more thing about buying.\n\n## Next\n\nDone.\n";
+
+  it("holds two sections as quiet rows until they stand side by side, then never moves them", () => {
+    const { window, document } = boot();
+    const el = document.createElement("div");
+    let firstFacing = null, sawHeadingBefore = false, sawRows = false;
+    for (let end = 1; end <= PAIR.length; end += 3) {
+      window.renderMarkdownStream(el, PAIR.slice(0, end));
+      const facing = el.querySelector(".md-facing");
+      if (!firstFacing && facing) firstFacing = facing;
+      if (firstFacing) expect(el.querySelector(".md-facing")).toBe(firstFacing);
+      if (!firstFacing && [...el.querySelectorAll("h2")].some(h => h.textContent.startsWith("For"))) sawHeadingBefore = true;
+      if (el.querySelector(".stream-sections-pending")) sawRows = true;
+    }
+    expect(sawRows).toBe(true);
+    expect(sawHeadingBefore).toBe(false);
+    expect(firstFacing.querySelectorAll(".md-facing-side")).toHaveLength(2);
+    window.morphMarkdown(el, PAIR);
+    expect(el.querySelector(".md-facing")).toBe(firstFacing);
+  });
+
+  it("lets sections that are no pair appear as they are, and ends as a full render", () => {
+    const { window, document } = boot();
+    for (const text of [SECTIONS, PAIR]) {
+      for (const step of [1, 7, 30]) {
+        const { el } = stream(window, document, text, step);
+        const full = document.createElement("div");
+        window.injectMarkdown(full, text, []);
+        expect(el.innerHTML, `${step}`).toBe(full.innerHTML);
+      }
+    }
+    const { el } = stream(window, document, SECTIONS, 5);
+    expect(el.querySelector(".md-facing, .stream-sections-pending")).toBeNull();
   });
 
   it("never turns a paragraph into a heading while its list's first dash arrives", () => {
