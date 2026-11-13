@@ -1,0 +1,273 @@
+/* Shapes an answer draws from plain Markdown (answer-shapes.js): figures,
+   two sides, a timeline, bars, steps. Shared by /app and the public pages.
+   No box and no tinted plate: tone, hairlines and space carry them, like the
+   table they come from. Selectors carry a class more than the answer's own
+   list and paragraph rules (shell.css, public-pages.css .share-md), which
+   load after this file on the public pages. */
+
+/* --- Figures: a table of one row, each value large over its heading. ---- */
+/* Each figure as wide as its value needs, never broken inside a number;
+   what does not fit beside the others starts the next line. */
+.md-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.1em 1.75em;
+  margin: 1.5em 0;
+}
+
+.md-figures > div {
+  display: flex;
+  flex: 1 0 8.5rem;
+  flex-direction: column-reverse;
+  justify-content: flex-end;
+}
+
+.md-figures dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 1.9em;
+  font-weight: var(--font-weight-semibold, 600);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+/* A value of more than ten characters ("1.234.567 €") at the full size
+   pushed its neighbours onto a line of their own. */
+.md-figures.is-long dd { font-size: 1.5em; }
+
+.md-figures dt {
+  margin-top: 0.4em;
+  color: var(--ink-3);
+  font-size: 0.82em;
+  line-height: 1.4;
+}
+
+/* --- Two sides: each column of a table its own short list. -------------- */
+.md-facing {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  margin: 1.5em 0;
+}
+
+.md-facing > .md-facing-side { min-width: 0; padding-inline-end: 1.75em; }
+
+.md-facing > .md-facing-side + .md-facing-side {
+  padding-inline: 1.75em 0;
+  border-inline-start: 1px solid var(--line);
+}
+
+.md-facing .md-facing-head {
+  margin: 0 0 0.7em;
+  color: var(--ink-3);
+  font-size: 0.82em;
+  font-weight: var(--font-weight-semibold, 600);
+  line-height: 1.4;
+}
+
+.md-facing .md-facing-side > ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.md-facing .md-facing-side li {
+  margin: 0;
+  padding: 0;
+  line-height: 1.55;
+}
+
+.md-facing .md-facing-side li + li { margin-top: 0.65em; }
+
+.md-facing .md-facing-side li > :first-child { margin-top: 0; }
+.md-facing .md-facing-side li > :last-child { margin-bottom: 0; }
+
+/* --- Bars: a thin measure under each amount of a column. ---------------- */
+.md-bar {
+  display: block;
+  height: 2px;
+  margin-top: 7px;
+  border-radius: 1px;
+  background: var(--line-soft);
+}
+
+.md-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink-3);
+}
+
+/* Label and one amount: the bar runs beside the amount instead. */
+table.md-bar-rows { min-width: 0; }
+
+table.md-bar-rows .md-bar-cell {
+  position: relative;
+  width: 62%;
+}
+
+/* The label keeps its words whole; the bar gives way first. */
+table.md-bar-rows td:first-child { overflow-wrap: break-word; }
+
+/* On the amount's first line, also where the label beside it wraps: the
+   cell's top padding (10px) plus half a line. */
+table.md-bar-rows .md-bar {
+  position: absolute;
+  inset-inline-start: 0;
+  top: calc(10px + 0.775em);
+  width: calc(100% - var(--md-bar-amount, 8ch) - 1.4em);
+  height: 6px;
+  margin-top: -3px;
+  border-radius: 3px;
+  background: none;
+}
+
+/* The one row the answer points to: its words in weight, its bars green. */
+table tr.md-pick > td,
+table tr.md-pick > td:first-child {
+  color: var(--ink);
+  font-weight: var(--font-weight-semibold, 600);
+}
+
+table tr.md-pick .md-bar > i { background: var(--agree); }
+
+/* --- Steps: the list's numbers on a rail, each title on its own line. ---- */
+:is(.consensus-answer-body, .share-md) ol.md-steps {
+  padding-inline-start: 0;
+  list-style: none;
+  counter-reset: md-step;
+}
+
+:is(.consensus-answer-body, .share-md) ol.md-steps > li {
+  position: relative;
+  padding-inline-start: 2.1em;
+  counter-increment: md-step;
+}
+
+:is(.consensus-answer-body, .share-md) ol.md-steps > li + li { margin-top: 0.9em; }
+
+.md-steps > li::before {
+  content: counter(md-step);
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.14em;
+  width: 1.3em;
+  color: var(--ink-3);
+  font-size: 0.82em;
+  font-weight: var(--font-weight-semibold, 600);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.md-steps > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(0.53em - 0.5px);
+  top: 1.75em;
+  bottom: -0.65em;
+  width: 1px;
+  background: var(--line);
+}
+
+.md-steps > li > :is(strong, b):first-child,
+.md-steps > li > p:first-child > :is(strong, b):first-child {
+  display: block;
+}
+
+/* --- Timeline: a table of dates on the steps' rail. -------------------- */
+/* The date stands where the step's number stands, a point on the line
+   beside it. The table stays a table for reading aloud and copying; its
+   header row says nothing a date and an event do not, so it is kept for
+   screen readers and search but not shown. */
+table.md-timeline {
+  width: 100%;
+  min-width: 0;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+table.md-timeline > thead {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+table.md-timeline > tbody > tr > td {
+  min-width: 0;
+  padding: 0 0 0.95em;
+  border: 0;
+  vertical-align: top;
+}
+
+table.md-timeline > tbody > tr:last-child > td { padding-bottom: 0; }
+
+table.md-timeline > tbody > tr > td:first-child {
+  position: relative;
+  width: 1%;
+  padding-inline-end: 1.9em;
+  color: var(--ink);
+  font-size: 0.88em;
+  font-weight: var(--font-weight-semibold, 600);
+  font-variant-numeric: tabular-nums;
+  line-height: calc(1.7em / 0.88);
+  white-space: nowrap;
+}
+
+/* The point, centred on the first line of the event. */
+table.md-timeline > tbody > tr > td:first-child::after {
+  content: "";
+  position: absolute;
+  inset-inline-end: calc(0.95em - 3.5px);
+  top: calc(0.85em / 0.88 - 3.5px);
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink);
+}
+
+/* The line, from below one point to above the next. */
+table.md-timeline > tbody > tr:not(:last-child) > td:first-child::before {
+  content: "";
+  position: absolute;
+  inset-inline-end: calc(0.95em - 0.5px);
+  top: calc(0.85em / 0.88 + 7px);
+  bottom: calc(-0.85em / 0.88 + 7px);
+  width: 1px;
+  background: var(--line);
+}
+
+@media (max-width: 640px) {
+  .md-figures { gap: 1em 1.25em; }
+  .md-figures dd { font-size: 1.55em; }
+  .md-figures.is-long dd { font-size: 1.3em; }
+  table.md-bar-rows .md-bar-cell { width: 50%; }
+
+  /* Beside a long amount ("0,32 €/kWh") the bar shrank to a stub: it runs
+     under the amount instead, over the cell's whole width. */
+  table.md-bar-rows.has-long-amounts .md-bar {
+    position: static;
+    width: 100%;
+    height: 4px;
+    margin-top: 8px;
+    border-radius: 2px;
+  }
+
+  /* Two sides stand one under the other, a hairline between them. */
+  .md-facing { grid-template-columns: minmax(0, 1fr); }
+  .md-facing > .md-facing-side { padding-inline-end: 0; }
+  .md-facing > .md-facing-side + .md-facing-side {
+    margin-top: 1.2em;
+    padding: 1.2em 0 0;
+    border-inline-start: 0;
+    border-top: 1px solid var(--line);
+  }
+
+  table.md-timeline > tbody > tr > td { min-width: 0; padding: 0 0 0.95em; }
+  table.md-timeline > tbody > tr > td:first-child { padding-inline-end: 1.6em; }
+  table.md-timeline > tbody > tr > td:first-child::after { inset-inline-end: calc(0.8em - 3.5px); }
+  table.md-timeline > tbody > tr:not(:last-child) > td:first-child::before { inset-inline-end: calc(0.8em - 0.5px); }
+}

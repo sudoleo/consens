@@ -99,6 +99,14 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   oder `load` (Mermaid kam nicht an). Nutzung: Anzahl ins Verhältnis zu
   `answer` mit `mode=agent` setzen; Fehlerquote: `syntax` an allen. Eine
   Antwort, die ohne Stream ankommt (gepufferte Verbindung), zählt nicht mit.
+- `app_shape` (seit 2026-11-13, `kind`): einmal je Form einer Agent-Antwort,
+  die gerade geschrieben wurde, sobald ihr Text feststeht (`agent-chat.js`
+  `countShapes`), nie beim Öffnen eines gespeicherten Chats und nie je
+  Stream-Stück. `kind`: `figures` (Kennzahlen), `facing`
+  (Gegenüberstellung), `timeline`, `bars`, `pick` (Balken mit einer
+  hervorgehobenen Zeile, zusätzlich zu `bars`) oder `steps`
+  (`answer-shapes.js`). Nutzung: Anzahl je Form ins Verhältnis zu `answer`
+  mit `mode=agent` setzen, vorher und nach dem Faktsatz im Agent-Prompt.
 - `app_updated` (seit 2026-10-15, `reopened`: ob ein gespeicherter Chat wieder
   geöffnet wurde): ein offenes App-Fenster hat einen neuen Deploy selbst
   geladen (`app-update.js`). Zeigt, wie oft Nutzer sonst auf einem alten Build

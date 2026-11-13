@@ -150,6 +150,10 @@
           "file": "static/js/code-highlight.js",
           "note": "ConsensusCode: syntax tones in a finished code block (highlight.js from static/vendor/highlightjs, imported when an answer first holds one). markdown-stream.js asks it at runtime."
         },
+        {
+          "file": "static/js/answer-shapes.js",
+          "note": "AnswerShapes: figures, two sides, timeline, bars and steps drawn from plain Markdown. Before markdown-stream.js, which asks it for every render; the public pages load the same file (partials/answer_blocks.html)."
+        },
         "static/js/markdown-stream.js",
         {
           "file": "static/js/task-checks.js",

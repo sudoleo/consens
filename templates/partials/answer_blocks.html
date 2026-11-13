@@ -1,9 +1,14 @@
 {#
   What an answer's blocks need, only for pages with such a block
   (app/core/answer_assets.py): one script draws each ```mermaid block as its
-  diagram, the other gives code its syntax tones. Each imports its library
-  from static/vendor itself.
+  diagram, one gives code its syntax tones (each imports its library from
+  static/vendor itself), one draws tables and numbered lists in the shapes
+  the app gives them. The server keeps every word in the HTML; the page only
+  rearranges it.
 #}
+  {% if page_has_shapes() %}
+  <script defer src="{{ asset_url('/static/js/answer-shapes.js') }}" data-draw-answers=".share-md"></script>
+  {% endif %}
   {% if page_has_diagram() %}
   <script defer src="{{ asset_url('/static/js/diagram-render.js') }}"></script>
   {% endif %}

@@ -1,5 +1,5 @@
 {
-  "sources": "53be629d0b48",
+  "sources": "efcbc667203f",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -13,6 +13,7 @@
     "static/css/agent-chat.css",
     "static/css/agent-google.css",
     "static/css/agent-workspace.css",
+    "static/css/answer-shapes.css",
     "static/css/auth-modal.css",
     "static/css/base.css",
     "static/css/benchmark.css",
@@ -76,6 +77,7 @@
     "static/js/agent-work-log.js",
     "static/js/agent-workspace.js",
     "static/js/ai-consent.js",
+    "static/js/answer-shapes.js",
     "static/js/app-bootstrap.js",
     "static/js/app-core.js",
     "static/js/app-dom-events.js",
@@ -602,24 +604,25 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.93fa4359b1df.js",
+      "src": "/static/dist/app.05b03c53bc8f.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.dcbb0cbc1f78.css",
+    "app": "/static/dist/app.a5b5804f394b.css",
     "landing": "/static/dist/landing.7397bd00acc8.css",
-    "public": "/static/dist/public.3d4dcc81ccf1.css"
+    "public": "/static/dist/public.1104dd5e6275.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "81d060b56eb1",
+      "hash": "824ee27da9bc",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
         "static/css/agent-workspace.css",
+        "static/css/answer-shapes.css",
         "static/css/auth-modal.css",
         "static/css/base.css",
         "static/css/chat-scroll.css",
@@ -677,8 +680,9 @@
     },
     "public": {
       "entry": "static/css/public-pages.css",
-      "hash": "387b52062ff9",
+      "hash": "a53e1aa7eb05",
       "inputs": [
+        "static/css/answer-shapes.css",
         "static/css/code-highlight.css",
         "static/css/diagram.css",
         "static/css/foundation.css",
@@ -692,10 +696,10 @@
     }
   },
   "previous_assets": [
-    "app.329fc0b27e7d.css",
-    "app.2abfbc4c507e.css",
-    "app.aebf1fd3e247.js",
-    "app.a5527355fad8.js",
+    "app.4fb83a289185.css",
+    "app.dcbb0cbc1f78.css",
+    "app.49c49b040d52.js",
+    "app.5dded23fa53c.js",
     "auth.94cd8abedac1.js",
     "auth.58f346823c38.js",
     "demo.274397f8bb1b.js",
@@ -706,7 +710,7 @@
     "head.96c3a8044e16.js",
     "landing.35290fb9d106.css",
     "landing.420b02aadcbb.css",
-    "public.d2b6cb560d9a.css",
-    "public.f6d736ec7ebc.css"
+    "public.5bb84e461c3f.css",
+    "public.3d4dcc81ccf1.css"
   ]
 }

@@ -371,8 +371,6 @@ body {
 .watch-chart-line { stroke: var(--ink-2); }
 .watch-axis-label { fill: var(--ink-3); }
 
-.share-md th,
-.share-md td { border: 1px solid var(--line-soft); }
 .share-md pre,
 .share-md code { background: var(--surface); }
 

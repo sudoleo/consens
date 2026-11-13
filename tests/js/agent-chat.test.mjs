@@ -403,6 +403,59 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('counts each shape of a written answer once, when its text is fixed, and never for a saved one', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    const tracked = [];
+    w.trackUmamiEvent = (name, data) => tracked.push([name, data]);
+    w.AnswerShapes = { present: el => (el.textContent.includes('|') ? ['figures', 'steps'] : []) };
+    w.renderMarkdownStream = vi.fn((el, md) => { el.textContent = md; });
+    w.resetMarkdownStream = vi.fn();
+    w.morphMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.App.agentReview = { render: vi.fn(), renderActivity: vi.fn() };
+    const shapes = () => tracked.filter(([name]) => name === 'app_shape').map(([, data]) => data.kind);
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = w.App.runRegistry.visible();
+    handlers.delta.append('| a | b |');
+    w.App.agentChat.project(run);
+    handlers.delta.append(' 1 | 2 |');
+    w.App.agentChat.project(run);
+    // Streaming: nothing counted per chunk.
+    expect(shapes()).toEqual([]);
+    const text = '| a | b | 1 | 2 |';
+    resolve({ ok: true, data: { response: text, chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: text, execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(shapes()).toEqual(['figures', 'steps']);
+    // Projected again, the same answer counts nothing more.
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(shapes()).toEqual(['figures', 'steps']);
+    dom.window.close();
+  });
+
+  it('counts nothing for an answer that was not written on screen', async () => {
+    const { window: w, document: d, dom } = boot();
+    const tracked = [];
+    w.trackUmamiEvent = (name, data) => tracked.push([name, data]);
+    w.AnswerShapes = { present: () => ['figures'] };
+    w.morphMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    w.injectMarkdown = vi.fn((el, md) => { el.textContent = md; });
+    await selectAgent(w);
+    w.streamSSERequest.mockResolvedValueOnce({ ok: true, data: { response: 'Saved | a |', chat_id: 'a'.repeat(32), turn_id: 'b'.repeat(32),
+      turn: { id: 'b'.repeat(32), consensus: 'Saved | a |', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    d.getElementById('questionInput').value = 'Question';
+    await w.App.agentChat.send();
+    w.App.agentChat.project(w.App.runRegistry.visible());
+    expect(d.getElementById('agentAnswerBody').textContent).toBe('Saved | a |');
+    expect(tracked.filter(([name]) => name === 'app_shape')).toEqual([]);
+    dom.window.close();
+  });
+
   it('offers Retry after a failed run and sends the same message again in the same chat', async () => {
     const {window:w,document:d,dom} = boot();
     d.body.insertAdjacentHTML('beforeend', '<div id="agentAnswerErrorActions" hidden></div><div id="bookmarksContainer"></div>');

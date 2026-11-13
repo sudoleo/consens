@@ -598,8 +598,21 @@
   // link and a selection stays. Where it can draw,
   // stream-reveal.js paces the streamed text and brings its letters into
   // view; the full render then follows its last word.
+  // Which shapes a model's answer drew (docs/analytics.md, app_shape): once
+  // per shape of an answer that was just written, when its text is fixed,
+  // never for a chat opened later and never per streamed chunk.
+  function countShapes(body) {
+    if (typeof window.trackUmamiEvent !== 'function') return;
+    const counted = body._countedShapes || (body._countedShapes = new Set());
+    for (const kind of window.AnswerShapes?.present(body) || []) {
+      if (counted.has(kind)) continue;
+      counted.add(kind);
+      window.trackUmamiEvent('app_shape', { kind });
+    }
+  }
   function renderAnswerBody(body, text, mode) {
     if (!body) return;
+    const written = mode === 'full' && body.dataset.renderMode === 'stream';
     // The run ends with the same text the review already rendered in full
     // with its claim marks: switching to 'full' must keep that DOM. Rendering
     // it again dropped every mark and rebuilt it, a visible flicker.
@@ -607,9 +620,11 @@
         && body._markSignature && body.querySelector('.cx-claim')) {
       body.dataset.renderMode = mode;
       window.resetMarkdownStream?.(body);
+      countShapes(body);
     }
     if (body.dataset.markdown === text && body.dataset.renderMode === mode) return;
     const entering = !body.dataset.markdown?.trim() && Boolean(text.trim());
+    if (entering) body._countedShapes = null;
     body.dataset.markdown = text;
     body.dataset.renderMode = mode;
     const reveal = App.streamReveal?.active() ? App.streamReveal : null;
@@ -628,12 +643,16 @@
         let later = false;
         reveal.settle(body, text, () => {
           full();
+          if (written) countShapes(body);
           if (!later) return;
           body._agentRenderSerial = (body._agentRenderSerial || 0) + 1;
           queueMicrotask(() => registry.renderVisible());
         });
         later = true;
-      } else full();
+      } else {
+        full();
+        if (written) countShapes(body);
+      }
     } else {
       window.resetMarkdownStream?.(body);
       window.injectMarkdown?.(body, text, []);

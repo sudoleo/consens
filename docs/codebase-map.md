@@ -2759,22 +2759,66 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   und meldet den degradierten Zustand, statt eine Promise-Rejection auszulösen.
   `injectMarkdown(el, md, evidenceSources?)` akzeptiert optional turnbezogene
   Quellen; ohne dritten Parameter gilt weiter `window.currentEvidenceSources`.
-  **Formen, die die Antwort zeichnet:** Drei Strukturen, die Modelle ohnehin
-  schreiben, bekommen in `/app` eine eigene Form, allein aus der Struktur
-  gelesen (keine neue Syntax, kein Prompt, kein Wort einer Sprache).
-  `figuresFromTable`: eine Tabelle mit genau einer Zeile und zwei bis vier
-  kurzen Werten mit Ziffer wird zu `dl.md-figures` (Wert groß, Spaltenkopf
-  darunter). `drawTableBars`: eine Spalte vergleichbarer Beträge
-  (`parseAmount`: eine Einheit, nichts Negatives, ab drei Zeilen, keine
-  Jahreszahlen oder laufenden Nummern, deutsche und englische Schreibweise)
-  bekommt je Zelle `span.md-bar > i` mit dem Anteil am Spaltenmaximum; eine
-  letzte Zeile, die die übrigen summiert, bleibt ohne Balken. Bei Bezeichnung
-  plus genau einer Betragsspalte steht der Balken neben dem Betrag
-  (`table.md-bar-rows`, Breite des Betrags in `--md-bar-amount`).
-  `markStepLists`: eine nummerierte Liste, deren Punkte alle mit einem fetten
-  Titel beginnen, wird zu `ol.md-steps` (Nummern auf einer Schiene, Titel auf
-  eigener Zeile). Optik in `components-consensus.css`. Öffentliche Seiten
-  (`public_markdown.py`) zeichnen diese Formen nicht.
+  **Formen, die die Antwort zeichnet:** Strukturen, die Modelle ohnehin als
+  gewöhnliches Markdown schreiben, bekommen eine eigene Form, allein aus der
+  Struktur gelesen (keine neue Syntax, kein Stil-Prompt, kein Wort einer
+  Sprache). Die Regeln stehen nur in `static/js/answer-shapes.js`
+  (`window.AnswerShapes`, im `/app`-Bundle vor `markdown-stream.js`); dieselbe
+  Datei zeichnet die öffentlichen Seiten (unten). Optik in
+  `static/css/answer-shapes.css`, von `style.css` und `public-pages.css`
+  importiert. `enhanceMarkdownTables` fragt je Tabelle zuerst
+  `replaceTable` (ersetzt die Tabelle), sonst nach `markdown-table`
+  `decorateTable` (Tabelle bleibt); `renderMarkdownFragment` ruft `steps`.
+  - **Kennzahlen** (`figures`): eine Zeile mit zwei bis vier kurzen Werten
+    mit Ziffer → `dl.md-figures` (Wert groß über dem Spaltenkopf; Werte über
+    zehn Zeichen `is-long`, kleiner; nie mitten in der Zahl umbrochen).
+  - **Gegenüberstellung** (`facing`, `isFacing`): genau zwei Textspalten,
+    ab zwei Zeilen, keine Zelle ein Betrag, nichts außer Text in den Zellen;
+    eine erste Spalte ganz fett oder nur aus Fragen ist eine Spalte von
+    Bezeichnungen (Zeilen sind Paare → Tabelle bleibt); sonst muss die
+    typische Zelle (Median der Länge) der kürzeren Spalte mindestens halb so
+    lang sein wie die der anderen und mindestens 16 Zeichen haben (12, wenn
+    eine Zelle leer ist: ungleich viele Punkte je Seite gibt es bei Paaren
+    nicht). → `div.md-facing` mit zwei `.md-facing-side`, je
+    `p.md-facing-head` + `ul[aria-labelledby]`, leere Zellen fallen weg;
+    Haarlinie dazwischen, unter 640 px untereinander.
+  - **Zeitstrahl** (`timeline`): zwei Spalten, ab drei Zeilen, die erste nur
+    Zeitpunkte (`when`: Jahr 1000–2199, volles Datum in den üblichen
+    Reihenfolgen, `12.3.`, `3/2024`, `09:30`, umgebende Wörter erlaubt, aber
+    nie nötig, keine Monatslisten), die zweite Text ohne Beträge; dasselbe
+    Wort hinter jeder Jahreszahl (`1500 m`) oder lauter runde Hunderter
+    gelten als Mengen. → `table.md-timeline` bleibt Tabelle, Kopfzeile nur
+    für Vorleser und Suche, Datum und Punkt auf der Schiene der Schritte.
+  - **Balken** (`bars`, `parseAmount`): eine Spalte vergleichbarer Beträge
+    (eine Einheit, nichts Negatives, ab drei Zeilen, keine Jahreszahlen oder
+    laufenden Nummern, deutsche und englische Schreibweise) bekommt je Zelle
+    `span.md-bar > i`; eine letzte Summenzeile bleibt ohne Balken. Bei
+    Bezeichnung plus genau einer Betragsspalte `table.md-bar-rows` (Balken
+    neben dem Betrag, am Handy bei Beträgen über acht Zeichen darunter). **Empfehlung:** genau eine Zeile,
+    deren Bezeichnung ganz fett ist und einen Balken hat → `tr.md-pick`,
+    fett und Balken in `--agree`; mehrere oder keine → alles grau.
+  - **Schritte** (`steps`): nummerierte Liste, deren Punkte alle mit fettem
+    Titel beginnen → `ol.md-steps`; ein Punkt oder Doppelpunkt am Titelende
+    fällt weg (Auslassungspunkte bleiben). Im wachsenden Teil eines Streams
+    (`renderMarkdownFragment(md, { growing: true })`) darf der letzte Punkt
+    noch nur Titel oder leer sein, damit die Liste nicht erst als normale
+    Liste erscheint und dann auf die Schiene springt.
+  Tabellen erscheinen im Stream erst als Ganzes (`stream-table-pending`),
+  ihre Formen also auch. Gezählt wird je geschriebener Antwort und Form
+  einmal (`app_shape`, `agent-chat.js` `countShapes`, `AnswerShapes.present`).
+  Öffentliche Seiten: `public_markdown.py` rendert unverändert; enthält die
+  Antwort eine Tabelle oder `<ol>`, lädt `partials/answer_blocks.html`
+  (`page_has_shapes`) `answer-shapes.js` mit `data-draw-answers=".share-md"`,
+  das dieselben Regeln anwendet. Jedes Wort bleibt im Server-HTML; die
+  Tabellen dort tragen dieselben Haarlinien wie in `/app`.
+  Im Stream hält `holdOpenNumber` eine Zeile, die bisher nur aus einer
+  Listennummer besteht („1“, „1.“), bis zum nächsten Stück zurück (sie stand
+  sonst kurz als Absatz da). Wird ein Block fest, behält
+  `renderMarkdownStream` die Knoten des gezeigten Rests, die schon zum
+  nächsten Block gehören (eine Überschrift unter einer noch wartenden
+  Tabelle), statt sie neu zu zeichnen.
+  Agent-Prompt: `AGENT_AUDIT_ANSWER_SECTION` nennt die Formen als Fakt der
+  App (welche Tabelle und Liste wie erscheint), ohne Aufforderung.
   **Checklisten (seit 2026-10-21):** `- [ ] Punkt` / `- [x] Punkt` werden zu
   Kästchen. marked zeichnet das Kästchen als Formularfeld, das
   `MODEL_HTML_CONFIG` zu Recht verbietet (vorher verschwand es, der Punkt las
@@ -12425,6 +12469,8 @@ zählen nicht):
   Platz eines Diagramms ist `.md-diagram[data-diagram]`, seit 2026-11-10),
   `window.ConsensusCode` (code-highlight.js → markdown-stream.js; ein
   benannter Codeblock ist `pre[data-code]`, seit 2026-11-11),
+  `window.AnswerShapes` (answer-shapes.js → markdown-stream.js, agent-chat.js
+  `present` für die Zählung; auch auf öffentlichen Seiten),
   `window.App.reportCriticalError`, `window.renderStoredAuditMarks` (Marken
   eines Agent-Audits, consensus-insights.js → agent-review.js; seit 2026-10-25),
   `App.agentWorkLog.render(host, view)`, `.reset(host)` und `.KINDS` (Arbeitsprotokoll,

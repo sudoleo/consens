@@ -1,10 +1,10 @@
-"""page_has_diagram and page_has_code decide whether a public page loads
-diagram-render.js and code-highlight.js, and public_markdown marks the blocks
-they read."""
+"""page_has_diagram, page_has_code and page_has_shapes decide whether a
+public page loads diagram-render.js, code-highlight.js and answer-shapes.js,
+and public_markdown marks the blocks they read."""
 
 from jinja2 import Environment
 
-from app.core.answer_assets import contains_code, contains_diagram, register_answer_globals
+from app.core.answer_assets import contains_code, contains_diagram, contains_shapes, register_answer_globals
 from app.services.public_markdown import render_public_markdown
 
 FENCE = "```"
@@ -72,3 +72,12 @@ def test_jinja_globals_see_route_context_and_includes():
     assert page.render(answer_html="<p>plain</p><pre><code>x</code></pre>") == ""
     assert page.render(answer_html='<pre><code class="language-mermaid">pie\n</code></pre>') == "diagrams"
     assert page.render(answer_html='<pre><code class="language-ts">let a;\n</code></pre>') == "code"
+
+
+def test_a_table_or_a_numbered_list_loads_the_shapes_and_keeps_every_word():
+    table = render_public_markdown("| Dafür | Dagegen |\n|---|---|\n| Spart Betriebskosten | Teurer in der Anschaffung |")
+    steps = render_public_markdown("1. **Fragen.** Drei Angebote.\n2. **Antragen.** Vor dem Auftrag.")
+    # The server writes the plain table and list; the page draws them, so a crawler reads every word.
+    assert "<table>" in table and "Teurer in der Anschaffung" in table and contains_shapes(table)
+    assert "<ol>" in steps and "Fragen." in steps and contains_shapes({"turns": [{"answer_html": steps}]})
+    assert not contains_shapes(render_public_markdown("- one\n- two\n\nText"))

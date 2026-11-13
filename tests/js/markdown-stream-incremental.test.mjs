@@ -210,4 +210,17 @@ describe("incremental streamed Markdown", () => {
     window.renderMarkdownStream(el, "Short first paragraph.\n\nSecond paragraph follows.\n\nThird");
     expect(el.classList.contains("has-lead")).toBe(false);
   });
+
+  it("keeps a list's number back until its words follow, and the heading above in its node", () => {
+    const { window, document } = boot();
+    const el = document.createElement("div");
+    window.renderMarkdownStream(el, "| A | B |\n|---|---|\n| 1 | 2 |\n\n### Steps\n\n");
+    const heading = el.querySelector("h3");
+    window.renderMarkdownStream(el, "| A | B |\n|---|---|\n| 1 | 2 |\n\n### Steps\n\n1");
+    expect(el.querySelector("p")).toBeNull();
+    window.renderMarkdownStream(el, "| A | B |\n|---|---|\n| 1 | 2 |\n\n### Steps\n\n1. **Ask**");
+    expect(el.querySelector("ol li").textContent).toBe("Ask");
+    // The table's block was fixed under the heading: the heading stayed the same node.
+    expect(el.querySelector("h3")).toBe(heading);
+  });
 });

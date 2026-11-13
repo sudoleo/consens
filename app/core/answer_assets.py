@@ -1,10 +1,12 @@
 """Load the scripts for an answer's blocks on public pages only when needed.
 
-A shared answer shows a ```mermaid block as its diagram and a code block
-with its syntax tones, like the app (static/js/diagram-render.js,
-code-highlight.js). Most pages have neither, so the templates include
+A shared answer shows a ```mermaid block as its diagram, a code block
+with its syntax tones and its tables and numbered lists in their shapes,
+like the app (static/js/diagram-render.js, code-highlight.js,
+answer-shapes.js). Most pages need few of them, so the templates include
 ``partials/answer_blocks.html``, which emits each script only when the
-rendered answer carries the mark ``public_markdown`` leaves on such a block.
+rendered answer carries the mark ``public_markdown`` leaves on such a block
+(for the shapes: a table or a numbered list at all).
 """
 
 from __future__ import annotations
@@ -43,6 +45,12 @@ def contains_code(value) -> bool:
     return _contains(value, lambda text: bool(_CODE_MARK.search(text)))
 
 
+def contains_shapes(value) -> bool:
+    """A table or a numbered list: what static/js/answer-shapes.js may draw."""
+
+    return _contains(value, lambda text: "<table" in text or "<ol" in text)
+
+
 @pass_context
 def page_has_diagram(context) -> bool:
     """Jinja global: scan the variables the route passed to the template."""
@@ -57,6 +65,14 @@ def page_has_code(context) -> bool:
     return contains_code(dict(context.parent)) or contains_code(dict(context.vars))
 
 
+@pass_context
+def page_has_shapes(context) -> bool:
+    """Jinja global: a table or a numbered list in the rendered answer."""
+
+    return contains_shapes(dict(context.parent)) or contains_shapes(dict(context.vars))
+
+
 def register_answer_globals(templates) -> None:
     templates.env.globals["page_has_diagram"] = page_has_diagram
     templates.env.globals["page_has_code"] = page_has_code
+    templates.env.globals["page_has_shapes"] = page_has_shapes
