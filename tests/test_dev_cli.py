@@ -104,7 +104,7 @@ if __name__ == '__main__':
             encoding="utf-8",
         )
 
-    def run(target, *, failure="", test_path="", command="check", inherited=True):
+    def run(target, *, failure="", test_path="", command="check", inherited=True, queued=None):
         env = os.environ.copy()
         env.update({
             "PATH": str(commands) + os.pathsep + env.get("PATH", ""),
@@ -135,10 +135,11 @@ foreach ($name in @('PATH', 'RUN_E2E', 'UNIT_TEST_MODE', 'E2E_TEST_MODE',
 $state | ConvertTo-Json -Depth 3 | Set-Content -LiteralPath $env:DEV_STATE -Encoding UTF8
 exit $code
 """
-        result = subprocess.run(
-            [request.param, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
-            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=45,
-        )
+        argv = [request.param, "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script]
+        if queued is None:
+            result = subprocess.run(argv, cwd=tmp_path, env=env, capture_output=True, text=True, timeout=45)
+        else:
+            result = _run_announcing_the_queue(argv, tmp_path, env, queued)
         state = json.loads(Path(env["DEV_STATE"]).read_text(encoding="utf-8-sig"))
         assert state["cwd"] == str(tmp_path), result.stdout + result.stderr
         expected = {key: env.get(key) for key in state["env"]}
@@ -237,9 +238,40 @@ def test_browser_failure_restores_initially_absent_environment_entries(cli):
     assert calls[-1]["tool"] == "emulator-stop"
 
 
+def _run_announcing_the_queue(argv, tmp_path, env, queued):
+    """Run dev.ps1 and create ``queued`` the moment it says it is waiting.
+
+    Its output goes to a file so the wait is visible while the run is still
+    blocked in the queue.
+    """
+    output = tmp_path / "stdout.txt"
+    ended = threading.Event()
+
+    def announce():
+        while not ended.wait(0.05):
+            if "Queued behind" in output.read_text(errors="replace"):
+                queued.touch()
+                return
+
+    with output.open("w") as stream:
+        watcher = threading.Thread(target=announce)
+        watcher.start()
+        try:
+            result = subprocess.run(argv, cwd=tmp_path, env=env, stdout=stream, stderr=subprocess.PIPE,
+                                    text=True, timeout=45)
+        finally:
+            ended.set()
+            watcher.join()
+    result.stdout = output.read_text(errors="replace")
+    return result
+
+
 def _hold_emulator_queue(shell, tmp_path, *, release):
-    """Another session's run: owns the queue for the fixture's port 9876."""
+    """Another session's run: owns the queue for the fixture's port 9876 until
+    the waiting run has said so (``queued``). A fixed time would let a slow
+    start of dev.ps1 find the queue already free."""
     ready = tmp_path / "queue-held"
+    queued = tmp_path / "queue-waited-for"
     released = tmp_path / "queue-released"
     end = (f"Set-Content -LiteralPath '{released}' ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()); "
            "$m.ReleaseMutex()" if release else "exit 0")
@@ -247,18 +279,20 @@ def _hold_emulator_queue(shell, tmp_path, *, release):
         "$m = New-Object System.Threading.Mutex($false, 'consensio-dev-emulator-9876'); $null = $m.WaitOne(); "
         "$owner = Join-Path ([IO.Path]::GetTempPath()) 'consensio-dev-emulator-9876.txt'; "
         "[IO.File]::WriteAllText($owner, 'browser tests/e2e/test_other.py in another checkout'); "
-        f"Set-Content -LiteralPath '{ready}' held; Start-Sleep -Seconds 4; {end}"])
+        f"Set-Content -LiteralPath '{ready}' held; $until = (Get-Date).AddSeconds(40); "
+        f"while (-not (Test-Path -LiteralPath '{queued}') -and (Get-Date) -lt $until) {{ Start-Sleep -Milliseconds 100 }}; "
+        f"{end}"])
     deadline = time.monotonic() + 30
     while not ready.exists():
         assert holder.poll() is None and time.monotonic() < deadline, "queue holder did not start"
         time.sleep(0.1)
-    return holder, released
+    return holder, queued, released
 
 
 def test_browser_queues_behind_another_run_and_starts_when_it_ends(cli, tmp_path):
     _, run = cli
-    holder, released = _hold_emulator_queue(run.shell, tmp_path, release=True)
-    result, calls = run("browser", test_path="tests/e2e/test_example.py")
+    holder, queued, released = _hold_emulator_queue(run.shell, tmp_path, release=True)
+    result, calls = run("browser", test_path="tests/e2e/test_example.py", queued=queued)
     holder.wait(timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
     assert "Queued behind: browser tests/e2e/test_other.py in another checkout" in result.stdout
@@ -269,10 +303,11 @@ def test_browser_queues_behind_another_run_and_starts_when_it_ends(cli, tmp_path
 
 def test_queue_survives_a_run_that_died_without_releasing(cli, tmp_path):
     _, run = cli
-    holder, _ = _hold_emulator_queue(run.shell, tmp_path, release=False)
-    result, calls = run("rules")
+    holder, queued, _ = _hold_emulator_queue(run.shell, tmp_path, release=False)
+    result, calls = run("rules", queued=queued)
     holder.wait(timeout=30)
     assert result.returncode == 0, result.stdout + result.stderr
+    assert "Queued behind" in result.stdout
     assert [call["tool"] for call in calls] == ["java", "firebase", "emulator-start", "node", "emulator-stop"]
 
 
