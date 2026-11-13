@@ -239,6 +239,36 @@
 @media (pointer: coarse) {
   .model-picker-group-option { min-height: 44px; }
 }
+/* The family's logo, quiet like the preset marks: grey at rest, its own
+   colours while the row is pointed at. The grey sits on the slot, not the
+   image, so dark mode keeps inverting the black logos inside. The negative
+   margin brings it closer to its name than the row's 12px gap. */
+.model-picker-group-mark {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-right: -4px;
+  filter: grayscale(1);
+  opacity: .62;
+  transition: filter var(--dur-state) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
+}
+.model-picker-group-mark > img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+.model-picker-group-option:focus-visible:not(:disabled) .model-picker-group-mark {
+  filter: none;
+  opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .model-picker-group-option:hover:not(:disabled) .model-picker-group-mark {
+    filter: none;
+    opacity: 1;
+  }
+}
 
 /* --- Consensus-Preset-Ebene (Daily/Open Models/High Quality + Custom) ----- */
 

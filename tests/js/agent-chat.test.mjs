@@ -230,6 +230,24 @@ describe("single-model agent chat", () => {
     expect(d.activeElement).toBe(trigger);
     dom.window.close();
   });
+  it('puts the family logo before each family name, an empty slot for models outside the registry', async () => {
+    const families = [['other', 'Other models'], ['openai', 'OpenAI'], ['anthropic', 'Anthropic']];
+    const catalog = {...CATALOG, models: CATALOG.models.map((model, i) => ({...model,
+      provider: families[i][0], provider_label: families[i][1]}))};
+    const {window:w, document:d, dom} = boot({catalog, setup: window => {
+      window.App.createModelMark = provider => Object.assign(window.document.createElement('img'), {alt: '', className: `logo-${provider}`});
+    }});
+    await selectAgent(w);
+    d.querySelector('.agent-model-picker .model-picker-display').click();
+    const rows = [...d.querySelectorAll('.agent-model-picker button[data-model-group]')];
+    expect(rows.map(row => row.dataset.modelGroup)).toEqual(['openai', 'anthropic', 'other']);
+    expect(rows.map(row => row.firstElementChild.className)).toEqual(Array(3).fill('model-picker-group-mark'));
+    expect(rows.map(row => row.querySelector('.model-picker-group-mark img')?.className ?? null))
+      .toEqual(['logo-openai', 'logo-anthropic', null]);
+    expect(rows.every(row => row.firstElementChild.getAttribute('aria-hidden') === 'true')).toBe(true);
+    expect(rows.map(row => row.querySelector('.model-picker-option-label').textContent)).toEqual(['OpenAI', 'Anthropic', 'Other models']);
+    dom.window.close();
+  });
   it('orders allowance snapshots by reset, UTC day and ledger revision despite server clock skew', async () => {
     const {window:w,dom} = boot();
     await selectAgent(w);

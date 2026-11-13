@@ -840,6 +840,12 @@
       button.classList.toggle('is-current-group', !!selected);
       button.disabled = group.disabled || options.every(option => option.disabled);
       button.setAttribute('aria-label', `${group.label}, ${options.length} models${selected ? `, selected: ${window.App.getModelOptionLabel(selected)}` : ''}`);
+      // A family outside the registry ("Other models") keeps an empty slot,
+      // so every name starts in the same column.
+      const mark = document.createElement('span');
+      mark.className = 'model-picker-group-mark'; mark.setAttribute('aria-hidden', 'true');
+      const family = (window.App.modelPrefs || []).find(pref => pref.provider === group.dataset.modelGroup);
+      if (family && typeof window.App.createModelMark === 'function') mark.append(window.App.createModelMark(family.provider));
       const label = document.createElement('span');
       label.className = 'model-picker-option-label'; label.textContent = group.label;
       const count = document.createElement('span');
@@ -847,7 +853,7 @@
       count.setAttribute('aria-hidden', 'true');
       const chevron = document.createElement('span');
       chevron.className = 'model-picker-option-chevron'; chevron.setAttribute('aria-hidden', 'true');
-      button.append(label, count, chevron);
+      button.append(mark, label, count, chevron);
       button.dataset.focusKey = `group:${group.dataset.modelGroup}`;
       button.addEventListener('click', event => {
         event.preventDefault(); event.stopPropagation();
