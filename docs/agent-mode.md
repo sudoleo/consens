@@ -1090,7 +1090,12 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Agenten (`safe_place`, sonst bleibt die Marke): eine Zeile Fließtext oder
   ein Listenpunkt, keine Überschrift, Tabellenzeile, Zitat-, Code- oder
   Formelblock, Markdown in sich geschlossen, höchstens `SENTENCE_CHARS`
-  Zeichen, wörtlich übergeben. Je Befund antwortet der Agent mit dem
+  Zeichen, wörtlich übergeben. Läuft Fettdruck, Code oder eine Formel eines
+  markierten Satzes in einen Nachbarsatz derselben Zeile weiter, geht die
+  Stelle mit bis zu `WIDEN_SENTENCES` = 2 Nachbarsätzen derselben Zeile an
+  den Agenten (`widened_place`, die folgenden zuerst; nie über eine Zeile).
+  Anlass: In Max' Lauf vom 2026-11-13 blieb so der klarste Befund (falsch,
+  zwei Prüfer) unberührt. Je Befund antwortet der Agent mit dem
   korrigierten Satz oder mit `stands` und einer Begründung
   (`CORRECTION_REQUEST`, `read_corrections`); ein Satz gilt nur, wenn er die
   Form hält (`kept_shape`: eine Zeile, kein Bruchstück unter `SHRINK_SHARE`,

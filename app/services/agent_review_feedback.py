@@ -76,6 +76,12 @@ STEP_CHARS = 300
 # SHRINK_SHARE of it (a fragment for a sentence).
 GROWTH_CHARS = 400
 SHRINK_SHARE = .5
+# A marked sentence whose emphasis, code or formula runs on into a sentence
+# next to it on the same line goes to the agent with up to this many of them,
+# so the place it may replace opens and closes its Markdown (Max's run of
+# 2026-11-13: a quote two reviewers called wrong stayed untouched because its
+# bold text ended in the next sentence).
+WIDEN_SENTENCES = 2
 
 STATES = ("open", "checking", "corrected", "disputed")
 _SEVERITY = {"wrong": 3, "doubtful": 2, "incomplete": 1}
@@ -519,19 +525,44 @@ def safe_place(answer, start, end):
 
 def correction_items(answer, findings):
     """{id: (start, end, sentence)} of each finding whose sentences in
-    ``answer`` (from its first to its last marked one) form a safe place
-    (safe_place). A finding without one keeps its mark: rather no correction
-    than a broken paragraph."""
+    ``answer`` (from its first to its last marked one, widened where its
+    Markdown runs on, widened_place) form a safe place (safe_place). A finding
+    without one keeps its mark: rather no correction than a broken paragraph."""
     spans = sentence_spans(answer)
     items = {}
     for finding in findings:
         numbers = [number for number in finding.get("sentences") or [] if 1 <= number <= len(spans)]
         if not numbers:
             continue
-        start, end = spans[min(numbers) - 1][0], spans[max(numbers) - 1][1]
-        if safe_place(answer, start, end):
-            items[finding["id"]] = (start, end, answer[start:end])
+        place = widened_place(answer, spans, min(numbers), max(numbers))
+        if place is not None:
+            items[finding["id"]] = (*place, answer[place[0]:place[1]])
     return items
+
+
+def widened_place(answer, spans, first, last):
+    """(start, end) of a safe place for the sentences ``first`` to
+    ``last`` (numbers in ``spans``): those sentences, or where their
+    emphasis, code or formula runs on, with up to WIDEN_SENTENCES of the
+    sentences next to them on the same line, the following ones first; None
+    when no such place is safe."""
+    start, end = spans[first - 1][0], spans[last - 1][1]
+    if safe_place(answer, start, end):
+        return start, end
+    if _balanced(answer[start:end]):
+        # Not the Markdown: a line break, a block, a length that widening
+        # cannot mend.
+        return None
+    for before_count in range(WIDEN_SENTENCES + 1):
+        for after_count in range(WIDEN_SENTENCES + 1 - before_count):
+            if not before_count and not after_count:
+                continue
+            if first - before_count < 1 or last + after_count > len(spans):
+                continue
+            wide_start, wide_end = spans[first - before_count - 1][0], spans[last + after_count - 1][1]
+            if "\n" not in answer[wide_start:wide_end] and safe_place(answer, wide_start, wide_end):
+                return wide_start, wide_end
+    return None
 
 
 def correction_message(findings, items):

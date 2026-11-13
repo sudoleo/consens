@@ -113,9 +113,9 @@ def _finding_on(answer, *words):
 @pytest.mark.parametrize("answer, words", [
     (LIST, ("330 metres", "opened in 1889")),
     ("| Year | Height |\n|---|---|\n| 1889 | The tower was 300 metres tall. |", ("300 metres",)),
-    ("Text **bold starts here. It ends** after it.", ("bold starts",)),
+    ("Text **bold starts here.\nIt ends** after it.", ("bold starts",)),
     ("Word " * 400 + "end.", ("end.",)),
-], ids=["two-list-items", "table-row", "open-bold", "too-long"])
+], ids=["two-list-items", "table-row", "bold-over-a-line", "too-long"])
 def test_a_place_that_is_not_one_plain_line_keeps_its_mark(answer, words):
     assert fb.correction_items(answer, [_finding_on(answer, *words)]) == {}
 
@@ -480,3 +480,24 @@ def test_a_refused_pass_logs_why_without_any_text(store, caplog):
     assert "diagnostic=provider=Google reason=reasoning_pinned" in caplog.text
     review = raw_turn(store, loop)["agent_review"]
     assert review["audit"]["feedback"]["skipped"] == "failed" and _marks_kept(review)
+
+
+def test_a_sentence_whose_bold_runs_on_goes_with_the_next_one_on_its_line():
+    """Max's run of 2026-11-13: the clearest finding (wrong, two reviewers)
+    sat on a list item whose bold text opened in it and closed in the next
+    sentence, and stayed untouched."""
+    answer = ("Intro text with enough words here.\n\n"
+              "- Ein Forscher (Programm „Lux“): „Die meisten Krebsarten in fünf Jahren heilbar“ — er relativiert: "
+              "**Patienten bis 2030 der besten Therapie zuordnen: ja. Neue Medikamente in Echtzeit: nein.** "
+              "Mehr dazu unten.\n- Ein zweiter Punkt der Liste steht hier.\n\nSchluss mit genug Wörtern.")
+    items = fb.correction_items(answer, [_finding_on(answer, "Krebsarten in fünf Jahren")])
+    [(start, end, before)] = items.values()
+    assert before.count("**") == 2 and "Echtzeit: nein.**" in before and "\n" not in before
+    fixed = before.replace("Ein Forscher", "Ein Minister")
+    results = fb.read_corrections(json.dumps({"findings": [{"id": "s1", "sentence": fixed}]}), items)
+    out = fb.corrected_answer(answer, items, results)
+    assert "Ein Minister" in out and out.count("\n- ") == 2 and "Mehr dazu unten." in out
+    # The wider place never reaches over a line.
+    other = answer.replace("ja. Neue", "ja.\nNeue")
+    assert fb.correction_items(other, [_finding_on(other, "Krebsarten in fünf Jahren")]) == {}
+
