@@ -328,7 +328,7 @@
   }
 
   // The title already stands on a line of its own; a line break the model
-  // wrote after it ("**Title**␣␣" then the text) left an empty line.
+  // wrote after it (two blanks after "**Title**", then the text) left an empty line.
   function dropTitleBreak(title) {
     if (!title) return;
     let next = title.first.nextSibling;
