@@ -819,10 +819,13 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       getönt, Escape leert, Reiterklick kehrt zurück, Enter springt in den
       ersten Treffer. Englisch und Deutsch, 390 px (Feld über der Reiterleiste)
       und Desktop, Light/Dark.
-- [ ] Settings → Display → Letter animations aus: Antwort erscheint beim
-      Streamen ohne grünes Einblenden, leerer Startbildschirm ohne
-      Buchstabenwolken; wieder an → beides zurück, auch nach Reload und auf
-      einem zweiten Gerät desselben Kontos.
+- [ ] Settings → Display → Streaming animation aus: Antwort erscheint beim
+      Streamen ohne grünes Einblenden, die Buchstabenwolken bleiben; wieder an
+      → das Licht ist zurück, auch nach Reload und auf einem zweiten Gerät
+      desselben Kontos.
+- [ ] Settings → Display → Letter animations aus: leerer Startbildschirm ohne
+      Buchstabenwolken, gestreamte Antworten kommen weiter mit dem Licht
+      herein; wieder an → die Wolken sind zurück.
 - [ ] Settings → Display → Answer highlights: All / Contradictions /
       Disagreements & issues / Critical contradictions / None bei 320/390 px und Desktop prüfen. Graue Detail-
       widersprüche bleiben unter Contradictions sichtbar, graue Emphasis nicht.
@@ -1743,7 +1746,7 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   hinterlassen keine fixierten Höhen oder unsichtbaren Fokusziele. Reduced Motion
   und Forced Colors zeigen alle Zustandswechsel unmittelbar ohne Animation.
 - [ ] Antwortbeginn (seit 2026-11-05, P6), hell und dunkel, 390 px und Desktop,
-  Letter animations an und aus: Das erste Wort steht ohne merkliche Pause im
+  Streaming animation an und aus: Das erste Wort steht ohne merkliche Pause im
   Bild, dort, wo die Live-Zeilen standen, und kommt unter ihrem Ausblenden herein
   (kurzes Überblenden, kein Nacheinander). Weder beim Erscheinen noch wenn die
   Zeilen weg sind, rückt oder springt etwas; die Wörter danach kommen im

@@ -92,9 +92,12 @@ class UserSettings(_Strict):
     # A line under each highlight whose shape names its verdict
     # (consensus-insights.js, body.marks-underlined); None is off.
     mark_lines: Optional[bool] = None
-    # The letters of a streamed answer and behind the empty start screen
-    # (stream-reveal.js, letter-clouds.js); None is on.
+    # The letter clouds behind the empty start screen (letter-clouds.js);
+    # None is on.
     letter_animations: Optional[bool] = None
+    # The light a streamed answer's letters come in with (stream-reveal.js);
+    # None is on.
+    stream_animation: Optional[bool] = None
     # The Agent's live lines in full, every thought, command and output as
     # it comes (agent-activity.js); None is the calm line.
     detailed_progress: Optional[bool] = None

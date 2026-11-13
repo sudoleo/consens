@@ -42,6 +42,7 @@ def test_sanitize_keeps_valid_fields_and_drops_each_invalid_one_alone():
         "claim_counts": True,
         # Off is a choice of its own, not an unchosen value.
         "letter_animations": False,
+        "stream_animation": False,
         "unknown": 1,
     }
     assert user_settings.sanitize_settings(stored) == {
@@ -49,6 +50,7 @@ def test_sanitize_keeps_valid_fields_and_drops_each_invalid_one_alone():
         "system_prompt": "Answer in German.",
         "claim_counts": True,
         "letter_animations": False,
+        "stream_animation": False,
     }
     assert user_settings.sanitize_settings(None) == {}
     assert user_settings.sanitize_settings(["run_mode"]) == {}

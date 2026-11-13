@@ -336,8 +336,10 @@
     claim_counts: booleanSetting("consensio.showClaimCounts.v1"),
     // Off unless true: consensus-insights.js sets body.marks-underlined.
     mark_lines: booleanSetting("consensio.markLines.v1"),
-    // On unless false: stream-reveal.js and letter-clouds.js read it.
+    // On unless false: letter-clouds.js reads it.
     letter_animations: booleanSetting("consensio.letterAnimations.v1"),
+    // On unless false: stream-reveal.js reads it.
+    stream_animation: booleanSetting("consensio.streamAnimation.v1"),
     // Off unless true: agent-activity.js shows the Agent's live lines in
     // full (every thought, command and output) instead of its calm line.
     detailed_progress: booleanSetting("consensio.detailedProgress.v1"),

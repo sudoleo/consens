@@ -1378,15 +1378,27 @@
                 </label>
               </div>
 
-              {#- On unless switched off (account setting letter_animations):
-                  stream-reveal.js and letter-clouds.js read it; app-ui.js
-                  binds the switch. -#}
+              {#- On unless switched off (account setting stream_animation):
+                  stream-reveal.js reads it; app-ui.js binds the switch. -#}
               <div class="settings-section"
-                data-settings-keywords="animation animationen bewegung motion effekt effects einblenden fade streaming licht light schrift text typing tippen wolken clouds hintergrund background startbildschirm reduce reduzieren ruhig still">
+                data-settings-keywords="animation animationen bewegung motion effekt effects einblenden fade streaming licht light schrift text typing tippen antwort answer schreiben writing wörter words reduce reduzieren ruhig still">
+                <label for="streamAnimationSwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Streaming animation</strong>
+                    <small>While an answer is written, its letters fade in softly. Off: text appears as it arrives.</small>
+                  </span>
+                  <input type="checkbox" id="streamAnimationSwitch" checked>
+                </label>
+              </div>
+
+              {#- On unless switched off (account setting letter_animations):
+                  letter-clouds.js reads it; app-ui.js binds the switch. -#}
+              <div class="settings-section"
+                data-settings-keywords="animation animationen bewegung motion effekt effects buchstaben letters wolken clouds hintergrund background startbildschirm start screen leer empty reduce reduzieren ruhig still">
                 <label for="letterAnimationsSwitch" class="custom-checkbox-label settings-switch-row">
                   <span>
                     <strong>Letter animations</strong>
-                    <small>Letters fade in while an answer is written and drift behind the empty start screen. Off: text appears at once.</small>
+                    <small>Letters drift behind the empty start screen. Off: the start screen stays still.</small>
                   </span>
                   <input type="checkbox" id="letterAnimationsSwitch" checked>
                 </label>

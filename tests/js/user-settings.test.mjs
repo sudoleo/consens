@@ -151,6 +151,7 @@ describe("the local copy", () => {
     ["run_mode", "fast"],
     ["claim_counts", "true"],
     ["letter_animations", "off"],
+    ["stream_animation", "off"],
     ["reviewers", "never"],
     ["reviewers", false],
     ["agent_model", { model_id: "openai gpt", reasoning_effort: "low" }],

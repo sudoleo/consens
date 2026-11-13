@@ -14,7 +14,7 @@
 // The look is drawn with the CSS Custom Highlight API over the text the
 // Markdown renderer made: no node is added and nothing moves, so a link or a
 // selection in the growing paragraph stays what it is.
-// Without that API, with reduced motion or with Letter animations switched
+// Without that API, with reduced motion or with Streaming animation switched
 // off in Settings, active() is false and the caller paints the answer as it
 // arrives.
 // The first word of an answer comes into view at once, within about a tenth
@@ -89,10 +89,10 @@
   let sheet = null;
   let frame = 0;
 
-  // Settings > Display > Letter animations off (account setting) paints the
-  // answer as it arrives, like reduced motion.
+  // Settings > Display > Streaming animation off (account setting) paints
+  // the answer as it arrives, like reduced motion.
   function active() {
-    return canDraw && !reducedMotion?.matches && App.userSettings?.get("letter_animations") !== false;
+    return canDraw && !reducedMotion?.matches && App.userSettings?.get("stream_animation") !== false;
   }
 
   function sharedLength(a, b) {

@@ -4,12 +4,12 @@ import { loadScripts } from "./helpers/appWindow.mjs";
 
 // A browser with the CSS Custom Highlight API, a clock the test moves and
 // animation frames it runs, so the pace is deterministic.
-function boot({ highlights = true, reduced = false, letters } = {}) {
+function boot({ highlights = true, reduced = false, streaming } = {}) {
   const frames = [];
   let clock = 1000;
   const loaded = loadScripts([
-    // Settings > Display > Letter animations, when the test sets it.
-    ...(letters === undefined ? [] : ["static/js/user-settings.js"]),
+    // Settings > Display > Streaming animation, when the test sets it.
+    ...(streaming === undefined ? [] : ["static/js/user-settings.js"]),
     "static/vendor/marked/12.0.2/marked.min.js",
     "static/vendor/dompurify/3.4.17/dist/purify.min.js",
     "static/js/markdown-stream.js",
@@ -24,7 +24,7 @@ function boot({ highlights = true, reduced = false, letters } = {}) {
         Object.defineProperty(window.document, "adoptedStyleSheets", { value: [], writable: true, configurable: true });
       }
       window.matchMedia = query => ({ matches: reduced && query.includes("reduce"), addEventListener() {} });
-      if (letters !== undefined) window.localStorage.setItem("consensio.letterAnimations.v1", String(letters));
+      if (streaming !== undefined) window.localStorage.setItem("consensio.streamAnimation.v1", String(streaming));
       window.performance.now = () => clock;
       window.requestAnimationFrame = fn => frames.push(fn);
     },
@@ -55,11 +55,19 @@ describe("stream-reveal: the pace of a streamed answer", () => {
     expect(boot({ reduced: true }).reveal.active()).toBe(false);
   });
 
-  it("is off while Letter animations are switched off in Settings", () => {
-    expect(boot({ letters: true }).reveal.active()).toBe(true);
-    const app = boot({ letters: false });
+  it("is off while Streaming animation is switched off in Settings", () => {
+    expect(boot({ streaming: true }).reveal.active()).toBe(true);
+    const app = boot({ streaming: false });
     expect(app.reveal.active()).toBe(false);
-    app.window.App.userSettings.set("letter_animations", true);
+    app.window.App.userSettings.set("stream_animation", true);
+    expect(app.reveal.active()).toBe(true);
+  });
+
+  // Letter animations is the start screen's clouds: an account that has them
+  // off still sees its answers come in with the light.
+  it("stays on while only Letter animations are off", () => {
+    const app = boot({ streaming: true });
+    app.window.App.userSettings.set("letter_animations", false);
     expect(app.reveal.active()).toBe(true);
   });
 

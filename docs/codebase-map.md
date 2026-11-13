@@ -2802,8 +2802,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   seit 2026-10-22): Takt und „Licht“ einer gestreamten Agent-Antwort, Ablauf
   unter „Agent-Laufoberfläche“. `active()` ist nur mit CSS Custom Highlight API,
   ohne `prefers-reduced-motion` und ohne ausgeschaltete Kontoeinstellung
-  `letter_animations` (Settings → Display → Letter animations, seit 2026-10-23)
-  wahr; sonst malt `agent-chat.js` wie vorher jeden Frame, was angekommen ist.
+  `stream_animation` (Settings → Display → Streaming animation, seit 2026-11-13;
+  davor hing das Licht mit an `letter_animations`) wahr; sonst malt `agent-chat.js` wie vorher jeden Frame, was angekommen ist.
   Ausschalten mitten im Stream: der direkte Maler schreibt, das Modul gibt die
   Antwort über `_markdownWrites` ab. Tests: `tests/js/stream-reveal.test.mjs`.
 - **`sources.js`** — Quellen/Evidence-Mapping; nutzt DOM-Datasets
@@ -3256,7 +3256,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   verdeckter Tab rechnet nicht. Ohne `matchMedia` (reduzierte Bewegung nicht
   prüfbar) oder Canvas bleibt das Modul aus; `prefers-reduced-motion` zeigt
   ruhende Wolken ohne Welle. Die Kontoeinstellung `letter_animations: false`
-  (Settings → Display → Letter animations, seit 2026-10-23) zeigt gar keine:
+  (Settings → Display → Letter animations, seit 2026-10-23; gilt seit
+  2026-11-13 nur noch für die Wolken) zeigt gar keine:
   `wanted()` ist dann falsch, ein Umschalten (`userSettings.onChange`) blendet
   die Ebene sofort aus oder ein. Tests: `tests/js/letter-clouds.test.mjs`,
   Browser `tests/e2e/test_letter_clouds.py`.
@@ -9189,7 +9190,10 @@ highlights, seit 2026-10-25; fehlt = aus; `consensus-insights.js` bindet
 `#markLinesSwitch` und setzt `body.marks-underlined`, die Linien selbst stehen in
 `components-consensus-visuals.css`), `letter_animations` (Display → Letter
 animations; fehlt = an, `false` = aus; `app-ui.js` bindet
-`#letterAnimationsSwitch`, `stream-reveal.js` und `letter-clouds.js` lesen sie),
+`#letterAnimationsSwitch`, nur `letter-clouds.js` liest sie), `stream_animation`
+(Display → Streaming animation, seit 2026-11-13; fehlt = an, `false` = aus;
+`app-ui.js` bindet `#streamAnimationSwitch`, `stream-reveal.js` liest sie; ein
+altes `letter_animations: false` vererbt sich nicht),
 `detailed_progress` (Display → Detailed progress, seit 2026-11-01; fehlt = aus,
 die ruhige Zeile; `app-ui.js` bindet `#detailedProgressSwitch` über
 `bindSettingSwitch`, `agent-activity.js` liest sie bei jedem Zeichnen,
