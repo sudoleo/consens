@@ -2811,9 +2811,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`page_has_shapes`) `answer-shapes.js` mit `data-draw-answers=".share-md"`,
   das dieselben Regeln anwendet. Jedes Wort bleibt im Server-HTML; die
   Tabellen dort tragen dieselben Haarlinien wie in `/app`.
-  Im Stream hält `holdOpenNumber` eine Zeile, die bisher nur aus einer
-  Listennummer besteht („1“, „1.“), bis zum nächsten Stück zurück (sie stand
-  sonst kurz als Absatz da). Wird ein Block fest, behält
+  Im Stream hält `holdOpenItemStart` eine letzte Zeile, die bisher nur aus dem Anfang
+  eines Listenpunkts oder einer Linie besteht („1.“, „-“, „1. **“), bis zum nächsten Stück zurück (sie stand
+  sonst kurz als Absatz da, „-“ unter einem Absatz sogar als Überschrift). Wird ein Block fest, behält
   `renderMarkdownStream` die Knoten des gezeigten Rests, die schon zum
   nächsten Block gehören (eine Überschrift unter einer noch wartenden
   Tabelle), statt sie neu zu zeichnen.

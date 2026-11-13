@@ -405,7 +405,8 @@ function isNumericTableValue(value) {
     .replace(/\u00a0/g, " ")
     .trim();
   if (!normalized) return false;
-  return /^\(?[+-]?\s*(?:[$€£¥]\s*)?(?:\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:[.,]\d+)?(?:\s*%)?\)?$/.test(normalized);
+  // "−0,50 %": models also write the typographic minus (U+2212).
+  return /^\(?[+\-−]?\s*(?:[$€£¥]\s*)?(?:\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:[.,]\d+)?(?:\s*%)?\)?$/.test(normalized);
 }
 
 function markNumericTableColumns(table) {
@@ -813,19 +814,20 @@ function holdOpenImage(text) {
   return lines ? text.slice(0, lines.index + lines[1].length) : text;
 }
 
-// A numbered item whose number is all that arrived yet ("1" or "1.") stood
-// as a paragraph for a chunk, then turned into the list: it waits for the
+// A last line that is only the start of a list item or a rule ("1", "1.",
+// "-", "*", "1. **") stood for a chunk as something else: a paragraph, or
+// after a paragraph "-" even turned it into a heading. It waits for the
 // words after it.
-const OPEN_NUMBER = /(^|\n)[ \t]{0,3}\d{1,9}[.)]?[ \t]*$/;
+const OPEN_ITEM_START = /(^|\n)[ \t]{0,3}(?:\d{1,9}[.)]?|[-*+=_]+)(?:[ \t]+\**)?[ \t]*$/;
 
-function holdOpenNumber(text) {
+function holdOpenItemStart(text) {
   if (/(^|\n)\s{0,3}(```|~~~)/.test(text)) return text;
-  const match = text.match(OPEN_NUMBER);
+  const match = text.match(OPEN_ITEM_START);
   return match ? text.slice(0, match.index + match[1].length) : text;
 }
 
 function renderStreamTail(text, decorate) {
-  text = holdOpenNumber(holdOpenImage(text));
+  text = holdOpenItemStart(holdOpenImage(text));
   const table = pendingTableStart(text);
   const before = table === -1 ? closeOpenStrong(holdOpenTask(text)) : closeOpenStrong(text.slice(0, table));
   const nodes = table === -1 || before.trim() ? renderStreamFragment(before, decorate, { growing: true }) : [];

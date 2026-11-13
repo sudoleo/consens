@@ -192,6 +192,12 @@ describe("Bars", () => {
     expect(widths(render(table(["Name", "Change"], [["A", "-3 %"], ["B", "2 %"], ["C", "5 %"]])))).toEqual([]);
   });
 
+  it("aligns a column with a typographic minus as numbers, without bars", () => {
+    const output = render(table(["Since", "Deposit rate"], [["2020", "−0,50 %"], ["2022", "0,75 %"], ["2023", "4,00 %"]]));
+    expect(output.querySelector("tbody td:last-child").classList.contains("is-numeric")).toBe(true);
+    expect(widths(output)).toEqual([]);
+  });
+
   it("leaves a last row that sums the others without a bar", () => {
     const output = render(table(["Item", "Cost"], [["A", "100 €"], ["B", "300 €"], ["C", "200 €"], ["Total", "600 €"]]));
 
@@ -232,6 +238,13 @@ describe("Steps", () => {
     const titles = Array.from(output.querySelectorAll("ol.md-steps strong")).map(title => title.textContent);
     expect(titles).toEqual(["Ask", "Apply", "Wait...", "Sign"]);
     expect(output.querySelectorAll("ol.md-steps li")[1].textContent).toBe("Apply before you sign.");
+  });
+
+  it("drops a line break the model wrote after the title, which stands on its own line already", () => {
+    const output = render("<ol><li><p><strong>2020–2022: Zero rates</strong><br>\nThe bank held its rate.</p></li>"
+      + "<li><p><strong>Since 2024: Easing</strong><br>Rates fell.</p></li></ol>");
+    expect(output.querySelectorAll("ol.md-steps br")).toHaveLength(0);
+    expect(output.querySelector("ol.md-steps li").textContent).toContain("Zero rates");
   });
 
   it("leaves plain, partly titled and all-bold lists and bullet lists alone", () => {

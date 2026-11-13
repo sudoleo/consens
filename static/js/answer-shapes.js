@@ -302,7 +302,11 @@
       list.classList.add("md-steps");
       const start = Number(list.getAttribute("start"));
       if (start > 1) list.style.counterReset = `md-step ${start - 1}`;
-      items.forEach(item => dropTitleStop(titleOf(item)));
+      items.forEach(item => {
+        const title = titleOf(item);
+        dropTitleStop(title);
+        dropTitleBreak(title);
+      });
       count += 1;
     });
     return count;
@@ -321,6 +325,15 @@
     }
     const after = title.first.nextSibling;
     if (after?.nodeType === 3 && /^[.:](?!\.)/.test(after.nodeValue)) after.nodeValue = after.nodeValue.slice(1);
+  }
+
+  // The title already stands on a line of its own; a line break the model
+  // wrote after it ("**Title**␣␣" then the text) left an empty line.
+  function dropTitleBreak(title) {
+    if (!title) return;
+    let next = title.first.nextSibling;
+    while (next?.nodeType === 3 && !next.nodeValue.trim()) next = next.nextSibling;
+    if (next?.nodeType === 1 && next.tagName === "BR") next.remove();
   }
 
   // --- Entry points ---------------------------------------------------------

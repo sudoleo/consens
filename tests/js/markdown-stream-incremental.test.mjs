@@ -223,4 +223,15 @@ describe("incremental streamed Markdown", () => {
     // The table's block was fixed under the heading: the heading stayed the same node.
     expect(el.querySelector("h3")).toBe(heading);
   });
+
+  it("never turns a paragraph into a heading while its list's first dash arrives", () => {
+    const { window, document } = boot();
+    const el = document.createElement("div");
+    window.renderMarkdownStream(el, "**What you need:**\n-");
+    expect(el.querySelector("h2")).toBeNull();
+    const paragraph = el.querySelector("p");
+    window.renderMarkdownStream(el, "**What you need:**\n- Your ID");
+    expect(el.querySelector("p")).toBe(paragraph);
+    expect(el.querySelector("ul li").textContent).toBe("Your ID");
+  });
 });
