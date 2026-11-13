@@ -337,6 +337,51 @@ describe("stream-reveal: a fixed answer rewritten in place", () => {
     expect(timing.duration).toBeLessThan(300);
   });
 
+  // A table body cell the agent corrected (a place of its own,
+  // agent_review_feedback): only its words come into view again; the table
+  // keeps its rows, cells and nodes, and does not glide as a whole.
+  const TABLE = "Kurz: zwei Werkzeuge.\n\n| Merkmal | Flowbank | Ankerwerk |\n| --- | --- | --- |\n"
+    + "| Erweiterbarkeit | Keine: kein Graph-Editor, keine eigenen Tools/MCP, kein Self-Hosting | Voll: eigene Knoten |\n"
+    + "| Preis | Kostenlos bis drei Abläufe | Ab 20 Euro im Monat |\n\nWer wenig braucht, nimmt Flowbank.";
+  const CELL = "Keine: kein Graph-Editor, keine eigenen Tools/MCP, kein Self-Hosting";
+  const FIXED = "Teilweise: eigene Tools über MCP, kein Self-Hosting";
+
+  it("lights up only a corrected table cell and keeps the table as it stood", () => {
+    const { window, document, reveal, el, run, unseen, lit } = boot();
+    window.injectMarkdown(el, TABLE, []);
+    const table = el.querySelector("table");
+    const cells = [...table.querySelectorAll("th, td")];
+    // The cell's row loses a line: the rows under it and the paragraph after
+    // the table stand higher.
+    const [wrap, after] = [el.children[1], el.children[2]];
+    const rows = [...table.rows];
+    const tops = new Map([[el.children[0], 0], [wrap, 40], ...rows.map((row, index) => [row, 40 + index * 50]), [after, 200]]);
+    for (const element of tops.keys()) {
+      element.getBoundingClientRect = () => ({ top: tops.get(element) });
+      element.animate = vi.fn();
+    }
+    reveal.rewrite(el, () => {
+      window.morphMarkdown(el, TABLE.replace(CELL, FIXED));
+      tops.set(rows[2], 116).set(after, 176);
+    });
+    expect(el.querySelector("table")).toBe(table);
+    expect([...table.querySelectorAll("th, td")]).toEqual(cells);
+    expect([...table.rows].map(row => row.cells.length)).toEqual([3, 3, 3]);
+    expect(cells[4].textContent).toBe(FIXED);
+    const pieces = [...steps(window).values()];
+    expect(pieces.join("").length).toBe(FIXED.length);
+    expect(pieces.every(piece => FIXED.includes(piece))).toBe(true);
+    expect(steps(window).get(0)?.length).toBeGreaterThan(FIXED.length - 3);
+    // The table stands; its rows take their new place at once (a row's
+    // collapsed border would not glide with it); what follows the table glides.
+    expect([wrap, ...rows].filter(element => element.animate.mock.calls.length)).toEqual([]);
+    expect(after.animate.mock.calls.map(([frames]) => frames[0].transform)).toEqual(["translateY(24px)"]);
+    run(3000);
+    expect(unseen()).toBe(0);
+    expect(lit()).toBe(0);
+    expect(document.querySelector(".markdown-table-wrap > table")).toBe(table);
+  });
+
   it("only rewrites, without light or motion, under reduced motion", () => {
     const { window, document, reveal, el, lit } = boot({ reduced: true });
     window.injectMarkdown(el, BEFORE, []);

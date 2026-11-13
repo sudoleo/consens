@@ -1358,6 +1358,66 @@ def locate_quote(answer, quote):
     return None
 
 
+_CELL_BORDER = re.compile(r"(?<!\\)\|")
+_TABLE_SEPARATOR = re.compile(r"^\s*\|?\s*:?-{3,}:?\s*(?:\|\s*:?-{3,}:?\s*)*\|?\s*$")
+
+
+def _cells(line, offset=0):
+    """(start, end) of each cell's text on the table row ``line`` (at
+    ``offset`` in its text), between its unescaped borders, without the
+    spaces around it."""
+    cells, begin = [], 0
+    for border in [*_CELL_BORDER.finditer(line), None]:
+        stop = border.start() if border is not None else len(line)
+        part = line[begin:stop]
+        if part.strip():
+            lead = len(part) - len(part.lstrip())
+            cells.append((offset + begin + lead, offset + begin + len(part.rstrip())))
+        if border is not None:
+            begin = border.end()
+    return cells
+
+
+# A quoted cell shorter than the whole cell names it only from this length:
+# "Keine" stands in more than one cell of a comparison.
+CELL_PART_CHARS = 12
+
+
+def locate_cells(answer, quote):
+    """[(start, stop)] of the cells a quote of a table row names, or [].
+
+    Reviewers quote a row as Markdown, its label and the cell they mean,
+    with the cells between left out ("| **Kontrolle** | Keine: … |"): no
+    such text stands in the answer. Each quoted cell is matched to a cell of
+    one row, in order (locate_quote's forms: emphasis and case do not count;
+    part of a cell from CELL_PART_CHARS on);
+    the row's first cell, its label, only names the row where the quote
+    names another cell too. One row only: a quote two rows fit names none."""
+    wanted = [_anchor_form(part) for part in _CELL_BORDER.split(str(quote or ""))]
+    wanted = [part for part in wanted if part]
+    if len(wanted) < 2:
+        return []
+    found, offset = [], 0
+    for line in answer.split("\n"):
+        if line.lstrip().startswith("|") and not _TABLE_SEPARATOR.match(line):
+            cells = _cells(line, offset)
+            forms = [_anchor_form(answer[start:end]) for start, end in cells]
+            picked, at = [], 0
+            for part in wanted:
+                index = next((i for i in range(at, len(forms)) if forms[i] == part
+                              or (len(part) >= CELL_PART_CHARS and part in forms[i])), None)
+                if index is None:
+                    break
+                picked.append(index)
+                at = index + 1
+            else:
+                if picked and picked[0] == 0 and len(picked) > 1:
+                    picked = picked[1:]
+                found.append([cells[index] for index in picked])
+        offset += len(line) + 1
+    return found[0] if len(found) == 1 else []
+
+
 def place_marks(answer, reviews, entries=None):
     """Every review's marks on the sentences of ``answer`` and on the work.
 
@@ -1387,8 +1447,10 @@ def place_marks(answer, reviews, entries=None):
         for mark in marks:
             number += 1
             found = locate_quote(answer, mark["quote"]) if mark.get("quote") else None
-            hits = ([(index, start, end) for index, (start, end) in enumerate(spans, 1)
-                     if start < found[1] and found[0] < end] if found else [])
+            places = ([found] if found else locate_cells(answer, mark["quote"])
+                      if mark.get("quote") and "|" in mark["quote"] else [])
+            hits = [(index, start, end, place) for index, (start, end) in enumerate(spans, 1)
+                    for place in places if start < place[1] and place[0] < end]
             item = {"model": label, "kind": mark["kind"], "note": mark["note"],
                     **({"source": mark["source"]} if mark.get("source") else {}),
                     **({"entry": mark["entry"]} if mark.get("entry") else {}), "mark": number}
@@ -1400,7 +1462,7 @@ def place_marks(answer, reviews, entries=None):
                 else:
                     unplaced.append({**item, "quote": mark["quote"]})
                 continue
-            for index, start, end in hits:
+            for index, start, end, place in hits:
                 anchor, sentence_id, occurrence = _sentence_reference(index, sentences)
                 if not anchor:
                     continue
@@ -1408,7 +1470,7 @@ def place_marks(answer, reviews, entries=None):
                     "anchor": anchor, "audit": True, "kind": mark["kind"], "agree": [], "dissent": [],
                     **({"sentence_id": sentence_id, "anchor_occurrence": occurrence} if sentence_id is not None else {})})
                 # The quoted words as the page shows them: a link by its label.
-                target = _clip(_LINK.sub(r"\1", answer[max(found[0], start):min(found[1], end)]).strip(),
+                target = _clip(_LINK.sub(r"\1", answer[max(place[0], start):min(place[1], end)]).strip(),
                                MAX_COVERAGE_TARGET_CHARS)
                 entry = {**item, **({"target": target} if target else {})}
                 if entry not in claim["dissent"]:
@@ -2736,10 +2798,11 @@ class AnswerAudit:
             self._save()
             results, skipped = {}, None
             try:
-                value = self._correction_request(fb.correction_message(due, items), cancellation,
+                cells = fb.table_cells(answer, items)
+                value = self._correction_request(fb.correction_message(due, items, cells), cancellation,
                                                  fb.CORRECTION_SECONDS if left is None
                                                  else min(fb.CORRECTION_SECONDS, left - REVIEW_TIME_MARGIN))
-                results = fb.read_corrections(value.text, items, self._finding_sources(due))
+                results = fb.read_corrections(value.text, items, self._finding_sources(due), cells)
                 for key, urls in fb.new_links(results, items).items():
                     # A link to a reviewer's source stands only where its page exists.
                     if not fb.links_found(urls):

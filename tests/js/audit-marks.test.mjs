@@ -57,7 +57,7 @@ it("marks reviewed sentences by kind, colours the quoted words and keeps unmarke
   const { window, document } = boot(ANSWER);
   const body = document.getElementById("consensusAnswerBody");
   const fallback = document.getElementById("consensusClaimsFallback");
-  expect(window.renderStoredAuditMarks(body, AUDIT, fallback, [])).toBe(true);
+  expect(window.renderStoredAuditMarks(body, AUDIT)).toBe(true);
   const [built, tickets] = marks(document);
   expect(built.textContent).toBe("It was built in 1889 for the World's Fair.");
   expect([...built.classList]).toEqual(expect.arrayContaining(["cx-claim", "is-minor", "is-audit"]));
@@ -68,17 +68,17 @@ it("marks reviewed sentences by kind, colours the quoted words and keeps unmarke
   expect(body.querySelector(".is-unanimous, .claim-badge")).toBeNull();
   expect(tickets.getAttribute("role")).toBe("button");
   expect(tickets.getAttribute("aria-label")).toContain("Wrong: 2 reviewers object");
-  // A note whose passage the answer does not hold is listed below it.
-  expect(fallback.hidden).toBe(false);
-  expect(fallback.textContent).toContain("Other notes");
-  expect(fallback.textContent).toContain("It is 400 metres tall");
+  // A note whose passage the answer does not hold has no mark, and nothing
+  // stands for it under the answer: Notes lists it (agent-review.js).
+  expect(body.textContent).not.toContain("It is 400 metres tall");
+  expect(fallback.hidden).toBe(true);
+  expect(fallback.childNodes).toHaveLength(0);
 });
 
 it("opens a card with every reviewer's note, its kind and its source", () => {
   const { window, document } = boot(ANSWER);
   const body = document.getElementById("consensusAnswerBody");
-  window.renderStoredAuditMarks(body, AUDIT, document.getElementById("consensusClaimsFallback"), [],
-    { openNotes() { window.notesOpened = true; } });
+  window.renderStoredAuditMarks(body, AUDIT, { openNotes() { window.notesOpened = true; } });
   marks(document)[1].click();
   const pop = document.getElementById("claimPopover");
   expect(pop.hidden).toBe(false);
@@ -100,28 +100,8 @@ it("opens a card with every reviewer's note, its kind and its source", () => {
 it("shows every reviewer's mark among the disagreements and only a wrong one among the contradictions", () => {
   for (const [mode, shown] of [["concerns", 2], ["all", 2], ["contradictions", 1], ["critical", 1]]) {
     const { window, document } = boot(ANSWER, mode);
-    window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), AUDIT,
-      document.getElementById("consensusClaimsFallback"), []);
+    window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), AUDIT);
     expect(marks(document).filter(mark => !mark.classList.contains("is-marker-filtered")).length, mode).toBe(shown);
-  }
-});
-
-// A note the answer does not hold showed only
-// among the disagreements; one that calls the answer wrong went under
-// "Contradictions only" and "Critical", where its placed mark stays.
-it("lists a wrong note among the contradictions like its mark, the others only among the disagreements", () => {
-  const audit = { claims: [], unplaced: [
-    { model: "OpenAI", kind: "wrong", note: "Not in the answer.", quote: "It is 400 metres tall" },
-    { model: "Gemini", kind: "doubtful", note: "Unclear.", quote: "It has 3 floors" }] };
-  for (const [mode, shown] of [["concerns", ["wrong", "doubtful"]], ["all", ["wrong", "doubtful"]],
-    ["contradictions", ["wrong"]], ["critical", ["wrong"]]]) {
-    const { window, document } = boot(ANSWER, mode);
-    const fallback = document.getElementById("consensusClaimsFallback");
-    window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit, fallback, []);
-    const rows = [...fallback.querySelectorAll(".claims-fallback-row")];
-    expect(rows.filter(row => !row.classList.contains("is-marker-filtered")).map(row => row.dataset.kind), mode)
-      .toEqual(shown);
-    expect(fallback.classList.contains("is-marker-filtered"), mode).toBe(false);
   }
 });
 
@@ -129,28 +109,27 @@ it("never links a source that is no web address", () => {
   const { window, document } = boot(ANSWER);
   const audit = { claims: [{ ...AUDIT.claims[1], dissent: [{ model: "OpenAI", kind: "wrong", note: "Bad link.",
     source: "javascript:alert(1)", target: "14 euros" }] }], unplaced: [] };
-  window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit,
-    document.getElementById("consensusClaimsFallback"), []);
+  window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit);
   marks(document)[0].click();
   expect(document.querySelector("#claimPopover a.cx-card-source")).toBeNull();
-  expect(document.getElementById("consensusClaimsFallback").hidden).toBe(true);
 });
 
 // One mark over several sentences (agent_audit.place_marks: the same mark
-// number on each) the page cannot find on every sentence: the note shows once,
-// on a sentence it marks or else once in the list.
-it("lists a note over several sentences once, and not at all where one of its sentences shows it", () => {
+// number on each) the page cannot find on every sentence: it marks the
+// sentences it finds; none found, it stands only under Notes, like a note
+// without a place, and nothing is listed under the answer.
+it("marks the sentences of a note it finds, and lists nothing under the answer for those it does not", () => {
   const note = { model: "OpenAI", kind: "doubtful", note: "Both sentences are doubtful.", mark: 7 };
   const audit = (first, second) => ({ unplaced: [], claims: [first, second].map(anchor =>
     ({ anchor, kind: "doubtful", audit: true, agree: [], dissent: [{ ...note, target: anchor }] })) });
-  const rows = (first, second) => {
+  const shown = (first, second) => {
     const { window, document } = boot(ANSWER);
     const fallback = document.getElementById("consensusClaimsFallback");
-    window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit(first, second), fallback, []);
-    return [marks(document).length, fallback.querySelectorAll(".claims-fallback-row").length];
+    window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit(first, second));
+    return [marks(document).length, fallback.hidden, fallback.childNodes.length];
   };
-  expect(rows("The Eiffel Tower is 330 metres tall.", "It opened in 1890 for visitors.")).toEqual([1, 0]);
-  expect(rows("The bridge is 30 metres long.", "It opened in 1890 for visitors.")).toEqual([0, 1]);
+  expect(shown("The Eiffel Tower is 330 metres tall.", "It opened in 1890 for visitors.")).toEqual([1, true, 0]);
+  expect(shown("The bridge is 30 metres long.", "It opened in 1890 for visitors.")).toEqual([0, true, 0]);
 });
 
 // Settings › Agent › Pass notes to the agent (agent_review_feedback.py):
@@ -170,7 +149,7 @@ it("keeps a disputed finding's mark with the agent's reason and shows none for a
     { id: "s2", on: "answer", kind: "wrong", voices: 2, hard: true, state: "disputed",
       reason: "The site lists 14 euros for the second floor, which the answer names." }] };
   const body = document.getElementById("consensusAnswerBody");
-  expect(window.renderStoredAuditMarks(body, audit, document.getElementById("consensusClaimsFallback"), [])).toBe(true);
+  expect(window.renderStoredAuditMarks(body, audit)).toBe(true);
   expect(marks(document).map(mark => mark.textContent)).toEqual(["Tickets to the top cost 14 euros."]);
   expect(body.textContent).not.toContain("The agent disagrees");
   marks(document)[0].click();
@@ -187,15 +166,13 @@ it("keeps a disputed finding's mark with the agent's reason and shows none for a
 it("draws the marks of findings the agent left open as before, and says on the card it has not checked them", () => {
   const plain = boot(ANSWER), passed = boot(ANSWER);
   const audit = structuredClone(AUDIT);
-  plain.window.renderStoredAuditMarks(plain.document.getElementById("consensusAnswerBody"), AUDIT,
-    plain.document.getElementById("consensusClaimsFallback"), []);
+  plain.window.renderStoredAuditMarks(plain.document.getElementById("consensusAnswerBody"), AUDIT);
   // A pass that ran out of time: the same marks; the card adds one quiet line.
   audit.claims.forEach((claim, index) => claim.dissent.forEach(item => { item.finding = `s${index + 1}`; }));
   audit.feedback = { status: "done", skipped: "no_time", counts: {}, findings: [
     { id: "s1", on: "answer", kind: "incomplete", voices: 1, hard: false, state: "open", delivered: "final" },
     { id: "s2", on: "answer", kind: "wrong", voices: 2, hard: true, state: "open", delivered: "final" }] };
-  passed.window.renderStoredAuditMarks(passed.document.getElementById("consensusAnswerBody"), audit,
-    passed.document.getElementById("consensusClaimsFallback"), []);
+  passed.window.renderStoredAuditMarks(passed.document.getElementById("consensusAnswerBody"), audit);
   expect(passed.document.getElementById("consensusAnswerBody").innerHTML)
     .toBe(plain.document.getElementById("consensusAnswerBody").innerHTML);
   marks(passed.document)[1].click();
@@ -227,16 +204,14 @@ function cellsAudit(feedback) {
 }
 it("shows a finding over several table cells as one passage, and leaves the marks without findings as they were", () => {
   const off = boot(CELLS);
-  off.window.renderStoredAuditMarks(off.document.getElementById("consensusAnswerBody"), cellsAudit(false),
-    off.document.getElementById("consensusClaimsFallback"), []);
+  off.window.renderStoredAuditMarks(off.document.getElementById("consensusAnswerBody"), cellsAudit(false));
   const separate = marks(off.document);
   expect(separate).toHaveLength(3);
   expect(new Set(separate.map(mark => mark.cxGroup)).size).toBe(3);
   expect(separate.filter(mark => mark.getAttribute("role") === "button")).toHaveLength(3);
 
   const { window, document } = boot(CELLS);
-  window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), cellsAudit(true),
-    document.getElementById("consensusClaimsFallback"), []);
+  window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), cellsAudit(true));
   const cells = marks(document);
   expect(cells).toHaveLength(3);
   expect(new Set(cells.map(mark => mark.cxGroup)).size).toBe(1);
@@ -264,8 +239,7 @@ function verdictAudit(finding, feedback = {}) {
 }
 function preview(audit) {
   const { window, document } = boot(ANSWER);
-  window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit,
-    document.getElementById("consensusClaimsFallback"), []);
+  window.renderStoredAuditMarks(document.getElementById("consensusAnswerBody"), audit);
   const mark = marks(document).find(span => span.textContent.startsWith("Tickets"));
   return mark.cxGroup.controls[0].preview({ interactive: false });
 }
@@ -276,7 +250,7 @@ it("says on the hover preview of a mark whether and how the agent looked at its 
   expect(disputed.querySelector(".cx-card-note")).toBeNull();
   const note = audit => preview(audit).querySelector(".cx-card-note").textContent;
   expect(note(verdictAudit({ state: "open", delivered: "cut" }))).toBe("Not checked by the agent: past its limit for one answer.");
-  expect(note(verdictAudit({ state: "open" }))).toBe("Not checked by the agent: no place it could safely rewrite.");
+  expect(note(verdictAudit({ state: "open" }))).toBe("Not checked by the agent: it can't change this spot without breaking the formatting.");
   expect(note(verdictAudit({ state: "open", delivered: "final" }, { skipped: "failed" })))
     .toBe("Not checked by the agent: the correction did not finish.");
   expect(note(verdictAudit({ state: "open", delivered: "final" }, { skipped: "stopped" })))
@@ -310,4 +284,19 @@ it("sweeps exactly the sentences of the findings the agent checks", () => {
   const stillBody = still.document.getElementById("consensusAnswerBody");
   still.window.renderAuditChecking(stillBody, audit, new Set(["s1", "s2"]), { still: true });
   expect([...stillBody.querySelectorAll(".cx-claim")].map(span => span.classList.contains("is-still"))).toEqual([true, true]);
+});
+
+// A table body cell is a place of its own for the agent's correction: the
+// sweep stays inside the cell it checks, and the table keeps its cells.
+it("sweeps a table cell the agent checks, and only that cell", () => {
+  const { window, document } = boot(CELLS);
+  const body = document.getElementById("consensusAnswerBody");
+  const cells = [...body.querySelectorAll("th, td")];
+  const audit = { unplaced: [], claims: [{ anchor: "12 euros a month.", kind: "wrong", audit: true, agree: [],
+    dissent: [{ model: "OpenAI", kind: "wrong", note: "It costs 15 euros.", mark: 1, finding: "s1" }] }] };
+  expect(window.renderAuditChecking(body, audit, new Set(["s1"]))).toBe(1);
+  const swept = [...body.querySelectorAll(".cx-claim.is-agent-checking")];
+  expect(swept.map(span => [span.textContent, span.closest("td")?.cellIndex])).toEqual([["12 euros a month.", 1]]);
+  expect([...body.querySelectorAll("th, td")]).toEqual(cells);
+  expect([...body.querySelectorAll("tr")].map(row => row.cells.length)).toEqual([3, 3]);
 });

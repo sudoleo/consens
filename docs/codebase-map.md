@@ -6397,8 +6397,8 @@ seit 2026-10-31 für jeden neuen Turn, rendert `agent-review.js` `render` eine
 Review mit Prüfern über `renderAudit`, auch eine vor der fixierten Antwort
 gestoppte mit Befunden (`auditReadable`) oder mit Antworten der gefragten
 Modelle (`advised`): nur auf genau dieser Version markiert
-`window.renderStoredAuditMarks(body, review.audit, fallback, sources,
-{openNotes})` (consensus-insights.js), seit 2026-11-09 sobald der erste Prüfer
+`window.renderStoredAuditMarks(body, review.audit, {openNotes})`
+(consensus-insights.js), seit 2026-11-09 sobald der erste Prüfer
 seine Schlussrunde hat (Review noch `running`, `audit.claims` schon da: `early`
 in `renderAudit`; die Marken der übrigen kommen dazu, keine verschwindet;
 Server: `AnswerAudit._show_early`, siehe „Ein Modus“ in
@@ -6409,9 +6409,11 @@ Marken streichen sich einzeln auf (`revealMarks`: jede Marke hat ihren
 Zeitpunkt in `body._revealAt`, schon stehende bleiben stehen). Bis dahin
 erschien alles erst mit dem langsamsten Prüfer. Die Marken setzen die Sätze mit `.is-audit` und
 `is-major`/`is-split`/`is-minor` je Art, die Karte (`auditCard`) zeigt je Prüfer
-Art, Anmerkung und Quelle, nicht platzierte Anmerkungen stehen in der
-Fallback-Liste („Other notes“; die Hervorhebungsfilter behandeln eine Zeile wie
-ihre Marke: „wrong“ auch unter Contradictions/Critical, seit 2026-11-05).
+Art, Anmerkung und Quelle. Nicht platzierte Anmerkungen (`audit.unplaced`
+oder ein Satz, den die Seite nicht findet) bekommen keine Marke und nichts
+unter der Antwort: Sie stehen nur im Leser unter Notes, nach den Stellen der
+Antwort, mit ihrem Zitat als lesbarem Text ohne Markdown (`auditMarks`,
+`byPassage` in agent-review.js).
 Die Leiste bietet Notes, Answers (nur mit
 `compare_models`, öffnet den ersten Vergleich mit Antworten, `adviceContexts`:
 ein Leser-Kontext je Vergleich unter `agent-evidence:{id}`) und Sources; der
@@ -6795,8 +6797,11 @@ ab und Befunde mit Eintrag in `process` (`review.mode = "audit"`,
 `review.audit.reviewers/claims/unplaced/process/issues`, je Prüfer seit
 2026-10-29 `fresh`, `pauses`, `unfollowed_at_seq`, `backlog`
 (`ReviewerSession.fixed`), `final_ms`, `hedged`; `dissent[].mark` je
-Markierung; mehrdeutige oder zu lange Zitate ohne Eintrag bleiben
-`unplaced`); eine unlesbare Schlussrunde fragt seit 2026-10-27 einmal in
+Markierung; ein Zitat einer Tabellenzeile als Markdown, Beschriftung und
+gemeinte Zelle mit ausgelassenen Zellen dazwischen, setzt `locate_cells` auf
+die Zellen einer einzigen Zeile (ohne die Beschriftung; Teile einer Zelle
+erst ab `CELL_PART_CHARS`); mehrdeutige oder zu lange Zitate ohne Eintrag
+bleiben `unplaced`); eine unlesbare Schlussrunde fragt seit 2026-10-27 einmal in
 derselben Sitzung nach (`REPAIR_NOTE`), ein vorübergehender Anbieterfehler
 läuft einmal in neuer Sitzung (`ReviewerSession._mendable`); scheitert sie
 dann noch, gelten seine Live-Befunde (`live`). Seit 2026-10-29 läuft jede
@@ -6964,7 +6969,9 @@ bleibt; Marken korrigierter Befunde fallen weg, `corrected_out`, die Seite
 zeigt Marken erst nach dem Durchgang; App-Eintrag `answer_corrected`). Die
 Korrektur prüft kein Prüfer nach, und was der Agent bekommt, lesen die
 Prüfer nie (`review_entry` → `redacted`, `delivered_for_reviewers`). Nur
-sichere Stellen gehen in den Durchgang (`safe_place`, `kept_shape`: höchstens ein Satz mehr, Links nur auf
+sichere Stellen gehen in den Durchgang (`safe_place`, auch eine Zelle im Rumpf einer Tabelle als
+`"place": "table cell"`; `$` als Währung sperrt nicht, Formeln nach der Regel von `math-render.js`;
+`kept_shape`: höchstens ein Satz mehr, eine Zelle bleibt eine Zelle, Links nur auf
 die alte Adresse oder die geprüfte Quelle des Prüfers, `links_found`); jeder
 Fehler danach setzt Antwort und Marken zurück. Gegen den Wettlauf mit der
 nächsten Nachricht startet und speichert sie nur, solange der Turn der

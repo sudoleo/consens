@@ -112,10 +112,9 @@ def _finding_on(answer, *words):
 
 @pytest.mark.parametrize("answer, words", [
     (LIST, ("330 metres", "opened in 1889")),
-    ("| Year | Height |\n|---|---|\n| 1889 | The tower was 300 metres tall. |", ("300 metres",)),
     ("Text **bold starts here.\nIt ends** after it.", ("bold starts",)),
     ("Word " * 400 + "end.", ("end.",)),
-], ids=["two-list-items", "table-row", "bold-over-a-line", "too-long"])
+], ids=["two-list-items", "bold-over-a-line", "too-long"])
 def test_a_place_that_is_not_one_plain_line_keeps_its_mark(answer, words):
     assert fb.correction_items(answer, [_finding_on(answer, *words)]) == {}
 

@@ -664,11 +664,11 @@ Marke zeigt die markierten Worte und je Prüfer Art (in ihrer Farbe,
 (Textlink). Unmarkierter Text heißt „kein Einwand“, nicht „bestätigt“: kein Grün, keine
 Quote, kein Score. Die Highlight-Einstellung zeigt unter „Disagreements &
 issues“ (Standard) und „All“ jede Marke, unter „Contradictions“ und
-„Critical“ nur `wrong`. Nicht platzierte Anmerkungen stehen unter der Leiste
-(„Other notes“, `.agent-review.is-audit`: sie schieben die Leiste am Ende der
-Prüfung nicht nach unten) als ganze Zeile, die ihre Karte öffnet: Prüfer und
-Anmerkung, die Art in Farbe, das Zitat leise dahinter; die Karte sagt dann
-„Not found in the text“ statt „In the answer“ (D4, D14). Die Leiste bietet
+„Critical“ nur `wrong`. Nicht platzierte Anmerkungen bekommen keine Marke
+und keinen eigenen Block unter der Antwort: Der Leser unter Notes führt sie
+nach den Stellen der Antwort wie jede andere Stelle, ihr Zitat als lesbarer
+Text (Tabellenzeile als Zellen mit „·“, ohne `**`, `|` und Links), darunter
+Prüfer, Art und Anmerkung. Die Leiste bietet
 **Notes** mit eigener Glyphe (Notiz am Rand statt der Gabel des Widerspruchs,
 auch auf der Karte, B10) und der Zahl aller Anmerkungen (Marken, nicht platzierte und zur
 Arbeit; dieselbe Zahl in der Aktivität, B5), „No objections“ mit Haken,
@@ -676,7 +676,7 @@ wenn kein Prüfer etwas fand (B4), „Notes“ ohne Zahl bei einer gescheiterten
 Prüfung, und Sources. Der Leser zeigt die Anmerkungen nach Stelle in der
 Reihenfolge der Antwort, je Stelle das Zitat einmal und darunter jede
 Anmerkung mit Prüfer und Art, die schwerste zuerst; oben eine Zeile
-„1 wrong · 4 doubtful · 3 incomplete“, danach „Other notes“, „On the work“
+„1 wrong · 4 doubtful · 3 incomplete“, danach „On the work“
 (deutsch „Zum Ablauf“; Befunde zur Arbeit mit dem Schritt in den Worten der
 Aktivität, etwa „Command“ oder „Agent step“, `App.agentActivity.toolName`;
 `#seq` und Rohname nur für Admins) und zuletzt, wer keinen Einwand hatte
@@ -1104,10 +1104,26 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   ab oder scheitert der Durchgang, endet seine Sitzung ohne Fehlertext. Ohne
   gelungene Übergabe (`handed_over`) läuft kein Durchgang (`skipped: busy`):
   er hielte die nächste Nachricht auf. Nur sichere Stellen gehen an den
-  Agenten (`safe_place`, sonst bleibt die Marke): eine Zeile Fließtext oder
-  ein Listenpunkt, keine Überschrift, Tabellenzeile, Zitat-, Code- oder
-  Formelblock, Markdown in sich geschlossen, höchstens `SENTENCE_CHARS`
-  Zeichen, wörtlich übergeben. Läuft Fettdruck, Code oder eine Formel eines
+  Agenten (`safe_place`, sonst bleibt die Marke): eine Zeile Fließtext, ein
+  Listenpunkt oder der Text einer Zelle im Rumpf einer Tabelle (Kopf- und
+  Trennzeile bleiben gesperrt, `_body_cell`), keine Überschrift, kein
+  Zitat-, Code- oder Formelblock, Fettdruck und Code in sich geschlossen,
+  keine Formel angeschnitten, höchstens `SENTENCE_CHARS` Zeichen, wörtlich
+  übergeben. Eine Zelle geht als `"place": "table cell"` an den Agenten
+  (`table_cells`); ihr Ersatz bleibt eine Zelle (`kept_shape(cell=True)`:
+  kein unmaskiertes `|`, kein Zeilenumbruch, höchstens `CELL_GROWTH_CHARS`
+  länger), so behält jede Zeile ihre Spalten. Was eine Formel ist, entscheidet
+  dieselbe Regel wie beim Rendern (`_formulas` = `math-render.js`
+  `DOLLAR_INLINE_RE`/`LATEX_SIGNAL_RE`): ein `$` als Währung („17–20
+  $/Monat“, „$20“, „US-$“) sperrt keine Stelle mehr; ein Ersatz, dessen `$`
+  mit einem `$` daneben zu einer Formel würde oder eine Formel der Zeile
+  verändert, wird verworfen (`_keeps_formulas`). Die Bitte nennt die
+  Sprache des Satzes als die der Antwort darauf (Max' Lauf brachte einen
+  englischen Satz in eine deutsche Antwort); eine Prüfung der Sprache per
+  Wortliste gibt es bewusst nicht. Anlass all dessen: In Max' Lauf vom
+  2026-11-13 zu einem Werkzeugvergleich gingen vier von sechs Befunden nicht
+  an den Agenten, drei lagen in Tabellenzellen, einer neben einem Preis
+  mit `$`. Läuft Fettdruck, Code oder eine Formel eines
   markierten Satzes in einen Nachbarsatz derselben Zeile weiter, geht die
   Stelle mit bis zu `WIDEN_SENTENCES` = 2 Nachbarsätzen derselben Zeile an
   den Agenten (`widened_place`, die folgenden zuerst; nie über eine Zeile).

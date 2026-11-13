@@ -85,7 +85,6 @@ describe("the demo on a German page", () => {
       body: `
         <article class="thread-history-turn">
           <div class="consensus-answer-body"></div>
-          <div class="consensus-claims-fallback" hidden></div>
         </article>
         <div id="claimPopover" hidden></div>
         <div id="claimSheetBackdrop" hidden></div>
@@ -93,14 +92,12 @@ describe("the demo on a German page", () => {
     });
     window.Element.prototype.scrollIntoView = function () {};
     const body = document.querySelector(".consensus-answer-body");
-    const fallback = document.querySelector(".consensus-claims-fallback");
     body.innerHTML = data.answer;
     // The answer itself arrived in German.
     expect(body.textContent).toContain("Was die Rechnung annimmt");
     const audit = { claims: data.notes.map(note => ({ anchor: note.anchor, audit: true, kind: note.kind, agree: [],
       dissent: [{ model: note.model, kind: note.kind, note: note.note, target: note.target }] })), unplaced: [], process: [] };
-    expect(window.renderStoredAuditMarks(body, audit, fallback, [])).toBe(true);
-    expect(fallback.hidden).toBe(true);
+    expect(window.renderStoredAuditMarks(body, audit)).toBe(true);
     expect([...body.querySelectorAll(".cx-claim.is-audit")].map(mark => mark.textContent.trim()))
       .toEqual(data.notes.map(note => note.anchor));
     const spots = [...body.querySelectorAll(".cx-spot")].map(spot => spot.textContent);

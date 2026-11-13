@@ -299,9 +299,6 @@
    the reviewers' notes, in their form, in ink rather than a kind's colour. */
 .cx-card-reply .cx-card-tag { font-weight: var(--font-weight-medium); color: var(--ink-2); }
 .cx-card-reply > .cx-card-meta + .cx-card-claim { margin-top: 4px; }
-.cx-audit-kind { color: var(--kind-incomplete); }
-.cx-audit-kind[data-kind="wrong"] { color: var(--kind-wrong); }
-.cx-audit-kind[data-kind="doubtful"] { color: var(--kind-doubtful); }
 
 .cx-card-source {
   display: inline-flex;

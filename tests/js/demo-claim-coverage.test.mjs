@@ -59,7 +59,6 @@ describe("the demo's one-mode turn (2026-10-31)", () => {
       body: `
         <article class="thread-history-turn">
           <div class="consensus-answer-body">${data.answer}</div>
-          <div class="consensus-claims-fallback" hidden></div>
         </article>
         <div id="claimPopover" hidden></div>
         <div id="claimSheetBackdrop" hidden></div>
@@ -73,10 +72,8 @@ describe("the demo's one-mode turn (2026-10-31)", () => {
     window.Element.prototype.scrollIntoView = function () {};
 
     const body = document.querySelector(".consensus-answer-body");
-    const fallback = document.querySelector(".consensus-claims-fallback");
-    expect(window.renderStoredAuditMarks(body, auditOf(data.notes), fallback, [])).toBe(true);
-    // Every note found its sentence: none falls back to "Other notes".
-    expect(fallback.hidden).toBe(true);
+    expect(window.renderStoredAuditMarks(body, auditOf(data.notes))).toBe(true);
+    // Every note found its sentence.
     const marks = [...body.querySelectorAll(".cx-claim.is-audit")];
     expect(marks.map(mark => mark.textContent.trim())).toEqual(data.notes.map(note => note.anchor));
     // Wrong red, doubtful amber, incomplete grey (consensus-insights.js AUDIT_CLASSES).

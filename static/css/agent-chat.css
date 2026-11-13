@@ -755,25 +755,9 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 /* Key claims (claims no inline mark could hold) read before the buttons, as
    a quiet list: text first, its model ratio right behind it. */
 .agent-review > .consensus-claims-fallback { order: 0; margin: 0 0 var(--space-3); padding-top: 0; border-top: 0; }
-/* A review's notes the text does not hold come under the row, not above it:
-   the row stands from the moment the answer is fixed, and the end of the
-   review must not push its cells down. */
-.agent-review.is-audit > .consensus-claims-fallback { order: 4; margin: var(--space-3) 0 0; }
 .agent-review .claims-fallback-title { margin-bottom: var(--space-1); font-size: var(--font-size-xs); font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ink-3); }
 .agent-review .claims-fallback-row { justify-content: flex-start; gap: var(--space-2); padding: 2px 0; font-size: var(--font-size-ui); line-height: 1.5; color: var(--ink-2); }
 .agent-review .claims-fallback-row .claim-badge { margin: 0; }
-/* A reviewer's note whose words the answer does not hold (consensus-
-   insights.js renderStoredAuditMarks): the whole line is the way to its
-   card, the reviewer and the note first, the kind in the colour of its
-   marks, the quoted words after it. */
-.agent-review .claims-fallback-row.is-audit-note { display: block; width: 100%; min-height: 32px; margin: 0 0 0 -8px; padding: var(--space-1) var(--space-2); box-sizing: border-box; border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-2); font: inherit; font-size: var(--font-size-ui); line-height: 1.5; text-align: start; cursor: pointer; }
-.agent-review .claims-fallback-row.is-audit-note .cx-audit-kind { font-weight: var(--font-weight-medium); white-space: nowrap; }
-.agent-review .claims-fallback-row.is-audit-note .claims-fallback-quote { color: var(--ink-3); }
-@media (hover: hover) and (pointer: fine) {
-  .agent-review .claims-fallback-row.is-audit-note:hover { background: var(--hover); color: var(--ink); }
-}
-.agent-review .claims-fallback-row.is-audit-note:focus-visible { outline: var(--focus-ring); outline-offset: 0; }
-@media (pointer: coarse) { .agent-review .claims-fallback-row.is-audit-note { min-height: 44px; padding-block: var(--space-3); } }
 .thread-history-footer[hidden] { display: none; }
 .agent-review-summary { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2) var(--space-4); margin-bottom: var(--space-2); }
 .agent-review-status { color: var(--ink-2); font-weight: 400; }
@@ -878,7 +862,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-audit-change > ins.agent-audit-after { color: var(--ink); text-decoration: none; }
 /* Its source: the text link, a finger's height on a phone. */
 .agent-audit-source { justify-self: start; font-size: var(--font-size-xs); }
-/* "Other notes", "On the work": a section, not a label. */
+/* "Corrected by the agent", "On the work": a section, not a label. */
 .agent-audit-work-head { margin: 0 0 var(--space-1); color: var(--ink); font-size: var(--font-size-ui); font-weight: var(--font-weight-semibold); }
 .agent-audit-entry { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 var(--space-2); min-width: 0; color: var(--ink-3); font-size: var(--font-size-xs); }
 .agent-audit-entry-seq { font-variant-numeric: tabular-nums; }

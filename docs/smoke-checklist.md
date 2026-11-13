@@ -262,7 +262,16 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Prüfer es nicht (Zeitlimit), endet er mit „… · nicht geprüft“, bei
       einem Teil der Prüfer „teilweise geprüft · …“, nach Stopp „Prüfung
       gestoppt“. Ein Befund über mehrere Tabellenzellen ist eine Passage (ein
-      Hover, eine Karte). Scheitert der Durchgang (Kontingent fast leer,
+      Hover, eine Karte). Eine Antwort mit Vergleichstabelle, ein Befund auf
+      einer Zelle: der Schimmer liegt nur auf dieser Zelle, danach läuft nur
+      ihr neuer Text im Licht ein; die Tabelle behält Zeilen und Spalten und
+      gleitet nicht (Spaltenbreiten dürfen sich in dem Moment einmal
+      anpassen), eine bestrittene Zelle trägt ihre Marke. Eine Anmerkung, deren
+      Zitat so nicht in der Antwort steht, hängt nicht unter der Antwort: Notes
+      listet sie zwischen den anderen mit Prüfer, Art und Anmerkung, ihr Zitat
+      als Wörter (eine Tabellenzeile als „a · b“, nie `|` oder `**`); die Zahl
+      an Notes ist die der offenen Anmerkungen plus die der verbesserten Sätze.
+      Scheitert der Durchgang (Kontingent fast leer,
       Zeitüberschreitung): Schimmer weg, alle Marken, ruhig „Korrektur nicht
       möglich · N Anmerkungen offen“, in der Aktivität „Anmerkungen der Prüfer
       nicht durchgegangen“. Zweiter Tab, Reload und abgelaufener Nachlauf

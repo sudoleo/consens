@@ -800,7 +800,7 @@ it('marks a reviewed answer with its reviewers\' notes, without a score or diffe
   expect([...panel.querySelectorAll('.agent-audit-tally > span')].map(span => span.textContent)).toEqual(['1 wrong', '1 incomplete']);
   expect(panel.querySelector('a.agent-audit-source').href).toBe('https://example.org/proof');
   // Opening the notes from a mark's card leads to the same panel.
-  w.renderStoredAuditMarks.mock.calls[0][4].openNotes();
+  w.renderStoredAuditMarks.mock.calls[0][2].openNotes();
   expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
   dom.window.close();
 });
@@ -1163,17 +1163,17 @@ it('lists the notes on the work with their log entry, also those of a failed fin
   expect(buttons[0].getAttribute('aria-label')).toBe('Notes 4');
   buttons[0].click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  // Passage by passage, then the notes elsewhere, then those on the work.
+  // Passage by passage (a note without a place among them), then those on the work.
   const groups = [...panel.querySelectorAll('.agent-audit-group')];
-  expect(groups.map(group => group.querySelector('.agent-audit-work-head').textContent)).toEqual(['Other notes', 'On the work']);
-  const work = groups[1].querySelectorAll('.agent-audit-note');
+  expect(groups.map(group => group.querySelector('.agent-audit-work-head').textContent)).toEqual(['On the work']);
+  const work = groups[0].querySelectorAll('.agent-audit-note');
   // The most serious first, each with its reviewer and kind.
   expect([...work].map(note => [note.dataset.kind, note.querySelector('.agent-audit-by > span:last-child').textContent])).toEqual([
     ['wrong', 'Gemini'], ['doubtful', 'GPT']]);
   // The step in the activity's words; the log's number and name for admins only.
   w.App.agentActivity = { toolName: name => ({ read_source: 'Read source' })[name] || 'Tool' };
   const again = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  const entry = [...again.querySelectorAll('.agent-audit-group')][1].querySelectorAll('.agent-audit-note')[1]
+  const entry = [...again.querySelectorAll('.agent-audit-group')][0].querySelectorAll('.agent-audit-note')[1]
     .querySelector('.agent-audit-entry');
   expect([...entry.children].map(el => [el.textContent, el.classList.contains('admin-only')])).toEqual([
     ['Read source', false], ['#9', true], ['read_source', true]]);
@@ -1644,6 +1644,59 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
   expect(w.App.answerReader.openContext.mock.calls.length).toBe(opened + 1);
   expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
   expect(w.App.agentReview.correctionUnchecked(done)).toBe(false);
+});
+
+// A note whose words the answer does not hold (audit.unplaced; here a row a
+// reviewer quoted from a table the answer does not have): no list under the
+// answer, but a passage among the others under Notes, its quote as words, and
+// one count for it on Notes, in the line under the row and in the reader.
+it('lists a note without a place under Notes like the others, its quoted Markdown as words', () => {
+  const { window: w, document: d, body } = feedbackSetup();
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  const done = feedbackReview('done');
+  done.audit.unplaced = [{ model: 'OpenAI', kind: 'doubtful', mark: 3, quote: '| **Support** | Only by e-mail, `48 h` |',
+    note: 'There is a chat as well.' }];
+  w.App.agentReview.render(body, done, { key: 't1', ended: true });
+  const row = d.querySelector('.agent-review');
+  expect(row.querySelector('.consensus-claims-fallback')).toBeNull();
+  expect(row.textContent).not.toContain('There is a chat as well.');
+  // 1 corrected note + 2 open (the disputed one and the one without a place).
+  expect(notesCell(d).getAttribute('aria-label')).toBe('Notes 3');
+  expect([...d.querySelectorAll('.agent-review-findings span')].map(span => span.textContent))
+    .toEqual(['1 sentence improved', '2 notes open']);
+  notesCell(d).click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect(panel.querySelector('.agent-evidence-status').textContent).toBe('1 sentence improved · 2 notes open');
+  expect([...panel.querySelectorAll('.agent-audit-tally > span')].map(span => span.textContent)).toEqual(['1 wrong', '2 doubtful']);
+  expect([...panel.querySelectorAll('h5')].map(head => head.textContent)).toEqual(['Corrected by the agent']);
+  const passages = [...panel.children].filter(child => child.matches('.agent-audit-passage'));
+  expect(passages.map(passage => passage.querySelector('q').textContent))
+    .toEqual(['The arena opened in 80 AD.', 'Support · Only by e-mail, 48 h']);
+  const note = passages[1].querySelector('.agent-audit-note');
+  expect([note.querySelector('.agent-audit-by > span:last-child').textContent, note.querySelector('.agent-audit-kind').textContent,
+    note.querySelector('.agent-audit-text').textContent]).toEqual(['GPT', 'Doubtful', 'There is a chat as well.']);
+  // The head above the answer counts the same open notes.
+  const head = d.createElement('div');
+  w.App.agentReview.renderActivity(head, done, CORRECTED, { ended: true });
+  expect(head.querySelector('.agent-activity-check').textContent)
+    .toBe('3 notes · 1 passage marked in the text · 1 sentence improved');
+});
+
+// Quotes in the reader read as words, never as Markdown.
+it('shows a quoted table row, list item, heading or link as plain words', () => {
+  const { window: w, document: d, body } = feedbackSetup();
+  const review = feedbackReview('done');
+  review.audit.unplaced = [
+    '| **Kontrolle / Erweiterbarkeit** | Keine: eigene Plattform, eigene Regeln |',
+    '| A | B |\n| --- | --- |\n| 1 | 2 \\| 3 |', '- **Vorlagen**: viele', '## Fazit', '1. Schritt [eins](https://example.org/eins)',
+    'snake_case bleibt, *betont* nicht', '> Preis * Menge = Umsatz',
+  ].map((quote, index) => ({ model: 'OpenAI', kind: 'incomplete', mark: 10 + index, quote, note: `Note ${index}.` }));
+  w.App.agentReview.render(body, review, { key: 't1' });
+  notesCell(d).click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  const quotes = [...panel.querySelectorAll('.agent-audit-passage > q')].map(q => q.textContent);
+  expect(quotes.slice(1)).toEqual(['Kontrolle / Erweiterbarkeit · Keine: eigene Plattform, eigene Regeln',
+    'A · B · 1 · 2 | 3', 'Vorlagen: viele', 'Fazit', 'Schritt eins', 'snake_case bleibt, betont nicht', 'Preis * Menge = Umsatz']);
 });
 
 it('lands a correction only once the reader lets go of a selection in the answer', () => {

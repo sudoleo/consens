@@ -20,7 +20,6 @@ QUESTION = "When did the Colosseum open, and what does a ticket cost?"
 ANSWER = ("Rome's Colosseum opened in 80 AD under Emperor Titus. It held about 50,000 spectators.\n\n"
           "A standard ticket costs 18 euros and includes the Roman Forum, according to the "
           "[official site](https://colosseo.it/en/). The arena floor was rebuilt in 2023.")
-DIGEST = hashlib.sha256(ANSWER.encode()).hexdigest()
 LUNA = {"model": "openai/gpt-6-luna", "label": "GPT-6 Luna"}
 MIMO = {"model": "xiaomi/mimo-v2.6-flash", "label": "MiMo V2.6 Flash"}
 REVIEWERS = [("openai", "OpenAI", LUNA), ("xiaomi", "Xiaomi", MIMO)]
@@ -36,18 +35,19 @@ MARKS = {
 }
 
 
-def review(status="succeeded", reviewer_status="completed"):
+def review(status="succeeded", reviewer_status="completed", answer=ANSWER, marks=MARKS):
     """The turn's review as agent_audit saves it."""
     reviewers = [{"provider": provider, "provider_label": label, "model": model, "status": reviewer_status,
-                  "rounds": 2, **({"marks": len(MARKS[label])} if reviewer_status == "completed" else {})}
+                  "rounds": 2, **({"marks": len(marks[label])} if reviewer_status == "completed" else {})}
                  for provider, label, model in REVIEWERS]
     audit = {"reviewers": reviewers}
     if status in {"succeeded", "partial"}:
         claims, unplaced, process = agent_audit.place_marks(
-            ANSWER, [(label, MARKS[label], False) for _, label, _ in REVIEWERS], {7: ("tool", "vm_exec")})
+            answer, [(label, marks[label], False) for _, label, _ in REVIEWERS], {7: ("tool", "vm_exec")})
         audit.update(claims=claims, unplaced=unplaced, process=process)
-    return {"mode": "audit", "status": status, "answer_version": 1, "answer_hash": DIGEST, "comparisons": [],
-            "checks": [], "versions": [{"id": 1, "text": ANSWER, "hash": DIGEST, "status": status}], "audit": audit}
+    digest = hashlib.sha256(answer.encode()).hexdigest()
+    return {"mode": "audit", "status": status, "answer_version": 1, "answer_hash": digest, "comparisons": [],
+            "checks": [], "versions": [{"id": 1, "text": answer, "hash": digest, "status": status}], "audit": audit}
 
 
 def reviewer_sessions(status="completed"):
@@ -66,7 +66,7 @@ ACTIVITY = [
 ]
 
 
-def open_audit_page(browser, server, width, dark, events, *, hang_live=False, before_send=None):
+def open_audit_page(browser, server, width, dark, events, *, hang_live=False, before_send=None, question=QUESTION):
     context, page = _real_firebase_page(browser, server, has_touch=width < 700)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
@@ -98,7 +98,7 @@ def open_audit_page(browser, server, width, dark, events, *, hang_live=False, be
                   "document.body.classList.toggle('dark-mode', dark); }", dark)
     if before_send:
         before_send(page)
-    page.locator("#questionInput").fill(QUESTION)
+    page.locator("#questionInput").fill(question)
     page.locator("#sendButton").click()
     return context, page, errors
 
@@ -397,31 +397,122 @@ def feedback_events(*stages, final=False, end="done", handover=True):
     """The run's frames. ``handover=False``: a stream that stays with the run
     (the harness answers it at once, and a hand-over's stream that ends
     without its final frame stops following, agent-chat.js followReview)."""
-    handed = {"id": TURN, "question": QUESTION, "status": "pending", "execution_mode": "agent", "mode": "Agent",
-              "consensus": ANSWER, "sources": [], "model_answers": {}, "agent_review": feedback_review("live"),
+    return run_events(QUESTION, ANSWER, feedback_review, stages, handover=handover,
+                      end=(CORRECTED if end == "done" else ANSWER, end) if final else None)
+
+
+def run_events(question, answer, reviewed, stages, *, handover=True, end=None):
+    """The frames of a run whose review ``reviewed(stage)`` builds: the answer,
+    the review while it runs, then ``stages``; ``end`` (text, stage): the
+    final frame with the turn as saved."""
+    handed = {"id": TURN, "question": question, "status": "pending", "execution_mode": "agent", "mode": "Agent",
+              "consensus": answer, "sources": [], "model_answers": {}, "agent_review": reviewed("live"),
               "agent_activity": ACTIVITY, "agent_settings": {"model_id": "claude-haiku-4-5", "label": "Claude Haiku 4.5",
                                                              "policy": {"delegation": True}}}
+    meta = {"id": "bm", "title": question, "query": question, "mode": "Agent", "has_consensus": True}
     events = [("started", {"chat_id": CHAT, "turn_id": TURN, "delegation": True})]
     events += [("activity", event) for event in ACTIVITY]
     events += [("delegation", {"version": 1, "chat_id": CHAT, "turn_id": TURN, "agent": agent})
                for agent in reviewer_sessions("working")]
-    events += [("delta", {"text": ANSWER}), ("answer_check", {}), ("review", {"review": feedback_review("live")})]
+    events += [("delta", {"text": answer}), ("answer_check", {}), ("review", {"review": reviewed("live")})]
     if handover:
-        events.append(("handover", {"chat_id": CHAT, "turn_id": TURN, "response": ANSWER, "turn": handed,
-                                    "bookmark_meta": {"id": "bm", "title": QUESTION, "query": QUESTION, "mode": "Agent",
-                                                      "has_consensus": True}}))
-    events += [("review", {"review": feedback_review(stage)}) for stage in stages]
-    if final:
+        events.append(("handover", {"chat_id": CHAT, "turn_id": TURN, "response": answer, "turn": handed,
+                                    "bookmark_meta": meta}))
+    events += [("review", {"review": reviewed(stage)}) for stage in stages]
+    if end:
+        text, stage = end
         corrected = {"version": 1, "id": "server_correct_answer", "kind": "tool", "name": "correct_answer",
                      "status": "succeeded"}
-        text = CORRECTED if end == "done" else ANSWER
-        saved = {**handed, "status": "completed", "consensus": text, "agent_review": feedback_review(end),
+        saved = {**handed, "status": "completed", "consensus": text, "agent_review": reviewed(stage),
                  "agent_activity": [*ACTIVITY, corrected]}
         events.append(("final", {"chat_id": CHAT, "turn_id": TURN, "response": text, "turn": saved,
-                                 "token_budget": {"remaining": 140057, "limit": 250000},
-                                 "bookmark_meta": {"id": "bm", "title": QUESTION, "query": QUESTION, "mode": "Agent",
-                                                   "has_consensus": True}}))
+                                 "token_budget": {"remaining": 140057, "limit": 250000}, "bookmark_meta": meta}))
     return events
+
+
+# A comparison table with findings for the agent (invented products): the
+# agent corrects one body cell and keeps another with its reason; a reviewer
+# quoted a row the table does not have, so its note has no place in the answer.
+TABLE_QUESTION = "Flowbank oder Ankerwerk: Was passt für ein paar feste Abläufe?"
+TABLE_CELL = "Keine: kein Graph-Editor, keine eigenen Tools/MCP, kein Self-Hosting"
+TABLE_FIXED_CELL = "Teilweise: eigene Tools über MCP, kein Self-Hosting"
+TABLE_KEPT = "Steil: Knoten, Variablen und Fehlerpfade baut man selbst"
+TABLE_ANSWER = (
+    "Kurz: Für ein paar feste Abläufe ohne eigenen Server passt Flowbank, für ein Team mit eigenem Server "
+    "Ankerwerk.\n\n"
+    "| Merkmal | Flowbank | Ankerwerk |\n"
+    "| --- | --- | --- |\n"
+    f"| **Erweiterbarkeit** | {TABLE_CELL} | Voll: eigene Knoten, eigene Tools, Self-Hosting per Docker |\n"
+    "| **Preis** | Kostenlos bis drei Abläufe, danach 12 Euro im Monat | Selbst gehostet kostenlos, in der Cloud "
+    "ab 20 Euro im Monat |\n"
+    f"| **Einstieg** | Flach: fertige Vorlagen für die üblichen Fälle | {TABLE_KEPT} |\n\n"
+    "Wer nur ein paar feste Abläufe braucht, ist mit Flowbank schneller am Ziel.")
+TABLE_CORRECTED = TABLE_ANSWER.replace(TABLE_CELL, TABLE_FIXED_CELL)
+TABLE_ROW = "| **Support** | Nur per E-Mail, Antwort in zwei Tagen |"
+TABLE_REASON = ("Die Vorlagen von Ankerwerk decken nur einfache Fälle ab; Knoten und Fehlerpfade für eigene Abläufe "
+                "baut man weiterhin selbst.")
+TABLE_MARKS = {
+    "OpenAI": [{"quote": TABLE_CELL, "kind": "wrong", "source": "https://flowbank.example/docs/mcp",
+                "note": "Flowbank bindet eigene Tools über MCP-Server an; nur Self-Hosting fehlt."},
+               {"quote": TABLE_ROW, "kind": "doubtful",
+                "note": "Flowbank hat auch einen Chat-Support; die Zeile nennt nur die E-Mail."}],
+    "Xiaomi": [{"quote": TABLE_KEPT, "kind": "doubtful",
+                "note": "Ankerwerk bringt seit Version 2 Vorlagen mit; der Einstieg ist eher mittel."}],
+}
+TABLE_FINDING_OF = {TABLE_MARKS["OpenAI"][0]["note"]: "s1", TABLE_MARKS["Xiaomi"][0]["note"]: "s2"}
+
+
+def table_review(stage):
+    """The table answer's review with findings for the agent: while the
+    reviewers review ("live"), while the agent checks the two cells
+    ("checking"), once its pass is through ("done": s1 corrected in the
+    answer's second version, s2 disputed). The note on the missing row has
+    no finding: the server makes findings of placed marks only."""
+    done = stage == "done"
+    live = stage == "live"
+    saved = review("running" if live else "succeeded", "running" if live else "completed", TABLE_ANSWER, TABLE_MARKS)
+    findings = [{"id": "s1", "on": "answer", "kind": "wrong", "voices": 1, "hard": True, "state": "open"},
+                {"id": "s2", "on": "answer", "kind": "doubtful", "voices": 1, "hard": True, "state": "open"}]
+    if stage == "checking":
+        for finding in findings:
+            finding.update(state="checking", delivered="final")
+    text = TABLE_ANSWER
+    marks = TABLE_MARKS
+    if done:
+        cell = TABLE_MARKS["OpenAI"][0]
+        findings[0].update(state="corrected", delivered="final", before=TABLE_CELL, after=TABLE_FIXED_CELL,
+                           notes=[{"model": "OpenAI", "kind": "wrong", "note": cell["note"], "source": cell["source"]}])
+        findings[1].update(state="disputed", delivered="final", reason=TABLE_REASON)
+        text = TABLE_CORRECTED
+        marks = {"OpenAI": TABLE_MARKS["OpenAI"][1:], "Xiaomi": TABLE_MARKS["Xiaomi"]}
+        digest = hashlib.sha256(TABLE_CORRECTED.encode()).hexdigest()
+        saved["versions"].append({"id": 2, "text": TABLE_CORRECTED, "hash": digest, "status": "succeeded",
+                                  "corrects": 1})
+        saved.update(answer_version=2, answer_hash=digest)
+    claims, unplaced, process = agent_audit.place_marks(
+        text, [(label, marks[label], False) for _, label, _ in REVIEWERS], {})
+    saved["audit"].update(claims=claims, unplaced=unplaced, process=process)
+    for claim in claims:
+        for item in claim["dissent"]:
+            item["finding"] = TABLE_FINDING_OF[item["note"]]
+    saved["audit"]["feedback"] = {"status": "done" if done else stage, "findings": findings,
+                                  "counts": {"delivered": 0 if live else 2, "corrected": int(done),
+                                             "disputed": int(done), "cut": 0}}
+    return saved
+
+
+def table_events(*stages, handover=True, feedback=True):
+    """The table answer's run; ``feedback=False``: reviewed without findings
+    for the agent (the setting off)."""
+    if not feedback:
+        def plain(stage):
+            live = stage == "live"
+            return review("running" if live else "succeeded", "running" if live else "completed",
+                          TABLE_ANSWER, TABLE_MARKS)
+        return run_events(TABLE_QUESTION, TABLE_ANSWER, plain, stages, handover=handover,
+                          end=(TABLE_ANSWER, "done"))
+    return run_events(TABLE_QUESTION, TABLE_ANSWER, table_review, stages, handover=handover,
+                      end=(TABLE_CORRECTED, "done") if "done" in stages else None)
 
 
 @pytest.mark.parametrize("width", [1280, 390])
@@ -684,6 +775,144 @@ def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser,
         # The activity does not claim the findings were checked.
         page.locator("#agentAnswer .agent-activity > summary").click()
         expect(page.locator("#agentAnswer .agent-activity")).to_contain_text("Couldn’t check the reviewers’ notes")
+        assert errors == []
+    finally:
+        context.close()
+
+
+def test_the_agent_sweeps_the_table_cells_it_checks(browser, phase4_server):
+    """A table body cell is a place of its own for the agent: while it checks,
+    the sweep runs over exactly the cells of its findings, inside the table."""
+    context, page, errors = open_audit_page(browser, phase4_server, 1280, False,
+                                            table_events("checking", handover=False), hang_live=True,
+                                            question=TABLE_QUESTION)
+    try:
+        body = page.locator("#agentAnswerBody")
+        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_text("The agent is checking 2 notes…")
+        swept = body.locator(".cx-claim.is-agent-checking")
+        expect(swept).to_have_count(2)
+        cells = swept.evaluate_all("""spans => spans.map(span => [span.textContent,
+            span.closest('td')?.cellIndex ?? -1, span.closest('tr')?.rowIndex ?? -1])""")
+        assert cells == [[TABLE_CELL, 1, 1], [TABLE_KEPT, 2, 3]], cells
+        assert body.evaluate("el => [...el.querySelector('table').rows].map(row => row.cells.length)") == [3, 3, 3, 3]
+        page.wait_for_timeout(700)
+        _snapshot(page, "table-checking-1280")
+        assert errors == []
+    finally:
+        context.close()
+
+
+# Where the table stands while the agent's correction of one of its cells
+# comes in: before and after the change of the text, in the same task, and in
+# every frame for a second and a half after it. Its top is measured from the
+# answer's, so a glide of the whole table shows and a scroll does not.
+TABLE_WATCH = """() => { const reveal = App.streamReveal, rewrite = reveal.rewrite; window.__tables = [];
+    const shape = body => { const table = body.querySelector('table');
+        const cell = table && [...table.querySelectorAll('td')].find(td => /Graph-Editor|Teilweise/.test(td.textContent));
+        if (!cell) return null;
+        const box = table.getBoundingClientRect();
+        return { cols: [...table.rows].map(row => row.cells.length), top: box.top - body.getBoundingClientRect().top,
+                 height: box.height, cell: cell.getBoundingClientRect().height, text: cell.textContent }; };
+    reveal.rewrite = (body, change) => { const entry = { frames: [] }; window.__tables.push(entry);
+        const result = rewrite(body, () => { entry.before = shape(body); const out = change(); entry.after = shape(body); return out; });
+        entry.lit = [...CSS.highlights.values()].reduce((sum, ranges) => sum + ranges.size, 0);
+        const start = performance.now();
+        const sample = () => { const now = shape(body); if (now) entry.frames.push([now.top, now.height]);
+            if (performance.now() - start < 1500) requestAnimationFrame(sample); };
+        requestAnimationFrame(sample);
+        return result; }; }"""
+
+
+@pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
+def test_the_agent_corrects_a_table_cell_and_the_table_stands(browser, phase4_server, width, dark):
+    """The corrected cell is rewritten in place in the light, the cell the agent
+    keeps gets its mark: the table keeps its rows and columns, does not glide,
+    and its height changes by no more than the cell's own lines."""
+    context, page, errors = open_audit_page(browser, phase4_server, width, dark, table_events("checking", "done"),
+                                            before_send=lambda page: page.evaluate(TABLE_WATCH),
+                                            question=TABLE_QUESTION)
+    try:
+        body = page.locator("#agentAnswerBody")
+        expect(body).to_contain_text(TABLE_FIXED_CELL)
+        expect(body).not_to_contain_text("Graph-Editor")
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        page.wait_for_function("() => window.__tables.length > 0")
+        page.wait_for_timeout(1700)
+        tables = page.evaluate("() => window.__tables")
+        assert len(tables) == 1, tables
+        table = tables[0]
+        before, after = table["before"], table["after"]
+        assert before["text"] == TABLE_CELL and after["text"] == TABLE_FIXED_CELL, table
+        # In the light, the same rows and columns.
+        assert table["lit"] > 0, table
+        assert before["cols"] == after["cols"] == [3, 3, 3, 3], table
+        # No more change in height than the cell's own lines, and none later.
+        assert abs(after["height"] - before["height"]) <= abs(after["cell"] - before["cell"]) + 1, table
+        tops = {round(top, 1) for top, _ in table["frames"]}
+        heights = {round(height, 1) for _, height in table["frames"]}
+        assert max(tops) - min(tops) < 1 and abs(min(tops) - after["top"]) < 1, (tops, after)
+        assert max(heights) - min(heights) < 1 and abs(min(heights) - after["height"]) < 1, (heights, after)
+        # The kept cell carries its mark, the corrected one none; no sweep is left.
+        marked = body.locator("td .cx-claim.is-audit")
+        expect(marked.filter(has_text=TABLE_KEPT)).not_to_have_count(0)
+        expect(marked.filter(has_text=TABLE_FIXED_CELL)).to_have_count(0)
+        expect(body.locator(".is-agent-checking")).to_have_count(0)
+        assert body.evaluate("el => [...el.querySelector('table').rows].map(row => row.cells.length)") == [3, 3, 3, 3]
+        assert page.evaluate("() => [...CSS.highlights.keys()].every(name => !CSS.highlights.get(name).size)")
+        _snapshot(page, f"table-corrected-{width}-{'dark' if dark else 'light'}")
+        assert errors == []
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width,dark,feedback", [(1280, False, True), (1280, True, True), (390, False, True),
+                                                 (390, True, True), (1280, False, False), (390, True, False)])
+def test_a_note_without_a_place_stands_under_notes_not_under_the_answer(browser, phase4_server, width, dark,
+                                                                        feedback):
+    """A reviewer quoted a table row the answer does not have: nothing hangs
+    under the answer for it. Notes counts it like the others and lists it
+    among them, by its reviewer, kind and note, its quote as words."""
+    events = table_events("checking", "done") if feedback else table_events("done", feedback=False)
+    context, page, errors = open_audit_page(browser, phase4_server, width, dark, events, question=TABLE_QUESTION)
+    try:
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        row = page.locator("#agentAnswer .agent-review")
+        notes = row.locator('.agent-evidence-link[data-section="differences"]')
+        expect(notes).to_have_attribute("aria-label", "Notes 3")
+        if feedback:
+            expect(row.locator(".agent-review-findings")).to_have_text("1 sentence improved · 2 notes open")
+        else:
+            expect(row.locator(".agent-review-findings")).to_have_count(0)
+        expect(row.locator(".consensus-claims-fallback")).to_have_count(0)
+        expect(page.locator("#agentAnswer")).not_to_contain_text("Chat-Support")
+        page.wait_for_timeout(1500)
+        page.evaluate("() => document.querySelector('#agentAnswer .agent-review').scrollIntoView({ block: 'center' })")
+        page.wait_for_timeout(300)
+        tag = f"{width}-{'dark' if dark else 'light'}-{'findings' if feedback else 'plain'}"
+        _snapshot(page, f"after-answer-{tag}")
+        notes.click()
+        panel = page.locator(".agent-audit-panel")
+        expect(panel).to_be_visible()
+        expect(panel.locator(".agent-audit-tally")).to_have_text("1 wrong · 2 doubtful")
+        heads = panel.locator(".agent-audit-work-head")
+        if feedback:
+            expect(heads).to_have_text(["Corrected by the agent"])
+        else:
+            expect(heads).to_have_count(0)
+        quotes = panel.locator(".agent-audit-quote").all_text_contents()
+        assert "Support · Nur per E-Mail, Antwort in zwei Tagen" in quotes, quotes
+        assert not [quote for quote in quotes if "|" in quote or "**" in quote], quotes
+        other = panel.locator(".agent-audit-passage", has_text="Support · Nur per E-Mail")
+        expect(other.locator(".agent-audit-by > span:last-child")).to_have_text("GPT-6 Luna")
+        expect(other.locator(".agent-audit-kind")).to_have_text("Doubtful")
+        expect(other.locator(".agent-audit-text")).to_have_text(TABLE_MARKS["OpenAI"][1]["note"])
+        if feedback:
+            expect(other.locator(".agent-audit-unchecked")).to_have_text("Not checked by the agent.")
+        page.wait_for_timeout(500)
+        _snapshot(page, f"after-notes-{tag}")
+        other.scroll_into_view_if_needed()
+        page.wait_for_timeout(300)
+        _snapshot(page, f"after-notes-other-{tag}")
         assert errors == []
     finally:
         context.close()

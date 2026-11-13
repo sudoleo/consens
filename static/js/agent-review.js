@@ -915,8 +915,8 @@
   // passage never stands twice, far apart.
   function auditPassage(quote, items, audit, onAnswer = true) {
     const passage = node('section', 'agent-audit-passage');
-    if (quote) {
-      const words = node('q', 'agent-audit-quote', String(quote));
+    if (plainWords(quote)) {
+      const words = node('q', 'agent-audit-quote', plainWords(quote));
       words.setAttribute('data-i18n-skip', '');
       passage.append(words);
     }
@@ -939,9 +939,33 @@
     entry.append(head, text);
     return entry;
   }
-  // Markdown of a sentence as words (links as their text), for the trace.
-  const plainWords = text => String(text || '').replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/\*\*|__|`/g, '').replace(/\s+/g, ' ').trim();
+  // Markdown a reviewer quoted, or a sentence the agent corrected, as the
+  // words a reader sees: a link as its text, no marks of emphasis or code, no
+  // list, heading or quote mark at a line's start, and a table row's cells
+  // "a · b" instead of its pipes. An escaped pipe is a cell's text, never its
+  // border (U+0000 while the row is split). No lookbehind: Safari before
+  // 16.4 rejects the whole bundle over one.
+  function plainLine(line) {
+    const text = line.trim().replace(/\\\|/g, '\u0000')
+      .replace(/^(?:#{1,6}\s+|>\s*|[-*+]\s+(?:\[[ xX]\]\s+)?|\d{1,9}[.)]\s+)/, '');
+    const row = /^\||\|$|\s\|\s/.test(text);
+    const words = !row ? text : text.replace(/^\||\|$/g, '').split('|').map(cell => cell.trim())
+      .filter(cell => cell && !/^:?-{3,}:?$/.test(cell)).join(' · ');
+    return { text: words.replace(/\u0000/g, '|'), row };
+  }
+  function plainWords(text) {
+    let words = '';
+    let row = false;
+    for (const line of String(text || '').split('\n').map(plainLine).filter(line => line.text)) {
+      words += !words ? line.text : (row || line.row ? ' · ' : ' ') + line.text;
+      row = line.row;
+    }
+    return words.replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/\*\*|__|~~|`/g, '')
+      .replace(/(^|[\s(·])[*_](\S(?:.*?\S)?)[*_](?=$|[\s).,;:!?·])/g, '$1$2')
+      .replace(/\\([*_#>`~\\])/g, '$1')
+      .replace(/\s+/g, ' ').trim();
+  }
   // A sentence the agent corrected: what stood, what stands now, and the
   // reviewers' notes that led to it.
   function correctedPassage(finding, audit) {
@@ -998,7 +1022,6 @@
     const panel = node('div', 'agent-evidence-panel agent-audit-panel');
     const audit = review.audit;
     const reviewers = audit.reviewers || [];
-    const unplaced = new Set(audit.unplaced || []);
     const marks = auditMarks(audit), work = auditWork(audit);
     const fixed = correctedFindings(audit), fixedNotes = fixed.flatMap(finding => finding.notes);
     const status = auditStatus(review);
@@ -1009,18 +1032,13 @@
     if (AUDIT_DONE.has(review.status) && reviewers.some(r => r.status === 'completed')) {
       panel.append(node('p', 'agent-review-note', 'Unmarked text means no objection, not confirmed.'));
     }
-    for (const group of byPassage(marks.filter(item => !unplaced.has(item)))) panel.append(auditPassage(group.quote, group.items, audit));
+    // A note whose words the answer does not hold (`unplaced`) stands among
+    // the others, after those of the answer's passages: its quote as words.
+    for (const group of byPassage(marks)) panel.append(auditPassage(group.quote, group.items, audit));
     if (fixed.length) {
       const section = node('section', 'agent-audit-group');
       section.append(node('h5', 'agent-audit-work-head', 'Corrected by the agent'));
       for (const finding of fixed) section.append(correctedPassage(finding, audit));
-      panel.append(section);
-    }
-    const other = marks.filter(item => unplaced.has(item));
-    if (other.length) {
-      const section = node('section', 'agent-audit-group');
-      section.append(node('h5', 'agent-audit-work-head', 'Other notes'), node('p', 'agent-review-note', 'Not found in the answer as quoted.'));
-      for (const group of byPassage(other)) section.append(auditPassage(group.quote, group.items, audit));
       panel.append(section);
     }
     if (work.length) {
@@ -1329,8 +1347,7 @@
     if (pending) reviewerMarks(marks, review.audit?.reviewers || []);
     for (const child of [...host.children]) if (child !== status && child !== marks) child.remove();
     const tabs = evidenceNav();
-    const fallback = node('div', 'consensus-claims-fallback'); fallback.hidden = true;
-    host.prepend(fallback, tabs);
+    host.prepend(tabs);
     if (status.parentNode !== host) host.append(status);
     if (marks.parentNode !== host || marks.nextSibling !== status) host.insertBefore(marks, status);
     const context = auditContext(review, evidence, turnSources);
@@ -1357,7 +1374,7 @@
     // stops keeps them (notesOnly): a mark that showed never goes away.
     const fadeChecking = checking.length ? () => {} : checkingFade(body);
     const place = () => overText(body, raw, () => {
-      if (exact && !hold && (done || early || notesOnly)) window.renderStoredAuditMarks?.(body, review.audit, fallback, turnSources, {
+      if (exact && !hold && (done || early || notesOnly)) window.renderStoredAuditMarks?.(body, review.audit, {
         openNotes: () => open('differences', { trigger: document.activeElement }) });
       if (checking.length) window.renderAuditChecking?.(body, review.audit, new Set(checking.map(finding => finding.id)), { still });
       window.linkifyAgentSources?.(body, turnSources);

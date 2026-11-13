@@ -263,11 +263,8 @@
             fallbackBoxes.forEach(function (box) {
               const rows = Array.from(box.querySelectorAll(".claims-fallback-row"));
               rows.forEach(function (row) {
-                // A reviewer's note the answer does not hold counts like its
-                // mark (matchesHighlightFilter): "wrong" is a contradiction.
                 const include = highlightMode === "all"
-                  || (highlightMode === "concerns" && row.dataset.coverage === "split")
-                  || (row.classList.contains("is-audit-note") && row.dataset.kind === "wrong");
+                  || (highlightMode === "concerns" && row.dataset.coverage === "split");
                 row.classList.toggle("is-marker-filtered", !include);
               });
               box.classList.toggle("is-marker-filtered", rows.length > 0
@@ -2546,14 +2543,11 @@
           }
 
           // Die Karte einer Marke: die markierten Worte der Antwort, darunter
-          // jede Anmerkung mit ihrem Pruefer, ihrer Art und ihrer Quelle. Eine
-          // Anmerkung, deren Zitat die Antwort nicht enthaelt, sagt das, statt
-          // "In the answer" ueber Worte zu schreiben, die dort nicht stehen.
+          // jede Anmerkung mit ihrem Pruefer, ihrer Art und ihrer Quelle.
           function auditCard(claim, ctx) {
             const card = cardNode("div", "cx-card cx-card-audit");
             card.appendChild(cardHeading(auditSummary(claim)));
-            card.appendChild(cardSide(claimAnswerSide(claim, ctx.spans), [], ctx,
-              { label: claim.unplaced ? "Not found in the text" : "In the answer" }));
+            card.appendChild(cardSide(claimAnswerSide(claim, ctx.spans), [], ctx, { label: "In the answer" }));
             claim.dissent.forEach(function (item) {
               const side = cardSide({ text: item.note }, [item.model], ctx, { label: AUDIT_KINDS[item.kind] || "Doubtful" });
               side.dataset.kind = item.kind;
@@ -2614,7 +2608,7 @@
             cut: "Not checked by the agent: past its limit for one answer.",
             unfinished: "Not checked by the agent: the correction did not finish.",
             stopped: "Not checked by the agent: the correction was stopped.",
-            place: "Not checked by the agent: no place it could safely rewrite.",
+            place: "Not checked by the agent: it can't change this spot without breaking the formatting.",
           };
           function auditFindingVerdict(items, audit) {
             const feedback = audit && audit.feedback;
@@ -2661,10 +2655,11 @@
           }
 
           // Marks a reviewed Agent answer (agent-review.js). `audit` is the
-          // review's audit part: claims (one per marked sentence) and unplaced
-          // notes (their quote is not in the answer's sentences), which join
-          // the list below the answer like unanchored claims.
-          function renderStoredAuditMarks(body, audit, fallbackBox, sources, options = {}) {
+          // review's audit part: its claims, one per marked sentence. A note
+          // without a place (`unplaced`, or a sentence this page does not
+          // find) gets no mark and nothing under the answer: Notes lists every
+          // note (agent-review.js auditPanel), opened only by a click.
+          function renderStoredAuditMarks(body, audit, options = {}) {
             if (!body || !audit || typeof audit !== "object") return false;
             hidePreviewWithin(body);
             const navigation = options.navigation || { canOpen: function () { return false; }, open: function () {} };
@@ -2676,13 +2671,8 @@
             const claims = (Array.isArray(audit.claims) ? audit.claims : []).filter(function (claim) {
               return claim && claim.anchor && Array.isArray(claim.dissent) && claim.dissent.some(valid);
             });
-            const unplaced = (Array.isArray(audit.unplaced) ? audit.unplaced : []).filter(valid);
             const markedByBlock = new Map();
             const spots = [];
-            // A mark over several sentences carries its number on each
-            // (agent_audit.place_marks): listed once, and not where one of
-            // its sentences shows it.
-            const missed = [], placedMarks = new Set();
             // With findings for the agent, the sentences of one finding (a
             // mark over several sentences or table cells) are one passage: one
             // card, one hover, one tab stop, in the colour of its most
@@ -2695,11 +2685,7 @@
               if (probe && !markedByBlock.has(probe.block)) markedByBlock.set(probe.block, []);
               const result = probe && markSentence(body, claim.anchor, AUDIT_CLASSES[shown.kind],
                 markedByBlock.get(probe.block), claim.anchor_occurrence);
-              if (!result) {
-                shown.dissent.forEach(function (item) { missed.push(Object.assign({ quote: item.target || claim.anchor }, item)); });
-                return;
-              }
-              shown.dissent.forEach(function (item) { if (item.mark != null) placedMarks.add(item.mark); });
+              if (!result) return;
               result.spans.forEach(function (span) { span.classList.add("is-audit"); });
               const key = audit.feedback ? shown.dissent.find(function (item) { return item.finding; })?.finding : null;
               const joined = key ? byFinding.get(key) : null;
@@ -2745,51 +2731,7 @@
               if (shown.kind === "wrong" && spans[0]?.cxGroup) spans[0].cxGroup.hasContradiction = true;
             });
             spots.forEach(function (entry) { wrapSpots(entry.spans, entry.targets); });
-            missed.forEach(function (item) {
-              if (item.mark == null) { unplaced.push(item); return; }
-              if (placedMarks.has(item.mark)) return;
-              placedMarks.add(item.mark);
-              unplaced.push(item);
-            });
-            if (fallbackBox) {
-              fallbackBox.replaceChildren();
-              fallbackBox.hidden = !unplaced.length;
-              if (unplaced.length) {
-                fallbackBox.appendChild(cardNode("div", "claims-fallback-title", "Other notes"));
-                // Each line says the note, not a fragment of words: its
-                // reviewer and note, the kind in the colour of its marks, the
-                // quoted words quietly after it. The whole line opens its card,
-                // a target a finger can hit.
-                unplaced.forEach(function (item) {
-                  const row = cardNode("button", "claims-fallback-row is-audit-note");
-                  row.type = "button";
-                  // Shown under "Disagreements & issues" like a split claim.
-                  row.dataset.coverage = "split";
-                  const kind = AUDIT_CLASSES[item.kind] ? item.kind : "doubtful";
-                  row.dataset.kind = kind;
-                  const text = cardNode("span", "claims-fallback-text");
-                  const who = modelDisplayName(cardModel(item.model));
-                  text.textContent = (who ? who + ": " : "") + String(item.note || "");
-                  text.setAttribute("data-i18n-skip", "");
-                  const label = cardNode("span", "cx-audit-kind", AUDIT_KINDS[kind]);
-                  label.dataset.kind = kind;
-                  const quote = cardNode("q", "claims-fallback-quote", String(item.quote || ""));
-                  quote.setAttribute("data-i18n-skip", "");
-                  const note = { anchor: String(item.quote || ""), kind: kind, dissent: [item], unplaced: true };
-                  auditVerdict(note, findings, audit);
-                  row.setAttribute("aria-label", auditLabel(note));
-                  row.addEventListener("click", function () {
-                    openCard(row, null, function (ctx) {
-                      return auditCard(note, Object.assign(ctx, { spans: [quote], navigation: navigation, openInDrawer: openNotes }));
-                    }, "audit");
-                  });
-                  row.append(text, " ", label);
-                  if (item.quote) row.append(" ", quote);
-                  fallbackBox.appendChild(row);
-                });
-              }
-            }
-            applyConsensusMarkerVisibility(storedConsensusMarkersVisible(), false, body, fallbackBox);
+            applyConsensusMarkerVisibility(storedConsensusMarkersVisible(), false, body);
             return claims.length > 0;
           }
 
