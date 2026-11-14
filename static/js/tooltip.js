@@ -34,7 +34,9 @@
   const INTERACTIVE = "a[href], button, input, select, textarea, summary, label, [role='button'], [role='menuitem'], [role='option'], [role='tab'], [contenteditable='true']";
   const MARK = "[data-tooltip], [title], [data-tooltip-title], [data-tooltip-overflow]";
   const POPUP = "[data-popover], [role='menu'], [role='listbox'], [role='dialog'], dialog";
-  const EXPANDED = "[aria-expanded='true']";
+  // aria-expanded alone also marks an open disclosure (the sidebar, a
+  // list), whose control keeps its line.
+  const MENU_OPEN = "[aria-expanded='true'][aria-haspopup]:not([aria-haspopup='false'])";
 
   let tip = null;
   let target = null;
@@ -79,6 +81,16 @@
     const popup = element && node.closest(POPUP);
     if (popup && popup !== element && element.contains(popup)) return null;
     return element;
+  }
+
+  function opensMenu(element) {
+    if (element.matches(MENU_OPEN) || element.querySelector(MENU_OPEN)) return true;
+    for (const popover of document.querySelectorAll("[data-popover]")) {
+      if (!App.popover?.isOpen?.(popover)) continue;
+      const trigger = App.popover.triggerOf(popover);
+      if (trigger && element.contains(trigger)) return true;
+    }
+    return false;
   }
 
   function coversOpenPopover(element, rect) {
@@ -131,7 +143,7 @@
   function show(element) {
     const text = textOf(element);
     if (!text || !element.isConnected) return;
-    if (element.matches(EXPANDED) || element.querySelector(EXPANDED)) return;
+    if (opensMenu(element)) return;
     const node = ensure();
     const parent = host(element);
     if (node.parentElement !== parent) parent.append(node);

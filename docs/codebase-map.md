@@ -1399,8 +1399,10 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   (`scrollWidth > clientWidth`). Ein offenes Menü wird nie verdeckt: der
   Tooltip einer Marke reicht nicht in ein Menü hinein, das sie enthält
   (`[data-popover]`, `role=menu|listbox|dialog`, etwa das Modellmenü im Chip
-  mit `title`), eine Marke mit `aria-expanded="true"` (in sich oder darin)
-  zeigt keinen, und einer, der auf einem offenen Popover läge
+  mit `title`), eine Marke, deren Menü offen ist (in sich oder darin: Auslöser
+  eines offenen Popovers laut `App.popover.triggerOf`, oder `aria-expanded="true"`
+  mit `aria-haspopup`), zeigt keinen; eine offene Aufklappung wie „Collapse
+  sidebar“ behält ihren. Einer, der auf einem offenen Popover läge
   (`App.popover.isOpen`), weicht auf die andere Seite aus oder entfällt.
 - **Bewegungs-Regeln (`static/css/motion.css`, Apple-Audit C8, C10, C11, C13,
   C14):** Theme-Wechsel ohne Verschmieren, ein Spinner (`.spinner` und die

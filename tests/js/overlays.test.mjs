@@ -380,6 +380,44 @@ describe("one tooltip (E12)", () => {
     expect(shown(document.getElementById("send"))).toBe(true);
   });
 
+  // aria-expanded also marks an open disclosure (the sidebar, a list): only
+  // a control whose menu is open stays quiet.
+  it("keeps the line of an open disclosure and of a menu control without App.popover", () => {
+    vi.useFakeTimers();
+    const ctx = loadScripts(["static/js/popover.js", "static/js/tooltip.js"], {
+      body: `<button id="collapse" aria-controls="side" aria-expanded="true" title="Collapse sidebar"></button>
+        <div id="side"><div id="head" title="All your chats"><button id="list" aria-expanded="true" aria-controls="items"></button></div></div>
+        <button id="menuButton" aria-haspopup="menu" aria-expanded="true" title="More actions"></button>
+        <button id="quota" aria-controls="card" aria-expanded="false" title="Today's allowance"></button>
+        <div id="card"></div>`,
+    });
+    contexts.push(ctx);
+    const { window, document } = ctx;
+    window.App.tooltip.init();
+    const tip = document.querySelector(".global-tooltip");
+    const shown = (element) => {
+      pointer(window, "pointerover", element);
+      vi.advanceTimersByTime(600);
+      const visible = tip.classList.contains("visible");
+      pointer(window, "pointerout", element);
+      return visible;
+    };
+
+    expect(shown(document.getElementById("collapse"))).toBe(true);
+    expect(shown(document.getElementById("list"))).toBe(true);
+    // A menu control that says so keeps quiet even without App.popover.
+    expect(shown(document.getElementById("menuButton"))).toBe(false);
+    // A control whose card App.popover holds open keeps quiet without aria-haspopup.
+    const quota = document.getElementById("quota");
+    const card = document.getElementById("card");
+    window.App.popover.opened(card, { trigger: quota });
+    quota.setAttribute("aria-expanded", "true");
+    expect(shown(quota)).toBe(false);
+    window.App.popover.closed(card);
+    quota.setAttribute("aria-expanded", "false");
+    expect(shown(quota)).toBe(true);
+  });
+
   // A cut-off chat title is shown whole as it was asked; a title that is the
   // page's own word arrives translated from its element.
   it("shows a chat title as asked on a German page, and the page's words in German", async () => {
