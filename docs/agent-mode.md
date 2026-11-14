@@ -1212,9 +1212,13 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   verbessert“): Mit der Einstellung zeigt die Antwort keine Marken, bis der
   Korrekturdurchgang durch ist (`feedback.status: done`; endet der Lauf
   vorher, zeigen sie sich wie bisher), nie eine Farbe, die gleich wieder
-  verschwindet. Ein korrigierter Satz wird an Ort und Stelle mit dem Licht des
-  Streamings neu geschrieben, ohne Marke; vorher schimmert nichts (welcher
-  Satz sich ändert, steht erst mit dem Ergebnis fest). Bestrittene und offene
+  verschwindet. Während der Agent prüft, treten genau die geprüften Sätze in
+  ein Ruhegrau zurück, und ein Band aus Tinte läuft durch ihre Buchstaben,
+  ohne Fläche und ohne Farbe (Grün heißt im Produkt Zustimmung). Am Ende
+  gleiten sie zurück in die Tinte, bevor Marken kommen; ein korrigierter Satz
+  bleibt bis dahin grau und wird an Ort und Stelle neu geschrieben, seine
+  Buchstaben in einem farblosen Licht (`--rewrite-light`), ohne Marke. Das
+  normale Streaming einer Antwort bleibt grün. Bestrittene und offene
   Befunde zeigen ihre Marke wie bisher, bestrittene mit der Begründung. Die
   Spur steht auf Klick in den Details der Prüfung. `stream_animation` und
   `prefers-reduced-motion` gelten; ein gespeicherter Chat zeigt den

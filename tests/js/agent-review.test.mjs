@@ -1646,6 +1646,43 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
   expect(w.App.agentReview.correctionUnchecked(done)).toBe(false);
 });
 
+// The sentences being checked rest in grey (agent-chat.css): when the pass
+// ends, the kept one goes back to ink before its mark comes, the corrected
+// one stays grey until its new words come in; a render in between waits.
+it('lets the checked sentences go back to ink before the marks and the new words come', () => {
+  vi.useFakeTimers();
+  const { window: w, body } = feedbackSetup();
+  w.App.streamReveal.active = () => true;
+  w.renderAuditChecking = vi.fn(target => {
+    target.innerHTML = '<span class="cx-claim is-agent-checking" data-findings="s1">Tickets cost 18 euros.</span> '
+      + '<span class="cx-claim is-agent-checking" data-findings="s2">The arena opened in 80 AD.</span>';
+    return 2;
+  });
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  const [fixed, kept] = body.querySelectorAll('.is-agent-checking');
+  w.App.agentReview.render(body, feedbackReview('done'), { key: 't1', ended: false });
+  expect([fixed.classList.contains('is-leaving'), kept.classList.contains('is-leaving')]).toEqual([false, true]);
+  w.App.agentReview.render(body, feedbackReview('done'), { key: 't1', ended: true });
+  vi.advanceTimersByTime(150);
+  expect([w.App.streamReveal.rewrite.mock.calls.length, w.renderStoredAuditMarks.mock.calls.length]).toEqual([0, 0]);
+  expect(body.textContent).toBe(ORIGINAL);
+  vi.advanceTimersByTime(100);
+  expect([w.App.streamReveal.rewrite.mock.calls.length, w.renderStoredAuditMarks.mock.calls.length]).toEqual([1, 1]);
+  expect(body.textContent).toBe(CORRECTED);
+  // A pass that checks again keeps its grey: the waiting render is dropped.
+  const again = feedbackSetup();
+  again.window.renderAuditChecking = w.renderAuditChecking;
+  again.window.App.agentReview.render(again.body, feedbackReview('checking'), { key: 't1', ended: false });
+  again.window.App.agentReview.render(again.body, feedbackReview('done'), { key: 't1', ended: false });
+  const checking = feedbackReview('checking');
+  checking.audit.feedback.findings[0].id = 's3';
+  again.window.App.agentReview.render(again.body, checking, { key: 't1', ended: false });
+  vi.advanceTimersByTime(1000);
+  expect(again.window.renderStoredAuditMarks).not.toHaveBeenCalled();
+  expect(again.body.querySelectorAll('.is-agent-checking.is-leaving')).toHaveLength(0);
+  vi.useRealTimers();
+});
+
 // A note whose words the answer does not hold (audit.unplaced; here a row a
 // reviewer quoted from a table the answer does not have): no list under the
 // answer, but a passage among the others under Notes, its quote as words, and

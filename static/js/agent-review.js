@@ -745,25 +745,39 @@
   }
   const stillMotion = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
     || App.userSettings?.get?.('stream_animation') === false;
-  // The sweep over the sentences being checked ends where they stood: a
-  // quiet tone over their old lines fades out while the marks or the new
-  // words come in (never a cut from grey to colour).
-  function checkingFade(body) {
-    const spans = body.querySelectorAll('.cx-claim.is-agent-checking');
-    if (!spans.length || stillMotion() || typeof Element.prototype.animate !== 'function') return () => {};
-    const rects = [...spans].flatMap(span => [...span.getClientRects()]).filter(rect => rect.width && rect.height);
-    return () => {
-      for (const rect of rects) {
-        const ghost = node('div', 'agent-checking-ghost');
-        ghost.setAttribute('aria-hidden', 'true');
-        Object.assign(ghost.style, { left: `${rect.left}px`, top: `${rect.top}px`, width: `${rect.width}px`, height: `${rect.height}px` });
-        document.body.append(ghost);
-        const fade = ghost.animate([{ opacity: 1 }, { opacity: 0 }], { duration: CHECKING_FADE_MS, easing: 'ease-out' });
-        fade.onfinish = fade.oncancel = () => ghost.remove();
-      }
-    };
+  // The pass over the findings ended: the sentences the agent checked go
+  // back from grey to ink (agent-chat.css .is-leaving) before this render
+  // lays its marks over them, so a mark never cuts in on the grey. One it
+  // corrected stays grey until its new words come in (stream-reveal.js
+  // rewrite). The newest render waits for that moment; a render that checks
+  // again cancels it. False when nothing has to go.
+  function leaveChecking(body, review, rewrites, rerender) {
+    const pending = body._checkingLeave;
+    if (pending?.done) { body._checkingLeave = null; return false; }
+    if (pending) { pending.rerender = rerender; return true; }
+    const spans = [...body.querySelectorAll('.cx-claim.is-agent-checking:not(.is-still)')];
+    if (!spans.length || stillMotion()) return false;
+    const findings = findingsOf(review.audit);
+    const rewritten = span => rewrites && (span.dataset.findings || '').split(' ').some(id => {
+      const finding = findings.get(id);
+      return finding?.on === 'answer' && finding.state === 'corrected';
+    });
+    for (const span of spans) if (!rewritten(span)) span.classList.add('is-leaving');
+    const leave = { rerender };
+    body._checkingLeave = leave;
+    setTimeout(() => {
+      if (body._checkingLeave !== leave) return;
+      leave.done = true;
+      if (body.isConnected) leave.rerender(); else body._checkingLeave = null;
+    }, App.motion?.ms?.('state') ?? 200);
+    return true;
   }
-  const CHECKING_FADE_MS = 260;
+  // Another render takes over: the grey stays where it still stands.
+  function keepChecking(body) {
+    if (!body._checkingLeave) return;
+    body._checkingLeave = null;
+    for (const span of body.querySelectorAll('.cx-claim.is-agent-checking.is-leaving')) span.classList.remove('is-leaving');
+  }
   // A view that sees no end of the pass (a tab that does not follow the run)
   // stops the sweep after the server's own deadline for it
   // (agent_review_feedback CORRECTION_SECONDS) and its save, and shows the
@@ -1270,21 +1284,27 @@
     // in it; until then the answer stands as reviewed, its review not shown.
     const correction = correctionOf(review, raw);
     const deferred = Boolean(correction) && selectedIn(body);
-    if (deferred) holdForSelection(body, review, evidence);
-    else if (correction) {
-      raw = correction.to.text;
-      body.dataset.markdown = raw;
-      body._corrected = { from: correction.from.text, to: raw };
-    }
+    const onScreen = correction && !deferred ? correction.to.text : raw;
     const version = deferred ? correction.from : review.versions?.find(v => v.id === review.answer_version);
-    const exact = Boolean(version) && raw === version.text && (deferred || version.hash === review.answer_hash);
+    const exact = Boolean(version) && onScreen === version.text && (deferred || version.hash === review.answer_hash);
     // While the agent may still correct the answer, the review shows nothing
     // at the sentences and the row goes on reviewing.
     const hold = deferred || withheld(review, evidence.ended);
-    // The agent checks findings now: their sentences carry the sweep, the line
+    // The agent checks findings now: their sentences carry the band, the line
     // under the row says how many (both only while this view follows the run).
     const pass = passOf(review.audit);
     const checking = !deferred && hold && exact && pass?.status === 'checking' ? pass.checking : [];
+    // Before anything changes on screen: the answer still shows what it
+    // showed, and the render that follows reads it the same way.
+    if (!checking.length && leaveChecking(body, review, Boolean(correction) && !deferred && App.streamReveal?.active?.(),
+      () => render(body, review, evidence))) return;
+    keepChecking(body);
+    if (deferred) holdForSelection(body, review, evidence);
+    else if (correction) {
+      raw = onScreen;
+      body.dataset.markdown = raw;
+      body._corrected = { from: correction.from.text, to: raw };
+    }
     const summary = !hold && exact ? passSummary(review.audit) : null;
     // The rewritten sentences come into view in the light only where this
     // answer stood under the running review a moment ago, never on a reload.
@@ -1372,7 +1392,6 @@
     // The marks of exactly this answer: of every reviewer once the review is
     // done, before that of those whose final round is in. A review that then
     // stops keeps them (notesOnly): a mark that showed never goes away.
-    const fadeChecking = checking.length ? () => {} : checkingFade(body);
     const place = () => overText(body, raw, () => {
       if (exact && !hold && (done || early || notesOnly)) window.renderStoredAuditMarks?.(body, review.audit, {
         openNotes: () => open('differences', { trigger: document.activeElement }) });
@@ -1381,7 +1400,6 @@
     });
     if (relight && App.streamReveal?.rewrite) App.streamReveal.rewrite(body, place);
     else place();
-    fadeChecking();
     body._markSignature = null;
     const count = auditCount(review.audit);
     // The answers the agent asked for (compare_models), read in their own
@@ -1424,7 +1442,7 @@
   function renderReview(body, review, evidence) {
     // A correction held for a selection is this render's to decide (renderAudit).
     body._heldCorrection = null;
-    if (!isAudit(review)) sweepUntil(body, '', null);
+    if (!isAudit(review)) { sweepUntil(body, '', null); keepChecking(body); }
     const version = review?.versions?.find(v => v.id === review.answer_version);
     const raw = body.dataset.markdown ?? version?.text;
     const turnSources = sourcesOf(body, review, evidence, raw);

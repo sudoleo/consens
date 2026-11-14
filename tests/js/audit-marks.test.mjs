@@ -265,8 +265,10 @@ it("says on the hover preview of a mark whether and how the agent looked at its 
   expect(plain.querySelector(".cx-card-note, .cx-card-reply")).toBeNull();
 });
 
-// While the agent checks findings: their sentences carry the loader's sweep,
-// nothing else; the text stays as it is and nothing becomes a control.
+// While the agent checks findings: their sentences carry the band of ink,
+// nothing else; the text stays as it is and nothing becomes a control. Each
+// names the findings it is checked for (agent-review.js keeps a corrected
+// one grey until its new words come).
 it("sweeps exactly the sentences of the findings the agent checks", () => {
   const { window, document } = boot(ANSWER);
   const body = document.getElementById("consensusAnswerBody");
@@ -278,6 +280,7 @@ it("sweeps exactly the sentences of the findings the agent checks", () => {
   const swept = [...body.querySelectorAll(".cx-claim")];
   expect(swept.map(span => span.textContent)).toEqual(["Tickets to the top cost 14 euros."]);
   expect(swept[0].className).toBe("cx-claim is-agent-checking");
+  expect(swept[0].dataset.findings).toBe("s2");
   expect(swept[0].hasAttribute("role") || swept[0].hasAttribute("tabindex")).toBe(false);
   expect(body.textContent).toBe(text);
   const still = boot(ANSWER);
@@ -287,7 +290,7 @@ it("sweeps exactly the sentences of the findings the agent checks", () => {
 });
 
 // A table body cell is a place of its own for the agent's correction: the
-// sweep stays inside the cell it checks, and the table keeps its cells.
+// band stays inside the cell it checks, and the table keeps its cells.
 it("sweeps a table cell the agent checks, and only that cell", () => {
   const { window, document } = boot(CELLS);
   const body = document.getElementById("consensusAnswerBody");

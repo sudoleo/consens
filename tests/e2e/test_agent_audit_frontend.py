@@ -518,8 +518,9 @@ def table_events(*stages, handover=True, feedback=True):
 @pytest.mark.parametrize("width", [1280, 390])
 def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, phase4_server, width):
     """With findings passed to the agent, a mark could go with the sentence
-    it marks: no mark yet, but the sentences the agent checks carry the table
-    loader's sweep, and one line under the row says how many."""
+    it marks: no mark yet, but the sentences the agent checks rest in grey
+    with a band of ink running through their letters, and one line under the
+    row says how many."""
     context, page, errors = open_audit_page(browser, phase4_server, width, False,
                                             feedback_events("checking", handover=False), hang_live=True)
     try:
@@ -534,10 +535,14 @@ def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, pha
         expect(swept.filter(has_text="The arena floor was rebuilt in 2023.")).not_to_have_count(0)
         expect(swept.filter(has_text="It held about 50,000 spectators")).to_have_count(0)
         expect(body.locator(".cx-claim.is-audit")).to_have_count(0)
-        # The loader's sweep, its pace; the text keeps its place and stays selectable.
+        # The band at the beat, in the letters (no surface); the text keeps
+        # its place and stays selectable.
         style = swept.first.evaluate("""el => { const s = getComputedStyle(el);
-            return [s.animationName, s.animationDuration, s.userSelect, s.pointerEvents]; }""")
-        assert style[0] == "agent-checking-sweep" and style[1] == "1.8s" and style[2] != "none", style
+            return [s.animationName, s.animationDuration, s.userSelect, s.color, s.backgroundClip,
+                s.backgroundColor]; }""")
+        beats = dict(zip(style[0].split(", "), style[1].split(", ")))
+        assert beats.get("agent-checking-sweep") == "1.8s" and style[2] != "none", style
+        assert style[3:] == ["rgba(0, 0, 0, 0)", "text", "rgba(0, 0, 0, 0)"], style
         height = body.evaluate("""el => { const before = el.getBoundingClientRect().height;
             el.querySelectorAll('.is-agent-checking').forEach(span => span.classList.remove('is-agent-checking'));
             const after = el.getBoundingClientRect().height;
@@ -604,7 +609,8 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
         rewrites = page.evaluate("() => window.__rewrites")
         assert len(rewrites) == 1 and rewrites[0] > 0, rewrites
         # The light is gone once the sentence stands, and nothing was left unseen.
-        assert page.evaluate("() => [...CSS.highlights.keys()].every(name => !CSS.highlights.get(name).size)")
+        page.wait_for_function("() => [...CSS.highlights.keys()].every(name => !CSS.highlights.get(name).size)",
+                               timeout=3000)
         _snapshot(page, f"findings-improved-{width}-{'dark' if dark else 'light'}")
         if width >= 1200:
             # The hover preview of the kept sentence says what the agent made of it.
@@ -858,7 +864,10 @@ def test_the_agent_corrects_a_table_cell_and_the_table_stands(browser, phase4_se
         expect(marked.filter(has_text=TABLE_FIXED_CELL)).to_have_count(0)
         expect(body.locator(".is-agent-checking")).to_have_count(0)
         assert body.evaluate("el => [...el.querySelector('table').rows].map(row => row.cells.length)") == [3, 3, 3, 3]
-        assert page.evaluate("() => [...CSS.highlights.keys()].every(name => !CSS.highlights.get(name).size)")
+        # The light goes out: the passage within REWRITE_MS, each letter's
+        # light for REWRITE_LIGHT_MS after it (stream-reveal.js).
+        page.wait_for_function("() => [...CSS.highlights.keys()].every(name => !CSS.highlights.get(name).size)",
+                               timeout=3000)
         _snapshot(page, f"table-corrected-{width}-{'dark' if dark else 'light'}")
         assert errors == []
     finally:

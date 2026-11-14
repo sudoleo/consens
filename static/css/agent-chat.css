@@ -686,52 +686,52 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
   .agent-review-findings-link:hover { background: var(--hover); color: var(--ink-2); }
 }
 @media (pointer: coarse) { .agent-review-findings-link { padding-block: 12px; } }
-/* The sentences the agent checks carry the table loader's material
-   (skeleton.css, .stream-table-pending): its tone and a band of light at its
-   beat, swept along each line. On text the loader's ink band all but
-   vanished, so the band is the house green a corrected sentence is then
-   rewritten in (stream-reveal.js), a tint with a soft rise and fall, never a
-   glow. It glides at an even pace: the loader's curve crossed the line in a
-   fifth of the beat, a flick too quick to catch beside the words. The text
-   stays readable (ink keeps over 6:1 on the band's peak in both themes) and
-   selectable, the span takes no room. Without motion (Settings or the
-   system) a stronger tone stands alone. Near black the same ink step reads
-   smaller, so the dark tones are a step stronger (as --hover-mix). A ghost
-   of the tone fades where the sweep ended. */
-.cx-claim.is-agent-checking {
-  --checking-ink: 12%;
-  padding: 0.1em 0;
-  border-radius: 3px;
-  background-color: color-mix(in srgb, var(--ink) var(--checking-ink), transparent);
-  -webkit-box-decoration-break: clone;
-  box-decoration-break: clone;
-}
-.dark-mode .cx-claim.is-agent-checking { --checking-ink: 15%; }
+/* The sentences the agent checks step back into a quiet grey, and a band
+   of ink runs through their letters at the beat, swept along each line at
+   an even pace. No surface, no line and no hue: green says agreement, and
+   the text is what is being checked. The span takes no room and stays
+   selectable; children (bold, links) take the transparent ink, so the band
+   runs through them too, while a pill and inline code keep their own
+   surface and rest in the grey, as a link's line does. The grey comes and
+   goes in --dur-state through a registered colour (agent-review.js adds
+   .is-leaving and waits for it), so a mark that stands afterwards never
+   cuts in on the grey. `clone`: with `slice`, Chrome drops the band on the
+   first line once a bold word sits in the sentence. A selection paints over
+   the clipped background, so selected letters take the ink. Without motion
+   (Settings or the system) the grey stands alone. */
+@property --checking-rest { syntax: '<color>'; inherits: true; initial-value: #767676; }
+.cx-claim.is-agent-checking { color: var(--ink-rest); }
+.cx-claim.is-agent-checking :is(strong, b, em, i, a:not(.src-ref)) { color: inherit; }
+.cx-claim.is-agent-checking :is(.src-ref, code) { color: var(--ink-rest); }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   .cx-claim.is-agent-checking:not(.is-still) {
-    --checking-ink: 10%;
-    background-image: linear-gradient(100deg, transparent 37%,
-      color-mix(in srgb, var(--stream-light) 9%, transparent) 41.5%,
-      color-mix(in srgb, var(--stream-light) 25%, transparent) 45.5%,
-      color-mix(in srgb, var(--stream-light) 34%, transparent) 50%,
-      color-mix(in srgb, var(--stream-light) 25%, transparent) 54.5%,
-      color-mix(in srgb, var(--stream-light) 9%, transparent) 58.5%,
-      transparent 63%);
+    --checking-rest: var(--ink-rest);
+    color: transparent;
+    background-image: linear-gradient(100deg, var(--checking-rest) 42%, var(--ink) 47%, var(--ink) 53%, var(--checking-rest) 58%);
     background-repeat: no-repeat;
     background-size: 300% 100%;
-    animation: agent-checking-sweep var(--dur-beat) var(--ease-linear) infinite;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+    transition: --checking-rest var(--dur-state) var(--ease-standard);
+    animation: agent-checking-in var(--dur-state) var(--ease-standard) backwards,
+      agent-checking-sweep var(--dur-beat) var(--ease-linear) infinite;
   }
-  .dark-mode .cx-claim.is-agent-checking:not(.is-still) { --checking-ink: 12%; }
+  .cx-claim.is-agent-checking.is-leaving:not(.is-still) { --checking-rest: var(--ink); }
+  .cx-claim.is-agent-checking:not(.is-still) :is(.src-ref, code) { color: var(--checking-rest); }
+  .cx-claim.is-agent-checking:not(.is-still) a:not([class]) { text-decoration-color: color-mix(in srgb, var(--checking-rest) 40%, transparent); }
+  .cx-claim.is-agent-checking:not(.is-still)::selection,
+  .cx-claim.is-agent-checking:not(.is-still) ::selection { color: var(--ink); }
 }
 @media (forced-colors: active) {
-  .cx-claim.is-agent-checking { background: none; text-decoration: underline dotted GrayText; }
+  .cx-claim.is-agent-checking { color: inherit; text-decoration: underline dotted GrayText; }
 }
+@keyframes agent-checking-in { from { --checking-rest: var(--ink); } }
 @keyframes agent-checking-sweep {
   0%, 10% { background-position: 100% 0; }
   70%, 100% { background-position: 0% 0; }
 }
-.agent-checking-ghost { position: fixed; z-index: 0; border-radius: 3px; background: color-mix(in srgb, var(--ink) 10%, transparent); pointer-events: none; }
-.dark-mode .agent-checking-ghost { background: color-mix(in srgb, var(--ink) 12%, transparent); }
 /* Too narrow for the score and every link in one line (an open Agent panel,
    German): the score takes its own line above, as on a phone. */
 @container agent-review (max-width: 720px) {

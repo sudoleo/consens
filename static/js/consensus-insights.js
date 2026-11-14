@@ -2634,9 +2634,9 @@
           const AUDIT_SEVERITY = { incomplete: 1, doubtful: 2, wrong: 3 };
 
           // While the agent checks findings (findings_to_agent, agent-review.js):
-          // the sentences of the findings `ids` carry the loader's sweep
+          // the sentences of the findings `ids` carry the band of ink
           // (agent-chat.css .is-agent-checking), no mark and no control;
-          // `still` without the sweep. Returns how many sentences it found.
+          // `still` without the band. Returns how many sentences it found.
           function renderAuditChecking(body, audit, ids, options = {}) {
             if (!body || !audit || !ids || !ids.size) return 0;
             const markedByBlock = new Map();
@@ -2649,7 +2649,15 @@
               const result = markSentence(body, claim.anchor, "is-agent-checking", markedByBlock.get(probe.block), claim.anchor_occurrence);
               if (!result) return;
               found += 1;
-              if (options.still) result.spans.forEach(function (span) { span.classList.add("is-still"); });
+              // The findings it checks: one the agent corrects keeps the
+              // sentence in grey until its new words come (agent-review.js).
+              const checked = claim.dissent.map(function (item) { return item && item.finding; })
+                .filter(function (id) { return ids.has(id); });
+              result.spans.forEach(function (span) {
+                if (options.still) span.classList.add("is-still");
+                const before = span.dataset.findings ? span.dataset.findings.split(" ") : [];
+                span.dataset.findings = [...new Set([...before, ...checked])].join(" ");
+              });
             });
             return found;
           }

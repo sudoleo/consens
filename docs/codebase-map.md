@@ -2897,8 +2897,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Ausschalten mitten im Stream: der direkte Maler schreibt, das Modul gibt die
   Antwort über `_markdownWrites` ab. Seit 2026-11-13 auch `rewrite(body,
   change)`: Sätze, die `change()` in einer fixierten Antwort neu schreibt (die
-  Korrektur des Agenten, siehe „Befunde an den Agenten“ in §4), kommen im selben
-  Licht ins Bild (Satzvergleich vorher/nachher, längste gemeinsame Folge, nur
+  Korrektur des Agenten, siehe „Befunde an den Agenten“ in §4), kommen Buchstabe
+  für Buchstabe ins Bild, aber in einem Licht ohne Farbton (`--rewrite-light`,
+  34 % Tinte auf dem Grund, in `:root` und `.dark-mode` deklariert; eigene
+  Highlight-Namen `rewrite-light-…`, je Licht ein Regelsatz), das je Buchstabe
+  `REWRITE_LIGHT_MS` (1100 ms) steht statt `lightMs` (Satzvergleich
+  vorher/nachher, längste gemeinsame Folge, nur
   die neuen Sätze, ab dem ersten Frame verborgen), was darunter steht, gleitet
   `SETTLE_MS` an seinen Platz (WAAPI-Transform); ohne `active()` steht die
   Änderung einfach. Tests: `tests/js/stream-reveal.test.mjs`.
@@ -7009,18 +7013,31 @@ Solange der Durchgang des Agenten nicht `done` ist, zeigt die Antwort keine
 Marke, Notes wartet, und während die Prüfer prüfen sagt die Leiste weiter
 „Reviewing the answer…“ (`agent-review.js` `withheld`). Prüft der Agent
 (`feedback.status` `checking`), tragen genau die Sätze seiner Befunde (die
-Claims, deren `dissent[].finding` einer mit `state` `checking` ist) den
-Schimmer des Tabellen-Ladens (`consensus-insights.js` `renderAuditChecking`:
-`.cx-claim.is-agent-checking` ohne Rolle und Klick, `agent-chat.css`: Ton von
-`.skeleton` mit einem Lichtband im Hausgrün `--stream-light`, gleichmäßig
-(`--ease-linear`) im Takt `--dur-beat` über jede Zeile; ohne Bewegung durch
-System oder `stream_animation` ein kräftigerer Ton allein, `.is-still`), die
+Claims, deren `dissent[].finding` einer mit `state` `checking` ist) ein Band
+aus Tinte in der Schrift (`consensus-insights.js` `renderAuditChecking`:
+`.cx-claim.is-agent-checking` ohne Rolle und Klick, `data-findings` mit den
+geprüften Befunden; `agent-chat.css`: keine Fläche, keine Linie, keine Farbe;
+die Schrift ist transparent, ein Verlauf Ruhegrau → `--ink` → Ruhegrau läuft
+per `background-clip: text` gleichmäßig (`--ease-linear`) im Takt
+`--dur-beat` durch jede Zeile, `box-decoration-break: clone`, weil Chrome mit
+`slice` bei einem fetten Wort die erste Zeile verliert; fett, kursiv und Links
+erben die transparente Schrift, Quellen-Pills und Inline-Code ruhen im Grau.
+Ruhegrau ist der Token `--ink-rest`: hell `#767676` (4,5:1 auf Weiß; `--ink-3`
+läge zu nah an der Tinte), dunkel `--ink-3`. Ohne Bewegung durch System oder
+`stream_animation` steht der Satz nur im Ruhegrau, `.is-still`; `forced-colors`
+unterstreicht gepunktet), die
 Prüfer-Marken der Leiste gehen, und eine Zeile darunter sagt „The agent is checking 3 notes…“ (die
 Anmerkungen der geprüften Befunde, `checkingNotes`; `.agent-review-findings`,
 die Live-Region sagt es einmal). Sichtbar heißt es überall „notes“ /
-„Anmerkungen“, nie „findings“ / „Befunde“. Am Ende gleitet der
-Ton über den alten Zeilen aus (`checkingFade`, `.agent-checking-ghost`), die
-Marken streichen sich auf oder die neuen Sätze laufen im Licht ein. Danach
+„Anmerkungen“, nie „findings“ / „Befunde“. Das Grau kommt und geht in
+`--dur-state` über die registrierte Farbe `--checking-rest` (`@property`,
+Einstieg `agent-checking-in`). Am Ende (`agent-review.js` `leaveChecking`)
+gleiten die geprüften Sätze erst in die Tinte zurück (`.is-leaving`), und der
+Render mit Marken oder Korrektur wartet so lange (`_checkingLeave`; ein
+neuerer Render ersetzt den wartenden, einer, der wieder prüft, bricht ihn ab,
+`keepChecking`): Eine Marke kommt nie als Schnitt aus dem Grau. Ein Satz,
+dessen Befund `corrected` ist, bleibt bis dahin grau, und seine neuen
+Buchstaben laufen im farblosen Licht von `rewrite()` ein. Danach
 sagt dieselbe Zeile, was daraus wurde, als Knopf zu Notes (`passSummary`):
 „1 sentence improved · 3 notes open“ (verbessert = Befunde `corrected`, offen =
 die stehenden Anmerkungen wie in Notes), bei `skipped` ruhig „Correction not

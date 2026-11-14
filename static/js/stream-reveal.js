@@ -22,8 +22,10 @@
 // so it has its own lead and the short end of the light.
 // A fixed answer whose sentences change in place (the agent corrected them
 // after its review) shows them the same way: rewrite(body, change) brings
-// the sentences change() wrote anew into view in the light, and what moved
-// below them glides to its new place instead of jumping.
+// the sentences change() wrote anew into view, and what moved below them
+// glides to its new place instead of jumping. Their light has no hue
+// (--rewrite-light) and stands longer (REWRITE_LIGHT_MS): green says
+// agreement, and these are the sentences a reviewer doubted.
 // Exports: App.streamReveal { active, stream, settle, rewrite }.
 // =====================================================================
 (() => {
@@ -77,9 +79,13 @@
   const clamp01 = x => Math.max(0, Math.min(1, x));
   const pct = x => `${(clamp01(x) * 100).toFixed(1)}%`;
   const fade = (color, share) => `color-mix(in srgb, ${color} ${pct(share)}, transparent)`;
+  // The two lights, --stream-light and --rewrite-light (variables.css): a
+  // streamed answer's and a rewritten sentence's, each with its own
+  // highlight rules, named after it. Their values without the stylesheet:
+  const LIGHT_FALLBACK = { stream: "var(--agree)", rewrite: "var(--ink-3)" };
   // A letter `t` (0 to 1) into its light, in the text color it ends in.
-  function lightRule(t, color) {
-    const lit = `color-mix(in oklab, var(--stream-light, var(--agree)) ${pct(1 - ease(t))}, ${color})`;
+  function lightRule(t, color, light) {
+    const lit = `color-mix(in oklab, var(--${light}-light, ${LIGHT_FALLBACK[light]}) ${pct(1 - ease(t))}, ${color})`;
     return `color: ${fade(lit, ease(clamp01(t / LIGHT_APPEAR)))};`;
   }
   const lightMs = speed => Math.min(LIGHT_MAX_MS, Math.max(LIGHT_MIN_MS, (LIGHT_TRAIL_CHARS / Math.max(1, speed)) * 1000));
@@ -158,21 +164,22 @@
     return sheet;
   }
 
-  // Every text color in the answer gets its own rules, so a link or a muted
-  // word comes into its own color, not into the body's ink. Step 0 is a
-  // letter not yet in view.
-  function highlightFor(color, step) {
-    let index = colorIndex.get(color);
+  // Every text color in the answer gets its own rules per light, so a link
+  // or a muted word comes into its own color, not into the body's ink. Step
+  // 0 is a letter not yet in view.
+  function highlightFor(color, step, light) {
+    const name = `${light}-light`;
+    let index = colorIndex.get(`${name} ${color}`);
     if (index === undefined) {
       index = colorIndex.size;
-      colorIndex.set(color, index);
-      sheetFor().insertRule(`::highlight(stream-light-${index}-0) { color: transparent; }`);
+      colorIndex.set(`${name} ${color}`, index);
+      sheetFor().insertRule(`::highlight(${name}-${index}-0) { color: transparent; }`);
       for (let at = 1; at <= STEPS; at += 1) {
         const t = ((at - 0.5) / STEPS) ** STEP_CURVE;
-        sheetFor().insertRule(`::highlight(stream-light-${index}-${at}) { ${lightRule(t, color)} }`);
+        sheetFor().insertRule(`::highlight(${name}-${index}-${at}) { ${lightRule(t, color, light)} }`);
       }
     }
-    const key = `stream-light-${index}-${step}`;
+    const key = `${name}-${index}-${step}`;
     let highlight = highlights.get(key);
     if (!highlight) {
       highlight = new Highlight();
@@ -214,7 +221,7 @@
   }
 
   // The letters from `from` to `to` in `step`, across text nodes.
-  function paintStep(state, from, to, step, colorOf) {
+  function paintStep(state, from, to, step, colorOf, light) {
     // The last node that starts at or before `from`.
     let low = 0;
     let high = state.starts.length - 1;
@@ -233,7 +240,7 @@
       const range = new Range();
       range.setStart(node, start);
       range.setEnd(node, end);
-      highlightFor(colorOf(parent), step).add(range);
+      highlightFor(colorOf(parent), step, light).add(range);
     }
   }
 
@@ -259,7 +266,7 @@
         for (let index = span.from + 1; index <= span.to; index += 1) {
           const step = index < span.to ? stepAt(index) : NaN;
           if (step === runStep) continue;
-          if (runStep >= 0) paintStep(state, runFrom, index, runStep, colorOf);
+          if (runStep >= 0) paintStep(state, runFrom, index, runStep, colorOf, state.light || "stream");
           runFrom = index;
           runStep = step;
         }
@@ -424,8 +431,11 @@
 
   // --- A fixed answer rewritten in place ------------------------------------
   // A rewritten passage comes into view within REWRITE_MS, at a stream's pace;
-  // what moves below it glides for SETTLE_MS.
+  // what moves below it glides for SETTLE_MS. Each letter stays in its light
+  // for REWRITE_LIGHT_MS: without a hue, the light needs that long to be
+  // seen at all.
   const REWRITE_MS = 900;
+  const REWRITE_LIGHT_MS = 1100;
   const SETTLE_MS = 220;
   const SETTLE_EASE = "cubic-bezier(0.2, 0, 0, 1)";
   const BLOCKS = ["p", "li", "h1", "h2", "h3", "h4", "h5", "h6", "td", "th", "blockquote", "pre", "dt", "dd",
@@ -506,7 +516,7 @@
   }
 
   // `change()` rewrites some sentences of the fixed answer in `body`. Those
-  // it wrote anew come into view letter by letter in the light, one after
+  // it wrote anew come into view letter by letter in their light, one after
   // another; the rest stands as it was. Blocks below them, in the answer and
   // after it, glide from where they stood. Nothing scrolls, and the first
   // frame already hides the new letters. Without the look (active() false)
@@ -526,9 +536,9 @@
       const letter = 1000 / speed;
       const now = performance.now();
       let start = now;
-      const state = { body, nodes: after.nodes, starts: after.starts, spans: [] };
+      const state = { body, nodes: after.nodes, starts: after.starts, spans: [], light: "rewrite" };
       for (const sentence of fresh) {
-        state.spans.push({ from: sentence.from, to: sentence.to, start, letter, ms: lightMs(speed) });
+        state.spans.push({ from: sentence.from, to: sentence.to, start, letter, ms: REWRITE_LIGHT_MS });
         start += (sentence.to - sentence.from) * letter;
       }
       relit.add(state);

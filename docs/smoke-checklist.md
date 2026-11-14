@@ -244,12 +244,14 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       einer leicht veralteten Zahl („Was kostet ein Ticket fürs Kolosseum?“)
       → die Antwort steht sofort, ohne Marken; die Leiste sagt „Antwort wird
       geprüft…“, dann „Der Agent prüft 2 Anmerkungen…“ in einer Zeile darunter,
-      und genau deren Sätze tragen den grauen Ton des Tabellen-Ladens, über
-      den ruhig ein grünes Lichtband gleitet, auf Anhieb zu sehen, hell wie
-      dunkel (lesbar, markierbar, nichts verrutscht; mit „Streaming-Animation“
-      aus nur ein etwas kräftigerer grauer Ton); nie erscheint eine
-      Markenfarbe, die wieder verschwindet. Danach: nur der korrigierte Satz läuft im grünen
-      Licht neu ein, der Schimmer klingt aus, der Text darunter gleitet,
+      und genau deren Sätze treten in ein Grau zurück, durch dessen
+      Buchstaben ruhig ein Band aus Tinte läuft, ohne Fläche und ohne Farbe,
+      auf Anhieb zu sehen, hell wie dunkel (lesbar, markierbar, auch fette
+      Wörter, Links und Tabellenzellen; nichts verrutscht; mit
+      „Streaming-Animation“ aus nur das Grau); nie erscheint eine
+      Markenfarbe, die wieder verschwindet. Danach: die übrigen Sätze gleiten
+      zurück in die Tinte, bevor ihre Marken kommen; nur der korrigierte Satz
+      läuft in einem farblosen Licht neu ein, der Text darunter gleitet,
       nichts scrollt, kein Panel öffnet sich, der Fokus bleibt; die Zeile sagt
       „1 Satz verbessert · 3 Anmerkungen offen“ und öffnet per Klick Notes;
       bestrittene Stellen tragen ihre Marke, schon die Hover-Vorschau nennt

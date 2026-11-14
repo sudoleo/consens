@@ -65,6 +65,14 @@
   /* The light a streamed answer's newest letters arrive in, the house green
      of the Send button's light (stream-reveal.js). */
   --stream-light: var(--agree);
+  /* A sentence rewritten in a fixed answer arrives in a light without hue:
+     the green says agreement and stood on the sentence a reviewer doubted.
+     Declared in both themes, so --ink and --ground resolve in each. */
+  --rewrite-light: color-mix(in srgb, var(--ink) 34%, var(--ground));
+  /* The grey a sentence the agent checks rests in (agent-chat.css). Beside
+     black ink, --ink-3 is too close to it to read as stepped back; this is
+     the lightest grey that still reads as text (4.5:1 on white). */
+  --ink-rest: #767676;
 
   /* Interaction tone steps. foundation.css turns them into --hover and
      --selected (an ink wash, so the step reads on any surface). */
@@ -198,6 +206,8 @@
   --dispute-bg: rgba(240, 127, 118, 0.17);
   /* On the dark ground the light is brighter than the ink it cools to. */
   --stream-light: color-mix(in oklab, var(--agree) 70%, white);
+  --rewrite-light: color-mix(in srgb, var(--ink) 34%, var(--ground));
+  --ink-rest: var(--ink-3);
 
   --hover-mix: 7%;
   --selected-mix: 12%;

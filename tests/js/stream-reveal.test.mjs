@@ -290,7 +290,7 @@ describe("stream-reveal: the light", () => {
 
 // The agent corrected sentences of its fixed answer after the review
 // (findings_to_agent, agent-review.js): only they come into view again, in
-// the same light; what moved below them glides instead of jumping.
+// a light without hue; what moved below them glides instead of jumping.
 describe("stream-reveal: a fixed answer rewritten in place", () => {
   const BEFORE = "Tickets cost 18 euros. The arena opened in 80 AD.\n\nIt held about 50,000 spectators.";
   const AFTER = "Tickets cost 24 euros since 2025. The arena opened in 80 AD.\n\nIt held about 50,000 spectators.";
@@ -319,6 +319,24 @@ describe("stream-reveal: a fixed answer rewritten in place", () => {
     expect(lit()).toBeGreaterThan(0);
     run(3000);
     expect(unseen()).toBe(0);
+    expect(lit()).toBe(0);
+  });
+
+  it("brings them in a light of their own, without the stream's green, and lets it stand longer", () => {
+    const { window, reveal, el, run, lit } = boot();
+    window.injectMarkdown(el, BEFORE, []);
+    reveal.rewrite(el, () => window.morphMarkdown(el, AFTER));
+    expect([...window.CSS.highlights.keys()].every(name => name.startsWith("rewrite-light-"))).toBe(true);
+    const rules = [...window.document.adoptedStyleSheets[0].rules].map(rule => rule.cssText ?? String(rule));
+    const lights = rules.filter(rule => !rule.includes("color: transparent"));
+    expect(lights.length).toBeGreaterThan(0);
+    expect(lights.every(rule => rule.includes("var(--rewrite-light") && !rule.includes("--stream-light"))).toBe(true);
+    // 33 letters at the slowest pace (40 a second): the last one comes in
+    // at 800 ms; in the stream's longest light (750 ms) it would stand by
+    // 1550 ms, in its own (1100 ms) only by 1900 ms.
+    run(1750);
+    expect(lit()).toBeGreaterThan(0);
+    run(3000);
     expect(lit()).toBe(0);
   });
 
