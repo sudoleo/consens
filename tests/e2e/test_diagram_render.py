@@ -28,10 +28,12 @@ def _block(source):
     return f'<pre><code class="language-mermaid">{source}\n</code></pre>'
 
 
-def _page(browser, body, width='680px', viewport=None, init=None):
+def _page(browser, body, width='680px', viewport=None, init=None, now=None):
     context = browser.new_context(**({'viewport': viewport} if viewport else {}))
     errors, requested, refused = [], [], []
     page = context.new_page()
+    if now:
+        page.clock.set_fixed_time(now)
     page.on('pageerror', lambda error: errors.append(str(error)))
     if init:
         # The page's policy runs no inline script; this one is the browser's.
@@ -195,6 +197,25 @@ def test_a_gantt_chart_spans_the_answer_and_a_sequence_ends_with_its_last_messag
         assert sizes[1][1] < 400 and sizes[1][2]
         svg = _drawing(page, '.md-diagram:nth-child(1)')
         assert 'Jensen Huang' in svg and 'Untersuchung' in svg
+        assert not errors
+    finally:
+        context.close()
+
+
+def test_a_gantt_chart_marks_today_only_between_its_bars(browser):
+    current = 'gantt\n  dateFormat YYYY-MM-DD\n  section Lauf\n  Prüfung :a1, 2026-11-10, 4d'
+    past = 'gantt\n  dateFormat YYYY-MM-DD\n  section Lauf\n  Prüfung :a1, 2019-03-04, 4d'
+    context, page, errors, _requested, _refused = _page(
+        browser, _block(current) + _block(past), now='2026-11-12T12:00:00Z')
+    try:
+        # Mermaid draws its line for today wherever today falls, and the drawing
+        # grew to reach it: some 160 px a day here, years later too wide to draw.
+        expect(page.locator('.md-diagram.is-drawn')).to_have_count(2, timeout=20000)
+        widths = page.evaluate('''() => [...document.querySelectorAll(".md-diagram")].map(place =>
+            Number(place.style.getPropertyValue("--diagram-width")))''')
+        assert all(700 <= width <= 800 for width in widths), widths
+        assert 'class="today"' in _drawing(page, '.md-diagram:nth-child(1)')
+        assert 'class="today"' not in _drawing(page, '.md-diagram:nth-child(2)')
         assert not errors
     finally:
         context.close()

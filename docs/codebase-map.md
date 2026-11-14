@@ -2629,8 +2629,9 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     Gantt-Aufgabe, Heute-Linie). `themeVariables()` setzt Mermaids Farben,
     `themeCSS()` die Regeln der App darüber (Mermaids `themeCSS` des Modells
     bleibt gesperrt), `tidy()` räumt das SVG auf (Filter weg, runde Ecken,
-    doppelte oder zu dichte Gantt-Datumsmarken weg, Lebenslinien einer
-    Sequenz auf ihre Höhe gekürzt, Titel eines Zeitstrahls in Überschriftgröße).
+    doppelte oder zu dichte Gantt-Datumsmarken weg, die Heute-Linie nur
+    zwischen erstem und letztem Balken, Lebenslinien einer Sequenz auf ihre
+    Höhe gekürzt, Titel eines Zeitstrahls in Überschriftgröße).
     `picture()` misst die Tinte der Zeichnung in einem verborgenen Platz der
     Seite (`inked()`, nachdem alles entfernt ist, was laden oder laufen
     könnte) und vergrößert den Rahmen darauf: Titel und Wörter neben einem

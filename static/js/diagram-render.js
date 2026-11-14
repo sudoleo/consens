@@ -365,6 +365,23 @@
     svg.querySelectorAll("line.actor-line, line[data-et='life-line']").forEach(line => {
       if (Number(line.getAttribute("y2")) > bottom) line.setAttribute("y2", String(bottom - 4));
     });
+    // A Gantt chart marks today with a line wherever today falls, also
+    // months beside its bars, and the drawing grows to reach whatever has ink
+    // (picture()): a chart of last spring came out too wide to draw at all.
+    // The line stays only from its first bar's start to its last bar's end.
+    let from = Infinity, to = -Infinity;
+    svg.querySelectorAll("rect.task").forEach(bar => {
+      const x = Number(bar.getAttribute("x")), width = Number(bar.getAttribute("width"));
+      if (Number.isFinite(x) && Number.isFinite(width)) {
+        from = Math.min(from, x);
+        to = Math.max(to, x + width);
+      }
+    });
+    svg.querySelectorAll("g.today").forEach(today => {
+      const line = today.querySelector("line");
+      const at = line ? Number(line.getAttribute("x1")) : NaN;
+      if (!(at >= from - 1 && at <= to + 1)) today.remove();
+    });
     // A Gantt chart's ticks every twelve hours under a format of days say
     // every day twice, and on a phone its dates run into each other: a tick
     // that repeats the one before or stands too close to it goes.
