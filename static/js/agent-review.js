@@ -686,7 +686,8 @@
   // everywhere the page speaks of this pass ("notes", as under Notes).
   const checkingNotes = pass => pass.checking.reduce((sum, finding) =>
     sum + Math.max(1, Array.isArray(finding.notes) ? finding.notes.length : 0), 0);
-  const checkingWords = count => (count === 1 ? 'The agent is checking 1 note…' : `The agent is checking ${count} notes…`);
+  const checkingWords = count => (count === 1 ? 'The agent is refining the answer with 1 note…'
+    : `The agent is refining the answer with ${count} notes…`);
   // What came of a finished pass: its head (sentences improved, or that a
   // correction was not possible: the user's Stop says so, every other reason
   // alike) and the notes still open, each a phrase of its own for the
@@ -705,7 +706,9 @@
   }
   // The head of a turn's activity (agent-activity.js), with notes passed to
   // the agent: while the review or the agent's pass goes on after the answer
-  // stood (`ended` false), that it is still being checked; then how the check
+  // stood (`ended` false), that it is still being refined, `live` (the head
+  // keeps the look of a running step: the answer may still change under the
+  // reader's eyes, and a quiet note there went unseen); then how the check
   // ended, in the sense of the line under the answer: checked (by every
   // reviewer or in part) and the one thing that came of it, stopped by the
   // user, or not checked (the reviewers did not finish). Null without such a
@@ -713,10 +716,9 @@
   function headNote(review, ended) {
     if (!isAudit(review) || !review.audit.feedback) return null;
     const audit = review.audit, pass = passOf(audit);
-    const checking = () => {
-      const count = pass.status === 'checking' ? checkingNotes(pass) : 0;
-      return [!count ? 'checking…' : count === 1 ? 'checking 1 note…' : `checking ${count} notes…`];
-    };
+    // One phrase for the reviewers' round and the agent's pass: to the
+    // reader both are the answer being refined; the line under it counts.
+    const checking = () => ['refining…'];
     if (ended === false && (!AUDIT_ENDED.has(review.status) || pass.status !== 'done')) return { live: true, parts: checking() };
     // A review this view saw no end of (a saved turn still under way).
     if (!AUDIT_ENDED.has(review.status)) return { live: false, parts: checking() };

@@ -7026,7 +7026,7 @@ Ruhegrau ist der Token `--ink-rest`: hell `#767676` (4,5:1 auf Weiß; `--ink-3`
 läge zu nah an der Tinte), dunkel `--ink-3`. Ohne Bewegung durch System oder
 `stream_animation` steht der Satz nur im Ruhegrau, `.is-still`; `forced-colors`
 unterstreicht gepunktet), die
-Prüfer-Marken der Leiste gehen, und eine Zeile darunter sagt „The agent is checking 3 notes…“ (die
+Prüfer-Marken der Leiste gehen, und eine Zeile darunter sagt „The agent is refining the answer with 3 notes…“ (die
 Anmerkungen der geprüften Befunde, `checkingNotes`; `.agent-review-findings`,
 die Live-Region sagt es einmal). Sichtbar heißt es überall „notes“ /
 „Anmerkungen“, nie „findings“ / „Befunde“. Das Grau kommt und geht in
@@ -7047,12 +7047,18 @@ Kopf („1 sentence improved“) und den Schritt eines gescheiterten Durchgangs
 „Couldn’t check the reviewers’ notes“ (`correctionUnchecked`). Der Kopf über
 der Antwort (`agent-activity.js` `setNote`, `agent-review.js` `headNote`, nur
 nach der Übergabe, nicht während der Lauf läuft) sagt es dort, wo der Leser
-liest: „Answer in 14s · checking…“, dann „… · checking 3 notes…“, am Ende „…
-· checked · 1 sentence improved“ (sonst „2 notes open“, „no objections“,
+liest: „Answer in 14s · refining…“, solange Prüfer und Agent arbeiten (eine
+Wendung für beide; die Zeile unter der Antwort zählt die Anmerkungen), am Ende
+„… · checked · 1 sentence improved“ (sonst „2 notes open“, „no objections“,
 „correction not possible“/„… stopped“; „checked in part“ bei `partial`,
 „check stopped“ bei `cancelled`, „not checked“ bei `failed`/`missing`/`off`, ein
-gespeicherter, noch laufender bleibt „checking…“; nie fällt er nach
-„checking…“ auf „Thought for“ zurück), in einer Zeile (`.has-check-note`: kein
+gespeicherter, noch laufender bleibt „refining…“; nie fällt er nach
+„refining…“ auf „Thought for“ zurück). Solange diese Seite die Prüfung
+verfolgt (`headNote` `live`), sieht die Wendung aus wie ein laufender Schritt:
+Tinte statt `--ink-3` und der Glanz der Live-Zeile (`.agent-activity-after.is-live`,
+`label-shine`), damit eine Antwort, die sich gleich ändert, nicht überrascht;
+eine eigene Live-Zeile über der stehenden Antwort würde sie verschieben. In
+einer Zeile (`.has-check-note`: kein
 Umbruch, schmal mit „…“, die Zeit dann Text wie die Wörter, damit „…“ nie die
 Zahl verdeckt). Zeit und Worte ändern sich in einem Schritt und gleiten einmal
 (`setTitle(…, note)`, `writeNote`); ein wachsender Kopf beginnt mindestens so

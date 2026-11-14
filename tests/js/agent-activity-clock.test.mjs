@@ -178,20 +178,21 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     { id: "s2", on: "answer", kind: "doubtful", voices: 1, hard: false, state, notes: [note("Two."), note("Too.")], ...extra }];
   const head = host => host.querySelector(".agent-activity-title").textContent;
 
-  it("says the answer is still being checked, then what came of it, at the time it stood", () => {
+  it("says the answer is still being refined, in the look of a running step, then what came of it, at the time it stood", () => {
     const { app, host, activity } = boot();
     const render = (rev, ended) => activity.render(host, { running: false, status: "succeeded", elapsedMs: 14300, events: [],
       review: rev, reviewEnded: ended });
     render(review({ status: "running", feedback: { status: "live", findings: findings("open") } }), false);
-    expect(head(host)).toBe("Answer in 14s · checking…");
+    expect(head(host)).toBe("Answer in 14s · refining…");
     expect(host.querySelector(".agent-activity").classList.contains("has-check-note")).toBe(true);
-    // Each phrase alone for the translation.
-    expect([...host.querySelectorAll(".agent-activity-after > span")].map(span => span.textContent)).toEqual(["checking…"]);
+    // Each phrase alone for the translation; live while the check goes on.
+    const after = () => host.querySelector(".agent-activity-after");
+    expect([...after().querySelectorAll(":scope > span")].map(span => span.textContent)).toEqual(["refining…"]);
+    expect(after().classList.contains("is-live")).toBe(true);
+    // The reviewers' round and the agent's pass read as one: the line under the answer counts the notes.
     render(review({ feedback: { status: "checking", findings: findings("checking", { delivered: "final" }) } }), false);
-    expect(head(host)).toBe("Answer in 14s · checking 3 notes…");
-    const one = review({ feedback: { status: "checking", findings: findings("checking", { delivered: "final" }).slice(0, 1) } });
-    render(one, false);
-    expect(head(host)).toBe("Answer in 14s · checking 1 note…");
+    expect(head(host)).toBe("Answer in 14s · refining…");
+    expect(after().classList.contains("is-live")).toBe(true);
     // Settled: the one thing that came of it; the rest stands under the answer.
     const improved = review({ feedback: { status: "done", findings: [
       { ...findings("corrected", { delivered: "final" })[0], before: "First.", after: "First, fixed." },
@@ -218,7 +219,7 @@ describe("activity head of an answer whose check goes on after it stood", () => 
   });
 
   // However the check ends, the head says it, in the sense of the line under
-  // the answer: never "Thought for" after "checking…" (Max's run of
+  // the answer: never "Thought for" after "refining…" (Max's run of
   // 2026-11-13: the one reviewer ran out of time, the head fell back).
   it("ends with a true word for every end of the check", () => {
     const { app, host, activity } = boot();
@@ -239,14 +240,16 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     // The user stopped it ("Review stopped").
     expect(end("cancelled")).toBe("Answer in 17s · check stopped");
     // A saved turn whose review this view saw no end of.
-    expect(end("running", { status: "live", findings: [] })).toBe("Answer in 17s · checking…");
+    expect(end("running", { status: "live", findings: [] })).toBe("Answer in 17s · refining…");
+    // It does not follow that check: nothing pretends to run.
+    expect(host.querySelector(".agent-activity-after").classList.contains("is-live")).toBe(false);
     expect(host.querySelector(".agent-activity").classList.contains("has-check-note")).toBe(true);
     app.dom.window.close();
   });
 
   // From the run's clock to the check and on, each state whole: never the
   // verb without its number (Max's run: "Answer in" with a gap, a second
-  // before "Answer in 17s · checking…").
+  // before "Answer in 17s · refining…").
   it("never shows its words without the time on the way from the run to the check", () => {
     const { app, host, activity } = boot();
     const states = [];
@@ -263,12 +266,12 @@ describe("activity head of an answer whose check goes on after it stood", () => 
       findings: findings("checking", { delivered: "final" }) } }), reviewEnded: false });
     render({ running: false, elapsedMs: 17000, review: review({ feedback: { status: "done",
       findings: findings("disputed", { delivered: "final", reason: "So." }) } }), reviewEnded: true });
-    expect(states).toEqual(["Reviewing · 16s", "Answer in 17s · checking…", "Answer in 17s · checking…",
-      "Answer in 17s · checking 3 notes…", "Answer in 17s · checked · 2 notes open"]);
+    expect(states).toEqual(["Reviewing · 16s", "Answer in 17s · refining…", "Answer in 17s · refining…",
+      "Answer in 17s · refining…", "Answer in 17s · checked · 2 notes open"]);
     // A head that never knew its time says what it is, never "Answer in" alone.
     const fresh = boot();
     fresh.activity.render(fresh.host, { running: false, status: "succeeded", elapsedMs: null, events: [], review: live, reviewEnded: false });
-    expect(head(fresh.host)).toBe("Answer ready · checking…");
+    expect(head(fresh.host)).toBe("Answer ready · refining…");
     fresh.app.dom.window.close();
     app.dom.window.close();
   });

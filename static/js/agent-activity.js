@@ -262,7 +262,7 @@
     const { verb, gap, time } = titleParts(ms, now, status, Boolean(note));
     const label = `${verb}${gap}${time}`;
     const parts = note?.parts || [];
-    const said = parts.join('\n');
+    const said = `${parts.join('\n')}${note?.live ? '\nlive' : ''}`;
     const noted = (view.checkNoteKey || '') !== said;
     if (view.title.dataset.label === window.App.t(label) && !noted) return;
     view.title.dataset.label = label;
@@ -294,7 +294,7 @@
     if (gapEl.textContent !== gap) gapEl.textContent = gap;
     if (timeEl.textContent !== window.App.t(time)) timeEl.textContent = time;
     timeEl.dataset.unit = slot;
-    if (noted) writeNote(view, parts);
+    if (noted) writeNote(view, parts, said, Boolean(note?.live));
     if (!resize) return;
     // The chevron glides to its new place while the new words open up (none
     // with reduced motion, motion()); the words keep to one line meanwhile.
@@ -335,11 +335,12 @@
     next();
   }
   // After the time, what the check of an answer says that goes on after it
-  // stood (agent-review.js headNote: "checking…", then "checked · 1 sentence
+  // stood (agent-review.js headNote: "refining…", then "checked · 1 sentence
   // improved"), each phrase alone for the translation (setTitle). Nothing
-  // without such a check.
-  function writeNote(view, parts) {
-    view.checkNoteKey = parts.join('\n');
+  // without such a check. `live`: the check still goes on, and the phrase
+  // looks like a running step (agent-chat.css .is-live).
+  function writeNote(view, parts, key, live) {
+    view.checkNoteKey = key;
     view.details.classList.toggle('has-check-note', parts.length > 0);
     if (!parts.length) {
       view.checkNote?.remove();
@@ -351,6 +352,7 @@
         view.title.append(view.checkNote);
       }
       view.checkNote.replaceChildren();
+      view.checkNote.classList.toggle('is-live', live);
       for (const part of parts) {
         const phrase = document.createElement('span');
         phrase.textContent = part;

@@ -243,7 +243,8 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Zeile weg, die Einstellungssuche findet sie dann nicht). Eine Frage mit
       einer leicht veralteten Zahl („Was kostet ein Ticket fürs Kolosseum?“)
       → die Antwort steht sofort, ohne Marken; die Leiste sagt „Antwort wird
-      geprüft…“, dann „Der Agent prüft 2 Anmerkungen…“ in einer Zeile darunter,
+      geprüft…“, dann „Der Agent verfeinert die Antwort anhand von 2
+      Anmerkungen…“ in einer Zeile darunter,
       und genau deren Sätze treten in ein Grau zurück, durch dessen
       Buchstaben ruhig ein Band aus Tinte läuft, ohne Fläche und ohne Farbe,
       auf Anhieb zu sehen, hell wie dunkel (lesbar, markierbar, auch fette
@@ -257,8 +258,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       bestrittene Stellen tragen ihre Marke, schon die Hover-Vorschau nennt
       „Der Agent widerspricht“ mit Grund, nicht geprüfte „Vom Agenten nicht
       geprüft“ mit Grund, wo er bekannt ist. Der Kopf über der Antwort sagt
-      dabei „Antwort in 14 Sek. · wird geprüft…“, dann „… · prüft 2
-      Anmerkungen…“, am Ende „… · geprüft · 1 Satz verbessert“, in einer
+      dabei „Antwort in 14 Sek. · wird verfeinert…“ in Tinte mit dem Glanz
+      eines laufenden Schritts, gut zu sehen, bis Prüfer und Agent durch
+      sind, am Ende „… · geprüft · 1 Satz verbessert“, in einer
       Zeile, und seine Zeit springt nicht auf die Dauer der Prüfung; der
       Wechsel nach dem Stream zeigt nie „Antwort in“ ohne Zahl. Schafft der
       Prüfer es nicht (Zeitlimit), endet er mit „… · nicht geprüft“, bei

@@ -1212,7 +1212,10 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   verbessert“): Mit der Einstellung zeigt die Antwort keine Marken, bis der
   Korrekturdurchgang durch ist (`feedback.status: done`; endet der Lauf
   vorher, zeigen sie sich wie bisher), nie eine Farbe, die gleich wieder
-  verschwindet. Während der Agent prüft, treten genau die geprüften Sätze in
+  verschwindet. Bis Prüfer und Agent durch sind, sagt der Kopf über der
+  Antwort „Answer in 14s · refining…“ im Aussehen eines laufenden Schritts
+  (Max 2026-11-15: das stille Grau ging unter, und die Antwort änderte sich
+  dann überraschend). Während der Agent prüft, treten genau die geprüften Sätze in
   ein Ruhegrau zurück, und ein Band aus Tinte läuft durch ihre Buchstaben,
   ohne Fläche und ohne Farbe (Grün heißt im Produkt Zustimmung). Am Ende
   gleiten sie zurück in die Tinte, bevor Marken kommen; ein korrigierter Satz

@@ -527,7 +527,7 @@ def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, pha
         body = page.locator("#agentAnswerBody")
         expect(body).to_contain_text("A standard ticket costs 18 euros")
         row = page.locator("#agentAnswer .agent-review")
-        expect(row.locator(".agent-review-findings")).to_have_text("The agent is checking 2 notes…")
+        expect(row.locator(".agent-review-findings")).to_have_text("The agent is refining the answer with 2 notes…")
         expect(row.locator(".agent-review-reviewers")).to_be_hidden()
         expect(row.locator('.agent-evidence-link[data-section="differences"]')).to_be_disabled()
         swept = body.locator(".cx-claim.is-agent-checking")
@@ -549,6 +549,16 @@ def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, pha
             el.querySelectorAll('.cx-claim:not(.is-audit)').forEach(span => span.classList.add('is-agent-checking'));
             return [before, after]; }""")
         assert height[0] == height[1], height
+        # Answer highlights only paint the reviewers' marks: with them off the
+        # agent still refines the answer, and the band stays in view.
+        highlights = """value => { const select = document.getElementById('consensusHighlightsSelect');
+            select.value = value; select.dispatchEvent(new Event('change')); }"""
+        page.evaluate(highlights, "none")
+        expect(page.locator("body")).to_have_class(re.compile("consensus-markers-hidden"))
+        off = swept.first.evaluate("""el => { const s = getComputedStyle(el);
+            return [s.backgroundClip, s.color, s.animationName]; }""")
+        assert off[0] == "text" and off[1] == "rgba(0, 0, 0, 0)" and "agent-checking-sweep" in off[2], off
+        page.evaluate(highlights, "concerns")
         page.wait_for_timeout(700)
         _snapshot(page, f"findings-checking-{width}")
         # The switch beside the reviewers: off by default, bound to the
@@ -649,7 +659,7 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
 @pytest.mark.parametrize("width", [1280, 390])
 def test_the_head_says_the_answer_is_still_being_checked(browser, phase4_server, width):
     """The head above the answer, where the reader looks, says that the
-    answer is still being checked while the review and the agent's pass go
+    answer is still being refined while the review and the agent's pass go
     on, at the time the answer stood, on one line. The answer under it is the
     run's real one (the sweep of the agent's pass); the head is drawn as after
     the hand-over, whose stream this harness cannot keep open (a hand-over's
@@ -657,7 +667,7 @@ def test_the_head_says_the_answer_is_still_being_checked(browser, phase4_server,
     context, page, errors = open_audit_page(browser, phase4_server, width, False,
                                             feedback_events("checking", handover=False), hang_live=True)
     try:
-        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_text("The agent is checking 2 notes…")
+        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_text("The agent is refining the answer with 2 notes…")
         head = page.locator("#agentAnswer .agent-activity-title")
         draw = """([review]) => { const host = document.querySelector('#agentAnswer .agent-activity').parentElement;
             App.agentActivity.render(host, { running: false, status: 'succeeded', elapsedMs: 14300,
@@ -665,9 +675,14 @@ def test_the_head_says_the_answer_is_still_being_checked(browser, phase4_server,
         line = head.evaluate("el => parseFloat(getComputedStyle(el).lineHeight)")
         summary = page.locator("#agentAnswer .agent-activity > summary")
         before = summary.bounding_box()["height"]
-        for stage, words in (("live", "checking…"), ("checking", "checking 2 notes…")):
+        for stage in ("live", "checking"):
             page.evaluate(draw, [feedback_review(stage)])
-            expect(head).to_have_text(f"Answer in 14s · {words}")
+            expect(head).to_have_text("Answer in 14s · refining…")
+            # In ink, with the running step's sheen: where the reader looks, it does not go unseen.
+            look = head.locator(".agent-activity-after.is-live > span").evaluate("""el => [getComputedStyle(el).color,
+                getComputedStyle(document.getElementById('agentAnswerBody')).color,
+                getComputedStyle(el, '::after').animationName]""")
+            assert look[0] == look[1] and look[2] == "label-shine", look
             # One line, whatever the width: the head never pushes the answer down.
             assert head.bounding_box()["height"] <= line * 1.5, head.bounding_box()
             # Nor does the row around it grow: the answer under it stays where it is.
@@ -697,7 +712,7 @@ HEAD_SAMPLER = """() => { window.__heads = [];
 
 @pytest.mark.parametrize("width", [1280, 390])
 def test_the_head_turns_to_the_check_without_a_half_state(browser, phase4_server, width):
-    """From the run's clock to "Answer in 14s · checking…" and on: the head
+    """From the run's clock to "Answer in 14s · refining…" and on: the head
     never shows its words without the time, never hides the time behind
     "…", and settles at the width of its words."""
     context, page, errors = open_audit_page(browser, phase4_server, width, False,
@@ -721,7 +736,7 @@ def test_the_head_turns_to_the_check_without_a_half_state(browser, phase4_server
 
 
 def test_the_head_ends_on_not_checked_when_the_reviewers_did_not_finish(browser, phase4_server):
-    """After "checking…" the head never falls back to "Thought for": the
+    """After "refining…" the head never falls back to "Thought for": the
     reviewers did not finish, and it says so, as the line under the answer."""
     events = feedback_events("live", final=True, end="unreviewed")
     context, page, errors = open_audit_page(browser, phase4_server, 1280, False, events,
@@ -794,7 +809,7 @@ def test_the_agent_sweeps_the_table_cells_it_checks(browser, phase4_server):
                                             question=TABLE_QUESTION)
     try:
         body = page.locator("#agentAnswerBody")
-        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_text("The agent is checking 2 notes…")
+        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_text("The agent is refining the answer with 2 notes…")
         swept = body.locator(".cx-claim.is-agent-checking")
         expect(swept).to_have_count(2)
         cells = swept.evaluate_all("""spans => spans.map(span => [span.textContent,
