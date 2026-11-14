@@ -13,11 +13,17 @@ import time
 import traceback
 from contextlib import contextmanager
 
+from app.core.site import OAUTH_CALLBACK_PATHS
+
 
 _CORRELATION_ID = contextvars.ContextVar("correlation_id", default="-")
 _SAFE_LABEL = re.compile(r"[^a-zA-Z0-9_.:-]")
 _LOCK = threading.Lock()
 _METRICS: dict[str, dict] = {}
+# h11 accepts any token as a method, and each key stays for the life of the
+# process: an invented method counts as OTHER, not as a metric of its own.
+_HTTP_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
+_OAUTH_TARGETS = tuple(f"{path}?" for path in OAUTH_CALLBACK_PATHS)
 
 
 def correlation_id() -> str:
@@ -49,7 +55,7 @@ class OAuthAccessFilter(logging.Filter):
         # authorization codes/state out of access logs, even at debug level.
         if isinstance(record.args, tuple):
             record.args = tuple(value.split("?", 1)[0] + "?[redacted]" if isinstance(value, str)
-                and value.startswith("/agent/google/callback?") else value for value in record.args)
+                and value.startswith(_OAUTH_TARGETS) else value for value in record.args)
         return True
 
 
@@ -222,6 +228,23 @@ def safe_traceback(exc: BaseException, *, limit: int = SAFE_TRACEBACK_FRAMES) ->
 CORRELATION_SCOPE_KEY = "consensio.correlation_id"
 
 
+async def call_on_path(app, scope, path: str, receive, send) -> None:
+    """Hand the request to ``app`` as if ``path`` had been asked for.
+
+    uvicorn's own scope keeps the address the browser asked for (its access
+    log reads it there). Starlette's 500 handler sees that scope too, not the
+    copy: what the app wrote into the copy (route, request ID) is carried
+    over when it raises, so the error names its route and request.
+    """
+    inner = {**scope, "path": path, "raw_path": path.encode("utf-8")}
+    try:
+        await app(inner, receive, send)
+    except BaseException:
+        for key, value in inner.items():
+            scope.setdefault(key, value)
+        raise
+
+
 class CorrelationMiddleware:
     def __init__(self, app):
         self.app = app
@@ -246,9 +269,10 @@ class CorrelationMiddleware:
             try:
                 await self.app(scope, receive, send_with_correlation)
             finally:
+                method = scope.get("method", "GET")
                 record_metric(
                     "http",
-                    f"{scope.get('method', 'GET')}:{status_code // 100}xx",
+                    f"{method if method in _HTTP_METHODS else 'OTHER'}:{status_code // 100}xx",
                     duration_ms=(time.monotonic() - started) * 1000,
                     outcome="failure" if status_code >= 500 else "success",
                 )

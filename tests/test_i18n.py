@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app.core import i18n
 from app.core.i18n_middleware import I18nMiddleware
+from app.core.observability import CORRELATION_SCOPE_KEY, CorrelationMiddleware
 from scripts import i18n as i18n_tool
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -231,6 +232,30 @@ def test_other_pages_follow_the_choice_on_one_address(client):
     assert client.get("/de/app").headers["location"] == "/app"
     # API answers stay English: the browser translates what it shows.
     assert client.get("/api/thing", headers={"Accept-Language": "de"}).json() == {"error": "New chat"}
+
+
+def test_an_error_on_a_german_address_names_its_route_and_request():
+    """Starlette's 500 handler runs outside every middleware, on the scope
+    uvicorn made; the access log keeps the address that was asked for."""
+    app = FastAPI()
+    seen = {}
+
+    @app.get("/about")
+    def about():
+        raise RuntimeError("broken")
+
+    @app.exception_handler(Exception)
+    async def unexpected(request, exc):
+        seen.update(route=getattr(request.scope.get("route"), "path", "unmatched"),
+                    request=request.scope.get(CORRELATION_SCOPE_KEY), path=request.scope["path"])
+        return JSONResponse({"error": "Internal server error"}, status_code=500)
+
+    app.add_middleware(CorrelationMiddleware)
+    app.add_middleware(I18nMiddleware)
+    response = TestClient(app, raise_server_exceptions=False).get("/de/about")
+    assert response.status_code == 500
+    assert seen["route"] == "/about" and seen["path"] == "/de/about"
+    assert seen["request"] and seen["request"].startswith("req-")
 
 
 def test_lang_parameter_stores_the_choice(client):

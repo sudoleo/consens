@@ -23,3 +23,9 @@ def normalize_public_site_url(value: str | None) -> str:
 
 SITE_URL = normalize_public_site_url(os.environ.get("PUBLIC_SITE_URL"))
 
+
+
+# Where a provider's OAuth redirect lands (Google, GitHub). The query carries
+# the authorization code and state: kept out of the access log, and the page
+# goes out under its own strict policy (app/core/oauth_callback.py).
+OAUTH_CALLBACK_PATHS = ("/agent/google/callback", "/agent/github/callback")

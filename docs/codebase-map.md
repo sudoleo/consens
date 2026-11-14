@@ -538,7 +538,10 @@ Kommentare (`markdown-stream.js`, `iter_sse_events`).
 Jeder Request erhält eine PII-freie `req-*`-Correlation-ID (auch als
 `X-Correlation-ID` in der Response); `GET /health/metrics` liefert nur
 prozesslokale, aggregierte Provider-/Scheduler-Zähler und Laufzeiten ohne
-Prompts, Antworten, E-Mails oder andere Nutzdaten.
+Prompts, Antworten, E-Mails oder andere Nutzdaten. HTTP-Zähler heißen
+`http:<METHODE>:<n>xx`; eine Methode außerhalb von GET, HEAD, POST, PUT, PATCH,
+DELETE, OPTIONS zählt als `OTHER` (sonst legte jede erfundene einen Eintrag an,
+der bis zum Neustart bleibt).
 Im `lifespan`-Startup ist nur `load_models_from_db()` readiness-kritisch; dessen
 Firestore-Read deaktiviert SDK-Retries und besitzt ein echtes Fünf-Sekunden-
 Budget. Schema-Backfill und Dokumentanlage sind davon getrennt und laufen erst
@@ -10373,6 +10376,11 @@ direkt zur Codestelle. Betreiber-Anleitung: [`error-alerts.md`](error-alerts.md)
   schon zurückgesetzt, send-Wrapper umgangen). Der Handler nimmt die ID aus dem
   Scope (sonst `err-…`), loggt in deren `correlation_scope` (Log-Zeile mit
   `[corr=…]` und `at=<safe_traceback>`) und setzt `x-correlation-id` am 500er.
+  Eine Middleware, die einen anderen Pfad routet (`/de/…` ohne Präfix,
+  Font-Alias), nimmt `observability.call_on_path`: die App bekommt eine Kopie
+  des Scopes, uvicorns Original behält die Adresse fürs Access-Log, und wirft
+  die App, gehen Route und ID auf das Original über (sonst stand im Log
+  `route=unmatched` mit neuer `err-…`).
 - **Zustellung.** `telegram_notifier.dispatch_critical_error_notification`
   reserviert synchron (Dedup + Budget) und sendet auf einem Daemon-Thread
   `critical-alert` — unabhängig vom Response; früher hing der Alert als
@@ -12474,8 +12482,11 @@ ein Wörterbuch `app/i18n/de/*.json` (Englisch → Deutsch, `page-*.json` und
   `consens_lang`, sonst `Accept-Language`. Deutsche Browser auf englischen
   Adressen lokalisierter Seiten → 302 auf `/de/…`; `?lang=en|de|auto` setzt
   bzw. löscht das Cookie. `request.state.language` trägt die Sprache;
-  `/api/`, `/static/`, `/__/`, `/admin`, `/health` und der Google-Callback
-  laufen unberührt durch.
+  `/api/`, `/static/`, `/__/`, `/admin`, `/health` und die OAuth-Callbacks
+  (`site.OAUTH_CALLBACK_PATHS`) laufen unberührt durch. Die Callback-Seite
+  (`app/core/oauth_callback.page`, Google und GitHub) schreibt ihre Sätze selbst
+  in der Sprache von `request_language` (Kontext `oauth callback|…`), weil ihre
+  Nonce-CSP kein Wörterbuch-Skript zulässt.
 - **Server:** jede deutsche HTML-Antwort durch `i18n.translate_html`
   (Läufe aus Text und Inline-Elementen als Ganzes mit Markern `<0>…</0>`,
   sonst stückweise; Platzhalter `{name}` fangen nur ganze Elemente; Attribute, Meta, JSON-LD, `lang`,
@@ -12762,7 +12773,10 @@ zählen nicht):
   Die Middleware arbeitet auf der Header-Liste (`_ResponseHeaders`, seit
   2026-10-17): Ihre Header ersetzen gleichnamige der Route, statt daneben eine
   zweite Kopie zu senden, und mehrere `Set-Cookie` einer Antwort bleiben alle
-  erhalten. Eine eigene CSP behält nur `/agent/google/callback` (Nonce).
+  erhalten. Eine eigene CSP (Nonce) und `Referrer-Policy: no-referrer`
+  behalten nur die OAuth-Callbacks (`site.OAUTH_CALLBACK_PATHS`:
+  `/agent/google/callback`, `/agent/github/callback`); `OAuthAccessFilter`
+  schwärzt bei beiden die Query (Code, State) im Access-Log.
 - **Static-Caching, zwei Regime.** Für **`/app`** kommt die Marke seit
   2026-08-17 aus dem Dateiinhalt (`app/core/assets.py`); dort gibt es nichts
   mehr zu bumpen, wohl aber nach jeder `static/`-Änderung ein `npm run build`,

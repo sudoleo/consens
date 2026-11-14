@@ -35,6 +35,8 @@ from functools import lru_cache
 from pathlib import Path
 from starlette.datastructures import Headers, MutableHeaders
 
+from app.core.observability import call_on_path
+
 # StaticFiles takes the type from the platform's table, and Windows (and some
 # slim Linux images) know no .woff2: the fonts went out as
 # application/octet-stream next to a preload that announces font/woff2.
@@ -149,8 +151,6 @@ class StaticDeliveryMiddleware:
         # and keeps revalidating.
         cache_control = static_cache_control(path, query)
         font = legacy_font_target(path)
-        if font:
-            scope = {**scope, "path": font, "raw_path": font.encode("latin-1")}
         state = {"mode": None, "start": None, "compressor": None}
 
         async def wrapped_send(message):
@@ -178,7 +178,10 @@ class StaticDeliveryMiddleware:
                 return
             await self._send_compressed(state, message, send)
 
-        await self.app(scope, receive, wrapped_send)
+        if font:
+            await call_on_path(self.app, scope, font, receive, wrapped_send)
+        else:
+            await self.app(scope, receive, wrapped_send)
 
     async def _send_compressed(self, state, message, send):
         body = message.get("body", b"")

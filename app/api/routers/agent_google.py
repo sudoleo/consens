@@ -1,14 +1,14 @@
 """User-only connection controls and exact-content action confirmations."""
 from __future__ import annotations
-import secrets
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Request, HTTPException, Query
-from fastapi.responses import JSONResponse, HTMLResponse
+from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from app.api.routers.agent import require_agent_access
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
+from app.core import oauth_callback
 from app.core.rate_limit import limiter
 from app.core.security import db_firestore
 from app.services.agent_documents import Strict
@@ -104,20 +104,9 @@ def connect(request: Request, payload: Connect):
 
 @router.get("/agent/google/callback")
 def callback(request: Request):
-    # No third-party assets, no template interpolation of the authorization code.
-    # Finish requires the authenticated original user, one-time state and cookie.
-    nonce = secrets.token_urlsafe(24)
-    html = """<!doctype html><html><meta charset="utf-8"><title>Google connection</title>
-<p id="status">Completing Google connection…</p><script nonce="NONCE">
-const params = new URLSearchParams(location.search);
-history.replaceState(null, '', location.pathname);
-if (window.opener) {
-  window.opener.postMessage({type:'consens-google-oauth',code:params.get('code'),state:params.get('state'),error:params.get('error')}, location.origin);
-  document.getElementById('status').textContent='Return to Consens to finish connecting. You may close this window.';
-} else { document.getElementById('status').textContent='This connection window has no active Consens session. Return to Consens and connect again.'; }
-</script></html>""".replace("NONCE", nonce)
-    return HTMLResponse(html, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
-        "Content-Security-Policy": f"default-src 'none'; script-src 'nonce-{nonce}'; base-uri 'none'; frame-ancestors 'none'"})
+    # No template interpolation of the authorization code. Finish requires
+    # the authenticated original user, one-time state and cookie.
+    return oauth_callback.page(request, service="Google", message="consens-google-oauth")
 
 
 @router.post("/agent/google/finish")

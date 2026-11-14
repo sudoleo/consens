@@ -26,6 +26,7 @@ from app.core.entitlements import (
     tier_at_least,
 )
 from app.core.observability import safe_exception
+from app.core.site import OAUTH_CALLBACK_PATHS
 
 # --- E2E-Test-Hook (MOCK_AUTH=1) ------------------------------------------
 # Die Playwright-Suite laeuft ohne echten Firebase-Login: verify_user_token
@@ -198,7 +199,7 @@ class CustomSecurityMiddleware:
                     # the app page that hands the result back.
                     headers.remove(b"content-security-policy")
                     headers.set(b"x-frame-options", b"SAMEORIGIN")
-                if path == "/agent/google/callback":
+                if path in OAUTH_CALLBACK_PATHS:
                     headers.set(b"content-security-policy", route_csp or b"default-src 'none'; frame-ancestors 'none'")
                     headers.set(b"referrer-policy", b"no-referrer")
                 if sensitive_api_response:

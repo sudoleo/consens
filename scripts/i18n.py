@@ -839,7 +839,7 @@ def _string_of(node: ast.AST) -> str | None:
 SERVER_TEXT_KEYS = {"app/services/starter_questions.py": {"label", "question"}, "app/core/config.py": {"label", "hint"}}
 # Files that mark every fixed word themselves: the first argument of these
 # calls is a key, whatever it looks like ("Why" is no prose to the heuristic).
-SERVER_MARKED = {"app/services/mailer.py": {"_t", "_h", "_N"}}
+SERVER_MARKED = {"app/services/mailer.py": {"_t", "_h", "_N"}, "app/core/oauth_callback.py": {"_t"}}
 # Services whose exceptions carry a sentence for the page: the first argument
 # of ``raise Name("…")`` for these classes reaches a card as the server's
 # ``error`` (routers/agent.py: the hold, secret and notes endpoints answer

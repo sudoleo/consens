@@ -9,14 +9,13 @@ installations and repositories this GitHub user may use and saves only that.
 """
 from __future__ import annotations
 
-import secrets
-
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import Field
 
 from app.api.routers.agent import require_agent_access
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
+from app.core import oauth_callback
 from app.core.rate_limit import limiter
 from app.core.security import db_firestore
 from app.services.agent_documents import Strict
@@ -86,18 +85,7 @@ def callback(request: Request):
     """The app's Callback URL. Hands code and state to the window that
     started the connection; without a code (GitHub showed an existing
     installation) that window asks for the user's authorization next."""
-    nonce = secrets.token_urlsafe(24)
-    html = """<!doctype html><html><meta charset="utf-8"><title>GitHub connection</title>
-<p id="status">Completing GitHub connection…</p><script nonce="NONCE">
-const params = new URLSearchParams(location.search);
-history.replaceState(null, '', location.pathname);
-if (window.opener) {
-  window.opener.postMessage({type:'consens-github-oauth',code:params.get('code'),state:params.get('state'),error:params.get('error')}, location.origin);
-  document.getElementById('status').textContent='Return to Consens to finish connecting. You may close this window.';
-} else { document.getElementById('status').textContent='This window has no active Consens session. Return to Consens and connect GitHub again.'; }
-</script></html>""".replace("NONCE", nonce)
-    return HTMLResponse(html, headers={"Cache-Control": "no-store", "Referrer-Policy": "no-referrer",
-        "Content-Security-Policy": f"default-src 'none'; script-src 'nonce-{nonce}'; base-uri 'none'; frame-ancestors 'none'"})
+    return oauth_callback.page(request, service="GitHub", message="consens-github-oauth")
 
 
 @router.post("/agent/github/finish")

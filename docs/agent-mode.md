@@ -3657,7 +3657,8 @@ Browser-Geheimnis; das Popup öffnet `https://github.com/apps/<slug>/installatio
 Nach der Installation schickt GitHub es zur Callback-Seite
 `GET /agent/github/callback` (die App fordert die Nutzer-Autorisierung bei der
 Installation an), die `code` und `state` per `postMessage` an das öffnende
-Fenster gibt; kommt sie ohne `code` (bestehende Installation), führt das Fenster
+Fenster gibt (dieselbe Seite wie bei Google, `app/core/oauth_callback.py`:
+eigene Nonce-CSP, kein Referrer, Query im Access-Log geschwärzt); kommt sie ohne `code` (bestehende Installation), führt das Fenster
 das Popup zur OAuth-Freigabe (`/login/oauth/authorize?client_id&state`), die
 sicher beides zurückbringt. `POST /agent/github/finish` (angemeldeter Nutzer,
 `state`, Cookie, `code`) tauscht den Code gegen ein Nutzer-Token und liest damit

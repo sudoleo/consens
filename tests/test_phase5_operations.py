@@ -515,6 +515,24 @@ def test_correlation_header_metrics_and_log_redaction(caplog, monkeypatch):
     assert secret not in result
 
 
+def test_an_invented_http_method_adds_no_metric_of_its_own():
+    app = FastAPI()
+    app.add_middleware(CorrelationMiddleware)
+
+    @app.get("/ok")
+    def ok():
+        return {"ok": True}
+
+    client = TestClient(app)
+    for index in range(3):
+        client.request(f"INVENTED{index}", "/ok")
+    client.request("POST", "/ok")
+    http = [key for key in metrics_snapshot() if key.startswith("http:")]
+    assert not [key for key in http if "INVENTED" in key]
+    assert metrics_snapshot()["http:OTHER:4xx"]["count"] >= 3
+    assert "http:POST:4xx" in http
+
+
 @pytest.mark.parametrize(
     ("raw_result", "expected_outcome", "has_answer"),
     [

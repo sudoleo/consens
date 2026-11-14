@@ -35,11 +35,13 @@ from urllib.parse import parse_qsl, quote, urlencode
 from starlette.datastructures import Headers, MutableHeaders
 
 from app.core import i18n
-from app.core.site import SITE_URL
+from app.core.observability import call_on_path
+from app.core.site import OAUTH_CALLBACK_PATHS, SITE_URL
 
 
-# The OAuth callback renders under its own strict policy (no extra script).
-PASS_THROUGH = ("/static/", "/__/", "/api/", "/admin", "/health", "/agent/google/callback")
+# The OAuth callbacks write their own language under their own strict policy
+# (no extra script).
+PASS_THROUGH = ("/static/", "/__/", "/api/", "/admin", "/health", *OAUTH_CALLBACK_PATHS)
 COOKIE_MAX_AGE = 365 * 24 * 3600
 BUNDLE_PREFIX = "/i18n/"
 # A longer page goes out in English with the browser dictionary, which
@@ -157,18 +159,17 @@ class I18nMiddleware:
             await _send_simple(send, 302, _redirect_headers(_local_location(target, query)))
             return
 
-        if prefix_language:
-            scope = dict(scope)
-            scope["path"] = page_path
-            scope["raw_path"] = page_path.encode("utf-8")
         state = scope.setdefault("state", {})
         state["language"] = language
 
-        translated = language in i18n.TRANSLATED_LANGUAGES
-        if not translated and not localized:
-            await self.app(scope, receive, self._vary_only(send))
-            return
-        await self.app(scope, receive, self._rewriting_send(send, language, page_path, bool(prefix_language), localized))
+        if language in i18n.TRANSLATED_LANGUAGES or localized:
+            respond = self._rewriting_send(send, language, page_path, bool(prefix_language), localized)
+        else:
+            respond = self._vary_only(send)
+        if prefix_language:
+            await call_on_path(self.app, scope, page_path, receive, respond)
+        else:
+            await self.app(scope, receive, respond)
 
     def _vary_only(self, send):
         async def wrapped(message):
