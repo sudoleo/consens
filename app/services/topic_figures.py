@@ -416,6 +416,10 @@ _GLYPHS = {
 _DOT_BELOW_PERCENT = 3.5
 _AXIS_PAD = 0.045
 _MAX_TICKS = 7
+# Years a row can stand at on the time axis. The widest axis between them,
+# padded on both sides, still lies within what ``date`` counts (years
+# 1 to 9999); a row outside stays off the axis instead of breaking the page.
+_AXIS_YEARS = range(1000, 9001)
 
 
 def _date_label(entry: dict) -> str:
@@ -458,6 +462,8 @@ def _day_span(written) -> tuple[int, int] | None:
             first = final = day
     except ValueError:
         first = final = day
+    if first.year not in _AXIS_YEARS or final.year not in _AXIS_YEARS:
+        return None
     return first.toordinal(), max(final.toordinal(), first.toordinal())
 
 

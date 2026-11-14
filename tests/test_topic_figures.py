@@ -364,6 +364,19 @@ def test_a_date_is_drawn_as_wide_as_the_answer_was_precise():
     assert topic_figures._day_span("soon") is None
 
 
+def test_a_date_beyond_any_axis_stays_off_it_instead_of_breaking_the_page():
+    def timeline(*dates):
+        return {"kind": "timeline", "title": "", "after_heading": "", "items": [
+            {"label": f"Event {index}", "note": "", "disputed": False, "date": written}
+            for index, written in enumerate(dates)]}
+
+    for dates in (("0001-01-05", "2026-10-01", "2026-10-20"), ("2026-10-01", "2026-10-20", "9999-12-01")):
+        html = str(topic_figures.figure_html(timeline(*dates), as_of=date(2026, 11, 14)))
+        assert html.count('role="listitem"') == 2
+    html = str(topic_figures.figure_html(timeline("1000-01-01", "9000-12-31"), as_of=date(2026, 11, 14)))
+    assert html.count('role="listitem"') == 2
+
+
 def test_a_status_board_of_an_earlier_run_is_drawn_as_a_lineup():
     stored = topic_figures.stored_figures([{"kind": "status", "title": "Availability", "after_heading": "", "items": [
         {"label": "Gemini 4 Argon", "note": "you can use it today", "disputed": False, "status": "confirmed"},
