@@ -265,24 +265,36 @@ it("says on the hover preview of a mark whether and how the agent looked at its 
   expect(plain.querySelector(".cx-card-note, .cx-card-reply")).toBeNull();
 });
 
-// While the agent checks findings: their sentences carry the band of ink,
-// nothing else; the text stays as it is and nothing becomes a control. Each
-// names the findings it is checked for (agent-review.js keeps a corrected
-// one grey until its new words come).
-it("sweeps exactly the sentences of the findings the agent checks", () => {
+// While the reviewers' notes wait for the agent: every sentence with a note
+// carries the band of ink, nothing else; the text stays as it is and nothing
+// becomes a control. Each names the findings the agent checks it for
+// (agent-review.js keeps a corrected one grey until its new words come).
+it("sweeps the sentences with a note, and names the findings the agent checks", () => {
   const { window, document } = boot(ANSWER);
   const body = document.getElementById("consensusAnswerBody");
+  const text = body.textContent;
+  // A reviewer's first notes, before the agent's pass: no finding yet.
+  expect(window.renderAuditChecking(body, structuredClone(AUDIT), new Set())).toBe(2);
+  const first = [...body.querySelectorAll(".cx-claim")];
+  expect(first.map(span => [span.textContent, span.className, span.dataset.findings])).toEqual([
+    ["It was built in 1889 for the World's Fair.", "cx-claim is-agent-checking", ""],
+    ["Tickets to the top cost 14 euros.", "cx-claim is-agent-checking", ""]]);
+  expect(first.some(span => span.hasAttribute("role") || span.hasAttribute("tabindex"))).toBe(false);
+  expect(body.textContent).toBe(text);
+  // The pass: a render builds the sentences anew, those in the grey already
+  // stand in it, and the one whose finding the agent checks says so.
   const audit = structuredClone(AUDIT);
   audit.claims[0].dissent.forEach(item => { item.finding = "s1"; });
   audit.claims[1].dissent.forEach(item => { item.finding = "s2"; });
-  const text = body.textContent;
-  expect(window.renderAuditChecking(body, audit, new Set(["s2"]))).toBe(1);
-  const swept = [...body.querySelectorAll(".cx-claim")];
-  expect(swept.map(span => span.textContent)).toEqual(["Tickets to the top cost 14 euros."]);
-  expect(swept[0].className).toBe("cx-claim is-agent-checking");
-  expect(swept[0].dataset.findings).toBe("s2");
-  expect(swept[0].hasAttribute("role") || swept[0].hasAttribute("tabindex")).toBe(false);
-  expect(body.textContent).toBe(text);
+  const again = boot(ANSWER);
+  const againBody = again.document.getElementById("consensusAnswerBody");
+  again.window.renderAuditChecking(againBody, audit, new Set(["s2"]), { standing: new Set([first[1].dataset.claim]) });
+  expect([...againBody.querySelectorAll(".cx-claim")].map(span => [span.classList.contains("is-standing"), span.dataset.findings]))
+    .toEqual([[false, ""], [true, "s2"]]);
+  // A claim without a note (a sentence the reviewers agreed on) is not swept.
+  const agreed = boot(ANSWER);
+  const quiet = { unplaced: [], claims: [{ anchor: AUDIT.claims[0].anchor, kind: "unanimous", agree: ["OpenAI"], dissent: [] }] };
+  expect(agreed.window.renderAuditChecking(agreed.document.getElementById("consensusAnswerBody"), quiet, new Set())).toBe(0);
   const still = boot(ANSWER);
   const stillBody = still.document.getElementById("consensusAnswerBody");
   still.window.renderAuditChecking(stillBody, audit, new Set(["s1", "s2"]), { still: true });

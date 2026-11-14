@@ -1215,9 +1215,14 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   verschwindet. Bis Prüfer und Agent durch sind, sagt der Kopf über der
   Antwort „Answer in 14s · refining…“ im Aussehen eines laufenden Schritts
   (Max 2026-11-15: das stille Grau ging unter, und die Antwort änderte sich
-  dann überraschend). Während der Agent prüft, treten genau die geprüften Sätze in
+  dann überraschend). Sobald der erste Prüfer mit Anmerkungen fertig ist
+  (Max 2026-11-15: schafft Transparenz, ohne zu stören; der erste Prüfer ist
+  im Median 6 s vor dem letzten da, bis zum Ende des Durchgangs waren es 19 s
+  ohne ein Zeichen), treten die Sätze mit Anmerkung in
   ein Ruhegrau zurück, und ein Band aus Tinte läuft durch ihre Buchstaben,
-  ohne Fläche und ohne Farbe (Grün heißt im Produkt Zustimmung). Am Ende
+  ohne Fläche und ohne Farbe (Grün heißt im Produkt Zustimmung), noch ohne
+  Marke, weil sich der Satz noch ändern kann. Sie bleiben darin, bis der
+  Durchgang des Agenten durch ist, auch die, deren Anmerkung er nicht nimmt. Am Ende
   gleiten sie zurück in die Tinte, bevor Marken kommen; ein korrigierter Satz
   bleibt bis dahin grau und wird an Ort und Stelle neu geschrieben, seine
   Buchstaben in einem farblosen Licht (`--rewrite-light`), ohne Marke. Das

@@ -518,9 +518,9 @@ def table_events(*stages, handover=True, feedback=True):
 @pytest.mark.parametrize("width", [1280, 390])
 def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, phase4_server, width):
     """With findings passed to the agent, a mark could go with the sentence
-    it marks: no mark yet, but the sentences the agent checks rest in grey
-    with a band of ink running through their letters, and one line under the
-    row says how many."""
+    it marks: no mark yet, but the sentences with a note rest in grey with a
+    band of ink running through their letters, and one line under the row
+    says how many notes the agent checks."""
     context, page, errors = open_audit_page(browser, phase4_server, width, False,
                                             feedback_events("checking", handover=False), hang_live=True)
     try:
@@ -533,7 +533,10 @@ def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, pha
         swept = body.locator(".cx-claim.is-agent-checking")
         expect(swept.filter(has_text="A standard ticket costs 18 euros")).not_to_have_count(0)
         expect(swept.filter(has_text="The arena floor was rebuilt in 2023.")).not_to_have_count(0)
-        expect(swept.filter(has_text="It held about 50,000 spectators")).to_have_count(0)
+        # A note the pass does not take stands in the grey as well: its mark
+        # comes with the others, at the pass's end.
+        expect(swept.filter(has_text="It held about 50,000 spectators")).not_to_have_count(0)
+        expect(swept.filter(has_text="Rome's Colosseum opened in 80 AD")).to_have_count(0)
         expect(body.locator(".cx-claim.is-audit")).to_have_count(0)
         # The band at the beat, in the letters (no surface); the text keeps
         # its place and stays selectable.
@@ -575,6 +578,49 @@ def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, pha
             return [...before, on, off, row.hidden];
         }""")
         assert state == [False, False, True, True, False], state
+        assert errors == []
+    finally:
+        context.close()
+
+
+NO_COUNTS = {"delivered": 0, "corrected": 0, "disputed": 0, "cut": 0}
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_a_reviewers_first_notes_stand_in_the_grey_while_the_other_still_reviews(browser, phase4_server, width):
+    """With findings passed to the agent, the first reviewer is through
+    seconds before the last: the sentences of its notes step into the grey at
+    once, without a mark (they may still change) and without a line; the row
+    goes on reviewing."""
+    waiting, first = review("running", "running"), early_review()
+    for saved in (waiting, first):
+        saved["audit"]["feedback"] = {"status": "live", "findings": [], "counts": dict(NO_COUNTS)}
+    events = [("started", {"chat_id": CHAT, "turn_id": TURN, "delegation": True})]
+    events += [("activity", event) for event in ACTIVITY]
+    events += [("delegation", {"version": 1, "chat_id": CHAT, "turn_id": TURN, "agent": agent})
+               for agent in reviewer_sessions("working")]
+    events += [("delta", {"text": ANSWER}), ("answer_check", {}), ("review", {"review": waiting}),
+               ("review", {"review": first})]
+    context, page, errors = open_audit_page(browser, phase4_server, width, False, events, hang_live=True)
+    try:
+        body = page.locator("#agentAnswerBody")
+        expect(body).to_contain_text("Colosseum opened in 80 AD")
+        swept = body.locator(".cx-claim.is-agent-checking")
+        expect(swept.filter(has_text="A standard ticket costs 18 euros")).not_to_have_count(0)
+        expect(swept.filter(has_text="The arena floor was rebuilt in 2023.")).not_to_have_count(0)
+        # The second reviewer's note is not there yet.
+        expect(swept.filter(has_text="It held about 50,000 spectators")).to_have_count(0)
+        expect(body.locator(".cx-claim.is-audit")).to_have_count(0)
+        row = page.locator("#agentAnswer .agent-review")
+        expect(row.locator(".agent-review-status")).to_have_text("Reviewing the answer…")
+        expect(row.locator(".agent-review-findings")).to_have_count(0)
+        marks = row.locator(".agent-review-reviewers .agent-review-reviewer")
+        expect(marks.nth(0)).to_have_attribute("data-state", "done")
+        expect(marks.nth(1)).to_have_attribute("data-state", "working")
+        expect(row.locator('.agent-evidence-link[data-section="differences"]')).to_be_disabled()
+        page.wait_for_timeout(700)
+        assert page.evaluate("document.documentElement.scrollWidth <= innerWidth + 1")
+        _snapshot(page, f"findings-first-notes-{width}")
         assert errors == []
     finally:
         context.close()

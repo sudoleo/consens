@@ -2633,16 +2633,26 @@
 
           const AUDIT_SEVERITY = { incomplete: 1, doubtful: 2, wrong: 3 };
 
-          // While the agent checks findings (findings_to_agent, agent-review.js):
-          // the sentences of the findings `ids` carry the band of ink
-          // (agent-chat.css .is-agent-checking), no mark and no control;
-          // `still` without the band. Returns how many sentences it found.
+          // While the reviewers' notes wait for the agent (findings_to_agent,
+          // agent-review.js): every sentence with a note carries the band of
+          // ink (agent-chat.css .is-agent-checking), no mark and no control;
+          // `still` without the band. `ids`: the findings the agent checks
+          // now, which each sentence names for the render that ends the pass.
+          // `standing`: the sentences (claimKey) that stood in the grey
+          // before this render, which do not step into it again. Returns how
+          // many sentences it found.
+          function auditClaimKey(claim) {
+            return (claim.anchor_occurrence || 0) + ":" + claim.anchor;
+          }
+
           function renderAuditChecking(body, audit, ids, options = {}) {
-            if (!body || !audit || !ids || !ids.size) return 0;
+            if (!body || !audit || !ids) return 0;
             const markedByBlock = new Map();
             let found = 0;
             (Array.isArray(audit.claims) ? audit.claims : []).forEach(function (claim) {
-              if (!claim || !claim.anchor || !(claim.dissent || []).some(function (item) { return item && ids.has(item.finding); })) return;
+              if (!claim || !claim.anchor || !(claim.dissent || []).some(function (item) {
+                return item && typeof item.note === "string" && item.note.trim();
+              })) return;
               const probe = locateAnchor(body, claim.anchor, claim.anchor_occurrence);
               if (!probe) return;
               if (!markedByBlock.has(probe.block)) markedByBlock.set(probe.block, []);
@@ -2653,8 +2663,11 @@
               // sentence in grey until its new words come (agent-review.js).
               const checked = claim.dissent.map(function (item) { return item && item.finding; })
                 .filter(function (id) { return ids.has(id); });
+              const key = auditClaimKey(claim);
               result.spans.forEach(function (span) {
                 if (options.still) span.classList.add("is-still");
+                if (options.standing && options.standing.has(key)) span.classList.add("is-standing");
+                span.dataset.claim = key;
                 const before = span.dataset.findings ? span.dataset.findings.split(" ") : [];
                 span.dataset.findings = [...new Set([...before, ...checked])].join(" ");
               });

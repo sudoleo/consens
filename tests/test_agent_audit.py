@@ -14,7 +14,7 @@ import time
 import pytest
 from pydantic import BaseModel, ConfigDict
 
-from app.services import agent_audit, agent_delegation, agent_memory, prompt_defaults
+from app.services import agent_audit, agent_delegation, agent_final_rounds, agent_memory, prompt_defaults
 from app.services.agent_audit import (AGENT_SEARCH_ROUNDS, LIVE_SEARCH_ROUNDS, REVIEW_SEARCH_ROUNDS, locate_quote,
                                       parse_review, place_marks, review_entry, round_message, work_goes_on)
 from app.services.agent_comparison import AgentPreferences, comparison_selection
@@ -463,7 +463,7 @@ def audit_sessions(store, loop, family):
 
 
 def test_the_hedge_time_follows_the_models_final_rounds(monkeypatch):
-    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_final_rounds, "_rounds", {})
     assert agent_audit.final_hedge_seconds("m") == agent_audit.FINAL_HEDGE_SECONDS == 30
     for seconds in (1, 2, 3, 4, 5, 6, 7):
         agent_audit.record_final_seconds("m", seconds)
@@ -475,17 +475,43 @@ def test_the_hedge_time_follows_the_models_final_rounds(monkeypatch):
         agent_audit.record_final_seconds("slow", seconds)
     # The p90: a hedge for the long tail only.
     assert agent_audit.final_hedge_seconds("slow") == 60
-    # The last FINAL_HEDGE_SAMPLES count.
-    for _ in range(agent_audit.FINAL_HEDGE_SAMPLES):
+    # The last agent_final_rounds.ROUNDS count.
+    for _ in range(agent_final_rounds.ROUNDS):
         agent_audit.record_final_seconds("slow", 14)
     assert agent_audit.final_hedge_seconds("slow") == 14
+
+
+def test_a_reviewer_stays_away_from_its_models_slow_endpoints_in_every_round(store, monkeypatch):
+    monkeypatch.setattr(agent_final_rounds, "_rounds", {})
+    script = Audit(tool_steps=1)
+    factory, made = script.factory, []
+
+    def recording():
+        made.append(factory())
+        return made[-1]
+    script.factory = recording
+    loop = audit_loop(store, script)
+    slow = loop.comparison.models["anthropic"].model
+    for endpoint, seconds in (("Quick", 6), ("Slow", 30)):
+        for _ in range(agent_final_rounds.ENDPOINT_MIN_ROUNDS):
+            agent_final_rounds.record(slow, seconds, endpoint)
+    list(loop.run())
+    avoided = {}
+    for completion in made:
+        if not completion.step_id.startswith("completion:"):
+            model = next(model for step, model in script.calls if step == completion.step_id)
+            avoided.setdefault(model, set()).add(tuple(completion.avoid_endpoints))
+    # Live and final rounds alike, so its conversation is cached where it stays.
+    assert script.rounds["anthropic"].count("live") >= 1 and "final" in script.rounds["anthropic"]
+    assert avoided[slow] == {("Slow",)}
+    assert avoided[loop.comparison.models["openai"].model] == {()}
 
 
 def test_a_final_round_that_hangs_gets_its_hedge_and_the_first_reply_wins(store, monkeypatch):
     """Without the hedge the slowest reviewer sets the time to the marks
     (Luna p90 40 s, max 72 s), and a hung request holds the turn until its
     hard stop."""
-    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_final_rounds, "_rounds", {})
     monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .3)
     asked = []
 
@@ -510,7 +536,7 @@ def test_a_final_round_that_hangs_gets_its_hedge_and_the_first_reply_wins(store,
     assert audit_sessions(store, loop, "openai") == [("stopped", "superseded"), ("completed", None)]
     # It counts for the hedge time as long as it had run.
     model = loop.comparison.auditor.sessions["openai"].model.model
-    assert len(agent_audit._final_seconds[model]) == 1 and agent_audit._final_seconds[model][0] >= .3
+    assert [seconds >= .3 for _, seconds, _ in agent_final_rounds.rounds(model)] == [True]
     # The review says so.
     assert [(r["provider"], r["hedged"], type(r["final_ms"])) for r in review["audit"]["reviewers"]] == [
         ("anthropic", False, int), ("openai", True, int)]
@@ -522,7 +548,7 @@ def test_the_hedge_goes_to_another_endpoint_than_the_request_at_work(store, monk
     repeats: it wins only where the first request's endpoint is slow or
     hangs (14 days of Prod to 2026-11-13: 3 of 20; a DeepSeek round whose
     request and hedge both ran on Parasail ended without marks after 90 s)."""
-    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_final_rounds, "_rounds", {})
     monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .3)
     asked, seen = [], []
 
@@ -559,7 +585,7 @@ def test_a_hedge_without_a_known_endpoint_goes_where_routing_sends_it(store, mon
     hedge then avoids nothing (a model with one endpoint keeps its hedge
     there too: OpenRouter answers 404 and the request goes as routed,
     agent_client._elsewhere)."""
-    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_final_rounds, "_rounds", {})
     monkeypatch.setattr(agent_audit, "final_hedge_seconds", lambda model: .3)
     asked, seen = [], []
 
@@ -645,6 +671,7 @@ def test_a_stopped_final_round_waits_for_its_request_without_spinning(monkeypatc
     session.cancellation = agent_audit.ReviewCancellation()
     session.worker = SimpleNamespace(id="w1", state="waiting")
     session.conversation_key, session.requests, session.hedged = None, [], False
+    session._avoided = ()
     threading.Timer(.1, session.cancellation.cancel).start()
     with pytest.raises(ProviderCancelled):
         session._final_request("Final round.", set())
@@ -1101,10 +1128,31 @@ def test_reviewers_still_working_at_the_deadline_lose_their_marks_not_the_answer
     assert {"code": "no_time"} in review["audit"]["issues"]
 
 
+def test_the_final_rounds_start_with_the_fixed_answer_not_after_the_hand_over(store, monkeypatch):
+    script = Audit()
+    loop = audit_loop(store, script)
+    hand_over, seen = store.hand_over, []
+
+    def waiting_hand_over(*args, **kwargs):
+        # The hand-over stands for everything between the fixed answer and
+        # the review's own step: both final rounds are under way before it.
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and not all(
+                "final" in script.rounds.get(family, []) for family in ("anthropic", "openai")):
+            time.sleep(.01)
+        seen.append({family: list(script.rounds.get(family, [])) for family in ("anthropic", "openai")})
+        return hand_over(*args, **kwargs)
+    monkeypatch.setattr(store, "hand_over", waiting_hand_over)
+    list(loop.run())
+    assert seen and all("final" in rounds for rounds in seen[0].values())
+    review = saved(store, loop)["agent_review"]
+    assert review["status"] == "succeeded" and len(review["audit"]["claims"]) >= 1
+
+
 def test_without_time_left_no_reviewer_starts(store, monkeypatch):
     script = Audit()
     loop = audit_loop(store, script)
-    monkeypatch.setattr(loop, "_hard_stop_left", lambda: 5 if loop.comparison.text else 1000)
+    monkeypatch.setattr(loop, "_hard_stop_left", lambda: 5 if loop.answer_fixed else 1000)
     list(loop.run())
     turn = saved(store, loop)
     assert turn["status"] == "completed" and turn["agent_review"]["status"] == "failed"

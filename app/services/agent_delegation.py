@@ -1954,8 +1954,9 @@ class DelegationLoop(AgentLoop):
         """One claimed, metered model call.
 
         ``avoid_endpoint``: the endpoint a first attempt of this step broke
-        off on or was declined by; this attempt goes to another one where
-        the model has one (AgentCompletion.avoid_endpoints).
+        off on or was declined by, or several a reviewer stays away from
+        (agent_final_rounds); this attempt goes to another one where the
+        model has one (AgentCompletion.avoid_endpoints).
 
         ``answer_candidate``: a step of a turn with comparison tools
         (agent_answer_mode) whose text may turn out to be the answer. Its text streams once it is
@@ -2073,7 +2074,7 @@ class DelegationLoop(AgentLoop):
         value.published = ""
         value.tool_call_limit = TOOL_CALLS_PER_STEP
         if avoid_endpoint:
-            value.avoid_endpoints = (avoid_endpoint,)
+            value.avoid_endpoints = (avoid_endpoint,) if isinstance(avoid_endpoint, str) else tuple(avoid_endpoint)
         if worker is None:
             # The agent's own steps: several calls at once (_parallel_calls),
             # and a call past the limit gets its result.
@@ -3629,6 +3630,9 @@ class DelegationLoop(AgentLoop):
             from app.services.agent_comparison import answer_hash
             self.work_log.app("answer_fixed", {"hash": answer_hash(value.text), "chars": len(value.text)},
                               step=value.step_id)
+        # The reviewers start their final round with the log entry, not after
+        # the hand-over and the review's own step (_finish_review).
+        comparison.auditor.start_final(comparison.text or value.text)
         comparison.freeze_for_synthesis()
         comparison.capture(value.text)
         links = self._check_links(value.text)

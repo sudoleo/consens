@@ -5288,8 +5288,12 @@ zurück (`_retract` plus Aufforderung zu `review_agent`). `_finish_merged`
 fixiert die Antwort (`answer_fixed`: kein Halt eines Prüfers mehr, ein später
 endet mit ihr), gleicht den sichtbaren Text an (`_show_answer`, auch nach
 `_drop_presearch_text`), schreibt den App-Eintrag `answer_fixed` (Hash, Länge),
+gibt den Prüfern die Antwort sofort (`AnswerAudit.start_final`, seit
+2026-11-15: ihre Schlussrunden beginnen mit dem Eintrag, nicht erst nach
+Übergabe, Speichern und dem Schritt `audit_answer`; das stand in Prod im
+Median 1,4 s vor jeder Schlussrunde),
 fixiert die Grundlage (`freeze_for_synthesis`, `capture`: Version `required`)
-und lässt über `_finish_review` das App-Tool `audit_answer` die Prüfer starten
+und lässt über `_finish_review` das App-Tool `audit_answer` die Prüfung führen
 („Ein Modus“ unten). Jede Antwort wird so geprüft, auch eine Direktantwort
 ohne Vergleich (bis 2026-10-31 bekam eine Direktantwort im Vergleichsmodus
 keine Prüfung, `ComparisonTools.direct`). Festgeschrieben wird nur ein
@@ -6806,10 +6810,13 @@ die fixierte Antwort steht in der Schlussrunde nur einmal
 (`ANSWER_IN_STEP`). Ist das Gespräch eines
 Prüfers voll, geht er in einem neuen weiter, mit dem Anfang des Laufs und
 seinen bisherigen Befunden (`ReviewerSession._carry`, `opening_entries`).
-Nach der Antwort fixiert `capture` die Version, `_finish_review`
-ruft das App-Tool `audit_answer`, und `AnswerAudit.run` setzt `final_answer`
-(eine laufende Live-Runde bricht seit 2026-10-29 ab, `cut_round`/`RoundCut`,
-ihre Sitzung endet `round_cut` und reicht die OpenRouter-Sitzung weiter):
+Mit dem Eintrag `answer_fixed` setzt `AnswerAudit.start_final` `final_answer`
+(seit 2026-11-15 direkt in `_finish_merged`; `AnswerAudit.run` holt es nur
+nach, wo das nicht geschah, und wartet sonst auf die schon laufenden
+Schlussrunden; eine laufende Live-Runde bricht seit 2026-10-29 ab,
+`cut_round`/`RoundCut`, ihre Sitzung endet `round_cut` und reicht die
+OpenRouter-Sitzung weiter). Danach fixiert `capture` die Version, und
+`_finish_review` ruft das App-Tool `audit_answer`:
 Jeder Prüfer gibt in der Schlussrunde (Rest des Protokolls und die Antwort)
 seine vollständige Liste. `place_marks` legt ihre Zitate je Satz als Claims
 ab und Befunde mit Eintrag in `process` (`review.mode = "audit"`,
@@ -7011,12 +7018,22 @@ Zeit bis zur Antwort, nicht bis zum Ende der Prüfung). Tests: `tests/test_agent
 Im Browser (nur mit `audit.feedback`; ohne sie bleibt jedes Byte wie oben):
 Solange der Durchgang des Agenten nicht `done` ist, zeigt die Antwort keine
 Marke, Notes wartet, und während die Prüfer prüfen sagt die Leiste weiter
-„Reviewing the answer…“ (`agent-review.js` `withheld`). Prüft der Agent
-(`feedback.status` `checking`), tragen genau die Sätze seiner Befunde (die
-Claims, deren `dissent[].finding` einer mit `state` `checking` ist) ein Band
-aus Tinte in der Schrift (`consensus-insights.js` `renderAuditChecking`:
+„Reviewing the answer…“ (`agent-review.js` `withheld`). Von der ersten
+Anmerkung eines Prüfers an (seit 2026-11-15: sobald die Prüfung einen Claim
+mit Anmerkung hält, also schon mit dem Stand von `_show_early`, während der
+letzte Prüfer noch prüft; `notedSentences`) bis der Durchgang des Agenten
+durch ist, tragen alle Sätze mit Anmerkung ein Band
+aus Tinte in der Schrift, ohne Marke und ohne eigene Zeile: Der erste Prüfer
+ist im Median 6 s vor dem letzten fertig, und der Leser sieht, wo eine
+Anmerkung liegt, statt einer Antwort, die fertig aussieht
+(`consensus-insights.js` `renderAuditChecking`:
 `.cx-claim.is-agent-checking` ohne Rolle und Klick, `data-findings` mit den
-geprüften Befunden; `agent-chat.css`: keine Fläche, keine Linie, keine Farbe;
+Befunden, die der Agent gerade prüft, `data-claim` als Schlüssel des Satzes;
+ein Render, während das Grau steht, baut die Sätze neu: die schon grauen
+bekommen `.is-standing` und treten nicht noch einmal ein, und jedes Band
+läuft an der Uhr der Seite weiter, `--checking-phase`; auch ein Satz, dessen
+Anmerkung der Durchgang nicht nimmt, bleibt bis zu dessen Ende grau und
+bekommt dann seine Marke; `agent-chat.css`: keine Fläche, keine Linie, keine Farbe;
 die Schrift ist transparent, ein Verlauf Ruhegrau → `--ink` → Ruhegrau läuft
 per `background-clip: text` gleichmäßig (`--ease-linear`) im Takt
 `--dur-beat` durch jede Zeile, `box-decoration-break: clone`, weil Chrome mit
@@ -10487,6 +10504,7 @@ app/services/
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Die Prüfer jedes Agent-Laufs (seit 2026-10-25 als Audit, seit 2026-10-31 der eine Modus für jedes Konto): AGENT_SEARCH_ROUNDS des Agenten; AnswerAudit lässt die gewählten Modelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (toleranter Locator), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; compare_models-Ergebnisse strukturiert (COMPARISON_ENTRY_CHARS, ROUND_TIERS, BRIEF_TOOLS); Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate); seit 2026-10-29 eigene Cancellation je Live-/Gate-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS), Gate-Frist GATE_SECONDS und gate_trace
   agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt; seit 2026-10-30 auch jeder Turn mit Arbeitsplatz (workspace_counters: ws_*, wrap_up)
+  agent_final_rounds.py      Schlussrunden der Prüfer je Modell und Endpunkt, über Deploys hinweg (seit 2026-11-15): record/rounds halten je Modell die letzten 50 Schlussrunden (Ende, Sekunden, Endpunkt; nach 14 Tagen zählt eine nicht mehr), slow_endpoints nennt die Endpunkte, die ein Prüfer meidet (Median ab 3 Runden mindestens das 1,75-Fache und 4 s über dem schnellsten Endpunkt des Modells, höchstens 3), seconds die Zeiten ohne sie für die Hedge-Zeit (agent_audit.final_hedge_seconds); load liest ops_metrics/agent-final-rounds einmal je Prozess, save schreibt es nach den Schlussrunden einer Prüfung (liest vorher und führt zusammen), beides in Daemon-Threads, nie in Tests oder mit MOCK_LLM
   agent_gate.py              Vorab-Prüfung (2026-10-27 bis 2026-11-04): outward erkannte nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer liefen (zuletzt request_domain; update_memory mit Fremdinhalt im Blick bis 2026-11-02); seit dem offenen Netz des Arbeitsplatzes keiner mehr, das Gate selbst (agent_audit.open_gate, DelegationLoop._gate_wait) bleibt
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm), seit 2026-10-30 auch mit 2–4 Antworten als Knöpfen (choices → choice, chosen()); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back
   agent_browser.py           Werkzeug browser (seit 2026-10-27): typisierte Aktionen (open/read/text/find/click auch an x,y/drag mit strokes/type/select/key/scroll/back/forward/tabs/tab/screenshot/upload/download/wait) im Arbeitsplatz (seit 2026-11-04 derselbe Rechner, vorher die Browser-VM) über workspace_vm/browser/browser.py mit JSON auf stdin als Nutzer des Anbieters; Adressen nur http(s) und öffentlich, seit 2026-10-29 auch http://localhost:<port>, der Server des Agenten (local_port; bis 2026-11-04 über agent_tunnel), Upload einer Datei, die der Nutzer des Agenten lesen darf, für einen Aufruf, Downloads des Browsers (Aktion, download, Nutzer in der Ansicht) seit 2026-10-28 in <Chat-Ordner>/downloads/ (_keep_downloads, bis 25 MB, danach im Ordner des Browsers gelöscht), Screenshot als Bild, open bringt seit 2026-10-29 ein kleines JPEG der Seite für ihre Karte im Chat (preview_url, nur in der Aktivität, bounded_activity streicht es zuerst), Ausfall kostet nur dieses Werkzeug (Grund im Log); seit 2026-10-29 weckt _warm beim ersten Aufruf einer Nachricht die VM (agent_workspace.open_workspace) und startet Chrome (Helfer-Aktion warm) auf eigenem Backend, während die Sperre genommen wird; screenshot_after bringt bei Aktionen, die die Seite ändern, das Bild danach im selben Aufruf (PICTURE_AFTER); show legt seit 2026-10-30 den Screenshot unter die Antwort (_show, kind web_image, Herkunft browser); Aktionen in PREVIEW_AFTER bringen alle PREVIEW_SECONDS ein neues Bild für die Seitenkarte, die Aktivität page_title/page_url; look zeigt ask_user den Browser nach der Rückgabe; click/drag an x,y melden seit 2026-10-30, was an ihren Punkten lag und was sich danach änderte (browser.py HIT_JS); seit 2026-11-03 ist eine Ref veraltet, wenn ihr Element inzwischen anderes zeigt (browser.py KEY_JS/data-consens-key, located; seit 2026-11-04 gemessen an dem, was der Agent vor seinem Schritt sah: Anfrage-Feld step, data-consens-next/-step, KEY_CHECK_JS; seit 2026-11-06 nur für Elemente, deren Zeile die Antwort zeigt: data-consens-seen, shown_to_agent/SHOWN_JS), Aktionen auf Elementen geben nach ACT_MS = 3 s mit Grund auf, wait mit text wartet bis die Seite den Text zeigt (wait_for_text), und ein gescheiterter Browser-Aufruf lässt die späteren Browser-Aufrufe seines Schritts ungelaufen (agent_delegation CALL_AFTER_BROWSER_FAILURE); seit 2026-11-02 note_sign_in (Liste, wo der Browser angemeldet ist, sign_in_site: Hostname, nie in temporären Chats); seit 2026-11-10 accept_dialog (nur mit Aktionen aus DIALOG_AFTER: ein confirm/prompt der Seite bekommt OK statt Abbrechen), upload auch an x,y und scroll mit ref oder x,y für den Kasten dort
@@ -11107,6 +11125,11 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   `ws_active_s`, `ws_first_call_s.{browser|vm}`, `ws_first_result_s`,
   `ws_failures.{code}`; ohne UID, Chat, Turn oder Text;
   übersteht das Löschen der Chats. Nur Server (Rules deny-all), kein Index.
+- `ops_metrics/agent-final-rounds` (seit 2026-11-15) — ein Dokument: je
+  Modell die letzten 50 Schlussrunden der Prüfer (`models[].rounds[]` mit
+  `at`, `s`, `e`: Ende, Sekunden, Endpunkt), woraus `agent_final_rounds` die
+  Hedge-Zeit und die gemiedenen Endpunkte ableitet; ohne UID, Chat, Turn oder
+  Text. Nur Server (Rules deny-all), kein Index.
 - `notification_outbox/{sha256(kind,resource,run,channel,recipient)}` — dauerhafte
   Benachrichtigungsaufträge für Watch-Owner (Mail/Telegram, inkl. Pause nach drei
   Fehlern), Watch-Seiten-Follower, Topic-Follower, Morning Brief und seit

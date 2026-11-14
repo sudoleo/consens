@@ -37,7 +37,7 @@ import time
 
 import pytest
 
-from app.services import agent_audit, agent_delegation, agent_quota
+from app.services import agent_audit, agent_delegation, agent_final_rounds, agent_quota
 from app.services.agent_comparison import AgentPreferences, ComparisonTools, comparison_selection
 from app.services.agent_delegation import DelegationLoop
 from app.services.agent_delegation_config import defaults
@@ -120,7 +120,7 @@ def scaled(monkeypatch):
     for name in ("FINAL_HEDGE_SECONDS", "FINAL_HEDGE_MIN_SECONDS", "FINAL_ROUND_SECONDS", "GATE_SECONDS",
                  "FAILURE_PAUSE_SECONDS"):
         monkeypatch.setattr(agent_audit, name, prod(getattr(agent_audit, name)))
-    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_final_rounds, "_rounds", {})
     monkeypatch.setattr(agent_delegation, "THINKING_UPDATE_SECONDS", prod(agent_delegation.THINKING_UPDATE_SECONDS))
 
 
@@ -659,7 +659,7 @@ def test_a_long_workbench_run_takes_each_reviewer_through_new_conversations_a_pa
     store = AgentRunStore(RoundTripDatabase(round_trip=0))
     monkeypatch.setattr(agent_audit, "session_budget", lambda model: LONG_BUDGET)
     monkeypatch.setattr(agent_audit, "FAILURE_PAUSE_SECONDS", .05)
-    monkeypatch.setattr(agent_audit, "_final_seconds", {})
+    monkeypatch.setattr(agent_final_rounds, "_rounds", {})
     fresh, unfollowed, forced = defaultdict(int), {}, set()
     original_round, original_fresh = agent_audit.ReviewerSession._round, agent_audit.ReviewerSession._fresh
 

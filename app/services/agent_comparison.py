@@ -339,8 +339,8 @@ class ComparisonTools:
         reviewer's kind of round for its receipt (worker_completion).
         ``registry``: tools the request carries without calling them (the
         agent's, where it continues the agent's conversation).
-        ``avoid_endpoint``: an endpoint this request goes elsewhere than, where
-        the model has another (DelegationLoop._step). ``on_completion``: called
+        ``avoid_endpoint``: an endpoint, or several, this request goes elsewhere
+        than, where the model has another (DelegationLoop._step). ``on_completion``: called
         with each request's completion as it starts, whose ``endpoint`` says
         where it runs once its stream says so."""
         loop = self.loop

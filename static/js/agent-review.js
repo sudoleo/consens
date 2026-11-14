@@ -682,6 +682,9 @@
       improved: findings.filter(finding => finding.on === 'answer' && finding.state === 'corrected').length,
       attempted: findings.some(finding => finding.delivered === 'final') };
   }
+  // Whether a sentence of the answer has a reviewer's note.
+  const notedSentences = audit => (audit?.claims || []).some(claim => claim?.anchor
+    && (claim.dissent || []).some(item => typeof item?.note === 'string' && item.note.trim()));
   // The notes of the findings the agent checks now: one word for them
   // everywhere the page speaks of this pass ("notes", as under Notes).
   const checkingNotes = pass => pass.checking.reduce((sum, finding) =>
@@ -747,8 +750,8 @@
   }
   const stillMotion = () => Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
     || App.userSettings?.get?.('stream_animation') === false;
-  // The pass over the findings ended: the sentences the agent checked go
-  // back from grey to ink (agent-chat.css .is-leaving) before this render
+  // The pass over the findings ended: the sentences in the grey go
+  // back to ink (agent-chat.css .is-leaving) before this render
   // lays its marks over them, so a mark never cuts in on the grey. One it
   // corrected stays grey until its new words come in (stream-reveal.js
   // rewrite). The newest render waits for that moment; a render that checks
@@ -1292,13 +1295,19 @@
     // While the agent may still correct the answer, the review shows nothing
     // at the sentences and the row goes on reviewing.
     const hold = deferred || withheld(review, evidence.ended);
-    // The agent checks findings now: their sentences carry the band, the line
-    // under the row says how many (both only while this view follows the run).
+    // The agent checks findings now: the line under the row says how many
+    // (only while this view follows the run).
     const pass = passOf(review.audit);
     const checking = !deferred && hold && exact && pass?.status === 'checking' ? pass.checking : [];
+    // From a reviewer's first note until the agent's pass is through, the
+    // sentences with notes stand in the grey with the band: the first
+    // reviewer is done seconds before the last, and the reader sees where a
+    // note lies instead of an answer that looks finished. No mark yet: the
+    // sentence may still change.
+    const noted = !deferred && hold && exact && notedSentences(review.audit);
     // Before anything changes on screen: the answer still shows what it
     // showed, and the render that follows reads it the same way.
-    if (!checking.length && leaveChecking(body, review, Boolean(correction) && !deferred && App.streamReveal?.active?.(),
+    if (!noted && leaveChecking(body, review, Boolean(correction) && !deferred && App.streamReveal?.active?.(),
       () => render(body, review, evidence))) return;
     keepChecking(body);
     if (deferred) holdForSelection(body, review, evidence);
@@ -1332,7 +1341,7 @@
       host.setAttribute('aria-label', 'Answer evidence');
     } else if (empty) placeRow(body, host, raw);
     const still = stillMotion();
-    sweepUntil(body, checking.length ? `${lineage}|${checking.map(finding => finding.id).join(',')}` : '',
+    sweepUntil(body, noted ? `${lineage}|${checking.map(finding => finding.id).join(',')}` : '',
       () => render(body, review, { ...evidence, ended: true }));
     const signature = JSON.stringify(['audit', review, raw, exact, turnSources, body._agentRenderSerial || 0,
       ...(review.audit.feedback ? [hold, still] : [])]);
@@ -1394,10 +1403,19 @@
     // The marks of exactly this answer: of every reviewer once the review is
     // done, before that of those whose final round is in. A review that then
     // stops keeps them (notesOnly): a mark that showed never goes away.
+    // A render while the grey stands (another reviewer through, the pass
+    // begun) builds the sentences anew: those in it already neither step
+    // into it again nor start their band over.
+    const standing = new Set([...body.querySelectorAll('.cx-claim.is-agent-checking')]
+      .map(span => span.dataset.claim).filter(Boolean));
     const place = () => overText(body, raw, () => {
       if (exact && !hold && (done || early || notesOnly)) window.renderStoredAuditMarks?.(body, review.audit, {
         openNotes: () => open('differences', { trigger: document.activeElement }) });
-      if (checking.length) window.renderAuditChecking?.(body, review.audit, new Set(checking.map(finding => finding.id)), { still });
+      if (noted) {
+        const beat = App.motion?.ms?.('beat') ?? 1800;
+        body.style.setProperty('--checking-phase', `-${Math.round(performance.now() % beat)}ms`);
+        window.renderAuditChecking?.(body, review.audit, new Set(checking.map(finding => finding.id)), { still, standing });
+      }
       window.linkifyAgentSources?.(body, turnSources);
     });
     if (relight && App.streamReveal?.rewrite) App.streamReveal.rewrite(body, place);

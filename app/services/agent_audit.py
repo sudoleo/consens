@@ -44,7 +44,6 @@ still completes.
 """
 from __future__ import annotations
 
-from collections import deque
 from contextvars import copy_context
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -61,6 +60,7 @@ from uuid import uuid4
 
 from app.core import config as cfg
 from app.core.observability import record_metric, safe_exception
+from app.services import agent_final_rounds
 from app.services.llm.provider_runtime import ProviderCancellation, ProviderCancelled
 
 
@@ -163,12 +163,12 @@ REVIEW_MIN_SECONDS = 30
 # request stops. Without it the slowest reviewer alone sets the time to the
 # marks (GPT-6 Luna p90 40 s, max 72 s), and a hung request holds the turn
 # until its hard stop. The hedge time is the FINAL_HEDGE_QUANTILE of
-# the model's last FINAL_HEDGE_SAMPLES final rounds in this process, from
+# the model's last final rounds (agent_final_rounds, kept across deploys:
+# counted in the process alone it never left FINAL_HEDGE_SECONDS), from
 # FINAL_HEDGE_MIN_SAMPLES on, at least FINAL_HEDGE_MIN_SECONDS, else
-# FINAL_HEDGE_SECONDS. The receipts hold the same durations, but reading
-# them would put a query in front of every final round; a deploy starts the
-# count over. A request the hedge overtook counts with the time it had run:
-# a lower bound above the hedge time, so the quantile does not drift down.
+# FINAL_HEDGE_SECONDS. A request the hedge overtook counts with the time it
+# had run: a lower bound above the hedge time, so the quantile does not
+# drift down.
 # FINAL_ROUND_SECONDS bounds the final round, both requests and a repair
 # included; then the reviewer's live marks stand (no_time) and the turn
 # completes. Thinking and search stay as they are (no cuts: hangs are
@@ -180,7 +180,6 @@ REVIEW_MIN_SECONDS = 30
 FINAL_HEDGE_SECONDS = 30
 FINAL_HEDGE_MIN_SECONDS = 12
 FINAL_HEDGE_QUANTILE = .9
-FINAL_HEDGE_SAMPLES = 50
 FINAL_HEDGE_MIN_SAMPLES = 8
 FINAL_ROUND_SECONDS = 90
 # A reviewer's threads (its own, its final round's requests) get this long
@@ -1511,27 +1510,20 @@ def trim_marks(audit):
 
 # --- One reviewer -------------------------------------------------------------
 
-# Seconds of each model's recent final rounds in this process (final_hedge_seconds).
-_final_seconds = {}
-_final_lock = threading.Lock()
-
-
 def final_hedge_seconds(model):
     """Seconds after which a final round on ``model`` (its API id) gets its
     hedge: FINAL_HEDGE_QUANTILE of its recent final rounds, at least
     FINAL_HEDGE_MIN_SECONDS, FINAL_HEDGE_SECONDS before there are enough."""
-    with _final_lock:
-        samples = sorted(_final_seconds.get(model, ()))
+    samples = agent_final_rounds.seconds(model)
     if len(samples) < FINAL_HEDGE_MIN_SAMPLES:
         return FINAL_HEDGE_SECONDS
     return max(FINAL_HEDGE_MIN_SECONDS, samples[math.ceil(len(samples) * FINAL_HEDGE_QUANTILE) - 1])
 
 
-def record_final_seconds(model, seconds):
+def record_final_seconds(model, seconds, endpoint=""):
     """How long a final round's first request on ``model`` took (or had run
-    when the hedge overtook it)."""
-    with _final_lock:
-        _final_seconds.setdefault(model, deque(maxlen=FINAL_HEDGE_SAMPLES)).append(seconds)
+    when the hedge overtook it), and on which endpoint."""
+    agent_final_rounds.record(model, seconds, endpoint)
 
 
 class FinalRequest:
@@ -1540,9 +1532,10 @@ class FinalRequest:
     "repair" or its "hedge". Once its thread is done: ``value`` and
     ``marks``, or ``error`` and the reply's ``shape``, and ``seconds``.
     ``completion``: the request's own as it runs, whose ``endpoint`` says
-    where; ``avoid_endpoint``: one it goes elsewhere than (a hedge)."""
+    where; ``avoid_endpoint``: the endpoints it goes elsewhere than (those
+    slow for the reviewer's model, a hedge also the first request's)."""
 
-    def __init__(self, session, worker, messages, kind, known, results, slots, avoid_endpoint=""):
+    def __init__(self, session, worker, messages, kind, known, results, slots, avoid_endpoint=()):
         self.session, self.worker, self.messages, self.kind = session, worker, messages, kind
         self.avoid_endpoint, self.completion = avoid_endpoint, None
         self.cancellation = ProviderCancellation()
@@ -1650,6 +1643,7 @@ class ReviewerSession:
         # ``hedged``: its hedge started.
         self.requests = []
         self.hedged = False
+        self._avoided = None
         self.thread = None
         # Its thread is through (final round in, failed or stopped): the
         # audit shows what it has (AnswerAudit._await_reviewers).
@@ -1658,6 +1652,16 @@ class ReviewerSession:
     @property
     def state(self):
         return self.audit.reviewers[self.provider]
+
+    @property
+    def avoided(self):
+        """The endpoints of its model this reviewer stays away from
+        (agent_final_rounds.slow_endpoints), the same for all its rounds: its
+        conversation is cached on the endpoint of its first request, and a
+        list that changed between rounds would move it."""
+        if self._avoided is None:
+            self._avoided = agent_final_rounds.slow_endpoints(self.model.model)
+        return self._avoided
 
     def _set(self, **fields):
         with self.tools.lock:
@@ -1951,7 +1955,8 @@ class ReviewerSession:
                     value = self.tools.worker_request(
                         self.worker, self.model, self.messages, cancellation=cut, slots=self.audit.slots,
                         searching=parse is None, search_rounds=LIVE_SEARCH_ROUNDS, one_off=False,
-                        review_round="repair" if attempt else "live" if gate is None else "gate")
+                        review_round="repair" if attempt else "live" if gate is None else "gate",
+                        avoid_endpoint=self.avoided)
                     marks = (parse(value.text) if parse is not None
                              else parse_review(value.text, known=known, final=False))
                     break
@@ -2032,7 +2037,8 @@ class ReviewerSession:
                 # endpoint is slow or hangs, and there only elsewhere.
                 at_work = next((request.endpoint for request in reversed(running) if request.kind != "hedge"), "")
                 hedge = self._ask(self._open(own=True), list(self.messages), "hedge", known, results,
-                                  threading.BoundedSemaphore(1), avoid_endpoint=at_work)
+                                  threading.BoundedSemaphore(1),
+                                  avoid_endpoint=tuple(dict.fromkeys(name for name in (at_work, *self.avoided) if name)))
                 running.append(hedge)
                 self.hedged = True
             # Stopped, no hedge comes any more: wait for the running requests
@@ -2084,10 +2090,10 @@ class ReviewerSession:
         for request in running:
             request.stop("stopped", {"code": "superseded"})
         if winner is first:
-            record_final_seconds(self.model.model, first.seconds)
+            record_final_seconds(self.model.model, first.seconds, first.endpoint)
         elif first in running:
             # Overtaken by the hedge: at least as long as it had run.
-            record_final_seconds(self.model.model, time.monotonic() - first.started)
+            record_final_seconds(self.model.model, time.monotonic() - first.started, first.endpoint)
         self.worker = winner.worker
         if winner is hedge:
             self.messages = list(hedge.messages)
@@ -2096,10 +2102,10 @@ class ReviewerSession:
         self.chars += len(self.messages[-2]["content"]) + len(_dumps(reply))
         return winner.value, winner.marks
 
-    def _ask(self, worker, messages, kind, known, results, slots=None, avoid_endpoint=""):
+    def _ask(self, worker, messages, kind, known, results, slots=None, avoid_endpoint=None):
         """One request of the final round on its own thread (FinalRequest)."""
         request = FinalRequest(self, worker, messages, kind, known, results, slots or self.audit.slots,
-                               avoid_endpoint=avoid_endpoint)
+                               avoid_endpoint=self.avoided if avoid_endpoint is None else avoid_endpoint)
         self.requests.append(request)
         return request
 
@@ -2169,7 +2175,10 @@ class AnswerAudit:
         self.claims = self.unplaced = self.process = None
         self.issues = []
         self.work_log = None
+        # The fixed answer once the reviewers have it (start_final), and the
+        # account lock's time then (_lock_time).
         self.final_answer = None
+        self._final_lock_time = None
         self.stopping = False
         self.file_ids = []
         self.slots = None
@@ -2404,6 +2413,7 @@ class AnswerAudit:
             # The reviewers then read the instructions themselves.
             logging.warning("Agent reviewer brief unavailable category=%s", safe_exception(exc))
         self.slots = threading.BoundedSemaphore(max(1, len(models)))
+        agent_final_rounds.load()
         with tools.lock:
             self.reviewers = {provider: {"provider": provider, "provider_label": cfg.provider_label(provider),
                                          "model": model.settings(), "status": "waiting", "rounds": 0,
@@ -2464,6 +2474,27 @@ class AnswerAudit:
             # The review's state stays in memory; close() saves it again.
             self._unsaved = True
             logging.warning("Agent audit state not saved category=%s", safe_exception(exc))
+
+    def _final_time(self):
+        """(seconds left until the turn's hard stop or None, whether a final round still fits them)."""
+        loop = self.tools.loop
+        left = loop._hard_stop_left() if callable(getattr(loop, "_hard_stop_left", None)) else None
+        return left, left is None or left - REVIEW_TIME_MARGIN >= REVIEW_MIN_SECONDS
+
+    def start_final(self, answer):
+        """The answer is fixed (DelegationLoop._finish_merged): the reviewers
+        read it now, a live round at work giving way (ReviewerSession.fixed).
+        The hand-over, the saves and the review's own step (run) come after
+        it and take over a second; waited for, they stood before every final
+        round. Not without reviewers, after a stop, or with no time left for a
+        final round, which run says."""
+        if not self.sessions or self.stopping or self.final_answer is not None or not self._final_time()[1]:
+            return
+        self._final_lock_time = self._lock_time()
+        self.final_answer = answer
+        for session in self.sessions.values():
+            session.fixed()
+        self.work_log.wake()
 
     def run(self, cancellation):
         """The answer is fixed: every reviewer gives its final marks.
@@ -2551,8 +2582,8 @@ class AnswerAudit:
             raise RuntimeError("The reviewers never started")
         self._settle("running")
         self._save()
-        left = loop._hard_stop_left() if callable(getattr(loop, "_hard_stop_left", None)) else None
-        if left is not None and left - REVIEW_TIME_MARGIN < REVIEW_MIN_SECONDS:
+        left, fits = self._final_time()
+        if not fits and self.final_answer is None:
             # No final round fits: the marks of the live rounds are all there is.
             for session in self.sessions.values():
                 session.cancellation.deadline = True
@@ -2563,17 +2594,16 @@ class AnswerAudit:
             self._finish(answer, [{"code": "no_time"}])
             return
         if left is not None:
-            self._timer = threading.Timer(left - REVIEW_TIME_MARGIN, self._expire)
+            self._timer = threading.Timer(max(0., left - REVIEW_TIME_MARGIN), self._expire)
             self._timer.daemon = True
             self._timer.start()
-        self.final_answer = answer
-        for session in self.sessions.values():
-            # Its backlog, and a live round at work gives way to the final
-            # round.
-            session.fixed()
-        self.work_log.wake()
-        locked = self._lock_time()
+        self.start_final(answer)
+        if self.final_answer is not None and self.final_answer != answer:
+            # Never: the answer of a turn is fixed once (ComparisonTools.capture).
+            logging.warning("Agent audit reviews another answer than the turn's")
+        locked = self._final_lock_time
         self._await_reviewers(answer, time.monotonic() + FINAL_ROUND_SECONDS + REVIEWER_JOIN_SECONDS)
+        agent_final_rounds.save()
         late = [session for session in self.sessions.values() if session.thread.is_alive()]
         for session in late:
             # Held up outside its requests (FINAL_ROUND_SECONDS bound those).

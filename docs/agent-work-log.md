@@ -243,7 +243,9 @@ autonome Läufe (seit 2026-10-25, vorher höchstens 6 Live-Runden). Begrenzt
 wird nur durch die Dauer des Turns, denn ein Prüfer ist während seiner Runde
 beschäftigt und nimmt danach alles Neue auf einmal. Ein Schritt ohne Tool-Aufruf ist
 meist die Antwort: Eine Antwort in einem Schritt hat nur die Schlussrunde. Die
-Schlussrunde beginnt, wenn die Antwort fixiert ist (`answer_fixed`), mit dem
+Schlussrunde beginnt, sobald die Antwort fixiert ist (`answer_fixed`, seit
+2026-11-15 mit dem Eintrag selbst, vor Übergabe und Speichern:
+`AnswerAudit.start_final`), mit dem
 Rest des Protokolls und der Antwort, und ist kurz, weil der Prüfer den Weg
 dorthin schon kennt. Läuft beim Fixieren noch eine Live-Runde, bricht sie
 seit 2026-10-29 sofort ab (`ReviewerSession.cut_round`, eine eigene
@@ -306,12 +308,21 @@ Agent-Panel.
   Beleg `round: hedge`). Die erste brauchbare Antwort gewinnt, die andere
   Anfrage stoppt (Sitzung „stopped“, `superseded`, ohne Nachricht; das Panel
   zeigt weiter eine Zeile je Prüfer). Die Hedge-Zeit ist das p90
-  (`FINAL_HEDGE_QUANTILE`; bis zum Tempo-Test vom 2026-10-29 das p75) der letzten `FINAL_HEDGE_SAMPLES` (50)
-  Schlussrunden des Modells in diesem Prozess, ab `FINAL_HEDGE_MIN_SAMPLES`
+  (`FINAL_HEDGE_QUANTILE`; bis zum Tempo-Test vom 2026-10-29 das p75) der letzten 50
+  Schlussrunden des Modells, ab `FINAL_HEDGE_MIN_SAMPLES`
   (8), mindestens `FINAL_HEDGE_MIN_SECONDS` (12 s), sonst
-  `FINAL_HEDGE_SECONDS` (30 s). Bewusst nicht aus den Belegen gelesen: Das
-  wäre eine Abfrage vor jeder Schlussrunde; ein Deploy beginnt die Zählung
-  neu. Eine vom Hedge überholte Anfrage zählt mit der Zeit, die sie lief
+  `FINAL_HEDGE_SECONDS` (30 s). Seit 2026-11-15 hält `agent_final_rounds`
+  die Schlussrunden über Deploys hinweg (`ops_metrics/agent-final-rounds`,
+  einmal je Prozess gelesen, nach jeder Prüfung geschrieben, beides neben
+  dem Lauf): Im Prozess allein gezählt kamen die 8 Runden nie zusammen (ein
+  Deploy begann die Zählung neu, ein Modell hat eine Handvoll Schlussrunden
+  am Tag), und alle Hedges in Prod starteten nach den 30 s. Dasselbe Modul
+  sagt, welche Endpunkte seines Modells ein Prüfer meidet
+  (`slow_endpoints`, `ReviewerSession.avoided`, als `provider.ignore` in
+  jeder seiner Runden, damit sein Gespräch dort gecacht wird, wo es bleibt):
+  In Prod lag der lange Schwanz am Endpunkt (DeepSeek V4.1 Flash im Median
+  8 s auf einem, 29 und 60 s auf zwei anderen). Runden auf einem gemiedenen
+  Endpunkt zählen für die Hedge-Zeit nicht. Eine vom Hedge überholte Anfrage zählt mit der Zeit, die sie lief
   (eine untere Grenze über der Hedge-Zeit), damit das p90 nicht nach unten
   driftet. `FINAL_ROUND_SECONDS` (90 s) begrenzt die Schlussrunde samt
   Hedge und zweitem Versuch: danach `no_time` („Its final review reached its

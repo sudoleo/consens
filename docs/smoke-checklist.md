@@ -244,8 +244,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       einer leicht veralteten Zahl („Was kostet ein Ticket fürs Kolosseum?“)
       → die Antwort steht sofort, ohne Marken; die Leiste sagt „Antwort wird
       geprüft…“, dann „Der Agent verfeinert die Antwort anhand von 2
-      Anmerkungen…“ in einer Zeile darunter,
-      und genau deren Sätze treten in ein Grau zurück, durch dessen
+      Anmerkungen…“ in einer Zeile darunter.
+      Schon vorher, sobald der erste Prüfer mit einer Anmerkung fertig ist
+      (seine Marke in der Leiste atmet nicht mehr, die des anderen noch),
+      treten die Sätze mit Anmerkung in ein Grau zurück, durch dessen
       Buchstaben ruhig ein Band aus Tinte läuft, ohne Fläche und ohne Farbe,
       auf Anhieb zu sehen, hell wie dunkel (lesbar, markierbar, auch fette
       Wörter, Links und Tabellenzellen; nichts verrutscht; mit

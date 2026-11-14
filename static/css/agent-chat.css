@@ -686,7 +686,8 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
   .agent-review-findings-link:hover { background: var(--hover); color: var(--ink-2); }
 }
 @media (pointer: coarse) { .agent-review-findings-link { padding-block: 12px; } }
-/* The sentences the agent checks step back into a quiet grey, and a band
+/* The sentences with a reviewer's note step back into a quiet grey until
+   the agent's pass over the notes is through (agent-review.js), and a band
    of ink runs through their letters at the beat, swept along each line at
    an even pace. No surface, no line and no hue: green says agreement, and
    the text is what is being checked. The span takes no room and stays
@@ -717,7 +718,12 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
     transition: --checking-rest var(--dur-state) var(--ease-standard);
     animation: agent-checking-in var(--dur-state) var(--ease-standard) backwards,
       agent-checking-sweep var(--dur-beat) var(--ease-linear) infinite;
+    /* Every band runs at the page's clock (agent-review.js sets the phase):
+       a sentence built anew while it stands in the grey goes on where its
+       band was. */
+    animation-delay: 0s, var(--checking-phase, 0s);
   }
+  .cx-claim.is-agent-checking.is-standing:not(.is-still) { animation-name: none, agent-checking-sweep; }
   .cx-claim.is-agent-checking.is-leaving:not(.is-still) { --checking-rest: var(--ink); }
   .cx-claim.is-agent-checking:not(.is-still) :is(.src-ref, code) { color: var(--checking-rest); }
   .cx-claim.is-agent-checking:not(.is-still) a:not([class]) { text-decoration-color: color-mix(in srgb, var(--checking-rest) 40%, transparent); }

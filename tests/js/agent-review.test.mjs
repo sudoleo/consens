@@ -1533,17 +1533,31 @@ it('without the setting a review renders as before, also while its run goes on',
 
 it('shows no mark while the reviewers review and the agent checks their findings, then the review at once', () => {
   const { window: w, document: d, body } = feedbackSetup();
-  w.App.agentReview.render(body, feedbackReview('live'), { key: 't1', ended: false });
+  // The reviewers still read: nothing at the sentences.
+  const reading = feedbackReview('live');
+  reading.audit.claims = [];
+  w.App.agentReview.render(body, reading, { key: 't1', ended: false });
   const status = d.querySelector('.agent-review-status');
   expect([status.textContent, status.classList.contains('visually-hidden')]).toEqual(['Reviewing the answer…', false]);
   expect(d.querySelector('.agent-review-findings')).toBeNull();
   expect(w.renderAuditChecking).not.toHaveBeenCalled();
-  // The agent checks: its findings' sentences carry the sweep, one line under
-  // the row says how many; still no mark, the notes still wait.
+  // The first reviewer is through with notes: their sentences step into the
+  // grey at once, without a mark and without a line; the row goes on reviewing.
+  w.App.agentReview.render(body, feedbackReview('live'), { key: 't1', ended: false });
+  expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  expect([...w.renderAuditChecking.mock.calls[0][2]]).toEqual([]);
+  expect([w.renderAuditChecking.mock.calls[0][3].still, [...w.renderAuditChecking.mock.calls[0][3].standing]]).toEqual([false, []]);
+  expect([status.textContent, status.classList.contains('visually-hidden')]).toEqual(['Reviewing the answer…', false]);
+  expect(d.querySelector('.agent-review-findings')).toBeNull();
+  expect(d.querySelector('.agent-review-reviewers').hidden).toBe(false);
+  expect(body.style.getPropertyValue('--checking-phase')).toMatch(/^-\d+ms$/);
+  // The agent checks: the sentences name its findings, one line under the row
+  // says how many; still no mark, the notes still wait.
+  w.renderAuditChecking.mockClear();
   w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
   expect([...w.renderAuditChecking.mock.calls[0][2]]).toEqual(['s1', 's2']);
-  expect(w.renderAuditChecking.mock.calls[0][3]).toEqual({ still: false });
+  expect([w.renderAuditChecking.mock.calls[0][3].still, [...w.renderAuditChecking.mock.calls[0][3].standing]]).toEqual([false, []]);
   const line = d.querySelector('.agent-review-findings');
   expect([line.textContent, line.getAttribute('aria-hidden'), line.querySelector('button')]).toEqual(
     ['The agent is refining the answer with 2 notes…', 'true', null]);
@@ -1563,15 +1577,34 @@ it('shows no mark while the reviewers review and the agent checks their findings
   expect(notesCell(d).disabled).toBe(false);
 });
 
+it('keeps a sentence standing in the grey through the renders that follow', () => {
+  const { window: w, body } = feedbackSetup();
+  // As consensus-insights.js marks a noted sentence.
+  w.renderAuditChecking = vi.fn(host => {
+    const span = host.ownerDocument.createElement('span');
+    span.className = 'cx-claim is-agent-checking';
+    span.dataset.claim = '0:Tickets cost 18 euros.';
+    host.append(span);
+    return 1;
+  });
+  w.App.agentReview.render(body, feedbackReview('live'), { key: 't1', ended: false });
+  expect([...w.renderAuditChecking.mock.calls[0][3].standing]).toEqual([]);
+  // The pass begins: the same sentence, built anew, is told that it stood there.
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  expect(w.renderAuditChecking).toHaveBeenCalledTimes(2);
+  expect([...w.renderAuditChecking.mock.calls[1][3].standing]).toEqual(['0:Tickets cost 18 euros.']);
+  expect(body.querySelector('.is-leaving')).toBeNull();
+});
+
 it('sweeps without motion where motion is off, and never sweeps a run that ended', () => {
   const still = feedbackSetup();
   still.window.App.userSettings = { get: name => (name === 'stream_animation' ? false : undefined) };
   still.window.App.agentReview.render(still.body, feedbackReview('checking'), { key: 't1', ended: false });
-  expect(still.window.renderAuditChecking.mock.calls[0][3]).toEqual({ still: true });
+  expect(still.window.renderAuditChecking.mock.calls[0][3]).toMatchObject({ still: true });
   const reduced = feedbackSetup();
   reduced.window.matchMedia = query => ({ matches: query.includes('reduce') });
   reduced.window.App.agentReview.render(reduced.body, feedbackReview('checking'), { key: 't1', ended: false });
-  expect(reduced.window.renderAuditChecking.mock.calls[0][3]).toEqual({ still: true });
+  expect(reduced.window.renderAuditChecking.mock.calls[0][3]).toMatchObject({ still: true });
   // A stored turn, or one whose run is over: its review as it stands, no sweep.
   for (const evidence of [{ key: 't1', ended: true }, { key: 't1' }]) {
     const { window: w, document: d, body } = feedbackSetup();
