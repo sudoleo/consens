@@ -316,9 +316,14 @@ describe("composer attachment tray", () => {
     expect(image().style.touchAction).toBe("none");
     image().dispatchEvent(new window.MouseEvent("dblclick", { bubbles: true, cancelable: true }));
     expect(body.classList.contains("is-zoomed")).toBe(true);
-    // Enlarged, a swipe moves the picture, not to the next one; a pinch never pages.
+    // Enlarged, a swipe or an arrow key moves the picture, not to the next
+    // one; a pinch never pages.
     swipe(300, 100);
     expect(count.textContent).toBe("1 / 2");
+    const arrow = new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+    document.body.dispatchEvent(arrow);
+    expect(count.textContent).toBe("1 / 2");
+    expect(arrow.defaultPrevented).toBe(true);
     document.body.dispatchEvent(new window.KeyboardEvent("keydown", { key: "0", bubbles: true }));
     expect(image().style.transform).toBe("");
     swipe(300, 100, true);

@@ -723,12 +723,14 @@
     if (viewerPrev) viewerPrev.addEventListener("click", function () { pageGallery(-1); });
     if (viewerNext) viewerNext.addEventListener("click", function () { pageGallery(1); });
     // On the document: a page step empties the body, and a focused Download
-    // or source link inside it leaves the focus on <body>.
+    // or source link inside it leaves the focus on <body>. An enlarged
+    // picture moves with the arrows instead (image-zoom.js listens after us).
     if (viewerOverlay) {
       document.addEventListener("keydown", function (event) {
         if (!viewerGallery || !viewerOverlay.hasAttribute("open")) return;
         if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
         if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+        if (viewerZoom?.zoomed()) return;
         event.preventDefault();
         pageGallery(event.key === "ArrowLeft" ? -1 : 1);
       });
