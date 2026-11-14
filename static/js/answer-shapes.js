@@ -47,7 +47,9 @@
       digits = parts.length > 2 || parts[1].length === 3 ? parts.join("") : parts.join(".");
     }
     const value = Number(digits);
-    return Number.isFinite(value) ? { value, unit: (match[1] || match[3] || "").trim() } : null;
+    // "$1.2B": the currency and the size behind it are one unit together.
+    const unit = [match[1], match[3]].map(part => (part || "").trim()).filter(Boolean).join(" ");
+    return Number.isFinite(value) ? { value, unit } : null;
   }
 
   // --- Figures --------------------------------------------------------------

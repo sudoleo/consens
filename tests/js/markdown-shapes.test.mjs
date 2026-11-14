@@ -223,6 +223,15 @@ describe("Bars", () => {
     expect(widths(render(table(["Name", "Change"], [["A", "-3 %"], ["B", "2 %"], ["C", "5 %"]])))).toEqual([]);
   });
 
+  // The size behind an amount stays its unit with a currency in front too:
+  // billions beside millions are not one scale.
+  it("compares a currency's amounts only in one size", () => {
+    expect(widths(render(table(["Company", "Revenue"], [["A", "$1.2B"], ["B", "$800M"], ["C", "$500M"]])))).toEqual([]);
+    expect(widths(render(table(["Fund", "Volume"], [["A", "€1,5 Mio."], ["B", "€900.000"], ["C", "€450.000"]])))).toEqual([]);
+    expect(widths(render(table(["Company", "Revenue"], [["A", "$1.2B"], ["B", "$0.6B"], ["C", "$0.3B"]]))))
+      .toEqual(["100%", "50%", "25%"]);
+  });
+
   it("aligns a column with a typographic minus as numbers, without bars", () => {
     const output = render(table(["Since", "Deposit rate"], [["2020", "−0,50 %"], ["2022", "0,75 %"], ["2023", "4,00 %"]]));
     expect(output.querySelector("tbody td:last-child").classList.contains("is-numeric")).toBe(true);

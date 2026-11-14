@@ -2818,7 +2818,7 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     Daten über zwölf Zeichen (`has-long-dates`) brechen am Handy zweizeilig
     in einer schmaleren Spalte um.
   - **Balken** (`bars`, `parseAmount`): eine Spalte vergleichbarer Beträge
-    (eine Einheit, nichts Negatives, ab drei Zeilen, keine Jahreszahlen oder
+    (eine Einheit, bei `$1.2B` Währung und Größe zusammen, nichts Negatives, ab drei Zeilen, keine Jahreszahlen oder
     laufenden Nummern, deutsche und englische Schreibweise) bekommt je Zelle
     `span.md-bar > i`; eine letzte Summenzeile bleibt ohne Balken. Bei
     Bezeichnung plus genau einer Betragsspalte `table.md-bar-rows` (Balken
