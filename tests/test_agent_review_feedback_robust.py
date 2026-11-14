@@ -451,7 +451,7 @@ def test_the_pass_goes_to_the_agents_endpoint_with_its_reasoning(store):
                 seen.update(session=kwargs.get("session_id"), history_end=value.history_end, messages=messages,
                             tools=[tool["function"]["name"] for tool in kwargs.get("tools") or []
                                    if tool.get("type") == "function"],
-                            allow=kwargs.get("allow_tool_calls"))
+                            allow=kwargs.get("allow_tool_calls"), one_off=getattr(value, "one_off", None))
             return stream(model=model, messages=messages, **kwargs)
         value.stream = wrapped
         return value
@@ -460,6 +460,10 @@ def test_the_pass_goes_to_the_agents_endpoint_with_its_reasoning(store):
     loop.factory = recording
     list(loop.run())
     assert seen["session"] == loop.provider_session and seen["history_end"] == loop.history_end
+    # Not a one-off: on Claude and Qwen it carries cache_control and the cache
+    # points (AgentCompletion.stream), so it reads the agent's cached
+    # conversation instead of paying all of it again.
+    assert seen["one_off"] is False
     # The agent's tool step stands in the request as the agent sent it, its tools listed and not callable.
     assert any(m.get("role") == "assistant" and m.get("tool_calls") for m in seen["messages"])
     assert any(m.get("role") == "tool" for m in seen["messages"])

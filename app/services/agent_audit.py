@@ -2901,7 +2901,9 @@ class AnswerAudit:
         timer.daemon = True
         timer.start()
         try:
-            value = self.tools.worker_request(worker, model, messages, cancellation=cut,
+            # Not a one-off: only a request with cache_control reads the
+            # agent's cached conversation (AgentCompletion.stream).
+            value = self.tools.worker_request(worker, model, messages, cancellation=cut, one_off=False,
                                               slots=threading.BoundedSemaphore(1), registry=loop.registry)
         except BaseException as exc:
             if not isinstance(exc, Exception) or (isinstance(exc, ProviderCancelled) and cancellation.cancelled):
