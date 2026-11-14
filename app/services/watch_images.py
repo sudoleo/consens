@@ -554,8 +554,6 @@ def make_thumbnail(content: bytes, *, box=None, aspect=(1 / 3, 3)):
             limit = MAX_PIXELS if jpeg else MAX_PIXELS_DECODED
             if min(width, height) < MIN_SIDE or width * height > limit:
                 return None
-            if not (aspect[0] <= width / height <= aspect[1]):
-                return None
             orientation = None
             if jpeg:
                 # Nur JPEG-Fotos tragen eine Kamera-Ausrichtung; PNG würde für
@@ -564,17 +562,25 @@ def make_thumbnail(content: bytes, *, box=None, aspect=(1 / 3, 3)):
                     orientation = source.getexif().get(0x0112)
                 except Exception:
                     orientation = None
-                image_decode.draft(source, (box[0] * 2, box[1] * 2))
+            # 5 bis 8 drehen das Bild um eine Vierteldrehung: Format und
+            # Zielkasten gelten für das gedrehte Bild, verkleinert wird vorher.
+            fit = box
+            if orientation in (5, 6, 7, 8):
+                width, height, fit = height, width, (box[1], box[0])
+            if not (aspect[0] <= width / height <= aspect[1]):
+                return None
+            if jpeg:
+                image_decode.draft(source, (fit[0] * 2, fit[1] * 2))
             if source.mode in ("RGB", "RGBA"):
                 # Erst verkleinern, dann kopieren: nur ein großer Puffer lebt.
-                source.thumbnail(box, Image.Resampling.LANCZOS)
+                source.thumbnail(fit, Image.Resampling.LANCZOS)
                 image = source.convert(source.mode)
             else:
                 has_alpha = source.mode in ("LA", "PA") or (
                     source.mode == "P" and "transparency" in source.info
                 )
                 image = source.convert("RGBA" if has_alpha else "RGB")
-                image.thumbnail(box, Image.Resampling.LANCZOS)
+                image.thumbnail(fit, Image.Resampling.LANCZOS)
         if orientation in _ORIENTATION:
             image = image.transpose(_ORIENTATION[orientation])
         if _looks_flat(image):

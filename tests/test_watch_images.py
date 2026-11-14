@@ -285,6 +285,22 @@ class ThumbnailTests(unittest.TestCase):
         _data, size = watch_images.make_thumbnail(buffer.getvalue())
         self.assertEqual(size, (160, 320))
 
+    def test_the_format_check_and_the_box_see_the_turned_picture(self):
+        def turned(size):
+            image = Image.frombytes("RGB", size, random.Random(9).randbytes(size[0] * size[1] * 3))
+            exif = Image.Exif()
+            exif[0x0112] = 6
+            buffer = io.BytesIO()
+            image.save(buffer, "JPEG", exif=exif)
+            return buffer.getvalue()
+
+        # Stored upright, shown lying: a wide card (topic_pictures) takes it,
+        # as large as its box allows.
+        _data, size = watch_images.make_thumbnail(turned((400, 800)), box=(640, 480), aspect=(1.2, 2.4))
+        self.assertEqual(size, (640, 320))
+        # Stored lying, shown upright: no wide card.
+        self.assertIsNone(watch_images.make_thumbnail(turned((800, 400)), box=(640, 480), aspect=(1.2, 2.4)))
+
     def test_logos_icons_strips_and_non_images_are_rejected(self):
         self.assertIsNone(watch_images.make_thumbnail(flat_bytes()))
         self.assertIsNone(watch_images.make_thumbnail(photo_bytes((120, 120))))
