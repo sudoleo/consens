@@ -40,6 +40,7 @@ import json
 import logging
 import re
 import threading
+import unicodedata
 
 from app.core.observability import safe_exception
 
@@ -62,8 +63,10 @@ CORRECTION_MIN_SECONDS = 45
 CORRECTION_SECONDS = 120
 # The register's bounds: a long run's live rounds bring marks without end
 # (each reviewer's own list keeps MAX_MARKS, kept_marks), and the review's
-# storage budget holds every finding's notes. Past MAX_FINDINGS new places are
-# not tracked; a finding keeps NOTES_PER_FINDING notes.
+# storage budget holds every finding's notes. Past MAX_FINDINGS new places of
+# one kind, entries of the work or places in the answer, are not tracked: soft
+# marks on the work never crowd out the answer's findings and their correction.
+# A finding keeps NOTES_PER_FINDING notes.
 MAX_FINDINGS = 60
 NOTES_PER_FINDING = 6
 # What one finding carries to the agent and the record.
@@ -216,10 +219,10 @@ class Findings:
 
     def _finding(self, key, on, **fields):
         """The finding ``key``, made where it is new and the register has
-        room (MAX_FINDINGS); None past it."""
+        room for one more ``on`` (MAX_FINDINGS); None past it."""
         finding = self.findings.get(key)
         if finding is None:
-            if len(self.findings) >= MAX_FINDINGS:
+            if sum(1 for item in self.findings.values() if item["on"] == on) >= MAX_FINDINGS:
                 return None
             finding = self.findings[key] = {"id": key, "on": on, **fields, "kind": "incomplete", "voices": set(),
                                             "notes": [], "state": "open", "delivered": None, "hard": False}
@@ -513,6 +516,14 @@ _INLINE_FORMULA = re.compile(r"(^|[^\\$\w])\$(?!\s)((?:[^$\n\\]|\\[^\n])*?(?:[^$
                              re.ASCII)
 _LATEX_SIGNAL = re.compile(r"\\[A-Za-z]|[\^_{}]")
 MAX_INLINE_FORMULA_CHARS = 200
+# What is text to emphasis and links (CommonMark): code spans, a link's
+# address, a bare address, an escaped sign. "my_var" in code or an address
+# with "_" opens nothing.
+_CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)")
+_LINK_TARGET = re.compile(r"\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+\"[^\"]*\")?\)")
+_BARE_URL = re.compile(r"https?://[^\s)\]>]+")
+_ESCAPED = re.compile(r"\\[!-/:-@\[-`{-~]")
+_EMPHASIS_RUN = re.compile(r"\*+|_+")
 
 
 def _urls(text):
@@ -520,10 +531,55 @@ def _urls(text):
 
 
 def _balanced(text):
-    """Whether ``text`` opens and closes its emphasis and code. Formulas
-    are judged in their line (_cuts_formula, _keeps_formulas): a "$" alone
-    says nothing, a price has one."""
-    return text.count("**") % 2 == 0 and text.count("`") % 2 == 0
+    """Whether ``text`` opens and closes its emphasis, strikethrough, code
+    and links. Formulas are judged in their line (_cuts_formula,
+    _keeps_formulas): a "$" alone says nothing, a price has one."""
+    text = _CODE_SPAN.sub("x", text)
+    for start, end in reversed(_formulas(text)):
+        text = text[:start] + "x" + text[end:]
+    text = _ESCAPED.sub("x", _BARE_URL.sub("x", _LINK_TARGET.sub("]", text)))
+    if "`" in text or "](" in text or text.count("~~") % 2:
+        return False
+    depth = 0
+    for char in text:
+        depth += (char == "[") - (char == "]")
+        if depth < 0:
+            return False
+    return not depth and _emphasis_closed(text)
+
+
+def _punctuation(char):
+    return unicodedata.category(char)[0] in "PS"
+
+
+def _emphasis_closed(text):
+    """Whether every run of "*" or "_" that can open or close emphasis
+    pairs within ``text``, as CommonMark pairs them (flanking runs; one
+    inside a word, between spaces or at a list item's start opens nothing).
+    A run left over shows as a raw sign, or pairs with one beside the place."""
+    openers = []
+    for match in _EMPHASIS_RUN.finditer(text):
+        sign, count = match.group()[0], len(match.group())
+        before = text[match.start() - 1] if match.start() else " "
+        after = text[match.end()] if match.end() < len(text) else " "
+        left = not after.isspace() and (not _punctuation(after) or before.isspace() or _punctuation(before))
+        right = not before.isspace() and (not _punctuation(before) or after.isspace() or _punctuation(after))
+        can_open = left and (sign == "*" or not right or _punctuation(before))
+        can_close = right and (sign == "*" or not left or _punctuation(after))
+        while count and can_close and any(opener[0] == sign for opener in openers):
+            if openers[-1][0] != sign:
+                # A closer past another sign's opener: the one between stays raw.
+                return False
+            used = 2 if count >= 2 and openers[-1][1] >= 2 else 1
+            count -= used
+            openers[-1][1] -= used
+            if not openers[-1][1]:
+                openers.pop()
+        if count and can_open:
+            openers.append([sign, count])
+        elif count and can_close:
+            return False
+    return not openers
 
 
 def _formulas(text):
@@ -773,23 +829,30 @@ async def _found(url):
 
 
 def corrected_answer(answer, items, results):
-    """``answer`` with each corrected sentence in its place, from the end
-    on so the earlier places hold. Overlapping places keep the first."""
-    text, taken = answer, []
-    for key, (start, end, _) in sorted(items.items(), key=lambda item: item[1][0], reverse=True):
+    """``answer`` with each corrected sentence in its place. Where places
+    overlap (widened_place), the one listed first in ``items`` stands:
+    correctable lists the most severe finding first. A sentence that does not
+    stand leaves ``results``, its finding stays open."""
+    taken = []
+    for key, (start, end, _) in items.items():
         result = results.get(key)
         if not result or result[0] != "corrected":
             continue
-        if any(start < other_end and other_start < end for other_start, other_end in taken):
+        # A "$" of the new text would pair with one beside it, or a formula
+        # of the line would change: the sentence stays. Checked once more
+        # below, with the corrections after it on its line in place.
+        if (any(start < other_end and other_start < end for other_start, other_end, _ in taken)
+                or not _keeps_formulas(answer, start, end, result[1])):
             results.pop(key)
             continue
-        if not _keeps_formulas(text, start, end, result[1]):
-            # A "$" of the new text would pair with one beside it, or a
-            # formula of the line would change: the sentence stays.
+        taken.append((start, end, key))
+    text = answer
+    # From the end on, so the earlier places hold.
+    for start, end, key in sorted(taken, reverse=True):
+        if not _keeps_formulas(text, start, end, results[key][1]):
             results.pop(key)
             continue
-        taken.append((start, end))
-        text = text[:start] + result[1] + text[end:]
+        text = text[:start] + results[key][1] + text[end:]
     return text
 
 

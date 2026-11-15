@@ -136,12 +136,52 @@ def test_a_list_item_alone_can_be_corrected_and_the_list_stands():
     "costs 36.10",
     "Tickets to the top cost 36.10 euros, see [rates](https://example.org/rates).",
     "Tickets to the top cost **36.10 euros.",
+    "Tickets to the top cost *36.10 euros.",
+    "Tickets to the top cost _36.10_ euros_.",
+    "Tickets to the top cost ~~36.10 euros.",
+    "Tickets to the top cost [36.10 euros.",
+    "Tickets to the top cost 36.10] euros.",
     "Tickets to the top cost 36.10 euros\nand more.",
     "Tickets to the top cost 36.10 euros as of 2026 and the lift",
-], ids=["fragment", "new-link", "open-bold", "new-line", "no-sentence"])
+], ids=["fragment", "new-link", "open-bold", "open-italic", "open-underscore", "open-strike", "open-link",
+        "closed-link", "new-line", "no-sentence"])
 def test_a_reply_that_is_no_safe_sentence_changes_nothing(after):
     items = {"s1": (0, 33, "Tickets to the top cost 14 euros.")}
     assert fb.read_corrections(json.dumps({"findings": [{"id": "s1", "sentence": after}]}), items) == {}
+
+
+@pytest.mark.parametrize("sentence", [
+    "The field my_ticket_price_total holds 2 * 36.10 euros.",
+    "Tickets cost *36.10* euros, __all__ taxes _included_.",
+    "The list at https://example.org/ticket_prices_2026 says 36.10 euros.",
+    "The [list](https://example.org/ticket_prices_(2026)) says 36.10 euros.",
+    "The price $p_{top}$ is 36.10 euros.",
+    "The field `ticket_price * 2` holds 36.10 euros.",
+    "Tickets cost 36.10 euros [1], ~~14~~ no longer.",
+    "Tickets cost 36.10 euros \\*.",
+], ids=["snake-and-times", "emphasis", "address", "link-with-brackets", "formula", "code", "note-and-strike",
+        "escaped"])
+def test_signs_that_open_nothing_never_cost_a_correction(sentence):
+    """Only Markdown the page would leave open counts: a "*" or "_" inside a
+    word, between spaces, in code, an address or a formula opens nothing."""
+    before = sentence.replace("36.10", "14.00")
+    assert fb.safe_place(before, 0, len(before))
+    results = fb.read_corrections(json.dumps({"findings": [{"id": "s1", "sentence": sentence}]}),
+                                  {"s1": (0, len(before), before)})
+    assert results == {"s1": ("corrected", sentence)}
+
+
+@pytest.mark.parametrize("words, place", [
+    ("Laut [Bericht", "Laut [Bericht: Wahl! Ergebnis](https://example.org/wahl) gewann sie klar."),
+    ("gewann sie klar", "Laut [Bericht: Wahl! Ergebnis](https://example.org/wahl) gewann sie klar."),
+    ("Die Partei", "Die Partei *gewann die Wahl! Das Ergebnis* steht fest."),
+], ids=["link-opens", "link-closes", "italic"])
+def test_a_sentence_that_ends_inside_a_link_or_emphasis_goes_with_the_rest_of_it(words, place):
+    """The sentences of a line can end inside a link's title or emphasis:
+    replaced alone, a corrected half would leave the other half raw."""
+    answer = f"Intro text with enough words here.\n\n{place} Danach kam noch mehr.\n\nSchluss mit genug Wörtern."
+    [(_, _, before)] = fb.correction_items(answer, [_finding_on(answer, words)]).values()
+    assert before == place
 
 
 def test_a_sentence_keeps_its_link_and_its_picture():
@@ -312,6 +352,43 @@ def test_the_register_stays_within_its_bounds():
     soft = fb.Findings()
     soft.live("A", [{"entry": 3, "kind": "doubtful", "note": "Maybe."}])
     assert soft.snapshot()["findings"] == []
+
+
+def test_the_live_rounds_never_crowd_out_the_findings_on_the_answer():
+    """A long run's live rounds mark entry after entry, soft marks too; the
+    answer's findings still get their correction pass."""
+    from app.services.agent_audit import place_marks
+    register = fb.Findings()
+    register.live("A", [{"entry": entry, "kind": "doubtful", "note": "Maybe."}
+                        for entry in range(1, fb.MAX_FINDINGS + 10)])
+    assert len(register.findings) == fb.MAX_FINDINGS
+    claims, _, process = place_marks(ANSWER, [("B", [{"quote": "Tickets to the top cost 14 euros", "kind": "wrong",
+                                                      "note": "36.10.", "source": RATES}], False)])
+    register.placed(claims, process)
+    due, _, items = register.correctable(ANSWER)
+    assert [finding["id"] for finding in due] == ["s1"] and items["s1"][2] == "Tickets to the top cost 14 euros."
+
+
+def test_overlapping_places_keep_the_correction_of_the_most_severe_finding():
+    """Widened places can overlap; the one listed first in ``items`` stands,
+    wherever it lies in the answer, and correctable lists the most severe
+    first."""
+    from app.services.agent_audit import place_marks
+    claims, _, process = place_marks(ANSWER, [("A", [
+        {"quote": "built in 1889", "kind": "doubtful", "note": "Check the year."},
+        {"quote": "Tickets to the top cost 14 euros", "kind": "wrong", "note": "36.10.", "source": RATES}], False)])
+    register = fb.Findings()
+    register.placed(claims, process)
+    due, _, items = register.correctable(ANSWER)
+    assert [finding["kind"] for finding in due] == ["wrong", "doubtful"] and list(items) == [f["id"] for f in due]
+
+    answer = "Alpha beta gamma. Delta epsilon zeta. Eta theta iota."
+    first, second = answer[:answer.index(" Eta")], answer[answer.index("Delta"):]
+    items = {"s1": (0, len(first), first), "s2": (answer.index("Delta"), len(answer), second)}
+    results = {"s1": ("corrected", first.replace("gamma", "GAMMA")),
+               "s2": ("corrected", second.replace("iota", "IOTA"))}
+    assert fb.corrected_answer(answer, items, results) == answer.replace("gamma", "GAMMA")
+    assert list(results) == ["s1"]
 
 
 def test_the_storage_budget_shortens_the_trace_too():

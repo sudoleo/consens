@@ -1065,7 +1065,9 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   `cut`). Gespeichert als `agent_review.audit.feedback` (`status` `live` →
   `checking` → `done`, `skipped` mit Grund, `counts`), jede platzierte Marke
   trägt `finding` mit der Kennung; nur mit der Einstellung. Begrenzt auf
-  `MAX_FINDINGS` = 60 Stellen und `NOTES_PER_FINDING` = 6 Notizen; gespeichert
+  `MAX_FINDINGS` = 60 Stellen je Art (Einträge der Arbeit, Stellen der
+  Antwort: weiche Live-Marken eines langen Laufs verdrängen nie die Befunde
+  der Antwort) und `NOTES_PER_FINDING` = 6 Notizen; gespeichert
   werden Befunde auf der Antwort sowie harte oder zugestellte zur Arbeit (ein
   weicher zur Arbeit steht in den Marken auf der Arbeit); `trim_marks` kürzt
   auch ihre Notizen.
@@ -1125,7 +1127,13 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Agenten (`safe_place`, sonst bleibt die Marke): eine Zeile Fließtext, ein
   Listenpunkt oder der Text einer Zelle im Rumpf einer Tabelle (Kopf- und
   Trennzeile bleiben gesperrt, `_body_cell`), keine Überschrift, kein
-  Zitat-, Code- oder Formelblock, Fettdruck und Code in sich geschlossen,
+  Zitat-, Code- oder Formelblock, Hervorhebung (`**`, `*`, `_`),
+  Durchstreichung (`~~`), Code und Links in sich geschlossen (`_balanced`,
+  gepaart wie in CommonMark: ein `_` im Wort, ein `*` zwischen Leerzeichen
+  oder am Listenanfang, Code, Adressen und Formeln öffnen nichts; ein
+  einzelnes Zeichen, das sich mit nichts paart, etwa `3*4` oder `_id`,
+  sperrt die Stelle dagegen, denn es könnte sich mit einem Zeichen daneben
+  paaren),
   keine Formel angeschnitten, höchstens `SENTENCE_CHARS` Zeichen, wörtlich
   übergeben. Eine Zelle geht als `"place": "table cell"` an den Agenten
   (`table_cells`); ihr Ersatz bleibt eine Zelle (`kept_shape(cell=True)`:
@@ -1141,7 +1149,7 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Wortliste gibt es bewusst nicht. Anlass all dessen: In Max' Lauf vom
   2026-11-13 zu einem Werkzeugvergleich gingen vier von sechs Befunden nicht
   an den Agenten, drei lagen in Tabellenzellen, einer neben einem Preis
-  mit `$`. Läuft Fettdruck, Code oder eine Formel eines
+  mit `$`. Läuft Hervorhebung, Code, ein Link oder eine Formel eines
   markierten Satzes in einen Nachbarsatz derselben Zeile weiter, geht die
   Stelle mit bis zu `WIDEN_SENTENCES` = 2 Nachbarsätzen derselben Zeile an
   den Agenten (`widened_place`, die folgenden zuerst; nie über eine Zeile).
@@ -1166,7 +1174,9 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Durchgang; beide guten Korrekturen mit Link wurden verworfen, weil das
   Modell die Quelle des Prüfers verlinkte (daher diese Regel), Opus machte
   aus einem Satz drei (daher „höchstens ein Satz mehr“). Ersetzt werden nur
-  diese Sätze (`corrected_answer`). Die korrigierte Antwort wird Version 2
+  diese Sätze (`corrected_answer`); überlappen sich zwei erweiterte Stellen,
+  gilt die des schwereren Befunds (die Reihenfolge von `correctable`), der
+  andere bleibt offen. Die korrigierte Antwort wird Version 2
   (`ComparisonTools.correct`, `versions[1].corrects = 1`), die erste bleibt
   gespeichert; die übrigen Marken stehen neu auf ihr (`_place_corrected`),
   die eines korrigierten Befunds fallen weg (`corrected_out`): Die Antwort
