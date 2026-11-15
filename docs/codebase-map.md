@@ -2837,7 +2837,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   ihre Formen also auch. Gezählt wird je geschriebener Antwort und Form
   einmal (`app_shape`, `agent-chat.js` `countShapes`, `AnswerShapes.present`).
   Öffentliche Seiten: `public_markdown.py` rendert unverändert; enthält die
-  Antwort eine Tabelle oder `<ol>`, lädt `partials/answer_blocks.html`
+  Antwort eine Tabelle, ein `<ol>` oder zwei Überschriften mit einer `<ul>`
+  (Dafür/Dagegen nebeneinander), lädt `partials/answer_blocks.html`
   (`page_has_shapes`) `answer-shapes.js` mit `data-draw-answers=".share-md"`,
   das dieselben Regeln anwendet. Jedes Wort bleibt im Server-HTML; die
   Tabellen dort tragen dieselben Haarlinien wie in `/app`.

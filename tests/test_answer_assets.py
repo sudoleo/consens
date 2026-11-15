@@ -81,3 +81,11 @@ def test_a_table_or_a_numbered_list_loads_the_shapes_and_keeps_every_word():
     assert "<table>" in table and "Teurer in der Anschaffung" in table and contains_shapes(table)
     assert "<ol>" in steps and "Fragen." in steps and contains_shapes({"turns": [{"answer_html": steps}]})
     assert not contains_shapes(render_public_markdown("- one\n- two\n\nText"))
+
+
+def test_two_headed_bullet_sections_load_the_shapes():
+    # Pros and cons as two sections stand side by side in the app
+    # (answer-shapes.js facingSections); the page needs the script for it.
+    facing = render_public_markdown("## Dafür\n\n- Spart Kosten\n- Leiser\n\n## Dagegen\n\n- Teurer\n- Braucht Platz")
+    assert "<ul>" in facing and contains_shapes({"turns": [{"answer_html": facing}]})
+    assert not contains_shapes(render_public_markdown("## Überblick\n\n- one\n- two\n\nText"))

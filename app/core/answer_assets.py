@@ -6,7 +6,7 @@ like the app (static/js/diagram-render.js, code-highlight.js,
 answer-shapes.js). Most pages need few of them, so the templates include
 ``partials/answer_blocks.html``, which emits each script only when the
 rendered answer carries the mark ``public_markdown`` leaves on such a block
-(for the shapes: a table or a numbered list at all).
+(for the shapes: a table, a numbered list or two headed bullet lists).
 """
 
 from __future__ import annotations
@@ -19,6 +19,8 @@ from jinja2 import pass_context
 # and for a code block in a language it lets through.
 DIAGRAM_MARK = 'class="language-mermaid"'
 _CODE_MARK = re.compile(r'class="language-(?!mermaid")')
+
+_HEADING = re.compile(r"<h[1-6][\s>]")
 
 _MAX_DEPTH = 8
 
@@ -45,10 +47,17 @@ def contains_code(value) -> bool:
     return _contains(value, lambda text: bool(_CODE_MARK.search(text)))
 
 
-def contains_shapes(value) -> bool:
-    """A table or a numbered list: what static/js/answer-shapes.js may draw."""
+def _has_shapes(text: str) -> bool:
+    if "<table" in text or "<ol" in text:
+        return True
+    return "<ul" in text and len(_HEADING.findall(text)) >= 2
 
-    return _contains(value, lambda text: "<table" in text or "<ol" in text)
+
+def contains_shapes(value) -> bool:
+    """A table, a numbered list or two headed bullet lists (for and against,
+    side by side): what static/js/answer-shapes.js may draw."""
+
+    return _contains(value, _has_shapes)
 
 
 @pass_context
@@ -67,7 +76,7 @@ def page_has_code(context) -> bool:
 
 @pass_context
 def page_has_shapes(context) -> bool:
-    """Jinja global: a table or a numbered list in the rendered answer."""
+    """Jinja global: something in the rendered answer the shapes may draw."""
 
     return contains_shapes(dict(context.parent)) or contains_shapes(dict(context.vars))
 
