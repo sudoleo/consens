@@ -554,6 +554,9 @@ class Shop:
             def evaluate(self, script):
                 return False
 
+            def evaluate_handle(self, script):
+                return type("Handle", (), {"as_element": lambda self: None})()
+
             def click(self, timeout):
                 page.act()
 
@@ -1019,6 +1022,16 @@ class Dialog:
         self.answers.append(("dismiss",))
 
 
+class Answered(Dialog):
+    """A dialog answered before the call could: Playwright's error then."""
+
+    def accept(self, prompt_text=None):
+        raise Exception("Dialog.accept: Cannot accept dialog which is already handled!")
+
+    def dismiss(self):
+        raise Exception("Dialog.dismiss: Cannot dismiss dialog which is already handled!")
+
+
 def chosen(name, mime, content):
     """The file as upload hands it to Chrome: its bytes, not its path. Chrome
     reads a path only when the form is sent, and the server deletes the file
@@ -1138,6 +1151,20 @@ def test_alerts_prompts_and_leaving_a_page_are_answered_as_the_action_asked(brow
     assert "filechooser" not in fresh.handlers and fresh.handlers["dialog"] == []
 
 
+def test_a_dialog_answered_before_the_call_could_is_not_called_cancelled(browser, driven):
+    """The user may answer a dialog in the live view while the agent's call
+    runs (a wait), and a page that goes on closes its own; the call's answer
+    then fails. The agent read "it got Cancel, so what it asked about did
+    not happen" also for a confirm the user had said OK to."""
+    page = Shop(browser)
+    page.effect = shows(Answered("confirm", "Delete the file?"), Answered("alert", "Saved."))
+    said = driven(page, action="click", ref="e5", accept_dialog=True).splitlines()
+    assert said[1:3] == [
+        'The page asked (confirm) "Delete the file?"; it was answered or closed before this call could answer it, '
+        "so read the page to see what happened.",
+        'The page showed a message (alert) "Saved."; it was closed.']
+
+
 def test_upload_goes_on_the_button_that_opens_the_file_picker(browser, driven, monkeypatch):
     """Sites hide their file field (read lists no hidden element) behind a
     button, a label or a drop zone, and set_input_files on the button
@@ -1171,18 +1198,24 @@ def test_upload_goes_on_the_button_that_opens_the_file_picker(browser, driven, m
 
 
 def test_upload_on_a_file_field_sets_it_and_a_click_names_the_picker_it_opened(browser, driven):
-    """A file field (also through its label) takes the file directly; a
-    click that opened a picker says that upload chooses there."""
+    """A file field, also the one a label around the element controls, takes
+    the file directly; a click that opened a picker says that upload chooses
+    there. The files go on the field FILE_FIELD_JS found, not on the
+    element: Playwright follows no label from a button or link, and upload
+    on a button in a file field's label failed."""
     upload = os.path.join(browser.UPLOADS, "photo.jpg")
     Path(upload).write_bytes(b"jpg")
     page, put = Shop(browser), []
 
     class Field(page.Locator):
-        def evaluate(self, script):
-            return script == browser.FILE_FIELD_JS
+        def evaluate_handle(self, script):
+            ref = self.ref
+            field = type("Field", (), {"set_input_files": lambda self, files, timeout: put.append((ref, files))})()
+            return type("Handle", (), {"as_element": lambda self: field if script == browser.FILE_FIELD_JS
+                                       else None})()
 
         def set_input_files(self, files, timeout):
-            put.append((self.ref, files))
+            raise AssertionError("Node is not an HTMLInputElement")
     page.Locator = Field
     assert driven(page, action="upload", ref="e2", file=upload).startswith("Put photo.jpg into e2.\n")
     assert put == [("e2", chosen("photo.jpg", "image/jpeg", b"jpg"))]

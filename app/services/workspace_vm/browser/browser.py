@@ -480,13 +480,16 @@ FIND_JS = r"""
 IS_SECRET_JS = r"""el => el.type === 'password' || /password/i.test(el.autocomplete || '') ||
   /one-time-code/i.test(el.autocomplete || '')"""
 
-# A file field, also through the label around the element, which
-# set_input_files takes the same way. Sites mostly hide it (read lists no
-# hidden element) behind a button that opens the file picker.
+# The file field of an element, itself or the control of the label around
+# it, else null. Upload sets the files on that field, not on the element:
+# Playwright follows the label only from an element that is no button, link
+# or role=button/checkbox/radio/switch, and a button in a file field's label
+# failed ("Node is not an HTMLInputElement"). Sites mostly hide the field
+# (read lists no hidden element) behind a button that opens the file picker.
 FILE_FIELD_JS = r"""el => {
   const label = el.tagName === 'INPUT' ? null : el.closest('label');
   const field = (label && label.control) || el;
-  return field.tagName === 'INPUT' && field.type === 'file';
+  return field.tagName === 'INPUT' && field.type === 'file' ? field : null;
 }"""
 
 # What a click or drag at x,y met. With only "Clicked at 337,623." as its
@@ -2080,8 +2083,9 @@ def finished_downloads():
 
 
 # What the pages asked during this call (run), for its answer: each dialog
-# as (type, message, default, answered OK), and the file pickers that opened
-# while it acted (FileChooser; upload takes the one its click opened).
+# as (type, message, default, answered OK; None when the call's answer came
+# too late), and the file pickers that opened while it acted (FileChooser;
+# upload takes the one its click opened).
 # Unhandled, Playwright closes a dialog unseen: a confirm got Cancel, and the
 # agent's click on "Delete" did nothing it could tell.
 ASKED = {"dialogs": [], "choosers": []}
@@ -2105,8 +2109,9 @@ def answer_dialog(dialog, accept):
         else:
             dialog.accept()
     except Exception:
-        # The page or its dialog went away meanwhile.
-        pass
+        # The page or its dialog went away meanwhile, or the user answered
+        # it in the live view: what it got is not this call's answer.
+        yes = None
     ASKED["dialogs"].append((kind, message, default, yes))
 
 
@@ -2116,7 +2121,12 @@ def asked_text():
     lines = []
     for kind, message, default, yes in ASKED["dialogs"]:
         said = f' "{message}"' if message else ""
-        if kind == "beforeunload":
+        if yes is None and kind == "alert":
+            lines.append(f"The page showed a message (alert){said}; it was closed.")
+        elif yes is None:
+            lines.append(f"The page asked ({kind}){said}; it was answered or closed before this call could answer "
+                         "it, so read the page to see what happened.")
+        elif kind == "beforeunload":
             lines.append("The page warned before it was left (it may have had unsaved changes); it was left.")
         elif kind == "alert":
             lines.append(f"The page showed a message (alert){said}; it was closed with OK.")
@@ -2490,8 +2500,9 @@ def act(context, page, action, request, seen=None):
         if ref:
             frame, target = located(page, ref)
             watch([ref], frame)
-            if target.evaluate(FILE_FIELD_JS):
-                target.set_input_files(payload, timeout=10_000)
+            field = target.evaluate_handle(FILE_FIELD_JS).as_element()
+            if field is not None:
+                field.set_input_files(payload, timeout=10_000)
                 return f"Put {name} into {ref}."
             # A button, a label or a drop zone that opens the file picker.
             target.click(timeout=ACT_MS)

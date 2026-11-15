@@ -2653,11 +2653,17 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   `accept_dialog` (dann OK, ein `prompt` mit seinem Vorgabewert; Playwrights
   `accept()` allein schickt einen leeren Text). Nach Abbrechen sagt die
   Antwort, dass dieselbe Aktion mit `accept_dialog` OK sagt; das Backend nimmt
-  das Feld nur mit Aktionen, die die Seite ändern (`DIALOG_AFTER`). Seiten
+  das Feld nur mit Aktionen, die die Seite ändern (`DIALOG_AFTER`). Scheitert
+  die Antwort, weil der Nutzer den Dialog in der Live-Ansicht schon
+  beantwortet hat oder die Seite weiterging, behauptet die Antwort kein
+  Abbrechen, sondern sagt, dass der Dialog vorher beantwortet oder geschlossen
+  wurde und der Agent auf der Seite nachsehen soll. Seiten
   verstecken ihr Dateifeld meist hinter einem Knopf, einem Label oder einer
   Ablagefläche (`read` listet keine versteckten Elemente), und
   `set_input_files` auf dem Knopf scheiterte. `upload` nimmt jetzt außer einem
-  Dateifeld (auch über sein Label, `FILE_FIELD_JS`) jedes Element oder x,y des
+  Dateifeld (auch über sein Label, `FILE_FIELD_JS`; die Dateien gehen auf das
+  gefundene Feld, denn Playwright folgt dem Label nicht von einem Knopf oder
+  Link aus, und ein Knopf in einem Label scheiterte) jedes Element oder x,y des
   Screenshots, klickt es, wartet bis `CHOOSER_SECONDS` (1 s) auf die
   Dateiauswahl, die Playwright während des Aufrufs abfängt (`opened_chooser`),
   und wählt dort die Datei. Öffnet der Klick keine, sagt die Antwort das,
