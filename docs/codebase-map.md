@@ -7114,7 +7114,10 @@ nach dem Laufende (Absturz vor `done`) stehen die Marken wie ohne Einstellung,
 ohne Schimmer. Ein Nachlauf, der ohne Turn endet, zeichnet die Antwort neu
 (`followReview`), und eine Ansicht, die kein Ende des Durchgangs sieht, zeigt
 nach `CHECKING_LIMIT_MS` (180 s, über `CORRECTION_SECONDS` des Servers) die
-Prüfung, wie sie ist (`sweepUntil`).
+Prüfung, wie sie ist (`sweepUntil`), und bleibt dabei, wenn sie denselben
+Stand wieder rendert (`body._sweepEnded`, `sweepKey`: die Basisansicht rendert
+einen laufenden Turn immer wieder); ein Durchgang über andere Anmerkungen
+läuft mit eigener Frist.
 Kommt Version 2 (`versions[].corrects`), schreibt `renderAudit` die Antwort
 selbst um (`correctionOf`, `body._corrected`; `agent-chat.js`
 `renderAnswerBody` rendert über `App.agentReview.shownText` weiter die

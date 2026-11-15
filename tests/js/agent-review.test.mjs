@@ -1627,6 +1627,19 @@ it('ends a sweep it sees no end of after the pass\'s own deadline, also through 
   expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
   expect(w.renderAuditChecking).toHaveBeenCalledTimes(1);
   expect(d.querySelector('.agent-review-findings')).toBeNull();
+  // Later frames of the same state (the base view, a pending turn in the
+  // history) still see no end: the sweep stays over, no new deadline runs.
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  vi.advanceTimersByTime(200000);
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  expect(w.renderAuditChecking).toHaveBeenCalledTimes(1);
+  expect(d.querySelector('.agent-review-findings')).toBeNull();
+  // A pass over other notes is a sweep of its own.
+  const other = feedbackReview('checking');
+  other.audit.feedback.findings[0].id = 's3';
+  w.App.agentReview.render(body, other, { key: 't1', ended: false });
+  expect(w.renderAuditChecking).toHaveBeenCalledTimes(2);
+  expect(d.querySelector('.agent-review-findings')).not.toBeNull();
   vi.useRealTimers();
 });
 

@@ -789,7 +789,9 @@
   // review as it has it.
   const CHECKING_LIMIT_MS = 180000;
   // One deadline per sweep (`key`: the answer and the findings checked); a
-  // render of the same sweep keeps it, any other ends it.
+  // render of the same sweep keeps it, any other ends it. A sweep past its
+  // deadline stays over (`_sweepEnded`, sweepKey): the base view renders the
+  // same pending state again and again, and each would start it anew.
   function sweepUntil(body, key, end) {
     if ((body._sweep || '') === key) return;
     clearTimeout(body._sweepTimer);
@@ -797,9 +799,13 @@
     if (!key) return;
     const raw = body.dataset.markdown;
     body._sweepTimer = setTimeout(() => {
-      if (body.isConnected && body._sweep === key && body.dataset.markdown === raw) end();
+      if (!body.isConnected || body._sweep !== key || body.dataset.markdown !== raw) return;
+      body._sweepEnded = key;
+      end();
     }, CHECKING_LIMIT_MS);
   }
+  const sweepKey = (lineage, pass) => `${lineage}|${pass?.status === 'checking'
+    ? pass.checking.map(finding => finding.id).join(',') : ''}`;
   // The text on screen when the review's answer is the agent's correction of
   // it (`corrects`): {from, to} versions, else null.
   function correctionOf(review, raw) {
@@ -1293,11 +1299,14 @@
     const version = deferred ? correction.from : review.versions?.find(v => v.id === review.answer_version);
     const exact = Boolean(version) && onScreen === version.text && (deferred || version.hash === review.answer_hash);
     // While the agent may still correct the answer, the review shows nothing
-    // at the sentences and the row goes on reviewing.
-    const hold = deferred || withheld(review, evidence.ended);
+    // at the sentences and the row goes on reviewing; a sweep past its
+    // deadline counts as ended (sweepUntil).
+    const pass = passOf(review.audit);
+    const lineage = review.versions?.[0]?.hash || '';
+    const sweep = sweepKey(lineage, pass);
+    const hold = deferred || withheld(review, body._sweepEnded === sweep || evidence.ended);
     // The agent checks findings now: the line under the row says how many
     // (only while this view follows the run).
-    const pass = passOf(review.audit);
     const checking = !deferred && hold && exact && pass?.status === 'checking' ? pass.checking : [];
     // From a reviewer's first note until the agent's pass is through, the
     // sentences with notes stand in the grey with the band: the first
@@ -1319,7 +1328,6 @@
     const summary = !hold && exact ? passSummary(review.audit) : null;
     // The rewritten sentences come into view in the light only where this
     // answer stood under the running review a moment ago, never on a reload.
-    const lineage = review.versions?.[0]?.hash || '';
     const relight = Boolean(correction) && !deferred && body._feedbackSeen?.lineage === lineage && body._feedbackSeen.held;
     body._feedbackSeen = review.audit.feedback ? { lineage, held: hold } : null;
     const done = AUDIT_DONE.has(review.status) && !hold;
@@ -1341,8 +1349,7 @@
       host.setAttribute('aria-label', 'Answer evidence');
     } else if (empty) placeRow(body, host, raw);
     const still = stillMotion();
-    sweepUntil(body, noted ? `${lineage}|${checking.map(finding => finding.id).join(',')}` : '',
-      () => render(body, review, { ...evidence, ended: true }));
+    sweepUntil(body, noted ? sweep : '', () => render(body, review, { ...evidence, ended: true }));
     const signature = JSON.stringify(['audit', review, raw, exact, turnSources, body._agentRenderSerial || 0,
       ...(review.audit.feedback ? [hold, still] : [])]);
     if (host.dataset.signature === signature) {
