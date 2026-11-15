@@ -1679,13 +1679,9 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
   w.App.agentReview.renderActivity(details, done, CORRECTED, { ended: true });
   expect(details.querySelector('.agent-activity-check').textContent)
     .toBe('2 notes · 1 passage marked in the text · 1 sentence improved');
-  // One calm line under the row says it too, and opens the notes.
-  const line = d.querySelector('.agent-review-findings');
-  expect([...line.querySelectorAll('span')].map(span => span.textContent)).toEqual(['1 sentence improved', '1 note open']);
-  const opened = w.App.answerReader.openContext.mock.calls.length;
-  line.querySelector('button').click();
-  expect(w.App.answerReader.openContext.mock.calls.length).toBe(opened + 1);
-  expect(w.App.answerReader.openContext.mock.calls.at(-1)[1].section).toBe('differences');
+  // No line under the row says it again: the head over the answer does.
+  expect(d.querySelector('.agent-review-findings')).toBeNull();
+  expect(w.App.agentReview.headNote(done, true).parts).toEqual(['checked', '1 sentence improved']);
   expect(w.App.agentReview.correctionUnchecked(done)).toBe(false);
 });
 
@@ -1742,8 +1738,7 @@ it('lists a note without a place under Notes like the others, its quoted Markdow
   expect(row.textContent).not.toContain('There is a chat as well.');
   // 1 corrected note + 2 open (the disputed one and the one without a place).
   expect(notesCell(d).getAttribute('aria-label')).toBe('Notes 3');
-  expect([...d.querySelectorAll('.agent-review-findings span')].map(span => span.textContent))
-    .toEqual(['1 sentence improved', '2 notes open']);
+  expect(d.querySelector('.agent-review-findings')).toBeNull();
   notesCell(d).click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
   expect(panel.querySelector('.agent-evidence-status').textContent).toBe('1 sentence improved · 2 notes open');
@@ -1817,28 +1812,34 @@ it('says calmly when a correction was not possible, and shows the review as it i
   expect(w.renderStoredAuditMarks.mock.calls[0][1].claims).toHaveLength(2);
   expect(body.textContent).toBe(ORIGINAL);
   expect(w.App.streamReveal.rewrite).not.toHaveBeenCalled();
-  const line = d.querySelector('.agent-review-findings');
-  expect([...line.querySelectorAll('span')].map(span => span.textContent)).toEqual(['Correction not possible', '2 notes open']);
-  // Its reason stays in the record; no error word, no colour of its own.
+  // The head says it, Notes opens with it; nothing under the row.
+  expect(d.querySelector('.agent-review-findings')).toBeNull();
+  expect(w.App.agentReview.headNote(skipped, true).parts).toEqual(['checked', 'correction not possible']);
+  // Its reason stays in the record; no error word.
   expect(d.querySelector('.agent-review').textContent).not.toMatch(/time|skipped|fail|error/i);
-  expect(line.dataset.state).toBeUndefined();
   expect(w.App.agentReview.correctionUnchecked(skipped)).toBe(true);
   // The notes say per passage that the agent has not checked it, as the mark does.
-  d.querySelector('.agent-review-findings button').click();
+  notesCell(d).click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  expect(panel.querySelector('.agent-evidence-status').textContent).toBe('Correction not possible · 2 notes open');
   expect([...panel.querySelectorAll('.agent-audit-unchecked')].map(line => line.textContent)).toEqual([
     'Not checked by the agent: the correction did not finish.', 'Not checked by the agent: the correction did not finish.']);
   // The user's own Stop is said as such.
   const stopped = feedbackReview('skipped');
   stopped.audit.feedback.skipped = 'stopped';
   w.App.agentReview.render(body, stopped, { key: 't1', ended: true });
-  expect(d.querySelector('.agent-review-findings').textContent).toBe('Correction stopped · 2 notes open');
+  expect(w.App.agentReview.headNote(stopped, true).parts).toEqual(['checked', 'correction stopped']);
+  notesCell(d).click();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences')
+    .querySelector('.agent-evidence-status').textContent).toBe('Correction stopped · 2 notes open');
   expect(w.App.agentReview.correctionUnchecked(stopped)).toBe(false);
   // A pass with nothing to check says nothing.
   const quiet = feedbackReview('live');
   quiet.audit.feedback.status = 'done';
   w.App.agentReview.render(body, quiet, { key: 't1', ended: true });
-  expect(d.querySelector('.agent-review-findings')).toBeNull();
+  notesCell(d).click();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences')
+    .querySelector('.agent-evidence-status')).toBeNull();
 });
 
 it('shows the marks of a run that ended before the agent\'s pass was through', () => {

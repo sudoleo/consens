@@ -7063,12 +7063,14 @@ Render mit Marken oder Korrektur wartet so lange (`_checkingLeave`; ein
 neuerer Render ersetzt den wartenden, einer, der wieder prüft, bricht ihn ab,
 `keepChecking`): Eine Marke kommt nie als Schnitt aus dem Grau. Ein Satz,
 dessen Befund `corrected` ist, bleibt bis dahin grau, und seine neuen
-Buchstaben laufen im farblosen Licht von `rewrite()` ein. Danach
-sagt dieselbe Zeile, was daraus wurde, als Knopf zu Notes (`passSummary`):
+Buchstaben laufen im farblosen Licht von `rewrite()` ein. Was daraus
+wurde, steht nicht unter der Leiste (dort steht für den Durchgang nie eine
+eigene Zeile, weder während er läuft noch danach), sondern im Kopf über der
+Antwort (siehe unten) und als erste Zeile in Notes (`passSummary`):
 „1 sentence improved · 3 notes open“ (verbessert = Befunde `corrected`, offen =
 die stehenden Anmerkungen wie in Notes), bei `skipped` ruhig „Correction not
 possible · 8 notes open“ (der Stopp des Nutzers „Correction stopped“), ohne
-Durchgang nichts; Notes beginnt mit derselben Zeile, die Aktivität nennt den
+Durchgang nichts; die Aktivität nennt den
 Kopf („1 sentence improved“) und den Schritt eines gescheiterten Durchgangs
 „Couldn’t check the reviewers’ notes“ (`correctionUnchecked`). Der Kopf über
 der Antwort (`agent-activity.js` `setNote`, `agent-review.js` `headNote`, nur

@@ -652,9 +652,9 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
         expect(marked.filter(has_text="It held about 50,000 spectators")).not_to_have_count(0)
         expect(marked.filter(has_text="24 euros")).to_have_count(0)
         expect(body.locator(".is-agent-checking")).to_have_count(0)
-        line = page.locator("#agentAnswer .agent-review-findings")
-        expect(line).to_have_text("1 sentence improved · 3 notes open")
-        # The head above the answer says it too, at the time the answer stood.
+        # The head above the answer says what came of it, at the time the
+        # answer stood; no second paragraph under the row says it again.
+        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_count(0)
         head = page.locator("#agentAnswer .agent-activity-title")
         expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked · 1 sentence improved$"))
         page.wait_for_timeout(400)
@@ -687,8 +687,8 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
         expect(card).to_contain_text(FLOOR_REASON)
         expect(card.locator(".cx-card-reply .cx-card-tag")).to_have_text("The agent disagrees")
         page.keyboard.press("Escape")
-        # The line opens the notes with the trace.
-        line.locator("button").click()
+        # Notes opens with what came of the pass, and the trace.
+        page.locator('#agentAnswer .agent-evidence-link[data-section="differences"]').click()
         reader = page.locator(".agent-audit-panel")
         expect(reader).to_be_visible()
         expect(reader.locator(".agent-evidence-status")).to_have_text("1 sentence improved · 3 notes open")
@@ -872,14 +872,13 @@ def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser,
         for text in ("A standard ticket costs 18 euros", "The arena floor was rebuilt in 2023.",
                      "It held about 50,000 spectators"):
             expect(marked.filter(has_text=text)).not_to_have_count(0)
-        line = page.locator("#agentAnswer .agent-review-findings")
-        expect(line).to_have_text("Correction not possible · 4 notes open")
-        expect(page.locator("#agentAnswer .agent-activity-title")).to_have_text(
-            re.compile(r"^Answer in \d+s · checked · correction not possible$"))
-        # In the row's quiet ink, never an error colour.
-        colors = line.evaluate("""el => [getComputedStyle(el).color,
-            getComputedStyle(el.closest('.agent-review').querySelector('.agent-evidence-link')).color]""")
-        assert colors[0] != "rgb(0, 0, 0)" and "255, 0, 0" not in colors[0], colors
+        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_count(0)
+        head = page.locator("#agentAnswer .agent-activity-title")
+        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked · correction not possible$"))
+        # In the head's quiet ink, never an error colour.
+        colors = head.locator(".agent-activity-after").evaluate("""el => [getComputedStyle(el).color,
+            getComputedStyle(document.documentElement).getPropertyValue('--dispute').trim()]""")
+        assert "255, 0, 0" not in colors[0] and colors[0] != colors[1], colors
         page.wait_for_timeout(1200)
         _snapshot(page, "findings-not-possible-1280")
         ticket = marked.filter(has_text="A standard ticket costs 18 euros").first
@@ -1005,10 +1004,7 @@ def test_a_note_without_a_place_stands_under_notes_not_under_the_answer(browser,
         row = page.locator("#agentAnswer .agent-review")
         notes = row.locator('.agent-evidence-link[data-section="differences"]')
         expect(notes).to_have_attribute("aria-label", "Notes 3")
-        if feedback:
-            expect(row.locator(".agent-review-findings")).to_have_text("1 sentence improved · 2 notes open")
-        else:
-            expect(row.locator(".agent-review-findings")).to_have_count(0)
+        expect(row.locator(".agent-review-findings")).to_have_count(0)
         expect(row.locator(".consensus-claims-fallback")).to_have_count(0)
         expect(page.locator("#agentAnswer")).not_to_contain_text("Chat-Support")
         page.wait_for_timeout(1500)

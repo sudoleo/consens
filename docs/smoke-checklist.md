@@ -255,8 +255,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Markenfarbe, die wieder verschwindet. Danach: die übrigen Sätze gleiten
       zurück in die Tinte, bevor ihre Marken kommen; nur der korrigierte Satz
       läuft in einem farblosen Licht neu ein, der Text darunter gleitet,
-      nichts scrollt, kein Panel öffnet sich, der Fokus bleibt; die Zeile sagt
-      „1 Satz verbessert · 3 Anmerkungen offen“ und öffnet per Klick Notes;
+      nichts scrollt, kein Panel öffnet sich, der Fokus bleibt; unter der
+      Leiste steht keine eigene Zeile dazu, Notes beginnt mit „1 Satz
+      verbessert · 3 Anmerkungen offen“;
       bestrittene Stellen tragen ihre Marke, schon die Hover-Vorschau nennt
       „Der Agent widerspricht“ mit Grund, nicht geprüfte „Vom Agenten nicht
       geprüft“ mit Grund, wo er bekannt ist. Die Live-Zeile über der Antwort
@@ -281,8 +282,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       als Wörter (eine Tabellenzeile als „a · b“, nie `|` oder `**`); die Zahl
       an Notes ist die der offenen Anmerkungen plus die der verbesserten Sätze.
       Scheitert der Durchgang (Kontingent fast leer,
-      Zeitüberschreitung): Schimmer weg, alle Marken, ruhig „Korrektur nicht
-      möglich · N Anmerkungen offen“, in der Aktivität „Anmerkungen der Prüfer
+      Zeitüberschreitung): Schimmer weg, alle Marken, im Kopf ruhig „… ·
+      Korrektur nicht möglich“, in Notes „Korrektur nicht möglich · N
+      Anmerkungen offen“, in der Aktivität „Anmerkungen der Prüfer
       nicht durchgegangen“. Zweiter Tab, Reload und abgelaufener Nachlauf
       zeigen nie einen endlosen Schimmer.
       Notes: „Vom Agenten korrigiert“ mit altem (durchgestrichen) und neuem

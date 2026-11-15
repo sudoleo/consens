@@ -675,17 +675,6 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
   0%, 100% { opacity: .3; }
   50% { opacity: .95; }
 }
-/* What came of the agent's pass over the reviewers' findings (agent-review.js,
-   only with findings_to_agent): one calm line under the row, which opens
-   the notes. Never in a colour of its own. */
-.agent-review > .agent-review-findings { order: 3; flex: 1 0 100%; min-height: 32px; margin: 0; color: var(--ink-3); line-height: 32px; }
-/* Inline, not flex: the " · " between the phrases keeps its spaces. */
-.agent-review-findings-link { display: inline-block; margin-left: -8px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: inherit; font: inherit; line-height: 20px; text-align: start; cursor: pointer; }
-.agent-review-findings-link:focus-visible { outline: var(--focus-ring); outline-offset: 0; }
-@media (hover: hover) and (pointer: fine) {
-  .agent-review-findings-link:hover { background: var(--hover); color: var(--ink-2); }
-}
-@media (pointer: coarse) { .agent-review-findings-link { padding-block: 12px; } }
 /* The sentences with a reviewer's note step back into a quiet grey until
    the agent's pass over the notes is through (agent-review.js), and a band
    of ink runs through their letters at the beat, swept along each line at

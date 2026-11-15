@@ -1325,7 +1325,6 @@
       body.dataset.markdown = raw;
       body._corrected = { from: correction.from.text, to: raw };
     }
-    const summary = !hold && exact ? passSummary(review.audit) : null;
     // The rewritten sentences come into view in the light only where this
     // answer stood under the running review a moment ago, never on a reload.
     const relight = Boolean(correction) && !deferred && body._feedbackSeen?.lineage === lineage && body._feedbackSeen.held;
@@ -1391,20 +1390,11 @@
     const context = auditContext(review, evidence, turnSources);
     host._auditContext = context;
     const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
-    // What came of the agent's pass (findings_to_agent) in one calm line
-    // under the row, which opens the notes with their trace. While it
-    // checks, nothing stands here: the live line over the answer says that
-    // it is being refined (agent-activity.js), a second paragraph under it
-    // was one too many; the live region still says how many notes.
-    if (!checking.length && summary) {
-      const line = node('p', 'agent-review-findings');
-      const button = phrases(node('button', 'agent-review-findings-link'), [summary.head, summary.open]);
-      button.type = 'button';
-      button.setAttribute('aria-controls', 'modelAnswerReader');
-      button.addEventListener('click', () => open('differences', { trigger: button }));
-      line.append(button);
-      host.append(line);
-    }
+    // Nothing stands under the row for the agent's pass (findings_to_agent):
+    // while it checks, the live line over the answer says that it is being
+    // refined, and what came of it the head says (agent-activity.js); Notes
+    // opens with the same words. A second paragraph under the answer was
+    // one too many.
     // The marks of exactly this answer: of every reviewer once the review is
     // done, before that of those whose final round is in. A review that then
     // stops keeps them (notesOnly): a mark that showed never goes away.
