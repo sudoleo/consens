@@ -3,8 +3,9 @@
 // App.firstRun: the dialog a new account sees before its first question
 // goes out (ai-consent.js asks through it). Two short steps:
 //
-//   setup     what the reviewers do, shown on one sentence, and how much of
-//             it this person wants to see; whether the app remembers them
+//   setup     what the reviewers do, played as a short scene on one answer,
+//             and how much of it this person wants to see; whether the app
+//             remembers them
 //   consent   who answers, and the agreement to send the question there
 //
 //   const choice = await App.firstRun.ask({ providers });
@@ -57,22 +58,58 @@
     return node;
   }
 
-  // One sentence as the reviewers treat it: <0> is the year they call wrong,
-  // <1> what the agent corrects it to, <2> the passage they doubt. The
-  // translation keeps the pairs and may move them.
-  function sampleSentence() {
-    const line = element("p", "first-run-sample-text");
-    const year = element("span", "first-run-year");
-    const parts = t("The Eiffel Tower opened in <0>1887</0><1>1889</1> and is <2>the most visited monument in the world</2>.")
-      .split(/(<\d>.*?<\/\d>)/);
-    parts.forEach(part => {
-      const marked = /^<(\d)>(.*)<\/\d>$/.exec(part);
-      if (!marked) line.append(part);
-      else if (marked[1] === "0") { year.append(element("span", "is-old", marked[2])); line.append(year); }
-      else if (marked[1] === "1") year.append(element("span", "is-new", marked[2]));
-      else line.append(element("span", "first-run-mark", marked[2]));
+  // The answer of the scene, word by word so it can come in like a stream:
+  // <0> is the year the reviewers call wrong, <1> what the agent corrects it
+  // to, <2> the passage they doubt. The translation keeps the pairs and may
+  // move them. --i is each word's place in the stream (first-run.css).
+  function sceneAnswer() {
+    const line = element("p", "first-run-answer");
+    const year = element("span", "first-run-word first-run-year");
+    let place = 0;
+    const words = (text, into) => text.split(/(\s+)/).forEach(piece => {
+      if (!piece) return;
+      if (/^\s+$/.test(piece)) return into.append(" ");
+      const word = element("span", "first-run-word", piece);
+      word.style.setProperty("--i", String(place++));
+      into.append(word);
     });
+    t("The Eiffel Tower opened in <0>1887</0><1>1889</1> and is <2>the most visited monument in the world</2>.")
+      .split(/(<\d>.*?<\/\d>)/).forEach(part => {
+        const marked = /^<(\d)>(.*)<\/\d>$/.exec(part);
+        if (!marked) return words(part, line);
+        if (marked[1] === "0") {
+          year.style.setProperty("--i", String(place++));
+          year.append(element("span", "is-old", marked[2]));
+          return line.append(year);
+        }
+        if (marked[1] === "1") return year.append(element("span", "is-new", marked[2]));
+        const doubt = element("span", "first-run-mark");
+        words(marked[2], doubt);
+        line.append(doubt);
+      });
     return line;
+  }
+
+  // The scene: a question, its answer streaming in, the reviewers finding
+  // the wrong year, the correction, the doubt. Decoration; the caption under
+  // it says in words what the chosen view shows.
+  function scene() {
+    const stage = element("div", "first-run-stage");
+    stage.setAttribute("aria-hidden", "true");
+    const play = element("div", "first-run-scene");
+    const status = element("div", "first-run-status");
+    const phases = element("span", "first-run-phases");
+    phases.append(
+      element("span", "is-checking", t("Checking the answer")),
+      element("span", "is-found", t("Found a mistake")),
+      element("span", "is-done", t("Corrected and checked")));
+    status.append(element("span", "first-run-reviewers"), phases);
+    const steps = element("div", "first-run-steps");
+    [t("Thinking: is 1887 right?"), t("Searching: Eiffel Tower opening year"), t("Reading toureiffel.paris")]
+      .forEach(step => steps.append(element("span", "", step)));
+    play.append(sceneAnswer(), status, steps);
+    stage.append(element("p", "first-run-ask", t("When did the Eiffel Tower open?")), play);
+    return stage;
   }
 
   function closeButton() {
@@ -110,15 +147,7 @@
       row.append(input, element("span", "", name));
       views.append(row);
     });
-    // Decoration: the caption under it says the same in words.
-    const sample = element("div", "first-run-sample");
-    sample.setAttribute("aria-hidden", "true");
-    const steps = element("div", "first-run-sample-steps");
-    const full = element("span", "is-full");
-    [t("Thinking: is 1887 right?"), t("Searching: Eiffel Tower opening year"), t("Reading toureiffel.paris")]
-      .forEach(step => full.append(element("span", "", step)));
-    steps.append(element("span", "is-calm", t("Checking the answer")), full);
-    sample.append(steps, sampleSentence());
+    const sample = scene();
     const caption = element("p", "first-run-caption");
     caption.setAttribute("aria-live", "polite");
 
@@ -195,16 +224,11 @@
     };
   }
 
-  // The sample tells its story again (found, corrected) for the view
-  // just chosen.
+  // The scene keeps playing; the view only decides what stays marked.
   function showView() {
     const { view } = chosen();
     dialog.dataset.view = view;
     dialog.querySelector(".first-run-caption").textContent = viewText(view)[1];
-    const sample = dialog.querySelector(".first-run-sample");
-    sample.classList.remove("is-playing");
-    void sample.offsetWidth;
-    sample.classList.add("is-playing");
   }
 
   function showStep(step) {
@@ -228,6 +252,8 @@
     providers.querySelector("ul").replaceChildren(...rows);
     const logos = rows.map(row => row.querySelector("img")?.cloneNode()).filter(Boolean);
     providers.querySelector(".first-run-logos").replaceChildren(...logos);
+    // The scene's reviewers wear the first three of the same logos.
+    dialog.querySelector(".first-run-reviewers").replaceChildren(...logos.slice(0, 3).map(logo => logo.cloneNode()));
     // Without logos there is no row to stand for the names: show them.
     providers.open = logos.length < rows.length;
   }

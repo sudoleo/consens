@@ -44,6 +44,21 @@ describe("the dialog", () => {
     expect(dialog().querySelector(".close-button").dataset.answer).toBe("false");
   });
 
+  it("plays one answer as a scene: its words in stream order, the wrong year with its correction, the reviewers' logos", () => {
+    const { App, dialog } = boot();
+    App.firstRun.ask({ providers: [...PROVIDERS, { text: "Gemini", icon: "/g.png" }, { text: "Grok", icon: "/x.png" }] });
+    const stage = dialog().querySelector(".first-run-stage");
+    expect(stage.getAttribute("aria-hidden")).toBe("true");
+    expect(stage.querySelector(".first-run-answer").textContent)
+      .toBe("The Eiffel Tower opened in 18871889 and is the most visited monument in the world.");
+    const places = [...stage.querySelectorAll(".first-run-word")].map(word => Number(word.style.getPropertyValue("--i")));
+    expect(places).toEqual(places.map((_, index) => index));
+    expect([...stage.querySelectorAll(".first-run-year > span")].map(year => [year.className, year.textContent]))
+      .toEqual([["is-old", "1887"], ["is-new", "1889"]]);
+    expect(stage.querySelector(".first-run-mark").textContent).toBe("the most visited monument in the world");
+    expect(stage.querySelectorAll(".first-run-reviewers img")).toHaveLength(3);
+  });
+
   it("answers with the chosen view and memory after Continue and Agree", async () => {
     const { App, dialog, pick } = boot();
     const answer = App.firstRun.ask({ providers: PROVIDERS });

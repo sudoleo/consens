@@ -1397,9 +1397,14 @@ Server.
 - [ ] Dialog vor der ersten Frage (KI-Zustimmung): ein Konto ohne
       `users/{uid}.ai_consent` tippt eine Frage und sendet → Schritt 1 „Jede
       Antwort bekommt eine zweite Meinung“: „Mit Zweifeln“ ist gewählt, der
-      Schieber gleitet beim Wechsel, im Beispielsatz wird 1887 gefunden und zu
-      1889 korrigiert (bei „Nur die Antwort“ ohne Spur, bei „Alles“ ticken die
-      Arbeitsschritte darüber), nichts springt; Gedächtnis-Schalter aus.
+      Schieber gleitet beim Wechsel. Darunter läuft die Szene in Schleife und
+      ohne Ruckeln: Frage, die Antwort kommt Wort für Wort, „Prüft die
+      Antwort“ → 1887 wird rot gefunden → zu 1889 korrigiert → der Zweifel
+      läuft durch „das meistbesuchte Bauwerk der Welt“ → „Korrigiert und
+      geprüft“, kurze Pause, von vorn (bei „Nur die Antwort“ bleibt keine
+      Spur, bei „Alles“ ticken die Arbeitsschritte darunter). Nichts springt,
+      auch nicht beim Wechsel der Lesart; mit „Bewegung reduzieren“ steht das
+      Endbild. Gedächtnis-Schalter aus.
       „Weiter“ → Schritt 2 „Fast geschafft“: Logo-Reihe (im Dark Mode lesbar),
       „Namen zeigen“ klappt die Liste auf, Link öffnet `/privacy#providers` im
       neuen Tab. X, Escape oder Klick daneben: Frage bleibt im Feld, nichts

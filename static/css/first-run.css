@@ -5,9 +5,9 @@
    -------------------------------------------------------------------------- */
 .first-run-dialog .first-run-content {
   position: relative;
-  width: min(92vw, 400px);
-  max-height: min(92dvh, 720px);
-  margin: clamp(12px, 10vh, 120px) auto;
+  width: min(92vw, 440px);
+  max-height: min(94dvh, 760px);
+  margin: clamp(12px, 8vh, 96px) auto;
   padding: 26px 24px 24px;
   overflow-y: auto;
   text-align: left;
@@ -108,140 +108,283 @@
   outline-offset: 1px;
 }
 
-/* The sample answer: one sentence as the chosen view shows it. Every part
-   keeps its place in all views, so choosing never moves the dialog. */
-.first-run-sample {
+/* The stage: a small piece of the app in which one answer is checked, over
+   and over. A loop is six beats; every part reads the same clock, so the
+   scene needs no script. At rest (no animation, reduced motion) each part
+   shows its last state: the corrected, checked answer. */
+.first-run-stage {
   display: grid;
-  gap: 4px;
-  margin: 10px 0 0;
-  padding: 12px 14px;
-  border-radius: var(--radius-sm);
-  background: var(--line-soft);
+  gap: 12px;
+  margin: 12px 0 0;
+  padding: 16px 16px 14px;
+  border-radius: var(--radius-md);
+  background: var(--ground);
+  box-shadow: 0 0 0 1px var(--line-soft), 0 8px 24px -16px var(--line);
 }
 
-.first-run-sample-steps {
-  display: grid;
-  overflow: hidden;
-  color: var(--ink-3);
+.first-run-dialog .first-run-ask {
+  justify-self: end;
+  max-width: 85%;
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: var(--radius-lg) var(--radius-lg) 4px var(--radius-lg);
+  background: var(--line-soft);
+  color: var(--ink);
   font-size: var(--font-size-xs);
   line-height: var(--line-height-ui);
-  white-space: nowrap;
 }
 
-.first-run-dialog[data-view="all"] .first-run-sample-steps .is-calm,
-.first-run-dialog:not([data-view="all"]) .first-run-sample-steps .is-full {
-  display: none;
-}
-
-/* "Everything": the steps come one after another in the same line, as the
-   Agent's full progress does. */
-.first-run-sample-steps .is-full {
+.first-run-scene {
   display: grid;
+  gap: 10px;
 }
 
-.first-run-sample-steps .is-full span {
-  grid-area: 1 / 1;
-  opacity: 0;
-  animation: first-run-step calc(var(--dur-beat) * 3) var(--ease-standard) infinite;
+.first-run-dialog[open] .first-run-scene {
+  animation: first-run-scene calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
 }
 
-.first-run-sample-steps .is-full span:nth-child(2) { animation-delay: var(--dur-beat); }
-.first-run-sample-steps .is-full span:nth-child(3) { animation-delay: calc(var(--dur-beat) * 2); }
-
-@keyframes first-run-step {
-  0% { opacity: 0; transform: translateY(4px); }
-  5%, 30% { opacity: 1; transform: none; }
-  35%, 100% { opacity: 0; transform: translateY(-4px); }
+@keyframes first-run-scene {
+  0% { opacity: 0; }
+  2%, 80% { opacity: 1; }
+  84%, 100% { opacity: 0; }
 }
 
-.first-run-dialog .first-run-sample-text {
+.first-run-dialog .first-run-answer {
   margin: 0;
   color: var(--ink);
-  font-size: var(--font-size-sm);
+  font-size: var(--font-size-md);
   line-height: var(--line-height-reading);
+  text-wrap: pretty;
+}
+
+/* The answer comes in word by word. A word leaves before the scene fades,
+   so the last ones of a loop are gone when the next one begins. */
+.first-run-word {
+  display: inline-block;
+}
+
+.first-run-dialog[open] .first-run-word {
+  animation: first-run-word calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
+  animation-delay: calc(var(--dur-beat) * 0.05 * var(--i, 0));
+}
+
+@keyframes first-run-word {
+  0%, 3% { opacity: 0; transform: translateY(4px); }
+  7%, 78% { opacity: 1; transform: none; }
+  82%, 100% { opacity: 0; transform: none; }
 }
 
 /* The year the reviewers call wrong and the one the agent corrects it to
-   share one place. At rest the corrected year stands; while the sample
-   plays, the wrong one is found (the tint runs through it) and then gives
-   way. "With doubts" and "Everything" keep a trace of the correction. */
+   share one place. ::before is the finding (it runs through the year and
+   goes with it), ::after the trace the correction leaves, which "Just the
+   answer" does not show. */
 .first-run-year {
   position: relative;
   display: inline-grid;
-  border-radius: 3px;
 }
 
 .first-run-year > span {
   grid-area: 1 / 1;
   position: relative;
+  z-index: 1;
+}
+
+.first-run-year::before,
+.first-run-year::after {
+  content: "";
+  position: absolute;
+  inset: 1px -3px;
+  border-radius: 4px;
 }
 
 .first-run-year::before {
-  content: "";
-  position: absolute;
-  inset: 0 -2px;
-  border-radius: 3px;
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  background: color-mix(in srgb, var(--dispute) 26%, transparent);
   transform-origin: left;
+  opacity: 0;
 }
 
-.first-run-dialog[data-view="answer"] .first-run-year::before {
-  opacity: 0;
+.first-run-year::after {
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+}
+
+.first-run-dialog[data-view="answer"] .first-run-year::after {
+  display: none;
 }
 
 .first-run-year .is-old {
   opacity: 0;
 }
 
-.first-run-sample.is-playing .first-run-year::before {
-  animation: first-run-found var(--dur-beat) var(--ease-standard) both;
+.first-run-dialog[open] .first-run-year::before {
+  animation: first-run-found calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
 }
 
-.first-run-dialog[data-view="answer"] .first-run-sample.is-playing .first-run-year::before {
-  animation-name: first-run-found-quiet;
+.first-run-dialog[open] .first-run-year::after {
+  animation: first-run-trace calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
 }
 
-.first-run-sample.is-playing .first-run-year .is-old {
-  animation: first-run-year-out var(--dur-beat) var(--ease-standard) both;
+.first-run-dialog[open] .first-run-year .is-old {
+  animation: first-run-year-out calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
 }
 
-.first-run-sample.is-playing .first-run-year .is-new {
-  animation: first-run-year-in var(--dur-beat) var(--ease-standard) both;
+.first-run-dialog[open] .first-run-year .is-new {
+  animation: first-run-year-in calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
 }
 
 @keyframes first-run-found {
-  0%, 12% { transform: scaleX(0); background: color-mix(in srgb, var(--dispute) 24%, transparent); }
-  34%, 62% { transform: none; background: color-mix(in srgb, var(--dispute) 24%, transparent); }
-  100% { transform: none; }
+  0%, 26% { opacity: 1; transform: scaleX(0); }
+  33%, 45% { opacity: 1; transform: none; }
+  51%, 100% { opacity: 0; transform: none; }
 }
 
-@keyframes first-run-found-quiet {
-  0%, 12% { opacity: 1; transform: scaleX(0); background: color-mix(in srgb, var(--dispute) 24%, transparent); }
-  34%, 62% { opacity: 1; transform: none; background: color-mix(in srgb, var(--dispute) 24%, transparent); }
-  100% { opacity: 0; transform: none; }
+@keyframes first-run-trace {
+  0%, 47% { opacity: 0; }
+  53%, 100% { opacity: 1; }
 }
 
 @keyframes first-run-year-out {
-  0%, 60% { opacity: 1; transform: none; }
-  74%, 100% { opacity: 0; transform: translateY(-5px); }
+  0%, 44% { opacity: 1; transform: none; }
+  49%, 100% { opacity: 0; transform: translateY(-6px); }
 }
 
 @keyframes first-run-year-in {
-  0%, 66% { opacity: 0; transform: translateY(5px); }
-  82%, 100% { opacity: 1; transform: none; }
+  0%, 46% { opacity: 0; transform: translateY(6px); }
+  52%, 100% { opacity: 1; transform: none; }
 }
 
-/* A doubt runs through its passage from the left, like ink. */
+/* A doubt runs through its passage from the left, like ink; "Just the
+   answer" leaves it out. */
 .first-run-mark {
-  border-radius: 3px;
+  border-radius: 4px;
   background-image: linear-gradient(color-mix(in srgb, var(--ink) 11%, transparent) 0 0);
   background-repeat: no-repeat;
-  background-size: 0% 100%;
-  transition: background-size var(--dur-light) var(--ease-standard);
+  background-size: 100% 100%;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
 }
 
-.first-run-dialog:not([data-view="answer"]) .first-run-mark {
-  background-size: 100% 100%;
+.first-run-dialog[data-view="answer"] .first-run-mark {
+  background-image: none;
+}
+
+.first-run-dialog[open] .first-run-mark {
+  animation: first-run-doubt calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
+}
+
+@keyframes first-run-doubt {
+  0%, 57% { background-size: 0% 100%; }
+  66%, 100% { background-size: 100% 100%; }
+}
+
+/* Under the answer: who checks, and how far they are. */
+.first-run-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+.first-run-reviewers {
+  display: flex;
+  flex: none;
+}
+
+.first-run-reviewers {
+  gap: 4px;
+}
+
+.first-run-reviewers img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+.first-run-phases {
+  display: grid;
+}
+
+.first-run-phases span {
+  grid-area: 1 / 1;
+}
+
+.first-run-phases .is-checking,
+.first-run-phases .is-found {
+  opacity: 0;
+}
+
+.first-run-phases .is-done {
+  color: var(--ink);
+}
+
+.first-run-dialog[open] .first-run-phases .is-checking {
+  animation: first-run-checking calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
+}
+
+.first-run-dialog[open] .first-run-phases .is-found {
+  animation: first-run-finding calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
+}
+
+.first-run-dialog[open] .first-run-phases .is-done {
+  animation: first-run-done calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
+}
+
+@keyframes first-run-checking {
+  0%, 16% { opacity: 0; transform: translateY(4px); }
+  19%, 30% { opacity: 1; transform: none; }
+  33%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes first-run-finding {
+  0%, 31% { opacity: 0; transform: translateY(4px); }
+  34%, 48% { opacity: 1; transform: none; }
+  51%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes first-run-done {
+  0%, 50% { opacity: 0; transform: translateY(4px); }
+  53%, 100% { opacity: 1; transform: none; }
+}
+
+/* "Everything": the steps tick through one line, as the Agent's full
+   progress does. The line keeps its place in the other views, so choosing
+   never moves the dialog. */
+.first-run-steps {
+  display: grid;
+  overflow: hidden;
+  margin-top: -4px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  white-space: nowrap;
+  transition: opacity var(--dur-state) var(--ease-standard);
+}
+
+.first-run-dialog:not([data-view="all"]) .first-run-steps {
+  opacity: 0;
+}
+
+.first-run-steps span {
+  grid-area: 1 / 1;
+  opacity: 0;
+}
+
+.first-run-steps span:nth-child(2) {
+  opacity: 1;
+}
+
+.first-run-dialog[open] .first-run-steps span {
+  animation: first-run-step calc(var(--dur-beat) * 3) var(--ease-standard) infinite;
+}
+
+.first-run-dialog[open] .first-run-steps span:nth-child(2) { animation-delay: var(--dur-beat); }
+.first-run-dialog[open] .first-run-steps span:nth-child(3) { animation-delay: calc(var(--dur-beat) * 2); }
+
+@keyframes first-run-step {
+  0% { opacity: 0; transform: translateY(4px); }
+  5%, 30% { opacity: 1; transform: none; }
+  35%, 100% { opacity: 0; transform: translateY(-4px); }
 }
 
 .first-run-dialog .first-run-caption {
@@ -355,18 +498,14 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .first-run-views::before,
-  .first-run-mark {
+  .first-run-views::before {
     transition: none;
   }
 
-  .first-run-sample.is-playing .first-run-year::before,
-  .first-run-sample.is-playing .first-run-year > span,
-  .first-run-sample-steps .is-full span {
+  .first-run-dialog[open] .first-run-scene,
+  .first-run-dialog[open] .first-run-scene *,
+  .first-run-dialog[open] .first-run-scene *::before,
+  .first-run-dialog[open] .first-run-scene *::after {
     animation: none;
-  }
-
-  .first-run-sample-steps .is-full span:nth-child(2) {
-    opacity: 1;
   }
 }
