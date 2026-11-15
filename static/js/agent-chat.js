@@ -962,6 +962,10 @@
       highlights: running ? App.agentDelegation?.liveHighlights?.(context.metadata.chatId, context.metadata.agentTurnId) : [],
       reconnecting: context.metadata.reconnecting === true && context.metadata.offline === true,
       reviewEnded: !running && !context.metadata.reviewTail,
+      // The answer may still be refined after its last word, and this view
+      // follows that: the live line stays over it until then.
+      refines: context.metadata.findingsToAgent === true,
+      reviewLive: running || context.metadata.reviewTail === true,
     });
     // Evidence links and Copy belong to a finished answer. While the run
     // streams they are only cleared once, when this run takes over the view.
@@ -2515,6 +2519,10 @@
   }
   // `basis`: the saved chat on screen whose newest turn runs elsewhere
   // (followRunning): the run continues it, with its history above.
+  // Whether the answer to this request may be refined after it is written:
+  // the reviewers check every answer and their notes reach the agent. With
+  // reviewers only for the workspace it is not known before the answer.
+  const refinesAnswer = body => body.findings_to_agent === true && body.reviewers === "always";
   async function resume(record, uid, { basis = null } = {}) {
     if (!canUse() || window.auth.currentUser.uid !== uid) return;
     const body = { ...record.body, recover_only: false };
@@ -2533,6 +2541,7 @@
           googleSelection: body.google_selection || null, googleDataConsent: body.google_data_consent === true },
         metadata: { draftQuestion: "", quotedContext: "", fileIds: body.file_ids || [], agentActivity: [],
           agentSettings: settings, chatId: body.chat_id, requestSent: true, resumed: true,
+          findingsToAgent: refinesAnswer(body),
           // Knows none of its chat's earlier turns (run-registry findByBookmarkId).
           ...(record.followup && !basis ? { historyMissing: true } : {}) },
         usage: { status: "simulation", key: null },
@@ -3170,6 +3179,7 @@
         // when on, so a message without it is the request it always was.
         ...(App.userSettings?.get?.("findings_to_agent") === true ? { findings_to_agent: true } : {}),
       };
+      context.metadata.findingsToAgent = refinesAnswer(body);
       // A reload ends a temporary chat (temporary-chat.js): nothing to follow then.
       if (!context.config.temporary) rememberPending(context, body);
       const result = await follow(context, body, signal, { headers });

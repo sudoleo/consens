@@ -243,8 +243,8 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Zeile weg, die Einstellungssuche findet sie dann nicht). Eine Frage mit
       einer leicht veralteten Zahl („Was kostet ein Ticket fürs Kolosseum?“)
       → die Antwort steht sofort, ohne Marken; die Leiste sagt „Antwort wird
-      geprüft…“, dann „Der Agent verfeinert die Antwort anhand von 2
-      Anmerkungen…“ in einer Zeile darunter.
+      geprüft…“; während der Agent die Anmerkungen prüft, steht unter der
+      Leiste keine weitere Zeile (das sagt die Live-Zeile über der Antwort).
       Schon vorher, sobald der erste Prüfer mit einer Anmerkung fertig ist
       (seine Marke in der Leiste atmet nicht mehr, die des anderen noch),
       treten die Sätze mit Anmerkung in ein Grau zurück, durch dessen
@@ -259,10 +259,13 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       „1 Satz verbessert · 3 Anmerkungen offen“ und öffnet per Klick Notes;
       bestrittene Stellen tragen ihre Marke, schon die Hover-Vorschau nennt
       „Der Agent widerspricht“ mit Grund, nicht geprüfte „Vom Agenten nicht
-      geprüft“ mit Grund, wo er bekannt ist. Der Kopf über der Antwort sagt
-      dabei „Antwort in 14 Sek. · wird verfeinert…“ in Tinte mit dem Glanz
-      eines laufenden Schritts, gut zu sehen, bis Prüfer und Agent durch
-      sind, am Ende „… · geprüft · 1 Satz verbessert“, in einer
+      geprüft“ mit Grund, wo er bekannt ist. Die Live-Zeile über der Antwort
+      verschwindet dabei nicht beim ersten Wort, sondern bleibt stehen
+      („Antwort wird geschrieben…“, dann „Antwort wird verfeinert…“, mit
+      Marke und Glanz) und gleitet erst zu, wenn Prüfer und Agent durch
+      sind; die Antwort rückt dabei einmal um eine Zeile nach oben und wird
+      nie nach unten geschoben. Der Kopf sagt währenddessen „Antwort in 14
+      Sek.“, am Ende „… · geprüft · 1 Satz verbessert“, in einer
       Zeile, und seine Zeit springt nicht auf die Dauer der Prüfung; der
       Wechsel nach dem Stream zeigt nie „Antwort in“ ohne Zahl. Schafft der
       Prüfer es nicht (Zeitlimit), endet er mit „… · nicht geprüft“, bei

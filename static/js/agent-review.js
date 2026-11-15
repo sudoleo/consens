@@ -709,9 +709,9 @@
   }
   // The head of a turn's activity (agent-activity.js), with notes passed to
   // the agent: while the review or the agent's pass goes on after the answer
-  // stood (`ended` false), that it is still being refined, `live` (the head
-  // keeps the look of a running step: the answer may still change under the
-  // reader's eyes, and a quiet note there went unseen); then how the check
+  // stood (`ended` false), that it is still being refined, `live` (where
+  // the page follows it, the activity's live line says so instead and the
+  // head keeps its time alone: agent-activity.js `refining`); then how the check
   // ended, in the sense of the line under the answer: checked (by every
   // reviewer or in part) and the one thing that came of it, stopped by the
   // user, or not checked (the reviewers did not finish). Null without such a
@@ -720,7 +720,7 @@
     if (!isAudit(review) || !review.audit.feedback) return null;
     const audit = review.audit, pass = passOf(audit);
     // One phrase for the reviewers' round and the agent's pass: to the
-    // reader both are the answer being refined; the line under it counts.
+    // reader both are the answer being refined.
     const checking = () => ['refining…'];
     if (ended === false && (!AUDIT_ENDED.has(review.status) || pass.status !== 'done')) return { live: true, parts: checking() };
     // A review this view saw no end of (a saved turn still under way).
@@ -1384,14 +1384,12 @@
     const context = auditContext(review, evidence, turnSources);
     host._auditContext = context;
     const open = (section, options = {}) => App.answerReader?.openContext(context, { section, ...options });
-    // The pass in one calm line under the row (findings_to_agent): while the
-    // agent checks, how many findings; then what came of it, which opens the
-    // notes with their trace. Said by the live region while it checks.
-    if (checking.length) {
-      const line = phrases(node('p', 'agent-review-findings is-checking'), [checkingWords(checkingNotes(pass))]);
-      line.setAttribute('aria-hidden', 'true');
-      host.append(line);
-    } else if (summary) {
+    // What came of the agent's pass (findings_to_agent) in one calm line
+    // under the row, which opens the notes with their trace. While it
+    // checks, nothing stands here: the live line over the answer says that
+    // it is being refined (agent-activity.js), a second paragraph under it
+    // was one too many; the live region still says how many notes.
+    if (!checking.length && summary) {
       const line = node('p', 'agent-review-findings');
       const button = phrases(node('button', 'agent-review-findings-link'), [summary.head, summary.open]);
       button.type = 'button';

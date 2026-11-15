@@ -156,9 +156,11 @@ describe("run details on a German page", () => {
 
 // Settings › Agent › Pass notes to the agent: the review and the agent's pass
 // over its notes go on after the answer stood, and a sentence may still
-// change. The head says so up there, where the reader looks, instead of
-// "Thought for", and then what came of it; its time stays the time until the
-// answer stood. Without the setting the head is as it always was.
+// change. Where the page follows that, the live line stays over the answer
+// and says so ("Refining the answer…") until nothing changes any more; the
+// head keeps the time until the answer stood, says "refining…" in words
+// where there is no such line, and then what came of it. Without the
+// setting the head is as it always was.
 describe("activity head of an answer whose check goes on after it stood", () => {
   const boot = () => {
     const app = loadScripts(["static/js/agent-review.js", "static/js/agent-activity.js"], { body: '<div id="host"></div>' });
@@ -178,21 +180,20 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     { id: "s2", on: "answer", kind: "doubtful", voices: 1, hard: false, state, notes: [note("Two."), note("Too.")], ...extra }];
   const head = host => host.querySelector(".agent-activity-title").textContent;
 
-  it("says the answer is still being refined, in the look of a running step, then what came of it, at the time it stood", () => {
+  it("says the answer is still being refined, then what came of it, at the time it stood", () => {
     const { app, host, activity } = boot();
     const render = (rev, ended) => activity.render(host, { running: false, status: "succeeded", elapsedMs: 14300, events: [],
       review: rev, reviewEnded: ended });
     render(review({ status: "running", feedback: { status: "live", findings: findings("open") } }), false);
     expect(head(host)).toBe("Answer in 14s · refining…");
     expect(host.querySelector(".agent-activity").classList.contains("has-check-note")).toBe(true);
-    // Each phrase alone for the translation; live while the check goes on.
-    const after = () => host.querySelector(".agent-activity-after");
-    expect([...after().querySelectorAll(":scope > span")].map(span => span.textContent)).toEqual(["refining…"]);
-    expect(after().classList.contains("is-live")).toBe(true);
-    // The reviewers' round and the agent's pass read as one: the line under the answer counts the notes.
+    // Each phrase alone for the translation.
+    expect([...host.querySelectorAll(".agent-activity-after > span")].map(span => span.textContent)).toEqual(["refining…"]);
+    // The reviewers' round and the agent's pass read as one.
     render(review({ feedback: { status: "checking", findings: findings("checking", { delivered: "final" }) } }), false);
     expect(head(host)).toBe("Answer in 14s · refining…");
-    expect(after().classList.contains("is-live")).toBe(true);
+    // No live line here: this view was not told that it follows the check.
+    expect(host.querySelector(".agent-current-status")).toBeNull();
     // Settled: the one thing that came of it; the rest stands under the answer.
     const improved = review({ feedback: { status: "done", findings: [
       { ...findings("corrected", { delivered: "final" })[0], before: "First.", after: "First, fixed." },
@@ -241,9 +242,59 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     expect(end("cancelled")).toBe("Answer in 17s · check stopped");
     // A saved turn whose review this view saw no end of.
     expect(end("running", { status: "live", findings: [] })).toBe("Answer in 17s · refining…");
-    // It does not follow that check: nothing pretends to run.
-    expect(host.querySelector(".agent-activity-after").classList.contains("is-live")).toBe(false);
     expect(host.querySelector(".agent-activity").classList.contains("has-check-note")).toBe(true);
+    app.dom.window.close();
+  });
+
+  // The live line of a run whose answer may still be refined (the request
+  // said so: `refines`), on a page that follows the check (`reviewLive`).
+  it("keeps the live line over the answer from its first word until nothing changes in it any more", () => {
+    vi.useFakeTimers();
+    const { app, host, activity } = boot();
+    const line = () => host.querySelector(".agent-progress .agent-current-status");
+    // Its words stand their time before the next take the line (pace).
+    const said = () => { vi.advanceTimersByTime(1500);
+      return line() && !host.querySelector(".agent-progress").hidden ? line().textContent : null; };
+    const base = { status: "running", events: [{ id: "r1", kind: "status", status: "responding" }], refines: true, reviewLive: true };
+    activity.render(host, { ...base, running: true, elapsedMs: 3000 });
+    expect(said()).not.toBeNull();
+    // The answer begins: the line stays, where it used to give way.
+    activity.render(host, { ...base, running: true, elapsedMs: 9000, answerText: "First. Second." });
+    expect(said()).toBe("Writing answer…");
+    // It stands and the reviewers review it; the run hands over.
+    const live = review({ status: "running", feedback: { status: "live", findings: findings("open") } });
+    activity.render(host, { ...base, running: true, elapsedMs: 14000, answerText: "First. Second.", review: live });
+    expect(said()).toBe("Refining the answer…");
+    const after = { ...base, running: false, status: "succeeded", elapsedMs: 14300, answerText: "First. Second.", reviewEnded: false };
+    activity.render(host, { ...after, review: live });
+    expect([said(), head(host)]).toEqual(["Refining the answer…", "Answer in 14s"]);
+    expect(host.querySelector(".agent-activity").classList.contains("is-refining")).toBe(true);
+    activity.render(host, { ...after, review: review({ feedback: { status: "checking",
+      findings: findings("checking", { delivered: "final" }) } }) });
+    expect([said(), head(host)]).toEqual(["Refining the answer…", "Answer in 14s"]);
+    // Through: the line closes, the head says what came of it.
+    activity.render(host, { ...after, reviewLive: false, reviewEnded: true, review: review({ feedback: { status: "done",
+      findings: findings("disputed", { delivered: "final", reason: "So." }) } }) });
+    expect(said()).toBeNull();
+    expect(head(host)).toBe("Answer in 14s · checked · 2 notes open");
+    expect(host.querySelector(".agent-activity").classList.contains("is-refining")).toBe(false);
+    vi.useRealTimers();
+    app.dom.window.close();
+  });
+
+  // Not asked for with the request (the setting off, reviewers only for the
+  // workspace): the lines give way at the answer's first word as always, and
+  // none comes back over a written answer, which it would push down.
+  it("brings no line back over a written answer", () => {
+    const { app, host, activity } = boot();
+    const shown = () => !host.querySelector(".agent-progress").hidden && Boolean(host.querySelector(".agent-current-status"));
+    const base = { events: [{ id: "r1", kind: "status", status: "responding" }], answerText: "First. Second.", reviewLive: true };
+    activity.render(host, { ...base, running: true, status: "running", elapsedMs: 9000 });
+    expect(shown()).toBe(false);
+    activity.render(host, { ...base, running: false, status: "succeeded", elapsedMs: 14300, reviewEnded: false,
+      review: review({ status: "running", feedback: { status: "live", findings: findings("open") } }) });
+    expect(shown()).toBe(false);
+    expect(head(host)).toBe("Answer in 14s · refining…");
     app.dom.window.close();
   });
 

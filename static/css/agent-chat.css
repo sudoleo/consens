@@ -675,9 +675,9 @@ body.single-agent-active:not(.is-hero) .consensus-section { margin-top: 0; }
   0%, 100% { opacity: .3; }
   50% { opacity: .95; }
 }
-/* The agent's pass over the reviewers' findings (agent-review.js, only with
-   findings_to_agent): one calm line under the row, while it checks and with
-   what came of it, which opens the notes. Never in a colour of its own. */
+/* What came of the agent's pass over the reviewers' findings (agent-review.js,
+   only with findings_to_agent): one calm line under the row, which opens
+   the notes. Never in a colour of its own. */
 .agent-review > .agent-review-findings { order: 3; flex: 1 0 100%; min-height: 32px; margin: 0; color: var(--ink-3); line-height: 32px; }
 /* Inline, not flex: the " · " between the phrases keeps its spaces. */
 .agent-review-findings-link { display: inline-block; margin-left: -8px; padding: 6px 8px; border: 0; border-radius: var(--radius-2xs); background: transparent; color: inherit; font: inherit; line-height: 20px; text-align: start; cursor: pointer; }
@@ -935,20 +935,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    head's quiet ink, never wrapping the head onto a second line; a narrow
    column ends it with "…" (the full words stand under the answer). */
 .agent-activity-after { color: var(--ink-3); font-weight: var(--font-weight-regular); }
-/* While the answer is still being refined (agent-review.js headNote `live`),
-   the phrase looks like the running step under a working head: ink and the
-   live line's sheen (label-shine). The answer may still change under the
-   reader's eyes; in the quiet grey the note went unseen. */
-.agent-activity-after.is-live > span { color: var(--ink); font-weight: var(--font-weight-medium); }
-@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-  .agent-activity-after.is-live > span { position: relative; display: inline-block; overflow: clip; vertical-align: bottom; }
-  .agent-activity-after.is-live > span::after {
-    content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 250%; pointer-events: none;
-    background-image: linear-gradient(105deg, transparent 43%,
-      color-mix(in srgb, var(--bg-color, #fff) 55%, transparent) 50%, transparent 57%);
-    animation: label-shine var(--dur-beat) var(--ease-linear) infinite;
-  }
-}
 .agent-activity.has-check-note > summary { flex-wrap: nowrap; }
 /* The words give way, never the model icons and the panel button after them. */
 .agent-activity.has-check-note > summary > :not(.agent-activity-title) { flex-shrink: 0; }
@@ -1003,7 +989,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-activity-timeline:not(.has-insights):not(.has-current) .agent-activity-content > :last-child::after { bottom: calc(100% - var(--dot-y)); }
 .agent-activity-timeline :is(.agent-activity-tool[data-status="running"], .agent-activity-current)::before { background: var(--agent-ink); }
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
-  .agent-activity.is-running :is(.agent-activity-tool[data-status="running"], .agent-activity-current)::before {
+  .agent-activity:is(.is-running, .is-refining) :is(.agent-activity-tool[data-status="running"], .agent-activity-current)::before {
     animation: activity-dot-breathe var(--dur-beat) var(--ease-standard) infinite;
   }
 }
@@ -1067,17 +1053,17 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    letters on the page's own colour. */
 @media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
   .agent-current-status,
-  .agent-activity.is-running :is(.agent-activity-tool[data-status="running"], .agent-activity-current) > strong {
+  .agent-activity:is(.is-running, .is-refining) :is(.agent-activity-tool[data-status="running"], .agent-activity-current) > strong {
     position: relative; width: fit-content; max-width: 100%; overflow: clip;
   }
-  .agent-activity.is-running .agent-activity-current > strong { display: inline-block; }
+  .agent-activity:is(.is-running, .is-refining) .agent-activity-current > strong { display: inline-block; }
   /* The mark breathes like the dot of the step at work in the opened
      timeline: from the click on Send something on the line moves in every
      frame, also in the seconds before the model's first word, when the
      words stand still and the sheen is between two passes. */
   .agent-current-status::before { animation: activity-dot-breathe var(--dur-beat) var(--ease-standard) infinite; }
   .agent-current-status::after,
-  .agent-activity.is-running :is(.agent-activity-tool[data-status="running"], .agent-activity-current) > strong::after {
+  .agent-activity:is(.is-running, .is-refining) :is(.agent-activity-tool[data-status="running"], .agent-activity-current) > strong::after {
     content: ''; position: absolute; top: 0; bottom: 0; left: 0; width: 250%; pointer-events: none;
     background-image: linear-gradient(105deg, transparent 43%,
       color-mix(in srgb, var(--bg-color, #fff) 55%, transparent) 50%, transparent 57%);
@@ -1086,7 +1072,7 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 /* Paused for the user's decision (a reviewer's halt): nothing works, so
    nothing shines. */
-.agent-activity.is-running .agent-activity-current.is-paused > strong::after { content: none; }
+.agent-activity:is(.is-running, .is-refining) .agent-activity-current.is-paused > strong::after { content: none; }
 .agent-progress p:last-child, .agent-progress-step:last-child { margin-bottom: 0; }
 .agent-progress-step[hidden] { display: none; }
 .agent-progress[hidden], .agent-activity[open] ~ .agent-progress { display: none; }

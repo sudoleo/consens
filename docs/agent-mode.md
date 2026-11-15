@@ -1212,10 +1212,13 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   verbessert“): Mit der Einstellung zeigt die Antwort keine Marken, bis der
   Korrekturdurchgang durch ist (`feedback.status: done`; endet der Lauf
   vorher, zeigen sie sich wie bisher), nie eine Farbe, die gleich wieder
-  verschwindet. Bis Prüfer und Agent durch sind, sagt der Kopf über der
-  Antwort „Answer in 14s · refining…“ im Aussehen eines laufenden Schritts
-  (Max 2026-11-15: das stille Grau ging unter, und die Antwort änderte sich
-  dann überraschend). Sobald der erste Prüfer mit Anmerkungen fertig ist
+  verschwindet. Bis Prüfer und Agent durch sind, bleibt die Live-Zeile über
+  der Antwort stehen („Writing answer…“, dann „Refining the answer…“) und
+  schließt sich erst, wenn sich an der Antwort nichts mehr ändert (Max
+  2026-11-15: die Zeile, die sonst „Thinking…“ zeigt, soll es sagen; ein
+  stilles Wort im Kopf ging unter, und die Antwort änderte sich dann
+  überraschend). Wo die Zeile nicht steht, sagt der Kopf „Answer in 14s ·
+  refining…“. Sobald der erste Prüfer mit Anmerkungen fertig ist
   (Max 2026-11-15: schafft Transparenz, ohne zu stören; der erste Prüfer ist
   im Median 6 s vor dem letzten da, bis zum Ende des Durchgangs waren es 19 s
   ohne ein Zeichen), treten die Sätze mit Anmerkung in

@@ -262,7 +262,7 @@
     const { verb, gap, time } = titleParts(ms, now, status, Boolean(note));
     const label = `${verb}${gap}${time}`;
     const parts = note?.parts || [];
-    const said = `${parts.join('\n')}${note?.live ? '\nlive' : ''}`;
+    const said = parts.join('\n');
     const noted = (view.checkNoteKey || '') !== said;
     if (view.title.dataset.label === window.App.t(label) && !noted) return;
     view.title.dataset.label = label;
@@ -294,7 +294,7 @@
     if (gapEl.textContent !== gap) gapEl.textContent = gap;
     if (timeEl.textContent !== window.App.t(time)) timeEl.textContent = time;
     timeEl.dataset.unit = slot;
-    if (noted) writeNote(view, parts, said, Boolean(note?.live));
+    if (noted) writeNote(view, parts);
     if (!resize) return;
     // The chevron glides to its new place while the new words open up (none
     // with reduced motion, motion()); the words keep to one line meanwhile.
@@ -337,10 +337,10 @@
   // After the time, what the check of an answer says that goes on after it
   // stood (agent-review.js headNote: "refining…", then "checked · 1 sentence
   // improved"), each phrase alone for the translation (setTitle). Nothing
-  // without such a check. `live`: the check still goes on, and the phrase
-  // looks like a running step (agent-chat.css .is-live).
-  function writeNote(view, parts, key, live) {
-    view.checkNoteKey = key;
+  // without such a check, and where the live line says it (renderActivity
+  // `refining`).
+  function writeNote(view, parts) {
+    view.checkNoteKey = parts.join('\n');
     view.details.classList.toggle('has-check-note', parts.length > 0);
     if (!parts.length) {
       view.checkNote?.remove();
@@ -352,7 +352,6 @@
         view.title.append(view.checkNote);
       }
       view.checkNote.replaceChildren();
-      view.checkNote.classList.toggle('is-live', live);
       for (const part of parts) {
         const phrase = document.createElement('span');
         phrase.textContent = part;
@@ -782,7 +781,7 @@
       line.next = null;
       line.at = performance.now();
       const node = view.previewNodes.get(id);
-      if (!view.running || !node?.isConnected) return;
+      if (!(view.running || view.standing) || !node?.isConnected) return;
       if (id === 'calm-status') { crossfade(node, line.text, view); return; }
       settle(view, () => { node.textContent = line.text; });
       motion(node, [{ opacity: .65 }, { opacity: 1 }], () => {}, 160);
@@ -1551,7 +1550,8 @@
   }
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
-    highlights = [], reconnecting = false, vm = null, vmRestore = null, reviewEnded } = {}) {
+    highlights = [], reconnecting = false, vm = null, vmRestore = null, reviewEnded, refines = false,
+    reviewLive = false } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -1697,11 +1697,20 @@
     // saved duration does (savedDuration).
     const waited = waitedMs(view, now === 'paused' || now === 'asking');
     // An answer whose check goes on after it stood says so in the head.
-    const note = running ? null : App.agentReview?.headNote?.(review, reviewEnded) || null;
+    const checkNote = running ? null : App.agentReview?.headNote?.(review, reviewEnded) || null;
+    // With notes passed to the agent (`refines`) the answer is not final at
+    // its last word: the live line stays over it from its first word on
+    // ("Writing answer…", then "Refining the answer…") and closes once
+    // nothing in it changes any more (`standing` below). Only where this
+    // view follows the check (`reviewLive`); the head then keeps its time
+    // alone, and says it in words wherever the line is not.
+    const refining = !running && refines && reviewLive && Boolean(checkNote?.live);
+    const note = refining ? { ...checkNote, parts: [] } : checkNote;
     updateClock(view, running && Number.isFinite(elapsedMs) ? Math.max(0, elapsedMs - waited) : elapsedMs, now,
       settled ? 'succeeded' : status, note);
     renderRunDetails(view, settings || events.findLast(item => item.settings)?.settings);
     view.details.classList.toggle("is-running", running);
+    view.details.classList.toggle("is-refining", refining);
     if (view.details.dataset.status !== status) view.details.dataset.status = status;
     // Completion collapses a manually opened live history only offscreen
     // (below). Later explicit expansion is preserved across saved-turn and usage updates.
@@ -1784,11 +1793,25 @@
     // "Checking the answer" and left again, two collapses for one.
     const answering = running && (!activeTool || answerChecks.has(activeTool.name))
       && Boolean(String(answerText || '').trim());
-    const showPreview = running && lines.length && !answering;
+    // The one line that stays over an answer that may still be refined (see
+    // `refining`): kept from the answer's first word, never brought back
+    // over a written answer, which it would push down. It closes with a
+    // glide (hidePreview) once the check is through. Not while the run
+    // waits for the user: its card says that.
+    const standing = refines && !held && (answering || refining);
+    // The answer stands once the review holds a version of it.
+    const standingStep = !standing ? '' : running && (reconnecting || waiting) ? heading
+      : review?.versions?.length ? 'Refining the answer…' : 'Writing answer…';
+    if (standing) {
+      lines = [{ id: 'calm-status', kind: 'step', current: true, fade: true,
+        text: pace(view, 'calm-status', standingStep, STATUS_DWELL_MS) }];
+    }
+    view.standing = Boolean(standing);
+    const showPreview = standing || (running && lines.length && !answering);
     let previewChanged = false;
     const previewIds = new Set();
-    const pinned = showPreview && plan ? 1 : 0;
-    const folded = showPreview && !calm ? foldPast(paragraphs) : null;
+    const pinned = showPreview && !standing && plan ? 1 : 0;
+    const folded = showPreview && !standing && !calm ? foldPast(paragraphs) : null;
     const pastIds = new Set(folded?.past.map(item => item.id) || []);
     const update = () => {
       if (pinned) {
@@ -1979,7 +2002,7 @@
       }
     }
     for (const [id, node] of view.nodes) if (!ids.has(id)) { node.remove(); view.nodes.delete(id); }
-    const currentStep = running && !saving && (!activeTool || waiting || reconnecting || held) ? heading : '';
+    const currentStep = standingStep || (running && !saving && (!activeTool || waiting || reconnecting || held) ? heading : '');
     if (currentStep) {
       const label = view.current.firstElementChild;
       if (label.textContent !== window.App.t(currentStep)) label.textContent = currentStep;

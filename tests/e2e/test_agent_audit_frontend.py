@@ -519,15 +519,17 @@ def table_events(*stages, handover=True, feedback=True):
 def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, phase4_server, width):
     """With findings passed to the agent, a mark could go with the sentence
     it marks: no mark yet, but the sentences with a note rest in grey with a
-    band of ink running through their letters, and one line under the row
-    says how many notes the agent checks."""
+    band of ink running through their letters; nothing is written under the
+    row while the agent checks."""
     context, page, errors = open_audit_page(browser, phase4_server, width, False,
                                             feedback_events("checking", handover=False), hang_live=True)
     try:
         body = page.locator("#agentAnswerBody")
         expect(body).to_contain_text("A standard ticket costs 18 euros")
         row = page.locator("#agentAnswer .agent-review")
-        expect(row.locator(".agent-review-findings")).to_have_text("The agent is refining the answer with 2 notes…")
+        # Said by the live region, not in a second paragraph under the answer.
+        expect(row.locator(".agent-review-status")).to_have_text("The agent is refining the answer with 2 notes…")
+        expect(row.locator(".agent-review-findings")).to_have_count(0)
         expect(row.locator(".agent-review-reviewers")).to_be_hidden()
         expect(row.locator('.agent-evidence-link[data-section="differences"]')).to_be_disabled()
         swept = body.locator(".cx-claim.is-agent-checking")
@@ -704,16 +706,18 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
 
 @pytest.mark.parametrize("width", [1280, 390])
 def test_the_head_says_the_answer_is_still_being_checked(browser, phase4_server, width):
-    """The head above the answer, where the reader looks, says that the
-    answer is still being refined while the review and the agent's pass go
-    on, at the time the answer stood, on one line. The answer under it is the
+    """Where no live line says it (this request did not ask for the notes to
+    reach the agent, yet its review carries them), the head above the answer
+    says that the answer is still being refined while the review and the
+    agent's pass go on, at the time the answer stood, on one line. The answer under it is the
     run's real one (the sweep of the agent's pass); the head is drawn as after
     the hand-over, whose stream this harness cannot keep open (a hand-over's
     stream that ends stops following, agent-chat.js followReview)."""
     context, page, errors = open_audit_page(browser, phase4_server, width, False,
                                             feedback_events("checking", handover=False), hang_live=True)
     try:
-        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_text("The agent is refining the answer with 2 notes…")
+        expect(page.locator("#agentAnswer .agent-review-status")).to_have_text(
+            "The agent is refining the answer with 2 notes…")
         head = page.locator("#agentAnswer .agent-activity-title")
         draw = """([review]) => { const host = document.querySelector('#agentAnswer .agent-activity').parentElement;
             App.agentActivity.render(host, { running: false, status: 'succeeded', elapsedMs: 14300,
@@ -724,17 +728,68 @@ def test_the_head_says_the_answer_is_still_being_checked(browser, phase4_server,
         for stage in ("live", "checking"):
             page.evaluate(draw, [feedback_review(stage)])
             expect(head).to_have_text("Answer in 14s · refining…")
-            # In ink, with the running step's sheen: where the reader looks, it does not go unseen.
-            look = head.locator(".agent-activity-after.is-live > span").evaluate("""el => [getComputedStyle(el).color,
-                getComputedStyle(document.getElementById('agentAnswerBody')).color,
-                getComputedStyle(el, '::after').animationName]""")
-            assert look[0] == look[1] and look[2] == "label-shine", look
             # One line, whatever the width: the head never pushes the answer down.
             assert head.bounding_box()["height"] <= line * 1.5, head.bounding_box()
             # Nor does the row around it grow: the answer under it stays where it is.
             assert summary.bounding_box()["height"] == before, (summary.bounding_box(), before)
             page.wait_for_timeout(300)
             _snapshot(page, f"header-{stage}-{width}")
+        assert errors == []
+    finally:
+        context.close()
+
+
+# Where the answer stands under the head, in every frame it shows text.
+ANSWER_TOPS = """() => { App.userSettings.set('findings_to_agent', true); window.__tops = [];
+    const frame = () => { const body = document.getElementById('agentAnswerBody');
+        const head = document.querySelector('#agentAnswer .agent-activity > summary');
+        if (body && head && body.textContent.trim() && body.offsetParent)
+            window.__tops.push(Math.round(body.getBoundingClientRect().top - head.getBoundingClientRect().top));
+        requestAnimationFrame(frame); }; frame(); }"""
+
+
+@pytest.mark.parametrize("width", [1280, 390])
+def test_the_live_line_stays_over_the_answer_while_it_is_refined(browser, phase4_server, width):
+    """With notes passed to the agent the answer may still change after its
+    last word: the live line stays over it, with its mark and sheen, and says
+    "Refining the answer…" instead of leaving at the answer's first word."""
+    context, page, errors = open_audit_page(browser, phase4_server, width, False,
+                                            feedback_events("checking", handover=False), hang_live=True,
+                                            before_send=lambda page: page.evaluate(ANSWER_TOPS))
+    try:
+        line = page.locator("#agentAnswer .agent-progress .agent-current-status")
+        expect(line).to_have_text("Refining the answer…")
+        expect(line).to_be_visible()
+        body = page.locator("#agentAnswerBody")
+        expect(body.locator(".cx-claim.is-agent-checking")).not_to_have_count(0)
+        box = line.bounding_box()
+        assert box["y"] + box["height"] <= body.bounding_box()["y"] + 1, (box, body.bounding_box())
+        look = line.evaluate("""el => [getComputedStyle(el, '::before').animationName,
+            getComputedStyle(el, '::after').animationName]""")
+        assert look == ["activity-dot-breathe", "label-shine"], look
+        page.wait_for_timeout(400)
+        _snapshot(page, f"refining-line-{width}")
+        assert errors == []
+    finally:
+        context.close()
+
+
+def test_the_live_line_closes_once_the_answer_is_refined(browser, phase4_server):
+    """Once the agent's pass is through the line closes: the answer moves up
+    by that one line, and nothing ever pushed it down."""
+    context, page, errors = open_audit_page(browser, phase4_server, 1280, False,
+                                            feedback_events("checking", "done", final=True),
+                                            before_send=lambda page: page.evaluate(ANSWER_TOPS))
+    try:
+        body = page.locator("#agentAnswerBody")
+        expect(body).to_contain_text("A standard ticket costs 24 euros since 2025")
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        expect(page.locator("#agentAnswer .agent-progress .agent-current-status")).to_have_count(0)
+        expect(page.locator("#agentAnswer .agent-activity-title")).to_have_text(
+            re.compile(r"^Answer in \d+s · checked · 1 sentence improved$"))
+        page.wait_for_timeout(400)
+        tops = page.evaluate("() => window.__tops")
+        assert tops and all(later <= earlier + 1 for earlier, later in zip(tops, tops[1:])), tops
         assert errors == []
     finally:
         context.close()
@@ -855,7 +910,8 @@ def test_the_agent_sweeps_the_table_cells_it_checks(browser, phase4_server):
                                             question=TABLE_QUESTION)
     try:
         body = page.locator("#agentAnswerBody")
-        expect(page.locator("#agentAnswer .agent-review-findings")).to_have_text("The agent is refining the answer with 2 notes…")
+        expect(page.locator("#agentAnswer .agent-review-status")).to_have_text(
+            "The agent is refining the answer with 2 notes…")
         swept = body.locator(".cx-claim.is-agent-checking")
         expect(swept).to_have_count(2)
         cells = swept.evaluate_all("""spans => spans.map(span => [span.textContent,

@@ -7044,9 +7044,11 @@ Ruhegrau ist der Token `--ink-rest`: hell `#767676` (4,5:1 auf Weiß; `--ink-3`
 läge zu nah an der Tinte), dunkel `--ink-3`. Ohne Bewegung durch System oder
 `stream_animation` steht der Satz nur im Ruhegrau, `.is-still`; `forced-colors`
 unterstreicht gepunktet), die
-Prüfer-Marken der Leiste gehen, und eine Zeile darunter sagt „The agent is refining the answer with 3 notes…“ (die
-Anmerkungen der geprüften Befunde, `checkingNotes`; `.agent-review-findings`,
-die Live-Region sagt es einmal). Sichtbar heißt es überall „notes“ /
+Prüfer-Marken der Leiste gehen, und die Live-Region der Leiste sagt „The
+agent is refining the answer with 3 notes…“ (die Anmerkungen der geprüften
+Befunde, `checkingNotes`). Sichtbar steht unter der Leiste dabei nichts: Die
+Live-Zeile über der Antwort sagt „Refining the answer…“ (siehe unten), ein
+zweiter Absatz unter der Antwort war einer zu viel. Sichtbar heißt es überall „notes“ /
 „Anmerkungen“, nie „findings“ / „Befunde“. Das Grau kommt und geht in
 `--dur-state` über die registrierte Farbe `--checking-rest` (`@property`,
 Einstieg `agent-checking-in`). Am Ende (`agent-review.js` `leaveChecking`)
@@ -7066,16 +7068,26 @@ Kopf („1 sentence improved“) und den Schritt eines gescheiterten Durchgangs
 der Antwort (`agent-activity.js` `setNote`, `agent-review.js` `headNote`, nur
 nach der Übergabe, nicht während der Lauf läuft) sagt es dort, wo der Leser
 liest: „Answer in 14s · refining…“, solange Prüfer und Agent arbeiten (eine
-Wendung für beide; die Zeile unter der Antwort zählt die Anmerkungen), am Ende
+Wendung für beide), am Ende
 „… · checked · 1 sentence improved“ (sonst „2 notes open“, „no objections“,
 „correction not possible“/„… stopped“; „checked in part“ bei `partial`,
 „check stopped“ bei `cancelled`, „not checked“ bei `failed`/`missing`/`off`, ein
 gespeicherter, noch laufender bleibt „refining…“; nie fällt er nach
-„refining…“ auf „Thought for“ zurück). Solange diese Seite die Prüfung
-verfolgt (`headNote` `live`), sieht die Wendung aus wie ein laufender Schritt:
-Tinte statt `--ink-3` und der Glanz der Live-Zeile (`.agent-activity-after.is-live`,
-`label-shine`), damit eine Antwort, die sich gleich ändert, nicht überrascht;
-eine eigene Live-Zeile über der stehenden Antwort würde sie verschieben. In
+„refining…“ auf „Thought for“ zurück). Verfolgt die Seite die Prüfung und
+hat die Anfrage selbst die Anmerkungen an den Agenten verlangt
+(`agent-chat.js` `refinesAnswer`: `findings_to_agent` und Prüfer „always“,
+als `metadata.findingsToAgent`; `renderActivity` `refines`, `reviewLive`),
+sagt es stattdessen die Live-Zeile, und der Kopf zeigt nur seine Zeit: Die
+Zeile weicht dann nicht beim ersten Wort der Antwort, sondern bleibt über ihr
+stehen (`standing`, eine Zeile, auch mit `detailed_progress`): „Writing
+answer…“, sobald die Prüfung eine Version der Antwort hält „Refining the
+answer…“, mit Marke und Glanz wie jeder laufende Schritt (`.is-refining` für
+die Zeile in der geöffneten Aktivität), und gleitet zu (`hidePreview`), wenn
+Prüfer und Agent durch sind; die Antwort rückt dabei einmal um diese Zeile
+nach oben. Sie wird gehalten, nie zurückgeholt: Eine Zeile, die über der
+geschriebenen Antwort wieder erschiene, schöbe sie nach unten; ohne das
+Zeichen der Anfrage (Prüfer nur für den Arbeitsplatz, wiederaufgenommener
+Lauf ohne Auftrag) bleibt es bei den Worten im Kopf. Der Kopf steht in
 einer Zeile (`.has-check-note`: kein
 Umbruch, schmal mit „…“, die Zeit dann Text wie die Wörter, damit „…“ nie die
 Zahl verdeckt). Zeit und Worte ändern sich in einem Schritt und gleiten einmal

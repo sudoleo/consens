@@ -1551,17 +1551,16 @@ it('shows no mark while the reviewers review and the agent checks their findings
   expect(d.querySelector('.agent-review-findings')).toBeNull();
   expect(d.querySelector('.agent-review-reviewers').hidden).toBe(false);
   expect(body.style.getPropertyValue('--checking-phase')).toMatch(/^-\d+ms$/);
-  // The agent checks: the sentences name its findings, one line under the row
-  // says how many; still no mark, the notes still wait.
+  // The agent checks: the sentences name its findings; still no mark, the
+  // notes still wait.
   w.renderAuditChecking.mockClear();
   w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
   expect([...w.renderAuditChecking.mock.calls[0][2]]).toEqual(['s1', 's2']);
   expect([w.renderAuditChecking.mock.calls[0][3].still, [...w.renderAuditChecking.mock.calls[0][3].standing]]).toEqual([false, []]);
-  const line = d.querySelector('.agent-review-findings');
-  expect([line.textContent, line.getAttribute('aria-hidden'), line.querySelector('button')]).toEqual(
-    ['The agent is refining the answer with 2 notes…', 'true', null]);
-  // Said once, by the live region; the reviewers' marks have done their part.
+  // No second paragraph under the answer: the live line over it says that
+  // it is being refined (agent-activity.js); the live region says how many
+  // notes. The reviewers' marks have done their part.
   expect([status.textContent, status.classList.contains('visually-hidden')]).toEqual(['The agent is refining the answer with 2 notes…', true]);
   expect(d.querySelector('.agent-review-reviewers').hidden).toBe(true);
   expect([notesCell(d).disabled, notesCell(d).textContent]).toEqual([true, 'Notes']);
