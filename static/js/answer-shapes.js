@@ -38,12 +38,19 @@
     let digits = match[2].replace(/\s/g, "");
     if (/[.,]$/.test(digits)) return null;
     const dot = digits.lastIndexOf("."), comma = digits.lastIndexOf(",");
+    // Several separators are thousands only in groups of three: "12.03.2025"
+    // and "19.1.0" are a date and a version, no amounts.
+    const thousands = parts => /^\d{1,3}$/.test(parts[0]) && parts.slice(1).every(part => /^\d{3}$/.test(part));
     if (dot !== -1 && comma !== -1) {
       const decimal = dot > comma ? "." : ",";
-      digits = digits.split(decimal === "." ? "," : ".").join("").replace(decimal, ".");
+      const sides = digits.split(decimal);
+      const groups = sides[0].split(decimal === "." ? "," : ".");
+      if (sides.length !== 2 || !thousands(groups)) return null;
+      digits = `${groups.join("")}.${sides[1]}`;
     } else if (dot !== -1 || comma !== -1) {
       const mark = dot !== -1 ? "." : ",";
       const parts = digits.split(mark);
+      if (parts.length > 2 && !thousands(parts)) return null;
       digits = parts.length > 2 || parts[1].length === 3 ? parts.join("") : parts.join(".");
     }
     const value = Number(digits);

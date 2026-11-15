@@ -232,6 +232,19 @@ describe("Bars", () => {
       .toEqual(["100%", "50%", "25%"]);
   });
 
+  // Several separators are thousands only in groups of three: a date or a
+  // version is no amount.
+  it("draws nothing for dates and version numbers, and still reads millions", () => {
+    expect(widths(render(table(["Release", "Date"], [["A", "12.03.2025"], ["B", "02.05.2025"], ["C", "15.06.2025"]])))).toEqual([]);
+    expect(widths(render(table(["Tool", "Version"], [["A", "19.1.0"], ["B", "4.17.21"], ["C", "3.12.4"]])))).toEqual([]);
+    expect(widths(render(table(["Item", "When"], [["A", "12,03,2025"], ["B", "02,05,2025"], ["C", "15,06,2025"]])))).toEqual([]);
+    expect(widths(render(table(["Item", "Odd"], [["A", "12.03,5"], ["B", "02.05,5"], ["C", "15.06,5"]])))).toEqual([]);
+    expect(widths(render(table(["City", "People"], [["A", "2.000.000"], ["B", "1,000,000"], ["C", "500.000"]]))))
+      .toEqual(["100%", "50%", "25%"]);
+    expect(widths(render(table(["Fund", "Volume"], [["A", "1.200.000,50 €"], ["B", "600.000,25 €"], ["C", "300.000,125 €"]]))))
+      .toEqual(["100%", "50%", "25%"]);
+  });
+
   it("aligns a column with a typographic minus as numbers, without bars", () => {
     const output = render(table(["Since", "Deposit rate"], [["2020", "−0,50 %"], ["2022", "0,75 %"], ["2023", "4,00 %"]]));
     expect(output.querySelector("tbody td:last-child").classList.contains("is-numeric")).toBe(true);
