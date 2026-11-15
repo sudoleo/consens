@@ -26,6 +26,8 @@ shared time axis). With ``--figures FILE`` no Judge is asked.
 (services/topic_pictures.py) and nothing else: no Judge is asked. Its dry run
 fetches the pages the standing answers cite, says per page whether it gave a
 picture and why not, and with ``--out DIR`` saves the thumbnails for a look.
+A page that turns the client away is looked up at Exa, in the dry run too
+(0.001 $ a page).
 
     venv\\Scripts\\python.exe scripts\\backfill_topic_visuals.py --out _preview
     venv\\Scripts\\python.exe scripts\\backfill_topic_visuals.py --apply --figures probe.json

@@ -191,3 +191,19 @@ def test_a_page_without_text_is_no_page(service):
     service.answers = [(200, {"results": [{"url": "https://example.org/empty", "title": "Empty", "text": "  "}],
                               "statuses": [{"id": "x", "status": "success", "source": "cached"}]})]
     assert exa.page("https://example.org/empty", characters=100)["status"] == "failed"
+
+
+def test_a_preview_is_the_picture_exa_read_on_the_page(service):
+    page_url, picture = "https://openai.com/index/gpt-6", "https://images.ctfassets.net/openai/hero.png"
+    service.answers = [(200, {"results": [{"url": page_url, "title": "GPT-6", "text": "GPT-6 is", "image": picture}],
+                              "statuses": [{"id": page_url, "status": "success", "source": "cached"}],
+                              "costDollars": {"total": 0.001}})]
+    assert exa.preview(page_url) == {"url": page_url, "image": picture, "cost_nanos": 1_000_000}
+    assert service.sent[0][0] == exa.CONTENTS_URL and service.sent[0][1]["urls"] == [page_url]
+
+    # A page Exa may not read, or one that names no picture, gives none.
+    service.answers = [(200, {"results": [], "statuses": [
+        {"id": page_url, "status": "error", "error": {"tag": "SOURCE_NOT_AVAILABLE", "httpStatusCode": 403}}]})]
+    assert exa.preview(page_url) == {"url": "", "image": "", "cost_nanos": exa.PAGE_COST_NANOS}
+    service.answers = [(200, {"results": [{"url": page_url, "title": "GPT-6", "image": "javascript:alert(1)"}]})]
+    assert exa.preview(page_url)["image"] == ""

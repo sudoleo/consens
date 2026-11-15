@@ -1,8 +1,9 @@
 """Pictures on a Topic's Direct-links cards (app/services/topic_pictures.py).
 
 The picture is the preview a cited page names for itself; which pages qualify
-is a rule about the source. No model is asked, a blocked page has no picture,
-and a card row is plain again as soon as fewer than two pictures remain.
+is a rule about the source. No model is asked, a page that turns the client
+away is looked up in Exa's copy (nowhere else), and a card row is plain again
+as soon as no picture remains.
 """
 
 import io
@@ -14,7 +15,7 @@ from PIL import Image
 
 from app.api.routers import topics as topics_router
 from app.core.rate_limit import limiter
-from app.services import topic_images, topic_pictures, topic_runner, topics, watch_images
+from app.services import exa, topic_images, topic_pictures, topic_runner, topics, watch_images
 from test_topics_feature import NOW, FakeFirestore, run_payload, topic_payload
 
 ANNOUNCEMENT = "https://openai.com/index/gpt-6-announcement"
@@ -44,20 +45,38 @@ def page(image_url):
 
 
 class Fetch:
-    """Pages and images by URL; anything unknown is refused like a bot wall."""
+    """Pages and images by URL; anything unknown is refused like a bot wall,
+    a page in ``errors`` fails with its code."""
 
-    def __init__(self, pages=None, images=None):
+    def __init__(self, pages=None, images=None, errors=None):
         self.pages, self.images, self.calls = dict(pages or {}), dict(images or {}), []
+        self.errors = dict(errors or {})
 
     async def __call__(self, url, purpose):
         self.calls.append((purpose, url))
         if purpose == "page":
+            if url in self.errors:
+                raise ValueError(self.errors[url])
             if url not in self.pages:
                 raise ValueError("status_403")
             return url, self.pages[url].encode("utf-8"), "text/html", False
         if url not in self.images:
             raise ValueError("status_404")
         return url, self.images[url], "image/jpeg", False
+
+
+class Index:
+    """Exa's copy: per page (the address Exa has it under, its picture);
+    a page Exa does not have gives ("", "")."""
+
+    def __init__(self, copies=None, fail=False):
+        self.copies, self.fail, self.calls = dict(copies or {}), fail, []
+
+    async def __call__(self, url):
+        self.calls.append(url)
+        if self.fail:
+            raise exa.ExaError("server", "HTTP 500")
+        return self.copies.get(url, ("", ""))
 
 
 def evidence(*urls):
@@ -147,10 +166,10 @@ def test_a_stored_picture_is_not_fetched_again():
     assert db.documents[("topics", topic_id)]["pictures"] == before
 
 
-def test_a_blocked_page_has_no_picture_and_is_left_alone_after_three_passes():
+def test_a_page_blocked_everywhere_has_no_picture_and_is_left_alone_after_three_passes():
     db = FakeFirestore()
     topic_id = topic_with_run(db, [ANNOUNCEMENT, DOCS])
-    fetch = Fetch()  # every page answers 403
+    fetch = Fetch()  # every page answers 403, and the suite has no Exa
 
     for attempt in range(1, topic_pictures.MAX_MISSES + 1):
         assert topic_pictures.refresh_for_topic(topic_id, db=db, fetch=fetch) == "none"
@@ -162,6 +181,63 @@ def test_a_blocked_page_has_no_picture_and_is_left_alone_after_three_passes():
     assert topic_pictures.refresh_for_topic(topic_id, db=db, fetch=fetch) == "kept"
     assert len(fetch.calls) == asked
     assert topics.get_topic(topic_id, db=db)["pictures"]["items"] == []
+
+
+def test_a_page_that_turns_the_client_away_is_read_from_exas_copy():
+    db = FakeFirestore()
+    topic_id = topic_with_run(db, [ANNOUNCEMENT, DOCS])
+    hero, docs = "https://images.ctfassets.net/openai/hero.png", "https://cdn.openai.com/docs.jpg"
+    # The announcement answers the client 403; the docs page lets it in.
+    fetch = Fetch(pages={DOCS: page(docs)}, images={hero: photo(1), docs: photo(2)})
+    index = Index({ANNOUNCEMENT: (ANNOUNCEMENT, hero)})
+
+    assert topic_pictures.refresh_for_topic(topic_id, db=db, fetch=fetch, index=index) == "ready"
+
+    items = topics.get_topic(topic_id, db=db)["pictures"]["items"]
+    assert [(item["source_url"], item["image_url"]) for item in items] == [(ANNOUNCEMENT, hero), (DOCS, docs)]
+    # Exa is asked for the address only; the picture comes by the client.
+    assert index.calls == [ANNOUNCEMENT] and ("image", hero) in fetch.calls
+
+
+def test_only_a_refusal_goes_to_exa_and_its_copy_must_be_the_same_site():
+    db = FakeFirestore()
+    third = "https://help.openai.com/en/articles/gpt-6-in-chatgpt"
+    topic_id = topic_with_run(db, [ANNOUNCEMENT, DOCS, third])
+    topic = topics.get_topic(topic_id, db=db)
+    pages = topic_pictures.standing_pages(topic, db=db)
+    fetch = Fetch(errors={DOCS: "status_404"})
+    index = Index({ANNOUNCEMENT: ("https://login.example.com/", "https://login.example.com/card.jpg")})
+
+    notes = {}
+    pictures, misses = topic_pictures.find_pictures(pages, topic, fetch=fetch, index=index, notes=notes)
+
+    assert pictures == [] and len(misses) == 3
+    assert index.calls == [ANNOUNCEMENT, third]
+    assert notes[topic_pictures.picture_key(ANNOUNCEMENT)] == "leads to another site"
+    assert notes[topic_pictures.picture_key(DOCS)] == "page not readable (status_404)"
+    assert notes[topic_pictures.picture_key(third)] == "page not readable (status_403), not at Exa"
+    assert not [call for call in fetch.calls if call[0] == "image"]
+
+    notes = {}
+    topic_pictures.find_pictures(pages, topic, fetch=fetch, index=Index(fail=True), notes=notes)
+    assert notes[topic_pictures.picture_key(third)] == "page not readable (status_403), Exa failed"
+
+
+def test_exa_is_asked_by_default_only_where_it_is_set_up(monkeypatch):
+    db = FakeFirestore()
+    topic_id = topic_with_run(db, [ANNOUNCEMENT])
+    hero = "https://images.ctfassets.net/openai/hero.png"
+    asked = []
+    monkeypatch.setattr(exa, "preview", lambda url: asked.append(url) or {
+        "url": url, "image": hero, "cost_nanos": exa.PAGE_COST_NANOS})
+    fetch = Fetch(images={hero: photo(1)})
+
+    assert topic_pictures.refresh_for_topic(topic_id, db=db, fetch=fetch) == "none"
+    assert asked == []
+
+    monkeypatch.setattr(exa, "available", lambda: True)
+    assert topic_pictures.refresh_for_topic(topic_id, db=db, fetch=fetch) == "ready"
+    assert asked == [ANNOUNCEMENT]
 
 
 def test_a_picture_two_pages_of_one_site_share_is_nobodys_picture():
@@ -243,7 +319,7 @@ def test_a_new_answer_rewrites_the_list_and_drops_unused_bytes():
     assert f"{topic_id}_{old[DOCS]}" not in kept
 
 
-def test_the_page_shows_picture_cards_from_two_pictures_on(monkeypatch):
+def test_the_page_shows_picture_cards_from_one_picture_on(monkeypatch):
     db = FakeFirestore()
     monkeypatch.setattr(topics, "db_firestore", db)
     topic_id = topic_with_run(db, [ANNOUNCEMENT, DOCS, STORY])
@@ -271,12 +347,13 @@ def test_the_page_shows_picture_cards_from_two_pictures_on(monkeypatch):
     versioned = client().get(f"/topics/gpt-6?version={run_id}").text
     assert "has-pictures" not in versioned and "/picture/" not in versioned
 
-    # One picture alone leaves the row plain.
+    # One picture is enough for the row; the other cards show their icon.
     state = db.documents[("topics", topic_id)]["pictures"]
     db.documents[("topics", topic_id)]["pictures"] = {**state, "items": state["items"][:1]}
     topics_router.invalidate_topic_pages()
     single = client().get("/topics/gpt-6").text
-    assert "has-pictures" not in single and "/picture/" not in single
+    assert 'class="wp-links-list has-pictures"' in single
+    assert single.count("/picture/") == 1 and single.count('class="wp-link-picture is-empty"') == 2
 
 
 def test_cards_without_pictures_render_as_they_always_did():
@@ -292,7 +369,8 @@ def test_cards_without_pictures_render_as_they_always_did():
     assert plain.count('class="wp-link-icon site-icon"') == 2 and plain.count("wp-link-arrow") == 2
 
     one = str(module.direct_links([{**links[0], "picture": {"url": "/p", "width": 640, "height": 336}}, links[1]]))
-    assert "has-pictures" not in one and "wp-link-picture" not in one
+    assert '<ul class="wp-links-list has-pictures">' in one
+    assert one.count('<img src="/p"') == 1 and one.count('class="wp-link-picture is-empty"') == 1
 
 
 def test_the_picture_route_serves_known_tokens_with_a_long_cache(monkeypatch):

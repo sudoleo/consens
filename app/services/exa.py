@@ -1,5 +1,7 @@
 """Exa for the agent's own research: its web search (agent_web_search.py) and
-the text of a page (agent_read_source.py), asked by the server.
+the text of a page (agent_read_source.py), asked by the server. Topic pages
+ask it for the preview picture of a cited page that turns their own plain
+client away (topic_pictures.py).
 
 A provider's own search runs inside the model's request and hands its hits
 to the model alone: of 101 search steps of GPT-6.1 Terra in prod (2026-10-31
@@ -347,4 +349,18 @@ def page(url, *, characters, fresh=False):
         return {"status": "failed", "error": reason, "cost_nanos": _cost(data, 0)}
     return {"status": "completed", "url": _web(found.get("url")) or url, "title": _line(found.get("title"), TITLE_CHARS),
             "text": text, "published": _day(found.get("publishedDate")), "stored": status.get("source") == "cached",
+            "cost_nanos": _cost(data, PAGE_COST_NANOS)}
+
+
+def preview(url):
+    """The preview picture a public page names for itself (``og:image``), as
+    Exa read the page: {"url": the page's address in Exa's answer, "image":
+    the picture's address, "cost_nanos"}; both addresses "" when Exa has no
+    such page or picture. Exa's crawler reads only where the site lets it in
+    (SOURCE_NOT_AVAILABLE otherwise). Raises ExaError."""
+    # Exa bills a page by its text; the picture's address comes with it.
+    data = _post(CONTENTS_URL, {"urls": [url], "text": {"maxCharacters": 100}}, seconds=PAGE_SECONDS)
+    found = next((item for item in (data.get("results") if isinstance(data.get("results"), list) else [])
+                  if isinstance(item, dict)), None) or {}
+    return {"url": _web(found.get("url")), "image": _web(found.get("image")),
             "cost_nanos": _cost(data, PAGE_COST_NANOS)}

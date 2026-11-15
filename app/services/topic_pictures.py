@@ -9,8 +9,10 @@ qualify is a rule about the source, never a judgement of the picture:
 * only primary sources, documentation and research, plus reporting from the
   Topic's preferred domains. Other reporting, community and rumor pages are
   left out: content farms illustrate with generated or stock pictures.
-* a page that refuses the plain client has no picture; nothing is fetched
-  around a bot wall.
+* a page that turns the plain client away (401, 403: openai.com, Reuters)
+  is read from Exa's copy, whose crawler the site lets in, and only for the
+  address of its preview picture. The client never poses as a browser; where
+  Exa has no copy either, the page has no picture.
 * a picture two pages of one site share is that site's share card, not a
   picture of either page. Logo-like and flat images fall as they do for
   Watches (``watch_images``).
@@ -32,7 +34,7 @@ from datetime import datetime, timezone
 from urllib.parse import urlsplit
 
 from app.core.observability import safe_exception
-from app.services import source_links, topic_images, topics, watch_images
+from app.services import exa, source_links, topic_images, topics, watch_images
 from app.services.public_markdown import strip_chat_framing
 from app.services.source_catalog import canonical_source_url
 
@@ -48,6 +50,8 @@ MIN_WIDTH = 300
 # Landscape only: a square preview is an app icon or an avatar, a strip a banner.
 PICTURE_ASPECT = (1.2, 2.4)
 ELIGIBLE_ROLES = frozenset({"primary", "documentation", "research"})
+# What a page that turns the plain client away answers (watch_images._fetch).
+REFUSALS = frozenset({"status_401", "status_403"})
 
 _CACHE: OrderedDict[tuple[str, str], tuple[bytes, str]] = OrderedDict()
 _CACHE_LOCK = threading.Lock()
@@ -156,21 +160,46 @@ def _fetch_failure(exc: BaseException) -> str:
     return safe_exception(exc)
 
 
-async def _page_picture(page: dict, fetch):
-    """(the page's own preview picture as a card thumbnail or None, why not)."""
+async def indexed_preview(url: str) -> tuple[str, str]:
+    """(the page's address, its preview picture's) from Exa's copy of it."""
+    found = await asyncio.to_thread(exa.preview, url)
+    logging.info("Topic picture page read from Exa cost_nanos=%s", found["cost_nanos"])
+    return found["url"], found["image"]
+
+
+async def _preview_images(page: dict, fetch, index):
+    """(the preview pictures the page names, the address it was read at,
+    why it could not be read)."""
     try:
         final_url, content, _kind, _truncated = await asyncio.wait_for(
             fetch(page["url"], "page"), watch_images.FETCH_SECONDS + 1,
         )
+        return watch_images.page_preview(content.decode("utf-8", errors="replace"), final_url), final_url, ""
     except Exception as exc:
         logging.info("Topic picture page skipped category=%s", safe_exception(exc))
-        return None, "page not readable (" + _fetch_failure(exc) + ")"
+        failure = _fetch_failure(exc)
+    if failure not in REFUSALS or index is None:
+        return [], "", "page not readable (" + failure + ")"
+    try:
+        final_url, image_url = await asyncio.wait_for(index(page["url"]), exa.PAGE_SECONDS + 1)
+    except Exception as exc:
+        logging.info("Topic picture index skipped category=%s", safe_exception(exc))
+        return [], "", "page not readable (" + failure + "), Exa failed"
+    if not final_url:
+        return [], "", "page not readable (" + failure + "), not at Exa"
+    return [image_url] if image_url else [], final_url, ""
+
+
+async def _page_picture(page: dict, fetch, index=None):
+    """(the page's own preview picture as a card thumbnail or None, why not)."""
+    images, final_url, reason = await _preview_images(page, fetch, index)
+    if reason:
+        return None, reason
     final_host = (urlsplit(final_url).hostname or "").lower()
     # A page that sends the client elsewhere (login, consent, another site)
     # shows that place's picture, not its own.
     if watch_images._skip_host(final_host) or (watch_images.site_domain(final_host) or final_host) != page["site"]:
         return None, "leads to another site"
-    images = watch_images.page_preview(content.decode("utf-8", errors="replace"), final_url)
     reason = "no preview picture"
     for image_url in images[:2]:
         if watch_images._looks_like_logo(image_url, article=True):
@@ -210,7 +239,7 @@ def _same_picture(left: dict, right: dict) -> bool:
     )
 
 
-async def _gather(pages, stored: dict, misses: dict, fetch, picked: dict, missed: dict,
+async def _gather(pages, stored: dict, misses: dict, fetch, index, picked: dict, missed: dict,
                   generic: set, notes: dict):
     """Walk the candidates in order until four have a picture.
 
@@ -230,7 +259,7 @@ async def _gather(pages, stored: dict, misses: dict, fetch, picked: dict, missed
             if misses.get(_miss_key(key), 0) >= MAX_MISSES:
                 notes[key] = "given up"
                 continue
-            found, reason = await _page_picture(page, fetch)
+            found, reason = await _page_picture(page, fetch, index)
             if found is None:
                 missed[key] = misses.get(_miss_key(key), 0) + 1
                 notes[key] = reason
@@ -248,12 +277,15 @@ async def _gather(pages, stored: dict, misses: dict, fetch, picked: dict, missed
         picked[key] = found
 
 
-def find_pictures(pages, topic: dict, *, fetch=None, notes=None) -> tuple[list[dict], dict[str, int]]:
+def find_pictures(pages, topic: dict, *, fetch=None, index=None, notes=None) -> tuple[list[dict], dict[str, int]]:
     """(pictures in card order, miss counts for the pages looked at). Blocks.
 
     A page with a stored picture is not fetched again; a page whose misses
-    reached the limit is not asked again.
+    reached the limit is not asked again. ``index`` reads a page that turns
+    the client away; by default Exa's copy, where Exa is set up.
     """
+    if index is None and exa.available():
+        index = indexed_preview
     stored = {picture_key(item["source_url"]): item for item in stored_items(topic)}
     misses = _misses(topic)
     picked: dict[str, dict] = {}
@@ -264,7 +296,7 @@ def find_pictures(pages, topic: dict, *, fetch=None, notes=None) -> tuple[list[d
     async def run():
         try:
             await asyncio.wait_for(
-                _gather(pages, stored, misses, fetch or watch_images._http_fetch,
+                _gather(pages, stored, misses, fetch or watch_images._http_fetch, index,
                         picked, missed, generic, notes),
                 ATTEMPT_SECONDS,
             )
@@ -333,7 +365,7 @@ def standing_pages(topic: dict, *, db=None) -> list[dict]:
     )
 
 
-def refresh_for_topic(topic_id: str, *, db=None, fetch=None) -> str:
+def refresh_for_topic(topic_id: str, *, db=None, fetch=None, index=None) -> str:
     """One pass for a Topic, from the answer its page shows.
 
     The pass reads the Topic and its standing run itself: the newest check is
@@ -351,7 +383,7 @@ def refresh_for_topic(topic_id: str, *, db=None, fetch=None) -> str:
     if not pages and not _state(topic):
         return "skipped"
     try:
-        pictures, misses = find_pictures(pages, topic, fetch=fetch)
+        pictures, misses = find_pictures(pages, topic, fetch=fetch, index=index)
     except Exception as exc:
         logging.warning("Topic picture search failed category=%s", safe_exception(exc))
         return "skipped"

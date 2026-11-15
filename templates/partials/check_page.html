@@ -85,13 +85,12 @@
    suchen. Navigation, kein Beleg einzelner Sätze. On a phone a swipeable row,
    so the answer starts on the first screen.
    A link may carry the preview picture of its page (``link.picture``, Topic
-   pages: topic_pictures). From two pictures on, every card is a picture
-   card with the same box, so the row has one height before any picture
-   loads; a card without one shows the site's icon on a quiet tile. One
-   picture alone would leave three bare tiles: then the cards stay plain. #}
+   pages: topic_pictures). With a picture, every card is a picture card with
+   the same box, so the row has one height before any picture loads; a card
+   without one shows the site's icon on a quiet tile. #}
 {% macro direct_links(links) %}
 {% if links %}
-{% set pictured = links | selectattr("picture") | list | length >= 2 %}
+{% set pictured = links | selectattr("picture") | list | length >= 1 %}
 <section class="wp-links" aria-labelledby="wpLinksHeading">
   <h2 id="wpLinksHeading" class="wp-label">Direct links</h2>
   <ul class="wp-links-list{% if pictured %} has-pictures{% endif %}">

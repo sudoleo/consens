@@ -10257,8 +10257,13 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   (`candidate_pages`): nur Primärquellen, Dokumentation und Forschung, dazu
   Berichte von den bevorzugten Domains des Topics. Andere Berichte, Community
   und Gerüchte nie (Inhaltsfarmen bebildern mit generierten und Stockbildern).
-  Eine Seite, die den schlichten Client abweist (403), hat kein Bild; es wird
-  nichts umgangen. Logoartige, flache, hochformatige und zu kleine Bilder
+  Eine Seite, die den schlichten Client abweist (401/403: openai.com,
+  Reuters), wird stattdessen in Exas Kopie nachgeschlagen (`exa.preview`,
+  `/contents`, je Seite 0,001 $, nur mit `EXA_API_KEY`): Exas Crawler liest
+  nur, wo die Seite ihn hereinlässt, und geholt wird nur die Adresse ihres
+  Vorschaubilds, das Bild selbst wieder mit dem schlichten Client. Der Client
+  gibt sich nie als Browser aus; hat auch Exa nichts (Metaculus nennt kein
+  Vorschaubild), bleibt die Seite ohne Bild. Logoartige, flache, hochformatige und zu kleine Bilder
   fallen weg (`watch_images.make_thumbnail` mit breitem Format, 640 px), ebenso
   ein Bild, das zwei Seiten derselben Site teilen (deren Teilen-Grafik; nach
   Adresse oder Bytes). Eine Seite mit gespeichertem Bild wird nicht erneut
@@ -10269,14 +10274,18 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   `misses`); beim Neuschreiben werden unbenutzte Bytes gelöscht. Ausgeliefert
   über `/api/topics/{id}/picture/{token}` (30 Tage, immutable), nie in
   og:image/JSON-LD. Die Seite hängt das Bild per URL an den passenden
-  Direktlink (`with_pictures`, nur ohne `?version=`); ab zwei Bildern zeichnet
+  Direktlink (`with_pictures`, nur ohne `?version=`); ab einem Bild zeichnet
   `check_page.direct_links` eine Reihe Bildkarten (festes Feld im Format
   1200 × 630, darunter Titel und Domain; eine Karte ohne Bild zeigt das Icon
-  der Seite im selben Feld), mit weniger bleiben die Kacheln wie bisher.
+  der Seite im selben Feld), ohne Bild bleiben die Kacheln. Je Domain gibt es
+  einen Direktlink: Bilder weiterer Seiten derselben Domain (Gemini: drei
+  blog.google-Beiträge) liegen bereit, erscheinen aber erst, wenn eine
+  spätere Antwort diese Seite zum Direktlink macht.
   Watch-Seiten teilen das Makro und reichen keine Bilder durch. Nachtrag für
   bestehende Topics: `scripts/backfill_topic_visuals.py --pictures` (ohne
   Judge; Trockenlauf nennt je Seite Bild oder Grund, `--out` speichert die
-  Vorschauen, `--apply` = Prod-Write).
+  Vorschauen, `--apply` = Prod-Write; abgewiesene Seiten fragen auch im
+  Trockenlauf Exa).
 - **Abbildungen aus der Antwort** (`app/services/topic_figures.py`): Nach
   jedem Check füllt ein Judge-Call (`consensus_engine.query_answer_figures`,
   Differences-Judge-Kette, Structured Output) aus der bereinigten Antwort
