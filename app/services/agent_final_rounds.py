@@ -48,6 +48,7 @@ SLOW_MIN_SECONDS = 4.
 # A reviewer stays away from at most this many endpoints of its model.
 MAX_AVOIDED = 3
 ENDPOINT_CHARS = 80
+SECONDS_DIGITS = 2
 
 _lock = threading.Lock()
 # {model: deque of (ended at, seconds, endpoint)}, oldest first.
@@ -60,7 +61,10 @@ def record(model, seconds, endpoint="", *, now=None):
     """A final round's first request on ``model`` took ``seconds`` (or had
     run that long when its hedge overtook it), on ``endpoint`` where its
     stream named one."""
-    entry = (float(now if now is not None else time.time()), float(seconds), str(endpoint or "")[:ENDPOINT_CHARS])
+    # Rounded as saved: a save reads the document back first, and a round
+    # that differed from its saved self would count twice (_merge).
+    entry = (float(now if now is not None else time.time()), round(float(seconds), SECONDS_DIGITS),
+             str(endpoint or "")[:ENDPOINT_CHARS])
     with _lock:
         _rounds.setdefault(model, deque(maxlen=ROUNDS)).append(entry)
 
@@ -170,7 +174,7 @@ def _write():
             snapshot = reference.get()
             _merge(_stored(snapshot.to_dict() if snapshot.exists else {}))
             with _lock:
-                models = [{"model": model, "rounds": [{"at": at, "s": round(taken, 2), "e": endpoint}
+                models = [{"model": model, "rounds": [{"at": at, "s": round(taken, SECONDS_DIGITS), "e": endpoint}
                                                       for at, taken, endpoint in entries]}
                           for model, entries in sorted(_rounds.items())]
             reference.set({"models": models, "updated_at": datetime.now(timezone.utc)})

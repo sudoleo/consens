@@ -127,6 +127,18 @@ def test_a_save_keeps_what_another_instance_saved_meanwhile(monkeypatch):
     assert [entry[2] for entry in rounds.rounds("m")] == ["B", "A"]
 
 
+def test_a_process_saving_twice_counts_its_own_rounds_once(monkeypatch):
+    monkeypatch.setattr(rounds.time, "time", lambda: NOW)
+    document = Document()
+    monkeypatch.setattr(rounds, "_document", lambda: document)
+    rounds.record("m", 8.123456, "A")
+    rounds._write()
+    # The second save reads back what the first wrote, seconds rounded.
+    rounds._write()
+    assert rounds.rounds("m") == [(NOW, 8.12, "A")]
+    assert len(document.data["models"][0]["rounds"]) == 1
+
+
 def test_a_failed_read_or_write_costs_nothing_and_tests_never_touch_the_database(monkeypatch):
     def broken():
         raise RuntimeError("no database")
