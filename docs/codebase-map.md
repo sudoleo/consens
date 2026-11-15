@@ -6998,7 +6998,7 @@ Modell-Calls: `tests/test_agent_audit_tempo.py`. Details: `docs/agent-mode.md`,
 „Ein Modus: der Agent arbeitet, die gewählten Modelle prüfen“.
 
 **Befunde an den Agenten** (seit 2026-11-13, Kontoeinstellung
-`findings_to_agent`, Standard aus; Details `docs/agent-mode.md` „Befunde an
+`findings_to_agent`, seit 2026-11-15 Standard an, der Haken schaltet aus; Details `docs/agent-mode.md` „Befunde an
 den Agenten“): Aus ist alles wie oben. An: `agent_review_feedback.py`
 (`Findings`, Register als `AnswerAudit.feedback`, Snapshot
 `audit.feedback`, Marken mit `finding`) gibt Befunde als Daten an den
@@ -9260,8 +9260,8 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Gehen ein; Nein sagen das X, Escape und der Hintergrund (`ask` → `null`, die
   Frage bleibt im Feld, nichts wird gesetzt). „Agree and start“ →
   `POST /api/my/ai-consent`, erst danach `App.firstRun.apply(choice)`: die
-  Lesart, für jede Lesart `findings_to_agent: true` (der Dialog verspricht die
-  Korrektur) und das Event `app_first_run`; dann geht die Frage raus. Ebenso
+  Lesart (die Korrektur, die der Dialog in jeder Lesart verspricht, ist der
+  Standard von `findings_to_agent`) und das Event `app_first_run`; dann geht die Frage raus. Ebenso
   vor den anderen Eingängen mit Schranke: Start einer Watch
   (`watch-composer.js` `submit`, die Karte unter der Antwort `agent-watch.js`
   `start`) und Remember/Correct memory (`memory-edit.js` `submitEdit`); ohne
@@ -9524,7 +9524,7 @@ unter der Zeile `#reviewersNote`, `App.words.reviewerSetting()` liest sie, der
 Browser schickt sie mit jeder Nachricht, siehe „Prüfer nach Einstellung“ in §4;
 der Agent kann sie weder lesen noch ändern, `agent_settings.ELSEWHERE`),
 `findings_to_agent` (seit 2026-11-13, Settings → Agent neben den Prüfern,
-„Pass notes to the agent“; fehlt = aus; `app-ui.js` bindet
+„Pass notes to the agent“; fehlt = an, `false` = aus; `app-ui.js` bindet
 `#findingsToAgentSwitch`, `agent-mode.js` blendet die Zeile
 `#findingsToAgentSetting` bei Prüfern `off` aus, die Einstellungssuche
 überspringt ausgeblendete Zeilen; die Seite schickt sie mit jeder Nachricht, nur wenn an

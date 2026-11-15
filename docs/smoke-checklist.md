@@ -241,7 +241,8 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Automatisiert: `test_agent_audit.py`, `test_agent_audit_tempo.py`,
       `agent-live.test.mjs`, `agent-chat.test.mjs`.
 - [ ] Anmerkungen an den Agenten (2026-11-13, echter Provider, Einstellungen →
-      Agent → „Anmerkungen an den Agenten geben“ an; bei Prüfern „Aus“ ist die
+      Agent → „Anmerkungen an den Agenten geben“ ist von Haus aus an, abgehakt
+      läuft keine Korrektur; bei Prüfern „Aus“ ist die
       Zeile weg, die Einstellungssuche findet sie dann nicht). Eine Frage mit
       einer leicht veralteten Zahl („Was kostet ein Ticket fürs Kolosseum?“)
       → die Antwort steht sofort, ohne Marken; die Leiste sagt „Antwort wird

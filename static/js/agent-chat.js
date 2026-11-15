@@ -3175,9 +3175,10 @@
         timezone: deviceTimezone(),
         // Who checks this message's work: what the composer showed (Settings > Agent).
         reviewers: App.words.reviewerSetting(),
-        // Whether the reviewers' findings reach the agent (Settings > Agent); sent only
-        // when on, so a message without it is the request it always was.
-        ...(App.userSettings?.get?.("findings_to_agent") === true ? { findings_to_agent: true } : {}),
+        // Whether the reviewers' findings reach the agent (Settings > Agent): on
+        // unless the account switched it off. Sent only when on: the server reads
+        // a message without it as off, as a page from before the default did.
+        ...(App.userSettings?.get?.("findings_to_agent") !== false ? { findings_to_agent: true } : {}),
       };
       context.metadata.findingsToAgent = refinesAnswer(body);
       // A reload ends a temporary chat (temporary-chat.js): nothing to follow then.

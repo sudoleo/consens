@@ -204,7 +204,9 @@
 }
 
 .first-run-year::after {
-  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  inset: auto 0 0.04em;
+  border-radius: 0;
+  border-bottom: 1px dotted color-mix(in srgb, var(--ink) 34%, transparent);
 }
 
 .first-run-dialog[data-view="answer"] .first-run-year::after {
@@ -252,19 +254,27 @@
   52%, 100% { opacity: 1; transform: none; }
 }
 
-/* A doubt runs through its passage from the left, like ink; "Just the
-   answer" leaves it out. */
+/* A doubt is dotted under its passage, as in the app
+   (components-consensus-visuals.css); "Just the answer" leaves it out. The
+   words are inline blocks, which a line of their parent does not reach: each
+   draws its own, in the colour the passage fades in (--first-run-dots). */
+@property --first-run-dots { syntax: '<color>'; inherits: true; initial-value: transparent; }
+
 .first-run-mark {
-  border-radius: 4px;
-  background-image: linear-gradient(color-mix(in srgb, var(--ink) 11%, transparent) 0 0);
-  background-repeat: no-repeat;
-  background-size: 100% 100%;
-  box-decoration-break: clone;
-  -webkit-box-decoration-break: clone;
+  --first-run-dots: color-mix(in srgb, var(--ink) 52%, transparent);
 }
 
-.first-run-dialog[data-view="answer"] .first-run-mark {
-  background-image: none;
+.first-run-mark,
+.first-run-mark > .first-run-word {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 0.1em;
+  text-underline-offset: 0.24em;
+  text-decoration-color: var(--first-run-dots);
+}
+
+.first-run-dialog[data-view="answer"] :is(.first-run-mark, .first-run-mark > .first-run-word) {
+  text-decoration-line: none;
 }
 
 .first-run-dialog[open] .first-run-mark {
@@ -272,8 +282,8 @@
 }
 
 @keyframes first-run-doubt {
-  0%, 57% { background-size: 0% 100%; }
-  66%, 100% { background-size: 100% 100%; }
+  0%, 57% { --first-run-dots: transparent; }
+  66%, 100% { --first-run-dots: color-mix(in srgb, var(--ink) 52%, transparent); }
 }
 
 /* Under the answer: who checks, and how far they are. */

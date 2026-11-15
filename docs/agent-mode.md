@@ -1036,9 +1036,10 @@ Modell-Interaktion, Ansicht, App-Tempo, Kosten, Messbarkeit in sechs Paketen):
 
 ### Befunde an den Agenten (seit 2026-11-13, Kontoeinstellung, Standard aus)
 
-Max (2026-11-13): Der Grundsatz „Prüfer steuern nie“ bleibt der Standard;
-wer will, schaltet unter Settings > Agent „Pass findings to the agent“ ein
-(`user_settings.findings_to_agent`, `None` = aus). Aus ist jeder Lauf wie
+Max (2026-11-13) als Opt-in eingeführt, seit 2026-11-15 der Standard (Max:
+„Der Haken in den Settings soll es ausschalten“): Settings > Agent „Pass
+notes to the agent“ ist an, solange das Konto ihn nicht abhakt
+(`user_settings.findings_to_agent`, `None` = an, `False` = aus). Aus ist jeder Lauf wie
 vorher: dieselben Prompts, dasselbe Protokoll, dieselbe Prüfung und Anzeige
 (`tests/test_agent_review_feedback.py` sichert das ab). Ein vollautomatischer
 Rückkanal ohne Klick und ohne Rückfrage, ohne Wartezeit vor der Antwort, ohne
@@ -1046,8 +1047,9 @@ Schleife zwischen Agent und Prüfern; Halt und Gate gehen unverändert nur an
 den Nutzer. Code: `app/services/agent_review_feedback.py`.
 
 - **Einstellung:** Die Seite schickt sie mit jeder Nachricht wie
-  `reviewers` (`AgentRequest.findings_to_agent`, nur wenn an; ältere Seiten
-  nichts = aus; ein eigener Lesevorgang am Konto je Nachricht wäre ein
+  `reviewers` (`AgentRequest.findings_to_agent`, nur wenn an; ohne das Feld
+  liest der Server aus, damit eine Seite von vor dem neuen Standard ein
+  abgehaktes Konto nicht einschaltet; ein eigener Lesevorgang am Konto je Nachricht wäre ein
   Firestore-Read mehr für jedes Konto), Watch-Läufe lesen sie mit
   `reviewers` in einem Read (`agent_watches._reviewers`); ein Turn mit ihr trägt
   `agent_settings.findings_to_agent: true`. Mit Prüfern `off` wirkt sie

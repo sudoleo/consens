@@ -865,7 +865,7 @@ def _review_settings(uid: str, db) -> tuple[str, bool]:
         values = {}
     value = values.get("reviewers")
     return (value if value in {"always", "workspace", "off"} else "always",
-            values.get("findings_to_agent") is True)
+            values.get("findings_to_agent") is not False)
 
 
 def _reviewers(uid: str, db) -> str:

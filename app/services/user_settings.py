@@ -110,7 +110,7 @@ class UserSettings(_Strict):
     reviewers: Optional[Literal["always", "workspace", "off"]] = None
     # Whether the reviewers' hard findings reach the agent, while it works
     # and in one correction of its answer (agent_review_feedback.py). None is
-    # off: the agent never learns of a mark. The browser sends it with each
+    # on, False off: then the agent never learns of a mark. The browser sends it with each
     # message like ``reviewers`` (AgentRequest.findings_to_agent), the agent
     # never changes it (agent_settings.ELSEWHERE).
     findings_to_agent: Optional[bool] = None

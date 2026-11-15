@@ -26,8 +26,11 @@ def test_progress_paragraphs_collapse_at_final_and_reopen_with_keyboard(browser,
         page.route("**/chats", lambda r: _json(r, {"chat": {"id": "a" * 32, "execution_mode": "agent"}}))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         page.evaluate("dark => { document.documentElement.classList.toggle('dark-mode', dark); document.body.classList.toggle('dark-mode', dark); }", dark)
-        # The trace line by line: each note, step and its motion.
+        # The trace line by line: each note, step and its motion. Without the
+        # correction pass: then the lines give way to the answer's first words
+        # (the line that stays for it has its tests in test_agent_audit_frontend.py).
         _detailed_progress(page)
+        page.evaluate("() => App.userSettings.set('findings_to_agent', false)")
         _choose_mode(page, "agent")
         expect(page.locator("#agentModelDropdown")).to_be_enabled()
         page.evaluate("""updates => {

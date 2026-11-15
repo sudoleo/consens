@@ -111,19 +111,19 @@ describe("the dialog", () => {
 });
 
 describe("apply", () => {
-  it("writes only what differs from the app's default, and the correction pass for every view", () => {
+  it("writes only what differs from the app's default; the correction pass is the default in every view", () => {
     const { App, calls } = boot();
     App.firstRun.apply({ view: "doubts", memory: false });
-    expect(calls.settings).toEqual([["findings_to_agent", true]]);
+    expect(calls.settings).toEqual([]);
     expect(calls.memory).toEqual([]);
     calls.settings.length = 0;
     App.firstRun.apply({ view: "answer", memory: true });
-    expect(calls.settings).toEqual([["consensus_highlights", "critical"], ["findings_to_agent", true]]);
+    expect(calls.settings).toEqual([["consensus_highlights", "critical"]]);
     expect(calls.memory).toEqual(["first_run"]);
     calls.settings.length = 0;
     App.firstRun.apply({ view: "all", memory: false });
     expect(calls.settings)
-      .toEqual([["consensus_highlights", "all"], ["detailed_progress", true], ["findings_to_agent", true]]);
+      .toEqual([["consensus_highlights", "all"], ["detailed_progress", true]]);
     expect(calls.events.at(-1)).toEqual(["app_first_run", { view: "all", memory: false }]);
   });
 

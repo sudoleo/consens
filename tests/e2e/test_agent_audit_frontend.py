@@ -566,7 +566,7 @@ def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, pha
         page.evaluate(highlights, "concerns")
         page.wait_for_timeout(700)
         _snapshot(page, f"findings-checking-{width}")
-        # The switch beside the reviewers: off by default, bound to the
+        # The switch beside the reviewers: on by default, bound to the
         # account setting, gone while the reviewers are off.
         state = page.evaluate("""() => {
             const row = document.getElementById('findingsToAgentSetting');
@@ -579,7 +579,8 @@ def test_the_agent_checks_its_findings_under_a_sweep_without_a_mark(browser, pha
             App.userSettings.set('reviewers', 'always');
             return [...before, on, off, row.hidden];
         }""")
-        assert state == [False, False, True, True, False], state
+        # On unless switched off: the click takes it off.
+        assert state == [False, True, False, True, False], state
         assert errors == []
     finally:
         context.close()

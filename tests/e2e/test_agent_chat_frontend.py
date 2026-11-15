@@ -460,10 +460,13 @@ def test_buffering_proxy_shows_polled_progress_before_the_answer(browser, phase4
         # Nothing arrives over the stream, yet the progress shows up.
         progress = page.locator("#agentAnswerActivity .agent-progress")
         expect(progress).to_contain_text(reasoning["text"], timeout=15000)
-        # The answer starts: like over the stream, the progress lines give way.
+        # The answer starts: like over the stream, the lines give way to the one
+        # that stays while the answer may still be refined (findings_to_agent,
+        # on by default).
         available[0] = 3
         expect(page.locator("#agentAnswerBody")).to_contain_text("Partial answer")
-        expect(progress).to_be_hidden()
+        expect(progress.locator(".agent-current-status")).to_have_text("Writing answer…")
+        expect(progress).not_to_contain_text(reasoning["text"])
         assert page.evaluate("() => App.runRegistry.visible().status") == "running"
         request = held[0].request.post_data_json
         assert f"request_id={request['client_request_id']}" in polls[0] and polls[0].endswith("after=0")

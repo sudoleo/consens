@@ -407,7 +407,7 @@ def test_off_the_agent_reads_the_setting_as_it_is(store):
     loop = feedback_loop(store, Audit(), findings=False)
     about = SettingsTools(loop)._about()
     assert about["findings_to_agent"] == "off in this message"
-    assert "Pass notes to the agent: Off (the default) or On" in about["reviewers"]
+    assert "Pass notes to the agent: On (the default) or Off" in about["reviewers"]
     assert "whether their findings reach you" in ELSEWHERE
     on = feedback_loop(store, Audit(), findings=True)
     assert SettingsTools(on)._about()["findings_to_agent"] == "on in this message"
@@ -420,6 +420,14 @@ def test_a_watch_run_reads_the_setting_with_the_reviewers_in_one_read(store):
          "field_revisions": {"reviewers": 1, "findings_to_agent": 1}})
     assert agent_watches._review_settings(UID, store.db) == ("always", True)
     assert agent_watches._reviewers(UID, store.db) == "always"
+    # On unless the account switched it off.
+    store.db.collection("users").document(UID).collection("settings").document("app").set(
+        {"values": {"reviewers": "always"}, "revision": 2, "field_revisions": {"reviewers": 2}})
+    assert agent_watches._review_settings(UID, store.db) == ("always", True)
+    store.db.collection("users").document(UID).collection("settings").document("app").set(
+        {"values": {"reviewers": "always", "findings_to_agent": False}, "revision": 3,
+         "field_revisions": {"reviewers": 3, "findings_to_agent": 3}})
+    assert agent_watches._review_settings(UID, store.db) == ("always", False)
 
 
 # --- What real models replied (live probe 2026-11-13, GPT-6.1 Terra and Claude Opus 5.5) -----------

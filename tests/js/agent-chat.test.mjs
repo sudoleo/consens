@@ -372,26 +372,26 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(line()).toBe('Thinking…'));
     dom.window.close();
   }, 10000);
-  it('sends findings_to_agent only where the account switched it on', async () => {
+  it('sends findings_to_agent with every message by default', async () => {
     const {window:w,document:d,dom} = boot();
     await selectAgent(w);
     w.streamSSERequest.mockImplementation(() => new Promise(() => {}));
     d.querySelector('#questionInput').value = 'First question';
     w.App.agentChat.send();
     await vi.waitFor(() => expect(w.streamSSERequest).toHaveBeenCalledTimes(1));
-    // Off: the request is the one it always was.
-    expect('findings_to_agent' in w.streamSSERequest.mock.calls[0][1]).toBe(false);
+    expect(w.streamSSERequest.mock.calls[0][1].findings_to_agent).toBe(true);
     dom.window.close();
   });
-  it('sends findings_to_agent with the message once the account switched it on', async () => {
+  it('sends no findings_to_agent once the account switched it off', async () => {
     const {window:w,document:d,dom} = boot();
     await selectAgent(w);
-    w.App.userSettings.set('findings_to_agent', true);
+    w.App.userSettings.set('findings_to_agent', false);
     w.streamSSERequest.mockImplementation(() => new Promise(() => {}));
     d.querySelector('#questionInput').value = 'Second question';
     w.App.agentChat.send();
     await vi.waitFor(() => expect(w.streamSSERequest).toHaveBeenCalledTimes(1));
-    expect(w.streamSSERequest.mock.calls[0][1].findings_to_agent).toBe(true);
+    // Off: the request is the one it always was.
+    expect('findings_to_agent' in w.streamSSERequest.mock.calls[0][1]).toBe(false);
     dom.window.close();
   });
   it('keeps a silent stream open while the server reports the run still running and adopts its saved answer', async () => {

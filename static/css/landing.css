@@ -1647,12 +1647,8 @@ img { display: block; max-width: 100%; }
 }
 
 .lp-scene-visual.is-visible .cx-claim.is-unanimous,
-.lp-scene-visual.is-visible .cx-claim.is-minor,
-.lp-scene-visual.is-visible .cx-claim.is-split,
 .lp-scene-visual.is-visible .cx-claim.is-major,
 .lp-step.is-visible .cx-claim.is-unanimous,
-.lp-step.is-visible .cx-claim.is-minor,
-.lp-step.is-visible .cx-claim.is-split,
 .lp-step.is-visible .cx-claim.is-major {
   /* Ein Verlauf statt background-color: nur er laesst sich in der Breite
      animieren. Die Farbe bleibt dieselbe wie in der App - die Flaeche
@@ -1663,6 +1659,17 @@ img { display: block; max-width: 100%; }
   /* The app's bleed is a shadow that a stroke cannot grow with. */
   box-shadow: none;
   animation: cxStroke var(--dur-light) var(--ease-standard) var(--dur-light) backwards;
+}
+
+/* The quiet levels are dots, as in the app (components-consensus-visuals.css):
+   they have no surface to stroke and come in at the same moment instead. */
+.lp-scene-visual.is-visible .cx-claim:is(.is-minor, .is-split, .is-thin),
+.lp-step.is-visible .cx-claim:is(.is-minor, .is-split, .is-thin) {
+  animation: cxDots var(--dur-light) var(--ease-standard) var(--dur-light) backwards;
+}
+
+@keyframes cxDots {
+  from { text-decoration-color: transparent; }
 }
 
 /* --------------------------------------------------------------------------

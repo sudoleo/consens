@@ -526,7 +526,9 @@ body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-f
    Antwort der Link. Die Flaeche der Stufe kommt unter Zeiger, Tastatur und
    offener Karte (.is-hovered unten), damit sichtbar bleibt, worauf sich die
    Karte bezieht und welche Stufe es ist. Mit benannter Stelle traegt die
-   Stelle die Punkte statt ihres Satzes. */
+   Stelle die Punkte statt ihres Satzes. Ein Satz, den die Lesart einer
+   Satzpruefung nicht malt (.is-quiet, passage-check.js), bekommt auch keine
+   Punkte. */
 .cx-claim:is(.is-split, .is-minor, .is-thin) {
   --cx-paint: transparent;
   --cx-dots: color-mix(in srgb, var(--ink) 34%, transparent);
@@ -542,8 +544,8 @@ body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-f
   --cx-spot-paint: transparent;
 }
 
-body:not(.consensus-markers-hidden) .cx-claim:is(.is-split, .is-minor, .is-thin):not(.is-marker-filtered, .has-spot),
-body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-split, .is-minor, .is-thin):not(.is-marker-filtered) .cx-spot {
+body:not(.consensus-markers-hidden) .cx-claim:is(.is-split, .is-minor, .is-thin):not(.is-marker-filtered, .is-quiet, .has-spot),
+body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-split, .is-minor, .is-thin):not(.is-marker-filtered, .is-quiet) .cx-spot {
   text-decoration-line: underline;
   text-decoration-style: dotted;
   text-decoration-thickness: var(--cx-dots-size);

@@ -293,9 +293,8 @@
     Object.entries(view).forEach(([name, value]) => {
       if (value !== null) App.userSettings?.set?.(name, value);
     });
-    // What the dialog promised in every view: the reviewers' findings reach
-    // the agent, which corrects its answer.
-    App.userSettings?.set?.("findings_to_agent", true);
+    // What the dialog promises in every view, the agent correcting its
+    // answer with the reviewers' findings, is the default (findings_to_agent).
     if (choice.memory) App.userMemory?.enableAgentMemory?.("first_run");
     App.trackAppEvent?.("app_first_run", { view: choice.view, memory: choice.memory === true });
   }

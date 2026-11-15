@@ -1,5 +1,5 @@
-"""The reviewers' findings back to the agent: an opt-in of the account
-(user_settings ``findings_to_agent``), off by default.
+"""The reviewers' findings back to the agent: a setting of the account
+(user_settings ``findings_to_agent``), on unless the account switched it off.
 
 Off is the review as it always was: the agent never learns of a mark
 (docs/agent-audit-readiness-2026-10-29.md, "Prüfer steuern nie"). On, Max's
