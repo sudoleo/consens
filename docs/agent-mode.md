@@ -490,6 +490,14 @@ Schlussrunde liefert die vollständige Liste `{"marks": [{quote, entry, kind,
 note, source}]}`: `wrong`, `doubtful` oder `incomplete`, ein Zitat wörtlich
 aus der Antwort und so lang, dass es nur einmal darin steht, oder die Nummer
 eines gelesenen Eintrags, die Anmerkung in der Sprache der Nachricht.
+Die Schwelle steht als Zweck im Prompt (`REVIEW_PROMPT_HEAD`), nicht als
+Regelliste: Eine Marke unterbricht den Leser und muss das wert sein, also nur,
+was ihn mit einem falschen Bild oder einer falschen Entscheidung zurückließe
+(Sachfehler, falsch gelesene Frage oder Quelle, eine Lücke, die er braucht).
+Ein Urteil, ein Rat oder eine zugespitzte Formulierung ist Sache des Agenten
+und bleibt ohne Marke, solange kein falscher Fakt darunter liegt; `doubtful`
+gilt deshalb nur für Tatsachenaussagen (Max' Anlass: Zweifel-Marken an
+Coaching-Sätzen).
 `parse_review` liest tolerant (Fence, Text drumherum, Synonyme, „#12“,
 seit 2026-10-30 über `_read_json` auch Zeilenumbrüche in Strings, ein nicht
 maskiertes `"` in einem String und ein Komma vor der schließenden Klammer;

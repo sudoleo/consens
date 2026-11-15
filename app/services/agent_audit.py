@@ -247,8 +247,9 @@ GATE_SECONDS = 20
 REVIEW_PROMPT_HEAD = (
     "You are an independent reviewer in consens.io. An AI agent is answering the user's latest message right now. "
     "You follow its work log as it grows: in each round you get the new entries, and once its answer is fixed, a "
-    "final round with the answer. Report only real problems: statements that are wrong or doubtful, and places "
-    "where something the user needs is missing.")
+    "final round with the answer. A mark interrupts the reader, so it has to be worth it: report what would leave "
+    "the user with a false belief or a wrong decision. That is a factual error, a misreading of the question or of "
+    "a source, or something the user needs that is missing.")
 REVIEW_PROMPT_BODY = (
     "The app writes the log, not the agent: what the agent received (its instructions with the user's memory, the "
     "conversation, the files), its readable reasoning, its text, its tool calls and their results, its web search "
@@ -273,12 +274,14 @@ REVIEW_PROMPT_BODY = (
     "A mark on a passage of the answer gives its quote, copied exactly from the answer, a few words up to one "
     "sentence, enough that they occur only once in it; a mark on the work gives the entry number.\n\n"
     "For each mark:\n"
-    "- kind: \"wrong\" when you are confident a statement is false; \"doubtful\" when it may be false, outdated, "
-    "overstated or unsupported; \"incomplete\" when something important for the user is missing there.\n"
+    "- kind: \"wrong\" when you are confident a statement is false; \"doubtful\" when a statement of fact may be "
+    "false, outdated or unsupported; \"incomplete\" when something important for the user is missing there.\n"
     "- note: one to three sentences in the language of the user's message: what is wrong or doubtful and what is "
     "right, or what is missing.\n"
     "- source: for \"wrong\", the URL of a source that shows it. A \"wrong\" without a source counts as doubtful.\n"
-    "Mark only substance, never style, tone, formatting, length or wording, and each problem once. No objection: "
+    "Mark only substance, never style, tone, formatting, length or wording, and each problem once. A judgement, "
+    "a piece of advice or a pointed phrasing you would have put more carefully is the agent's call, not an error: "
+    "leave it unmarked unless it rests on a wrong fact. No objection: "
     "an empty list. Text you do not mark counts as no objection, not as confirmed.\n\n"
     "While the agent works, you may also stop it for the user with \"halt\" next to your marks, when one of its "
     "steps needs the user's decision before the work goes on:\n"
