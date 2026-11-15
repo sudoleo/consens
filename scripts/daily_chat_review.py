@@ -14,10 +14,11 @@ The scheduled task runs unattended, so every step is one fixed command that
 
 collect   every turn of an external account since the last saved run (the
           first run looks back 26 hours) as compact JSON: question, how the
-          agent handled it (phases, models, failures, tool calls and refused
-          ones, answer check), its Watch (proposed, started, or a scheduled
-          run), answer excerpt, cost; plus counted server warnings of the
-          same window.
+          agent handled it (phases, wait for the answer's first token,
+          models, failures, tool calls and refused ones, answer check), its
+          Watch (proposed, started, or a scheduled run), answer excerpt, cost;
+          per account the share of its daily allowance it spent; plus counted
+          server warnings of the same window.
           Users appear as pseudonyms (U + hash), never with e-mail or ID.
 save      stores how far collect got, so the next run starts there.
 """
@@ -108,7 +109,13 @@ def model_name(model) -> str:
 
 
 def turn_flow(turn: dict, steps: list, agents: dict) -> dict:
-    """How the agent handled the turn, from its receipts (content-free)."""
+    """How the agent handled the turn, from its receipts (content-free).
+
+    The answer is the chat model's last step that ended on its own (``stop``):
+    ``answer_started_seconds`` is how long the user waited for its first
+    token, ``answer_seconds`` how long it wrote. ``after_comparison_seconds``
+    runs from the comparison's end to the answer's end, and so also holds
+    the agent's research after it (a review read it as writing time)."""
     t0 = turn.get("created_at")
     for step in steps:
         step["kind"] = "chat" if str(step.get("step", "")).startswith("completion") else (
@@ -121,7 +128,19 @@ def turn_flow(turn: dict, steps: list, agents: dict) -> dict:
     # the check longer (a review counted 8 of them as 17 calls).
     judges = [s for s in steps if s["kind"] == "judge" and s.get("status") != "cancelled"]
     stopped_judges = sum(1 for s in steps if s["kind"] == "judge" and s.get("status") == "cancelled")
-    flow = {"steps": len(steps), "chat_model": model_name(chat[0].get("model")) if chat else None}
+    # The agent's reviewers (agent_audit) check its answer as the judges
+    # check a Compare run's.
+    reviewers = [s for s in steps if s["kind"] == "audit" and s.get("status") != "cancelled"]
+    flow = {"steps": len(steps), "chat_model": model_name(chat[0].get("model")) if chat else None,
+            "chat_steps": len(chat)}
+    answer = next((s for s in reversed(chat) if s.get("finish_reason") == "stop"), chat[-1] if chat else None)
+    answer_end = (answer or {}).get("settled_at")
+    if answer and answer_end:
+        flow["answer_started_seconds"] = seconds(t0, answer.get("first_token_at") or answer.get("created_at"))
+        flow["answer_seconds"] = seconds(answer.get("created_at"), answer_end)
+        late = [s for s in judges + reviewers if s.get("settled_at") and s["settled_at"] > answer_end]
+        if late:
+            flow["check_after_answer_seconds"] = seconds(answer_end, max(s["settled_at"] for s in late))
     if comparison:
         c0 = min(s["created_at"] for s in comparison)
         ended = [s for s in comparison if s.get("settled_at")]
@@ -130,16 +149,14 @@ def turn_flow(turn: dict, steps: list, agents: dict) -> dict:
             flow["comparison_seconds"] = seconds(c0, c1)
             slowest = max(ended, key=lambda s: s["settled_at"])
             flow["slowest_model"] = f"{model_name(slowest.get('model'))} {seconds(slowest['created_at'], slowest['settled_at'])}s"
+            if answer_end and answer_end > c1:
+                flow["after_comparison_seconds"] = seconds(c1, answer_end)
         flow["comparison_models"] = sorted({model_name(s.get("model")) for s in comparison})
         flow["comparison_failures"] = [f"{model_name(s.get('model'))}: {s.get('status')} {s.get('finish_reason') or ''}".strip()
                                        for s in comparison if s.get("status") != "succeeded"]
-        writer = [s for s in chat if s.get("created_at") and s["created_at"] >= (max((s2.get("settled_at") or c0) for s2 in comparison))]
-        if writer and writer[-1].get("settled_at"):
-            flow["writer_seconds"] = seconds(writer[0]["created_at"], writer[-1]["settled_at"])
-            answer_end = writer[-1]["settled_at"]
-            late = [s for s in judges if s.get("settled_at") and s["settled_at"] > answer_end]
-            if late:
-                flow["check_after_answer_seconds"] = seconds(answer_end, max(s["settled_at"] for s in late))
+    if reviewers:
+        flow["reviewer_calls"] = len(reviewers)
+        flow["reviewer_models"] = dict(Counter(model_name(s.get("model")) for s in reviewers))
     if judges:
         flow["judge_calls"] = len(judges)
         flow["judge_timeouts"] = sum(1 for s in judges if s.get("settled_at") and s.get("status") != "succeeded"
@@ -233,6 +250,28 @@ def watch_summary(turn_id: str, turn: dict, started: dict) -> dict:
     return out
 
 
+def allowance_used(db, uid: str, days, config: dict, tier: str) -> list:
+    """The share of its daily allowance the account spent on each UTC day in
+    ``days`` (agent_quota ledger, also its temporary chats), content-free.
+    The server log names no account when one runs out (``Agent admission
+    stopped``); this shows whether it was an external one."""
+    from app.services import agent_budget_config, agent_quota
+    limit = agent_budget_config.limit_for(config, tier)
+    suffix = ("_" + config["reset_epoch"] if config.get("reset_epoch") else "") + agent_quota.LEDGER_UNIT
+    out = []
+    for day in days:
+        spent = agent_quota.spent_amount(agent_quota.quota_ref(db, uid, day + suffix).get().to_dict() or {})
+        if spent:
+            out.append({"day": day, "tier": agent_budget_config.tier_key(tier),
+                        "used_percent": round(spent * 100 / limit) if limit else None})
+    return out
+
+
+def utc_days(start: datetime, end: datetime) -> list:
+    first, last = start.astimezone(timezone.utc).date(), end.astimezone(timezone.utc).date()
+    return [(first + timedelta(days=n)).isoformat() for n in range((last - first).days + 1)]
+
+
 def render_warnings(start: datetime, end: datetime) -> dict:
     """WARNING/ERROR lines of the app log in the window, counted by pattern."""
     key = os.environ.get("RENDER_API_KEY", "")
@@ -268,13 +307,18 @@ def cmd_collect(args) -> int:
     state = load_json(STATE_FILE)
     since = (datetime.fromisoformat(state["last_seen"]) if state.get("last_seen") and not args.hours
              else now - timedelta(hours=args.hours or FIRST_LOOKBACK_HOURS))
+    from app.services import agent_budget_config, agent_quota
     accounts, own = external_accounts()
-    turns, newest = [], since
+    budget_config, days = agent_budget_config.get_config(db), utc_days(since, now)
+    turns, newest, allowance = [], since, {}
     for uid, (created, providers) in accounts.items():
         user = db.collection("users").document(uid)
         chats = list(user.collection("chats").where("updated_at", ">", since).stream())
         if not chats:
             continue
+        used = allowance_used(db, uid, days, budget_config, agent_quota.account_tier(uid))
+        if used:
+            allowance[pseudonym(uid)] = used
         calls = started = None
         for chat in chats:
             chat_data = chat.to_dict() or {}
@@ -335,6 +379,9 @@ def cmd_collect(args) -> int:
         # The log has no account, so own accounts count too (a review pinned
         # 3 of the operator's refused turns on an external user's run).
         "server_warnings_scope": "all accounts, own included; not tied to the turns below",
+        # Per external account with a chat in the window, temporary ones too:
+        # around 100 % or more it ran out of its daily allowance that day.
+        "allowance_by_user": allowance,
         "turn_list": shown,
     }
     sys.stdout.reconfigure(encoding="utf-8")

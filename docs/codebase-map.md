@@ -11576,9 +11576,16 @@ täglich 07:15, seit 2026-10-18) liest nur: Turns externer Konten seit dem
 letzten Lauf (eigene Konten per E-Mail-Marker `maxl.plack`/`ml.plack`/`nodon`
 über Firebase Auth ausgeschlossen, Nutzer als Pseudonym `U…`), je Turn Frage,
 Antwortanfang, Ablauf aus den Receipts (Vergleichsdauer, langsamstes Modell,
-Ausfälle, Schreib- und Prüfdauer, Judge-Timeouts, langsamster Judge-Call,
+Ausfälle; Antwort = letzter Chat-Schritt mit `stop`: Wartezeit bis zu ihrem
+ersten Token `answer_started_seconds`, Schreibdauer `answer_seconds`;
+`after_comparison_seconds` vom Vergleichsende bis Antwortende, also mit der
+Recherche danach; Prüfdauer nach Antwortende über Prüfer (`audit`,
+`reviewer_calls`) und Judges, Judge-Timeouts, langsamster Judge-Call,
 Kosten; gestoppte Judge-Calls, meist Hedge-Verlierer, getrennt als
-`judge_hedges_stopped` und nicht in der Prüfdauer), Werkzeugaufrufe aus dem
+`judge_hedges_stopped` und nicht in der Prüfdauer), je Konto mit Chat im
+Fenster (auch temporär) der Anteil des Tageskontos je UTC-Tag aus dem
+`agent_quota`-Ledger (`allowance_by_user`; das Log nennt bei
+`Agent admission stopped` kein Konto), Werkzeugaufrufe aus dem
 Arbeitsprotokoll (`flow.tools` je Name, `flow.refused_calls` als „Werkzeug:
 Feld“ für Aufrufe, die das Register vor dem Werkzeug ablehnte, nie Werte,
 `flow.tool_errors`), die Watch des Turns (`watch.proposed`/`watch.started`

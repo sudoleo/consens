@@ -68,3 +68,82 @@ def test_a_scheduled_run_is_marked_even_when_it_found_nothing():
     assert watch_summary("r1", quiet, {}) == {"scheduled_run": "quiet"}
     found = {**quiet, "agent_watch_run": {"finding": {"summary": "In stock.", "needs_user": False}}}
     assert watch_summary("r2", found, {}) == {"scheduled_run": "finding"}
+
+
+def at(second):
+    from datetime import datetime, timedelta, timezone
+    return datetime(2026, 11, 15, 8, 41, 53, tzinfo=timezone.utc) + timedelta(seconds=second)
+
+
+def receipt(step, start, end, *, agent="", first=None, finish="stop", model="openai/gpt-6.1-terra", status="succeeded"):
+    return {"step": step, "agent_id": agent, "created_at": at(start), "settled_at": at(end),
+            "first_token_at": at(first) if first is not None else None, "finish_reason": finish,
+            "model": {"model": model}, "status": status}
+
+
+def test_the_flow_tells_the_wait_for_the_answer_from_the_research_after_the_comparison():
+    from scripts.daily_chat_review import turn_flow
+    agents = {"c1": {"kind": "comparison"}, "c2": {"kind": "comparison"}, "a1": {"kind": "audit"},
+              "a2": {"kind": "audit"}}
+    steps = [
+        receipt("completion:0", 0, 5, first=4, finish="tool_calls"),
+        receipt("agent:c1:0", 6, 80, agent="c1", model="moonshotai/kimi-k2.6"),
+        receipt("agent:c2:0", 6, 40, agent="c2", model="x-ai/grok-4.3"),
+        receipt("completion:1", 93, 100, first=99, finish="tool_calls"),
+        receipt("completion:2", 172, 285, first=178),
+        receipt("agent:a1:0", 6, 300, agent="a1", model="anthropic/claude-haiku-5.5"),
+        receipt("agent:a2:0", 6, 336, agent="a2", model="moonshotai/kimi-k2.6"),
+        receipt("agent:a2:1", 290, 400, agent="a2", model="moonshotai/kimi-k2.6", status="cancelled"),
+    ]
+    flow = turn_flow({"created_at": at(0), "completed_at": at(336)}, steps, agents)
+    assert flow["chat_steps"] == 3
+    assert flow["comparison_seconds"] == 74 and flow["slowest_model"] == "kimi-k2.6 74s"
+    assert flow["after_comparison_seconds"] == 205
+    assert flow["answer_started_seconds"] == 178 and flow["answer_seconds"] == 113
+    # The check after the answer: the agent's reviewers, without a stopped hedge.
+    assert flow["check_after_answer_seconds"] == 51
+    assert flow["reviewer_calls"] == 2 and flow["reviewer_models"] == {"claude-haiku-5.5": 1, "kimi-k2.6": 1}
+    assert "writer_seconds" not in flow
+
+
+def test_a_direct_answer_has_its_wait_without_a_comparison():
+    from scripts.daily_chat_review import turn_flow
+    flow = turn_flow({"created_at": at(0), "completed_at": at(58)},
+                     [receipt("completion:0", 0, 10, first=3, finish="tool_calls"), receipt("completion:1", 40, 55)], {})
+    assert flow["answer_started_seconds"] == 40 and flow["answer_seconds"] == 15
+    assert "comparison_seconds" not in flow and "after_comparison_seconds" not in flow
+
+
+class Ledgers:
+    """users/{uid}/chat_state/{doc} of a fake Firestore, read-only."""
+
+    def __init__(self, docs):
+        self.docs, self.path = docs, []
+
+    def collection(self, name):
+        self.path.append(name)
+        return self
+
+    def document(self, name):
+        self.path.append(name)
+        return self
+
+    def get(self):
+        path, self.path = self.path, []
+        return Snapshot(self.docs.get(path[-1]))
+
+
+def test_the_allowance_an_account_spent_on_each_day_of_the_window():
+    from datetime import datetime, timezone
+    from scripts.daily_chat_review import allowance_used, utc_days
+    config = {"tier_limits": {"free": 1_000_000, "plus": 2_500_000, "pro": 5_000_000, "admin": 5_000_000},
+              "reset_epoch": "e1"}
+    db = Ledgers({"agent_tokens_2026-11-14_e1_eur": {"used": 250_000},
+                  "agent_tokens_2026-11-15_e1_eur": {"used": 900_000, "estimated": 140_000, "pipeline_estimated": 0}})
+    days = utc_days(datetime(2026, 11, 14, 7, 0, tzinfo=timezone.utc), datetime(2026, 11, 16, 10, 0, tzinfo=timezone.utc))
+    assert days == ["2026-11-14", "2026-11-15", "2026-11-16"]
+    assert allowance_used(db, "uid", days, config, "free") == [
+        {"day": "2026-11-14", "tier": "free", "used_percent": 25},
+        {"day": "2026-11-15", "tier": "free", "used_percent": 104},
+    ]
+    assert allowance_used(db, "uid", days, config, "plus")[1]["used_percent"] == 42
