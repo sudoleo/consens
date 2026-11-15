@@ -7155,8 +7155,14 @@ Leser eine Auswahl in der Antwort, wartet die Korrektur bis zum nächsten
 Befunde haben keine Marke (`renderStoredAuditMarks` und die Zähler
 überspringen Einträge mit ihrem `finding`), bestrittene behalten sie, Karte
 und Notes nennen danach den Grund („The agent disagrees“). Notes zeigt unter
-„Corrected by the agent“ je Korrektur vorher/nachher (`del`/`ins`) mit den
-Anmerkungen (`feedback.findings[].notes`); sie zählen in Notes mit.
+„Corrected by the agent“ je Korrektur eine Zeile mit Wort-Diff
+(`agent-review.js` `wordDiff`/`changeLine`: LCS über Wörter und Zeichen,
+Leerraum hängt am Wort; Gestrichenes als `del` auf `--dispute-bg`, Neues als
+`ins` auf `--agree-bg`, lange unveränderte Strecken auf sechs Wörter je Seite
+mit „…“ gekürzt). Ist mehr als 60 % geändert oder der Text zu lang, stehen
+vorher/nachher als zwei Zeilen da. Die Anmerkungen
+(`feedback.findings[].notes`) stehen eingeklappt darunter (`details`, Kopf
+mit Prüfer und Art, Grund und Quelle beim Aufklappen); sie zählen in Notes mit.
 Aktivität: Schritt `correct_answer`
 („Checked the reviewers’ findings“, wie `audit_answer` ein `answerChecks`),
 Agent-Panel: Sitzung `correction` ohne Icon im Modellstapel, ihre JSON-Antwort

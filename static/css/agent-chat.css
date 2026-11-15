@@ -847,14 +847,39 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 :is(.agent-audit-note, .agent-audit-kind)[data-kind="doubtful"] .agent-audit-kind, .agent-audit-kind[data-kind="doubtful"] { color: var(--kind-doubtful); }
 .agent-audit-text { margin: 0; color: var(--ink); }
 /* With findings passed to the agent (agent-review.js): its reason where it
-   keeps a sentence, in ink; a sentence it corrected as what stood, struck
-   through and quiet, over what stands now. */
+   keeps a sentence, in ink; a sentence it corrected as one line with its
+   changed words tinted (a word diff), or, rewritten through and through, as
+   what stood, struck through and quiet, over what stands now. */
 .agent-audit-reply .agent-audit-kind { color: var(--ink-2); }
 .agent-audit-passage > .agent-audit-unchecked { margin: var(--space-2) 0 0; }
+.agent-audit-diff > :is(del, ins) {
+  padding: 0 2px; border-radius: 3px;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+}
+.agent-audit-diff > del {
+  background: var(--dispute-bg); color: var(--ink-2);
+  text-decoration-line: line-through; text-decoration-color: color-mix(in srgb, var(--dispute) 65%, transparent);
+}
+.agent-audit-diff > ins { background: var(--agree-bg); color: var(--ink); text-decoration: none; }
+.agent-audit-diff > del + ins { margin-left: 2px; }
+.agent-audit-gap { color: var(--ink-3); }
 .agent-audit-change { display: grid; gap: var(--space-1); margin: 0 0 var(--space-2); }
 .agent-audit-change > .agent-audit-quote { margin: 0; }
 .agent-audit-change > del.agent-audit-before { color: var(--ink-3); text-decoration-line: line-through; text-decoration-color: var(--ink-3); }
 .agent-audit-change > ins.agent-audit-after { color: var(--ink); text-decoration: none; }
+/* A note on a corrected sentence: who said what on one line, the reason on
+   a click, behind the app's one chevron (right while folded, down open). */
+.agent-audit-fold > summary { width: fit-content; cursor: pointer; list-style: none; }
+.agent-audit-fold > summary::-webkit-details-marker { display: none; }
+.agent-audit-fold > summary::after {
+  content: ""; width: 1em; height: 1em; flex: none; color: var(--ink-3); background: currentColor;
+  -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat;
+  transform: rotate(-90deg);
+}
+.agent-audit-fold[open] > summary::after { transform: none; }
+.agent-audit-fold > summary:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: var(--radius-xs); }
+.agent-audit-fold-body { display: grid; gap: var(--space-1); margin-top: var(--space-1); }
+.agent-audit-fold-body > .agent-audit-text { color: var(--ink-2); font-size: var(--font-size-xs); }
 /* Its source: the text link, a finger's height on a phone. */
 .agent-audit-source { justify-self: start; font-size: var(--font-size-xs); }
 /* "Corrected by the agent", "On the work": a section, not a label. */

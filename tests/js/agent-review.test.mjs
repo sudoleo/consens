@@ -1663,9 +1663,16 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
   const fixed = panel.querySelector('.agent-audit-corrected');
   expect(fixed.closest('.agent-audit-group').querySelector('h5').textContent).toBe('Corrected by the agent');
-  expect(fixed.querySelector('del').textContent).toBe('Tickets cost 18 euros.');
-  expect(fixed.querySelector('ins').textContent).toBe('Tickets cost 24 euros since 2025.');
-  expect(fixed.querySelector('.agent-audit-text').textContent).toBe('The ticket costs 24 euros since 2025.');
+  // One line, the changed words marked: a word diff, not two sentences.
+  const line = fixed.querySelector('.agent-audit-diff');
+  expect(line.textContent).toBe('Tickets cost 1824 euros since 2025.');
+  expect([...line.querySelectorAll('del')].map(el => el.textContent)).toEqual(['18']);
+  expect([...line.querySelectorAll('ins')].map(el => el.textContent)).toEqual(['24', 'since 2025']);
+  // The reviewer's reason is folded under its name.
+  const fold = fixed.querySelector('details.agent-audit-fold');
+  expect(fold.open).toBe(false);
+  expect(fold.querySelector('summary .agent-audit-kind').textContent).toBe('Wrong');
+  expect(fold.querySelector('.agent-audit-text').textContent).toBe('The ticket costs 24 euros since 2025.');
   // Where the agent disagreed, its reason follows the reviewers' note.
   const disputed = [...panel.querySelectorAll('.agent-audit-passage')].find(passage => passage.textContent.includes('72 AD'));
   const reply = disputed.querySelector('.agent-audit-reply');
@@ -1683,6 +1690,60 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
   expect(d.querySelector('.agent-review-findings')).toBeNull();
   expect(w.App.agentReview.headNote(done, true).parts).toEqual(['checked', '1 sentence improved']);
   expect(w.App.agentReview.correctionUnchecked(done)).toBe(false);
+});
+
+// A long corrected sentence keeps a few words around each change and elides
+// the rest; one rewritten through and through shows as before and after.
+it('shortens a long corrected sentence to its changes and shows a rewrite as two lines', () => {
+  const { window: w, document: d, body } = feedbackSetup();
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  const done = feedbackReview('done');
+  const before = 'Die Geschäftszahlen zeigen das Gegenteil eines Kollaps: OpenAI hat im Q3 erstmals über $10 Bio. '
+    + 'Quartalsumsatz gemeldet, rund 50 % mehr als im Vorquartal, mit ca. $50 Bio. Umsatz-Run-Rate und mehr als '
+    + '100 Mio. bezahlten Abos (TechCrunch/Bloomberg).';
+  const after = before.replaceAll('Bio.', 'Mrd.') + ' Die übrigen Zahlen sind als Mrd. zu lesen.';
+  Object.assign(done.audit.feedback.findings[0], { before, after });
+  const rewrite = { ...done.audit.feedback.findings[0], id: 's9', before: 'The arena held 50,000.', after: 'Seats: about fifty thousand people.' };
+  done.audit.feedback.findings.push(rewrite);
+  w.App.agentReview.render(body, done, { key: 't1', ended: true });
+  notesCell(d).click();
+  const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
+  const [long, rewritten] = panel.querySelectorAll('.agent-audit-corrected');
+  const line = long.querySelector('.agent-audit-diff');
+  // Six words before the first change; the runs between changes are short enough to stay.
+  expect(line.textContent).toBe('… hat im Q3 erstmals über $10 BioMrd. Quartalsumsatz gemeldet, rund 50 % mehr als im '
+    + 'Vorquartal, mit ca. $50 BioMrd. Umsatz-Run-Rate und mehr als 100 Mio. bezahlten Abos (TechCrunch/Bloomberg). '
+    + 'Die übrigen Zahlen sind als Mrd. zu lesen.');
+  expect([...line.querySelectorAll('del')].map(el => el.textContent)).toEqual(['Bio', 'Bio']);
+  expect([...line.querySelectorAll('ins')].map(el => el.textContent))
+    .toEqual(['Mrd', 'Mrd', 'Die übrigen Zahlen sind als Mrd. zu lesen.']);
+  expect(line.querySelectorAll('.agent-audit-gap')).toHaveLength(1);
+  // Between two changes a long unchanged stretch keeps six words on each side.
+  const middle = feedbackReview('done');
+  Object.assign(middle.audit.feedback.findings[0], {
+    before: 'Alpha one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen omega.',
+    after: 'Beta one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen gamma.' });
+  w.App.agentReview.render(body, middle, { key: 't1', ended: true });
+  notesCell(d).click();
+  expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences')
+    .querySelector('.agent-audit-diff').textContent)
+    .toBe('AlphaBeta one two three four five six … ten eleven twelve thirteen fourteen fifteen omegagamma.');
+  // Words match, blanks never on their own: a moved phrase reads as one change.
+  const moved = feedbackReview('done');
+  Object.assign(moved.audit.feedback.findings[0], {
+    before: 'Opus 5.5 erschien am 22.9., Fable 5.2 und Mythos 5.2 am 9.11. öffentlich (Anthropic).',
+    after: 'Opus 5.5 erschien am 22.9., Fable 5.2 am 9.11. öffentlich; Mythos 5.2 ist nur für geprüfte '
+      + 'Organisationen verfügbar (Anthropic Release Notes).' });
+  w.App.agentReview.render(body, moved, { key: 't1', ended: true });
+  notesCell(d).click();
+  const movedLine = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences')
+    .querySelector('.agent-audit-diff');
+  expect([...movedLine.querySelectorAll('del')].map(el => el.textContent)).toEqual(['und Mythos 5.2']);
+  expect([...movedLine.querySelectorAll('ins')].map(el => el.textContent))
+    .toEqual(['; Mythos 5.2 ist nur für geprüfte Organisationen verfügbar', 'Release Notes']);
+  expect(rewritten.querySelector('.agent-audit-diff')).toBeNull();
+  expect([rewritten.querySelector('del').textContent, rewritten.querySelector('ins').textContent])
+    .toEqual(['The arena held 50,000.', 'Seats: about fifty thousand people.']);
 });
 
 // The sentences being checked rest in grey (agent-chat.css): when the pass

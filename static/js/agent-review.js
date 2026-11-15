@@ -889,11 +889,12 @@
   // its mark), then the note, then its source as a link. A note on the work
   // names its step in the activity's words ("Command", "Agent step"); the
   // work log's number and raw name only for those who can open the log
-  // (admins).
-  function auditNote(item, audit) {
+  // (admins). `folded`: the head alone, the rest on a click (a note whose
+  // sentence the agent has already corrected).
+  function auditNote(item, audit, { folded = false } = {}) {
     const entry = node('li', 'agent-audit-note');
     entry.dataset.kind = kindOf(item);
-    const head = node('div', 'agent-audit-note-head');
+    const head = node(folded ? 'summary' : 'div', 'agent-audit-note-head');
     const reviewer = (audit?.reviewers || []).find(r => reviewerLabel(r) === item.model);
     const name = reviewerName(reviewer, item.model);
     if (name) {
@@ -933,6 +934,14 @@
         entry.append(link);
       }
     } catch (_) { /* No source. */ }
+    if (folded) {
+      // The body in a box of its own: a details element does not lay out
+      // as a grid in every browser.
+      const fold = node('details', 'agent-audit-fold'), body = node('div', 'agent-audit-fold-body');
+      body.append(...[...entry.childNodes].filter(child => child !== head));
+      fold.append(head, body);
+      entry.append(fold);
+    }
     return entry;
   }
   // One passage of the answer: its words once, then every reviewer's note on
@@ -991,20 +1000,131 @@
       .replace(/\\([*_#>`~\\])/g, '$1')
       .replace(/\s+/g, ' ').trim();
   }
-  // A sentence the agent corrected: what stood, what stands now, and the
-  // reviewers' notes that led to it.
+  // Words and marks are a diff's units: "Bio." to "Mrd." changes one word,
+  // not the point after it. The blanks before a word go with it and never
+  // match on their own: as units of their own, the many blanks of a sentence
+  // outweighed its words, and "und Mythos 5.2 am 9.11." came out as confetti.
+  const DIFF_TOKEN = /(\s*)([\p{L}\p{N}]+(?:['’.,\-/][\p{L}\p{N}]+)*|[^\s\p{L}\p{N}])/gu;
+  // The table of a longer rewrite (a whole table, say) costs more than its
+  // diff helps: it shows as before and after.
+  const DIFF_MAX_CELLS = 250000;
+  // Above this share of changed words a diff is confetti.
+  const DIFF_MAX_CHANGED = 0.6;
+  // Unchanged words a change keeps around it; longer runs are elided.
+  const DIFF_CONTEXT = 6;
+  const isSpace = text => !/\S/.test(text);
+  // The changes from one text to another as runs: {same} or {gone, came}.
+  // Null where a diff would not read better than the two texts.
+  function wordDiff(before, after) {
+    const units = text => [...text.matchAll(DIFF_TOKEN)].map(([, blank, word]) => ({ blank, word }));
+    const a = units(before), b = units(after);
+    // Only the common start is cut off. Matching from the end too ties a
+    // sentence's last point to the end of an added one, and the addition
+    // then starts with that point: ". Die übrigen … lesen".
+    let start = 0;
+    while (start < a.length && start < b.length && a[start].word === b[start].word) start++;
+    const n = a.length - start, m = b.length - start;
+    if ((n + 1) * (m + 1) > DIFF_MAX_CELLS) return null;
+    const same = (i, j) => a[start + i].word === b[start + j].word;
+    const lcs = new Uint16Array((n + 1) * (m + 1));
+    for (let i = n - 1; i >= 0; i--) {
+      for (let j = m - 1; j >= 0; j--) {
+        lcs[i * (m + 1) + j] = same(i, j) ? lcs[(i + 1) * (m + 1) + j + 1] + 1
+          : Math.max(lcs[(i + 1) * (m + 1) + j], lcs[i * (m + 1) + j + 1]);
+      }
+    }
+    // An unchanged word with the blank the new text gives it.
+    const ops = b.slice(0, start).map(unit => ['=', unit.blank + unit.word]);
+    let i = 0, j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && same(i, j)) { const unit = b[start + j]; ops.push(['=', unit.blank + unit.word]); i++; j++; }
+      else if (j < m && (i === n || lcs[i * (m + 1) + j + 1] >= lcs[(i + 1) * (m + 1) + j])) {
+        const unit = b[start + j++]; ops.push(['+', unit.blank + unit.word]);
+      } else { const unit = a[start + i++]; ops.push(['-', unit.blank + unit.word]); }
+    }
+    const runs = [];
+    for (const [op, text] of ops) {
+      const last = runs.at(-1);
+      if (op === '=') {
+        if (last && 'same' in last) last.same += text; else runs.push({ same: text });
+        continue;
+      }
+      const change = last && !('same' in last) ? last : (runs.push({ gone: '', came: '' }), runs.at(-1));
+      change[op === '-' ? 'gone' : 'came'] += text;
+    }
+    const changed = ops.filter(([op]) => op !== '=').length;
+    if (!changed || changed > DIFF_MAX_CHANGED * (a.length + b.length)) return null;
+    return runs;
+  }
+  // Up to `head` words from the start of an unchanged run and `tail` from its
+  // end; null where little would go.
+  function elide(text, head, tail) {
+    const parts = text.match(/\S+|\s+/g) || [];
+    if (parts.filter(part => !isSpace(part)).length <= head + tail + 2) return null;
+    // The parts up to the `count`-th word, read from the front.
+    const take = (list, count) => {
+      const kept = [];
+      for (const part of list) {
+        if (!count) break;
+        kept.push(part);
+        if (!isSpace(part)) count--;
+      }
+      return kept;
+    };
+    return { start: take(parts, head).join(''), end: take([...parts].reverse(), tail).reverse().join('') };
+  }
+  // A corrected sentence as one line: what went struck through on red, what
+  // came on green, the unchanged words around them, long stretches of those
+  // shortened to "…" (the whole sentence stands in the answer).
+  function changeLine(before, after) {
+    const runs = wordDiff(before, after);
+    if (!runs) return null;
+    const line = node('p', 'agent-audit-quote agent-audit-diff');
+    line.setAttribute('data-i18n-skip', '');
+    const gap = () => node('span', 'agent-audit-gap', '…');
+    for (const [index, run] of runs.entries()) {
+      if (!('same' in run)) {
+        // Blanks at a change's edges stay unpainted.
+        const lead = (run.gone || run.came).match(/^\s*/)[0], trail = (run.gone || run.came).match(/\s*$/)[0];
+        const strip = text => text.slice(lead.length && text.startsWith(lead) ? lead.length : 0,
+          trail.length && text.endsWith(trail) ? text.length - trail.length : undefined);
+        line.append(document.createTextNode(lead));
+        if (strip(run.gone)) line.append(node('del', 'agent-audit-before', strip(run.gone)));
+        if (strip(run.came)) line.append(node('ins', 'agent-audit-after', strip(run.came)));
+        line.append(document.createTextNode(trail));
+        continue;
+      }
+      const first = index === 0, last = index === runs.length - 1;
+      const cut = elide(run.same, first ? 0 : DIFF_CONTEXT, last ? 0 : DIFF_CONTEXT);
+      if (!cut) { line.append(document.createTextNode(run.same)); continue; }
+      if (cut.start) line.append(document.createTextNode(`${cut.start} `));
+      line.append(gap());
+      if (cut.end) line.append(document.createTextNode(` ${cut.end}`));
+    }
+    return line;
+  }
+  // A sentence the agent corrected: the change in one line, and the
+  // reviewers' notes that led to it, folded (who said what, the reason on
+  // demand).
   function correctedPassage(finding, audit) {
     const passage = node('section', 'agent-audit-passage agent-audit-corrected');
-    const change = node('div', 'agent-audit-change');
-    for (const [tag, cls, text] of [['del', 'agent-audit-before', finding.before], ['ins', 'agent-audit-after', finding.after]]) {
-      if (!plainWords(text)) continue;
-      const words = node(tag, `agent-audit-quote ${cls}`, plainWords(text));
-      words.setAttribute('data-i18n-skip', '');
-      change.append(words);
+    const [before, after] = [plainWords(finding.before), plainWords(finding.after)];
+    const line = before && after ? changeLine(before, after) : null;
+    if (line) passage.append(line);
+    else {
+      const change = node('div', 'agent-audit-change');
+      for (const [tag, cls, text] of [['del', 'agent-audit-before', before], ['ins', 'agent-audit-after', after]]) {
+        if (!text) continue;
+        const words = node(tag, `agent-audit-quote ${cls}`, text);
+        words.setAttribute('data-i18n-skip', '');
+        change.append(words);
+      }
+      if (change.childElementCount) passage.append(change);
     }
-    if (change.childElementCount) passage.append(change);
     const list = node('ul', 'agent-audit-notes');
-    for (const item of [...finding.notes].sort((a, b) => KIND_RANK[kindOf(a)] - KIND_RANK[kindOf(b)])) list.append(auditNote(item, audit));
+    for (const item of [...finding.notes].sort((a, b) => KIND_RANK[kindOf(a)] - KIND_RANK[kindOf(b)])) {
+      list.append(auditNote(item, audit, { folded: true }));
+    }
     if (list.childElementCount) passage.append(list);
     return passage;
   }

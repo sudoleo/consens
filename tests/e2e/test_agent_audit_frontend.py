@@ -694,8 +694,10 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
         expect(reader).to_be_visible()
         expect(reader.locator(".agent-evidence-status")).to_have_text("1 sentence improved · 3 notes open")
         fixed = reader.locator(".agent-audit-corrected")
-        expect(fixed.locator("del")).to_contain_text("18 euros")
-        expect(fixed.locator("ins")).to_contain_text("24 euros since 2025")
+        # One line with the changed words marked (a word diff); the reason folded.
+        expect(fixed.locator(".agent-audit-diff del")).to_have_text(["18"])
+        expect(fixed.locator(".agent-audit-diff ins")).to_have_text(["24", "since 2025"])
+        expect(fixed.locator("details.agent-audit-fold")).not_to_have_attribute("open", re.compile(".*"))
         expect(fixed).to_contain_text("Since 2025 the standard ticket costs 24 euros")
         expect(reader.locator(".agent-audit-reply")).to_contain_text(FLOOR_REASON)
         page.wait_for_timeout(500)
