@@ -1004,6 +1004,9 @@ gestrichelt, Zustimmung gepunktet). Außerhalb des Modus ändert sich nichts,
 außer der Leser schaltet dieselben Linien ein (Kontoeinstellung `mark_lines`,
 `body.marks-underlined`): beide setzen nur `--cx-underline: underline`, eine
 Regel zeichnet für beide, außerhalb des Kontrastmodus in der Farbe der Stufe.
+Die leisen Stufen (uneinig, Detail, dünne Lage) tragen auch ohne beides eine
+neutrale Punktlinie statt einer Fläche; mit `mark_lines` und im Kontrastmodus
+werden uneinig und Detail daraus gestrichelt in der Farbe ihrer Stufe.
 **Material-Bausteine (seit 2026-10-20, Apple-Audit Welle 2, w2c):** ein zweiter
 Block `:root, .dark-mode` in `foundation.css` leitet aus den Themenwerten ab
 (auch auf `body.dark-mode` deklariert, sonst erbt der dunkle App-Body die helle
@@ -3802,7 +3805,17 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   `--cx-mark-*` in `components-consensus-visuals.css`): `is-unanimous` grün
   (volle Zustimmung, auch „4/4"), `is-minor` ein neutraler Grau-Wash (Difference
   ohne `severity: major`), `is-split` bernstein (Claim mit Dissens — dieselbe
-  Note wie sein gelbes Badge), `is-major` rot (Widerspruch). Deckung bewusst
+  Note wie sein gelbes Badge), `is-major` rot (Widerspruch). Eine Fläche im
+  Text tragen davon nur Rot und (unter „All checks“) Grün: Die leisen Stufen
+  `is-split`, `is-minor` und `is-thin` sind seit 2026-11-15 (Max: ein „nice
+  to know“ soll den Lesefluss nicht sprengen, wie ein unterpunktetes Datum im
+  Messenger) eine Punktlinie in neutraler Tinte (`--cx-dots`,
+  `--cx-dots-size`; Bernstein 52 % Tinte und 0,1 em, Grau 34 % und 1 px),
+  am Satz oder an der benannten Stelle; ihre Fläche (`--cx-mark-*`) zeigt
+  sich erst unter Zeiger, Tastatur und offener Karte (`.is-hovered`), und im
+  Dunkelmodus nimmt nur noch Rot seinen Ton in die Schrift. Beim Aufstreichen
+  (`is-marks-revealing`) blenden ihre Punkte ein (`agent-mark-dots`), statt
+  dass eine Fläche gezogen wird. Deckung der Flächen bewusst
   niedrig, damit der Textkontrast (≥ 12:1) unangetastet bleibt; seit
   2026-10-02 (User-Vorgabe: ruhig, Apple-Prinzip) sind die Marken reine
   Systemfarben in sehr geringer Deckung (Grün #34c759, Orange #ff9500, Rot

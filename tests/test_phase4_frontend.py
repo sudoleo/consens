@@ -214,11 +214,11 @@ def test_login_dialog_accessibility_and_current_landing_marker_vocabulary():
     assert "keepOpen: authDialogHasTyping" in firebase
     assert "function trapTab(dialog, event)" in modal_dialog
     assert "opener.focus({ preventScroll: true })" in modal_dialog
-    # Die Marken sind farbige Textmarker statt Linien unter dem Satz
-    # (User-Vorgabe: eine Unterstreichung liest sich wie ein Link). Die
-    # Legende spricht von Farben, nicht von Linienstaerken, und nennt die
-    # Arten der Pruefer-Anmerkungen.
-    assert "red · wrong" in landing and "amber · doubtful" in landing and "grey · incomplete" in landing
+    # Der Widerspruch ist ein roter Textmarker; die leisen Arten sind eine
+    # Punktlinie (User-Vorgabe: ein "gut zu wissen" soll den Lesefluss nicht
+    # sprengen; Punkte, keine durchgezogene Linie, die sich wie ein Link
+    # liest). Die Legende nennt die Arten der Pruefer-Anmerkungen.
+    assert "red · wrong" in landing and "dotted · doubtful" in landing and "fine dots · incomplete" in landing
     assert "fine rule" not in landing
     assert "heavier amber rule" not in landing
     assert "fine dotted line" not in landing

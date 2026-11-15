@@ -1390,14 +1390,22 @@ a.answer-link-missing { color: var(--ink-3); text-decoration: line-through; text
   /* A sentence whose disputed words are named strokes only those words
      (.cx-spot inherits the sentence's --cx-reveal-delay). */
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
-    .cx-claim:is(.is-thin, .is-unanimous, .is-minor, .is-split, .is-major):not(.is-marker-filtered, .has-spot),
+    .cx-claim:is(.is-unanimous, .is-major):not(.is-marker-filtered, .has-spot),
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
-    .cx-claim.has-spot:is(.is-minor, .is-split, .is-major):not(.is-marker-filtered) .cx-spot {
+    .cx-claim.has-spot.is-major:not(.is-marker-filtered) .cx-spot {
     background-color: transparent;
     background-image: linear-gradient(var(--cx-mark), var(--cx-mark));
     background-repeat: no-repeat;
     box-shadow: none;
     animation: agent-mark-stroke var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
+  }
+  /* The levels drawn as dots (components-consensus-visuals.css) have no
+     surface to stroke: their dots come in at the same moment. */
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
+    .cx-claim:is(.is-thin, .is-minor, .is-split):not(.is-marker-filtered, .has-spot),
+  body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing
+    .cx-claim.has-spot:is(.is-thin, .is-minor, .is-split):not(.is-marker-filtered) .cx-spot {
+    animation: agent-mark-dots var(--dur-light) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
   }
   body:not(.consensus-markers-hidden) #agentAnswerBody.is-marks-revealing .claim-badge:not(.is-marker-filtered) {
     animation: agent-mark-badge var(--dur-layer) var(--ease-out) var(--cx-reveal-delay, 0ms) backwards;
@@ -1412,6 +1420,7 @@ a.answer-link-missing { color: var(--ink-3); text-decoration: line-through; text
   to { transform: translateX(10%); }
 }
 @keyframes agent-mark-stroke { from { background-size: 0% 100%; } to { background-size: 100% 100%; } }
+@keyframes agent-mark-dots { from { text-decoration-color: transparent; } }
 @keyframes agent-mark-badge { from { opacity: 0; transform: translateY(2px) scale(.9); } }
 
 /* ---- Progress at the models ------------------------------------------------

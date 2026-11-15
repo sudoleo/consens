@@ -312,7 +312,10 @@
    unter einem Satz ist im Web die Form eines Links - der Leser erwartet einen
    Sprung und bekommt eine Bewertung. Ein Marker ueber der Stelle sagt
    dagegen genau das, was hier gemeint ist: jemand hat den Satz gelesen und
-   angestrichen.
+   angestrichen. Das gilt fuer Widerspruch und Zustimmung. Die leisen Stufen
+   (Bernstein, Grau) tragen stattdessen eine Punktlinie (siehe unten): eine
+   Flaeche auf jedem zweiten Satz sprengte den Lesefluss, und Punkte sind
+   nicht die Form eines Links; ihre Flaeche zeigt sich erst unter dem Zeiger.
 
    Die Farbe traegt die ganze Aussage und
    spricht die Ampel des Hauses (--agree/--partial/--dispute):
@@ -509,28 +512,61 @@ body:not(.consensus-markers-hidden) .cx-claim.has-spot.is-major:not(.is-marker-f
   --cx-mark-strong: var(--cx-mark-split-strong);
 }
 
-/* A reviewer's "incomplete" (Agent audit) is the quietest of its three
-   kinds, but never one to search for: the stronger grey, about as far from
-   the page as the amber, and a dashed line in the quiet ink under its words,
-   in both themes (the grey alone was 1.18:1, in the dark almost
-   nothing). */
-.cx-claim.is-audit.is-minor {
-  --cx-mark: var(--cx-mark-note-strong);
-  --cx-mark-strong: color-mix(in srgb, var(--cx-mark-note-strong), var(--ink) 8%);
-}
-
-body:not(.consensus-markers-hidden) .cx-claim.is-audit.is-minor:not(.is-marker-filtered, .has-spot),
-body:not(.consensus-markers-hidden) .cx-claim.is-audit.has-spot.is-minor:not(.is-marker-filtered) .cx-spot {
-  text-decoration-line: underline;
-  text-decoration-style: dashed;
-  text-decoration-thickness: 1px;
-  text-decoration-color: var(--ink-3);
-  text-underline-offset: 0.22em;
-}
-
 .cx-claim.is-major {
   --cx-mark: var(--cx-mark-major);
   --cx-mark-strong: var(--cx-mark-major-strong);
+}
+
+/* Die leisen Stufen sind eine Punktlinie, keine Flaeche (wie ein Datum, das
+   ein Messenger unterpunktet): Geteilt oder zweifelhaft ist ein "gut zu
+   wissen", und eine Flaeche darueber zog das Auge aus dem Lesen. Den Marker
+   behalten nur der Widerspruch (Rot) und, unter "All checks", die
+   Zustimmung. Bernstein in neutraler Tinte, Nuance und duenne Abdeckung
+   duenner und heller. Punkte, keine durchgezogene Linie: die traegt in einer
+   Antwort der Link. Die Flaeche der Stufe kommt unter Zeiger, Tastatur und
+   offener Karte (.is-hovered unten), damit sichtbar bleibt, worauf sich die
+   Karte bezieht und welche Stufe es ist. Mit benannter Stelle traegt die
+   Stelle die Punkte statt ihres Satzes. */
+.cx-claim:is(.is-split, .is-minor, .is-thin) {
+  --cx-paint: transparent;
+  --cx-dots: color-mix(in srgb, var(--ink) 34%, transparent);
+  --cx-dots-size: 1px;
+}
+
+.cx-claim.is-split {
+  --cx-dots: color-mix(in srgb, var(--ink) 52%, transparent);
+  --cx-dots-size: 0.1em;
+}
+
+.cx-claim:is(.is-split, .is-minor, .is-thin) .cx-spot {
+  --cx-spot-paint: transparent;
+}
+
+body:not(.consensus-markers-hidden) .cx-claim:is(.is-split, .is-minor, .is-thin):not(.is-marker-filtered, .has-spot),
+body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-split, .is-minor, .is-thin):not(.is-marker-filtered) .cx-spot {
+  text-decoration-line: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: var(--cx-dots-size);
+  text-decoration-color: var(--cx-dots);
+  text-underline-offset: 0.24em;
+}
+
+/* Mit mark_lines (und im Kontrastmodus) traegt die Form das Ergebnis: Dort
+   bleiben Uneinigkeit und Detail gestrichelt und in der Farbe ihrer Stufe. */
+body.marks-underlined:not(.consensus-markers-hidden) .cx-claim:is(.is-split, .is-minor):not(.is-marker-filtered, .has-spot),
+body.marks-underlined:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-split, .is-minor):not(.is-marker-filtered) .cx-spot {
+  text-decoration-style: dashed;
+  text-decoration-thickness: 1px;
+  text-decoration-color: var(--cx-line);
+}
+
+@media (forced-colors: active) {
+  body:not(.consensus-markers-hidden) .cx-claim:is(.is-split, .is-minor):not(.is-marker-filtered, .has-spot),
+  body:not(.consensus-markers-hidden) .cx-claim.has-spot:is(.is-split, .is-minor):not(.is-marker-filtered) .cx-spot {
+    text-decoration-style: dashed;
+    text-decoration-thickness: 1px;
+    text-decoration-color: var(--cx-line);
+  }
 }
 
 /* Die Stelle des Streits. Ein bestrittener Satz mit benannter Stelle
@@ -577,15 +613,10 @@ body:not(.consensus-markers-hidden) .cx-claim.is-audit.has-spot.is-minor:not(.is
 
 .cx-spot.cx-join-start.cx-join-end { box-shadow: none; }
 
-/* Dark Mode, Ton in Ton: die markierte Stelle nimmt auch in der Schrift
+/* Dark Mode, Ton in Ton: die rot markierte Stelle nimmt auch in der Schrift
    ihren Ton an, statt hell auf einem dunklen Farbband zu stehen. Gilt nur,
    solange die Marke sichtbar ist (Highlights-Filter, "No highlights", eine
-   ungemalte Satzpruefung). */
-.dark-mode:not(.consensus-markers-hidden) .cx-claim.is-split:not(.has-spot, .is-marker-filtered, .is-quiet),
-.dark-mode:not(.consensus-markers-hidden) .cx-claim.is-split.has-spot:not(.is-marker-filtered, .is-quiet) .cx-spot {
-  color: var(--cx-ink-split);
-}
-
+   ungemalte Satzpruefung). Die unterpunkteten Stufen behalten die Tinte. */
 .dark-mode:not(.consensus-markers-hidden) .cx-claim.is-major:not(.has-spot, .is-marker-filtered, .is-quiet),
 .dark-mode:not(.consensus-markers-hidden) .cx-claim.is-major.has-spot:not(.is-marker-filtered, .is-quiet) .cx-spot {
   color: var(--cx-ink-major);

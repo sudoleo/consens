@@ -907,8 +907,9 @@ def test_split_claim_uses_visible_dissent_palette_and_neutral_count(app_page):
     marked = app_page.locator("#consensusAnswerBody .cx-claim").first
     assert "is-split" in (marked.get_attribute("class") or "")
     expect(app_page.locator("#consensusAnswerBody .claim-ratio")).to_have_text("2/4")
-    # Die Passage traegt die zarte Dissensflaeche; das Badge bleibt lesbar
-    # neutral. Beide folgen ihren Theme-Tokens, nicht einem RGB-Verhaeltnis.
+    # Die geteilte Passage traegt eine Punktlinie, keine Flaeche (die zeigt
+    # sich erst unter dem Zeiger); das Badge bleibt lesbar neutral und folgt
+    # seinem Theme-Token, nicht einem RGB-Verhaeltnis.
     tones = app_page.evaluate(
         """() => {
           const color = token => {
@@ -921,18 +922,18 @@ def test_split_claim_uses_visible_dissent_palette_and_neutral_count(app_page):
           };
           const span = document.querySelector("#consensusAnswerBody .cx-claim");
           const badge = document.querySelector("#consensusAnswerBody .claim-badge");
+          const style = getComputedStyle(span);
           return {
-            mark: getComputedStyle(span).backgroundColor,
+            mark: style.backgroundColor,
+            line: [style.textDecorationLine, style.textDecorationStyle],
             badge: getComputedStyle(badge).color,
-            expectedMark: color('--cx-mark-split'),
             expectedBadge: color('--ink-2'),
           };
         }"""
     )
-    assert tones['mark'] == tones['expectedMark']
+    assert tones['mark'] in ('transparent', 'rgba(0, 0, 0, 0)')
+    assert tones['line'] == ['underline', 'dotted']
     assert tones['badge'] == tones['expectedBadge']
-    assert tones['mark'] != tones['badge']
-    assert tones['expectedMark'] not in ('transparent', 'rgba(0, 0, 0, 0)')
 
 
 def test_claim_hover_keeps_silent_models_available_on_demand(app_page):

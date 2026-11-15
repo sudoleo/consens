@@ -115,8 +115,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       sofort eine Folgefrage senden: sie startet ohne Warten, die vorige
       Antwort rutscht in den Verlauf und bekommt dort ihre Marken, sobald die
       Prüfer fertig sind. Ein einziger Prüfer im Picker reicht zum Senden. Erst wenn alle
-      Prüfer fertig sind, erscheinen Marken (falsch rot, zweifelhaft gelb,
-      unvollständig grau, nur die zitierten Worte gefärbt), kein Grün, kein
+      Prüfer fertig sind, erscheinen Marken (falsch rot hinterlegt,
+      zweifelhaft unterpunktet in neutraler Tinte, unvollständig feiner
+      unterpunktet, jeweils nur die zitierten Worte; unter dem Zeiger zeigt
+      sich die gelbe bzw. graue Fläche), kein Grün, kein
       Score; die Karte zeigt je Prüfer Art, Anmerkung und Quelle. Notes öffnet
       die Anmerkungen je Modell samt „No objections.“ und Ausfällen. Reload und
       archivierter Chat sehen gleich aus. Ein Stop gilt nur, solange der Agent
