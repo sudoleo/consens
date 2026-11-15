@@ -47,7 +47,7 @@
 
   function viewText(view) {
     if (view === "answer") return [t("Just the answer"), t("Mistakes get fixed before you read them.")];
-    if (view === "all") return [t("Everything"), t("Plus every thought and step, live.")];
+    if (view === "all") return [t("Everything"), t("Plus what they confirm and every step, live.")];
     return [t("With doubts"), t("You see what was fixed and what is still open.")];
   }
 
@@ -59,40 +59,48 @@
   }
 
   // The answer of the scene, word by word so it can come in like a stream:
-  // <0> is the year the reviewers call wrong, <1> what the agent corrects it
-  // to, <2> the passage they doubt. The translation keeps the pairs and may
-  // move them. --i is each word's place in the stream (first-run.css).
+  // <3> is the claim the reviewers mark wrong, <0> the year in it, <1> what
+  // the agent corrects that year to, <2> the passage they doubt. The
+  // translation keeps the tags and may move them; <0> and <1> stay together
+  // inside <3>. --i is each word's place in the stream (first-run.css).
   function sceneAnswer() {
     const line = element("p", "first-run-answer");
-    const year = element("span", "first-run-word first-run-year");
+    let year = null;
     let place = 0;
-    const words = (text, into) => text.split(/(\s+)/).forEach(piece => {
+    let into = line;
+    const open = [];
+    const words = text => text.split(/(\s+)/).forEach(piece => {
       if (!piece) return;
       if (/^\s+$/.test(piece)) return into.append(" ");
       const word = element("span", "first-run-word", piece);
       word.style.setProperty("--i", String(place++));
       into.append(word);
     });
-    t("The Eiffel Tower opened in <0>1887</0><1>1889</1> and is <2>the most visited monument in the world</2>.")
-      .split(/(<\d>.*?<\/\d>)/).forEach(part => {
-        const marked = /^<(\d)>(.*)<\/\d>$/.exec(part);
-        if (!marked) return words(part, line);
-        if (marked[1] === "0") {
-          year.style.setProperty("--i", String(place++));
-          year.append(element("span", "is-old", marked[2]));
-          return line.append(year);
+    t("The Eiffel Tower <3>opened in <0>1887</0><1>1889</1></3> and is <2>the most visited monument in the world</2>.")
+      .split(/(<\/?\d>)/).forEach(part => {
+        const tag = /^<(\/?)(\d)>$/.exec(part);
+        if (!tag) return year?.contains(into) ? into.append(part) : words(part);
+        if (tag[1]) return void (into = open.pop() || line);
+        open.push(into);
+        if (tag[2] === "0" || tag[2] === "1") {
+          if (!year) {
+            year = element("span", "first-run-word first-run-year");
+            year.style.setProperty("--i", String(place++));
+            into.append(year);
+          }
+          into = year.appendChild(element("span", tag[2] === "0" ? "is-old" : "is-new"));
+          return;
         }
-        if (marked[1] === "1") return year.append(element("span", "is-new", marked[2]));
-        const doubt = element("span", "first-run-mark");
-        words(marked[2], doubt);
-        line.append(doubt);
+        into = into.appendChild(element("span", tag[2] === "3" ? "first-run-claim" : "first-run-mark"));
       });
     return line;
   }
 
   // The scene: a question, its answer streaming in, the reviewers finding
-  // the wrong year, the correction, the doubt. Decoration; the caption under
-  // it says in words what the chosen view shows.
+  // the wrong claim, the correction, the doubt. Their progress runs in one
+  // line above the answer, where the app shows it; under "Everything" that
+  // line shows their steps. Decoration; the caption under it says in words
+  // what the chosen view shows.
   function scene() {
     const stage = element("div", "first-run-stage");
     stage.setAttribute("aria-hidden", "true");
@@ -101,13 +109,12 @@
     const phases = element("span", "first-run-phases");
     phases.append(
       element("span", "is-checking", t("Checking the answer")),
+      ...[t("Thinking: is 1887 right?"), t("Searching: Eiffel Tower opening year"), t("Reading toureiffel.paris")]
+        .map(step => element("span", "is-step", step)),
       element("span", "is-found", t("Found a mistake")),
       element("span", "is-done", t("Corrected and checked")));
     status.append(element("span", "first-run-reviewers"), phases);
-    const steps = element("div", "first-run-steps");
-    [t("Thinking: is 1887 right?"), t("Searching: Eiffel Tower opening year"), t("Reading toureiffel.paris")]
-      .forEach(step => steps.append(element("span", "", step)));
-    play.append(sceneAnswer(), status, steps);
+    play.append(status, sceneAnswer());
     stage.append(element("p", "first-run-ask", t("When did the Eiffel Tower open?")), play);
     return stage;
   }
@@ -224,7 +231,7 @@
     };
   }
 
-  // The scene keeps playing; the view only decides what stays marked.
+  // The scene keeps playing; the view decides what it marks (first-run.css).
   function showView() {
     const { view } = chosen();
     dialog.dataset.view = view;

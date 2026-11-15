@@ -44,7 +44,7 @@ describe("the dialog", () => {
     expect(dialog().querySelector(".close-button").dataset.answer).toBe("false");
   });
 
-  it("plays one answer as a scene: its words in stream order, the wrong year with its correction, the reviewers' logos", () => {
+  it("plays one answer as a scene: its words in stream order, the wrong claim with its corrected year, the reviewers' logos", () => {
     const { App, dialog } = boot();
     App.firstRun.ask({ providers: [...PROVIDERS, { text: "Gemini", icon: "/g.png" }, { text: "Grok", icon: "/x.png" }] });
     const stage = dialog().querySelector(".first-run-stage");
@@ -53,10 +53,34 @@ describe("the dialog", () => {
       .toBe("The Eiffel Tower opened in 18871889 and is the most visited monument in the world.");
     const places = [...stage.querySelectorAll(".first-run-word")].map(word => Number(word.style.getPropertyValue("--i")));
     expect(places).toEqual(places.map((_, index) => index));
-    expect([...stage.querySelectorAll(".first-run-year > span")].map(year => [year.className, year.textContent]))
+    expect(stage.querySelector(".first-run-claim").textContent).toBe("opened in 18871889");
+    expect([...stage.querySelectorAll(".first-run-claim > .first-run-year > span")].map(year => [year.className, year.textContent]))
       .toEqual([["is-old", "1887"], ["is-new", "1889"]]);
     expect(stage.querySelector(".first-run-mark").textContent).toBe("the most visited monument in the world");
     expect(stage.querySelectorAll(".first-run-reviewers img")).toHaveLength(3);
+  });
+
+  it("runs the reviewers' progress in one line above the answer, their steps in it", () => {
+    const { App, dialog } = boot();
+    App.firstRun.ask({ providers: PROVIDERS });
+    const scene = dialog().querySelector(".first-run-scene");
+    expect([...scene.children].map(child => child.className)).toEqual(["first-run-status", "first-run-answer"]);
+    expect([...scene.querySelectorAll(".first-run-phases > span")].map(phase => phase.className))
+      .toEqual(["is-checking", "is-step", "is-step", "is-step", "is-found", "is-done"]);
+  });
+
+  it("keeps the claim around the year where a translation puts it", () => {
+    const { App, dialog } = boot();
+    App.t = text => text.startsWith("The Eiffel Tower <3>")
+      ? "Der Eiffelturm <3>wurde <0>1887</0><1>1889</1> eröffnet</3> und ist <2>das meistbesuchte Bauwerk der Welt</2>."
+      : text;
+    App.firstRun.ask({ providers: PROVIDERS });
+    const stage = dialog().querySelector(".first-run-stage");
+    expect(stage.querySelector(".first-run-answer").textContent)
+      .toBe("Der Eiffelturm wurde 18871889 eröffnet und ist das meistbesuchte Bauwerk der Welt.");
+    expect(stage.querySelector(".first-run-claim").textContent).toBe("wurde 18871889 eröffnet");
+    expect([...stage.querySelectorAll(".first-run-claim .first-run-word")].map(word => word.textContent))
+      .toEqual(["wurde", "18871889", "eröffnet"]);
   });
 
   it("answers with the chosen view and memory after Continue and Agree", async () => {
@@ -64,7 +88,7 @@ describe("the dialog", () => {
     const answer = App.firstRun.ask({ providers: PROVIDERS });
     pick("all");
     expect(dialog().dataset.view).toBe("all");
-    expect(dialog().querySelector(".first-run-caption").textContent).toBe("Plus every thought and step, live.");
+    expect(dialog().querySelector(".first-run-caption").textContent).toBe("Plus what they confirm and every step, live.");
     dialog().querySelector("#firstRunMemory").checked = true;
     dialog().querySelector(".first-run-next").click();
     expect(dialog().dataset.step).toBe("consent");

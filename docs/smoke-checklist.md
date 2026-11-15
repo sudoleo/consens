@@ -1399,11 +1399,16 @@ Server.
       `users/{uid}.ai_consent` tippt eine Frage und sendet → Schritt 1 „Jede
       Antwort bekommt eine zweite Meinung“: „Mit Zweifeln“ ist gewählt, der
       Schieber gleitet beim Wechsel. Darunter läuft die Szene in Schleife und
-      ohne Ruckeln: Frage, die Antwort kommt Wort für Wort, „Prüft die
-      Antwort“ → 1887 wird rot gefunden → zu 1889 korrigiert → der Zweifel
-      läuft durch „das meistbesuchte Bauwerk der Welt“ → „Korrigiert und
-      geprüft“, kurze Pause, von vorn (bei „Nur die Antwort“ bleibt keine
-      Spur, bei „Alles“ ticken die Arbeitsschritte darunter). Nichts springt,
+      ohne Ruckeln: Frage, die Antwort kommt schon beim ersten Durchlauf
+      Wort für Wort in der richtigen Reihenfolge, dann erscheinen über der
+      Antwort, bündig mit ihr, die Logos und „Prüft die Antwort“ → „wurde
+      1887 eröffnet“ wird rot markiert, „Fehler gefunden“ → zu 1889
+      korrigiert → „das meistbesuchte Bauwerk der Welt“ wird unterpunktet,
+      „Korrigiert und geprüft“, kurze Pause, von vorn. Bei „Nur die Antwort“
+      wird nichts markiert, nur das Jahr still korrigiert; bei „Alles“ ticken
+      in derselben Zeile die Arbeitsschritte, und die korrigierte Aussage
+      wird grün; im Dunkelmodus nimmt die rote Stelle den Ton auch in der
+      Schrift an. Nichts springt,
       auch nicht beim Wechsel der Lesart; mit „Bewegung reduzieren“ steht das
       Endbild. Gedächtnis-Schalter aus.
       „Weiter“ → Schritt 2 „Fast geschafft“: Logo-Reihe (im Dark Mode lesbar),

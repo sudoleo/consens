@@ -9246,10 +9246,14 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   (1) „Every answer gets a second opinion“: drei Lesarten in einer Reihe
   (`VIEWS`: `answer` → `consensus_highlights: critical`; `doubts` = App-Standard,
   schreibt nichts; `all` → `consensus_highlights: all` + `detailed_progress`),
-  darunter eine Szene in Schleife (reines CSS, sechs Takte `--dur-beat`, jede
+  darunter eine Szene in Schleife (reines CSS, sieben Takte `--dur-beat`, jede
   Animation liest dieselbe Uhr; Ruhezustand = Endbild): Frage, Antwort Wort
-  für Wort, die Prüfer finden das falsche Jahr, Korrektur, Zweifel; die Lesart
-  entscheidet nur, was markiert bleibt. Dazu der Schalter fürs Gedächtnis (aus; `userMemory.enableAgentMemory("first_run")`);
+  für Wort, die Prüfer markieren die falsche Aussage rot (`.first-run-claim`
+  um das Jahr), Korrektur des Jahrs, Zweifel unterpunktet. Der Fortschritt
+  der Prüfer steht wie die Live-Zeile der App über der Antwort. Die Lesart
+  entscheidet, was die Szene markiert: `answer` nichts (das Jahr wird still
+  korrigiert), `doubts` Rot, Korrekturspur und Zweifel, `all` dazu die
+  Schritte in der Fortschrittszeile und Grün auf der korrigierten Aussage. Dazu der Schalter fürs Gedächtnis (aus; `userMemory.enableAgentMemory("first_run")`);
   (2) „Almost there“: die Anbieter aus `window.MODEL_FAMILIES` als Logo-Reihe,
   die Namen hinter „Show names“ (`citationLabel`, `icon`, `iconClass`; fehlt
   ein Logo, steht die Namensliste offen), ein Satz, dass die Frage nur an die

@@ -109,14 +109,14 @@
 }
 
 /* The stage: a small piece of the app in which one answer is checked, over
-   and over. A loop is six beats; every part reads the same clock, so the
+   and over. A loop is seven beats; every part reads the same clock, so the
    scene needs no script. At rest (no animation, reduced motion) each part
    shows its last state: the corrected, checked answer. */
 .first-run-stage {
   display: grid;
   gap: 12px;
   margin: 12px 0 0;
-  padding: 16px 16px 14px;
+  padding: 16px 16px 18px;
   border-radius: var(--radius-md);
   background: var(--ground);
   box-shadow: 0 0 0 1px var(--line-soft), 0 8px 24px -16px var(--line);
@@ -136,17 +136,125 @@
 
 .first-run-scene {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .first-run-dialog[open] .first-run-scene {
-  animation: first-run-scene calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
+  animation: first-run-scene calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
 }
 
 @keyframes first-run-scene {
   0% { opacity: 0; }
-  2%, 80% { opacity: 1; }
-  84%, 100% { opacity: 0; }
+  1.6%, 86.5% { opacity: 1; }
+  89.7%, 100% { opacity: 0; }
+}
+
+/* Above the answer, where the app's live line runs: who checks and how far
+   they are, under "Everything" their steps. All of it shares one place, so
+   choosing a view never moves the dialog. */
+.first-run-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+.first-run-reviewers {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+/* Without logos the empty row would still leave its gap before the words. */
+.first-run-reviewers:empty {
+  display: none;
+}
+
+.first-run-reviewers img {
+  width: 14px;
+  height: 14px;
+  object-fit: contain;
+}
+
+/* The reviewers come when the check begins, not while the answer is still
+   being written. */
+.first-run-dialog[open] .first-run-reviewers {
+  animation: first-run-reviewers calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
+}
+
+@keyframes first-run-reviewers {
+  0%, 11.9% { opacity: 0; }
+  13.5%, 100% { opacity: 1; }
+}
+
+.first-run-phases {
+  display: grid;
+  min-width: 0;
+}
+
+.first-run-phases span {
+  grid-area: 1 / 1;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.first-run-phases span:not(.is-done) {
+  opacity: 0;
+}
+
+.first-run-phases .is-done {
+  color: var(--ink);
+}
+
+.first-run-dialog:not([data-view="all"]) .first-run-phases .is-step,
+.first-run-dialog[data-view="all"] .first-run-phases .is-checking {
+  display: none;
+}
+
+.first-run-dialog[open] .first-run-phases .is-checking {
+  animation: first-run-checking calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
+}
+
+.first-run-dialog[open] .first-run-phases .is-step {
+  animation: first-run-step calc(var(--dur-beat) * 7) var(--ease-standard) infinite backwards;
+}
+
+.first-run-dialog[open] .first-run-phases .is-step:nth-child(3) { animation-delay: calc(var(--dur-beat) * 0.5); }
+.first-run-dialog[open] .first-run-phases .is-step:nth-child(4) { animation-delay: var(--dur-beat); }
+
+.first-run-dialog[open] .first-run-phases .is-found {
+  animation: first-run-finding calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
+}
+
+.first-run-dialog[open] .first-run-phases .is-done {
+  animation: first-run-done calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
+}
+
+@keyframes first-run-checking {
+  0%, 11.9% { opacity: 0; transform: translateY(4px); }
+  13.5%, 31.7% { opacity: 1; transform: none; }
+  33.3%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes first-run-step {
+  0%, 11.9% { opacity: 0; transform: translateY(4px); }
+  13.5%, 17.9% { opacity: 1; transform: none; }
+  19%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes first-run-finding {
+  0%, 33.3% { opacity: 0; transform: translateY(4px); }
+  34.9%, 43.7% { opacity: 1; transform: none; }
+  45.2%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes first-run-done {
+  0%, 46% { opacity: 0; transform: translateY(4px); }
+  47.6%, 100% { opacity: 1; transform: none; }
 }
 
 .first-run-dialog .first-run-answer {
@@ -157,27 +265,97 @@
   text-wrap: pretty;
 }
 
-/* The answer comes in word by word. A word leaves before the scene fades,
-   so the last ones of a loop are gone when the next one begins. */
+/* The answer comes in word by word. Until its place comes a word wears the
+   first frame (backwards); otherwise the finished answer stood there and
+   its words left and came back out of order. A place delays a word by up
+   to about 0.9 s, so it fades only after the scene has (89.7 %) and is gone
+   before its next loop begins. */
 .first-run-word {
   display: inline-block;
 }
 
 .first-run-dialog[open] .first-run-word {
-  animation: first-run-word calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
-  animation-delay: calc(var(--dur-beat) * 0.05 * var(--i, 0));
+  animation: first-run-word calc(var(--dur-beat) * 7) var(--ease-standard) infinite backwards;
+  animation-delay: calc(var(--dur-beat) * 0.035 * var(--i, 0));
 }
 
 @keyframes first-run-word {
-  0%, 3% { opacity: 0; transform: translateY(4px); }
-  7%, 78% { opacity: 1; transform: none; }
-  82%, 100% { opacity: 0; transform: none; }
+  0%, 1.2% { opacity: 0; }
+  4%, 90.5% { opacity: 1; }
+  92.5%, 100% { opacity: 0; }
 }
 
-/* The year the reviewers call wrong and the one the agent corrects it to
-   share one place. ::before is the finding (it runs through the year and
-   goes with it), ::after the trace the correction leaves, which "Just the
-   answer" does not show. */
+/* The claim the reviewers find wrong. The views differ most here, as they
+   do in the app: "Just the answer" never marks it, the year is just
+   corrected; "With doubts" sweeps the red of the app's marks over it
+   (components-consensus-visuals.css) until the year is corrected;
+   "Everything" then shows the green of agreement on the corrected claim, as
+   "All checks" does. The padding reaches past the words; the same negative
+   margin keeps them where they are. */
+@property --first-run-paint { syntax: '<color>'; inherits: false; initial-value: transparent; }
+
+.first-run-claim {
+  --first-run-paint: transparent;
+  --first-run-red: var(--cx-mark-major, color-mix(in srgb, var(--dispute) 22%, transparent));
+  --first-run-green: var(--cx-mark-agree, color-mix(in srgb, var(--agree) 14%, transparent));
+  margin: 0 -0.12em;
+  padding: 0.1em 0.12em;
+  border-radius: 3px;
+  background: linear-gradient(var(--first-run-paint), var(--first-run-paint)) no-repeat left / 100% 100%;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
+.first-run-dialog[data-view="all"] .first-run-claim {
+  --first-run-paint: var(--first-run-green);
+}
+
+.first-run-dialog[open] .first-run-claim {
+  animation: first-run-found calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
+}
+
+/* Dark mode: while marked red, the claim's words take the red's tone, as
+   the app's marks do, instead of standing light on a dark band. */
+.dark-mode .first-run-dialog[open] .first-run-claim {
+  animation: first-run-found calc(var(--dur-beat) * 7) var(--ease-standard) infinite,
+    first-run-found-ink calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
+}
+
+.first-run-dialog[open][data-view="all"] .first-run-claim {
+  animation-name: first-run-found-agreed;
+}
+
+.dark-mode .first-run-dialog[open][data-view="all"] .first-run-claim {
+  animation-name: first-run-found-agreed, first-run-found-ink;
+}
+
+.first-run-dialog[open][data-view="answer"] .first-run-claim,
+.dark-mode .first-run-dialog[open][data-view="answer"] .first-run-claim {
+  animation: none;
+}
+
+@keyframes first-run-found {
+  0%, 28.6% { --first-run-paint: var(--first-run-red); background-size: 0% 100%; }
+  32.5%, 43.7% { --first-run-paint: var(--first-run-red); background-size: 100% 100%; }
+  46.8%, 100% { --first-run-paint: transparent; background-size: 100% 100%; }
+}
+
+@keyframes first-run-found-agreed {
+  0%, 28.6% { --first-run-paint: var(--first-run-red); background-size: 0% 100%; }
+  32.5%, 43.7% { --first-run-paint: var(--first-run-red); background-size: 100% 100%; }
+  46.8% { --first-run-paint: transparent; background-size: 100% 100%; }
+  52.4%, 100% { --first-run-paint: var(--first-run-green); background-size: 100% 100%; }
+}
+
+@keyframes first-run-found-ink {
+  0%, 28.6% { color: var(--ink); }
+  32.5%, 43.7% { color: var(--cx-ink-major, var(--ink)); }
+  46.8%, 100% { color: var(--ink); }
+}
+
+/* The wrong year and the one the agent corrects it to share one place.
+   ::after is the trace the correction leaves, which "Just the answer" does
+   not show. */
 .first-run-year {
   position: relative;
   display: inline-grid;
@@ -185,27 +363,12 @@
 
 .first-run-year > span {
   grid-area: 1 / 1;
-  position: relative;
-  z-index: 1;
 }
 
-.first-run-year::before,
 .first-run-year::after {
   content: "";
   position: absolute;
-  inset: 1px -3px;
-  border-radius: 4px;
-}
-
-.first-run-year::before {
-  background: color-mix(in srgb, var(--dispute) 26%, transparent);
-  transform-origin: left;
-  opacity: 0;
-}
-
-.first-run-year::after {
   inset: auto 0 0.04em;
-  border-radius: 0;
   border-bottom: 1px dotted color-mix(in srgb, var(--ink) 34%, transparent);
 }
 
@@ -217,41 +380,31 @@
   opacity: 0;
 }
 
-.first-run-dialog[open] .first-run-year::before {
-  animation: first-run-found calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
-}
-
 .first-run-dialog[open] .first-run-year::after {
-  animation: first-run-trace calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
+  animation: first-run-trace calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
 }
 
 .first-run-dialog[open] .first-run-year .is-old {
-  animation: first-run-year-out calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
+  animation: first-run-year-out calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
 }
 
 .first-run-dialog[open] .first-run-year .is-new {
-  animation: first-run-year-in calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
-}
-
-@keyframes first-run-found {
-  0%, 26% { opacity: 1; transform: scaleX(0); }
-  33%, 45% { opacity: 1; transform: none; }
-  51%, 100% { opacity: 0; transform: none; }
+  animation: first-run-year-in calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
 }
 
 @keyframes first-run-trace {
-  0%, 47% { opacity: 0; }
-  53%, 100% { opacity: 1; }
+  0%, 47.6% { opacity: 0; }
+  50.8%, 100% { opacity: 1; }
 }
 
 @keyframes first-run-year-out {
-  0%, 44% { opacity: 1; transform: none; }
-  49%, 100% { opacity: 0; transform: translateY(-6px); }
+  0%, 42.9% { opacity: 1; transform: none; }
+  45.6%, 100% { opacity: 0; transform: translateY(-6px); }
 }
 
 @keyframes first-run-year-in {
-  0%, 46% { opacity: 0; transform: translateY(6px); }
-  52%, 100% { opacity: 1; transform: none; }
+  0%, 44.4% { opacity: 0; transform: translateY(6px); }
+  47.2%, 100% { opacity: 1; transform: none; }
 }
 
 /* A doubt is dotted under its passage, as in the app
@@ -278,123 +431,12 @@
 }
 
 .first-run-dialog[open] .first-run-mark {
-  animation: first-run-doubt calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
+  animation: first-run-doubt calc(var(--dur-beat) * 7) var(--ease-standard) infinite;
 }
 
 @keyframes first-run-doubt {
-  0%, 57% { --first-run-dots: transparent; }
-  66%, 100% { --first-run-dots: color-mix(in srgb, var(--ink) 52%, transparent); }
-}
-
-/* Under the answer: who checks, and how far they are. */
-.first-run-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-}
-
-.first-run-reviewers {
-  display: flex;
-  flex: none;
-}
-
-.first-run-reviewers {
-  gap: 4px;
-}
-
-.first-run-reviewers img {
-  width: 14px;
-  height: 14px;
-  object-fit: contain;
-}
-
-.first-run-phases {
-  display: grid;
-}
-
-.first-run-phases span {
-  grid-area: 1 / 1;
-}
-
-.first-run-phases .is-checking,
-.first-run-phases .is-found {
-  opacity: 0;
-}
-
-.first-run-phases .is-done {
-  color: var(--ink);
-}
-
-.first-run-dialog[open] .first-run-phases .is-checking {
-  animation: first-run-checking calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
-}
-
-.first-run-dialog[open] .first-run-phases .is-found {
-  animation: first-run-finding calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
-}
-
-.first-run-dialog[open] .first-run-phases .is-done {
-  animation: first-run-done calc(var(--dur-beat) * 6) var(--ease-standard) infinite;
-}
-
-@keyframes first-run-checking {
-  0%, 16% { opacity: 0; transform: translateY(4px); }
-  19%, 30% { opacity: 1; transform: none; }
-  33%, 100% { opacity: 0; transform: translateY(-4px); }
-}
-
-@keyframes first-run-finding {
-  0%, 31% { opacity: 0; transform: translateY(4px); }
-  34%, 48% { opacity: 1; transform: none; }
-  51%, 100% { opacity: 0; transform: translateY(-4px); }
-}
-
-@keyframes first-run-done {
-  0%, 50% { opacity: 0; transform: translateY(4px); }
-  53%, 100% { opacity: 1; transform: none; }
-}
-
-/* "Everything": the steps tick through one line, as the Agent's full
-   progress does. The line keeps its place in the other views, so choosing
-   never moves the dialog. */
-.first-run-steps {
-  display: grid;
-  overflow: hidden;
-  margin-top: -4px;
-  color: var(--ink-3);
-  font-size: var(--font-size-xs);
-  line-height: var(--line-height-ui);
-  white-space: nowrap;
-  transition: opacity var(--dur-state) var(--ease-standard);
-}
-
-.first-run-dialog:not([data-view="all"]) .first-run-steps {
-  opacity: 0;
-}
-
-.first-run-steps span {
-  grid-area: 1 / 1;
-  opacity: 0;
-}
-
-.first-run-steps span:nth-child(2) {
-  opacity: 1;
-}
-
-.first-run-dialog[open] .first-run-steps span {
-  animation: first-run-step calc(var(--dur-beat) * 3) var(--ease-standard) infinite;
-}
-
-.first-run-dialog[open] .first-run-steps span:nth-child(2) { animation-delay: var(--dur-beat); }
-.first-run-dialog[open] .first-run-steps span:nth-child(3) { animation-delay: calc(var(--dur-beat) * 2); }
-
-@keyframes first-run-step {
-  0% { opacity: 0; transform: translateY(4px); }
-  5%, 30% { opacity: 1; transform: none; }
-  35%, 100% { opacity: 0; transform: translateY(-4px); }
+  0%, 53.2% { --first-run-dots: transparent; }
+  59.5%, 100% { --first-run-dots: color-mix(in srgb, var(--ink) 52%, transparent); }
 }
 
 .first-run-dialog .first-run-caption {
