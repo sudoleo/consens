@@ -408,12 +408,13 @@
   // dauerhaft nur hier in den Einstellungen.
   const AUTO_ON_MESSAGE = "Agent can now update your memory. Review or undo any change here in Settings › Memory.";
 
-  // The hint under an Agent answer (agent-memory.js): switches on "Let Agent
+  // The hint under an Agent answer (agent-memory.js, source "hint") and the
+  // first-run dialog (first-run.js, "first_run"): switches on "Let Agent
   // update memory" without touching the text fields. It never un-pauses: the
   // hint only appears for memory that is in use, and a pause the user set in
   // another tab since then must win. Reads fresh first, because a cached
   // profile from an earlier load could carry an old revision or old switches.
-  async function enableAgentMemory() {
+  async function enableAgentMemory(source = "hint") {
     const user = currentUser();
     if (!user) return false;
     // An unsaved draft in Settings stays as it is: read fresh beside it and
@@ -440,7 +441,7 @@
     const next = { ...(saved || emptyProfile()), auto_memory: true };
     const ok = await persist(next, AUTO_ON_MESSAGE, { rewriteFields: false, revision });
     if (ok && draft && revision !== base) state.draftRevision = base;
-    if (ok) window.App?.trackAppEvent?.("app_auto_memory_on", { source: "hint" });
+    if (ok) window.App?.trackAppEvent?.("app_auto_memory_on", { source });
     return ok;
   }
 

@@ -1392,14 +1392,21 @@ Server.
 
 ## Auth / Usage / Tier
 
-- [ ] KI-Zustimmung (seit 2026-11-06): ein Konto ohne `users/{uid}.ai_consent`
-      tippt eine Frage und sendet → Dialog „A quick note“ / „Kurz vorab“ listet
-      die Anbieter aller Familien mit Logo in zwei Spalten (Logos im Dark Mode
-      lesbar), darunter klein „Deine Frage geht nur an die Modelle, die daran
-      arbeiten, nicht an alle.“ und was über OpenRouter an sie geht; Link öffnet
-      `/privacy#providers` im neuen Tab. „Not now“ lässt die Frage im Feld, nichts geht raus;
-      „Agree“ schickt sie sofort, die nächste Frage fragt nicht mehr (auch nach
-      Neuladen und auf einem zweiten Gerät). Auf Deutsch dieselben Sätze.
+- [ ] Dialog vor der ersten Frage (KI-Zustimmung): ein Konto ohne
+      `users/{uid}.ai_consent` tippt eine Frage und sendet → Schritt 1 „Jede
+      Antwort bekommt eine zweite Meinung“: „Mit Zweifeln“ ist gewählt, der
+      Schieber gleitet beim Wechsel, im Beispielsatz wird 1887 gefunden und zu
+      1889 korrigiert (bei „Nur die Antwort“ ohne Spur, bei „Alles“ ticken die
+      Arbeitsschritte darüber), nichts springt; Gedächtnis-Schalter aus.
+      „Weiter“ → Schritt 2 „Fast geschafft“: Logo-Reihe (im Dark Mode lesbar),
+      „Namen zeigen“ klappt die Liste auf, Link öffnet `/privacy#providers` im
+      neuen Tab. X, Escape oder Klick daneben: Frage bleibt im Feld, nichts
+      geht raus, nichts ist gesetzt, nächstes Senden beginnt wieder bei
+      Schritt 1. „Einverstanden und los“ schickt die Frage sofort; danach
+      stehen in den Einstellungen die gewählte Lesart, „Prüfer-Anmerkungen an
+      den Agenten“ an und ggf. das Gedächtnis; die nächste Frage fragt nicht
+      mehr (auch nach Neuladen und auf einem zweiten Gerät). Bei 390 px passt
+      jeder Schritt ohne Scrollen.
 - Mit Free mehrere gesperrte Funktionen anklicken (High Quality,
   Resolve): ein kurzer Hinweis wird ersetzt, kein Vollbild-Dialog;
   Frage und Modellauswahl bleiben erhalten und der Composer bleibt bedienbar.

@@ -50,6 +50,7 @@
    surface and motion, popovers, the notice line, App.confirm. After every
    component, so the one surface and the one motion win. */
 @import url('./css/overlays.css');
+@import url('./css/first-run.css');
 /* What every moving part shares: the theme switch, disclosures, the one
    spinner, reduced motion. */
 @import url('./css/motion.css');

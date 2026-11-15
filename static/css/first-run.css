@@ -1,0 +1,372 @@
+/* --------------------------------------------------------------------------
+   First run (first-run.js): the dialog before an account's first question.
+   It wears App.confirm's surface (overlays.css .confirm-dialog); here is
+   only what its two steps add. Loaded after overlays.css.
+   -------------------------------------------------------------------------- */
+.first-run-dialog .first-run-content {
+  position: relative;
+  width: min(92vw, 400px);
+  max-height: min(92dvh, 720px);
+  margin: clamp(12px, 10vh, 120px) auto;
+  padding: 26px 24px 24px;
+  overflow-y: auto;
+  text-align: left;
+}
+
+.first-run-dialog h2 {
+  margin: 0 28px 8px 0;
+  text-align: left;
+  text-wrap: balance;
+}
+
+.first-run-dialog .first-run-lead {
+  margin: 0 0 16px;
+  color: var(--ink-3);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-reading);
+  text-wrap: pretty;
+}
+
+.first-run-dialog:not([data-step="consent"]) .first-run-step[data-step="consent"],
+.first-run-dialog[data-step="consent"] .first-run-step[data-step="setup"] {
+  display: none;
+}
+
+.first-run-dialog .btn-pro {
+  width: 100%;
+  min-height: 42px;
+}
+
+/* Three choices in one row. The chosen one stands on the dialog's ground:
+   one thumb that glides to it. */
+.first-run-views {
+  --first-run-gap: 3px;
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--first-run-gap);
+  padding: var(--first-run-gap);
+  border-radius: var(--radius-sm);
+  background: var(--line-soft);
+}
+
+.first-run-views::before {
+  content: "";
+  position: absolute;
+  top: var(--first-run-gap);
+  bottom: var(--first-run-gap);
+  left: var(--first-run-gap);
+  width: calc((100% - 4 * var(--first-run-gap)) / 3);
+  border-radius: calc(var(--radius-sm) - var(--first-run-gap));
+  background: var(--ground);
+  box-shadow: 0 1px 2px var(--line-soft);
+  transition: transform var(--dur-layer) var(--ease-standard);
+}
+
+/* On the dark ground the page colour would read as a hole: the thumb is a
+   lighter tone there. */
+.dark-mode .first-run-views::before {
+  background: color-mix(in srgb, var(--ink) 16%, transparent);
+  box-shadow: none;
+}
+
+.first-run-dialog[data-view="doubts"] .first-run-views::before {
+  transform: translateX(calc(100% + var(--first-run-gap)));
+}
+
+.first-run-dialog[data-view="all"] .first-run-views::before {
+  transform: translateX(calc(200% + 2 * var(--first-run-gap)));
+}
+
+.first-run-view {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 34px;
+  padding: 0 6px;
+  border-radius: calc(var(--radius-sm) - var(--first-run-gap));
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  text-align: center;
+  cursor: pointer;
+  transition: color var(--dur-layer) var(--ease-standard);
+}
+
+.first-run-view input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.first-run-view:has(input:checked) {
+  color: var(--ink);
+}
+
+.first-run-view:has(input:focus-visible) {
+  outline: 2px solid var(--ink);
+  outline-offset: 1px;
+}
+
+/* The sample answer: one sentence as the chosen view shows it. Every part
+   keeps its place in all views, so choosing never moves the dialog. */
+.first-run-sample {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--line-soft);
+}
+
+.first-run-sample-steps {
+  display: grid;
+  overflow: hidden;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+  white-space: nowrap;
+}
+
+.first-run-dialog[data-view="all"] .first-run-sample-steps .is-calm,
+.first-run-dialog:not([data-view="all"]) .first-run-sample-steps .is-full {
+  display: none;
+}
+
+/* "Everything": the steps come one after another in the same line, as the
+   Agent's full progress does. */
+.first-run-sample-steps .is-full {
+  display: grid;
+}
+
+.first-run-sample-steps .is-full span {
+  grid-area: 1 / 1;
+  opacity: 0;
+  animation: first-run-step calc(var(--dur-beat) * 3) var(--ease-standard) infinite;
+}
+
+.first-run-sample-steps .is-full span:nth-child(2) { animation-delay: var(--dur-beat); }
+.first-run-sample-steps .is-full span:nth-child(3) { animation-delay: calc(var(--dur-beat) * 2); }
+
+@keyframes first-run-step {
+  0% { opacity: 0; transform: translateY(4px); }
+  5%, 30% { opacity: 1; transform: none; }
+  35%, 100% { opacity: 0; transform: translateY(-4px); }
+}
+
+.first-run-dialog .first-run-sample-text {
+  margin: 0;
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-reading);
+}
+
+/* The year the reviewers call wrong and the one the agent corrects it to
+   share one place. At rest the corrected year stands; while the sample
+   plays, the wrong one is found (the tint runs through it) and then gives
+   way. "With doubts" and "Everything" keep a trace of the correction. */
+.first-run-year {
+  position: relative;
+  display: inline-grid;
+  border-radius: 3px;
+}
+
+.first-run-year > span {
+  grid-area: 1 / 1;
+  position: relative;
+}
+
+.first-run-year::before {
+  content: "";
+  position: absolute;
+  inset: 0 -2px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ink) 9%, transparent);
+  transform-origin: left;
+}
+
+.first-run-dialog[data-view="answer"] .first-run-year::before {
+  opacity: 0;
+}
+
+.first-run-year .is-old {
+  opacity: 0;
+}
+
+.first-run-sample.is-playing .first-run-year::before {
+  animation: first-run-found var(--dur-beat) var(--ease-standard) both;
+}
+
+.first-run-dialog[data-view="answer"] .first-run-sample.is-playing .first-run-year::before {
+  animation-name: first-run-found-quiet;
+}
+
+.first-run-sample.is-playing .first-run-year .is-old {
+  animation: first-run-year-out var(--dur-beat) var(--ease-standard) both;
+}
+
+.first-run-sample.is-playing .first-run-year .is-new {
+  animation: first-run-year-in var(--dur-beat) var(--ease-standard) both;
+}
+
+@keyframes first-run-found {
+  0%, 12% { transform: scaleX(0); background: color-mix(in srgb, var(--dispute) 24%, transparent); }
+  34%, 62% { transform: none; background: color-mix(in srgb, var(--dispute) 24%, transparent); }
+  100% { transform: none; }
+}
+
+@keyframes first-run-found-quiet {
+  0%, 12% { opacity: 1; transform: scaleX(0); background: color-mix(in srgb, var(--dispute) 24%, transparent); }
+  34%, 62% { opacity: 1; transform: none; background: color-mix(in srgb, var(--dispute) 24%, transparent); }
+  100% { opacity: 0; transform: none; }
+}
+
+@keyframes first-run-year-out {
+  0%, 60% { opacity: 1; transform: none; }
+  74%, 100% { opacity: 0; transform: translateY(-5px); }
+}
+
+@keyframes first-run-year-in {
+  0%, 66% { opacity: 0; transform: translateY(5px); }
+  82%, 100% { opacity: 1; transform: none; }
+}
+
+/* A doubt runs through its passage from the left, like ink. */
+.first-run-mark {
+  border-radius: 3px;
+  background-image: linear-gradient(color-mix(in srgb, var(--ink) 11%, transparent) 0 0);
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  transition: background-size var(--dur-light) var(--ease-standard);
+}
+
+.first-run-dialog:not([data-view="answer"]) .first-run-mark {
+  background-size: 100% 100%;
+}
+
+.first-run-dialog .first-run-caption {
+  min-height: calc(1em * var(--line-height-ui));
+  margin: 8px 2px 18px;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+/* Memory: a row on the sample's tone, its switch at the end. */
+.first-run-memory {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin: 0 0 20px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--line-soft);
+  cursor: pointer;
+}
+
+.first-run-memory-words {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.first-run-memory strong {
+  color: var(--ink);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-heading);
+}
+
+.first-run-memory small {
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui);
+}
+
+.first-run-memory .switch {
+  flex: none;
+}
+
+.first-run-memory:has(input:focus-visible) {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+/* Who answers: the logos in one row, the names behind "Show names". */
+.first-run-providers {
+  margin: 0 0 16px;
+}
+
+.first-run-providers summary {
+  display: grid;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--line-soft);
+  list-style: none;
+  cursor: pointer;
+}
+
+.first-run-providers summary::-webkit-details-marker {
+  display: none;
+}
+
+.first-run-logos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.first-run-logos img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.first-run-providers-more {
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.first-run-providers[open] summary {
+  display: none;
+}
+
+.first-run-dialog .first-run-providers .confirm-modal-list {
+  margin: 0;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: var(--line-soft);
+}
+
+.first-run-dialog .confirm-modal-note {
+  margin: 0 0 20px;
+  color: var(--ink-3);
+}
+
+.first-run-dialog .confirm-modal-note a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .first-run-views::before,
+  .first-run-mark {
+    transition: none;
+  }
+
+  .first-run-sample.is-playing .first-run-year::before,
+  .first-run-sample.is-playing .first-run-year > span,
+  .first-run-sample-steps .is-full span {
+    animation: none;
+  }
+
+  .first-run-sample-steps .is-full span:nth-child(2) {
+    opacity: 1;
+  }
+}

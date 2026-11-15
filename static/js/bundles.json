@@ -88,8 +88,12 @@
           "note": "App.confirm: the app's own question before something final, instead of window.confirm. Uses App.modalDialog."
         },
         {
+          "file": "static/js/first-run.js",
+          "note": "App.firstRun: the two-step dialog before an account's first question (how much of the reviewers' work to show, memory, then the agreement). Built on App.modalDialog; ai-consent.js asks through it."
+        },
+        {
           "file": "static/js/ai-consent.js",
-          "note": "App.aiConsent: the one question before an account's first question goes to the AI providers. Uses App.confirm; firebase.js sets it from /user_status, query-send.js awaits it before a run."
+          "note": "App.aiConsent: the one question before an account's first question goes to the AI providers. Asks through App.firstRun; firebase.js sets it from /user_status, query-send.js awaits it before a run."
         },
         {
           "file": "static/js/auth-bootstrap.js",

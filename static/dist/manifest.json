@@ -1,5 +1,5 @@
 {
-  "sources": "2e70e61b443d",
+  "sources": "4065be70f4d4",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -37,6 +37,7 @@
     "static/css/demo-action.css",
     "static/css/diagram.css",
     "static/css/file-viewer.css",
+    "static/css/first-run.css",
     "static/css/foundation.css",
     "static/css/landing.css",
     "static/css/layout.css",
@@ -110,6 +111,7 @@
     "static/js/feature-access.js",
     "static/js/feedback-dialog.js",
     "static/js/file-viewer.js",
+    "static/js/first-run.js",
     "static/js/image-zoom.js",
     "static/js/letter-clouds.js",
     "static/js/markdown-stream.js",
@@ -586,7 +588,7 @@
     },
     {
       "name": "auth",
-      "src": "/static/dist/auth.5bbaf8385aa5.js",
+      "src": "/static/dist/auth.4a5d7342419d.js",
       "module": false,
       "defer": true
     },
@@ -604,20 +606,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.f50ed36c8755.js",
+      "src": "/static/dist/app.7071c070c9d3.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.f795edae25b1.css",
+    "app": "/static/dist/app.85b4ddcae106.css",
     "landing": "/static/dist/landing.7397bd00acc8.css",
     "public": "/static/dist/public.58a22e1bbc91.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "a5b3d3249af0",
+      "hash": "7f11b9f5d866",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -644,6 +646,7 @@
         "static/css/demo-action.css",
         "static/css/diagram.css",
         "static/css/file-viewer.css",
+        "static/css/first-run.css",
         "static/css/foundation.css",
         "static/css/layout.css",
         "static/css/letter-clouds.css",
@@ -696,12 +699,12 @@
     }
   },
   "previous_assets": [
+    "app.f795edae25b1.css",
     "app.242ef525f8c3.css",
-    "app.9c5668e74e54.css",
+    "app.f50ed36c8755.js",
     "app.f8439c119c05.js",
-    "app.488d62064f9d.js",
+    "auth.5bbaf8385aa5.js",
     "auth.94cd8abedac1.js",
-    "auth.58f346823c38.js",
     "demo.274397f8bb1b.js",
     "demo.59bc9450805f.js",
     "firebase.a3cc005e89c4.js",

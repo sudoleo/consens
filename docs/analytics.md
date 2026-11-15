@@ -68,7 +68,10 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   angemeldeter Konten.
 - `app_memory_hint` (`action`: shown, dismissed) und `app_auto_memory_on`
   (`source: hint` beim Einschalten aus dem Hinweis unter einer Agent-Antwort,
-  ohne `source` aus Settings): wie viele den Gedächtnis-Hinweis sehen und annehmen.
+  `first_run` aus dem Dialog vor der ersten Frage, ohne `source` aus Settings):
+  wie viele den Gedächtnis-Hinweis sehen und annehmen.
+- `app_first_run` (`view`: answer, doubts, all; `memory`: true/false): was neue
+  Konten im Dialog vor der ersten Frage wählen (`first-run.js`).
 - `app_stream_buffered` (seit 2026-10-08, ohne Daten): einmal pro Agent-Lauf,
   wenn das Netz den Antwort-Stream zurückhält (Firmen-Proxy, Virenscanner) und
   die App den Fortschritt stattdessen per Polling holt (`agent-live.js`).

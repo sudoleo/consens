@@ -2,11 +2,12 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadScripts } from "./helpers/appWindow.mjs";
 
 // static/js/ai-consent.js: the one question before an account's first
-// question goes to the AI providers (app/services/ai_consent.py).
+// question goes to the AI providers (app/services/ai_consent.py), asked as
+// the last step of the first-run dialog (first-run.js).
 const contexts = [];
 
 function boot({ answer = true, saved = true, uid = "u1" } = {}) {
-  const calls = { asked: [], posts: [], toasts: [] };
+  const calls = { asked: [], applied: [], posts: [], toasts: [] };
   const ctx = loadScripts(["static/js/ai-consent.js"], {
     before(window) {
       window.auth = { currentUser: uid ? { uid, getIdToken: async () => "token-" + uid } : null };
@@ -20,7 +21,10 @@ function boot({ answer = true, saved = true, uid = "u1" } = {}) {
         return { ok: saved };
       };
       window.App = {
-        confirm: async options => { calls.asked.push(options); return answer; },
+        firstRun: {
+          ask: async options => { calls.asked.push(options); return answer ? { view: "answer", memory: true } : null; },
+          apply: choice => calls.applied.push(choice),
+        },
         toast: options => calls.toasts.push(options),
       };
     },
@@ -41,32 +45,30 @@ describe("before the first question", () => {
     expect(calls.asked).toEqual([]);
   });
 
-  it("lists the providers with their logos, saves the yes once and then sends without asking", async () => {
+  it("names the providers with their logos, saves the yes once, applies the choice and then sends without asking", async () => {
     const { App, calls } = boot();
     App.aiConsent.set("u1", false);
     expect(await App.aiConsent.ensure()).toBe(true);
     expect(calls.asked).toHaveLength(1);
-    expect(calls.asked[0].list).toEqual([
+    expect(calls.asked[0].providers).toEqual([
       { text: "OpenAI", icon: "/static/chatgpt.png", iconClass: "chatgpt-logo" },
       { text: "Anthropic Claude", icon: "/static/claude.png", iconClass: undefined },
       { text: "Qwen", icon: undefined, iconClass: undefined },
     ]);
-    // First the calming part (2026-11-07, Max): the list is not who gets every question.
-    expect(calls.asked[0].note).toMatch(/^Your question only goes to the models working on it, not to all of them\./);
-    expect(calls.asked[0].note).toContain("Through OpenRouter");
-    expect(calls.asked[0].link.href).toBe("/privacy#providers");
+    expect(calls.applied).toEqual([{ view: "answer", memory: true }]);
     expect(calls.posts).toEqual([["/api/my/ai-consent", { method: "POST", headers: { Authorization: "Bearer token-u1" } }]]);
     expect(await App.aiConsent.ensure()).toBe(true);
     expect(calls.asked).toHaveLength(1);
   });
 
-  it("sends nothing on Not now and asks again next time", async () => {
+  it("sends and sets nothing when the dialog is closed, and asks again next time", async () => {
     const { App, calls } = boot({ answer: false });
     App.aiConsent.set("u1", false);
     expect(await App.aiConsent.ensure()).toBe(false);
     expect(await App.aiConsent.ensure()).toBe(false);
     expect(calls.asked).toHaveLength(2);
     expect(calls.posts).toEqual([]);
+    expect(calls.applied).toEqual([]);
   });
 
   it("does not send when the yes could not be saved", async () => {
@@ -74,6 +76,7 @@ describe("before the first question", () => {
     App.aiConsent.set("u1", false);
     expect(await App.aiConsent.ensure()).toBe(false);
     expect(calls.toasts[0].tone).toBe("error");
+    expect(calls.applied).toEqual([]);
     expect(App.aiConsent.needed()).toBe(true);
   });
 

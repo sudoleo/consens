@@ -1083,7 +1083,7 @@ marked und DOMPurify: kein Head-Skript ruft sie, und deferred Skripte und Module
 laufen in Dokumentreihenfolge, also vor `firebase.js` und der `app`-Gruppe), der same-origin
 `email-verify.js` als inhaltsadressierte `window.App.emailVerification`-Brücke,
 die Gruppe `auth` (deferred) mit den Ebenen-Modulen `motion.js`,
-`modal-dialog.js`, `popover.js`, `notices.js`, `confirm-dialog.js`, `ai-consent.js`, dem
+`modal-dialog.js`, `popover.js`, `notices.js`, `confirm-dialog.js`, `first-run.js`, `ai-consent.js`, dem
 `auth-bootstrap.js`-Watchdog und `chat-list.js` (Gruppen der Chatliste) vor
 `firebase.js` + `demo.js` (ES-Module; der
 Login-Dialog öffnet schon beim Auswerten von `firebase.js`), dann deferred
@@ -9227,26 +9227,36 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   (Schlüssel stellt der Betreiber aus). `/user_status` liefert `ai_consent`. **Browser:**
   `static/js/ai-consent.js` (`App.aiConsent`, Gruppe `auth`): `firebase.js`
   setzt es aus `/user_status` und leert es beim Abmelden; `window.sendQuestion`
-  wartet vor Agent und Compare auf `ensure()` (`App.confirm` „A quick note“:
-  ein Satz, die Anbieter aus `window.MODEL_FAMILIES` als Liste mit Logo
-  (`citationLabel`, `icon`, `iconClass`), Kleingedrucktes: seit 2026-11-07
-  zuerst, dass die Frage nur an die Modelle geht, die daran arbeiten, nicht an
-  alle (bewusst nicht „nur die gewählten“: Titel, Gedächtnis und andere Helfer
-  nutzen eigene Modelle), dann was über OpenRouter an sie geht, Link
-  `/privacy#providers`; bewusst kurz und ohne Warnton;
-  „Not now“ lässt die Frage im Feld, „Agree“ → `POST /api/my/ai-consent`, dann
-  geht sie raus). Ebenso vor den anderen Eingängen mit Schranke: Start einer
-  Watch (`watch-composer.js` `submit`, die Karte unter der Antwort
-  `agent-watch.js` `start`) und Remember/Correct memory (`memory-edit.js`
-  `submitEdit`); „Not now“ lässt Satz bzw. Dialog stehen (bis 2026-11-07
-  fragten nur Chat-Nachrichten, ein Konto ohne Zustimmung bekam dort nur die
-  Absage). Ein unbekannter Stand (kein Status, Feld fehlt) fragt nicht:
+  wartet vor Agent und Compare auf `ensure()`. Gefragt wird über den
+  **Dialog vor der ersten Frage** (`static/js/first-run.js` `App.firstRun`,
+  Stile `static/css/first-run.css`), zwei kurze Schritte in einem Fenster:
+  (1) „Every answer gets a second opinion“: drei Lesarten in einer Reihe
+  (`VIEWS`: `answer` → `consensus_highlights: critical`; `doubts` = App-Standard,
+  schreibt nichts; `all` → `consensus_highlights: all` + `detailed_progress`),
+  darunter ein Beispielsatz, an dem Fund und Korrektur für die gewählte Lesart
+  ablaufen, und der Schalter fürs Gedächtnis (aus; `userMemory.enableAgentMemory("first_run")`);
+  (2) „Almost there“: die Anbieter aus `window.MODEL_FAMILIES` als Logo-Reihe,
+  die Namen hinter „Show names“ (`citationLabel`, `icon`, `iconClass`; fehlt
+  ein Logo, steht die Namensliste offen), ein Satz, dass die Frage nur an die
+  Modelle geht, die daran arbeiten (bewusst nicht „nur die gewählten“: Titel,
+  Gedächtnis und andere Helfer nutzen eigene Modelle), Link
+  `/privacy#providers`. Bewusst wenig Text und kein „Not now“-Knopf: vor der
+  ersten Antwort hat niemand Bindung, ein Ausweg neben dem Weiter lädt zum
+  Gehen ein; Nein sagen das X, Escape und der Hintergrund (`ask` → `null`, die
+  Frage bleibt im Feld, nichts wird gesetzt). „Agree and start“ →
+  `POST /api/my/ai-consent`, erst danach `App.firstRun.apply(choice)`: die
+  Lesart, für jede Lesart `findings_to_agent: true` (der Dialog verspricht die
+  Korrektur) und das Event `app_first_run`; dann geht die Frage raus. Ebenso
+  vor den anderen Eingängen mit Schranke: Start einer Watch
+  (`watch-composer.js` `submit`, die Karte unter der Antwort `agent-watch.js`
+  `start`) und Remember/Correct memory (`memory-edit.js` `submitEdit`); ohne
+  Ja bleiben Satz bzw. Dialog stehen. Ein unbekannter Stand (kein Status, Feld fehlt) fragt nicht:
   der Server ist die Schranke, seine Ablehnung (`agent-chat.js` `failRun`,
   `query-send.js` `finishFailed`, die drei eben genannten → `refused`) lässt
   das nächste Senden fragen.
   Tests: `tests/test_ai_consent.py` (Marker `real_ai_consent`; sonst hat jedes
   Testkonto zugestimmt, `conftest._accounts_agreed_to_the_ai_providers`),
-  `tests/js/ai-consent.test.mjs`, `tests/e2e/test_ai_consent_dialog.py`; die
+  `tests/js/ai-consent.test.mjs`, `tests/js/first-run.test.mjs`, `tests/e2e/test_ai_consent_dialog.py`; die
   Journeys säen die Zustimmung (`journey_server.py` `seed`).
 - Der Login ist seit 2026-10-20 ein nativer `<dialog class="modal">` über
   `App.modalDialog` (Überschriftsreferenz, benannter Close-Button, Fokus-
