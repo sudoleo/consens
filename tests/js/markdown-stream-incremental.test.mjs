@@ -253,6 +253,21 @@ describe("incremental streamed Markdown", () => {
     expect(el.querySelector(".md-facing")).toBe(firstFacing);
   });
 
+  it("stands two sections side by side as soon as the rule below them has its line", () => {
+    const { window, document } = boot();
+    const el = document.createElement("div");
+    const before = PAIR.slice(0, PAIR.indexOf("## How to compare"));
+    // A lone "---" may still become something else and waits.
+    window.renderMarkdownStream(el, `${before}---`);
+    expect(el.querySelector(".md-facing")).toBeNull();
+    expect(el.querySelector(".stream-sections-pending")).not.toBeNull();
+    window.renderMarkdownStream(el, `${before}---\n`);
+    const facing = el.querySelector(".md-facing");
+    expect(facing).not.toBeNull();
+    window.renderMarkdownStream(el, `${before}---\n\nCount every cost, not only the rate.\n`);
+    expect(el.querySelector(".md-facing")).toBe(facing);
+  });
+
   it("lets sections that are no pair appear as they are, and ends as a full render", () => {
     const { window, document } = boot();
     for (const text of [SECTIONS, PAIR]) {

@@ -317,6 +317,23 @@ describe("Steps", () => {
     expect(render("<ul><li><strong>One.</strong> Text</li></ul>").querySelector(".md-steps")).toBeNull();
   });
 
+  it("makes room for the rail's numbers and line wherever a list stands on it", () => {
+    const { window, document } = load("<ol><li><strong>Ask.</strong> Three offers.</li><li><strong>Apply.</strong> Before you sign.</li></ol>");
+    const style = document.head.appendChild(document.createElement("style"));
+    style.textContent = readFileSync(new URL("../../static/css/answer-shapes.css", import.meta.url), "utf8");
+    // The answer, a public page, a compared answer, a detail of the history, a file in the viewer.
+    for (const host of ["consensus-answer-body", "share-md", "response-box", "thread-history-detail-body", "file-viewer-markdown"]) {
+      const output = document.body.appendChild(document.createElement("div"));
+      output.className = host;
+      output.append(window.renderMarkdownFragment("answer"));
+      const list = output.querySelector("ol.md-steps");
+      expect(window.getComputedStyle(list).listStyle, host).toBe("none");
+      expect(window.getComputedStyle(list).getPropertyValue("counter-reset"), host).toBe("md-step");
+      expect(window.getComputedStyle(list.children[1]).getPropertyValue("counter-increment"), host).toBe("md-step");
+      expect(window.getComputedStyle(list.children[1]).position, host).toBe("relative");
+    }
+  });
+
   it("stands on the rail while its last item is still only a title", () => {
     const { window } = load("<ol><li><strong>Ask.</strong> Three offers.</li><li><strong>Appl</strong></li></ol>");
     const growing = window.document.createElement("div");

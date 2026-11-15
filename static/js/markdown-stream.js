@@ -889,7 +889,8 @@ function sectionsAhead(text, from, back = from, decided = new Map(), { pairs = t
   }
   // A token is complete once another one follows it; the last may still grow,
   // so its kind is read from how it begins: "## " is a heading of level 2,
-  // "- word" a bullet list, a lone "#" or "-" may still become anything.
+  // "- word" a bullet list, a lone "#" or "-" may still become anything. A
+  // rule whose line has ended ("---\n") stays a rule, whatever follows.
   const complete = index => index < blocks.length - 1;
   const kind = index => {
     const block = blocks[index];
@@ -904,6 +905,7 @@ function sectionsAhead(text, from, back = from, decided = new Map(), { pairs = t
     const heading = raw.match(/^ {0,3}(#{1,6})[ \t]/);
     if (heading) return `h${heading[1].length}`;
     if (/^ {0,3}[-*+_][-*+_ \t]*$/.test(raw) || /^ {0,3}#{1,6}$/.test(raw)) return "open";
+    if (block.token.type === "hr") return "hr";
     return /^ {0,3}[-*+][ \t]+\S/.test(raw) ? "list" : "other";
   };
   const verdict = index => {

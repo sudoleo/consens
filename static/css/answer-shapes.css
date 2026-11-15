@@ -133,19 +133,24 @@ table tr.md-pick > td:first-child {
 table tr.md-pick .md-bar > i { background: var(--agree); }
 
 /* --- Steps: the list's numbers on a rail, each title on its own line. ---- */
-:is(.consensus-answer-body, .share-md) ol.md-steps {
+/* Wherever steps() marks a list (an answer, a compared answer, the history,
+   a file in the viewer), with no container in front: the number and the
+   line drawn below need the room and the counter of these rules. The class
+   twice outranks an answer's own list rules (.share-md ol,
+   .consensus-answer-body :is(ul, ol)). */
+ol.md-steps.md-steps {
   padding-inline-start: 0;
   list-style: none;
   counter-reset: md-step;
 }
 
-:is(.consensus-answer-body, .share-md) ol.md-steps > li {
+ol.md-steps > li {
   position: relative;
   padding-inline-start: 2.1em;
   counter-increment: md-step;
 }
 
-:is(.consensus-answer-body, .share-md) ol.md-steps > li + li { margin-top: 0.9em; }
+ol.md-steps > li + li { margin-top: 0.9em; }
 
 .md-steps > li::before {
   content: counter(md-step);

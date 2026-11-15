@@ -2805,7 +2805,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     entscheidet; dann erscheint das Paar am Stück als ein Block, sonst die
     Abschnitte, wie sie sind. Entschieden wird mit `facingSections` selbst an
     den fertigen Teilen, halbfertige nach ihrem Anfang („## “ = Überschrift,
-    „- Wort“ = Aufzählung, „#“/„-“ allein = offen). Auch der Vergleichsmodus
+    „- Wort“ = Aufzählung, „#“/„-“ allein = offen; eine Linie mit fertiger
+    Zeile, „---\n“, gilt schon als Linie). Auch der Vergleichsmodus
     (`createStreamRenderer`) hält so zurück. Folge: Jede Überschrift am Ende
     erscheint erst, wenn das nächste Stück beginnt.
   - **Zeitstrahl** (`timeline`): zwei Spalten, ab drei Zeilen, die erste nur
@@ -2832,7 +2833,12 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     weg (Auslassungspunkte bleiben). Im wachsenden Teil eines Streams
     (`renderMarkdownFragment(md, { growing: true })`) darf der letzte Punkt
     noch nur Titel oder leer sein, damit die Liste nicht erst als normale
-    Liste erscheint und dann auf die Schiene springt.
+    Liste erscheint und dann auf die Schiene springt. Weil
+    `renderMarkdownFragment` sie ruft, stehen Schritte überall, wo es rendert
+    (Antwort, Vergleichsantwort, Verlaufsdetails, Dateivorschau); die
+    CSS-Regeln der Schiene setzen deshalb keinen Container voraus und
+    überbieten dessen Listenregeln über die doppelte Klasse
+    (`ol.md-steps.md-steps`).
   Tabellen erscheinen im Stream erst als Ganzes (`stream-table-pending`),
   ihre Formen also auch. Gezählt wird je geschriebener Antwort und Form
   einmal (`app_shape`, `agent-chat.js` `countShapes`, `AnswerShapes.present`).
