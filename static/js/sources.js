@@ -158,6 +158,12 @@ function getSourcePillLabel(src, token) {
   return number ? `Source ${number}` : String(token || "Source");
 }
 
+// A citation in brackets ("([WSJ](url))") brings the model's name for its
+// source; the pill shows that name instead of the domain.
+function sourceRefLabel(entry) {
+  return entry?.label || getSourcePillLabel(entry?.src, entry?.token);
+}
+
 // The same globe for sources without (or with a failed) favicon as on the
 // public pages (source-pill.css draws it): never a broken-image icon, and no
 // 8-px letter. The proxy answers unknown hosts with a
@@ -200,14 +206,16 @@ function sourceRefEntries(refs) {
     const key = number || String(ref.token || "");
     if (seen.has(key)) return;
     seen.add(key);
-    entries.push({ src: ref.src || null, number, token: ref.token != null ? String(ref.token) : String(number || "") });
+    const entry = { src: ref.src || null, number, token: ref.token != null ? String(ref.token) : String(number || "") };
+    if (ref.label) entry.label = String(ref.label);
+    entries.push(entry);
   });
   return entries;
 }
 
 function sourceRefAriaLabel(entries) {
   const first = entries[0] || {};
-  const label = getSourcePillLabel(first.src, first.token);
+  const label = sourceRefLabel(first);
   const more = entries.length - 1;
   return more > 0
     ? window.App.t("Source: {label} (and {more} more)", { label, more })
@@ -220,7 +228,7 @@ function fillSourceRef(el, refs, options = {}) {
   const entries = sourceRefEntries(refs);
   if (!entries.length) return el;
   const first = entries[0];
-  const label = getSourcePillLabel(first.src, first.token);
+  const label = sourceRefLabel(first);
   const href = getSafeSourceHref(first.src);
   el.replaceChildren();
   el.append(createSourceRefIcon(first.src, label));
@@ -281,7 +289,7 @@ function appendNumberedSourceRefs(fragment, refs, options = {}) {
 function sourceRefPlainText(ref) {
   const entries = ref?.sourceGroup?.length ? ref.sourceGroup
     : [{ src: ref?.sourceData || null, token: ref?.dataset?.sourceNumber || ref?.textContent || "" }];
-  const labels = entries.map(entry => getSourcePillLabel(entry.src, entry.token));
+  const labels = entries.map(sourceRefLabel);
   const shown = ref?.classList?.contains("is-compact") ? labels.slice(1) : labels;
   const unique = [...new Set(shown.filter(Boolean))];
   return unique.length ? ` (${unique.join(", ")})` : "";
@@ -352,14 +360,36 @@ function mergeAdjacentSourceRefs(containerEl) {
   });
 }
 
+// The text right before or after a node in its paragraph. A sentence mark
+// (consensus-insights.js wrapFlatRange) puts the text around a link into
+// spans of its own, so the bracket of "([WSJ](url))" is often no sibling.
+function textBeside(node, forward) {
+  const block = node.parentElement?.closest("p, li, td, th, dt, dd, blockquote, h1, h2, h3, h4, h5, h6")
+    || node.parentElement;
+  if (!block) return null;
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, {
+    acceptNode: text => text.nodeValue && !node.contains(text) ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+  });
+  walker.currentNode = node;
+  return forward ? walker.nextNode() : walker.previousNode();
+}
+
+// Brackets that hold nothing but this node ("([WSJ](url))", "(pill)"): the
+// text nodes that carry them, or null.
+function citationBrackets(node, pattern = { open: /\($/, close: /^\)/ }) {
+  const before = textBeside(node, false);
+  const after = textBeside(node, true);
+  return before && after && pattern.open.test(before.nodeValue) && pattern.close.test(after.nodeValue)
+    ? { before, after } : null;
+}
+
 // "(url1, url2)" ended as "(pill)": brackets that hold nothing but the
 // citation go, and a terminal citation follows the sentence punctuation —
 // the same rule a single bracketed URL already gets.
 function unwrapCitationParens(ref) {
-  const before = ref.previousSibling;
-  const after = ref.nextSibling;
-  if (before?.nodeType !== Node.TEXT_NODE || after?.nodeType !== Node.TEXT_NODE) return;
-  if (!/\(\s*$/.test(before.nodeValue) || !/^\s*\)/.test(after.nodeValue)) return;
+  const brackets = citationBrackets(ref, { open: /\(\s*$/, close: /^\s*\)/ });
+  if (!brackets) return;
+  const { before, after } = brackets;
   before.nodeValue = before.nodeValue.replace(/[ \t]*\(\s*$/, "");
   after.nodeValue = after.nodeValue.replace(/^\s*\)/, "");
   const punctuation = after.nodeValue.match(/^([.!?]+)(?=\s|$)/);
@@ -555,15 +585,17 @@ function canonicalAgentSourceUrl(value) {
 }
 
 // A link whose label is its own address or just its site's name
-// ("[njaped.no](https://njaped.no/)"): linkifyAgentSources puts a pill in its
-// place, and the label goes with it. Sentence marks keep out of such a link
+// ("[njaped.no](https://njaped.no/)"), or that stands alone in brackets
+// ("([WSJ](url))"): linkifyAgentSources puts a pill in its place, and the
+// label leaves the text. Sentence marks keep out of such a link
 // (consensus-insights.js wrapFlatRange); a mark inside it left the page with
 // the label, and its hover card opened in the corner of the screen.
 function isBareSourceLink(link) {
   if (!link?.matches?.('a[href]') || link.matches('.src-ref, .source-link') || link.querySelector('img, svg')) return false;
   const url = canonicalAgentSourceUrl(link.getAttribute('href'));
   const label = link.textContent.trim();
-  return Boolean(url) && (canonicalAgentSourceUrl(label) === url || labelIsSourceHost(label, { url }));
+  return Boolean(url) && (canonicalAgentSourceUrl(label) === url || labelIsSourceHost(label, { url })
+    || Boolean(citationBrackets(link)));
 }
 window.isBareSourceLink = isBareSourceLink;
 
@@ -614,7 +646,9 @@ function linkifyAgentSources(containerEl, sources) {
       // Keep focused/hovered references alive during streamed activity updates.
       const group = link.sourceGroup?.length ? link.sourceGroup : [{src: {url: link.getAttribute('href')}}];
       const mapped = group.map(entry => refs.get(canonical(entry.src?.url)));
-      if (mapped.some(Boolean)) fillSourceRef(link, mapped.map((entry, index) => entry || group[index]));
+      if (mapped.some(Boolean)) {
+        fillSourceRef(link, mapped.map((entry, index) => entry ? { ...entry, label: group[index].label } : group[index]));
+      }
       continue;
     }
     if (link.closest('code, pre, .katex, mjx-container, .md-picture') || link.querySelector('img, svg')) continue;
@@ -627,27 +661,30 @@ function linkifyAgentSources(containerEl, sources) {
     // pill shows anyway. The pill takes the label's place instead of
     // following it, so the domain is not written twice.
     const hostLabel = !rawUrl && !existingCitation && labelIsSourceHost(label, ref.src);
-    const before = link.previousSibling;
-    const after = link.nextSibling;
-    const parenthesized = before?.nodeType === Node.TEXT_NODE && after?.nodeType === Node.TEXT_NODE
-      && /\($/.test(before.nodeValue) && /^\)/.test(after.nodeValue);
-    if ((rawUrl || hostLabel) && parenthesized) {
+    const named = !rawUrl && !existingCitation && !hostLabel;
+    // A link alone in brackets is a citation ("([WSJ](url))", as most models
+    // write one): the brackets go, and the pill carries its words in place
+    // of the domain. A named link inside a sentence keeps its words.
+    const brackets = (rawUrl || hostLabel || named) && citationBrackets(link);
+    const before = brackets ? brackets.before : link.previousSibling;
+    const after = brackets ? brackets.after : link.nextSibling;
+    if (brackets) {
       before.nodeValue = before.nodeValue.replace(/[ \t]*\($/, '');
       after.nodeValue = after.nodeValue.slice(1);
     } else if (rawUrl && before?.nodeType === Node.TEXT_NODE) {
       before.nodeValue = before.nodeValue.replace(/[ \t]+$/, '');
     }
     const fragment = document.createDocumentFragment();
-    if (!rawUrl && !existingCitation && !hostLabel) fragment.append(...link.childNodes);
+    if (named && !brackets) fragment.append(...link.childNodes);
     // As in Consensus, a terminal citation follows the sentence punctuation.
     // A domain that stands in the sentence itself keeps its place.
-    const punctuation = !(hostLabel && !parenthesized) && after?.nodeType === Node.TEXT_NODE
+    const punctuation = !(hostLabel && !brackets) && after?.nodeType === Node.TEXT_NODE
       && after.nodeValue.match(/^([.!?]+)(?=\s|$)/);
     if (punctuation) {
       fragment.append(document.createTextNode(punctuation[1]));
       after.nodeValue = after.nodeValue.slice(punctuation[1].length);
     }
-    fragment.append(createSourceRef(ref));
+    fragment.append(createSourceRef(named && brackets ? { ...ref, label: label.replace(/\s+/g, ' ') } : ref));
     link.replaceWith(fragment);
   }
   mergeAdjacentSourceRefs(containerEl);

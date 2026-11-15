@@ -345,8 +345,8 @@ def test_the_consensus_page_no_longer_counts_zero_contradictions():
 
 
 def test_a_shared_agent_answer_cites_its_sources_as_the_app_does(share_app):
-    # Its words, then the source's pill (public_markdown source_pills), not an
-    # underlined link.
+    # The source's pill (public_markdown source_pills), not an underlined
+    # link; a link alone in brackets loses them and its words go into the pill.
     client, database, store = share_app
     answer = "It sends data every day ([mission status](https://science.nasa.gov/webb))."
     chat_id, turn_id = _saved_turn(database, store, assistant_response=answer)
@@ -354,9 +354,10 @@ def test_a_shared_agent_answer_cites_its_sources_as_the_app_does(share_app):
     _, shared = _share(client, chat_id, turn_id)
     body = client.get(shared["path"]).text
 
-    assert '(mission status<a class="src-ref" href="https://science.nasa.gov/webb" target="_blank"' in body
-    assert '<span class="src-ref-label">science.nasa.gov</span></a>).' in body
-    assert ">mission status</a>" not in body
+    assert 'every day.<a class="src-ref" href="https://science.nasa.gov/webb" target="_blank"' in body
+    assert 'src="/api/topics/favicon?d=science.nasa.gov"' in body
+    assert '<span class="src-ref-label">mission status</span></a>' in body
+    assert ">mission status</a>" not in body and "</a>)" not in body
 
 
 def test_a_german_page_keeps_the_shared_question_in_its_titles(share_app):

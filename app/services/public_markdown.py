@@ -481,20 +481,20 @@ def _text_token(content):
     return token
 
 
-def _pill_html(href, host, more=0):
+def _pill_html(href, host, label="", more=0):
     count = f'<span class="src-ref-more">+{more}</span>' if more else ""
     return (
         f'<a class="src-ref" href="{escape(href, quote=True)}" target="_blank">'
         f'<img class="src-ref-favicon site-icon" src="/api/topics/favicon?d={quote(host, safe=".-")}" '
         'alt="" width="14" height="14" loading="lazy">'
-        f'<span class="src-ref-label">{escape(host)}</span>{count}</a>'
+        f'<span class="src-ref-label">{escape(label or host)}</span>{count}</a>'
     )
 
 
-def _pill_token(href, host):
+def _pill_token(href, host, label=""):
     token = Token("html_inline", "", 0)
-    token.meta = {"pill": (href, host), "more": 0}
-    token.content = _pill_html(href, host)
+    token.meta = {"pill": (href, host, label), "more": 0}
+    token.content = _pill_html(href, host, label)
     return token
 
 
@@ -503,10 +503,11 @@ def _pill_source_links(tokens, sources):
     linkifyAgentSources): a link to one of the answer's sources keeps its
     words as plain text and the source follows as a pill -- site icon and
     domain, after the point when the link ends a sentence. A link whose words
-    are just its address or its domain becomes the pill, and the brackets
-    around it go with it. Pills that stand side by side (only spaces, commas
-    or semicolons between) are one pill with "+N". Links to anything else
-    stay links."""
+    are just its address or its domain becomes the pill. A link alone in
+    brackets ("([WSJ](url))") is a citation: the brackets go, and the pill
+    shows its words in place of the domain. Pills that stand side by side
+    (only spaces, commas or semicolons between) are one pill with "+N".
+    Links to anything else stay links."""
     known = {}
     for source in sources or []:
         url = canonical_source_url(source.get("url"))
@@ -537,19 +538,20 @@ def _pill_source_links(tokens, sources):
             before = out[-1] if out and out[-1].type == "text" else None
             after = children[close + 1] if close + 1 < len(children) and children[close + 1].type == "text" else None
             bracketed = bool(before and after and before.content.endswith("(") and after.content.startswith(")"))
-            if (raw_url or host_label) and bracketed:
+            named = not raw_url and not host_label
+            if bracketed:
                 before.content = re.sub(r"[ \t]*\($", "", before.content)
                 after.content = after.content[1:]
             elif raw_url and before:
                 before.content = before.content.rstrip(" \t")
-            if not raw_url and not host_label:
+            if named and not bracketed:
                 out.extend(inner)
             # A domain that stands in the sentence itself keeps its place.
             point = _PILL_POINT_RE.match(after.content) if after and not (host_label and not bracketed) else None
             if point:
                 out.append(_text_token(point[1]))
                 after.content = after.content[len(point[1]):]
-            out.append(_pill_token(href, host))
+            out.append(_pill_token(href, host, " ".join(label.split()) if named and bracketed else ""))
             index = close + 1
         token.children = _merge_adjacent_pills(out)
 

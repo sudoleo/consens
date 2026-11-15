@@ -106,7 +106,8 @@ def test_plain_text_is_text_not_html():
 
 def test_a_shared_agent_answer_cites_its_sources_as_pills_like_the_app():
     # sources.js linkifyAgentSources, on the server: the words stay, the source
-    # follows as a pill; a link that only names its domain becomes the pill.
+    # follows as a pill; a link that only names its domain becomes the pill,
+    # and a link alone in brackets becomes a pill with its words.
     from app.services.public_markdown import render_public_markdown
     sources = [{"id": "S1", "url": "https://www.uni-hannover.de/news/hoi", "title": "Founding"},
                {"id": "S2", "url": "https://njaped.no/", "title": "njaped"},
@@ -119,8 +120,9 @@ def test_a_shared_agent_answer_cites_its_sources_as_pills_like_the_app():
     html = render_public_markdown(md, sources, source_pills=True)
 
     pill = '<a class="src-ref" href="https://www.uni-hannover.de/news/hoi" target="_blank"'
-    assert "(founding note" + pill in html
-    assert '<span class="src-ref-label">uni-hannover.de</span></a>).' in html
+    assert "Founded 2018." + pill in html
+    assert '<span class="src-ref-label">founding note</span></a> Read' in html
+    assert "(" not in html.split(pill)[0] and "</a>)" not in html
     assert "Read " + '<a class="src-ref" href="https://njaped.no/"' in html
     assert '>njaped.no</span></a>.' in html and ">njaped.no</a>" not in html
     # Side by side: one pill, "+1".

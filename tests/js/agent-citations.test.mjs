@@ -122,6 +122,48 @@ it('lets a pill stand in for a link label that only repeats its domain', () => {
   dom.window.close();
 });
 
+it('turns a named link alone in brackets into a pill with its words, without the brackets', () => {
+  const {window: w, dom} = setup();
+  const sources = [{url: 'https://www.wsj.com/tech/astra', title: 'OpenAI pulls model'}];
+  // The form most models cite in.
+  const markdown = '- Aus internen Tests gestrichen worden ([WSJ](https://www.wsj.com/tech/astra)).\n'
+    + '- Terra am 26.10. ([Check vom 2.11.](https://omniakey.com/check))\n'
+    + '- Laut [Reuters](https://www.reuters.com/a) war es anders.';
+  const body = render(w, markdown, {sources});
+  const [wsj, check, reuters] = body.querySelectorAll('li');
+  expect(wsj.textContent).toBe('Aus internen Tests gestrichen worden.WSJ');
+  expect(wsj.querySelector('.src-ref .src-ref-label').textContent).toBe('WSJ');
+  expect(wsj.querySelector('.src-ref').getAttribute('href')).toBe(sources[0].url);
+  expect(wsj.querySelector('.src-ref').getAttribute('aria-label')).toBe('Source: WSJ');
+  expect(wsj.querySelector('.src-ref-favicon').getAttribute('src')).toBe('/api/topics/favicon?d=wsj.com');
+  expect(check.textContent).toBe('Terra am 26.10.Check vom 2.11.');
+  // Inside a sentence the words stay where they are, and the pill names the domain.
+  expect(reuters.textContent).toBe('Laut Reutersreuters.com war es anders.');
+  expect(body.dataset.markdown).toBe(markdown);
+  // A later pass (streaming, review) keeps the words in the pill.
+  w.App.agentReview.render(body, null, {sources});
+  expect(wsj.querySelector('.src-ref-label').textContent).toBe('WSJ');
+  // Copied as text it is the citation it was: "(WSJ)".
+  expect(w.App.sourceRefs.plainText(wsj.querySelector('.src-ref'))).toBe(' (WSJ)');
+  dom.window.close();
+});
+
+it('finds the brackets of a citation that sentence marks put into spans of their own', () => {
+  const {window: w, dom} = setup();
+  const body = w.document.getElementById('agentAnswerBody');
+  body.innerHTML = '<p><span class="cx-claim">Gestrichen worden (</span><a href="https://www.wsj.com/a">WSJ</a>'
+    + '<span class="cx-claim">).</span> Weiter.</p>';
+  const link = body.querySelector('a');
+  // Marks keep out of the link's words: they leave the text for the pill.
+  expect(w.isBareSourceLink(link)).toBe(true);
+  w.linkifyAgentSources(body, [{url: 'https://www.wsj.com/a'}]);
+  expect(body.textContent).toBe('Gestrichen worden.WSJ Weiter.');
+  expect(body.querySelector('.src-ref-label').textContent).toBe('WSJ');
+  body.innerHTML = '<p>Laut <a href="https://www.wsj.com/a">WSJ</a> war es so.</p>';
+  expect(w.isBareSourceLink(body.querySelector('a'))).toBe(false);
+  dom.window.close();
+});
+
 it('collapses adjacent citations into one pill and lists every source in the teaser', () => {
   const {window: w, dom} = setup();
   const sources = [{url: 'https://uci.org/a', title: 'UCI ranking'}, {url: 'https://pcs.example/b', title: 'Rider profile'},

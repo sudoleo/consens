@@ -2958,10 +2958,15 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Pillen mit Quellenvorschau; nebeneinanderstehende Pillen (nur Leerraum,
   Komma, Semikolon dazwischen) fasst `mergeAdjacentSourceRefs` zusammen. Die
   Nummern entsprechen der deduplizierten Quellenliste des jeweiligen Turns
-  bzw. der Einzelantwort. Benannte Links behalten ihren Text; ein Linktext,
-  der nur die eigene Domain wiederholt (`[njaped.no](https://njaped.no/)`),
+  bzw. der Einzelantwort. Benannte Links im Satz behalten ihren Text; ein
+  Linktext, der nur die eigene Domain wiederholt (`[njaped.no](https://njaped.no/)`),
   wird durch die Pille ersetzt statt verdoppelt. Ausgeschriebene URLs und
-  reine Zitat-Klammern („(url1, url2)“) entfallen samt Klammer. Code, Formeln
+  reine Zitat-Klammern („(url1, url2)“) entfallen samt Klammer. Ein Link
+  allein in Klammern (`([WSJ](url))`, so zitieren die meisten Modelle) ist
+  ein Zitat: Die Klammern entfallen, und die Pille zeigt seinen Text statt
+  der Domain (`entry.label`, die Domain steht in der Vorschau). Die Klammern
+  findet `citationBrackets` auch, wenn Satzmarken sie in eigene Spans gelegt
+  haben. Code, Formeln
   und reine Zahlennotation wie `[1]` bleiben unberührt. Die Umwandlung betrifft
   nur den DOM, nicht Markdown oder Review-Hash; `agent-review.js` liest die
   Quellen einer Pille über `sourceGroup` zurück.
@@ -9991,7 +9996,8 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   App: `render_public_markdown(…, source_pills=True)` (nur Agent, nicht
   Watch-Seiten) lässt bei Links auf Quellen der Antwort die Worte stehen und
   setzt die Quellenpille `a.src-ref` (Favicon + Domain, `source-pill.css`)
-  dahinter, wie `sources.js` `linkifyAgentSources`. „Models compared“ ist
+  dahinter, wie `sources.js` `linkifyAgentSources`; ein Link allein in
+  Klammern wird ohne Klammern zur Pille mit seinem Text. „Models compared“ ist
   ein zugeklapptes `details.wp-disclosure` mit der grauen Logoreihe. Die
   Differences-Ansicht jeder Share-Seite zeigt die Karten der App
   (`check_page.difference_cards`: kritisch zuerst, kleinere gebündelt,
