@@ -1493,6 +1493,31 @@
     p.append(who, words);
     return p;
   }
+  // What the user wrote into the run (agent-chat.js steer) is part of the
+  // conversation, not of the work: once the agent read it, it stands as the
+  // user's message in the turn, under the run's line and before the lines
+  // and the answer that came after it, whether the activity is folded or
+  // not. Opened, the activity shows each at its place among the steps
+  // instead ("You", userNote), and these give way (agent-chat.css).
+  function userMessages(view, events) {
+    const notes = events.filter(item => item.kind === 'progress' && item.from_user && item.text);
+    const signature = JSON.stringify(notes.map(item => item.id));
+    if (view.notes.dataset.signature === signature) return;
+    view.notes.dataset.signature = signature;
+    view.notes.replaceChildren(...notes.map(item => {
+      const message = document.createElement('div');
+      message.className = 'agent-user-message';
+      const words = document.createElement('p');
+      words.className = 'agent-user-message-text';
+      // The user's own words: never translated.
+      words.dataset.i18nSkip = '';
+      words.translate = false;
+      words.textContent = String(item.text).slice(0, 4000);
+      message.append(words);
+      return message;
+    }));
+    view.notes.hidden = !notes.length;
+  }
 
   // Like Claude Code, the live lines stay a few: the step at work (with the
   // note leading into it), and whatever waits on the user; every earlier
@@ -1592,6 +1617,8 @@
       // The page the agent opened for the user, under the run's line: it stays
       // while the run goes on, the answer comes and after it (pinPage).
       const pin = document.createElement('div'); pin.className = 'agent-page-pin'; pin.hidden = true;
+      // The user's messages into the run (userMessages), under its line.
+      const notes = document.createElement('div'); notes.className = 'agent-user-messages'; notes.hidden = true;
       const preview = document.createElement('div'); preview.className = 'agent-progress';
       preview.setAttribute('role', 'log'); preview.setAttribute('aria-live', 'polite');
       // A line that changes swaps its text node, an addition: "text" as well
@@ -1616,8 +1643,8 @@
       details.append(summary, history);
       // Progress shows at the model icons in the summary (agent-chat.css,
       // "Progress at the models"), not on a line of its own.
-      host.replaceChildren(details, pin, preview);
-      host._agentActivity = { details, summary, history, title, timeline, runDetails, insights, content, current, note, usageEl, vmRestoreEl, pin, preview, nodes: new Map(), previewNodes: new Map() };
+      host.replaceChildren(details, notes, pin, preview);
+      host._agentActivity = { details, summary, history, title, timeline, runDetails, insights, content, current, note, usageEl, vmRestoreEl, pin, notes, preview, nodes: new Map(), previewNodes: new Map() };
       vmRestoreEl.addEventListener('click', () => host._agentActivity.vmRestore?.());
       summary.addEventListener('click', event => {
         event.preventDefault();
@@ -1626,6 +1653,7 @@
       });
     }
     const view = host._agentActivity;
+    userMessages(view, events);
     const progress = events.filter(item => item.kind === 'progress' && item.text);
     // Reasoning stays beside the agent's notes: only a step's reasoning
     // that its own note repeats word for word stands back.
@@ -1752,15 +1780,15 @@
     }
     if (waiting) paragraphs.push({ id: 'waiting', kind:'progress', text: latest.text || 'Active model calls are using the available allowance. This response will continue automatically.' });
     // The calm view's lines (detailed()): what waits on the user, and what
-    // the user wrote or decided since the last step; then the line of what
-    // it does now, and under it the comparison models' quote while they
-    // answer or the reason while it waits for tokens.
-    let lines = paragraphs;
+    // the user decided since the last step; then the line of what it does
+    // now, and under it the comparison models' quote while they answer or
+    // the reason while it waits for tokens. What the user wrote stands above
+    // the lines in either view (userMessages).
+    let lines = paragraphs.filter(item => item.kind !== 'user');
     if (calm) {
       const since = paragraphs.findLastIndex(item => ['vm', 'step'].includes(item.kind) && item.id !== 'current-status');
       lines = paragraphs.filter((item, index) => item.kind === 'review'
-        || (item.kind === 'hold' && ((item.item.state || 'waiting') === 'waiting' || index > since))
-        || (item.kind === 'user' && index > since));
+        || (item.kind === 'hold' && ((item.item.state || 'waiting') === 'waiting' || index > since)));
       if (running && !saving && !held) {
         // One line, no thin, indented thought under the status: what a
         // running step does, else the newest thought since the last step,
@@ -1841,7 +1869,6 @@
         let p = view.previewNodes.get(item.id);
         if (!p) {
           p = item.kind === 'vm' ? stepView('agent-vm', item.item) : item.kind === 'hold' ? holdView('agent-hold-step')
-            : item.kind === 'user' ? userNote('agent-user-note', item.text)
             : item.kind === 'start' ? startView()
             : document.createElement(item.kind === 'progress' ? 'p' : 'div');
           view.previewNodes.set(item.id, p);
@@ -1857,8 +1884,7 @@
           previewChanged = true;
           if (!view.details.open) reveal(p);
         }
-        if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'user' || item.kind === 'hold'
-          || item.kind === 'start') {
+        if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'hold' || item.kind === 'start') {
           if (item.kind === 'vm') updateVm(p, item.item);
           if (item.kind === 'hold') updateHold(p, item.item);
           if (item.kind === 'start') {

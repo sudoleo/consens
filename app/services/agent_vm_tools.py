@@ -1433,8 +1433,9 @@ class VMTools:
         return timeout
 
     def interrupt(self):
-        """A reviewer's halt (DelegationLoop.request_hold): the running
-        command ends now, as if the user had stopped it."""
+        """A reviewer's halt (DelegationLoop.request_hold) or a message the
+        user sent now (DelegationLoop._hurry): the running command ends now,
+        as if the user had stopped it."""
         with self.session._lock:
             running = self._running
         if running is not None:
@@ -1454,9 +1455,10 @@ class VMTools:
         unregister = cancellation.register(command)
         with self.session._lock:
             self._running = command
-            # A halt that came while the VM started found nothing to end
-            # (interrupt): this command is stopped before it runs.
-            if getattr(self.loop, "hold", None) is not None:
+            # A halt or a message sent now (DelegationLoop._hurry) that came
+            # while the VM started found nothing to end (interrupt): this
+            # command is stopped before it runs.
+            if getattr(self.loop, "hold", None) is not None or getattr(self.loop, "hurried", False) is True:
                 command.cancel()
         started = self.session.clock()
 
@@ -1483,7 +1485,8 @@ class VMTools:
                     self.session.commands += 1
                     self.session.seconds += seconds
                 raise
-            # Ended by a reviewer's halt: for the agent, the user stopped it.
+            # Ended by a reviewer's halt or the user's message sent now: for the
+            # agent, the user stopped it.
             with self.session._lock:
                 self.session.commands += 1
                 self.session.seconds += seconds

@@ -440,16 +440,29 @@ body:not(.is-hero) #agentAnswer { padding-bottom: var(--space-7); }
 }
 .agent-queue-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-queue-state { flex: none; padding-right: var(--space-2); color: var(--ink-3); font-size: var(--font-size-xs); }
-.agent-queue-item[data-state="sending"] .agent-queue-state { animation: agent-queue-pulse var(--dur-beat) var(--ease-standard) infinite alternate; }
+.agent-queue-item:is([data-state="sending"], [data-state="now"]) .agent-queue-state { animation: agent-queue-pulse var(--dur-beat) var(--ease-standard) infinite alternate; }
 @keyframes agent-queue-pulse { to { opacity: .45; } }
-@media (prefers-reduced-motion: reduce) { .agent-queue-item[data-state="sending"] .agent-queue-state { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .agent-queue-item:is([data-state="sending"], [data-state="now"]) .agent-queue-state { animation: none; } }
 /* The app's one close cross (.close-button); 44px under a finger. */
 .agent-queue-remove { margin-left: calc(-1 * var(--space-2)); }
-/* A phone: what happens to it goes under the words, the cross beside both. */
+/* "Send now" (agent-chat.js hurry): a quiet text action at the row's end,
+   no frame, as the restore line under the usage. */
+.agent-queue-now {
+  flex: none; min-height: 32px; margin: 0; padding: 0 var(--space-3) 0 0; border: 0; background: none; color: var(--ink-2);
+  font: inherit; font-size: var(--font-size-xs); cursor: pointer; text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, currentColor 35%, transparent); text-underline-offset: 3px;
+}
+.agent-queue-now:focus-visible { outline: var(--focus-ring); outline-offset: 2px; border-radius: var(--radius-sm); }
+@media (hover: hover) and (pointer: fine) {
+  .agent-queue-now:hover { color: var(--ink); }
+}
+/* A phone: what happens to it goes under the words, the cross or "Send
+   now" beside both. */
 @media (max-width: 480px) {
   .agent-queue-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; column-gap: var(--space-2); padding-block: var(--space-2); }
   .agent-queue-state { grid-row: 2; padding-right: 0; }
-  .agent-queue-remove { grid-column: 2; grid-row: 1 / span 2; margin-left: 0; }
+  .agent-queue-remove, .agent-queue-now { grid-column: 2; grid-row: 1 / span 2; margin-left: 0; }
+  .agent-queue-now { min-height: 44px; padding-inline: var(--space-2); }
 }
 /* Every card above the field (agent-chat.js holdCard: a reviewer's pause, a
    domain the agent asks for, the agent's own questions) is one family: a
@@ -1267,7 +1280,18 @@ a.answer-link-missing { color: var(--ink-3); text-decoration: line-through; text
 /* A message the user sent into the running response (agent-activity.js
    userNote): their words in full ink after a quiet "You". */
 .agent-user-note { color: var(--ink); font-size: var(--font-size-ui); line-height: var(--trace-lh); overflow-wrap: anywhere; white-space: pre-wrap; }
-.agent-progress > .agent-user-note { margin: 0 0 var(--trace-gap); }
+/* The same messages in the turn (agent-activity.js userMessages): the
+   user's own turn, as their question stands (.thread-ask-bubble), only
+   while the activity is folded. */
+.agent-user-messages { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); margin: var(--space-2) 0 var(--space-4); }
+.agent-user-messages[hidden], .agent-activity[open] ~ .agent-user-messages { display: none; }
+.agent-user-message {
+  box-sizing: border-box; max-width: 70%; padding: 11px 15px; border-radius: var(--radius-lg); background: var(--chat-surface);
+}
+.agent-user-message-text {
+  margin: 0; color: var(--ink); font-family: var(--font-sans); font-size: var(--font-size-base);
+  line-height: var(--line-height-reading); letter-spacing: var(--tracking-tight); overflow-wrap: anywhere; white-space: pre-wrap;
+}
 /* A reviewer's halt in the activity (agent-activity.js holdView): who, why,
    what the user decided. The partial tone marks it while it waits. */
 .agent-hold-step { display: grid; gap: 2px; color: var(--ink); font-size: var(--font-size-ui); line-height: 1.55; }

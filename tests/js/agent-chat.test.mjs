@@ -1892,8 +1892,9 @@ describe("single-model agent chat", () => {
   });
 
   // A message typed while a response runs is never lost and always on screen:
-  // into the run when it reads messages, else in the queue.
-  it("queues a message typed during a response and sends it once the response is done", async () => {
+  // into the run, as in Claude Code, and out as the next message when the
+  // run ended before it read it. Any account: not only one with the workspace.
+  it("sends a message typed during a response into the run, and next when the run did not read it", async () => {
     const { window, document, dom } = boot();
     await selectAgent(window);
     const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
@@ -1901,26 +1902,109 @@ describe("single-model agent chat", () => {
     let resolve;
     window.streamSSERequest = vi.fn(() => new Promise(r => { resolve = r; }));
     window.sendQuestion = vi.fn();
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => String(url).endsWith("/notes")
+      ? { ok: true, json: async () => ({ status: "added", id: "n1" }) } : catalogFetch(url, options));
     const input = document.getElementById("questionInput");
     input.value = "Question";
     const pending = window.App.agentChat.send();
     await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalled());
     expect(window.App.agentChat.steering()).toBeNull();
     input.value = "Also compare the prices";
-    expect(window.App.agentChat.steering()).toEqual({ title: "Send after this response" });
+    expect(window.App.agentChat.steering()).toEqual({ title: "Send into the running response" });
     await window.App.agentChat.steer();
     expect(input.value).toBe("");
     expect(queue.hidden).toBe(false);
     expect(queue.querySelector(".agent-queue-text").textContent).toBe("Also compare the prices");
-    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sends after this response");
-    // Without the VM nothing goes into the run.
-    expect(window.fetch.mock.calls.some(([url]) => String(url).endsWith("/notes"))).toBe(false);
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Read before the next step");
+    const [, options] = window.fetch.mock.calls.find(([url]) => String(url).endsWith("/notes"));
+    expect(JSON.parse(options.body)).toEqual({ text: "Also compare the prices" });
+    // The run ended before its next step: the message is the next one.
     resolve({ ok: true, data: { response: "Answer", chat_id: "a".repeat(32), turn_id: "b".repeat(32),
       turn: { id: "b".repeat(32), question: "Question", consensus: "Answer", mode: "Agent", execution_mode: "agent" } } });
     await pending;
     await vi.waitFor(() => expect(window.sendQuestion).toHaveBeenCalled());
     expect(input.value).toBe("Also compare the prices");
     expect(queue.hidden).toBe(true);
+    dom.window.close();
+  });
+
+  // Claude Code's interrupt: "Send now" on a message the run has not read
+  // yet, or Ctrl/Cmd+Enter in the field, breaks off what runs for it.
+  it("sends a message now from its queue row or with Ctrl+Enter", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
+    document.body.append(queue);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    const catalogFetch = window.fetch;
+    let serial = 0;
+    window.fetch = vi.fn(async (url, options) => String(url).endsWith("/notes")
+      ? { ok: true, json: async () => ({ status: "added", id: `abc${++serial}`.padEnd(12, "0") }) }
+      : String(url).endsWith("/now") ? { ok: true, json: async () => ({ status: "now" }) } : catalogFetch(url, options));
+    const input = document.getElementById("questionInput");
+    input.value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    input.value = "Use the newer data";
+    await window.App.agentChat.steer();
+    const row = queue.querySelector(".agent-queue-item");
+    expect(row.dataset.state).toBe("waiting");
+    const now = row.querySelector(".agent-queue-now");
+    expect(now.textContent).toBe("Send now");
+    expect(now.title).toMatch(/\((Ctrl|Cmd)\+Enter\)$/);
+    now.click();
+    await vi.waitFor(() => expect(window.fetch.mock.calls.some(([url]) => String(url).endsWith("/now"))).toBe(true));
+    const [hurried, hurry] = window.fetch.mock.calls.find(([url]) => String(url).endsWith("/now"));
+    expect(hurried).toContain(`/requests/${encodeURIComponent(run.requestIdentity)}/notes/abc100000000/now`);
+    expect(hurry.method).toBe("POST");
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sending now…");
+    expect(queue.querySelector(".agent-queue-now")).toBeNull();
+    // Read: off the queue, as any message the run took.
+    handlers.activity.receive({ version: 1, step_id: "completion:3", id: "completion:3/note-abc100000000", kind: "progress",
+      text: "Use the newer data", from_user: true });
+    expect(queue.hidden).toBe(true);
+    // Ctrl+Enter (app-init.js): the message goes in with ``now`` at once.
+    input.value = "Stop, use the 2026 figures";
+    await window.App.agentChat.steer({ now: true });
+    const sent = window.fetch.mock.calls.filter(([url]) => String(url).endsWith("/notes"));
+    expect(sent).toHaveLength(2);
+    expect(JSON.parse(sent[1][1].body)).toEqual({ text: "Stop, use the 2026 figures", now: true });
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sending now…");
+    window.App.runRegistry.cancel(run.runId, "user");
+    dom.window.close();
+  });
+
+  // Typed before the run's first step (its request still on its way): it
+  // goes in once the run works, not after it.
+  it("hands a message typed before the run started to the run once it works", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
+    document.body.append(queue);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => String(url).endsWith("/notes")
+      ? { ok: true, json: async () => ({ status: "added", id: "n1" }) } : catalogFetch(url, options));
+    const input = document.getElementById("questionInput");
+    input.value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const run = window.App.runRegistry.visible();
+    run.metadata.requestSent = false;
+    input.value = "In German, please";
+    await window.App.agentChat.steer();
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sends after this response");
+    expect(window.fetch.mock.calls.some(([url]) => String(url).endsWith("/notes"))).toBe(false);
+    run.metadata.requestSent = true;
+    handlers.activity.receive({ version: 1, step_id: "completion:0", id: "completion:0/status", kind: "status",
+      status: "working", text: "Working" });
+    await vi.waitFor(() => expect(queue.querySelector(".agent-queue-state").textContent).toBe("Read before the next step"));
+    expect(window.fetch.mock.calls.filter(([url]) => String(url).endsWith("/notes"))).toHaveLength(1);
+    window.App.runRegistry.cancel(run.runId, "user");
     dom.window.close();
   });
 
@@ -2155,10 +2239,7 @@ describe("single-model agent chat", () => {
   });
 
   it("sends a message into a response that reads them and lets it go once the run read it", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
     document.body.append(queue);
@@ -2197,9 +2278,7 @@ describe("single-model agent chat", () => {
   });
 
   it("sends a message into a temporary chat's running response like into any other", async () => {
-    // A temporary chat has the account's workspace.
     const { window, document, dom } = boot({ setup(w) {
-      w.document.body.classList.add("viewer-has-workspace");
       // The switch is on (temporary-chat.js): the first message starts the chat.
       w.App.temporaryChat = { armed: () => true, start: () => "token-1", adopt: () => true, token: () => "token-1",
         unanswered: () => false, leave: vi.fn(), arm: vi.fn(), sync: vi.fn(), shown: () => true };
@@ -2254,10 +2333,7 @@ describe("single-model agent chat", () => {
   // The run read the message before the POST's answer with its id arrived:
   // it stayed queued and went out again after the response, paid twice.
   it("never sends a message again that the run read before its id came back", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
     document.body.append(queue);
@@ -2289,10 +2365,7 @@ describe("single-model agent chat", () => {
   });
 
   it("keeps a message for the next turn once the answer is fixed and under review", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
     document.body.append(queue);
@@ -2319,10 +2392,7 @@ describe("single-model agent chat", () => {
   // A reviewer paused the work (agent_audit.py halt): one card
   // above the field until the user decides; the agent never learns of it.
   it("shows a reviewer's pause above the field and takes the user's decision", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);
@@ -2423,10 +2493,7 @@ describe("single-model agent chat", () => {
   // reviewers stand each with its reason, and without any answer the card
   // says the step could not be checked.
   it("asks before a step runs when reviewers stopped it or none could check it", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);
@@ -2477,10 +2544,7 @@ describe("single-model agent chat", () => {
   // same pause again with a new revision, drawn again with both reasons and
   // the words already typed into its reply.
   it("draws a pause again when another reviewer's halt joins it", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);
@@ -2526,10 +2590,7 @@ describe("single-model agent chat", () => {
   // decides every one, after the reviewers; "Allow for this chat" goes on,
   // "Don't allow" tells the agent no.
   it("asks the user about a domain with the reviewers' verdict and the agent's reason", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);
@@ -2590,10 +2651,7 @@ describe("single-model agent chat", () => {
   it("lets the user pick one of the agent's answers on a choice card", async () => {
     // On chess.com: "against a person or a bot?" on a card that
     // only said Allow or Don't allow, and the agent guessed from "allowed".
-    const { window, document } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);
@@ -2628,10 +2686,7 @@ describe("single-model agent chat", () => {
   });
 
   it("hands the user the browser, asks before a step and waits while they have the browser", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);
@@ -2728,10 +2783,7 @@ describe("single-model agent chat", () => {
   // pasted into the card's field, it goes to the workspace
   // alone, by POST, and the field is no form; "Not now" declines.
   it("takes a key in the card's own field and sends it to the workspace alone", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);
@@ -2810,10 +2862,7 @@ describe("single-model agent chat", () => {
   // the pressed button says it is on its way meanwhile and the card says why
   // it failed; a pause decided elsewhere closes the card.
   it("sends a decision within a deadline, keeps Stop free and closes a pause that is over", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);
@@ -2862,10 +2911,7 @@ describe("single-model agent chat", () => {
   // A second reviewer halts while the pause is open,
   // and the server sends the same pause with both reasons.
   it("adds a second halt's reason to the open card without losing words or a decision", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);
@@ -2912,10 +2958,7 @@ describe("single-model agent chat", () => {
   });
 
   it("ends a running review with the failed run instead of reviewing on", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     let handlers, fail;
     window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => {
@@ -2943,10 +2986,7 @@ describe("single-model agent chat", () => {
   // the field below never sends. Only the card's state decides, never the
   // words: Enter puts them, as dots, into the card's key field.
   it("puts the field's words into the open key card instead of sending them", async () => {
-    const { window, document, dom } = boot({ setup(w) {
-      // The account has the workspace: a running response reads messages.
-      w.document.body.classList.add("viewer-has-workspace");
-    } });
+    const { window, document, dom } = boot();
     await selectAgent(window);
     const host = document.createElement("div"); host.id = "agentHold"; host.hidden = true;
     document.body.append(host);

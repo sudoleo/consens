@@ -1128,35 +1128,43 @@ def restore_agent_vm(request: Request, chat_id: str, turn_id: str):
 class AgentNoteRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     text: str = Field(min_length=1, max_length=4000)
+    # "Send now": the message breaks off what runs (DelegationLoop._hurry).
+    now: bool = False
+
+
+_NOT_RUNNING = "This response is no longer running. Send your message as a new one."
+
+
+def _running_turn_id(store, uid, chat_id, request_id):
+    """The turn of a response that still runs, by the browser's request
+    identity, or None."""
+    if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
+        raise HTTPException(status_code=404, detail="Request not found")
+    turn_id = _idempotent_turn_id(chat_id, request_id)
+    try:
+        turn = store.get_turn(uid, chat_id, turn_id)
+    except ChatNotFound:
+        turn = None
+    return turn_id if turn and turn.get("status") == "pending" else None
 
 
 @router.post("/agent/chats/{chat_id}/requests/{request_id}/notes")
 @limiter.limit("30/minute")
 def add_agent_note(request: Request, chat_id: str, request_id: str, payload: AgentNoteRequest):
     """A message into the running response, by the browser's request identity
-    (Enter while it runs, agent-chat.js deliver; with Agent VM). The run
-    takes it before its next step (DelegationLoop._take_notes)."""
+    (Enter while it runs, agent-chat.js deliver). The run takes it before its
+    next step (DelegationLoop._take_notes); with ``now`` at once (_hurry)."""
     uid = _chat_uid(request)
     require_agent_access(uid)
-    if not re.fullmatch(r"[0-9a-f]{32}", chat_id) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", request_id):
-        raise HTTPException(status_code=404, detail="Request not found")
     text = payload.text.strip()
     if not text:
         raise HTTPException(status_code=422, detail="Write a message first.")
     try:
         store = AgentRunStore(db_firestore)
-        turn_id = _idempotent_turn_id(chat_id, request_id)
-        try:
-            turn = store.get_turn(uid, chat_id, turn_id)
-        except ChatNotFound:
-            turn = None
-        if not turn or turn.get("status") != "pending":
-            return JSONResponse({"error": "This response is no longer running. Send your message as a new one.",
-                                 "code": "not_running"}, status_code=409)
-        if ((turn.get("agent_settings") or {}).get("agent_preferences") or {}).get("vm") != "on":
-            return JSONResponse({"error": "Messages during a response need the workspace.", "code": "notes_unavailable"},
-                                status_code=409)
-        note = store.add_user_note(uid, chat_id, turn_id, text)
+        turn_id = _running_turn_id(store, uid, chat_id, request_id)
+        if turn_id is None:
+            return JSONResponse({"error": _NOT_RUNNING, "code": "not_running"}, status_code=409)
+        note = store.add_user_note(uid, chat_id, turn_id, text, now=payload.now)
         loop = agent_background.run_loop(uid, chat_id, request_id)
         if loop is not None:
             # This process runs it: the run has it at once.
@@ -1164,8 +1172,40 @@ def add_agent_note(request: Request, chat_id: str, request_id: str, payload: Age
         return JSONResponse({"status": "added", "id": note["id"]}, headers={"Cache-Control": "private, no-store"})
     except TurnStatusConflict as exc:
         return JSONResponse({"error": str(exc), "code": "not_running"}, status_code=409)
+    except HTTPException:
+        raise
     except Exception as exc:
         _raise_store_error(exc, operation="add agent note", uid=uid)
+
+
+@router.post("/agent/chats/{chat_id}/requests/{request_id}/notes/{note_id}/now")
+@limiter.limit("30/minute")
+def hurry_agent_note(request: Request, chat_id: str, request_id: str, note_id: str):
+    """"Send now" on a message already sent into the running response
+    (agent-chat.js hurry): the run breaks off what it does for it, unless
+    it has read it already (DelegationLoop._receive_notes)."""
+    uid = _chat_uid(request)
+    require_agent_access(uid)
+    if not re.fullmatch(r"[0-9a-f]{12}", note_id):
+        raise HTTPException(status_code=404, detail="Message not found")
+    try:
+        store = AgentRunStore(db_firestore)
+        turn_id = _running_turn_id(store, uid, chat_id, request_id)
+        if turn_id is None:
+            return JSONResponse({"error": _NOT_RUNNING, "code": "not_running"}, status_code=409)
+        saved = store.hurry_user_note(uid, chat_id, turn_id, note_id)
+        loop = agent_background.run_loop(uid, chat_id, request_id)
+        if loop is not None:
+            loop.receive(saved)
+        return JSONResponse({"status": "now"}, headers={"Cache-Control": "private, no-store"})
+    except TurnStatusConflict as exc:
+        return JSONResponse({"error": str(exc), "code": "not_running"}, status_code=409)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="Message not found")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        _raise_store_error(exc, operation="hurry agent note", uid=uid)
 
 
 def _decide_hold(store, uid, chat_id, request_id, turn_id, hold_id, action, text="", choice=None, revision=None):

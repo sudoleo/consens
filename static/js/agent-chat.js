@@ -1485,12 +1485,15 @@
     App.showPopup?.(message);
   }
   // A message typed while a response runs (Enter or Send, app-init.js,
-  // query-send.js): never lost, always on screen.
-  // A run that reads messages (Agent VM, routers/agent.py add_agent_note)
-  // takes it before its next step, like typing to Claude Code while it works;
-  // the activity then shows it under "You". Any other waits in the queue
-  // above the field and goes out as the next message once the response is
-  // done. Stop or a failure puts it back in the field.
+  // query-send.js): never lost, always on screen. As in Claude Code, the
+  // run takes it before its next step (routers/agent.py add_agent_note): the
+  // calls under way end first, then the agent reads it, and the turn shows
+  // it as the user's message from there on (agent-activity.js userMessages).
+  // "Send now" on it, or Ctrl/Cmd+Enter, breaks off what runs instead
+  // (hurry). One the run cannot take any more (its answer stands, or it has
+  // not started) waits in the queue above the field and goes out as the next
+  // message once the response is done. Stop or a failure puts it back in
+  // the field.
   let queueSerial = 0;
   function queueOf(context) {
     return context?.metadata ? (context.metadata.queue ||= []) : [];
@@ -1524,14 +1527,10 @@
           ...(noteId ? { noteId } : {}), ...(unsure && !noteId ? { unsure: true } : {}) };
       });
   }
-  // A running response reads messages where the account has the workspace
-  // (routers/agent.py add_agent_note). Once the answer is fixed (a version
-  // under review) the run takes no more steps: a message then waits for its
-  // end like any other. A temporary chat too: it has the account's
-  // workspace like any chat.
+  // Once the answer is fixed (a version under review) the run takes no more
+  // steps: a message then waits for its end.
   function readsMessages(context) {
-    return document.body.classList.contains("viewer-has-workspace")
-      && !context?.metadata?.agentReview?.versions?.length;
+    return !context?.metadata?.agentReview?.versions?.length;
   }
   // What Send does now: null when it stops the response (an empty field).
   function steering() {
@@ -1543,7 +1542,8 @@
       : hold ? "Send to the agent and let it go on"
       : readsMessages(context) ? "Send into the running response" : "Send after this response" };
   }
-  async function steer() {
+  // ``now`` (Ctrl/Cmd+Enter, app-init.js): the message breaks off what runs.
+  async function steer({ now = false } = {}) {
     const context = registry.visible();
     const input = document.getElementById("questionInput");
     if (!steering() || !input) return false;
@@ -1577,37 +1577,65 @@
       }
       return true;
     }
-    const item = { key: ++queueSerial, text, state: "queued" };
+    const item = { key: ++queueSerial, text, state: "queued", ...(now ? { now: true } : {}) };
     queueOf(context).push(item);
     persistQueue(context);
     renderQueue();
     if (readsMessages(context)) await deliver(context, item);
     return true;
   }
+  function notesUrl(context) {
+    return `/agent/chats/${encodeURIComponent(context.metadata.chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/notes`;
+  }
   async function deliver(context, item) {
-    const chatId = context.metadata.chatId;
-    // Before the response has started, the message waits for its end.
-    if (!chatId || !context.metadata.requestSent) return;
+    // Before the response has started it waits for the run's first step
+    // (deliverQueued), else for its end. Tried once: one the run refused
+    // goes out after it.
+    if (!context.metadata.chatId || !context.metadata.requestSent || item.tried) return;
+    item.tried = true;
     item.state = "sending";
     persistQueue(context);
     renderQueue();
-    const url = `/agent/chats/${encodeURIComponent(chatId)}/requests/${encodeURIComponent(context.requestIdentity)}/notes`;
     try {
       const token = await window.auth.currentUser.getIdToken();
-      const response = await fetch(url, { method: "POST", body: JSON.stringify({ text: item.text }),
+      const response = await fetch(notesUrl(context), { method: "POST",
+        body: JSON.stringify({ text: item.text, ...(item.now ? { now: true } : {}) }),
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" } });
       const data = await response.json().catch(() => ({}));
       if (response.ok && data.id && context.metadata.readNotes?.includes(data.id)) {
         // Read before this answer arrived (delivered): done, never sent again.
         const queue = queueOf(context);
         if (queue.includes(item)) queue.splice(queue.indexOf(item), 1);
-      } else if (response.ok && data.id) Object.assign(item, { state: "waiting", noteId: data.id });
+      } else if (response.ok && data.id) Object.assign(item, { state: item.now ? "now" : "waiting", noteId: data.id });
       else item.state = "queued";
     } catch (_) {
       // Unreachable now: it goes out with the next message instead.
       item.state = "queued";
     }
     persistQueue(context);
+    renderQueue();
+  }
+  // Typed before the run's first step: it goes in once the run works.
+  function deliverQueued(context) {
+    if (!readsMessages(context)) return;
+    for (const item of queueOf(context)) if (item.state === "queued" && !item.tried) deliver(context, item);
+  }
+  // "Send now" on a message the run has not read yet: the run breaks off
+  // what it does for it (routers/agent.py hurry_agent_note). Once read, the
+  // activity takes it off the queue as for any other (delivered).
+  async function hurry(context, item) {
+    if (item.state !== "waiting" || !item.noteId) return;
+    item.state = "now";
+    renderQueue();
+    try {
+      const token = await window.auth.currentUser.getIdToken();
+      const response = await fetch(`${notesUrl(context)}/${encodeURIComponent(item.noteId)}/now`,
+        { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      // Gone meanwhile (the response ended): it goes out after it (flushQueue).
+      if (!response.ok && response.status !== 409 && item.state === "now") item.state = "waiting";
+    } catch (_) {
+      if (item.state === "now") item.state = "waiting";
+    }
     renderQueue();
   }
   // The activity showed the message under "You": the run has read it. Its
@@ -1675,7 +1703,11 @@
     App.showPopup?.(context.status === "succeeded" ? "Your waiting message is back in the field, before your new text."
       : "Your waiting message is back in the field: the response ended before it could take it.");
   }
-  const queueLabels = { queued: "Sends after this response", sending: "Sending…", waiting: "Read before the next step" };
+  const queueLabels = { queued: "Sends after this response", sending: "Sending…", waiting: "Read before the next step",
+    now: "Sending now…" };
+  // As the Ctrl+K of the chat search (app-init.js): Cmd on a Mac.
+  const onApple = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || "");
+  const nowShortcut = onApple ? "Cmd+Enter" : "Ctrl+Enter";
   function renderQueue() {
     if (!window.document?.body) return;
     const host = document.getElementById("agentQueue");
@@ -1713,6 +1745,21 @@
           document.getElementById("questionInput")?.focus({ preventScroll: true });
         });
         row.append(remove);
+      }
+      if (item.state === "waiting" && item.noteId) {
+        // A quiet link, as on the pause card: the message goes in after the
+        // calls under way unless the user wants it in now.
+        const now = document.createElement("button");
+        now.type = "button";
+        now.className = "agent-queue-now";
+        now.textContent = "Send now";
+        now.title = `Stop the current step and give the agent this message now (${nowShortcut})`;
+        now.setAttribute("aria-keyshortcuts", onApple ? "Meta+Enter" : "Control+Enter");
+        now.addEventListener("click", () => {
+          hurry(context, item);
+          document.getElementById("questionInput")?.focus({ preventScroll: true });
+        });
+        row.append(now);
       }
       return row;
     }));
@@ -2725,6 +2772,7 @@
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         App.agentActivity?.receive(context.metadata.agentActivity, event);
         delivered(context, event);
+        deliverQueued(context);
         if (event.kind === "status" && event.clear_response) context.consensus.streamText = "";
         if (event.settings) context.metadata.agentSettings = event.settings;
         if (event.kind === "usage") context.metadata.agentUsage = event.usage;

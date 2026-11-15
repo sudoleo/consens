@@ -212,23 +212,32 @@ describe("VM calls in the activity", () => {
   });
 
   // A message the user sent into the running response.
-  it("shows the user's message in their own words, live and in the timeline", () => {
+  it("shows the user's message in their own words, in the turn and in the timeline", () => {
     const { host, activity } = setup();
     const events = [];
     activity.receive(events, vm({ id: "c:1/tool", status: "succeeded", command: "make", exit_code: 0 }));
     activity.receive(events, { version: 1, kind: "progress", id: "completion:1/note-n1", text: "Done", from_user: true });
     activity.receive(events, vm({ id: "c:2/tool", status: "running", command: "make test" }));
     activity.render(host, { running: true, status: "running", events });
-    const live = host.querySelector(".agent-progress .agent-user-note");
-    expect(live.querySelector(".agent-user-note-who").textContent).toBe("You");
+    // The user's message in the turn, after the run's line and before its live lines.
+    const messages = host.querySelector(".agent-user-messages");
+    expect(messages.hidden).toBe(false);
+    expect([...host.children].indexOf(messages)).toBeLessThan([...host.children].indexOf(host.querySelector(".agent-progress")));
     // The words stay the user's: never translated, even when they match a label.
-    const words = live.querySelector(".agent-user-note-text");
+    const words = messages.querySelector(".agent-user-message-text");
     expect(words.textContent).toBe("Done");
     expect(words.hasAttribute("data-i18n-skip")).toBe(true);
+    expect(host.querySelector(".agent-progress .agent-user-note")).toBeNull();
     // A note between commands does not count as a step of the fold.
     expect(host.querySelector(".agent-vm-fold")).toBeNull();
-    const saved = host.querySelector(".agent-activity-content .agent-user-note .agent-user-note-text");
-    expect(saved.textContent).toBe("Done");
+    // The opened activity: at its place among the steps, after a quiet "You".
+    const saved = host.querySelector(".agent-activity-content .agent-user-note");
+    expect(saved.querySelector(".agent-user-note-who").textContent).toBe("You");
+    expect(saved.querySelector(".agent-user-note-text").textContent).toBe("Done");
+    // Still there once the run ended, as its answer came after it.
+    activity.render(host, { running: false, status: "succeeded", events });
+    expect(messages.hidden).toBe(false);
+    expect(messages.querySelectorAll(".agent-user-message")).toHaveLength(1);
   });
 
   // The 63 entries beside

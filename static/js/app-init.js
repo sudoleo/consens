@@ -872,8 +872,10 @@
             }
             if (window.isRunActive && window.isRunActive()) {
               event.preventDefault();
-              // The words go into the running response or its queue (agent-chat.js steer).
-              window.App.agentChat?.steer?.();
+              // The words go into the running response or its queue
+              // (agent-chat.js steer); with Ctrl or Cmd they break off
+              // what runs ("Send now").
+              window.App.agentChat?.steer?.({ now: event.ctrlKey || event.metaKey });
               return;
             }
             if (window.isQueryRequestRunning && window.isQueryRequestRunning()) {

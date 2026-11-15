@@ -703,9 +703,10 @@ class AgentSessionStore:
             return update
         return self._agent_transaction(uid, operation)
 
-    def add_user_note(self, uid, chat_id, turn_id, text):
+    def add_user_note(self, uid, chat_id, turn_id, text, *, now=False):
         """A message of the user into the running response (DelegationLoop
-        takes it before its next step). At most USER_NOTES_MAX per response."""
+        takes it before its next step; ``now``: it breaks off what runs, see
+        DelegationLoop._hurry). At most USER_NOTES_MAX per response."""
         from uuid import uuid4
         ref = self.receipt_ref(uid, chat_id, turn_id)
 
@@ -718,9 +719,33 @@ class AgentSessionStore:
             if len(notes) >= USER_NOTES_MAX:
                 raise TurnStatusConflict("This response already has the most messages it takes while it runs.")
             note = {"id": uuid4().hex[:12], "text": text[:USER_NOTE_CHARS],
-                    "at": datetime.now(timezone.utc).isoformat()}
+                    "at": datetime.now(timezone.utc).isoformat(), **({"now": True} if now else {})}
             tx.update(ref, {"user_notes": [*notes, note]})
             return note
+        return self._agent_transaction(uid, operation)
+
+    def hurry_user_note(self, uid, chat_id, turn_id, note_id):
+        """"Send now" on a message the user sent into the running response:
+        marked ``now`` on the root, where the run's watcher reads it too.
+        Returns the root's messages as saved (DelegationLoop.receive). Raises
+        TurnStatusConflict once the response no longer runs, KeyError for a
+        message it does not have."""
+        ref = self.receipt_ref(uid, chat_id, turn_id)
+
+        def operation(tx):
+            persistence_guard.ensure_account_write_allowed(uid=uid, db=self.db, transaction=tx)
+            data = ref.get(transaction=tx).to_dict() or {}
+            if data.get("run_status") != "running" or data.get("cancel_requested"):
+                raise TurnStatusConflict("This response is no longer running. Send your message as a new one.")
+            notes = list(data.get("user_notes") or [])
+            index = next((i for i, note in enumerate(notes) if isinstance(note, dict) and note.get("id") == note_id),
+                         None)
+            if index is None:
+                raise KeyError(note_id)
+            if notes[index].get("now") is not True:
+                notes[index] = {**notes[index], "now": True}
+                tx.update(ref, {"user_notes": notes})
+            return {"user_notes": notes}
         return self._agent_transaction(uid, operation)
 
     def stop_delegation(self, uid, chat_id, turn_id):

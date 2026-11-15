@@ -179,6 +179,9 @@ WATCH_PAUSED_SECONDS = 10
 # run, so the agent reads the message first. All the agent learns: a pause of
 # the user.
 HOLD_STEERED = "Not run: the user paused your work and wrote to you. Read their message first."
+# The same after the user's "Send now" (a note with ``now``): their message
+# broke off the step, its later calls wait for the agent's next step.
+CALL_AFTER_MESSAGE = "Not run: the user interrupted your work with a message. Read it first."
 # The calls of one step run one after another, at most this many. What
 # a call that does not run reads instead, by why (the batch in run()): every
 # call of a step gets exactly one result, or the provider refuses the next
@@ -550,6 +553,10 @@ class DelegationLoop(AgentLoop):
         # The user's messages into this run (USER_NOTE_OPEN): seen ids, and
         # those not yet in the conversation.
         self.notes_seen, self.notes = set(), deque()
+        # "Send now" (a note with ``now``, _receive_notes): the ids it was
+        # asked for, and whether one waits that breaks off what runs now, until
+        # _take_notes gives it to the agent.
+        self.notes_hurried, self.hurried = set(), False
         # A reviewer's halt (request_hold): the run waits for the user before
         # its next step or call, and its time stands still meanwhile. Nothing
         # of it enters the agent's conversation.
@@ -573,7 +580,7 @@ class DelegationLoop(AgentLoop):
         # The answer is fixed (_finish_merged): reviewers halt nothing more.
         self.answer_fixed = False
         # The cancellation of the agent's step that streams now (_halt_scope).
-        self.step_halt = None
+        self.step_halt, self.step_hurriable = None, True
         # Every hold of the turn as it ended, without its reasons (_end_hold).
         self.holds = []
         self.paused_seconds = 0.0
@@ -2160,7 +2167,7 @@ class DelegationLoop(AgentLoop):
             else:
                 self._check(cancellation)
                 provider_attempted = True
-                streaming = self._halt_scope(halt)
+                streaming = self._halt_scope(halt, hurriable=not summary)
                 source = value.stream(model=model, messages=messages, api_key=self.api_key, tools=tools,
                                       native_searches=searches, allow_tool_calls=allow_tools,
                                       session_id=self.provider_session if continues_agent else None)
@@ -2368,11 +2375,14 @@ class DelegationLoop(AgentLoop):
                 yield self.tool_event(step + ":web_search", "web_search", "succeeded", sources=value.sources, count=count, server_tool=True)
         return value
 
-    def _halt_scope(self, halt):
+    def _halt_scope(self, halt, *, hurriable=True):
         """While the agent's own step streams, ``halt`` is the provider's
         cancellation (a child of the turn's: Stop still ends it) and what
-        request_hold cancels; a hold already open breaks the step off at
-        once. Returns what ends that (``close``)."""
+        request_hold and the user's "Send now" (_hurry) cancel; a hold
+        already open breaks the step off at once, and so does a message sent
+        now that came after the step took the user's messages. Not
+        ``hurriable``: a summary, which the run needs before any next step
+        and would only write again. Returns what ends that (``close``)."""
         from contextlib import ExitStack
         scope = ExitStack()
         if halt is None:
@@ -2380,8 +2390,8 @@ class DelegationLoop(AgentLoop):
         scope.callback(self.cancellation.register(halt))
         scope.enter_context(bind_provider_cancellation(halt))
         with self.condition:
-            self.step_halt = halt
-            held = self.hold is not None and not self.hold.get("ask")
+            self.step_halt, self.step_hurriable = halt, hurriable
+            held = (self.hold is not None and not self.hold.get("ask")) or (hurriable and self.hurried)
         scope.callback(self._step_streamed, halt)
         if held:
             halt.cancel()
@@ -3213,20 +3223,49 @@ class DelegationLoop(AgentLoop):
         return decision
 
     def _receive_notes(self, root):
-        """New messages of the user from the run's root (the watcher)."""
+        """New messages of the user from the run's root (the watcher). One
+        with ``now`` (sent so, or "Send now" on it later) that the agent has
+        not read yet breaks off what runs now (_hurry), once."""
+        hurry = False
         for note in (root or {}).get("user_notes") or []:
-            if not isinstance(note, dict) or not isinstance(note.get("text"), str) or note.get("id") in self.notes_seen:
+            if not isinstance(note, dict) or not isinstance(note.get("text"), str):
                 continue
             with self.condition:
-                self.notes_seen.add(note.get("id"))
-                self.notes.append(note)
-                self.condition.notify_all()
+                if note.get("id") not in self.notes_seen:
+                    self.notes_seen.add(note.get("id"))
+                    self.notes.append(note)
+                    self.condition.notify_all()
+                if note.get("now") is True and note.get("id") not in self.notes_hurried:
+                    self.notes_hurried.add(note.get("id"))
+                    if any(waiting.get("id") == note.get("id") for waiting in self.notes):
+                        self.hurried = hurry = True
+        if hurry:
+            self._hurry()
+
+    def _hurry(self):
+        """The user's "Send now": their message goes to the agent at once, as
+        Claude Code's interrupt does. The step that streams now breaks off
+        (its text goes back, it runs again with the message: _past_halts), a
+        running workspace command ends as if the user had stopped it, and the
+        batch's later calls do not run (CALL_AFTER_MESSAGE). A call already
+        running elsewhere (a page read, a comparison) ends first. Nothing once
+        the answer is fixed: the page sends the message as the next one."""
+        with self.condition:
+            if self.closed.is_set() or self.cancellation.cancelled or self.answer_fixed:
+                return
+            streaming = self.step_halt if self.step_hurriable else None
+            self.condition.notify_all()
+        if self.vm_tools is not None:
+            self.vm_tools.interrupt()
+        if streaming is not None:
+            streaming.cancel()
 
     def _take_notes(self, step):
         """The user's new messages join the conversation before the next
         step, each one shown in the activity in the user's own words."""
         with self.condition:
             notes, self.notes = list(self.notes), deque()
+            self.hurried = False
         for note in notes:
             self.messages.append({"role": "user", "content": f"{USER_NOTE_OPEN}\n{note['text']}"})
             # The user's own words, like their message: a settings change
@@ -3319,18 +3358,21 @@ class DelegationLoop(AgentLoop):
                                             **step_args, **elsewhere))[0]
 
     def _past_halts(self, model, messages, step, steps, registry, **step_args):
-        """The agent's step (_step), once more after a reviewer's halt broke
-        it off while it streamed (``value.halted``): what it showed goes
-        back, the run waits for the user, and the step runs again on the next
-        index, after a message ("steer") with that message in view. Returns
-        the value and the step it ran as."""
+        """The agent's step (_step), once more after a reviewer's halt or the
+        user's "Send now" (_hurry) broke it off while it streamed
+        (``value.halted``): what it showed goes back, the run waits for the
+        user where a hold is open, and the step runs again on the next index
+        with the user's messages in view (their decision "steer", a message
+        sent now, any other that came meanwhile). Returns the value and the
+        step it ran as."""
         while True:
             value = yield from self._step(model, messages, step, registry, self.cancellation, **step_args)
             if getattr(value, "halted", None) is None:
                 return value, step
             yield from self._retract(value)
-            if (yield from self._hold_wait()) == "steer":
-                self._take_notes(step)
+            yield from self._hold_wait()
+            if self._take_notes(step):
+                yield from self._events()
             index = next(steps, None)
             if index is None:
                 raise AnalysisBudgetExceeded("Agent orchestration call limit reached")
@@ -4043,10 +4085,12 @@ class DelegationLoop(AgentLoop):
                             # the next call waits for the user. Once the user
                             # wrote to the agent, the rest of the batch waits
                             # for the agent's next step instead; so does a
-                            # pause that came after a call of this step ran.
+                            # pause that came after a call of this step ran,
+                            # and a message the user sent now (_hurry).
                             paused = yield from self._hold_wait()
-                            if paused == "steer" or (paused is not None and position):
-                                stopped = HOLD_STEERED if paused == "steer" else CALL_AFTER_PAUSE
+                            if paused == "steer" or self.hurried or (paused is not None and position):
+                                stopped = (HOLD_STEERED if paused == "steer" else CALL_AFTER_MESSAGE if self.hurried
+                                           else CALL_AFTER_PAUSE)
                                 started = prefetched.pop(call["id"], None)
                                 if started is not None:
                                     yield from unreached(call, started, stopped)
@@ -4203,6 +4247,14 @@ class DelegationLoop(AgentLoop):
                             if self.merged:
                                 yield from self._retract(value)
                             continue
+                    if self.hurried:
+                        # The user sent a message now just as the answer
+                        # stood written (_hurry found no step to break off):
+                        # it goes back as after a message on a halt above,
+                        # and the agent's next step has the message.
+                        if self.merged:
+                            yield from self._retract(value)
+                        continue
                     if self.merged:
                         # The agent wrote the answer itself (agent_answer_mode).
                         yield from self._finish_merged(value)

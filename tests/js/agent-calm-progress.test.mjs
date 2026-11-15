@@ -208,7 +208,7 @@ describe("the calm live view", () => {
     activity.dispose(host);
   });
 
-  it("keeps what waits on the user and what the user wrote, and the plan above", () => {
+  it("keeps what waits on the user and the plan above, and what the user wrote above both", () => {
     const { activity, events, render, preview, status, host } = setup();
     activity.receive(events, tool({ name: "update_plan", status: "succeeded",
       items: [{ content: "Find the rates", status: "completed" }, { content: "Compare them", status: "in_progress" }] }));
@@ -217,7 +217,9 @@ describe("the calm live view", () => {
     render();
     expect(preview().firstElementChild.classList.contains("agent-plan")).toBe(true);
     expect(preview().querySelector(".agent-plan summary").textContent).toBe("Plan · 1 of 2 done");
-    expect(preview().querySelector(".agent-user-note .agent-user-note-text").textContent).toBe("Also look at Austria.");
+    // What the user wrote is their message in the turn, above the lines, not one of them.
+    expect(preview().querySelector(".agent-user-note")).toBeNull();
+    expect(host.querySelector(".agent-user-messages .agent-user-message-text").textContent).toBe("Also look at Austria.");
     // A reviewer's pause: no line of work while the run waits, the pause says why.
     activity.receive(events, { version: 1, kind: "hold", id: "hold:1", state: "waiting", halt: "harm",
       reviewer: "Gemini", reason: "This deletes the folder." });

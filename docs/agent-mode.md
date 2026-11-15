@@ -3518,31 +3518,64 @@ Nachricht (`VMSession.close`, `users/{uid}/chat_state/agent_vm_time_<Tag>`);
 `/user_status` liefert `vm_time`, die Einstellungen zeigen „VM time today“. Die App selbst nutzt ihn nur für Hintergrundprozesse,
 gedeckelt (siehe unten).
 
-**Eingreifen (seit 2026-10-26).** Zwei Wege neben Stop, beide nur mit der
-VM:
-- *Nachricht in den laufenden Lauf.* Enter oder Senden mit Text im
-  Eingabefeld schickt die Nachricht während eines laufenden VM-Laufs hinein
-  (`agent-chat.js` `steer`; seit 2026-10-26 wird der Knopf mit Text im Feld
-  zu Senden, „Send into the running response“, leer bleibt er Stop). Jede
-  Nachricht steht sofort als Zeile in `#agentQueue` über dem Feld: „Read
-  before the next step“, bis die Aktivität sie unter „You“ zeigt
-  (`note-<id>`). Ohne VM (oder vor dem Start) wartet sie dort als „Sends
-  after this response“ (mit ×), seit 2026-10-27 auch, sobald die Antwort
-  fixiert ist (eine Version in der Review, `readsMessages`): Danach macht der
-  Agent keinen Schritt mehr, die Nachricht ging vorher als „Read before the
-  next step“ an den Lauf und kam erst nach der Prüfung zurück. Was der Lauf nicht las, geht nach seinem
-  Ende als nächste Nachricht raus; nach Stop oder Fehler steht es wieder im
-  Feld (`flushQueue`). `POST /agent/chats/{chat}/requests/{request_id}/notes`
-  (`text` 1–4.000 Zeichen) prüft laufenden Turn und VM-Einstellung und legt die
-  Nachricht am Root-Beleg ab (`AgentSessionStore.add_user_note`, höchstens
-  `USER_NOTES_MAX` = 10 je Antwort); der Wächter-Thread liest sie bei der
-  Lease-Prüfung mit (`check_delegation` gibt den Root zurück, kein zusätzlicher
-  Lesezugriff), die Schleife hängt sie vor dem nächsten Schritt an
-  (`_take_notes`: „[The user wrote this while you were working; it comes from
-  the user:]“ + Text). Ein laufender Befehl wird nicht unterbrochen. Die
-  Aktivität zeigt sie als „You“ + Worte des Nutzers (`from_user`, nie
-  übersetzt), das Arbeitsprotokoll mit Herkunft `user`. Kommt sie erst nach der
-  fertigen Antwort an, sagt die Aktivität das (`NOTES_UNREAD`).
+**Eingreifen (seit 2026-10-26).** Zwei Wege neben Stop: die Nachricht in
+den laufenden Lauf (jeder Agent-Lauf, seit 2026-11-15 nicht mehr nur mit
+der VM) und, nur mit der VM, der Checkpoint:
+- *Nachricht in den laufenden Lauf, wie in Claude Code.* Enter oder Senden
+  mit Text im Eingabefeld schickt die Nachricht während eines laufenden
+  Agent-Laufs hinein (`agent-chat.js` `steer`; der Knopf wird mit Text im
+  Feld zu Senden, „Send into the running response“, leer bleibt er Stop). Sie
+  startet keinen neuen Turn danach: Der Lauf nimmt sie an der nächsten
+  Schrittgrenze, laufende Werkzeugaufrufe enden zuerst, dann sieht das
+  Modell sie vor seinem nächsten Aufruf. Jede Nachricht steht sofort als
+  Zeile in `#agentQueue` über dem Feld: „Read before the next step“ mit
+  „Send now“, bis die Aktivität sie gelesen meldet (`note-<id>`). Vor dem
+  ersten Schritt des Laufs (Anfrage noch unterwegs) wartet sie dort als
+  „Sends after this response“ (mit ×) und geht beim ersten Aktivitäts-Frame
+  hinein (`deliverQueued`, ein Versuch je Nachricht); ebenso wartet sie,
+  sobald die Antwort fixiert ist (eine Version in der Review,
+  `readsMessages`): Danach macht der Agent keinen Schritt mehr. Was der Lauf
+  nicht las, geht nach seinem Ende als nächste Nachricht raus; nach Stop oder
+  Fehler steht es wieder im Feld (`flushQueue`).
+  `POST /agent/chats/{chat}/requests/{request_id}/notes` (`text` 1–4.000
+  Zeichen, optional `now`) prüft den laufenden Turn und legt die Nachricht am
+  Root-Beleg ab (`AgentSessionStore.add_user_note`, höchstens
+  `USER_NOTES_MAX` = 10 je Antwort); der Lauf dieses Prozesses bekommt sie
+  sofort (`DelegationLoop.receive`), der Wächter-Thread liest sie sonst bei
+  der Lease-Prüfung mit (`check_delegation` gibt den Root zurück, kein
+  zusätzlicher Lesezugriff). Die Schleife hängt sie vor dem nächsten Schritt
+  an (`_take_notes`: „[The user wrote this while you were working; it comes
+  from the user:]“ + Text), das Arbeitsprotokoll mit Herkunft `user`. Im
+  Turn steht sie danach als Nachricht des Nutzers, rechts in der Blase wie
+  seine Frage, unter der Laufzeile und vor den Zeilen und der Antwort, die
+  nach ihr kamen (`agent-activity.js` `userMessages`, `.agent-user-messages`,
+  auch nach dem Neuladen aus `agent_activity`); die aufgeklappte Aktivität
+  zeigt sie stattdessen an ihrer Stelle zwischen den Schritten als „You“ +
+  Worte (`from_user`, nie übersetzt). Kommt sie erst nach der fertigen
+  Antwort an, sagt die Aktivität das (`NOTES_UNREAD`), und die Seite schickt
+  sie als nächste Nachricht.
+- *Sofort senden („Send now“, Claude Codes Interrupt).* „Send now“ in der
+  Zeile einer noch ungelesenen Nachricht (`hurry`,
+  `POST …/notes/{note_id}/now`, `AgentSessionStore.hurry_user_note` setzt
+  `now` an der Notiz am Root) oder Strg+Enter (⌘+Enter am Mac) im Feld
+  (`steer({ now })`, die Notiz kommt gleich mit `now`) bricht ab, was gerade
+  läuft, und gibt dem Agenten die Nachricht sofort. Der Lauf
+  (`_receive_notes` → `_hurry`, je Notiz einmal, nur solange sie ungelesen
+  ist) baut auf dem Prüfer-Halt auf: Der Schritt, der gerade streamt, bricht
+  über seine eigene Cancellation ab (`step_halt`, `_halt_scope`); sein
+  gezeigter Text geht zurück und er läuft auf dem nächsten Index mit der
+  Nachricht neu (`_past_halts` nimmt nach jedem Abbruch die Nachrichten,
+  `_take_notes`), ein laufender Arbeitsplatz-Befehl endet, als hätte der
+  Nutzer ihn gestoppt (`VMTools.interrupt`, auch einer, der gerade erst
+  startet), und die späteren Aufrufe des Batches laufen nicht
+  (`CALL_AFTER_MESSAGE`). Ein Aufruf, der anderswo schon läuft (Seite lesen,
+  Vergleich), endet zuerst. Kam die Nachricht, als die Antwort gerade fertig
+  geschrieben, aber noch nicht fixiert war, geht die Antwort zurück und der
+  Agent macht mit der Nachricht weiter. Ein Zusammenfassungsschritt bricht
+  nicht ab (er wäre gleich wieder fällig). Der Turn läuft danach weiter,
+  statt zu enden; abgebrochene Schritte zählen mit dem, was sie verbraucht
+  haben, aufs Tageskonto wie ein vom Prüfer-Halt abgebrochener. Nach dem
+  Fixieren der Antwort bricht nichts mehr ab (`answer_fixed`).
 - *Checkpoint wiederherstellen.* Unter der Verbrauchszeile der letzten
   Antwort steht für Admins „Restore the workspace to before this message“, wenn der
   Turn einen Checkpoint hat; nach Bestätigung (`App.confirm`, gefährlich)
