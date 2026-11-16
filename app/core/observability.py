@@ -23,7 +23,15 @@ _METRICS: dict[str, dict] = {}
 # h11 accepts any token as a method, and each key stays for the life of the
 # process: an invented method counts as OTHER, not as a metric of its own.
 _HTTP_METHODS = frozenset({"GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"})
-_OAUTH_TARGETS = tuple(f"{path}?" for path in OAUTH_CALLBACK_PATHS)
+
+
+def _oauth_target(value) -> bool:
+    """Whether ``value`` is a request target to an OAuth callback with a
+    query. Also with a trailing slash or a language prefix: the redirect to
+    the route (307, 302) logs the first request with its code and state."""
+    if not isinstance(value, str) or "?" not in value:
+        return False
+    return value.split("?", 1)[0].rstrip("/").lower().endswith(OAUTH_CALLBACK_PATHS)
 
 
 def correlation_id() -> str:
@@ -54,8 +62,8 @@ class OAuthAccessFilter(logging.Filter):
         # Uvicorn's access tuple contains the complete request target. Keep
         # authorization codes/state out of access logs, even at debug level.
         if isinstance(record.args, tuple):
-            record.args = tuple(value.split("?", 1)[0] + "?[redacted]" if isinstance(value, str)
-                and value.startswith(_OAUTH_TARGETS) else value for value in record.args)
+            record.args = tuple(value.split("?", 1)[0] + "?[redacted]" if _oauth_target(value) else value
+                                for value in record.args)
         return True
 
 

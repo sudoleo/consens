@@ -133,6 +133,24 @@ def test_api_daily_quota_and_oauth_access_log_redaction(google):
     assert "private-code" not in record.getMessage() and "private-state" not in record.getMessage()
 
 
+@pytest.mark.parametrize("target", ["/agent/github/callback/?code=private-code&state=private-state",
+                                    "/de/agent/github/callback?code=private-code&state=private-state",
+                                    "/de/agent/google/callback/?code=private-code&state=private-state",
+                                    "https://consens.io/agent/google/callback?code=private-code&state=private-state"])
+def test_the_access_log_hides_oauth_codes_also_on_the_way_to_the_callback(target):
+    """A trailing slash (307) or a language prefix (302) logs the first
+    request with its query before the redirect."""
+    import logging
+    from app.core.observability import OAuthAccessFilter
+    record = logging.LogRecord("uvicorn.access", 20, "", 0, '%s %s %s', ("GET", target, "307"), None)
+    OAuthAccessFilter().filter(record)
+    assert "private-code" not in record.getMessage() and "private-state" not in record.getMessage()
+    # Other targets keep their query.
+    other = logging.LogRecord("uvicorn.access", 20, "", 0, '%s %s %s', ("GET", "/agent/callbacks?code=1", "404"), None)
+    OAuthAccessFilter().filter(other)
+    assert other.getMessage() == "GET /agent/callbacks?code=1 404"
+
+
 def test_model_routing_requires_zdr_without_collection_and_keeps_optional_allowlists(google,monkeypatch):
     from dataclasses import replace
     from app.services.google_connections import restricted_model
