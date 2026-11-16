@@ -9308,7 +9308,10 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Frage bleibt im Feld, nichts wird gesetzt). „Agree and start“ →
   `POST /api/my/ai-consent`, erst danach `App.firstRun.apply(choice)`: die
   Lesart (die Korrektur, die der Dialog in jeder Lesart verspricht, ist der
-  Standard von `findings_to_agent`) und das Event `app_first_run`; dann geht die Frage raus. Ebenso
+  Standard von `findings_to_agent`) und das Event `app_first_run`; dann geht die Frage raus.
+  Die Lesart setzt `set(…, {source: "first_run"})`: `consensus-insights.js`
+  wendet sie sofort an, eine `local`-Änderung hielte es für die seines
+  eigenen Selects. Ebenso
   vor den anderen Eingängen mit Schranke: Start einer Watch
   (`watch-composer.js` `submit`, die Karte unter der Antwort `agent-watch.js`
   `start`) und Remember/Correct memory (`memory-edit.js` `submitEdit`); ohne
@@ -9596,8 +9599,8 @@ der einzige Besitzer: `get(name)`, `set(name, wert | null, {derived, source})`,
 `accepts(name, wert)`, `onChange(names, handler)` über
 `consensio:settings-change` (`detail.source`: `local`, `agent` (die
 Einstellungskarte des Agenten, `set(…, {source: "agent"})`: gespeichert wie
-`local`, aber die Module wenden sie an wie einen Kontowert), `server`, `tab`,
-`signout`; `previous`; nach einer Rückkehr aus dem Back/Forward-Cache gleicht
+`local`, aber die Module wenden sie an wie einen Kontowert), `first_run` (der
+Dialog vor der ersten Frage, ebenso), `server`, `tab`, `signout`; `previous`; nach einer Rückkehr aus dem Back/Forward-Cache gleicht
 `pageshow` nach). Die lokale Kopie liegt unter den bisherigen
 localStorage-Schlüsseln (`runMode`, `checkSources`, `pref_*`, `systemPrompt`,
 `consensio.*`); `consensio.agentModel.v1` ersetzt das frühere

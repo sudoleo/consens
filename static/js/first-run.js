@@ -298,7 +298,7 @@
     const view = VIEWS[choice?.view];
     if (!view) return;
     Object.entries(view).forEach(([name, value]) => {
-      if (value !== null) App.userSettings?.set?.(name, value);
+      if (value !== null) App.userSettings?.set?.(name, value, { source: "first_run" });
     });
     // What the dialog promises in every view, the agent correcting its
     // answer with the reviewers' findings, is the default (findings_to_agent).

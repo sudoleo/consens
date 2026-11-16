@@ -30,13 +30,15 @@
 //          detail {names, source, previous}; source is "local" (this page
 //          changed it), "agent" (this page applied the Agent's settings
 //          card: saved like "local", but every owner module shows it),
-//          "server", "tab" (another tab) or "signout".
+//          "first_run" (the dialog before the first question, the same
+//          way), "server", "tab" (another tab) or "signout".
 // =====================================================================
 
 (function () {
   "use strict";
 
   const EVENT = "consensio:settings-change";
+  const APPLIED_ELSEWHERE = new Set(["agent", "first_run"]);
   const ENDPOINT = "/api/my/settings";
   const SYNC_KEY = "consensio.settingsSync.v1";
   // Set once this browser synced with any account (see load()).
@@ -452,8 +454,10 @@
   // default. options.derived marks a correction the app makes itself (a
   // model that left the list): before the account answered it stays on this
   // page, so it can never win over the account's own value. options.source
-  // "agent": the Agent's settings card applied it (agent-settings.js); the
-  // modules that own the setting apply it as they do a change from the account.
+  // "agent" (the Agent's settings card, agent-settings.js) or "first_run"
+  // (the dialog before the first question, first-run.js): another module
+  // applied it, and the modules that own the setting apply it as they do a
+  // change from the account.
   function set(name, value, options = {}) {
     const setting = definition(name);
     const next = value === null || value === undefined ? null : setting.normalize(value);
@@ -472,7 +476,7 @@
       const owner = session ? session.uid : syncRecord().owner;
       if (owner) addPending(owner, [name]);
     }
-    refresh([name], options.source === "agent" ? "agent" : "local");
+    refresh([name], APPLIED_ELSEWHERE.has(options.source) ? options.source : "local");
     scheduleFlush();
     return true;
   }

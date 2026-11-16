@@ -151,6 +151,26 @@ describe("apply", () => {
     expect(calls.events.at(-1)).toEqual(["app_first_run", { view: "all", memory: false }]);
   });
 
+  it("hands the view to the modules that own it, as a change they did not make themselves", () => {
+    // consensus-insights.js ignores a "local" change of consensus_highlights
+    // (its own select already applied it): the answer kept the old marks
+    // until a reload.
+    const ctx = loadScripts(["static/js/user-settings.js", "static/js/first-run.js"], {
+      before(window) {
+        window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
+        window.App = { userMemory: {}, trackAppEvent: () => {} };
+      },
+    });
+    contexts.push(ctx);
+    const changes = [];
+    ctx.window.addEventListener("consensio:settings-change", event => changes.push(event.detail));
+    ctx.window.App.firstRun.apply({ view: "all", memory: false });
+    expect(ctx.window.App.userSettings.get("consensus_highlights")).toBe("all");
+    expect(changes.map(detail => [detail.names, detail.source])).toEqual([
+      [["consensus_highlights"], "first_run"], [["detailed_progress"], "first_run"],
+    ]);
+  });
+
   it("ignores a view it does not know", () => {
     const { App, calls } = boot();
     App.firstRun.apply({ view: "everything" });

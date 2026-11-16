@@ -62,6 +62,8 @@ def test_the_first_question_sets_the_account_up_names_the_providers_and_goes_out
         # The chosen view is the account's setting now; the correction pass the
         # dialog promises is the default and needs no write.
         assert page.evaluate("() => window.App.userSettings.get('consensus_highlights')") == "critical"
+        # ... and the page shows it at once, not only after a reload.
+        assert page.evaluate("() => document.body.dataset.consensusHighlightMode") == "critical"
         assert page.evaluate("() => window.App.userSettings.get('findings_to_agent')") is None
         # Asked once: the yes holds for the next question.
         assert page.evaluate("() => window.App.aiConsent.needed()") is False
