@@ -218,6 +218,35 @@
   // must not spend this reader's allowance. Read once and taken out of the
   // address right here, before Umami or a reload can see it.
   const LINK_QUESTION_MAX_CHARS = 2000;
+  // Only what can be seen: a link must not make its words read otherwise
+  // than they are, carry words nobody sees, or push some out of the field's
+  // view. Every invisible character goes (controls, format and ignorable
+  // ones: direction marks, zero widths, tag characters, variation
+  // selectors), except a line break, a tab and what joins what is seen: a
+  // joiner between letters (Persian, the Indic scripts) or between the parts
+  // of an emoji, and the emoji style right after its emoji.
+  const EMOJI_STYLE = String.fromCharCode(0xfe0f);
+  const BRAILLE_BLANK = String.fromCharCode(0x2800);
+  const INVISIBLE = /[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
+  // The character before is captured, not looked behind at: Safari before
+  // 16.4 cannot parse a lookbehind, and one in this bundle stops the app.
+  const JOINERS = /([\p{L}\p{M}\p{Extended_Pictographic}\p{Emoji_Modifier}])?(\p{Join_Control}+)(?=([\p{L}\p{M}\p{Extended_Pictographic}])?)/gu;
+  const STYLES = new RegExp(`([\\p{Extended_Pictographic}#*0-9])?${EMOJI_STYLE}+`, "gu");
+  function visibleText(raw) {
+    return raw.replace(/\r\n?/g, "\n")
+      .replace(INVISIBLE, char => (char === "\n" || char === "\t" || char === EMOJI_STYLE
+        || /\p{Join_Control}/u.test(char) ? char : ""))
+      .replace(JOINERS, (_, before = "", joiners, after) => (before && after && joiners.length === 1 ? before + joiners : before))
+      .replace(STYLES, (_, before = "") => (before ? before + EMOJI_STYLE : ""))
+      // A blank that only looks like a space is one.
+      .split(BRAILLE_BLANK).join(" ")
+      // Blank room that would push words out of view: none at a line's end,
+      // at most four blanks in a row, at most one empty line.
+      .replace(/[^\S\n]+(?=\n|$)/g, "")
+      .replace(/([^\S\n]{4})[^\S\n]+/g, "$1")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
   // null: the fragment brings no question.
   function linkQuestion(hash) {
     // "#?q=" is what /opensearch.xml asks for: only after a "?" does Chrome
@@ -225,13 +254,17 @@
     // way Firefox does anyway and URLSearchParams reads them.
     const fragment = String(hash || "").replace(/^#\??/, "");
     if (!/(^|&)q=/.test(fragment)) return null;
-    const text = String(new URLSearchParams(fragment).get("q") || "")
-      .replace(/\r\n?/g, "\n")
-      // Control characters and the marks that turn the reading direction:
-      // a link must not make its words read otherwise than they are.
-      .replace(/[\p{Cc}\p{Bidi_Control}]/gu, char => (char === "\n" || char === "\t" ? char : ""))
-      .trim();
+    const text = visibleText(String(new URLSearchParams(fragment).get("q") || ""));
     return Array.from(text).slice(0, LINK_QUESTION_MAX_CHARS).join("").trim();
+  }
+  // A question from a link that does not fit the field shows its start, with
+  // the caret at its end: its last lines alone could make it read otherwise.
+  // Typing scrolls to the caret as always.
+  function showStart(input) {
+    if (!input) return;
+    const value = input.value;
+    input.scrollTop = 0;
+    requestAnimationFrame(() => { if (input.value === value) input.scrollTop = 0; });
   }
   const linkEntry = (() => {
     if (window.location.pathname !== "/app") return null;
@@ -244,7 +277,7 @@
   })();
   // `filled`: the question stands in the field (composer-invite.js counts
   // it, app-init.js gives it the caret). A draft keeps the field instead.
-  window.App.questionLink = { parse: linkQuestion, opened: linkEntry !== null, filled: false };
+  window.App.questionLink = { parse: linkQuestion, showStart, opened: linkEntry !== null, filled: false };
 
   // ---- The bar of an installed app's window --------------------------------
   // Installed (/manifest.webmanifest), Chrome and Edge draw a title bar, and
@@ -469,6 +502,7 @@
         // in place (composer-autosize.js, head bundle).
         requestAnimationFrame(() => {
           window.App.sizeQuestionInput?.(input);
+          if (linked) input.scrollTop = 0;
           // The note under the examples stands in their room while the field
           // holds text (composer.css); its distance is theirs, measured as
           // composer-invite.js measures it, so it does not glide up later.

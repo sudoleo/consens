@@ -206,6 +206,7 @@
       input.dispatchEvent(new Event("input", { bubbles: true }));
       input.focus({ preventScroll: true });
       input.setSelectionRange(input.value.length, input.value.length);
+      App.questionLink.showStart(input);
     }
     track("app_question_link", { filled, guest: Boolean(App.isGuestComposer?.()) });
   }

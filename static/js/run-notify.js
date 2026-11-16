@@ -75,6 +75,9 @@
     if (!(elapsedMs >= OFFER_AFTER_MS) || declined.has(runId)) return null;
     if (permission() !== "default" || read(PREF_KEY) === "off") return null;
     if (offered.has(runId)) return "ask";
+    // Only an offer someone can see counts towards the three: a run started
+    // and left at once gets it when its tab is back in front (backInFront).
+    if (document.hidden) return null;
     const count = Number(read(OFFERS_KEY)) || 0;
     if (count >= MAX_OFFERS) return null;
     offered.add(runId);
@@ -130,14 +133,55 @@
     }
   }
 
+  // The same run in two tabs of this browser (one chat opened twice) has
+  // the same request identity there, not the same runId: one notification
+  // for both, which the system replaces instead of showing twice.
+  function identity(run) {
+    return run.requestIdentity || run.runId;
+  }
+
+  // A hidden tab asks first whether a tab in front follows the same run;
+  // then the reader sees it there. Same channel pattern as
+  // temporary-chat.js: a tab answers only for itself.
+  const PEER_WAIT_MS = 150;
+  const peers = typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel("consensio.runNotify") : null;
+  peers?.addEventListener("message", event => {
+    const ask = event.data || {};
+    if (ask.type !== "who" || document.hidden) return;
+    if ((App.runRegistry?.list?.() || []).some(run => identity(run) === ask.identity)) {
+      peers.postMessage({ type: "followed", identity: ask.identity });
+    }
+  });
+  function followedInFront(id) {
+    if (!peers) return Promise.resolve(false);
+    return new Promise(resolve => {
+      const done = answer => {
+        peers.removeEventListener("message", heard);
+        clearTimeout(timer);
+        resolve(answer);
+      };
+      const heard = event => { if (event.data?.type === "followed" && event.data.identity === id) done(true); };
+      const timer = setTimeout(() => done(false), PEER_WAIT_MS);
+      peers.addEventListener("message", heard);
+      peers.postMessage({ type: "who", identity: id });
+    });
+  }
+
   function notify(run, state) {
+    if (!peers) { show(run, state); return; }
+    followedInFront(identity(run)).then(followed => {
+      if (!followed && document.hidden && enabled()) show(run, state);
+    });
+  }
+
+  function show(run, state) {
     // A temporary chat's title is its question: the notification only says
     // what happened.
     const title = temporary(run) ? App.t("Temporary chat") : chatTitle(run) || "consens.io";
     let note;
     try {
       // One per run (`tag`): what it says next replaces it instead of piling up.
-      note = new window.Notification(title, { body: App.t(BODY[state]), tag: `consens-run-${run.runId}`,
+      note = new window.Notification(title, { body: App.t(BODY[state]), tag: `consens-run-${identity(run)}`,
         icon: ICON, lang: App.lang || "en" });
     } catch (_) {
       // A browser that names the constructor but refuses it (Chrome on
@@ -194,11 +238,13 @@
     }, Math.max(0, left) + 50);
   }
 
-  // Back in front: what the notifications said is on screen now.
-  function closeShown() {
+  // Back in front: what the notifications said is on screen now, and the
+  // live line draws the offer it held back while the tab was hidden.
+  function backInFront() {
     if (document.hidden) return;
     shown.forEach(note => note.close());
     shown.clear();
+    changed();
   }
 
   // ---- The switch in Settings --------------------------------------------
@@ -250,7 +296,7 @@
   }
 
   window.addEventListener("consensio:run-registry-change", observe);
-  document.addEventListener("visibilitychange", closeShown);
+  document.addEventListener("visibilitychange", backInFront);
   window.addEventListener("focus", renderSwitch);
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();

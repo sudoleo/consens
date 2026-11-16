@@ -18,7 +18,7 @@ const contexts = [];
 afterEach(() => contexts.splice(0).forEach(ctx => ctx.window.close()));
 
 function boot({ permission = "default", answer = "granted", notification = true, agent = null, storage = {},
-  touch = 0, secure = true, refuse = false } = {}) {
+  touch = 0, secure = true, refuse = false, channel = null } = {}) {
   const runs = new Map();
   let visibleId = null;
   let hidden = false;
@@ -31,6 +31,7 @@ function boot({ permission = "default", answer = "granted", notification = true,
       Object.defineProperty(window.document, "hidden", { configurable: true, get: () => hidden });
       if (agent) Object.defineProperty(window.navigator, "userAgent", { configurable: true, value: agent });
       Object.defineProperty(window.navigator, "maxTouchPoints", { configurable: true, value: touch });
+      if (channel) window.BroadcastChannel = channel;
       if (notification) {
         window.Notification = class {
           constructor(title, options) {
@@ -69,10 +70,11 @@ function boot({ permission = "default", answer = "granted", notification = true,
     ...ctx,
     calls,
     notify: window.App.runNotify,
-    run(id, status, { metadata = {}, title = "Price of gold", temporary = false, visible = true } = {}) {
+    run(id, status, { metadata = {}, title = "Price of gold", temporary = false, visible = true, identity = "" } = {}) {
       const run = runs.get(id) || { runId: id, startedAt: Date.now(), config: { executionMode: "agent" }, bookmark: {} };
       Object.assign(run, { status, metadata, question: title });
       run.bookmark = { id: `b_${id}`, title };
+      if (identity) run.requestIdentity = identity;
       run.config = { ...run.config, temporary };
       runs.set(id, run);
       if (visible) visibleId = id;
@@ -84,6 +86,22 @@ function boot({ permission = "default", answer = "granted", notification = true,
   };
 }
 const flush = () => new Promise(resolve => setTimeout(resolve, 0));
+const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
+// Tabs of one browser: a BroadcastChannel whose messages reach the other
+// windows built with the same bus.
+function sharedChannel() {
+  const channels = [];
+  return class Channel {
+    constructor(name) { Object.assign(this, { name, listeners: new Set() }); channels.push(this); }
+    addEventListener(_type, listener) { this.listeners.add(listener); }
+    removeEventListener(_type, listener) { this.listeners.delete(listener); }
+    postMessage(data) {
+      for (const other of channels) {
+        if (other !== this && other.name === this.name) setTimeout(() => other.listeners.forEach(listener => listener({ data })), 0);
+      }
+    }
+  };
+}
 
 describe("where a page may notify", () => {
   it.each([
@@ -134,6 +152,24 @@ describe("the offer in the live line", () => {
     expect(app.calls.updates).toContain("r1");
   });
 
+  // A run started and left at once used up the three offers unseen.
+  it("offers nothing while the tab is hidden and counts only an offer that was seen", () => {
+    const app = boot();
+    app.run("r1", "running");
+    app.hide();
+    expect(["r1", "r2", "r3", "r4"].map(id => app.notify.offer(id, 30000))).toEqual([null, null, null, null]);
+    expect(app.window.localStorage.getItem(OFFERS)).toBeNull();
+    app.calls.updates.length = 0;
+    app.show();
+    // Back in front, the live line of the run on screen draws again.
+    expect(app.calls.updates).toContain("r1");
+    expect(app.notify.offer("r1", 30000)).toBe("ask");
+    app.hide();
+    // One that was seen stays on its line.
+    expect(app.notify.offer("r1", 31000)).toBe("ask");
+    expect(app.window.localStorage.getItem(OFFERS)).toBe("1");
+  });
+
   it("goes for this run when the browser's question is closed or refused", async () => {
     const app = boot({ answer: "default" });
     expect(app.notify.offer("r1", 25000)).toBe("ask");
@@ -170,6 +206,35 @@ describe("the notification", () => {
       ["consens-run-r2", "Waiting for your decision."],
       ["consens-run-r2", "The answer couldn’t be completed."],
     ]);
+  });
+
+  // The same chat open in two tabs: the same request, two runIds.
+  it("names the run by its request, so a second tab's notification replaces the first", () => {
+    const app = boot({ permission: "granted" });
+    app.run("r1", "running", { identity: "req-1" });
+    app.hide();
+    app.run("r1", "succeeded", { identity: "req-1" });
+    expect(app.calls.notes[0].tag).toBe("consens-run-req-1");
+  });
+
+  it("leaves it to a tab in front that follows the same run", async () => {
+    const Channel = sharedChannel();
+    const front = boot({ permission: "granted", channel: Channel });
+    const back = boot({ permission: "granted", channel: Channel });
+    front.run("r-front", "running", { identity: "req-1" });
+    back.run("r-back", "running", { identity: "req-1" });
+    back.run("r-other", "running", { identity: "req-2", visible: false });
+    back.hide();
+    back.run("r-back", "succeeded", { identity: "req-1" });
+    back.run("r-other", "succeeded", { identity: "req-2", visible: false });
+    await pause(300);
+    // The front tab shows req-1 itself; req-2 only this tab follows.
+    expect(back.calls.notes.map(note => note.tag)).toEqual(["consens-run-req-2"]);
+    // Nobody in front: the hidden tab says it.
+    front.hide();
+    back.run("r-back", "running", { identity: "req-1", metadata: { hold: { id: "h1" } } });
+    await pause(300);
+    expect(back.calls.notes.map(note => note.tag)).toEqual(["consens-run-req-2", "consens-run-req-1"]);
   });
 
   it("names no temporary chat, whose title is its question", () => {

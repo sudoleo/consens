@@ -289,6 +289,7 @@
               questionInput.focus({ preventScroll: true });
               const end = questionInput.value.length;
               questionInput.setSelectionRange(end, end);
+              if (window.App.questionLink?.filled) window.App.questionLink.showStart(questionInput);
             } else if (pendingComposerFocus && window.__consensioAuthState?.known) {
               pendingComposerFocus = false;
             }
@@ -416,6 +417,8 @@
           if (!draft) return;
           questionInput.value = draft;
           requestAnimationFrame(resizeQuestionInput);
+          // On this page that is the question a link brought (app-bootstrap.js).
+          if (window.App.questionLink?.filled) window.App.questionLink.showStart(questionInput);
           window.syncDemoChipState?.();
           // A guest's Send follows the text it now has.
           window.updateQuestionInputAccess?.();

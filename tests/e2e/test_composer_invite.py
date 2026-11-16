@@ -415,3 +415,23 @@ def test_a_question_link_fills_an_accounts_field_once_and_never_over_a_draft(bro
         assert sent == []
     finally:
         context.close()
+
+
+def test_a_long_question_from_a_link_shows_its_start_with_the_caret_at_its_end(browser, phase4_server):
+    # Its last lines alone could read otherwise than the whole.
+    lines = "%0A".join(f"Line+{index}" for index in range(30))
+    context, page = _real_firebase_page(browser, phase4_server, path=f"/app#q={lines}")
+    try:
+        field = page.locator("#questionInput")
+        expect(field).to_be_focused()
+        page.wait_for_timeout(300)
+        state = page.evaluate("""() => {
+          const input = document.getElementById('questionInput');
+          return { top: input.scrollTop, overflows: input.scrollHeight > input.clientHeight + 1,
+            caret: input.selectionStart, length: input.value.length };
+        }""")
+        assert state["overflows"], state
+        assert state["top"] == 0, state
+        assert state["caret"] == state["length"], state
+    finally:
+        context.close()

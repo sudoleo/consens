@@ -4255,12 +4255,16 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   Seite verborgen ist. Hört auf `consensio:run-registry-change` und liest jeden
   Lauf der Registry über `App.tabStatus.state`; gemeldet wird nur ein Wechsel
   nach `ready`/`failed` (Schlüssel `end`) oder in eine Pause (`hold:<id>`),
-  je Lauf und Schlüssel einmal, `tag` `consens-run-<runId>` (das Spätere
-  ersetzt das Frühere). Die Marken nach der Antwort ändern den Zustand nicht
+  je Lauf und Schlüssel einmal, `tag` `consens-run-<requestIdentity>` (Rückfall
+  `runId`; dieselbe Anfrage hat in zwei Tabs dieselbe Identität, das System
+  ersetzt die Meldung statt sie doppelt zu zeigen). Ein verborgener Tab fragt
+  vorher über `BroadcastChannel("consensio.runNotify")` (Muster aus
+  `temporary-chat.js`, 150 ms), ob ein Tab im Vordergrund denselben Lauf in
+  seiner Registry hat; dann meldet er nichts. Die Marken nach der Antwort ändern den Zustand nicht
   und melden nichts. Titel = Chattitel (`bookmark.title`, 80 Zeichen), bei
   temporären Chats nur „Temporary chat“; Klick: `window.focus()`, dann
   `window.openBookmark(bookmark.id)` bzw. `runRegistry.show(runId)`. Zurück
-  im Vordergrund schließt es seine Meldungen. Nur mit
+  im Vordergrund schließt es seine Meldungen und zeichnet die Live-Zeile neu. Nur mit
   `Notification.permission === "granted"` und ohne
   `localStorage["consensio.runNotify.v1"] = "off"` (Gerät, nicht Konto).
   `supported()` ist falsch ohne `new Notification()`: Android, iPhone/iPad
@@ -4269,7 +4273,8 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   für die Live-Zeile (`agent-activity.js`, Zeile `kind: 'offer'` vor der
   aktuellen Zeile, in `agent-chat.css` rechts gefloatet; die aktuelle Zeile
   wird `flow-root`): ab 20 s, nur bei Erlaubnis `default`, höchstens auf drei
-  Läufen ohne Klick (`consensio.runNotify.offers.v1`). Erst `ask(source, runId)`
+  Läufen ohne Klick (`consensio.runNotify.offers.v1`), nie bei verborgenem Tab;
+  gezählt wird nur ein Angebot, das zu sehen war. Erst `ask(source, runId)`
   fragt den Browser. Ein Weckruf (`registry.update`) zeichnet die Zeile nach
   20 s neu, falls bis dahin kein Ereignis kam. Den Schalter `#runNotifySwitch`
   (Einstellungen › Agent, `#runNotifySetting` nur wo `supported()`) und
@@ -13344,8 +13349,14 @@ zählen nicht):
   gilt gleich (so fragt `/opensearch.xml`: erst nach einem `?` kodiert Chrome
   die Suchwörter als Abfragewert, sonst als Pfad mit rohem `+` und `&`).
   `app-bootstrap.js` (`App.questionLink.parse`) liest es nur auf `/app`, im
-  ersten Bild: höchstens 2.000 Zeichen, ohne Steuer- und
-  Richtungszeichen, nur als `value`; nimmt das Fragment sofort per
+  ersten Bild: nur Sichtbares (`visibleText`: ohne `\p{Cc}`, `\p{Cf}`,
+  `\p{Default_Ignorable_Code_Point}`, also auch ohne Tag-Zeichen, Zero-Width
+  und Variantenwähler; bleiben dürfen Zeilenumbruch, Tab, ein Joiner
+  zwischen Buchstaben oder Teilen eines Emoji und U+FE0F direkt nach seinem
+  Emoji), Leerraum gedeckelt (keiner am Zeilenende, höchstens vier am Stück,
+  höchstens eine Leerzeile), höchstens 2.000 Zeichen, nur als `value`. Passt
+  die Frage nicht ins Feld, zeigt es ihren Anfang, der Cursor steht am Ende
+  (`App.questionLink.showStart`); erst Tippen scrollt zum Cursor; nimmt das Fragment sofort per
   `history.replaceState` aus der Adresse (Umami, Neuladen, Lesezeichen sehen
   es nie; `consensioBeforeSend` schneidet jedes Fragment zusätzlich ab). Es
   füllt nur, sendet nie (ein fremder Link verbraucht kein Kontingent), und nie

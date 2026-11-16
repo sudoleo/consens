@@ -24,7 +24,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       hinzufügen, gleiches Ergebnis. Bei offener App im selben Tab erneut
       suchen → neuer Chat mit der Frage; ein Entwurf im Feld bleibt stehen.
       Als Gast: Frage steht nach dem Laden noch im Feld, Senden öffnet die
-      Registrierung. In Umami kein Fragment in den URLs. Automatisiert:
+      Registrierung. In Umami kein Fragment in den URLs. Eine Frage mit 30
+      Zeilen zeigt ihren Anfang, Cursor am Ende; viele Leerzeilen werden zu
+      einer, Emoji mit Hautton oder Regenbogenfahne bleiben ganz. Automatisiert:
       `tests/test_web_app.py`, `question-link.test.mjs`,
       `tests/e2e/test_composer_invite.py`.
 - [ ] Bescheid, wenn ein Lauf fertig ist (2026-11-16, Desktop): ein
@@ -38,7 +40,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       „The Agent is waiting for you.“. Einstellungen › Agent: Schalter zeigt
       den Stand des Browsers (erlaubt / fragt / blockiert, dann gesperrt);
       Aus hält auf diesem Gerät. Android und iPhone: kein Angebot, kein
-      Schalter. Automatisiert: `run-notify.test.mjs`,
+      Schalter. Lauf starten und sofort den Tab wechseln: das Angebot kommt
+      beim Zurückkehren und zählt erst dann. Derselbe Chat in zwei Tabs, einer
+      vorne: keine Meldung; beide verborgen: eine. Automatisiert: `run-notify.test.mjs`,
       `agent-calm-progress.test.mjs`, `tests/e2e/test_run_notify_frontend.py`.
 - [ ] Sidebar-Breite (2026-10-08, Desktop ≥1100px): rechte Sidebar-Kante
       greifen (Cursor wird zum Doppelpfeil, dünne Linie erscheint) und ziehen →
