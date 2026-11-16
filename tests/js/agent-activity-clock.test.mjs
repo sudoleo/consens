@@ -259,6 +259,11 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     expect(end("partial", undefined, one)).toBe("Answer in 17s · checked in part by DeepSeek · 2 notes open");
     expect(end("partial", { status: "done", skipped: "no_time", findings: findings("open", { delivered: "final" }) }, one))
       .toBe("Answer in 17s · checked in part by DeepSeek · 2 notes open");
+    // Every shorter form of it still says "in part" (agent-chat.css picks one by width).
+    const part = host.querySelector(".agent-activity-by");
+    expect([part.dataset.count, part.dataset.brief, part.dataset.least])
+      .toEqual(["checked in part by 1 AI", "checked in part", "checked in part"]);
+    expect(host.querySelector(".agent-activity").classList.contains("has-check-partial")).toBe(true);
     // Three of them, by the model when the provider is not named; a
     // reviewer of no known family by its provider's label.
     const three = { reviewers: [{ provider_label: "Anthropic", model: { model: "anthropic/claude-haiku-4.5" }, status: "completed" },

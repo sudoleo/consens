@@ -319,7 +319,9 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       steht ohne Zeit und Logos bei 390 px „Geprüft von 2 KIs · keine
       Einwände“, bei 360 und 320 px „Geprüft · keine Einwände“, nie ein
       abgeschnittener Name und nie „…“ in dieser Zeile; die Namen zeigt die
-      aufgeklappte Aktivität. Blieb die Korrektur ohne Ergebnis,
+      aufgeklappte Aktivität. Hat nur ein Teil der Prüfer geprüft, steht
+      auf jeder Breite „Teilweise geprüft“, nie „Geprüft“; passt das
+      Ergebnis dahinter nicht ganz (360 und 320 px), steht „Teilweise geprüft“ allein. Blieb die Korrektur ohne Ergebnis,
       steht dort nur „2 Anmerkungen offen“ (kein „Korrektur nicht möglich“),
       die aufgeklappte Aktivität nennt den Schritt. Schafft der
       Prüfer es nicht (Zeitlimit), endet er mit „… · nicht geprüft“, bei
@@ -1732,8 +1734,9 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
       nur wenn kein Lauf läuft (Handy ohne Hover sichtbar). Klick: der Text
       steht im Feld, Cursor am Ende, nichts wird gesendet oder ersetzt; ein
       Entwurf im Feld bleibt, die Nachricht folgt ihm nach einer Leerzeile.
-      Ältere Nachrichten und geplante Watch-Nachrichten haben keinen Stift;
-      sein Erscheinen nach dem Lauf verschiebt nichts.
+      Ältere Nachrichten, geplante Watch-Nachrichten und Nachrichten mit
+      Dateien (auch nur aus Dateien) haben keinen Stift; sein Erscheinen
+      nach dem Lauf verschiebt nichts.
 - [ ] Teilen am Handy (iPhone, Android): nach „Öffentlichen Link erstellen“
       ist „Teilen…“ die erste Aktion und öffnet das System-Menü mit Link und
       Frage als Titel, „Link kopieren“ daneben; Schließen des Menüs zeigt

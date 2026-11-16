@@ -8,7 +8,8 @@ import { loadScripts } from "./helpers/appWindow.mjs";
  */
 const BODY = `<textarea id="questionInput"></textarea><div id="threadHistory" hidden></div>
   <div id="threadAsk" class="thread-ask" hidden><div class="thread-ask-bubble"><div class="thread-ask-text" id="threadAskText"></div>
-    <button type="button" class="thread-ask-edit" aria-label="Edit and send again" hidden></button></div></div>
+    <button type="button" class="thread-ask-edit" aria-label="Edit and send again" hidden></button></div>
+    <div class="attachment-bar message-attachments" id="threadAskAttachments" hidden></div></div>
   <input id="compareOpenAI" type="checkbox" checked><select id="compareOpenAIModel"><option value="gpt-5.4-mini">OpenAI</option></select>
   <input id="compareClaude" type="checkbox" checked><select id="compareClaudeModel"><option value="claude-haiku-4-5">Claude</option></select>
   <div id="agentModelControls"><div class="select-wrapper agent-model-picker"><select id="agentModelDropdown"></select></div>
@@ -110,6 +111,24 @@ describe("Edit and send again", () => {
     // A second click adds nothing twice.
     pencil(document).click();
     expect(input.value).toBe("And the Pantheon?\n\nWhen did the Colosseum open?");
+    dom.window.close();
+  });
+
+  // The pencil gives back words, not files: at a message with files it
+  // does nothing (and agent-chat.css shows none), else "bericht.pdf" would
+  // go out again as words without its file.
+  it("gives nothing back from a message with files", async () => {
+    const { window, document, dom, pending } = agentApp();
+    window.App.runMode.set("agent");
+    await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
+    await (await ask(window, document, pending, "bericht.pdf"))();
+    await vi.waitFor(() => expect(pencil(document).hidden).toBe(false));
+    const row = document.getElementById("threadAskAttachments");
+    row.innerHTML = '<span class="attachment-chip">bericht.pdf</span>';
+    row.hidden = false;
+    pencil(document).click();
+    expect(document.getElementById("questionInput").value).toBe("");
+    expect(window.App.composer.expand).not.toHaveBeenCalled();
     dom.window.close();
   });
 

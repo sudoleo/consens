@@ -4,6 +4,7 @@ notes and reviewers, the review while it runs, and a reviewer's pause.
 The review is built by the server's own placement (agent_audit.place_marks),
 so the page reads exactly the shape a real turn saves.
 """
+import base64
 import hashlib
 import json
 import os
@@ -14,6 +15,7 @@ import pytest
 from playwright.sync_api import expect
 from test_phase4_frontend import phase4_server, _real_firebase_page, _json  # noqa: F401  (fixture)
 from test_agent_chat_frontend import CATALOG, _choose_mode, _detailed_progress, _snapshot
+from test_agent_image_previews import _png
 
 from app.services import agent_audit
 
@@ -1235,6 +1237,66 @@ def test_the_answer_leaves_by_copy_and_its_message_comes_back_by_the_pencil(brow
         context.close()
 
 
+@pytest.mark.parametrize("words", ["", "What does this report say?"])
+def test_a_message_with_files_has_no_pencil(browser, phase4_server, words):
+    """The pencil gives back words, not files: at a message with a file it
+    would put back the words without the file, and a message of a file
+    alone reads as its name ("bericht.png", sent again as words). Such a
+    message has none."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    stored, errors = [], []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+    file_id = "c" * 32
+    try:
+        page.route("**/user_status", lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
+        page.route("**/agent/models", lambda r: _json(r, CATALOG))
+        page.route("**/agent/budget", lambda r: _json(r, {"token_budget": {"limit": 250000, "remaining": 249000}}))
+        page.route("**/chats", lambda r: _json(r, {"chat": {"id": CHAT}}))
+        page.route(f"**/agent/chats/{CHAT}/actions", lambda r: _json(r, {"actions": [], "evidence": []}))
+
+        def files(route):
+            if route.request.method == "POST":
+                body = route.request.post_data_json
+                stored.append({"id": file_id, "name": body["name"], "mime": "image/png",
+                               "size": len(base64.b64decode(body["data"])), "status": "ready", "warnings": [],
+                               "created_at": "2026-11-16T10:00:00Z", "expires_at": "2099-10-29T10:00:00Z"})
+                _json(route, {"file": stored[-1]})
+            else:
+                _json(route, {"files": stored})
+        page.route(f"**/agent/chats/{CHAT}/files", files)
+        page.route(f"**/agent/chats/{CHAT}/files/{file_id}",
+                   lambda r: r.fulfill(body=_png((10, 20, 30)), content_type="image/png"))
+
+        def answer(route):
+            payload = route.request.post_data_json
+            turn = {"id": TURN, "question": payload["question"], "consensus": "A report.", "execution_mode": "agent",
+                    "status": "completed", "attachments": list(stored), "agent_settings": {"file_ids": [file_id]}}
+            result = {"chat_id": CHAT, "turn_id": TURN, "turn": turn, "response": turn["consensus"],
+                      "bookmark_meta": {"id": payload["bookmark_id"], "title": payload["question"], "mode": "Agent"}}
+            route.fulfill(content_type="text/event-stream", body="event: final\ndata: " + json.dumps(result) + "\n\n")
+        page.route("**/agent", answer)
+        page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
+        _choose_mode(page, "agent")
+        page.locator("#attachFileInput").set_input_files([{"name": "bericht.png", "mimeType": "image/png",
+                                                           "buffer": _png((10, 20, 30))}])
+        expect(page.locator("#attachmentBar .attachment-chip")).to_have_count(1)
+        if words:
+            page.locator("#questionInput").fill(words)
+        page.locator("#sendButton").click()
+        expect(page.locator("#agentAnswerBody")).to_contain_text("A report.")
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        expect(page.locator("#threadAskAttachments .attachment-chip")).to_have_count(1)
+        expect(page.locator("#threadAskText")).to_have_text(words or "bericht.png")
+        page.wait_for_timeout(300)
+        expect(page.locator("#threadAsk .thread-ask-edit")).to_be_hidden()
+        # Nor does a stray call give the words back without the file.
+        page.evaluate("() => document.querySelector('#threadAsk .thread-ask-edit').click()")
+        expect(page.locator("#questionInput")).to_have_value("")
+        assert errors == []
+    finally:
+        context.close()
+
+
 @pytest.mark.parametrize("width", [320, 390])
 def test_a_narrow_german_head_and_row_keep_their_words_whole(browser, phase4_server, width):
     """German on a phone: the head names the reviewers and keeps the outcome
@@ -1289,13 +1351,15 @@ HEAD_REVIEWERS = [("anthropic", "Anthropic", {"model": "anthropic/claude-haiku-4
                   ("deepseek", "DeepSeek", {"model": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash"}),
                   ("openai", "OpenAI", LUNA)]
 HEAD_OUTCOMES = ["no objections", "1 sentence improved", "12 sentences improved", "3 notes open", "12 notes open",
-                 "check stopped", "not checked", "checked in part"]
+                 "check stopped", "not checked", "checked in part", "checked in part, no objections"]
 
 
 def head_review(outcome, count):
     """A finished review with notes passed to the agent, ending in ``outcome``
     (headNote's words), by ``count`` reviewers."""
-    status = {"check stopped": "cancelled", "not checked": "failed", "checked in part": "partial"}.get(outcome, "succeeded")
+    status = {"check stopped": "cancelled", "not checked": "failed"}.get(outcome, "succeeded")
+    if outcome.startswith("checked in part"):
+        status = "partial"
     reviewers = [{"provider": provider, "provider_label": label, "model": model,
                   "status": "failed" if status == "failed" or (status == "partial" and index == count - 1) else "completed"}
                  for index, (provider, label, model) in enumerate(HEAD_REVIEWERS[:count])]
@@ -1321,7 +1385,10 @@ DRAW_HEAD = """async ([review]) => { const host = document.querySelector('#agent
     // Past its glide to the new width, and the page's translation of the words.
     await new Promise(resolve => setTimeout(resolve, 400));
     const title = host.querySelector('.agent-activity-title'), summary = host.querySelector('.agent-activity > summary');
-    const shown = el => el.getBoundingClientRect().width > 0;
+    // On the head's one line: an outcome that gave way stands on a second, out of view.
+    const line = title.getBoundingClientRect();
+    const shown = el => { const box = el.getBoundingClientRect();
+        return box.width > 0 && box.top >= line.top - 1 && box.bottom <= line.bottom + 1; };
     const phrases = [...title.querySelectorAll('.agent-activity-after > span:not(.agent-activity-sep)')].filter(shown);
     const by = title.querySelector('.agent-activity-by');
     const words = el => el === by && !shown(by.firstElementChild)
@@ -1368,12 +1435,19 @@ def test_a_narrow_head_says_who_checked_in_a_form_that_fits_whole(browser, phase
         # The count where it fits (a 390px phone), else the word alone.
         said = {(entry["count"], entry["outcome"]): entry["said"][0].lower() for entry in seen}
         checked = "checked" if lang == "en" else "geprüft"
+        in_part = "checked in part" if lang == "en" else "teilweise geprüft"
         if width >= 390:
             assert said[(2, "no objections")] == ("checked by 2 ais" if lang == "en" else "geprüft von 2 kis"), said
             assert said[(3, "12 notes open")] == ("checked by 3 ais" if lang == "en" else "geprüft von 3 kis"), said
-            assert said[(3, "checked in part")] == ("checked in part" if lang == "en" else "teilweise geprüft"), said
         else:
-            assert said[(2, "no objections")] == said[(3, "checked in part")] == checked, said
+            assert said[(2, "no objections")] == said[(3, "12 notes open")] == checked, said
+        # A check in part never reads as a whole one: "in part" in every
+        # form. Its outcome stands whole after it (no cut, above) where the
+        # longest fits, on the narrowest head not at all (Notes counts it).
+        for entry in seen:
+            if entry["outcome"].startswith("checked in part"):
+                assert entry["said"][0].lower().startswith(in_part), entry
+                assert len(entry["said"]) == (2 if width >= 390 else 1), entry
         if os.environ.get("AGENT_SCREENSHOTS"):
             Path(os.environ["AGENT_SCREENSHOTS"], "head-forms", f"{width}-{lang}.json").write_text(
                 json.dumps(seen, indent=1, ensure_ascii=False), encoding="utf-8")

@@ -646,6 +646,9 @@ body.single-agent-active .thread-history:not([hidden]):has(+ .thread-ask:not([hi
   transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
 }
 .thread-ask-edit[hidden], body.thread-message-pending .thread-ask-edit, .thread-ask.is-watch-run .thread-ask-edit { display: none; }
+/* A message with files has none: the pencil gives back words, not files,
+   and a message of files alone reads as their names. */
+.thread-ask:has(> .message-attachments:not([hidden]) > *) .thread-ask-edit { display: none; }
 .thread-ask-edit svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 @media (hover: hover) and (pointer: fine) {
   .thread-ask-edit:hover { background: var(--raise); color: var(--ink); }
@@ -1031,14 +1034,16 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    families by name and their icons ("Answer in 14s · checked by Claude and
    DeepSeek · no objections"); narrower, without time and icons, their
    number in the composer's words ("Checked by 2 AIs · no objections");
-   narrowest, "Checked · no objections". The names stay one tap away, in
-   the opened activity. Each step sits where the longest words of its form
-   still fit whole, measured in the app (the words have the column less
+   narrowest, "Checked · no objections". A check in part says so in every
+   form; on the narrowest head, where its outcome would not fit after it,
+   "Checked in part" stands alone (Notes counts the outcome under the
+   answer), never "Checked". The names stay one tap away,
+   in the opened activity. Each step sits where the longest words of its
+   form still fit whole, measured in the app (the words have the column less
    68px): "Geprüft von 2 KIs · 12 Anmerkungen offen" and "Checked by 2 AIs
    · 12 sentences improved" need 336px of column, "Teilweise geprüft von 2
-   KIs · 12 Anmerkungen offen" 390px, "Teilweise geprüft · 12 Anmerkungen
-   offen" 329px; a note without names keeps its time ("Antwort in 12 Min.
-   4 Sek. · Prüfung gestoppt") from 345px. */
+   KIs · 12 Anmerkungen offen" 390px; a note without names keeps its time
+   ("Antwort in 12 Min. 4 Sek. · Prüfung gestoppt") from 345px. */
 @container agent-head (max-width: 479px) {
   .agent-activity.has-check-note > summary :is(.agent-model-stack, .agent-history-models) { display: none; }
   .agent-activity.has-check-note > summary .agent-inline-controls { border-left: 0; padding-left: 0; margin-left: 0; }
@@ -1051,6 +1056,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 @container agent-head (max-width: 389px) {
   .agent-activity.has-check-names .agent-activity-after > .agent-activity-by.is-partial::before { content: attr(data-brief); }
 }
+/* "Teilweise geprüft · 12 Anmerkungen offen" needs 329px of column. */
+@container agent-head (max-width: 328px) {
+  .agent-activity.has-check-partial .agent-activity-after > .agent-activity-by ~ span { display: none; }
+}
 @container agent-head (max-width: 344px) {
   .agent-activity.has-check-note:not(.has-check-names) .agent-activity-title > :not(.agent-activity-after),
   .agent-activity.has-check-note:not(.has-check-names) .agent-activity-after > .agent-activity-sep:first-child { display: none; }
@@ -1059,9 +1068,6 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 }
 @container agent-head (max-width: 335px) {
   .agent-activity.has-check-names .agent-activity-after > .agent-activity-by:not(.is-partial)::before { content: attr(data-least); }
-}
-@container agent-head (max-width: 328px) {
-  .agent-activity.has-check-names .agent-activity-after > .agent-activity-by.is-partial::before { content: attr(data-least); }
 }
 .agent-activity-chevron { width: 1em; height: 1em; margin-left: 1px; color: var(--ink-3); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transition: transform var(--dur-state) var(--ease-standard); }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(180deg); }

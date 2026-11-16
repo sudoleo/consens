@@ -68,9 +68,10 @@ Ein vor dem Versand gescheiterter oder gestoppter Start gibt den Entwurf samt
 Zitat zurück, sofern der Nutzer inzwischen keinen anderen Entwurf begonnen oder
 Chat/Account gewechselt hat. Bereits versendete Nachrichten werden nicht erneut
 als ungesendet angeboten. Der Stift an der neuesten eigenen Nachricht
-(„Edit and send again“, nur wenn kein Lauf läuft) legt sie zurück ins Feld, um
-sie geändert als neue Nachricht zu senden; ein Entwurf im Feld bleibt davor
-stehen (`agent-chat.js` `syncAskEdit`/`editLastMessage`).
+(„Edit and send again“, nur wenn kein Lauf läuft, nicht an einer Nachricht mit
+Dateien) legt sie zurück ins Feld, um sie geändert als neue Nachricht zu
+senden; ein Entwurf im Feld bleibt davor stehen (`agent-chat.js`
+`syncAskEdit`/`editLastMessage`).
 
 Unter jeder stehenden Agent-Antwort ist „Copy“ eine Zelle der Leiste, vor Watch
 und Share (`answer-copy.js`, seit 2026-11-16): Markdown als Text, die

@@ -1712,7 +1712,7 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
   part.status = 'partial';
   part.audit.reviewers[1].status = 'failed';
   expect(w.App.agentReview.headNote(part, true).forms).toEqual({ full: 'checked in part by OpenAI',
-    count: 'checked in part by 1 AI', brief: 'checked in part', least: 'checked', partial: true });
+    count: 'checked in part by 1 AI', brief: 'checked in part', least: 'checked in part', partial: true });
   expect(w.App.agentReview.correctionUnchecked(done)).toBe(false);
 });
 

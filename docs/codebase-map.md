@@ -7227,8 +7227,12 @@ zu seiner neuen Breite gleitet, behalten die Namen ihre (`.is-gliding`) und
 werden von links aufgedeckt; stehen sie am Ende gekürzt, wechselt der Kopf
 ohne Gleiten); darunter ohne Zeit und Logos die Zählform („Checked by 2 AIs ·
 no objections“, per `::before` mit `content: attr(data-count)`, erster
-Buchstabe groß); unter 336 px nur „Checked · …“ (bei `partial` unter 390 px
-„Checked in part · …“, unter 329 px „Checked · …“). Ein Kopf ohne Namen
+Buchstabe groß); unter 336 px nur „Checked · …“. Eine Prüfung in Teilen sagt
+es auf jeder Stufe, nie „Checked“ allein (`least` ist dort „checked in
+part“; unter 390 px „Checked in part · …“); unter 329 px, wo „Teilweise
+geprüft · 12 Anmerkungen offen“ nicht mehr ganz passt, steht „Checked in
+part“ ohne Ergebnis (`.has-check-partial`), Notes zählt es unter der
+Antwort. Ein Kopf ohne Namen
 („check stopped“, „not checked“, „refining…“) verliert unter 480 px die Logos
 und unter 345 px die Zeit. Die Schwellen sind in der App gemessen (die Worte
 haben die Spalte weniger 68 px; die längsten: „Geprüft von 2 KIs · 12
@@ -8123,7 +8127,10 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   2026-11-16): nur an der neuesten Nachricht eines Agent-Chats, sichtbar, solange
   im Chat auf dem Bildschirm kein Lauf läuft (`syncAskEdit` aus `project` und
   `renderShellNow`; nicht an einer geplanten Watch-Nachricht `.is-watch-run`,
-  nicht während eine Nachricht unterwegs ist `body.thread-message-pending`).
+  nicht während eine Nachricht unterwegs ist `body.thread-message-pending`,
+  nicht an einer Nachricht mit Dateien `#threadAskAttachments` mit Chips: er
+  gäbe die Worte ohne die Dateien zurück, und eine Nachricht nur aus Dateien
+  hieße ihre Namen; `editLastMessage` verweigert dort auch selbst).
   Er sitzt links neben der Blase auf ihrer letzten Zeile, absolut, ohne eigenen
   Platz, immer sichtbar (kein Hover nötig, 44 px Fingerfläche). Ein Klick
   (`editLastMessage`) legt `#threadAskText[data-question]` ins Feld, Cursor ans

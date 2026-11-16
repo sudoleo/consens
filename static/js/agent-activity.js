@@ -362,6 +362,7 @@
     view.checkNoteKey = key;
     view.details.classList.toggle('has-check-note', parts.length > 0);
     view.details.classList.toggle('has-check-names', by >= 0 && by < parts.length);
+    view.details.classList.toggle('has-check-partial', by >= 0 && by < parts.length && forms?.partial === true);
     if (!parts.length) {
       view.checkNote?.remove();
       view.checkNote = null;

@@ -1435,7 +1435,9 @@
   // the message back into the box to be edited and sent again as a new one;
   // nothing is replaced, nothing branches. Only while no run goes on in the
   // chat on screen. A Watch's scheduled run, whose task the user did not
-  // type then, and a message on its way have none (agent-chat.css).
+  // type then, a message on its way and a message with files have none
+  // (agent-chat.css): the box would get its words back without its files,
+  // and a message of files alone reads as their names.
   function syncAskEdit(running) {
     const edit = document.querySelector('#threadAsk .thread-ask-edit');
     const show = selectedMode() === 'agent' && !running;
@@ -1447,7 +1449,8 @@
   function editLastMessage() {
     const input = document.getElementById('questionInput');
     const question = document.getElementById('threadAskText')?.dataset.question || '';
-    if (!input || input.disabled || !question.trim()) return;
+    const files = document.getElementById('threadAskAttachments')?.childElementCount > 0;
+    if (!input || input.disabled || !question.trim() || files) return;
     const draft = input.value;
     if (!draft.trim()) input.value = question;
     else if (!draft.includes(question)) input.value = `${draft.replace(/\s+$/, '')}\n\n${question}`;

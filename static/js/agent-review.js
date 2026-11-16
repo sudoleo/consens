@@ -738,7 +738,8 @@
   // here (the names are no words of the dictionary): `full` names the
   // families ("checked by Claude and DeepSeek"), `count` counts them in the
   // composer's words ("checked by 2 AIs"), `brief` and `least` say only
-  // that ("checked in part", "checked"). Null without a name to give.
+  // that ("checked"). A check in part says so in every form, "checked in
+  // part" at the least. Null without a name to give.
   function checkedBy(review) {
     const done = (review.audit.reviewers || []).filter(r => r.status === 'completed');
     const names = familyNames(done);
@@ -747,7 +748,7 @@
     if (review.status === 'partial') {
       return { full: App.t('checked in part by {names}', { names: list }),
         count: count === 1 ? App.t('checked in part by 1 AI') : App.t('checked in part by {count} AIs', { count }),
-        brief: App.t('checked in part'), least: App.t('checked'), partial: true };
+        brief: App.t('checked in part'), least: App.t('checked in part'), partial: true };
     }
     return { full: App.t('checked by {names}', { names: list }),
       count: count === 1 ? App.t('checked by 1 AI') : App.t('checked by {count} AIs', { count }),
