@@ -58,6 +58,12 @@ function wrapUpNote() {
     before(window) { window.App = {}; } }).window.App.agentReview.wrapUpNote;
 }
 
+// The run's first activity: it works, and takes messages (agent-chat.js deliver).
+function runWorks(handlers) {
+  handlers.activity.receive({ version: 1, step_id: "completion:0", id: "completion:0/status", kind: "status",
+    status: "working", text: "Working" });
+}
+
 async function selectAgent(window) {
   // The one mode choice (run-mode.js); agent-chat.js re-renders on its event.
   window.App.runMode.set("compare");
@@ -1899,8 +1905,11 @@ describe("single-model agent chat", () => {
     await selectAgent(window);
     const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
     document.body.append(queue);
-    let resolve;
-    window.streamSSERequest = vi.fn(() => new Promise(r => { resolve = r; }));
+    let resolve, handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => {
+      handlers = received;
+      return new Promise(r => { resolve = r; });
+    });
     window.sendQuestion = vi.fn();
     const catalogFetch = window.fetch;
     window.fetch = vi.fn(async (url, options) => String(url).endsWith("/notes")
@@ -1909,6 +1918,7 @@ describe("single-model agent chat", () => {
     input.value = "Question";
     const pending = window.App.agentChat.send();
     await vi.waitFor(() => expect(window.streamSSERequest).toHaveBeenCalled());
+    runWorks(handlers);
     expect(window.App.agentChat.steering()).toBeNull();
     input.value = "Also compare the prices";
     expect(window.App.agentChat.steering()).toEqual({ title: "Send into the running response" });
@@ -1948,6 +1958,7 @@ describe("single-model agent chat", () => {
     window.App.agentChat.send();
     await vi.waitFor(() => expect(handlers).toBeDefined());
     const run = window.App.runRegistry.visible();
+    runWorks(handlers);
     input.value = "Use the newer data";
     await window.App.agentChat.steer();
     const row = queue.querySelector(".agent-queue-item");
@@ -2005,6 +2016,36 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(queue.querySelector(".agent-queue-state").textContent).toBe("Read before the next step"));
     expect(window.fetch.mock.calls.filter(([url]) => String(url).endsWith("/notes"))).toHaveLength(1);
     window.App.runRegistry.cancel(run.runId, "user");
+    dom.window.close();
+  });
+
+  // The request is on its way (requestSent), but its turn has no running
+  // root yet: the server refused a message sent then (409), and the one try
+  // was spent, so it went out only after the response as a new message.
+  it("holds a message typed while the request is on its way until the run's first activity", async () => {
+    const { window, document, dom } = boot();
+    await selectAgent(window);
+    const queue = document.createElement("div"); queue.id = "agentQueue"; queue.hidden = true;
+    document.body.append(queue);
+    let handlers;
+    window.streamSSERequest = vi.fn((_url, _payload, _signal, received) => { handlers = received; return new Promise(() => {}); });
+    const catalogFetch = window.fetch;
+    window.fetch = vi.fn(async (url, options) => String(url).endsWith("/notes")
+      ? { ok: true, json: async () => ({ status: "added", id: "n1" }) } : catalogFetch(url, options));
+    const notes = () => window.fetch.mock.calls.filter(([url]) => String(url).endsWith("/notes"));
+    const input = document.getElementById("questionInput");
+    input.value = "Question";
+    window.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    expect(window.App.runRegistry.visible().metadata.requestSent).toBe(true);
+    input.value = "In German, please";
+    await window.App.agentChat.steer();
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sends after this response");
+    expect(notes()).toHaveLength(0);
+    runWorks(handlers);
+    await vi.waitFor(() => expect(queue.querySelector(".agent-queue-state").textContent).toBe("Read before the next step"));
+    expect(notes()).toHaveLength(1);
+    window.App.runRegistry.cancel(window.App.runRegistry.visible().runId, "user");
     dom.window.close();
   });
 
@@ -2251,6 +2292,7 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(handlers).toBeDefined());
     const run = window.App.runRegistry.visible();
     run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    runWorks(handlers);
     const catalogFetch = window.fetch;
     window.fetch = vi.fn(async (url, options) => String(url).endsWith("/notes")
       ? { ok: true, json: async () => ({ status: "added", id: "n1" }) } : catalogFetch(url, options));
@@ -2346,6 +2388,7 @@ describe("single-model agent chat", () => {
     await vi.waitFor(() => expect(handlers).toBeDefined());
     const run = window.App.runRegistry.visible();
     run.metadata.chatId = "a".repeat(32); run.metadata.requestSent = true;
+    runWorks(handlers);
     const catalogFetch = window.fetch;
     let answer;
     window.fetch = vi.fn(async (url, options) => String(url).endsWith("/notes")

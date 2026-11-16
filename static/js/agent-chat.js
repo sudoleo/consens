@@ -1590,8 +1590,9 @@
   async function deliver(context, item) {
     // Before the response has started it waits for the run's first step
     // (deliverQueued), else for its end. Tried once: one the run refused
-    // goes out after it.
-    if (!context.metadata.chatId || !context.metadata.requestSent || item.tried) return;
+    // goes out after it. A request on its way has no running turn the
+    // server would take it into (409): the run's first activity says it works.
+    if (!context.metadata.chatId || !context.metadata.runActive || item.tried) return;
     item.tried = true;
     item.state = "sending";
     persistQueue(context);
@@ -2772,6 +2773,7 @@
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         App.agentActivity?.receive(context.metadata.agentActivity, event);
         delivered(context, event);
+        context.metadata.runActive = true;
         deliverQueued(context);
         if (event.kind === "status" && event.clear_response) context.consensus.streamText = "";
         if (event.settings) context.metadata.agentSettings = event.settings;

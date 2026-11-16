@@ -7257,7 +7257,9 @@ und faltet nie, ohne eigene Statuszeile darunter, seit 2026-10-29, UX-Audit C9),
 der Nutzer während eines laufenden Turns abschickt, startet keinen neuen
 Turn. `agent-chat.js` `steer` legt sie in `#agentQueue` und schickt sie per
 `POST …/notes` an den Lauf (`deliver`; vor dem ersten Schritt erst beim
-ersten Aktivitäts-Frame, `deliverQueued`; nach dem Fixieren der Antwort,
+ersten Aktivitäts-Frame, `metadata.runActive` + `deliverQueued`, auch wenn
+die Anfrage schon unterwegs ist: bis dahin hat der Server keinen laufenden
+Turn und lehnt mit 409 ab; nach dem Fixieren der Antwort,
 `readsMessages`, geht sie nach dem Lauf als nächste Nachricht raus).
 `AgentSessionStore.add_user_note` legt sie an `user_notes` am Root-Beleg,
 `DelegationLoop._receive_notes` nimmt sie (sofort über `receive`, sonst über

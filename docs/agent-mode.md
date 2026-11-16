@@ -3534,7 +3534,9 @@ der VM) und, nur mit der VM, der Checkpoint:
   „Send now“, bis die Aktivität sie gelesen meldet (`note-<id>`). Vor dem
   ersten Schritt des Laufs (Anfrage noch unterwegs) wartet sie dort als
   „Sends after this response“ (mit ×) und geht beim ersten Aktivitäts-Frame
-  hinein (`deliverQueued`, ein Versuch je Nachricht); ebenso wartet sie,
+  hinein (`deliverQueued`, ein Versuch je Nachricht; `metadata.runActive`,
+  denn schon gesendet heißt nicht laufend: bis zum ersten Schritt lehnt der
+  Server mit 409 ab); ebenso wartet sie,
   sobald die Antwort fixiert ist (eine Version in der Review,
   `readsMessages`): Danach macht der Agent keinen Schritt mehr. Was der Lauf
   nicht las, geht nach seinem Ende als nächste Nachricht raus; nach Stop oder
