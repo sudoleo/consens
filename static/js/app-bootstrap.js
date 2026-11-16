@@ -45,6 +45,28 @@
   window.App = window.App || {};
   window.App.askPlaceholder = () => "Ask anything";
 
+  // ---- A sign-in link from the mail ----------------------------------------
+  // /app#signin=<code> (app/services/sign_in_links.py). The code leaves the
+  // address before any other script, the history or a bookmark can keep it,
+  // and waits here for firebase.js, which spends it once.
+  let signInCode = "";
+  if (String(window.location.hash || "").startsWith("#signin=")) {
+    signInCode = window.location.hash.slice("#signin=".length, "#signin=".length + 128);
+    try {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    } catch (_) { /* the page still works; the code is spent at the first try */ }
+  }
+  window.App.takeSignInCode = function () {
+    const code = signInCode;
+    signInCode = "";
+    return code;
+  };
+  // The same /app tab reused for a link changes only its fragment; a fresh
+  // page takes the code the one way above.
+  window.addEventListener("hashchange", () => {
+    if (String(window.location.hash || "").startsWith("#signin=")) window.location.reload();
+  });
+
   function read(key, store = "localStorage") {
     try { return window[store].getItem(key); } catch (_) { return null; }
   }

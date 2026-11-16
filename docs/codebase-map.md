@@ -599,7 +599,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | `chat.py` | Kern-LLM-Flow für Compare: `/prepare` und die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`). Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. Eine Frage an `/ask_*` setzt keinen Chat fort: Kontextfelder (`context`, `chat_id`/`turn_id`/`context_version_id`) werden ignoriert. `/consensus` und `/resolve` sind seit 2026-10-25 entfernt; den Consensus fährt nur noch der Server (`consensus_pipeline`). |
 | `chat_history.py` | Owner-gebundene Chat-Persistenz: `POST/GET /chats` (der Browser legt hier nur Agent-Chats an, `execution_mode: "agent"`; seit 2026-11-01 mit `temporary: true` einen temporären, nur Agent, sonst 422, siehe §4 „Temporäre Chats“), `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail und Turns bereits unsichtbar bzw. gesperrt). Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`. `ChatStore.fail_turn` liest Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptiert ausschließlich einen weiterhin `active` Chat. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Agent-Turns entstehen und enden über `/agent`. Die Consensus-Turn-Routen (`POST/GET /chats/{id}/turns`, `GET …/turns/{turn}`, `POST …/context`) und `ChatStore.complete_turn` sind seit 2026-10-25 entfernt; gespeicherte Consensus-Chats liest der Browser aus ihrem Bookmark (`GET /bookmarks/{id}/conversation`). |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Runtime-Fehler liefern zusätzlich Bundle-Koordinaten (Ort + bis zu fünf `[bundle, zeile, spalte]`-Frames), die über `static/dist/<bundle>.map` auf `static/js/…:zeile:spalte` aufgelöst werden, den Namen des laufenden App-Bundles und nur bei `TypeError`/`ReferenceError`/`RangeError`/`SyntaxError` die entschärfte Message (lange Literale → „…“, URLs/Mails/Secrets raus, max. 200 Zeichen). Der Endpoint liefert keine Konfigurationsdetails zurück. |
-| `auth.py` | `/register`, `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen durchlaufen danach denselben Mailbox-Setup-Pfad: Der Admin-SDK-Reset-Link (`continueUrl = {PUBLIC_SITE_URL}/app?setup=1`, damit Firebases „Passwort gespeichert“-Seite zurück in den vorausgefüllten Login führt) geht in einer EIGENEN SMTP-Mail raus (`registration.send_own_setup_email` → `mailer.build_account_setup_message` „Finish setting up …“ bzw. für Konten mit mindestens einem Login `build_existing_account_message` „You already have an account“ mit Login-Knopf + optionalem Reset; „Send the link again“ vor dem ersten Login bekommt wieder die Setup-Mail, `needs_password_setup`). Grund: Firebases Vorlage sagt „Reset your password“ und ist in diesem Projekt gesperrt. Ohne SMTP oder bei Fehlern geht wie früher Firebases `PASSWORD_RESET`-Mail raus (lehnt Firebase die Continue-URL mit 400 ab, ohne sie). Die HTTP-Antwort bleibt in allen Fällen identisch. Neben dem IP-Limit (3/min) gehen pro Adresse höchstens 5 Setup-Mails je Stunde raus (prozesslokal über `api_uid_limiter`, Schlüssel = SHA-256 der Adresse); darüber antwortet `/register` gleich und versendet nichts, damit niemand über viele IPs ein fremdes Postfach flutet. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig; es läuft bei jedem Login und Seitenaufruf und ist deshalb nur gegen Fluten begrenzt (30/min pro IP). |
+| `auth.py` | `/register`, `POST /auth/email-link/account` und `POST /auth/email-link` (seit 2026-11-16: wessen Link, ohne ihn zu verbrauchen; dann Code aus der Anmeldemail → Firebase-Custom-Token; siehe „Anmelden per E-Mail-Link“ in §4), `/confirm-registration` (setzt nach verifiziertem Login zusätzlich eine kurzlebige HttpOnly-Session für private servergerenderte Seiten), `DELETE /auth/session` (lokales Logout-Cleanup). `/register` gibt für Neuanlage, Bestand und Create-Race exakt `{"status":"check_inbox"}` zurück, nie UID/E-Mail/Custom-Token. Unbekannte Adressen erhalten ein serverseitig zufälliges, dem anonymen Aufrufer unbekanntes Übergangspasswort; neue und bestehende Adressen bekommen danach dieselbe Art Mail: seit 2026-11-16 einen Anmeldelink mit EINEM Knopf (`registration.deliver_sign_in_email` → `sign_in_links.issue` + `mailer.build_sign_in_message`; Wortlaut „Welcome …/Confirm and log in“ für Konten ohne ersten Login, `needs_password_setup`, sonst „Your login link …/Log in“). Sie verlangt eigenes SMTP und Firestore; fehlt eines oder scheitert der Versand, wird der Code verworfen und es geht der frühere Passwort-Setup-Weg raus: der Admin-SDK-Reset-Link (`continueUrl = {PUBLIC_SITE_URL}/app?setup=1`) in einer EIGENEN SMTP-Mail (`registration.send_own_setup_email` → `mailer.build_account_setup_message` „Finish setting up …“ bzw. `build_existing_account_message` „You already have an account“), sonst Firebases `PASSWORD_RESET`-Mail (lehnt Firebase die Continue-URL mit 400 ab, ohne sie). Grund für eigene Mails: Firebases Vorlage sagt „Reset your password“ und ist in diesem Projekt gesperrt. Die HTTP-Antwort bleibt in allen Fällen identisch. Neben dem IP-Limit (3/min) gehen pro Adresse höchstens 5 Setup-Mails je Stunde raus (prozesslokal über `api_uid_limiter`, Schlüssel = SHA-256 der Adresse); darüber antwortet `/register` gleich und versendet nichts, damit niemand über viele IPs ein fremdes Postfach flutet. Der Browser versucht keinen Login mit den eingesendeten Legacy-Credentials. Nur ein tatsächlich neues Konto löst den PII-freien Telegram-Admin-Alert aus. `/confirm-registration` prüft Revocation live und erkennt damit auch gerade neu angelegte Google-Konten serverseitig; es läuft bei jedem Login und Seitenaufruf und ist deshalb nur gegen Fluten begrenzt (30/min pro IP). |
 | `firebase_auth_proxy.py` | Same-Origin-Proxy für Firebases Sign-in-Helfer: `GET/HEAD/POST /__/auth/*` und `GET /__/firebase/init.json` werden transparent an `https://<FIREBASE_PROJECT_ID>.firebaseapp.com` (überschreibbar per `FIREBASE_AUTH_PROXY_UPSTREAM`) weitergereicht (Firebase „redirect best practices“, Proxy-Option). Weitergereicht werden nur Request-Zeile, Content-Negotiation-Header und der Handler-Body, nie Cookies/Authorization; zurück nur Inhalts-/Cache-Header, kein `Set-Cookie`. `CustomSecurityMiddleware` lässt auf diesen Pfaden die App-CSP weg und setzt `X-Frame-Options: SAMEORIGIN` (das `/__/auth/iframe` rahmt die App selbst). Wirksam erst, wenn `FIREBASE_AUTH_DOMAIN` den App-Host nennt (siehe §7). Ohne Projekt-ID 404, Upstream-Fehler neutral 502. Unter `/__/auth/` nur schlichte Helfernamen (Segmente aus `[A-Za-z0-9_.-]`, kein `.`/`..`), sonst 404: Der Server dekodiert `%2F`, httpx löst Punkt-Segmente auf, `..%2F` holte sonst jede Seite der Hosting-Site ohne CSP. |
 | `users.py` | `/user_status`, `/usage` (kann die Kontoprüfung nicht gelesen werden – `AuthenticationUnavailable` –, antworten beide 503 mit `Retry-After`, nie 401: der Browser fragt dann nach, statt Agent für die Sitzung abzuschalten), `/usage/run/release`, `GET`/`PUT /api/my/memory` sowie `POST /api/my/memory/edit|undo` (User-Memory samt explizitem, revisioniertem Luna-Patch, siehe §3), `POST`/`DELETE /api/my/memory/items` und `POST /api/my/memory/changes/{change_id}/undo` (gespeicherte Einzel-Erinnerungen, siehe §3 „Agent-Memory“), `GET`/`PATCH /api/my/settings` (Kontoeinstellungen, siehe §4 „Kontoeinstellungen“), `POST /api/my/ai-consent` (Zustimmung zur Weitergabe an KI-Anbieter, siehe §4 „Auth / Usage / Tier“), `/delete_account`, `/track-interest`. `/delete_account` legt vor jeder Löschung einen persistenten, fail-closed Auftrag über `FirestoreAccountDeletion` an. Die idempotente Kaskade umfasst API-Zugang/Telegram, alle Nutzer-Subcollections, Chats, Waitlist/Feedback, Pending Results, Persistence-Guards/Votes, Watches/Briefs, Follow-Challenges/E-Mail-Follows, eigene Shares über deren bestehende Hard-Delete-Kaskade, Profil und Firebase Auth. Jeder Bereich wird separat quittiert und bei Fehlern vom fünfminütigen Maintenance-Loop erneut versucht; bis dahin lautet die Antwort ehrlich `202 cleanup_pending`, erst der vollständige Abschluss ergibt 200. Owner-gebundene Create/Update/Delete-Transaktionen lesen den Account-Tombstone als ersten Teil derselben Mutation; nur interne Cleanup-Kaskaden verwenden explizite Bypässe. Dadurch können bereits authentifizierte, verspätete Requests keinen zuvor quittierten Bereich neu befüllen. `/track-interest` ist der idempotente Pro-Beta-Zugangsrequest (ein Pending-Dokument pro UID, kein Billing); aktive Pro-Konten werden abgewiesen. **Seit 2026-07-25 ruft die App diesen Endpunkt nicht mehr auf** — es wird nichts mehr angeboten, das man anfragen könnte; der Endpunkt bleibt nur bestehen, damit vorhandene Waitlist-Dokumente nicht verwaisen. |
 | `bookmarks.py` | `GET /bookmarks` liefert ausschließlich kompakte Metadaten, standardmäßig 30 Einträge und einen opaken Cursor; seit 2026-10-16 liest die Liste per Projektions-Query nur `query`, `title`, `title_source`, `mode`, `timestamp`, `pinned`, `pinned_at` und `list_summary` (statt ganzer Dokumente mit allen Antworten, bis 750 kB, Audit C4). Seit 2026-10-22 heftet `PATCH /bookmarks/{id}/pin` (`{pinned: bool}`, strikt) einen Chat oben an: `persistence_guard.write_bookmark` merged `pinned: true` + `pinned_at` (bzw. `false`/`null`), legt nie ein gelöschtes Bookmark neu an (404) und übersteht wie der Name jeden späteren Save; die erste Seite von `GET /bookmarks` (ohne Cursor) bringt zusätzlich `pinned` mit, alle angehefteten Chats (Gleichheitsfilter `pinned == true`, automatischer Einzelfeld-Index; seit 2026-11-07 bis zur Bookmark-Grenze `MAX_PINNED_BOOKMARKS` = `MAX_BOOKMARKS_PER_USER` = 500 statt 50 in Dokumentreihenfolge, ein Read je Pin; neuester Pin zuerst, in Python nach `pinned_at` sortiert, weil `order_by` einen Composite-Index bräuchte), damit ein alter angehefteter Chat nicht erst auf Seite fünf kommt; scheitert diese Zusatzabfrage, kommt die Seite ohne sie. `list_summary` (`has_consensus`, `model_count`, `source_count`, `attachment_count`) schreibt `persistence_guard.write_bookmark` bei JEDEM Save neu aus dem zusammengeführten Dokument; ältere Bookmarks ohne gültige Summary liest die Liste weiterhin voll (`get_all`, nur diese Zeilen), bis `scripts/backfill_bookmark_list_summary.py --apply` sie nachträgt. Neue Listenfelder brauchen deshalb einen Eintrag in `_BOOKMARK_LIST_FIELDS`; `GET /bookmarks/{id}` liefert owner-geschützt den Vollinhalt. Sidebar-Name: `title` ist die erste Frage (`query` die letzte); seit 2026-10-03 benennt `POST /bookmarks/{id}/title` die Unterhaltung einmalig ChatGPT-artig mit 2–6 Wörtern (`app/services/chat_titles.py`: ein strukturierter Call über `query_engine_json` mit dem Chat-Memory-Modell der ersten verfügbaren Familie, Gemini zuerst, auf Betreiberkosten; MOCK_LLM liefert `Topic: …`; höchstens `BOOKMARK_TITLES_PER_HOUR` = 30 Modellaufrufe pro Konto und Stunde, darüber `skipped`). Der Titel landet zuerst auf dem Chat-Dokument (Agent- und Follow-up-Saves kopieren dessen `title`), dann mit `title_source: "generated"` auf dem Bookmark; `persistence_guard.write_bookmark` verwirft in derselben Transaktion jedes spätere `title` ohne `title_source`, damit Modell-/Consensus-Saves desselben Laufs den Namen nicht zurücksetzen. Scheitert der Call, bleibt die Frage der Name (`status: "skipped"`, nie ein Fehler); fehlende Bookmarks werden nicht neu angelegt. Listenmetadaten tragen `title_source`. Auf dieselbe Art sagt seit 2026-10-16 `POST /api/my/starter-questions` die Beispielfragen eines leeren neuen Chats voraus (`app/services/starter_questions.py`): Projektions-Query `select(["title", "query"])` der neuesten 12 Bookmarks (nie die Antworten), ab 3 Chats ein strukturierter Call mit demselben Modell wie die Titel (Namen + letzte Frage als Daten, Datum im Prompt), Rückgabe höchstens drei `{label, question}` (Wiederholungen schon gestellter Fragen, Labels über 40 Zeichen und weniger als zwei brauchbare verworfen); `STARTER_PREDICTIONS_PER_HOUR` = 12 pro Konto und Stunde, geprüft vor dem Read; jedes Scheitern ist `status: "skipped"`. MOCK_LLM liefert `More on …?`. Chat-Bookmarks referenzieren additiv `chat_id`/letzte `turn_id`; `GET /bookmarks/{id}/conversation` paginiert dafür die vollständigen owner-gebundenen completed Turns aus `ChatStore`, statt den wachsenden Transcript in ein Bookmark-Dokument zu kopieren; seit 2026-10-29 nennt es bei Agent-Chats zusätzlich `running` (`_running_agent_turn`: der neueste `pending`-Turn mit `id`, `question`, `client_request_id`, `position`, `attachments` und den Identitätsfeldern seiner `agent_settings`, sonst `null`), damit ein zweiter Tab oder ein anderes Gerät dem laufenden Turn folgt (`agent-chat.js` `followRunning`, A-B2); der Normalpfad läuft über `ChatStore.list_turn_details` (Chat einmal pro Seite geprüft; seit 2026-10-16 holt `_page_model_answers` die Modellantworten aller completed Turns der Seite gesammelt per `get_all` über die aus `included_models` bekannten Dokument-IDs, je 100 Dokumente ein Aufruf, Audit C6; pending/failed Turns lesen keine Antworten, nur completed Turns ohne `included_models` behalten die Query pro Turn) und benötigt damit meist 3 SDK-Aufrufe pro Seite statt `2 + N`. Abgerechnet werden weiterhin Dokument-Reads: Chat + gelesene Turn-Dokumente (inklusive Pagination-Sentinel) + alle zurückgegebenen Antwortdokumente; eine Query ist nicht ein einzelner Dokument-Read. Scheitert nur dieser optimierte Collection-Read, fällt der Endpoint korrektheitshalber auf `list_turns` + owner-gebundene Turn-Details zurück, statt den Browser auf zwei Bookmark-Snapshots zu reduzieren. Der Endpunkt ist bewusst ein synchrones `def`, damit die blockierenden Reads im Threadpool statt auf dem Event-Loop laufen. `/bookmark` (POST/DELETE), `/bookmark/consensus` sowie `POST /bookmark/consensus/share-result` erhalten Speichern, Löschen und die sichere Share-/Watch-Rehydration. Consensus-Inhalte werden aus einem owner-gebundenen Pending Result oder completed Turn serverseitig materialisiert, nicht aus frei behaupteten Clientfeldern; ein neuer Share-Snapshot eines Bookmarks entsteht ausschließlich aus dessen completed Turn (`_completed_turn_payload`, Abschnitt „Sharing“), weil `POST /bookmark` `query` und `sources` weiterhin überschreiben darf; die alten, ignorierten Client-Kopien bleiben für gecachte Clients im Schema, werden aber nicht mehr formvalidiert und können den autoritativen Save daher nicht mit 422 blockieren. Quellenlisten werden nicht nach Anzahl gekürzt; die bestehenden Dokument- und Request-Bytebudgets begrenzen den Save ausdrücklich. `persist_authoritative_consensus_bookmark` ist der gemeinsame Writer für den primären `/consensus`-Abschluss und den idempotenten `/bookmark/consensus`-Fallback. Der breite slowapi-IP-Schutz sitzt vor der Tokenprüfung; die eigentlichen Modell- und Consensus-Save-Budgets gelten danach pro UID, damit der interne Preset-Fan-out nicht mit fremden Nutzern an einem Proxy-/NAT-Bucket konkurriert. Persistent gelten höchstens 500 Bookmarks, 750 kB je Dokument und 25 MB geschätztes Gesamtbudget pro UID. Die Bookmark-Grenze ist nur Netz unter dem Chat-Limit (`MAX_CHATS_PER_OWNER`, vor dem Lauf): sie greift erst nach dem bezahlten Lauf und liegt deshalb mindestens beim Doppelten (Test). Lehnt sie den Agent-Abschluss ab, meldet `/agent` „Your saved chats are full …“ (Code `bookmark_count_limit`/`bookmark_storage_limit`, `recoverable`, Recover → 409 statt 500); nach dem Freiräumen holt „Recover saved answer“ den Eintrag nach. Die App zeigt die `bookmark_*`-Codes (auch `bookmark_unavailable`) immer, selbst unter einer geprüften Antwort (`agent-chat.js` failureNotice); das Chat-Limit erscheint vor dem Lauf als „Message not sent. You've reached the maximum number of saved chats …“, der Entwurf bleibt im Feld. `DELETE /bookmark` liest die Chat-Bindung und legt **vor** dem Entfernen des Bookmarks per `ChatStore.request_chat_deletion` in einer Transaktion Tombstone (`status=deleting`), einmaligen Zählerabzug und einen dauerhaften Auftrag `chat_deletion_jobs/{sha256(uid:chat)[:40]}` an; erst danach wird das Bookmark gelöscht und `run_chat_deletion` versucht die Kaskade sofort. Scheitert sie (auch zwischen zwei Batches) oder stirbt der Prozess, bleibt der Auftrag mit `attempts`, `last_error` (nur Kategorie) und Backoff (`next_attempt_at`, 1 min bis 6 h) sichtbar und `resume_chat_deletions` im stündlichen Retention-Loop beendet ihn; quittiert wird erst nach vollständiger Kaskade. Kann der Auftrag nicht angelegt werden, bleibt das Bookmark bestehen und die Antwort ist 500 (nichts gelöscht, erneut versuchbar). Saves akzeptieren eine validierte stabile `bookmarkId`, sodass alle Turns einer laufenden Unterhaltung dasselbe Sidebar-Bookmark aktualisieren; Legacy-Saves ohne ID bleiben fragebasiert. `previous_question`/`previous_turn` bleiben als kompatibler Ein-Turn-Fallback für alte Bookmarks ohne Chat-Bindung erhalten. Alle Bookmark-Antworten sind wie `/chats` `private, no-store`. Die Save-Endpunkte liefern weiterhin den zusammengeführten Datensatz zurück; der Client reduziert ihn sofort auf Listenmetadaten und hält höchstens das geöffnete Detail im Cache. Der seltene Browser-Fallback sendet nur IDs plus kleine Legacy-Texte, nutzt `keepalive`, wiederholt Netz-/408-/425-/429-/5xx-Fehler begrenzt und zeigt einen endgültigen Fehler dedupliziert verständlich an. |
@@ -9380,15 +9380,21 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
 - **Login-Dialog (seit 2026-10-04, `static/firebase.js`, Stil allein in
   `static/css/auth-modal.css`):** ein Formular mit zwei Tabs (`#authTabLogin`
   / `#authTabRegister`, Pfeiltasten), Google zuerst. Enter bzw. „Los“ der
-  Handy-Tastatur submitten das Formular, der Tab entscheidet über Login oder
-  Registrierung. Sign-up ist EIN E-Mail-Feld (keine Bestätigungsfelder mehr);
-  die Erfolgsansicht nennt die Adresse, bietet für bekannte Anbieter „Open
-  Gmail/Outlook/…“, „Send the link again“ (30/60-s-Cooldown, derselbe
-  `/register`-Aufruf) und „Use a different address“. Die Adresse liegt bis zum
-  nächsten Login unter `consensio.authEmail`; `/app?setup=1` (Continue-URL der
-  Setup-/Reset-Mail) öffnet den Login vorausgefüllt mit Hinweis und entfernt
-  den Parameter. „Forgot password?“ antwortet immer neutral („If an account
-  exists …“) und führt ebenfalls über `/app?setup=1` zurück. Jede Aktion zeigt
+  Handy-Tastatur submitten das Formular, `formEl.dataset.mode` entscheidet:
+  `login` (Passwort), `link` (Anmeldelink per Mail, seit 2026-11-16, unter dem
+  Tab Log in; „Email me a link instead“ `#emailLinkButton` unter dem Knopf
+  wechselt hinein, „Use a password instead“ `#passwordModeButton` zurück,
+  Knopf `#sendLinkButton`) oder `register`. Sign-up ist EIN E-Mail-Feld ohne
+  Passwort; Sign-up und Link-Modus rufen beide `/register` und zeigen dieselbe
+  Erfolgsansicht („Check your inbox“, „Open the link and you’re in.“): die
+  Adresse, für bekannte Anbieter „Open Gmail/Outlook/…“, „Send the link again“
+  (30/60-s-Cooldown, derselbe Aufruf) und „Use a different address“ (zurück in
+  den Modus, der gesendet hat). Die Adresse liegt bis zum nächsten Login unter
+  `consensio.authEmail`. `/app?setup=1` (Continue-URL der Passwort-Mail, nur
+  noch Ausweichweg und „Forgot password?“) öffnet den Login vorausgefüllt mit
+  Hinweis und entfernt den Parameter. „Forgot password?“ antwortet immer
+  neutral („If an account exists …“) und ist auch der Weg zu einem ersten
+  Passwort für ein Konto, das nur Links kennt. Jede Aktion zeigt
   einen Ladezustand; Fehler stehen am auslösenden Element (`#googleError`
   unter Google, `#loginError`/`#registerError` unter dem Formular). Ein falsches
   Passwort heißt auch dann „E-mail or password is not correct“, wenn SDK 9.22
@@ -9410,6 +9416,54 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   zurück. Nach Popup-/E-Mail-Login lädt die Seite unter ihrer eigenen URL neu
   (Deep-Links wie `/app/watches` bleiben, eine Gast-Demo verschwindet);
   `onIdTokenChanged` schließt ein offenes Modal für jeden bestätigten Nutzer.
+- **Anmelden per E-Mail-Link (seit 2026-11-16, `app/services/sign_in_links.py`):**
+  Die Mail aus `/register` trägt `{PUBLIC_SITE_URL}/app#signin=<code>`
+  (`secrets.token_urlsafe(32)`, 43 Zeichen). Firestore
+  `sign_in_links/{sha256(code)}` hält `uid`, `email_hash`, `created_at` und
+  `expires_at` (+60 min), nie den Code. Das Fragment geht mit keinem Request
+  mit (Zugriffslog, Mail-Scanner; Umami läuft mit `data-exclude-hash`);
+  `app-bootstrap.js` nimmt es im Head vor jedem anderen Skript per
+  `history.replaceState` aus der Adresse und reicht es einmal über
+  `App.takeSignInCode()` weiter; ein schon offener `/app`-Tab, in dem nur das
+  Fragment wechselt, lädt dafür neu (`hashchange`). `firebase.js`
+  (`signInFromLink`) wartet auf
+  Firebases ersten Zustand: Ist schon ein bestätigtes Konto angemeldet, wird
+  nichts eingelöst (Toast „You’re already logged in.“; ein Link wechselt nie
+  das Konto). Sonst zeigt der Dialog die Ansicht `#linkConfirm` („Your email
+  link“, Knopf „One moment…“, ohne Lead) und fragt zuerst
+  `POST /auth/email-link/account {code}` (`sign_in_links.account_address`:
+  dieselben Prüfungen wie beim Einlösen, verbraucht nichts, ändert nichts am
+  Konto, Antwort `{email}` mit `no-store`). Ist das die Adresse, die dieser
+  Browser angefordert hat (`consensio.authEmail`, ohne Groß/Klein), löst die
+  Seite sofort ein; sonst steht „Log in as <Adresse>?“ mit dem Knopf „Log in“,
+  und erst der Klick löst ein. Eine Seite, die den Link nur lädt (ein
+  Mail-Scanner mit JavaScript), lässt ihn damit gültig, und ein untergeschobener
+  Link meldet niemanden still an. Einlösen ist `POST /auth/email-link {code}`
+  (Knopf „Signing you in…“). `redeem` liest und löscht den
+  Datensatz in EINER Transaktion; vor dem Commit prüft es das Konto bei
+  Firebase (existiert, nicht gesperrt, Adresse passt zu `email_hash`), setzt
+  bei einem unbestätigten Konto `email_verified` (der Klick beweist das
+  Postfach), ersetzt dabei ein vorhandenes Passwort durch ein zufälliges und
+  beendet ältere Sitzungen (`revoke_refresh_tokens`), und stellt
+  `auth.create_custom_token(uid)` aus (lokal mit dem Dienstkonto-Schlüssel
+  signiert, keine Konsolen-Einstellung). Antwort `{token, first}` mit
+  `no-store`; `first` = das Konto hatte noch keinen Login. Unbekannt,
+  abgelaufen, benutzt, falsches Format oder geändertes Konto: immer 400
+  `{error: "This link has expired or was already used.", code: "link_invalid"}`;
+  ein Firebase-Ausfall gibt 503 mit `Retry-After: 5` und lässt den Link
+  gültig. Der Browser meldet sich mit
+  `signInWithCustomToken` an, `onIdTokenChanged` und `/confirm-registration`
+  laufen wie bei jedem Login, `continueSignedIn()` lädt neu; die Frage eines
+  Gasts geht danach wie nach jedem Login von selbst raus (`composer-invite.js`,
+  nur im selben Browser, höchstens 60 min alt). Ein abgelehnter Link (schon
+  bei der Frage oder beim Einlösen): der Dialog wechselt in den Link-Modus,
+  der Satz steht als Lead, der Knopf heißt „Email me a new link“, die
+  Adresse steht drin, wenn dieser Browser sie kennt. Beide Endpunkte haben
+  dieselbe Absage und je 10 Anfragen/min pro IP. Abgelaufene Datensätze
+  fegt `retention_maintenance` stündlich (`sign_in_links.cleanup_expired`,
+  Einzelfeld-Index), die Kontolöschung nimmt offene Links mit (Bereich
+  `sign_in_links`). Tests: `tests/test_sign_in_links.py`,
+  `tests/e2e/test_auth_dialog.py`, `tests/e2e/test_composer_invite.py`.
 - **Revocation-Entscheidung:** seltene sensible Grenzen (`/confirm-registration`,
   `/delete_account`, sämtliche Admin-Endpunkte) verwenden den live prüfenden
   `check_revoked=True`-Pfad. Normale App-Requests prüfen das signierte ID-Token
@@ -10694,7 +10748,8 @@ app/services/
   api_account_cleanup.py     Fail-closed Account-Blocks + retrybare API-Datenlöschung
   account_deletion.py         Persistenter Vollkonto-Tombstone + bereichsweise Retry-Kaskade
   persistence_guard.py       Transaktionale Bookmark-/Feedback-Budgets; agent_best_model_choice liest gespeicherte Agent-Checks für scripts/backfill_model_pulse.py (Model-Pulse-Stimmen aus Agent-Turns bis 2026-10-31)
-  registration.py            Nicht-enumerierender Firebase-Mailbox-Setup-Pfad
+  registration.py            Nicht-enumerierender Mailbox-Pfad: Konto anlegen, Anmeldelink-Mail, Passwort-Setup als Ausweichweg
+  sign_in_links.py           Einmal-Codes der Anmeldemail (sign_in_links/{sha256}), account_address (wessen Link, verbraucht nichts), Einlösen in einer Transaktion → Custom-Token
   follow_challenges.py       Gehashte persistente Resend-/Empfänger-/Globalbudgets für Double-Opt-in
   api_key_repository.py      SHA-256-gehashte, UID-gebundene API-Schluessel
   api_run_repository.py      Idempotenz + persistente API-Run-State-Machine
@@ -10710,7 +10765,7 @@ app/services/
   notification_delivery.py   Die Arten (KINDS: load + render je Kanal) und ein Zustellversuch je Outbox-Item in fester Schrittfolge + Retry-Pass run_outbox_tick
   share_snapshots.py         Snapshot-Lifecycle (pending→share), Quoten, Cleanups, Sitemap-Quellen
   favicons.py                Begrenzter Favicon-Fetch (sz=128, < 64 px = kein Icon), Singleflight, LRU-/Negativcache, cached_favicon ohne Abruf
-  retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup + Outbox-Retention (30 Tage, nur Terminalstatus), Arbeitsplatz-Spuren (workspace_guard.cleanup_expired_trails)
+  retention_maintenance.py   Periodischer Pending-/Revoked-Share-Cleanup + Outbox-Retention (30 Tage, nur Terminalstatus), Arbeitsplatz-Spuren (workspace_guard.cleanup_expired_trails), abgelaufene Anmeldelinks (sign_in_links.cleanup_expired)
   watch_service.py           Watch-CRUD, Tier-/Intervall-/Zielregeln, Lauf-Abschluss (Signal, geltende Antwort, Abschluss), Unsubscribe-Tokens
   evidence_change.py         Change-Judge mit Quellen + serverseitige Belegprüfung (Ursache, tragende Quellen), geteilt von Watch und Topic
   watch_probe.py             Täglicher Beleg-Scan zwischen zwei Checks: Claim, ein günstiger Such-Call, Vorziehen des vollen Checks
@@ -11182,6 +11237,13 @@ lesen und die neuen Einträge daraufsetzen (nur hinzufügen):
   Index); geht mit dem Chat (`_purge_chat`) bzw. `delete_all_chats`. Der Chat
   selbst trägt `temporary: true`, seine Turns `agent_settings.temporary`.
   Keine Inhalte. Siehe §4 „Temporäre Chats“.
+- `sign_in_links/{sha256(code)}` — seit 2026-11-16 die offenen Einmal-Codes
+  der Anmeldemail (`uid`, `email_hash`, `created_at`, `expires_at` +60 min);
+  kein Code, keine Adresse im Klartext. Beim Einlösen in derselben Transaktion
+  gelöscht, abgelaufene fegt `retention_maintenance` stündlich, die
+  Kontolöschung nimmt alle eines Kontos mit. Nur das Admin-SDK greift zu (die
+  Regeln verbieten alles), kein zusammengesetzter Index nötig. Siehe §4
+  „Anmelden per E-Mail-Link“.
 - `follow_challenges/{sha256(scope:resource:email)}` — ausschließlich gehashte
   Double-Opt-in-Challenges mit 15-Minuten-Resendfenster, höchstens fünf Sends
   pro Empfänger/UTC-Tag und global höchstens 500/Stunde; kein E-Mail-Klartext.
@@ -12120,8 +12182,9 @@ Coveragewerte von 26.09.2026 sind keine Messung des aktuellen Codes.
 Agent-Dateien/-Dokumente, abgelaufene Arbeitsprotokolle (`cleanup_expired_work_logs`,
 Collection-Group `turns.work_log_expires_at`), Google-Daten, abgelaufene temporäre
 Chats (`expire_temporary_chats`, seit 2026-11-01), fällige `chat_deletion_jobs` über
-`resume_chat_deletions` sowie `cleanup_memory_edit_records` für 30-Tage-Undo-
-Snapshots und abgelaufene Memory-Edit-Leases) direkt nach Task-Start
+`resume_chat_deletions`, `cleanup_memory_edit_records` für 30-Tage-Undo-
+Snapshots und abgelaufene Memory-Edit-Leases sowie abgelaufene Anmeldelinks,
+`sign_in_links.cleanup_expired`, seit 2026-11-16) direkt nach Task-Start
 und danach standardmäßig stündlich aus; der tägliche Render-Restart ist keine
 Voraussetzung mehr. Revoked-Shares werden bereits per `revoked_at < cutoff`
 gefiltert, deterministisch sortiert und vollständig in begrenzten Seiten
@@ -12814,9 +12877,19 @@ zählen nicht):
   exakt `{"status": "check_inbox"}` zurück; das gilt auch für das Create-Race.
   UID, E-Mail und Custom-Token werden nie zurückgegeben. Ein neuer Firebase-User
   bekommt nur ein langes serverseitiges Zufallspasswort; anschließend erhalten
-  neue und bestehende Adressen denselben gehosteten Passwort-Setup-Link. Der
+  neue und bestehende Adressen dieselbe Art Mail (Anmeldelink, als Ausweichweg
+  der Passwort-Setup-Link). Den Custom-Token gibt allein `/auth/email-link`
+  heraus, und nur gegen den Code aus dieser Mail. Der
   Browser zeigt den neutralen Erfolgs-Screen und führt keinen Probe-Login aus.
   Eine spezifische Fehlermeldung oder ein Login-Seitenkanal wäre Konto-Enumeration.
+- **Der Code des Anmeldelinks steht nur im Fragment (`/app#signin=…`) und lebt
+  nur im Speicher der Seite.** `app-bootstrap.js` (Head-Gruppe, vor dem
+  Umami-Snippet) nimmt ihn aus der Adresse, bevor ein anderes Skript sie liest;
+  `App.takeSignInCode()` gibt ihn genau einmal heraus. Verbrauchen darf ihn nur
+  ein Klick oder der Browser, der ihn angefordert hat (`/auth/email-link/account`
+  fragt vorher, ohne ihn zu verbrauchen). Nie als Query-Parameter,
+  nie in `localStorage`/`sessionStorage`, nie in einem Log; das Backend speichert
+  nur seinen SHA-256.
 - **Die Frage einer Nachrichtenblase steht in `data-question`, nicht im Text.**
   `.thread-ask-text` und `.thread-history-question-text` tragen seit 2026-10-09
   `dataset.question` (die whitespace-kollabierte Frage). `renderThreadQuestion`

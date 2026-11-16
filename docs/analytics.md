@@ -16,7 +16,7 @@ Diese sechs reichen für fast jede Frage. Sie haben in jedem Modus dieselbe Form
 |---|---|---|
 | `open_app` | Klick von einer öffentlichen Seite in die App | `from` (landing, share, benchmark, model-pulse, …), `place` (welcher Knopf), `demo` |
 | `signup` | neues Konto | `method` (google, email) |
-| `login` | Anmeldung mit bestehendem Konto | `method` |
+| `login` | Anmeldung mit bestehendem Konto | `method` (google, email = Passwort, email_link = Link aus der Mail) |
 | `ask` | eine Frage wurde abgeschickt | `mode` (agent, consensus, compare), `follow_up`, `files`, `reasoning`, `source` (typed, example, pasted, link), `after_login` (nur `true`: die Frage, die ein Gast vor dem Anmelden abgeschickt hat) |
 | `answer` | dieser Lauf ist fertig (einmal pro Lauf) | `mode`, `status` (ok, partial, failed) |
 | `landing_hero_demo_start` | Demo gestartet | – |
@@ -36,8 +36,13 @@ Server abgelehnter (Kontingent, belegter Dienst) endet in beiden Modi mit
 `answer` `status=failed`. Ein nach abgerissenem Stream wiederhergestellter Lauf
 zählt normal mit `ok`/`partial`.
 
-`signup` per E-Mail zählt die angeforderte Einrichtungs-Mail (das Backend
-verrät aus Datenschutzgründen nicht, ob die Adresse schon ein Konto hatte).
+`signup` per E-Mail zählt die angeforderte Mail auf dem Tab „Sign up“ (das
+Backend verrät aus Datenschutzgründen nicht, ob die Adresse schon ein Konto
+hatte). Seit 2026-11-16 meldet ein Klick auf den Link in der Mail an:
+`auth_link_result` mit `status: success` und `first: true` ist die erste
+Anmeldung eines Kontos (dafür kein zweites `signup`), mit `first: false`
+folgt `login` mit `method: email_link`. Wie viele E-Mail-Registrierungen
+ankommen: `auth_link_result` (`first: true`) ÷ `signup` (`method: email`).
 Google unterscheidet neu/bestehend über die Zeitstempel des Kontos.
 
 ## Detail-Events (Diagnose, nicht für Funnels)
@@ -127,7 +132,13 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   geöffnet wurde): ein offenes App-Fenster hat einen neuen Deploy selbst
   geladen (`app-update.js`). Zeigt, wie oft Nutzer sonst auf einem alten Build
   sitzen geblieben wären.
-- `auth_*`: jeder einzelne Anmeldeversuch mit Ergebnis und Fehlercode.
+- `auth_*`: jeder einzelne Anmeldeversuch mit Ergebnis und Fehlercode. Für
+  den Anmeldelink (seit 2026-11-16): `auth_link_requested` und
+  `auth_link_request_result` (`status`) auf dem Tab „Log in“ („Email me a
+  link instead“), `auth_link_result` beim Öffnen des Links (`status`:
+  `confirm` = ein anderer Browser fragt „Log in as …?“, `success` mit
+  `first`, `invalid` = abgelaufen/benutzt, `error`, `already_signed_in`).
+  Wie viele die Frage stehen lassen: `confirm` ohne folgendes `success`.
 - `landing_*`, `benchmark_*`, `pulse_*`, `consensus_engine_*`, `hub_*`,
   `share_*`, `topic_open`: die einzelnen Knöpfe der öffentlichen Seiten.
   `open_app` fasst die App-Einstiege davon zusammen.

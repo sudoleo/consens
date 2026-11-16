@@ -53,7 +53,12 @@
   color: var(--ink-2);
   font-size: var(--font-size-sm);
   line-height: 1.45;
+  /* Two even lines, never one word left alone on the second. */
+  text-wrap: balance;
+  overflow-wrap: anywhere;
 }
+
+#loginModal .auth-lead:empty { display: none; }
 
 /* --- Log in / Sign up --------------------------------------------------- */
 #loginModal .auth-tabs {
@@ -347,6 +352,16 @@
 #loginModal .auth-primary-action[hidden],
 #loginModal .auth-primary-action.u-display-none { display: none; }
 
+#loginModal .auth-alt-row {
+  display: flex;
+  justify-content: center;
+}
+
+#loginModal .auth-alt-row[hidden],
+#loginModal .auth-alt-row .auth-link[hidden] { display: none; }
+
+#loginModal .auth-alt-row .auth-link { font-size: var(--font-size-sm); }
+
 #loginModal .error-message,
 #loginModal .auth-status {
   margin: 0;
@@ -446,36 +461,18 @@
   font-weight: var(--font-weight-semibold);
 }
 
-#loginModal .auth-success-text {
-  color: var(--ink-2);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
+/* --- Opened from a sign-in mail ------------------------------------------ */
+#loginModal .auth-confirm {
+  padding: 22px 28px 28px;
 }
+
+#loginModal .auth-confirm[hidden] { display: none; }
 
 #loginModal .auth-success-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px 18px;
-}
-
-#loginModal .auth-secondary-action {
-  width: 100%;
-  min-height: 44px;
-  padding: 0 16px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  cursor: pointer;
-}
-
-#loginModal .auth-secondary-action:focus-visible { background: var(--hover); }
-@media (hover: hover) and (pointer: fine) {
-  #loginModal .auth-secondary-action:hover { background: var(--hover); }
 }
 
 /* 44px to the finger for the dialog's smaller controls:
@@ -491,6 +488,8 @@
      takes all of them, the field (and Show in it) and the button keep
      their own taps. */
   #loginModal .auth-forgot-row .auth-link::after { inset: -6px var(--hit-slop) -14px; }
+  /* Under the button: the 44px grow downwards, the button keeps its edge. */
+  #loginModal .auth-alt-row .auth-link::after { inset: -4px var(--hit-slop) -18px; }
 }
 
 @media (max-width: 480px) {
@@ -498,5 +497,6 @@
   #loginModal .auth-head { padding: 24px 20px 0; }
   #loginModal .auth-tabs { margin-inline: 20px; }
   #loginModal .auth-form { padding: 18px 20px 20px; }
-  #loginModal .auth-success { padding-inline: 20px; }
+  #loginModal .auth-success,
+  #loginModal .auth-confirm { padding-inline: 20px; }
 }

@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification, onIdTokenChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, signInWithCustomToken, signOut, onAuthStateChanged, sendPasswordResetEmail, sendEmailVerification, onIdTokenChanged } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 import {
   GoogleAuthProvider,
   signInWithPopup,
@@ -1184,6 +1184,10 @@ const forgotBtn = document.getElementById("forgotPasswordButton");
 
 const loginBtn = document.getElementById("loginButton");
 const confirmRegisterBtn = document.getElementById("confirmRegisterButton");
+const sendLinkBtn = document.getElementById("sendLinkButton");
+const altRowEl = document.getElementById("authAltRow");
+const emailLinkBtn = document.getElementById("emailLinkButton");
+const passwordModeBtn = document.getElementById("passwordModeButton");
 const loginNoticeEl = document.getElementById("loginNotice");
 const loginErr = document.getElementById("loginError");
 const registerErr = document.getElementById("registerError");
@@ -1203,9 +1207,13 @@ const registrationMailboxEl = document.getElementById("registrationMailboxLink")
 const registrationResendBtn = document.getElementById("registrationResendButton");
 const registrationChangeBtn = document.getElementById("registrationChangeButton");
 const registrationStatusEl = document.getElementById("registrationStatus");
-const registrationLoginBtn = document.getElementById("registrationLoginButton");
+const linkConfirmEl = document.getElementById("linkConfirm");
+const linkConfirmBtn = document.getElementById("linkConfirmButton");
 
 let lastRegisteredEmail = "";
+// The tab that sent the link ("register" or "link"): "Use a different
+// address" goes back to it.
+let lastLinkMode = "register";
 let resendTimer = 0;
 
 // --- Small state helpers -----------------------------------------------
@@ -1216,6 +1224,11 @@ function setButtonPending(button, isPending, pendingLabel) {
   button.disabled = isPending;
   button.setAttribute("aria-busy", String(isPending));
   button.textContent = isPending ? pendingLabel : button.dataset.idleLabel;
+}
+
+function setIdleLabel(button, label) {
+  button.dataset.idleLabel = label;
+  if (!button.disabled) button.textContent = label;
 }
 
 function setRegisterPending(isPending) {
@@ -1246,18 +1259,24 @@ function hidePassword() {
   passRevealEl.setAttribute("aria-pressed", "false");
 }
 
+// Three modes of one form: "login" (password), "link" (a sign-in link by
+// mail, under the Log in tab) and "register".
 function setMode(mode) {
-  const isRegister = mode === "register";
+  const current = mode === "register" || mode === "link" ? mode : "login";
+  const isRegister = current === "register";
   window.clearInterval(resendTimer);
-  formEl.dataset.mode = isRegister ? "register" : "login";
+  formEl.dataset.mode = current;
   formEl.hidden = false;
   tabsEl.hidden = false;
   registrationSuccessEl.hidden = true;
+  linkConfirmEl.hidden = true;
   setRegisterPending(false);
   setButtonPending(loginBtn, false);
+  setButtonPending(sendLinkBtn, false);
+  setIdleLabel(sendLinkBtn, "Email me a link");
   hidePassword();
 
-  const copy = AUTH_MODE_COPY[formEl.dataset.mode];
+  const copy = AUTH_MODE_COPY[isRegister ? "register" : "login"];
   titleEl.textContent = copy.title;
   leadEl.textContent = authContextLead || copy.lead;
   [[tabLoginEl, !isRegister], [tabRegisterEl, isRegister]].forEach(([tab, selected]) => {
@@ -1265,18 +1284,22 @@ function setMode(mode) {
     tab.tabIndex = selected ? 0 : -1;
   });
 
-  passFieldEl.hidden = isRegister;
-  forgotRowEl.hidden = isRegister;
+  passFieldEl.hidden = current !== "login";
+  forgotRowEl.hidden = current !== "login";
   singleMailNoteEl.classList.toggle("u-display-none", !isRegister);
   confirmRegisterBtn.classList.toggle("u-display-none", !isRegister);
-  loginBtn.classList.toggle("u-display-none", isRegister);
+  loginBtn.classList.toggle("u-display-none", current !== "login");
+  sendLinkBtn.classList.toggle("u-display-none", current !== "link");
+  altRowEl.hidden = isRegister;
+  emailLinkBtn.hidden = current !== "login";
+  passwordModeBtn.hidden = current !== "link";
   clearAuthMessages();
 }
 
 function selectAuthTab(mode) {
   if (formEl.dataset.mode === mode && !formEl.hidden) return;
-  // Sign up hides the password row: the dialog follows its fields with one
-  // height movement instead of jumping (App.watchUi.smoothHeight).
+  // Sign up and the link hide the password row: the dialog follows its
+  // fields with one height movement instead of jumping (App.watchUi.smoothHeight).
   const smooth = window.App?.watchUi?.smoothHeight;
   const box = formEl.closest(".auth-modal");
   if (smooth && box) smooth(box, () => setMode(mode));
@@ -1294,6 +1317,16 @@ tabsEl.addEventListener("keydown", event => {
   next.focus();
 });
 
+// The address is often filled in already: then the next step is the button.
+emailLinkBtn.addEventListener("click", () => {
+  selectAuthTab("link");
+  (emailEl.value.trim() ? sendLinkBtn : emailEl).focus();
+});
+passwordModeBtn.addEventListener("click", () => {
+  selectAuthTab("login");
+  (emailEl.value.trim() ? passEl : emailEl).focus();
+});
+
 passRevealEl.addEventListener("click", () => {
   const show = passEl.type === "password";
   passEl.type = show ? "text" : "password";
@@ -1307,13 +1340,16 @@ passRevealEl.addEventListener("click", () => {
 formEl.addEventListener("submit", event => {
   event.preventDefault();
   if (formEl.dataset.mode === "register") handleRegister();
+  else if (formEl.dataset.mode === "link") handleSendLink();
   else handleEmailLogin();
 });
 
-// --- Sign up: mailbox-only setup ----------------------------------------
+// --- Sign up and the sign-in link -----------------------------------------
 //
-// Existing and new addresses get the same answer and the same e-mail, so the
-// form never tells a stranger whether an address has an account.
+// Both send the same mail through /register: one button in it logs in
+// (app/services/sign_in_links.py). Existing and new addresses get the same
+// answer, so the form never tells a stranger whether an address has an
+// account.
 
 const MAILBOXES = [
   [/^(gmail|googlemail)\.com$/, "Gmail", "https://mail.google.com/mail/u/0/#inbox"],
@@ -1331,7 +1367,7 @@ function mailboxFor(email) {
   return hit ? { name: hit[1], url: hit[2] } : null;
 }
 
-async function requestSetupLink(email) {
+async function requestSignInLink(email) {
   try {
     const response = await fetch("/register", {
       method: "POST",
@@ -1353,8 +1389,8 @@ async function requestSetupLink(email) {
         : "We couldn’t send the link right now. Try again in a moment.",
     };
   } catch (error) {
-    console.error("Registration request failed:", error);
-    return { ok: false, message: "We couldn’t create your account. Check your connection and try again." };
+    console.error("Sign-in link request failed:", error);
+    return { ok: false, message: "We couldn’t send the link. Check your connection and try again." };
   }
 }
 
@@ -1374,16 +1410,42 @@ async function handleRegister() {
   setRegisterPending(true);
   // Never try caller-chosen credentials here: that would reveal whether the
   // backend had just created the account.
-  const result = await requestSetupLink(email);
+  const result = await requestSignInLink(email);
   setRegisterPending(false);
   if (result.ok) {
     rememberEmail(email);
-    showRegistrationSuccess(email);
+    showRegistrationSuccess(email, "register");
     trackAppEvent("auth_register_result", { status: "success" });
     trackAppEvent("signup", { method: "email" });
   } else {
     registerErr.textContent = result.message;
     trackAppEvent("auth_register_result", { status: "error" });
+  }
+}
+
+async function handleSendLink() {
+  if (sendLinkBtn.disabled) return;
+  clearAuthMessages();
+  const email = (emailEl.value || "").trim();
+  if (!email) {
+    showFieldError(loginErr, emailEl, "Enter your email address.");
+    return;
+  }
+  if (!EMAIL_PATTERN.test(email)) {
+    showFieldError(loginErr, emailEl, "Check the email address. It looks incomplete.");
+    return;
+  }
+  trackAppEvent("auth_link_requested");
+  setButtonPending(sendLinkBtn, true, "Sending link…");
+  const result = await requestSignInLink(email);
+  setButtonPending(sendLinkBtn, false);
+  if (result.ok) {
+    rememberEmail(email);
+    showRegistrationSuccess(email, "link");
+    trackAppEvent("auth_link_request_result", { status: "success" });
+  } else {
+    loginErr.textContent = result.message;
+    trackAppEvent("auth_link_request_result", { status: "error" });
   }
 }
 
@@ -1402,10 +1464,11 @@ function startResendCooldown(seconds) {
   }, 1000);
 }
 
-function showRegistrationSuccess(email) {
+function showRegistrationSuccess(email, mode) {
   lastRegisteredEmail = email;
+  lastLinkMode = mode;
   titleEl.textContent = "Check your inbox";
-  leadEl.textContent = "One step left to your account.";
+  leadEl.textContent = "Open the link and you’re in.";
   registrationSuccessEmailEl.textContent = email;
   const mailbox = mailboxFor(email);
   registrationMailboxEl.hidden = !mailbox;
@@ -1430,23 +1493,17 @@ registrationResendBtn.addEventListener("click", async () => {
   if (!lastRegisteredEmail || registrationResendBtn.disabled) return;
   registrationResendBtn.disabled = true;
   registrationStatusEl.textContent = "Sending…";
-  const result = await requestSetupLink(lastRegisteredEmail);
+  const result = await requestSignInLink(lastRegisteredEmail);
   registrationStatusEl.textContent = result.ok ? "Sent again. It can take a minute to arrive." : result.message;
   startResendCooldown(result.ok ? 60 : 20);
   trackAppEvent("auth_register_resend", { status: result.ok ? "success" : "error" });
 });
 
 registrationChangeBtn.addEventListener("click", () => {
-  setMode("register");
+  setMode(lastLinkMode);
   emailEl.value = lastRegisteredEmail;
   emailEl.focus();
   emailEl.select();
-});
-
-registrationLoginBtn.addEventListener("click", () => {
-  setMode("login");
-  if (lastRegisteredEmail) emailEl.value = lastRegisteredEmail;
-  (emailEl.value ? passEl : emailEl).focus();
 });
 
 function handleForgotPassword() {
@@ -1639,6 +1696,7 @@ function bindAuthDialog(modal) {
     keepOpen: authDialogHasTyping,
     onClose: () => {
       authContextLead = "";
+      pendingLinkCode = "";
       hidePassword();
     },
   });
@@ -1650,8 +1708,9 @@ function showAuthModal(mode, trigger) {
   if (mode) setMode(mode);
   syncInAppBrowserNotice();
   // On a phone a focused field opens the keyboard, which covers the Google
-  // button before the user has chosen a way in.
-  const initialFocus = (isCoarsePointer()
+  // button before the user has chosen a way in. Without the form (opened
+  // from a sign-in mail) there is no field to start in.
+  const initialFocus = (isCoarsePointer() || formEl.hidden
     ? document.getElementById("loginModalContent")
     : emailEl) || document.getElementById("closeLoginModal");
   bindAuthDialog(modal);
@@ -1817,6 +1876,137 @@ const SIGNED_IN_RETURN = (() => {
     loginNoticeEl.textContent = "Your password is set. Log in to start.";
     if (email && !isCoarsePointer()) passEl.focus({ preventScroll: true });
     trackAppEvent("auth_setup_return");
+  });
+})();
+
+// Back from a sign-in mail (/app#signin=<code>; app-bootstrap.js has taken
+// the code out of the address). The page first asks whose link it is, which
+// spends nothing. In the browser that asked for the link (the same address
+// is remembered) it logs in at once; anywhere else the dialog names the
+// account and logs in only after "Log in". A page that loads the link and
+// clicks nothing, such as a mail scanner, leaves it usable. A refused link
+// says so in one sentence, with the button for a new one.
+const LINK_FAILURE_LEADS = {
+  invalid: "This link has expired or was already used.",
+  error: "Logging in didn’t work this time.",
+};
+let pendingLinkCode = "";
+
+// One height movement for every change of the dialog's face.
+function changeAuthView(change) {
+  const smooth = window.App?.watchUi?.smoothHeight;
+  const box = formEl.closest(".auth-modal");
+  if (smooth && box && authDialog()?.open) smooth(box, change);
+  else change();
+}
+
+function showLinkLanding() {
+  formEl.hidden = true;
+  tabsEl.hidden = true;
+  registrationSuccessEl.hidden = true;
+  linkConfirmEl.hidden = false;
+  authContextLead = "";
+  titleEl.textContent = "Your email link";
+  leadEl.textContent = "";
+  setButtonPending(linkConfirmBtn, true, "One moment…");
+}
+
+function showLinkFailure(reason) {
+  pendingLinkCode = "";
+  changeAuthView(() => {
+    setMode("link");
+    authContextLead = LINK_FAILURE_LEADS[reason] || LINK_FAILURE_LEADS.error;
+    leadEl.textContent = authContextLead;
+    setIdleLabel(sendLinkBtn, "Email me a new link");
+    const requested = rememberedEmail();
+    if (requested && !emailEl.value) emailEl.value = requested;
+  });
+  if (!isCoarsePointer()) (emailEl.value ? sendLinkBtn : emailEl).focus({ preventScroll: true });
+}
+
+async function postLinkCode(path, code) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+    body: JSON.stringify({ code }),
+  });
+  return { response, data: await response.json().catch(() => ({})) };
+}
+
+async function checkSignInLink(code) {
+  showLinkLanding();
+  showAuthModal(null);
+  let reason = "error";
+  try {
+    const { response, data } = await postLinkCode("/auth/email-link/account", code);
+    if (response.ok && typeof data.email === "string") {
+      if (data.email.toLowerCase() === rememberedEmail().trim().toLowerCase()) {
+        redeemSignInLink(code);
+        return;
+      }
+      pendingLinkCode = code;
+      changeAuthView(() => {
+        leadEl.textContent = `Log in as ${data.email}?`;
+        setButtonPending(linkConfirmBtn, false);
+      });
+      if (!isCoarsePointer()) linkConfirmBtn.focus({ preventScroll: true });
+      trackAppEvent("auth_link_result", { status: "confirm" });
+      return;
+    }
+    if (response.status === 400) reason = "invalid";
+  } catch (error) {
+    console.warn("Sign-in link check failed:", error?.code || error);
+  }
+  trackAppEvent("auth_link_result", { status: reason });
+  showLinkFailure(reason);
+}
+
+async function redeemSignInLink(code) {
+  pendingLinkCode = "";
+  setButtonPending(linkConfirmBtn, true, "Signing you in…");
+  let reason = "error";
+  try {
+    const { response, data } = await postLinkCode("/auth/email-link", code);
+    if (response.ok && typeof data.token === "string") {
+      // A guest's waiting question goes out on the reloaded page
+      // (continueSignedIn), not in this one while the sign-in lands.
+      window.App.reloadingAfterSignIn = true;
+      await signInWithCustomToken(auth, data.token);
+      forgetRememberedEmail();
+      trackAppEvent("auth_link_result", { status: "success", first: data.first === true });
+      // A first sign-in was counted as "signup" when the link was asked for.
+      if (data.first !== true) trackAppEvent("login", { method: "email_link" });
+      continueSignedIn();
+      return;
+    }
+    if (response.status === 400) reason = "invalid";
+  } catch (error) {
+    console.warn("Sign-in link failed:", error?.code || error);
+  }
+  window.App.reloadingAfterSignIn = false;
+  trackAppEvent("auth_link_result", { status: reason });
+  showLinkFailure(reason);
+}
+
+linkConfirmBtn.addEventListener("click", () => {
+  if (pendingLinkCode && !linkConfirmBtn.disabled) redeemSignInLink(pendingLinkCode);
+});
+
+(function signInFromLink() {
+  const code = window.App.takeSignInCode?.() || "";
+  if (!code) return;
+  let handled = false;
+  onAuthStateChanged(auth, user => {
+    if (handled) return;
+    handled = true;
+    // Signed in already: a link never switches the account in use.
+    if (user?.emailVerified) {
+      window.App.toast?.({ message: "You’re already logged in." });
+      trackAppEvent("auth_link_result", { status: "already_signed_in" });
+      return;
+    }
+    checkSignInLink(code);
   });
 })();
 

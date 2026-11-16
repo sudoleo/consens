@@ -77,7 +77,7 @@ class AuthSessionTests(unittest.TestCase):
             patch.object(
                 auth_router, "find_or_provision_user", return_value=(user, True)
             ) as provision,
-            patch.object(auth_router, "deliver_password_setup_email") as deliver,
+            patch.object(auth_router, "deliver_sign_in_email") as deliver,
             patch.object(
                 auth_router,
                 "send_new_user_registration_notification",
@@ -91,7 +91,7 @@ class AuthSessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "check_inbox"})
         provision.assert_called_once_with("new@example.test")
-        deliver.assert_called_once_with("new@example.test", setup=True, language="en")
+        deliver.assert_called_once_with("new@example.test", uid="new-owner", first=True, language="en")
         notify.assert_called_once_with("email/password", "new-owner")
 
     def test_existing_email_registration_does_not_notify(self):
@@ -108,7 +108,7 @@ class AuthSessionTests(unittest.TestCase):
                     False,
                 ),
             ),
-            patch.object(auth_router, "deliver_password_setup_email") as deliver,
+            patch.object(auth_router, "deliver_sign_in_email") as deliver,
             patch.object(
                 auth_router,
                 "send_new_user_registration_notification",
@@ -121,10 +121,10 @@ class AuthSessionTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json(), {"status": "check_inbox"})
-        deliver.assert_called_once_with("existing@example.test", setup=False, language="en")
+        deliver.assert_called_once_with("existing@example.test", uid="existing-owner", first=False, language="en")
         notify.assert_not_called()
 
-    def test_resend_before_first_login_sends_the_setup_mail_again(self):
+    def test_resend_before_first_login_sends_the_welcome_mail_again(self):
         never_signed_in = SimpleNamespace(
             uid="pending-owner",
             user_metadata=SimpleNamespace(last_sign_in_timestamp=None),
@@ -136,12 +136,12 @@ class AuthSessionTests(unittest.TestCase):
                 "find_or_provision_user",
                 return_value=(never_signed_in, False),
             ),
-            patch.object(auth_router, "deliver_password_setup_email") as deliver,
+            patch.object(auth_router, "deliver_sign_in_email") as deliver,
             patch.object(auth_router, "send_new_user_registration_notification"),
         ):
             self.client.post("/register", json={"email": "pending@example.test"})
 
-        deliver.assert_called_once_with("pending@example.test", setup=True, language="en")
+        deliver.assert_called_once_with("pending@example.test", uid="pending-owner", first=True, language="en")
 
     def test_setup_mails_per_address_are_capped_with_a_neutral_answer(self):
         pending = SimpleNamespace(
@@ -154,7 +154,7 @@ class AuthSessionTests(unittest.TestCase):
             patch.object(
                 auth_router, "find_or_provision_user", return_value=(pending, False)
             ) as provision,
-            patch.object(auth_router, "deliver_password_setup_email") as deliver,
+            patch.object(auth_router, "deliver_sign_in_email") as deliver,
             patch.object(auth_router, "send_new_user_registration_notification"),
         ):
             for index in range(auth_router._SETUP_MAILS_PER_ADDRESS + 1):
@@ -191,7 +191,7 @@ class AuthSessionTests(unittest.TestCase):
                 "find_or_provision_user",
                 return_value=(new_user, True),
             ),
-            patch.object(auth_router, "deliver_password_setup_email"),
+            patch.object(auth_router, "deliver_sign_in_email"),
             patch.object(auth_router, "send_new_user_registration_notification"),
         ):
             created = self.client.post(
@@ -205,7 +205,7 @@ class AuthSessionTests(unittest.TestCase):
                 "find_or_provision_user",
                 return_value=(SimpleNamespace(uid="existing-owner"), False),
             ),
-            patch.object(auth_router, "deliver_password_setup_email"),
+            patch.object(auth_router, "deliver_sign_in_email"),
             patch.object(auth_router, "send_new_user_registration_notification"),
         ):
             existing = self.client.post(
@@ -223,7 +223,7 @@ class AuthSessionTests(unittest.TestCase):
             patch.object(
                 auth_router, "find_or_provision_user", return_value=(user, True)
             ) as provision,
-            patch.object(auth_router, "deliver_password_setup_email"),
+            patch.object(auth_router, "deliver_sign_in_email"),
             patch.object(auth_router, "send_new_user_registration_notification"),
         ):
             response = self.client.post(

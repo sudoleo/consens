@@ -2,9 +2,10 @@
 
 The anonymous caller never chooses a credential that can immediately be used
 to distinguish a newly-created Firebase user from an existing one. New users
-receive an unguessable temporary password and, just like existing users, a
-Firebase-hosted password-setup/reset e-mail. Mailbox access is therefore the
-first observable proof of ownership.
+receive an unguessable temporary password and, just like existing users, an
+e-mail: a one-click sign-in link (sign_in_links.py), or where that mail
+cannot go out, a password-setup link. Mailbox access is therefore the first
+observable proof of ownership.
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ import requests
 
 from app.core.observability import safe_exception
 from app.core.site import SITE_URL
-from app.services import mailer
+from app.services import mailer, sign_in_links
 
 
 PASSWORD_SETUP_ENDPOINT = (
@@ -105,7 +106,7 @@ def needs_password_setup(user) -> bool:
     """True until the account has signed in once.
 
     "Send the link again" hits /register with an address that already exists;
-    it must get the setup mail again, not "you already have an account".
+    it must get the welcome mail again, not "you already have an account".
     """
     metadata = getattr(user, "user_metadata", None)
     return not getattr(metadata, "last_sign_in_timestamp", None)
@@ -154,3 +155,29 @@ def deliver_password_setup_email(email: str, *, setup: bool = True, language: st
     except Exception as exc:
         logging.error("Registration setup delivery failed: %s", safe_exception(exc))
         return False
+
+
+def deliver_sign_in_email(email: str, *, uid: str, first: bool, language: str = "") -> bool:
+    """The mail behind /register: one button that logs the reader in.
+
+    The link needs our own SMTP and Firestore. Without either, the reader
+    still gets in through the password-setup mail. ``first``: welcome wording
+    for an account that has never signed in.
+    """
+    if mailer.is_configured():
+        code = ""
+        try:
+            code = sign_in_links.issue(uid, email)
+            message = mailer.build_sign_in_message(
+                recipient=email, sign_in_url=sign_in_links.link_url(code), first=first, language=language,
+            )
+            if mailer.deliver_now(message):
+                return True
+        except Exception as exc:
+            logging.warning("Sign-in link mail failed (%s)", safe_exception(exc))
+        if code:
+            try:
+                sign_in_links.discard(code)
+            except Exception as exc:
+                logging.warning("Sign-in link withdrawal failed (%s)", safe_exception(exc))
+    return deliver_password_setup_email(email, setup=first, language=language)

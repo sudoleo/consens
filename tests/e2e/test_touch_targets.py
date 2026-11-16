@@ -156,6 +156,11 @@ def test_login_dialog_and_public_bar_take_a_finger(browser, phase4_server):
         # Right under the password field the link does not take the field's taps.
         field = page.locator("#loginPassword").bounding_box()
         assert page.evaluate("([x, y]) => document.elementFromPoint(x, y).id", [field["x"] + 20, field["y"] + field["height"] - 2]) == "loginPassword"
+        # The link under "Log in" takes a finger, and the button keeps its bottom edge.
+        assert_tappable(page, "#emailLinkButton")
+        button = page.locator("#loginButton").bounding_box()
+        assert page.evaluate("([x, y]) => document.elementFromPoint(x, y).id",
+                             [button["x"] + button["width"] / 2, button["y"] + button["height"] - 1]) == "loginButton"
 
         page.goto(phase4_server + "/", wait_until="domcontentloaded")
         page.set_viewport_size({"width": 390, "height": 780})

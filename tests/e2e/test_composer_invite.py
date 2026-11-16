@@ -224,6 +224,41 @@ def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in(browser, phase4
         context.close()
 
 
+def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in_link(browser, phase4_server):
+    """The mail's link opens in the browser that sent the question: one click
+    logs in, and the question runs once, as after any other sign-in."""
+    from tests.e2e.test_auth_dialog import _link_page
+
+    question = "Is creatine safe for teenagers?"
+    prepared = []
+    # What a guest's Send left behind, on the page before the sign-in only.
+    waiting = CAPTURE_EVENTS + f"""
+      if (!sessionStorage.getItem('e2e.uid')) {{
+        localStorage.setItem('consensio.authEmail', 'account-a@example.invalid');
+        localStorage.setItem('consensio.questionDraft.v1', {json.dumps(question)});
+        localStorage.setItem('consensio.sendAfterLogin.v1',
+          JSON.stringify({{ source: 'typed', text: {json.dumps(question)}, at: Date.now() }}));
+      }}"""
+
+    def routes(page):
+        page.route("**/prepare", lambda route: (
+            prepared.append(route.request.post_data_json), _json(route, {"system_prompt": "Prepared prompt"})))
+        page.route("**/ask_*", lambda route: _json(route, {"response": "An answer", "sources": []}))
+
+    context, page, asked, spent = _link_page(
+        browser, phase4_server, init_script=waiting, before_goto=routes,
+        redeem=lambda route: _json(route, {"token": "custom-token-account-a", "first": True}))
+    try:
+        page.wait_for_function(f"() => window.App.runRegistry.visible()?.question === {json.dumps(question)}")
+        page.wait_for_function("() => window.__events.some(([name]) => name === 'ask')")
+        assert len(asked) == 1 and len(spent) == 1 and len(prepared) == 1
+        ask = page.evaluate("() => window.__events.find(([name]) => name === 'ask')[1]")
+        assert ask["after_login"] is True
+        assert page.evaluate("localStorage.getItem('consensio.sendAfterLogin.v1')") is None
+    finally:
+        context.close()
+
+
 AGENT_CATALOG = {"default_model_id": "deepseek/deepseek-v4.1-flash", "models": [
     {"id": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash", "reasoning_efforts": ["default"],
      "reasoning_available": True}]}

@@ -96,7 +96,7 @@ def test_titles_buttons_and_labels_are_in_sentence_case():
     for text in ui_text.template_texts():
         if text.context not in TITLE_TAGS or text.text in TITLED or len(text.text) > 60:
             continue
-        # Each sentence starts with a capital ("Password set? Log in").
+        # Each sentence starts with a capital, a second one in a label too.
         for sentence in re.split(r"(?<=[.?!])\s+|\s+·\s+", text.text):
             words = re.findall(r"[A-Za-z][A-Za-z’'-]*", sentence)
             capitals = [word for word in words[1:] if word[0].isupper() and word not in PROPER and not word.isupper()]

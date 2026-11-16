@@ -51,8 +51,19 @@ RECORDING_AUTH_STUB = (
   window.__authCalls.push(["reset", email, settings ? settings.url : ""]);
 }""",
     )
+    # Firebase keeps a sign-in across the reload that follows it; here the
+    # tab does (pages read it back through LINK_PERSISTENCE).
+    .replace(
+        "export async function signInWithCustomToken(_auth, token) {\n",
+        """export async function signInWithCustomToken(_auth, token) {
+  window.__authCalls.push(["custom-token", token]);
+  sessionStorage.setItem("e2e.uid", String(token).replace(/^custom-token-/, ""));
+""",
+    )
 )
-assert RECORDING_AUTH_STUB.count("__authCalls.push") == 5
+assert RECORDING_AUTH_STUB.count("__authCalls.push") == 6
+LINK_PERSISTENCE = "window.__E2E_INITIAL_UID = sessionStorage.getItem('e2e.uid') || window.__E2E_INITIAL_UID;"
+LINK_CODE = "Ab3_" + "x" * 39
 
 
 def _guest_page(browser, server, init_script=None, path="/app"):
@@ -150,6 +161,9 @@ def test_sign_up_is_one_field_and_the_inbox_is_one_tap_away(browser, phase4_serv
 
         page.click("#confirmRegisterButton")
         expect(page.locator("#registrationSuccess")).to_be_visible()
+        # The mail holds the one button that logs in: no password step.
+        expect(page.locator("#authLead")).to_have_text("Open the link and you’re in.")
+        expect(page.locator("#registrationSuccess")).not_to_contain_text("password")
         expect(page.locator("#registrationSuccessEmail")).to_have_text("new.person@gmail.com")
         expect(page.locator("#registrationMailboxLink")).to_have_text("Open Gmail")
         expect(page.locator("#registrationMailboxLink")).to_have_attribute("href", "https://mail.google.com/mail/u/0/#inbox")
@@ -161,45 +175,211 @@ def test_sign_up_is_one_field_and_the_inbox_is_one_tap_away(browser, phase4_serv
         page.click("#registrationChangeButton")
         expect(page.locator("#loginEmail")).to_have_value("new.person@gmail.com")
         expect(page.locator("#confirmRegisterButton")).to_be_visible()
-
-        page.click("#confirmRegisterButton")
-        page.click("#registrationLoginButton")
-        expect(page.locator("#authTabLogin")).to_have_attribute("aria-selected", "true")
-        expect(page.locator("#loginEmail")).to_have_value("new.person@gmail.com")
-        expect(page.locator("#loginPassword")).to_be_focused()
+        expect(page.locator("#authTabRegister")).to_have_attribute("aria-selected", "true")
+        assert _calls(page) == []
     finally:
         context.close()
 
 
-def test_forgot_password_answers_neutrally_and_leads_back_into_the_app(browser, phase4_server):
+def test_log_in_offers_a_link_instead_of_the_password(browser, phase4_server):
     context, page = _guest_page(browser, phase4_server)
     try:
+        requests = []
+        page.route("**/register", lambda route: (
+            requests.append(json.loads(route.request.post_data)), _json(route, {"status": "check_inbox"})))
         page.click("#authTopLoginBtn")
-        page.click("#forgotPasswordButton")
-        expect(page.locator("#loginError")).to_contain_text("Enter your email address above")
-        assert _calls(page) == []
+        page.click("#emailLinkButton")
 
-        page.fill("#loginEmail", "maybe@example.test")
-        page.click("#forgotPasswordButton")
-        expect(page.locator("#loginNotice")).to_contain_text("If an account exists for maybe@example.test")
-        assert _calls(page) == [["reset", "maybe@example.test", phase4_server + "/app?setup=1"]]
-        assert "#" not in page.url
+        expect(page.locator("#authTabLogin")).to_have_attribute("aria-selected", "true")
+        expect(page.locator("#loginPassword")).to_be_hidden()
+        expect(page.locator("#forgotPasswordButton")).to_be_hidden()
+        expect(page.locator("#loginButton")).to_be_hidden()
+        expect(page.locator("#sendLinkButton")).to_have_text("Email me a link")
+        expect(page.locator("#loginEmail")).to_be_focused()
+
+        page.press("#loginEmail", "Enter")
+        expect(page.locator("#loginError")).to_have_text("Enter your email address.")
+        assert requests == []
+
+        page.fill("#loginEmail", "someone@gmail.com")
+        page.press("#loginEmail", "Enter")
+        expect(page.locator("#registrationSuccess")).to_be_visible()
+        expect(page.locator("#authLead")).to_have_text("Open the link and you’re in.")
+        assert requests == [{"email": "someone@gmail.com"}]
+
+        # A typo: back to the link, not to the password.
+        page.click("#registrationChangeButton")
+        expect(page.locator("#sendLinkButton")).to_be_visible()
+        expect(page.locator("#loginPassword")).to_be_hidden()
+        expect(page.locator("#loginEmail")).to_have_value("someone@gmail.com")
+
+        page.click("#passwordModeButton")
+        expect(page.locator("#loginPassword")).to_be_focused()
+        expect(page.locator("#emailLinkButton")).to_be_visible()
+        assert _calls(page) == []
     finally:
         context.close()
 
 
-def test_coming_back_from_the_setup_mail_opens_a_prefilled_login(browser, phase4_server):
-    context, page = _guest_page(
-        browser, phase4_server,
-        init_script="localStorage.setItem('consensio.authEmail', 'new.person@example.test');",
-        path="/app?setup=1",
+REDEEMED = {"token": "custom-token-account-a", "first": False}
+REFUSED = {"error": "This link has expired or was already used.", "code": "link_invalid"}
+
+
+def _link_page(browser, server, *, redeem=None, account=None, init_script="", initial_uid=None, before_goto=None):
+    """A page opened from a sign-in mail (/app#signin=<code>).
+
+    Returns the bodies sent to ask whose link it is (``asked``) and to spend
+    it (``spent``). By default the link is account-a's and signs in."""
+    asked, spent = [], []
+
+    def routes(page):
+        page.route("https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js",
+                   lambda route: route.fulfill(content_type="application/javascript", body=RECORDING_AUTH_STUB))
+
+        def ask(route):
+            asked.append(route.request.post_data_json)
+            (account or (lambda r: _json(r, {"email": "account-a@example.invalid"})))(route)
+
+        def spend(route):
+            spent.append(route.request.post_data_json)
+            (redeem or (lambda r: _json(r, REDEEMED)))(route)
+
+        page.route("**/auth/email-link/account", ask)
+        page.route("**/auth/email-link", spend)
+        if before_goto:
+            before_goto(page)
+
+    context, page = _real_firebase_page(
+        browser, server, initial_uid=initial_uid, path="/app#signin=" + LINK_CODE,
+        init_script=init_script + LINK_PERSISTENCE, before_goto=routes,
     )
+    return context, page, asked, spent
+
+
+def test_the_link_logs_in_at_once_in_the_browser_that_asked_for_it(browser, phase4_server):
+    context, page, asked, spent = _link_page(
+        browser, phase4_server,
+        init_script="localStorage.setItem('consensio.authEmail', 'Account-A@example.invalid');")
     try:
+        page.wait_for_function("() => window.__consensioAuthState?.uid === 'account-a' && !window.App.reloadingAfterSignIn")
+        assert asked == [{"code": LINK_CODE}] and spent == [{"code": LINK_CODE}]
+        assert "signin" not in page.url and "#" not in page.url
+        expect(page.locator("#loginModal")).to_be_hidden()
+
+        # The link is spent: another reload does not ask again.
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__consensioAuthState?.known === true")
+        page.wait_for_timeout(300)
+        assert len(asked) == 1 and len(spent) == 1
+    finally:
+        context.close()
+
+
+def test_another_browser_names_the_account_and_logs_in_only_after_the_click(browser, phase4_server):
+    context, page, asked, spent = _link_page(browser, phase4_server)
+    try:
+        dialog = page.get_by_role("dialog", name="Your email link")
+        expect(dialog).to_be_visible()
+        expect(page.locator("#authLead")).to_have_text("Log in as account-a@example.invalid?")
+        expect(page.locator("#linkConfirmButton")).to_have_text("Log in")
+        expect(page.locator("#linkConfirmButton")).to_be_enabled()
+        expect(page.locator("#loginForm")).to_be_hidden()
+        expect(page.locator("#authTabs")).to_be_hidden()
+        assert "signin" not in page.url
+
+        # A page that loads the link and clicks nothing (a mail scanner)
+        # leaves it usable.
+        page.wait_for_timeout(500)
+        assert asked == [{"code": LINK_CODE}] and spent == []
+        assert page.evaluate("() => window.__consensioAuthState.uid") is None
+
+        page.click("#linkConfirmButton")
+        page.wait_for_function("() => window.__consensioAuthState?.uid === 'account-a' && !window.App.reloadingAfterSignIn")
+        assert spent == [{"code": LINK_CODE}]
+        expect(page.locator("#loginModal")).to_be_hidden()
+        # The address was on screen a moment ago: nothing to announce now.
+        expect(page.get_by_text("Logged in as")).to_have_count(0)
+    finally:
+        context.close()
+
+
+def test_the_dialog_says_nothing_wrong_while_it_checks_the_link(browser, phase4_server):
+    held = []
+    context, page, asked, spent = _link_page(browser, phase4_server, account=held.append)
+    try:
+        expect(page.get_by_role("dialog", name="Your email link")).to_be_visible()
+        expect(page.locator("#linkConfirmButton")).to_have_text("One moment…")
+        expect(page.locator("#linkConfirmButton")).to_be_disabled()
+        expect(page.locator("#authLead")).to_be_hidden()
+        assert spent == []
+    finally:
+        for route in held:
+            route.abort()
+        context.close()
+
+
+def test_an_expired_link_says_so_and_offers_a_new_one(browser, phase4_server):
+    context, page, asked, spent = _link_page(
+        browser, phase4_server, account=lambda route: _json(route, REFUSED, status=400),
+        init_script="localStorage.setItem('consensio.authEmail', 'new.person@example.test');")
+    try:
+        registrations = []
+        page.route("**/register", lambda route: (
+            registrations.append(json.loads(route.request.post_data)), _json(route, {"status": "check_inbox"})))
         expect(page.get_by_role("dialog", name="Log in to consens.io")).to_be_visible()
+        expect(page.locator("#authLead")).to_have_text("This link has expired or was already used.")
+        expect(page.locator("#sendLinkButton")).to_have_text("Email me a new link")
+        expect(page.locator("#sendLinkButton")).to_be_enabled()
         expect(page.locator("#loginEmail")).to_have_value("new.person@example.test")
-        expect(page.locator("#loginNotice")).to_have_text("Your password is set. Log in to start.")
-        expect(page.locator("#loginPassword")).to_be_focused()
-        assert "setup" not in page.url
+        expect(page.locator("#linkConfirm")).to_be_hidden()
+        assert asked == [{"code": LINK_CODE}] and spent == []
+        assert "signin" not in page.url
+        assert page.evaluate("() => window.__consensioAuthState.uid") is None
+
+        page.click("#sendLinkButton")
+        expect(page.locator("#registrationSuccess")).to_be_visible()
+        assert registrations == [{"email": "new.person@example.test"}]
+    finally:
+        context.close()
+
+
+def test_a_link_spent_between_the_question_and_the_click_says_so(browser, phase4_server):
+    context, page, asked, spent = _link_page(
+        browser, phase4_server, redeem=lambda route: _json(route, REFUSED, status=400))
+    try:
+        page.click("#linkConfirmButton")
+        expect(page.locator("#authLead")).to_have_text("This link has expired or was already used.")
+        expect(page.locator("#sendLinkButton")).to_have_text("Email me a new link")
+        assert len(spent) == 1
+        assert page.evaluate("() => window.__consensioAuthState.uid") is None
+    finally:
+        context.close()
+
+
+def test_a_link_opened_in_an_open_app_tab_is_taken_too(browser, phase4_server):
+    """Only the fragment changes when a mail app reuses the /app tab."""
+    context, page = _guest_page(browser, phase4_server)
+    try:
+        asked = []
+        page.route("**/auth/email-link/account", lambda route: (
+            asked.append(route.request.post_data_json), _json(route, REFUSED, status=400)))
+        page.evaluate(f"() => {{ location.hash = 'signin={LINK_CODE}'; }}")
+        expect(page.locator("#authLead")).to_have_text("This link has expired or was already used.")
+        assert asked == [{"code": LINK_CODE}]
+        assert "signin" not in page.url
+    finally:
+        context.close()
+
+
+def test_a_link_never_switches_the_account_in_use(browser, phase4_server):
+    context, page, asked, spent = _link_page(
+        browser, phase4_server, initial_uid="account-a",
+        redeem=lambda route: _json(route, {"token": "custom-token-account-b", "first": False}))
+    try:
+        expect(page.get_by_text("You’re already logged in.")).to_be_visible()
+        assert asked == [] and spent == []
+        assert page.evaluate("() => window.__consensioAuthState.uid") == "account-a"
+        assert "signin" not in page.url
     finally:
         context.close()
 

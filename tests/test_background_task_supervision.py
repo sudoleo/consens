@@ -130,6 +130,9 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
     from app.services import agent_work_log
     monkeypatch.setattr(agent_work_log, "cleanup_expired_work_logs",
         lambda: calls.append("work_logs") or 4)
+    from app.services import sign_in_links
+    monkeypatch.setattr(sign_in_links, "cleanup_expired",
+        lambda: calls.append("sign_in_links") or 3)
 
     async def stop_after_first_tick(seconds):
         raise asyncio.CancelledError
@@ -144,7 +147,7 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
 
     asyncio.run(exercise())
     assert calls == ["pending", "receipts", "shares", "work_logs", "temporary_chats", "chat_deletions", "memory",
-                     "memory_changes", "outbox"]
+                     "memory_changes", "outbox", "sign_in_links"]
     health = background_tasks.task_health_snapshot()["retention-maintenance"]
     assert health["details"] == {
         "expired_pending_deleted": 2,
@@ -161,6 +164,7 @@ def test_retention_loop_runs_cleanup_before_first_sleep(monkeypatch):
         "memory_change_logs": 9,
         "notification_outbox_deleted": 8,
         "workspace_trails_deleted": 0,
+        "sign_in_links_deleted": 3,
     }
 
 

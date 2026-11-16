@@ -85,6 +85,7 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
         "tier_audit": 0,
         "workspace": 0,
         "agent_watches": 0,
+        "sign_in_links": 0,
     }
 
     monkeypatch.setattr(
@@ -154,6 +155,11 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     )
     monkeypatch.setattr(
         service,
+        "_delete_sign_in_links",
+        lambda uid: calls.__setitem__("sign_in_links", calls["sign_in_links"] + 1),
+    )
+    monkeypatch.setattr(
+        service,
         "_delete_auth_user",
         lambda uid: calls.__setitem__("auth", calls["auth"] + 1),
     )
@@ -194,6 +200,8 @@ def test_failed_area_remains_pending_and_only_that_area_is_retried(monkeypatch):
     assert calls["watch_indexes"] == 1
     assert calls["guards"] == 1
     assert calls["follows"] == 1
+    # Open sign-in links name the account (sign_in_links.py).
+    assert calls["sign_in_links"] == 1
     assert calls["outbox"] == 1
     assert calls["tier_audit"] == 1
     assert calls["auth"] == 1

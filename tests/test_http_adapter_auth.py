@@ -294,7 +294,7 @@ def test_registration_create_race_has_same_public_response_and_no_duplicate_noti
     monkeypatch.setattr(registration.auth, "create_user", create)
     deliver = Mock()
     notify = Mock()
-    monkeypatch.setattr(auth_router, "deliver_password_setup_email", deliver)
+    monkeypatch.setattr(auth_router, "deliver_sign_in_email", deliver)
     monkeypatch.setattr(auth_router, "send_new_user_registration_notification", notify)
     responses = [
         h.client.post("/register", json={"email": "same@example.test"})

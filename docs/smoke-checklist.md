@@ -1477,6 +1477,21 @@ Server.
       gleich und enthalten weder UID/E-Mail noch Custom-Token. Das eingesendete
       Legacy-Passwort erlaubt bei einer neuen Adresse keinen direkten Login;
       beide Fälle führen ausschließlich über den Link im Postfach.
+- [ ] Anmelden per E-Mail-Link (seit 2026-11-16), mit eigenem Testpostfach:
+      Sign up → „Check your inbox“ → die Mail „Welcome to consens.io“ hat genau
+      einen Knopf „Confirm and log in“. Ein Klick öffnet `/app`, die Adresse
+      zeigt kein `#signin=` mehr, kurz „Signing you in…“, dann die App
+      angemeldet, ohne Bestätigungs-Streifen und ohne Passwortschritt. Derselbe
+      Link noch einmal (abgemeldet): „This link has expired or was already
+      used.“ mit „Email me a new link“. Log in → „Email me a link instead“ →
+      Mail „Your login link for consens.io“ → Knopf „Log in“. Link auf einem
+      anderen Gerät oder Browser öffnen: „Your email link · Log in as
+      <Adresse>?“, erst „Log in“ meldet an, keine Frage geht raus; den Dialog
+      dort schließen, ohne zu klicken: der Link gilt danach noch. Angemeldet
+      einen Link öffnen: „You’re already logged in.“, das Konto wechselt nicht.
+      Postfach mit Link-Scanner (Outlook/Defender): der erste Klick meldet an,
+      nicht „expired“. Mail auf Deutsch, wenn die
+      Seite deutsch war; hell und dunkel im Mailprogramm.
 - [ ] Login (E-Mail + Google), Logout.
 - [ ] Gast tippt und meldet sich beim Senden an (seit 2026-10-15): Als Gast
       eine Beispielfrage unter dem leeren Feld antippen, das Feld füllt sich,
@@ -1484,8 +1499,9 @@ Server.
       „Your question stays here…“; Login mit Google (Popup und auf dem Handy
       Redirect) lädt neu, die Frage steht im Feld und läuft einmal von selbst
       als neuer Chat. Ein weiteres Neuladen sendet nichts mehr. Über die
-      E-Mail-Registrierung kommt die Frage nach dem Passwort-Setzen ebenfalls
-      zurück (innerhalb einer Stunde läuft sie von selbst).
+      E-Mail-Registrierung kommt die Frage nach dem Klick auf den Link in der
+      Mail ebenfalls zurück, wenn er im selben Browser aufgeht (innerhalb einer
+      Stunde läuft sie von selbst).
 - [ ] Gast sieht den Agent (seit 2026-10-21, Apple-Audit H3): privates Fenster,
       `/app` hart neu laden — ab dem ersten Bild Agent-Chip mit dem
       Chatmodell und davor „6 AIs cross-check“, „Get a second opinion. And a third.“, Beispielfragen und
@@ -1515,8 +1531,9 @@ Server.
       work inside the LinkedIn app“ mit „Copy link“ (Android zusätzlich „Open in
       Chrome“); E-Mail-Login funktioniert dort weiter.
 - [ ] Sign-up mit Gmail-Adresse: „Open Gmail“, Resend-Cooldown, „Use a
-      different address“. Der Link in der Mail endet nach dem Passwort-Setzen
-      über „Continue“ auf `/app?setup=1` mit vorausgefülltem Login.
+      different address“. „Forgot password?“ schickt Firebases Mail zum
+      Passwort-Setzen, die über „Continue“ auf `/app?setup=1` mit
+      vorausgefülltem Login endet (auch der Weg zu einem ersten Passwort).
 - [ ] Nach Logout verschwinden Account-Label, Kontingent-Ring/-Panel, Usage-
       Zahlen, Watch-Kontingent und Bookmark-Inhalte sofort; Bookmarks und Suche
       sind als Gast nicht klick- bzw. fokussierbar. Auch eine vor dem Logout

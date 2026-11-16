@@ -66,6 +66,10 @@ def every_mail(language):
                                                     language=language),
         "existing": mailer.build_existing_account_message(recipient="r@example.test", login_url="https://www.consens.io/app",
                                                           reset_url="https://auth.example.test/x", language=language),
+        "sign-in welcome": mailer.build_sign_in_message(recipient="r@example.test", first=True, language=language,
+                                                        sign_in_url="https://www.consens.io/app#signin=x"),
+        "sign-in": mailer.build_sign_in_message(recipient="r@example.test", first=False, language=language,
+                                                sign_in_url="https://www.consens.io/app#signin=x"),
     }
 
 

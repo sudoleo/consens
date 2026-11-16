@@ -102,7 +102,8 @@ def test_registration_never_probes_account_existence_with_caller_credentials():
 
     assert "password: password" not in register
     assert "signInWithEmailAndPassword" not in register
-    assert "showRegistrationSuccess(email)" in register
+    assert 'showRegistrationSuccess(email, "register")' in register
+    assert 'showRegistrationSuccess(email, "link")' in register
 
 
 # ---------------------------------------------------------------------------

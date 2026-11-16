@@ -17,6 +17,7 @@ from app.services import (
     notification_outbox,
     persistence_guard,
     share_snapshots,
+    sign_in_links,
     topics,
     user_memory,
     watch_service,
@@ -117,6 +118,8 @@ class FirestoreAccountDeletion:
             # Pending notifications carry the owner's question/summary text.
             ("notification_outbox", lambda: self._delete_notification_outbox(uid)),
             ("persistence_guards", lambda: self._delete_persistence_guards(uid, email)),
+            # Open sign-in links name the account.
+            ("sign_in_links", lambda: self._delete_sign_in_links(uid)),
             ("email_follows", lambda: self._delete_email_follows(email)),
             ("profile", lambda: self._db.collection("users").document(uid).delete()),
             ("firebase_auth", lambda: self._delete_auth_user(uid)),
@@ -274,6 +277,9 @@ class FirestoreAccountDeletion:
     def _delete_persistence_guards(self, uid: str, email: str) -> None:
         persistence_guard.delete_owner_data(uid, db=self._db)
         follow_challenges.delete_for_email(email, db=self._db)
+
+    def _delete_sign_in_links(self, uid: str) -> None:
+        sign_in_links.forget_account(uid, db=self._db)
 
     def _delete_uid_queries(self, uid: str) -> None:
         for name in ("pro_waitlist", "feedback"):

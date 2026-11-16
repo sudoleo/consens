@@ -14,8 +14,9 @@ from app.core.i18n_middleware import request_language
 from app.core.observability import safe_exception
 from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limiter
 from app.core.security import verify_user_token, AuthenticationUnavailable, auth_unavailable_error
+from app.services import sign_in_links
 from app.services.registration import (
-    deliver_password_setup_email,
+    deliver_sign_in_email,
     find_or_provision_user,
     is_password_setup_configured,
     needs_password_setup,
@@ -29,6 +30,9 @@ _REGISTER_RESPONSE_FLOOR_SECONDS = 0.35
 # vielen Adressen (Proxys, Botnetz) davon ab, ein fremdes Postfach zu fluten.
 _SETUP_MAILS_PER_ADDRESS = 5
 _SETUP_MAIL_WINDOW_SECONDS = 3600
+# The page shows this one sentence for every refused link: unknown, expired,
+# used or for an account that changed.
+_LINK_REFUSED = {"error": "This link has expired or was already used.", "code": "link_invalid"}
 
 
 class RegisterRequest(BaseModel):
@@ -49,6 +53,14 @@ class RegisterRequest(BaseModel):
         if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]{2,}", normalized):
             raise ValueError("Invalid email address")
         return normalized
+
+
+class EmailLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Any string up to this size reaches sign_in_links.redeem, which refuses
+    # a malformed code with the same answer as an unknown one.
+    code: str = Field(default="", max_length=128)
 
 
 async def _neutral_registration_response(started_at: float) -> dict:
@@ -108,13 +120,14 @@ async def register_user(
             logging.warning("/register: setup mail cap reached for one address")
             return await _neutral_registration_response(started_at)
         # New users receive an unguessable temporary credential. Existing and
-        # new addresses then take the exact same mailbox-only setup path, so an
+        # new addresses then take the exact same mailbox-only path, so an
         # anonymous caller cannot distinguish them with a follow-up login.
         user, created = await asyncio.to_thread(find_or_provision_user, email)
         background_tasks.add_task(
-            deliver_password_setup_email,
+            deliver_sign_in_email,
             email,
-            setup=created or needs_password_setup(user),
+            uid=user.uid,
+            first=created or needs_password_setup(user),
             language=request_language(request),
         )
         if created:
@@ -131,7 +144,54 @@ async def register_user(
     except Exception as exc:
         logging.error("/register failed: %s", safe_exception(exc))
         raise HTTPException(status_code=503, detail="Registration is temporarily unavailable.")
-    
+
+
+@router.post("/auth/email-link")
+# A code has 256 bits; the limit only keeps floods off Firestore and Firebase.
+@limiter.limit("10/minute")
+def sign_in_with_email_link(request: Request, data: EmailLinkRequest):
+    """Trade the code from a sign-in mail for a Firebase custom token, once.
+
+    The browser signs in with the token; the usual session path
+    (/confirm-registration) follows from there."""
+    try:
+        sign_in = sign_in_links.redeem(data.code)
+    except sign_in_links.LinkInvalid:
+        raise HTTPException(status_code=400, detail=_LINK_REFUSED) from None
+    except Exception as exc:
+        logging.error("/auth/email-link failed: %s", safe_exception(exc))
+        raise HTTPException(
+            status_code=503,
+            detail="Logging in is temporarily unavailable.",
+            headers={"Retry-After": "5"},
+        ) from None
+    response = JSONResponse({"token": sign_in.token, "first": sign_in.first})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@router.post("/auth/email-link/account")
+@limiter.limit("10/minute")
+def email_link_account(request: Request, data: EmailLinkRequest):
+    """The address a sign-in link would log in; spends nothing, changes nothing.
+
+    A browser that did not ask for the link shows it and logs in only after
+    a click, so a page load alone (a mail scanner's) leaves the link usable."""
+    try:
+        email = sign_in_links.account_address(data.code)
+    except sign_in_links.LinkInvalid:
+        raise HTTPException(status_code=400, detail=_LINK_REFUSED) from None
+    except Exception as exc:
+        logging.error("/auth/email-link/account failed: %s", safe_exception(exc))
+        raise HTTPException(
+            status_code=503,
+            detail="Logging in is temporarily unavailable.",
+            headers={"Retry-After": "5"},
+        ) from None
+    response = JSONResponse({"email": email})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
 
 @router.post("/confirm-registration")
 # Runs on every sign-in and page load (firebase.js), so the limit only stops

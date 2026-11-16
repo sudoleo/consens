@@ -1128,6 +1128,39 @@ def build_brief_message(*, recipient: str, date_label: str, items: list,
 
 
 @_localized
+def build_sign_in_message(*, recipient: str, sign_in_url: str, first: bool) -> EmailMessage:
+    """One button that logs the reader in (sign_in_links.py). ``first``: the
+    account has never signed in, so the same click also welcomes it."""
+    if first:
+        subject = _t("Welcome to consens.io")
+        heading = _t("Confirm your email and you're in")
+        lead = _t("Thanks for signing up. The button confirms your email address and logs you in.")
+        button = _t("Confirm and log in")
+        preheader = _t("One click and you're in.")
+        footer = _t("The link works once, for one hour. Didn't sign up? Just ignore this email.")
+    else:
+        subject = _t("Your login link for consens.io")
+        heading = _t("Log in to consens.io")
+        lead = _t("Here's your link. It logs you in, no password needed.")
+        button = _t("Log in")
+        preheader = _t("Your link to log in, no password needed.")
+        footer = _t("The link works once, for one hour. Didn't ask for it? Just ignore this email, nothing has changed.")
+    plain = f"{heading}\n\n{lead}\n{sign_in_url}\n\n{footer}\n"
+    body = (
+        f'<p class="cx-soft" style="margin:16px 0 0;color:{INK_SOFT}">{html.escape(lead)}</p>'
+        + _button_html(sign_in_url, button)
+    )
+    html_body = _shell_html(
+        eyebrow=_t("Account"),
+        heading=heading,
+        preheader=preheader,
+        body=body,
+        footer=html.escape(footer),
+    )
+    return _base_message(recipient, subject, plain, html_body)
+
+
+@_localized
 def build_account_setup_message(*, recipient: str, setup_url: str) -> EmailMessage:
     """Sign-up mail: choose a password. Replaces Firebase's "Reset your
     password" template, which this project cannot edit."""

@@ -53,6 +53,10 @@ export function onIdTokenChanged(_auth, callback) {
 export function onAuthStateChanged(_auth, callback) { return onIdTokenChanged(_auth, callback); }
 export async function signOut() { await window.__switchE2EUser(null); }
 export async function signInWithEmailAndPassword() { return { user: auth.currentUser }; }
+export async function signInWithCustomToken(_auth, token) {
+  await window.__switchE2EUser(String(token).replace(/^custom-token-/, ""));
+  return { user: auth.currentUser };
+}
 export async function signInWithPopup() { return { user: auth.currentUser }; }
 export async function signInWithRedirect() {}
 export async function getRedirectResult() { return null; }
