@@ -1146,6 +1146,21 @@
                   <input type="checkbox" id="detailedProgressSwitch">
                 </label>
               </div>
+              {#- This device's, not the account's: the permission belongs to
+                  the browser. run-notify.js shows the row only where a page
+                  may notify (desktop browsers) and says what the browser
+                  allows under it. -#}
+              <div class="settings-section" id="runNotifySetting" hidden
+                data-settings-keywords="benachrichtigung benachrichtigungen mitteilung mitteilungen notification notifications bescheid fertig done ready hintergrund background tab browser glocke bell">
+                <label for="runNotifySwitch" class="custom-checkbox-label settings-switch-row">
+                  <span>
+                    <strong>Notify me when it’s done</strong>
+                    <small>On this device. When a message is answered or waits for you while consens.io is in the background, your browser shows a notification.</small>
+                  </span>
+                  <input type="checkbox" id="runNotifySwitch" aria-describedby="runNotifyPermission">
+                </label>
+                <p id="runNotifyPermission" class="settings-run-notify-note"></p>
+              </div>
 
               <!-- The account's workspace (workspace-view.js): one Linux computer for the Agent and you;
                    last in its group, so the row hides without leaving a line behind. -->

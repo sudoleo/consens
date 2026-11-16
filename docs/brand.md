@@ -25,14 +25,18 @@ Jede Datei entsteht aus der Zeichnung. Nach einer Änderung an `mark.svg`:
 | Datei | Wofür |
 |---|---|
 | `static/favicon.svg` | Tab-Icon; Tinte oder Kreide je nach System-Thema |
-| `static/brand/icon-192.png` | Kachel für Browser ohne SVG-Icons und für Suchergebnisse |
+| `static/brand/icon-192.png` | Kachel für Browser ohne SVG-Icons, für Suchergebnisse und als App-Symbol im Manifest |
 | `static/brand/apple-touch-icon.png` | Kachel für den iOS-Homescreen |
-| `static/brand/logo-512.png` | Kachel als Organization-Logo im JSON-LD |
+| `static/brand/logo-512.png` | Kachel als Organization-Logo im JSON-LD und als großes App-Symbol |
+| `static/brand/icon-maskable-512.png` | maskierbare Kachel: Android schneidet ein installiertes App-Symbol in seine eigene Form (Kreis, Squircle); die Marke ist hier 55 % statt zwei Drittel breit und bleibt mit Luft in der sicheren Zone (Kreis mit 40 % Radius) |
 | `static/favicon.png` | helle Marke ohne Grund, für Icon-Reihen (CSS invertiert sie auf hellem Grund) |
 | `static/favicon-dark.png` | dunkle Marke ohne Grund; Alphamaske der Link-Karten |
 
 Die drei `<link>`-Zeilen für Icons stehen einmal in
 `templates/partials/head_icons.html`; jede Seite bindet dieses Partial ein.
+Dort stehen auch das Manifest (`/manifest.webmanifest`: Name „consens.io“,
+Kurzname „consens“, Fenster- und Hintergrundfarbe Weiß aus `--ground`) und
+die Suchbeschreibung (`/opensearch.xml`), beide aus `app/core/web_app.py`.
 
 ### Im Template
 

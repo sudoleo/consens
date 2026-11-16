@@ -286,6 +286,10 @@
         "static/js/query-send.js",
         "static/js/tab-status.js",
         {
+          "file": "static/js/run-notify.js",
+          "note": "App.runNotify: a system notification when a run ends while the page is hidden, the offer in the live line (agent-activity.js) and the switch in Settings. After tab-status.js, whose run states it uses."
+        },
+        {
           "file": "static/js/app-update.js",
           "note": "App.appUpdate: loads a newer deploy while the page is idle and unseen, then reopens the saved chat (window.openBookmark, consensio:auth-state)."
         },

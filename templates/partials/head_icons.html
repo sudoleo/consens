@@ -3,7 +3,13 @@
     tile for everything that cannot use it: Safari tabs, the iOS home screen
     (which paints transparency black) and search results, whose icon has to
     be a multiple of 48 px. The fixed size on the PNG keeps Chrome on the
-    SVG. All files come from scripts/render_brand_assets.py. -#}
+    SVG. All files come from scripts/render_brand_assets.py.
+    With them, what makes the site an app and a search keyword
+    (app/core/web_app.py): the manifest goes with credentials, so its
+    language cookie comes along, and Chrome takes the search description
+    only from the start page ("/"). -#}
 <link rel="icon" href="{{ asset_url('/static/favicon.svg') }}" type="image/svg+xml">
   <link rel="icon" href="{{ asset_url('/static/brand/icon-192.png') }}" sizes="192x192" type="image/png">
   <link rel="apple-touch-icon" href="{{ asset_url('/static/brand/apple-touch-icon.png') }}">
+  <link rel="manifest" href="/manifest.webmanifest" crossorigin="use-credentials">
+  <link rel="search" type="application/opensearchdescription+xml" title="consens.io" href="/opensearch.xml">

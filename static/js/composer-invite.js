@@ -8,8 +8,10 @@
 // 2. Example questions under an empty new chat (#composerStarters), curated
 //    or predicted from the newest chats (composer-starters.js). A click
 //    fills the field and never sends: the reader adapts it or sends it.
-// 3. Where a sent question came from (typed, example, pasted), for the "ask"
-//    event (app-core.js trackAsk). Never the text itself.
+// 3. Where a sent question came from (typed, example, pasted, link), for the
+//    "ask" event (app-core.js trackAsk). Never the text itself.
+// 4. A question brought by /app#q= (app-bootstrap.js reads it on load) also
+//    while the app is open: the browser then changes only the fragment.
 (function () {
   "use strict";
   const App = window.App = window.App || {};
@@ -174,6 +176,38 @@
       if (button) useStarter(button);
     });
     trackStartersRoom();
+    if (App.questionLink?.filled) source = "link";
+    if (App.questionLink?.opened) {
+      // Umami's script loads after this bundle, app-init.js (isGuestComposer) too.
+      const count = () => track("app_question_link", { filled: App.questionLink.filled, guest: Boolean(App.isGuestComposer?.()) });
+      if (document.readyState === "complete") count();
+      else window.addEventListener("load", count, { once: true });
+    }
+    window.addEventListener("hashchange", questionFromLink);
+  }
+
+  // The same link while the app is open: the address bar's keyword typed in
+  // this tab, later the iOS app loading it again. Nothing reloads, so the
+  // question is taken here. Like a fresh start it fills only an empty field,
+  // in a new chat.
+  function questionFromLink() {
+    const text = App.questionLink?.parse?.(window.location.hash);
+    if (typeof text !== "string" || window.location.pathname !== "/app") return;
+    try {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    } catch (_) { /* the fragment stays; the question still lands */ }
+    const input = field();
+    const filled = Boolean(text && input && !input.disabled && !input.value.trim());
+    if (filled) {
+      if (!document.body.classList.contains("is-hero")) document.getElementById("newRunButton")?.click();
+      input.value = text;
+      source = "link";
+      // Autosize, the demo chip, collapse and Send follow the field's input.
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.focus({ preventScroll: true });
+      input.setSelectionRange(input.value.length, input.value.length);
+    }
+    track("app_question_link", { filled, guest: Boolean(App.isGuestComposer?.()) });
   }
 
   App.composerInvite = { sendAsGuest, afterAccessUpdate, takeAskContext };

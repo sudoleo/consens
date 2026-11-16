@@ -71,6 +71,21 @@ def test_tiles_are_solid_squares():
             assert ((x - radius) ** 2 + (y - radius) ** 2) ** 0.5 < radius, name
 
 
+def test_the_maskable_tile_keeps_the_mark_inside_every_launcher_shape():
+    # A launcher may cut the icon to any shape that holds the circle of 40 %
+    # radius around its middle (the manifest's "maskable" safe zone).
+    for name, side in brand.MASKABLE_TILES.items():
+        with Image.open(ROOT / "static" / "brand" / name) as image:
+            assert image.size == (side, side) and image.mode == "RGB", name
+            light = image.convert("L").point(lambda value: 255 if value > 128 else 0)
+            pixels = light.load()
+            farthest = max(
+                ((x - side / 2) ** 2 + (y - side / 2) ** 2) ** 0.5
+                for y in range(side) for x in range(side) if pixels[x, y]
+            )
+        assert farthest < brand.MASKABLE_SAFE_RADIUS * side * 0.9, name
+
+
 def test_every_page_takes_its_icons_from_one_partial():
     partial = read("templates/partials/head_icons.html")
     linked = re.findall(r"asset_url\('(/static/[^']+)'\)", partial)

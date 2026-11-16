@@ -178,8 +178,73 @@
     let draft = null;
     try { draft = JSON.parse(stored); } catch (_) { /* a plain string from before 2026-10-16 */ }
     if (!draft || typeof draft.text !== "string") return typeof draft === "string" ? draft : stored;
+    // A link's question kept for a guest (below) belongs to the page the
+    // link opened: a reload or the next visit starts empty. A guest's Send
+    // keeps it again as an ordinary draft (composer-invite.js).
+    if (draft.link) {
+      try { window.localStorage.removeItem("consensio.questionDraft.v1"); } catch (_) { /* private mode */ }
+      return "";
+    }
     return Date.now() - Number(draft.at) <= 24 * 60 * 60 * 1000 ? draft.text : "";
   }
+
+  // ---- A question brought by the address -----------------------------------
+  // /app#q=<text> is the one way in from outside: a browser's search
+  // keyword (/opensearch.xml), a shortcut, later the iOS app
+  // (docs/codebase-map.md §8). In the fragment it reaches no server and no
+  // access log. It only fills the field and never sends: a link from anywhere
+  // must not spend this reader's allowance. Read once and taken out of the
+  // address right here, before Umami or a reload can see it.
+  const LINK_QUESTION_MAX_CHARS = 2000;
+  // null: the fragment brings no question.
+  function linkQuestion(hash) {
+    // "#?q=" is what /opensearch.xml asks for: only after a "?" does Chrome
+    // encode the terms as a query value ("+" a space, "%2B" a plus), the
+    // way Firefox does anyway and URLSearchParams reads them.
+    const fragment = String(hash || "").replace(/^#\??/, "");
+    if (!/(^|&)q=/.test(fragment)) return null;
+    const text = String(new URLSearchParams(fragment).get("q") || "")
+      .replace(/\r\n?/g, "\n")
+      // Control characters and the marks that turn the reading direction:
+      // a link must not make its words read otherwise than they are.
+      .replace(/[\p{Cc}\p{Bidi_Control}]/gu, char => (char === "\n" || char === "\t" ? char : ""))
+      .trim();
+    return Array.from(text).slice(0, LINK_QUESTION_MAX_CHARS).join("").trim();
+  }
+  const linkEntry = (() => {
+    if (window.location.pathname !== "/app") return null;
+    const text = linkQuestion(window.location.hash);
+    if (text === null) return null;
+    try {
+      window.history.replaceState(window.history.state, "", window.location.pathname + window.location.search);
+    } catch (_) { /* no History API: the field still gets the question */ }
+    return text;
+  })();
+  // `filled`: the question stands in the field (composer-invite.js counts
+  // it, app-init.js gives it the caret). A draft keeps the field instead.
+  window.App.questionLink = { parse: linkQuestion, opened: linkEntry !== null, filled: false };
+
+  // ---- The bar of an installed app's window --------------------------------
+  // Installed (/manifest.webmanifest), Chrome and Edge draw a title bar, and
+  // Android a status bar, in the manifest's one colour: the light page's. In
+  // such a window the bar follows the page's theme. Never in Safari: its bars
+  // take their colour from the page's edges (shell.css,
+  // .app-mobile-header-edge), which a theme-color would override.
+  window.App.windowColour = function () {
+    const installed = window.matchMedia
+      && window.matchMedia("(display-mode: standalone), (display-mode: window-controls-overlay), (display-mode: minimal-ui)");
+    if (!installed?.matches || /Apple/.test(navigator.vendor || "") || !document.body) return;
+    // Empty while the stylesheet still loads: app-init.js applyTheme sets it.
+    const colour = getComputedStyle(document.body).getPropertyValue("--ground").trim();
+    if (!colour) return;
+    let meta = document.querySelector('meta[name="theme-color"]');
+    if (!meta) {
+      meta = document.createElement("meta");
+      meta.name = "theme-color";
+      document.head.append(meta);
+    }
+    if (meta.content !== colour) meta.content = colour;
+  };
 
   // First-paint state. DOMContentLoaded waits for the deferred bundles (and
   // the Firebase CDN modules before them), so the browser usually paints the
@@ -324,6 +389,7 @@
     if (once("body", document.body)) {
       if (watchPage) document.body.classList.add("is-watch-view");
       if (theme === "dark") document.body.classList.add("dark-mode");
+      window.App.windowColour();
       // Agent's start screen (not Compare's) is painted before auth
       // resolves; run-mode.js (earlier in this bundle) owns the stored choice.
       if (window.App?.runMode?.preference() !== "compare") {
@@ -359,7 +425,21 @@
     const input = once("input", document.getElementById("questionInput"));
     if (input) {
       if (agentLook || guestExpected()) input.placeholder = window.App.askPlaceholder();
-      const draft = !input.value && waitingDraft();
+      const waiting = !input.value && waitingDraft();
+      // What already stands in the field, or waits for it, is never replaced.
+      const linked = !input.value && !waiting && linkEntry ? linkEntry : "";
+      if (linked) {
+        window.App.questionLink.filled = true;
+        // A guest's field is emptied once the sign-in answers and refilled
+        // from the draft (firebase.js, restoreQuestionDraft): kept as one
+        // for this page (`link`, see waitingDraft), the question survives that.
+        if (guestExpected()) {
+          try {
+            window.localStorage.setItem("consensio.questionDraft.v1", JSON.stringify({ text: linked, at: Date.now(), link: true }));
+          } catch (_) { /* private mode */ }
+        }
+      }
+      const draft = waiting || linked;
       if (draft) {
         input.value = draft;
         draftSeeded = true;

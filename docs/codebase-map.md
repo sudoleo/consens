@@ -595,7 +595,7 @@ Threadpool aus. `async def` bleibt nur für echte Await-Pfade (Mail, explizites
 | Router | Zweck (Auswahl an Pfaden) |
 |---|---|
 | `agent.py` | `GET /agent/models` und `POST /agent`: Modellkatalog (jedes angemeldete Konto, Premium-Modelle Pro) aus den vollständigen Firestore-Anbieterlisten samt Reihenfolge, aktuellen Provider-Metadaten und konfiguriertem Standard und begrenzter Modell-/Tool-Lauf im bestehenden Chat. Strikte Auswahl, owner-gebundene IDs, SSE mit bestätigten Fortschritten, Tool-Ergebnissen/Quellen und aggregierter Usage. Alle angebotenen Chatmodelle nutzen den gemeinsamen Websuch-Builder mit begrenzten Exa-Ergebnissen; kein eigener Suchdienst. Vorrang für gemeldete Provider-Gesamtkosten, idempotente Schrittbelege, modellgebundene 429-Wartefrist und Wiederaufnahme fertiger Antworten. Geprüfte Delegation mit eigenen Sitzungen, Mailboxen, Seitenleiste und atomarem gemeinsamen Budget; ergänzende `/agent/chats/{chat}/turns/{turn}/agents`-Detail-/Stop-Endpunkte, `GET /agent/chats/{chat}/turns/{turn}/work-log?after=&limit=` und `GET .../work-log/{seq}` (Arbeitsprotokoll, seit 2026-10-31 jedes Turns, lesbar für seinen Besitzer, siehe „Ein Modus“ → „Arbeitsprotokoll“), `POST /agent/chats/{chat}/requests/{request_id}/stop` (Stop per Request-Identität), `POST /agent/chats/{chat}/requests/{request_id}/notes` (Nachricht in den laufenden Lauf, jeder Agent-Lauf seit 2026-11-15, vorher nur mit VM; optional `now`) und `POST …/notes/{note_id}/now` („Send now“: bricht den laufenden Schritt für sie ab; 404 unbekannte Notiz, 409 `not_running`; siehe §4 „Nachsteuern während des Laufs“; Browser: `agent-chat.js` `steer`/`hurry`, sichtbare Warteschlange `#agentQueue`, Ungelesenes geht danach als nächste Nachricht), `POST /agent/chats/{chat}/requests/{request_id}/hold` (Entscheidung des Nutzers, wenn ein Prüfer die Arbeit pausiert hat: `continue`/`stop`/`steer`, seit 2026-10-26, seit 2026-11-07 mit der gesehenen `revision` der Karte; seit 2026-10-27 `deny` für eine Domain, um die der Agent bat, und seine eigene Frage; seit 2026-10-29 sonst 422 `invalid_action`, `agent_sessions.deniable`; seit 2026-10-30 `choose` mit `choice` (Index) auf der Auswahlkarte des Agenten, dort nur das, `stop` oder `steer`, `agent_sessions.check_answer`; siehe „Ein Modus“ → „Aussteuern“), `POST /agent/chats/{chat}/turns/{turn}/vm-restore` (Arbeitsplatz auf den Checkpoint vor dieser Nachricht, Konten mit VM (`vm_allowed`), seit 2026-10-26; seit 2026-10-27 nur Checkpoints, die `agent_workspace.restorable` erlaubt, sonst 409 `expired`), `POST /agent/chats/{chat}/turns/{turn}/share-result` (Pending-Snapshot einer fertigen Agent-Antwort fürs Teilen, seit 2026-10-21, siehe „Sharing“) sowie `GET /agent/chats/{chat}/live?request_id=…&after=<seq>` (prozesslokale Frames des laufenden Turns für puffernde Netze und Wiederverbinden, siehe §4 „Agent-Turns laufen ohne Verbindung weiter“). Der Turn läuft auf einem eigenen Thread (`agent_background.py`); die POST-Antwort ist nur ein Tail seiner Frames. Kein `/prepare` oder Memory-Kompressor; liest pro Turn einmal das Nutzer-Memory (Profil, Notiz, Einzel-Erinnerungen) und bietet nach Opt-in `update_memory` samt SSE-Event `memory` an (siehe §3 „Agent-Memory“); `compare_models` und die Prüfer der Antwort im gemeinsamen Tageskonto (siehe §4 „Agent · Beta“ und „Ein Modus“). `agent_preferences` im Body wird seit 2026-10-31 angenommen und ignoriert. `recover_only` startet nie einen Modellaufruf. `agent_settings.answer_mode` ist seit 2026-10-14 immer `merged` (der Agent schreibt die Antwort selbst); ältere Turns mit getrenntem Antwortschritt tragen `separate` oder kein Feld. Seit 2026-10-23 speichert jeder Agent-Turn den App-Kontext seiner Frage (`app_context`, nur am Dokument); spätere Nachrichten wiederholen die Frage damit byte-gleich (Prompt-Cache, siehe „Feste Cache-Punkte“). Seit 2026-11-03 ist der Kern `start_agent_turn(uid, payload, watch_run=None)`: `POST /agent` ruft ihn mit dem Konto aus dem Token, der Takt einer Agent-Watch (`agent_watches.start_run`) mit `watch_run` (ohne Senderate-Limit, nur die neuesten `agent_watches.HISTORY_CHARS` Zeichen des Chats über `AgentRunStore.messages(history_chars=…)`, `agent_watches.run_context` im App-Kontext, `DelegationLoop(watch_run=…)`, am Ende des Produzenten `agent_watches.turn_ended`); ein Lauf ohne Befund und ohne Ende aktualisiert den Seitenleisten-Eintrag nicht (`_quiet_watch_run`). |
-| `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App; Tab-Titel `consens.io`, gleich `DEFAULT_APP_TITLE` in `app-core.js`; `noindex`, aber mit OG-/Twitter-Tags, weil die Adresse geteilt wird), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `POST /app` (seit 2026-10-29: Ziel aller Formulare der App-Shell — Login, Feedback, Memory-Eintrag —, falls eines abgeschickt wird, bevor sein Skript es übernimmt; liest den Inhalt nie, 303 zurück auf `/app`. Vorher hatten die Formulare kein `method`, ein GET schrieb E-Mail und Passwort in Adresse, Verlauf und Render-Log), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms` (dazu 301 von `/datenschutz` und `/impressum`), `robots.txt`, `sitemap*.xml`. Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback` und `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Best-answer-Votes schreibt seit 2026-10-31 niemand mehr: bis 2026-10-25 der Browser-Consensus (`POST /vote`, entfernt), danach der Vergleichsmodus des Agenten (einmal pro Turn); `/model-pulse` und `/api/model-leaderboard` zeigen den Stand bis dahin (wie sie künftig gespeist werden, ist offen, siehe „Ein Modus“ in §4). |
+| `pages.py` | HTML-Seiten + SEO: `/` (Landing; wer eingeloggt ist, kommt beim direkten Aufruf — getippt, Lesezeichen, Suchtreffer, `Sec-Fetch-Site` `none`/`cross-site` — per 302 auf `/app`. Merker ist das identitätslose Cookie `consens_app=1`, das `auth-session-state.js` beim Login setzt und beim Logout löscht. Klicks innerhalb der Seite (Logo, „Product“, `/#watch`) und `/?home` zeigen weiter die Landing; die Antwort trägt `Vary: Cookie, Sec-Fetch-Site`), `/model-pulse` (öffentliche Best-answer-Raten mit Filtern; API `GET /api/model-pulse`), `/app` (Haupt-App; Tab-Titel `consens.io`, gleich `DEFAULT_APP_TITLE` in `app-core.js`; `noindex`, aber mit OG-/Twitter-Tags, weil die Adresse geteilt wird), `/app/watches` (gleiche App-Shell; watch.js öffnet anhand des Pfads das Watch-Dashboard), `POST /app` (seit 2026-10-29: Ziel aller Formulare der App-Shell — Login, Feedback, Memory-Eintrag —, falls eines abgeschickt wird, bevor sein Skript es übernimmt; liest den Inhalt nie, 303 zurück auf `/app`. Vorher hatten die Formulare kein `method`, ein GET schrieb E-Mail und Passwort in Adresse, Verlauf und Render-Log), `/admin` (inkl. Topics-Tab), `/admin/topics` (308-Kompatibilitätsredirect auf `/admin#topics`), `/admin/benchmark` (Benchmark-Run-Visualisierung), `/about`, `/ai-model-comparison`, `/consensus-engine` (nutzerfreundliche Consensus-Engine-Erklärung), `/privacy` `/imprint` `/terms` (dazu 301 von `/datenschutz` und `/impressum`), `robots.txt`, `sitemap*.xml`, `/manifest.webmanifest` und `/opensearch.xml` (seit 2026-11-16, gebaut in `app/core/web_app.py`: consens.io als installierbare App mit eigenem Fenster und als Suchkürzel; beide in der Sprache des Lesers über `request_language`, `Cache-Control: private`, `Vary: Accept-Language, Cookie`; Vertrag `#q=` in §8). Außerdem der öffentliche, familienaggregierte Best-answer-Zähler `GET /api/model-leaderboard` (60 s Browser-/CDN-Cache; `period=all|since-2026-08-31`; alle neun Familien einschließlich Nullständen, Kimi/GLM und Meta/Muse mit eigenem Verfügbarkeitsdatum aus `_LEADERBOARD_AVAILABLE_SINCE`). Beide Zeiträume nutzen zusätzlich einen serverseitigen 60-s-Cache mit serialisiertem Refresh pro Zeitraum/Prozess. Der gemeinsame Zeitraum zählt die datierten, deduplizierten `model_votes` ab 31.08.2026 über indexierte `count()`-Abfragen pro Familie; Modellkatalog und Counts werden im selben Read-only-Transaktionssnapshot gelesen. Solange der neue `model_votes`-Index aus `firestore.indexes.json` fehlt/aufbaut, greift nur für diesen Indexfehler der gecachte Legacy-Scan. Kontolöschungen entfernen weiterhin Votes aus dem Zeitraum, ohne Lifetime-Zähler zurückzusetzen; `/feedback` und `/check_keys` bleiben die weiteren internen Seiten-Routen (Key-Test nur für verifizierte Logins). Feedback ist persistent pro UID auf 30 Sekunden und 10/UTC-Tag begrenzt. Best-answer-Votes schreibt seit 2026-10-31 niemand mehr: bis 2026-10-25 der Browser-Consensus (`POST /vote`, entfernt), danach der Vergleichsmodus des Agenten (einmal pro Turn); `/model-pulse` und `/api/model-leaderboard` zeigen den Stand bis dahin (wie sie künftig gespeist werden, ist offen, siehe „Ein Modus“ in §4). |
 | `chat.py` | Kern-LLM-Flow für Compare: `/prepare` und die aus `cfg.PROVIDERS[*].ask_endpoint` erzeugten `/ask_*`-Routen (aktuell zusätzlich `/ask_kimi` und `/ask_glm`). Alle `/ask_*`-Endpoints laufen über `handle_ask` + die deklarative Familien-Registry `ASK_PROVIDERS`; Transport und Credential sind für alle OpenRouter, `useOwnKeys` wählt optional `openrouter_key`. Eine Frage an `/ask_*` setzt keinen Chat fort: Kontextfelder (`context`, `chat_id`/`turn_id`/`context_version_id`) werden ignoriert. `/consensus` und `/resolve` sind seit 2026-10-25 entfernt; den Consensus fährt nur noch der Server (`consensus_pipeline`). |
 | `chat_history.py` | Owner-gebundene Chat-Persistenz: `POST/GET /chats` (der Browser legt hier nur Agent-Chats an, `execution_mode: "agent"`; seit 2026-11-01 mit `temporary: true` einen temporären, nur Agent, sonst 422, siehe §4 „Temporäre Chats“), `GET /chats/{chat_id}`, `DELETE /chats/{chat_id}` (dreistufige Kaskade über `ChatStore.delete_chat`; vor der Enumeration wird der Chat transaktional auf `deleting` gesetzt und zugleich ein dauerhafter `chat_deletion_jobs`-Auftrag angelegt, damit kein paralleler Turn als Subcollection-Waise nachrutschen kann und eine unterbrochene Kaskade vom Retention-Loop fortgesetzt wird; `deleting`-Chats sind in Liste, Detail und Turns bereits unsichtbar bzw. gesperrt). Seit 2026-10-21 hält `PUT /chats/{chat_id}/turns/{turn_id}/task-checks` (`{checked: [int]}`, Positionen 0–199, höchstens 200, sonst 422; UID-Budget `task_checks` 60) die angehakten Checklisten-Kästchen einer Antwort: `ChatStore.set_task_checks` ersetzt in einer Transaktion (Account-Tombstone, lebender Chat, Turn `completed`, sonst 404/409) das Feld `task_checks` am Turn, ohne `updated_at` von Chat oder Turn zu bewegen (die Chatliste ordnet sich nicht um); `turn_detail` reicht das Feld an Turn-Detail und Konversationsseiten durch (`static/js/task-checks.js`). Listen sind begrenzt und mit selbstenthaltenden, UID-/Ressourcen-gebundenen HMAC-Cursors paginiert (`updated_at` + Dokument-ID für Chats, `position` + Dokument-ID für Turns); Cursor-Dokumente werden nicht erneut als veränderliche Seitengrenze gelesen. Create-Chat serialisiert das Owner-Limit über `chat_state/quota`. `ChatStore.fail_turn` liest Chat, Turn und Account-Tombstone in derselben Transaktion und akzeptiert ausschließlich einen weiterhin `active` Chat. Alle `/chats`-Antworten erhalten über die Security-Middleware `private, no-store`. Agent-Turns entstehen und enden über `/agent`. Die Consensus-Turn-Routen (`POST/GET /chats/{id}/turns`, `GET …/turns/{turn}`, `POST …/context`) und `ChatStore.complete_turn` sind seit 2026-10-25 entfernt; gespeicherte Consensus-Chats liest der Browser aus ihrem Bookmark (`GET /bookmarks/{id}/conversation`). |
 | `client_errors.py` | Nimmt unter `POST /api/client-errors` ausschließlich same-origin, größenbegrenzte kritische Browsermeldungen an (5/min pro IP). Freitext, Stack, konkrete IDs/Slugs und Providerdetails werden verworfen; nur allowgelistete Typ-/Phasenkategorien, eine abstrahierte Route und bei echten Skript-/Stylesheet-Ladefehlern eine grobe Ressourcenklasse (`app_bundle`, `static_asset`, `jsdelivr_dependency`, `firebase_dependency`, `same_origin_resource`, `unknown_resource`) erreichen den nicht-blockierenden Telegram-Alert. Runtime-Fehler liefern zusätzlich Bundle-Koordinaten (Ort + bis zu fünf `[bundle, zeile, spalte]`-Frames), die über `static/dist/<bundle>.map` auf `static/js/…:zeile:spalte` aufgelöst werden, den Namen des laufenden App-Bundles und nur bei `TypeError`/`ReferenceError`/`RangeError`/`SyntaxError` die entschärfte Message (lange Literale → „…“, URLs/Mails/Secrets raus, max. 200 Zeichen). Der Endpoint liefert keine Konfigurationsdetails zurück. |
@@ -646,7 +646,16 @@ der öffentlichen Seiten, `.app-favicon` in Kopf und Sidebar von `/app`,
 `templates/partials/head_icons.html` ein; alle Icon-Dateien schreibt
 `scripts/render_brand_assets.py` aus der Zeichnung (`--check` meldet
 veraltete), `tests/test_brand_assets.py` hält Zeichnung, Makro und Dateien
-gleich. Das Organization-Logo im JSON-LD ist `static/brand/logo-512.png`. Das
+gleich. Das Organization-Logo im JSON-LD ist `static/brand/logo-512.png`.
+Dasselbe Partial verweist seit 2026-11-16 auf `/manifest.webmanifest` (mit
+`crossorigin="use-credentials"`, damit das Sprach-Cookie mitgeht) und
+`/opensearch.xml`; das Manifest nimmt `icon-192.png`, `logo-512.png` und die
+maskierbare `icon-maskable-512.png` (Marke auf 55 % der Breite, innerhalb der
+sicheren Zone von 40 % Radius), Farben aus `--ground` in `variables.css`.
+`/app` trägt kein `theme-color` im Template (Safaris Leisten färbt
+`shell.css` über eigene Randstreifen); nur in einem installierten Fenster
+außerhalb von WebKit setzt `App.windowColour()` (`app-bootstrap.js`, bei
+jedem Themenwechsel aus `applyTheme`) es auf das `--ground` des Themas. Das
 Link-Vorschaubild (`og:image`, `twitter:card` `summary_large_image`, 1200 × 630)
 kommt seit 2026-10-18 überall aus `templates/partials/og_card.html`, auch für
 `/app`: Ohne eigene Karte zeigt eine Seite die Markenkarte der Landing
@@ -4223,6 +4232,33 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   schreibt es außerdem „Answer ready“ in die Statuszeile `#answerStatus`
   (`role="status"`, in `main#appMain`), sobald der sichtbare Lauf von
   `starting`/`running` auf `succeeded` wechselt; der Start leert sie.
+  `App.tabStatus.state(run)` (seit 2026-11-16) ist die eine Zustandsregel
+  (`working`, `reviewing`, `paused`, `asking`, `ready`, `failed`, sonst `null`),
+  die Titel und `run-notify.js` teilen.
+- **`run-notify.js`** (seit 2026-11-16, nach `tab-status.js`, `App.runNotify`) —
+  Systemmeldung, wenn ein Lauf endet oder auf den Leser wartet, während die
+  Seite verborgen ist. Hört auf `consensio:run-registry-change` und liest jeden
+  Lauf der Registry über `App.tabStatus.state`; gemeldet wird nur ein Wechsel
+  nach `ready`/`failed` (Schlüssel `end`) oder in eine Pause (`hold:<id>`),
+  je Lauf und Schlüssel einmal, `tag` `consens-run-<runId>` (das Spätere
+  ersetzt das Frühere). Die Marken nach der Antwort ändern den Zustand nicht
+  und melden nichts. Titel = Chattitel (`bookmark.title`, 80 Zeichen), bei
+  temporären Chats nur „Temporary chat“; Klick: `window.focus()`, dann
+  `window.openBookmark(bookmark.id)` bzw. `runRegistry.show(runId)`. Zurück
+  im Vordergrund schließt es seine Meldungen. Nur mit
+  `Notification.permission === "granted"` und ohne
+  `localStorage["consensio.runNotify.v1"] = "off"` (Gerät, nicht Konto).
+  `supported()` ist falsch ohne `new Notification()`: Android, iPhone/iPad
+  (auch iPadOS als Mac), unsicherer Kontext, oder ein Konstruktor, der wirft
+  (dann für die Seite aus). `offer(runId, elapsedMs)` → `"ask"`/`"set"`/`null`
+  für die Live-Zeile (`agent-activity.js`, Zeile `kind: 'offer'` vor der
+  aktuellen Zeile, in `agent-chat.css` rechts gefloatet; die aktuelle Zeile
+  wird `flow-root`): ab 20 s, nur bei Erlaubnis `default`, höchstens auf drei
+  Läufen ohne Klick (`consensio.runNotify.offers.v1`). Erst `ask(source, runId)`
+  fragt den Browser. Ein Weckruf (`registry.update`) zeichnet die Zeile nach
+  20 s neu, falls bis dahin kein Ereignis kam. Den Schalter `#runNotifySwitch`
+  (Einstellungen › Agent, `#runNotifySetting` nur wo `supported()`) und
+  `#runNotifyPermission` (was der Browser erlaubt) bindet es selbst.
 - **`app-update.js`** (seit 2026-10-15, nach `tab-status.js`, `App.appUpdate`) —
   ein offenes App-Fenster holt neue Deploys selbst. Es vergleicht seinen Build
   (`data-app-build`) mit `GET /api/build`: beim Verlassen (`visibilitychange`
@@ -4331,7 +4367,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   geantwortet haben (angewendet wird es seit 2026-10-29 erst danach),
   und ein leeres Feld verbrauchte sonst den einen Versuch
   (`tests/e2e/test_composer_invite.py`, beide Reihenfolgen); `takeAskContext()` für
-  `App.trackAsk` (`source` typed/example/pasted, `after_login`). Dazu die
+  `App.trackAsk` (`source` typed/example/pasted/link, `after_login`).
+  Eine Frage aus `/app#q=` (`App.questionLink`, `app-bootstrap.js`) setzt
+  `source` auf `link`; kommt das Fragment, während die App offen ist
+  (`hashchange`), füllt es ein leeres Feld in einem neuen Chat
+  (`#newRunButton`), sonst nichts. Dazu die
   Klicks auf die Beispielfragen `#composerStarters` (füllen nur das Feld;
   kuratierte wie vorhergesagte, `data-starter="predicted"`) und
   `--starters-room` auf `.input-section` (Höhe der Beispielzeile samt Rand),
@@ -13107,6 +13147,32 @@ zählen nicht):
   `cover` (Safari rahmt sie im Querformat in der Seitenfarbe).
   `tests/e2e/test_safe_areas.py` simuliert die iPhone-Insets per CDP
   (`Emulation.setSafeAreaInsetsOverride`), hoch- und querformatig.
+- **`/app#q=<Text>` ist der Vertrag für Einstiege von außen (seit 2026-11-16).**
+  Suchkürzel (`/opensearch.xml`), Kurzbefehle, Lesezeichen und später die
+  iOS-App (Swift-Hülle um `/app`, Teilen-Menü) bringen eine Frage nur so mit.
+  Im Fragment erreicht sie keinen Server und kein Zugriffsprotokoll; nie als
+  `?q=`. Kodiert wie ein Abfragewert (`URLSearchParams`): Leerzeichen als `+`
+  oder `%20`, ein echtes Plus als `%2B`, `&` als `%26` (Swifts
+  `URLComponents.queryItems` lässt `+` stehen: dort selbst kodieren). `#?q=`
+  gilt gleich (so fragt `/opensearch.xml`: erst nach einem `?` kodiert Chrome
+  die Suchwörter als Abfragewert, sonst als Pfad mit rohem `+` und `&`).
+  `app-bootstrap.js` (`App.questionLink.parse`) liest es nur auf `/app`, im
+  ersten Bild: höchstens 2.000 Zeichen, ohne Steuer- und
+  Richtungszeichen, nur als `value`; nimmt das Fragment sofort per
+  `history.replaceState` aus der Adresse (Umami, Neuladen, Lesezeichen sehen
+  es nie; `consensioBeforeSend` schneidet jedes Fragment zusätzlich ab). Es
+  füllt nur, sendet nie (ein fremder Link verbraucht kein Kontingent), und nie
+  über einen Entwurf oder Text im Feld. Für Gäste wird die Frage zum Entwurf
+  (`consensio.questionDraft.v1` mit `link: true`), weil `firebase.js` deren
+  Feld nach der Auth-Antwort leert und aus dem Entwurf füllt; der nächste
+  Seitenaufruf verwirft einen solchen Entwurf (`waitingDraft`), erst das
+  Senden eines Gasts macht ihn zum gewöhnlichen. In einer offenen App
+  (`hashchange`, etwa das Suchkürzel im selben Tab oder die iOS-App, die die
+  Adresse neu lädt) füllt `composer-invite.js` ein leeres Feld in einem neuen
+  Chat. Kein `share_target` im Manifest: Es bräuchte einen Abfrage-Parameter
+  oder einen Service Worker und kommt mit der App. Tests:
+  `tests/js/question-link.test.mjs`, `tests/e2e/test_composer_invite.py`,
+  `tests/test_web_app.py`.
 
 ---
 

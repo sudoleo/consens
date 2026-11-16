@@ -262,6 +262,39 @@ describe("the calm live view", () => {
     activity.dispose(host);
   });
 
+  // run-notify.js decides; the line only carries the word, before itself and
+  // floated to its end (agent-chat.css), so no line is added.
+  it("offers to say when it is done at the end of its line, and says it once taken", () => {
+    const { window, activity, events, render, preview, status, host } = setup();
+    const asked = [];
+    let state = null;
+    window.App.runNotify = { offer: (runId, elapsedMs) => (elapsedMs >= 20000 ? state : null),
+      ask: (source, runId) => asked.push([source, runId]) };
+    activity.receive(events, note("completion:1", "I compare the three offers."));
+    render({ runId: "r1", elapsedMs: 25000 });
+    expect(preview().querySelector(".agent-notify-offer")).toBeNull();
+    state = "ask";
+    render({ runId: "r1", elapsedMs: 19000 });
+    expect(preview().querySelector(".agent-notify-offer")).toBeNull();
+    render({ runId: "r1", elapsedMs: 25000 });
+    expect([...preview().children].map(child => child.className)).toEqual([
+      "agent-notify-offer", "agent-progress-step agent-current-status"]);
+    expect(status()).toBe("I compare the three offers.");
+    const button = preview().querySelector(".agent-notify-offer button");
+    expect(button.textContent).toBe("Notify me when it’s done");
+    button.click();
+    expect(asked).toEqual([["offer", "r1"]]);
+    state = "set";
+    render({ runId: "r1", elapsedMs: 26000 });
+    expect(preview().querySelector(".agent-notify-offer").textContent).toBe("You’ll get a notification");
+    expect(preview().querySelector(".agent-notify-offer button")).toBeNull();
+    // While the run waits for the reader its card speaks; no offer then.
+    activity.receive(events, { version: 1, kind: "hold", id: "hold:1", state: "waiting", reason: "Check this step", halt: true });
+    render({ runId: "r1", elapsedMs: 27000 });
+    expect(preview().querySelector(".agent-notify-offer")).toBeNull();
+    activity.dispose(host);
+  });
+
   it("lets the answer take the lines' place as before", () => {
     const { activity, events, render, preview, host } = setup();
     activity.receive(events, note("completion:1", "I have what I need."));

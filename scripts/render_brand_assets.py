@@ -8,9 +8,10 @@ of the shape or an older colour:
     static/favicon.svg                 tab icon, ink or chalk by system theme
     static/favicon.png                 chalk mark on nothing (icon rows; CSS inverts it on light)
     static/favicon-dark.png            ink mark on nothing (alpha mask of og_image)
-    static/brand/icon-192.png          solid tile: tabs without SVG support, search results
+    static/brand/icon-192.png          solid tile: tabs without SVG support, search results, app icon
     static/brand/apple-touch-icon.png  solid tile, 180 px (iOS paints transparency black)
-    static/brand/logo-512.png          solid tile, Organization logo in JSON-LD
+    static/brand/logo-512.png          solid tile, Organization logo in JSON-LD, app icon
+    static/brand/icon-maskable-512.png solid tile with a smaller mark, for launchers that cut a shape
 
     venv/Scripts/python.exe scripts/render_brand_assets.py          # write
     venv/Scripts/python.exe scripts/render_brand_assets.py --check  # exit 1 if a file is stale
@@ -43,6 +44,14 @@ CHALK = (245, 245, 245)
 TILE_MARK_WIDTH = 0.66
 OPTICAL_CENTRE = (139.4, 85.0)
 TILES = {"icon-192.png": 192, "apple-touch-icon.png": 180, "logo-512.png": 512}
+# Android cuts an installed app's icon to its own shape (circle, squircle);
+# only a circle of 40 % radius around the middle is sure to stay (the
+# manifest's "maskable" safe zone). At 0.66 the mark reaches 35 % and fills
+# that circle almost to its edge; at 0.55 it keeps the air a launcher's own
+# icons have.
+MASKABLE_MARK_WIDTH = 0.55
+MASKABLE_SAFE_RADIUS = 0.4
+MASKABLE_TILES = {"icon-maskable-512.png": 512}
 SUPERSAMPLE = 8
 # A rendering may differ by rounding between Pillow versions.
 PIXEL_TOLERANCE = 3
@@ -133,8 +142,8 @@ def glyph(shapes, colour) -> Image.Image:
     return image
 
 
-def tile(shapes, side: int) -> Image.Image:
-    scale = TILE_MARK_WIDTH * side / WIDTH
+def tile(shapes, side: int, mark_width: float = TILE_MARK_WIDTH) -> Image.Image:
+    scale = mark_width * side / WIDTH
     offset = (side / 2 - OPTICAL_CENTRE[0] * scale, side / 2 - OPTICAL_CENTRE[1] * scale)
     image = Image.new("RGB", (side, side), INK)
     image.paste(Image.new("RGB", (side, side), CHALK), (0, 0), mask(shapes, (side, side), scale, offset))
@@ -168,6 +177,8 @@ def rendered() -> dict[Path, bytes | str]:
     }
     for name, side in TILES.items():
         files[STATIC / "brand" / name] = _png(tile(shapes, side))
+    for name, side in MASKABLE_TILES.items():
+        files[STATIC / "brand" / name] = _png(tile(shapes, side, MASKABLE_MARK_WIDTH))
     return files
 
 

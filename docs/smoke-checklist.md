@@ -8,6 +8,38 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
 
 ## Neue Funktionsgruppen und Restprüfung
 
+- [ ] Als App und per Frage-Link (2026-11-16): Chrome/Edge am Desktop zeigen in
+      der Adresszeile „Installieren“; installiert öffnet `/app` im eigenen
+      Fenster mit der Marke als Symbol, Rechtsklick aufs Symbol zeigt „New
+      chat“ und „Watches“ (deutscher Browser: „Neuer Chat“); die Titelleiste
+      folgt hell/dunkel. Android-Chrome bietet „App installieren“ an, das
+      Symbol ist rund ausgeschnitten ohne abgeschnittene Marke. iPhone: „Zum
+      Home-Bildschirm“ → eigenes Fenster, Login (Google und E-Mail) klappt dort,
+      die Leisten oben und unten haben die Seitenfarbe (hell und dunkel), im
+      normalen Safari-Tab unverändert. `/` einmal öffnen, dann in Chrome unter
+      Einstellungen › Suchmaschinen › Websitesuche „consens.io“ aktivieren;
+      „consens.io C++ & Rust?“ in der Adresszeile → `/app` mit genau dieser
+      Frage im Feld, Cursor am Ende, nichts gesendet, Adresse ohne `#`,
+      Neuladen → leeres Feld. Firefox: Suchmaschine über das Suchsymbol
+      hinzufügen, gleiches Ergebnis. Bei offener App im selben Tab erneut
+      suchen → neuer Chat mit der Frage; ein Entwurf im Feld bleibt stehen.
+      Als Gast: Frage steht nach dem Laden noch im Feld, Senden öffnet die
+      Registrierung. In Umami kein Fragment in den URLs. Automatisiert:
+      `tests/test_web_app.py`, `question-link.test.mjs`,
+      `tests/e2e/test_composer_invite.py`.
+- [ ] Bescheid, wenn ein Lauf fertig ist (2026-11-16, Desktop): ein
+      Agent-Lauf über 20 s zeigt rechts in seiner Live-Zeile „Notify me when
+      it’s done“, die Zeile springt nicht und wird nicht höher; erst der Klick
+      fragt den Browser, danach „You’ll get a notification“. Tab wechseln →
+      eine Systemmeldung mit dem Chattitel, sobald die Antwort steht, keine
+      zweite, wenn die Marken kommen; Klick holt den Tab mit diesem Chat nach
+      vorn. Temporärer Chat: nur „Temporary chat“. Pause eines Prüfers oder
+      Rückfrage des Agenten im Hintergrund → „Waiting for your decision.“ bzw.
+      „The Agent is waiting for you.“. Einstellungen › Agent: Schalter zeigt
+      den Stand des Browsers (erlaubt / fragt / blockiert, dann gesperrt);
+      Aus hält auf diesem Gerät. Android und iPhone: kein Angebot, kein
+      Schalter. Automatisiert: `run-notify.test.mjs`,
+      `agent-calm-progress.test.mjs`, `tests/e2e/test_run_notify_frontend.py`.
 - [ ] Sidebar-Breite (2026-10-08, Desktop ≥1100px): rechte Sidebar-Kante
       greifen (Cursor wird zum Doppelpfeil, dünne Linie erscheint) und ziehen →
       Sidebar, Zahnrad-Fußzeile und Toggle folgen, die Lesespalte bleibt mittig;

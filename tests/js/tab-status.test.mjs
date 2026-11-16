@@ -100,6 +100,20 @@ describe("tab status", () => {
     expect(app.title()).toBe("Price of gold | consens.io");
   });
 
+  // run-notify.js tells the same states in a system notification.
+  it("names a run's state once for every place that tells it", () => {
+    const { state } = boot().window.App.tabStatus;
+    expect([
+      { status: "starting", metadata: {} },
+      { status: "running", metadata: { agentReview: { status: "running" } } },
+      { status: "running", metadata: { hold: { id: "a1b2c3d4e5f6" } } },
+      { status: "running", metadata: { hold: { id: "a1b2c3d4e5f6", ask: "browser" } } },
+      { status: "succeeded", metadata: {} },
+      { status: "failed", metadata: {} },
+      { status: "canceled", metadata: {} },
+    ].map(state)).toEqual(["working", "reviewing", "paused", "asking", "ready", "failed", null]);
+  });
+
   it("does not announce a run that was already done before the tab was left", () => {
     const app = boot();
     app.run("succeeded");

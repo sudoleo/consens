@@ -545,6 +545,21 @@ body:not(.viewer-has-workspace) .settings-group.workspace-only + .settings-group
 }
 .settings-reviewers-note[hidden] { display: none; }
 
+/* What the browser allows for "Notify me when it's done" (run-notify.js):
+   in the tone of its help and as close under it as the help under its
+   title (4px; the label keeps 10px under itself). A block of its own, so
+   the page translates it alone when it changes. Blocked by the browser, the
+   switch can do nothing and looks it. */
+.settings-section .settings-run-notify-note {
+  margin: -6px 0 0;
+}
+#runNotifySetting input:disabled {
+  opacity: 0.45;
+}
+#runNotifySetting label:has(input:disabled) {
+  cursor: default;
+}
+
 /* Eine Einstellung mit mehr als zwei Stufen sitzt in derselben Zeile wie ein
    Schalter, traegt an seiner Stelle aber ein Auswahlfeld. Der Rahmen ist der
    des Consensus-Pickers, damit die App nur eine Select-Sprache spricht. */

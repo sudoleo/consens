@@ -279,3 +279,73 @@ def test_a_guest_question_runs_after_the_sign_in_in_the_mode_the_guest_saw(brows
             assert account["settings"]["run_mode"] == "agent"
     finally:
         context.close()
+
+
+# /app#q=… (app-bootstrap.js): a question from outside fills the field and
+# never sends. In the fragment it reaches no server; the address loses it at
+# once, so a reload fills nothing again.
+QUESTION_LINK = "/app#q=Is+creatine+safe+for+teenagers%3F+%28C%2B%2B+%26+more%29"
+LINKED = "Is creatine safe for teenagers? (C++ & more)"
+
+
+def _sent(page):
+    sent = []
+    page.on("request", lambda request: sent.append(request.url)
+            if request.method == "POST" and any(part in request.url for part in ("/agent", "/prepare", "/ask_")) else None)
+    return sent
+
+
+def test_a_question_link_waits_in_a_guests_field_through_the_sign_in_check(browser, phase4_server):
+    # The guest's field is emptied once Firebase answers and refilled from the
+    # draft (firebase.js): the link's question has to survive that.
+    context, page = _real_firebase_page(browser, phase4_server, initial_uid=None, path=QUESTION_LINK,
+                                        init_script=CAPTURE_EVENTS)
+    sent = _sent(page)
+    try:
+        field = page.locator("#questionInput")
+        expect(field).to_have_value(LINKED)
+        expect(field).to_be_focused()
+        assert page.evaluate("[location.hash, location.pathname]") == ["", "/app"]
+        assert page.evaluate("document.getElementById('questionInput').selectionStart") == len(LINKED)
+        page.wait_for_timeout(600)
+        expect(field).to_have_value(LINKED)
+        assert sent == []
+        # Sending is the guest's own click, and asks for the sign-in.
+        page.click("#sendButton")
+        expect(page.locator("#loginModal")).to_be_visible()
+        pending = page.evaluate("JSON.parse(localStorage.getItem('consensio.sendAfterLogin.v1'))")
+        assert pending["text"] == LINKED and pending["source"] == "link"
+        assert ["app_question_link", {"filled": True, "guest": True}] in page.evaluate("window.__events")
+        assert sent == []
+    finally:
+        context.close()
+
+
+def test_a_question_link_fills_an_accounts_field_once_and_never_over_a_draft(browser, phase4_server):
+    context, page = _real_firebase_page(browser, phase4_server, path=QUESTION_LINK)
+    sent = _sent(page)
+    try:
+        field = page.locator("#questionInput")
+        expect(field).to_have_value(LINKED)
+        expect(field).to_be_focused()
+        assert page.evaluate("location.hash") == ""
+        page.wait_for_timeout(600)
+        assert sent == []
+        # A reload of the address it left fills nothing.
+        page.reload(wait_until="domcontentloaded")
+        page.wait_for_function("() => window.__consensioAuthState?.known === true")
+        expect(field).to_have_value("")
+
+        # While the app is open the browser changes only the fragment (the
+        # address bar's keyword in this tab).
+        field.fill("My own words")
+        page.evaluate("location.hash = '#?q=Someone+else'")
+        page.wait_for_function("() => location.hash === ''")
+        expect(field).to_have_value("My own words")
+        field.fill("")
+        page.evaluate("location.hash = '#?q=A+second+question'")
+        expect(field).to_have_value("A second question")
+        expect(field).to_be_focused()
+        assert sent == []
+    finally:
+        context.close()

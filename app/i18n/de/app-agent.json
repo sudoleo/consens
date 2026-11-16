@@ -1396,5 +1396,14 @@
   "no objections": "keine Einwände",
   "not checked": "nicht geprüft",
   "checked in part": "teilweise geprüft",
-  "check stopped": "Prüfung gestoppt"
+  "check stopped": "Prüfung gestoppt",
+  "Notify me when it’s done": "Sag mir Bescheid, wenn’s fertig ist",
+  "You’ll get a notification": "Du bekommst Bescheid",
+  "Your answer is ready.": "Deine Antwort ist fertig.",
+  "The Agent is waiting for you.": "Der Agent wartet auf dich.",
+  "Waiting for your decision.": "Wartet auf deine Entscheidung.",
+  "The answer couldn’t be completed.": "Die Antwort konnte nicht fertiggestellt werden.",
+  "Allowed in this browser.": "In diesem Browser erlaubt.",
+  "Your browser asks once when you switch it on.": "Dein Browser fragt einmal, wenn du es einschaltest.",
+  "Blocked in this browser’s site settings.": "In den Website-Einstellungen dieses Browsers blockiert."
 }

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import logging
 import re
@@ -14,6 +15,8 @@ import requests
 import app.core.config as cfg
 from app.core.rate_limit import limiter
 from app.core.observability import safe_exception
+from app.core import web_app
+from app.core.i18n_middleware import request_language
 from app.core.site import SITE_URL
 from app.core.version import REPO_URL, get_commit_short
 from app.core.security import (
@@ -95,6 +98,27 @@ def robots_txt():
         f"Sitemap: {SITE_URL}/sitemap.xml",
         "",
     ])
+
+
+def _web_app_response(content, media_type: str) -> Response:
+    """The manifest and the search description speak the reader's language
+    (cookie, else Accept-Language): no shared cache may hand one reader's
+    language to the next."""
+    response = Response(content=content, media_type=media_type)
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    response.headers["Vary"] = "Accept-Language, Cookie"
+    return response
+
+
+@router.get("/manifest.webmanifest", include_in_schema=False)
+def web_app_manifest(request: Request):
+    body = json.dumps(web_app.manifest(request_language(request)), ensure_ascii=False, separators=(",", ":"))
+    return _web_app_response(body, "application/manifest+json")
+
+
+@router.get("/opensearch.xml", include_in_schema=False)
+def opensearch_description(request: Request):
+    return _web_app_response(web_app.opensearch(request_language(request)), "application/opensearchdescription+xml")
 
 
 @router.get("/sitemap.xml")

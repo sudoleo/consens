@@ -966,6 +966,7 @@
       // follows that: the live line stays over it until then.
       refines: context.metadata.findingsToAgent === true,
       reviewLive: running || context.metadata.reviewTail === true,
+      runId: context.runId,
     });
     // Evidence links and Copy belong to a finished answer. While the run
     // streams they are only cleared once, when this run takes over the view.

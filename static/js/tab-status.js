@@ -57,17 +57,23 @@
     else if (status === "succeeded" && (was === "starting" || was === "running")) line.textContent = window.App.t(READY);
   }
 
-  function label(run) {
+  // What a run is doing for the reader, one name per state. The system
+  // notification (run-notify.js) says the same as this title.
+  function state(run) {
     const status = run?.status || null;
     if ((status === "starting" || status === "running") && run?.metadata?.hold) {
-      return run.metadata.hold.ask ? YOUR_TURN : PAUSED;
+      return run.metadata.hold.ask ? "asking" : "paused";
     }
     if (status === "starting" || status === "running") {
-      return run?.metadata?.agentReview?.status === "running" ? REVIEWING : WORKING;
+      return run?.metadata?.agentReview?.status === "running" ? "reviewing" : "working";
     }
-    if (status === "succeeded") return READY;
-    if (status === "failed") return FAILED;
+    if (status === "succeeded") return "ready";
+    if (status === "failed") return "failed";
     return null;
+  }
+  const LABELS = { working: WORKING, reviewing: REVIEWING, paused: PAUSED, asking: YOUR_TURN, ready: READY, failed: FAILED };
+  function label(run) {
+    return LABELS[state(run)] || null;
   }
 
   function apply(next) {
@@ -100,5 +106,5 @@
   window.addEventListener("consensio:run-registry-change", announce);
   document.addEventListener("visibilitychange", sync);
   window.App = window.App || {};
-  window.App.tabStatus = Object.freeze({ titled });
+  window.App.tabStatus = Object.freeze({ titled, state });
 })();

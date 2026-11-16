@@ -472,11 +472,12 @@
       if (node.parentNode === preview) {
         const shift = top - node.getBoundingClientRect().top;
         if (Math.abs(shift) >= .5) node._slide = motion(node, [{ transform: `translateY(${shift}px)` }, { transform: 'none' }], () => {}, SETTLE_MS);
-      } else if (!node.isConnected || !node.getClientRects().length) {
+      } else if ((!node.isConnected || !node.getClientRects().length) && !node.classList.contains('agent-notify-offer')) {
         // A line that left (gone, or folded out of sight) fades where it
         // stood, over the lines that take its place: only its words in its
         // type, without the class, role or state of a line, so nothing reads
-        // it as one (a second "status" while it fades).
+        // it as one (a second "status" while it fades). Not the offer at the
+        // end of a line: its ghost would stand at the start of one.
         const ghost = node.cloneNode(false);
         preview.append(ghost);
         const look = getComputedStyle(ghost);
@@ -1479,6 +1480,33 @@
     return progress.node;
   }
 
+  // The offer to say when the run is done (run-notify.js): a quiet word, and
+  // once taken, what it means. Only its click asks the browser.
+  function offerView() {
+    const node = document.createElement('div');
+    node.className = 'agent-notify-offer';
+    return node;
+  }
+  function updateOffer(node, state, runId) {
+    node._runId = runId;
+    if (node.dataset.state === state) return;
+    node.dataset.state = state;
+    if (state !== 'ask') {
+      const done = document.createElement('span');
+      done.textContent = 'You’ll get a notification';
+      node.replaceChildren(done);
+      return;
+    }
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = 'Notify me when it’s done';
+    button.addEventListener('click', () => {
+      button.disabled = true;
+      App.runNotify?.ask?.('offer', node._runId);
+    });
+    node.replaceChildren(button);
+  }
+
   function userNote(className, text) {
     const p = document.createElement('p');
     p.className = className;
@@ -1576,7 +1604,7 @@
   function renderActivity(host, { events = [], usage = null, running = false, responding = false,
     status = "succeeded", truncated = false, finishReason = "", review = null, answerText = '', settings = null, elapsedMs = null,
     highlights = [], reconnecting = false, vm = null, vmRestore = null, reviewEnded, refines = false,
-    reviewLive = false } = {}) {
+    reviewLive = false, runId = '' } = {}) {
     if (!host) return;
     if (!host._agentActivity) {
       const details = document.createElement("details");
@@ -1835,6 +1863,12 @@
         text: pace(view, 'calm-status', standingStep, STATUS_DWELL_MS) }];
     }
     view.standing = Boolean(standing);
+    // A run that takes a while offers to say when it is done (run-notify.js),
+    // at the end of the line of what it does now: before that line and
+    // floated right, so its words make room and no line is added.
+    const notify = running && !held ? App.runNotify?.offer?.(runId, elapsedMs) : null;
+    const current = notify ? lines.findIndex(item => item.current) : -1;
+    if (current >= 0) lines = [...lines.slice(0, current), { id: 'notify-offer', kind: 'offer', state: notify }, ...lines.slice(current)];
     const showPreview = standing || (running && lines.length && !answering);
     let previewChanged = false;
     const previewIds = new Set();
@@ -1870,6 +1904,7 @@
         if (!p) {
           p = item.kind === 'vm' ? stepView('agent-vm', item.item) : item.kind === 'hold' ? holdView('agent-hold-step')
             : item.kind === 'start' ? startView()
+            : item.kind === 'offer' ? offerView()
             : document.createElement(item.kind === 'progress' ? 'p' : 'div');
           view.previewNodes.set(item.id, p);
           if (item.kind === 'review') {
@@ -1884,7 +1919,8 @@
           previewChanged = true;
           if (!view.details.open) reveal(p);
         }
-        if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'hold' || item.kind === 'start') {
+        if (item.kind === 'review' || item.kind === 'vm' || item.kind === 'hold' || item.kind === 'start' || item.kind === 'offer') {
+          if (item.kind === 'offer') updateOffer(p, item.state, runId);
           if (item.kind === 'vm') updateVm(p, item.item);
           if (item.kind === 'hold') updateHold(p, item.item);
           if (item.kind === 'start') {

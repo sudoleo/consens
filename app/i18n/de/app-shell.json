@@ -561,5 +561,6 @@
   "Show names": "Namen zeigen",
   "Your question only goes to the models working on it.": "Deine Frage geht nur an die Modelle, die daran arbeiten.",
   "Agree and start": "Einverstanden und los",
-  "<0>Pass notes to the agent</0> <1>While it works, the Agent gets the reviewers’ clearest notes; once its answer stands, it goes through all of them and corrects a sentence or says why it stands.</1>": "<0>Anmerkungen an den Agenten geben</0> <1>Während er arbeitet, bekommt der Agent die klarsten Anmerkungen der Prüfer; steht seine Antwort, geht er alle durch und verbessert einen Satz oder sagt, warum er bleibt.</1>"
+  "<0>Pass notes to the agent</0> <1>While it works, the Agent gets the reviewers’ clearest notes; once its answer stands, it goes through all of them and corrects a sentence or says why it stands.</1>": "<0>Anmerkungen an den Agenten geben</0> <1>Während er arbeitet, bekommt der Agent die klarsten Anmerkungen der Prüfer; steht seine Antwort, geht er alle durch und verbessert einen Satz oder sagt, warum er bleibt.</1>",
+  "<0>Notify me when it’s done</0> <1>On this device. When a message is answered or waits for you while consens.io is in the background, your browser shows a notification.</1>": "<0>Sag mir Bescheid, wenn’s fertig ist</0> <1>Auf diesem Gerät. Ist eine Nachricht beantwortet oder wartet sie auf dich, während consens.io im Hintergrund ist, zeigt dein Browser eine Benachrichtigung.</1>"
 }

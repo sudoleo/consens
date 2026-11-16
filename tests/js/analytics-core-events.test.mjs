@@ -85,6 +85,16 @@ describe('consensioBeforeSend', () => {
     expect(landing.w.consensioBeforeSend('event', { url: 'https://consens.io/', title: 'consens.io' }).title).toBe('consens.io');
   });
 
+  // /app#q= carries a question (app-bootstrap.js). Should Umami's own
+  // script ever keep the fragment, it still stops here.
+  it('never sends a fragment, where a question link carries its text', () => {
+    const { w } = page('https://consens.io/app?utm_source=shortcut');
+    const payload = w.consensioBeforeSend('event', {
+      url: 'https://consens.io/app#q=Is+my+rash+serious%3F', referrer: 'https://consens.io/app#?q=rash' });
+    expect(payload.url).toBe('https://consens.io/app?utm_source=shortcut');
+    expect(payload.referrer).toBe('https://consens.io/app');
+  });
+
   it('leaves a URL without campaign tags alone', () => {
     const { w } = page('https://consens.io/topic-follow/confirm?token=secret');
     expect(w.consensioBeforeSend('event', { url: 'https://consens.io/topic-follow/confirm' }).url)

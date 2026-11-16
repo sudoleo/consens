@@ -48,6 +48,14 @@
     if ((window.navigator && window.navigator.webdriver) || /HeadlessChrome|PhantomJS|Lighthouse/i.test(agent) || botScreen(agent)) {
       return false;
     }
+    // A fragment can carry a question (/app#q=). app-bootstrap.js takes it
+    // out of the address at once and data-exclude-hash should drop it, but
+    // the script comes from Umami's servers and may change: none leaves here.
+    if (payload) {
+      ["url", "referrer"].forEach(key => {
+        if (typeof payload[key] === "string") payload[key] = payload[key].split("#")[0];
+      });
+    }
     // data-exclude-search drops the whole query string, which keeps tokens
     // from email links out of Umami. Campaign tags are the one part worth
     // keeping, so they are put back, and nothing else.
@@ -59,8 +67,7 @@
       });
       const query = keep.toString();
       if (query && payload && typeof payload.url === "string" && payload.url.indexOf("?") === -1) {
-        const hash = payload.url.indexOf("#");
-        payload.url = hash === -1 ? `${payload.url}?${query}` : `${payload.url.slice(0, hash)}?${query}${payload.url.slice(hash)}`;
+        payload.url = `${payload.url}?${query}`;
       }
     } catch (_) { /* keep the stripped URL */ }
     // In the app the tab title is the user's question (setAppTitle); it must

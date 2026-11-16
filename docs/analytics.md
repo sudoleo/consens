@@ -17,7 +17,7 @@ Diese sechs reichen für fast jede Frage. Sie haben in jedem Modus dieselbe Form
 | `open_app` | Klick von einer öffentlichen Seite in die App | `from` (landing, share, benchmark, model-pulse, …), `place` (welcher Knopf), `demo` |
 | `signup` | neues Konto | `method` (google, email) |
 | `login` | Anmeldung mit bestehendem Konto | `method` |
-| `ask` | eine Frage wurde abgeschickt | `mode` (agent, consensus, compare), `follow_up`, `files`, `reasoning`, `source` (typed, example, pasted), `after_login` (nur `true`: die Frage, die ein Gast vor dem Anmelden abgeschickt hat) |
+| `ask` | eine Frage wurde abgeschickt | `mode` (agent, consensus, compare), `follow_up`, `files`, `reasoning`, `source` (typed, example, pasted, link), `after_login` (nur `true`: die Frage, die ein Gast vor dem Anmelden abgeschickt hat) |
 | `answer` | dieser Lauf ist fertig (einmal pro Lauf) | `mode`, `status` (ok, partial, failed) |
 | `landing_hero_demo_start` | Demo gestartet | – |
 
@@ -28,7 +28,8 @@ Seit 2026-10-15 tippen Gäste und melden sich beim Senden an
 `open_app` → `app_guest_send` → `signup`/`login` → `ask` mit `after_login`.
 `source` sagt, woher der Text kam: `example` = eine Beispielfrage unter dem
 leeren Feld, `pasted` = ein eingefügter Text ab 200 Zeichen (meist eine fremde
-KI-Antwort zum Prüfen), sonst `typed`.
+KI-Antwort zum Prüfen), `link` = eine Frage aus `/app#q=` (Suchkürzel,
+Kurzbefehl; seit 2026-11-16), sonst `typed`.
 Erfolgsquote eines Modus: `answer` mit `status=ok` ÷ `ask` mit demselben `mode`.
 Ein vom Nutzer abgebrochener Lauf sendet `ask`, aber kein `answer`; ein vom
 Server abgelehnter (Kontingent, belegter Dienst) endet in beiden Modi mit
@@ -110,6 +111,18 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   hervorgehobenen Zeile, zusätzlich zu `bars`) oder `steps`
   (`answer-shapes.js`). Nutzung: Anzahl je Form ins Verhältnis zu `answer`
   mit `mode=agent` setzen, vorher und nach dem Faktsatz im Agent-Prompt.
+- `app_question_link` (seit 2026-11-16, `filled`, `guest`): jemand kam über
+  `/app#q=…` (Suchkürzel aus `/opensearch.xml`, Kurzbefehl, Lesezeichen),
+  einmal pro Seitenaufruf, oder während die App offen war (`hashchange`).
+  `filled: false`: ein Entwurf oder Text im Feld blieb stehen. Die Frage
+  selbst geht nie mit (Fragment, `consensioBeforeSend` schneidet es ab).
+  Was daraus wurde, zeigt `ask` mit `source: link`.
+- `app_run_notify` (seit 2026-11-16, `source`: offer, settings; `result`:
+  granted, denied, default, off): Systemmeldungen für fertige Läufe
+  (`run-notify.js`). `offer` ist das Wort in der Live-Zeile eines Laufs über
+  20 s, `settings` der Schalter; `default` heißt, die Frage des Browsers wurde
+  geschlossen, `off` der Schalter ausgeschaltet. Die Meldungen selbst zählt
+  nichts (sie entstehen, während niemand auf die Seite schaut).
 - `app_updated` (seit 2026-10-15, `reopened`: ob ein gespeicherter Chat wieder
   geöffnet wurde): ein offenes App-Fenster hat einen neuen Deploy selbst
   geladen (`app-update.js`). Zeigt, wie oft Nutzer sonst auf einem alten Build

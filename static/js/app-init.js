@@ -96,6 +96,7 @@
           } else {
             document.body.classList.remove("dark-mode");
           }
+          window.App.windowColour?.();
 
           modeToggles.forEach(toggle => {
             toggle.classList.toggle("is-dark", isDark);
@@ -238,6 +239,9 @@
             window.history.replaceState(window.history.state, '', url.pathname + url.search + url.hash);
           }
         } catch (e) { /* a missing History API only costs the caret */ }
+        // A question from /app#q= (app-bootstrap.js) waits with the caret at
+        // its end, ready to be changed or sent.
+        if (window.App.questionLink?.filled) pendingComposerFocus = true;
 
         window.updateQuestionInputAccess = function () {
           const canAsk = window.userCanAskQuestions();
@@ -283,6 +287,8 @@
             if (pendingComposerFocus && canType) {
               pendingComposerFocus = false;
               questionInput.focus({ preventScroll: true });
+              const end = questionInput.value.length;
+              questionInput.setSelectionRange(end, end);
             } else if (pendingComposerFocus && window.__consensioAuthState?.known) {
               pendingComposerFocus = false;
             }
