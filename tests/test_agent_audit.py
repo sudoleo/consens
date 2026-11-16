@@ -1149,6 +1149,29 @@ def test_the_final_rounds_start_with_the_fixed_answer_not_after_the_hand_over(st
     assert review["status"] == "succeeded" and len(review["audit"]["claims"]) >= 1
 
 
+def test_an_early_final_start_that_fails_costs_neither_the_answer_nor_the_review(store, monkeypatch, caplog):
+    """The final rounds start with the fixed answer only to save time; when
+    that start fails, the review's own step starts them, and the answer the
+    user already sees stands."""
+    script = Audit()
+    loop = audit_loop(store, script)
+    real, calls = agent_audit.AnswerAudit.start_final, []
+
+    def start_final(self, answer):
+        calls.append(answer)
+        if len(calls) == 1:
+            raise RuntimeError("broken early start")
+        return real(self, answer)
+    monkeypatch.setattr(agent_audit.AnswerAudit, "start_final", start_final)
+    with caplog.at_level(logging.WARNING):
+        list(loop.run())
+    turn = saved(store, loop)
+    assert len(calls) == 2
+    assert turn["status"] == "completed" and turn["consensus"] == ANSWER and not turn.get("agent_failure")
+    assert turn["agent_review"]["status"] == "succeeded"
+    assert "broken early start" not in caplog.text and "Agent audit final rounds not started early" in caplog.text
+
+
 def test_without_time_left_no_reviewer_starts(store, monkeypatch):
     script = Audit()
     loop = audit_loop(store, script)

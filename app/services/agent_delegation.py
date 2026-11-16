@@ -3673,8 +3673,12 @@ class DelegationLoop(AgentLoop):
             self.work_log.app("answer_fixed", {"hash": answer_hash(value.text), "chars": len(value.text)},
                               step=value.step_id)
         # The reviewers start their final round with the log entry, not after
-        # the hand-over and the review's own step (_finish_review).
-        comparison.auditor.start_final(comparison.text or value.text)
+        # the hand-over and the review's own step (_finish_review). Only a
+        # head start: that step starts them anyway, and the answer stands.
+        try:
+            comparison.auditor.start_final(comparison.text or value.text)
+        except Exception as exc:
+            logging.warning("Agent audit final rounds not started early category=%s", safe_exception(exc))
         comparison.freeze_for_synthesis()
         comparison.capture(value.text)
         links = self._check_links(value.text)
