@@ -31,7 +31,9 @@ workspace's outages (VM unavailable or busy, browser off). Every turn that
 ended its work at a limit counts its reason (``wrap_up``). With the account's
 findings_to_agent (agent_review_feedback) ``findings_to_agent`` counts the
 turns and the findings that reached the agent, that it corrected or disputed
-and that its limits cut.
+and that its limits cut, and ``correction`` how its correction pass went
+(correction_counters): why it kept nothing, each request's outcome, each
+finding left with the rule it broke, by the agent's model.
 """
 from __future__ import annotations
 
@@ -122,8 +124,10 @@ def capture(loop):
     feedback = loop.comparison.auditor.feedback
     if feedback is not None:
         # findings_to_agent: how many findings reached the agent, how many it
-        # corrected or disputed, how many the limits cut (counts, no text).
+        # corrected or disputed, how many the limits cut (counts, no text),
+        # and how its correction pass went (codes, Findings.traced).
         captured["findings"] = dict(feedback.counts)
+        captured["correction"] = {"skipped": feedback.skipped, **(feedback.trace or {})}
     vm_tools = getattr(loop, "vm_tools", None)
     if vm_tools is not None:
         # The workspace on demand (DelegationLoop._open_workspace): how often
@@ -196,6 +200,34 @@ def workspace_counters(turn, captured, counters):
     return counters
 
 
+def correction_counters(correction, counters):
+    """The correction pass of a turn with findings_to_agent, added to
+    ``counters`` under ``correction``: why it was skipped or kept nothing
+    (``skipped``); for a pass that sent requests (``passes``), how its first
+    request went (``first``), its second where one went (``again``) or why
+    one due did not go (``not_again``), each finding a request left with why
+    (``rejected``), and per agent model whether the pass settled anything
+    (``models``). Codes and model ids only."""
+    if not isinstance(correction, dict):
+        return counters
+    if correction.get("skipped"):
+        _add(counters, "correction", "skipped", label(correction["skipped"]))
+    requests = [item for item in correction.get("requests") or [] if isinstance(item, dict)]
+    if not requests:
+        return counters
+    _add(counters, "correction", "passes")
+    settled = any(item.get("outcome") == "settled" for item in requests)
+    _add(counters, "correction", "models", label(correction.get("model")), "settled" if settled else "unsettled")
+    for index, item in enumerate(requests[:2]):
+        _add(counters, "correction", "again" if index else "first", label(item.get("outcome")))
+        if item.get("again"):
+            _add(counters, "correction", "not_again", label(item["again"]))
+        rejected = item.get("rejected") if isinstance(item.get("rejected"), dict) else {}
+        for rule in rejected.values():
+            _add(counters, "correction", "rejected", label(rule))
+    return counters
+
+
 def turn_counters(turn, captured):
     """The increments one turn adds to its day: {field: {key: n}}, its
     workspace's among them (workspace_counters). ``turn``: the saved turn
@@ -222,6 +254,7 @@ def turn_counters(turn, captured):
             if isinstance(count, int) and not isinstance(count, bool) and count > 0:
                 node = counters.setdefault("findings_to_agent", {})
                 node[key] = node.get(key, 0) + count
+    correction_counters(captured.get("correction"), counters)
     if review:
         _add(counters, "reviews", label(review.get("status")))
     ended = captured.get("ended_at")

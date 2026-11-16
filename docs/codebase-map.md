@@ -7022,9 +7022,16 @@ Korrektur prüft kein Prüfer nach, und was der Agent bekommt, lesen die
 Prüfer nie (`review_entry` → `redacted`, `delivered_for_reviewers`). Nur
 sichere Stellen gehen in den Durchgang (`safe_place`, auch eine Zelle im Rumpf einer Tabelle als
 `"place": "table cell"`; `$` als Währung sperrt nicht, Formeln nach der Regel von `math-render.js`;
-`kept_shape`: höchstens ein Satz mehr, eine Zelle bleibt eine Zelle, Links nur auf
-die alte Adresse oder die geprüfte Quelle des Prüfers, `links_found`); jeder
-Fehler danach setzt Antwort und Marken zurück. Gegen den Wettlauf mit der
+`read_reply`/`shape_rule`: höchstens ein Satz mehr, eine Zelle bleibt eine Zelle, Links nur auf
+die alte Adresse oder die geprüfte Quelle des Prüfers, statt eines Links oder dazu, `links_found`;
+nach dem Satzende zitierte Links beenden den Satz); jeder
+Fehler danach setzt Antwort und Marken zurück. Bringt eine Antwort, die kam, nichts
+(`MENDABLE`), geht genau eine weitere Anfrage auf derselben Sitzung mit dem Grund als
+Formhinweis raus (`AnswerAudit._corrections`, `repair_note`; nur mit
+`CORRECTION_AGAIN_SECONDS` der Frist übrig, solange der Turn der neueste ist, im
+Tageskonto); wie jede Anfrage ausging (Ausgang, je Befund die Regel), steht ohne Text in
+`audit.feedback.pass`, im App-Eintrag `answer_corrected` (`requests`), in der Logzeile
+„Agent correction left findings open“ und im Zähler `correction`. Gegen den Wettlauf mit der
 nächsten Nachricht startet und speichert sie nur, solange der Turn der
 neueste des Chats ist (`AgentSessionStore.begin_correction`,
 `save_review(latest=True)` → `NewerTurn`); das Speichern setzt
@@ -7035,10 +7042,11 @@ Befunde stehen am Chat als `agent_open_findings` (mit `turn_id`;
 `save_review(chat_fields=…)`); die Seite schickt die Einstellung mit
 (`AgentRequest.findings_to_agent`), die Route nimmt die offenen Befunde in den
 App-Kontext der nächsten Frage (`open_findings_context`). Systemprompt: `review_facts` ersetzt den
-Satz `_REVIEW_MARKS` durch `MARKS_SHARED`. Zähler `findings_to_agent` in
-`agent_audit_metrics`. `chat_store.turn_detail` gibt mit der Einstellung `agent_answer_fixed_at` mit (Kopfzeile:
+Satz `_REVIEW_MARKS` durch `MARKS_SHARED`. Zähler `findings_to_agent` und `correction`
+(`correction_counters`) in `agent_audit_metrics`, Abschnitt „Correction pass“ in
+`scripts/audit_report.py`. `chat_store.turn_detail` gibt mit der Einstellung `agent_answer_fixed_at` mit (Kopfzeile:
 Zeit bis zur Antwort, nicht bis zum Ende der Prüfung). Tests: `tests/test_agent_review_feedback.py`,
-`tests/test_agent_review_feedback_robust.py`.
+`tests/test_agent_review_feedback_robust.py`, `tests/test_agent_review_feedback_again.py` (Gründe, zweiter Versuch).
 
 Im Browser (nur mit `audit.feedback`; ohne sie bleibt jedes Byte wie oben):
 Solange der Durchgang des Agenten nicht `done` ist, zeigt die Antwort keine
@@ -10614,7 +10622,7 @@ app/services/
   agent_source_evidence.py   Quellenauszüge für die Vergleichsergebnisse des Agenten: Google-Weiterleitungen beim Eintreffen einer Vergleichsantwort durch ihre Seiten ersetzt (resolve_redirects, 3 s), Zitattext + gestützter Satz je Vergleichsantwort, Seitenabruf ohne Suchtext, gepoolte Quellenliste mit Zeichenbudget (nur im Speicher)
   agent_journal.py           Journal eines Agent-Laufs (seit 2026-10-21): ein Thread schreibt die Sitzungs-Updates je Sitzung in Reihenfolge, alles Fällige in einer Transaktion (publish_agents, seit 10-22), wartende Aufrufer zuerst, ungeschriebene Updates zusammengelegt, Live-Zeilen gedrosselt
   agent_audit.py             Die Prüfer jedes Agent-Laufs (seit 2026-10-25 als Audit, seit 2026-10-31 der eine Modus für jedes Konto): AGENT_SEARCH_ROUNDS des Agenten; AnswerAudit lässt die gewählten Modelle dem Arbeitsprotokoll in Live-Runden folgen (ReviewerSession je Prüfer, round_message, work_goes_on) und die fixierte Antwort in einer Schlussrunde prüfen, je mit eigener Websuche (review_system_prompt, parse_review: quote/entry/kind/note/source, wrong ohne http(s)-Quelle = doubtful), place_marks findet die Zitate (toleranter Locator), legt sie je Satz als Claims zusammen und Befunde zur Arbeit in process; compare_models-Ergebnisse strukturiert (COMPARISON_ENTRY_CHARS, ROUND_TIERS, BRIEF_TOOLS); Fehler kosten nur Marken (Runde, Frist, Stop, Speicherbudget); seit 2026-10-27 Gate-Runden vor Außenwirkung (Gate, open_gate/ready_gate/gate_result/gate_hold, parse_gate); seit 2026-10-29 eigene Cancellation je Live-/Gate-Runde (cut_round, RoundCut), Schlussrunde mit Hedging und Frist (FinalRequest, final_hedge_seconds, FINAL_ROUND_SECONDS), Gate-Frist GATE_SECONDS und gate_trace
-  agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt; seit 2026-10-30 auch jeder Turn mit Arbeitsplatz (workspace_counters: ws_*, wrap_up)
+  agent_audit_metrics.py     Anonyme Tageszähler der Audit-Turns (seit 2026-10-29, A-M1): capture kopiert am Turn-Ende Zeiten des Arbeitsprotokolls und Holds der Aktivität, ein Daemon-Thread liest den Turn einmal und schreibt ops_metrics/agent-audit-{Tag} als ein Merge aus Increments (turn_counters), Fehler nur geloggt; seit 2026-10-30 auch jeder Turn mit Arbeitsplatz (workspace_counters: ws_*, wrap_up); mit findings_to_agent der Korrekturdurchgang (correction_counters: correction, Gründe je Anfrage und Regel, je Agent-Modell)
   agent_final_rounds.py      Schlussrunden der Prüfer je Modell und Endpunkt, über Deploys hinweg (seit 2026-11-15): record/rounds halten je Modell die letzten 50 Schlussrunden (Ende, Sekunden, Endpunkt; nach 14 Tagen zählt eine nicht mehr), slow_endpoints nennt die Endpunkte, die ein Prüfer meidet (Median ab 3 Runden mindestens das 1,75-Fache und 4 s über dem schnellsten Endpunkt des Modells, höchstens 3), seconds die Zeiten ohne sie für die Hedge-Zeit (agent_audit.final_hedge_seconds); load liest ops_metrics/agent-final-rounds einmal je Prozess, save schreibt es nach den Schlussrunden einer Prüfung (liest vorher und führt zusammen), beides in Daemon-Threads, nie in Tests oder mit MOCK_LLM
   agent_gate.py              Vorab-Prüfung (2026-10-27 bis 2026-11-04): outward erkannte nach Werkzeug und typisierten Argumenten die Aufrufe, die erst nach dem Go aller Prüfer liefen (zuletzt request_domain; update_memory mit Fremdinhalt im Blick bis 2026-11-02); seit dem offenen Netz des Arbeitsplatzes keiner mehr, das Gate selbst (agent_audit.open_gate, DelegationLoop._gate_wait) bleibt
   agent_ask.py               ask_user (seit 2026-10-29): der Agent übergibt dem Nutzer den Browser (browser, Fortsetzung bei Rückgabe), bittet um einen Key (secret: Name, der Wert geht über POST .../secret an die Werkbank, agent_secrets.py) oder fragt vor einem Schritt in seinem Namen (confirm), seit 2026-10-30 auch mit 2–4 Antworten als Knöpfen (choices → choice, chosen()); hold(), requested(), ANSWERS, TAKEOVER_TIMEOUT; AskTools neben dem Browser in VMTools.tools() (VMTools.browser_tools: nach handed_back liefert ask das Bild bzw. die Seite mit, BrowserTools.look; Protokoll-Herkunft web); der Ablauf in DelegationLoop._ask_wait/_takeover_wait/_user_hold/_handed_back

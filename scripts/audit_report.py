@@ -20,6 +20,10 @@ Method as in that spec (section 8):
   (agent_audit_metrics), which also count turns whose chats were deleted,
   since 2026-10-30 every turn that used the workspace too (``ws_*``) and the
   reasons of wrap-ups (``wrap_up``);
+- the correction pass of findings_to_agent (corrections): how each turn's
+  ended by agent model (``audit.feedback.skipped``), and from
+  ``audit.feedback.pass`` and the counters' ``correction`` how its requests
+  went and which rules turned findings down;
 - since 2026-10-30 the agent's steps split by their receipts' own times
   (``request_started_at``, ``first_token_at``, ``stream_ended_at``): ours
   before the request, the provider's, ours after the stream.
@@ -132,10 +136,17 @@ def _turn(turn):
              [{"kind": item.get("halt"), "gate": item.get("gate"), "ask": item.get("ask"),
                "domain": bool(item.get("domain")), "decision": item.get("state")}
               for item in turn.get("agent_activity") or [] if isinstance(item, dict) and item.get("kind") == "hold"])
+    feedback = audit.get("feedback") if isinstance(audit.get("feedback"), dict) else None
+    model = settings.get("model")
     return {"status": turn.get("status"), "error_code": turn.get("error_code"), "failure": failure.get("code"),
             "created_at": turn.get("created_at"), "completed_at": turn.get("completed_at"),
             "failed_at": turn.get("failed_at"), "updated_at": turn.get("updated_at"),
-            "model": settings.get("model"), "preferences": settings.get("agent_preferences") or {},
+            "model": model.get("model") if isinstance(model, dict) else model,
+            "preferences": settings.get("agent_preferences") or {},
+            # The correction pass of findings_to_agent: codes and counts, no text.
+            "feedback": {"skipped": feedback.get("skipped"), "counts": feedback.get("counts") or {},
+                         "pass": feedback.get("pass") if isinstance(feedback.get("pass"), dict) else None}
+            if feedback else None,
             "comparison_models": len(settings.get("comparison_models") or {}),
             # The comparisons compare_models ran, by status, and how many
             # answers each got ("partial" may be one of two).
@@ -439,6 +450,33 @@ def workspace(counters):
     return {field: counters.get(field) or {} for field in WORKSPACE_FIELDS}
 
 
+def corrections(rows, counters):
+    """The correction pass of findings_to_agent. From the saved turns of the
+    window, per agent model, how each ended (``feedback.skipped``, else
+    "settled" where it corrected or disputed a finding, "none" where no pass
+    ran), and from the passes that kept their requests (``feedback.pass``)
+    how the first and a second request went and which rules turned findings
+    down; from the daily counters the same for every turn, deleted chats
+    included (``correction``, agent_audit_metrics.correction_counters)."""
+    ended, first, again, rejected = defaultdict(Counter), Counter(), Counter(), Counter()
+    for row in rows:
+        feedback = row["info"].get("feedback")
+        if not feedback:
+            continue
+        counts = feedback.get("counts") or {}
+        outcome = feedback.get("skipped") or (
+            "settled" if (counts.get("corrected") or 0) + (counts.get("disputed") or 0) else "none")
+        ended[str(row["info"].get("model"))][outcome] += 1
+        trace = feedback.get("pass") or {}
+        for index, request in enumerate(trace.get("requests") or []):
+            if isinstance(request, dict):
+                (again if index else first)[request.get("outcome")] += 1
+                rejected.update((request.get("rejected") or {}).values())
+    return {"turns": {model: dict(value) for model, value in sorted(ended.items())},
+            "first": dict(first), "again": dict(again), "rejected": dict(rejected),
+            "counters": counters.get("correction") or {}}
+
+
 def _target(target_id, metric, value, target, ok):
     return {"id": target_id, "metric": metric, "value": value, "target": target, "ok": ok}
 
@@ -568,6 +606,7 @@ def report(data):
         "tokens": tokens, "quota": quota, "search": _search(data, rows),
         "counters": _counters(data.get("counters") or []),
         "workspace": workspace(_counters(data.get("counters") or [])),
+        "correction": corrections(rows, _counters(data.get("counters") or [])),
         "targets": targets,
         "release": {"turns": len(rows), "three_reviewers": reviewers.get(3, 0), "long_workspace_runs": long_runs,
                     "needed": RELEASE},
@@ -622,6 +661,13 @@ def render(result):
     add("\nWorkspace turns (daily counters, every mode, deleted chats included)")
     for field, value in result["workspace"].items():
         add(f"  {field:<18} {value or '-'}")
+    correction = result["correction"]
+    add("\nCorrection pass (findings_to_agent)")
+    for model, value in correction["turns"].items() or [("no turns", {})]:
+        add(f"  {model:<30} {value or '-'}")
+    add(f"  first request {correction['first'] or '-'}; second {correction['again'] or '-'}")
+    add(f"  findings turned down {correction['rejected'] or '-'}")
+    add(f"  daily counters {correction['counters'] or '-'}")
     counters = result["counters"]
     add(f"\nDaily counters (ops_metrics): {counters if counters.get('days') else 'none in the window'}")
     add("\nTargets")

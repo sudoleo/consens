@@ -148,6 +148,30 @@ def test_old_and_new_turns_are_told_apart_by_their_frozen_preferences(preference
     assert is_audit({"preferences": preferences, "review": review}) is audit
 
 
+def test_the_correction_pass_by_model_request_and_rule():
+    """How each turn's pass ended per agent model, also from turns saved
+    before the pass kept its requests (only ``skipped`` and counts), and
+    how its requests went, from the turns and the daily counters."""
+    source = data()
+    source["turns"].update({
+        (GUEST, "c1", "t4"): {**turn(reviewers=[LUNA]), "feedback": {
+            "skipped": "unreadable", "counts": {"delivered": 1}, "pass": None}},
+        (GUEST, "c1", "t5"): {**turn(reviewers=[LUNA]), "feedback": {
+            "skipped": None, "counts": {"delivered": 2, "corrected": 1},
+            "pass": {"model": TERRA, "requests": [{"outcome": "rejected", "rejected": {"s1": "links"}},
+                                                  {"outcome": "settled", "rejected": {"s2": "missing"}}]}}},
+        (GUEST, "c1", "t6"): {**turn(reviewers=[LUNA]), "feedback": {"skipped": None, "counts": {}, "pass": None}}})
+    source["counters"].append({"day": "2026-10-31", "correction": {
+        "passes": 2, "first": {"rejected": 1, "settled": 1}, "again": {"settled": 1}, "rejected": {"links": 1}}})
+    result = report(source)["correction"]
+    assert result["turns"] == {TERRA: {"unreadable": 1, "settled": 1, "none": 1}}
+    assert result["first"] == {"rejected": 1} and result["again"] == {"settled": 1}
+    assert result["rejected"] == {"links": 1, "missing": 1}
+    assert result["counters"]["passes"] == 2 and result["counters"]["rejected"] == {"links": 1}
+    text = render(report(source))
+    assert "Correction pass" in text and "'unreadable': 1" in text and GUEST not in text
+
+
 def test_quantiles_by_nearest_rank():
     assert quantiles([]) == {"n": 0, "p50": None, "p90": None, "max": None}
     assert quantiles([5, 1, None, 3, 2, 4, 10, 9, 8, 7, 6]) == {"n": 10, "p50": 5.5, "p90": 9, "max": 10}

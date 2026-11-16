@@ -450,7 +450,7 @@ def test_a_pass_that_cannot_finish_ends_quietly_with_the_marks_as_before(store, 
     from app.services.agent_quota import AgentTokenBudgetExceeded
     from app.services.llm.provider_runtime import ProviderCancelled
 
-    def refuse(self, message, cancellation, seconds):
+    def refuse(self, *args, **kwargs):
         raise {"allowance": lambda: AgentTokenBudgetExceeded(0, 100), "time": lambda: ProviderCancelled("overtime"),
                "error": lambda: RuntimeError("provider broke")}[failure]()
     monkeypatch.setattr(AnswerAudit, "_correction_request", refuse)

@@ -1168,12 +1168,17 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Anlass: In Max' Lauf vom 2026-11-13 blieb so der klarste Befund (falsch,
   zwei Prüfer) unberührt. Je Befund antwortet der Agent mit dem
   korrigierten Satz oder mit `stands` und einer Begründung
-  (`CORRECTION_REQUEST`, `read_corrections`); ein Satz gilt nur, wenn er die
-  Form hält (`kept_shape`: eine Zeile, kein Bruchstück unter `SHRINK_SHARE`,
-  nicht viel länger und höchstens ein Satz mehr, endet als Satz, wo das
-  Original es tat, dieselben Bilder, Markdown geschlossen, gleich viele Links,
-  jeder auf eine Adresse, die er schon hatte, oder auf eine Quelle, die ein
-  Prüfer für diesen Befund nannte). Eine solche neue Adresse gilt nur, wenn
+  (`CORRECTION_REQUEST`, `read_reply`; ein einzelner Befund darf auch ohne
+  seine Liste kommen); ein Satz gilt nur, wenn er die Form hält
+  (`shape_rule`/`kept_shape`: eine Zeile, kein Bruchstück unter
+  `SHRINK_SHARE`, nicht viel länger und höchstens ein Satz mehr, endet als
+  Satz, wo das Original es tat, wobei nach dem Satzende zitierte Links
+  dazugehören („… 37,9. [Quelle](…)“, so zitiert Muse Ember;
+  `_ends_sentence` liest rückwärts, jedes Zeichen einmal), dieselben Bilder,
+  Markdown geschlossen, jeder Link auf eine Adresse, die er schon hatte, oder
+  auf eine Quelle, die ein Prüfer für diesen Befund nannte, an Stelle eines
+  Links oder dazu; ein eigener Link fällt nur weg, wo eine Quelle ihn
+  ersetzt). Eine solche neue Adresse gilt nur, wenn
   die Seite öffentlich ist und nicht fehlt (`new_links`, `links_found`: wie
   die Prüfung der Links der Antwort, nur 404/410 fehlt; nicht prüfbar zählt
   als fehlend), sonst bleibt der Satz mit seiner Marke; in Chats mit
@@ -1185,7 +1190,42 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   irrende Prüfer und eine eingeschleuste Anweisung bestritten, 1–9 s je
   Durchgang; beide guten Korrekturen mit Link wurden verworfen, weil das
   Modell die Quelle des Prüfers verlinkte (daher diese Regel), Opus machte
-  aus einem Satz drei (daher „höchstens ein Satz mehr“). Ersetzt werden nur
+  aus einem Satz drei (daher „höchstens ein Satz mehr“). Prod 2026-11-13 bis
+  16: 6 von 20 Durchgängen mit Befunden endeten `unreadable` (Terra 4 von 7,
+  Muse Ember 2 von 13), jeder nach einer vollständigen Antwort
+  (`finish_reason: stop`, kein Werkzeugaufruf, kein Filter); den Text
+  speichert niemand. Von den Befunden, deren Satz einen Link hatte oder zu
+  denen ein Prüfer eine Quelle nannte, blieben 13 von 24 offen, von den
+  übrigen keiner von 17: Die Regel „gleich viele Links“ verwarf, wo das
+  Modell die Quelle des Prüfers dazu zitierte, und ein Zitat nach dem
+  Satzende galt nicht als Satzende (daher beides jetzt erlaubt).
+  **Zweiter Versuch:** Bringt eine Antwort, die kam, nichts, was sie hätte
+  bringen können (`MENDABLE`: kein JSON, keine Befunde, fremde Kennungen,
+  alle verworfen; ein Werkzeugaufruf nur auf einem erfolgreichen Schritt),
+  geht genau eine weitere Anfrage auf derselben Sitzung raus: dieselbe Bitte
+  mit dem Grund als Formhinweis (`CORRECTION_AGAIN`, `repair_note`: je
+  Befund die verletzte Regel, nie etwas aus den Befunden), wie es die Prüfer
+  mit `REPAIR_NOTE` haben. Nur mit `CORRECTION_AGAIN_SECONDS` = 30 s der Frist
+  übrig (beide Anfragen zusammen bleiben in `CORRECTION_SECONDS` und vor
+  `REVIEW_TIME_MARGIN`), solange der Turn der neueste des Chats ist
+  (`begin_correction` noch einmal) und im Tageskonto (ihr Claim). Was sie
+  bringt, zählt; scheitert sie, endet der Durchgang, wie die erste Anfrage
+  ihn ließ (`skipped` behält seine Bedeutung), der Stopp des Nutzers bricht
+  ab. Ein gescheiterter Schritt (Filter, ein Werkzeugaufruf ohne Text, den
+  der Client als abgebrochenen Stream liest, Anbieterfehler) bekommt keinen:
+  seine Sitzung nimmt keinen Schritt mehr an. **Warum nichts kam**, steht
+  ohne Text da: in `audit.feedback.pass` (`model`, `requests[]` mit
+  `outcome` = `settled` oder dem Grund: `not_json`, `no_findings`,
+  `unknown_id`, `rejected`, `tool_calls`, `empty`, `cut`, `incomplete`,
+  `filtered`, `no_time`, `allowance` oder der Fehlercode aus
+  `agent_failure`, `correction_outcome`; `rejected` {Befund: Regel aus
+  `REJECTIONS`: `missing`, `empty`, `unchanged`, `line_break`, `too_long`,
+  `too_short`, `cell_border`, `sentences`, `sentence_end`, `links`,
+  `pictures`, `markdown`, `link_not_found`, `place`}; `again`, wo ein zweiter
+  Versuch fällig war und nicht ging: `no_time`, `newer_message`,
+  `unavailable`), im App-Eintrag `answer_corrected` (`requests`), als
+  Logzeile „Agent correction left findings open“ (Befund-Kennungen, Codes,
+  Länge, Tokens) und in den Tageszählern. Ersetzt werden nur
   diese Sätze (`corrected_answer`); überlappen sich zwei erweiterte Stellen,
   gilt die des schwereren Befunds (die Reihenfolge von `correctable`), der
   andere bleibt offen. Die korrigierte Antwort wird Version 2
@@ -1229,7 +1269,12 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   App-Kontext reist mit der Frage im Verlauf (Cache bleibt), der Verlauf
   trägt den korrigierten Antworttext.
 - **Messung:** `agent_audit_metrics` zählt je Tag `findings_to_agent`
-  (`turns`, `delivered`, `corrected`, `disputed`, `cut`), ohne Texte.
+  (`turns`, `delivered`, `corrected`, `disputed`, `cut`) und `correction`
+  (`correction_counters`: `skipped`, `passes`, `first` und `again` je
+  Ausgang, `not_again`, `rejected` je Regel, `models.<Modell>.settled` bzw.
+  `unsettled`), ohne Texte. `scripts/audit_report.py` zeigt das unter
+  „Correction pass“, je Agent-Modell aus `feedback.skipped` auch für Turns von
+  vor der Spur.
 - **Anzeige** (Max 2026-11-13: „muss laufen wie ChatGPT, was sich selbst
   verbessert“): Mit der Einstellung zeigt die Antwort keine Marken, bis der
   Korrekturdurchgang durch ist (`feedback.status: done`; endet der Lauf

@@ -1172,6 +1172,31 @@ def reply_shape(error, reply=None):
             "reasoning_tokens": usage.get("reasoning_tokens"), **({"json_error": json_error} if json_error else {})}
 
 
+def correction_outcome(error, completion=None):
+    """Why a request of the agent's correction pass that raised brought
+    nothing, as a code: its time (no_time), the allowance, the provider's
+    filter (filtered), the shape of a reply that came (reply_shape:
+    tool_calls, empty, cut, incomplete), else the failure's code
+    (agent_failure). ``completion``: the request's. Its tools are listed and
+    not callable, so a call without text, or a filter that ends the stream,
+    breaks the stream off (AgentCompletion.stream): what it left says which."""
+    from app.services.agent_provider_limits import ModelDeclined, agent_failure
+    from app.services.agent_quota import AgentTokenBudgetExceeded
+    if isinstance(error, ProviderCancelled):
+        return "no_time"
+    if isinstance(error, AgentTokenBudgetExceeded):
+        return "allowance"
+    shape = reply_shape(error)
+    finish = (shape or {}).get("finish") or getattr(completion, "finish_reason", None)
+    if isinstance(error, ModelDeclined) or finish == "content_filter":
+        return "filtered"
+    if shape:
+        return shape["shape"]
+    if getattr(completion, "_tool_parts", None) or getattr(completion, "skipped_tool_parts", 0):
+        return "tool_calls"
+    return agent_failure(error).get("code") or "provider_error"
+
+
 def review_failure(error, cancellation=None):
     """Why a reviewer left no marks, as {code, error} (agent panel, review).
     A reply with a tool call instead of the review is ``review_tool_calls``,
@@ -2796,7 +2821,11 @@ class AnswerAudit:
         model on its own conversation, as data; for each it gives the
         corrected sentence or why the sentence stands. Only those sentences
         change, the first version stays saved (ComparisonTools.correct) and
-        the reviewers do not review the result.
+        the reviewers do not review the result. A reply that settled nothing
+        it could have gets one more request (_corrections); how each request
+        went is in ``audit.feedback.pass``, the work log's
+        ``answer_corrected``, the log and the daily counters, never a word of
+        it.
 
         Never costs the answer or the marks: whatever goes wrong after the
         pass began puts text, versions and marks back as reviewed and leaves
@@ -2832,6 +2861,7 @@ class AnswerAudit:
                     self.process)
         feedback.checking(due)
         reviewed = feedback.state()
+        requests, model = [], None
         try:
             if self.work_log is not None:
                 self.work_log.app("findings_delivered", {"phase": "answer", "findings": [
@@ -2839,15 +2869,12 @@ class AnswerAudit:
             self._save()
             results, skipped = {}, None
             try:
+                model = loop._routing_model()
                 cells = fb.table_cells(answer, items)
-                value = self._correction_request(fb.correction_message(due, items, cells), cancellation,
-                                                 fb.CORRECTION_SECONDS if left is None
-                                                 else min(fb.CORRECTION_SECONDS, left - REVIEW_TIME_MARGIN))
-                results = fb.read_corrections(value.text, items, self._finding_sources(due), cells)
-                for key, urls in fb.new_links(results, items).items():
-                    # A link to a reviewer's source stands only where its page exists.
-                    if not fb.links_found(urls):
-                        results.pop(key)
+                results = self._corrections(
+                    model, fb.correction_message(due, items, cells), cancellation,
+                    fb.CORRECTION_SECONDS if left is None else min(fb.CORRECTION_SECONDS, left - REVIEW_TIME_MARGIN),
+                    items, self._finding_sources(due), cells, requests)
                 if not results:
                     skipped = "unreadable"
             except ProviderCancelled:
@@ -2860,7 +2887,12 @@ class AnswerAudit:
                 from app.core.observability import provider_diagnostic
                 logging.warning("Agent correction failed category=%s diagnostic=%s", safe_exception(exc),
                                 provider_diagnostic(exc))
+            taken = set(results)
             text = fb.corrected_answer(answer, items, results)
+            if requests and taken - set(results):
+                requests[-1].setdefault("rejected", {}).update(dict.fromkeys(sorted(taken - set(results)), "place"))
+            if requests:
+                feedback.traced(getattr(model, "model", None), requests)
             settled = {key: ("corrected", items[key][2], result[1]) if result[0] == "corrected" else result
                        for key, result in results.items()}
             if text != answer:
@@ -2871,7 +2903,7 @@ class AnswerAudit:
                     "findings": [{"id": key, "state": result[0],
                                   **({"sentence": result[2]} if result[0] == "corrected" else {"stands": result[1]})}
                                  for key, result in settled.items()],
-                    **({"skipped": skipped} if skipped else {})})
+                    **({"skipped": skipped} if skipped else {}), **({"requests": requests} if requests else {})})
             self._save_open(latest=text != answer)
         except BaseException as exc:
             from app.services.agent_sessions import NewerTurn
@@ -2881,6 +2913,8 @@ class AnswerAudit:
             with tools.lock:
                 tools.text, tools.versions, self.claims, self.unplaced, self.process = kept
             feedback.restore(reviewed)
+            if requests and feedback.trace is None:
+                feedback.traced(getattr(model, "model", None), requests)
             stopped = isinstance(exc, ProviderCancelled) or not isinstance(exc, Exception)
             reason = "stopped" if stopped else "newer_message" if isinstance(exc, NewerTurn) else "failed"
             if not stopped and not isinstance(exc, NewerTurn):
@@ -2894,7 +2928,7 @@ class AnswerAudit:
 
     def _finding_sources(self, findings):
         """{id: the reviewers' sources for that finding}, which a corrected
-        sentence may link instead (agent_review_feedback.kept_shape); none in
+        sentence may link (agent_review_feedback.shape_rule); none in
         a chat with Google data, where no address from it is ever opened
         (agent_answer_links)."""
         loop = self.tools.loop
@@ -2905,22 +2939,113 @@ class AnswerAudit:
         return {finding["id"]: {note["source"] for note in finding["notes"] if note.get("source")}
                 for finding in findings}
 
-    def _correction_request(self, message, cancellation, seconds):
-        """The correction as one request of the agent's chat model on its own
-        conversation, as a helper session of the run: the agent's tools
-        listed and not callable and the message's files where its steps had
-        them (DelegationLoop._step, ``kind`` "correction"), so the request
-        reads the run's cached prefix. A helper: the chat's lock went with
-        the hand-over, and a helper's steps still claim
-        (AgentSessionStore._claim_delegated), within the daily allowance (no
-        overdraft: the answer and its review stand without it). Past
-        ``seconds`` it stops; its session then ends quietly, as one that
-        failed: the page shows no error for a pass that brought nothing."""
+    def _corrections(self, model, message, cancellation, seconds, items, sources, cells, requests):
+        """The pass's requests on one helper session (_correction_request)
+        and what they settled ({id: result}, agent_review_feedback.read_reply;
+        a new link only where its page exists, links_found). Its first
+        request decides how a pass without a result ends: it raises as that
+        request did, or returns {} (unreadable). A reply that came and settled
+        nothing it could have (MENDABLE) gets one more request on the same
+        session, the message with why (repair_note), within ``seconds`` for
+        both: only with CORRECTION_AGAIN_SECONDS left, while the turn is
+        still the chat's newest, and within the allowance (its claim). What
+        that request brings counts; its failure leaves the pass as the first
+        left it, the user's Stop raises. ``requests`` gets per request its
+        outcome, the findings it left with why, and where one more request
+        was due but did not go, why (Findings.traced): codes only."""
+        from app.services import agent_review_feedback as fb
+        loop = self.tools.loop
+        deadline = time.monotonic() + seconds
+        worker = self._correction_worker(model)
+        first_error, note = None, None
+        for attempt in range(2):
+            sent = message if note is None else message + "\n\n" + note
+            completions = []
+            try:
+                value = self._correction_request(worker, model, sent, cancellation, deadline - time.monotonic(),
+                                                 completions.append)
+            except BaseException as exc:
+                if not isinstance(exc, Exception) or (isinstance(exc, ProviderCancelled)
+                                                      and (cancellation.cancelled or loop.cancellation.cancelled)):
+                    loop._terminal(worker, "stopped", CORRECTION_STOPPED, {"code": "stopped"})
+                    raise
+                outcome = correction_outcome(exc, completions[-1] if completions else None)
+                requests.append({"outcome": outcome})
+                self._correction_unusable(model, attempt, outcome, {}, reply_shape(exc), exc)
+                if not attempt:
+                    first_error = exc
+                    # Only a reply its step settled as succeeded (ComparisonTools.worker_request
+                    # judged it after): a failed step ends its session's claims.
+                    note = (self._correction_again(outcome, {}, deadline, requests[-1])
+                            if getattr(exc, "reply", None) is not None else None)
+                    if note:
+                        continue
+                self._correction_ended(worker, exc)
+                if first_error is not None:
+                    raise first_error
+                return {}
+            results, rejected, fault = fb.read_reply(value.text, items, sources, cells)
+            for key, urls in fb.new_links(results, items).items():
+                # A link the sentence did not have stands only where its page exists.
+                if not fb.links_found(urls):
+                    results.pop(key)
+                    rejected[key] = "link_not_found"
+            outcome = "settled" if results else fault or "rejected"
+            requests.append({"outcome": outcome, **({"rejected": rejected} if rejected else {})})
+            if outcome != "settled" or rejected:
+                self._correction_unusable(model, attempt, outcome, rejected, reply_shape(None, value), None)
+            if not results and not attempt:
+                note = self._correction_again(outcome, rejected, deadline, requests[-1], fault)
+                if note:
+                    continue
+            loop._state(worker, "completed", finish_reason=value.finish_reason)
+            if not results and first_error is not None:
+                raise first_error
+            return results
+        return {}
+
+    def _correction_again(self, outcome, rejected, deadline, request, fault=None):
+        """The note of the pass's second request (repair_note), or None
+        where none goes: the reply could not be mended (MENDABLE), too little
+        of the pass's time is left, or a newer message of the chat started
+        (its result would not be kept). Why one due did not go is the
+        request's ``again``."""
+        from app.services import agent_review_feedback as fb
+        if outcome not in fb.MENDABLE:
+            return None
+        if deadline - time.monotonic() < fb.CORRECTION_AGAIN_SECONDS:
+            request["again"] = "no_time"
+            return None
+        loop = self.tools.loop
+        try:
+            latest = loop.store.begin_correction(loop.uid, loop.chat_id, loop.turn_id, run_token=loop.run_token)
+        except Exception as exc:
+            logging.warning("Agent correction not tried again category=%s", safe_exception(exc))
+            request["again"] = "unavailable"
+            return None
+        if not latest:
+            request["again"] = "newer_message"
+            return None
+        return fb.repair_note(fault or (outcome if outcome in fb.REPLY_FAULTS else None), rejected)
+
+    @staticmethod
+    def _correction_unusable(model, attempt, outcome, rejected, shape, error):
+        """A request of the pass left findings unsettled: how, never a word
+        of its reply (finding ids and codes, its length and tokens)."""
+        from app.core.observability import provider_diagnostic
+        shape = shape or {}
+        logging.warning("Agent correction left findings open model=%s request=%s outcome=%s rejected=%s chars=%s "
+                        "finish=%s output_tokens=%s reasoning_tokens=%s%s", getattr(model, "model", None),
+                        attempt + 1, outcome, ",".join(f"{key}:{rule}" for key, rule in sorted(rejected.items())) or "-",
+                        shape.get("chars"), shape.get("finish"), shape.get("output_tokens"),
+                        shape.get("reasoning_tokens"),
+                        f" diagnostic={provider_diagnostic(error)}" if error is not None and not shape else "")
+
+    def _correction_worker(self, model):
+        """The pass's helper session (agent panel row "Correction")."""
         from app.services.agent_delegation import Worker
         loop = self.tools.loop
-        model = loop._routing_model()
-        messages = [*loop.messages, {"role": "user", "content": message}]
-        worker = Worker(uuid4().hex, model, messages)
+        worker = Worker(uuid4().hex, model, list(loop.messages))
         worker.kind = "correction"
         worker.file_ids = loop.file_context.selection() if getattr(loop, "file_context", None) else []
         title = "Correction"
@@ -2928,6 +3053,30 @@ class AnswerAudit:
             "title": title, "kind": "correction", "comparison_id": None,
             "assignment": {"goal": title, "context": "Check the reviewers' notes on the answer."},
             "model": model.settings(), "status": "waiting", "created_at": datetime.now(timezone.utc).isoformat()})
+        return worker
+
+    def _correction_ended(self, worker, error):
+        """The pass's session after a request that failed: it ends quietly,
+        stopped past its time, else failed, without an error text: the page
+        shows no error for a pass that brought nothing."""
+        from app.services.agent_provider_limits import agent_failure
+        code = "no_time" if isinstance(error, ProviderCancelled) else agent_failure(error).get("code") or "provider_error"
+        self.tools.loop._state(worker, "stopped" if code == "no_time" else "failed", failure={"code": code})
+
+    def _correction_request(self, worker, model, message, cancellation, seconds, on_completion=None):
+        """One request of the pass on ``worker``: the agent's chat model on
+        its own conversation, as a helper session of the run: the agent's
+        tools listed and not callable and the message's files where its
+        steps had them (DelegationLoop._step, ``kind`` "correction"), so the
+        request reads the run's cached prefix. A helper: the chat's lock went
+        with the hand-over, and a helper's steps still claim
+        (AgentSessionStore._claim_delegated), within the daily allowance (no
+        overdraft: the answer and its review stand without it). Past
+        ``seconds`` it stops (ProviderCancelled). The session's state is the
+        caller's (_corrections)."""
+        loop = self.tools.loop
+        messages = [*loop.messages, {"role": "user", "content": message}]
+        worker.messages = messages
         cut = ProviderCancellation()
         unregister = cancellation.register(cut)
         timer = threading.Timer(max(.1, seconds), cut.cancel)
@@ -2936,22 +3085,12 @@ class AnswerAudit:
         try:
             # Not a one-off: only a request with cache_control reads the
             # agent's cached conversation (AgentCompletion.stream).
-            value = self.tools.worker_request(worker, model, messages, cancellation=cut, one_off=False,
-                                              slots=threading.BoundedSemaphore(1), registry=loop.registry)
-        except BaseException as exc:
-            if not isinstance(exc, Exception) or (isinstance(exc, ProviderCancelled) and cancellation.cancelled):
-                loop._terminal(worker, "stopped", CORRECTION_STOPPED, {"code": "stopped"})
-            else:
-                from app.services.agent_provider_limits import agent_failure
-                code = ("no_time" if isinstance(exc, ProviderCancelled)
-                        else agent_failure(exc).get("code") or "provider_error")
-                loop._state(worker, "stopped" if code == "no_time" else "failed", failure={"code": code})
-            raise
+            return self.tools.worker_request(worker, model, messages, cancellation=cut, one_off=False,
+                                             slots=threading.BoundedSemaphore(1), registry=loop.registry,
+                                             on_completion=on_completion)
         finally:
             timer.cancel()
             unregister()
-        loop._state(worker, "completed", finish_reason=value.finish_reason)
-        return value
 
     def _place_corrected(self, text, settled):
         """The corrected answer becomes the review's version, and the marks
