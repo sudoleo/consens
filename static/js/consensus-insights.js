@@ -2636,8 +2636,10 @@
           // While the reviewers' notes wait for the agent (findings_to_agent,
           // agent-review.js): every sentence with a note carries the band of
           // ink (agent-chat.css .is-agent-checking), no mark and no control;
-          // `still` without the band. `ids`: the findings the agent checks
-          // now, which each sentence names for the render that ends the pass.
+          // `still` without the band. Each sentence names the findings on it
+          // for the render that ends the pass, also those the agent has not
+          // taken yet: a view that saw no pass (a background tab) jumps from
+          // the reviewers' notes straight to the corrected answer.
           // `standing`: the sentences (claimKey) that stood in the grey
           // before this render, which do not step into it again. Returns how
           // many sentences it found.
@@ -2645,8 +2647,8 @@
             return (claim.anchor_occurrence || 0) + ":" + claim.anchor;
           }
 
-          function renderAuditChecking(body, audit, ids, options = {}) {
-            if (!body || !audit || !ids) return 0;
+          function renderAuditChecking(body, audit, options = {}) {
+            if (!body || !audit) return 0;
             const markedByBlock = new Map();
             let found = 0;
             (Array.isArray(audit.claims) ? audit.claims : []).forEach(function (claim) {
@@ -2659,10 +2661,10 @@
               const result = markSentence(body, claim.anchor, "is-agent-checking", markedByBlock.get(probe.block), claim.anchor_occurrence);
               if (!result) return;
               found += 1;
-              // The findings it checks: one the agent corrects keeps the
-              // sentence in grey until its new words come (agent-review.js).
+              // One the agent corrects keeps the sentence in grey until its
+              // new words come (agent-review.js leaveChecking).
               const checked = claim.dissent.map(function (item) { return item && item.finding; })
-                .filter(function (id) { return ids.has(id); });
+                .filter(function (id) { return typeof id === "string" && id; });
               const key = auditClaimKey(claim);
               result.spans.forEach(function (span) {
                 if (options.still) span.classList.add("is-still");

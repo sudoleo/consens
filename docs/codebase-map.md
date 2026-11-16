@@ -7052,8 +7052,10 @@ aus Tinte in der Schrift, ohne Marke und ohne eigene Zeile: Der erste Prüfer
 ist im Median 6 s vor dem letzten fertig, und der Leser sieht, wo eine
 Anmerkung liegt, statt einer Antwort, die fertig aussieht
 (`consensus-insights.js` `renderAuditChecking`:
-`.cx-claim.is-agent-checking` ohne Rolle und Klick, `data-findings` mit den
-Befunden, die der Agent gerade prüft, `data-claim` als Schlüssel des Satzes;
+`.cx-claim.is-agent-checking` ohne Rolle und Klick, `data-findings` mit allen
+Befunden des Satzes, auch vor dem Durchgang (eine Ansicht, die ihn nicht sah,
+springt von den Anmerkungen direkt zur korrigierten Antwort; `leaveChecking`
+hält den korrigierten Satz daran grau), `data-claim` als Schlüssel des Satzes;
 ein Render, während das Grau steht, baut die Sätze neu: die schon grauen
 bekommen `.is-standing` und treten nicht noch einmal ein, und jedes Band
 läuft an der Uhr der Seite weiter, `--checking-phase`; auch ein Satz, dessen
@@ -7143,7 +7145,9 @@ nach `CHECKING_LIMIT_MS` (180 s, über `CORRECTION_SECONDS` des Servers) die
 Prüfung, wie sie ist (`sweepUntil`), und bleibt dabei, wenn sie denselben
 Stand wieder rendert (`body._sweepEnded`, `sweepKey`: die Basisansicht rendert
 einen laufenden Turn immer wieder); ein Durchgang über andere Anmerkungen
-läuft mit eigener Frist.
+läuft mit eigener Frist. Die Frist läuft für jeden Stand mit grauem Satz und
+auch für einen Durchgang ohne angemerkten Satz auf dem Schirm (Notes wartet
+sonst für immer).
 Kommt Version 2 (`versions[].corrects`), schreibt `renderAudit` die Antwort
 selbst um (`correctionOf`, `body._corrected`; `agent-chat.js`
 `renderAnswerBody` rendert über `App.agentReview.shownText` weiter die

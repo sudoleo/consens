@@ -267,37 +267,39 @@ it("says on the hover preview of a mark whether and how the agent looked at its 
 
 // While the reviewers' notes wait for the agent: every sentence with a note
 // carries the band of ink, nothing else; the text stays as it is and nothing
-// becomes a control. Each names the findings the agent checks it for
-// (agent-review.js keeps a corrected one grey until its new words come).
-it("sweeps the sentences with a note, and names the findings the agent checks", () => {
+// becomes a control. Each names the findings on it (agent-review.js keeps a
+// corrected one grey until its new words come), also before the agent's pass:
+// a view that saw no pass goes from the notes straight to the corrected answer.
+it("sweeps the sentences with a note, and names the findings on each", () => {
   const { window, document } = boot(ANSWER);
   const body = document.getElementById("consensusAnswerBody");
   const text = body.textContent;
   // A reviewer's first notes, before the agent's pass: no finding yet.
-  expect(window.renderAuditChecking(body, structuredClone(AUDIT), new Set())).toBe(2);
+  expect(window.renderAuditChecking(body, structuredClone(AUDIT))).toBe(2);
   const first = [...body.querySelectorAll(".cx-claim")];
   expect(first.map(span => [span.textContent, span.className, span.dataset.findings])).toEqual([
     ["It was built in 1889 for the World's Fair.", "cx-claim is-agent-checking", ""],
     ["Tickets to the top cost 14 euros.", "cx-claim is-agent-checking", ""]]);
   expect(first.some(span => span.hasAttribute("role") || span.hasAttribute("tabindex"))).toBe(false);
   expect(body.textContent).toBe(text);
-  // The pass: a render builds the sentences anew, those in the grey already
-  // stand in it, and the one whose finding the agent checks says so.
+  // With findings: a render builds the sentences anew, those in the grey
+  // already stand in it, and each names its findings, whether the agent
+  // checks them now or not.
   const audit = structuredClone(AUDIT);
   audit.claims[0].dissent.forEach(item => { item.finding = "s1"; });
   audit.claims[1].dissent.forEach(item => { item.finding = "s2"; });
   const again = boot(ANSWER);
   const againBody = again.document.getElementById("consensusAnswerBody");
-  again.window.renderAuditChecking(againBody, audit, new Set(["s2"]), { standing: new Set([first[1].dataset.claim]) });
+  again.window.renderAuditChecking(againBody, audit, { standing: new Set([first[1].dataset.claim]) });
   expect([...againBody.querySelectorAll(".cx-claim")].map(span => [span.classList.contains("is-standing"), span.dataset.findings]))
-    .toEqual([[false, ""], [true, "s2"]]);
+    .toEqual([[false, "s1"], [true, "s2"]]);
   // A claim without a note (a sentence the reviewers agreed on) is not swept.
   const agreed = boot(ANSWER);
   const quiet = { unplaced: [], claims: [{ anchor: AUDIT.claims[0].anchor, kind: "unanimous", agree: ["OpenAI"], dissent: [] }] };
-  expect(agreed.window.renderAuditChecking(agreed.document.getElementById("consensusAnswerBody"), quiet, new Set())).toBe(0);
+  expect(agreed.window.renderAuditChecking(agreed.document.getElementById("consensusAnswerBody"), quiet)).toBe(0);
   const still = boot(ANSWER);
   const stillBody = still.document.getElementById("consensusAnswerBody");
-  still.window.renderAuditChecking(stillBody, audit, new Set(["s1", "s2"]), { still: true });
+  still.window.renderAuditChecking(stillBody, audit, { still: true });
   expect([...stillBody.querySelectorAll(".cx-claim")].map(span => span.classList.contains("is-still"))).toEqual([true, true]);
 });
 
@@ -309,7 +311,7 @@ it("sweeps a table cell the agent checks, and only that cell", () => {
   const cells = [...body.querySelectorAll("th, td")];
   const audit = { unplaced: [], claims: [{ anchor: "12 euros a month.", kind: "wrong", audit: true, agree: [],
     dissent: [{ model: "OpenAI", kind: "wrong", note: "It costs 15 euros.", mark: 1, finding: "s1" }] }] };
-  expect(window.renderAuditChecking(body, audit, new Set(["s1"]))).toBe(1);
+  expect(window.renderAuditChecking(body, audit)).toBe(1);
   const swept = [...body.querySelectorAll(".cx-claim.is-agent-checking")];
   expect(swept.map(span => [span.textContent, span.closest("td")?.cellIndex])).toEqual([["12 euros a month.", 1]]);
   expect([...body.querySelectorAll("th, td")]).toEqual(cells);

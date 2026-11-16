@@ -1468,7 +1468,9 @@
       host.setAttribute('aria-label', 'Answer evidence');
     } else if (empty) placeRow(body, host, raw);
     const still = stillMotion();
-    sweepUntil(body, noted ? sweep : '', () => render(body, review, { ...evidence, ended: true }));
+    // Also a pass over findings with no noted sentence on screen: the row
+    // (Notes waiting, "The agent is refining…") waits for its end as well.
+    sweepUntil(body, noted || checking.length ? sweep : '', () => render(body, review, { ...evidence, ended: true }));
     const signature = JSON.stringify(['audit', review, raw, exact, turnSources, body._agentRenderSerial || 0,
       ...(review.audit.feedback ? [hold, still] : [])]);
     if (host.dataset.signature === signature) {
@@ -1529,7 +1531,7 @@
       if (noted) {
         const beat = App.motion?.ms?.('beat') ?? 1800;
         body.style.setProperty('--checking-phase', `-${Math.round(performance.now() % beat)}ms`);
-        window.renderAuditChecking?.(body, review.audit, new Set(checking.map(finding => finding.id)), { still, standing });
+        window.renderAuditChecking?.(body, review.audit, { still, standing });
       }
       window.linkifyAgentSources?.(body, turnSources);
     });

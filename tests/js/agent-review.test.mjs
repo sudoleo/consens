@@ -1545,19 +1545,16 @@ it('shows no mark while the reviewers review and the agent checks their findings
   // grey at once, without a mark and without a line; the row goes on reviewing.
   w.App.agentReview.render(body, feedbackReview('live'), { key: 't1', ended: false });
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
-  expect([...w.renderAuditChecking.mock.calls[0][2]]).toEqual([]);
-  expect([w.renderAuditChecking.mock.calls[0][3].still, [...w.renderAuditChecking.mock.calls[0][3].standing]]).toEqual([false, []]);
+  expect([w.renderAuditChecking.mock.calls[0][2].still, [...w.renderAuditChecking.mock.calls[0][2].standing]]).toEqual([false, []]);
   expect([status.textContent, status.classList.contains('visually-hidden')]).toEqual(['Reviewing the answer…', false]);
   expect(d.querySelector('.agent-review-findings')).toBeNull();
   expect(d.querySelector('.agent-review-reviewers').hidden).toBe(false);
   expect(body.style.getPropertyValue('--checking-phase')).toMatch(/^-\d+ms$/);
-  // The agent checks: the sentences name its findings; still no mark, the
-  // notes still wait.
+  // The agent checks: still no mark, the notes still wait.
   w.renderAuditChecking.mockClear();
   w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
   expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
-  expect([...w.renderAuditChecking.mock.calls[0][2]]).toEqual(['s1', 's2']);
-  expect([w.renderAuditChecking.mock.calls[0][3].still, [...w.renderAuditChecking.mock.calls[0][3].standing]]).toEqual([false, []]);
+  expect([w.renderAuditChecking.mock.calls[0][2].still, [...w.renderAuditChecking.mock.calls[0][2].standing]]).toEqual([false, []]);
   // No second paragraph under the answer: the live line over it says that
   // it is being refined (agent-activity.js); the live region says how many
   // notes. The reviewers' marks have done their part.
@@ -1587,11 +1584,11 @@ it('keeps a sentence standing in the grey through the renders that follow', () =
     return 1;
   });
   w.App.agentReview.render(body, feedbackReview('live'), { key: 't1', ended: false });
-  expect([...w.renderAuditChecking.mock.calls[0][3].standing]).toEqual([]);
+  expect([...w.renderAuditChecking.mock.calls[0][2].standing]).toEqual([]);
   // The pass begins: the same sentence, built anew, is told that it stood there.
   w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
   expect(w.renderAuditChecking).toHaveBeenCalledTimes(2);
-  expect([...w.renderAuditChecking.mock.calls[1][3].standing]).toEqual(['0:Tickets cost 18 euros.']);
+  expect([...w.renderAuditChecking.mock.calls[1][2].standing]).toEqual(['0:Tickets cost 18 euros.']);
   expect(body.querySelector('.is-leaving')).toBeNull();
 });
 
@@ -1599,11 +1596,11 @@ it('sweeps without motion where motion is off, and never sweeps a run that ended
   const still = feedbackSetup();
   still.window.App.userSettings = { get: name => (name === 'stream_animation' ? false : undefined) };
   still.window.App.agentReview.render(still.body, feedbackReview('checking'), { key: 't1', ended: false });
-  expect(still.window.renderAuditChecking.mock.calls[0][3]).toMatchObject({ still: true });
+  expect(still.window.renderAuditChecking.mock.calls[0][2]).toMatchObject({ still: true });
   const reduced = feedbackSetup();
   reduced.window.matchMedia = query => ({ matches: query.includes('reduce') });
   reduced.window.App.agentReview.render(reduced.body, feedbackReview('checking'), { key: 't1', ended: false });
-  expect(reduced.window.renderAuditChecking.mock.calls[0][3]).toMatchObject({ still: true });
+  expect(reduced.window.renderAuditChecking.mock.calls[0][2]).toMatchObject({ still: true });
   // A stored turn, or one whose run is over: its review as it stands, no sweep.
   for (const evidence of [{ key: 't1', ended: true }, { key: 't1' }]) {
     const { window: w, document: d, body } = feedbackSetup();
@@ -1638,6 +1635,22 @@ it('ends a sweep it sees no end of after the pass\'s own deadline, also through 
   other.audit.feedback.findings[0].id = 's3';
   w.App.agentReview.render(body, other, { key: 't1', ended: false });
   expect(w.renderAuditChecking).toHaveBeenCalledTimes(2);
+  vi.useRealTimers();
+});
+
+it('ends a pass it sees no end of also when no sentence on screen carries a note', () => {
+  vi.useFakeTimers();
+  const { window: w, document: d, body } = feedbackSetup();
+  const quiet = () => { const review = feedbackReview('checking'); review.audit.claims = []; return review; };
+  w.App.agentReview.render(body, quiet(), { key: 't1', ended: false });
+  const status = d.querySelector('.agent-review-status');
+  expect([status.textContent, notesCell(d).disabled]).toEqual(['The agent is refining the answer with 2 notes…', true]);
+  vi.advanceTimersByTime(181000);
+  expect(status.textContent).not.toContain('refining');
+  expect(notesCell(d).disabled).toBe(false);
+  // The base view renders the same state again: the pass stays over.
+  w.App.agentReview.render(body, quiet(), { key: 't1', ended: false });
+  expect([status.textContent.includes('refining'), notesCell(d).disabled]).toEqual([false, false]);
   vi.useRealTimers();
 });
 
