@@ -63,10 +63,11 @@ CORRECTION_MIN_SECONDS = 45
 CORRECTION_SECONDS = 120
 # The register's bounds: a long run's live rounds bring marks without end
 # (each reviewer's own list keeps MAX_MARKS, kept_marks), and the review's
-# storage budget holds every finding's notes. Past MAX_FINDINGS new places of
-# one kind, entries of the work or places in the answer, are not tracked: soft
-# marks on the work never crowd out the answer's findings and their correction.
-# A finding keeps NOTES_PER_FINDING notes.
+# storage budget holds every finding's notes. Each kind, entries of the work and
+# places in the answer, keeps at most MAX_FINDINGS: soft marks on the work never
+# crowd out the answer's findings and their correction. Past it a new entry of
+# the work takes the place of the oldest soft one (Findings._finding), a new
+# place in the answer is not tracked. A finding keeps NOTES_PER_FINDING notes.
 MAX_FINDINGS = 60
 NOTES_PER_FINDING = 6
 # What one finding carries to the agent and the record.
@@ -219,11 +220,19 @@ class Findings:
 
     def _finding(self, key, on, **fields):
         """The finding ``key``, made where it is new and the register has
-        room for one more ``on`` (MAX_FINDINGS); None past it."""
+        room for one more ``on`` (MAX_FINDINGS); None past it. On the work a
+        full register makes room by dropping its oldest soft finding that
+        never reached the agent: it only waits for a second voice, while the
+        new place may be a hard one late in a long run."""
         finding = self.findings.get(key)
         if finding is None:
-            if sum(1 for item in self.findings.values() if item["on"] == on) >= MAX_FINDINGS:
-                return None
+            same = [item for item in self.findings.values() if item["on"] == on]
+            if len(same) >= MAX_FINDINGS:
+                spare = next((item for item in same if on == "work" and not item["hard"]
+                              and item["delivered"] is None), None)
+                if spare is None:
+                    return None
+                del self.findings[spare["id"]]
             finding = self.findings[key] = {"id": key, "on": on, **fields, "kind": "incomplete", "voices": set(),
                                             "notes": [], "state": "open", "delivered": None, "hard": False}
         return finding

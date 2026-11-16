@@ -1077,7 +1077,9 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   trägt `finding` mit der Kennung; nur mit der Einstellung. Begrenzt auf
   `MAX_FINDINGS` = 60 Stellen je Art (Einträge der Arbeit, Stellen der
   Antwort: weiche Live-Marken eines langen Laufs verdrängen nie die Befunde
-  der Antwort) und `NOTES_PER_FINDING` = 6 Notizen; gespeichert
+  der Antwort; ist die Arbeit voll, weicht für eine neue Stelle der älteste
+  weiche, nie zugestellte Befund, damit ein später harter den Agenten noch
+  erreicht) und `NOTES_PER_FINDING` = 6 Notizen; gespeichert
   werden Befunde auf der Antwort sowie harte oder zugestellte zur Arbeit (ein
   weicher zur Arbeit steht in den Marken auf der Arbeit); `trim_marks` kürzt
   auch ihre Notizen.

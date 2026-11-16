@@ -354,6 +354,27 @@ def test_the_register_stays_within_its_bounds():
     assert soft.snapshot()["findings"] == []
 
 
+def test_a_hard_finding_late_in_a_long_run_still_reaches_the_agent():
+    """A full register of soft doubts about the work makes room for a new
+    place: one called wrong with a source, or one two reviewers mark, after
+    MAX_FINDINGS soft ones still reaches the agent; a hard one is never
+    dropped for it."""
+    register = fb.Findings()
+    register.live("A", [{"entry": entry, "kind": "doubtful", "note": "Maybe."}
+                        for entry in range(1, fb.MAX_FINDINGS + 1)])
+    register.live("B", [{"entry": 500, "kind": "wrong", "note": "It is 36.10.", "source": RATES}])
+    register.live("A", [{"entry": 501, "kind": "doubtful", "note": "Check this."}])
+    register.live("B", [{"entry": 501, "kind": "doubtful", "note": "Unsure too."}])
+    assert [finding["id"] for finding in register.take_live()] == ["e500", "e501"]
+    assert len(register.findings) == fb.MAX_FINDINGS
+    # A register full of hard findings takes no new place.
+    full = fb.Findings()
+    full.live("A", [{"entry": entry, "kind": "wrong", "note": "No.", "source": RATES}
+                    for entry in range(1, fb.MAX_FINDINGS + 1)])
+    full.live("B", [{"entry": 900, "kind": "wrong", "note": "No.", "source": RATES}])
+    assert "e900" not in full.findings and len(full.findings) == fb.MAX_FINDINGS
+
+
 def test_the_live_rounds_never_crowd_out_the_findings_on_the_answer():
     """A long run's live rounds mark entry after entry, soft marks too; the
     answer's findings still get their correction pass."""
