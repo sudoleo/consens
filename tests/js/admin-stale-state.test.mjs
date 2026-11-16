@@ -117,3 +117,32 @@ describe("a preset pick", () => {
         expect(window.drawn).toEqual(["presets", "judges", "add", "presets", "watch"]);
     });
 });
+
+describe("Discard", () => {
+    it("draws the models the server holds, not the unsaved picks", async () => {
+        const select = (attr, value) => `<select ${attr}><option value="saved">saved</option>`
+            + `<option value="${value}" selected>${value}</option></select>`;
+        const window = boot([
+            `<div id="presetModelsContainer">${select('data-preset-id="daily" data-preset-slot="consensus"', "unsaved-preset")}</div>`,
+            `<div id="judgeModelsContainer">${select('data-judge-provider="openai"', "unsaved-judge")}`
+                + `${select('data-projudge-provider="openai"', "unsaved-pro")}</div>`,
+            `<div id="chatMemoryModelsContainer">${select('data-chatmemory-provider="openai"', "unsaved-memory")}</div>`,
+            `<div id="judgeFamiliesContainer">${select('data-judgefam-engine="openai"', "unsaved-family")}</div>`,
+            '<p id="modelsLoadError"></p>',
+        ].join(""), [
+            "var globalModelsData = {}; var providers = [];",
+            "function meta() { return globalModelsData.meta || {}; }",
+            "function clearDirty() {} function renderOverview() {}",
+            "window.fetch = async () => ({ ok: true, json: async () => ({ meta: { provider_keys: ['openai'] } }) });",
+            // What every draw of admin.js keeps over the saved value.
+            "function renderUI() { window.kept = [currentPresetModels(), currentJudgeModels(), currentProJudgeModels(),",
+            "    currentChatMemoryModels(), currentJudgeFamilies()]; }",
+            section("function currentPresetModels", "// An engine as a person reads it"),
+            section("function currentJudgeModels", "function buildJudgeModelSelect"),
+            section("let modelsLoadError", "async function reloadModels"),
+            "window.fetchModels = fetchModels;",
+        ]);
+        await window.fetchModels("token");
+        expect(window.kept).toEqual([{}, {}, {}, {}, {}]);
+    });
+});

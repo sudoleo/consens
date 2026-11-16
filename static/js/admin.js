@@ -1357,6 +1357,11 @@ async function fetchModels(idToken) {
             : [];
         modelsLoadError = '';
         notice.hidden = true;
+        // What the server holds replaces every unsaved pick (Discard): the
+        // renders keep what their selects still show over the saved value.
+        for (const id of ['presetModelsContainer', 'judgeModelsContainer', 'chatMemoryModelsContainer', 'judgeFamiliesContainer']) {
+            document.getElementById(id)?.replaceChildren();
+        }
         renderUI();
         clearDirty();
     } catch (err) {
