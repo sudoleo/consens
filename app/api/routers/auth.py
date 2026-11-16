@@ -16,6 +16,7 @@ from app.core.rate_limit import ApiUidRateLimitExceeded, api_uid_limiter, limite
 from app.core.security import verify_user_token, AuthenticationUnavailable, auth_unavailable_error
 from app.services import sign_in_links
 from app.services.registration import (
+    deliver_password_setup_email,
     deliver_sign_in_email,
     find_or_provision_user,
     is_password_setup_configured,
@@ -43,6 +44,10 @@ class RegisterRequest(BaseModel):
     # ignored. An anonymous caller must never choose an immediately usable
     # Firebase credential before proving mailbox ownership.
     password: Optional[str] = Field(default=None, max_length=256)
+    # The mail sets a password instead of carrying a sign-in link: for an app
+    # saved to the iPhone home screen, whose own storage a link from the mail
+    # (it opens Safari) never reaches.
+    password_setup: bool = False
 
     @field_validator("email")
     @classmethod
@@ -123,13 +128,15 @@ async def register_user(
         # new addresses then take the exact same mailbox-only path, so an
         # anonymous caller cannot distinguish them with a follow-up login.
         user, created = await asyncio.to_thread(find_or_provision_user, email)
-        background_tasks.add_task(
-            deliver_sign_in_email,
-            email,
-            uid=user.uid,
-            first=created or needs_password_setup(user),
-            language=request_language(request),
-        )
+        first = created or needs_password_setup(user)
+        if data.password_setup:
+            background_tasks.add_task(
+                deliver_password_setup_email, email, setup=first, language=request_language(request),
+            )
+        else:
+            background_tasks.add_task(
+                deliver_sign_in_email, email, uid=user.uid, first=first, language=request_language(request),
+            )
         if created:
             background_tasks.add_task(
                 send_new_user_registration_notification,

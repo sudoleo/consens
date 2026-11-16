@@ -224,20 +224,21 @@ def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in(browser, phase4
         context.close()
 
 
-def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in_link(browser, phase4_server):
-    """The mail's link opens in the browser that sent the question: one click
-    logs in, and the question runs once, as after any other sign-in."""
+LINK_QUESTION = "Is creatine safe for teenagers?"
+
+
+def _guest_waits_and_opens_the_link(browser, server, prepared, *, requested_here):
+    """A guest's Send left the question waiting; then the mail's link opens."""
     from tests.e2e.test_auth_dialog import _link_page
 
-    question = "Is creatine safe for teenagers?"
-    prepared = []
     # What a guest's Send left behind, on the page before the sign-in only.
+    remembered = "localStorage.setItem('consensio.authEmail', 'account-a@example.invalid');" if requested_here else ""
     waiting = CAPTURE_EVENTS + f"""
       if (!sessionStorage.getItem('e2e.uid')) {{
-        localStorage.setItem('consensio.authEmail', 'account-a@example.invalid');
-        localStorage.setItem('consensio.questionDraft.v1', {json.dumps(question)});
+        {remembered}
+        localStorage.setItem('consensio.questionDraft.v1', {json.dumps(LINK_QUESTION)});
         localStorage.setItem('consensio.sendAfterLogin.v1',
-          JSON.stringify({{ source: 'typed', text: {json.dumps(question)}, at: Date.now() }}));
+          JSON.stringify({{ source: 'typed', text: {json.dumps(LINK_QUESTION)}, at: Date.now() }}));
       }}"""
 
     def routes(page):
@@ -245,9 +246,18 @@ def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in_link(browser, p
             prepared.append(route.request.post_data_json), _json(route, {"system_prompt": "Prepared prompt"})))
         page.route("**/ask_*", lambda route: _json(route, {"response": "An answer", "sources": []}))
 
-    context, page, asked, spent = _link_page(
-        browser, phase4_server, init_script=waiting, before_goto=routes,
+    return _link_page(
+        browser, server, init_script=waiting, before_goto=routes,
         redeem=lambda route: _json(route, {"token": "custom-token-account-a", "first": True}))
+
+
+def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in_link(browser, phase4_server):
+    """The mail's link opens in the browser that sent the question: one click
+    logs in, and the question runs once, as after any other sign-in."""
+    question = LINK_QUESTION
+    prepared = []
+    context, page, asked, spent = _guest_waits_and_opens_the_link(
+        browser, phase4_server, prepared, requested_here=True)
     try:
         page.wait_for_function(f"() => window.App.runRegistry.visible()?.question === {json.dumps(question)}")
         page.wait_for_function("() => window.__events.some(([name]) => name === 'ask')")
@@ -255,6 +265,27 @@ def test_the_question_sent_as_a_guest_goes_out_after_the_sign_in_link(browser, p
         ask = page.evaluate("() => window.__events.find(([name]) => name === 'ask')[1]")
         assert ask["after_login"] is True
         assert page.evaluate("localStorage.getItem('consensio.sendAfterLogin.v1')") is None
+    finally:
+        context.close()
+
+
+def test_a_link_asked_for_elsewhere_does_not_send_the_waiting_question(browser, phase4_server):
+    """Confirmed in a browser that did not ask for this link: the account
+    logs in, the question stays in the field and goes nowhere by itself."""
+    prepared = []
+    context, page, asked, spent = _guest_waits_and_opens_the_link(
+        browser, phase4_server, prepared, requested_here=False)
+    try:
+        expect(page.locator("#authLead")).to_have_text("Log in as account-a@example.invalid?")
+        assert page.evaluate("localStorage.getItem('consensio.sendAfterLogin.v1')") is not None
+        page.click("#linkConfirmButton")
+        page.wait_for_function("() => window.__consensioAuthState?.uid === 'account-a' && !window.App.reloadingAfterSignIn"
+                               " && typeof window.updateQuestionInputAccess === 'function'")
+        expect(page.locator("#questionInput")).to_have_value(LINK_QUESTION)
+        page.wait_for_timeout(800)
+        assert len(spent) == 1 and prepared == []
+        assert page.evaluate("localStorage.getItem('consensio.sendAfterLogin.v1')") is None
+        assert not page.evaluate("() => window.__events.some(([name]) => name === 'ask')")
     finally:
         context.close()
 

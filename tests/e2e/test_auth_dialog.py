@@ -163,7 +163,9 @@ def test_sign_up_is_one_field_and_the_inbox_is_one_tap_away(browser, phase4_serv
         expect(page.locator("#registrationSuccess")).to_be_visible()
         # The mail holds the one button that logs in: no password step.
         expect(page.locator("#authLead")).to_have_text("Open the link and you’re in.")
-        expect(page.locator("#registrationSuccess")).not_to_contain_text("password")
+        expect(page.locator("#registrationSuccess")).not_to_contain_text("password", use_inner_text=True, ignore_case=True)
+        expect(page.locator("#registrationSetupText")).to_be_hidden()
+        expect(page.locator("#registrationLoginButton")).to_be_hidden()
         expect(page.locator("#registrationSuccessEmail")).to_have_text("new.person@gmail.com")
         expect(page.locator("#registrationMailboxLink")).to_have_text("Open Gmail")
         expect(page.locator("#registrationMailboxLink")).to_have_attribute("href", "https://mail.google.com/mail/u/0/#inbox")
@@ -217,6 +219,37 @@ def test_log_in_offers_a_link_instead_of_the_password(browser, phase4_server):
         expect(page.locator("#loginPassword")).to_be_focused()
         expect(page.locator("#emailLinkButton")).to_be_visible()
         assert _calls(page) == []
+    finally:
+        context.close()
+
+
+def test_an_app_on_the_iphone_home_screen_signs_up_with_a_password(browser, phase4_server):
+    """Its window keeps its own storage, which a link from the mail (opened in
+    Safari) never reaches: the mail sets a password, as before the link."""
+    context, page = _guest_page(
+        browser, phase4_server,
+        init_script="Object.defineProperty(navigator, 'standalone', { get: () => true });")
+    try:
+        registrations = []
+        page.route("**/register", lambda route: (
+            registrations.append(json.loads(route.request.post_data)), _json(route, {"status": "check_inbox"})))
+        page.click("#authTopLoginBtn")
+        expect(page.locator("#loginPassword")).to_be_visible()
+        expect(page.locator("#emailLinkButton")).to_be_hidden()
+
+        page.click("#authTabRegister")
+        expect(page.locator("#singleMailNote")).to_have_text("No password needed yet. We’ll email you a link to set one.")
+        page.fill("#loginEmail", "new.person@example.test")
+        page.click("#confirmRegisterButton")
+        expect(page.locator("#authLead")).to_have_text("One step left to your account.")
+        expect(page.locator("#registrationSetupText")).to_be_visible()
+        assert registrations == [{"email": "new.person@example.test", "password_setup": True}]
+
+        page.click("#registrationLoginButton")
+        expect(page.locator("#authTabLogin")).to_have_attribute("aria-selected", "true")
+        expect(page.locator("#loginEmail")).to_have_value("new.person@example.test")
+        expect(page.locator("#loginPassword")).to_be_focused()
+        expect(page.locator("#emailLinkButton")).to_be_hidden()
     finally:
         context.close()
 

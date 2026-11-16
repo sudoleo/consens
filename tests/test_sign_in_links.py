@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi import FastAPI
+from google.api_core.exceptions import Aborted
 from fastapi.testclient import TestClient
 
 from app.api.routers import auth as auth_router
@@ -19,9 +20,11 @@ NOW = datetime(2026, 11, 16, 12, 0, tzinfo=timezone.utc)
 EMAIL = "Reader@Example.test"
 
 
-# --- A Firestore double with real transaction semantics ------------------------
-# Reads remember the version they saw; a commit whose reads changed meanwhile
-# is retried, as Firestore does.
+# --- A Firestore double under the real transaction runner -----------------------
+# sign_in_links runs its transaction through firestore.transactional, as in
+# production. The double only keeps what that runner drives: reads remember
+# the version they saw, and a commit whose reads changed meanwhile raises
+# Aborted, which the runner retries.
 
 class Snapshot:
     def __init__(self, key, data, db):
@@ -83,11 +86,36 @@ class Collection(Query):
 
 
 class Transaction:
-    def __init__(self):
+    _max_attempts = 5
+    _read_only = False
+
+    def __init__(self, db):
+        self.db = db
+        self._clean_up()
+
+    def _clean_up(self):
+        self._id = None
         self.reads, self.deletes = {}, []
+
+    def _begin(self, retry_id=None):
+        self.db.attempts += 1
+        self._id = object()
 
     def delete(self, ref):
         self.deletes.append(ref.key)
+
+    def _commit(self):
+        with self.db.lock:
+            if any(self.db.versions.get(key, 0) != seen for key, seen in self.reads.items()):
+                self._clean_up()
+                raise Aborted("contention")
+            for key in self.deletes:
+                self.db.docs.pop(key, None)
+                self.db.bump(key)
+        self._clean_up()
+
+    def _rollback(self):
+        self._clean_up()
 
 
 class FakeDb:
@@ -102,18 +130,8 @@ class FakeDb:
     def collection(self, name):
         return Collection(self, name)
 
-    def run_transaction(self, operation, max_attempts=5):
-        for _ in range(max_attempts):
-            self.attempts += 1
-            tx = Transaction()
-            result = operation(tx)
-            with self.lock:
-                if all(self.versions.get(key, 0) == seen for key, seen in tx.reads.items()):
-                    for key in tx.deletes:
-                        self.docs.pop(key, None)
-                        self.bump(key)
-                    return result
-        raise RuntimeError("transaction contention")
+    def transaction(self):
+        return Transaction(self)
 
     def links(self):
         return {key[1]: data for key, data in self.docs.items() if key[0] == sign_in_links.COLLECTION}
@@ -284,12 +302,27 @@ def test_the_click_confirms_the_address_and_ends_an_earlier_password(firebase):
     [(uid, changes)] = firebase.updates
     assert uid == "reader" and changes["email_verified"] is True
     assert len(changes["password"]) >= 48
+    assert "providers_to_delete" not in changes
     assert firebase.revoked == ["reader"]
 
 
-def test_a_confirmed_account_keeps_its_password_and_sessions(firebase):
+def test_the_click_leaves_no_other_way_in_that_came_before_it(firebase):
     db = FakeDb()
-    firebase.users["reader"] = account(verified=True, providers=("google.com", "password"))
+    firebase.users["reader"] = account(verified=False, providers=("password", "google.com", "github.com"))
+    code = sign_in_links.issue("reader", EMAIL, db=db, now=NOW)
+
+    sign_in_links.redeem(code, db=db, now=NOW)
+
+    [(uid, changes)] = firebase.updates
+    assert changes["email_verified"] is True and len(changes["password"]) >= 48
+    assert changes["providers_to_delete"] == ["github.com", "google.com"]
+    assert firebase.revoked == ["reader"]
+
+
+@pytest.mark.parametrize("providers", [("google.com",), ("google.com", "password")])
+def test_a_confirmed_account_keeps_its_ways_in_and_sessions(firebase, providers):
+    db = FakeDb()
+    firebase.users["reader"] = account(verified=True, providers=providers)
     code = sign_in_links.issue("reader", EMAIL, db=db, now=NOW)
 
     sign_in_links.redeem(code, db=db, now=NOW)

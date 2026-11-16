@@ -468,11 +468,37 @@
 
 #loginModal .auth-confirm[hidden] { display: none; }
 
+#loginModal .auth-success-text {
+  color: var(--ink-2);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
 #loginModal .auth-success-row {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
   gap: 6px 18px;
+}
+
+#loginModal .auth-secondary-action {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  cursor: pointer;
+}
+
+#loginModal .auth-secondary-action[hidden] { display: none; }
+#loginModal .auth-secondary-action:focus-visible { background: var(--hover); }
+@media (hover: hover) and (pointer: fine) {
+  #loginModal .auth-secondary-action:hover { background: var(--hover); }
 }
 
 /* 44px to the finger for the dialog's smaller controls:

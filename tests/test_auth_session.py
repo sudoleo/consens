@@ -234,6 +234,33 @@ class AuthSessionTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         provision.assert_called_once_with("new@example.test")
 
+    def test_an_app_on_the_home_screen_gets_the_password_mail_with_the_same_answer(self):
+        """A home-screen app on the iPhone keeps its own storage, which the
+        mail's link (opened in Safari) never reaches: it asks for the mail
+        that sets a password. Nothing else about /register changes."""
+        pending = SimpleNamespace(uid="pending-owner", user_metadata=SimpleNamespace(last_sign_in_timestamp=None))
+        answers = {}
+        for flag in (True, False):
+            with (
+                patch.object(auth_router, "is_password_setup_configured", return_value=True),
+                patch.object(auth_router, "find_or_provision_user", return_value=(pending, False)),
+                patch.object(auth_router, "deliver_password_setup_email") as setup_mail,
+                patch.object(auth_router, "deliver_sign_in_email") as link_mail,
+                patch.object(auth_router, "send_new_user_registration_notification"),
+            ):
+                answers[flag] = self.client.post(
+                    "/register", json={"email": "pending@example.test", "password_setup": flag},
+                )
+            if flag:
+                setup_mail.assert_called_once_with("pending@example.test", setup=True, language="en")
+                link_mail.assert_not_called()
+            else:
+                link_mail.assert_called_once_with("pending@example.test", uid="pending-owner", first=True, language="en")
+                setup_mail.assert_not_called()
+
+        self.assertEqual(answers[True].status_code, answers[False].status_code)
+        self.assertEqual(answers[True].content, answers[False].content)
+
     def test_registration_rejects_control_characters_before_firebase(self):
         with patch.object(auth_router, "find_or_provision_user") as provision:
             response = self.client.post(

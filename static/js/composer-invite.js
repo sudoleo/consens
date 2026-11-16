@@ -210,7 +210,11 @@
     track("app_question_link", { filled, guest: Boolean(App.isGuestComposer?.()) });
   }
 
-  App.composerInvite = { sendAsGuest, afterAccessUpdate, takeAskContext };
+  // The waiting question stays in the field but no longer goes out by itself
+  // (firebase.js: a login link from another browser's request).
+  function forgetPending() { writePending(null); }
+
+  App.composerInvite = { sendAsGuest, afterAccessUpdate, takeAskContext, forgetPending };
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init, { once: true });
   else init();
 })();

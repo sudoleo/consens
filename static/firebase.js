@@ -1013,6 +1013,11 @@ window.refreshUsageData = async function () {
 
 const REMEMBERED_EMAIL_KEY = "consensio.authEmail";
 const GOOGLE_REDIRECT_KEY = "consensio.googleRedirectPending";
+// An app saved to the iPhone home screen (navigator.standalone exists only on
+// iOS) keeps its own storage, and a link from the mail opens Safari: a login
+// there never reaches the app's window. There the mail sets a password (the
+// app's earlier way), and the login link is not offered.
+const HOME_SCREEN_APP = navigator.standalone === true;
 // Same rule as RegisterRequest in app/api/routers/auth.py.
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/;
 const NETWORK_ERROR_MESSAGE = "Network error. Please check your internet connection and try again.";
@@ -1207,6 +1212,8 @@ const registrationMailboxEl = document.getElementById("registrationMailboxLink")
 const registrationResendBtn = document.getElementById("registrationResendButton");
 const registrationChangeBtn = document.getElementById("registrationChangeButton");
 const registrationStatusEl = document.getElementById("registrationStatus");
+const registrationSetupTextEl = document.getElementById("registrationSetupText");
+const registrationLoginBtn = document.getElementById("registrationLoginButton");
 const linkConfirmEl = document.getElementById("linkConfirm");
 const linkConfirmBtn = document.getElementById("linkConfirmButton");
 
@@ -1290,7 +1297,7 @@ function setMode(mode) {
   confirmRegisterBtn.classList.toggle("u-display-none", !isRegister);
   loginBtn.classList.toggle("u-display-none", current !== "login");
   sendLinkBtn.classList.toggle("u-display-none", current !== "link");
-  altRowEl.hidden = isRegister;
+  altRowEl.hidden = isRegister || HOME_SCREEN_APP;
   emailLinkBtn.hidden = current !== "login";
   passwordModeBtn.hidden = current !== "link";
   clearAuthMessages();
@@ -1372,7 +1379,7 @@ async function requestSignInLink(email) {
     const response = await fetch("/register", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ email: email })
+      body: JSON.stringify(HOME_SCREEN_APP ? { email, password_setup: true } : { email })
     });
     const data = await response.json().catch(() => ({}));
     if (response.ok && data.status === "check_inbox") return { ok: true };
@@ -1468,7 +1475,7 @@ function showRegistrationSuccess(email, mode) {
   lastRegisteredEmail = email;
   lastLinkMode = mode;
   titleEl.textContent = "Check your inbox";
-  leadEl.textContent = "Open the link and you’re in.";
+  leadEl.textContent = HOME_SCREEN_APP ? "One step left to your account." : "Open the link and you’re in.";
   registrationSuccessEmailEl.textContent = email;
   const mailbox = mailboxFor(email);
   registrationMailboxEl.hidden = !mailbox;
@@ -1504,6 +1511,13 @@ registrationChangeBtn.addEventListener("click", () => {
   emailEl.value = lastRegisteredEmail;
   emailEl.focus();
   emailEl.select();
+});
+
+// Home-screen app: back from setting the password in Safari, log in here.
+registrationLoginBtn.addEventListener("click", () => {
+  setMode("login");
+  if (lastRegisteredEmail) emailEl.value = lastRegisteredEmail;
+  (emailEl.value ? passEl : emailEl).focus();
 });
 
 function handleForgotPassword() {
@@ -1767,6 +1781,11 @@ document.getElementById("authTopSignupBtn")?.addEventListener("click", event => 
 document.getElementById("closeLoginModal").addEventListener("click", closeAuthModal);
 // Standard: beim Öffnen im Login-Modus
 setMode("login");
+if (HOME_SCREEN_APP) {
+  singleMailNoteEl.textContent = "No password needed yet. We’ll email you a link to set one.";
+  registrationSetupTextEl.hidden = false;
+  registrationLoginBtn.hidden = false;
+}
 
 // --- Coming back ---------------------------------------------------------
 
@@ -1990,7 +2009,12 @@ async function redeemSignInLink(code) {
 }
 
 linkConfirmBtn.addEventListener("click", () => {
-  if (pendingLinkCode && !linkConfirmBtn.disabled) redeemSignInLink(pendingLinkCode);
+  if (!pendingLinkCode || linkConfirmBtn.disabled) return;
+  // Not asked for here, for this address: a question a guest left waiting
+  // in this browser stays in the field, but does not go out by itself into
+  // this account.
+  window.App.composerInvite?.forgetPending?.();
+  redeemSignInLink(pendingLinkCode);
 });
 
 (function signInFromLink() {
@@ -2000,7 +2024,8 @@ linkConfirmBtn.addEventListener("click", () => {
   onAuthStateChanged(auth, user => {
     if (handled) return;
     handled = true;
-    // Signed in already: a link never switches the account in use.
+    // A confirmed session is never switched by a link; an unconfirmed one
+    // may go on through its link.
     if (user?.emailVerified) {
       window.App.toast?.({ message: "You’re already logged in." });
       trackAppEvent("auth_link_result", { status: "already_signed_in" });

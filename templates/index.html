@@ -861,6 +861,7 @@
           </div>
           <p class="auth-success-lead">We sent a link to</p>
           <strong id="registrationSuccessEmail" class="auth-success-email"></strong>
+          <p id="registrationSetupText" class="auth-success-text" hidden>Open it and choose a password, then come back here and log in.</p>
           <a id="registrationMailboxLink" class="auth-primary-action" href="#" target="_blank" rel="noopener noreferrer" hidden>Open inbox</a>
           <div class="auth-success-row">
             <button type="button" id="registrationResendButton" class="auth-link">Send the link again</button>
@@ -868,6 +869,7 @@
           </div>
           <p id="registrationStatus" class="auth-note" role="status" aria-live="polite"></p>
           <p class="auth-note">Nothing after a minute? Check your spam folder.</p>
+          <button type="button" id="registrationLoginButton" class="auth-secondary-action" hidden>Password set? Log in</button>
         </section>
 
         <!-- Opened from a sign-in mail (firebase.js signInFromLink). -->

@@ -74,24 +74,12 @@ def _where(collection, field: str, operator: str, value):
         return collection.where(field, operator, value)
 
 
-def _get(ref, tx):
-    # Transaction.get(ref) yields a generator; the reference's own get binds
-    # the read to the transaction and returns the one snapshot.
-    if tx is None:
-        return ref.get()
-    return ref.get(transaction=tx)
-
-
 def _run(db, operation):
-    if hasattr(db, "run_transaction"):
-        return db.run_transaction(operation)
-    transaction = db.transaction()
-
     @firestore.transactional
     def run(tx):
         return operation(tx)
 
-    return run(transaction)
+    return run(db.transaction())
 
 
 def _expired(record: dict, now: datetime) -> bool:
@@ -190,13 +178,17 @@ def _sign_in(record: dict):
     metadata = getattr(user, "user_metadata", None)
     first = not getattr(metadata, "last_sign_in_timestamp", None)
     if not getattr(user, "email_verified", False):
-        # The click proves the mailbox. A password set before that proof
-        # was never the mailbox owner's to know, so it does not carry over,
-        # and sessions opened with it end here.
+        # The click proves the mailbox. Ways in that were attached before
+        # that proof do not carry over: a password is replaced, every other
+        # sign-in provider is removed, and sessions opened with them end here.
         changes = {"email_verified": True}
         providers = {getattr(item, "provider_id", "") for item in (getattr(user, "provider_data", None) or [])}
+        providers.discard("")
         if "password" in providers:
             changes["password"] = secrets.token_urlsafe(48)
+        others = sorted(providers - {"password"})
+        if others:
+            changes["providers_to_delete"] = others
         auth.update_user(uid, **changes)
         auth.revoke_refresh_tokens(uid)
     token = auth.create_custom_token(uid)
@@ -217,15 +209,14 @@ def redeem(code: str, *, db=None, now: datetime | None = None) -> SignIn:
     ref = db.collection(COLLECTION).document(_digest(code))
 
     def spend(tx):
-        snapshot = _get(ref, tx)
+        # The reference's own get binds the read to the transaction and
+        # returns the one snapshot (Transaction.get yields a generator).
+        snapshot = ref.get(transaction=tx)
         if not snapshot.exists:
             return None
         record = snapshot.to_dict() or {}
         result = _REFUSED if _expired(record, now) else _sign_in(record)
-        if tx is None:
-            ref.delete()
-        else:
-            tx.delete(ref)
+        tx.delete(ref)
         return result
 
     result = _run(db, spend)

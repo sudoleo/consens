@@ -1497,7 +1497,11 @@ Server.
       dort schließen, ohne zu klicken: der Link gilt danach noch. Angemeldet
       einen Link öffnen: „You’re already logged in.“, das Konto wechselt nicht.
       Postfach mit Link-Scanner (Outlook/Defender): der erste Klick meldet an,
-      nicht „expired“. Mail auf Deutsch, wenn die
+      nicht „expired“. iPhone, consens.io als App auf dem Home-Bildschirm:
+      Sign up zeigt „No password needed yet. We’ll email you a link to set
+      one.“, die Mail setzt ein Passwort (Safari), zurück in der App
+      „Password set? Log in“ → mit Passwort angemeldet; kein „Email me a link
+      instead“. Mail auf Deutsch, wenn die
       Seite deutsch war; hell und dunkel im Mailprogramm.
 - [ ] Login (E-Mail + Google), Logout.
 - [ ] Gast tippt und meldet sich beim Senden an (seit 2026-10-15): Als Gast
