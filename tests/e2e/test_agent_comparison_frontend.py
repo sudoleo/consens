@@ -66,7 +66,8 @@ def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_se
         context.close()
 
 
-def test_reviewer_rows_carry_logos_and_the_menu_holds_still_while_choosing(browser, phase4_server):
+@pytest.mark.parametrize("full_row", [False, True])
+def test_reviewer_rows_carry_logos_and_the_menu_holds_still_while_choosing(browser, phase4_server, full_row):
     context, page = _real_firebase_page(browser, phase4_server)
     try:
         page.set_viewport_size({"width": 1280, "height": 900})
@@ -87,19 +88,28 @@ def test_reviewer_rows_carry_logos_and_the_menu_holds_still_while_choosing(brows
         expect(page.locator('.agent-model-picker .model-picker-row-open > .model-picker-family-mark > img')).to_have_count(rows.count())
         page.wait_for_function("() => [...document.querySelectorAll('.agent-model-picker .model-picker-family-mark > img')]"
                                ".every(img => img.complete && img.naturalWidth > 0)")
+        if full_row:
+            # No room left in the row (a narrow field, a wider fallback
+            # font): the chip grows to the right, into the chat model's
+            # picker, which holds the menu.
+            page.evaluate("() => { const models = document.querySelector('.composer-models');"
+                          " models.style.maxWidth = `${models.getBoundingClientRect().width}px`; }")
         left = menu.bounding_box()['x']
-        chip_width = chip.bounding_box()['width']
+        before = chip.bounding_box()
         # Another reviewer changes the chip's words and width under the menu;
-        # the menu's own scroll must not carry it after the chip's left end.
+        # neither the click nor the menu's own scroll may carry it along.
         page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="false"]:not(:disabled)').first.click()
-        page.wait_for_function("w => Math.abs(document.getElementById('composerModelPicker').getBoundingClientRect().width - w) > 8", arg=chip_width)
+        page.wait_for_function("w => Math.abs(document.getElementById('composerModelPicker').getBoundingClientRect().width - w) > 8", arg=before['width'])
+        page.evaluate("() => new Promise(requestAnimationFrame)")
+        after = chip.bounding_box()
+        if full_row:
+            assert after['x'] + after['width'] - (before['x'] + before['width']) > 8
+        assert abs(menu.bounding_box()['x'] - left) < 1
         menu.hover()
         page.mouse.wheel(0, 240)
         page.wait_for_function("() => document.querySelector('.agent-model-picker .model-picker-menu').scrollTop > 0")
         page.evaluate("() => new Promise(requestAnimationFrame)")
-        # Its right end may round by a pixel; following the left end moved
-        # the menu by the whole change in width.
-        assert abs(menu.bounding_box()['x'] - left) < 2
+        assert abs(menu.bounding_box()['x'] - left) < 1
     finally:
         context.close()
 

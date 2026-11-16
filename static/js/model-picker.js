@@ -1330,7 +1330,8 @@
     // A menu opened from another control (the models under the field) comes
     // out of that control while it is on screen.
     const anchor = state.anchor?.isConnected && state.anchor.getClientRects().length ? state.anchor : null;
-    const trigger = (anchor || state.displayButton || state.host).getBoundingClientRect();
+    const triggerElement = anchor || state.displayButton || state.host;
+    const trigger = triggerElement.getBoundingClientRect();
     const parent = state.menu.offsetParent;
     if (!parent) return;
     const bounds = parent.getBoundingClientRect();
@@ -1348,13 +1349,16 @@
     const below = bottomEdge - trigger.bottom - 8;
     const upward = above > below;
     const width = Math.min(state.menuWidth || 320, rightEdge - leftEdge);
-    // Opened, the menu holds its distance to the trigger's right end. The
-    // Reviewers chip changes its words under a click ("1 model" / "2
-    // models") and grows to the left; following its left end, the menu slid
-    // sideways at the next scroll, under the pointer.
-    const wanted = state.menuFromRight == null ? trigger.left : trigger.right + state.menuFromRight;
+    // Opened, the menu holds still under the pointer. The Reviewers chip
+    // changes its words under a click ("2 AIs" / "3 AIs"): beside Send it
+    // grows to the left, in a full row (a narrow field, a wider fallback
+    // font) to the right, into the chat model's picker that holds the menu.
+    // Neither of its ends stands still, the end of the models at Send does.
+    const models = triggerElement.closest('.composer-models');
+    const still = models ? models.getBoundingClientRect().right : trigger.right;
+    const wanted = state.menuFromRight == null ? trigger.left : still + state.menuFromRight;
     const left = Math.max(leftEdge, Math.min(wanted, rightEdge - width));
-    if (state.menuFromRight == null) state.menuFromRight = left - trigger.right;
+    if (state.menuFromRight == null) state.menuFromRight = left - still;
     Object.assign(state.menu.style, {
       boxSizing: 'border-box',
       width: `${width}px`, maxHeight: `${Math.max(0, Math.min(420, upward ? above : below))}px`,
@@ -1450,6 +1454,13 @@
     const composer = state.host.closest('.input-section');
     if (composer) composerPickerResize?.observe(composer);
     state.menuFromRight = null;
+    // The chip it comes out of and the box it is placed in change their
+    // width under a click in the menu, without a scroll or a resize;
+    // unfitted, the menu goes along with its box.
+    if (composer && state.menu.offsetParent) {
+      composerPickerResize?.observe(anchor || state.displayButton || state.host);
+      composerPickerResize?.observe(state.menu.offsetParent);
+    }
     fitComposerPicker(state);
     // A shortcut (Reasoning, Reviewers, a notice) lands inside the
     // level it named, ready for the keyboard.
