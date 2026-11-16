@@ -295,6 +295,33 @@ def test_rate_limit_blocks_immediate_resubmission_without_another_paid_claim(api
     assert store.get_chat(UID, chat)["turn_count"] == 1
 
 
+def test_a_google_chat_waits_for_its_own_route_not_for_the_one_other_chats_take(api, monkeypatch):
+    client, store, calls = api
+    gate = ProviderCooldowns()
+    monkeypatch.setattr(agent, "provider_cooldowns", gate)
+    monkeypatch.setattr(agent_loop, "provider_cooldowns", gate)
+    def fail(self, **kwargs):
+        calls.append(kwargs)
+        raise _ProviderHTTPStatusError(429, retry_after=60)
+        yield  # generator contract
+    monkeypatch.setattr(AgentCompletion, "stream", fail)
+    plain = store.create_chat(UID, execution_mode="agent")["id"]
+    client.post("/agent", headers=AUTH, json={"chat_id": plain, "question": "Hi", "client_request_id": "plain",
+                                              "bookmark_id": "plain"})
+    google = store.create_chat(UID, execution_mode="agent")["id"]
+    store._chat_ref(UID, google).update({"google_data": True})
+    payload = {"chat_id": google, "question": "Hi", "client_request_id": "google", "bookmark_id": "google",
+               "google_data_consent": True}
+    # The 429 of the plain chat's route says nothing about the zero-retention one.
+    first = client.post("/agent", headers=AUTH, json=payload)
+    assert first.status_code != 429 and "provider_rate_limited" in first.text
+    # Its own 429 holds the next message back before a turn is created.
+    second = client.post("/agent", headers=AUTH, json={**payload, "client_request_id": "again"})
+    assert second.status_code == 429 and int(second.headers["retry-after"]) > 0
+    assert len(calls) == 2
+    assert store.get_chat(UID, google)["turn_count"] == 1
+
+
 def test_provider_404_has_an_actionable_message_and_releases_the_chat(api, monkeypatch):
     client, store, calls = api
     def fail(self, **kwargs):

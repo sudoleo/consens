@@ -566,7 +566,6 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         key = openrouter_api_key(resolve_developer_api_keys())
         if not key and not mock_llm_enabled():
             raise HTTPException(status_code=503, detail="Agent model is not configured.")
-        provider_cooldowns.check(model, key or "")
         reads["recover"].result()
         sweep = sweep_after(store, uid, payload.chat_id, reads["recover"])
         bookmark = reads["bookmark"].result()
@@ -591,6 +590,10 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
             if not payload.google_data_consent:
                 raise HTTPException(422, "This chat contains Google information. Review and enable Google model-sharing consent before sending.")
             model = restricted_model(model)
+        # After the route is set: a chat with Google data waits only for a 429
+        # on its own zero-retention route (ProviderCooldowns.key).
+        provider_cooldowns.check(model, key or "")
+        if google_data:
             def mark_google(tx):
                 files.guard(uid, payload.chat_id, tx)
                 # The consent covers this chat from now on (the browser offers
