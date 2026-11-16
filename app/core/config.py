@@ -239,12 +239,10 @@ MUSE_GLIMMER_MODEL = "muse-glimmer-30b"
 MUSE_PRO_MODEL = "muse-spark-1.3"
 # Alibabas Qwen. Basis ist das offene, dichte
 # Qwen3.8 27B (0,04/1,35 $ je Mio. Token, Text und Bilder, 20 Anbieter, am
-# schnellsten bei Cerebras). Pro ist Qwen3.8 Max Prime (4/12 $), die schnellere
-# Variante des Flaggschiffs; alle Max-Modelle laufen nur bei Alibaba und
-# brauchten in der Live-Probe 24-77 s (Max 0902: bis 138 s, das offene
-# 2.4T-A95B brach zwei von drei Antworten am Output-Limit ab).
+# schnellsten bei Cerebras). Pro ist das Flaggschiff Qwen4 Max (1,50/4,50 $,
+# ohne offene Gewichte, nur bei Alibaba).
 QWEN_BASE_MODEL = "qwen3.8-27b"
-QWEN_PRO_MODEL = "qwen3.8-max-prime"
+QWEN_PRO_MODEL = "qwen4-max"
 # Xiaomis MiMo. Beide Modelle haben offene
 # Gewichte, lesen Text, Bilder, Video und Audio. Basis ist MiMo V2.6 Flash
 # (0,14/0,28 $ je Mio. Token, zehn Anbieter), Pro MiMo V2.6 Pro (0,43/0,87 $).
@@ -904,7 +902,8 @@ MODEL_LABEL_OVERRIDES = {
     MUSE_GLIMMER_MODEL: "Muse Glimmer 30B",
     MUSE_PRO_MODEL: "Muse Spark 1.3",
     QWEN_BASE_MODEL: "Qwen3.8 27B",
-    QWEN_PRO_MODEL: "Qwen3.8 Max Prime",
+    QWEN_PRO_MODEL: "Qwen4 Max",
+    "qwen3.8-max-prime": "Qwen3.8 Max Prime",
     MIMO_BASE_MODEL: "MiMo V2.6 Flash",
     MIMO_PRO_MODEL: "MiMo V2.6 Pro",
     OPENAI_OSS_MODEL: "gpt-oss-120b",
@@ -944,7 +943,8 @@ MODEL_REQUEST_CONFIG: dict[str, dict[str, Any]] = {
     # Live-Probe 2026-10-22 rief Qwen3.8 27B ohne Reasoning die Websuche in 5
     # von 8 Antworten nicht auf und hielt 2025 fuer das laufende Jahr. Mit
     # Standard-Aufwand liefen 3 von 8 Antworten ins Output-Limit. "low" suchte
-    # 8 von 8 Mal (Median 12 s, gpt-oss-120b 4 s).
+    # 8 von 8 Mal (Median 12 s, gpt-oss-120b 4 s). Qwen4 Max stuende sonst auf
+    # "high"; mit "low" suchte es 3 von 3 Mal und endete in 33-43 s.
     QWEN_BASE_MODEL: {"reasoning": {"effort": "low"}},
     QWEN_PRO_MODEL: {"reasoning": {"effort": "low"}},
     # MiMo sucht auch ohne Denken (Live-Probe 2026-10-26: 6 von 6 Antworten mit

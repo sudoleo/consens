@@ -997,7 +997,7 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       (https://openrouter.ai/settings/preferences); fehlt sie, meldet der Lauf
       fuer Muse einen Fehler, waehrend die uebrigen Familien normal antworten.
 - [ ] Qwen liefert eine echte Antwort mit Quellen: Qwen3.8 27B (Free, in Open
-      Models statt gpt-oss-120b) und Qwen3.8 Max Prime (Pro, langsam: nur bei
+      Models statt gpt-oss-120b) und Qwen4 Max (Pro, langsam: nur bei
       Alibaba). Ein Bild im Anhang erreicht beide.
 - [ ] MiMo liefert eine echte Antwort mit Quellen: MiMo V2.6 Flash (Free) und
       MiMo V2.6 Pro (Pro, langsam). Ein Bild im Anhang erreicht beide; das Logo

@@ -140,7 +140,7 @@ PROVIDER_IMAGE_SUPPORT = {
 # PDF-Faehigkeit wie bei Anhaengen auf Modellebene aufgeloest wird, bekommt die
 # ganze Familie den Text-Fallback (PDF-Extraktion) statt eines Blocks, den
 # Glimmer ablehnt.
-# Qwen ebenso: Qwen3.8 27B und Max Prime lesen Text, Bilder und Video, keine PDFs.
+# Qwen ebenso: Qwen3.8 27B und Qwen4 Max lesen Text, Bilder und Video, keine PDFs.
 # MiMo V2.6 Flash/Pro ebenso (dazu Audio, das die App nicht anhaengt).
 # Mistral ebenso: Small 2603 liest nur Text und Bilder, nur Medium 3.5 Dateien.
 PROVIDER_PDF_SUPPORT = {"openai", "anthropic", "gemini"}

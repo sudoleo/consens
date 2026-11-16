@@ -145,7 +145,11 @@ class RegistryCoverageTests(unittest.TestCase):
         self.assertEqual((qwen.ask_endpoint, qwen.response_id, qwen.checkbox_id),
                          ("/ask_qwen", "qwenResponse", "selectQwen"))
         self.assertEqual(cfg.get_model_label(cfg.QWEN_BASE_MODEL), "Qwen3.8 27B")
-        self.assertEqual(cfg.get_model_label(cfg.QWEN_PRO_MODEL), "Qwen3.8 Max Prime")
+        self.assertEqual(cfg.get_model_label(cfg.QWEN_PRO_MODEL), "Qwen4 Max")
+        self.assertEqual(cfg.MODEL_CONFIGS[cfg.QWEN_PRO_MODEL].api_model, "qwen/qwen4-max")
+        self.assertIn(cfg.QWEN_PRO_MODEL, cfg.PREMIUM_MODELS)
+        # Old answers and share pages keep the name of the Pro model they ran on.
+        self.assertEqual(cfg.get_model_label("qwen3.8-max-prime"), "Qwen3.8 Max Prime")
         # Without reasoning Qwen often skipped the search; "low" searched every time.
         for model in (cfg.QWEN_BASE_MODEL, cfg.QWEN_PRO_MODEL):
             self.assertEqual(cfg.MODEL_CONFIGS[model].request_config, {"reasoning": {"effort": "low"}})

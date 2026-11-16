@@ -11580,16 +11580,20 @@ dort Prompts und Antworten für seine Produkte verwenden, was dem Routing
 
 **Qwen (seit 2026-10-22, zehnte Familie):** Basis `qwen/qwen3.8-27b` (offene
 Gewichte, 0,04/1,35 $ je Mio., Text/Bild/Video, rund 20 Anbieter inkl.
-ZDR-Endpunkten, am schnellsten bei Cerebras), Pro `qwen/qwen3.8-max-prime`
-(4/12 $, nur bei Alibaba, kein ZDR-Endpunkt: in Google-Chats fällt es aus wie
-jedes andere nicht routbare Modell). Beide laufen mit `reasoning.effort` `low`
-(`MODEL_REQUEST_CONFIG`). Live-Probe mit dem echten Vergleichs-Payload: ohne
+ZDR-Endpunkten, am schnellsten bei Cerebras), Pro `qwen/qwen4-max` (1,50/4,50 $,
+ohne offene Gewichte, nur bei Alibaba, kein ZDR-Endpunkt: in Google-Chats
+fällt es aus wie jedes andere nicht routbare Modell). Beide laufen mit
+`reasoning.effort` `low` (`MODEL_REQUEST_CONFIG`; Qwen4 Max stünde sonst auf
+seiner Vorgabe `high`). Live-Probe mit dem echten Vergleichs-Payload: ohne
 Reasoning rief 27B die Websuche in 5 von 8 Antworten nicht auf und hielt 2025
 für das laufende Jahr; mit dem Standardaufwand (`xhigh`) liefen 3 von 8 ins
-Output-Limit; `low` suchte 8 von 8 Mal, Median 12 s (gpt-oss-120b 4 s). Die
-Max-Modelle brauchten 24–138 s, das offene 2.4T-A95B brach zwei von drei
-Antworten am Limit ab. Bilder nativ (`PROVIDER_IMAGE_SUPPORT`), PDFs über den
-Text-Fallback.
+Output-Limit; `low` suchte 8 von 8 Mal, Median 12 s (gpt-oss-120b 4 s).
+Qwen4 Max auf `low` suchte 3 von 3 Mal und endete sauber in 33–43 s, rund
+2 Cent je Antwort; Werkzeugaufruf und Fortsetzung im Agenten bestanden
+(`scripts/probe_agent_delegation.py`). Das frühere Pro-Modell
+`qwen3.8-max-prime` steht nur noch als Name in `MODEL_LABEL_OVERRIDES` und als
+Engine `Qwen-Pro` alter Share-Seiten. Bilder nativ (`PROVIDER_IMAGE_SUPPORT`),
+PDFs über den Text-Fallback.
 
 **Xiaomi (seit 2026-10-26, elfte Familie):** Key `xiaomi`, Label `Xiaomi`,
 in der App „MiMo“ (`dom_key` `mimo`: `/ask_mimo`, `selectMiMo`,

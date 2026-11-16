@@ -1410,6 +1410,31 @@
         "is_moderated": false
       }
     },
+    "qwen/qwen4-max": {
+      "pricing": {
+        "prompt": "0.0000015",
+        "completion": "0.0000045",
+        "input_cache_read": "0.000000075",
+        "input_cache_write": "0.000001875"
+      },
+      "reasoning": {
+        "mandatory": false,
+        "default_enabled": true,
+        "supported_efforts": [
+          "xhigh",
+          "high",
+          "low",
+          "none"
+        ],
+        "default_effort": "high"
+      },
+      "context_length": 1000000,
+      "top_provider": {
+        "context_length": 1000000,
+        "max_completion_tokens": 131072,
+        "is_moderated": false
+      }
+    },
     "xiaomi/mimo-v2.6-flash": {
       "pricing": {
         "prompt": "0.00000014",
