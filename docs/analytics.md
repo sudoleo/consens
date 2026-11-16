@@ -128,6 +128,14 @@ Laufen unverändert weiter, damit die Kurven seit Mai 2026 durchgehen:
   20 s, `settings` der Schalter; `default` heißt, die Frage des Browsers wurde
   geschlossen, `off` der Schalter ausgeschaltet. Die Meldungen selbst zählt
   nichts (sie entstehen, während niemand auf die Seite schaut).
+- `app_answer_copied` (seit 2026-11-16, ohne Daten): Klick auf „Copy“ unter
+  einer Agent-Antwort, der die Zwischenablage erreichte (`answer-copy.js`).
+  `app_message_edit` (ohne Daten): der Stift an der neuesten eigenen
+  Nachricht legte sie zurück ins Feld (`agent-chat.js`). `app_share_sheet`
+  (ohne Daten): der öffentliche Link ging über das Teilen-Menü des Systems
+  hinaus (`share-dialog.js`, nicht beim Schließen des Menüs). Nutzung: ins
+  Verhältnis zu `answer` mit `mode=agent` bzw. zu `app_share_created` setzen
+  (Produkt-Audit 2026-11-16, Punkte 1 und 7).
 - `app_updated` (seit 2026-10-15, `reopened`: ob ein gespeicherter Chat wieder
   geöffnet wurde): ein offenes App-Fenster hat einen neuen Deploy selbst
   geladen (`app-update.js`). Zeigt, wie oft Nutzer sonst auf einem alten Build

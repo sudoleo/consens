@@ -632,6 +632,28 @@ body.single-agent-active .thread-ask { margin: var(--space-2) 0 var(--space-5); 
    With the margin taken off the question, every later question lands 8px
    higher than the first. */
 body.single-agent-active .thread-history:not([hidden]):has(+ .thread-ask:not([hidden])) { margin-bottom: calc(-1 * var(--space-2)); }
+/* The pencil at the newest message (agent-chat.js syncAskEdit): left of the
+   bubble, on the middle of its last line (11px under the line, half of its
+   25.6px), outside the bubble's surface and taking no room, so it comes
+   and goes with the run without moving a thing. A glyph in the quiet ink
+   of the row under the answer, always there, so a finger needs no hover;
+   44px for the finger, the drawn square stays 32px. */
+#threadAsk .thread-ask-bubble { position: relative; }
+.thread-ask-edit {
+  position: absolute; right: 100%; bottom: calc(11px + var(--line-height-reading) * var(--font-size-base) / 2 - 16px);
+  display: grid; place-items: center; width: 32px; height: 32px; margin-right: var(--space-1); padding: 0;
+  border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-3); cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
+}
+.thread-ask-edit[hidden], body.thread-message-pending .thread-ask-edit, .thread-ask.is-watch-run .thread-ask-edit { display: none; }
+.thread-ask-edit svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+@media (hover: hover) and (pointer: fine) {
+  .thread-ask-edit:hover { background: var(--raise); color: var(--ink); }
+}
+.thread-ask-edit:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }
+@media (pointer: coarse) {
+  .thread-ask-edit::after { content: ""; position: absolute; inset: var(--hit-slop); }
+}
 /* The empty Consensus section between question and answer (order 3) adds no
    gap of its own: the question's margin is the whole distance, as in the
    history (shell.css .thread-history-turn.is-agent-turn). */
@@ -775,23 +797,23 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
 .agent-evidence-links { justify-content: flex-start; gap: var(--space-1) var(--space-3); margin-left: -8px; }
 .agent-evidence-link .consensus-tab-label { white-space: nowrap; }
 /* Phones: one toolbar of fixed columns. The evidence links and the
-   answer's Watch and Share (components-watch.css) are its cells, each a glyph (with its count) over
+   answer's Copy, Watch and Share (components-watch.css) are its cells, each a glyph (with its count) over
    a word, in equal columns from the left edge: every cell keeps its
    place whatever the answer offers, so a row of two never spreads to
    the edges, and Notes does not move when the review ends. The links' nav
    steps aside (display: contents) so all share the row; the score keeps
-   its own line above, the review's state takes the free columns. Four
-   columns (a review: Notes, Sources, Watch, Share), five for a comparison's
-   three links and for a review with the answers the agent asked for (Notes,
-   Answers, Sources): German words like „Anmerkungen“ need the width at 320px.
-   A word wider than its column („Contradictions“ is 84px, a fifth of a
-   390px phone 60px) keeps its width and the cells after it move up, never
-   over its edge or off the screen: a cell is its column at most, its word
-   at least (min-width wins), and the cells take the free space before the
-   review's state does. The words stay at least a finger wide (44px). */
+   its own line above, the review's state takes the free columns. Five
+   columns (a review: Notes, Sources, Copy, Watch, Share; an older answer
+   without Watch leaves the last one free), six with the answers the agent
+   asked for (Notes, Answers, Sources). A word wider than its column
+   („Keine Einwände“ is 91px, a fifth of a 390px phone 62px) keeps its width
+   and the cells after it move up, never over its edge or off the screen: a
+   cell is its column at most, its word at least (min-width wins), and the
+   cells take the free space before the review's state does. The words stay
+   at least a finger wide (44px). */
 @media (max-width: 640px) {
-  .agent-review, .agent-watch-pill-row { --cell: calc((100% - 3 * var(--space-3)) / 4); }
-  .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) { --cell: calc((100% - 4 * var(--space-3)) / 5); }
+  .agent-review, .agent-watch-pill-row { --cell: calc((100% - 4 * var(--space-3)) / 5); }
+  .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) { --cell: calc((100% - 5 * var(--space-3)) / 6); }
   .agent-review > .agent-agreement { flex: 1 0 100%; }
   .agent-review > .agent-agreement::after { content: none; }
   .agent-review > .agent-evidence-grid { display: contents; }
@@ -807,15 +829,33 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
   .agent-evidence-grid .consensus-tab-label { grid-row: 2; grid-column: 1 / -1; justify-self: center; min-width: 44px; text-align: center; }
   .agent-evidence-grid .agent-evidence-link:not(:has(.consensus-tab-count)) .agent-evidence-icon { grid-column: 1 / -1; justify-self: center; }
 }
-/* Below 375px a comparison's five words („Contradictions“, „Answers“,
-   „Sources“, Watch, Share) need 269px of a 278px row (a 320px phone), no
-   room for columns and gaps: there each cell is its word and the free space
-   stands between them, instead of the last one falling onto a line of its
-   own. */
+/* Where the words would only fit one line without air between them, the
+   cells stand in three columns over two lines instead, the evidence over
+   the actions: six cells (with the answers the agent asked for) up to
+   420px („Anmerkungen“ to „Teilen“ are 323px of a 390px phone's 358px
+   row), five below 375px (273px of a 320px phone's 278px). A column is as
+   wide as its widest word („Keine Einwände“) at least; the others share
+   the rest. Four cells keep their one line. The score and the review's
+   state, when there, take lines of their own. */
+@media (max-width: 420px) {
+  .agent-review:has(> .agent-evidence-grid > :nth-child(3)):has(> .agent-watch-pill):has(> .agent-share-pill) {
+    display: grid; grid-template-columns: repeat(3, minmax(max-content, 1fr)); gap: var(--space-1) var(--space-3);
+  }
+  /* In three columns every cell is its column; everything else in the row
+     (the score, the review's state) spans all three. */
+  .agent-review:has(> .agent-evidence-grid > :nth-child(3)):has(> .agent-watch-pill):has(> .agent-share-pill)
+    :is(.agent-evidence-link, .consensus-share-pill) { max-width: none; }
+  .agent-review > :not(.agent-evidence-grid, .consensus-share-pill) { grid-column: 1 / -1; }
+}
 @media (max-width: 374px) {
-  .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) { column-gap: 0; justify-content: space-between; }
-  .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) .agent-evidence-grid > .agent-evidence-link,
-  .agent-review:has(> .agent-evidence-grid > [data-section="answers"]) > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill) { flex: 0 0 auto; max-width: none; }
+  .agent-review:has(> .agent-evidence-grid > :nth-child(2)):has(> .agent-watch-pill):has(> .agent-share-pill),
+  .agent-review:has(> .agent-evidence-grid > :nth-child(3)):has(> .agent-share-pill) {
+    display: grid; grid-template-columns: repeat(3, minmax(max-content, 1fr)); gap: var(--space-1) var(--space-3);
+  }
+  .agent-review:has(> .agent-evidence-grid > :nth-child(2)):has(> .agent-watch-pill):has(> .agent-share-pill)
+    :is(.agent-evidence-link, .consensus-share-pill),
+  .agent-review:has(> .agent-evidence-grid > :nth-child(3)):has(> .agent-share-pill)
+    :is(.agent-evidence-link, .consensus-share-pill) { max-width: none; }
 }
 .agent-evidence-focus { display: inline-flex; gap: 8px; align-items: center; min-width: 0; max-width: 100%; color: var(--ink-3); }
 .agent-evidence-focus select { min-width: 0; max-width: 260px; background: transparent; color: var(--ink-2); border: 0; font: inherit; padding: 6px 0; }
@@ -970,6 +1010,30 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    the time is text like them, so a narrow head cuts the words after it with
    its "…", never the number as a whole. */
 .agent-activity.has-check-note .agent-activity-time { display: inline; min-width: 0; }
+/* A head that names the reviewers ("checked by Claude and DeepSeek · no
+   objections", agent-review.js headNote): its words stand in one row of
+   their own, and when room runs out only the names give way, with "…";
+   the outcome after them and the time before them keep their width. */
+.agent-activity.has-check-names .agent-activity-title { display: flex; align-items: baseline; text-overflow: clip; }
+.agent-activity.has-check-names .agent-activity-title > *,
+.agent-activity.has-check-names .agent-activity-after > * { flex: none; white-space: pre; }
+.agent-activity.has-check-names .agent-activity-title > .agent-activity-after { display: flex; align-items: baseline; flex: 0 1 auto; min-width: 0; }
+.agent-activity.has-check-names .agent-activity-after > .agent-activity-by { flex: 0 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* While the head glides to its new width (agent-activity.js setTitle) the
+   names keep theirs: the glide uncovers them from the left, as it does
+   every word after the time. */
+.agent-activity.has-check-names .agent-activity-title.is-gliding :is(.agent-activity-after, .agent-activity-by) { flex-shrink: 0; }
+/* Phones: the names take the place of the time and of the reviewers'
+   icons, which say the same: "Checked by Claude and DeepSeek · no
+   objections" fits a 390px head whole, and at 320px the outcome still
+   stands whole after "Checked by Cl…". */
+@media (max-width: 640px) {
+  .agent-activity.has-check-names .agent-activity-title > :not(.agent-activity-after),
+  .agent-activity.has-check-names .agent-activity-after > .agent-activity-sep:first-child,
+  .agent-activity.has-check-names > summary :is(.agent-model-stack, .agent-history-models) { display: none; }
+  .agent-activity.has-check-names > summary .agent-inline-controls { border-left: 0; padding-left: 0; margin-left: 0; }
+  .agent-activity.has-check-names .agent-activity-by::first-letter { text-transform: uppercase; }
+}
 .agent-activity-chevron { width: 1em; height: 1em; margin-left: 1px; color: var(--ink-3); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transition: transform var(--dur-state) var(--ease-standard); }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(180deg); }
 .agent-activity.is-closing .agent-activity-chevron { transform: none; }

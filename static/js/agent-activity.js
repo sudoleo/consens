@@ -264,6 +264,7 @@
     const parts = note?.parts || [];
     const said = parts.join('\n');
     const noted = (view.checkNoteKey || '') !== said;
+    const by = Number.isInteger(note?.by) ? note.by : -1;
     if (view.title.dataset.label === window.App.t(label) && !noted) return;
     view.title.dataset.label = label;
     const verbEl = view.title.querySelector(".agent-activity-verb-text");
@@ -294,19 +295,32 @@
     if (gapEl.textContent !== gap) gapEl.textContent = gap;
     if (timeEl.textContent !== window.App.t(time)) timeEl.textContent = time;
     timeEl.dataset.unit = slot;
-    if (noted) writeNote(view, parts);
+    if (noted) writeNote(view, parts, by);
     if (!resize) return;
     // The chevron glides to its new place while the new words open up (none
     // with reduced motion, motion()); the words keep to one line meanwhile.
     // A head that grows starts at least as wide as its words up to the time:
     // the glide uncovers what follows the number, never the number itself.
+    view.title.classList.remove('is-gliding');
     const to = view.title.getBoundingClientRect().width;
     const core = time ? Math.ceil(timeEl.getBoundingClientRect().right - view.title.getBoundingClientRect().left) : 0;
     const start = from && to > from ? Math.max(from, Math.min(to, core)) : from;
-    view.slotMotion = start && to && start !== to ? motion(view.title, [
+    // The reviewers' names (agent-chat.css .has-check-names) are the one
+    // phrase that gives way when room runs out. A narrower box while it
+    // glides would squeeze them away first, and the head would read
+    // "· no objections" for a moment: while it glides they keep their width
+    // and are uncovered like the words before them. Where they stand
+    // shortened at the end anyway (a phone), the head changes without a
+    // glide, never with their "…" growing.
+    const names = view.checkNote?.querySelector('.agent-activity-by');
+    const cut = Boolean(names) && names.scrollWidth > names.clientWidth + 1;
+    view.title.classList.toggle('is-gliding', Boolean(names) && !cut);
+    const settle = () => { view.title.classList.remove('is-gliding'); };
+    view.slotMotion = start && to && start !== to && !cut ? motion(view.title, [
       { width: `${start}px`, minWidth: `${start}px`, overflow: 'clip', whiteSpace: 'nowrap' },
       { width: `${to}px`, minWidth: `${to}px`, overflow: 'clip', whiteSpace: 'nowrap' },
-    ]) : null;
+    ], settle) : null;
+    if (!view.slotMotion) settle();
   }
   // `now`: the phase of a running run, or null once it is over. While it
   // waits for the user the clock stands still.
@@ -335,13 +349,17 @@
     next();
   }
   // After the time, what the check of an answer says that goes on after it
-  // stood (agent-review.js headNote: "refining…", then "checked · 1 sentence
-  // improved"), each phrase alone for the translation (setTitle). Nothing
-  // without such a check, and where the live line says it (renderActivity
-  // `refining`).
-  function writeNote(view, parts) {
+  // stood (agent-review.js headNote: "refining…", then "checked by Claude
+  // and DeepSeek · 1 sentence improved"), each phrase alone for the
+  // translation (setTitle). The phrase that names the reviewers (`by`) comes
+  // translated already, so the page leaves it as it is; it is the one a
+  // narrow head shortens with "…", never the outcome after it
+  // (agent-chat.css). Nothing without such a check, and where the live line
+  // says it (renderActivity `refining`).
+  function writeNote(view, parts, by = -1) {
     view.checkNoteKey = parts.join('\n');
     view.details.classList.toggle('has-check-note', parts.length > 0);
+    view.details.classList.toggle('has-check-names', by >= 0 && by < parts.length);
     if (!parts.length) {
       view.checkNote?.remove();
       view.checkNote = null;
@@ -352,11 +370,18 @@
         view.title.append(view.checkNote);
       }
       view.checkNote.replaceChildren();
-      for (const part of parts) {
+      parts.forEach((part, index) => {
+        const gap = document.createElement('span');
+        gap.className = 'agent-activity-sep';
+        gap.textContent = ' · ';
         const phrase = document.createElement('span');
         phrase.textContent = part;
-        view.checkNote.append(document.createTextNode(' · '), phrase);
-      }
+        if (index === by) {
+          phrase.className = 'agent-activity-by';
+          phrase.setAttribute('data-i18n-skip', '');
+        }
+        view.checkNote.append(gap, phrase);
+      });
     }
   }
   // The time a live run waited for the user on this page, so far, on the

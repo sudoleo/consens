@@ -308,11 +308,17 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       Marke und Glanz) und gleitet erst zu, wenn Prüfer und Agent durch
       sind; die Antwort rückt dabei einmal um eine Zeile nach oben und wird
       nie nach unten geschoben. Der Kopf sagt währenddessen „Antwort in 14
-      Sek.“, am Ende „… · geprüft · 1 Satz verbessert“, in einer
+      Sek.“, am Ende „… · geprüft von Claude und DeepSeek · 1 Satz
+      verbessert“ (die Familien der Prüfer dieser Antwort), in einer
       Zeile, und seine Zeit springt nicht auf die Dauer der Prüfung; der
-      Wechsel nach dem Stream zeigt nie „Antwort in“ ohne Zahl. Schafft der
+      Wechsel nach dem Stream zeigt nie „Antwort in“ ohne Zahl. Am Handy
+      (320 und 390 px) steht „Geprüft von Claude und DeepSeek · keine
+      Einwände“ ohne Zeit und Logos; wird es eng, endet nur der Namensteil
+      mit „…“, das Ergebnis steht ganz. Blieb die Korrektur ohne Ergebnis,
+      steht dort nur „2 Anmerkungen offen“ (kein „Korrektur nicht möglich“),
+      die aufgeklappte Aktivität nennt den Schritt. Schafft der
       Prüfer es nicht (Zeitlimit), endet er mit „… · nicht geprüft“, bei
-      einem Teil der Prüfer „teilweise geprüft · …“, nach Stopp „Prüfung
+      einem Teil der Prüfer „teilweise geprüft von … · …“, nach Stopp „Prüfung
       gestoppt“. Ein Befund über mehrere Tabellenzellen ist eine Passage (ein
       Hover, eine Karte). Eine Antwort mit Vergleichstabelle, ein Befund auf
       einer Zelle: der Schimmer liegt nur auf dieser Zelle, danach läuft nur
@@ -1699,10 +1705,31 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   Während der Antwort bleibt Stop nutzbar und ein neuer Entwurf kann entstehen.
 - [ ] Ein Fehler/Stop vor dem Versand erhält Text und Zitat im Composer.
   Ein inzwischen neu geschriebener Entwurf oder anderer Chat bleibt unverändert.
-- [ ] Unter einer Agent-Antwort steht kein Copy-Button (Desktop und Handy);
-      ein Codeblock in der Antwort hat oben rechts einen Kopier-Knopf (Desktop
+- [ ] Unter jeder fertigen Agent-Antwort steht „Kopieren“ als Zelle der
+      Leiste (Anmerkungen · Quellen · Kopieren · Watch · Teilen), auch an
+      älteren Antworten im Chat und nach dem Neuladen. Ein Klick: Wort und
+      Glyphe wechseln kurz zu „Kopiert“ und Haken, nichts daneben rückt, kein
+      Toast. Einfügen in Word oder Mail behält Überschriften, Tabellen und
+      Links, Einfügen in ein Textfeld (Notizen, WhatsApp) gibt das Markdown;
+      keine Prüfmarken, Quellen-Pillen als „(domain)“, Diagramme als Quelle.
+      Nach einer Korrektur des Agenten stehen Kopieren, Watch und Teilen
+      weiter da. Handy 390 px (Deutsch): eine Zeile, kein Wort
+      abgeschnitten, Luft zwischen den Wörtern; 320 px (und mit „Antworten“
+      bis 420 px): drei Spalten auf zwei Zeilen.
+      Ein Codeblock in der Antwort hat oben rechts einen Kopier-Knopf (Desktop
       beim Zeigen, Handy immer), der Klick kopiert den Code und zeigt kurz
       einen Haken.
+- [ ] Stift links neben der neuesten eigenen Nachricht eines Agent-Chats,
+      nur wenn kein Lauf läuft (Handy ohne Hover sichtbar). Klick: der Text
+      steht im Feld, Cursor am Ende, nichts wird gesendet oder ersetzt; ein
+      Entwurf im Feld bleibt, die Nachricht folgt ihm nach einer Leerzeile.
+      Ältere Nachrichten und geplante Watch-Nachrichten haben keinen Stift;
+      sein Erscheinen nach dem Lauf verschiebt nichts.
+- [ ] Teilen am Handy (iPhone, Android): nach „Öffentlichen Link erstellen“
+      ist „Teilen…“ die erste Aktion und öffnet das System-Menü mit Link und
+      Frage als Titel, „Link kopieren“ daneben; Schließen des Menüs zeigt
+      keinen Fehler. Firefox am Desktop (kein Teilen-Menü): „Kopieren“ neben
+      dem Link wie bisher.
 - [ ] Am Ende eines geprüften Laufs bleiben die Claim-Marken stehen (kein
   erneutes Einblenden); Reload eines Agent-Chats: Bookmarks und Eingabefeld
   springen nicht.

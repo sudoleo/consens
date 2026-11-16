@@ -45,6 +45,10 @@ def test_source_pill_favicons_only_use_the_own_proxy():
 
 
 def test_copy_paths_read_pills_through_the_shared_helper():
+    # The one preparation of an answer for the clipboard (Copy under an
+    # Agent answer, Copy consensus) reads pills through the helper.
+    copy = read("static/js/answer-copy.js")
+    assert "App.sourceRefs?.plainText" in copy
     actions = read("static/js/consensus-actions.js")
-    assert "window.App.sourceRefs?.plainText" in actions
+    assert "window.App.answerCopy?.text" in actions
     assert "window.App.sourceRefs?.urls" in actions

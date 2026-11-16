@@ -183,6 +183,10 @@
           "file": "static/js/consensus-footer.js",
           "note": "App.consensusFooter and reveal/hide of a saved Consensus answer (chats from before 2026-10-25). Before consensus-insights.js and app-init.js, which render it."
         },
+        {
+          "file": "static/js/answer-copy.js",
+          "note": "App.answerCopy: Copy under an Agent answer (first of its actions, Watch and Share follow) and the one preparation of an answer for the clipboard. consensus-actions.js copies through it at click time; uses App.sourceRefs (sources.js)."
+        },
         "static/js/share-dialog.js",
         "static/js/consensus-actions.js",
         {

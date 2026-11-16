@@ -385,6 +385,10 @@
       <div class="thread-ask-bubble">
         <div class="thread-ask-text" id="threadAskText"></div>
         <button type="button" id="threadAskMore" class="thread-ask-more" aria-expanded="false">Show more</button>
+        <!-- Der Stift der neuesten Nachricht eines Agent-Chats (agent-chat.js
+             syncAskEdit): legt sie zurueck ins Feld, links neben der Blase,
+             ohne eigenen Platz. Wandert nicht mit in den Verlauf. -->
+        <button type="button" class="thread-ask-edit" aria-label="Edit and send again" title="Edit and send again" hidden><svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M16.2 4.8a2.1 2.1 0 0 1 3 3L8.4 18.6 4 20l1.4-4.4ZM14.4 6.6l3 3"></path></svg></button>
       </div>
       <!-- Die Anhaenge dieser Frage. Gefuellt von
            window.App.setThreadQuestionAttachments (app-core.js), sobald die

@@ -518,6 +518,8 @@
     }
     if (panel) panel.hidden = demoView ? false : !agent || (!context && !basis);
     if (panel?.hidden) activityHost('');
+    // The demo's message is no message of the user's.
+    syncAskEdit(demoView || (context ? registry.isExecuting(context.runId) : basis?.currentTurn?.status === 'pending'));
     if (demoView) return;
     // With the Google sheet this only re-projects cached state; the
     // connections list loads when the Google entry is first opened.
@@ -550,6 +552,10 @@
       App.agentWatch?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
         proposal: basis.currentTurn?.status === 'completed' ? basis.currentTurn.agent_watch : null,
         chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId });
+      // Copy first among the answer's actions (answer-copy.js), for any
+      // answer that stands, also in a temporary chat.
+      App.answerCopy?.button?.(document.getElementById('agentAnswerBody'), {
+        eligible: basis.currentTurn?.status !== 'pending' && Boolean(String(basis.consensus || '').trim()) });
       // A reopened chat's answer has its Watch pill too, with the question of
       // this turn, never one left from the chat shown before. It starts a
       // Watch in this chat (watch-sheet.js); a temporary chat keeps nothing,
@@ -564,6 +570,7 @@
       // Not in a temporary chat: a share keeps a copy for 30 days.
       App.answerShare?.button?.(document.getElementById('agentAnswerBody'), {
         chatId: basis.chatId, turnId: basis.currentTurn?.id || basis.turnId,
+        question: basis.currentTurn?.question || basis.question,
         eligible: basis.temporary !== true && basis.currentTurn?.status === 'completed'
           && Boolean(String(basis.consensus || '').trim()) });
       App.agentGithub?.render(document.getElementById('agentAnswerBody'), { key: `${basis.chatId}:${basis.turnId}`,
@@ -584,6 +591,7 @@
       App.agentWatch?.render(document.getElementById("agentAnswerBody"), {});
       // No Watch run on screen, and none of its days (thread-history.js).
       App.followup?.markWatchRun?.(document.getElementById("threadAsk"), null);
+      App.answerCopy?.button?.(document.getElementById("agentAnswerBody"), {});
       App.watch?.answerButton?.(document.getElementById("agentAnswerBody"), {});
       App.answerShare?.button?.(document.getElementById("agentAnswerBody"), {});
       App.agentSettings?.render(document.getElementById("agentAnswerBody"), {});
@@ -881,6 +889,8 @@
       }
       ask.classList.add("thread-history-question");
       ask.querySelector(".thread-ask-text")?.classList.add("thread-history-question-text");
+      // Only the newest message has the pencil (syncAskEdit).
+      ask.querySelector(".thread-ask-edit")?.remove();
       panel.classList.add("thread-history-answer");
       panel.removeAttribute("aria-label");
       delete panel.dataset.turnKey;
@@ -1007,6 +1017,11 @@
     // A Watch the Agent prepared: its card under the completed answer that points to it.
     // The user's own message carries no "Scheduled Watch run" line.
     App.followup?.markWatchRun?.(document.getElementById('threadAsk'), state.completedTurn || null);
+    // Copy, the first of the answer's actions (answer-copy.js): whatever
+    // answer stands once the run is over, a stopped one too; with Watch and
+    // Share at the end of a review that may still correct a sentence.
+    App.answerCopy?.button?.(answerBody, { eligible: !running && state.completedTurn?.status !== 'pending'
+      && Boolean(String(answerBody?.dataset.markdown || '').trim()) });
     App.agentWatch?.render(answerBody, { key: context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_watch : null,
       chatId: context.metadata.chatId, turnId: state.completedTurn?.id || state.completedTurn?.turn_id });
@@ -1020,6 +1035,7 @@
         && context.config.temporary !== true });
     // Share beside it, for every finished answer (share-dialog.js).
     App.answerShare?.button?.(answerBody, { chatId: context.metadata.chatId, turnId: state.completedTurn?.id,
+      question: context.question,
       eligible: context.config.temporary !== true && !running && state.completedTurn?.status === 'completed'
         && Boolean(String(state.text || '').trim()) });
     // A settings change the Agent prepared: its card, applied with one click.
@@ -1029,6 +1045,7 @@
       key: context.metadata.chatId && state.completedTurn?.id ? `${context.metadata.chatId}:${state.completedTurn.id}` : context.runId,
       proposal: !running && state.completedTurn?.status === 'completed' ? state.completedTurn.agent_settings_proposal : null });
     App.syncSendButtonRunning?.();
+    syncAskEdit(running);
     if (!running) syncPendingReview();
     const delegated = context.metadata.delegation || state.completedTurn?.agent_settings?.policy?.delegation;
     // Before the server named the new turn, a chat whose activity panel is
@@ -1414,6 +1431,39 @@
     input.dispatchEvent(new Event('input', { bubbles: true }));
     App.composer?.expand?.();
   }
+  // The pencil at the newest message of an Agent chat (#threadAsk): it puts
+  // the message back into the box to be edited and sent again as a new one;
+  // nothing is replaced, nothing branches. Only while no run goes on in the
+  // chat on screen. A Watch's scheduled run, whose task the user did not
+  // type then, and a message on its way have none (agent-chat.css).
+  function syncAskEdit(running) {
+    const edit = document.querySelector('#threadAsk .thread-ask-edit');
+    const show = selectedMode() === 'agent' && !running;
+    if (edit && edit.hidden === show) edit.hidden = !show;
+  }
+  // A draft in the box is never lost (as restoreUnsentDraft never replaces
+  // one): the message follows it after a blank line. The cursor stands at
+  // the end, where a correction usually goes on.
+  function editLastMessage() {
+    const input = document.getElementById('questionInput');
+    const question = document.getElementById('threadAskText')?.dataset.question || '';
+    if (!input || input.disabled || !question.trim()) return;
+    const draft = input.value;
+    if (!draft.trim()) input.value = question;
+    else if (!draft.includes(question)) input.value = `${draft.replace(/\s+$/, '')}\n\n${question}`;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    App.composer?.expand?.();
+    input.focus({ preventScroll: true });
+    const end = input.value.length;
+    input.setSelectionRange(end, end);
+    input.scrollTop = input.scrollHeight;
+    App.trackAppEvent?.('app_message_edit', {});
+  }
+  // One listener on the document: the live surface is a fresh copy after
+  // every follow-up (liveTurn.take).
+  document.addEventListener('click', event => {
+    if (event.target?.closest?.('#threadAsk .thread-ask-edit')) editLastMessage();
+  });
   // A turn keeps running on the server when this page goes away (reload, a
   // phone that discarded the tab). Its identity stays in this tab's session
   // storage until the page saw the turn end, so a reload can follow it again.

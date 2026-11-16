@@ -357,23 +357,30 @@ def test_comparison_review_and_saved_projection(browser, phase4_server, width, d
         expect(page.locator('#agentAnswer').get_by_role('button', name='Follow up')).to_have_count(0)
         assert evidence_links.first.evaluate('el => getComputedStyle(el).backgroundImage') == 'none'
         if width <= 540:
-            # One toolbar row: the evidence links and the
-            # answer's Watch and Share, from the answer's left edge to its
-            # right, side by side, each a finger wide.
+            # The evidence links and the answer's Copy, Watch and Share: six
+            # words do not fit one phone row with air between them, so they
+            # stand in three columns over two lines (agent-chat.css), the
+            # evidence over the actions, from the answer's left edge to its
+            # right, each a finger wide.
             expect(page.locator('#agentAnswer .agent-share-pill')).to_be_visible()
             # Measure one layout frame: activity-height transitions can move the
             # entire row between separate Playwright round trips.
             row = page.evaluate('''() => ({
                 body: document.getElementById('agentAnswerBody').getBoundingClientRect().toJSON(),
-                cells: [...document.querySelectorAll('#agentAnswer :is(.agent-evidence-link, .agent-watch-pill, .agent-share-pill)')]
+                cells: [...document.querySelectorAll('#agentAnswer :is(.agent-evidence-link, .agent-copy-pill, .agent-watch-pill, .agent-share-pill)')]
                     .map(cell => cell.getBoundingClientRect().toJSON())})''')
             boxes = row['cells']
-            assert len(boxes) == 5, boxes
-            assert max(round(box['y']) for box in boxes) - min(round(box['y']) for box in boxes) <= 1
+            assert len(boxes) == 6, boxes
             assert all(box['height'] >= 44 and box['width'] >= 43.5 for box in boxes), boxes
-            assert abs(boxes[0]['left'] - row['body']['left']) <= 1, (boxes[0], row['body'])
-            assert abs(boxes[-1]['right'] - row['body']['right']) <= 1, (boxes[-1], row['body'])
-            assert all(a['right'] <= b['left'] for a, b in zip(boxes, boxes[1:])), boxes
+            lines = [boxes[:3], boxes[3:]]
+            assert lines[1][0]['y'] > lines[0][0]['y'], boxes
+            for line in lines:
+                assert max(round(box['y']) for box in line) - min(round(box['y']) for box in line) <= 1, line
+                assert abs(line[0]['left'] - row['body']['left']) <= 1, (line[0], row['body'])
+                assert abs(line[-1]['right'] - row['body']['right']) <= 1, (line[-1], row['body'])
+                assert all(a['right'] <= b['left'] for a, b in zip(line, line[1:])), line
+            # The actions stand in the columns of the evidence.
+            assert all(abs(a['left'] - b['left']) <= 1 for a, b in zip(*lines)), boxes
             assert evidence_links.evaluate_all('''links => links.every(link => {
                 const box = link.getBoundingClientRect();
                 return [...link.children].every(child => {

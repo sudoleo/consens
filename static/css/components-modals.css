@@ -1653,6 +1653,12 @@ dialog#shareModal[open] { display: flex; }
   box-shadow: none;
 }
 .share-url-row input:focus { outline: none; border-color: var(--field-focus-border); box-shadow: var(--field-focus-ring); }
+/* With the system's share sheet (share-dialog.js): Share… and Copy link as
+   one pair of equal width under the link, the page and the lists as plain
+   links under them, on the text's left edge. */
+.share-url-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.share-modal-actions.is-links { gap: 4px 16px; margin-top: 14px; }
+.share-modal-actions.is-links .share-link-btn { margin-left: 0; padding: 0; }
 .share-list { list-style: none; margin: 0; padding: 0; max-height: none; overflow: visible; }
 .share-list li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 2px; border-bottom: 1px solid color-mix(in srgb, var(--sidebar-border) 55%, transparent); }
 .share-list li:last-child { border-bottom: none; }

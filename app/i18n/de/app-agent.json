@@ -1371,7 +1371,6 @@
   "1 note open": "1 Anmerkung offen",
   "{count} notes open": "{count} Anmerkungen offen",
   "Correction stopped": "Korrektur gestoppt",
-  "Correction not possible": "Korrektur nicht möglich",
   "1 sentence improved": "1 Satz verbessert",
   "{improved} sentences improved": "{improved} Sätze verbessert",
   "Not checked by the agent.": "Vom Agenten nicht geprüft.",
@@ -1392,7 +1391,6 @@
   "refining…": "wird verfeinert…",
   "checked": "geprüft",
   "correction stopped": "Korrektur gestoppt",
-  "correction not possible": "Korrektur nicht möglich",
   "no objections": "keine Einwände",
   "not checked": "nicht geprüft",
   "checked in part": "teilweise geprüft",
@@ -1405,5 +1403,9 @@
   "The answer couldn’t be completed.": "Die Antwort konnte nicht fertiggestellt werden.",
   "Allowed in this browser.": "In diesem Browser erlaubt.",
   "Your browser asks once when you switch it on.": "Dein Browser fragt einmal, wenn du es einschaltest.",
-  "Blocked in this browser’s site settings.": "In den Website-Einstellungen dieses Browsers blockiert."
+  "Blocked in this browser’s site settings.": "In den Website-Einstellungen dieses Browsers blockiert.",
+  "checked by {names}": "geprüft von {names}",
+  "checked in part by {names}": "teilweise geprüft von {names}",
+  "names|{first} and {last}": "{first} und {last}",
+  "Edit and send again": "Bearbeiten und neu senden"
 }

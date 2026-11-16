@@ -691,21 +691,56 @@
     sum + Math.max(1, Array.isArray(finding.notes) ? finding.notes.length : 0), 0);
   const checkingWords = count => (count === 1 ? 'The agent is refining the answer with 1 note…'
     : `The agent is refining the answer with ${count} notes…`);
-  // What came of a finished pass: its head (sentences improved, or that a
-  // correction was not possible: the user's Stop says so, every other reason
-  // alike) and the notes still open, each a phrase of its own for the
-  // translation. Null where no pass ran and nothing is to be said.
+  // What came of a finished pass: its head (sentences improved, or that the
+  // user stopped the correction) and the notes still open, each a phrase of
+  // its own for the translation. A pass that came to nothing for another
+  // reason (`skipped`) is not labelled: the notes it left stand open, as
+  // they would without it; the activity names its step. Null where no pass
+  // ran and nothing is to be said.
   function passSummary(audit) {
     const pass = passOf(audit);
     if (!pass || pass.status !== 'done') return null;
     const count = auditMarks(audit).length + auditWork(audit).length;
     const open = count === 1 ? '1 note open' : count ? `${count} notes open` : '';
     if (pass.skipped && !pass.improved) {
-      return count ? { head: pass.skipped === 'stopped' ? 'Correction stopped' : 'Correction not possible', open } : null;
+      return count ? { head: pass.skipped === 'stopped' ? 'Correction stopped' : '', open } : null;
     }
     if (!pass.attempted) return null;
     const head = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved` : '';
     return head || open ? { head, open } : null;
+  }
+  // The reviewers who gave their review, by the short names of their
+  // families ("Claude", "DeepSeek": the page's model families,
+  // window.MODEL_FAMILIES, config.PROVIDERS title), each once. The full
+  // model names stand in the details.
+  function familyNames(reviewers) {
+    const families = Array.isArray(window.MODEL_FAMILIES) ? window.MODEL_FAMILIES : [];
+    const names = [];
+    for (const reviewer of reviewers) {
+      const provider = String(reviewer?.provider || '').toLowerCase();
+      const label = String(reviewer?.provider_label || '').toLowerCase();
+      const model = String(reviewer?.model?.model || '');
+      const family = families.find(f => f?.provider === provider || String(f?.label || '').toLowerCase() === label
+        || (f?.apiPrefix && model.startsWith(f.apiPrefix)));
+      const name = String(family?.title || reviewer?.provider_label || reviewer?.provider || '').trim();
+      if (name && !names.includes(name)) names.push(name);
+    }
+    return names;
+  }
+  // "Claude", "Claude and DeepSeek", "Claude, DeepSeek and ChatGPT", in the
+  // reader's language.
+  function nameList(names) {
+    if (names.length < 2) return names[0] || '';
+    return App.t('{first} and {last}', { first: names.slice(0, -1).join(', '), last: names.at(-1) }, 'names');
+  }
+  // "checked by Claude and DeepSeek", translated here as a whole (the names
+  // are no words of the dictionary): the head shows it as it is
+  // (agent-activity.js writeNote). Empty without a name to give.
+  function checkedBy(review) {
+    const names = familyNames((review.audit.reviewers || []).filter(r => r.status === 'completed'));
+    if (!names.length) return '';
+    return review.status === 'partial' ? App.t('checked in part by {names}', { names: nameList(names) })
+      : App.t('checked by {names}', { names: nameList(names) });
   }
   // The head of a turn's activity (agent-activity.js), with notes passed to
   // the agent: while the review or the agent's pass goes on after the answer
@@ -713,9 +748,12 @@
   // the page follows it, the activity's live line says so instead and the
   // head keeps its time alone: agent-activity.js `refining`); then how the check
   // ended, in the sense of the line under the answer: checked (by every
-  // reviewer or in part) and the one thing that came of it, stopped by the
-  // user, or not checked (the reviewers did not finish). Null without such a
-  // check: the head says what it always said.
+  // reviewer or in part, named by their families: `by` is the index of that
+  // phrase, which a narrow head shortens first) and the one thing that came
+  // of it, stopped by the user, or not checked (the reviewers did not
+  // finish). A pass that came to nothing (`skipped`) leaves its notes open,
+  // nothing more (passSummary). Null without such a check: the head says
+  // what it always said.
   function headNote(review, ended) {
     if (!isAudit(review) || !review.audit.feedback) return null;
     const audit = review.audit, pass = passOf(audit);
@@ -728,10 +766,11 @@
     if (review.status === 'cancelled') return { live: false, parts: ['check stopped'] };
     if (!AUDIT_DONE.has(review.status) || review.status === 'failed') return { live: false, parts: ['not checked'] };
     const count = auditMarks(audit).length + auditWork(audit).length;
-    const failed = pass.status === 'done' && pass.skipped && !pass.improved && count;
+    const stopped = pass.status === 'done' && pass.skipped === 'stopped' && !pass.improved && count;
     const result = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved`
-      : failed ? (pass.skipped === 'stopped' ? 'correction stopped' : 'correction not possible')
-        : count === 1 ? '1 note open' : count ? `${count} notes open` : 'no objections';
+      : stopped ? 'correction stopped' : count === 1 ? '1 note open' : count ? `${count} notes open` : 'no objections';
+    const by = checkedBy(review);
+    if (by) return { live: false, parts: [by, result], by: 0 };
     return { live: false, parts: [review.status === 'partial' ? 'checked in part' : 'checked', result] };
   }
   // The pass ended without checking what it got (agent-activity.js names
@@ -1504,7 +1543,13 @@
     // The reviewers are through while the agent checks their findings.
     marks.hidden = !pending || checking.length > 0;
     if (pending) reviewerMarks(marks, review.audit?.reviewers || []);
-    for (const child of [...host.children]) if (child !== status && child !== marks) child.remove();
+    // The answer's actions (Copy, Watch, Share) stay: their modules place
+    // them only with the turn's projection, and a render of its own (the
+    // grey leaving after the agent's pass, a held correction) came after
+    // that and left the row without them.
+    for (const child of [...host.children]) {
+      if (child !== status && child !== marks && !child.matches('.consensus-share-pill')) child.remove();
+    }
     const tabs = evidenceNav();
     host.prepend(tabs);
     if (status.parentNode !== host) host.append(status);
@@ -1614,7 +1659,10 @@
       const nav = evidenceNav();
       const button = evidenceButton('sources', 'Sources', turnSources.length);
       button.addEventListener('click', () => App.answerReader?.openContext(context, {section: 'sources', trigger: button}));
-      nav.append(button); host.replaceChildren(nav); App.answerReader?.refreshContext(context); return;
+      nav.append(button);
+      // The answer's actions stay behind the links (renderAudit).
+      host.replaceChildren(nav, ...[...host.children].filter(child => child.matches('.consensus-share-pill')));
+      App.answerReader?.refreshContext(context); return;
     }
     if (!host?.isConnected) {
       host = node("section", "agent-review"); placeRow(body, host, raw); body._agentReview = host;

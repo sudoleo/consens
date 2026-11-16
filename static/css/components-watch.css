@@ -1045,28 +1045,45 @@ dialog.modal.wd-detail[open] > .modal-content { translate: none; scale: none; }
 }
 .wd-detail-more { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 
-/* --- The Watch and Share pills under an Agent answer: Share follows
-   Watch --- */
-.agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill) { flex: 0 0 auto; order: 2; width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-/* Without an evidence row Watch and Share stand in a row of their own, the
+/* --- The answer's actions under an Agent answer: Copy (answer-copy.js),
+   Watch, Share --- */
+.agent-review > .consensus-share-pill:is(.agent-copy-pill, .agent-watch-pill, .agent-share-pill) { flex: 0 0 auto; order: 2; width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: normal; }
+/* Without an evidence row they stand in a row of their own, the
    same part at the same distances (agent-chat.css .agent-review). */
 .agent-watch-pill-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0 var(--space-3); margin: var(--space-4) 0 0 -8px; }
-.agent-watch-pill-row :is(.agent-watch-pill, .agent-share-pill) { width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-:is(.agent-watch-pill, .agent-share-pill) .share-pill-icon { width: 15px; height: 15px; flex: none; }
+.agent-watch-pill-row :is(.agent-copy-pill, .agent-watch-pill, .agent-share-pill) { width: auto; min-height: 36px; height: auto; gap: 6px; padding: 6px 8px; color: var(--ink-2); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); line-height: normal; }
+:is(.agent-copy-pill, .agent-watch-pill, .agent-share-pill) .share-pill-icon { width: 15px; height: 15px; flex: none; }
 .watch-consensus-pill.is-watching { color: var(--ink); }
-/* Phones: Watch and Share are two more cells of the evidence
-   row, drawn like its links (glyph over word, no surface), in its fixed
-   columns (agent-chat.css --cell): a column at most, the word at least,
-   44px wide at least, for the finger. */
+/* Copy's word and glyph change in place for a moment once it copied. The
+   cell keeps the width of "Copy": "Copied" lies over it, so nothing beside
+   it moves, and at rest no gap is held open for a word that is not there.
+   "Copied" is 12px wider ("Kopiert" is shorter than "Kopieren"): in a row
+   the cell's air after its word is 12px, 4px of it taken from the gap to
+   the next cell, so the word stays on the hover surface. */
+.agent-copy-word { position: relative; display: inline-block; }
+.agent-copy-word > :last-child { position: absolute; top: 0; left: 0; white-space: nowrap; }
+.agent-copy-pill:not(.is-copied) .agent-copy-word > :last-child,
+.agent-copy-pill.is-copied .agent-copy-word > :first-child { visibility: hidden; }
+@media (min-width: 641px) {
+  :is(.agent-review, .agent-watch-pill-row) > .consensus-share-pill.agent-copy-pill { padding-right: 12px; margin-right: -4px; }
+}
+.agent-copy-pill:not(.is-copied) .agent-copied-glyph,
+.agent-copy-pill.is-copied .agent-copy-glyph { display: none; }
+/* Phones: the actions are more cells of the evidence row, drawn like its
+   links (glyph over word, no surface), in its fixed columns (agent-chat.css
+   --cell): a column at most, the word at least, 44px wide at least, for
+   the finger. */
 @media (max-width: 640px) {
-  .agent-review > .consensus-share-pill:is(.agent-watch-pill, .agent-share-pill),
-  .agent-watch-pill-row > :is(.agent-watch-pill, .agent-share-pill) {
+  .agent-review > .consensus-share-pill:is(.agent-copy-pill, .agent-watch-pill, .agent-share-pill),
+  .agent-watch-pill-row > :is(.agent-copy-pill, .agent-watch-pill, .agent-share-pill) {
     display: grid; grid-template-rows: 16px auto; justify-items: center; align-content: start; gap: 5px;
     flex: 1 1 0; width: auto; min-width: max-content; max-width: var(--cell); min-height: 56px; height: auto; margin: 0; padding: 6px 0;
-    /* The links' line height, so all five words sit on one baseline. */
+    /* The links' line height, so all words sit on one baseline. */
     line-height: normal;
   }
-  :is(.agent-review, .agent-watch-pill-row) > :is(.agent-watch-pill, .agent-share-pill) > span { min-width: 44px; text-align: center; }
+  :is(.agent-review, .agent-watch-pill-row) > :is(.agent-copy-pill, .agent-watch-pill, .agent-share-pill) > span { min-width: 44px; text-align: center; }
+  /* Under its glyph, centred like the word it replaces. */
+  .agent-copy-word > :last-child { left: 50%; transform: translateX(-50%); }
   .agent-watch-pill-row { margin-left: 0; }
   /* A watched question says "Watching" and fills the eye's pupil. */
   :is(.agent-review, .agent-watch-pill-row) > .agent-watch-pill.is-watching .share-pill-icon circle { fill: currentColor; }

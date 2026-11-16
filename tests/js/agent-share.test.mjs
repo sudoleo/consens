@@ -30,7 +30,8 @@ function agentApp({ refuse = null } = {}) {
   const app = loadScripts(["static/js/user-settings.js", "static/js/run-mode.js", "static/js/run-registry.js", "static/js/token-budget.js",
     "static/js/model-picker.js", "static/js/request-deadline.js", "static/js/agent-activity.js", "static/js/thread-history.js",
     "static/js/agent-chat.js", "static/js/run-view.js",
-    "static/js/modal-dialog.js", "static/js/watch-state.js", "static/js/share-dialog.js", "static/js/watch-fields.js", "static/js/watch.js"], {
+    "static/js/modal-dialog.js", "static/js/watch-state.js", "static/js/answer-copy.js", "static/js/share-dialog.js",
+    "static/js/watch-fields.js", "static/js/watch.js"], {
     body: BODY,
     before(window) {
       window.localStorage.setItem("consensio.settingsReset", "2026-10-12");
@@ -89,9 +90,13 @@ describe("Share under an Agent answer", () => {
     await ask(window, document, "Is the James Webb telescope still working?");
     const pill = document.querySelector("#agentAnswer .agent-share-pill");
     expect(pill).not.toBeNull();
-    // Right after the Watch pill, in the same row.
+    // Right after the Watch pill, in the same row, which Copy opens.
     expect(document.getElementById("agentAnswerWatchButton").nextElementSibling).toBe(pill);
     expect(pill.textContent).toBe("Share");
+    const copy = document.querySelector("#agentAnswer .agent-copy-pill");
+    expect(copy.parentElement).toBe(pill.parentElement);
+    expect(copy.nextElementSibling).toBe(document.getElementById("agentAnswerWatchButton"));
+    expect(copy.parentElement.firstElementChild).toBe(copy);
 
     pill.click();
     await vi.waitFor(() => expect(confirmButton(document).disabled).toBe(false));
@@ -184,11 +189,62 @@ describe("Share under an Agent answer", () => {
     const turns = [...document.querySelectorAll("#threadHistory .thread-history-turn")];
     expect(turns.map(turn => Boolean(turn.querySelector(".agent-share-pill")))).toEqual([true, false]);
     expect(document.querySelector("#agentAnswer .agent-share-pill")).not.toBeNull();
+    // Copy too, first in the same row; not for the answer that never came.
+    expect(turns.map(turn => Boolean(turn.querySelector(".agent-copy-pill")))).toEqual([true, false]);
+    expect([...turns[0].querySelector(".agent-watch-pill-row").children].map(pill => pill.classList[1]))
+      .toEqual(["agent-copy-pill", "agent-share-pill"]);
 
     turns[0].querySelector(".agent-share-pill").click();
     await vi.waitFor(() => expect(confirmButton(document).disabled).toBe(false));
     expect(calls.filter(call => call.path.endsWith("/share-result")).map(call => call.path))
       .toEqual([`/agent/chats/${CHAT}/turns/${"b".repeat(32)}/share-result`]);
+    dom.window.close();
+  });
+
+  // Where the browser has a share sheet (a phone: WhatsApp, Mail, Notes),
+  // the public link goes there first, with the question as its title.
+  it("offers the system's share sheet first beside Copy link, where there is one", async () => {
+    const { window, document, dom } = agentApp();
+    const shared = [];
+    Object.defineProperty(window.navigator, "share", { configurable: true, value: vi.fn(async data => { shared.push(data); }) });
+    window.App.runMode.set("agent");
+    await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
+    await ask(window, document, "Is the James Webb telescope still working?");
+    document.querySelector("#agentAnswer .agent-share-pill").click();
+    await vi.waitFor(() => expect(confirmButton(document).disabled).toBe(false));
+    confirmButton(document).click();
+    await vi.waitFor(() => expect(document.getElementById("shareModalTitle").textContent).toBe("Public link created"));
+    const share = document.getElementById("shareSystemBtn");
+    expect([share.textContent, share.className]).toEqual(["Share…", "share-primary-btn"]);
+    const copy = document.getElementById("shareCopyUrlBtn");
+    expect([copy.textContent, copy.className]).toEqual(["Copy link", "share-secondary-btn"]);
+    expect(share.nextElementSibling).toBe(copy);
+    share.click();
+    await vi.waitFor(() => expect(shared).toEqual([{ title: "Is the James Webb telescope still working?",
+      url: "https://consens.io/s/webb-" + "S".repeat(16) }]));
+    // Closing the sheet is no failure: nothing is copied instead.
+    window.navigator.share.mockImplementationOnce(async () => { throw Object.assign(new Error("closed"), { name: "AbortError" }); });
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(window.navigator, "clipboard", { configurable: true, value: { writeText } });
+    share.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(writeText).not.toHaveBeenCalled();
+    dom.window.close();
+  });
+
+  it("keeps Copy as the first action where the browser has no share sheet", async () => {
+    const { window, document, dom } = agentApp();
+    window.App.runMode.set("agent");
+    await vi.waitFor(() => expect(document.getElementById("agentModelDropdown").disabled).toBe(false));
+    await ask(window, document, "Is the James Webb telescope still working?");
+    document.querySelector("#agentAnswer .agent-share-pill").click();
+    await vi.waitFor(() => expect(confirmButton(document).disabled).toBe(false));
+    confirmButton(document).click();
+    await vi.waitFor(() => expect(document.getElementById("shareModalTitle").textContent).toBe("Public link created"));
+    expect(document.getElementById("shareSystemBtn")).toBeNull();
+    const copy = document.getElementById("shareCopyUrlBtn");
+    expect([copy.textContent, copy.className]).toEqual(["Copy", "share-primary-btn"]);
     dom.window.close();
   });
 
@@ -201,6 +257,7 @@ describe("Share under an Agent answer", () => {
     window.App.runRegistry.clearAll("test-new-chat");
     window.App.runRegistry.clearVisible();
     expect(document.querySelector("#agentAnswer .agent-share-pill")).toBeNull();
+    expect(document.querySelector("#agentAnswer .agent-copy-pill")).toBeNull();
     dom.window.close();
   });
 });

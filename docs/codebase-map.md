@@ -3602,13 +3602,28 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   des Servers; bei bleibenden Gründen (4xx) verschwindet der Knopf, bei
   Netz/5xx/429 heißt er „Try again“ (früher: toter Knopf „Saved consensus
   unavailable“, Fehler nur in der Konsole). `App.answerShare.button(answerBody,
-  {chatId, turnId, eligible})` setzt unter jede fertige Agent-Antwort (live,
-  wiedergeöffnet, jeder Agent-Turn im Verlauf) die Share-Pille direkt hinter
-  die Watch-Pille (`watch.js`, gleiche Zeile; ohne Evidenzzeile teilen sich
-  beide `.agent-watch-pill-row`, die erst leer verschwindet); ein Turn im
+  {chatId, turnId, eligible, question})` setzt unter jede fertige Agent-Antwort (live,
+  wiedergeöffnet, jeder Agent-Turn im Verlauf) die Share-Pille als letzte
+  Aktion hinter die Watch-Pille (`watch.js`), sonst hinter Copy
+  (`answer-copy.js`, gleiche Zeile; ohne Evidenzzeile teilen sich alle
+  `.agent-watch-pill-row`, die erst leer verschwindet); ein Turn im
   Verlauf nimmt beim Klick den Chat auf dem Bildschirm. `App.answerShare.open`
   öffnet den Dialog für einen Turn (auch aus dem Chat-Menü, wenn der Chat als
-  laufender Agent-Run sichtbar ist, `firebase.js shareBookmark`).
+  laufender Agent-Run sichtbar ist, `firebase.js shareBookmark`). Steht der
+  öffentliche Link und hat der Browser ein Teilen-Menü (`navigator.share`,
+  `canShare({url})`), ist seit 2026-11-16 „Share…“ die erste Aktion
+  (`#shareSystemBtn`, System-Menü mit dem Link und der Frage als Titel:
+  `question` der Pille bzw. `#threadAskText[data-question]`), „Copy link“
+  daneben (`#shareCopyUrlBtn`, gleich breit), „Open page“, „My shared links“
+  und „Watches“ als Links darunter (`.share-modal-actions.is-links`). Das
+  Schließen des Menüs (`AbortError`) ist kein Fehler; ein anderer kopiert den
+  Link. Ohne Teilen-Menü bleibt die Ansicht wie zuvor („Copy“ neben dem Link).
+  An Veröffentlichung, Zustimmung und Sperren ändert das nichts.
+- **`answer-copy.js`** (seit 2026-11-16) — `App.answerCopy`: Copy unter einer
+  Agent-Antwort (`button(answerBody, {eligible})`, erste der Aktionen vor Watch
+  und Teilen) und die eine Aufbereitung einer Antwort für die Zwischenablage
+  (`clean`, `text` für „Copy consensus“, `payload` = Markdown als Text +
+  gerendertes HTML). Details unter „Die Leiste unter einer Agent-Antwort“.
 - **`consensus-actions.js`** — Copy/Citation/Share-Buttons am Consensus. Das
   Menü schließt beim Scrollen nur, wenn sich die Seite wirklich bewegt (ein
   Scroll-Ereignis ohne Bewegung nach dem ersten Tippen in einem geöffneten
@@ -6173,30 +6188,66 @@ unter Connections. Bis
 schickte sie mit POST `/agent`; Datei, Zeilen und Einstellung sind entfernt
 (`user-settings.js` `dropRetired` räumt die alten localStorage-Schlüssel ab,
 der Server ignoriert das Feld, siehe „Kontoeinstellungen“).
-Agent-Antworten haben seit 2026-10-04 keinen eigenen Copy-Button mehr
-(`agent-answer-actions.js` entfernt, User-Vorgabe); kopiert wird per Auswahl
-oder im Antwortleser. Folgefragen verwenden direkt den Composer, ohne
-zusätzliche Antwortaktion. `agent-review.js::evidenceButton`
+Kopieren ist eine Zelle der Leiste unter der Antwort (`answer-copy.js`,
+`App.answerCopy.button(answerBody, {eligible})`, seit 2026-11-16 nach dem
+Produkt-Audit; der lose Knopf unter der Antwort war am 2026-10-04 entfallen):
+Bauweise und Klassen von Watch und Teilen (`consensus-share-pill
+agent-copy-pill`, Glyphe über Wort auf dem Handy), als erste der Aktionen
+direkt hinter den Evidenz-Links (Notes · Answers · Sources · Copy · Watch ·
+Share), damit sie auch an älteren Antworten ohne Watch an derselben Stelle
+steht; Watch (`watch.js`) und Teilen (`share-dialog.js`) setzen sich dahinter.
+Ohne Evidenzzeile öffnet sie die `.agent-watch-pill-row`. Jede stehende
+Antwort hat sie (live, sobald der Turn nicht mehr läuft, mit Watch und Teilen
+also erst nach einem Korrekturdurchgang, der noch Sätze ändern kann; auch
+gestoppt; wiedergeöffnet; jeder Agent-Turn im Verlauf; auch im temporären
+Chat). Ein Klick legt das Markdown
+der Antwort als `text/plain` und die gerenderte Fassung als `text/html` in
+die Zwischenablage (`ClipboardItem`, sonst ein `copy`-Ereignis über
+`execCommand`, sonst nur Text). Die eine Aufbereitung `App.answerCopy.clean`
+(Badges, Code-Kopierknöpfe raus, Quellen-Pillen als „(domain)“, gezeichnete
+Diagramme als ihre Quelle) nutzt auch „Copy consensus“
+(`consensus-actions.js`, `App.answerCopy.text`); das HTML lässt dazu Bilder des
+Arbeitsplatzes, Knöpfe, `aria-hidden`-Teile und alle Attribute außer
+Link-Adressen (nur http/https/mailto), Bildquellen und Tabellenspannen weg,
+der Text die Bildplätze `![…](picture:pN)`. Rückmeldung ohne Toast: Wort und
+Glyphe wechseln 1,6 s zu „Copied“ und Haken; „Copied“ liegt über „Copy“
+(`.agent-copy-word`, die Zelle behält die Breite von „Copy“, am Desktop hält
+die Zelle 12 px Luft hinter dem Wort, 4 px davon aus dem Abstand zur
+nächsten), nichts daneben rückt, und in Ruhe steht keine Lücke für ein Wort,
+das nicht da ist. Ein Fehler sagt es als Toast („Copy to
+clipboard failed.“). Kopiert wird, was beim Klick steht
+(`answerBody.dataset.markdown`, auch nach einer Korrektur). Folgefragen
+verwenden direkt den Composer, ohne zusätzliche Antwortaktion. `agent-review.js::evidenceButton`
 gibt Contradictions/Review, Answers und Sources dieselbe dezente Icon-Gestaltung
 und lesbare ARIA-Namen samt Anzahl; der Antwortleser-Vertrag bleibt unverändert.
 **Die Leiste unter einer Agent-Antwort ist ein Bauteil** (UX-Audit
 2026-10-29, B1–B11): `section.agent-review` mit `evidenceNav()`
 (`consensus-footer-tabs agent-evidence-links agent-evidence-grid`) für
 Nur-Quellen, Prüfung (`renderAudit`) und gespeicherte Vergleichsmodus-Turns;
-Watch und Teilen hängen sich dahinter
-(`watch.js`, `share-dialog.js`), ohne Leiste in `.agent-watch-pill-row`, die
-dieselben Abstände trägt. Abstände aus der Skala (`foundation.css`
+Copy, Watch und Teilen hängen sich dahinter
+(`answer-copy.js`, `watch.js`, `share-dialog.js`), ohne Leiste in `.agent-watch-pill-row`, die
+dieselben Abstände trägt. Sie werden nur mit der Projektion des Turns gesetzt;
+ein eigener Render der Prüfung (das Grau, das nach dem Durchgang des Agenten
+weicht, eine wegen einer Auswahl gehaltene Korrektur) und die Nur-Quellen-Zeile
+lassen sie deshalb stehen (`.consensus-share-pill` bleibt beim Leeren der
+Leiste). Davor verschwanden Watch und Teilen unter jeder Antwort, deren Sätze
+der Agent nach Anmerkungen geprüft hatte. Abstände aus der Skala (`foundation.css`
 `--space-*`): `--space-4` vom Antworttext, `--space-3` zwischen den Zellen,
 die erste Glyphe auf der Textkante (`margin-left: -8px`). Eine
 Container-Query auf der Leiste (`container: agent-review`, ≤ 720 px) stellt
 den Score in eine eigene Zeile darüber, damit die Links auch neben der
 offenen Agent-Leiste einzeilig bleiben. Bis 640 px sind die Zellen ein Raster
-fester Spalten (`--cell`: vier, fünf bei einem Vergleich mit Answers), Glyphe
-und Anzahl über dem Wort, links beginnend. Eine Zelle ist höchstens ihre
-Spalte und mindestens ihr Wort (`min-width: max-content`, Wort ≥ 44 px):
-ein breiteres Wort („Contradictions“) behält seine Breite, die Zellen danach
-rücken auf. Unter 375 px ist eine Vergleichszeile ohne Spalten, jede Zelle
-ihr Wort, der Rest `space-between`; die Telefonregeln von
+fester Spalten (`--cell`: fünf für Notes, Sources, Copy, Watch, Share; sechs
+mit Answers), Glyphe und Anzahl über dem Wort, links beginnend. Eine Zelle
+ist höchstens ihre Spalte und mindestens ihr Wort (`min-width: max-content`,
+Wort ≥ 44 px): ein breiteres Wort („Keine Einwände“) behält seine Breite, die
+Zellen danach rücken auf. Wo die Wörter in einer Zeile keine Luft mehr
+hätten, steht die Leiste als Raster aus drei Spalten auf zwei Zeilen (Evidenz
+über den Aktionen, `grid-template-columns: repeat(3, minmax(max-content,
+1fr))`): sechs Zellen bis 420 px („Anmerkungen“ bis „Teilen“ brauchen 323 der
+358 px eines 390-px-Handys), fünf unter 375 px (273 der 278 px eines
+320-px-Handys); vier bleiben in einer Zeile, Score und Prüfstatus nehmen dann
+eine Zeile über alle Spalten; die Telefonregeln von
 `shell.css` für `.consensus-footer-tabs`/`.consensus-tab` gelten nicht für
 `.agent-evidence-links`. Der Status einer Prüfung steht als leises Wort am
 Ende der Leiste (`.agent-review > .agent-review-status`). Ohne Antworttext
@@ -7136,20 +7187,38 @@ wurde, steht nicht unter der Leiste (dort steht für den Durchgang nie eine
 eigene Zeile, weder während er läuft noch danach), sondern im Kopf über der
 Antwort (siehe unten) und als erste Zeile in Notes (`passSummary`):
 „1 sentence improved · 3 notes open“ (verbessert = Befunde `corrected`, offen =
-die stehenden Anmerkungen wie in Notes), bei `skipped` ruhig „Correction not
-possible · 8 notes open“ (der Stopp des Nutzers „Correction stopped“), ohne
-Durchgang nichts; die Aktivität nennt den
+die stehenden Anmerkungen wie in Notes). Ein Durchgang, der aus einem anderen
+Grund ohne Ergebnis blieb (`skipped`, nicht `stopped`), wird nicht beschriftet:
+dort steht nur „8 notes open“, wie ohne Durchgang (seit 2026-11-16; vorher
+„Correction not possible“); der Stopp des Nutzers bleibt „Correction stopped“,
+ohne Durchgang nichts. Die Aktivität nennt den
 Kopf („1 sentence improved“) und den Schritt eines gescheiterten Durchgangs
-„Couldn’t check the reviewers’ notes“ (`correctionUnchecked`). Der Kopf über
-der Antwort (`agent-activity.js` `setNote`, `agent-review.js` `headNote`, nur
+sachlich „Couldn’t check the reviewers’ notes“ (`correctionUnchecked`). Der Kopf über
+der Antwort (`agent-activity.js` `setNote`/`writeNote`, `agent-review.js` `headNote`, nur
 nach der Übergabe, nicht während der Lauf läuft) sagt es dort, wo der Leser
 liest: „Answer in 14s · refining…“, solange Prüfer und Agent arbeiten (eine
 Wendung für beide), am Ende
-„… · checked · 1 sentence improved“ (sonst „2 notes open“, „no objections“,
-„correction not possible“/„… stopped“; „checked in part“ bei `partial`,
-„check stopped“ bei `cancelled`, „not checked“ bei `failed`/`missing`/`off`, ein
+„… · checked by Claude and DeepSeek · 1 sentence improved“ (sonst „2 notes
+open“, „no objections“, „correction stopped“). Die Namen sind die kurzen
+Familiennamen der Prüfer, die ihre Prüfung abgaben (`familyNames`: der `title`
+ihrer Familie aus `window.MODEL_FAMILIES`, also `config.PROVIDERS`: ChatGPT,
+Claude, Gemini, DeepSeek …; sonst `provider_label`), die vollen Modellnamen
+bleiben in den Details. `checkedBy` übersetzt die Wendung als Ganzes (`App.t`
+„checked by {names}“, „checked in part by {names}“ bei `partial`, die Liste über
+„names|{first} and {last}“), `headNote` meldet ihren Index als `by`, und
+`writeNote` setzt sie als `.agent-activity-by` mit `data-i18n-skip`. Wird es eng,
+kürzt allein sie mit „…“ (`.has-check-names`: Titel und Nachsatz als Flex-Zeile,
+nur `.agent-activity-by` schrumpft; Zeit und Ergebnis behalten ihre Breite;
+während der Kopf zu seiner neuen Breite gleitet, behalten die Namen ihre
+(`.is-gliding`) und werden wie jedes Wort nach der Zeit von links aufgedeckt,
+statt zuerst weggedrückt zu werden; stehen sie am Ende gekürzt, wechselt der
+Kopf ohne Gleiten); bis 640 px stehen
+die Namen statt der Zeit und der Prüfer-Logos davor („Checked by Claude and
+DeepSeek · no objections“), damit das Ergebnis auch bei 320 px ganz bleibt.
+Ohne Namen „checked“/„checked in part“, „check stopped“ bei `cancelled`,
+„not checked“ bei `failed`/`missing`/`off`, ein
 gespeicherter, noch laufender bleibt „refining…“; nie fällt er nach
-„refining…“ auf „Thought for“ zurück). Verfolgt die Seite die Prüfung und
+„refining…“ auf „Thought for“ zurück. Verfolgt die Seite die Prüfung und
 hat die Anfrage selbst die Anmerkungen an den Agenten verlangt
 (`agent-chat.js` `refinesAnswer`: `findings_to_agent` und Prüfer „always“,
 als `metadata.findingsToAgent`; `renderActivity` `refines`, `reviewLive`),
@@ -8025,7 +8094,20 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   der Live-Fläche (`#agentAnswerErrorActions`, `#agentRecover`) bleiben nicht
   am umgezogenen Turn; ihre Klicks sind am `document` delegiert, damit sie auf
   jeder Kopie wirken (Nachprüfung B2: nach der ersten Folgefrage taten Retry,
-  „Choose another model“ und „Check/Recover saved answer“ nichts). Der Satz
+  „Choose another model“ und „Check/Recover saved answer“ nichts). Ebenso der
+  Stift „Edit and send again“ (`#threadAsk .thread-ask-edit`, seit
+  2026-11-16): nur an der neuesten Nachricht eines Agent-Chats, sichtbar, solange
+  im Chat auf dem Bildschirm kein Lauf läuft (`syncAskEdit` aus `project` und
+  `renderShellNow`; nicht an einer geplanten Watch-Nachricht `.is-watch-run`,
+  nicht während eine Nachricht unterwegs ist `body.thread-message-pending`).
+  Er sitzt links neben der Blase auf ihrer letzten Zeile, absolut, ohne eigenen
+  Platz, immer sichtbar (kein Hover nötig, 44 px Fingerfläche). Ein Klick
+  (`editLastMessage`) legt `#threadAskText[data-question]` ins Feld, Cursor ans
+  Ende; gesendet wird als neue Nachricht, nichts wird ersetzt oder verzweigt.
+  Steht schon ein Entwurf im Feld, bleibt er (wie `restoreUnsentDraft` nie einen
+  ersetzt): die Nachricht folgt ihm nach einer Leerzeile, ein zweiter Klick
+  fügt sie nicht doppelt an. `liveTurn.take` nimmt den Stift vom umgezogenen
+  Turn. Der Satz
   eines Fehlschlags ist `.agent-answer-error` (Klasse, nicht ID) und behält im
   Verlauf sein Aussehen. Agent-Turns
   im Verlauf (`.thread-history-turn.is-agent-turn`, Antwort zusätzlich

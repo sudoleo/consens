@@ -180,39 +180,10 @@
     copyAnswerBtn.addEventListener("click", () => {
       const consensusBox = document.getElementById("consensusResponse");
       const mainPara = window.App.consensusBodyEl(consensusBox);
-      // Agreement-Badges (z. B. "6/6") und Inline-Marker sind UI-Elemente und
-      // gehören nicht in den kopierten Text. Die .cx-claim-Spans bleiben: sie
-      // tragen den Antworttext selbst und fügen keine Beschriftung hinzu.
-      // Klon ohne Badges/Marker kurz unsichtbar einhängen:
-      // innerText braucht ein gerendertes Element, um Zeilenumbrüche zu
-      // erhalten (und ignoriert display:none-Kinder nur dann zuverlässig).
-      let mainText = "";
-      if (mainPara) {
-        const clone = mainPara.cloneNode(true);
-        clone.querySelectorAll(".claim-badge, .copy-btn").forEach(el => el.remove());
-        // Quellen-Pillen lesen sich im DOM als "uci.org+2". Im kopierten
-        // Text stehen stattdessen die Domains in Klammern. Der Klon traegt
-        // die Quellen nicht mit (JS-Eigenschaften), daher die Originale.
-        const originalRefs = Array.from(mainPara.querySelectorAll(".src-ref"));
-        clone.querySelectorAll(".src-ref").forEach((ref, index) => {
-          const text = window.App.sourceRefs?.plainText(originalRefs[index]) || "";
-          ref.replaceWith(document.createTextNode(text));
-        });
-        clone.querySelectorAll(".src-ref-sep").forEach(el => el.remove());
-        // A drawn diagram shows a picture and hides its source (diagram.css);
-        // the copied text carries the source, as a code block would.
-        clone.querySelectorAll(".md-diagram").forEach(place => {
-          const source = place.querySelector(":scope > pre");
-          if (source) place.replaceWith(source);
-          else place.remove();
-        });
-        clone.style.position = "absolute";
-        clone.style.left = "-99999px";
-        clone.style.top = "0";
-        document.body.appendChild(clone);
-        mainText = clone.innerText.trim();
-        clone.remove();
-      }
+      // The answer's words without the page's badges and pills, its
+      // diagrams as their source (answer-copy.js, the one preparation).
+      // The .cx-claim spans stay: they carry the answer's own text.
+      const mainText = mainPara ? window.App.answerCopy?.text(mainPara) || "" : "";
 
       if (!mainText) {
         closeConsensusActionsMenu();

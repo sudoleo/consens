@@ -23,7 +23,8 @@ function renderedText(window) {
 
 function boot(answer) {
   const writeText = vi.fn(() => Promise.resolve());
-  const env = loadScripts(['static/js/consensus-actions.js'], {
+  // The one preparation of an answer for the clipboard (answer-copy.js).
+  const env = loadScripts(['static/js/answer-copy.js', 'static/js/consensus-actions.js'], {
     body: `<style>${DIAGRAM_CSS}</style>
       <div id="consensusResponse"><div class="consensus-main"><h2>Answer</h2>
         <div id="consensusAnswerBody" class="consensus-answer-body">${answer}</div>

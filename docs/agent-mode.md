@@ -67,11 +67,15 @@ der Platzhalter „Ask a follow-up“, während der Antwort „Write your next m
 Ein vor dem Versand gescheiterter oder gestoppter Start gibt den Entwurf samt
 Zitat zurück, sofern der Nutzer inzwischen keinen anderen Entwurf begonnen oder
 Chat/Account gewechselt hat. Bereits versendete Nachrichten werden nicht erneut
-als ungesendet angeboten.
+als ungesendet angeboten. Der Stift an der neuesten eigenen Nachricht
+(„Edit and send again“, nur wenn kein Lauf läuft) legt sie zurück ins Feld, um
+sie geändert als neue Nachricht zu senden; ein Entwurf im Feld bleibt davor
+stehen (`agent-chat.js` `syncAskEdit`/`editLastMessage`).
 
-Agent-Antworten haben seit 2026-10-04 keinen eigenen Copy-Button mehr; ihre
-Codeblöcke haben seit 2026-10-26 einen Kopier-Knopf in der Ecke
-(`markdown-stream.js` `addCopyButtons`).
+Unter jeder stehenden Agent-Antwort ist „Copy“ eine Zelle der Leiste, vor Watch
+und Share (`answer-copy.js`, seit 2026-11-16): Markdown als Text, die
+gerenderte Antwort als HTML. Codeblöcke haben seit 2026-10-26 zusätzlich einen
+Kopier-Knopf in der Ecke (`markdown-stream.js` `addCopyButtons`).
 Folgefragen werden direkt im Eingabefeld gestellt.
 Contradictions/Review, Answers und Sources verwenden dieselben dezenten Aktionen
 mit vorangestellten Icons. Bis 540 px stehen die drei Bereiche gleichmäßig in

@@ -665,9 +665,9 @@
     return button;
   }
 
-  // The Agent answer's pill, right after its evidence row (Sources ·
-  // Answers · Differences) in the same line, on phones on the next one;
-  // without an evidence row, on a line of its own under the answer.
+  // The Agent answer's pill, after its evidence row (Notes · Answers ·
+  // Sources) and its Copy (answer-copy.js) in the same line; without an
+  // evidence row, in the line Copy opens under the answer.
   // Every finished Agent answer has one: the live
   // answer (agent-chat.js, on every projection), a reopened chat's answer
   // and each Agent turn of the history (thread-history.js, built off the
@@ -710,16 +710,22 @@
     const review = answerBody._agentReview?.parentNode && answerBody._agentReview.parentNode === answerBody.parentNode
       ? answerBody._agentReview : null;
     const nav = review ? review.querySelector(".agent-evidence-links") : null;
+    // Copy (answer-copy.js) is the first action, Watch follows it.
+    const copy = answerBody._copyPill || null;
     if (nav) {
-      if (nav.nextElementSibling !== button) nav.after(button);
+      const lead = copy?.parentNode === nav.parentNode ? copy : nav;
+      if (lead.nextElementSibling !== button) lead.after(button);
       if (ownRow && !ownRow.children.length) ownRow.remove();
     } else {
-      let row = button.closest(".agent-watch-pill-row");
+      const copyRow = copy?.closest(".agent-watch-pill-row") || null;
+      let row = button.closest(".agent-watch-pill-row") || copyRow;
       if (!row) {
         row = document.createElement("div");
         row.className = "agent-watch-pill-row";
-        row.appendChild(button);
       }
+      if (copy?.parentNode === row) { if (copy.nextElementSibling !== button) copy.after(button); }
+      else if (row.firstElementChild !== button) row.prepend(button);
+      if (ownRow && ownRow !== row && !ownRow.children.length) ownRow.remove();
       const after = review || window.App.answerTail?.(answerBody) || answerBody;
       if (after.nextElementSibling !== row) after.after(row);
     }

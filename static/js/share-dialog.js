@@ -117,7 +117,8 @@
   // `options.prepare(viewEpoch)` names the answer to share when it is not the
   // one Share targets by default (lastShareResultId or the opened chat
   // entry): a Promise of its pending result ID that rejects with the reason
-  // it can't be shared.
+  // it can't be shared. `options.title`: its question, the title of the
+  // link in the system share sheet (else the question on screen).
   function openShareDialog(view, options = {}) {
     const { modal } = shareDialogEls();
     if (!modal) return;
@@ -129,7 +130,7 @@
     if (view === "list") {
       renderShareListView();
     } else {
-      renderShareConfirmView(options.prepare);
+      renderShareConfirmView(options.prepare, options.title);
     }
   }
 
@@ -195,7 +196,7 @@
     return !status || status === 408 || status === 429 || status >= 500;
   }
 
-  function renderShareConfirmView(prepare) {
+  function renderShareConfirmView(prepare, linkTitle) {
     const viewEpoch = beginShareView();
     const { body, title } = shareDialogEls();
     if (!body) return;
@@ -298,7 +299,7 @@
         const data = await publish(true);
         if (!shareViewIsCurrent(viewEpoch)) return;
         window.App.trackAppEvent("app_share_created", { reused: data.created === false });
-        renderShareSuccessView(data.url);
+        renderShareSuccessView(data.url, linkTitle);
       } catch (err) {
         if (err?.stale) return;
         showError(err, "The link couldn’t be created. Try again.");
@@ -306,12 +307,36 @@
     });
   }
 
-  function renderShareSuccessView(url) {
+  // The system's share sheet (WhatsApp, Mail, Notes on a phone), where the
+  // browser has one for a link.
+  function systemShareable(url) {
+    if (typeof navigator.share !== "function") return false;
+    try { return navigator.canShare ? navigator.canShare({ url }) : true; } catch (_) { return false; }
+  }
+
+  function renderShareSuccessView(url, linkTitle) {
     beginShareView();
     const { body, title } = shareDialogEls();
     if (!body) return;
     title.textContent = "Public link created";
-    body.innerHTML = `
+    // With a share sheet it is the first way out, "Copy link" beside it;
+    // the page and the lists are plain links under them.
+    const system = systemShareable(url);
+    body.innerHTML = system ? `
+      <p>Your answer is now public at:</p>
+      <div class="share-url-row">
+        <input type="text" id="shareUrlInput" readonly>
+      </div>
+      <div class="share-url-actions">
+        <button type="button" id="shareSystemBtn" class="share-primary-btn">Share…</button>
+        <button type="button" id="shareCopyUrlBtn" class="share-secondary-btn">Copy link</button>
+      </div>
+      <div class="share-modal-actions is-links">
+        <a id="shareOpenLink" target="_blank" rel="noopener" class="share-link-btn">Open page</a>
+        <button type="button" id="shareListLink" class="share-link-btn">My shared links</button>
+        <button type="button" id="watchListLink" class="share-link-btn">Watches</button>
+      </div>
+    ` : `
       <p>Your answer is now public at:</p>
       <div class="share-url-row">
         <input type="text" id="shareUrlInput" readonly>
@@ -328,6 +353,19 @@
     input.addEventListener("focus", () => input.select());
     document.getElementById("shareOpenLink").href = url;
     document.getElementById("shareCopyUrlBtn").addEventListener("click", () => copyShareUrl(url));
+    if (system) {
+      const question = String(linkTitle || document.getElementById("threadAskText")?.dataset.question || "").trim();
+      document.getElementById("shareSystemBtn").addEventListener("click", async () => {
+        try {
+          await navigator.share(question ? { title: question, url } : { url });
+          window.App.trackAppEvent?.("app_share_sheet", {});
+        } catch (error) {
+          // Closing the sheet is no failure; a refused one still leaves
+          // the link on the clipboard.
+          if (error?.name !== "AbortError") copyShareUrl(url);
+        }
+      });
+    }
     document.getElementById("shareListLink").addEventListener("click", renderShareListView);
     document.getElementById("watchListLink").addEventListener("click", () => window.openWatchDashboard?.());
   }
@@ -460,8 +498,8 @@
     return prepare;
   }
 
-  function shareAgentAnswer({ chatId, turnId, trigger } = {}) {
-    openShareDialog("confirm", { trigger, prepare: prepareAgentAnswer(chatId, turnId) });
+  function shareAgentAnswer({ chatId, turnId, trigger, question } = {}) {
+    openShareDialog("confirm", { trigger, prepare: prepareAgentAnswer(chatId, turnId), title: question });
   }
 
   // The chat of the answers on screen: a history turn knows only its own ID.
@@ -473,10 +511,12 @@
 
   const SHARE_PILL_ICON = '<svg class="share-pill-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15V4"></path><path d="M8.5 7.5 12 4l3.5 3.5"></path><path d="M5 12v7a1.5 1.5 0 0 0 1.5 1.5h11A1.5 1.5 0 0 0 19 19v-7"></path></svg>';
 
-  // The pill sits right after the answer's Watch pill (watch.js), in the
-  // evidence row (Sources · Answers · Differences) or, without one, in the
-  // row of its own under the answer. Call it after App.watch.answerButton.
-  function syncAnswerShareButton(answerBody, { chatId = "", turnId = "", eligible = false } = {}) {
+  // The pill is the last of the answer's actions: after its Watch pill
+  // (watch.js), else after its Copy (answer-copy.js), in the evidence row
+  // (Notes · Answers · Sources) or, without one, in the row Copy and Watch
+  // stand in under the answer. Call it after App.watch.answerButton.
+  // `question`: the title the system share sheet gives the link.
+  function syncAnswerShareButton(answerBody, { chatId = "", turnId = "", eligible = false, question = "" } = {}) {
     if (!answerBody) return;
     let button = answerBody._sharePill;
     if (!eligible || !turnId) {
@@ -494,25 +534,27 @@
       button.title = "Share this answer as a public page";
       button.setAttribute("aria-label", "Share this answer publicly");
       button.addEventListener("click", () => shareAgentAnswer({
-        chatId: button._chatId || visibleChatId(), turnId: button._turnId, trigger: button
+        chatId: button._chatId || visibleChatId(), turnId: button._turnId, trigger: button, question: button._question
       }));
       answerBody._sharePill = button;
     }
     button._chatId = chatId;
     button._turnId = turnId;
+    button._question = String(question || "");
     const review = answerBody._agentReview?.parentNode && answerBody._agentReview.parentNode === answerBody.parentNode
       ? answerBody._agentReview : null;
     const nav = review ? review.querySelector(".agent-evidence-links") : null;
     const watch = answerBody._watchPill;
+    const copy = answerBody._copyPill;
     const ownRow = button.closest(".agent-watch-pill-row");
     if (nav) {
-      const after = watch?.parentNode === nav.parentNode ? watch : nav;
+      const after = watch?.parentNode === nav.parentNode ? watch : copy?.parentNode === nav.parentNode ? copy : nav;
       if (after.nextElementSibling !== button) after.after(button);
       if (ownRow && !ownRow.children.length) ownRow.remove();
       return;
     }
-    const watchRow = watch?.closest(".agent-watch-pill-row") || null;
-    let row = watchRow || ownRow;
+    const sharedRow = watch?.closest(".agent-watch-pill-row") || copy?.closest(".agent-watch-pill-row") || null;
+    let row = sharedRow || ownRow;
     if (!row) {
       row = document.createElement("div");
       row.className = "agent-watch-pill-row";
@@ -521,7 +563,7 @@
     if (ownRow && ownRow !== row && !ownRow.children.length) ownRow.remove();
     // Also off the page: a history turn is built before it is inserted.
     const after = review || window.App.answerTail?.(answerBody) || answerBody;
-    if (!row.parentNode || (!watchRow && after.nextElementSibling !== row)) after.after(row);
+    if (!row.parentNode || (!sharedRow && after.nextElementSibling !== row)) after.after(row);
   }
 
   window.App.answerShare = { open: shareAgentAnswer, button: syncAnswerShareButton };

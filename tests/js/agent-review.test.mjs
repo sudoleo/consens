@@ -1701,7 +1701,10 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
     .toBe('2 notes · 1 passage marked in the text · 1 sentence improved');
   // No line under the row says it again: the head over the answer does.
   expect(d.querySelector('.agent-review-findings')).toBeNull();
-  expect(w.App.agentReview.headNote(done, true).parts).toEqual(['checked', '1 sentence improved']);
+  // The reviewers who gave their review by name (without the page's model
+  // families, by their providers' labels); the one that failed is not named.
+  expect(w.App.agentReview.headNote(done, true)).toEqual({ live: false, by: 0,
+    parts: ['checked by OpenAI and Anthropic', '1 sentence improved'] });
   expect(w.App.agentReview.correctionUnchecked(done)).toBe(false);
 });
 
@@ -1876,7 +1879,7 @@ it('lands a correction only once the reader lets go of a selection in the answer
   expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
 });
 
-it('says calmly when a correction was not possible, and shows the review as it is', () => {
+it('leaves a correction that came to nothing unlabelled, and shows the review as it is', () => {
   const { window: w, document: d, body } = feedbackSetup();
   w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
   // Failed or out of time: the findings stay open, the marks as without the setting.
@@ -1886,23 +1889,25 @@ it('says calmly when a correction was not possible, and shows the review as it i
   expect(w.renderStoredAuditMarks.mock.calls[0][1].claims).toHaveLength(2);
   expect(body.textContent).toBe(ORIGINAL);
   expect(w.App.streamReveal.rewrite).not.toHaveBeenCalled();
-  // The head says it, Notes opens with it; nothing under the row.
+  // The head says only what stands open, as it would without the pass;
+  // nothing under the row.
   expect(d.querySelector('.agent-review-findings')).toBeNull();
-  expect(w.App.agentReview.headNote(skipped, true).parts).toEqual(['checked', 'correction not possible']);
+  expect(w.App.agentReview.headNote(skipped, true).parts).toEqual(['checked by OpenAI and Anthropic', '2 notes open']);
   // Its reason stays in the record; no error word.
-  expect(d.querySelector('.agent-review').textContent).not.toMatch(/time|skipped|fail|error/i);
+  expect(d.querySelector('.agent-review').textContent).not.toMatch(/time|skipped|fail|error|possible/i);
+  // The activity still names the step for what it was.
   expect(w.App.agentReview.correctionUnchecked(skipped)).toBe(true);
   // The notes say per passage that the agent has not checked it, as the mark does.
   notesCell(d).click();
   const panel = w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences');
-  expect(panel.querySelector('.agent-evidence-status').textContent).toBe('Correction not possible · 2 notes open');
+  expect(panel.querySelector('.agent-evidence-status').textContent).toBe('2 notes open');
   expect([...panel.querySelectorAll('.agent-audit-unchecked')].map(line => line.textContent)).toEqual([
     'Not checked by the agent: the correction did not finish.', 'Not checked by the agent: the correction did not finish.']);
   // The user's own Stop is said as such.
   const stopped = feedbackReview('skipped');
   stopped.audit.feedback.skipped = 'stopped';
   w.App.agentReview.render(body, stopped, { key: 't1', ended: true });
-  expect(w.App.agentReview.headNote(stopped, true).parts).toEqual(['checked', 'correction stopped']);
+  expect(w.App.agentReview.headNote(stopped, true).parts).toEqual(['checked by OpenAI and Anthropic', 'correction stopped']);
   notesCell(d).click();
   expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences')
     .querySelector('.agent-evidence-status').textContent).toBe('Correction stopped · 2 notes open');
@@ -1914,6 +1919,26 @@ it('says calmly when a correction was not possible, and shows the review as it i
   notesCell(d).click();
   expect(w.App.answerReader.openContext.mock.calls.at(-1)[0].renderPanel('differences')
     .querySelector('.agent-evidence-status')).toBeNull();
+});
+
+// Copy, Watch and Share are placed by the turn's projection (answer-copy.js,
+// watch.js, share-dialog.js). A render of the review's own after it (the
+// grey leaving once the agent's pass is through, a held correction) left the
+// row without them under every corrected answer.
+it('keeps the answer\'s actions in the row through a render of its own', () => {
+  const { window: w, document: d, body } = feedbackSetup();
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  const row = d.querySelector('.agent-review');
+  const actions = ['agent-copy-pill', 'agent-watch-pill', 'agent-share-pill'].map(name => {
+    const pill = d.createElement('button');
+    pill.className = `consensus-share-pill ${name}`;
+    return pill;
+  });
+  row.querySelector('.agent-evidence-links').after(...actions);
+  w.App.agentReview.render(body, feedbackReview('done'), { key: 't1', ended: true });
+  expect(d.querySelector('.agent-review')).toBe(row);
+  expect([...row.children].filter(child => child.matches('.consensus-share-pill'))).toEqual(actions);
+  expect(row.querySelector('.agent-evidence-links').nextElementSibling).toBe(actions[0]);
 });
 
 it('shows the marks of a run that ended before the agent\'s pass was through', () => {

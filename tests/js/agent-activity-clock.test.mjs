@@ -162,8 +162,14 @@ describe("run details on a German page", () => {
 // where there is no such line, and then what came of it. Without the
 // setting the head is as it always was.
 describe("activity head of an answer whose check goes on after it stood", () => {
+  // The page's model families (config.get_model_families): the head names
+  // the reviewers by their titles.
+  const FAMILIES = [{ provider: "anthropic", label: "Anthropic", title: "Claude", apiPrefix: "anthropic/" },
+    { provider: "deepseek", label: "DeepSeek", title: "DeepSeek", apiPrefix: "deepseek/" },
+    { provider: "openai", label: "OpenAI", title: "ChatGPT", apiPrefix: "openai/" }];
   const boot = () => {
-    const app = loadScripts(["static/js/agent-review.js", "static/js/agent-activity.js"], { body: '<div id="host"></div>' });
+    const app = loadScripts(["static/js/agent-review.js", "static/js/agent-activity.js"], { body: '<div id="host"></div>',
+      before(window) { window.MODEL_FAMILIES = FAMILIES; } });
     return { app, host: app.document.getElementById("host"), activity: app.window.App.agentActivity };
   };
   const note = (text, finding) => ({ model: "DeepSeek", kind: "doubtful", note: text, finding });
@@ -172,13 +178,15 @@ describe("activity head of an answer whose check goes on after it stood", () => 
       { anchor: "First.", kind: "doubtful", audit: true, agree: [], dissent: [{ ...note("One.", "s1"), mark: 1 }] },
       { anchor: "Second.", kind: "doubtful", audit: true, agree: [], dissent: [{ ...note("Two.", "s2"), mark: 2 }] }];
     return { mode: "audit", status, answer_version: 1, answer_hash: "h", versions: [{ id: 1, text: "First. Second.", hash: "h" }],
-      audit: { reviewers: [{ provider: "deepseek", provider_label: "DeepSeek", status: status === "running" ? "running" : "completed" }],
+      audit: { reviewers: ["anthropic", "deepseek"].map(provider => ({ provider, provider_label: provider === "deepseek" ? "DeepSeek" : "Anthropic",
+        status: status === "running" ? "running" : "completed" })),
         claims, unplaced: [], process: [], ...(feedback ? { feedback } : {}) } };
   }
   const findings = (state, extra = {}) => [
     { id: "s1", on: "answer", kind: "doubtful", voices: 1, hard: false, state, notes: [note("One.")], ...extra },
     { id: "s2", on: "answer", kind: "doubtful", voices: 1, hard: false, state, notes: [note("Two."), note("Too.")], ...extra }];
   const head = host => host.querySelector(".agent-activity-title").textContent;
+  const phrases = host => [...host.querySelectorAll(".agent-activity-after > span:not(.agent-activity-sep)")].map(span => span.textContent);
 
   it("says the answer is still being refined, then what came of it, at the time it stood", () => {
     const { app, host, activity } = boot();
@@ -188,7 +196,7 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     expect(head(host)).toBe("Answer in 14s · refining…");
     expect(host.querySelector(".agent-activity").classList.contains("has-check-note")).toBe(true);
     // Each phrase alone for the translation.
-    expect([...host.querySelectorAll(".agent-activity-after > span")].map(span => span.textContent)).toEqual(["refining…"]);
+    expect(phrases(host)).toEqual(["refining…"]);
     // The reviewers' round and the agent's pass read as one.
     render(review({ feedback: { status: "checking", findings: findings("checking", { delivered: "final" }) } }), false);
     expect(head(host)).toBe("Answer in 14s · refining…");
@@ -200,22 +208,31 @@ describe("activity head of an answer whose check goes on after it stood", () => 
       { ...findings("disputed", { delivered: "final" })[1], reason: "It stands." }] } });
     improved.audit.claims = improved.audit.claims.slice(1);
     render(improved, true);
-    expect(head(host)).toBe("Answer in 14s · checked · 1 sentence improved");
-    expect([...host.querySelectorAll(".agent-activity-after > span")].map(span => span.textContent))
-      .toEqual(["checked", "1 sentence improved"]);
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 1 sentence improved");
+    expect(phrases(host)).toEqual(["checked by Claude and DeepSeek", "1 sentence improved"]);
+    // The names come translated as a whole (agent-review.js checkedBy); a
+    // narrow head shortens them, never the outcome (agent-chat.css).
+    const names = host.querySelector(".agent-activity-by");
+    expect(names.textContent).toBe("checked by Claude and DeepSeek");
+    expect(names.hasAttribute("data-i18n-skip")).toBe(true);
+    expect(host.querySelector(".agent-activity").classList.contains("has-check-names")).toBe(true);
     render(review({ feedback: { status: "done", findings: findings("disputed", { delivered: "final", reason: "So." }) } }), true);
-    expect(head(host)).toBe("Answer in 14s · checked · 2 notes open");
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 notes open");
     const quiet = review({ feedback: { status: "done", findings: [] } });
     quiet.audit.claims = [];
     render(quiet, true);
-    expect(head(host)).toBe("Answer in 14s · checked · no objections");
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · no objections");
+    // A pass that came to nothing is not labelled: its notes stand open.
     render(review({ feedback: { status: "done", skipped: "failed", findings: findings("open", { delivered: "final" }) } }), true);
-    expect(head(host)).toBe("Answer in 14s · checked · correction not possible");
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 notes open");
     render(review({ feedback: { status: "done", skipped: "stopped", findings: findings("open", { delivered: "final" }) } }), true);
-    expect(head(host)).toBe("Answer in 14s · checked · correction stopped");
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · correction stopped");
     // A run that ended in the middle of the pass: what the review has.
     render(review({ feedback: { status: "checking", findings: findings("checking", { delivered: "final" }) } }), true);
-    expect(head(host)).toBe("Answer in 14s · checked · 2 notes open");
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 notes open");
+    // Before the check ends there are no names to give.
+    render(review({ status: "running", feedback: { status: "live", findings: findings("open") } }), false);
+    expect(host.querySelector(".agent-activity").classList.contains("has-check-names")).toBe(false);
     app.dom.window.close();
   });
 
@@ -234,10 +251,18 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     expect(end("failed", { status: "live", findings: [] }, { issues: [{ code: "reviewers_unavailable" }, { code: "no_time" }] }))
       .toBe("Answer in 17s · not checked");
     expect(end("missing")).toBe("Answer in 17s · not checked");
-    // Some of them did ("1 of 2 reviewed").
-    expect(end("partial")).toBe("Answer in 17s · checked in part · 2 notes open");
-    expect(end("partial", { status: "done", skipped: "no_time", findings: findings("open", { delivered: "final" }) }))
-      .toBe("Answer in 17s · checked in part · correction not possible");
+    // Some of them did ("1 of 2 reviewed"): those who did, by name.
+    const one = { reviewers: [{ provider: "anthropic", provider_label: "Anthropic", status: "failed" },
+      { provider: "deepseek", provider_label: "DeepSeek", status: "completed" }] };
+    expect(end("partial", undefined, one)).toBe("Answer in 17s · checked in part by DeepSeek · 2 notes open");
+    expect(end("partial", { status: "done", skipped: "no_time", findings: findings("open", { delivered: "final" }) }, one))
+      .toBe("Answer in 17s · checked in part by DeepSeek · 2 notes open");
+    // Three of them, by the model when the provider is not named; a
+    // reviewer of no known family by its provider's label.
+    const three = { reviewers: [{ provider_label: "Anthropic", model: { model: "anthropic/claude-haiku-4.5" }, status: "completed" },
+      { provider: "deepseek", provider_label: "DeepSeek", status: "completed" },
+      { provider: "muse", provider_label: "Meta", status: "completed" }] };
+    expect(end("succeeded", undefined, three)).toBe("Answer in 17s · checked by Claude, DeepSeek and Meta · 2 notes open");
     // The user stopped it ("Review stopped").
     expect(end("cancelled")).toBe("Answer in 17s · check stopped");
     // A saved turn whose review this view saw no end of.
@@ -276,7 +301,7 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     activity.render(host, { ...after, reviewLive: false, reviewEnded: true, review: review({ feedback: { status: "done",
       findings: findings("disputed", { delivered: "final", reason: "So." }) } }) });
     expect(said()).toBeNull();
-    expect(head(host)).toBe("Answer in 14s · checked · 2 notes open");
+    expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 notes open");
     expect(host.querySelector(".agent-activity").classList.contains("is-refining")).toBe(false);
     vi.useRealTimers();
     app.dom.window.close();
@@ -318,7 +343,7 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     render({ running: false, elapsedMs: 17000, review: review({ feedback: { status: "done",
       findings: findings("disputed", { delivered: "final", reason: "So." }) } }), reviewEnded: true });
     expect(states).toEqual(["Reviewing · 16s", "Answer in 17s · refining…", "Answer in 17s · refining…",
-      "Answer in 17s · refining…", "Answer in 17s · checked · 2 notes open"]);
+      "Answer in 17s · refining…", "Answer in 17s · checked by Claude and DeepSeek · 2 notes open"]);
     // A head that never knew its time says what it is, never "Answer in" alone.
     const fresh = boot();
     fresh.activity.render(fresh.host, { running: false, status: "succeeded", elapsedMs: null, events: [], review: live, reviewEnded: false });

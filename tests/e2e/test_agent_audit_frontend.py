@@ -66,8 +66,12 @@ ACTIVITY = [
 ]
 
 
-def open_audit_page(browser, server, width, dark, events, *, hang_live=False, before_send=None, question=QUESTION):
-    context, page = _real_firebase_page(browser, server, has_touch=width < 700)
+def open_audit_page(browser, server, width, dark, events, *, hang_live=False, before_send=None, question=QUESTION,
+                    lang="en"):
+    def german(page):
+        if lang == "de":
+            page.context.add_cookies([{"name": "consens_lang", "value": "de", "url": server}])
+    context, page = _real_firebase_page(browser, server, has_touch=width < 700, before_goto=german)
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
     page.set_viewport_size({"width": width, "height": 900})
@@ -657,7 +661,7 @@ def test_the_agent_corrects_a_sentence_and_keeps_another_with_its_reason(browser
         # answer stood; no second paragraph under the row says it again.
         expect(page.locator("#agentAnswer .agent-review-findings")).to_have_count(0)
         head = page.locator("#agentAnswer .agent-activity-title")
-        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked · 1 sentence improved$"))
+        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked by ChatGPT and MiMo · 1 sentence improved$"))
         page.wait_for_timeout(400)
         if width >= 1200:
             # Room enough: the whole line, nothing cut off.
@@ -789,7 +793,7 @@ def test_the_live_line_closes_once_the_answer_is_refined(browser, phase4_server)
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         expect(page.locator("#agentAnswer .agent-progress .agent-current-status")).to_have_count(0)
         expect(page.locator("#agentAnswer .agent-activity-title")).to_have_text(
-            re.compile(r"^Answer in \d+s · checked · 1 sentence improved$"))
+            re.compile(r"^Answer in \d+s · checked by ChatGPT and MiMo · 1 sentence improved$"))
         page.wait_for_timeout(400)
         tops = page.evaluate("() => window.__tops")
         assert tops and all(later <= earlier + 1 for earlier, later in zip(tops, tops[1:])), tops
@@ -799,7 +803,9 @@ def test_the_live_line_closes_once_the_answer_is_refined(browser, phase4_server)
 
 
 # Every state the head shows from the click on, sampled in each frame and on
-# each change: its words, and whether its time stands in view.
+# each change: its words, whether its time stands in view, and whether its
+# verb does (a phone's head that names the reviewers shows neither: the
+# names stand in their place, agent-chat.css).
 HEAD_SAMPLER = """() => { window.__heads = [];
     const sample = () => { const title = document.querySelector('#agentAnswer .agent-activity-title');
         if (!title) return;
@@ -807,9 +813,12 @@ HEAD_SAMPLER = """() => { window.__heads = [];
         const at = time.getBoundingClientRect();
         const shown = Boolean(time.textContent) && at.width > 0 && at.right <= box.right + 1
             && getComputedStyle(time).visibility !== 'hidden';
+        const verb = title.querySelector('.agent-activity-verb').getBoundingClientRect().width > 0;
+        const names = Boolean(title.querySelector('.agent-activity-by')?.getBoundingClientRect().width);
         const last = window.__heads.at(-1), text = title.textContent;
-        if (!last || last.text !== text || last.shown !== shown || Math.abs(last.width - box.width) > .5)
-            window.__heads.push({ text, shown, width: Math.round(box.width), scroll: title.scrollWidth, client: title.clientWidth }); };
+        if (!last || last.text !== text || last.shown !== shown || last.verb !== verb || Math.abs(last.width - box.width) > .5)
+            window.__heads.push({ text, shown, verb, names, width: Math.round(box.width), scroll: title.scrollWidth,
+                client: title.clientWidth }); };
     new MutationObserver(sample).observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true });
     const frame = () => { sample(); requestAnimationFrame(frame); }; frame(); }"""
 
@@ -818,19 +827,26 @@ HEAD_SAMPLER = """() => { window.__heads = [];
 def test_the_head_turns_to_the_check_without_a_half_state(browser, phase4_server, width):
     """From the run's clock to "Answer in 14s · refining…" and on: the head
     never shows its words without the time, never hides the time behind
-    "…", and settles at the width of its words."""
+    "…", and settles at the width of its words. On a phone the names of the
+    reviewers take the place of verb and time together at the end, never
+    one without the other."""
     context, page, errors = open_audit_page(browser, phase4_server, width, False,
                                             feedback_events("live", "checking", "done", final=True),
                                             before_send=lambda page: page.evaluate(HEAD_SAMPLER))
     try:
         page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
         head = page.locator("#agentAnswer .agent-activity-title")
-        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked · 1 sentence improved$"))
+        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked by ChatGPT and MiMo · 1 sentence improved$"))
         page.wait_for_timeout(600)
         heads = page.evaluate("() => window.__heads")
         checking = [entry for entry in heads if entry["text"].startswith("Answer in")]
         assert checking, heads
-        assert all(re.match(r"^Answer in \d+s( · |$)", entry["text"]) and entry["shown"] for entry in checking), heads
+        assert all(re.match(r"^Answer in \d+s( · |$)", entry["text"]) for entry in checking), heads
+        half = [entry for entry in checking if not (entry["shown"] and entry["verb"] or (
+            width <= 640 and entry["names"] and not entry["verb"] and not entry["shown"]))]
+        assert not half, half
+        # Only the end names the reviewers.
+        assert all(entry["shown"] for entry in checking if "checked by" not in entry["text"]), heads
         # Settled: the box is as wide as its words.
         if width >= 1200:
             assert heads[-1]["scroll"] <= heads[-1]["client"] + 1, heads[-1]
@@ -861,9 +877,10 @@ def test_the_head_ends_on_not_checked_when_the_reviewers_did_not_finish(browser,
 
 
 def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser, phase4_server):
-    """The pass failed: the sweep ends, every mark stands as reviewed, one
-    calm line says the correction was not possible, and the card of a mark
-    that the agent did not check says so."""
+    """The pass failed: the sweep ends, every mark stands as reviewed, the
+    head says only which notes stand open (no label on the failure), the
+    card of a mark that the agent did not check says so, and the activity
+    names the step."""
     events = feedback_events("checking", "failed", final=True, end="failed")
     context, page, errors = open_audit_page(browser, phase4_server, 1280, False, events)
     try:
@@ -877,7 +894,7 @@ def test_a_correction_that_was_not_possible_ends_quietly_with_the_marks(browser,
             expect(marked.filter(has_text=text)).not_to_have_count(0)
         expect(page.locator("#agentAnswer .agent-review-findings")).to_have_count(0)
         head = page.locator("#agentAnswer .agent-activity-title")
-        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked · correction not possible$"))
+        expect(head).to_have_text(re.compile(r"^Answer in \d+s · checked by ChatGPT and MiMo · 4 notes open$"))
         # In the head's quiet ink, never an error colour.
         colors = head.locator(".agent-activity-after").evaluate("""el => [getComputedStyle(el).color,
             getComputedStyle(document.documentElement).getPropertyValue('--dispute').trim()]""")
@@ -1121,6 +1138,144 @@ def test_a_reviewers_pause_asks_the_user_above_the_field(browser, phase4_server,
             assert colors[0] != "rgb(0, 0, 0)", colors
             page.wait_for_timeout(400)
             _snapshot(page, f"audit-textfile-{width}-dark")
+        assert errors == []
+    finally:
+        context.close()
+
+
+# The answer's text on the clipboard: navigator.clipboard.write as the page
+# calls it, its items read back as text.
+CLIPBOARD = """() => { window.__copied = [];
+    navigator.clipboard.write = async items => { for (const item of items) {
+        const kinds = {}; for (const type of item.types) kinds[type] = await (await item.getType(type)).text();
+        window.__copied.push(kinds); } }; }"""
+# The words of the row under the answer, as a JS string literal.
+ROW_WORDS = "'#agentAnswer .agent-review :is(.consensus-tab-label, .consensus-share-pill > span)'"
+# Every cell of the row under the answer: its word and its box.
+ROW_CELLS = """() => [...document.querySelectorAll('#agentAnswer .agent-review :is(.agent-evidence-link, .consensus-share-pill)')]
+    .filter(el => el.offsetParent).map(el => { const box = el.getBoundingClientRect();
+        return { cls: ['agent-copy-pill', 'agent-watch-pill', 'agent-share-pill'].find(name => el.classList.contains(name))
+            || el.dataset.section,
+            left: box.left, right: box.right, top: box.top, width: box.width }; })"""
+
+
+@pytest.mark.parametrize("width,dark", [(1280, False), (390, True)])
+def test_the_answer_leaves_by_copy_and_its_message_comes_back_by_the_pencil(browser, phase4_server, width, dark):
+    """Under a corrected answer: Copy first among its actions, Watch and
+    Share still there; a click puts the Markdown and the rendered answer on
+    the clipboard and says so in place, without moving a cell. The newest
+    message has its pencil once the run is over, beside the bubble, and it
+    puts the message back into the box."""
+    context, page, errors = open_audit_page(browser, phase4_server, width, dark,
+                                            feedback_events("checking", "done", final=True))
+    try:
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        expect(page.locator("#agentAnswerBody")).to_contain_text("A standard ticket costs 24 euros since 2025")
+        # Past the grey's leave (agent-review.js leaveChecking): its render
+        # of its own kept the actions.
+        page.wait_for_timeout(800)
+        cells = page.evaluate(ROW_CELLS)
+        assert [cell["cls"] for cell in cells] == ["differences", "sources", "agent-copy-pill", "agent-watch-pill",
+                                                   "agent-share-pill"], cells
+        # One row: every cell on the same line, none over the next.
+        assert len({round(cell["top"]) for cell in cells}) == 1, cells
+        assert all(a["right"] <= b["left"] + 0.5 for a, b in zip(cells, cells[1:])), cells
+        copy = page.locator("#agentAnswer .agent-copy-pill")
+        expect(copy).to_have_attribute("aria-label", "Copy answer")
+        page.evaluate(CLIPBOARD)
+        page.wait_for_timeout(300)
+        _snapshot(page, f"copy-row-{width}-{'dark' if dark else 'light'}")
+        copy.click()
+        expect(copy).to_have_class(re.compile("is-copied"))
+        expect(copy).to_have_attribute("aria-label", "Copied")
+        # The word changed in place: no cell moved, none changed its width.
+        after = page.evaluate(ROW_CELLS)
+        assert all(abs(a[key] - b[key]) < 0.5 for a, b in zip(cells, after) for key in ("left", "right", "top")), (cells, after)
+        shown = copy.evaluate("""el => [...el.querySelectorAll('.agent-copy-word > span')]
+            .filter(word => getComputedStyle(word).visibility === 'visible').map(word => word.textContent)""")
+        assert shown == ["Copied"], shown
+        expect(page.locator(".toast")).to_have_count(0)
+        copied = page.evaluate("() => window.__copied")
+        assert len(copied) == 1 and copied[0]["text/plain"] == CORRECTED, copied
+        assert "since 2025" in copied[0]["text/html"] and "class=" not in copied[0]["text/html"], copied
+        page.wait_for_timeout(150)
+        _snapshot(page, f"copy-copied-{width}-{'dark' if dark else 'light'}")
+        expect(copy).not_to_have_class(re.compile("is-copied"), timeout=3000)
+
+        # The head names the reviewers; on a phone instead of its time and
+        # logos, the outcome whole in any case.
+        head = page.locator("#agentAnswer .agent-activity-title")
+        expect(head.locator(".agent-activity-by")).to_have_text("checked by ChatGPT and MiMo")
+        outcome = head.locator(".agent-activity-after > span:not(.agent-activity-sep)").last
+        assert outcome.evaluate("el => el.scrollWidth <= el.clientWidth + 1"), outcome.text_content()
+        assert head.locator(".agent-activity-time").is_visible() == (width > 640)
+
+        # The pencil: left of the bubble, on the middle of its last line.
+        page.evaluate("() => document.getElementById('threadAsk').scrollIntoView({block: 'center'})")
+        edit = page.locator("#threadAsk .thread-ask-edit")
+        expect(edit).to_be_visible()
+        bubble = page.locator("#threadAsk .thread-ask-bubble").bounding_box()
+        pencil = edit.bounding_box()
+        line = page.locator("#threadAskText").evaluate("el => parseFloat(getComputedStyle(el).lineHeight)")
+        assert pencil["x"] + pencil["width"] <= bubble["x"] - 2, (pencil, bubble)
+        last_line_middle = bubble["y"] + bubble["height"] - 11 - line / 2
+        assert abs(pencil["y"] + pencil["height"] / 2 - last_line_middle) <= 1, (pencil, bubble, line)
+        expect(edit).to_have_attribute("aria-label", "Edit and send again")
+        page.wait_for_timeout(200)
+        _snapshot(page, f"edit-pencil-{width}-{'dark' if dark else 'light'}")
+        edit.click()
+        field = page.locator("#questionInput")
+        expect(field).to_have_value(QUESTION)
+        expect(field).to_be_focused()
+        assert field.evaluate("el => el.selectionStart === el.value.length")
+        assert errors == []
+    finally:
+        context.close()
+
+
+@pytest.mark.parametrize("width", [320, 390])
+def test_a_narrow_german_head_and_row_keep_their_words_whole(browser, phase4_server, width):
+    """German on a phone: the head names the reviewers and keeps the outcome
+    whole (only the names may end in "…"), and the five cells under the
+    answer keep their words whole and apart: one row at 390px, three
+    columns over two lines at 320px, where one row left no air between
+    the words."""
+    context, page, errors = open_audit_page(browser, phase4_server, width, False,
+                                            feedback_events("checking", "done", final=True), lang="de")
+    try:
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        page.wait_for_timeout(800)
+        head = page.locator("#agentAnswer .agent-activity-title")
+        expect(head.locator(".agent-activity-by")).to_have_text("geprüft von ChatGPT und MiMo")
+        outcome = head.locator(".agent-activity-after > span:not(.agent-activity-sep)").last
+        expect(outcome).to_have_text("1 Satz verbessert")
+        assert outcome.evaluate("el => el.scrollWidth <= el.clientWidth + 1")
+        # The head stays one line, inside the column.
+        summary = page.locator("#agentAnswer .agent-activity > summary").bounding_box()
+        assert summary["x"] + summary["width"] <= width - 15, summary
+        assert head.bounding_box()["height"] <= 24, head.bounding_box()
+        cells = page.evaluate(ROW_CELLS)
+        assert len(cells) == 5, cells
+        lines = [cells] if width >= 375 else [cells[:3], cells[3:]]
+        assert [len({round(cell["top"]) for cell in line}) for line in lines] == [1] * len(lines), cells
+        if width < 375:
+            # The second line in the columns of the first.
+            assert cells[3]["top"] > cells[0]["top"] and all(
+                abs(cells[3 + i]["left"] - cells[i]["left"]) < 0.5 for i in range(2)), cells
+        # The words themselves keep at least 8px of air in their line.
+        words = page.evaluate("""() => [...document.querySelectorAll(WORDS)].map(el => {
+            const range = document.createRange(); range.selectNodeContents(el);
+            const box = range.getBoundingClientRect(); return [Math.round(box.top), box.left, box.right]; })""".replace(
+            "WORDS", ROW_WORDS))
+        for top in {word[0] for word in words}:
+            line = sorted(word[1:] for word in words if word[0] == top)
+            assert all(a[1] + 8 <= b[0] for a, b in zip(line, line[1:])), line
+        assert max(cell["right"] for cell in cells) <= width - 15, cells
+        words = page.evaluate(f"() => [...document.querySelectorAll({ROW_WORDS})].map(el => el.scrollWidth <= el.clientWidth + 1)")
+        assert all(words), words
+        page.evaluate("() => document.querySelector('#agentAnswer .agent-activity').scrollIntoView({block: 'start'})")
+        page.wait_for_timeout(300)
+        _snapshot(page, f"german-head-row-{width}")
         assert errors == []
     finally:
         context.close()

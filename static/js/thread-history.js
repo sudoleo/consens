@@ -14,7 +14,7 @@
 //   - window.renderStoredConsensusClaims / renderStoredDifferenceCards
 //     (consensus-insights.js)
 //   - window.App.{agentActivity, agentReview, passageCheck, agentMemory,
-//     watch, answerShare, agentWorkspace, answerReader, taskChecks}
+//     answerCopy, watch, answerShare, agentWorkspace, answerReader, taskChecks}
 // =====================================================================
 
 (function () {
@@ -336,12 +336,15 @@
         // A temporary chat has its Watch pill too (a Watch names no chat),
         // but no share: that keeps a copy for 30 days (temporary-chat.js).
         const finished = turnData.status !== "failed" && Boolean(String(turnData.consensus || "").trim());
+        // Copy for every answer that stands, a stopped one too (answer-copy.js).
+        window.App.answerCopy?.button?.(answerBody, { eligible: turnData.status !== "pending"
+          && Boolean(String(turnData.consensus || "").trim()) });
         // A Watch belongs to the chat (agent_watches.py):
         // its pill stands under the newest answer only, not under each one.
         window.App.watch?.answerButton?.(answerBody, { question: turnData.question, history: true, eligible: false });
         // Its Share pill shares this turn's answer; the chat is the one on
         // screen when it is pressed (share-dialog.js).
-        window.App.answerShare?.button?.(answerBody, { turnId: turnId || "",
+        window.App.answerShare?.button?.(answerBody, { turnId: turnId || "", question: turnData.question,
           eligible: finished && turnData.agent_settings?.temporary !== true });
         // Documents and mail attachments of this turn stay with its answer;
         // agent-workspace.js fills the row from the chat's file list.
