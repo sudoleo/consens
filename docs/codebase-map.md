@@ -7114,8 +7114,10 @@ Prüfer nie (`review_entry` → `redacted`, `delivered_for_reviewers`). Nur
 sichere Stellen gehen in den Durchgang (`safe_place`, auch eine Zelle im Rumpf einer Tabelle als
 `"place": "table cell"`; `$` als Währung sperrt nicht, Formeln nach der Regel von `math-render.js`;
 `read_reply`/`shape_rule`: höchstens ein Satz mehr, eine Zelle bleibt eine Zelle, Links nur auf
-die alte Adresse oder die geprüfte Quelle des Prüfers, statt eines Links oder dazu, `links_found`;
-nach dem Satzende zitierte Links beenden den Satz); jeder
+die alte Adresse oder die geprüfte Quelle des Prüfers, statt eines Links oder dazu, höchstens so viele
+eigene Adressen weg wie Quellen dazu, kein roher HTML-Link; Links gelesen wie marked/GFM sie macht und
+normalisiert, `_urls`/`_address`; neue Adressen prüft `check_links` gemeinsam in der Frist des Durchgangs;
+nach dem Satzende zitierte Links beenden den Satz, ein Bild nicht); jeder
 Fehler danach setzt Antwort und Marken zurück. Bringt eine Antwort, die kam, nichts
 (`MENDABLE`), geht genau eine weitere Anfrage auf derselben Sitzung mit dem Grund als
 Formhinweis raus (`AnswerAudit._corrections`, `repair_note`; nur mit

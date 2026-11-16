@@ -1177,17 +1177,27 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   (`shape_rule`/`kept_shape`: eine Zeile, kein Bruchstück unter
   `SHRINK_SHARE`, nicht viel länger und höchstens ein Satz mehr, endet als
   Satz, wo das Original es tat, wobei nach dem Satzende zitierte Links
-  dazugehören („… 37,9. [Quelle](…)“, so zitiert Muse Ember;
-  `_ends_sentence` liest rückwärts, jedes Zeichen einmal), dieselben Bilder,
-  Markdown geschlossen, jeder Link auf eine Adresse, die er schon hatte, oder
-  auf eine Quelle, die ein Prüfer für diesen Befund nannte, an Stelle eines
-  Links oder dazu; ein eigener Link fällt nur weg, wo eine Quelle ihn
-  ersetzt). Eine solche neue Adresse gilt nur, wenn
-  die Seite öffentlich ist und nicht fehlt (`new_links`, `links_found`: wie
-  die Prüfung der Links der Antwort, nur 404/410 fehlt; nicht prüfbar zählt
-  als fehlend), sonst bleibt der Satz mit seiner Marke; in Chats mit
-  Google-Daten keine (`_finding_sources`). Andere neue Adressen liefen an der
-  Prüfung der Links vorbei. Die Anfrage nennt diese Regeln als Fakt der App
+  dazugehören („… 37,9. [Quelle](…)“, so zitiert Muse Ember; ein Bild
+  `![…](…)` ist kein Zitat; `_ends_sentence` liest rückwärts, jedes Zeichen
+  einmal, ohne den Text zu kopieren), dieselben Bilder, Markdown
+  geschlossen, jeder Link auf eine Adresse, die er schon hatte, oder auf eine
+  Quelle, die ein Prüfer für diesen Befund nannte, an Stelle eines Links oder
+  dazu, und es fehlen höchstens so viele seiner eigenen Adressen, wie
+  Quellen-Adressen dazukamen; kein roher HTML-Link (`<a`, `href=`), den der
+  Satz nicht hatte). Links liest die App, wie die Seite sie macht (marked
+  mit GFM, dann DOMPurify; `_urls`): ein Ziel `](…)` bis zum Leerzeichen,
+  ein Titel danach und `<…>` darum gehören nicht zur Adresse, ein Schema in
+  jeder Schreibung, `www.` als Link (mit `http://` davor), und Schema und
+  Host klein (`_address`): Derselbe Link anders geschrieben ist dieselbe
+  Adresse, für die Regel wie für `new_links`. Eine neue Adresse gilt nur, wenn
+  die Seite öffentlich ist und nicht fehlt (`new_links`, `check_links`: wie
+  die Prüfung der Links der Antwort, nur 404/410 fehlt), geprüft für alle
+  neuen Adressen einer Anfrage zugleich, höchstens `CHECK_SECONDS` und nie
+  über die Frist des Durchgangs hinaus; nach der Frist beginnt keine Prüfung
+  mehr. Was dabei fehlt, bleibt draußen (`link_not_found`), was ungeprüft
+  bleibt, auch (`link_unchecked`): Der Satz bleibt mit seiner Marke. In Chats
+  mit Google-Daten keine Quelle (`_finding_sources`), auch nicht dazu.
+  Andere neue Adressen liefen an der Prüfung der Links vorbei. Die Anfrage nennt diese Regeln als Fakt der App
   und bittet bei Widerspruch um eine Begründung in einem Satz (an der Marke
   sonst nach `REASON_CHARS` abgeschnitten). Live-Probe 2026-11-13 (8 Fälle,
   GPT-6.1 Terra und Claude Opus 5.5): keine falsch nachgegebene Korrektur,
@@ -1222,10 +1232,14 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   `outcome` = `settled` oder dem Grund: `not_json`, `no_findings`,
   `unknown_id`, `rejected`, `tool_calls`, `empty`, `cut`, `incomplete`,
   `filtered`, `no_time`, `allowance` oder der Fehlercode aus
-  `agent_failure`, `correction_outcome`; `rejected` {Befund: Regel aus
+  `agent_failure`, `correction_outcome`; `error`, wo das Lesen einer
+  Antwort brach, die Sitzung endet dann trotzdem; `rejected` {Befund: Regel aus
   `REJECTIONS`: `missing`, `empty`, `unchanged`, `line_break`, `too_long`,
   `too_short`, `cell_border`, `sentences`, `sentence_end`, `links`,
-  `pictures`, `markdown`, `link_not_found`, `place`}; `again`, wo ein zweiter
+  `pictures`, `markdown`, `link_not_found`, `link_unchecked`, `place`}; eine
+  Anfrage, deren korrigierte Sätze alle ihre Stelle verloren (`place`), hat
+  den Ausgang `rejected`, nicht `settled`; nur eine `id` als Text nennt
+  einen Befund; `again`, wo ein zweiter
   Versuch fällig war und nicht ging: `no_time`, `newer_message`,
   `unavailable`), im App-Eintrag `answer_corrected` (`requests`), als
   Logzeile „Agent correction left findings open“ (Befund-Kennungen, Codes,

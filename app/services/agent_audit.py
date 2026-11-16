@@ -1172,6 +1172,13 @@ def reply_shape(error, reply=None):
             "reasoning_tokens": usage.get("reasoning_tokens"), **({"json_error": json_error} if json_error else {})}
 
 
+def _stopped(error, cancellation, loop):
+    """Whether ``error`` is the user's Stop (or the process ending), not a
+    request of the correction pass that failed or ran out of time."""
+    return not isinstance(error, Exception) or (isinstance(error, ProviderCancelled)
+                                                and (cancellation.cancelled or loop.cancellation.cancelled))
+
+
 def correction_outcome(error, completion=None):
     """Why a request of the agent's correction pass that raised brought
     nothing, as a code: its time (no_time), the allowance, the provider's
@@ -2891,6 +2898,9 @@ class AnswerAudit:
             text = fb.corrected_answer(answer, items, results)
             if requests and taken - set(results):
                 requests[-1].setdefault("rejected", {}).update(dict.fromkeys(sorted(taken - set(results)), "place"))
+                if not results and requests[-1]["outcome"] == "settled":
+                    # Every corrected sentence lost its place: the request settled nothing.
+                    requests[-1]["outcome"] = "rejected"
             if requests:
                 feedback.traced(getattr(model, "model", None), requests)
             settled = {key: ("corrected", items[key][2], result[1]) if result[0] == "corrected" else result
@@ -2942,67 +2952,79 @@ class AnswerAudit:
     def _corrections(self, model, message, cancellation, seconds, items, sources, cells, requests):
         """The pass's requests on one helper session (_correction_request)
         and what they settled ({id: result}, agent_review_feedback.read_reply;
-        a new link only where its page exists, links_found). Its first
-        request decides how a pass without a result ends: it raises as that
-        request did, or returns {} (unreadable). A reply that came and settled
-        nothing it could have (MENDABLE) gets one more request on the same
-        session, the message with why (repair_note), within ``seconds`` for
-        both: only with CORRECTION_AGAIN_SECONDS left, while the turn is
-        still the chat's newest, and within the allowance (its claim). What
-        that request brings counts; its failure leaves the pass as the first
-        left it, the user's Stop raises. ``requests`` gets per request its
-        outcome, the findings it left with why, and where one more request
-        was due but did not go, why (Findings.traced): codes only."""
+        a new link only where its page was found within the pass's time,
+        check_links). Its first request decides how a pass without a result
+        ends: it raises as that request did, or returns {} (unreadable). A
+        reply that came and settled nothing it could have (MENDABLE) gets one
+        more request on the same session, the message with why
+        (repair_note), within ``seconds`` for both: only with
+        CORRECTION_AGAIN_SECONDS left, while the turn is still the chat's
+        newest, and within the allowance (its claim). What that request
+        brings counts; its failure leaves the pass as the first left it, the
+        user's Stop raises. The session ends on every path, also where
+        reading a reply broke. ``requests`` gets per request its outcome, the
+        findings it left with why, and where one more request was due but
+        did not go, why (Findings.traced): codes only."""
         from app.services import agent_review_feedback as fb
         loop = self.tools.loop
         deadline = time.monotonic() + seconds
         worker = self._correction_worker(model)
-        first_error, note = None, None
-        for attempt in range(2):
-            sent = message if note is None else message + "\n\n" + note
-            completions = []
-            try:
-                value = self._correction_request(worker, model, sent, cancellation, deadline - time.monotonic(),
-                                                 completions.append)
-            except BaseException as exc:
-                if not isinstance(exc, Exception) or (isinstance(exc, ProviderCancelled)
-                                                      and (cancellation.cancelled or loop.cancellation.cancelled)):
-                    loop._terminal(worker, "stopped", CORRECTION_STOPPED, {"code": "stopped"})
-                    raise
-                outcome = correction_outcome(exc, completions[-1] if completions else None)
-                requests.append({"outcome": outcome})
-                self._correction_unusable(model, attempt, outcome, {}, reply_shape(exc), exc)
-                if not attempt:
-                    first_error = exc
-                    # Only a reply its step settled as succeeded (ComparisonTools.worker_request
-                    # judged it after): a failed step ends its session's claims.
-                    note = (self._correction_again(outcome, {}, deadline, requests[-1])
-                            if getattr(exc, "reply", None) is not None else None)
+        first_error, note, logged = None, None, len(requests)
+        try:
+            for attempt in range(2):
+                sent = message if note is None else message + "\n\n" + note
+                completions, logged = [], len(requests)
+                try:
+                    value = self._correction_request(worker, model, sent, cancellation,
+                                                     deadline - time.monotonic(), completions.append)
+                except BaseException as exc:
+                    if _stopped(exc, cancellation, loop):
+                        raise
+                    outcome = correction_outcome(exc, completions[-1] if completions else None)
+                    requests.append({"outcome": outcome})
+                    self._correction_unusable(model, attempt, outcome, {}, reply_shape(exc), exc)
+                    if not attempt:
+                        first_error = exc
+                        # Only a reply its step settled as succeeded (ComparisonTools.worker_request
+                        # judged it after): a failed step ends its session's claims.
+                        note = (self._correction_again(outcome, {}, deadline, requests[-1])
+                                if getattr(exc, "reply", None) is not None else None)
+                        if note:
+                            continue
+                    self._correction_ended(worker, exc)
+                    if first_error is not None:
+                        raise first_error
+                    return {}
+                results, rejected, fault = fb.read_reply(value.text, items, sources, cells)
+                new = fb.new_links(results, items)
+                for key, state in (fb.check_links(new, deadline - time.monotonic()) if new else {}).items():
+                    # A link the sentence did not have stands only where its page was found in time.
+                    if state != "found":
+                        results.pop(key)
+                        rejected[key] = state
+                outcome = "settled" if results else fault or "rejected"
+                requests.append({"outcome": outcome, **({"rejected": rejected} if rejected else {})})
+                if outcome != "settled" or rejected:
+                    self._correction_unusable(model, attempt, outcome, rejected, reply_shape(None, value), None)
+                if not results and not attempt:
+                    note = self._correction_again(outcome, rejected, deadline, requests[-1], fault)
                     if note:
                         continue
-                self._correction_ended(worker, exc)
-                if first_error is not None:
+                loop._state(worker, "completed", finish_reason=value.finish_reason)
+                if not results and first_error is not None:
                     raise first_error
-                return {}
-            results, rejected, fault = fb.read_reply(value.text, items, sources, cells)
-            for key, urls in fb.new_links(results, items).items():
-                # A link the sentence did not have stands only where its page exists.
-                if not fb.links_found(urls):
-                    results.pop(key)
-                    rejected[key] = "link_not_found"
-            outcome = "settled" if results else fault or "rejected"
-            requests.append({"outcome": outcome, **({"rejected": rejected} if rejected else {})})
-            if outcome != "settled" or rejected:
-                self._correction_unusable(model, attempt, outcome, rejected, reply_shape(None, value), None)
-            if not results and not attempt:
-                note = self._correction_again(outcome, rejected, deadline, requests[-1], fault)
-                if note:
-                    continue
-            loop._state(worker, "completed", finish_reason=value.finish_reason)
-            if not results and first_error is not None:
-                raise first_error
-            return results
-        return {}
+                return results
+            return {}
+        except BaseException as exc:
+            if worker.state not in {"completed", "failed", "stopped"}:
+                if _stopped(exc, cancellation, loop):
+                    loop._terminal(worker, "stopped", CORRECTION_STOPPED, {"code": "stopped"})
+                else:
+                    if len(requests) == logged:
+                        requests.append({"outcome": "error"})
+                    logging.warning("Agent correction reply not read category=%s", safe_exception(exc))
+                    loop._state(worker, "failed", failure={"code": "error"})
+            raise
 
     def _correction_again(self, outcome, rejected, deadline, request, fault=None):
         """The note of the pass's second request (repair_note), or None

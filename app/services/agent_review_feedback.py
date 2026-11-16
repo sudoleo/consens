@@ -131,7 +131,7 @@ REPLY_FAULTS = {"not_json": "it held no JSON object", "no_findings": "it settled
                 "unknown_id": "its ids were not those of the findings", "tool_calls": "it called a tool",
                 "incomplete": "it did not complete"}
 # Why a finding stayed unsettled, by the rule its entry broke (read_reply,
-# shape_rule, links_found, corrected_answer).
+# shape_rule, check_links, corrected_answer).
 REJECTIONS = {
     "missing": "no entry", "empty": "neither a sentence nor why it stands",
     "unchanged": "the sentence as it was, without why it stands", "line_break": "a line break",
@@ -142,6 +142,7 @@ REJECTIONS = {
              "or one of its links left out",
     "pictures": "its pictures changed", "markdown": "Markdown left open",
     "link_not_found": "a link to a page that could not be found",
+    "link_unchecked": "a link to a page that could not be checked in time",
     "place": "a place another correction or a formula took"}
 # What one more request may mend: a reply that came, was paid and settled
 # nothing (a request cut at its output limit would be cut again, a failed
@@ -556,8 +557,17 @@ def sentence_spans(answer):
 
 # What a correction must keep of its place: the links' addresses (a new one
 # would pass the check of the answer's links, agent_answer_links), the
-# pictures it places, and the Markdown it opens and closes.
-_URL = re.compile(r"\]\(([^)\s]+)\)|(?<![(\w])(https?://[^\s)\]>]+)")
+# pictures it places, and the Markdown it opens and closes. A link is what
+# the page's Markdown (marked with GFM, then DOMPurify) makes one: a
+# destination "](…)" up to a space, so a title after it ("…", '…') and "<…>"
+# around it are no part of the address; a bare address with its scheme in
+# any case, or one starting "www." (GFM's autolink, http:// in front). Raw
+# HTML ("<a href=…>") makes a link no reading of the Markdown sees: a
+# correction may not bring one (shape_rule).
+_LINK_DESTINATION = re.compile(r"\]\(\s*<?([^\s<>()]*(?:\([^\s<>()]*\)[^\s<>()]*)*)")
+_AUTOLINK = re.compile(r"(?<!\w)(?:(?:https?|ftp)://|www\.)[^\s<>\]]+", re.IGNORECASE)
+_RAW_LINK = re.compile(r"<a[\s>/]|\bhref\s*=", re.IGNORECASE)
+_AUTOLINK_TRAILING = "?!.,:*_~'\""
 _PICTURE = re.compile(r"picture:p\d+")
 _SENTENCE_END = re.compile(r"[.!?…:;][\s*_\"'”’)\]]*$")
 _BLOCK_LINE = re.compile(r"^\s*(?:#|\||>|```|~~~|\$\$)")
@@ -578,13 +588,50 @@ MAX_INLINE_FORMULA_CHARS = 200
 # with "_" opens nothing.
 _CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)")
 _LINK_TARGET = re.compile(r"\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+\"[^\"]*\")?\)")
-_BARE_URL = re.compile(r"https?://[^\s)\]>]+")
 _ESCAPED = re.compile(r"\\[!-/:-@\[-`{-~]")
 _EMPHASIS_RUN = re.compile(r"\*+|_+")
 
 
+def _address(raw):
+    """A link's address as the page opens it: "www." with http:// in front,
+    scheme and host in lower case. A link written another way to the same
+    place is the same address."""
+    address = "http://" + raw if raw[:4].lower() == "www." else raw
+    scheme, sep, rest = address.partition("://")
+    if sep and scheme.isascii() and scheme.isalpha():
+        host = re.match(r"[^/?#]*", rest).group()
+        address = f"{scheme.lower()}://{host.lower()}{rest[len(host):]}"
+    return address
+
+
+def _autolink(match):
+    """A bare address as GFM ends it: without the signs after it that close
+    the sentence, and without a ")" it does not open."""
+    address = match.group()
+    opened = address.count("(") - address.count(")")
+    end = len(address)
+    while end:
+        if address[end - 1] in _AUTOLINK_TRAILING:
+            end -= 1
+        elif address[end - 1] == ")" and opened < 0:
+            end, opened = end - 1, opened + 1
+        else:
+            break
+    return address[:end]
+
+
 def _urls(text):
-    return sorted(link or bare for link, bare in _URL.findall(text))
+    """The addresses ``text`` links, sorted (_address), each link once:
+    first the destinations of "[…](…)", then the bare addresses of the rest."""
+    found = []
+
+    def destination(match):
+        if match.group(1):
+            found.append(_address(match.group(1)))
+        return "]("
+    rest = _LINK_DESTINATION.sub(destination, text)
+    found.extend(_address(address) for address in map(_autolink, _AUTOLINK.finditer(rest)) if address)
+    return sorted(found)
 
 
 def _balanced(text):
@@ -594,7 +641,8 @@ def _balanced(text):
     text = _CODE_SPAN.sub("x", text)
     for start, end in reversed(_formulas(text)):
         text = text[:start] + "x" + text[end:]
-    text = _ESCAPED.sub("x", _BARE_URL.sub("x", _LINK_TARGET.sub("]", text)))
+    text = _ESCAPED.sub("x", _AUTOLINK.sub(lambda match: "x" + match.group()[len(_autolink(match)):],
+                                           _LINK_TARGET.sub("]", text)))
     if "`" in text or "](" in text or text.count("~~") % 2:
         return False
     depth = 0
@@ -807,12 +855,14 @@ def read_reply(text, items, sources=None, cells=()):
     # One finding may come as the entry itself, without its list.
     entries = [entries] if isinstance(entries, dict) else entries
     entries = [item for item in entries if isinstance(item, dict)] if isinstance(entries, list) else []
-    if not any(item.get("id") in items for item in entries):
+    # Only a text names a finding: a list or an object as "id" is none (and no key to look up).
+    known = [item for item in entries if isinstance(item.get("id"), str) and item["id"] in items]
+    if not known:
         return {}, {}, "unknown_id" if any(item.get("id") for item in entries) else "no_findings"
     results, rejected = {}, {}
-    for item in entries:
-        key = item.get("id")
-        if key not in items or key in results:
+    for item in known:
+        key = item["id"]
+        if key in results:
             continue
         start, end, before = items[key]
         sentence, stands = item.get("sentence"), item.get("stands")
@@ -852,11 +902,13 @@ def kept_shape(before, after, sources=(), cell=False):
     return shape_rule(before, after, sources, cell) is None
 
 
-def _without_last_link(text):
-    """``text`` without the Markdown link "[label](address)" that ends it,
-    or None where none does. Read backwards, each sign once: a pattern over
-    runs of links and brackets backtracks without end on a long line."""
-    depth, at = 0, len(text) - 1
+def _without_last_link(text, end=None):
+    """Where the Markdown link "[label](address)" that ends ``text[:end]``
+    starts, or None where none does (a picture "![…](…)" is none). Read
+    backwards over that link alone, without a copy of the text: a pattern
+    over runs of links and brackets backtracks without end on a long line."""
+    end = len(text) if end is None else end
+    depth, at = 0, end - 1
     while at >= 0:
         char = text[at]
         if char.isspace():
@@ -868,34 +920,37 @@ def _without_last_link(text):
     if at < 1 or text[at - 1] != "]":
         return None
     start = text.rfind("[", 0, at - 1)
-    if start < 0 or "]" in text[start + 1:at - 1] or "\n" in text[start:at]:
+    if start < 0 or text.find("]", start + 1, at - 1) >= 0 or text.find("\n", start, at) >= 0:
         return None
-    return text[:start]
+    if start and text[start - 1] == "!":
+        return None
+    return start
 
 
 def _ends_sentence(text):
     """Whether ``text`` ends as a sentence, also where links are cited after
     its end ("… 37,9). [Quelle](https://…)", as Muse Ember cites): alone or
-    several, in brackets or with commas between."""
+    several, in brackets or with commas between. Linear in its length."""
     if _SENTENCE_END.search(text):
         return True
-    rest, cited, brackets = text, False, 0
+    end, cited, brackets = len(text), False, 0
     while True:
-        rest = rest.rstrip(" \t,;")
-        if rest.endswith(")"):
-            shorter = _without_last_link(rest)
-            if shorter is not None:
-                rest, cited = shorter, True
+        while end and text[end - 1] in " \t,;":
+            end -= 1
+        if end and text[end - 1] == ")":
+            start = _without_last_link(text, end)
+            if start is not None:
+                end, cited = start, True
                 continue
             if cited or brackets:
                 return False
             # The one bracket around links cited together.
-            rest, brackets = rest[:-1], brackets + 1
+            end, brackets = end - 1, brackets + 1
             continue
-        if rest.endswith("(") and brackets:
-            rest, brackets = rest[:-1], brackets - 1
+        if end and text[end - 1] == "(" and brackets:
+            end, brackets = end - 1, brackets - 1
             continue
-        return cited and not brackets and bool(_SENTENCE_END.search(rest))
+        return cited and not brackets and bool(_SENTENCE_END.search(text, 0, end))
 
 
 def shape_rule(before, after, sources=(), cell=False):
@@ -904,13 +959,15 @@ def shape_rule(before, after, sources=(), cell=False):
     fragment nor far longer, at most one sentence more (a correction, not a
     paragraph in its place), ending as a sentence where ``before`` did (links
     cited after its end count as ended), with its pictures and Markdown
-    closed, and with its links: each to an address it had or to one of
-    ``sources`` (the reviewers' sources for this finding: a better page for
-    the corrected figure, which new_links still has to find), none of its
-    own left out unless a source took its place. A source may also be added:
-    the models cite the page a reviewer named. A table cell (``cell``) stays
-    one: no cell border in it, and it grows by CELL_GROWTH_CHARS at most.
-    Anything else leaves the sentence and its mark."""
+    closed, and with its links (_urls, by address however written): each to
+    an address it had or to one of ``sources`` (the reviewers' sources for
+    this finding: a better page for the corrected figure, which new_links
+    still has to find), and at most as many of its own addresses gone as
+    sources came in. A source may also be added: the models cite the page a
+    reviewer named. No raw HTML link it did not have. A table cell
+    (``cell``) stays one: no cell border in it, and it grows by
+    CELL_GROWTH_CHARS at most. Anything else leaves the sentence and its
+    mark."""
     growth = CELL_GROWTH_CHARS if cell else GROWTH_CHARS
     if "\n" in after:
         return "line_break"
@@ -926,9 +983,11 @@ def shape_rule(before, after, sources=(), cell=False):
         return "cell_border"
     if _SENTENCE_END.search(before) and not _ends_sentence(after):
         return "sentence_end"
-    links_before, links_after = _urls(before), _urls(after)
-    allowed = set(links_before) | set(sources or ())
-    if len(links_after) < len(links_before) or any(url not in allowed for url in links_after):
+    if _RAW_LINK.search(after) and not _RAW_LINK.search(before):
+        return "links"
+    own, linked = set(_urls(before)), set(_urls(after))
+    added = linked - own
+    if not added <= {_address(source) for source in sources or ()} or len(own - linked) > len(added):
         return "links"
     if sorted(_PICTURE.findall(after)) != sorted(_PICTURE.findall(before)):
         return "pictures"
@@ -939,33 +998,58 @@ def shape_rule(before, after, sources=(), cell=False):
 
 def new_links(results, items):
     """{id: the addresses a corrected sentence links that its first version
-    did not} (a reviewer's source, kept_shape)."""
+    did not} (a reviewer's source, shape_rule), as _urls reads both."""
     found = {}
     for key, result in results.items():
         if result[0] == "corrected":
-            added = [url for url in _urls(result[1]) if url not in set(_urls(items[key][2]))]
+            had = set(_urls(items[key][2]))
+            added = sorted({url for url in _urls(result[1]) if url not in had})
             if added:
                 found[key] = added
     return found
 
 
-def links_found(urls):
-    """Whether every address of ``urls`` leads to a page on the public web,
-    as the check of the answer's links judges one (agent_answer_links: only
-    a site's own 404 or 410 counts as missing). One that is no public
-    address, or that could not be checked in time, counts as not found: a
-    link the answer did not have before must not go unchecked."""
+def check_links(by_finding, seconds):
+    """{id: "found" | "link_not_found" | "link_unchecked"} for the new
+    addresses of each corrected sentence ({id: [address]}, new_links): found
+    where every one leads to a page on the public web, as the check of the
+    answer's links judges one (agent_answer_links: only a site's own 404 or
+    410 counts as missing; no public address counts as missing too). All of
+    them at once, within ``seconds`` and at most CHECK_SECONDS: the pass's
+    time bounds them (AnswerAudit._corrections). One not checked in that
+    time, or whose check failed, is unchecked: a link the answer did not
+    have before must not go unchecked, so it stays out all the same."""
+    from app.services.agent_answer_links import CHECK_SECONDS
+    urls = sorted({url for found in by_finding.values() for url in found})
+    seconds = min(CHECK_SECONDS, seconds)
+    state = {}
+    if urls and seconds > 0:
+        async def check():
+            tasks = {url: asyncio.ensure_future(_found(url)) for url in urls}
+            _, pending = await asyncio.wait(tasks.values(), timeout=seconds)
+            for task in pending:
+                task.cancel()
+            return {url: ("found" if task.result() else "link_not_found")
+                    if task.done() and not task.cancelled() and task.exception() is None else "link_unchecked"
+                    for url, task in tasks.items()}
+        try:
+            state = asyncio.run(check())
+        except Exception as exc:
+            logging.info("Agent correction link not checked category=%s", safe_exception(exc))
+    out = {}
+    for key, found in by_finding.items():
+        states = {state.get(url, "link_unchecked") for url in found}
+        out[key] = next((code for code in ("link_not_found", "link_unchecked") if code in states), "found")
+    return out
+
+
+def links_found(urls, seconds=None):
+    """Whether every address of ``urls`` leads to a page on the public web
+    (check_links)."""
     from app.services.agent_answer_links import CHECK_SECONDS
     if not urls:
         return False
-
-    async def check():
-        return await asyncio.wait_for(asyncio.gather(*(_found(url) for url in urls)), CHECK_SECONDS)
-    try:
-        return all(asyncio.run(check()))
-    except Exception as exc:
-        logging.info("Agent correction link not checked category=%s", safe_exception(exc))
-        return False
+    return check_links({"": list(urls)}, CHECK_SECONDS if seconds is None else seconds)[""] == "found"
 
 
 async def _public(url):

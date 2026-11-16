@@ -39,6 +39,12 @@ def pages_exist(monkeypatch):
     monkeypatch.setattr(agent_answer_links, "link_gone", found)
 
 
+def correction_session(store, loop):
+    """The pass's helper session as the agent panel reads it."""
+    return next(a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
+                if a.get("kind") == "correction")
+
+
 def one(before, after, sources=(), cell=False):
     """read_reply of a one-finding pass whose reply corrects ``before`` to ``after``."""
     items = {"s1": (0, len(before), before)}
@@ -206,9 +212,7 @@ def test_a_tool_call_instead_of_the_reply_gets_one_more_request(store):
     assert "Tickets to the top cost 36.10 euros." in turn["assistant_response"]
     outcomes = [r["outcome"] for r in turn["agent_review"]["audit"]["feedback"]["pass"]["requests"]]
     assert outcomes == ["tool_calls", "settled"]
-    session = next(a for a in store.delegation_view(UID, loop.chat_id, loop.turn_id)["agents"]
-                   if a.get("kind") == "correction")
-    assert session["status"] == "completed"
+    assert correction_session(store, loop)["status"] == "completed"
 
 
 def test_at_most_one_more_request_and_the_pass_stays_unreadable(store):
@@ -273,7 +277,10 @@ def test_the_users_stop_during_the_second_request_keeps_the_answer_and_its_marks
     turn = raw_turn(store, loop)
     assert turn["assistant_response"] == ANSWER
     review = turn["agent_review"]
-    assert review["audit"]["feedback"]["status"] == "done" and _marks_kept(review)
+    feedback = review["audit"]["feedback"]
+    assert feedback["status"] == "done" and feedback["skipped"] == "stopped" and _marks_kept(review)
+    assert [r["outcome"] for r in feedback["pass"]["requests"]] == ["not_json"]
+    assert correction_session(store, loop)["status"] == "stopped"
 
 
 def test_a_provider_failure_gets_no_second_request_and_says_why(store):
@@ -305,6 +312,229 @@ def test_a_source_whose_page_is_missing_is_named_as_such(store, monkeypatch):
     first, again = feedback["pass"]["requests"]
     assert "link_not_found" in first["rejected"].values() and again["outcome"] == "rejected"
     assert feedback["skipped"] == "unreadable"
+
+
+# --- Every link the page makes is a link (independent review before the deploy) --------
+
+ELSEWHERE = "https://example.org/elsewhere"
+
+
+@pytest.mark.parametrize("link", [
+    f'[rates]({ELSEWHERE} "Rates")', f"[rates]({ELSEWHERE} 'Rates')", f"[rates](<{ELSEWHERE}>)",
+    "www.example.org/elsewhere", ELSEWHERE.upper(), f"({ELSEWHERE})",
+    '<a href="//example.org/elsewhere">rates</a>', "<A HREF='https://example.org/elsewhere'>rates</A>",
+], ids=["title", "single-quoted-title", "angle-brackets", "www", "upper-case-scheme", "in-brackets",
+        "raw-html", "raw-html-upper"])
+def test_a_link_the_page_makes_is_never_unseen(link):
+    """marked (GFM) and DOMPurify make each of these a link: one the reader
+    did not see would reach the answer with neither a source nor a check."""
+    after = f"Tickets to the top cost 36.10 euros, see {link}."
+    assert one(TICKETS, after, {SOURCE})[1] == {"s1": "links"}
+
+
+@pytest.mark.parametrize("link", [
+    f'[rates]({SOURCE} "Rates")', f"[rates](<{SOURCE}>)", SOURCE.replace("https://example.org", "HTTPS://Example.ORG"),
+    f"({SOURCE})"], ids=["title", "angle-brackets", "upper-case", "in-brackets"])
+def test_the_reviewers_source_however_written_is_the_source(link):
+    after = f"Tickets to the top cost 36.10 euros, see {link}."
+    assert one(TICKETS, after, {SOURCE})[0] == {"s1": ("corrected", after)}
+    assert fb.new_links({"s1": ("corrected", after)}, {"s1": (0, len(TICKETS), TICKETS)}) == {"s1": [SOURCE]}
+
+
+def test_a_link_written_another_way_is_the_link_the_sentence_had():
+    """The rule and new_links read the same addresses: the sentence's own
+    link in another spelling is no new one and needs no check."""
+    before = f"The [visitor count]({OWN}) is 7 million."
+    items = {"s1": (0, len(before), before)}
+    for written in (f'[visitor count]({OWN} "Visits")', f"[visitor count](<{OWN}>)",
+                    f"[visitor count]({OWN.replace('https://example.org', 'HTTPS://EXAMPLE.org')})"):
+        after = f"The {written} is 6.3 million."
+        assert one(before, after)[0] == {"s1": ("corrected", after)}, written
+        assert fb.new_links({"s1": ("corrected", after)}, items) == {}, written
+    assert fb._urls("See www.example.org/a, then https://example.org/b.") == [
+        "http://www.example.org/a", "https://example.org/b"]
+    assert fb._urls("The [wiki](https://en.wikipedia.org/wiki/Foo_(bar)) and (https://example.org/c).") == [
+        "https://en.wikipedia.org/wiki/Foo_(bar)", "https://example.org/c"]
+
+
+def test_no_own_address_goes_without_a_source_in_its_place():
+    before = f"See [a]({OWN}) and [b]({ELSEWHERE}) for 79.7."
+    assert one(before, f"See [a]({OWN}) and [a]({OWN}) for 80.8.", {SOURCE})[1] == {"s1": "links"}
+    assert one(before, f"See [a]({OWN}) and [s]({SOURCE}) for 80.8.", {SOURCE})[1] == {}
+    assert one(before, f"See [s]({SOURCE}) and the rest for 80.8 here.", {SOURCE})[1] == {"s1": "links"}
+
+
+def test_a_finding_is_named_by_a_text_alone():
+    """An "id" that is a list or an object names no finding and never
+    breaks the reader (it is no key to look up)."""
+    items = {"s1": (0, len(TICKETS), TICKETS)}
+    fixed = "Tickets to the top cost 36.10 euros."
+    for odd in (["s1"], {"id": "s1"}, 1):
+        assert fb.read_reply(json.dumps({"findings": [{"id": odd, "sentence": fixed}]}), items) \
+            == ({}, {}, "unknown_id"), odd
+    mixed = json.dumps({"findings": [{"id": ["s1"], "sentence": "x"}, {"id": "s1", "sentence": fixed}]})
+    assert fb.read_reply(mixed, items)[0] == {"s1": ("corrected", fixed)}
+
+
+def test_an_id_that_is_no_text_ends_the_session_all_the_same(store):
+    reply = json.dumps({"findings": [{"id": ["s1"], "sentence": "Tickets to the top cost 36.10 euros."}]})
+    loop = feedback_loop(store, Audit(live={"anthropic": corrector(reply)}))
+    list(loop.run())
+    feedback = raw_turn(store, loop)["agent_review"]["audit"]["feedback"]
+    assert feedback["skipped"] == "unreadable"
+    assert [r["outcome"] for r in feedback["pass"]["requests"]] == ["unknown_id", "unknown_id"]
+    assert correction_session(store, loop)["status"] == "completed"
+
+
+def test_a_reply_whose_reading_breaks_ends_the_session(store, monkeypatch):
+    def broken(*args, **kwargs):
+        raise TypeError("unhashable")
+    monkeypatch.setattr(fb, "read_reply", broken)
+    loop = feedback_loop(store, Audit(live={"anthropic": corrector("{}")}))
+    list(loop.run())
+    turn = raw_turn(store, loop)
+    feedback = turn["agent_review"]["audit"]["feedback"]
+    assert turn["assistant_response"] == ANSWER and feedback["skipped"] == "failed" and _marks_kept(turn["agent_review"])
+    assert feedback["pass"]["requests"] == [{"outcome": "error"}]
+    session = correction_session(store, loop)
+    assert session["status"] == "failed" and session["failure"] == {"code": "error"}
+
+
+def test_a_picture_is_no_link_cited_after_the_end():
+    assert fb._without_last_link("Costs 36.10 euros ![chart](https://example.org/c.png)") is None
+    assert not fb._ends_sentence("Costs 36.10 euros ![chart](https://example.org/c.png)")
+    assert fb._ends_sentence("Costs 36.10 euros. [Rates](https://example.org/r)")
+    assert one(TICKETS, f"Tickets to the top cost 36.10 euros ![rates]({SOURCE})", {SOURCE})[1] \
+        == {"s1": "sentence_end"}
+
+
+def _lines(call):
+    """How many lines of _ends_sentence and _without_last_link ``call``
+    runs: their steps, whatever the machine's speed."""
+    import sys
+    codes = {fb._ends_sentence.__code__, fb._without_last_link.__code__}
+    count = [0]
+
+    def local(frame, event, arg):
+        if event == "line":
+            count[0] += 1
+        return local
+
+    def tracer(frame, event, arg):
+        return local if frame.f_code in codes else None
+    previous = sys.gettrace()
+    sys.settrace(tracer)
+    try:
+        call()
+    finally:
+        sys.settrace(previous)
+    return count[0]
+
+
+@pytest.mark.parametrize("make", [
+    lambda n: "It costs 36.10 euros. " + "[a](https://example.org/a), " * n,
+    lambda n: "It costs 36.10 euros. ([a](https://example.org/a), " * n + "x",
+    lambda n: "[a](b) " * n + "x",
+    lambda n: ")" * (30 * n),
+    lambda n: "x. " + "![a](https://example.org/p.png)" * n,
+    lambda n: "(" * (30 * n) + ")",
+], ids=["cited-links", "brackets", "links-then-text", "closing-brackets", "pictures", "opening-brackets"])
+def test_reading_a_sentence_end_takes_steps_in_proportion_to_its_length(make):
+    """Read once from the end: four times the text takes at most about four
+    times the steps (a pattern over runs of links and brackets took minutes)."""
+    small, large = _lines(lambda: fb._ends_sentence(make(50))), _lines(lambda: fb._ends_sentence(make(200)))
+    assert large <= 5 * max(small, 1) + 20
+
+
+# --- The pass's time bounds the check of new links ---------------------------------
+
+def test_new_links_are_checked_together_and_never_past_the_time_given(monkeypatch):
+    import asyncio
+    import time
+    started, stopped = [], []
+
+    async def slow(url):
+        started.append(url)
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            stopped.append(url)
+            raise
+        return True
+    monkeypatch.setattr(fb, "_found", slow)
+    began = time.monotonic()
+    result = fb.check_links({"s1": [SOURCE], "s2": [OWN, SOURCE]}, .2)
+    assert result == {"s1": "link_unchecked", "s2": "link_unchecked"}
+    assert time.monotonic() - began < 3 and sorted(started) == sorted(stopped) == sorted({SOURCE, OWN})
+    # Past the time no check starts.
+    started.clear()
+    assert fb.check_links({"s1": [SOURCE]}, 0) == {"s1": "link_unchecked"} and started == []
+
+    async def answers(url):
+        return url == SOURCE
+    monkeypatch.setattr(fb, "_found", answers)
+    assert fb.check_links({"s1": [SOURCE], "s2": [OWN, SOURCE]}, 1) == {"s1": "found", "s2": "link_not_found"}
+
+
+def test_the_pass_checks_a_new_link_only_within_its_own_time(store, monkeypatch):
+    import asyncio
+    monkeypatch.setattr(fb, "CORRECTION_SECONDS", 1.5)
+    stopped = []
+
+    async def slow(url):
+        try:
+            await asyncio.sleep(3600)
+        except asyncio.CancelledError:
+            stopped.append(url)
+            raise
+    monkeypatch.setattr(fb, "_found", slow)
+    given, check = [], fb.check_links
+
+    def spy(by_finding, seconds):
+        given.append(seconds)
+        return check(by_finding, seconds)
+    monkeypatch.setattr(fb, "check_links", spy)
+    cited = f"Tickets to the top cost 36.10 euros ([rates]({RATES}))."
+    loop = feedback_loop(store, Audit(live={"anthropic": corrector(fix(cited))}))
+    list(loop.run())
+    turn = raw_turn(store, loop)
+    feedback = turn["agent_review"]["audit"]["feedback"]
+    [request] = feedback["pass"]["requests"]
+    assert "link_unchecked" in request["rejected"].values() and request["again"] == "no_time"
+    assert turn["assistant_response"] == ANSWER and stopped == [RATES]
+    # What is left of the pass's 1.5 s, not CHECK_SECONDS of its own.
+    assert len(given) == 1 and given[0] <= 1.5
+
+
+# --- A request is settled only where something of it stands ------------------------
+
+def test_a_request_whose_sentences_all_lost_their_place_settled_nothing(store, monkeypatch):
+    def lose_places(answer, items, results):
+        for key in [key for key, result in results.items() if result[0] == "corrected"]:
+            results.pop(key)
+        return answer
+    monkeypatch.setattr(fb, "corrected_answer", lose_places)
+    loop = feedback_loop(store, Audit(live={"anthropic": corrector(fix("Tickets to the top cost 36.10 euros."))}))
+    list(loop.run())
+    turn = raw_turn(store, loop)
+    [request] = turn["agent_review"]["audit"]["feedback"]["pass"]["requests"]
+    assert request["outcome"] == "rejected" and "place" in request["rejected"].values()
+    counted = agent_audit_metrics.turn_counters(turn, agent_audit_metrics.capture(loop))["correction"]
+    assert counted["models"] == {agent_audit_metrics.label(loop.model.model): {"unsettled": 1}}
+
+
+# --- A chat with Google data takes no reviewer's source ----------------------------
+
+def test_a_chat_with_google_data_takes_no_reviewers_source_not_even_added(store, pages_exist):
+    cited = f"Tickets to the top cost 36.10 euros ([rates]({RATES}))."
+    loop = feedback_loop(store, Audit(live={"anthropic": corrector(fix(cited))}))
+    loop.google_tools = True
+    assert loop.comparison.auditor._finding_sources([{"id": "s1", "notes": [{"source": RATES}]}]) == {}
+    list(loop.run())
+    turn = raw_turn(store, loop)
+    feedback = turn["agent_review"]["audit"]["feedback"]
+    assert turn["assistant_response"] == ANSWER and feedback["skipped"] == "unreadable"
+    assert all("links" in request["rejected"].values() for request in feedback["pass"]["requests"])
 
 
 FILTERED = ['{"choices":[{"delta":{},"finish_reason":"content_filter"}],'
