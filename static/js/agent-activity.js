@@ -262,9 +262,10 @@
     const { verb, gap, time } = titleParts(ms, now, status, Boolean(note));
     const label = `${verb}${gap}${time}`;
     const parts = note?.parts || [];
-    const said = parts.join('\n');
-    const noted = (view.checkNoteKey || '') !== said;
     const by = Number.isInteger(note?.by) ? note.by : -1;
+    const forms = by >= 0 ? note.forms || null : null;
+    const said = [...parts, forms ? `${forms.count}|${forms.brief}|${forms.least}` : ''].join('\n');
+    const noted = (view.checkNoteKey || '') !== said;
     if (view.title.dataset.label === window.App.t(label) && !noted) return;
     view.title.dataset.label = label;
     const verbEl = view.title.querySelector(".agent-activity-verb-text");
@@ -295,7 +296,7 @@
     if (gapEl.textContent !== gap) gapEl.textContent = gap;
     if (timeEl.textContent !== window.App.t(time)) timeEl.textContent = time;
     timeEl.dataset.unit = slot;
-    if (noted) writeNote(view, parts, by);
+    if (noted) writeNote(view, parts, by, forms, said);
     if (!resize) return;
     // The chevron glides to its new place while the new words open up (none
     // with reduced motion, motion()); the words keep to one line meanwhile.
@@ -352,12 +353,13 @@
   // stood (agent-review.js headNote: "refining…", then "checked by Claude
   // and DeepSeek · 1 sentence improved"), each phrase alone for the
   // translation (setTitle). The phrase that names the reviewers (`by`) comes
-  // translated already, so the page leaves it as it is; it is the one a
-  // narrow head shortens with "…", never the outcome after it
-  // (agent-chat.css). Nothing without such a check, and where the live line
+  // translated already, so the page leaves it as it is, with its shorter
+  // forms ("checked by 2 AIs", "checked") in attributes: the head's width
+  // picks the form that fits whole (agent-chat.css, container agent-head),
+  // never a cut name. Nothing without such a check, and where the live line
   // says it (renderActivity `refining`).
-  function writeNote(view, parts, by = -1) {
-    view.checkNoteKey = parts.join('\n');
+  function writeNote(view, parts, by = -1, forms = null, key = parts.join('\n')) {
+    view.checkNoteKey = key;
     view.details.classList.toggle('has-check-note', parts.length > 0);
     view.details.classList.toggle('has-check-names', by >= 0 && by < parts.length);
     if (!parts.length) {
@@ -375,11 +377,21 @@
         gap.className = 'agent-activity-sep';
         gap.textContent = ' · ';
         const phrase = document.createElement('span');
-        phrase.textContent = part;
         if (index === by) {
           phrase.className = 'agent-activity-by';
           phrase.setAttribute('data-i18n-skip', '');
-        }
+          const words = document.createElement('span');
+          words.textContent = part;
+          phrase.append(words);
+          if (forms) {
+            phrase.dataset.count = forms.count;
+            phrase.dataset.brief = forms.brief;
+            phrase.dataset.least = forms.least;
+            phrase.classList.toggle('is-partial', forms.partial === true);
+          }
+        } else phrase.textContent = part;
+        // The first phrase opens the line where the time gives way.
+        if (!index) phrase.classList.add('is-first');
         view.checkNote.append(gap, phrase);
       });
     }

@@ -215,6 +215,8 @@ describe("activity head of an answer whose check goes on after it stood", () => 
     const names = host.querySelector(".agent-activity-by");
     expect(names.textContent).toBe("checked by Claude and DeepSeek");
     expect(names.hasAttribute("data-i18n-skip")).toBe(true);
+    // Its shorter forms for a narrower head, each whole (agent-chat.css).
+    expect([names.dataset.count, names.dataset.brief, names.dataset.least]).toEqual(["checked by 2 AIs", "checked", "checked"]);
     expect(host.querySelector(".agent-activity").classList.contains("has-check-names")).toBe(true);
     render(review({ feedback: { status: "done", findings: findings("disputed", { delivered: "final", reason: "So." }) } }), true);
     expect(head(host)).toBe("Answer in 14s · checked by Claude and DeepSeek · 2 notes open");

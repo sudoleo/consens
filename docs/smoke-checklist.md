@@ -312,9 +312,10 @@ Prüfungen bleiben historisch und sind keine Freigabe des aktuellen Stands.
       verbessert“ (die Familien der Prüfer dieser Antwort), in einer
       Zeile, und seine Zeit springt nicht auf die Dauer der Prüfung; der
       Wechsel nach dem Stream zeigt nie „Antwort in“ ohne Zahl. Am Handy
-      (320 und 390 px) steht „Geprüft von Claude und DeepSeek · keine
-      Einwände“ ohne Zeit und Logos; wird es eng, endet nur der Namensteil
-      mit „…“, das Ergebnis steht ganz. Blieb die Korrektur ohne Ergebnis,
+      steht ohne Zeit und Logos bei 390 px „Geprüft von 2 KIs · keine
+      Einwände“, bei 360 und 320 px „Geprüft · keine Einwände“, nie ein
+      abgeschnittener Name und nie „…“ in dieser Zeile; die Namen zeigt die
+      aufgeklappte Aktivität. Blieb die Korrektur ohne Ergebnis,
       steht dort nur „2 Anmerkungen offen“ (kein „Korrektur nicht möglich“),
       die aufgeklappte Aktivität nennt den Schritt. Schafft der
       Prüfer es nicht (Zeitlimit), endet er mit „… · nicht geprüft“, bei

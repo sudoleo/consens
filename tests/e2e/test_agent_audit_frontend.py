@@ -6,7 +6,9 @@ so the page reads exactly the shape a real turn saves.
 """
 import hashlib
 import json
+import os
 import re
+from pathlib import Path
 
 import pytest
 from playwright.sync_api import expect
@@ -1276,6 +1278,105 @@ def test_a_narrow_german_head_and_row_keep_their_words_whole(browser, phase4_ser
         page.evaluate("() => document.querySelector('#agentAnswer .agent-activity').scrollIntoView({block: 'start'})")
         page.wait_for_timeout(300)
         _snapshot(page, f"german-head-row-{width}")
+        assert errors == []
+    finally:
+        context.close()
+
+
+# The reviewers the head names, as a turn saves them: the default pair, and
+# a third (High Quality).
+HEAD_REVIEWERS = [("anthropic", "Anthropic", {"model": "anthropic/claude-haiku-4.5", "label": "Claude Haiku 4.5"}),
+                  ("deepseek", "DeepSeek", {"model": "deepseek/deepseek-v4.1-flash", "label": "DeepSeek V4.1 Flash"}),
+                  ("openai", "OpenAI", LUNA)]
+HEAD_OUTCOMES = ["no objections", "1 sentence improved", "12 sentences improved", "3 notes open", "12 notes open",
+                 "check stopped", "not checked", "checked in part"]
+
+
+def head_review(outcome, count):
+    """A finished review with notes passed to the agent, ending in ``outcome``
+    (headNote's words), by ``count`` reviewers."""
+    status = {"check stopped": "cancelled", "not checked": "failed", "checked in part": "partial"}.get(outcome, "succeeded")
+    reviewers = [{"provider": provider, "provider_label": label, "model": model,
+                  "status": "failed" if status == "failed" or (status == "partial" and index == count - 1) else "completed"}
+                 for index, (provider, label, model) in enumerate(HEAD_REVIEWERS[:count])]
+    notes = {"3 notes open": 3, "12 notes open": 12, "checked in part": 12}.get(outcome, 0)
+    claims = [{"anchor": f"Sentence {n}.", "kind": "doubtful", "audit": True, "agree": [],
+               "dissent": [{"model": "Anthropic", "kind": "doubtful", "note": f"Note {n}.", "mark": n}]}
+              for n in range(1, notes + 1)]
+    improved = {"1 sentence improved": 1, "12 sentences improved": 12}.get(outcome, 0)
+    findings = [{"id": f"s{n}", "on": "answer", "kind": "wrong", "state": "corrected", "delivered": "final"}
+                for n in range(1, improved + 1)]
+    return {"mode": "audit", "status": status, "answer_version": 1, "answer_hash": "h", "comparisons": [], "checks": [],
+            "versions": [{"id": 1, "text": ANSWER, "hash": "h", "status": status}],
+            "audit": {"reviewers": reviewers, "claims": claims, "unplaced": [], "process": [],
+                      "feedback": {"status": "done", "findings": findings, "counts": dict(NO_COUNTS)}}}
+
+
+# The head drawn as a finished turn's, after a run of twelve minutes (the
+# widest time), and how it stands: whether a word is cut, what it says, and where
+# it ends against the column.
+DRAW_HEAD = """async ([review]) => { const host = document.querySelector('#agentAnswer .agent-activity').parentElement;
+    App.agentActivity.render(host, { running: false, status: 'succeeded', elapsedMs: 724000,
+      events: App.runRegistry.visible().metadata.agentActivity || [], review, reviewEnded: true });
+    // Past its glide to the new width, and the page's translation of the words.
+    await new Promise(resolve => setTimeout(resolve, 400));
+    const title = host.querySelector('.agent-activity-title'), summary = host.querySelector('.agent-activity > summary');
+    const shown = el => el.getBoundingClientRect().width > 0;
+    const phrases = [...title.querySelectorAll('.agent-activity-after > span:not(.agent-activity-sep)')].filter(shown);
+    const by = title.querySelector('.agent-activity-by');
+    const words = el => el === by && !shown(by.firstElementChild)
+      ? getComputedStyle(by, '::before').content.replace(/^"|"$/g, '') : el.textContent;
+    return { cut: [title, ...phrases].some(el => el.scrollWidth > el.clientWidth + 1),
+      said: [...(shown(title.querySelector('.agent-activity-time')) ? [title.querySelector('.agent-activity-time').textContent] : []),
+             ...phrases.map(words)],
+      right: summary.getBoundingClientRect().right, column: host.getBoundingClientRect().right,
+      height: title.getBoundingClientRect().height, column_width: host.getBoundingClientRect().width,
+      words_width: title.scrollWidth, room: host.getBoundingClientRect().width - (summary.scrollWidth - title.clientWidth),
+      icons: shown(summary.querySelector('.agent-model-stack') || document.createElement('i')) }; }"""
+
+
+@pytest.mark.parametrize("width,lang,dark", [(320, "en", False), (320, "de", True), (360, "en", True), (360, "de", False),
+                                             (390, "en", False), (390, "de", True)])
+def test_a_narrow_head_says_who_checked_in_a_form_that_fits_whole(browser, phase4_server, width, lang, dark):
+    """A phone's head never cuts its words: its width picks how it says who
+    checked (agent-chat.css, container agent-head), "Checked by 2 AIs · no
+    objections", where that does not fit "Checked · no objections", never a
+    name ending in "…"; with two and three reviewers, after every outcome,
+    in English and German, after a run of twelve minutes."""
+    context, page, errors = open_audit_page(browser, phase4_server, width, dark,
+                                            feedback_events("checking", "done", final=True), lang=lang)
+    try:
+        page.wait_for_function("() => App.runRegistry.visible()?.status === 'succeeded'")
+        page.wait_for_timeout(500)
+        page.evaluate("() => document.querySelector('#agentAnswer .agent-activity').scrollIntoView({block: 'center'})")
+        seen = []
+        for count in (2, 3):
+            for outcome in HEAD_OUTCOMES:
+                state = page.evaluate(DRAW_HEAD, [head_review(outcome, count)])
+                seen.append({"count": count, "outcome": outcome, **state})
+                assert not state["cut"], seen[-1]
+                assert state["right"] <= state["column"] + 0.5 and state["height"] <= 24, seen[-1]
+                # No name stands in a narrow head, cut or whole; nor do the icons.
+                assert not any(name in " ".join(state["said"]) for name in ("Claude", "DeepSeek", "ChatGPT")), seen[-1]
+                assert not state["icons"], seen[-1]
+                page.wait_for_timeout(250)
+                if os.environ.get("AGENT_SCREENSHOTS"):
+                    target = Path(os.environ["AGENT_SCREENSHOTS"]) / "head-forms"
+                    target.mkdir(parents=True, exist_ok=True)
+                    page.locator("#agentAnswer .agent-activity > summary").screenshot(
+                        path=str(target / f"{width}-{lang}-{'dark' if dark else 'light'}-{count}-{outcome.replace(' ', '-')}.png"))
+        # The count where it fits (a 390px phone), else the word alone.
+        said = {(entry["count"], entry["outcome"]): entry["said"][0].lower() for entry in seen}
+        checked = "checked" if lang == "en" else "geprüft"
+        if width >= 390:
+            assert said[(2, "no objections")] == ("checked by 2 ais" if lang == "en" else "geprüft von 2 kis"), said
+            assert said[(3, "12 notes open")] == ("checked by 3 ais" if lang == "en" else "geprüft von 3 kis"), said
+            assert said[(3, "checked in part")] == ("checked in part" if lang == "en" else "teilweise geprüft"), said
+        else:
+            assert said[(2, "no objections")] == said[(3, "checked in part")] == checked, said
+        if os.environ.get("AGENT_SCREENSHOTS"):
+            Path(os.environ["AGENT_SCREENSHOTS"], "head-forms", f"{width}-{lang}.json").write_text(
+                json.dumps(seen, indent=1, ensure_ascii=False), encoding="utf-8")
         assert errors == []
     finally:
         context.close()

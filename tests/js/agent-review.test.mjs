@@ -1703,8 +1703,16 @@ it('rewrites a corrected sentence in place in the light, with no mark on it and 
   expect(d.querySelector('.agent-review-findings')).toBeNull();
   // The reviewers who gave their review by name (without the page's model
   // families, by their providers' labels); the one that failed is not named.
+  // A narrower head picks one of the shorter forms, each whole.
   expect(w.App.agentReview.headNote(done, true)).toEqual({ live: false, by: 0,
-    parts: ['checked by OpenAI and Anthropic', '1 sentence improved'] });
+    parts: ['checked by OpenAI and Anthropic', '1 sentence improved'],
+    forms: { full: 'checked by OpenAI and Anthropic', count: 'checked by 2 AIs', brief: 'checked', least: 'checked',
+      partial: false } });
+  const part = structuredClone(done);
+  part.status = 'partial';
+  part.audit.reviewers[1].status = 'failed';
+  expect(w.App.agentReview.headNote(part, true).forms).toEqual({ full: 'checked in part by OpenAI',
+    count: 'checked in part by 1 AI', brief: 'checked in part', least: 'checked', partial: true });
   expect(w.App.agentReview.correctionUnchecked(done)).toBe(false);
 });
 

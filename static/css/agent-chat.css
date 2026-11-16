@@ -967,8 +967,10 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    the same at rest and while agent-activity.js animates it. Collapsing
    through it, the 18px under "Thought for …" vanished once the motion fixed
    the height: the answer jumped up and back down on every open and close.
-   The answer's first child has no top margin, so nothing moves at rest. */
-.agent-answer-activity { display: flow-root; }
+   The answer's first child has no top margin, so nothing moves at rest.
+   Its width, the column's, is what the head asks how it says who checked
+   (agent-head, below). */
+.agent-answer-activity { display: flow-root; container: agent-head / inline-size; }
 .agent-activity { margin: 0 0 var(--space-3); color: var(--ink-2); font-size: var(--font-size-ui); }
 .agent-activity > summary {
   display: flex; flex-wrap: wrap; align-items: center; gap: 9px; width: fit-content; max-width: 100%;
@@ -1023,16 +1025,43 @@ body.agreement-verdict-hidden .agent-agreement { display: none; }
    names keep theirs: the glide uncovers them from the left, as it does
    every word after the time. */
 .agent-activity.has-check-names .agent-activity-title.is-gliding :is(.agent-activity-after, .agent-activity-by) { flex-shrink: 0; }
-/* Phones: the names take the place of the time and of the reviewers'
-   icons, which say the same: "Checked by Claude and DeepSeek · no
-   objections" fits a 390px head whole, and at 320px the outcome still
-   stands whole after "Checked by Cl…". */
-@media (max-width: 640px) {
+/* The head's own width (container agent-head) picks how it says who
+   checked, each form a whole phrase, never a cut name (agent-review.js
+   checkedBy, written by agent-activity.js writeNote): wide, the time, the
+   families by name and their icons ("Answer in 14s · checked by Claude and
+   DeepSeek · no objections"); narrower, without time and icons, their
+   number in the composer's words ("Checked by 2 AIs · no objections");
+   narrowest, "Checked · no objections". The names stay one tap away, in
+   the opened activity. Each step sits where the longest words of its form
+   still fit whole, measured in the app (the words have the column less
+   68px): "Geprüft von 2 KIs · 12 Anmerkungen offen" and "Checked by 2 AIs
+   · 12 sentences improved" need 336px of column, "Teilweise geprüft von 2
+   KIs · 12 Anmerkungen offen" 390px, "Teilweise geprüft · 12 Anmerkungen
+   offen" 329px; a note without names keeps its time ("Antwort in 12 Min.
+   4 Sek. · Prüfung gestoppt") from 345px. */
+@container agent-head (max-width: 479px) {
+  .agent-activity.has-check-note > summary :is(.agent-model-stack, .agent-history-models) { display: none; }
+  .agent-activity.has-check-note > summary .agent-inline-controls { border-left: 0; padding-left: 0; margin-left: 0; }
   .agent-activity.has-check-names .agent-activity-title > :not(.agent-activity-after),
   .agent-activity.has-check-names .agent-activity-after > .agent-activity-sep:first-child,
-  .agent-activity.has-check-names > summary :is(.agent-model-stack, .agent-history-models) { display: none; }
-  .agent-activity.has-check-names > summary .agent-inline-controls { border-left: 0; padding-left: 0; margin-left: 0; }
+  .agent-activity.has-check-names .agent-activity-by > span { display: none; }
+  .agent-activity.has-check-names .agent-activity-by::before { content: attr(data-count); }
   .agent-activity.has-check-names .agent-activity-by::first-letter { text-transform: uppercase; }
+}
+@container agent-head (max-width: 389px) {
+  .agent-activity.has-check-names .agent-activity-after > .agent-activity-by.is-partial::before { content: attr(data-brief); }
+}
+@container agent-head (max-width: 344px) {
+  .agent-activity.has-check-note:not(.has-check-names) .agent-activity-title > :not(.agent-activity-after),
+  .agent-activity.has-check-note:not(.has-check-names) .agent-activity-after > .agent-activity-sep:first-child { display: none; }
+  .agent-activity.has-check-note:not(.has-check-names) .agent-activity-after > .is-first { display: inline-block; }
+  .agent-activity.has-check-note:not(.has-check-names) .agent-activity-after > .is-first::first-letter { text-transform: uppercase; }
+}
+@container agent-head (max-width: 335px) {
+  .agent-activity.has-check-names .agent-activity-after > .agent-activity-by:not(.is-partial)::before { content: attr(data-least); }
+}
+@container agent-head (max-width: 328px) {
+  .agent-activity.has-check-names .agent-activity-after > .agent-activity-by.is-partial::before { content: attr(data-least); }
 }
 .agent-activity-chevron { width: 1em; height: 1em; margin-left: 1px; color: var(--ink-3); background: currentColor; -webkit-mask: var(--chevron-mask) center / contain no-repeat; mask: var(--chevron-mask) center / contain no-repeat; transition: transform var(--dur-state) var(--ease-standard); }
 .agent-activity[open] .agent-activity-chevron { transform: rotate(180deg); }

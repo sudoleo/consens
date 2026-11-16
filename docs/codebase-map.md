@@ -7205,16 +7205,33 @@ ihrer Familie aus `window.MODEL_FAMILIES`, also `config.PROVIDERS`: ChatGPT,
 Claude, Gemini, DeepSeek …; sonst `provider_label`), die vollen Modellnamen
 bleiben in den Details. `checkedBy` übersetzt die Wendung als Ganzes (`App.t`
 „checked by {names}“, „checked in part by {names}“ bei `partial`, die Liste über
-„names|{first} and {last}“), `headNote` meldet ihren Index als `by`, und
-`writeNote` setzt sie als `.agent-activity-by` mit `data-i18n-skip`. Wird es eng,
-kürzt allein sie mit „…“ (`.has-check-names`: Titel und Nachsatz als Flex-Zeile,
-nur `.agent-activity-by` schrumpft; Zeit und Ergebnis behalten ihre Breite;
-während der Kopf zu seiner neuen Breite gleitet, behalten die Namen ihre
-(`.is-gliding`) und werden wie jedes Wort nach der Zeit von links aufgedeckt,
-statt zuerst weggedrückt zu werden; stehen sie am Ende gekürzt, wechselt der
-Kopf ohne Gleiten); bis 640 px stehen
-die Namen statt der Zeit und der Prüfer-Logos davor („Checked by Claude and
-DeepSeek · no objections“), damit das Ergebnis auch bei 320 px ganz bleibt.
+„names|{first} and {last}“) samt ihrer kürzeren Formen (`forms`: `count`
+„checked by 2 AIs“/„checked by 1 AI“ in den Worten des Eingabefelds,
+`brief` „checked in part“, `least` „checked“), `headNote` meldet ihren Index
+als `by`, und `writeNote` setzt sie als `.agent-activity-by` mit
+`data-i18n-skip`, die Namen als Text, die anderen Formen als `data-count`,
+`data-brief`, `data-least`. Welche Form steht, entscheidet die Breite der
+Spalte ohne JS-Messung (`.agent-answer-activity` ist der Container
+`agent-head`, Regeln in `agent-chat.css`), jede ganz, nie ein halber Name:
+ab 480 px Zeit, Namen und Prüfer-Logos (nur dort darf der Namensteil bei
+offener Seitenleiste mit „…“ kürzen: `.has-check-names` legt Titel und
+Nachsatz als Flex-Zeile, nur `.agent-activity-by` schrumpft; während der Kopf
+zu seiner neuen Breite gleitet, behalten die Namen ihre (`.is-gliding`) und
+werden von links aufgedeckt; stehen sie am Ende gekürzt, wechselt der Kopf
+ohne Gleiten); darunter ohne Zeit und Logos die Zählform („Checked by 2 AIs ·
+no objections“, per `::before` mit `content: attr(data-count)`, erster
+Buchstabe groß); unter 336 px nur „Checked · …“ (bei `partial` unter 390 px
+„Checked in part · …“, unter 329 px „Checked · …“). Ein Kopf ohne Namen
+(„check stopped“, „not checked“, „refining…“) verliert unter 480 px die Logos
+und unter 345 px die Zeit. Die Schwellen sind in der App gemessen (die Worte
+haben die Spalte weniger 68 px; die längsten: „Geprüft von 2 KIs · 12
+Anmerkungen offen“, „Checked by 2 AIs · 12 sentences improved“, „Antwort in
+12 Min. 4 Sek. · Prüfung gestoppt“); `test_agent_audit_frontend.py`
+`test_a_narrow_head_says_who_checked_in_a_form_that_fits_whole` prüft 320, 360
+und 390 px auf Deutsch und Englisch, mit zwei und drei Prüfern, für jedes
+Ergebnis, dass nichts abgeschnitten ist und kein Name steht. Bei 390 px heißt
+es so „Geprüft von 2 KIs · keine Einwände“, bei 360 und 320 px „Geprüft ·
+keine Einwände“; die Namen stehen in der aufgeklappten Aktivität.
 Ohne Namen „checked“/„checked in part“, „check stopped“ bei `cancelled`,
 „not checked“ bei `failed`/`missing`/`off`, ein
 gespeicherter, noch laufender bleibt „refining…“; nie fällt er nach

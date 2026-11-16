@@ -733,14 +733,25 @@
     if (names.length < 2) return names[0] || '';
     return App.t('{first} and {last}', { first: names.slice(0, -1).join(', '), last: names.at(-1) }, 'names');
   }
-  // "checked by Claude and DeepSeek", translated here as a whole (the names
-  // are no words of the dictionary): the head shows it as it is
-  // (agent-activity.js writeNote). Empty without a name to give.
+  // Who checked, in the three forms the head chooses from by its width
+  // (agent-chat.css, container agent-head), each a whole phrase, translated
+  // here (the names are no words of the dictionary): `full` names the
+  // families ("checked by Claude and DeepSeek"), `count` counts them in the
+  // composer's words ("checked by 2 AIs"), `brief` and `least` say only
+  // that ("checked in part", "checked"). Null without a name to give.
   function checkedBy(review) {
-    const names = familyNames((review.audit.reviewers || []).filter(r => r.status === 'completed'));
-    if (!names.length) return '';
-    return review.status === 'partial' ? App.t('checked in part by {names}', { names: nameList(names) })
-      : App.t('checked by {names}', { names: nameList(names) });
+    const done = (review.audit.reviewers || []).filter(r => r.status === 'completed');
+    const names = familyNames(done);
+    if (!names.length) return null;
+    const list = nameList(names), count = done.length;
+    if (review.status === 'partial') {
+      return { full: App.t('checked in part by {names}', { names: list }),
+        count: count === 1 ? App.t('checked in part by 1 AI') : App.t('checked in part by {count} AIs', { count }),
+        brief: App.t('checked in part'), least: App.t('checked'), partial: true };
+    }
+    return { full: App.t('checked by {names}', { names: list }),
+      count: count === 1 ? App.t('checked by 1 AI') : App.t('checked by {count} AIs', { count }),
+      brief: App.t('checked'), least: App.t('checked'), partial: false };
   }
   // The head of a turn's activity (agent-activity.js), with notes passed to
   // the agent: while the review or the agent's pass goes on after the answer
@@ -749,7 +760,7 @@
   // head keeps its time alone: agent-activity.js `refining`); then how the check
   // ended, in the sense of the line under the answer: checked (by every
   // reviewer or in part, named by their families: `by` is the index of that
-  // phrase, which a narrow head shortens first) and the one thing that came
+  // phrase, `forms` its shorter forms for a narrower head) and the one thing that came
   // of it, stopped by the user, or not checked (the reviewers did not
   // finish). A pass that came to nothing (`skipped`) leaves its notes open,
   // nothing more (passSummary). Null without such a check: the head says
@@ -770,7 +781,7 @@
     const result = pass.improved === 1 ? '1 sentence improved' : pass.improved ? `${pass.improved} sentences improved`
       : stopped ? 'correction stopped' : count === 1 ? '1 note open' : count ? `${count} notes open` : 'no objections';
     const by = checkedBy(review);
-    if (by) return { live: false, parts: [by, result], by: 0 };
+    if (by) return { live: false, parts: [by.full, result], by: 0, forms: by };
     return { live: false, parts: [review.status === 'partial' ? 'checked in part' : 'checked', result] };
   }
   // The pass ended without checking what it got (agent-activity.js names

@@ -1406,6 +1406,10 @@
   "Blocked in this browser’s site settings.": "In den Website-Einstellungen dieses Browsers blockiert.",
   "checked by {names}": "geprüft von {names}",
   "checked in part by {names}": "teilweise geprüft von {names}",
+  "checked by 1 AI": "geprüft von 1 KI",
+  "checked by {count} AIs": "geprüft von {count} KIs",
+  "checked in part by 1 AI": "teilweise geprüft von 1 KI",
+  "checked in part by {count} AIs": "teilweise geprüft von {count} KIs",
   "names|{first} and {last}": "{first} und {last}",
   "Edit and send again": "Bearbeiten und neu senden"
 }
