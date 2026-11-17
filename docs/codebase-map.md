@@ -42,9 +42,11 @@ API v1 und kuratierte Topics.
 Agent hat einen Modus (31.10.2026): Jeder Chat-Lauf jedes Kontos ist, was
 bis dahin „Audit statt Vergleich“ hieß. Das Chatmodell arbeitet und antwortet
 selbst mit eigener Websuche in jedem Schritt (dazu der Arbeitsplatz, wo das
-Konto ihn hat), die gewählten Modelle (1 bis 6) prüfen als Prüfer seine Arbeit
+Konto ihn hat), die gewählten Modelle (0 bis 6) prüfen als Prüfer seine Arbeit
 live und die fixierte Antwort, und der Agent darf sie mit `compare_models`
-fragen. Kein Judge prüft mehr eine Agent-Antwort.
+fragen. Ohne gewähltes Modell („No cross-check“) läuft die Nachricht wie mit
+Prüfern aus, ohne `compare_models` (`routers/agent.py` setzt `reviewers =
+"off"`). Kein Judge prüft mehr eine Agent-Antwort.
 - Entfernt: der Vergleichsmodus des Agenten (Judges auf der Agent-Antwort,
   `check_text`/Textprüfung, Coverage-Vorlauf und `coverage_preview`,
   Model-Pulse-Stimmen und Differences-Statistik aus Agent-Läufen,

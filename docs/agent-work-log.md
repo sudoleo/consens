@@ -155,10 +155,10 @@ Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
 
 ## Die Prüfer
 
-**Wer:** die gewählten Modelle der Nachricht (eins bis sechs,
-`agent_comparison.comparison_selection`). Seit 2026-10-31 hat jeder Chat-Lauf
-Prüfer; „Answer check“ aus (bis dahin: keine Prüfer, das Protokoll wurde
-trotzdem geschrieben) gibt es nicht mehr.
+**Wer:** die gewählten Modelle der Nachricht (bis sechs,
+`agent_comparison.comparison_selection`). Ohne gewähltes Modell oder mit der
+Einstellung „Prüfer aus“ prüft niemand; das Protokoll wird trotzdem
+geschrieben.
 
 **Was sie bekommen:** dasselbe Protokoll, als Fortsetzung einer eigenen Sitzung
 je Prüfer (`ReviewerSession`, ein Thread je Prüfer ab dem Start des Laufs,

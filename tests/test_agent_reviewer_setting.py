@@ -140,6 +140,29 @@ def test_the_route_runs_a_message_with_the_setting_its_page_sent(api):
     assert client.post("/agent", json={**payload, "reviewers": "never"}, headers=AUTH).status_code == 422
 
 
+def test_a_message_without_a_chosen_reviewer_runs_unchecked_whatever_the_setting(api):
+    """"No cross-check" in the composer: the message goes, nobody reviews it,
+    and compare_models has nobody to ask."""
+    client, store, calls = api
+    chat_id = client.post("/chats", json={"execution_mode": "agent"}, headers=AUTH).json()["chat"]["id"]
+    payload = {"chat_id": chat_id, "question": "Hi", "client_request_id": "none-1", "bookmark_id": "bm_none",
+               "comparison_models": {}, "reviewers": "always", "findings_to_agent": True}
+    response = client.post("/agent", json=payload, headers=AUTH)
+    assert response.status_code == 200 and "event: final" in response.text, response.text
+    turn = next(t for t in store.list_turns(UID, chat_id)["turns"] if t["question"] == "Hi")
+    saved_turn = store.get_turn(UID, chat_id, turn["id"])
+    settings = saved_turn["agent_settings"]
+    assert settings["reviewers"] == "off" and settings["comparison_models"] == {}
+    assert "findings_to_agent" not in settings
+    assert saved_turn["agent_review"]["status"] == "off" and not calls.reviews
+    assert prompt_defaults.AGENT_REVIEW_FACTS["off"] in calls[0]["messages"][0]["content"]
+    names = {tool.get("function", {}).get("name") for tool in calls[0]["tools"] or []}
+    assert "compare_models" not in names
+    # The replay is the same request: an empty choice is its identity, not the default preset.
+    replay = client.post("/agent", json=payload, headers=AUTH)
+    assert replay.status_code == 200 and replay.json()["response"] == "A helpful answer"
+
+
 def test_the_daily_counters_count_the_setting():
     counters = agent_audit_metrics.turn_counters({"status": "completed"},
                                                  {"review_setting": "off", "reviewers": 0})

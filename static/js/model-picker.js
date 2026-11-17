@@ -560,22 +560,20 @@
       // work; while its list loads, the name the first frame painted
       // (app-bootstrap.js).
       displayLabel = select.dataset.catalog === "ready" ? selectedLabel : window.App.firstFrame?.agentModel?.() || selectedLabel;
-      // With the reviewers off (Settings > Agent) nobody cross-checks.
+      // With the reviewers off (Settings > Agent) or none chosen nobody cross-checks.
       const setting = window.App.words?.reviewerSetting?.();
-      const off = setting === "off", workspace = setting === "workspace" && count > 0;
+      const off = setting === "off" || count < 1, workspace = setting === "workspace";
       displayTitle = off ? `${selectedLabel} writes the answer, without reviewers.`
-        : count < 1 ? `${selectedLabel} writes the answer. Choose a model to review it.`
-          : workspace ? (count === 1 ? `${selectedLabel} writes the answer, 1 AI checks its work in the workspace.`
-            : `${selectedLabel} writes the answer, ${count} AIs check its work in the workspace.`)
-            : count === 1 ? `${selectedLabel} writes the answer, 1 AI cross-checks it.`
-              : `${selectedLabel} writes the answer, ${count} AIs cross-check it.`;
+        : workspace ? (count === 1 ? `${selectedLabel} writes the answer, 1 AI checks its work in the workspace.`
+          : `${selectedLabel} writes the answer, ${count} AIs check its work in the workspace.`)
+          : count === 1 ? `${selectedLabel} writes the answer, 1 AI cross-checks it.`
+            : `${selectedLabel} writes the answer, ${count} AIs cross-check it.`;
       const model = spoken(selectedLabel);
       ariaLabel = off ? `${linked}: ${model} writes the answer, without reviewers`
-        : count < 1 ? `${linked}: ${model} writes the answer, no cross-check`
-          : workspace ? (count === 1 ? `${linked}: ${model} writes the answer, 1 AI checks its work in the workspace`
-            : `${linked}: ${model} writes the answer, ${count} AIs check its work in the workspace`)
-            : count === 1 ? `${linked}: ${model} writes the answer, 1 AI cross-checks it`
-              : `${linked}: ${model} writes the answer, ${count} AIs cross-check it`;
+        : workspace ? (count === 1 ? `${linked}: ${model} writes the answer, 1 AI checks its work in the workspace`
+          : `${linked}: ${model} writes the answer, ${count} AIs check its work in the workspace`)
+          : count === 1 ? `${linked}: ${model} writes the answer, 1 AI cross-checks it`
+            : `${linked}: ${model} writes the answer, ${count} AIs cross-check it`;
     }
 
     if (state.displayButton) {
@@ -979,7 +977,7 @@
     const models = count === 1 ? "1 model" : `${count} models`;
     renderLevelRow(state, {
       name: `${window.App.t(models)} · ${window.App.t(preset ? preset.label : "Custom")}`,
-      hint: count < 1 ? "Choose at least 1" : families.join(", "),
+      hint: count < 1 ? "No cross-check" : families.join(", "),
       level: "companion",
       disabled: state.companion.disabled,
       onEnter: () => enterCompanion(state)
@@ -1079,20 +1077,20 @@
     renderBackRow(select, state, "Presets", "presets");
 
     // Next to an Agent answer these models review it (and answer when the
-    // agent asks them): one is enough (Compare needs two).
+    // agent asks them): none is a message nobody checks (Compare needs two).
     const comparisonOnly = select.dataset.comparisonOnly === "true";
     // The count stands in the label's line from the start. A requirement
     // that appeared above the rows only below the minimum moved every row
     // under the pointer, one click before the last.
     const selectedCount = window.App.getSelectedModelCount?.() || 0;
-    const minimum = comparisonOnly ? 1 : 2;
+    const minimum = comparisonOnly ? 0 : 2;
     const requirement = document.createElement("span");
     requirement.className = "model-picker-requirement";
     requirement.setAttribute("role", "status");
     requirement.classList.toggle("is-invalid", selectedCount < minimum);
-    requirement.textContent = selectedCount < minimum
-      ? (minimum === 1 ? `At least 1 · ${selectedCount} selected` : `At least 2 · ${selectedCount} selected`)
-      : selectedCount === 1 ? "1 model selected" : `${selectedCount} models selected`;
+    requirement.textContent = selectedCount < minimum ? `At least 2 · ${selectedCount} selected`
+      : selectedCount < 1 ? "No cross-check"
+        : selectedCount === 1 ? "1 model selected" : `${selectedCount} models selected`;
     appendSectionLabel(state.menu, comparisonOnly ? "Reviewers" : "Answering models", requirement);
     window.App.modelPrefs.forEach(pref => renderProviderRow(select, state, pref));
   }

@@ -615,6 +615,9 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         delegation_config = {**delegation_config, "enabled": delegation_config["enabled"] and supports_delegation(model)}
         policy = AgentPolicy.for_chat(delegation_config)
         comparisons = comparison_selection(payload.comparison_models)
+        # No reviewer chosen ("No cross-check" in the composer): nobody
+        # checks, whatever the account's setting says.
+        reviewers = payload.reviewers if comparisons else "off"
         # Read beside the others; a temporary chat reads it and writes nothing.
         memory = reads["memory"].result()
         if temporary:
@@ -638,7 +641,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
         if watch_run:
             from app.services import agent_watches
             app_context += "\n" + agent_watches.run_context(watch_run)
-        findings_to_agent = payload.findings_to_agent and payload.reviewers != "off"
+        findings_to_agent = payload.findings_to_agent and reviewers != "off"
         if findings_to_agent:
             # The previous answer's open findings, saved on the chat while
             # that answer was the chat's newest (AnswerAudit._save_open).
@@ -661,7 +664,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                             "google_data": google_data,
                             "comparison_selection": payload.comparison_models,
                             "agent_preferences": preferences.model_dump(),
-                            "reviewers": payload.reviewers,
+                            "reviewers": reviewers,
                             **({"findings_to_agent": True} if findings_to_agent else {}),
                             **({"temporary": True} if temporary else {}),
                             **({"watch_run": watch_run} if watch_run else {}),
@@ -699,7 +702,7 @@ def start_agent_turn(uid, payload: AgentRequest, *, watch_run=None):
                          google_data_consent=payload.google_data_consent, google_data=google_data,
                          delegation_config=delegation_config, cooldowns=provider_cooldowns,
                          comparison_models=comparisons, agent_preferences=preferences, memory=memory,
-                         chat_sources=chat_sources, reviewers=payload.reviewers, temporary=temporary,
+                         chat_sources=chat_sources, reviewers=reviewers, temporary=temporary,
                          findings_to_agent=findings_to_agent,
                          watch_run=watch_run, history_summary=history_summary or None,
                          workspace_closed=preferences.vm == "on" and workspace_closed(chat_data, browser),

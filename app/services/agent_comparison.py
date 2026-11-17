@@ -165,12 +165,13 @@ class AuditAnswerArgs(BaseModel):
 
 def comparison_selection(value=None):
     """The models of one message: the reviewers of the agent's work and the
-    models compare_models asks. One is enough."""
+    models compare_models asks. None is the default preset; an empty choice
+    is a message nobody checks, without compare_models (ComparisonTools)."""
     chosen = dict(cfg.CONSENSUS_PRESET_MODELS[cfg.DEFAULT_CONSENSUS_PRESET]["answers"]) if value is None else dict(value)
     # A browser may still hold a migrated ID (grok-4.3-no-reasoning).
     chosen = {provider: cfg.canonical_model_id(model_id, provider) for provider, model_id in chosen.items()}
-    if not 1 <= len(chosen) <= cfg.MAX_RUN_FAMILIES:
-        raise ValueError(f"Select between one and {cfg.MAX_RUN_FAMILIES} reviewers")
+    if len(chosen) > cfg.MAX_RUN_FAMILIES:
+        raise ValueError(f"Select at most {cfg.MAX_RUN_FAMILIES} reviewers")
     for provider, model_id in chosen.items():
         if provider not in cfg.PROVIDERS or model_id not in cfg.PROVIDERS[provider].models:
             raise ValueError("Comparison model is not available")
@@ -223,8 +224,9 @@ class ComparisonTools:
         self.chat_fields = {}
         # Every chosen model, every answer awaited, the depth the agent's.
         limit = loop.policy.turn_comparisons if loop.policy.account_budget_only else None
+        # Without a chosen model there is nobody to ask.
         self.tools = [ReadOnlyTool("compare_models", AUDIT_COMPARE + (
-            f" At most {limit} times per message." if limit else ""), AuditCompareArgs, self.compare)]
+            f" At most {limit} times per message." if limit else ""), AuditCompareArgs, self.compare)] if models else []
         # The review: run by the app once the answer is written, never
         # offered to the agent; so is the agent's one correction of it.
         self.app_tools = [ReadOnlyTool("audit_answer", "Have the user's comparison models review the fixed answer.",

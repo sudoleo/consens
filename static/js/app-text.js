@@ -238,6 +238,10 @@
     reviewing: (count, setting) => setting === "off" ? "Reviewers off"
       : setting !== "workspace" || count < 1 ? App.words.crossCheck(count)
         : count === 1 ? "1 AI checks the workspace" : `${count} AIs check the workspace`,
+    // Their short form where the words do not fit (a narrow bar). Off and
+    // none keep their words: "Off" or "0 AIs" alone beside (+) said nothing.
+    reviewingShort: (count, setting) => setting === "off" ? "Reviewers off"
+      : count < 1 ? "No cross-check" : count === 1 ? "1 AI" : `${count} AIs`,
     // The account's reviewers setting: "always" unless it chose another.
     reviewerSetting: () => {
       const value = App.userSettings?.get?.("reviewers");

@@ -143,15 +143,17 @@ describe("single-model agent chat", () => {
     d.getElementById('questionInput').value='Please compare these options.';
     w.fetch.mockClear();
     await w.App.agentChat.send();
-    // The comparison models review the work: one is enough.
-    if (count < 1 || count > 6) {
+    // The comparison models review the work; none is a message nobody checks.
+    if (count > 6) {
       expect(w.fetch).not.toHaveBeenCalled();
       expect(w.streamSSERequest).not.toHaveBeenCalled();
       expect(d.getElementById('questionInput').value).toBe('Please compare these options.');
-      expect(w.App.showPopup).toHaveBeenCalledWith('Select between one and 6 reviewers before sending.');
+      expect(w.App.showPopup).toHaveBeenCalledWith('Select at most 6 reviewers before sending.');
     } else {
       expect(w.streamSSERequest).toHaveBeenCalledTimes(1);
-      expect(Object.keys(w.streamSSERequest.mock.calls[0][1].comparison_models)).toHaveLength(count);
+      const body = w.streamSSERequest.mock.calls[0][1];
+      expect(Object.keys(body.comparison_models)).toHaveLength(count);
+      expect(body.reviewers).toBe(count ? 'always' : 'off');
     }
     dom.window.close();
   });
@@ -4224,8 +4226,9 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, 1 AI cross-checks it.');
     expect(w.App.agentChat.sendBlocker()).toBeNull();
 
-    // The count stands in the label's line from the start; below the
-    // minimum only its words change, so no row moves.
+    // The count stands in the label's line from the start; without a
+    // reviewer only its words change, so no row moves. None is a message
+    // nobody checks, never a blocked Send.
     trigger.click();
     menu.querySelector('[data-picker-level="companion"]').click();
     menu.querySelector('.model-picker-custom-option').click();
@@ -4234,12 +4237,12 @@ describe('one Agent chip for the chat model and its comparison models', () => {
     expect(count().classList.contains('is-invalid')).toBe(false);
     const rows = menu.querySelectorAll('.model-picker-row').length;
     menu.querySelector('[data-focus-key="toggle:OpenAI"]').click();
-    expect(count().textContent).toBe('At least 1 · 0 selected');
-    expect(count().classList.contains('is-invalid')).toBe(true);
+    expect(count().textContent).toBe('No cross-check');
+    expect(count().classList.contains('is-invalid')).toBe(false);
     expect(menu.querySelectorAll('.model-picker-row').length).toBe(rows);
     expect(chipText()).toBe('DeepSeek V4.1 Flash');
-    expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer. Choose a model to review it.');
-    expect(w.App.agentChat.sendBlocker().message).toBe('Select between one and 6 reviewers to send your message.');
+    expect(trigger.title).toBe('DeepSeek V4.1 Flash writes the answer, without reviewers.');
+    expect(w.App.agentChat.sendBlocker()).toBeNull();
 
     // The reviewers' control opens their level, and the menu comes out of
     // it: it says open and closed like the chip.

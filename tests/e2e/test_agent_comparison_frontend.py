@@ -13,55 +13,36 @@ from test_agent_chat_frontend import CATALOG, _choose_mode, _open_agent_level, _
 
 
 @pytest.mark.parametrize("width", [1280, 390])
-def test_comparison_selection_blocks_send_before_losing_draft(browser, phase4_server, width):
+def test_without_a_reviewer_the_message_still_sends_unchecked(browser, phase4_server, width):
+    """"No cross-check" is a choice, not a blocked Send: the message goes
+    without reviewers, whatever the account's reviewers setting says."""
     context, page = _real_firebase_page(browser, phase4_server)
-    requests = []
     try:
         page.set_viewport_size({"width": width, "height": 960})
         page.route('**/user_status', lambda r: _json(r, {"tier": "pro", "is_pro": True, "agent_access": True}))
         page.route('**/agent/models', lambda r: _json(r, CATALOG))
-        page.route('**/agent', lambda r: (requests.append(r.request.url), _json(r, {"error": "Unexpected request"}, 500)))
-        page.route('**/chats', lambda r: (requests.append(r.request.url), _json(r, {"error": "Unexpected request"}, 500)))
+        page.route('**/agent', lambda r: _json(r, {"error": "Refused here"}, 500))
+        page.route('**/chats', lambda r: _json(r, {"error": "Refused here"}, 500))
         page.evaluate("async () => { await window.__switchE2EUser('account-a'); }")
         _choose_mode(page, 'agent')
-        page.locator('#questionInput').fill('Keep this draft while I choose the models.')
+        page.locator('#questionInput').fill('Send this without reviewers.')
         expect(page.locator('#sendButton')).to_be_enabled()
         # One chip in Agent: the comparison models are a section of its menu.
         expect(page.locator('.consensus-model-inline')).to_be_hidden()
         _open_agent_level(page, 'companion')
         page.locator('.agent-model-picker .model-picker-custom-option').click()
         selected = page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="true"]')
-        while selected.count() > 1:
+        while selected.count():
             selected.first.click()
-        # One reviewer is enough; none is not.
+        expect(page.locator('.agent-model-picker .model-picker-requirement')).to_have_text('No cross-check')
+        expect(page.locator('.agent-model-picker .model-picker-requirement')).not_to_have_class(re.compile(r'is-invalid'))
         expect(page.locator('#sendButton')).to_be_enabled()
-        selected.first.click()
-        expect(page.locator('#sendButton')).to_be_disabled()
         page.keyboard.press('Escape')
-        expect(page.locator('#agentComposerNotice')).to_be_visible()
-        expect(page.locator('#agentComposerMessage')).to_contain_text('reviewers')
-        expect(page.locator('#sendButton')).to_have_attribute('title', page.locator('#agentComposerMessage').inner_text())
-        page.locator('#questionInput').click()
-        page.locator('#questionInput').press('Control+End')
-        page.locator('#questionInput').press('Enter')
-        # With a keyboard Enter sends at every width; the send
-        # is blocked here, so the draft stays as it was.
-        draft = 'Keep this draft while I choose the models.'
-        expect(page.locator('#questionInput')).to_have_value(draft)
-        # Also guard direct callers, independent of the disabled button.
-        page.evaluate('() => App.agentChat.send()')
-        expect(page.locator('#questionInput')).to_have_value(draft)
-        assert requests == []
-        page.locator('#agentComposerAction').click()
-        expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
-        custom = page.locator('.agent-model-picker .model-picker-custom-option')
-        if custom.is_visible():
-            custom.click()
-        excluded = page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="false"]')
-        excluded.first.click()
-        expect(page.locator('#sendButton')).to_be_enabled()
+        expect(page.locator('#composerModelLabel')).to_have_text('No cross-check')
         expect(page.locator('#agentComposerNotice')).not_to_be_visible()
-        assert requests == []
+        # The message goes: its chat is asked for (and refused here).
+        with page.expect_request('**/chats'):
+            page.locator('#sendButton').click()
     finally:
         context.close()
 
@@ -188,16 +169,10 @@ def test_mobile_agent_plus_menu_opens_tools_from_single_line_composer(browser, p
         page.keyboard.press('Escape')
         page.evaluate('() => App.composer.collapse({force:true})')
         page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
-        expect(page.locator('#agentComposerNotice')).to_be_visible()
-        expect(page.locator('#composerModeBar')).not_to_be_visible()
-        _snapshot(page, f'agent-followup-selection-hint-{width}')
-        page.locator('#agentComposerAction').tap()
-        expect(page.locator('.agent-model-picker .model-picker-menu')).to_be_visible()
-        page.locator('.agent-model-picker .model-picker-row-toggle[aria-checked="false"]').first.tap()
+        # No reviewer is "No cross-check", never a hint that blocks Send.
         expect(page.locator('#agentComposerNotice')).not_to_be_visible()
-        page.keyboard.press('Escape')
-        page.evaluate('() => App.composer.collapse({force:true})')
-        page.wait_for_function("() => !document.body.classList.contains('composer-animating') && !document.body.classList.contains('composer-gliding')")
+        expect(page.locator('#composerModeBar')).not_to_be_visible()
+        _snapshot(page, f'agent-followup-no-cross-check-{width}')
         page.locator('#attachTrigger').tap()
         page.locator('#agentReasoningMenuOption').tap()
         menu = page.locator('.agent-model-picker .model-picker-menu')

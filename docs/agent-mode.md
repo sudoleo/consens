@@ -137,13 +137,17 @@ als Abschnitt „Reviewers“/„Prüfer“. Er wählt die Prüfer (die zugleich
 `compare_models` beantworten) aus derselben Konfiguration; Standard seit
 2026-11-01: Daily mit Claude Haiku 5.5 und DeepSeek V4.1 Flash. Agent
 bietet keine zusätzliche Presetliste und keinen Synthese-/Consensus-Modell-Picker
-an. Manuelle Familien-/Modellwahl bleibt möglich. Eins bis sechs Modelle müssen
-gewählt sein (bis 2026-10-31 im Vergleichsmodus zwei bis sechs; Compare braucht
-weiter zwei). Bei ungültiger Auswahl ist Senden gesperrt („Select between one and
-6 reviewers …“); auch direkte Send-Aufrufe
-werden vor Chat-Erstellung und Leeren des Entwurfs abgefangen. Der Browser sendet
-die konkrete Auswahl, auch eine leere Auswahl wird nicht still durch Defaults
-ersetzt. API-Aufrufe ohne Auswahl behalten das zentrale Standardpreset.
+an. Manuelle Familien-/Modellwahl bleibt möglich. Null bis sechs Modelle sind
+erlaubt (Compare braucht weiter zwei). Ohne Modell steht im Composer „No
+cross-check“, und die Nachricht läuft wie mit der Einstellung „Prüfer aus“:
+Der Browser sendet `comparison_models: {}` mit `reviewers: "off"`, der Server
+setzt bei leerer Auswahl selbst `reviewers = "off"` (gespeichert in
+`agent_settings.reviewers`) und bietet `compare_models` nicht an, weil niemand
+zu fragen ist. Erst mehr als sechs sperren das Senden („Select at most 6
+reviewers …“); auch direkte Send-Aufrufe werden vor Chat-Erstellung und Leeren
+des Entwurfs abgefangen. Der Browser sendet die konkrete Auswahl, auch eine
+leere Auswahl wird nicht still durch Defaults ersetzt. API-Aufrufe ohne Auswahl
+(`null`) behalten das zentrale Standardpreset.
 
 Die gemeinsame Bottom-Bar steht im Beta-Chat nur vor der ersten Frage. Danach
 liegen ihre Optionen im bestehenden (+)-Menü im Input. Der Composer selbst ist

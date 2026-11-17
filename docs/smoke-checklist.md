@@ -1709,9 +1709,9 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
   Lange Labels kürzen sich innerhalb ihres Buttons;
   Dropdown-Pfeile bleiben direkt am Label. Beide Picker bleiben bedienbar.
 - [ ] Während der Chatmodellkatalog lädt oder nicht verfügbar ist: Nachricht
-  tippen können, Senden gesperrt und Erklärung am Composer. Bei ungültiger
-  Vergleichsauswahl öffnet „Choose models“ den Picker; nach Korrektur verschwindet
-  der Hinweis. Auch im mobilen Folgefragen-Composer prüfen.
+  tippen können, Senden gesperrt und Erklärung am Composer. Alle Prüfer
+  abgewählt: Composer und Picker sagen „No cross-check“, Senden bleibt frei,
+  die Antwort kommt ohne Prüfung. Auch im mobilen Folgefragen-Composer prüfen.
 - [ ] Leere Nachricht sperrt Senden; ein hinzugefügtes Zitat gibt es frei.
   Während der Antwort bleibt Stop nutzbar und ein neuer Entwurf kann entstehen.
 - [ ] Ein Fehler/Stop vor dem Versand erhält Text und Zitat im Composer.

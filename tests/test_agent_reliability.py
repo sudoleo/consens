@@ -39,16 +39,15 @@ def test_legacy_receipts_cannot_hide_recoverable_token_reservations(store):
 
 def test_api_comparison_selection_uses_the_same_six_family_cap_as_the_picker():
     choices = {key: next(iter(provider.models)) for key, provider in cfg.PROVIDERS.items()}
-    with pytest.raises(ValueError, match='between one and 6 reviewers'):
+    with pytest.raises(ValueError, match='at most 6 reviewers'):
         comparison_selection(choices)
 
 
-def test_one_chosen_model_is_enough():
+def test_one_chosen_model_is_enough_and_none_is_no_cross_check():
     """The models review the agent's work and answer compare_models: one is
-    enough."""
+    enough; none is a message nobody checks."""
     assert list(comparison_selection({'anthropic': 'claude-haiku-4-5'})) == ['anthropic']
-    with pytest.raises(ValueError, match='between one and'):
-        comparison_selection({})
+    assert comparison_selection({}) == {}
 
 
 def test_admission_cannot_wait_when_even_released_tokens_cannot_fit(store, monkeypatch):

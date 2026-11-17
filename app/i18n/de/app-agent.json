@@ -240,14 +240,12 @@
   "Chat models could not be loaded. Retry to continue.": "Die Chatmodelle konnten nicht geladen werden. Versuch es erneut, um weiterzumachen.",
   "Loading chat models… You can already write your message.": "Lädt Chatmodelle… Du kannst deine Nachricht schon schreiben.",
   "No chat models are available right now. Try reloading the model list.": "Gerade sind keine Chatmodelle verfügbar. Lade die Modellliste neu.",
-  "Select between one and {limit} reviewers to send your message.": "Wähle einen bis {limit} Prüfer, um deine Nachricht zu senden.",
   "Reopen this saved chat before continuing.": "Öffne diesen gespeicherten Chat erneut, bevor du weitermachst.",
   "Needs review": "Zu prüfen",
   "(prefers-reduced-motion: reduce)": "(prefers-reduced-motion: reduce)",
   "Ask a follow-up": "Stell eine Nachfrage",
   "Message not sent. {reason}": "Nachricht nicht gesendet. {reason}",
   "Agent isn’t available on your account yet.": "Der Agent ist für dein Konto noch nicht verfügbar.",
-  "Select between one and {limit} reviewers before sending.": "Wähle vor dem Senden einen bis {limit} Prüfer.",
   "Choose an available agent model before sending.": "Wähle vor dem Senden ein verfügbares Agent-Modell.",
   "Not enough of today’s allowance is left for this step. Try a smaller model or fewer comparison models, or wait for the reset at {0}.": "Für diesen Schritt reicht dein heutiges Kontingent nicht mehr. Wähle ein kleineres Modell oder weniger Vergleichsmodelle oder warte bis zum Zurücksetzen um {0}.",
   "Waiting": "Wartet",
@@ -1411,5 +1409,7 @@
   "checked in part by 1 AI": "teilweise geprüft von 1 KI",
   "checked in part by {count} AIs": "teilweise geprüft von {count} KIs",
   "names|{first} and {last}": "{first} und {last}",
-  "Edit and send again": "Bearbeiten und neu senden"
+  "Edit and send again": "Bearbeiten und neu senden",
+  "Select at most {limit} reviewers to send your message.": "Wähle höchstens {limit} Prüfer, um deine Nachricht zu senden.",
+  "Select at most {limit} reviewers before sending.": "Wähle vor dem Senden höchstens {limit} Prüfer."
 }

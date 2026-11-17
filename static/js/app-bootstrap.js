@@ -588,7 +588,7 @@
         const words = window.App.words.reviewing(count, setting);
         label.textContent = words;
         // The short form a narrow bar shows (agent-mode.js renderReviewers).
-        const short = setting === "off" ? "Reviewers off" : count === 1 ? "1 AI" : `${count} AIs`;
+        const short = window.App.words.reviewingShort(count, setting);
         label.parentElement.classList.toggle("reviewers-off", setting === "off");
         label.dataset.short = window.App.t?.(short) ?? short;
         label.hidden = false;

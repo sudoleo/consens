@@ -424,10 +424,11 @@
     // Where the words do not fit, their short form ("3 AIs"), the same in the
     // chat and on the start screen: the marks never stand without a word on a
     // phone. An attribute is not translated by i18n.js.
-    // Off keeps its two words: "Off" alone beside (+) said nothing (a phone shows no marks).
-    const short = !reviewing ? "" : setting === "off" ? "Reviewers off" : count === 1 ? "1 AI" : `${count} AIs`;
+    const short = reviewing ? window.App.words.reviewingShort(count, setting) : "";
     const title = setting === "off"
       ? "Reviewers are off: nobody checks the agent’s work. Switch them on in Settings › Agent."
+      : count < 1
+        ? "No reviewer chosen: nobody checks the agent’s work. Choose them here."
       : setting === "workspace"
         ? "Reviewers follow the agent’s work once it uses its workspace, and pause it when in doubt. Choose them here."
         : "Independent reviewers follow the agent’s work and pause it when in doubt. Choose them here.";

@@ -1120,7 +1120,7 @@
           chat_id: context.metadata.chatId, question: context.question, client_request_id: context.requestIdentity,
           bookmark_id: context.bookmark.id, recover_only: true, model_id: settings.model_id,
           reasoning_effort: settings.reasoning_effort || 'default',
-          comparison_models: Object.keys(context.config.comparisonModels || {}).length ? context.config.comparisonModels : null,
+          comparison_models: context.config.comparisonModels ?? null,
         file_ids: context.metadata.fileIds || [],
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
@@ -1147,18 +1147,17 @@
       .filter(pref => document.getElementById(pref.checkId)?.checked)
       .map(pref => [pref.provider, document.getElementById(pref.selectId)?.value]));
   }
-  // The comparison models review the agent's work: one is enough
-  // (agent_comparison.comparison_selection).
+  // The comparison models review the agent's work. None is a message nobody
+  // checks ("No cross-check", agent_comparison.comparison_selection).
   function comparisonLimit() { return Number(App.maxRunFamilies) > 0 ? Number(App.maxRunFamilies) : 6; }
   function comparisonRequirement(suffix) {
     const limit = comparisonLimit();
-    return suffix === 'send' ? `Select between one and ${limit} reviewers to send your message.`
-      : `Select between one and ${limit} reviewers before sending.`;
+    return suffix === 'send' ? `Select at most ${limit} reviewers to send your message.`
+      : `Select at most ${limit} reviewers before sending.`;
   }
   function hasValidComparisonSelection(value = comparisonSelection()) {
     const models = Object.values(value);
-    return models.length >= 1 && models.length <= comparisonLimit()
-      && models.every(id => typeof id === 'string' && id.trim());
+    return models.length <= comparisonLimit() && models.every(id => typeof id === 'string' && id.trim());
   }
   function sendBlocker() {
     if (!canUse()) return { message: 'Log in to use Agent.' };
@@ -2650,7 +2649,7 @@
         config: { executionMode: "agent", agentMode: true, autoConsensus: false, deepSearch: false,
           useOwnKeys: false, providers: [],
           agentSettings: { model_id: body.model_id, reasoning_effort: body.reasoning_effort },
-          comparisonModels: body.comparison_models || {},
+          comparisonModels: body.comparison_models ?? null,
           googleSelection: body.google_selection || null, googleDataConsent: body.google_data_consent === true },
         metadata: { draftQuestion: "", quotedContext: "", fileIds: body.file_ids || [], agentActivity: [],
           agentSettings: settings, chatId: body.chat_id, requestSent: true, resumed: true,
@@ -3288,8 +3287,9 @@
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
         timezone: deviceTimezone(),
-        // Who checks this message's work: what the composer showed (Settings > Agent).
-        reviewers: App.words.reviewerSetting(),
+        // Who checks this message's work: what the composer showed (Settings >
+        // Agent); nobody without a chosen reviewer ("No cross-check").
+        reviewers: Object.keys(comparisonModels).length ? App.words.reviewerSetting() : "off",
         // Whether the reviewers' findings reach the agent (Settings > Agent): on
         // unless the account switched it off. Sent only when on: the server reads
         // a message without it as off, as a page from before the default did.

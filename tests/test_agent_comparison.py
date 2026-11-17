@@ -644,11 +644,13 @@ def test_comparison_models_get_their_own_completion_limit():
         assert model.max_output_tokens > cfg.MAX_TOKENS
 
 
-def test_one_model_is_enough_and_more_than_the_run_families_are_refused():
+def test_none_or_one_model_is_enough_and_more_than_the_run_families_are_refused():
     from app.core import config as cfg
     assert list(comparison_selection({"anthropic": "claude-haiku-4-5"})) == ["anthropic"]
-    with pytest.raises(ValueError, match=f"between one and {cfg.MAX_RUN_FAMILIES} reviewers"):
-        comparison_selection({})
+    assert comparison_selection({}) == {}
+    choices = {key: next(iter(provider.models)) for key, provider in cfg.PROVIDERS.items()}
+    with pytest.raises(ValueError, match=f"at most {cfg.MAX_RUN_FAMILIES} reviewers"):
+        comparison_selection(choices)
 
 
 def test_answer_cut_off_at_the_output_limit_is_kept_as_marked_evidence(store):
