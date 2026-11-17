@@ -317,7 +317,7 @@ def test_read_settings_says_what_is_set_the_defaults_and_the_choices_of_the_acco
     call = {"id": "r", "type": "function", "function": {"name": "read_settings", "arguments": ""}}
     tool, arguments = loop.registry.validate(call)  # no arguments streamed: an empty object
     read = tool.execute(arguments)
-    assert read["account"].startswith("without Pro")
+    assert "without Pro: Pro models" in read["account"]
     assert read["chat_model"]["now"] == "Claude Sonnet 5.5"
     assert "Claude Opus 4.8" in read["chat_model"]["on_pro"] and "Claude Opus 4.8" not in read["chat_model"]["choices"]
     assert "Grok 4.7" not in read["chat_model"]["choices"]
@@ -341,6 +341,25 @@ def test_read_settings_says_what_is_set_the_defaults_and_the_choices_of_the_acco
     # A stored Pro lineup without Pro runs the default lineup, as the picker does.
     assert settings_loop(store, account={"consensus_preset": "thorough"}).settings_tools.read(
         agent_settings.ReadSettings())["comparison_lineup"]["now"] == "Daily"
+
+
+def test_read_settings_names_the_account_once_for_its_allowance_and_for_pro(store, monkeypatch):
+    """"Pro" beside an allowance of "Admin" read as two accounts: the tier
+    the allowance counts and what Pro unlocks stand in one line."""
+    from app.services import agent_quota
+    monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: "pro")
+    monkeypatch.setattr(agent_quota, "_admin_role", lambda uid: True)
+    read = lambda pro: settings_loop(store, pro=pro).settings_tools.read(agent_settings.ReadSettings())
+    assert read(True)["account"] == "Admin, with everything Pro unlocks"
+    admin_without_pro = read(False)
+    assert admin_without_pro["account"].startswith("Admin, without Pro: Pro models")
+    assert "this_account" not in admin_without_pro["consens_io"]["allowance"]
+    monkeypatch.setattr(agent_quota, "_admin_role", lambda uid: False)
+    monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: "plus")
+    assert read(False)["account"].startswith("Plus, without Pro")
+    # Unreadable, the account still says what Pro unlocks.
+    monkeypatch.setattr(agent_quota, "_stored_tier", lambda uid: (_ for _ in ()).throw(RuntimeError("down")))
+    assert read(True)["account"] == "Pro" and read(False)["account"].startswith("without Pro")
 
 
 def test_read_settings_names_the_models_of_this_message_and_of_each_lineup(store, monkeypatch):
@@ -369,7 +388,8 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
     limits = agent_budget_config.get_config(store.db)["tier_limits"]
     monkeypatch.setattr(agent_quota, "shown_allowance", lambda db, uid, tier=None: (620_000, limits["free"]))
     loop = settings_loop(store)
-    about = loop.settings_tools.read(agent_settings.ReadSettings())["consens_io"]
+    read = loop.settings_tools.read(agent_settings.ReadSettings())
+    about = read["consens_io"]
     limits = agent_budget_config.get_config(store.db)["tier_limits"]
     allowance = about["allowance"]
     # Shares as the sidebar ring shows them, never amounts of money (the
@@ -377,7 +397,8 @@ def test_read_settings_has_the_facts_about_consens_io_from_the_code_that_enforce
     assert allowance["per_day"] == {"Free": "the base allowance",
                                     "Plus": f"{limits['plus'] / limits['free']:g} times Free's",
                                     "Pro": f"{limits['pro'] / limits['free']:g} times Free's"}
-    assert allowance["this_account"] == "Free"
+    # The account's tier stands once, beside what Pro unlocks.
+    assert read["account"].startswith("Free, without Pro") and "this_account" not in allowance
     assert allowance["left_today"].startswith(f"{int(620_000 / limits['free'] * 100)}% of today's allowance")
     assert not any(word in json.dumps(about) for word in ("EUR", "euro", "€"))
     assert "00:00 UTC" in allowance["how"] and "own OpenRouter API key" in allowance["how"]

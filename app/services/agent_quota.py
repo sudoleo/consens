@@ -149,6 +149,12 @@ def remaining_allowance(db, uid, *, tier=None):
     return _remaining(data, agent_budget_config.limit_for(config, tier))
 
 
+def allowance_limit(db, uid, *, tier=None):
+    """Today's whole allowance of the account (micro-euros), from the cached
+    config and tier: no read of the ledger."""
+    return agent_budget_config.limit_for(agent_budget_config.get_config(db), account_tier(uid) if tier is None else tier)
+
+
 def shown_allowance(db, uid, *, tier=None):
     """``(left, limit)`` of today's allowance as the sidebar ring shows it
     (token-budget.js view): the limit less what was spent, not less what

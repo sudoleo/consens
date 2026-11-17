@@ -123,8 +123,8 @@ def test_native_cloud_document_versions_are_immutable_and_cascade_retries(native
     assert created["version"] == 1 and len(created["files"]) == 2
     before = tree(documents.ref(created["document_id"]))
     revised = service(files, chat, turn="second", uid=uid).revise(ReviseDocument(
-        document_id=created["document_id"], version=1, section_number=2,
-        replacement={"heading": "Revised plan", "paragraphs": ["Review on Monday."]}, change_summary="Update plan"),
+        document_id=created["document_id"], version=1,
+        sections=[1, {"heading": "Revised plan", "paragraphs": ["Review on Monday."]}], change_summary="Update plan"),
         cancellation=ProviderCancellation())
     assert revised["version"] == 2
     old_path = documents.ref(created["document_id"]).collection("versions").document("1").path

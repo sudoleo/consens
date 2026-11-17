@@ -25,6 +25,10 @@ def test_the_plan_comes_with_the_vm(store, fake_vm):
     list(vm_loop(store, without, vm="off", request_id="two").run())
     assert "update_plan" in with_vm.offered[0] and prompt_defaults.AGENT_PLAN_PROMPT in with_vm.systems[0]
     assert "update_plan" not in without.offered[0] and prompt_defaults.AGENT_PLAN_PROMPT not in without.systems[0]
+    # Closing the plan with the answer is said where the plan is: a message
+    # without update_plan has no plan to close.
+    assert "plan" not in prompt_defaults.AGENT_AUDIT_ANSWER_SECTION
+    assert "Text beside a call that marks every step completed is your answer" in prompt_defaults.AGENT_PLAN_PROMPT
 
 
 def test_the_plan_is_in_the_activity_and_the_work_log(store, fake_vm):

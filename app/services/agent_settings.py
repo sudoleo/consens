@@ -455,6 +455,27 @@ class SettingsTools:
         current = next((model for model in models if model["id"] == self.loop.model.selection_id), None) or default
         return catalog, models, current, default
 
+    def _tier(self):
+        """The account's tier as the allowance counts it (agent_quota.account_tier:
+        admin first, from the cached user document); None when unreadable."""
+        from app.services import agent_quota
+        try:
+            return agent_quota.account_tier(self.loop.uid)
+        except Exception as exc:
+            logging.warning("agent settings account tier failed category=%s", type(exc).__name__)
+            return None
+
+    def _account(self, pro):
+        """The account in one line, its allowance's tier and what Pro unlocks
+        together: as two fields ("Pro" beside "Admin") they read as two
+        accounts. Pro is the picker's (_premium_allowed): an admin without the
+        Pro tier cannot pick Pro models in the browser."""
+        tier = self._tier()
+        if pro:
+            return "Admin, with everything Pro unlocks" if tier == "admin" else "Pro"
+        locked = "without Pro: Pro models and the levels High, Extra high and Max are locked"
+        return f"{TIER_LABELS[tier]}, {locked}" if tier in ("free", "plus", "admin") else locked
+
     def read(self, args, *, cancellation=None):
         if cancellation is not None:
             cancellation.raise_if_cancelled()
@@ -464,14 +485,14 @@ class SettingsTools:
         except ValueError as exc:
             # The facts of consens.io do not need the model list: a question
             # about the price still has its answer.
-            return {"settings": str(exc), "consens_io": self._about()}
+            return {"account": self._account(pro), "settings": str(exc), "consens_io": self._about()}
         effort = self.loop.model.reasoning_effort or "default"
         open_models = [model["label"] for model in models if model.get("available") is not False and not model.get("premium")]
         pro_models = [model["label"] for model in models if model.get("available") is not False and model.get("premium")]
         pick = self._account_pick()
         pick_model = next((model for model in models if pick and model["id"] == pick["model_id"]), None)
         result = {
-            "account": "Pro" if pro else "without Pro: Pro models and the levels High, Extra high and Max are locked",
+            "account": self._account(pro),
             "chat_model": {"now": current["label"] if current else None,
                            **({"new_chats": pick_model["label"]} if pick_model and pick_model is not current else {}),
                            "choices": open_models + (pro_models if pro else []),
@@ -581,11 +602,11 @@ class SettingsTools:
         }
         # The account's figures as the sidebar ring shows them; without them
         # the facts above still answer.
-        tier = None
+        # The account's tier stands once, in read_settings' "account".
+        tier = self._tier()
         try:
             db = self.loop.store.db
             config = agent_budget_config.get_config(db)
-            tier = agent_quota.account_tier(self.loop.uid)
             left, limit = agent_quota.shown_allowance(db, self.loop.uid, tier=tier)
         except Exception as exc:
             logging.warning("agent settings allowance failed category=%s", type(exc).__name__)
@@ -595,7 +616,6 @@ class SettingsTools:
                 "per_day": {TIER_LABELS[key]: "the base allowance" if key == "free" else
                             f"{config['tier_limits'][key] / base:g} times Free's" for key in ("free", "plus", "pro")}
                 if base else {},
-                "this_account": TIER_LABELS[tier],
                 "left_today": f"{percent(left, limit)} of today's allowance, "
                               "as the ring in the sidebar shows; calls still running hold part of it until they "
                               "finish"})

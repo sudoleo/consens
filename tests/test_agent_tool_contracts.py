@@ -28,6 +28,31 @@ def test_the_prompt_says_when_text_beside_a_call_is_the_answer_and_how_many_call
     assert "run side by side" in AGENT_AUDIT_ANSWER_SECTION and "one after another, in your order, up to four" not in AGENT_VM_PROMPT
 
 
+@pytest.mark.parametrize("reviewers", ["off", "always"])
+def test_without_reviewers_the_prompt_says_compare_models_still_asks_the_chosen_models(store, reviewers):
+    """"No other model reviews your work" read as if no model could be asked
+    either; the chosen models stay one compare_models call away."""
+    from app.services.prompt_defaults import AGENT_REVIEW_OFF_COMPARE_FACT
+    from test_agent_audit import Audit, audit_loop
+    loop = audit_loop(store, Audit(), reviewers=reviewers)
+    assert "compare_models" in loop.registry.tools
+    assert (AGENT_REVIEW_OFF_COMPARE_FACT in loop.messages[0]["content"]) is (reviewers == "off")
+    assert "read_settings names them" in AGENT_REVIEW_OFF_COMPARE_FACT
+
+
+def test_without_a_chosen_model_the_prompt_promises_no_compare_models(store, monkeypatch):
+    """"No cross-check" (an empty choice) runs off and without compare_models:
+    the fact goes with the tool."""
+    import test_agent_audit
+    from app.services.prompt_defaults import AGENT_REVIEW_FACTS, AGENT_REVIEW_OFF_COMPARE_FACT
+    from test_agent_audit import Audit, audit_loop
+    monkeypatch.setattr(test_agent_audit, "comparison_selection", lambda value=None: {})
+    loop = audit_loop(store, Audit(), reviewers="off")
+    assert "compare_models" not in loop.registry.tools
+    assert AGENT_REVIEW_FACTS["off"] in loop.messages[0]["content"]
+    assert AGENT_REVIEW_OFF_COMPARE_FACT not in loop.messages[0]["content"]
+
+
 def test_a_step_the_user_asked_for_exactly_needs_no_second_yes_in_the_browser_either():
     """The principle lets a step in the user's name go ahead when they asked
     for exactly that. The browser's paragraph and the reviewers' brief say the

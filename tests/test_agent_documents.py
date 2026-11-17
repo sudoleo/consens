@@ -45,7 +45,7 @@ def test_real_docx_pdf_version_and_saved_provenance(setup):
     repeat = docs.create(CreateDocument.model_validate(args), cancellation=ProviderCancellation())
     assert repeat["files"] == created["files"] and len(files.list("owner", chat)) == 3
     revision = service(files, chat, "followup").revise(ReviseDocument(document_id=created["document_id"], version=1,
-        section_number=2, replacement={"heading": "Revised plan", "paragraphs": ["Contact vendor B on Monday."]}, change_summary="Revised section two"), cancellation=ProviderCancellation())
+        sections=[1, {"heading": "Revised plan", "paragraphs": ["Contact vendor B on Monday."]}], change_summary="Revised section two"), cancellation=ProviderCancellation())
     assert revision["version"] == 2 and revision["parent_version"] == 1
     latest = docs.read(ReadDocument(document_id=created["document_id"]), cancellation=ProviderCancellation())
     original = docs.read(ReadDocument(document_id=created["document_id"], version=1), cancellation=ProviderCancellation())
@@ -54,8 +54,38 @@ def test_real_docx_pdf_version_and_saved_provenance(setup):
     assert latest["content"]["sections"][0] == original["content"]["sections"][0]
     assert latest["content"]["uncertainties"] == original["content"]["uncertainties"]
     with pytest.raises(FileUnavailable, match="newer"):
-        docs.revise(ReviseDocument(document_id=created["document_id"], version=1, section_number=2,
-            replacement={"heading": "Stale", "paragraphs": []}, change_summary="stale edit"), cancellation=ProviderCancellation())
+        docs.revise(ReviseDocument(document_id=created["document_id"], version=1,
+            sections=[1, {"heading": "Stale", "paragraphs": []}], change_summary="stale edit"), cancellation=ProviderCancellation())
+
+
+def test_one_revision_carries_every_change_and_keeps_what_it_does_not_name(setup):
+    """Several changes make one version: sections kept by number, inserted,
+    replaced and removed, with new sources and caveats beside them."""
+    files, chat = setup
+    docs = service(files, chat)
+    args = sample()
+    args["document"]["sections"].append({"heading": "Appendix", "paragraphs": ["Old figures."]})
+    created = docs.create(CreateDocument.model_validate(args), cancellation=ProviderCancellation())
+    revised = service(files, chat, "followup").revise(ReviseDocument.model_validate({
+        "document_id": created["document_id"], "version": 1,
+        "sections": [{"heading": "Costs", "paragraphs": ["B costs 13 EUR more."]}, 1, 2],
+        "sources": [{"label": "Vendor B offer", "url": "https://example.com/offer-b"}],
+        "uncertainties": [], "change_summary": "Costs first, appendix gone"}), cancellation=ProviderCancellation())
+    assert revised["version"] == 2 and len(revised["files"]) == 2
+    latest = docs.read(ReadDocument(document_id=created["document_id"]), cancellation=ProviderCancellation())
+    original = docs.read(ReadDocument(document_id=created["document_id"], version=1), cancellation=ProviderCancellation())
+    content = latest["content"]
+    assert [section["heading"] for section in content["sections"]] == ["Costs", "Comparison", "Action plan"]
+    assert content["sections"][1] == original["content"]["sections"][0]
+    assert content["sources"][0]["url"] == "https://example.com/offer-b" and content["uncertainties"] == []
+    # What the call left out stays as it was.
+    assert content["title"] == "Decision brief" and content["differing_views"] == original["content"]["differing_views"]
+    with pytest.raises(FileUnavailable, match="has 3 sections, so there is no section 4, 7 to keep"):
+        docs.revise(ReviseDocument(document_id=created["document_id"], version=2, sections=[1, 7, 4],
+                                   change_summary="x"), cancellation=ProviderCancellation())
+    with pytest.raises(FileUnavailable, match="Nothing changes from version 2"):
+        docs.revise(ReviseDocument(document_id=created["document_id"], version=2, sections=[1, 2, 3],
+                                   title="Decision brief", change_summary="x"), cancellation=ProviderCancellation())
 
 
 def test_ownership_invalid_sources_and_storage_failure(setup, monkeypatch):
@@ -305,7 +335,8 @@ def test_document_tool_descriptions_spell_out_the_arguments():
     assert ("sections: [{heading: string, paragraphs?: [string], table?: {headers: [string], rows?: [[string]]}}]"
             in tools["create_document"].description)
     assert "sources?: [{label: string, file_id?: string, locator?: string, url?: string}]" in tools["create_document"].description
-    assert "replacement: {heading: string, paragraphs?: [string]" in tools["revise_document"].description
+    assert "sections?: [integer | {heading: string, paragraphs?: [string]" in tools["revise_document"].description
+    assert "sources?: [{label: string" in tools["revise_document"].description
 
 
 def test_failed_revision_keeps_the_manifest_title(setup, monkeypatch):
@@ -314,8 +345,8 @@ def test_failed_revision_keeps_the_manifest_title(setup, monkeypatch):
     created = docs.create(CreateDocument.model_validate(sample()), cancellation=ProviderCancellation())
     monkeypatch.setattr("app.services.agent_documents.render", lambda spec: (_ for _ in ()).throw(FileUnavailable("render failed")))
     with pytest.raises(FileUnavailable):
-        docs.revise(ReviseDocument(document_id=created["document_id"], version=1, section_number=1,
-            replacement={"heading": "X", "paragraphs": []}, change_summary="x"), cancellation=ProviderCancellation())
+        docs.revise(ReviseDocument(document_id=created["document_id"], version=1,
+            sections=[{"heading": "X", "paragraphs": []}, 2], change_summary="x"), cancellation=ProviderCancellation())
     manifest = docs.ref(created["document_id"]).get().to_dict()
     assert manifest["title"] == "Decision brief" and manifest["version"] == 1
     assert "writing_until" not in manifest and "operation" not in manifest
@@ -326,8 +357,8 @@ def test_file_list_is_chronological_and_carries_document_titles(setup):
     source = upload(files, chat)
     docs = service(files, chat)
     created = docs.create(CreateDocument.model_validate(sample()), cancellation=ProviderCancellation())
-    service(files, chat, "followup").revise(ReviseDocument(document_id=created["document_id"], version=1, section_number=2,
-        replacement={"heading": "Revised plan", "paragraphs": ["Call vendor B."]}, change_summary="Revised"), cancellation=ProviderCancellation())
+    service(files, chat, "followup").revise(ReviseDocument(document_id=created["document_id"], version=1,
+        sections=[1, {"heading": "Revised plan", "paragraphs": ["Call vendor B."]}], change_summary="Revised"), cancellation=ProviderCancellation())
     listed = files.list("owner", chat)
     assert [f["created_at"] for f in listed] == sorted(f["created_at"] for f in listed)
     assert listed[0]["id"] == source["id"] and "title" not in listed[0]

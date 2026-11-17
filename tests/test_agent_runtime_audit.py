@@ -450,6 +450,39 @@ def test_each_batch_ends_with_the_step_and_how_long_the_user_has_waited(store, f
     assert [agent_delegation._waited(s) for s in (0.2, 45, 61, 150)] == [
         "1 second", "45 seconds", "1 minute", "2 minutes"]
     # A message without the workspace has no such line.
+    _a_message_without_the_workspace_has_no_line(store)
+
+
+def test_a_long_run_hears_of_the_day_s_allowance_once_it_runs_low(store, fake_vm, monkeypatch):
+    """The run ends with its answer before the allowance runs out
+    (_long_run_limit); told from LIMITS_SHOWN_FROM on, the agent can finish
+    what matters first. A share, never an amount, and from the read the
+    limit check makes anyway."""
+    from app.services import agent_quota
+    loop = vm_loop(store, Steps([[("vm_exec", {"command": "ls"})]]))
+    list(loop.run())
+    loop.workspace_opened = True
+    loop._turn_elapsed, loop.routing_steps = (lambda: 60), 3
+    reads = []
+    monkeypatch.setattr(agent_quota, "allowance_limit", lambda db, uid: 1_000_000_000)
+    for left, said in ((500_000_000, None), (200_000_000, "20%"), (3_000_000, "less than 1%")):
+        monkeypatch.setattr(agent_quota, "remaining_allowance", lambda db, uid, left=left: reads.append(1) or left)
+        assert loop._long_run_limit() is None
+        loop._note_progress()
+        line = loop.messages[-1]["content"]
+        assert line.startswith("[consens.io, written by the app: step 3; the user has been waiting 1 minute")
+        if said is None:
+            assert "allowance" not in line
+        else:
+            assert line.endswith(f"; {said} of the user's daily allowance left.]")
+        assert "€" not in line and "EUR" not in line
+    assert len(reads) == 3
+    # An unknown limit says nothing rather than a wrong share.
+    monkeypatch.setattr(agent_quota, "allowance_limit", lambda db, uid: (_ for _ in ()).throw(RuntimeError("down")))
+    assert loop._long_run_limit() is None and loop.allowance_left is None
+
+
+def _a_message_without_the_workspace_has_no_line(store):
     script = Steps([[("no_such_tool", {})]])
     list(vm_loop(store, script, request_id="two", vm="off").run())
     assert not any(str(m.get("content")).startswith(agent_delegation.PROGRESS_OPEN)

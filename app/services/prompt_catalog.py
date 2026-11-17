@@ -44,8 +44,10 @@ def _watch_run():
 
 
 def _review_facts():
-    from app.services.prompt_defaults import AGENT_PROVIDER_SEARCH_FACT, AGENT_REVIEW_FACTS
+    from app.services.prompt_defaults import (AGENT_PROVIDER_SEARCH_FACT, AGENT_REVIEW_FACTS,
+                                              AGENT_REVIEW_OFF_COMPARE_FACT)
     return "\n\n".join([*(f"[{setting}] {fact}" for setting, fact in AGENT_REVIEW_FACTS.items()),
+                         f"[off, with compare_models] {AGENT_REVIEW_OFF_COMPARE_FACT}",
                          f"[always and workspace, without web_search] {AGENT_PROVIDER_SEARCH_FACT}"])
 
 
@@ -94,8 +96,9 @@ _ENTRIES = (
      "prompt_defaults.py:AGENT_AUDIT_SYSTEM_PROMPT", lambda: _defaults("agent")),
     ("agent_review_facts", "Agent: who reviews",
      "Appended right after \"Agent: instructions\", one of three by the user's reviewers setting (Settings > "
-     "Agent, since 2026-11-01): always, only from the agent's first step in the workspace on, or off. The last "
-     "one follows a reviewed setting where the agent has no web_search tool.",
+     "Agent, since 2026-11-01): always, only from the agent's first step in the workspace on, or off. Off "
+     "adds that compare_models still asks the chosen models, where the message has it; the last one follows a "
+     "reviewed setting where the agent has no web_search tool.",
      "prompt_defaults.py:AGENT_REVIEW_FACTS", _review_facts),
     ("agent_temporary_chat", "Agent: temporary chat",
      "Appended after \"Agent: who reviews\" in a temporary chat (since 2026-11-01), which has the tools of "

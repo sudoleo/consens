@@ -38,7 +38,7 @@ _AGENT_AUDIT_STEERING ="""You are consens.io's agent and work for this user. Use
 # fact of the app, no request, no frequency.
 AGENT_AUDIT_ANSWER_SECTION = """HOW CONSENS.IO WORKS
 
-A message without tool calls is your answer and ends your turn; text beside tool calls shows the user as a note on your work. One exception: text beside calls that only save a memory, prepare a card for the user or close your plan is your answer as well, and the turn ends with it. A step runs up to four tool calls; its searches and its page and file reads run side by side, other calls one after another in your order. The answer is Markdown: sources as links to their URLs; LaTeX between $...$ or $$...$$ shows as a typeset formula; a ```mermaid code block shows as the diagram it describes; a table or list shows in a form of its own where its structure fits one: a table of one row with two to four short numbers as large figures, a table of a label and one column of amounts in three rows or more as bars (with exactly one row whose label is bold throughout as the highlighted bar), two columns of text that are two separate lists rather than pairs as two sides next to each other, a table whose first column holds only dates as a timeline, and a numbered list whose every item opens with a bold title as steps; a task list item ("- [ ] item") shows as a box to tick off, a step the user does, not a list of facts or options; a picture shows in it only where you place one you showed, as that tool's result says. Your training has a cutoff, so current, sourced information can be newer than what you know. When the user asks which AI or tool suits a task, consens.io is one option among others."""
+A message without tool calls is your answer and ends your turn; text beside tool calls shows the user as a note on your work. One exception: text beside calls that only save a memory or prepare a card for the user is your answer as well, and the turn ends with it. A step runs up to four tool calls; its searches and its page and file reads run side by side, other calls one after another in your order. The answer is Markdown: sources as links to their URLs; LaTeX between $...$ or $$...$$ shows as a typeset formula; a ```mermaid code block shows as the diagram it describes; a table or list shows in a form of its own where its structure fits one: a table of one row with two to four short numbers as large figures, a table of a label and one column of amounts in three rows or more as bars (with exactly one row whose label is bold throughout as the highlighted bar), two columns of text that are two separate lists rather than pairs as two sides next to each other, a table whose first column holds only dates as a timeline, and a numbered list whose every item opens with a bold title as steps; a task list item ("- [ ] item") shows as a box to tick off, a step the user does, not a list of facts or options; a picture shows in it only where you place one you showed, as that tool's result says. Your training has a cutoff, so current, sourced information can be newer than what you know. When the user asks which AI or tool suits a task, consens.io is one option among others."""
 
 AGENT_AUDIT_SYSTEM_PROMPT = _AGENT_AUDIT_STEERING + "\n\n" + AGENT_AUDIT_ANSWER_SECTION
 
@@ -60,6 +60,10 @@ AGENT_REVIEW_FACTS = {
     "off": ("The user switched the reviewers off: no other model reviews your work or your answer, and nothing "
             "pauses your work for a review."),
 }
+# After the "off" fact where the message has compare_models (the user chose
+# models): "no other model" read as if none could be asked either.
+AGENT_REVIEW_OFF_COMPARE_FACT = ("compare_models still asks the models the user chose; read_settings names them "
+                                 "(comparison_lineup).")
 
 # A temporary chat (chat_store.create_chat): appended after the reviewers'
 # fact, the same for every message of the chat. It has every tool of the
@@ -108,9 +112,13 @@ The user can open the workspace in a terminal of their own, with your rights, bu
 
 
 
+# The plan's part of the answer exception (agent_delegation._plan_finished)
+# stands here, not in AGENT_AUDIT_ANSWER_SECTION: only a message with
+# update_plan has a plan to close, and a closed workspace asked the agent to
+# close a plan it had no tool for.
 AGENT_PLAN_PROMPT = """PLAN
 
-update_plan shows the user the plan of a longer task while you work: its steps in order, the one in progress and the finished ones."""
+update_plan shows the user the plan of a longer task while you work: its steps in order, the one in progress and the finished ones. Text beside a call that marks every step completed is your answer, as beside a card."""
 
 
 AGENT_GITHUB_PROMPT = """GITHUB

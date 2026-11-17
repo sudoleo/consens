@@ -330,6 +330,11 @@ secrets, indexes, approved model routing, Google verification and live-test limi
 
 Agent documents (27.09.2026): `agent_documents.py` registers `create_document`,
 `read_document`, and `revise_document` on the root's existing bounded ToolRegistry.
+`revise_document` saves one version per call on top of the exact base version:
+every field it gives replaces that field, the rest stays; `sections` is the new
+order, a number keeps that base section (since 2026-11-17; before, one section
+per call and no change to sources or caveats). An unknown section number or a
+revision that changes nothing is refused.
 The tools run before the immutable synthesis/review handoff. The synthesis receives
 saved output descriptors explicitly, and `resources` SSE refreshes the
 `agent-workspace.js` document cards (one per `document_id`, after the answer). No worker receives document-write tools. Files reuse
@@ -5213,7 +5218,9 @@ Wiederholungsschutz ablehnen wird, dieselbe Seite ein zweites Mal (`url_key`,
 dann `already_read`) und Lesungen über den Grenzen (`SourceReader.room_for`). Nach jedem Batch einer
 Nachricht mit Arbeitsplatz steht eine Faktzeile (`_note_progress`: Schritt und
 wie lange der Nutzer wartet, die Grenzen erst ab `LIMITS_SHOWN_FROM` = 80 %,
-seit 2026-11-01; `open_workspace` nennt keine Grenzen mehr). Details und
+seit 2026-11-01; in langen Läufen ebenso der Rest des Tageskontingents als
+Anteil, aus der Lesung von `_long_run_limit`, seit 2026-11-17;
+`open_workspace` nennt keine Grenzen mehr). Details und
 Tabelle: [agent-mode.md](agent-mode.md) („Tageskontingent“-Abschnitt,
 „Arbeitsplatz: Schritte, Zeit und Bilder“).
 Worker-Delegation bleibt separat durch delegation_config.enabled und die
@@ -7106,7 +7113,8 @@ Routing-Runde nach bezahlter Arbeit schließt weiter mit einer Antwort
 (`_paid_audit` gilt mit `unreviewed` wie mit Prüfern). Das Ergebnis von
 `compare_models` nennt die Prüfer nur, wo sie folgen. Der Agent erfährt es als Fakt im Systemprompt
 (`prompt_defaults.AGENT_REVIEW_FACTS[setting]` nach
-`AGENT_AUDIT_ANSWER_SECTION`, das den Prüfersatz bis dahin selbst trug; im
+`AGENT_AUDIT_ANSWER_SECTION`, bei `off` mit `compare_models` dazu
+`AGENT_REVIEW_OFF_COMPARE_FACT`; das Antwort-Kapitel trug den Prüfersatz bis dahin selbst; im
 Modus `workspace` ein fester Satz, damit der Cache beim Öffnen hält), bis
 2026-11-02 auch im Memory-Block (`AUDIT_MEMORY_LOCK_FACTS`), und in der Beschreibung
 von `update_plan` (`PlanTools(reviewed=…)`). Ändern kann er sie nicht

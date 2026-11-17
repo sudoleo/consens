@@ -610,6 +610,9 @@ class DelegationLoop(AgentLoop):
         # What the reviewers' calls took from the allowance so far, in
         # micro-euros (agent_quota.measured_charge): _long_run_limit's estimate.
         self.reviewer_charge = 0
+        # Share of the day's allowance left at the last check of a long run
+        # (_note_allowance), or None.
+        self.allowance_left = None
         # Set once a routing step reasoned through its allowance: every later
         # step of this turn, the answer and a wrap-up included, uses that lighter level.
         self.routing_lighter = None
@@ -661,6 +664,9 @@ class DelegationLoop(AgentLoop):
                 from app.services.agent_review_feedback import review_facts
                 from app.services.prompt_defaults import _REVIEW_MARKS
                 fact = review_facts(REVIEW_FACTS, reviewers, _REVIEW_MARKS)
+            if reviewers == "off" and comparison_models:
+                from app.services.prompt_defaults import AGENT_REVIEW_OFF_COMPARE_FACT
+                fact += " " + AGENT_REVIEW_OFF_COMPARE_FACT
             self.messages[0]["content"] += "\n\n" + fact + (
                 "" if own_search or reviewers == "off" else " " + AGENT_PROVIDER_SEARCH_FACT)
             if temporary:
@@ -1151,7 +1157,20 @@ class DelegationLoop(AgentLoop):
         steps = micro_eur(worst_case_nanos(model, 2 * inputs, 2 * routing_output_limit(model)))
         if remaining < steps + 2 * self._reviewer_step_charge():
             return TURN_ALLOWANCE_LIMIT
+        self._note_allowance(remaining)
         return None
+
+    def _note_allowance(self, remaining):
+        """The share of the day's allowance this read left, for the line of
+        facts (_note_progress); None where the limit is unknown. From the
+        read the limit check made anyway: no read of the ledger of its own."""
+        from app.services import agent_quota
+        try:
+            limit = agent_quota.allowance_limit(self.store.db, self.uid)
+        except Exception as exc:
+            logging.warning("Agent allowance share unavailable category=%s", safe_exception(exc))
+            limit = 0
+        self.allowance_left = remaining / limit if limit > 0 else None
 
     def _request_inputs(self, model):
         """Input tokens of the agent's next step as _step sends it: the
@@ -1190,9 +1209,12 @@ class DelegationLoop(AgentLoop):
         each batch of results: the step and how long the user has been
         waiting for the answer (a run whose answer stood after 30 s went on
         looking for pictures for five minutes). The message's
-        limits only once LIMITS_SHOWN_FROM of one is used; a message without
-        the workspace gets the line only from then on (it ran into its 24
-        steps or 15 minutes without a word of them). New content at
+        limits only once LIMITS_SHOWN_FROM of one is used, and so the day's
+        allowance in a long run (it ends with its answer before that runs
+        out, _long_run_limit; told early, the agent can finish what matters
+        first); a message without the workspace gets the line only from then
+        on (it ran into its 24 steps or 15 minutes without a word of
+        them). New content at
         the end only: the cached prefix stays. A fact, never a rule
         (docs/agent-mode.md)."""
         if not self.policy.account_budget_only or not self.merged:
@@ -1208,6 +1230,13 @@ class DelegationLoop(AgentLoop):
         line = f"{PROGRESS_OPEN} {step}; the user has been waiting {_waited(elapsed)} for your answer"
         if seconds and elapsed >= seconds * LIMITS_SHOWN_FROM:
             line += f", of at most {seconds // 60} minutes for this message"
+        left = self.allowance_left
+        if left is not None and 1 - left >= LIMITS_SHOWN_FROM:
+            # A share, never an amount (Max: no euros to users, and the agent
+            # may quote it).
+            share = max(0, int(left * 100))
+            line += f"; {share}% of the user's daily allowance left" if share else \
+                "; less than 1% of the user's daily allowance left"
         self.messages.append({"role": "user", "content": line + ".]"})
 
     def _compact(self):

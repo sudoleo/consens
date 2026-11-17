@@ -268,7 +268,11 @@ Runde nach bezahlter Arbeit weiter mit einer Antwort. Der Agent
 erfährt die Einstellung als Fakt (`AGENT_REVIEW_FACTS`), ändern kann er sie
 nicht, auch nicht über eine Einstellungskarte. Die Prüfung einer Antwort ohne
 Prüfer endet `off` (`audit.setting` sagt warum), nie `failed`. Die
-`compare_models`-Modelle bleiben dieselben gewählten Modelle, auch mit Off.
+`compare_models`-Modelle bleiben dieselben gewählten Modelle, auch mit Off;
+das sagt der Prompt dann dazu (`AGENT_REVIEW_OFF_COMPARE_FACT`: „compare_models
+still asks the models the user chose; read_settings names them“), nur wo es
+das Werkzeug gibt. Ohne den Satz las Opus 5.5 „no other model reviews your
+work“ so, als könne es keins fragen (Harness-Eval 2026-11-17).
 
 Kosten hält das Tageskonto (jede Browser-Aktion ist ein Modellschritt), den
 Arbeitsplatz zusätzlich die VM-Zeit: ohne Pro 20 Minuten am Tag
@@ -1786,7 +1790,15 @@ app: step 31; the user has been waiting 4 minutes for your answer.]“ (unter
 einer Minute in Sekunden, `_waited`). Die Grenzen der Nachricht kommen erst
 dazu, wenn `LIMITS_SHOWN_FROM` = 80 % einer davon verbraucht sind: „step 160
 of at most 200; … waiting 97 minutes for your answer, of at most 120 minutes
-for this message.“ Bis 2026-11-01 stand die Grenze in jeder Zeile („4.8 of
+for this message.“ Ebenso in einem langen Lauf das Tageskontingent, sobald
+80 % verbraucht sind, als Anteil, nie als Betrag: „…; 14% of the user's daily
+allowance left.“ Der Anteil kommt aus der Lesung, die `_long_run_limit` vor
+jedem Schritt ohnehin macht (`_note_allowance`; das Limit aus
+`agent_quota.allowance_limit`, gecachte Konfiguration und Stufe, kein
+eigener Ledger-Read), ist also einen Schritt alt und zählt, was laufende
+Aufrufe halten, als verbraucht. Am Ende schließt der Lauf weiterhin selbst
+mit seiner Antwort ab (`TURN_ALLOWANCE_LIMIT`); früh gesagt, kann der Agent
+vorher das Wichtigste fertig machen. Bis 2026-11-01 stand die Grenze in jeder Zeile („4.8 of
 120 minutes“): Eine Obergrenze liest das Modell als Spielraum. Im Lauf „füg
 mal mehr bilder ein“ hatte der Agent nach zwei Minuten acht Bilder und
 arbeitete noch elf Minuten weiter (Max: „das mit den 120 min leitet fehl“).
@@ -3679,7 +3691,8 @@ der VM) und, nur mit der VM, der Checkpoint:
   (danach `told`), damit der Agent seinem Arbeitsstand nicht blind glaubt.
 
 **Bilder ansehen (seit 2026-10-26).** Nimmt das Chatmodell Bilder an
-(`input_modalities` der OpenRouter-Metadaten, `sees_pictures`), bekommt der
+(`input_modalities` der OpenRouter-Metadaten, `sees_pictures`; danach richtet
+sich auch der Satz in `find_pictures`, ob die Bilder als Bild folgen), bekommt der
 Agent `vm_view_image` (`path`; PNG, JPEG, WebP, GIF nach den Bytes, bis 5 MB).
 Das Ergebnis sagt nur, dass das Bild folgt; die Schleife hängt es nach den
 Ergebnissen des Stapels als Nutzernachricht an (`_show_pictures`,
@@ -3782,7 +3795,11 @@ wenn dieser den Plan abschließt (alle Schritte `completed`,
 `agent_delegation._plan_finished`): ein Satz vor einem Update mit offenen
 Schritten ist Einleitung, der Lauf geht weiter; der
 Arbeitsstand der nächsten Nachricht nennt den Stand („update_plan: 3 of 4
-steps done, now: …“).
+steps done, now: …“). Das sagt dem Modell der PLAN-Block
+(`AGENT_PLAN_PROMPT`: „Text beside a call that marks every step completed is
+your answer, as beside a card“), nicht `AGENT_AUDIT_ANSWER_SECTION`: Ohne
+Arbeitsplatz gibt es kein `update_plan`, und der feste Satz „close your plan“
+schickte das Modell auf die Suche nach einem Plan-Werkzeug.
 
 **GitHub aus der VM (seit 2026-10-26, mehrnutzerfähig).** Die Werkbank
 erreicht github.com seit 2026-11-04 wie das ganze Web („Ein Rechner“; von
@@ -4994,7 +5011,7 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   consens.io selbst, liest der Agent `consens_io` im Ergebnis von
   `read_settings` (`SettingsTools._about`): Preis (Early Access, noch kein
   Abo), Tagesbudget je Stufe als Vielfaches von Free aus der
-  Admin-Konfiguration, Stufe und Rest des Kontos in Prozent wie der Ring in
+  Admin-Konfiguration, Rest des Kontos in Prozent wie der Ring in
   der Seitenleiste (`agent_quota.shown_allowance`: Limit minus Verbrauch, ohne
   das, was laufende Aufrufe gerade halten, wie `token-budget.js`; nie Geldbeträge: Max
   2026-11-01 nach „5,00 € Tagesbudget, noch 4,27 € übrig“ in einer Antwort),
@@ -5012,7 +5029,13 @@ Evaluation und Varianten: [agent-settings-evaluation-2026-10-17.md](agent-settin
   Web-Fetch, Leselimit und möglicher alter Fassung. Die Zahlen kommen aus dem
   Code, der sie durchsetzt; bei Datenschutzfragen verlinkt der Agent die
   Datenschutzerklärung als verbindlichen Text, statt sie nachzuerzählen. Ist
-  das Konto-Budget nicht lesbar, fehlen nur dessen Zahlen.
+  das Konto-Budget nicht lesbar, fehlen nur dessen Zahlen. Die Stufe des
+  Kontos steht einmal, im Feld `account` neben dem, was Pro freischaltet
+  („Admin, with everything Pro unlocks“, „Plus, without Pro: …“): Als
+  `account: "Pro"` neben `allowance.this_account: "Admin"` las Opus 5.5 das
+  als zwei Konten (Harness-Eval 2026-11-17). Pro ist dabei die Sicht des
+  Modell-Pickers (`is_user_pro`), die Stufe die des Kontingents
+  (`agent_quota.account_tier`, Admin zuerst).
 - **Prompt:** `agent_settings.AUDIT_PROMPT` („ACCOUNT SETTINGS“, seit
   2026-10-28 nur Fakten): was die beiden Werkzeuge tun, dass nach Fremdinhalt
   ein Belegzitat nötig ist, was in den Einstellungen bleibt, und dass
@@ -5504,13 +5527,42 @@ Werkzeugs dasselbe `{"error"}` wie aus einer Schema-Ablehnung). Jetzt:
   goes in several calls“) und arbeitet weiter; drei in Folge zählen wie
   abgelehnte Anfragen.
 
+**Harness-Eval 2026-11-17 (Opus 5.5, zehn Befunde).** Umgesetzt: der
+Plan-Satz nur mit `update_plan` (PLAN-Block), `compare_models` bei Prüfer aus,
+der Kontingent-Anteil in langen Läufen ab 80 % (Faktzeile), `revise_document`
+mit allen Änderungen in einem Aufruf (Abschnitte per Nummer behalten,
+ersetzen, einfügen, entfernen; Quellen, Titel, Zusammenfassung und Vorbehalte
+nach derselben Regel: Angegebenes ersetzt, Weggelassenes bleibt; eine Version,
+ein Render), ein Kontofeld in `read_settings`, `find_pictures` sagt je
+Chatmodell, ob Bilder folgen. Nicht umgesetzt, mit Grund:
+- Kosten je Werkzeugergebnis: Jedes Ergebnis würde länger, ein Betrag lädt
+  zum Sparen an der Arbeit ein und kann beim Nutzer landen (nie Euro), und
+  Modellkosten stehen erst nach dem Settlement fest. Stattdessen der Anteil ab
+  80 % in langen Läufen.
+- `open_workspace` mit Werkzeugliste, Startzeit und Kosten: Die Beschreibung
+  nennt, was kommt; die Tageszeit des Arbeitsplatzes steht in
+  `read_settings`. Eine Startzeit wäre ein Wink, wann er sich lohnt
+  (Verhaltensvorgabe), und schwankt zwischen Sekunden und gut einer Minute.
+- Marker oder Rückmeldung für gezeichnete Tabellen: Die Formen kommen bewusst
+  nur aus der Struktur, ohne Syntax; der Prompt nennt die Regeln genau, das
+  Modell kann sie vorhersagen. Eine Rückmeldung käme erst nach der Antwort,
+  die den Turn beendet.
+- `ask_user` ohne Arbeitsplatz: Mit Arbeitsplatz gibt es ihn (Browser,
+  Schlüssel, Freigabe, Auswahl); ohne ist die Nachricht kurz, und eine
+  Rückfrage als Antwort leistet dasselbe.
+- Alle Grenzen in einem Prompt-Abschnitt: Jede Grenze steht bei ihrem
+  Werkzeug, in dessen Ergebnis und ab 80 % in der Faktzeile; ein Sammelblock
+  kostet jeden Turn und veraltet neben dem Code. Fehler kommen als Ergebnis
+  mit dem Ausweg (folgender Absatz).
+
 **Was das Modell über seine Aufrufe erfährt (seit 2026-11-10).** Aus dem
 Audit der Werkzeugverträge; alles Fakten, keine Verhaltensvorgaben:
 
 - `AGENT_AUDIT_ANSWER_SECTION` sagt die Ausnahme zu „text beside tool calls
   shows the user as a note“: Text neben Aufrufen, die nur ein Memory
-  speichern, eine Karte vorbereiten oder den Plan schließen
-  (`agent_answer_mode.SIDE_TOOLS`), ist die Antwort und beendet den Turn. Ohne
+  speichern oder eine Karte vorbereiten (`agent_answer_mode.SIDE_TOOLS`;
+  das abschließende `update_plan` nennt der PLAN-Block), ist die Antwort und
+  beendet den Turn. Ohne
   den Satz wurde „I'll note that, then compare the options.“ neben
   `update_memory` zur ganzen Antwort. Derselbe Block nennt jetzt in jedem
   Chat, dass ein Schritt bis zu vier Aufrufe ausführt (vorher nur im

@@ -226,6 +226,8 @@ def test_admin_get_lists_the_code_prompts_read_only(client):
     # Who reviews, by the user's setting, and the temporary chat.
     from app.services.prompt_defaults import AGENT_REVIEW_FACTS, AGENT_TEMPORARY_CHAT_PROMPT
     assert all(f"[{setting}] {fact}" in texts["agent_review_facts"] for setting, fact in AGENT_REVIEW_FACTS.items())
+    from app.services.prompt_defaults import AGENT_REVIEW_OFF_COMPARE_FACT
+    assert f"[off, with compare_models] {AGENT_REVIEW_OFF_COMPARE_FACT}" in texts["agent_review_facts"]
     assert texts["agent_temporary_chat"] == AGENT_TEMPORARY_CHAT_PROMPT
 
 

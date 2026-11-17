@@ -191,6 +191,13 @@ def test_the_agent_looks_first_and_only_what_it_shows_lands_under_the_answer(sto
     assert "picture:<id>" in loop.registry.tools["show_image"].description
     assert set(loop.registry.tools["find_pictures"].arguments.model_json_schema()["properties"]) == {"urls"}
     assert set(loop.registry.tools["show_image"].arguments.model_json_schema()["properties"]) == {"picture", "caption"}
+    # Whether the pictures come as images is said for this chat model, not left to its guess.
+    assert "follows as an image after the results" in loop.registry.tools["find_pictures"].description
+    assert "if you take images" not in loop.registry.tools["find_pictures"].description
+    blind = agent_web_images.WebImageTools(loop)
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: False)
+    assert "without the image itself, which this chat model does not take" in blind.tools()[0].description
+    monkeypatch.setattr(agent_vm_tools, "sees_pictures", lambda model: True)
     events = list(loop.run())
     looked, again, shown, twice, unknown = [json.loads(m["content"]) for m in loop.messages if m.get("role") == "tool"]
     # Side by side, each address once; a blocking site costs only its own entry.

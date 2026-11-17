@@ -369,13 +369,18 @@ class WebImageTools:
         self.search_enabled = picture_search.enabled()
 
     def tools(self):
+        from app.services.agent_vm_tools import sees_pictures
         found = "find_pictures or search_pictures" if self.search_enabled else "find_pictures"
+        # Said for the chat model at hand: a model cannot tell from its
+        # context whether the app sends it images.
+        seen = ("and follows as an image after the results" if sees_pictures(self.loop.model) else
+                "without the image itself, which this chat model does not take")
         tools = [
             ReadOnlyTool(
                 "find_pictures", "Look at pictures from the web before you show one: for each address the server "
                                  "fetches the picture itself, or the preview picture a page names for itself, up to "
                                  f"{LOOKS_PER_CALL} at once. Each comes back with an id, its page and size, the "
-                                 "page's title and the picture's alt text, and as an image if you take images; the "
+                                 f"page's title and the picture's alt text, {seen}; the "
                                  "user sees none of them. Pages of your search hits about the subject often carry "
                                  "a fitting photo.",
                 FindPicturesArgs, self.find, activity=self._find_activity)]
