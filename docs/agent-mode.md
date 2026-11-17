@@ -5596,7 +5596,8 @@ verweisen hierher.
 **Der Agent sucht mit einem eigenen Werkzeug (seit 2026-11-09, Max).**
 `web_search` (`agent_web_search.py`) ist ein Werkzeug der App: Der Agent ruft
 es wie jedes andere, mit bis zu 8 Suchen je Aufruf (`queries`; dazu optional
-`domains` und `since`), die App fragt Exa direkt (`exa.py`,
+`domains` und `since`; eine einzelne Suche oder Seite als Text statt als
+Liste gilt als Liste mit einem Eintrag), die App fragt Exa direkt (`exa.py`,
 `POST /search`, Typ `auto`, 5 Seiten à 2000 Zeichen Auszüge je Suche) und
 lässt die Suchen eines Aufrufs nebeneinander laufen. Die Treffer gehören
 damit der App:

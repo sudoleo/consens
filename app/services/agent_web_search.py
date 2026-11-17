@@ -20,7 +20,7 @@ import logging
 import re
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from app.services import exa
 from app.services.agent_read_source import host_of, url_key
@@ -95,6 +95,16 @@ class WebSearchArgs(BaseModel):
         'Only pages of these sites, such as ["europa.eu"]. Empty: the whole web.'))
     since: str = Field(default="", pattern=r"^(\d{4}-\d{2}-\d{2})?$", description=(
         "Only pages published on or after this day (YYYY-MM-DD). Empty: any date."))
+
+    @model_validator(mode="before")
+    @classmethod
+    def _one_as_text(cls, data):
+        # A model with one search or one site in mind sends it as text, not
+        # as a list of one; refusing that costs it a whole step. A list as
+        # JSON text is decoded before (agent_tools._decode_stringified).
+        if isinstance(data, dict):
+            data = {**data, **{key: [data[key]] for key in ("queries", "domains") if isinstance(data.get(key), str)}}
+        return data
 
 
 class WebSearch:

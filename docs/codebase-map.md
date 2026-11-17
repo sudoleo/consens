@@ -5238,7 +5238,9 @@ auch `check_contradictions`): der Server führt es über
 `ToolRegistry.validate` nimmt ein Array-/Objekt-Argument, das als JSON-Text
 kommt (Sonnet schickte `"memory": "[]"` und scheiterte dreimal an der
 Validierung), als den deklarierten Container (`_decode_stringified`); alles
-andere lehnt die Validierung ab. Werkzeugschemas gehen flach an den Provider
+andere lehnt die Validierung ab, außer wo ein Werkzeug selbst mehr liest
+(`web_search` nimmt eine einzelne Suche oder Seite als Text als Liste mit
+einem Eintrag, `WebSearchArgs._one_as_text`). Werkzeugschemas gehen flach an den Provider
 (`argument_schema`, kein `$defs`/`$ref`; DeepSeek sah verschachtelte Modelle
 sonst nicht), die Dokument-Werkzeuge und `update_memory` nennen ihre
 Argumentform zusätzlich in der Beschreibung (`argument_shape`), und ein

@@ -250,8 +250,17 @@ def test_the_tool_says_what_it_does_and_takes_few_fields(store, searches):
         return str(refusal.value)
     assert "queries" in refused({"query": "one string"})
     assert "queries" in refused({"queries": []})
+    assert "queries" in refused({"queries": ""})
     assert "queries" in refused({"queries": ["q"] * (QUERIES_PER_CALL + 1)})
+    assert "queries" in refused({"queries": {"q": 1}})
     assert "since" in refused({"queries": ["q"], "since": "last week"})
+
+    def accepted(arguments):
+        return registry.validate({"function": {"name": "web_search", "arguments": json.dumps(arguments)}})[1]
+    # One search or one site as text is a list of one; a list as its JSON text is that list.
+    one = accepted({"queries": "Nimbus 28 Preis", "domains": "europa.eu"})
+    assert one.queries == ["Nimbus 28 Preis"] and one.domains == ["europa.eu"]
+    assert accepted({"queries": json.dumps(["a", "b"])}).queries == ["a", "b"]
     # The search words and the site as a model writes them.
     result = tool.execute(WebSearchArgs(queries=[" q ", "q"], domains=["https://www.Europa.eu/", "europa.eu"],
                                         since="2026-01-01"), cancellation=ProviderCancellation())
