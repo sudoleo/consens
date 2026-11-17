@@ -731,12 +731,18 @@ ADMIN_LIST_LIMIT = 300
 
 def list_all(*, db=None, limit: int = ADMIN_LIST_LIMIT) -> list[dict]:
     """Every account's Watches for the admin, running ones first by their
-    next run, then paused, then ended: one read per Watch."""
+    next run, then paused, then ended: one read per Watch. Read status by
+    status, so ended Watches piling up past ``limit`` never push a running
+    or failing one off the list."""
     db = _db(db)
     watches = []
-    for snapshot in db.collection(COLLECTION).limit(limit).stream():
-        data = snapshot.to_dict() or {}
-        watches.append({**serialize(snapshot.id, data), "uid": str(data.get("uid") or "")})
+    for status in (STATUS_ACTIVE, STATUS_PAUSED, STATUS_DONE):
+        if len(watches) >= limit:
+            break
+        query = db.collection(COLLECTION).where(filter=FieldFilter("status", "==", status))
+        for snapshot in query.limit(limit - len(watches)).stream():
+            data = snapshot.to_dict() or {}
+            watches.append({**serialize(snapshot.id, data), "uid": str(data.get("uid") or "")})
     order = {STATUS_ACTIVE: 0, STATUS_PAUSED: 1}
     watches.sort(key=lambda watch: (order.get(watch["status"], 2), watch["next_run_at"] or "~"))
     return watches

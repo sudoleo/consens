@@ -7120,7 +7120,8 @@ sichere Stellen gehen in den Durchgang (`safe_place`, auch eine Zelle im Rumpf e
 `"place": "table cell"`; `$` als Währung sperrt nicht, Formeln nach der Regel von `math-render.js`;
 `read_reply`/`shape_rule`: höchstens ein Satz mehr, eine Zelle bleibt eine Zelle, Links nur auf
 die alte Adresse oder die geprüfte Quelle des Prüfers, statt eines Links oder dazu, höchstens so viele
-eigene Adressen weg wie Quellen dazu, kein roher HTML-Link; Links gelesen wie marked/GFM sie macht und
+eigene Adressen weg wie Quellen dazu, kein roher HTML-Link, keine neue Durchstreichung auch mit
+einem `~` (`_strikes`, Regel `strike`); Links gelesen wie marked/GFM sie macht und
 normalisiert, `_urls`/`_address`; neue Adressen prüft `check_links` gemeinsam in der Frist des Durchgangs;
 nach dem Satzende zitierte Links beenden den Satz, ein Bild nicht); jeder
 Fehler danach setzt Antwort und Marken zurück. Bringt eine Antwort, die kam, nichts
@@ -7287,7 +7288,8 @@ nach dem Laufende (Absturz vor `done`) stehen die Marken wie ohne Einstellung,
 ohne Schimmer. Ein Nachlauf, der ohne Turn endet, zeichnet die Antwort neu
 (`followReview`), und eine Ansicht, die kein Ende des Durchgangs sieht, zeigt
 nach `CHECKING_LIMIT_MS` (180 s, über `CORRECTION_SECONDS` des Servers) die
-Prüfung, wie sie ist (`sweepUntil`), und bleibt dabei, wenn sie denselben
+Prüfung, wie sie ist (`sweepUntil`, mit dem Stand des neuesten Renders,
+`body._sweepEnd`, also auch mit Marken, die inzwischen kamen), und bleibt dabei, wenn sie denselben
 Stand wieder rendert (`body._sweepEnded`, `sweepKey`: die Basisansicht rendert
 einen laufenden Turn immer wieder); ein Durchgang über andere Anmerkungen
 läuft mit eigener Frist. Die Frist läuft für jeden Stand mit grauem Satz und
@@ -7412,7 +7414,8 @@ den Wächter), `_take_notes` hängt sie vor dem nächsten Modellaufruf an: Die
 Aufrufe des laufenden Batches enden zuerst. **Sofort senden** („Send now“ in
 der Zeile, `hurry` → `POST …/notes/{note_id}/now`,
 `AgentSessionStore.hurry_user_note`; oder Strg/⌘+Enter, `steer({ now })` →
-Notiz mit `now`) ruft `_hurry` einmal je ungelesener Notiz: dieselben Wege
+Notiz mit `now`, bei leerem Feld `hurryWaiting`: das „Send now“ der ältesten
+wartenden Zeile) ruft `_hurry` einmal je ungelesener Notiz: dieselben Wege
 wie der Prüfer-Halt (`step_halt` bricht den streamenden Schritt ab, sein Text
 geht zurück, `_past_halts` nimmt die Nachrichten und läuft auf dem nächsten
 Index neu; `VMTools.interrupt` beendet den laufenden Befehl als Nutzer-Stopp,
@@ -12101,7 +12104,8 @@ stehen), letzte Änderungen und eingeklappt die API-Schlüssel (`#tab-api`).
 **Watches**: die Agent-Watches aller Konten, nur lesend
 (`GET /api/admin/agent-watches`: `agent_watches.list_all`, ein Read je
 Watch, höchstens 300, laufende nach nächstem Lauf, dann pausierte, dann
-beendete; dazu die E-Mail des Besitzers), laufende mit Problem oben,
+beendete; gelesen Status für Status, damit viele beendete keine laufende
+aus der Liste drängen; dazu die E-Mail des Besitzers), laufende mit Problem oben,
 pausierte und beendete eingeklappt. Darunter eingeklappt die
 Consensus-Watches (`GET /api/admin/watches`, erst beim ersten Öffnen der
 Seite geladen); solange `archived` (`cfg.consensus_watches_archived`) gilt,

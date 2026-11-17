@@ -840,10 +840,13 @@
   // review as it has it.
   const CHECKING_LIMIT_MS = 180000;
   // One deadline per sweep (`key`: the answer and the findings checked); a
-  // render of the same sweep keeps it, any other ends it. A sweep past its
-  // deadline stays over (`_sweepEnded`, sweepKey): the base view renders the
-  // same pending state again and again, and each would start it anew.
+  // render of the same sweep keeps it, any other ends it. At the deadline
+  // the newest render's review shows (`_sweepEnd`), with the marks that came
+  // in meanwhile under the same key. A sweep past its deadline stays over
+  // (`_sweepEnded`, sweepKey): the base view renders the same pending state
+  // again and again, and each would start it anew.
   function sweepUntil(body, key, end) {
+    body._sweepEnd = end;
     if ((body._sweep || '') === key) return;
     clearTimeout(body._sweepTimer);
     body._sweep = key;
@@ -852,7 +855,7 @@
     body._sweepTimer = setTimeout(() => {
       if (!body.isConnected || body._sweep !== key || body.dataset.markdown !== raw) return;
       body._sweepEnded = key;
-      end();
+      body._sweepEnd?.();
     }, CHECKING_LIMIT_MS);
   }
   const sweepKey = (lineage, pass) => `${lineage}|${pass?.status === 'checking'

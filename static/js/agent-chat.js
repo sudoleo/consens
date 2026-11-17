@@ -1597,9 +1597,11 @@
       : readsMessages(context) ? "Send into the running response" : "Send after this response" };
   }
   // ``now`` (Ctrl/Cmd+Enter, app-init.js): the message breaks off what runs.
+  // In an empty field the shortcut is the "Send now" of the waiting rows.
   async function steer({ now = false } = {}) {
     const context = registry.visible();
     const input = document.getElementById("questionInput");
+    if (now && input && !input.value.trim()) return hurryWaiting(context);
     if (!steering() || !input) return false;
     const text = String(input.value).trim();
     // The agent asked for a key and its card is open: the field never
@@ -1692,6 +1694,15 @@
       if (item.state === "now") item.state = "waiting";
     }
     renderQueue();
+  }
+  // The oldest message the run has not read yet: once the run breaks off,
+  // it reads every waiting one before its next step (DelegationLoop._take_notes).
+  function hurryWaiting(context) {
+    if (selectedMode() !== "agent" || !context || !registry.isExecuting(context.runId)) return false;
+    const item = queueOf(context).find(entry => entry.state === "waiting" && entry.noteId);
+    if (!item) return false;
+    hurry(context, item);
+    return true;
   }
   // The activity showed the message under "You": the run has read it. Its
   // id comes with the step that read it ("completion:3/note-<id>",

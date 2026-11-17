@@ -84,21 +84,30 @@ def test_the_overview_answers_with_the_days_or_says_it_could_not(client):
 
 
 class WatchesDb:
+    """Firestore's agent_watches as list_all reads it: one status at a time,
+    each query cut at its limit."""
     def __init__(self, documents):
         self.documents = documents
         self.limits = []
+        self.status = None
 
     def collection(self, name):
         assert name == agent_watches.COLLECTION
         return self
 
+    def where(self, *, filter):
+        assert (filter.field_path, filter.op_string) == ("status", "==")
+        self.status = filter.value
+        return self
+
     def limit(self, value):
         self.limits.append(value)
+        self.cut = value
         return self
 
     def stream(self):
-        return [SimpleNamespace(id=doc_id, to_dict=lambda data=data: dict(data))
-                for doc_id, data in self.documents.items()]
+        found = [(doc_id, data) for doc_id, data in self.documents.items() if data.get("status") == self.status]
+        return [SimpleNamespace(id=doc_id, to_dict=lambda data=data: dict(data)) for doc_id, data in found[:self.cut]]
 
 
 def at(day, hour=8):
@@ -117,10 +126,25 @@ def test_every_watch_comes_running_first_by_next_run_then_paused_then_ended():
     watches = agent_watches.list_all(db=db)
 
     assert [watch["id"] for watch in watches] == ["sooner", "later", "paused", "ended"]
-    assert db.limits == [agent_watches.ADMIN_LIST_LIMIT]
+    limit = agent_watches.ADMIN_LIST_LIMIT
+    assert db.limits == [limit, limit - 2, limit - 3]
     assert watches[0]["uid"] == "u3"
     assert watches[0]["looks"] == [{"at": at(11, 7).isoformat(), "outcome": "failed", "summary": ""}]
     assert watches[3]["ended"] == "goal_reached"
+
+
+def test_ended_watches_past_the_limit_never_push_a_running_one_off_the_list():
+    ended = {f"ended{index}": {"uid": "u1", "task": "Old", "status": "done"} for index in range(3)}
+    db = WatchesDb({**ended, "running": {"uid": "u2", "task": "Now", "status": "active", "next_run_at": at(12)},
+                    "paused": {"uid": "u2", "task": "Later", "status": "paused"}})
+    watches = agent_watches.list_all(db=db, limit=3)
+    assert [watch["id"] for watch in watches] == ["running", "paused", "ended0"]
+    assert db.limits == [3, 2, 1]
+    # Full with running ones: the ended ones are not read at all.
+    db = WatchesDb({**ended, **{f"run{index}": {"uid": "u2", "status": "active", "next_run_at": at(12 + index)}
+                                for index in range(3)}})
+    assert [watch["id"] for watch in agent_watches.list_all(db=db, limit=3)] == ["run0", "run1", "run2"]
+    assert db.limits == [3]
 
 
 def test_the_admin_list_names_each_owner_by_address(client):

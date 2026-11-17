@@ -139,12 +139,14 @@ def test_a_list_item_alone_can_be_corrected_and_the_list_stands():
     "Tickets to the top cost *36.10 euros.",
     "Tickets to the top cost _36.10_ euros_.",
     "Tickets to the top cost ~~36.10 euros.",
+    "Tickets to the top cost 3~5 euros, by lift 1~2 more.",
+    "Tickets to the top cost ~36 euros.",
     "Tickets to the top cost [36.10 euros.",
     "Tickets to the top cost 36.10] euros.",
     "Tickets to the top cost 36.10 euros\nand more.",
     "Tickets to the top cost 36.10 euros as of 2026 and the lift",
-], ids=["fragment", "new-link", "open-bold", "open-italic", "open-underscore", "open-strike", "open-link",
-        "closed-link", "new-line", "no-sentence"])
+], ids=["fragment", "new-link", "open-bold", "open-italic", "open-underscore", "open-strike", "single-tilde-strike",
+        "loose-tilde", "open-link", "closed-link", "new-line", "no-sentence"])
 def test_a_reply_that_is_no_safe_sentence_changes_nothing(after):
     items = {"s1": (0, 33, "Tickets to the top cost 14 euros.")}
     assert fb.read_corrections(json.dumps({"findings": [{"id": "s1", "sentence": after}]}), items) == {}
@@ -158,9 +160,10 @@ def test_a_reply_that_is_no_safe_sentence_changes_nothing(after):
     "The price $p_{top}$ is 36.10 euros.",
     "The field `ticket_price * 2` holds 36.10 euros.",
     "Tickets cost 36.10 euros [1], ~~14~~ no longer.",
+    "Tickets cost ~36.10 euros, `3~5` in code, ~ 40 dollars.",
     "Tickets cost 36.10 euros \\*.",
 ], ids=["snake-and-times", "emphasis", "address", "link-with-brackets", "formula", "code", "note-and-strike",
-        "escaped"])
+        "tilde-kept", "escaped"])
 def test_signs_that_open_nothing_never_cost_a_correction(sentence):
     """Only Markdown the page would leave open counts: a "*" or "_" inside a
     word, between spaces, in code, an address or a formula opens nothing."""

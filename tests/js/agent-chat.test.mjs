@@ -1977,12 +1977,28 @@ describe("single-model agent chat", () => {
     handlers.activity.receive({ version: 1, step_id: "completion:3", id: "completion:3/note-abc100000000", kind: "progress",
       text: "Use the newer data", from_user: true });
     expect(queue.hidden).toBe(true);
+    // Ctrl+Enter in the empty field is the row's "Send now"; with nothing
+    // waiting it does nothing.
+    input.value = "Also the 2025 figures";
+    await window.App.agentChat.steer();
+    expect(queue.querySelector(".agent-queue-item").dataset.state).toBe("waiting");
+    expect(input.value).toBe("");
+    expect(await window.App.agentChat.steer({ now: true })).toBe(true);
+    const hurries = window.fetch.mock.calls.filter(([url]) => String(url).endsWith("/now"));
+    expect(hurries).toHaveLength(2);
+    expect(hurries[1][0]).toContain("/notes/abc200000000/now");
+    expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sending now…");
+    handlers.activity.receive({ version: 1, step_id: "completion:5", id: "completion:5/note-abc200000000", kind: "progress",
+      text: "Also the 2025 figures", from_user: true });
+    expect(queue.hidden).toBe(true);
+    expect(await window.App.agentChat.steer({ now: true })).toBe(false);
+    expect(window.fetch.mock.calls.filter(([url]) => String(url).endsWith("/now"))).toHaveLength(2);
     // Ctrl+Enter (app-init.js): the message goes in with ``now`` at once.
     input.value = "Stop, use the 2026 figures";
     await window.App.agentChat.steer({ now: true });
     const sent = window.fetch.mock.calls.filter(([url]) => String(url).endsWith("/notes"));
-    expect(sent).toHaveLength(2);
-    expect(JSON.parse(sent[1][1].body)).toEqual({ text: "Stop, use the 2026 figures", now: true });
+    expect(sent).toHaveLength(3);
+    expect(JSON.parse(sent[2][1].body)).toEqual({ text: "Stop, use the 2026 figures", now: true });
     expect(queue.querySelector(".agent-queue-state").textContent).toBe("Sending now…");
     window.App.runRegistry.cancel(run.runId, "user");
     dom.window.close();

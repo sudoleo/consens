@@ -130,6 +130,7 @@ def test_the_reader_says_why_each_finding_stayed_open():
     ("Tickets cost 36.10 euros. The lift is extra. The stairs are cheaper. Children pay less.", "sentences"),
     ("Tickets to the top cost 36.10 euros as of 2026 and the lift", "sentence_end"),
     ("Tickets to the top cost **36.10 euros.", "markdown"),
+    ("Tickets to the top cost 3~5 euros, by lift 1~2 more.", "strike"),
     ("Tickets to the top cost 36.10 euros picture:p1.", "pictures"),
     ("Tickets | to the top cost 36.10 euros.", "cell_border"),
 ])

@@ -1638,6 +1638,23 @@ it('ends a sweep it sees no end of after the pass\'s own deadline, also through 
   vi.useRealTimers();
 });
 
+it('ends a sweep with the newest review of it, marks that came in meanwhile included', () => {
+  vi.useFakeTimers();
+  const { window: w, body } = feedbackSetup();
+  w.App.agentReview.render(body, feedbackReview('checking'), { key: 't1', ended: false });
+  vi.advanceTimersByTime(60000);
+  // A late reviewer marks a third sentence: the same sweep (same findings checked).
+  const later = feedbackReview('checking');
+  later.audit.claims.push({ anchor: 'It seats 50,000.', kind: 'doubtful', audit: true, agree: [],
+    dissent: [{ model: 'Google', kind: 'doubtful', note: 'Estimates vary.', mark: 3 }] });
+  w.App.agentReview.render(body, later, { key: 't1', ended: false });
+  expect(w.renderStoredAuditMarks).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(121000);
+  expect(w.renderStoredAuditMarks).toHaveBeenCalledTimes(1);
+  expect(w.renderStoredAuditMarks.mock.calls[0][1].claims).toHaveLength(3);
+  vi.useRealTimers();
+});
+
 it('ends a pass it sees no end of also when no sentence on screen carries a note', () => {
   vi.useFakeTimers();
   const { window: w, document: d, body } = feedbackSetup();

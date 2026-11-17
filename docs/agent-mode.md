@@ -1181,7 +1181,10 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   dazugehören („… 37,9. [Quelle](…)“, so zitiert Muse Ember; ein Bild
   `![…](…)` ist kein Zitat; `_ends_sentence` liest rückwärts, jedes Zeichen
   einmal, ohne den Text zu kopieren), dieselben Bilder, Markdown
-  geschlossen, jeder Link auf eine Adresse, die er schon hatte, oder auf eine
+  geschlossen, keine neue Durchstreichung (`_strikes`, `strike`: marked/GFM
+  streicht auch mit einem `~`, „3~5 Tage, per Express 1~2“ streicht alles
+  dazwischen; ein `~`, das sich mit einem daneben paaren könnte, etwa
+  „~36 €“, nur, wenn der Satz schon eines hatte), jeder Link auf eine Adresse, die er schon hatte, oder auf eine
   Quelle, die ein Prüfer für diesen Befund nannte, an Stelle eines Links oder
   dazu, und es fehlen höchstens so viele seiner eigenen Adressen, wie
   Quellen-Adressen dazukamen; kein roher HTML-Link (`<a`, `href=`), den der
@@ -3626,7 +3629,9 @@ der VM) und, nur mit der VM, der Checkpoint:
   Zeile einer noch ungelesenen Nachricht (`hurry`,
   `POST …/notes/{note_id}/now`, `AgentSessionStore.hurry_user_note` setzt
   `now` an der Notiz am Root) oder Strg+Enter (⌘+Enter am Mac) im Feld
-  (`steer({ now })`, die Notiz kommt gleich mit `now`) bricht ab, was gerade
+  (`steer({ now })`, die Notiz kommt gleich mit `now`; bei leerem Feld ist
+  es das „Send now“ der ältesten wartenden Zeile, `hurryWaiting`, und der
+  Lauf liest danach alle wartenden) bricht ab, was gerade
   läuft, und gibt dem Agenten die Nachricht sofort. Der Lauf
   (`_receive_notes` → `_hurry`, je Notiz einmal, nur solange sie ungelesen
   ist) baut auf dem Prüfer-Halt auf: Der Schritt, der gerade streamt, bricht

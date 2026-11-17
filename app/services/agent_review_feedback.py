@@ -141,6 +141,7 @@ REJECTIONS = {
     "links": "a link to an address that is neither one of the sentence's nor a source a reviewer named for it, "
              "or one of its links left out",
     "pictures": "its pictures changed", "markdown": "Markdown left open",
+    "strike": "a ~ the page shows as strikethrough (write 3–5 or about 36, not 3~5 or ~36)",
     "link_not_found": "a link to a page that could not be found",
     "link_unchecked": "a link to a page that could not be checked in time",
     "place": "a place another correction or a formula took"}
@@ -590,6 +591,11 @@ _CODE_SPAN = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)")
 _LINK_TARGET = re.compile(r"\]\((?:[^()\s]|\([^()\s]*\))*(?:\s+\"[^\"]*\")?\)")
 _ESCAPED = re.compile(r"\\[!-/:-@\[-`{-~]")
 _EMPHASIS_RUN = re.compile(r"\*+|_+")
+# Strikethrough as the page's marked (12, GFM) reads it: one "~" as well as
+# two, before a non-space, closed by the same run after one, no "~" beside
+# either. "3~5 days, by air 1~2" strikes "5 days, by air 1"; "~~~" is text.
+_STRIKE = re.compile(r"(~~?)(?=[^\s~])[\s\S]*?[^\s~]\1(?=[^~]|$)")
+_TILDES = re.compile(r"~+")
 
 
 def _address(raw):
@@ -638,11 +644,7 @@ def _balanced(text):
     """Whether ``text`` opens and closes its emphasis, strikethrough, code
     and links. Formulas are judged in their line (_cuts_formula,
     _keeps_formulas): a "$" alone says nothing, a price has one."""
-    text = _CODE_SPAN.sub("x", text)
-    for start, end in reversed(_formulas(text)):
-        text = text[:start] + "x" + text[end:]
-    text = _ESCAPED.sub("x", _AUTOLINK.sub(lambda match: "x" + match.group()[len(_autolink(match)):],
-                                           _LINK_TARGET.sub("]", text)))
+    text = _signs_only(text)
     if "`" in text or "](" in text or text.count("~~") % 2:
         return False
     depth = 0
@@ -651,6 +653,36 @@ def _balanced(text):
         if depth < 0:
             return False
     return not depth and _emphasis_closed(text)
+
+
+def _signs_only(text):
+    """``text`` with what its Markdown signs never touch as one "x" each:
+    code spans, formulas, link addresses, bare addresses, escaped signs."""
+    text = _CODE_SPAN.sub("x", text)
+    for start, end in reversed(_formulas(text)):
+        text = text[:start] + "x" + text[end:]
+    return _ESCAPED.sub("x", _AUTOLINK.sub(lambda match: "x" + match.group()[len(_autolink(match)):],
+                                           _LINK_TARGET.sub("]", text)))
+
+
+def _strikes(text):
+    """What ``text`` strikes through on its own (each struck run, its "~"
+    included), and how many of its runs of "~" are left that could still
+    strike with a "~" beside the place: all but one between two spaces or
+    longer than two."""
+    text = _signs_only(text)
+    struck, loose, at = [], 0, 0
+    while run := _TILDES.search(text, at):
+        match = _STRIKE.match(text, run.start())
+        if match:
+            struck.append(match.group())
+            at = match.end()
+            continue
+        before = text[run.start() - 1] if run.start() else ""
+        after = text[run.end()] if run.end() < len(text) else ""
+        loose += len(run.group()) <= 2 and not (before.isspace() and after.isspace())
+        at = run.end()
+    return struck, loose
 
 
 def _punctuation(char):
@@ -959,7 +991,7 @@ def shape_rule(before, after, sources=(), cell=False):
     fragment nor far longer, at most one sentence more (a correction, not a
     paragraph in its place), ending as a sentence where ``before`` did (links
     cited after its end count as ended), with its pictures and Markdown
-    closed, and with its links (_urls, by address however written): each to
+    closed, striking through nothing ``before`` did not, and with its links (_urls, by address however written): each to
     an address it had or to one of ``sources`` (the reviewers' sources for
     this finding: a better page for the corrected figure, which new_links
     still has to find), and at most as many of its own addresses gone as
@@ -993,6 +1025,12 @@ def shape_rule(before, after, sources=(), cell=False):
         return "pictures"
     if not _balanced(after):
         return "markdown"
+    # A "~" for a range or "about" ("3~5 days", "~36 euros") strikes text
+    # through on the page: only what ``before`` struck may stay struck.
+    struck, loose = _strikes(before)
+    struck_after, loose_after = _strikes(after)
+    if any(struck_after.count(run) > struck.count(run) for run in struck_after) or loose_after > loose:
+        return "strike"
     return None
 
 
