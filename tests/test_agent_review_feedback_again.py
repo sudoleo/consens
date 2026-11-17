@@ -477,6 +477,33 @@ def test_new_links_are_checked_together_and_never_past_the_time_given(monkeypatc
     assert fb.check_links({"s1": [SOURCE], "s2": [OWN, SOURCE]}, 1) == {"s1": "found", "s2": "link_not_found"}
 
 
+def test_every_new_link_of_the_pass_is_looked_up_and_a_busy_lookup_misses_nothing(monkeypatch):
+    """Five corrected sentences, each with a reviewer's page: the four DNS
+    lookups that source pages share refused the fifth link at once, and it
+    counted as a page that does not exist."""
+    import socket
+    import threading
+    import time
+    from app.services import source_documents
+
+    def lookup(host, port, *args):
+        time.sleep(.05)
+        return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("93.184.216.34", port))]
+
+    async def exists(url, **kwargs):
+        return None
+    monkeypatch.setattr(source_documents.socket, "getaddrinfo", lookup)
+    monkeypatch.setattr(agent_answer_links, "link_gone", exists)
+    pages = {f"s{index}": [f"https://example{index}.org/rates-2026"] for index in range(1, 6)}
+    assert fb.check_links(pages, 5) == {key: "found" for key in pages}
+
+    # No lookup free: the link is unchecked, never a page that is missing.
+    busy = threading.BoundedSemaphore(1)
+    busy.acquire()
+    monkeypatch.setattr(agent_answer_links, "_lookups", (agent_answer_links._lookups[0], busy))
+    assert fb.check_links({"s1": [SOURCE]}, 5) == {"s1": "link_unchecked"}
+
+
 def test_the_pass_checks_a_new_link_only_within_its_own_time(store, monkeypatch):
     import asyncio
     monkeypatch.setattr(fb, "CORRECTION_SECONDS", 1.5)

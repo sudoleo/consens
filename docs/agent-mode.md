@@ -1196,10 +1196,13 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Adresse, für die Regel wie für `new_links`. Eine neue Adresse gilt nur, wenn
   die Seite öffentlich ist und nicht fehlt (`new_links`, `check_links`: wie
   die Prüfung der Links der Antwort, nur 404/410 fehlt), geprüft für alle
-  neuen Adressen einer Anfrage zugleich, höchstens `CHECK_SECONDS` und nie
+  neuen Adressen einer Anfrage gemeinsam, drei zugleich (`PARALLEL`) über die
+  eigenen DNS-Plätze dieser Prüfung (`agent_answer_links._lookups`; die vier
+  der Quellenseiten wiesen den fünften Link sofort ab, und er galt als
+  fehlend), höchstens `CHECK_SECONDS` und nie
   über die Frist des Durchgangs hinaus; nach der Frist beginnt keine Prüfung
   mehr. Was dabei fehlt, bleibt draußen (`link_not_found`), was ungeprüft
-  bleibt, auch (`link_unchecked`): Der Satz bleibt mit seiner Marke. In Chats
+  bleibt (auch ein volles DNS-Tor), auch (`link_unchecked`): Der Satz bleibt mit seiner Marke. In Chats
   mit Google-Daten keine Quelle (`_finding_sources`), auch nicht dazu.
   Andere neue Adressen liefen an der Prüfung der Links vorbei. Die Anfrage nennt diese Regeln als Fakt der App
   und bittet bei Widerspruch um eine Begründung in einem Satz (an der Marke

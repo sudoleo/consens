@@ -1056,14 +1056,20 @@ def check_links(by_finding, seconds):
     them at once, within ``seconds`` and at most CHECK_SECONDS: the pass's
     time bounds them (AnswerAudit._corrections). One not checked in that
     time, or whose check failed, is unchecked: a link the answer did not
-    have before must not go unchecked, so it stays out all the same."""
-    from app.services.agent_answer_links import CHECK_SECONDS
+    have before must not go unchecked, so it stays out all the same.
+    PARALLEL at a time, as the answer's links: each takes a DNS lookup."""
+    from app.services.agent_answer_links import CHECK_SECONDS, PARALLEL
     urls = sorted({url for found in by_finding.values() for url in found})
     seconds = min(CHECK_SECONDS, seconds)
     state = {}
     if urls and seconds > 0:
         async def check():
-            tasks = {url: asyncio.ensure_future(_found(url)) for url in urls}
+            slots = asyncio.Semaphore(PARALLEL)
+
+            async def one(url):
+                async with slots:
+                    return await _found(url)
+            tasks = {url: asyncio.ensure_future(one(url)) for url in urls}
             _, pending = await asyncio.wait(tasks.values(), timeout=seconds)
             for task in pending:
                 task.cancel()
@@ -1091,10 +1097,18 @@ def links_found(urls, seconds=None):
 
 
 async def _public(url):
-    """Whether ``url`` names a public host (source_documents.pinned_target)."""
+    """Whether ``url`` names a public host (source_documents.pinned_target),
+    with the link check's own lookups (agent_answer_links): the four that
+    source pages share refuse one more at once. A busy lookup raises, so the
+    link is unchecked rather than missing."""
+    from app.services.agent_answer_links import _lookups
     from app.services.source_documents import pinned_target
     try:
-        await pinned_target(url)
+        await pinned_target(url, lookups=_lookups)
+    except ValueError as exc:
+        if str(exc) == "dns_busy":
+            raise
+        return False
     except Exception:
         return False
     return True
