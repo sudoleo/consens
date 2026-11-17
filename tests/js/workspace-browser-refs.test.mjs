@@ -106,7 +106,7 @@ describe("workspace browser refs", () => {
   it("counts the pictures, canvases, videos and text that the list leaves out", () => {
     const text = "Long text. ".repeat(40);
     const { document, read } = page(
-      `<h1>Board</h1><p>${text}</p><canvas id="c"></canvas><img id="big" alt="Map"><img id="icon" alt="i">` +
+      `<h1>Board <a href="/b">all</a></h1><p>${text}</p><canvas id="c"></canvas><img id="big" alt="Map"><img id="icon" alt="i">` +
         '<a href="/x"><img id="inside" alt="Inside"></a><video id="v"></video><img id="play" role="button" alt="Play">'
     );
     // Big enough to count; the icon keeps jsdom's 10 x 10.
@@ -115,8 +115,9 @@ describe("workspace browser refs", () => {
     }
     const { lines, unlisted } = read(0);
     // A picture in a link or one that is a button is listed, not counted.
-    expect(lines).toEqual(['heading "Board"', '[e1] link "Inside"', '[e2] button "Play"']);
-    // The text outside the heading and the listed elements: the paragraph.
+    expect(lines).toEqual(['heading "Board all"', '[e1] link "all"', '[e2] link "Inside"', '[e3] button "Play"']);
+    // The text outside the heading and the listed elements: the paragraph
+    // (the link in the heading counts once, with its heading).
     expect(unlisted).toEqual({ pictures: 1, canvas: 1, video: 1, text: text.trim().length });
   });
 

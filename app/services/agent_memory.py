@@ -801,7 +801,8 @@ for them. Keep what a later chat should know and could not read from its
 question, also when it shows only in a correction, in a yes to your offer for
 next time or across this chat, and update or delete a memory that turns out
 outdated or wrong. When this message gave you such a thing, save it in the
-same step as your answer. The user sees every change while you work and in
+same step as your answer: text beside a call that only saves a memory is
+your answer, as beside a card. The user sees every change while you work and in
 Settings and can undo it, so the answer itself need not mention it. Health,
 religion, political views and other sensitive details only when the user asks
 you to remember them."""

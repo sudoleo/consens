@@ -3763,7 +3763,7 @@ mit `temporary <chat>`, `at_cap` formuliert), jeder endet spätestens nach
 3 × 1 h wach. Ein Prozess überlebt seine Nachricht (der Arbeitsstand nennt
 seine ID). Die Aktivität des Starts sagt dem Nutzer, wann er von selbst endet
 (`ends_at` aus `max_seconds`, „Running in the background until 14:30“, seit
-2026-11-17): Ein Dev-Server, den der Nutzer weiter benutzt, endet an seiner
+2026-11-17; nach dieser Zeit „Ended“): Ein Dev-Server, den der Nutzer weiter benutzt, endet an seiner
 Grenze, und „Running in the background“ stand dort vorher für immer.
 `cwd` ist absolut oder relativ zum Chat-Ordner, wie bei `vm_exec`. Status: `running`, `exited` mit `exit_code`, `stopped` (seit
 2026-10-28: `vm_stop_process` hat ihn beendet, Marke `stopped` im Prozessordner;
@@ -5595,9 +5595,10 @@ Audit der Werkzeugverträge; alles Fakten, keine Verhaltensvorgaben:
 
 - `AGENT_AUDIT_ANSWER_SECTION` sagt die Ausnahme zu „text beside tool calls
   shows the user as a note“: Text neben Aufrufen, die nur ein Memory
-  speichern oder eine Karte vorbereiten (`agent_answer_mode.SIDE_TOOLS`;
-  das abschließende `update_plan` nennt der PLAN-Block), ist die Antwort und
-  beendet den Turn. Ohne
+  speichern oder eine Karte vorbereiten (`agent_answer_mode.SIDE_TOOLS`),
+  ist die Antwort und beendet den Turn. Der feste Block nennt davon nur die
+  Karte; das Memory nennt `AUDIT_MEMORY_WRITE_PROMPT`, das abschließende
+  `update_plan` der PLAN-Block, jeweils nur, wo es das Werkzeug gibt. Ohne
   den Satz wurde „I'll note that, then compare the options.“ neben
   `update_memory` zur ganzen Antwort. Derselbe Block nennt jetzt in jedem
   Chat, dass ein Schritt bis zu vier Aufrufe ausführt (vorher nur im

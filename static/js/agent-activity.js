@@ -1089,11 +1089,12 @@
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);
     if (item.status === 'running') return '';
     // A background process that still runs once its call is done, with the
-    // time it ends by itself (its max_seconds): past it, it no longer runs.
+    // time it ends by itself (its max_seconds). Past that time it has ended,
+    // whatever ended it; the row is the start's and hears of no later stop.
     if (item.process_status === 'running') {
-      return Number.isFinite(item.ends_at)
-        ? App.t('Running in the background until {time}', { time: App.format.time(item.ends_at) })
-        : App.t('Running in the background');
+      if (!Number.isFinite(item.ends_at)) return App.t('Running in the background');
+      return Date.now() >= item.ends_at ? App.t('Ended')
+        : App.t('Running in the background until {time}', { time: App.format.time(item.ends_at) });
     }
     // Ended by vm_stop_process: no exit code (timeout's 124 read as its limit).
     if (item.status === 'cancelled' || item.process_status === 'stopped') return App.t('Stopped');

@@ -215,12 +215,23 @@ describe("VM calls in the activity", () => {
   it("says when a background process ends by itself", () => {
     const { host, activity } = setup();
     const events = [];
-    const endsAt = new Date(2026, 10, 17, 14, 30).getTime();
+    const soon = new Date(Date.now() + 3_600_000);
+    soon.setHours(soon.getHours(), 30, 0, 0);
+    const endsAt = soon.getTime();
+    const clock = String(soon.getHours()).padStart(2, "0") + ":30";
     activity.receive(events, { version: 1, kind: "tool", id: "b:1/tool", name: "vm_start_process", status: "succeeded",
       command: "npm run dev", process: "abcd1234", process_status: "running", ends_at: endsAt });
     activity.renderTurn(host, { status: "completed", agent_activity: events, assistant_response: "Done." });
     const started = host.querySelector(".agent-activity-content .agent-vm");
-    expect(started.querySelector(".agent-vm-meta").textContent).toBe("Running in the background until 14:30");
+    expect(started.querySelector(".agent-vm-meta").textContent).toBe(`Running in the background until ${clock}`);
+    // Past its limit it no longer runs, whatever ended it.
+    const past = setup();
+    const old = [];
+    past.activity.receive(old, { version: 1, kind: "tool", id: "b:1/tool", name: "vm_start_process",
+      status: "succeeded", command: "npm run dev", process: "abcd1234", process_status: "running",
+      ends_at: Date.now() - 60_000 });
+    past.activity.renderTurn(past.host, { status: "completed", agent_activity: old, assistant_response: "Done." });
+    expect(past.host.querySelector(".agent-activity-content .agent-vm-meta").textContent).toBe("Ended");
   });
 
   // A message the user sent into the running response.

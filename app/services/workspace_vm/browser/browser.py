@@ -307,7 +307,8 @@ arg => {
   // listed elements, and the text outside them. A page drawn on a canvas
   // listed a few buttons and nothing said there was more to see.
   const unlisted = {pictures: 0, canvas: 0, video: 0, text: 0};
-  let listedText = 0;
+  // The heading counted last: a link in it is listed too, its text counted once.
+  let listedText = 0, heading = null;
   const big = el => {
     if (!shown(el)) return false;
     const box = el.getBoundingClientRect();
@@ -325,6 +326,7 @@ arg => {
       if (shown(el) && clean(el.innerText)) {
         into.push('heading "' + clip(clean(el.innerText), 200) + '"');
         listedText += clean(el.innerText).length;
+        heading = el;
       }
       continue;
     }
@@ -344,7 +346,7 @@ arg => {
     }
     if (!el.matches(ACT) || !shown(el)) continue;
     listed = el;
-    listedText += clean(el.innerText).length;
+    if (!(heading && heading.contains(el))) listedText += clean(el.innerText).length;
     let ref = el.getAttribute('data-consens-ref');
     // A copied element (a framework's clone) brings its original's ref along.
     if (!/^e\d+$/.test(ref || '') || given.has(ref)) {

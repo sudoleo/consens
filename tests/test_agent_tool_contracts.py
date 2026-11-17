@@ -23,6 +23,12 @@ def test_the_prompt_says_when_text_beside_a_call_is_the_answer_and_how_many_call
     update_memory became the whole answer."""
     assert "text beside tool calls shows the user as a note on your work. One exception" in AGENT_AUDIT_ANSWER_SECTION
     assert "is your answer as well, and the turn ends with it" in AGENT_AUDIT_ANSWER_SECTION
+    # Each side tool's part stands with its tool: update_memory and
+    # update_plan are not in every message.
+    from app.services.agent_memory import AUDIT_MEMORY_READ_ONLY_PROMPT, AUDIT_MEMORY_WRITE_PROMPT
+    assert "memory" not in AGENT_AUDIT_ANSWER_SECTION and "plan" not in AGENT_AUDIT_ANSWER_SECTION
+    assert "text beside a call that only saves a memory is your answer" in " ".join(AUDIT_MEMORY_WRITE_PROMPT.split())
+    assert "your answer" not in AUDIT_MEMORY_READ_ONLY_PROMPT
     # In every chat, not only with the workspace; and true of reads, which run side by side.
     assert "A step runs up to four tool calls" in AGENT_AUDIT_ANSWER_SECTION
     assert "run side by side" in AGENT_AUDIT_ANSWER_SECTION and "one after another, in your order, up to four" not in AGENT_VM_PROMPT
