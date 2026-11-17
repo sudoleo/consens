@@ -547,7 +547,7 @@ def test_the_pass_goes_to_the_agents_endpoint_with_its_reasoning(store):
     pass on Muse Ember, on a session of its own, was refused. The pass
     continues the agent's conversation on the agent's session, its tool step
     and the reasoning replayed as they were."""
-    seen = {}
+    seen, agent_parallel = {}, []
     script = Audit(tool_steps=1, live={"anthropic": agent_side(fix_tickets)})
     factory = script.factory
 
@@ -560,7 +560,10 @@ def test_the_pass_goes_to_the_agents_endpoint_with_its_reasoning(store):
                 seen.update(session=kwargs.get("session_id"), history_end=value.history_end, messages=messages,
                             tools=[tool["function"]["name"] for tool in kwargs.get("tools") or []
                                    if tool.get("type") == "function"],
-                            allow=kwargs.get("allow_tool_calls"), one_off=getattr(value, "one_off", None))
+                            allow=kwargs.get("allow_tool_calls"), one_off=getattr(value, "one_off", None),
+                            parallel=value.parallel_tool_calls)
+            elif kwargs.get("session_id") == loop.provider_session:
+                agent_parallel.append(value.parallel_tool_calls)
             return stream(model=model, messages=messages, **kwargs)
         value.stream = wrapped
         return value
@@ -573,6 +576,9 @@ def test_the_pass_goes_to_the_agents_endpoint_with_its_reasoning(store):
     # points (AgentCompletion.stream), so it reads the agent's cached
     # conversation instead of paying all of it again.
     assert seen["one_off"] is False
+    # With the agent's parallel_tool_calls: a request that differs in it read
+    # none of the agent's cache on GPT-6.1 Terra.
+    assert agent_parallel and set(agent_parallel) == {seen["parallel"]}
     # The agent's tool step stands in the request as the agent sent it, its tools listed and not callable.
     assert any(m.get("role") == "assistant" and m.get("tool_calls") for m in seen["messages"])
     assert any(m.get("role") == "tool" for m in seen["messages"])

@@ -874,6 +874,64 @@ def _review_settings(uid: str, db) -> tuple[str, bool]:
             values.get("findings_to_agent") is not False)
 
 
+def _chosen_models(uid: str, run: dict, db) -> dict:
+    """The models the user last ran in the Watch's chat (chat_store.create_turn
+    ``agent_selection``), else those of the message that proposed the Watch;
+    {} when neither is known."""
+    from app.services.agent_runs import AgentRunStore
+    store = AgentRunStore(db)
+    chat = store._chat_ref(uid, run["chat_id"]).get()
+    chosen = (chat.to_dict() or {}).get("agent_selection") if chat.exists else None
+    if isinstance(chosen, dict):
+        return chosen
+    if run.get("turn_id"):
+        turn = store._turn_ref(uid, run["chat_id"], run["turn_id"]).get()
+        settings = (turn.to_dict() or {}).get("agent_settings") if turn.exists else None
+        if isinstance(settings, dict) and isinstance(settings.get("selection"), dict):
+            return {**settings["selection"], "comparison_models": settings.get("comparison_selection")}
+    return {}
+
+
+def run_models(uid: str, run: dict, db) -> dict:
+    """The run's chat model, reasoning and reviewers as the user chose them
+    in its chat (_chosen_models), as AgentRequest fields. A choice the account
+    may no longer make (a Pro model after Pro ended, a model gone from the
+    catalog) falls back to the app's default for that part: a refused run
+    would end the Watch's runs instead (_refused)."""
+    import re
+    from app.api.routers import agent as agent_router
+    from app.services.agent_comparison import comparison_selection
+    from app.services.agent_tools import configured_model
+    from app.services.llm.agent_client import REASONING_EFFORT_PATTERN, default_agent_model_id, resolve_agent_model
+    try:
+        chosen = _chosen_models(uid, run, db)
+    except Exception as exc:
+        logging.info("Agent watch run models unreadable category=%s", safe_exception(exc))
+        return {}
+    fields = {}
+    model_id, effort = chosen.get("model_id"), chosen.get("reasoning_effort") or "default"
+    if (isinstance(model_id, str) and 0 < len(model_id) <= 160 and isinstance(effort, str)
+            and re.fullmatch(REASONING_EFFORT_PATTERN, effort)):
+        try:
+            model = configured_model(resolve_agent_model(model_id, effort))
+            if model.selection_id != default_agent_model_id():
+                agent_router.require_model_access(uid, [model.selection_id])
+            agent_router.require_reasoning_access(uid, effort)
+            fields.update(model_id=model_id, reasoning_effort=effort)
+        except Exception as exc:
+            logging.info("Agent watch run chat model not allowed category=%s", safe_exception(exc))
+    models = chosen.get("comparison_models")
+    if (isinstance(models, dict) and 0 < len(models) <= 9
+            and all(isinstance(key, str) and isinstance(value, str) for key, value in models.items())):
+        try:
+            comparison_selection(models)
+            agent_router.require_model_access(uid, list(models.values()))
+            fields["comparison_models"] = dict(models)
+        except Exception as exc:
+            logging.info("Agent watch run reviewers not allowed category=%s", safe_exception(exc))
+    return fields
+
+
 def _reviewers(uid: str, db) -> str:
     """Who checks a run's work: the account's setting, as the composer sends it."""
     return _review_settings(uid, db)[0]
@@ -986,7 +1044,7 @@ def start_run(run: dict, *, db=None, now: datetime | None = None) -> bool:
         payload = agent_router.AgentRequest(
             chat_id=run["chat_id"], client_request_id=run["request_id"], bookmark_id=run["bookmark_id"],
             question=run_question(run), timezone=run.get("timezone") or None, reviewers=reviewers,
-            findings_to_agent=findings)
+            findings_to_agent=findings, **run_models(uid, run, db))
         response = agent_router.start_agent_turn(uid, payload, watch_run=watch_run)
     except HTTPException as exc:
         _forget(watch_id)

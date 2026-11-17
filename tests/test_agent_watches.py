@@ -327,6 +327,78 @@ def test_a_started_run_is_the_task_in_its_chat(store, router):
     assert "Registration is open" in agent_watches.run_context(watch_run)
 
 
+CHOSEN = {"model_id": "gpt-6-luna", "reasoning_effort": "default",
+          "comparison_models": {"anthropic": "claude-haiku-5.5", "qwen": "qwen3.8-27b"}}
+
+
+def test_a_run_uses_the_models_the_user_last_chose_in_its_chat(store, router):
+    """Without them a run took the app's default chat model and reviewers,
+    whatever the account ran in that chat (in Prod: Opus as a reviewer in the
+    chat, Haiku in its Watch's runs)."""
+    watch_id = due_watch(store, next_run_at=NOW)
+    run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)
+    store._chat_ref(UID, run["chat_id"]).update({"agent_selection": CHOSEN})
+    fake = router(StreamingResponse(iter(())))
+    assert agent_watches.start_run(run, db=store.db, now=NOW) is True
+    payload = fake.calls[0][1]
+    assert (payload.model_id, payload.reasoning_effort) == ("gpt-6-luna", "default")
+    assert payload.comparison_models == CHOSEN["comparison_models"]
+
+
+def test_without_a_message_since_the_models_are_those_of_the_proposal(store, router):
+    watch_id = due_watch(store, next_run_at=NOW)
+    run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)
+    store.db.turns(UID, run["chat_id"])[run["turn_id"]]["agent_settings"] = {
+        "selection": {"model_id": "gpt-6-luna", "reasoning_effort": "default"},
+        "comparison_selection": CHOSEN["comparison_models"]}
+    fake = router(StreamingResponse(iter(())))
+    agent_watches.start_run(run, db=store.db, now=NOW)
+    payload = fake.calls[0][1]
+    assert payload.model_id == "gpt-6-luna" and payload.comparison_models == CHOSEN["comparison_models"]
+
+
+@pytest.mark.parametrize("chosen", [
+    # Pro models after Pro ended, a model gone from the catalog, a broken record.
+    {"model_id": "claude-opus-5.5", "reasoning_effort": "default", "comparison_models": {"grok": "grok-4.7"}},
+    {"model_id": "gpt-6-luna", "reasoning_effort": "max", "comparison_models": {"openai": "retired-model"}},
+    {"model_id": "retired-model", "comparison_models": {}},
+    {"model_id": 7, "reasoning_effort": None, "comparison_models": ["claude-haiku-5.5"]},
+])
+def test_a_choice_the_account_can_no_longer_make_runs_with_the_defaults(store, router, monkeypatch, chosen):
+    """A refused run would end the Watch's runs (cannot_run): the part the
+    account may not use falls back to the app's default instead."""
+    from app.api.routers import agent as agent_router
+    monkeypatch.setattr(agent_router, "_premium_allowed", lambda uid: False)
+    watch_id = due_watch(store, next_run_at=NOW)
+    run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)
+    store._chat_ref(UID, run["chat_id"]).update({"agent_selection": chosen})
+    fake = router(StreamingResponse(iter(())))
+    assert agent_watches.start_run(run, db=store.db, now=NOW) is True
+    payload = fake.calls[0][1]
+    assert (payload.model_id, payload.reasoning_effort, payload.comparison_models) == (None, "default", None)
+
+
+def test_the_users_messages_note_their_models_on_the_chat_and_a_runs_do_not(store):
+    from test_agent_runs import AgentModel
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    model = AgentModel()
+
+    def send(request_id, **settings):
+        store.create_turn(UID, chat_id, question="Question", mode="Agent", deep_search=False,
+                          selected_models=[model.model], consensus_model=model.model,
+                          client_request_id=request_id, execution_mode="agent", agent_settings={
+                              "selection": {"model_id": "gpt-6-luna", "reasoning_effort": "low"},
+                              "comparison_selection": CHOSEN["comparison_models"], **settings})
+        store._chat_ref(UID, chat_id).update({"agent_lock_until": None})
+    send("one")
+    noted = store._chat_ref(UID, chat_id).get().to_dict()["agent_selection"]
+    assert noted == {"model_id": "gpt-6-luna", "reasoning_effort": "low",
+                     "comparison_models": CHOSEN["comparison_models"]}
+    send("two", selection={"model_id": "claude-haiku-5.5", "reasoning_effort": "default"},
+         watch_run={"watch_id": "w"})
+    assert store._chat_ref(UID, chat_id).get().to_dict()["agent_selection"] == noted
+
+
 def test_a_busy_chat_tries_again_soon_and_a_deleted_one_ends_the_watch(store, router):
     watch_id = due_watch(store, next_run_at=NOW)
     run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)

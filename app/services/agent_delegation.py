@@ -2103,18 +2103,21 @@ class DelegationLoop(AgentLoop):
         # endpoint that cached that conversation and wrote its reasoning,
         # which an endpoint of another session may not read (OpenRouter's
         # HTTP 400, reason reasoning_pinned, as GPT-6.1 Terra's on Azure),
-        # with the agent's cache points.
+        # with the agent's cache points and its parallel_tool_calls: on
+        # GPT-6.1 Terra a pass sent with it off read none of the agent's
+        # cache, while the agent's closing step (tool_choice none, the
+        # setting as in its other steps) read nearly all of it.
         continues_agent = worker is None or getattr(worker, "kind", None) == "correction"
         if continues_agent:
             value.history_end = self.history_end
+            value.parallel_tool_calls = self._parallel_calls()
         value.published = ""
         value.tool_call_limit = TOOL_CALLS_PER_STEP
         if avoid_endpoint:
             value.avoid_endpoints = (avoid_endpoint,) if isinstance(avoid_endpoint, str) else tuple(avoid_endpoint)
         if worker is None:
-            # The agent's own steps: several calls at once (_parallel_calls),
-            # and a call past the limit gets its result.
-            value.parallel_tool_calls, value.keep_over_limit = self._parallel_calls(), True
+            # The agent's own steps: a call past the limit gets its result.
+            value.keep_over_limit = True
         # A comparison answer's line is quoted live in the chat while the main
         # model waits (agent-activity.js highlight): it keeps updating, paced,
         # instead of freezing after the first few sentences.

@@ -1135,8 +1135,11 @@ den Nutzer. Code: `app/services/agent_review_feedback.py`.
   Dateien der Nachricht an derselben Stelle wie die Schritte des Agenten
   (`_step`, `kind: "correction"`), so hält der Prompt-Cache, und läuft auf
   der OpenRouter-Sitzung des Agenten (`provider_session`, mit seinen
-  Cache-Punkten): dort liegt das Gespräch im Cache, und das Reasoning seiner
-  früheren Schritte kann an das Endpoint gebunden sein, das es schrieb
+  Cache-Punkten und seinem `parallel_tool_calls`; ohne dieses las bei Terra
+  kein Durchgang etwas aus dem Cache, obwohl der Abschluss-Schritt des Agenten
+  mit `tool_choice: "none"` fast alles las): dort liegt das Gespräch im
+  Cache, und das Reasoning seiner früheren Schritte kann an das Endpoint
+  gebunden sein, das es schrieb
   (`reasoning_pinned`, wie bei Terra auf Azure). Der erste Prod-Durchgang mit
   Muse Ember scheiterte aber an etwas anderem: Muse Ember lehnt
   `tool_choice: "none"` ab (HTTP 400 auf Meta und Google, Probe 2026-11-13;
@@ -4807,6 +4810,12 @@ nicht.
   geplanten Lauf.
 - Die Watch läuft in dem Chat, in dem sie vorbereitet wurde (Kontext, Dateien
   im Arbeitsplatz, Google-Freigabe sind dort). Eine Watch je Chat.
+- Ein Lauf nimmt Chatmodell, Reasoning und Prüfer der letzten eigenen
+  Nachricht im Chat (`agent_selection` am Chat, `agent_watches.run_models`;
+  ohne sie die des Vorschlags), den Prüfer-Schalter und den Rückkanal aus den
+  Kontoeinstellungen. Was das Konto nicht mehr wählen darf (Pro-Modell nach
+  Pro, Modell nicht mehr im Katalog), läuft mit dem Standard, statt den Lauf
+  scheitern zu lassen.
 - Grenzen je Stufe (Admin → Allowance, `agent_watch_*`): Free 2 Watches, höchstens
   täglich; Plus 5, alle 6 Stunden; Pro 20, stündlich. Dazu Tagesgrenzen für den
   ganzen Server (`agent_watch_max_runs_per_day`, 3000) und jedes Konto

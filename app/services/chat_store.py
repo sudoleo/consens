@@ -1017,6 +1017,15 @@ class ChatStore:
                     "agent_turn_id": turn_id,
                     "agent_lock_until": datetime.now(timezone.utc) + timedelta(minutes=5),
                 })
+                selection = (agent_settings or {}).get("selection")
+                if isinstance(selection, dict) and not (agent_settings or {}).get("watch_run"):
+                    # The models the user's latest message ran with: a Watch
+                    # of this chat runs with them (agent_watches.run_models).
+                    chat_updates["agent_selection"] = {
+                        "model_id": selection.get("model_id"),
+                        "reasoning_effort": selection.get("reasoning_effort") or "default",
+                        "comparison_models": agent_settings.get("comparison_selection"),
+                    }
             if position == 1 and not str(chat_data.get("title") or "").strip():
                 chat_updates["title"] = derive_title(question)
 
