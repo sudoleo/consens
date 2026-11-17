@@ -500,7 +500,6 @@ def _pill_token(href, host, label=""):
 
 _CITATION_MARK = chr(0xFFFC)  # one link or pill in the text of a line
 _AFTER_CITATION_RE = re.compile(rf"(?:[\s,;]*{_CITATION_MARK})*[\s,;]*")
-_CITATIONS_BEFORE_RE = re.compile(rf"(?:\s*{_CITATION_MARK}[\s,;]*)*$")
 _CITED_SENTENCE_END_RE = re.compile(r"""[.!?:…]["'”“’»«)\]]*\s*$""")
 
 
@@ -529,6 +528,24 @@ def _flow_text(tokens):
     return "".join(parts)
 
 
+def _said_before_citations(line):
+    """``line`` without the marks at its end, the blanks, commas and
+    semicolons between them and the blanks before the first (sources.js
+    CITATIONS_BEFORE). Read once from the end: a pattern for that tail tried
+    every split of the blanks between two marks wherever words followed the
+    marks, twice the time per link (24 links held a share page 10 s)."""
+    start = first = len(line)
+    while start and (line[start - 1] in ",;" or line[start - 1] == _CITATION_MARK or line[start - 1].isspace()):
+        start -= 1
+        if line[start] == _CITATION_MARK:
+            first = start
+    if first == len(line):
+        return line
+    while first > start and line[first - 1].isspace():
+        first -= 1
+    return line[:first]
+
+
 def _only_cites(before, after):
     """Links that only follow a finished sentence, to the end of their line
     ("... behind Kimi. [Artificial Analysis](url), [Trending Topics](url)"),
@@ -543,7 +560,7 @@ def _only_cites(before, after):
     line_after = _flow_text(after[:end])
     if not _AFTER_CITATION_RE.fullmatch(line_after):
         return False
-    said = _CITATIONS_BEFORE_RE.sub("", line_before)
+    said = _said_before_citations(line_before)
     if said.strip():
         return bool(_CITED_SENTENCE_END_RE.search(said))
     return _CITATION_MARK in line_before + line_after

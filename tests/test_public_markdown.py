@@ -167,6 +167,34 @@ def test_a_shared_answer_cites_links_that_only_cite_as_named_pills():
     assert label("Reuters") in after and "Zweite Zeile. <a class=\"src-ref\"" in after
 
 
+# The marks at the end of the line before a link were taken off with a
+# pattern that tried every split of ", " between two marks wherever words
+# followed them: each link in the row doubled the time (24 links: 10 s).
+_OLD_CITATIONS_BEFORE = "(?:\\s*\\ufffc[\\s,;]*)*$"
+
+
+def test_a_row_of_links_before_more_words_costs_no_more_than_its_length():
+    import random
+    import re
+    import time
+    from app.services.public_markdown import _said_before_citations, render_public_markdown
+
+    old = re.compile(_OLD_CITATIONS_BEFORE)
+    rng = random.Random(20261117)
+    pieces = ["\ufffc", " ", ", ", ",", ";", "\t", "\n", "a", "Text.", "\u00a0"]
+    for _ in range(20_000):
+        line = "".join(rng.choice(pieces) for _ in range(rng.randint(0, 12)))
+        assert _said_before_citations(line) == old.sub("", line), repr(line)
+
+    sources = [{"id": "S1", "url": "https://www.reuters.com/a", "title": "Wire"}]
+    row = ", ".join(f"[Q{index}](https://example{index}.org/x)" for index in range(26))
+    started = time.perf_counter()
+    html = render_public_markdown(f"Quellen: {row} und [Reuters](https://www.reuters.com/a)", sources, source_pills=True)
+    assert time.perf_counter() - started < 2
+    # Words before it: the link keeps its own and the domain follows as the pill.
+    assert "und Reuters<a class=\"src-ref\"" in html and '<span class="src-ref-label">reuters.com</span>' in html
+
+
 # A long group of markers without a point was tried again from each marker
 # and each blank before it: 4,000 markers took 5.7 s on a share page, which
 # renders without a cache. The point is optional now, the
