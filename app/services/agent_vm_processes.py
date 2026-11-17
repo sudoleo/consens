@@ -43,6 +43,7 @@ import posixpath
 import re
 import secrets
 import shlex
+import time
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -107,7 +108,8 @@ PROCESSES_NOTE = ("It runs in the background: read its output with vm_process_ou
 class VmStartProcessArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     command: str = Field(min_length=1, max_length=20_000, description="Shell command, run by bash in the background.")
-    cwd: str = Field(default="", max_length=1024, description="Working directory; default this chat's folder.")
+    cwd: str = Field(default="", max_length=1024, description="Working directory, absolute or relative to this "
+                     "chat's folder; default that folder.")
     max_seconds: int = Field(default=DEFAULT_SECONDS, ge=10, le=MAX_SECONDS,
                              description=f"The process is ended after this long (default {DEFAULT_SECONDS // 60} minutes).")
 
@@ -525,4 +527,10 @@ class ProcessTools:
                 fields["exit_code"] = result["exit_code"]
             if result.get("status") in {"running", "lost", "stopped"}:
                 fields["process_status"] = result["status"]
+            # When it ends by itself (milliseconds since the epoch): a dev
+            # server the user keeps using stops at its limit, and the
+            # activity's "Running in the background" said so of it forever.
+            if (isinstance(args, VmStartProcessArgs) and result.get("status") == "running"
+                    and type(result.get("max_seconds")) is int):
+                fields["ends_at"] = int((time.time() + result["max_seconds"]) * 1000)
         return {**fields, **self.vm._outcome(result)}

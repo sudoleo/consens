@@ -775,6 +775,7 @@
   "Stopping process": "Stoppt Prozess",
   "Stopped process": "Prozess gestoppt",
   "Running in the background": "Läuft im Hintergrund",
+  "Running in the background until {time}": "Läuft im Hintergrund bis {time}",
   "Picture": "Bild",
   "You": "Du",
   "Connect GitHub": "GitHub verbinden",

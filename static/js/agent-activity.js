@@ -1088,8 +1088,13 @@
   function vmMeta(item) {
     if (vmOutcomes[item.outcome]) return App.t(vmOutcomes[item.outcome]);
     if (item.status === 'running') return '';
-    // A background process that still runs once its call is done.
-    if (item.process_status === 'running') return App.t('Running in the background');
+    // A background process that still runs once its call is done, with the
+    // time it ends by itself (its max_seconds): past it, it no longer runs.
+    if (item.process_status === 'running') {
+      return Number.isFinite(item.ends_at)
+        ? App.t('Running in the background until {time}', { time: App.format.time(item.ends_at) })
+        : App.t('Running in the background');
+    }
     // Ended by vm_stop_process: no exit code (timeout's 124 read as its limit).
     if (item.status === 'cancelled' || item.process_status === 'stopped') return App.t('Stopped');
     if (item.status === 'failed') return App.t('Failed');

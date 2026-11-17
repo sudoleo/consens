@@ -302,6 +302,17 @@ arg => {
   // This read's marks only: an iframe hidden since an earlier read keeps none.
   for (const old of document.querySelectorAll('[data-consens-frame]')) old.removeAttribute('data-consens-frame');
   let count = start, frames = 0;
+  // What the list leaves out (read's last line, unlisted_line): pictures,
+  // canvases and videos of at least 40 pixels each way (no icons) outside
+  // listed elements, and the text outside them. A page drawn on a canvas
+  // listed a few buttons and nothing said there was more to see.
+  const unlisted = {pictures: 0, canvas: 0, video: 0, text: 0};
+  let listedText = 0;
+  const big = el => {
+    if (!shown(el)) return false;
+    const box = el.getBoundingClientRect();
+    return box.width >= 40 && box.height >= 40;
+  };
   // The element listed last: what lies inside it is part of it. Listed
   // elements never nest, and the walk is in document order.
   let listed = null;
@@ -311,8 +322,15 @@ arg => {
     if (listed && listed !== el && listed.contains(el)) continue;
     const into = cover && cover.contains(el) ? front : main && !main.contains(el) ? outside : lines;
     if (/^H[1-6]$/.test(el.tagName) || el.getAttribute('role') === 'heading') {
-      if (shown(el) && clean(el.innerText)) into.push('heading "' + clip(clean(el.innerText), 200) + '"');
+      if (shown(el) && clean(el.innerText)) {
+        into.push('heading "' + clip(clean(el.innerText), 200) + '"');
+        listedText += clean(el.innerText).length;
+      }
       continue;
+    }
+    if ((/^(CANVAS|VIDEO|IMG)$/.test(el.tagName) || (el.tagName === 'svg' && el.getAttribute('role') === 'img')) &&
+        !el.matches(ACT) && big(el)) {
+      unlisted[el.tagName === 'CANVAS' ? 'canvas' : el.tagName === 'VIDEO' ? 'video' : 'pictures'] += 1;
     }
     if (el.tagName === 'IFRAME' && shown(el)) {
       // Marked for this read (page_lines puts the frame's elements here),
@@ -326,6 +344,7 @@ arg => {
     }
     if (!el.matches(ACT) || !shown(el)) continue;
     listed = el;
+    listedText += clean(el.innerText).length;
     let ref = el.getAttribute('data-consens-ref');
     // A copied element (a framework's clone) brings its original's ref along.
     if (!/^e\d+$/.test(ref || '') || given.has(ref)) {
@@ -356,7 +375,9 @@ arg => {
   }
   if (outside.length && lines.length) lines.push('(outside the main content: header, navigation, footer)');
   if (front.length) front.push('(the page under it:)');
-  return {lines: front.length ? ['(over the page:)', ...front, ...lines, ...outside] : lines.concat(outside), count};
+  unlisted.text = Math.max(0, clean((document.body || document.documentElement).innerText).length - listedText);
+  return {lines: front.length ? ['(over the page:)', ...front, ...lines, ...outside] : lines.concat(outside), count,
+          unlisted};
 }
 """.replace("%KEY_JS%", KEY_JS)
 
@@ -1042,16 +1063,57 @@ def header(page):
     except Exception:
         title = ""
     lines = [f'Page: "{title}"', f"URL: {page.url}"]
+    tab = tab_line(page)
+    if tab:
+        lines.append(tab)
     saved = saved_sign_in(page)
     if saved:
         lines.append(f"Cookies saved for this site: {saved}")
     return "\n".join(lines)
 
 
-def page_lines(page, frames="front"):
+def tab_line(page):
+    """Which tab of how many ``page`` is, once there is more than one: the
+    browser is shared, and tabs the user or an earlier message opened were
+    out of sight until a call of tabs."""
+    try:
+        pages = list(page.context.pages)
+        number = pages.index(page) + 1
+    except Exception:
+        return ""
+    return f"Tab {number} of {len(pages)} (tabs lists them)" if len(pages) > 1 else ""
+
+
+# Text outside read's list below this many characters is the labels around
+# its elements, no text to read (unlisted_line).
+UNLISTED_TEXT_CHARS = 200
+
+
+def unlisted_line(unlisted):
+    """read's last line: what the page shows that its list leaves out
+    (SNAPSHOT_JS ``unlisted``), or ""."""
+    if not isinstance(unlisted, dict):
+        return ""
+    parts = []
+    text = unlisted.get("text")
+    if type(text) is int and text >= UNLISTED_TEXT_CHARS:
+        parts.append(f"about {round(text, -2) if text >= 1000 else text:,} characters of text (action text)")
+    seen = []
+    for key, one, many in (("pictures", "picture", "pictures"), ("canvas", "canvas", "canvases"),
+                           ("video", "video", "videos")):
+        count = unlisted.get(key)
+        if type(count) is int and count > 0:
+            seen.append(f"{count} {one if count == 1 else many}")
+    if seen:
+        parts.append(", ".join(seen) + " (screenshot)")
+    return "(not listed: " + "; ".join(parts) + ")" if parts else ""
+
+
+def page_lines(page, frames="front", unlisted=None):
     """read's lines of the page; ``frames``: "all" reads the elements of
     every frame (the action read), "front" only of a frame over the page (a
-    consent dialog; after every action), "none" of none (find)."""
+    consent dialog; after every action), "none" of none (find).
+    ``unlisted`` (a dict) gets what the list leaves out of the page itself."""
     try:
         with open(REF_COUNTER, encoding="utf-8") as handle:
             start = int(handle.read().strip() or 0)
@@ -1059,6 +1121,8 @@ def page_lines(page, frames="front"):
         start = 0
     result = page.evaluate(SNAPSHOT_JS, snapshot_arg(start))
     lines, count = result["lines"], result["count"]
+    if unlisted is not None and isinstance(result.get("unlisted"), dict):
+        unlisted.update(result["unlisted"])
     if frames != "none":
         allowed = None if frames == "all" else front_frames(lines)
         refs = {}
@@ -1218,10 +1282,11 @@ def read_text(page, offset=0, limit=READ_CHARS, frames="front", keep=False):
     answer (after_text)."""
     if hidden(page):
         return hidden_text(page)
-    lines = page_lines(page, frames)
+    unlisted = {}
+    lines = page_lines(page, frames, unlisted=unlisted)
     if keep:
         remember(page, lines)
-    return shown_to_agent(page, listed_text(page, lines, offset, limit))
+    return shown_to_agent(page, listed_text(page, lines, offset, limit, unlisted=unlisted))
 
 
 # An element's line in an answer: read's line, a frame's element indented
@@ -1258,12 +1323,15 @@ def shown_to_agent(page, text):
     return text
 
 
-def listed_text(page, lines, offset, limit):
+def listed_text(page, lines, offset, limit, unlisted=None):
     shown, rest = paged(lines, offset, limit)
     out = [header(page), "\n".join(shown) if shown else
            "(no headings or elements to act on; read the page with the action text)"]
     if rest > 0:
         out.append(f"(… {rest} more lines: read with offset {offset + len(shown)})")
+    left_out = unlisted_line(unlisted)
+    if left_out:
+        out.append(left_out)
     return "\n".join(out)
 
 

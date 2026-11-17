@@ -236,7 +236,8 @@ _ANSI = re.compile(r"\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07")
 class VmExecArgs(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     command: str = Field(min_length=1, max_length=20_000, description="Shell command, run by bash with your login environment.")
-    cwd: str = Field(default="", max_length=1024, description="Working directory; default this chat's folder.")
+    cwd: str = Field(default="", max_length=1024, description="Working directory, absolute or relative to this "
+                     "chat's folder; default that folder.")
     timeout_seconds: int = Field(default=EXEC_TIMEOUT_DEFAULT, ge=1, le=EXEC_TIMEOUT_MAX, description=(
         f"After this long the command is stopped ({EXEC_TIMEOUT_DEFAULT} unless given, at most {EXEC_TIMEOUT_MAX}). "
         "What needs longer, or keeps running like a server, runs with vm_start_process."))
@@ -300,9 +301,13 @@ class VmShareFileArgs(BaseModel):
 # The workspace on demand (AGENT_WORKSPACE_ON_DEMAND, DelegationLoop._open_workspace):
 # a message that starts without the workspace has this one tool of it.
 OPEN_WORKSPACE = "open_workspace"
+# update_plan and ask_user come with the workspace (_workspace_tool_list)
+# and are named here: with the workspace closed, the agent looked for them as
+# tools that were missing. ask_user by what is the workspace's to ask for.
 OPEN_WORKSPACE_DESCRIPTION = ("Open your workspace for this message: the Linux computer and the browser you share "
-                              "with the user. Their tools (commands, files, background processes, the browser, "
-                              "GitHub) come with your next step.")
+                              "with the user. Their tools come with your next step: commands, files, background "
+                              "processes, the browser, GitHub, ask_user to hand the user the browser or ask them "
+                              "for a key or a yes, and update_plan for a plan the user sees.")
 WORKSPACE_OPENED = "Your workspace is open: its tools come with your next step."
 
 

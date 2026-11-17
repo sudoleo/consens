@@ -101,6 +101,25 @@ describe("workspace browser refs", () => {
     expect(read(0).lines.map(refOf)).toEqual(["e1", "e2"]);
   });
 
+  // read's last line says what its list leaves out: a page drawn on a canvas
+  // listed a few buttons and nothing said there was more to see.
+  it("counts the pictures, canvases, videos and text that the list leaves out", () => {
+    const text = "Long text. ".repeat(40);
+    const { document, read } = page(
+      `<h1>Board</h1><p>${text}</p><canvas id="c"></canvas><img id="big" alt="Map"><img id="icon" alt="i">` +
+        '<a href="/x"><img id="inside" alt="Inside"></a><video id="v"></video><img id="play" role="button" alt="Play">'
+    );
+    // Big enough to count; the icon keeps jsdom's 10 x 10.
+    for (const id of ["c", "big", "inside", "v", "play"]) {
+      document.getElementById(id).getBoundingClientRect = () => ({ width: 300, height: 200 });
+    }
+    const { lines, unlisted } = read(0);
+    // A picture in a link or one that is a button is listed, not counted.
+    expect(lines).toEqual(['heading "Board"', '[e1] link "Inside"', '[e2] button "Play"']);
+    // The text outside the heading and the listed elements: the paragraph.
+    expect(unlisted).toEqual({ pictures: 1, canvas: 1, video: 1, text: text.trim().length });
+  });
+
   it("gives a link's and a heading's text whole up to 200 characters", () => {
     const words = (size) => "word ".repeat(size / 5).trim();
     const { read } = page(`<h2>${words(190)}</h2><a href="/a">${words(150)}</a><a href="/b">${"x".repeat(250)}</a>`);

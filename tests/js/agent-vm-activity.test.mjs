@@ -211,6 +211,18 @@ describe("VM calls in the activity", () => {
     expect(stopped.querySelector(".agent-vm-meta").textContent).toBe("Exit 143");
   });
 
+  // A dev server the user keeps using ends at its limit: the activity says when.
+  it("says when a background process ends by itself", () => {
+    const { host, activity } = setup();
+    const events = [];
+    const endsAt = new Date(2026, 10, 17, 14, 30).getTime();
+    activity.receive(events, { version: 1, kind: "tool", id: "b:1/tool", name: "vm_start_process", status: "succeeded",
+      command: "npm run dev", process: "abcd1234", process_status: "running", ends_at: endsAt });
+    activity.renderTurn(host, { status: "completed", agent_activity: events, assistant_response: "Done." });
+    const started = host.querySelector(".agent-activity-content .agent-vm");
+    expect(started.querySelector(".agent-vm-meta").textContent).toBe("Running in the background until 14:30");
+  });
+
   // A message the user sent into the running response.
   it("shows the user's message in their own words, in the turn and in the timeline", () => {
     const { host, activity } = setup();

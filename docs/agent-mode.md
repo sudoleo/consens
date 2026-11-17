@@ -1563,7 +1563,10 @@ Nachricht alles von Anfang an, wie zuvor. Eine Nachricht beginnt in **Stufe 1**.
 Plan-Block `AGENT_WORKSPACE_CLOSED_PROMPT` (vor dem Memory-Block). Statt der
 Werkzeuge des Arbeitsplatzes (VM, `browser`, `ask_user`, GitHub,
 `update_plan`; bis 2026-11-04 auch `request_domain`) gibt es nur `open_workspace` (`task`: wofür, ein Satz,
-bis 200 Zeichen). Suche, `read_source`, Bilder, Watch, Einstellungen,
+bis 200 Zeichen). Seine Beschreibung nennt, was mit ihm kommt, auch
+`ask_user` (Browser übergeben, Schlüssel, ein Ja) und `update_plan`: Bei
+geschlossenem Arbeitsplatz hielt Opus 5.5 beide für fehlende Werkzeuge
+(Harness-Eval 2026-11-17). Suche, `read_source`, Bilder, Watch, Einstellungen,
 Chatsuche, Dokumente und Memory bleiben. Ein Werkzeug des Arbeitsplatzes, das
 das Modell trotzdem aufruft, läuft nicht („unknown tool“), und die VM startet
 nicht; seit 2026-10-30 sagt die Ablehnung, dass die Werkzeuge des
@@ -2830,7 +2833,16 @@ keine Kopien von VM zu VM, kein Tunnel, eigene Regeln der VM nur noch mit der
   (es markiert jeden Handler), jede Aktion scheiterte, deshalb eine eigene
   Funktion.
   Aktivität („Searched the page for“, Feld `query`) und Arbeitsprotokoll
-  (`browser find "…"`) nennen den Suchtext, den Text von `type` nie. Der Kopf jeder Seitenausgabe (`Page:`/`URL:`) trägt die Zeile `Cookies saved
+  (`browser find "…"`) nennen den Suchtext, den Text von `type` nie. Der Kopf
+  jeder Seitenausgabe nennt ab zwei Tabs nach `URL:` auch „Tab 2 of 3 (tabs
+  lists them)“ (`tab_line`, seit 2026-11-17): Tabs, die der Nutzer oder eine
+  frühere Nachricht geöffnet hat, sah der Agent sonst erst mit `tabs`. `read`
+  endet mit dem, was seine Liste auslässt (`unlisted_line` aus `SNAPSHOT_JS`
+  `unlisted`): „(not listed: about 4,800 characters of text (action text);
+  12 pictures, 1 canvas (screenshot))“; Bilder, Canvas und Videos ab 40 px je
+  Richtung außerhalb gelisteter Elemente, Text ab 200 Zeichen außerhalb von
+  Überschriften und Elementen. Eine Seite auf einem Canvas listete sonst ein
+  paar Knöpfe, und nichts sagte, dass es mehr zu sehen gab. Der Kopf trägt die Zeile `Cookies saved
   for this site: yes|no` aus den Cookies des Browser-Kontexts für die
   aktuelle Adresse (nicht leer = yes); nie Namen, Werte oder Anzahl. Ohne
   http(s)-Adresse (`about:blank`) oder wenn die Cookies nicht lesbar sind, fehlt
@@ -3749,7 +3761,11 @@ Prozesse fehlen in der Liste dieses Chats: `start_command` meldet je einen
 mit `temporary <chat>`, `at_cap` formuliert), jeder endet spätestens nach
 `max_seconds`, die Sprite bleibt nach dem Ende einer Nachricht also höchstens
 3 × 1 h wach. Ein Prozess überlebt seine Nachricht (der Arbeitsstand nennt
-seine ID). Status: `running`, `exited` mit `exit_code`, `stopped` (seit
+seine ID). Die Aktivität des Starts sagt dem Nutzer, wann er von selbst endet
+(`ends_at` aus `max_seconds`, „Running in the background until 14:30“, seit
+2026-11-17): Ein Dev-Server, den der Nutzer weiter benutzt, endet an seiner
+Grenze, und „Running in the background“ stand dort vorher für immer.
+`cwd` ist absolut oder relativ zum Chat-Ordner, wie bei `vm_exec`. Status: `running`, `exited` mit `exit_code`, `stopped` (seit
 2026-10-28: `vm_stop_process` hat ihn beendet, Marke `stopped` im Prozessordner;
 vorher stand dort der Exit-Code von coreutils `timeout`, 124, der wie sein
 Zeitlimit las) oder `lost` (die VM hat ihn ohne Exit-Code beendet). Ist der
@@ -5554,6 +5570,25 @@ Chatmodell, ob Bilder folgen. Nicht umgesetzt, mit Grund:
   Werkzeug, in dessen Ergebnis und ab 80 % in der Faktzeile; ein Sammelblock
   kostet jeden Turn und veraltet neben dem Code. Fehler kommen als Ergebnis
   mit dem Ausweg (folgender Absatz).
+
+Zweite Runde am selben Tag, Arbeitsplatz (sechs Befunde). Umgesetzt:
+`open_workspace` nennt `ask_user` und `update_plan`; `read` sagt, was seine
+Liste auslässt; der Seitenkopf nennt den Tab ab zweien; `cwd` relativ zum
+Chat-Ordner steht in der Beschreibung; die Aktivität nennt, wann ein
+Hintergrundprozess von selbst endet. Nicht umgesetzt:
+- Verweise in NOTES.md auf gelöschte Chat-Ordner melden: Ordner folgen dem
+  Titel, also veralten Pfade schon beim Umbenennen; Pfade aus freiem Text
+  (mit Leerzeichen) sind nicht verlässlich zu finden; der Prompt sagt, dass
+  die Notizen veraltet sein können, und ein Fehlgriff kostet einen Befehl.
+- Laufzeit und Verbrauch in späteren Ergebnissen: Gibt es schon, als
+  Faktzeile nach jedem Stapel einer Nachricht mit Arbeitsplatz (Schritt,
+  Wartezeit, ab 80 % die Grenzen und das Kontingent); Kosten je Aufruf
+  siehe oben.
+- Offene Tabs und Anmeldungen im ersten Ergebnis: Die bekannten Anmeldungen
+  stehen schon im Kontext jeder Frage (`sign_ins_note`), auch bei
+  geschlossenem Arbeitsplatz; die Tabs nennt jetzt der Seitenkopf. Ein
+  Browser-Aufruf vor jedem ersten Ergebnis der Werkbank kostete Zeit, die
+  meisten Nachrichten brauchen keinen.
 
 **Was das Modell über seine Aufrufe erfährt (seit 2026-11-10).** Aus dem
 Audit der Werkzeugverträge; alles Fakten, keine Verhaltensvorgaben:

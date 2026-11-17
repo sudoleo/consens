@@ -1559,6 +1559,11 @@ def test_only_an_allowed_account_gets_the_vm(api, monkeypatch, is_admin, access,
     assert ("open_workspace" in names) is vm and "vm_exec" not in names
     assert (prompt_defaults.AGENT_WORKSPACE_CLOSED_PROMPT in calls[0]["messages"][0]["content"]) is vm
     assert prompt_defaults.AGENT_VM_PROMPT not in calls[0]["messages"][0]["content"]
+    if vm:
+        # ask_user and update_plan come with it: closed, the agent took them for missing tools.
+        opener = next(tool["function"] for tool in calls[0]["tools"] if tool["function"]["name"] == "open_workspace")
+        assert "ask_user to hand the user the browser" in opener["description"]
+        assert "update_plan for a plan the user sees" in opener["description"]
     # The same request again is the same message.
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 200
 

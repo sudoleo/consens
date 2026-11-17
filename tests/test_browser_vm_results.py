@@ -298,6 +298,35 @@ def tabs(*pages):
     return type("Context", (), {"pages": list(pages)})()
 
 
+def test_read_says_what_its_list_leaves_out_and_which_tab_is_in_front(tmp_path, monkeypatch):
+    """Harness eval 2026-11-17: a read listed a page's buttons, and nothing
+    said that text, pictures or a canvas were there too; tabs the user or an
+    earlier message opened were out of sight until a call of tabs."""
+    browser = load()
+    monkeypatch.setattr(browser, "REF_COUNTER", str(tmp_path / "ref-count"))
+    page = Tab(browser, lines=['[e1] button "Play"'])
+    unlisted = {"pictures": 12, "canvas": 1, "video": 0, "text": 4_830}
+    plain = page.evaluate
+    page.evaluate = lambda script, arg=None: ({"lines": page.lines, "count": arg + 1, "unlisted": unlisted}
+                                              if script == browser.SNAPSHOT_JS else plain(script, arg))
+    assert browser.read_text(page).splitlines() == [
+        'Page: "Shop"', "URL: https://shop.example/cart", "Cookies saved for this site: no", '[e1] button "Play"',
+        "(not listed: about 4,800 characters of text (action text); 12 pictures, 1 canvas (screenshot))"]
+    # A few words outside the list are its labels; nothing left out, no line.
+    assert browser.unlisted_line({"pictures": 0, "canvas": 0, "video": 1, "text": 150}) == \
+        "(not listed: 1 video (screenshot))"
+    assert browser.unlisted_line({"pictures": 0, "canvas": 0, "video": 0, "text": 650}) == \
+        "(not listed: about 650 characters of text (action text))"
+    assert browser.unlisted_line({"pictures": 0, "canvas": 0, "video": 0, "text": 20}) == ""
+    assert browser.unlisted_line(None) == ""
+    # With more than one tab, the head says which one is in front.
+    other = Tab(browser, url="https://web.whatsapp.com/", title="WhatsApp")
+    page.context = type("Context", (), {"cookies": lambda self, urls: [], "pages": [other, page]})()
+    assert browser.header(page).splitlines()[2] == "Tab 2 of 2 (tabs lists them)"
+    page.context = type("Context", (), {"cookies": lambda self, urls: [], "pages": [page]})()
+    assert "Tab " not in browser.header(page)
+
+
 def test_a_failure_says_why_and_where(tmp_path, monkeypatch):
     """Audit L4: only the first line of Playwright's message ("Timeout
     10000ms exceeded."), no page, and the agent took a read or a screenshot

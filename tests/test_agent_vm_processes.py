@@ -78,7 +78,10 @@ def test_a_background_process_starts_under_its_supervisor(store, fake_vm, fixed_
     start, stop = saved["vm_start_process"], saved["vm_stop_process"]
     assert start["command"] == "npm run dev" and start["output"] == "Listening on :3000\n"
     assert start["process"] == PID and start["process_status"] == "running"
+    # When it ends by itself: the activity says "until 14:30" (agent-activity.js).
+    assert abs(start["ends_at"] - (time.time() + 1800) * 1000) < 60_000
     assert stop["process"] == PID and stop["process_status"] == "stopped" and "exit_code" not in stop
+    assert "ends_at" not in stop
     assert stop["output"] == "GET / 200\nbye\n"
     # The next message knows the process by its id.
     assert describe("vm_start_process", json.dumps({"command": "npm run dev"}), json.dumps(started)) == (
