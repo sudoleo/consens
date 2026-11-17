@@ -566,7 +566,10 @@ def sentence_spans(answer):
 # HTML ("<a href=…>") makes a link no reading of the Markdown sees: a
 # correction may not bring one (shape_rule).
 _LINK_DESTINATION = re.compile(r"\]\(\s*<?([^\s<>()]*(?:\([^\s<>()]*\)[^\s<>()]*)*)")
-_AUTOLINK = re.compile(r"(?<!\w)(?:(?:https?|ftp)://|www\.)[^\s<>\]]+", re.IGNORECASE)
+# The words of a link: marked makes no link inside them, an address there
+# ("[www.destatis.de](…)") included.
+_LINK_WORDS = re.compile(r"\[[^\[\]\n]*\]\(")
+_AUTOLINK =re.compile(r"(?<!\w)(?:(?:https?|ftp)://|www\.)[^\s<>\]]+", re.IGNORECASE)
 _RAW_LINK = re.compile(r"<a[\s>/]|\bhref\s*=", re.IGNORECASE)
 _AUTOLINK_TRAILING = "?!.,:*_~'\""
 _PICTURE = re.compile(r"picture:p\d+")
@@ -635,7 +638,7 @@ def _urls(text):
         if match.group(1):
             found.append(_address(match.group(1)))
         return "]("
-    rest = _LINK_DESTINATION.sub(destination, text)
+    rest = _LINK_WORDS.sub("](", _LINK_DESTINATION.sub(destination, text))
     found.extend(_address(address) for address in map(_autolink, _AUTOLINK.finditer(rest)) if address)
     return sorted(found)
 

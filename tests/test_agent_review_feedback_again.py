@@ -358,6 +358,17 @@ def test_a_link_written_another_way_is_the_link_the_sentence_had():
         "https://en.wikipedia.org/wiki/Foo_(bar)", "https://example.org/c"]
 
 
+def test_the_words_of_a_link_are_no_link_of_their_own_even_as_an_address():
+    """marked makes no link inside a link's words: "[www.destatis.de](…)" is
+    one link, to its destination. Read as two, a correction that named the
+    page by its title had lost an address the page never showed."""
+    page = "https://www.destatis.de/DE/Themen/inflation"
+    assert fb._urls(f"See [https://destatis.de]({page}).") == [page]
+    assert fb._urls(f"See [www.destatis.de]({page}) and www.example.org/a.") == ["http://www.example.org/a", page]
+    before = f"Laut [www.destatis.de]({page}) lag sie 2024 bei 5,9 %."
+    assert fb.shape_rule(before, f"Laut [Destatis]({page}) lag sie 2024 bei 2,2 %.") is None
+
+
 def test_no_own_address_goes_without_a_source_in_its_place():
     before = f"See [a]({OWN}) and [b]({ELSEWHERE}) for 79.7."
     assert one(before, f"See [a]({OWN}) and [a]({OWN}) for 80.8.", {SOURCE})[1] == {"s1": "links"}
