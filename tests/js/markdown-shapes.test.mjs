@@ -204,14 +204,27 @@ describe("Bars", () => {
     expect(widths(english)).toEqual(["100%", "50%", "25%"]);
   });
 
-  it("gives label and one amount the row form and several amounts a bar each", () => {
+  it("gives label and one amount the row form", () => {
     const one = render(table(["Heating", "Per year"], [["Gas", "2.150 €"], ["Air", "1.380 €"], ["Ground", "1.090 €"]]));
     expect(one.querySelector("table").classList.contains("md-bar-rows")).toBe(true);
     expect(one.querySelector("table").style.getPropertyValue("--md-bar-amount")).toBe("8ch");
+  });
 
-    const two = render(table(["Heating", "Buy", "CO₂"], [["Gas", "12.000 €", "4,6 t"], ["Air", "32.000 €", "1,5 t"], ["Ground", "45.000 €", "1,1 t"]]));
-    expect(two.querySelector("table").classList.contains("md-bar-rows")).toBe(false);
-    expect(two.querySelectorAll(".md-bar")).toHaveLength(6);
+  // A wider table does not say which way its numbers compare: benchmarks in
+  // rows and models in columns compare along the row, and a bar down the
+  // column gave the widest lead the shortest bar.
+  it("draws no bars in a table of several columns and still sets its amounts as numbers", () => {
+    const wide = render(table(["Heating", "Buy", "CO₂"], [["Gas", "12.000 €", "4,6 t"], ["Air", "32.000 €", "1,5 t"], ["Ground", "45.000 €", "1,1 t"]]));
+    expect(wide.querySelectorAll(".md-bar")).toHaveLength(0);
+    expect(wide.querySelector("table").classList.contains("md-bar-rows")).toBe(false);
+    expect(Array.from(wide.querySelectorAll("tbody tr:first-child td")).map(cell => cell.classList.contains("is-numeric")))
+      .toEqual([false, true, true]);
+
+    const mixed = render(table(["Benchmark", "Ours", "Best rival"], [
+      ["DeepSWE", "75,7", "Kimi: 75,5"], ["Last Exam", "46,7", "Opus: 43,4"], ["HLAB", "21,3", "Kimi: 11,7"],
+    ]));
+    expect(mixed.querySelectorAll(".md-bar")).toHaveLength(0);
+    expect(mixed.querySelector("tr.md-pick")).toBeNull();
   });
 
   it("draws nothing for years, running numbers, mixed units, text or fewer than three rows", () => {
@@ -273,6 +286,53 @@ describe("Bars", () => {
     expect(pick(table(["H", "Y"], [["<strong>Air</strong> pump", "1 €"], ["B", "2 €"], ["C", "3 €"]]))).toBeNull();
     expect(pick(table(["H", "Y"], [["A", "100 €"], ["B", "300 €"], ["C", "200 €"], ["<strong>Total</strong>", "600 €"]]))).toBeNull();
     expect(pick(table(["H", "Y"], [["<strong>A</strong>", "x"], ["B", "y"], ["C", "z"]]))).toBeNull();
+  });
+});
+
+describe("Even weight", () => {
+  const flat = output => Array.from(output.querySelectorAll("tbody tr")).map(row =>
+    Array.from(row.cells).map(cell => cell.classList.contains("md-all-bold")));
+
+  it("sets a column that is bold in every row in the column's own weight and keeps its words", () => {
+    const output = render(table(["Benchmark", "Ours", "Best rival"], [
+      ["<strong>DeepSWE</strong> (agentic)", "<strong>75,7</strong>", "<strong>Kimi:</strong> 75,5"],
+      ["<strong>Last Exam</strong>", "<strong>46,7</strong>", "<strong>Opus:</strong> 43,4"],
+    ]));
+    // Labels that open in bold, values bold throughout; a bold opening inside
+    // a text cell names what the cell goes on to say and stays.
+    expect(flat(output)).toEqual([[true, true, false], [true, true, false]]);
+    expect(output.querySelectorAll("td strong")).toHaveLength(6);
+    expect(output.querySelector("td").textContent).toBe("DeepSWE (agentic)");
+  });
+
+  it("keeps bold that only some rows carry, and the row the answer points to", () => {
+    const best = render(table(["Benchmark", "Ours", "Theirs"], [
+      ["Terminal", "48,5", "<strong>67,2</strong>"], ["Program", "<strong>65,0</strong>", "25,0"], ["Exam", "51,7", "<strong>59,8</strong>"],
+    ]));
+    expect(flat(best).flat()).not.toContain(true);
+    const pick = render(table(["Heating", "Per year"], [["Ground", "1.090 €"], ["<strong>Air</strong>", "1.380 €"], ["Gas", "2.150 €"]]));
+    expect(flat(pick).flat()).not.toContain(true);
+    expect(pick.querySelector("tr.md-pick")).not.toBeNull();
+    // One row is no column, and an empty cell is no row without bold.
+    expect(flat(render(table(["A", "B"], [["<strong>Only</strong>", "some longer words here"]]))).flat()).not.toContain(true);
+    expect(flat(render(table(["A", "B", "C"], [["x", "<strong>1</strong>", "a"], ["y", "", "b"], ["z", "<strong>3</strong>", "c"]]))))
+      .toEqual([[false, true, false], [false, false, false], [false, true, false]]);
+  });
+
+  it("gives such cells the weight of their column", () => {
+    const { window, document } = load(table(["Benchmark", "Ours", "Note"], [
+      ["<strong>DeepSWE</strong>", "<strong>75,7</strong>", "plain"], ["<strong>Exam</strong>", "<strong>46,7</strong>", "<strong>best</strong>"],
+    ]));
+    const style = document.head.appendChild(document.createElement("style"));
+    style.textContent = ".consensus-answer-body :is(strong, b) { font-weight: 600; } td { font-weight: 400; }"
+      + readFileSync(new URL("../../static/css/answer-shapes.css", import.meta.url), "utf8");
+    const output = document.body.appendChild(document.createElement("div"));
+    output.className = "consensus-answer-body";
+    window.injectMarkdown(output, "answer");
+    const weights = Array.from(output.querySelectorAll("tbody tr:last-child td strong")).map(node => window.getComputedStyle(node).fontWeight);
+    // The answer's own rule for bold gives way where the whole column is bold
+    // (jsdom names the winning declaration, it does not resolve "inherit").
+    expect(weights).toEqual(["inherit", "inherit", "600"]);
   });
 });
 

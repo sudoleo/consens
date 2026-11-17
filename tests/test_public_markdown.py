@@ -137,6 +137,36 @@ def test_a_shared_agent_answer_cites_its_sources_as_pills_like_the_app():
     assert "src-ref" not in render_public_markdown(md, sources)
 
 
+def test_a_shared_answer_cites_links_that_only_cite_as_named_pills():
+    # sources.js onlyCites, on the server: as words with a pill behind them
+    # every source stood there twice, name and domain.
+    from app.services.public_markdown import render_public_markdown
+    sources = [{"id": "S1", "url": "https://artificialanalysis.ai/qwen", "title": "Index"},
+               {"id": "S2", "url": "https://www.trendingtopics.eu/qwen", "title": "Report"},
+               {"id": "S3", "url": "https://www.reuters.com/a", "title": "Wire"}]
+    label = '<span class="src-ref-label">{}</span>'.format
+
+    run = render_public_markdown("Hinter den Flaggschiffen und **Kimi.** [Artificial Analysis](https://artificialanalysis.ai/qwen), "
+                                 "[Trending Topics](https://www.trendingtopics.eu/qwen)", sources, source_pills=True)
+    assert label("Artificial Analysis") + '<span class="src-ref-more">+1</span></a></p>' in run
+    assert "Artificial Analysis<a" not in run and "Trending Topics" not in run
+
+    # Inside a sentence the words stay, and so do those of one link alone in its line.
+    inside = render_public_markdown("Laut [Reuters](https://www.reuters.com/a) war es anders.", sources, source_pills=True)
+    assert "Laut Reuters<a class=\"src-ref\"" in inside and label("reuters.com") in inside
+    alone = render_public_markdown("[Reuters](https://www.reuters.com/a)", sources, source_pills=True)
+    assert "<p>Reuters<a class=\"src-ref\"" in alone and label("reuters.com") in alone
+    # Two or more links that are all their line holds are a line of sources.
+    line = render_public_markdown("[Reuters](https://www.reuters.com/a), [Trending Topics](https://www.trendingtopics.eu/qwen)",
+                                  sources, source_pills=True)
+    assert "<p><a class=\"src-ref\"" in line and label("Reuters") + '<span class="src-ref-more">+1</span>' in line
+    # A hard break ends the line: the link after it is alone in its own.
+    broken = render_public_markdown("Erste Zeile.  \n[Reuters](https://www.reuters.com/a)", sources, source_pills=True)
+    assert "Reuters<a class=\"src-ref\"" in broken and label("reuters.com") in broken
+    after = render_public_markdown("Erste Zeile  \nZweite Zeile. [Reuters](https://www.reuters.com/a)", sources, source_pills=True)
+    assert label("Reuters") in after and "Zweite Zeile. <a class=\"src-ref\"" in after
+
+
 # A long group of markers without a point was tried again from each marker
 # and each blank before it: 4,000 markers took 5.7 s on a share page, which
 # renders without a cache. The point is optional now, the

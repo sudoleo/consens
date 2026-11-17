@@ -2832,12 +2832,25 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     in einer schmaleren Spalte um.
   - **Balken** (`bars`, `parseAmount`): eine Spalte vergleichbarer Beträge
     (eine Einheit, bei `$1.2B` Währung und Größe zusammen, nichts Negatives, ab drei Zeilen, keine Jahreszahlen oder
-    laufenden Nummern, deutsche und englische Schreibweise) bekommt je Zelle
-    `span.md-bar > i`; eine letzte Summenzeile bleibt ohne Balken. Bei
-    Bezeichnung plus genau einer Betragsspalte `table.md-bar-rows` (Balken
-    neben dem Betrag, am Handy bei Beträgen über acht Zeichen darunter). **Empfehlung:** genau eine Zeile,
+    laufenden Nummern, deutsche und englische Schreibweise) wird in jeder
+    Tabelle als Zahlenspalte gesetzt (`is-numeric`). Balken gibt es nur bei
+    Bezeichnung plus genau dieser einen Betragsspalte: `table.md-bar-rows`,
+    je Zelle `span.md-bar > i` neben dem Betrag (am Handy bei Beträgen über
+    acht Zeichen darunter); eine letzte Summenzeile bleibt ohne Balken. In
+    breiteren Tabellen zeichnet die App seit 2026-11-17 keine Balken mehr:
+    Die Struktur sagt dort nicht, ob entlang der Spalte oder der Zeile
+    verglichen wird (Benchmarks in Zeilen, Modelle in Spalten), und unter
+    einer Zahl in schmaler Spalte las sich der Strich als Unterstreichung.
+    **Empfehlung:** genau eine Zeile,
     deren Bezeichnung ganz fett ist und einen Balken hat → `tr.md-pick`,
     fett und Balken in `--agree`; mehrere oder keine → alles grau.
+  - **Gleiches Gewicht** (`evenWeight`, keine Form, wird nicht gezählt): Fett,
+    das jede Zeile einer Spalte trägt, hebt nichts hervor. Beginnt jede
+    Zeilenbezeichnung fett oder ist jeder Wert einer Spalte ganz fett (ab
+    zwei gefüllten Zellen), bekommen die Zellen `md-all-bold` und stehen im
+    Gewicht ihrer Spalte; die `<strong>` bleiben im DOM (Kopieren,
+    Prüfmarken). Fett in einzelnen Zeilen (Bestwert, Empfehlung) und ein
+    fetter Anfang in den Zellen einer Textspalte bleiben.
   - **Schritte** (`steps`): nummerierte Liste, deren Punkte alle mit fettem
     Titel beginnen (Text folgt im selben Absatz, oder der Titel ist ein
     eigener Absatz und der Punkt geht darunter weiter) → `ol.md-steps`; ein
@@ -2851,6 +2864,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
     CSS-Regeln der Schiene setzen deshalb keinen Container voraus und
     überbieten dessen Listenregeln über die doppelte Klasse
     (`ol.md-steps.md-steps`).
+  Zahlenspalten in `/app` markiert außerdem `markNumericTableColumns`
+  (`markdown-stream.js`, rechtsbündig mit Tabellenziffern): Ein Strich für
+  einen fehlenden Wert („–“, „—“, „-“) zählt dabei nicht gegen die Zahlen
+  und steht als `is-numeric is-blank` dort, wo die Zahlen stehen, im
+  leisen Ton.
   Tabellen erscheinen im Stream erst als Ganzes (`stream-table-pending`),
   ihre Formen also auch. Gezählt wird je geschriebener Antwort und Form
   einmal (`app_shape`, `agent-chat.js` `countShapes`, `AnswerShapes.present`).
@@ -2975,7 +2993,19 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   ein Zitat: Die Klammern entfallen, und die Pille zeigt seinen Text statt
   der Domain (`entry.label`, die Domain steht in der Vorschau). Die Klammern
   findet `citationBrackets` auch, wenn Satzmarken sie in eigene Spans gelegt
-  haben. Code, Formeln
+  haben. Dasselbe gilt seit 2026-11-17 für benannte Links, die nur zitieren
+  (`onlyCites`): Sie folgen nur noch auf ihren fertigen Satz (davor in
+  derselben Zeile Text, der mit Satzzeichen endet, danach bis zum Zeilenende
+  nur weitere Quellenlinks, Leerraum, Komma oder Semikolon; „… Kimi.
+  [Artificial Analysis](url), [Trending Topics](url)“), oder ihre Zeile
+  besteht aus nichts als zwei oder mehr Links (eine Quellenzeile, etwa unter
+  einer Tabelle). Die Pille trägt den Namen, statt dass er als loser Text
+  vor der Domain-Pille noch einmal dasteht. Ein einzelner Link allein in
+  seiner Zeile und ein Link im Satz behalten ihre Worte. Im Stream zählt ein
+  erst halb geschriebener nächster Link der Reihe („, [Trending To“) schon
+  als Link, damit die Pille davor nicht kurz zurückfällt.
+  `isBareSourceLink` kennt die Regel, Satzmarken bleiben also aus solchen
+  Links heraus. Code, Formeln
   und reine Zahlennotation wie `[1]` bleiben unberührt. Die Umwandlung betrifft
   nur den DOM, nicht Markdown oder Review-Hash; `agent-review.js` liest die
   Quellen einer Pille über `sourceGroup` zurück.
@@ -10273,7 +10303,8 @@ einen Chat bis zu seinem Termin zurück; holt ein anderer Lauf den Bildschirm
   Watch-Seiten) lässt bei Links auf Quellen der Antwort die Worte stehen und
   setzt die Quellenpille `a.src-ref` (Favicon + Domain, `source-pill.css`)
   dahinter, wie `sources.js` `linkifyAgentSources`; ein Link allein in
-  Klammern wird ohne Klammern zur Pille mit seinem Text. „Models compared“ ist
+  Klammern wird ohne Klammern zur Pille mit seinem Text, ebenso ein Link,
+  der nur zitiert (`_only_cites`, dieselbe Regel wie `onlyCites`). „Models compared“ ist
   ein zugeklapptes `details.wp-disclosure` mit der grauen Logoreihe. Die
   Differences-Ansicht jeder Share-Seite zeigt die Karten der App
   (`check_page.difference_cards`: kritisch zuerst, kleinere gebündelt,

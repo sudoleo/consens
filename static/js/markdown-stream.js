@@ -409,6 +409,11 @@ function isNumericTableValue(value) {
   return /^\(?[+\-−]?\s*(?:[$€£¥]\s*)?(?:\d{1,3}(?:[.,\s]\d{3})+|\d+)(?:[.,]\d+)?(?:\s*%)?\)?$/.test(normalized);
 }
 
+// A dash where a row has no value ("–", also the hyphen and the long dash).
+function isBlankTableValue(value) {
+  return /^[-–—−]$/.test(String(value || "").trim());
+}
+
 function markNumericTableColumns(table) {
   const rows = Array.from(table.tBodies || [])
     .flatMap(body => Array.from(body.rows || []));
@@ -419,9 +424,14 @@ function markNumericTableColumns(table) {
     const cells = rows
       .map(row => row.cells[column])
       .filter(Boolean);
+    // A dash is a gap in the column, not a value of another kind: it does
+    // not count against the numbers, and it stands where they stand, in the
+    // quiet tone. Left-aligned it sat at the far side of its column, beside
+    // the number of the column before.
+    const blanks = cells.filter(cell => isBlankTableValue(cell.textContent));
     const numericCount = cells.filter(cell => isNumericTableValue(cell.textContent)).length;
     // Allow one label row such as "Total" in an otherwise numeric column.
-    if (numericCount < Math.max(2, cells.length - 1)) continue;
+    if (numericCount < Math.max(2, cells.length - blanks.length - 1)) continue;
 
     Array.from(table.rows || []).forEach(row => {
       const cell = row.cells[column];
@@ -429,6 +439,7 @@ function markNumericTableColumns(table) {
         cell.classList.add("is-numeric");
       }
     });
+    blanks.forEach(cell => cell.classList.add("is-numeric", "is-blank"));
   }
 }
 

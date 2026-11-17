@@ -83,23 +83,7 @@
 .md-facing .md-facing-side li > :first-child { margin-top: 0; }
 .md-facing .md-facing-side li > :last-child { margin-bottom: 0; }
 
-/* --- Bars: a thin measure under each amount of a column. ---------------- */
-.md-bar {
-  display: block;
-  height: 2px;
-  margin-top: 7px;
-  border-radius: 1px;
-  background: var(--line-soft);
-}
-
-.md-bar > i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: var(--ink-3);
-}
-
-/* Label and one amount: the bar runs beside the amount instead. */
+/* --- Bars: a label and one amount, a bar beside each amount. ------------ */
 table.md-bar-rows { min-width: 0; }
 
 table.md-bar-rows .md-bar-cell {
@@ -113,6 +97,7 @@ table.md-bar-rows td:first-child { overflow-wrap: break-word; }
 /* On the amount's first line, also where the label beside it wraps: the
    cell's top padding (10px) plus half a line. */
 table.md-bar-rows .md-bar {
+  display: block;
   position: absolute;
   inset-inline-start: 0;
   top: calc(10px + 0.775em);
@@ -120,10 +105,16 @@ table.md-bar-rows .md-bar {
   height: 6px;
   margin-top: -3px;
   border-radius: 3px;
-  background: none;
 }
 
-/* The one row the answer points to: its words in weight, its bars green. */
+.md-bar > i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--ink-3);
+}
+
+/* The one row the answer points to: its words in weight, its bar green. */
 table tr.md-pick > td,
 table tr.md-pick > td:first-child {
   color: var(--ink);
@@ -131,6 +122,10 @@ table tr.md-pick > td:first-child {
 }
 
 table tr.md-pick .md-bar > i { background: var(--agree); }
+
+/* --- Even weight: bold in every row of a column points to nothing. ------ */
+/* Its cells stand in the column's own weight (answer-shapes.js evenWeight). */
+table td.md-all-bold :is(strong, b) { font-weight: inherit; }
 
 /* --- Steps: the list's numbers on a rail, each title on its own line. ---- */
 /* Wherever steps() marks a list (an answer, a compared answer, the history,

@@ -498,6 +498,57 @@ def _pill_token(href, host, label=""):
     return token
 
 
+_CITATION_MARK = chr(0xFFFC)  # one link or pill in the text of a line
+_AFTER_CITATION_RE = re.compile(rf"(?:[\s,;]*{_CITATION_MARK})*[\s,;]*")
+_CITATIONS_BEFORE_RE = re.compile(rf"(?:\s*{_CITATION_MARK}[\s,;]*)*$")
+_CITED_SENTENCE_END_RE = re.compile(r"""[.!?:…]["'”“’»«)\]]*\s*$""")
+
+
+def _flow_text(tokens):
+    """The tokens of one line as text, every link or pill to a source in it
+    as one mark."""
+    parts, index = [], 0
+    while index < len(tokens):
+        token = tokens[index]
+        if (token.meta or {}).get("pill"):
+            parts.append(_CITATION_MARK)
+        elif token.type == "link_open":
+            close = index + 1
+            while close < len(tokens) and tokens[close].type != "link_close":
+                close += 1
+            inner = tokens[index + 1:close]
+            cited = (canonical_source_url(str(token.attrGet("href") or ""))
+                     and not any(part.type == "image" for part in inner))
+            parts.append(_CITATION_MARK if cited else "".join(part.content for part in inner))
+            index = close
+        elif token.type in {"text", "code_inline", "image"}:
+            parts.append(token.content)
+        elif token.type == "softbreak":
+            parts.append(" ")
+        index += 1
+    return "".join(parts)
+
+
+def _only_cites(before, after):
+    """Links that only follow a finished sentence, to the end of their line
+    ("... behind Kimi. [Artificial Analysis](url), [Trending Topics](url)"),
+    name the sources of what was said and are part of no sentence (sources.js
+    onlyCites). So do two or more links that are all their line holds. One
+    link alone in its line keeps its words, and so does a link inside a
+    sentence. ``before`` and ``after`` are the tokens on either side of the
+    link; a hard break ends the line."""
+    breaks = [index for index, token in enumerate(before) if token.type == "hardbreak"]
+    line_before = _flow_text(before[breaks[-1] + 1:] if breaks else before)
+    end = next((index for index, token in enumerate(after) if token.type == "hardbreak"), len(after))
+    line_after = _flow_text(after[:end])
+    if not _AFTER_CITATION_RE.fullmatch(line_after):
+        return False
+    said = _CITATIONS_BEFORE_RE.sub("", line_before)
+    if said.strip():
+        return bool(_CITED_SENTENCE_END_RE.search(said))
+    return _CITATION_MARK in line_before + line_after
+
+
 def _pill_source_links(tokens, sources):
     """A shared Agent answer cites as the app does (sources.js
     linkifyAgentSources): a link to one of the answer's sources keeps its
@@ -505,9 +556,10 @@ def _pill_source_links(tokens, sources):
     domain, after the point when the link ends a sentence. A link whose words
     are just its address or its domain becomes the pill. A link alone in
     brackets ("([WSJ](url))") is a citation: the brackets go, and the pill
-    shows its words in place of the domain. Pills that stand side by side
-    (only spaces, commas or semicolons between) are one pill with "+N".
-    Links to anything else stay links."""
+    shows its words in place of the domain. So is a link that only follows
+    its finished sentence or shares a line of only links (_only_cites).
+    Pills that stand side by side (only spaces, commas or semicolons between)
+    are one pill with "+N". Links to anything else stay links."""
     known = {}
     for source in sources or []:
         url = canonical_source_url(source.get("url"))
@@ -539,19 +591,20 @@ def _pill_source_links(tokens, sources):
             after = children[close + 1] if close + 1 < len(children) and children[close + 1].type == "text" else None
             bracketed = bool(before and after and before.content.endswith("(") and after.content.startswith(")"))
             named = not raw_url and not host_label
+            cited = named and (bracketed or _only_cites(out, children[close + 1:]))
             if bracketed:
                 before.content = re.sub(r"[ \t]*\($", "", before.content)
                 after.content = after.content[1:]
             elif raw_url and before:
                 before.content = before.content.rstrip(" \t")
-            if named and not bracketed:
+            if named and not cited:
                 out.extend(inner)
             # A domain that stands in the sentence itself keeps its place.
             point = _PILL_POINT_RE.match(after.content) if after and not (host_label and not bracketed) else None
             if point:
                 out.append(_text_token(point[1]))
                 after.content = after.content[len(point[1]):]
-            out.append(_pill_token(href, host, " ".join(label.split()) if named and bracketed else ""))
+            out.append(_pill_token(href, host, " ".join(label.split()) if cited else ""))
             index = close + 1
         token.children = _merge_adjacent_pills(out)
 

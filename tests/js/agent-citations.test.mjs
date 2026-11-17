@@ -164,6 +164,87 @@ it('finds the brackets of a citation that sentence marks put into spans of their
   dom.window.close();
 });
 
+it('turns named links that only cite into pills with their words', () => {
+  const {window: w, dom} = setup();
+  const markdown = '- Hinter den Flaggschiffen und Kimi. [Artificial Analysis](https://artificialanalysis.ai/qwen), [Trending Topics](https://www.trendingtopics.eu/qwen)\n'
+    + '- Alle Werte sind **vom Hersteller:** [TNW](https://thenextweb.com/qwen)\n'
+    + '- Besserer Score (48,5 statt 37,9). [FreakyJolly](https://www.freakyjolly.com/qwen)\n'
+    + '- Laut [Reuters](https://www.reuters.com/a) war es anders. Mehr bei [AP](https://apnews.com/b) dazu.\n'
+    + '- [Docs](https://docs.example.org/start)\n'
+    + '- [Website](https://project.example/), [Repo](https://code.example/project)\n'
+    + '- Hinter Kimi [Mint](https://www.livemint.com/qwen).';
+  const body = render(w, markdown);
+  const [run, colon, single, inside, alone, list, unfinished] = body.querySelectorAll('li');
+  // The names stood there twice: as words and as the pill's domain.
+  expect(run.textContent).toBe('Hinter den Flaggschiffen und Kimi. Artificial Analysis+1');
+  expect(run.querySelectorAll('.src-ref')).toHaveLength(1);
+  expect(run.querySelector('.src-ref').getAttribute('aria-label')).toBe('Source: Artificial Analysis (and 1 more)');
+  expect(run.querySelector('.src-ref-favicon').getAttribute('src')).toBe('/api/topics/favicon?d=artificialanalysis.ai');
+  expect(w.App.sourceRefs.plainText(run.querySelector('.src-ref'))).toBe(' (Artificial Analysis, Trending Topics)');
+  expect(colon.textContent).toBe('Alle Werte sind vom Hersteller: TNW');
+  expect(single.textContent).toBe('Besserer Score (48,5 statt 37,9). FreakyJolly');
+  // Inside a sentence the words stay; so they do for one link alone in its
+  // line, where the name is what the line says, and in a sentence that has
+  // not ended. Two or more links that are all their line holds are a line
+  // of sources.
+  expect(inside.textContent).toBe('Laut Reutersreuters.com war es anders. Mehr bei APapnews.com dazu.');
+  expect(alone.textContent).toBe('Docsdocs.example.org');
+  expect(list.textContent).toBe('Website+1');
+  expect(unfinished.textContent).toBe('Hinter Kimi Mint.livemint.com');
+  expect(body.dataset.markdown).toBe(markdown);
+  // A later pass (streaming, review) keeps the words in the pill.
+  w.App.agentReview.render(body, null, {});
+  expect(run.querySelector('.src-ref-label').textContent).toBe('Artificial Analysis');
+  dom.window.close();
+});
+
+it('keeps the pill of such a citation while the next link of its run is half written', () => {
+  const {window: w, dom} = setup();
+  const body = w.document.getElementById('agentAnswerBody');
+  const stream = markdown => {
+    w.injectMarkdown(body, markdown, []);
+    const sources = [...body.querySelectorAll('a[href]')].map(link => ({url: link.getAttribute('href')}));
+    if (sources.length) w.linkifyAgentSources(body, sources);
+    return body.querySelector('.src-ref-label')?.textContent;
+  };
+  const first = 'Hinter Kimi. [Artificial Analysis](https://artificialanalysis.ai/qwen)';
+  // The link, a comma, the next label, its address arriving, both links.
+  for (const tail of ['', ', ', ', [Trending To', ', [Trending Topics](', ', [Trending Topics](https://www.trendingtop']) {
+    expect(stream(first + tail), tail).toBe('Artificial Analysis');
+  }
+  expect(stream(`${first}, [Trending Topics](https://www.trendingtopics.eu/qwen)`)).toBe('Artificial Analysis');
+  expect(body.querySelector('.src-ref-more').textContent).toBe('+1');
+  // Words after it make it part of a sentence again.
+  expect(stream(`${first} misst das anders.`)).toBe('artificialanalysis.ai');
+  expect(body.textContent).toContain('Artificial Analysis');
+  // A line of sources: alone the first link keeps its words, with the next
+  // one arriving it cites.
+  const line = '[Trending Topics](https://www.trendingtopics.eu/qwen)';
+  expect(stream(line)).toBe('trendingtopics.eu');
+  expect(stream(`${line}, `)).toBe('trendingtopics.eu');
+  for (const tail of [', [Mark', ', [MarkTechPost](https://www.marktech', ', [MarkTechPost](https://www.marktechpost.com/qwen)']) {
+    expect(stream(line + tail), tail).toBe('Trending Topics');
+  }
+  dom.window.close();
+});
+
+it('keeps sentence marks out of a link that only cites, and reads the line through them', () => {
+  const {window: w, dom} = setup();
+  const body = w.document.getElementById('agentAnswerBody');
+  body.innerHTML = '<ul><li><span class="cx-claim">Hinter Kimi.</span> <a href="https://artificialanalysis.ai/a">Artificial Analysis</a>, '
+    + '<a href="https://www.trendingtopics.eu/b">Trending Topics</a><ul><li>Darunter ein Punkt.</li></ul></li></ul>';
+  const [first, second] = body.querySelectorAll('a');
+  expect(w.isBareSourceLink(first)).toBe(true);
+  expect(w.isBareSourceLink(second)).toBe(true);
+  w.linkifyAgentSources(body, [{url: 'https://artificialanalysis.ai/a'}, {url: 'https://www.trendingtopics.eu/b'}]);
+  expect(body.querySelector('li').firstElementChild.nextElementSibling.matches('.src-ref.is-group')).toBe(true);
+  expect(body.querySelector('.src-ref-label').textContent).toBe('Artificial Analysis');
+  // A break ends the line: after it the link stands alone in its own.
+  body.innerHTML = '<p>Erste Zeile.<br><a href="https://artificialanalysis.ai/a">Artificial Analysis</a></p>';
+  expect(w.isBareSourceLink(body.querySelector('a'))).toBe(false);
+  dom.window.close();
+});
+
 it('collapses adjacent citations into one pill and lists every source in the teaser', () => {
   const {window: w, dom} = setup();
   const sources = [{url: 'https://uci.org/a', title: 'UCI ranking'}, {url: 'https://pcs.example/b', title: 'Rider profile'},

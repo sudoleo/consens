@@ -7,9 +7,11 @@
 //   figures   a table of one row: its values large over their headings
 //   timeline  a table whose first column holds only dates: dates on a rail
 //   facing    a table of two text columns whose rows are no pairs: two sides
-//   bars      a column of comparable amounts: a bar under each
+//   bars      a label and one column of comparable amounts: a bar beside each
 //   pick      bars with exactly one row whose label is bold: that row in green
 //   steps     a numbered list whose items open with a bold title: a rail
+// And one rule that draws nothing: bold in every row of a column stands in
+// the column's own weight (evenWeight).
 (function () {
   "use strict";
 
@@ -267,17 +269,22 @@
   }
 
   // --- Bars -----------------------------------------------------------------
-  // Bars under the amounts of a column that can be compared: one unit,
-  // nothing negative, three rows or more. Years and running numbers are not
-  // amounts, and a last row that sums the others would dwarf them, so it
-  // gets no bar. Exactly one row whose label is bold throughout is the one
-  // the answer points to: its bars take the house green. Several bold rows
-  // or none say nothing, and all stays grey.
+  // A column of amounts that can be compared: one unit, nothing negative,
+  // three rows or more. Years and running numbers are not amounts. Such a
+  // column is set as numbers in any table; bars are drawn only where the
+  // table is a label and that one column, each bar beside its amount. A
+  // wider table does not say which way its numbers compare, down a column
+  // or along a row (four benchmarks of one model beside other models'), so
+  // a bar there measured the wrong thing as often as the right one, and
+  // under a number in a narrow column it read as an underline.
+  // A last row that sums the others would dwarf them, so it gets no bar.
+  // Exactly one row whose label is bold throughout is the one the answer
+  // points to: its bar takes the house green. Several bold rows or none say
+  // nothing, and all stays grey.
   function bars(table) {
     const rows = bodyRows(table);
     const columnCount = Math.max(0, ...rows.map(row => row.cells.length));
     const doc = docOf(table);
-    const drawn = [];
     let barred = [];
     for (let column = 1; column < columnCount; column += 1) {
       let cells = rows.map(row => row.cells[column]);
@@ -297,6 +304,7 @@
       if (!(max > 0) || new Set(values).size < 2) continue;
 
       Array.from(table.rows).forEach(row => row.cells[column]?.classList.add("is-numeric"));
+      if (columnCount !== 2) continue;
       cells.forEach((cell, index) => {
         const bar = doc.createElement("span");
         bar.className = "md-bar";
@@ -306,24 +314,38 @@
         cell.classList.add("md-bar-cell");
         cell.append(bar);
       });
-      drawn.push(column);
       barred = cells.map(cell => cell.parentElement);
     }
-    if (!drawn.length) return "";
-    // Label and one amount: the bar has the row to itself, beside the amount.
-    if (drawn.length === 1 && columnCount === 2) {
-      table.classList.add("md-bar-rows");
-      const longest = Math.max(...Array.from(table.rows).map(row => textOf(row.cells[1]).length));
-      table.style.setProperty("--md-bar-amount", `${longest}ch`);
-      // Beside an amount this long a phone has room for a stub only.
-      if (longest > 8) table.classList.add("has-long-amounts");
-    }
+    if (!barred.length) return "";
+    table.classList.add("md-bar-rows");
+    const longest = Math.max(...Array.from(table.rows).map(row => textOf(row.cells[1]).length));
+    table.style.setProperty("--md-bar-amount", `${longest}ch`);
+    // Beside an amount this long a phone has room for a stub only.
+    if (longest > 8) table.classList.add("has-long-amounts");
     const bold = rows.filter(row => row.cells[0] && wholeBold(row.cells[0]));
     if (bold.length === 1 && barred.includes(bold[0])) {
       bold[0].classList.add("md-pick");
       return "pick";
     }
     return "bars";
+  }
+
+  // --- Even weight ----------------------------------------------------------
+  // Bold that every row of a column carries points to nothing: row labels
+  // that each open in bold, values that are each bold throughout. Such cells
+  // stand in their column's own weight (answer-shapes.css). The words stay
+  // as the model wrote them, for copying and for the marks of a review. Bold
+  // in some rows only (the best value, the row the answer points to) says
+  // something and stays; so does a bold opening inside the cells of a text
+  // column, which names what each cell goes on to say.
+  function evenWeight(table) {
+    const rows = bodyRows(table);
+    const columnCount = Math.max(0, ...rows.map(row => row.cells.length));
+    for (let column = 0; column < columnCount; column += 1) {
+      const cells = rows.map(row => row.cells[column]).filter(cell => cell && textOf(cell));
+      const bold = column === 0 ? cell => isBold(meaningful(cell)[0]) : wholeBold;
+      if (cells.length >= 2 && cells.every(bold)) cells.forEach(cell => cell.classList.add("md-all-bold"));
+    }
   }
 
   // --- Steps ----------------------------------------------------------------
@@ -405,6 +427,7 @@
 
   // A table that stays one, with a form of its own: dates on a rail or bars.
   function decorateTable(table) {
+    evenWeight(table);
     if (timeline(table)) return "timeline";
     return bars(table);
   }

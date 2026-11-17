@@ -584,18 +584,84 @@ function canonicalAgentSourceUrl(value) {
   } catch (_) { return ''; }
 }
 
+// --- Links that only cite -------------------------------------------------
+// "… behind Kimi. [Artificial Analysis](url), [Trending Topics](url)": links
+// that only follow a finished sentence, to the end of their line, name the
+// sources of what was said and are part of no sentence. Like a link alone in
+// brackets, such a link becomes a pill with its words. As words with a pill
+// behind them every source stood there twice, name and domain, and the name
+// read as the start of a new sentence.
+// A line of nothing but two or more links is a line of sources and cites the
+// same way. One link alone in its line keeps its words (there the name is
+// what the line says), and so does a link inside a sentence ("Laut
+// [Reuters](url) …").
+// While an answer streams, the next link of the run is for a moment only
+// half written ("…, [Trending To"): it counts as the link it is about to
+// be, so the pill before it does not turn back into words in between.
+// The mark stands for one link or pill in the text of a line (U+FFFC).
+const CITATION_MARK = String.fromCharCode(0xFFFC);
+const AFTER_CITATION = new RegExp(`^(?:[\\s,;]*${CITATION_MARK})*[\\s,;]*(?:\\[[^\\]\\n]*(?:\\]\\((?:${CITATION_MARK}|[^)\\s]*))?)?$`);
+const CITATIONS_BEFORE = new RegExp(`(?:\\s*${CITATION_MARK}[\\s,;]*)*$`);
+const SENTENCE_END = /[.!?:…]["'”“’»«)\]]*\s*$/;
+
+function isCitationLink(node) {
+  return node.matches('.src-ref') || (node.matches('a[href]') && !node.querySelector('img, svg')
+    && Boolean(canonicalAgentSourceUrl(node.getAttribute('href'))));
+}
+
+// The line a link stands in, to one side of it, as text: every link or pill
+// to a source in it as one mark. A line ends at a break or at a block inside
+// the paragraph (a list below a list item's own words).
+function flowBeside(link, forward) {
+  const block = link.parentElement?.closest('p, li, td, th, dt, dd, blockquote, h1, h2, h3, h4, h5, h6')
+    || link.parentElement;
+  const parts = [];
+  const read = node => {
+    if (node.nodeType === Node.TEXT_NODE) parts.push(node.nodeValue);
+    if (node.nodeType !== Node.ELEMENT_NODE) return true;
+    if (node.matches('ul, ol, p, div, table, pre, blockquote, br, hr, h1, h2, h3, h4, h5, h6')) return false;
+    if (node.matches('.claim-badge, .src-ref-sep')) return true;
+    if (node.matches('a, .src-ref')) {
+      parts.push(isCitationLink(node) ? CITATION_MARK : node.textContent);
+      return true;
+    }
+    const children = Array.from(node.childNodes);
+    return (forward ? children : children.reverse()).every(child => read(child));
+  };
+  const text = () => (forward ? parts : parts.reverse()).join('');
+  for (let node = link; node && node !== block; node = node.parentNode) {
+    for (let next = forward ? node.nextSibling : node.previousSibling; next;
+      next = forward ? next.nextSibling : next.previousSibling) {
+      if (!read(next)) return text();
+    }
+  }
+  return text();
+}
+
+function onlyCites(link) {
+  const after = flowBeside(link, true);
+  if (!AFTER_CITATION.test(after)) return false;
+  const before = flowBeside(link, false);
+  const said = before.replace(CITATIONS_BEFORE, '');
+  if (said.trim()) return SENTENCE_END.test(said);
+  // Nothing but links in the line: with another one beside it, written or
+  // being written.
+  return before.includes(CITATION_MARK) || after.includes(CITATION_MARK) || after.includes('[');
+}
+
 // A link whose label is its own address or just its site's name
-// ("[njaped.no](https://njaped.no/)"), or that stands alone in brackets
-// ("([WSJ](url))"): linkifyAgentSources puts a pill in its place, and the
-// label leaves the text. Sentence marks keep out of such a link
-// (consensus-insights.js wrapFlatRange); a mark inside it left the page with
-// the label, and its hover card opened in the corner of the screen.
+// ("[njaped.no](https://njaped.no/)"), that stands alone in brackets
+// ("([WSJ](url))") or only cites (onlyCites): linkifyAgentSources puts a
+// pill in its place, and the label leaves the text. Sentence marks keep out
+// of such a link (consensus-insights.js wrapFlatRange); a mark inside it
+// left the page with the label, and its hover card opened in the corner of
+// the screen.
 function isBareSourceLink(link) {
   if (!link?.matches?.('a[href]') || link.matches('.src-ref, .source-link') || link.querySelector('img, svg')) return false;
   const url = canonicalAgentSourceUrl(link.getAttribute('href'));
   const label = link.textContent.trim();
   return Boolean(url) && (canonicalAgentSourceUrl(label) === url || labelIsSourceHost(label, { url })
-    || Boolean(citationBrackets(link)));
+    || Boolean(citationBrackets(link)) || onlyCites(link));
 }
 window.isBareSourceLink = isBareSourceLink;
 
@@ -666,6 +732,8 @@ function linkifyAgentSources(containerEl, sources) {
     // write one): the brackets go, and the pill carries its words in place
     // of the domain. A named link inside a sentence keeps its words.
     const brackets = (rawUrl || hostLabel || named) && citationBrackets(link);
+    // So is a named link that only cites.
+    const cited = named && (Boolean(brackets) || onlyCites(link));
     const before = brackets ? brackets.before : link.previousSibling;
     const after = brackets ? brackets.after : link.nextSibling;
     if (brackets) {
@@ -675,7 +743,7 @@ function linkifyAgentSources(containerEl, sources) {
       before.nodeValue = before.nodeValue.replace(/[ \t]+$/, '');
     }
     const fragment = document.createDocumentFragment();
-    if (named && !brackets) fragment.append(...link.childNodes);
+    if (named && !cited) fragment.append(...link.childNodes);
     // As in Consensus, a terminal citation follows the sentence punctuation.
     // A domain that stands in the sentence itself keeps its place.
     const punctuation = !(hostLabel && !brackets) && after?.nodeType === Node.TEXT_NODE
@@ -684,7 +752,7 @@ function linkifyAgentSources(containerEl, sources) {
       fragment.append(document.createTextNode(punctuation[1]));
       after.nodeValue = after.nodeValue.slice(punctuation[1].length);
     }
-    fragment.append(createSourceRef(named && brackets ? { ...ref, label: label.replace(/\s+/g, ' ') } : ref));
+    fragment.append(createSourceRef(cited ? { ...ref, label: label.replace(/\s+/g, ' ') } : ref));
     link.replaceWith(fragment);
   }
   mergeAdjacentSourceRefs(containerEl);
