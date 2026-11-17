@@ -636,14 +636,18 @@ body.single-agent-active .thread-history:not([hidden]):has(+ .thread-ask:not([hi
    bubble, on the middle of its last line (11px under the line, half of its
    25.6px), outside the bubble's surface and taking no room, so it comes
    and goes with the run without moving a thing. A glyph in the quiet ink
-   of the row under the answer, always there, so a finger needs no hover;
-   44px for the finger, the drawn square stays 32px. */
+   of the row under the answer. With a mouse it shows while the pointer is
+   on the message (the pencil is part of it, so reaching for it keeps it)
+   or the keyboard is on it, as a code block's Copy does (base.css); under
+   a finger, which has no hover, always. 44px for the finger, the drawn
+   square stays 32px. */
 #threadAsk .thread-ask-bubble { position: relative; }
 .thread-ask-edit {
   position: absolute; right: 100%; bottom: calc(11px + var(--line-height-reading) * var(--font-size-base) / 2 - 16px);
   display: grid; place-items: center; width: 32px; height: 32px; margin-right: var(--space-1); padding: 0;
   border: 0; border-radius: var(--radius-2xs); background: transparent; color: var(--ink-3); cursor: pointer;
-  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
+  transition: opacity var(--dur-press) var(--ease-standard), background-color var(--dur-press) var(--ease-standard),
+    color var(--dur-press) var(--ease-standard);
 }
 .thread-ask-edit[hidden], body.thread-message-pending .thread-ask-edit, .thread-ask.is-watch-run .thread-ask-edit { display: none; }
 /* A message with files has none: the pencil gives back words, not files,
@@ -651,6 +655,8 @@ body.single-agent-active .thread-history:not([hidden]):has(+ .thread-ask:not([hi
 .thread-ask:has(> .message-attachments:not([hidden]) > *) .thread-ask-edit { display: none; }
 .thread-ask-edit svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
 @media (hover: hover) and (pointer: fine) {
+  .thread-ask-edit { opacity: 0; }
+  .thread-ask:hover .thread-ask-edit, .thread-ask-edit:focus-visible { opacity: 1; }
   .thread-ask-edit:hover { background: var(--raise); color: var(--ink); }
 }
 .thread-ask-edit:focus-visible { outline: var(--focus-ring); outline-offset: 2px; }

@@ -1731,7 +1731,9 @@ gelten nur noch für gespeicherte Turns des früheren Vergleichsmodus.
       beim Zeigen, Handy immer), der Klick kopiert den Code und zeigt kurz
       einen Haken.
 - [ ] Stift links neben der neuesten eigenen Nachricht eines Agent-Chats,
-      nur wenn kein Lauf läuft (Handy ohne Hover sichtbar). Klick: der Text
+      nur wenn kein Lauf läuft; mit der Maus erst, wenn der Zeiger auf der
+      Nachricht steht (per Tab auch mit der Tastatur), am Handy immer
+      sichtbar. Klick: der Text
       steht im Feld, Cursor am Ende, nichts wird gesendet oder ersetzt; ein
       Entwurf im Feld bleibt, die Nachricht folgt ihm nach einer Leerzeile.
       Ältere Nachrichten, geplante Watch-Nachrichten und Nachrichten mit

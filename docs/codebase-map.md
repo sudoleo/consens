@@ -8127,8 +8127,10 @@ Turn 3 und spätere Turns benutzen eine serverseitig autoritative Context-Versio
   jeder Kopie wirken (Nachprüfung B2: nach der ersten Folgefrage taten Retry,
   „Choose another model“ und „Check/Recover saved answer“ nichts). Ebenso der
   Stift „Edit and send again“ (`#threadAsk .thread-ask-edit`, seit
-  2026-11-16): nur an der neuesten Nachricht eines Agent-Chats, sichtbar, solange
-  im Chat auf dem Bildschirm kein Lauf läuft (`syncAskEdit` aus `project` und
+  2026-11-16): nur an der neuesten Nachricht eines Agent-Chats, da, solange
+  im Chat auf dem Bildschirm kein Lauf läuft; mit der Maus erst beim Zeigen auf
+  die Nachricht oder mit Tastaturfokus zu sehen, am Handy immer
+  (`agent-chat.css`, wie der Kopierknopf eines Codeblocks) (`syncAskEdit` aus `project` und
   `renderShellNow`; nicht an einer geplanten Watch-Nachricht `.is-watch-run`,
   nicht während eine Nachricht unterwegs ist `body.thread-message-pending`,
   nicht an einer Nachricht mit Dateien `#threadAskAttachments` mit Chips: er

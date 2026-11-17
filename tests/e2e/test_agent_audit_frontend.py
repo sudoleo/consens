@@ -1215,9 +1215,17 @@ def test_the_answer_leaves_by_copy_and_its_message_comes_back_by_the_pencil(brow
         assert head.locator(".agent-activity-time").is_visible() == (width > 640)
 
         # The pencil: left of the bubble, on the middle of its last line.
+        # With a mouse only while the pointer is on the message; under a
+        # finger always.
         page.evaluate("() => document.getElementById('threadAsk').scrollIntoView({block: 'center'})")
         edit = page.locator("#threadAsk .thread-ask-edit")
         expect(edit).to_be_visible()
+        mouse = page.evaluate("() => matchMedia('(hover: hover) and (pointer: fine)').matches")
+        assert mouse == (width > 640), mouse
+        page.mouse.move(width - 4, 4)
+        expect(edit).to_have_css("opacity", "0" if mouse else "1")
+        page.locator("#threadAskText").hover()
+        expect(edit).to_have_css("opacity", "1")
         bubble = page.locator("#threadAsk .thread-ask-bubble").bounding_box()
         pencil = edit.bounding_box()
         line = page.locator("#threadAskText").evaluate("el => parseFloat(getComputedStyle(el).lineHeight)")
