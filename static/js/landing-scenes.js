@@ -101,20 +101,30 @@
   // One Agent turn in the one mode, on the surfaces agent-activity.js,
   // agent-delegation.js and agent-review.js draw in /app: the reviewers
   // join beside the clock with the first step, a note on the plan, its
-  // search and its workspace (the demo's run), the agent asking the AIs once (their answers land one by one),
-  // the answer written in its own step with the files it shared, the
-  // reviewers' review of that exact text, then their marks and the evidence
-  // row. No score. The comparison owns the longest stretch, as it does in a run.
-  const PLAN_AT = 0.04;
-  const SEARCH_AT = 0.07;
-  const SEARCHED_AT = 0.14;
-  const WORKSPACE_AT = 0.16;
-  const WORKSPACE_DONE = 0.24;
-  const COMPARE_AT = 0.26;
+  // search, its workspace (the script it writes, the command it runs and
+  // what the command prints), the agent asking the AIs once (their answers
+  // land one by one). Once it writes, its steps fold into the clock line and
+  // one live row stays: the answer with its chart, whose lines grow as the
+  // page scrolls, and its spreadsheet, the reviewers' review of that exact
+  // text, then their marks and the evidence row. No score.
+  const PLAN_AT = 0.03;
+  const SEARCH_AT = 0.05;
+  const SEARCHED_AT = 0.10;
+  const WORKSPACE_AT = 0.11;
+  const WORKSPACE_DONE = 0.15;
+  const SCRIPT_AT = 0.16;
+  const SCRIPT_DONE = 0.19;
+  const COMMAND_AT = 0.20;
+  const PRINTED_AT = 0.30;
+  const COMMAND_DONE = 0.33;
+  const COMPARE_AT = 0.35;
   const COMPARE_END = 0.50;
-  const COMPARED_AT = 0.53;
-  const WRITE_AT = 0.58;
-  const REVIEW_AT = 0.79;
+  const COMPARED_AT = 0.52;
+  const WRITE_AT = 0.56;
+  const CHART_AT = 0.61;
+  const CHART_END = 0.71;
+  const TEXT_END = 0.77;
+  const REVIEW_AT = 0.80;
   const DONE_AT = 0.91;
   const RUN_SECONDS = 17;
 
@@ -136,14 +146,24 @@
       .map(el => [el.dataset.runItem, el]));
     const compareLabel = scene.querySelector("[data-run-compare]");
     const count = scene.querySelector("[data-run-count]");
+    const writing = scene.querySelector("[data-run-writing]");
     const status = scene.querySelector("[data-run-status]");
     const models = Array.from(scene.querySelectorAll("[data-model]"));
     const reviewers = Array.from(scene.querySelectorAll("[data-reviewer]"));
     const answer = scene.querySelector("[data-run-answer]");
     const evidence = scene.querySelector("[data-run-evidence]");
     const files = scene.querySelector("[data-run-files]");
+    // What the command prints, a line at a time, and the time it took.
+    const output = scene.querySelector("[data-run-output]");
+    const lines = Array.from(scene.querySelectorAll("[data-run-line]"));
+    const ran = scene.querySelector("[data-run-ran]");
+    // The chart and where on its way from left to right its marks stand
+    // (the partial scripts/demo_assets.py writes).
+    const chart = scene.querySelector("[data-run-chart]");
+    const crossing = chart ? Number(chart.dataset.crossing) || 0 : 0;
+    const stay = chart ? Number(chart.dataset.stay) || 0 : 0;
     // A step's words while it runs and once it is done (landing.html).
-    const steps = [[items.search, SEARCHED_AT], [items.workspace, WORKSPACE_DONE]]
+    const steps = [[items.search, SEARCHED_AT], [items.workspace, WORKSPACE_DONE], [items.write, SCRIPT_DONE]]
       .filter(([el]) => el).map(([el, end]) => ({ el, end, label: el.querySelector("[data-run-live]") }));
     // The answer streams in as one text across its blocks, in reading order.
     const streams = Array.from(scene.querySelectorAll("[data-stream]")).map(el => {
@@ -153,6 +173,8 @@
       return { el, text: el.textContent };
     });
     const total = streams.reduce((sum, item) => sum + item.text.length, 0);
+    // The verdict stands before the chart, the rest of the text after it.
+    const verdict = streams.length ? streams[0].text.length : 0;
     const marks = Array.from(scene.querySelectorAll("[data-mark]"));
 
     let lastChars = -1;
@@ -168,8 +190,8 @@
     // it may jump. The SLOT the card sits in is locked to
     // the card's tallest state, so the heading beside it and the page below
     // keep their place and the scroll progress keeps a fixed reference. The
-    // card itself follows its content: the log grows, and once the review is
-    // back it FOLDS into the clock line with a height transition
+    // card itself follows its content: the log grows, and once the agent
+    // writes it FOLDS into the clock line with a height transition
     // (.lp-agent-log.is-folded) instead of vanishing in one frame, which
     // dropped the answer 204 px (277 on a phone) and left a blank card. The
     // model icons stand after the comparison label, and the label is shorter
@@ -189,7 +211,9 @@
       if (compareLabel) compareLabel.style.minWidth = "";
       let tallest = 0;
       const widths = {};
-      for (const [p, wording] of [[WORKSPACE_DONE], [COMPARE_AT + 0.01, "live"], [COMPARED_AT, "done"], [REVIEW_AT + 0.01], [1]]) {
+      // The tallest frames: the command with all it printed, the comparison
+      // with its note, the whole answer under its live row, the finished turn.
+      for (const [p, wording] of [[COMMAND_DONE - 0.01], [COMPARE_AT + 0.01, "live"], [COMPARED_AT, "done"], [REVIEW_AT + 0.01], [1]]) {
         renderRun(p);
         if (window.App && window.App.i18n) window.App.i18n.flush();
         tallest = Math.max(tallest, run.offsetHeight);
@@ -208,6 +232,7 @@
     function renderRun(p) {
       lastP = p;
       const done = p >= DONE_AT;
+      const wrote = p >= WRITE_AT;
       const reviewing = p >= REVIEW_AT && !done;
       const seconds = done ? RUN_SECONDS : Math.floor(span(p, 0, DONE_AT) * RUN_SECONDS);
       if (clock) {
@@ -222,17 +247,30 @@
       reviewers.forEach(reviewer => reviewer.classList.toggle("is-done", p >= PLAN_AT));
 
       // The log: notes and steps appear as they happen and fold into the
-      // clock line once the run is over, as in /app -- a fold, not a cut.
-      if (log) log.classList.toggle("is-folded", done);
+      // clock line once the agent writes its answer, as the steps of a turn
+      // in /app give way to one live line -- a fold, not a cut.
+      if (log) log.classList.toggle("is-folded", wrote);
       show(items.plan, p >= PLAN_AT);
       show(items.search, p >= SEARCH_AT);
       show(items.workspace, p >= WORKSPACE_AT);
+      show(items.write, p >= SCRIPT_AT);
+      show(items.command, p >= COMMAND_AT);
       steps.forEach(({ el, end, label }) => {
         el.classList.toggle("is-current", p < end);
         if (!label) return;
         const text = p < end ? label.dataset.runLive : label.dataset.runDone;
         if (label.textContent !== say(text)) label.textContent = text;
       });
+
+      // The command prints line by line while it runs. Done, its output
+      // folds and the line says how long it took, as in /app.
+      const finished = p >= COMMAND_DONE;
+      const printed = Math.ceil(span(p, COMMAND_AT, PRINTED_AT) * lines.length);
+      lines.forEach((line, i) => show(line, i < printed));
+      if (items.command) items.command.classList.toggle("is-current", !finished);
+      if (output) output.classList.toggle("is-folded", finished || printed === 0);
+      show(ran, finished);
+
       show(items.compare, p >= COMPARE_AT);
       show(items.compared, p >= COMPARED_AT);
 
@@ -255,18 +293,20 @@
         if (count.textContent !== say(text)) count.textContent = text;
       }
 
-      // One live status row: writing, then the reviewers reviewing the
-      // fixed text. It stays in the log while the log folds, so the fold has
-      // one height to close.
-      show(items.status, p >= WRITE_AT);
+      // One live row under the clock: writing, then the reviewers reviewing
+      // the fixed text. It folds away with the end of the run.
+      if (writing) writing.classList.toggle("is-open", wrote && !done);
       if (status) {
         const text = p >= REVIEW_AT ? "Reviewing the answer…" : "Writing answer…";
         if (status.textContent !== say(text)) status.textContent = text;
       }
 
-      // The answer streams in while it is written; the sheen runs while the
+      // The answer streams in while it is written: the verdict, then the
+      // chart, then the sentences under it. The sheen runs while the
       // reviewers review it; their marks stroke on once they are back.
-      const chars = Math.round(span(p, WRITE_AT, REVIEW_AT - 0.03) * total);
+      const chars = p < CHART_END
+        ? Math.round(span(p, WRITE_AT + 0.01, CHART_AT) * verdict)
+        : verdict + Math.round(span(p, CHART_END, TEXT_END) * (total - verdict));
       if (chars !== lastChars) {
         let left = chars;
         streams.forEach(item => {
@@ -277,10 +317,21 @@
         });
         lastChars = chars;
       }
-      // The files the agent shared join the answer after its verdict.
-      show(files, streams.length > 0 && chars >= streams[0].text.length);
+      // The chart draws itself from the first year to the last: how far is
+      // the scroll, so scrubbing back takes the lines back. Its marks stand
+      // once the lines have reached them.
+      show(chart, p >= CHART_AT);
+      if (chart) {
+        const drawn = span(p, CHART_AT, CHART_END);
+        chart.style.setProperty("--draw", drawn.toFixed(3));
+        chart.classList.toggle("is-crossed", drawn >= crossing);
+        chart.classList.toggle("is-staying", drawn >= stay);
+        chart.classList.toggle("is-drawn", drawn >= 1);
+      }
+      // The spreadsheet joins the answer under its chart.
+      show(files, p >= CHART_END);
       if (answer) {
-        answer.classList.toggle("is-streaming", p >= WRITE_AT && chars < total);
+        answer.classList.toggle("is-streaming", wrote && p < TEXT_END);
         answer.classList.toggle("is-reviewing", reviewing);
         answer.classList.toggle("is-marked", done);
       }
@@ -292,6 +343,8 @@
     renderRun.remeasure = remeasureRun;
     // The still frame for reduced motion is the finished turn.
     renderRun.still = 1;
+    // Where the stage is not pinned, the card itself is the clock (measure).
+    renderRun.anchor = slot;
     return renderRun;
   }
 
@@ -357,10 +410,13 @@
 
       tracked.forEach(item => {
         const rect = item.scene.getBoundingClientRect();
+        const anchor = item.render.anchor ? item.render.anchor.getBoundingClientRect() : null;
         item.geo = {
           top: rect.top + scrollY,
           height: rect.height,
           stageHeight: item.stage ? item.stage.offsetHeight : 0,
+          anchorTop: anchor ? anchor.top + scrollY : 0,
+          anchorHeight: anchor ? anchor.height : 0,
           viewport
         };
       });
@@ -376,6 +432,15 @@
       const travel = geo.height - geo.stageHeight;
 
       if (travel > 40) return clamp((scrollY - geo.top) / travel, 0, 1);
+      // A scene with a card taller than a phone's screen is never pinned, and
+      // its heading alone fills the first screen: there the card is the
+      // clock. The run starts as the card comes up from the lower edge and is
+      // over when its last line has arrived, so each part is written while
+      // it is on screen and the finished card scrolls on like any other.
+      if (geo.anchorHeight) {
+        const distance = Math.max(240, geo.anchorHeight - geo.viewport * 0.2);
+        return clamp((scrollY + geo.viewport * 0.72 - geo.anchorTop) / distance, 0, 1);
+      }
       return clamp(
         (scrollY + geo.viewport * 0.82 - geo.top) / (geo.height + geo.viewport * 0.5),
         0, 1

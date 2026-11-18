@@ -880,7 +880,7 @@ img { display: block; max-width: 100%; }
   mask: var(--chevron-mask) center / contain no-repeat;
 }
 
-/* Once the check is back the log folds into the clock line:
+/* Once the agent writes its answer the log folds into the clock line:
    a height transition over the one wrapper inside it (grid rows 1fr -> 0fr),
    so the answer below rises with it instead of dropping 200 px in a frame.
    landing-scenes.js toggles .is-folded and measures with .is-measuring. */
@@ -895,6 +895,19 @@ img { display: block; max-width: 100%; }
 .lp-agent-log-items { display: grid; gap: 12px; min-height: 0; overflow: hidden; }
 .lp-agent-log.is-folded { grid-template-rows: 0fr; margin-block: 0; opacity: 0; }
 .lp-agent-log [hidden] { display: none; }
+
+/* The one live row under the clock while the answer is written and reviewed
+   (the calm line of a turn in /app). It opens as the log folds and folds
+   itself when the run is over, the same way. */
+.lp-agent-writing {
+  display: grid;
+  grid-template-rows: 0fr;
+  margin: 0;
+  opacity: 0;
+  transition: grid-template-rows calc(var(--dur-layer) * 1.6) var(--ease-standard), margin calc(var(--dur-layer) * 1.6) var(--ease-standard), opacity var(--dur-layer) var(--ease-standard);
+}
+.lp-agent-writing > div { min-height: 0; overflow: hidden; }
+.lp-agent-writing.is-open { grid-template-rows: 1fr; margin: 6px 0 16px; opacity: 1; }
 .lp-agent.is-measuring,
 .lp-agent.is-measuring * { transition: none !important; animation: none !important; }
 
@@ -953,6 +966,39 @@ img { display: block; max-width: 100%; }
 .lp-agent-step:not(.is-current) > .lp-agent-step-label {
   transition: min-width var(--dur-layer) var(--ease-out);
 }
+
+/* A call in the workspace, as .agent-vm in /app (agent-chat.css): the words
+   and the file or the command in mono, the command after its prompt, how
+   long it took, and what it printed in the one tinted field of the trace,
+   open while it runs and folded once it is done. */
+.lp-agent-step--vm { gap: 0 .5em; }
+.lp-agent-code { font-family: var(--font-mono); font-size: var(--font-size-xs); }
+.lp-agent-command .lp-agent-code::before { content: "$ "; color: var(--ink-3); }
+.lp-agent-meta { color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-regular); font-variant-numeric: tabular-nums; }
+.lp-agent-meta[hidden] { display: none; }
+.lp-agent-output {
+  display: grid;
+  grid-template-rows: 1fr;
+  flex: 1 0 100%;
+  min-width: 0;
+  transition: grid-template-rows var(--dur-layer) var(--ease-standard), opacity var(--dur-state) var(--ease-standard);
+}
+.lp-agent-output > div { min-height: 0; overflow: hidden; }
+.lp-agent-output.is-folded { grid-template-rows: 0fr; opacity: 0; }
+.lp-agent-output-field {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in srgb, var(--ink-2) 5%, transparent);
+  color: var(--ink-2);
+  font: var(--font-weight-regular) var(--font-size-xs)/1.55 var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.lp-agent-output-field p { margin: 0; }
+.lp-agent-output-field [hidden] { display: none; }
+/* Columns as the script pads them: the year, then three amounts, each
+   ending on its own right edge. */
+.lp-agent-output-row { display: grid; grid-template-columns: 4ch repeat(3, 11ch); justify-items: end; }
 
 /* The six comparison models: faint until their answer is in. */
 .lp-agent-models { display: inline-flex; align-items: center; padding-left: 7px; }
@@ -1020,6 +1066,97 @@ img { display: block; max-width: 100%; }
 .lp-agent-file-thumb.is-sheet { background: var(--raise); color: var(--ink-3); }
 .lp-agent-file-thumb svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linejoin: round; }
 
+/* The chart of the answer, in the text as in /app. Drawn from the model of
+   the demo (scripts/demo_assets.py writes the partial, the two colours with
+   it): two lines over thirty years on a grid of the page's own ink. The
+   lines sit in a layer of their own that is cut at the right edge, and
+   --draw (landing-scenes.js, 0 to 1) moves the cut: year by year is left to
+   right, so the lines grow as the page scrolls. Without the script --draw
+   is 1 and the chart stands whole. The labels are text over the plot, in
+   the page's type at every width. */
+.lp-agent-chart {
+  --chart-plot: 150px;
+  --chart-left: 44px;
+  --chart-right: 52px;
+  margin: 14px 0 0;
+  padding-bottom: 22px;
+  animation: lpAgentIn var(--dur-layer) var(--ease-out) both;
+}
+/* "500 Tsd. €" needs more room than "€500k". */
+:lang(de) .lp-agent-chart { --chart-left: 68px; --chart-right: 74px; }
+.lp-agent-chart[hidden] { display: none; }
+.lp-agent-chart .is-buying { --chart-line: var(--chart-buying); }
+.lp-agent-chart .is-renting { --chart-line: var(--chart-renting); }
+.lp-agent-chart-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-bottom: 12px;
+  color: var(--ink);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+.lp-agent-chart-key > div { display: inline-flex; align-items: center; gap: 7px; }
+.lp-agent-chart-key > div::before { content: ""; width: 16px; height: 3px; border-radius: 2px; background: var(--chart-line); }
+.lp-agent-chart-plot { position: relative; height: var(--chart-plot); margin: 0 var(--chart-right) 0 var(--chart-left); }
+.lp-agent-chart-plot svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.lp-agent-chart-plot svg * { fill: none; vector-effect: non-scaling-stroke; }
+.lp-agent-chart-grid { stroke: var(--line-soft); stroke-width: 1; }
+.lp-agent-chart-stay { stroke: var(--ink-3); stroke-width: 1; stroke-dasharray: 4 4; }
+.lp-agent-chart-lines { clip-path: inset(-8px calc((1 - var(--draw, 1)) * 100%) -8px -8px); }
+.lp-agent-chart-lines polyline { stroke: var(--chart-line); stroke-width: 2.5; stroke-linejoin: round; stroke-linecap: round; }
+.lp-agent-chart-plot > div {
+  position: absolute;
+  color: var(--ink-3);
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  white-space: nowrap;
+}
+.lp-agent-chart-y { right: calc(100% + 8px); transform: translateY(50%); }
+.lp-agent-chart-x { top: calc(100% + 8px); transform: translateX(-50%); }
+/* What the lines reach stands once they have reached it (.is-crossed,
+   .is-staying, .is-drawn from landing-scenes.js). */
+.lp-agent-chart-stay,
+.lp-agent-chart-plot > .lp-agent-chart-stay-label,
+.lp-agent-chart-plot > .lp-agent-chart-note,
+.lp-agent-chart-plot > .lp-agent-chart-end {
+  opacity: 0;
+  transition: opacity var(--dur-state) var(--ease-standard);
+}
+.lp-agent-chart.is-staying .lp-agent-chart-stay,
+.lp-agent-chart.is-staying .lp-agent-chart-stay-label,
+.lp-agent-chart.is-crossed .lp-agent-chart-note,
+.lp-agent-chart.is-drawn .lp-agent-chart-end { opacity: 1; }
+.lp-agent-chart-plot > .lp-agent-chart-stay-label { top: 2px; margin-left: 7px; }
+.lp-agent-chart-plot > .lp-agent-chart-end {
+  left: calc(100% + 8px);
+  transform: translateY(50%);
+  color: var(--ink);
+  font-weight: var(--font-weight-semibold);
+}
+.lp-agent-chart-plot > .lp-agent-chart-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--chart-buying);
+  box-shadow: 0 0 0 2px var(--ground);
+  transform: translate(-50%, 50%) scale(0);
+  transition: transform var(--dur-state) var(--ease-out);
+}
+.lp-agent-chart.is-crossed .lp-agent-chart-dot { transform: translate(-50%, 50%); }
+/* Under the crossing and to its right, where no line runs. Its ground
+   interrupts the dashed line of the years the couple stays. */
+.lp-agent-chart-plot > .lp-agent-chart-note {
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: var(--ground);
+  color: var(--ink);
+  font-weight: var(--font-weight-semibold);
+  transform: translate(7px, calc(100% + 5px));
+}
+
 /* The three sentences under the verdict, each wearing the reviewers' note
    on it once the review is back. */
 .lp-run-claims {
@@ -1042,11 +1179,16 @@ img { display: block; max-width: 100%; }
 /* A picture here, not a control: section 03 is where a mark opens. */
 .lp-run-claims .cx-claim { cursor: default; }
 
+/* The page's own sentence under the answer: it comes with the marks, after
+   the review, and keeps its room before so nothing under it moves. */
 .lp-agent-answer .lp-run-result-open {
   margin-top: 13px;
   color: var(--ink-3);
   font-size: var(--font-size-sm);
+  opacity: 0;
+  transition: opacity var(--dur-layer) var(--ease-standard) var(--dur-layer);
 }
+.lp-agent-answer.is-marked .lp-run-result-open { opacity: 1; }
 
 /* The evidence row under a reviewed answer: Notes, then the Answers of the
    AIs the agent asked; no score. */
@@ -1182,7 +1324,12 @@ img { display: block; max-width: 100%; }
   .lp-prompt-text.is-typing::after,
   .lp-composer-text.is-typing::after { animation: none; }
   .lp-agent-log,
-  .lp-agent-step-label { transition: none; }
+  .lp-agent-writing,
+  .lp-agent-output,
+  .lp-agent-chart,
+  .lp-agent-chart *,
+  .lp-agent-answer .lp-run-result-open,
+  .lp-agent-step-label { transition: none; animation: none; }
 }
 
 /* The finished scene in words, for screen readers: scenes 01
@@ -2130,21 +2277,9 @@ img { display: block; max-width: 100%; }
    Before a risky step: a reviewer's pause, the card above the field in /app
    (agent-chat.js holdCard, agent-chat.css .agent-hold-card) in its own
    words: a quiet amber glyph, the title, the kind and the reviewer's
-   reason, the step that has not run yet, and the one button.
+   reason, the step that has not run yet, and the one button. The picture
+   of the fifth step.
    -------------------------------------------------------------------------- */
-.lp-examples { margin-top: clamp(48px, 6vw, 84px); }
-
-.lp-examples-title {
-  margin: 0 0 18px;
-  color: var(--text-secondary);
-  font-size: var(--font-size-sm);
-  font-weight: var(--font-weight-semibold);
-  line-height: var(--line-height-heading);
-  letter-spacing: var(--tracking-wide);
-  text-transform: uppercase;
-}
-
-.lp-pause { display: grid; gap: 12px; max-width: 620px; }
 .lp-pause-card {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -2181,10 +2316,9 @@ img { display: block; max-width: 100%; }
   font-size: var(--font-size-xs);
   font-weight: var(--font-weight-semibold);
 }
-.lp-pause-note { margin: 0; color: var(--text-secondary); font-size: var(--font-size-sm); line-height: var(--line-height-ui); }
 
 /* --------------------------------------------------------------------------
-   Why section — three columns of a flat list
+   Card grid (benchmark, consensus engine): three columns of a flat list
 
    Three pieces of text separated by a hairline that fades out at both ends
    say as much as three framed boxes, without the page looking like a stack
@@ -2483,8 +2617,6 @@ img { display: block; max-width: 100%; }
   .lp-step-copy p { font-size: var(--font-size-sm); }
   .lp-excerpt { padding: 13px 14px; }
 
-  .lp-examples { margin-top: 38px; }
-  .lp-examples-title { margin-bottom: 12px; }
   .lp-pause-card { padding: 13px 14px; gap: 10px; }
 
   /* --- Lists of three ---------------------------------------------------- */
@@ -2641,6 +2773,25 @@ main > .lp-scene-02::before { display: none; }
   .lp-scroll-scene { min-height: 210vh; }
 }
 
+/* Scene 02 is pinned only where its card fits beside its heading under the
+   bar: two columns and a window of 760 px. A phone holds the heading or the
+   card, never both, and a pinned stage taller than the screen played the
+   whole run in the 150 px that were left of its travel. Unpinned, the card
+   is the clock (landing-scenes.js measure). */
+@media (max-width: 899px), (max-height: 759px) {
+  .lp-scene-02 .lp-scroll-scene { min-height: 0; }
+  .lp-scene-02 .lp-scene-stage { position: static; display: block; min-height: 0; padding-bottom: 0; }
+  .lp-scene-02 .lp-scene-rail { display: none; }
+  .lp-scene-02 .lp-shell { align-items: start; }
+  .lp-section.lp-scene-02 { padding: var(--section-pad) 0; }
+}
+/* Pinned, the run has more to show than the question of scene 01, and the
+   chart takes the height the window has left over the rest of the card. */
+@media (min-width: 900px) and (min-height: 760px) and (prefers-reduced-motion: no-preference) {
+  .lp-scene-02 .lp-scroll-scene { min-height: 250vh; }
+  .lp-agent-chart { --chart-plot: clamp(100px, calc(100svh - 654px), 220px); }
+}
+
 /* The slices of the product sit on one quiet tone without a shadow, as
    in the app; the notes under the marks speak in sentence case (one
    uppercase label per block at most). */
@@ -2653,14 +2804,6 @@ main > .lp-scene-02::before { display: none; }
   color: var(--ink-3);
 }
 .lp-mark-note::first-letter { text-transform: uppercase; }
-
-/* The title over the pause is a quiet line, not a shouting label. */
-.lp-examples-title {
-  font-weight: var(--font-weight-medium);
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--ink-3);
-}
 
 /* The watch story is two objects on the ground, not a card in a card. */
 .lp-watch-story { background: transparent; padding: 0; }

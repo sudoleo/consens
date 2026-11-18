@@ -818,8 +818,14 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       richtige Karte im Leser. Automatisiert: `tests/e2e/test_agent_comparison_frontend.py`
       (`test_differences_reader_stays_calm_with_missing_models`).
 - [ ] Landingpage-Szene 02 scrubbt einen Agent-Turn wie in /app (Uhr,
-      Notizen, Modell-Icons 0→6, Writing/Checking, Marken, 45/100) ohne
-      Höhensprung der Karte; Reduced Motion zeigt den fertigen Turn.
+      Notiz, Suche, Arbeitsplatz, „Wrote the file“, `$ python buy_vs_rent.py`
+      mit Ausgabe Zeile für Zeile, die sich danach einklappt, zwei Modell-Icons,
+      dann klappen die Schritte ein und die Antwort kommt: Diagramm, dessen
+      Linien mit dem Scroll wachsen, Excel-Datei, Marken, „Notes 3 · Answers 2“)
+      ohne Höhensprung der Karte; „Without the reviewers…“ erst mit den Marken.
+      Auf dem Handy und im flachen Fenster (unter 760 px Höhe) ist die Szene
+      nicht angeheftet und spielt, während die Karte hereinscrollt. Reduced
+      Motion zeigt den fertigen Turn mit ganzem Diagramm. Hell/Dunkel, Deutsch.
 - [ ] Modellantwort-Sidebar mit sechs Antworten: 520–720 px Dockbreite ab
       1400 px, ruhige einzeilige Kopfzeile und 14-px-Lesetext. Chat und
       Composer bleiben neben der Sidebar sichtbar. Light/Dark, eingeklappte
@@ -902,9 +908,8 @@ Emulator-E2E zuletzt 2026-08-09 mit 39 passed. Sichere Befehle:
       New chat erscheint erst angemeldet. Beide Buttons wirken flach und bleiben
       auch bei 320 px neben den Aktionen einer fertigen Antwort ohne Überlappung
       bedienbar. Light/Dark, Login/Logout und Fokusrückgabe nach Schließen prüfen.
-- [ ] Landing: Der Benchmark-Abschnitt steht vor `#watch` und trägt darunter
-      den Live-Streifen „No model wins every time.“ (Top-5-Raten mit
-      Fair-Share-Tick, Link auf `/model-pulse`); im Hero steht keine Pulse-Zeile
+- [ ] Landing: Der Benchmark-Abschnitt steht hinter `#watch` (Etikett
+      „Benchmark“), ohne Live-Streifen; im Hero steht keine Pulse-Zeile
       mehr. `/model-pulse` zeigt Best-answer-Raten (Picks ÷ Läufe der Familie)
       mit Band und Fair-Share-Tick; Zeitraum/Runs/„Only runs with“/Sortierung
       wechseln ohne Reload, die URL folgt, ohne JS funktioniert das Formular.

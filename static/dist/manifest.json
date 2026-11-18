@@ -1,5 +1,5 @@
 {
-  "sources": "c9244ea5dbee",
+  "sources": "e43f6a51ce82",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -615,7 +615,7 @@
   ],
   "styles": {
     "app": "/static/dist/app.769a3546a86c.css",
-    "landing": "/static/dist/landing.e41ebf7d6c40.css",
+    "landing": "/static/dist/landing.0fcd3ca7c011.css",
     "public": "/static/dist/public.ce9b752e83ab.css"
   },
   "style_sources": {
@@ -669,7 +669,7 @@
     },
     "landing": {
       "entry": "static/css/landing.css",
-      "hash": "83886e115cde",
+      "hash": "b85827aa29bd",
       "inputs": [
         "static/css/components-consensus-visuals.css",
         "static/css/demo-action.css",
@@ -713,8 +713,8 @@
     "firebase.4fa9fe06445b.js",
     "head.0e2c4abc9007.js",
     "head.eb40d37b940a.js",
+    "landing.e41ebf7d6c40.css",
     "landing.2a85f6138f8f.css",
-    "landing.a9cd11f15a4f.css",
     "public.95e10823f698.css",
     "public.58a22e1bbc91.css"
   ]

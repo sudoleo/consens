@@ -7,6 +7,7 @@ result. Every number the answer and the notes quote must be the model's, and
 the files the demo loads must be there.
 """
 import importlib.util
+import json
 import sys
 import zipfile
 from dataclasses import replace
@@ -17,6 +18,8 @@ from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
 DEMO = (ROOT / "static" / "demo.js").read_text(encoding="utf-8")
+LANDING = (ROOT / "templates" / "landing.html").read_text(encoding="utf-8")
+HOME_GERMAN = json.loads((ROOT / "app" / "i18n" / "de" / "page-home.json").read_text(encoding="utf-8"))
 
 
 def _assets():
@@ -72,3 +75,41 @@ def test_the_files_the_demo_loads_are_there():
                 minidom.parseString(book.read(name))
             years = book.read("xl/worksheets/sheet2.xml").decode("utf-8")
             assert years.count("<f>") > 200
+
+
+def test_the_landing_page_draws_the_models_chart():
+    """Scene 02 of the landing page draws the chart as markup. The partial is
+    what the model writes, and each of its labels has the model's German."""
+    assets = _assets()
+    agent = assets.Inputs()
+    rows = assets.years(agent)
+    partial = (ROOT / "templates" / "partials" / "demo_chart_mockup.html").read_text(encoding="utf-8")
+    assert partial == assets.mock_chart(agent), "run scripts/demo_assets.py"
+    assert '{% include "partials/demo_chart_mockup.html" %}' in LANDING
+    # The lines end where the picture's do, and cross in the model's year.
+    assert f'data-crossing="{assets.ahead_from(rows) / assets.YEARS:.3f}"' in partial
+    assert f'data-stay="{agent.stay / assets.YEARS:.3f}"' in partial
+    english, german = assets.TEXT["en"], assets.TEXT["de"]
+    labels = {english[key]: german[key] for key in ("buying", "renting")}
+    labels[english["ahead"].format(year=9)] = german["ahead"].format(year=9)
+    labels[english["stay"].format(years=agent.stay)] = german["stay"].format(years=agent.stay)
+    labels[f"{assets.YEARS} {english['years'].lower()}"] = f"{assets.YEARS} {german['years']}"
+    for value in (assets.MOCK_TOP // 2, assets.MOCK_TOP, rows[-1].buying, rows[-1].savings):
+        labels[assets.thousands(value, "en")] = assets.thousands(value, "de")
+    for label, translation in labels.items():
+        assert f">{label}</div>" in partial, label
+        assert HOME_GERMAN[label] == translation, label
+    # The words beside the picture, for screen readers.
+    assert (f"after {assets.YEARS} years buying stands at {assets.thousands(rows[-1].buying, 'en')}, "
+            f"renting at {assets.thousands(rows[-1].savings, 'en')}.") in LANDING
+
+
+def test_the_landing_page_prints_the_models_years():
+    """The command of scene 02 prints years of the model, the ones the demo
+    prints (DEMO_AGENT_YEARS), in the program's format."""
+    rows = _assets().years(_assets().Inputs())
+    for year in (9, 12, 30):
+        buying, renting = round(rows[year].buying), round(rows[year].savings)
+        assert f"[{year}, {buying}, {renting}]" in DEMO
+        cells = (year, f"{buying:,}", f"{renting:,}", f"{buying - renting:,}")
+        assert "".join(f"<span>{cell}</span>" for cell in cells) in LANDING, year

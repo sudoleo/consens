@@ -139,7 +139,7 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">01 · Ask</p>
               <h2 class="lp-h2">Start from one prompt.</h2>
-              <p class="lp-lead">Agent is where every question starts: one AI researches and writes the answer, and the AIs you chose check its work.<span class="lp-wide-only"> Compare, the answers side by side, waits in the (+) menu, next to your files.</span></p>
+              <p class="lp-lead">Ask a question or hand it a task. One AI researches and writes the answer, and the AIs you chose check its work.</p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- The field and nothing else: no window, no title bar, no
@@ -190,19 +190,23 @@
             <div class="lp-head lp-reveal">
               <p class="lp-eyebrow">02 · Run</p>
               <h2 class="lp-h2">The agent shows its work.</h2>
-              <p class="lp-lead">It makes a plan, searches the web, calculates in its own workspace and hands you real files: a chart in the answer, a spreadsheet you open beside the chat. The AIs you chose follow every step and review the answer independently, without ever steering it. Before a risky step, one of them can pause the run until you decide.<span class="lp-wide-only"> Scroll to move the run.</span></p>
+              <p class="lp-lead">It plans, searches the web, runs code in its own workspace and hands you real files. The AIs you chose follow every step and review the answer, without ever steering it.<span class="lp-wide-only"> Scroll to move the run.</span></p>
             </div>
             <div class="lp-scene-visual lp-reveal">
               <!-- An Agent turn in /app, the way agent-activity.js,
                    agent-delegation.js and agent-review.js draw it: the clock ("Working for 12s", "Reviewing
-                   · 15s", later "Thought for 17s") with the reviewers' marks
-                   beside it, the agent's own note, its search and its
-                   workspace, the one time it asks the two AIs of Daily
-                   (compare_models, their answers landing one by one), one live
-                   status row (Writing answer… / Reviewing the answer…), then
-                   the answer with the files it shared, the reviewers' marks
-                   and the evidence row. No score. Every line and count is the
-                   demo run's own data (static/demo.js, scripts/demo_assets.py).
+                   · 15s", later "Thought for 17s") with the marks of the
+                   reviewers beside it, the note of the agent, its search, its
+                   workspace (the script it writes, the command it runs and
+                   what the command prints, open while it runs and folded once
+                   it is done), the one time it asks the two AIs of Daily
+                   (compare_models, their answers landing one by one). Once it
+                   writes, the steps fold into the clock line and one live row
+                   stays (Writing answer… / Reviewing the answer…): the answer
+                   with its chart in the text and the spreadsheet under it,
+                   then the marks of the reviewers and the evidence row. No
+                   score. Every line and number is the data of the demo run
+                   (static/demo.js, scripts/demo_assets.py).
                    Driver: landing-scenes.js.
                    The run is a function of the scroll position, so a
                    screen reader would read whatever frame the page stands
@@ -215,10 +219,13 @@
                   <li>Whether buying pays off depends on how long you stay. I'll calculate both paths year by year.</li>
                   <li>Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de</li>
                   <li>Opened the workspace · Calculate 30 years of buying and renting</li>
+                  <li>Wrote the file buy_vs_rent.py</li>
+                  <li>Ran the command python buy_vs_rent.py</li>
                   <li>Compared perspectives: 2 answers</li>
                   <li>They split on whether paying off a loan beats investing the difference.</li>
                 </ul>
                 <p>Buying pulls ahead in year 9, so over your 12 years it comes out about €9,200 in front.</p>
+                <p>A chart in the answer: after 30 years buying stands at €485k, renting at €379k.</p>
                 <p>Shared files: chart.png, buy-vs-rent.xlsx</p>
                 <p>Three sentences from the answer and what the reviewers noted on each</p>
                 <dl>
@@ -250,6 +257,27 @@
                            did once done, in /app's words (agent-activity.js). -->
                       <p class="lp-agent-step" data-run-item="search" hidden><span data-run-live="Searching the web…" data-run-done="Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de">Searching the web…</span></p>
                       <p class="lp-agent-step" data-run-item="workspace" hidden><span data-run-live="Opening the workspace…" data-run-done="Opened the workspace · Calculate 30 years of buying and renting">Opening the workspace…</span></p>
+                      <!-- A call in the workspace, as agent-activity.js vmView
+                           draws it: the words and the file, the command after
+                           its prompt, what it prints in a tinted field. The
+                           rows are years of the model (scripts/demo_assets.py),
+                           the ones the demo prints. -->
+                      <p class="lp-agent-step lp-agent-step--vm" data-run-item="write" hidden><span data-run-live="Writing the file" data-run-done="Wrote the file">Writing the file</span> <span class="lp-agent-code">buy_vs_rent.py</span></p>
+                      <div class="lp-agent-step lp-agent-step--vm" data-run-item="command" hidden>
+                        <span class="lp-agent-command"><span class="lp-agent-code">python buy_vs_rent.py</span></span>
+                        <span class="lp-agent-meta" data-run-ran hidden>2s</span>
+                        <div class="lp-agent-output" data-run-output>
+                          <div>
+                            <div class="lp-agent-output-field">
+                              <p class="lp-agent-output-row" data-run-line><span>year</span><span>buying</span><span>renting</span><span>lead</span></p>
+                              <p class="lp-agent-output-row" data-run-line><span>9</span><span>150,924</span><span>150,123</span><span>801</span></p>
+                              <p class="lp-agent-output-row" data-run-line><span>12</span><span>189,090</span><span>179,930</span><span>9,160</span></p>
+                              <p class="lp-agent-output-row" data-run-line><span>30</span><span>484,555</span><span>379,043</span><span>105,512</span></p>
+                              <p data-run-line>Saved chart.png and buy-vs-rent.xlsx</p>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
                       <div class="lp-agent-step" data-run-item="compare" hidden>
                         <span class="lp-agent-step-label" data-run-compare>Comparing perspectives…</span>
                         <span class="lp-agent-models" aria-hidden="true">
@@ -260,19 +288,25 @@
                         <span class="lp-agent-count" data-run-count></span>
                       </div>
                       <p class="lp-agent-note" data-run-item="compared" hidden>They split on whether paying off a loan beats investing the difference.</p>
-                      <p class="lp-agent-step is-current" data-run-item="status" hidden><span data-run-status>Writing answer…</span></p>
                       </div>
+                    </div>
+                    <!-- The one live row while the answer is written and
+                         reviewed. It stands outside the log, which folds
+                         when the writing starts, and folds itself at the end. -->
+                    <div class="lp-agent-writing" data-run-writing>
+                      <div><p class="lp-agent-step is-current"><span data-run-status>Writing answer…</span></p></div>
                     </div>
                   </div>
                   <div class="lp-agent-answer" data-run-answer>
-                    <!-- The verdict, the two files the agent shared (its chart
-                         stands in the text in /app, the spreadsheet opens
-                         beside the chat), then three sentences of the answer,
-                         each wearing the note of a reviewer on it: wrong (red),
+                    <!-- The verdict, the chart the agent shared in the text
+                         as in /app (drawn from the model, its lines grow as
+                         the page scrolls), the spreadsheet that opens beside
+                         the chat, then three sentences of the answer, each
+                         wearing the note of a reviewer on it: wrong (red),
                          doubtful (dotted), incomplete (finer dots). -->
                     <p class="lp-agent-verdict"><strong data-stream>Buying pulls ahead in year 9, so over your 12 years it comes out about €9,200 in front.</strong></p>
+                    {% include "partials/demo_chart_mockup.html" %}
                     <div class="lp-agent-files" data-run-files hidden>
-                      <span class="lp-agent-file"><img class="lp-agent-file-thumb" src="{{ asset_url('/static/demo/buy-vs-rent.en.png') }}" alt="" width="64" height="40" loading="lazy"><span><b>chart.png</b><small>Image</small></span></span>
                       <span class="lp-agent-file"><span class="lp-agent-file-thumb is-sheet" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M4 4h16v16H4zM4 10h16M4 15h16M10 4v16"/></svg></span><span><b>buy-vs-rent.xlsx</b><small>Excel · 2 sheets</small></span></span>
                     </div>
                     <ul class="lp-run-claims" aria-label="Three sentences from the answer and what the reviewers noted on each">
@@ -280,7 +314,9 @@
                       <li><span class="cx-claim is-audit" data-mark="is-split" data-stream>The flat gains 1.5% in value a year.</span></li>
                       <li><span class="cx-claim is-audit" data-mark="is-minor" data-stream>The rate stays at 3.6% until the loan is repaid.</span></li>
                     </ul>
-                    <p class="lp-run-result-open" data-stream>Without the reviewers, an outdated tax rate would have decided it.</p>
+                    <!-- The page speaking, not the agent: it stands once the
+                         review is back, never in the text the agent streams. -->
+                    <p class="lp-run-result-open" data-run-closing>Without the reviewers, an outdated tax rate would have decided it.</p>
                   </div>
                   <div class="lp-agent-evidence" data-run-evidence>
                     <span class="lp-agent-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H10l-5 4v-4H4V5ZM8 9h8M8 12.5h5"/></svg>Notes <b>3</b></span>
@@ -311,7 +347,7 @@
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow">03 · Decide</p>
           <h2 class="lp-h2">The doubt is marked in the answer.</h2>
-          <p class="lp-lead">One answer, read top to bottom, with the reviewers' doubts written into it rather than hidden behind it.<span class="lp-wide-only"> Four things carry that.</span></p>
+          <p class="lp-lead">You read one answer from top to bottom. Where a reviewer objected, the sentence itself carries the mark.</p>
         </div>
 
         <ol class="lp-steps">
@@ -440,38 +476,104 @@
               </div>
             </div>
           </li>
-        </ol>
 
-        <!-- What the reviewers do besides marking the answer: they can stop
-             a step before it runs (agent_gate.py, the card above the field
-             in /app, agent-chat.js holdCard). An illustration in the
-             words of that card. -->
-        <div class="lp-examples lp-reveal">
-          <p class="lp-examples-title">Before a risky step</p>
-          <div class="lp-pause">
-            <div class="lp-pause-card">
-              <span class="lp-pause-glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></span>
-              <div class="lp-pause-body">
-                <p class="lp-pause-title">A reviewer paused before a step</p>
-                <p class="lp-pause-reason"><strong>Possible damage:</strong> This cancels both contracts, but you asked about the internet contract only. <span class="lp-pause-by">Claude</span></p>
-                <p class="lp-pause-step"><span>The step that has not run yet</span> Clicks “Cancel both contracts”</p>
-                <span class="lp-pause-btn">Let it run</span>
+          <!-- 05 · a pause before a risky step. What the reviewers do besides
+               marking the answer: they can stop a step before it runs
+               (agent_gate.py, the card above the field in /app, agent-chat.js
+               holdCard). An illustration in the words of that card. -->
+          <li class="lp-step lp-reveal">
+            <div class="lp-step-copy">
+              <p class="lp-step-num">05</p>
+              <h3>A pause before a risky step</h3>
+              <p>Before a step that could do damage, a reviewer can pause the run. The step runs only if you let it. Until then the agent waits, and you can stop the run instead.</p>
+            </div>
+            <div class="lp-step-visual">
+              <div class="lp-pause-card">
+                <span class="lp-pause-glyph" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg></span>
+                <div class="lp-pause-body">
+                  <p class="lp-pause-title">A reviewer paused before a step</p>
+                  <p class="lp-pause-reason"><strong>Possible damage:</strong> This cancels both contracts, but you asked about the internet contract only. <span class="lp-pause-by">Claude</span></p>
+                  <p class="lp-pause-step"><span>The step that has not run yet</span> Clicks “Cancel both contracts”</p>
+                  <span class="lp-pause-btn">Let it run</span>
+                </div>
               </div>
             </div>
-            <p class="lp-pause-note">The step runs only if you let it. Until then the agent waits, and you can stop the run instead.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ====================================================== WATCH -->
+    <section id="watch" class="lp-section lp-section--white lp-scene-04">
+      <div class="lp-shell">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow">04 · Monitor</p>
+          <h2 class="lp-h2">Let the Agent keep watch.</h2>
+          <p class="lp-lead">Tell the Agent what to check and how often. It looks on your schedule, on the web as you would, and speaks up only when it finds something, with the page that shows it.</p>
+        </div>
+
+        <!-- A Watch as the Watches page, its chat and its Telegram message
+             show it (watch-dashboard.js, thread-history.js,
+             telegram_watch._agent_watch_text): the task, its goal, quiet runs
+             folded into one line, the finding with its page, no scores. -->
+        <div class="lp-watch-story lp-reveal" aria-label="Watch example">
+          <div class="lp-watch-card">
+            <div class="lp-watch-card-head">
+              <span><img src="/static/favicon.png" alt="">Watch</span>
+              <span class="lp-watch-status is-moved"><i aria-hidden="true"></i>Found something</span>
+            </div>
+            <h3>Watch the price of the Garmin Forerunner 965 at bike-discount.de.</h3>
+            <p class="lp-watch-goal"><span class="lp-watch-goal-label">Done when</span> <span class="lp-watch-goal-text">Under 400 €</span></p>
+            <div class="lp-watch-meta"><span>Daily at 08:00</span><span>Email</span><span>Telegram</span></div>
+            <div class="lp-watch-timeline">
+              <div class="lp-watch-point is-baseline">
+                <span class="lp-watch-date">Yesterday</span>
+                <i aria-hidden="true"></i>
+                <div><strong>Checked 6 times · nothing new</strong><small>Quiet runs fold into one line in the chat.</small></div>
+              </div>
+              <div class="lp-watch-point is-change">
+                <span class="lp-watch-date">Today</span>
+                <i aria-hidden="true"></i>
+                <div><strong>Your Watch found something</strong><small>Down to 429 € from 469 €.</small></div>
+                <span class="lp-watch-source">bike-discount.de</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="lp-watch-notification">
+            <div class="lp-watch-notification-head">
+              <span class="lp-watch-telegram" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.7 3.4 18.5 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.1 12.8 1.2 11.3c-1.1-.3-1.1-1.1.2-1.6l19-7.3c.9-.3 1.7.2 1.3 1z"></path></svg>
+              </span>
+              <span><strong>Your Watch found something</strong><small>Telegram · now</small></span>
+            </div>
+            <dl class="lp-watch-message">
+              <dt>What it found</dt>
+              <dd>The Forerunner 965 is down to 429 € from 469 €, its lowest price in six weeks.</dd>
+              <dt>Seen on</dt>
+              <dd>bike-discount.de</dd>
+              <dt>Done when</dt>
+              <dd>Under 400 €</dd>
+            </dl>
+            <a href="/app/watches" data-umami-event="landing_watch_create">Create a Watch <span class="chevron link-chevron" aria-hidden="true"></span></a>
+            {#- Only a public Watch that is still checked, never a paused one or a
+                stand-in (share_snapshots.live_watch_path). -#}
+            {% if live_watch_path %}<a class="lp-watch-live" href="{{ live_watch_path }}" data-umami-event="landing_watch_live">See a live watch <span class="chevron link-chevron" aria-hidden="true"></span></a>{% endif %}
           </div>
         </div>
       </div>
     </section>
 
-    <!-- ====================================================== BENCHMARK PROOF -->
+    <!-- ====================================================== BENCHMARK -->
     <!-- The benchmark measures the consensus engine (Watches, Topics, API),
-         and its lead says so, as /benchmark and /about do. No live Model
-         Pulse strip under it: the pulse is an archive. -->
+         and its lead says so, as /benchmark and /about do. It stands behind
+         the Watch scene, which that engine serves, not between the scenes of
+         the agent it does not measure. No live Model Pulse strip under it:
+         the pulse is an archive. -->
     <section id="benchmark" class="lp-section lp-section--white">
       <div class="lp-shell">
         <div class="lp-head lp-reveal">
-          <p class="lp-eyebrow">Proof, not promises</p>
+          <p class="lp-eyebrow">Benchmark</p>
           <h2 class="lp-h2">We benchmarked the consensus.</h2>
           <p class="lp-lead">On 314 closed-book MMLU-Pro questions, the consensus ranks first overall, and pulls clear exactly where the models disagree. It tests the consensus engine behind Watches, Topics and the API, not the agent’s answers.</p>
         </div>
@@ -521,101 +623,13 @@
       </div>
     </section>
 
-    <!-- ====================================================== WATCH -->
-    <section id="watch" class="lp-section lp-section--white lp-scene-04">
-      <div class="lp-shell">
-        <div class="lp-head lp-reveal">
-          <p class="lp-eyebrow">04 · Monitor</p>
-          <h2 class="lp-h2">Let the Agent keep watch.</h2>
-          <p class="lp-lead">Tell the Agent what to check and how often. It looks on your schedule, on the web as you would, and speaks up only when it finds something, with the page that shows it.</p>
-        </div>
-
-        <!-- A Watch as the Watches page, its chat and its Telegram message
-             show it (watch-dashboard.js, thread-history.js,
-             telegram_watch._agent_watch_text): the task, its goal, quiet runs
-             folded into one line, the finding with its page, no scores. -->
-        <div class="lp-watch-story lp-reveal" aria-label="Watch example">
-          <div class="lp-watch-card">
-            <div class="lp-watch-card-head">
-              <span><img src="/static/favicon.png" alt="">Watch</span>
-              <span class="lp-watch-status is-moved"><i aria-hidden="true"></i>Found something</span>
-            </div>
-            <h3>Watch the price of the Garmin Forerunner 965 at bike-discount.de.</h3>
-            <p class="lp-watch-goal"><span class="lp-watch-goal-label">Done when</span> <span class="lp-watch-goal-text">Under 400 €</span></p>
-            <div class="lp-watch-meta"><span>Daily at 08:00</span><span>Email</span><span>Telegram</span></div>
-            <div class="lp-watch-timeline">
-              <div class="lp-watch-point is-baseline">
-                <span class="lp-watch-date">Jul 20</span>
-                <i aria-hidden="true"></i>
-                <div><strong>Checked 6 times · nothing new</strong><small>Quiet runs fold into one line in the chat.</small></div>
-              </div>
-              <div class="lp-watch-point is-change">
-                <span class="lp-watch-date">Jul 21</span>
-                <i aria-hidden="true"></i>
-                <div><strong>Your Watch found something</strong><small>Down to 429 € from 469 €.</small></div>
-                <span class="lp-watch-source">bike-discount.de</span>
-              </div>
-            </div>
-          </div>
-
-          <div class="lp-watch-notification">
-            <div class="lp-watch-notification-head">
-              <span class="lp-watch-telegram" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.7 3.4 18.5 19c-.2 1.1-.9 1.4-1.8.9l-4.9-3.6-2.4 2.3c-.3.3-.5.5-1 .5l.4-5 9.1-8.2c.4-.4-.1-.6-.6-.2L6.1 12.8 1.2 11.3c-1.1-.3-1.1-1.1.2-1.6l19-7.3c.9-.3 1.7.2 1.3 1z"></path></svg>
-              </span>
-              <span><strong>Your Watch found something</strong><small>Telegram · now</small></span>
-            </div>
-            <dl class="lp-watch-message">
-              <dt>What it found</dt>
-              <dd>The Forerunner 965 is down to 429 € from 469 €, its lowest price in six weeks.</dd>
-              <dt>Seen on</dt>
-              <dd>bike-discount.de</dd>
-              <dt>Done when</dt>
-              <dd>Under 400 €</dd>
-            </dl>
-            <a href="/app/watches" data-umami-event="landing_watch_create">Create a Watch <span class="chevron link-chevron" aria-hidden="true"></span></a>
-            {#- Only a public Watch that is still checked, never a paused one or a
-                stand-in (share_snapshots.live_watch_path). -#}
-            {% if live_watch_path %}<a class="lp-watch-live" href="{{ live_watch_path }}" data-umami-event="landing_watch_live">See a live watch <span class="chevron link-chevron" aria-hidden="true"></span></a>{% endif %}
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ====================================================== WHY -->
-    <section class="lp-section lp-section--grey">
-      <div class="lp-shell">
-        <div class="lp-head lp-reveal">
-          <p class="lp-eyebrow">Why consens.io</p>
-          <h2 class="lp-h2">Built for decisions that need a second view.</h2>
-        </div>
-        <div class="lp-card-grid lp-reveal">
-          <article class="lp-card">
-            <p class="lp-eyebrow">Compare</p>
-            <h3>Original answers stay visible</h3>
-            <p>Open Answers to read what each AI answered when the agent asked, or compare two answers side by side.</p>
-          </article>
-          <article class="lp-card">
-            <p class="lp-eyebrow">Verify</p>
-            <h3>Doubt is marked in place</h3>
-            <p>Where a reviewer finds a passage wrong, doubtful or incomplete, the sentence itself carries the mark, instead of the doubt being smoothed into one confident answer.</p>
-          </article>
-          <article class="lp-card">
-            <p class="lp-eyebrow">Control</p>
-            <h3>You choose the checks</h3>
-            <p>Pick the AI that does the work, the AIs that check it, and whether it reasons first. A review is a second view, not a guarantee: unmarked text means no objection, not confirmed.</p>
-          </article>
-        </div>
-      </div>
-    </section>
-
     <!-- ====================================================== MODELS -->
     <section id="models" class="lp-section lp-section--white">
       <div class="lp-shell">
         <div class="lp-head lp-reveal">
-          <p class="lp-eyebrow">Model coverage</p>
-          <h2 class="lp-h2">One workspace for leading AI providers.</h2>
-          <p class="lp-lead">Pick from the major model families the AI that does the work and the AIs that check it, so every answer gets independent eyes.</p>
+          <p class="lp-eyebrow">Models</p>
+          <h2 class="lp-h2">You choose who works and who checks.</h2>
+          <p class="lp-lead">Pick the AI that does the work and the AIs that check it from the major model families.</p>
         </div>
         <div class="lp-logos lp-reveal">
           <div class="lp-logo"><span class="lp-logo-mark"><img src="{{ asset_url('/static/icons/chat_icons/chatgpt.png') }}" alt="OpenAI ChatGPT"></span><span>ChatGPT</span></div>
@@ -641,7 +655,7 @@
            shows, ending in "Ask the agent" (WCAG 2.5.3). -->
       <div class="lp-shell lp-final">
         <div class="lp-head lp-reveal">
-          <h2 class="lp-h2">Ask the agent. Keep watching the answer.</h2>
+          <h2 class="lp-h2">Try it with your own question.</h2>
         </div>
         <div class="lp-hero-composer lp-final-composer lp-composer-preview lp-reveal">
           <a class="lp-prompt lp-hero-prompt" href="/app?focus=1" data-umami-event="landing_final_open_app">

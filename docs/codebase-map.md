@@ -710,28 +710,55 @@ Mockups zeigen keinen Chatmodell-Chip, neben dem in /app die Stufe steht).
 Das Wärmepumpen-Beispiel ist seit 2026-11-01 ein Lauf mit Dailys zwei Prüfern
 Claude und DeepSeek (wie die Demo in `static/demo.js`; Claude trägt „wrong“ und
 „incomplete“, DeepSeek „doubtful“; die zwei Antworten sind beim Kesseltest
-uneins). Szene 02 (`#agent-mode`, `.lp-agent`) sagt, was der Agent kann (Web,
-Quellen, Dateien, Browser am eigenen Arbeitsplatz), dass die Prüfer ihn nie
-steuern und vor einem riskanten Schritt pausieren können, und baut einen Turn des einen
-Modus so nach, wie `agent-activity.js`/`agent-review.js` ihn zeichnen: die Marken
-der Prüfer neben der Uhr, der Agent fragt die zwei KIs einmal, Uhr „Reviewing ·
-…s“, Statuszeile „Reviewing the answer…“, gestreamte Antwort, danach drei
-markierte Sätze (wrong / doubtful / incomplete) und „Notes 3 · Answers 2“, kein
-Score. Treiber `landing-scenes.js` (`buildRunScene`, `REVIEW_AT` 0.79,
-`MODEL_FINISH` je Anzahl der `[data-model]`-Marken, 2 und 3, sonst gleichmäßig,
-`data-reviewer`-Marken, `.lp-agent-answer.is-reviewing`, drei `data-mark`-Arten;
-Standbild bei reduced motion = fertiger Turn über `render.still`). Szene 03
-(„Decide“) in vier Schritten: wer geprüft hat, was ein Prüfer anmerkt (die Marke
-öffnet die Notizkarte `#lpNoteWalls` über `data-diff-open`), was die Farben
-heißen (`.lp-review`), was die anderen KIs antworteten (`.lp-answers`); statt der
-drei Score-Beispiele die Pause-Karte eines Prüfers vor einem riskanten Schritt
-(`.lp-pause`). `landing-insights.js` baut nur noch die Hover-Vorschau der
-markierten Stelle. Benchmark-Abschnitt und Model-Pulse-Block sind seit
-2026-11-01 von der Startseite entfernt (`benchmark.css` lädt dort nicht mehr);
+uneins). Szene 02 (`#agent-mode`, `.lp-agent`) sagt, was der Agent kann (planen,
+im Web suchen, Code am eigenen Arbeitsplatz ausführen, echte Dateien), dass die
+Prüfer ihn nie steuern, und baut einen Turn des einen Modus so nach, wie
+`agent-activity.js`/`agent-review.js` ihn zeichnen: die Marken der Prüfer neben
+der Uhr, Suche, Arbeitsplatz, das Skript, das er schreibt (`Wrote the file
+buy_vs_rent.py`), der Befehl, den er ausführt (`$ python buy_vs_rent.py`, wie
+`.agent-vm` in `/app`: Ausgabe Zeile für Zeile in einem getönten Feld, offen,
+solange er läuft, danach eingeklappt mit Dauer), der Agent fragt die zwei KIs
+einmal. Sobald er schreibt, klappen die Schritte in die Uhrzeile
+(`.lp-agent-log.is-folded`) und EINE Live-Zeile bleibt (`.lp-agent-writing`,
+„Writing answer…“ / „Reviewing the answer…“, Uhr „Reviewing · …s“): mit offenen
+Schritten wären Antwort und Diagramm höher als ein Laptop-Fenster. Die Antwort
+trägt ihr Diagramm im Text wie in `/app`, hier als Markup statt als Bild
+(`partials/demo_chart_mockup.html`, geschrieben von `scripts/demo_assets.py`
+`mock_chart` aus demselben Modell wie PNG und Excel; `tests/test_demo_assets.py`
+hält Datei, Zahlen der Befehlsausgabe und die deutschen Beschriftungen am
+Modell): Raster und Beschriftung in der Tinte der Seite, scharf in jeder Breite
+und im Dunkeln, die zwei Linien in einer eigenen Ebene, deren rechte Kante
+`--draw` (0 bis 1, vom Scroll) verschiebt, sodass sie Jahr für Jahr wachsen;
+Schnittpunkt, „Your 12 years“ und Endwerte erscheinen, sobald die Linien sie
+erreichen (`.is-crossed`, `.is-staying`, `.is-drawn`). Darunter die Excel-Datei,
+drei markierte Sätze (wrong / doubtful / incomplete) und „Notes 3 · Answers 2“,
+kein Score. Der Satz „Without the reviewers…“ ist der Satz der Seite, nicht des
+Agenten: Er steht erst mit den Marken da (`[data-run-closing]`), nie im
+gestreamten Text. Treiber `landing-scenes.js` (`buildRunScene`, Zeitachse
+`PLAN_AT` … `DONE_AT`, Schreiben ab `WRITE_AT` 0.56, Diagramm 0.61–0.71,
+`REVIEW_AT` 0.80, `MODEL_FINISH` je Anzahl der `[data-model]`-Marken, 2 und 3,
+sonst gleichmäßig, `data-reviewer`-Marken, `.lp-agent-answer.is-reviewing`,
+drei `data-mark`-Arten; Standbild bei reduced motion = fertiger Turn über
+`render.still`). Angeheftet ist Szene 02 nur, wo die Karte neben der
+Überschrift unter die Leiste passt (ab 900 px Breite und 760 px Höhe, 250vh,
+Diagrammhöhe aus der Fensterhöhe); sonst (Handy, flaches Fenster) steht sie im
+Seitenfluss, und die Karte selbst ist die Uhr (`render.anchor`, `measure`): Der
+Lauf beginnt, wenn die Karte von unten hereinkommt, und endet, wenn ihre letzte
+Zeile da ist. Vorher spielte ein Handy den ganzen Lauf in den 150 px ab, die
+einer zu hohen angehefteten Bühne an Weg blieben. Szene 03
+(„Decide“) in fünf Schritten: wer geprüft hat, was ein Prüfer anmerkt (die Marke
+öffnet die Notizkarte `#lpNoteTax` über `data-diff-open`), was die Farben
+heißen (`.lp-mark-key`), was die anderen KIs antworteten (`.lp-answers`), und die
+Pause eines Prüfers vor einem riskanten Schritt (`.lp-pause-card`, die Karte über
+dem Feld in `/app`). `landing-insights.js` baut nur noch die Hover-Vorschau der
+markierten Stelle. Die Reihenfolge der Seite: Hero, 01 Ask, 02 Run, 03 Decide,
+04 Monitor, Benchmark, Models, Schlussfeld; die Überschriften sagen, was da
+steht, ohne Werbezeilen (der Abschnitt „Why consens.io“ mit drei Spalten, die
+Szene 03 wiederholten, und „Proof, not promises“ sind entfallen).
 `/consensus-engine` und `/benchmark` beschreiben die Engine hinter Watches,
-Topics und API, nicht die Antworten der App. Seit 2026-10-20 (Apple-Audit I1) faltet sich der Log
-zum Abschluss in die Uhrzeile (`.lp-agent-log.is-folded`, Höhenübergang über
-`.lp-agent-log-items`, statt `hidden`), der Platz für den höchsten Zustand ist am
+Topics und API, nicht die Antworten der App. Der Log faltet sich mit einem
+Höhenübergang über `.lp-agent-log-items` (statt `hidden`), der Platz für den
+höchsten Zustand ist am
 Platzhalter um die Karte reserviert (nicht in der Karte), das Vergleichs-Label
 trägt als `min-width` die gemessene Breite der Fassung, die es gerade zeigt
 (die Marken dahinter gleiten zum kürzeren fertigen Label, zurück ohne
@@ -747,8 +774,9 @@ hält ihn mit den gestreamten Sätzen im Gleichlauf. Szene 03 und Watch sprechen
 „consensus“. Seit dem Feinschliff (2026-10-02) ist die H1 `.lp-hero-claim` die lauteste
 Zeile der Seite (Display-Größe, zweiter Satz in `--ink-3`), die ganze Landing
 steht auf EINEM Grund (`--ground`; Abschnitte trennt eine auslaufende
-Haarlinie statt zweier Tonstufen), die Szenen 01/02 laufen mit 210vh (Desktop)
-bzw. 170vh durch und enden ohne Leerlauf, ihre Schiene ist 1 px und trägt an
+Haarlinie statt zweier Tonstufen), Szene 01 läuft mit 210vh (Desktop) bzw.
+170vh durch, Szene 02 angeheftet mit 250vh, beide enden ohne Leerlauf, ihre
+Schiene ist 1 px und trägt an
 der Spitze das Hauslicht. `.lp-reveal` blendet nicht mehr aus: Blöcke sind ab
 dem ersten Frame sichtbar, nur unterhalb der Falz startende (`.is-armed`)
 steigen 8 px ein. Der Schluss wiederholt das Hero-Feld leer (öffnet `/app`),
@@ -847,8 +875,9 @@ drei strittige Stellen, 19 Claims und den daraus gerechneten Score 43/100
 Prüfer, und die Consensus-/Differences-Fixtures der Demo sind entfallen. Zahl
 und Einheit (°C, kW, m², im Deutschen auch % und €) trennt ein geschuetztes
 Leerzeichen, auch in Zitaten und Tests. Der Landing-Walkthrough (Szene 01–03)
-zeigt denselben Lauf (Szene 02 seit 2026-11-01 mit Suche, Arbeitsplatz und
-den beiden Dateien), damit Hero, Demo und Mockups eine Geschichte erzählen. Die Demo zeigt vor jedem Start das konfigurierte Daily-Preset ueber
+zeigt denselben Lauf (Szene 02 mit Suche, Arbeitsplatz, Skript, Befehl samt
+Ausgabe, dem Diagramm in der Antwort und der Excel-Datei), damit Hero, Demo
+und Mockups eine Geschichte erzählen. Die Demo zeigt vor jedem Start das konfigurierte Daily-Preset ueber
 `App.previewConsensusPreset('fast')`, einschliesslich aller sechs Familien
 und ihrer aktuellen Modelllabels (seit 2026-10-15; vorher Balanced). Eine eigene
 Open-Models-/Custom-Wahl wird dabei nur für die Vorführung durch Daily ersetzt. Die sechs redaktionell geschriebenen Demo-Perspektiven werden
@@ -903,12 +932,13 @@ watch“ – nur, wenn es eine laufende, kuratierte öffentliche Watch gibt
 nur per Link öffentliche Seite steht nie auf der Startseite, auch nicht als
 Ersatz; 15-min-Cache, Moderation leert ihn, eine Minute Pause nach einem
 Lesefehler, `stream(retry=None, timeout=3)`, damit die Landing nie auf
-Firestore wartet; `pages.landing_live_watch`). Davor, zwischen Decide und
-Watch, steht der Benchmark-Abschnitt `#benchmark` (statisch, Mini-Diagramm aus
+Firestore wartet; `pages.landing_live_watch`). Dahinter steht der
+Benchmark-Abschnitt `#benchmark` (statisch, Mini-Diagramm aus
 `benchmark.css`, „See the full benchmark“): am 2026-11-01 mit dem einen Modus
 entfernt, seit 2026-11-02 zurück (Max: „Der Benchmark soll bleiben“), mit dem
 Satz, dass er die Konsens-Engine hinter Watches, Themen und API misst, nicht
-die Antworten des Agenten. Der Live-Streifen aus dem Model Pulse darunter
+die Antworten des Agenten. Deshalb steht er hinter der Watch-Szene, die diese
+Engine bedient, und nicht zwischen den Szenen des Agenten. Der Live-Streifen aus dem Model Pulse darunter
 (03.10. bis 2026-11-01) bleibt weg, der Pulse ist ein Archiv. In Szene 01
 leuchtet „2 AIs cross-check“ seit 2026-11-02 nicht mehr auf (ein
 Überbleibsel des früheren Lauf-Schalters, das beim Scrollen flackerte).

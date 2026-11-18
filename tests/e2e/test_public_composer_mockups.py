@@ -138,10 +138,13 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
             'content', 'One AI does the work. Several check it. | consens.io')
         main = page.locator('main')
         for gone in ('/100', 'agreement score', 'separate judge', 'Partial agreement', '6 AIs', '3 AIs',
-                     'Live from real runs'):
+                     'Live from real runs', 'Proof, not promises', 'Why consens.io', 'leading AI providers'):
             expect(main).not_to_contain_text(gone)
-        # No Model Pulse strip; the benchmark says what it measures.
+        # No Model Pulse strip; the benchmark says what it measures, behind
+        # the Watch scene its engine serves.
         expect(page.locator('#benchmark')).to_contain_text('not the agent’s answers')
+        assert page.evaluate("""() => Boolean(document.getElementById('watch')
+            .compareDocumentPosition(document.getElementById('benchmark')) & Node.DOCUMENT_POSITION_FOLLOWING)""")
         expect(page.locator('#benchmark a[href="/benchmark"]')).to_have_text('See the full benchmark')
         expect(page.locator('.lp-live-pulse')).to_have_count(0)
         # Scene 02 ends on the reviewers' marks and the row under the answer.
@@ -153,14 +156,26 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         # Daily's two reviewers beside the clock, and the two AIs it asked.
         expect(run.locator('[data-reviewer]')).to_have_count(2)
         expect(run.locator('[data-run-count]')).to_have_text('2 answers')
-        # The run shows its search, its workspace and the files it shared,
-        # as the demo does.
+        # The run shows its search, its workspace (the script it wrote and
+        # ran) and what it shared, as the demo does: the chart in the answer,
+        # whole in the still frame, and the spreadsheet under it.
         expect(run.locator('[data-run-item="search"]')).to_have_text(
             'Searched the web · 3 sources: leipzig.de, finanztip.de, homeday.de')
         expect(run.locator('[data-run-item="workspace"]')).to_have_text(
             'Opened the workspace · Calculate 30 years of buying and renting')
+        expect(run.locator('[data-run-item="write"]')).to_have_text('Wrote the file buy_vs_rent.py')
+        expect(run.locator('[data-run-item="command"]')).to_contain_text('python buy_vs_rent.py')
+        chart = run.locator('[data-run-chart]')
+        expect(chart).to_be_visible()
+        expect(chart).to_have_class(re.compile(r'(^|\s)is-drawn(\s|$)'))
+        expect(chart.locator('.lp-agent-chart-note')).to_have_text('Buying pulls ahead in year 9')
+        expect(chart.locator('.lp-agent-chart-end')).to_have_text(['€485k', '€379k'])
+        assert chart.evaluate("""el => { const lines = el.querySelector('.lp-agent-chart-lines').getBoundingClientRect();
+            const plot = el.querySelector('.lp-agent-chart-plot').getBoundingClientRect();
+            return lines.width > 150 && Math.abs(lines.width - plot.width) < 1 && plot.height >= 96; }""")
         expect(run.locator('[data-run-files]')).to_contain_text('buy-vs-rent.xlsx')
         expect(run.locator('[data-run-files]')).to_contain_text('Excel · 2 sheets')
+        expect(run.locator('[data-run-closing]')).to_be_visible()
         # Decide: the marked sentence opens the reviewer's note.
         mark = page.locator('[data-diff-open="lpNoteTax"]')
         mark.scroll_into_view_if_needed()
@@ -168,7 +183,9 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         expect(page.locator('#lpNoteTax')).to_have_attribute('open', '')
         expect(page.locator('#lpNoteTax')).to_contain_text('Saxony has charged 5.5% since January 2023.')
         expect(page.locator('#lpNoteTax')).to_contain_text('Claude · Wrong')
-        expect(page.locator('.lp-pause-title')).to_have_text('A reviewer paused before a step')
+        # The pause is the fifth step of the list, a picture beside its words.
+        expect(page.locator('.lp-steps > .lp-step')).to_have_count(5)
+        expect(page.locator('.lp-steps .lp-pause-title')).to_have_text('A reviewer paused before a step')
         output = Path('test-results/landing-one-mode')
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}'
