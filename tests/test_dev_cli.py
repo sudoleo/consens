@@ -311,22 +311,27 @@ def test_queue_survives_a_run_that_died_without_releasing(cli, tmp_path):
     assert [call["tool"] for call in calls] == ["java", "firebase", "emulator-start", "node", "emulator-stop"]
 
 
-def test_browser_waits_for_an_emulator_port_held_outside_the_queue(cli):
+def test_browser_waits_for_an_emulator_port_held_outside_the_queue(cli, tmp_path):
+    """The port is freed once the run said it waits (``queued``): a fixed
+    time let a slow start of dev.ps1 find it already free."""
     _, run = cli
+    queued = tmp_path / "port-waited-for"
     listener = socket.socket()
     listener.bind(("127.0.0.1", 9876))
     listener.listen()
     closed = []
 
-    def close_later():
-        time.sleep(4)
+    def close_once_waited_for():
+        deadline = time.monotonic() + 40
+        while not queued.exists() and time.monotonic() < deadline:
+            time.sleep(0.1)
         closed.append(time.time())
         listener.close()
 
-    closer = threading.Thread(target=close_later)
+    closer = threading.Thread(target=close_once_waited_for)
     closer.start()
     try:
-        result, calls = run("browser", test_path="tests/e2e/test_example.py")
+        result, calls = run("browser", test_path="tests/e2e/test_example.py", queued=queued)
     finally:
         closer.join()
     assert result.returncode == 0, result.stdout + result.stderr
