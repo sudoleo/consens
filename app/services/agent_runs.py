@@ -294,7 +294,7 @@ class AgentRunStore(AgentSessionStore, ChatStore):
         ``history_chars`` keeps less: a Watch's scheduled run reads only its
         chat's newest messages (agent_watches.HISTORY_CHARS).
 
-        A turn that worked in its VM is followed by its work record
+        A turn that called tools is followed by its work record
         (``agent_work_record``, agent_compaction.work_record) as an app
         message, exactly as saved: what the agent did there, which question
         and answer alone do not say.

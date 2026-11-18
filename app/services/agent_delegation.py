@@ -503,8 +503,8 @@ class DelegationLoop(AgentLoop):
         # transcripts or private continuation data are appended to messages:
         # the user's own words for memory evidence and readable links. The
         # app context block is not the user's text.
-        # The work records of earlier VM turns are the app's, not the user's
-        # (agent_compaction.is_work_record): VM output must never pass for
+        # The work records of earlier turns are the app's, not the user's
+        # (agent_compaction.is_work_record): tool output must never pass for
         # the user's words, links or addresses. Neither is a summary of the
         # chat's history (agent_compaction.is_summary), the agent's own text.
         from app.services.agent_compaction import is_summary, is_work_record
@@ -3761,15 +3761,15 @@ class DelegationLoop(AgentLoop):
         except Exception as exc:
             logging.warning("Agent answer links not saved category=%s", safe_exception(exc))
 
-    def _keeps_record(self, status):
-        """Whether the next message is told what this one did
-        (agent_compaction.work_record): after a VM run, after any run that
-        broke off or was stopped, so that "Retry" goes on from its work
-        instead of starting over, and after a run that ended at a limit of
-        its message (_wrap_up): its answer says a follow-up can go on, and
-        "Continue" without the record started the research again."""
-        return (self._long_run() or status != "succeeded"
-                or isinstance(getattr(self.completion, "wrap_up", None), dict))
+    def _keep_record(self):
+        """The next message is told what this one did
+        (agent_compaction.work_record, "" without a tool call): earlier
+        messages reach the agent as question and answer only. Without it
+        "Retry" and "Continue" started the work over, and a follow-up that
+        did not know a search had run asked the user for what that search
+        had found and took its own earlier answer for an unchecked claim."""
+        from app.services.agent_compaction import work_record
+        self.completion.work_record = work_record(self.own_messages(), 0)
 
     def _hand_over(self):
         """The answer is fixed: the chat is free for its next message while
@@ -3781,9 +3781,7 @@ class DelegationLoop(AgentLoop):
         # Without reviewers too: the run's end (the work log, the receipt,
         # the bookmark) takes another 2 s the browser need not wait for.
         self._release_workspace()
-        if self._keeps_record("succeeded"):
-            from app.services.agent_compaction import work_record
-            self.completion.work_record = work_record(self.own_messages(), 0)
+        self._keep_record()
         try:
             handed = self.store.hand_over(self.uid, self.chat_id, self.turn_id, run_token=self.run_token,
                                           completion=self.completion)
@@ -4373,9 +4371,7 @@ class DelegationLoop(AgentLoop):
                 # chat deleted meanwhile): else the session would stay open,
                 # its VM time uncharged.
                 self._release_workspace()
-            if self._keeps_record(status):
-                from app.services.agent_compaction import work_record
-                self.completion.work_record = work_record(self.own_messages(), 0)
+            self._keep_record()
             if self.work_log is not None:
                 # The log's last entry, saved before finish_run: a write after
                 # it finds the turn no longer pending (save_work_log).

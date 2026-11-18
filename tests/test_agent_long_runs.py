@@ -603,11 +603,12 @@ def test_a_call_with_malformed_arguments_does_not_cost_the_answer(store, fake_vm
     assert turn["agent_work_record"].splitlines()[2].startswith("2. vm_install_packages")
 
 
-def test_a_turn_without_vm_work_saves_no_record(store, fake_vm):
+def test_a_turn_without_tool_calls_saves_no_record(store, fake_vm):
     loop = vm_loop(store, LongAgent([]))
     list(loop.run())
     assert "agent_work_record" not in stored(store, loop)
+    # A workspace that did not start is a call the next message hears of.
     fake_vm.fail.add("ensure")
     failed = vm_loop(store, LongAgent([[("vm_exec", {"command": "ls"})]]), request_id="two")
     list(failed.run())
-    assert "agent_work_record" not in stored(store, failed)
+    assert stored(store, failed)["agent_work_record"].splitlines()[1].startswith("1. vm_exec $ ls -> error: ")

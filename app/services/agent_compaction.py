@@ -27,8 +27,9 @@ returned (agent_work_log.py); the cut itself is an ``app`` entry
 
 Work record: earlier messages reach the agent as question and answer only
 (AgentRunStore.messages), so the next message would not know what the agent
-did in its VM, which files it changed and which tests failed. A turn that
-worked in its VM therefore saves ``agent_work_record`` (``work_record``):
+did, what it searched for and read, which files it changed in its VM and
+which tests failed. A turn that called a tool therefore saves
+``agent_work_record`` (``work_record``):
 one line per tool call of the agent, written by the app from the calls and
 their results, never by a model (no cost, nothing it could invent). The
 history repeats it after that turn's answer as an app message, byte for byte

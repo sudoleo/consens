@@ -72,7 +72,8 @@ Modelle von `compare_models` und die Seitenabrufe der App für `read_source`
   für jeden späteren Leser Daten, nie Anweisung (`UNTRUSTED_DATA`). Im Kontext entscheidet die Herkunft, nicht der Text
   (`context_data`): `user` sind nur Nachrichten des Nutzers vor der Frage
   dieses Laufs und die Frage selbst, nie das Arbeitsprotokoll-Résumé eines
-  früheren VM-Turns im Verlauf (`agent_work_record`, Herkunft `vm`); was der Lauf danach als Nutzernachricht
+  früheren Turns mit Werkzeugaufrufen im Verlauf (`agent_work_record`, Herkunft nach seinen Aufrufen:
+  `vm`, sobald einer in der VM lief, sonst `web`, `google`, `file` oder `agent`, `record_data`); was der Lauf danach als Nutzernachricht
   anhängt, ist von der App (`app`) oder von Workern (`agent`); alles, was ein
   Worker liest, ab seinem Auftrag, schrieb der Agent (`agent`). Das Ergebnis von
   `compare_models` (seit 2026-10-31) sind die Antworten anderer Modelle

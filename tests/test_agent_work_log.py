@@ -114,6 +114,23 @@ def test_a_workers_assignment_and_messages_are_the_agents_words():
     assert context_data("agent", 6, 5, {"role": "user"}, "App note, not from the user: …") == "app"
 
 
+def test_a_work_record_in_the_history_comes_from_where_its_calls_reached():
+    """Untrusted always: the record quotes tool results. The VM before the
+    web; a record of searches alone is no VM output."""
+    from app.services.agent_compaction import WORK_RECORD_CLOSE, WORK_RECORD_OPEN
+    from app.services.agent_work_log import UNTRUSTED_DATA
+
+    def record(*lines):
+        return "\n".join([WORK_RECORD_OPEN, *(f"{n}. {line}" for n, line in enumerate(lines, 1)), WORK_RECORD_CLOSE])
+    searched = record("web_search jane example -> pages of example.com", "read_source https://example.org -> completed")
+    assert context_data("agent", 3, 5, {"role": "user"}, searched) == "web"
+    worked = record("web_search pytest flags -> pages of docs.pytest.org", "vm_exec $ pytest -q -> exit 1, 2.0 s: 1 failed")
+    assert context_data("agent", 3, 5, {"role": "user"}, worked) == "vm"
+    assert context_data("agent", 3, 5, {"role": "user"}, record("gmail_read invoices")) == "google"
+    for lines in (("update_memory Likes tea",), ("probe a",), ()):
+        assert context_data("agent", 3, 5, {"role": "user"}, record(*lines)) in UNTRUSTED_DATA
+
+
 def test_a_tool_result_is_logged_when_it_returns_with_where_it_came_from():
     store = LogStore()
     log = work_log(store)

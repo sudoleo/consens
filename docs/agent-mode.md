@@ -3570,12 +3570,18 @@ work record of the response above, written by the app, not by the user …]“,
 byte-gleich wie gespeichert, sodass die nächste Nachricht weiter den gecachten
 Präfix der vorigen liest. Es ist nie Nutzertext: `is_work_record` lässt es aus
 `answer_conversation` heraus (Memory-Belege, Links für `read_source`,
-Adressen für Gmail, Vergleichskontext), im Arbeitsprotokoll hat es die
-Herkunft `vm`. Auch ein Turn, der scheiterte oder gestoppt wurde, speichert
+Adressen für Gmail, Vergleichskontext). Auch ein Turn, der scheiterte oder gestoppt wurde, speichert
 es, seit 2026-10-27 auch ohne VM, sobald er ein Werkzeug aufrief; sein
 Hinweis im Verlauf sagt dann, darauf aufzubauen (`FAILED_TURN_RESUME`, siehe
-„Abbrüche mitten im Schritt“). Ein erfolgreicher Turn, dessen VM nie
-startete, speichert keins.
+„Abbrüche mitten im Schritt“). Seit 2026-11-18 speichert es jeder Turn, der
+ein Werkzeug aufrief (`_keep_record`), auch ein erfolgreicher ohne VM; die
+Zeilen zu `web_search` und `read_source` nennen Suchwörter, Fundstellen und
+Seiten. Anlass: Ein Folge-Turn ohne Bericht bat den Nutzer um einen Link,
+den seine Suche schon gefunden hatte, und erklärte seine eigene frühere,
+belegte Antwort für ungeprüft. Ein Turn ganz ohne Werkzeug speichert keins.
+Im Arbeitsprotokoll trägt es die Herkunft seiner Aufrufe
+(`agent_work_log.record_data`): `vm`, sobald einer in der VM lief, sonst
+`web`, `google`, `file` oder `agent`, nie Nutzertext.
 
 **Keine Geheimnisse in der VM.** Kein Befehl bekommt Umgebungsvariablen aus
 dem Backend, `SPRITES_TOKEN` steht nur im Header der Anfragen von

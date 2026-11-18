@@ -37,6 +37,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import threading
 import time
 
@@ -89,6 +90,8 @@ TOOL_DATA = {
     # The answers of the user's chosen models with their pages: model output.
     "compare_models": "agent",
 }
+# A work record's call lines (agent_compaction.work_record): "3. web_search …".
+_RECORD_CALL = re.compile(r"^\d+\. (\w+)", re.M)
 # Measurements an entry may carry beside its content: a tool result's start
 # and duration (``tool``), a gate's wait on its ``checked`` or ``paused``
 # entry. Numbers and times only, never text.
@@ -151,13 +154,21 @@ def message_text(message):
     return _json(content)
 
 
+def record_data(text):
+    """The data class of a work record: where what its calls returned came
+    from (TOOL_DATA), the VM before the web. Always one of UNTRUSTED_DATA:
+    the record quotes tool results."""
+    found = {TOOL_DATA.get(name, "agent") for name in _RECORD_CALL.findall(text)}
+    return next((data for data in ("vm", "web", "google", "file") if data in found), "agent")
+
+
 def context_data(actor, index, own_from, message, text):
     """The data class of the conversation message at ``index`` (DATA_CLASSES).
 
     Messages before ``own_from`` are the chat as the run received it: the
     user's questions (with the app's context block) and the agent's earlier
-    answers, and after an answer of a VM turn its work record (the app's,
-    from VM output: ``vm``). Later user-role messages are never the user's
+    answers, and after an answer that called tools its work record (the
+    app's, record_data). Later user-role messages are never the user's
     words: the app adds its hints, and workers report to the agent. A
     worker's user-role messages are the agent's (its assignment and later
     messages)."""
@@ -168,9 +179,11 @@ def context_data(actor, index, own_from, message, text):
     if role == "assistant" or actor != "agent" or is_summary(text):
         # A summary of the chat or of the run is the agent's own text.
         return "agent"
-    if is_work_record(text) or text.startswith(PICTURE_OPEN):
-        # The app's record of VM output, a picture of the VM; a picture of
-        # the browser or one find_pictures fetched is the web's.
+    if is_work_record(text):
+        return record_data(text)
+    if text.startswith(PICTURE_OPEN):
+        # A picture of the VM; a picture of the browser or one find_pictures
+        # fetched is the web's.
         from app.services.agent_browser import SCREENSHOT_INTRO
         from app.services.agent_web_images import INTRO
         return "web" if text.startswith((SCREENSHOT_INTRO.split("{")[0], INTRO.split("{")[0])) else "vm"

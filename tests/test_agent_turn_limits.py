@@ -13,6 +13,7 @@ import pytest
 
 from app.services import agent_delegation
 from app.services.agent_comparison import answer_hash, comparison_selection
+from app.services.agent_compaction import WORK_RECORD_CLOSE
 from app.services.agent_delegation import DelegationLoop, TURN_WRAP_UP_SECONDS
 from app.services.agent_delegation_config import defaults
 from app.services.agent_policy import AgentPolicy
@@ -515,13 +516,24 @@ def test_a_turn_that_ended_at_a_limit_leaves_its_work_for_the_follow_up(store):
     assert loop.completion.wrap_up["reason"] == "steps" and len(seen) == 2
     record = store._turn_ref(UID, loop.chat_id, loop.turn_id).get().to_dict()["agent_work_record"]
     assert "1. probe" in record and "2. probe" in record and "3. probe" not in record
-    # A turn that simply answered keeps none.
+
+
+def test_every_turn_that_called_a_tool_tells_the_next_message_what_it_did(store):
+    """A finished answer too: without it a follow-up asked the user for a
+    link its own search had found and called its earlier, searched answer an
+    unchecked claim. (A turn without a tool call keeps none:
+    test_agent_long_runs.test_a_turn_without_tool_calls_saves_no_record.)"""
     script = Script()
-    plain = chat_loop(store, script)
-    with_probe(plain, [{"text": "found it"}])
-    plain.factory = planned(script, probes(1))
-    list(plain.run())
-    assert "agent_work_record" not in store._turn_ref(UID, plain.chat_id, plain.turn_id).get().to_dict()
+    searched = chat_loop(store, script)
+    with_probe(searched, [{"text": "found it"}])
+    searched.factory = planned(script, probes(1))
+    list(searched.run())
+    turn = store._turn_ref(UID, searched.chat_id, searched.turn_id).get().to_dict()
+    assert turn["status"] == "completed" and getattr(searched.completion, "wrap_up", None) is None
+    assert turn["agent_work_record"].splitlines()[1:] == ["1. probe", WORK_RECORD_CLOSE]
+    later = pending(store, chat_id=searched.chat_id, request_id="two", question="And then?")[1]
+    history = store.messages(UID, searched.chat_id, later)
+    assert history[3] == {"role": "user", "content": turn["agent_work_record"]}
 
 
 def test_the_work_record_says_what_was_searched_for_and_read():
