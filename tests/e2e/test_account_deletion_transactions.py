@@ -10,7 +10,7 @@ from test_file_storage_transactions import cloud_files, save
 
 AREAS = {"api_access", "agent_workspace", "user_subcollections", "chats", "waitlist_feedback", "tier_audit", "owned_shares", "pending_results",
     "answer_receipts", "orphan_watches", "agent_watches", "watch_indexes", "watch_brief", "memory_review", "notification_outbox",
-    "persistence_guards", "email_follows", "profile", "firebase_auth"}
+    "persistence_guards", "email_follows", "sign_in_links", "profile", "firebase_auth"}
 
 
 def seed(db, uid):
@@ -25,7 +25,7 @@ def seed(db, uid):
     for collection, field, value in (
         ("api_consensus_keys", "uid", uid), ("api_consensus_runs", "uid", uid),
         ("pro_waitlist", "uid", uid), ("feedback", "uid", uid), ("account_tier_audit", "uid", uid), ("pending_results", "owner_uid", uid),
-        ("answer_receipts", "owner_uid", uid), ("notification_outbox", "uid", uid),
+        ("answer_receipts", "owner_uid", uid), ("notification_outbox", "uid", uid), ("sign_in_links", "uid", uid),
         ("watch_followers", "email", uid + "@example.invalid"), ("topic_followers", "email", uid + "@example.invalid"),
     ):
         ref = db.tracked(collection)
