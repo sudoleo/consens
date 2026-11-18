@@ -307,3 +307,23 @@ def test_without_the_picture_tools_there_is_nothing_to_save(store, fake_vm, monk
     loop = vm_loop(store, script)
     list(loop.run())
     assert loop.image_tools is None and "vm_save_picture" not in script.offered[0]
+
+
+def test_pictures_leave_by_what_they_weigh_not_at_the_eleventh():
+    """Eleven screenshots of a browser run took the cached prefix with them
+    (prod 2026-11-18: 48,000 of 57,800 prompt tokens written again to drop
+    about 2,000): small pictures stay until their bytes weigh as much as
+    the old count allowed at most, or a compaction rewrites the prefix anyway."""
+    def run(count, raw):
+        messages = [{"role": "system", "content": "s"}, {"role": "user", "content": "q"}]
+        messages += [picture_message(f"/home/sprite/p{n}.png", "image/png", raw) for n in range(count)]
+        return [*messages, {"role": "assistant", "content": "Looked."}]
+    small = PNG * 1000
+    assert older_pictures(run(11, small), 2) == []
+    assert older_pictures(run(agent_compaction.PICTURES_SHOWN, small), 2) == []
+    # Heavy ones leave before their number does.
+    heavy = PNG * (agent_compaction.PICTURES_SHOWN_CHARS // 10 // len(PNG))
+    gone = older_pictures(run(11, heavy), 2)
+    assert [index for index, _ in gone] == list(range(2, 2 + 11 - agent_compaction.PICTURES_KEPT))
+    # A compaction's own limit is the number alone.
+    assert len(older_pictures(run(5, small), 2, shown_max=agent_compaction.PICTURES_KEPT)) == 2

@@ -491,8 +491,11 @@ def _a_message_without_the_workspace_has_no_line(store):
 
 # --- L1, L6: pictures of the batch stay, older ones leave together ----------------------
 
-def test_pictures_of_this_batch_stay_and_older_ones_leave_together(store, fake_vm):
+def test_pictures_of_this_batch_stay_and_older_ones_leave_together(store, fake_vm, monkeypatch):
     from app.services import agent_compaction
+    # The mark in pictures as small as these; their weight has its own test
+    # (test_agent_vm_pictures.py).
+    monkeypatch.setattr(agent_compaction, "PICTURES_SHOWN", 10)
     from app.services.agent_browser import SCREENSHOT_INTRO
     from app.services.agent_vm_tools import PICTURE_INTRO
     from app.services.agent_web_images import INTRO
