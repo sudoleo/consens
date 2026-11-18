@@ -324,11 +324,13 @@ ELSEWHERE = "https://example.org/elsewhere"
     f'[rates]({ELSEWHERE} "Rates")', f"[rates]({ELSEWHERE} 'Rates')", f"[rates](<{ELSEWHERE}>)",
     "www.example.org/elsewhere", ELSEWHERE.upper(), f"({ELSEWHERE})",
     '<a href="//example.org/elsewhere">rates</a>', "<A HREF='https://example.org/elsewhere'>rates</A>",
+    f"Quelle{ELSEWHERE}", f"見る{ELSEWHERE}", "awww.example.org/elsewhere",
 ], ids=["title", "single-quoted-title", "angle-brackets", "www", "upper-case-scheme", "in-brackets",
-        "raw-html", "raw-html-upper"])
+        "raw-html", "raw-html-upper", "glued-to-a-word", "after-cjk", "www-glued-to-a-word"])
 def test_a_link_the_page_makes_is_never_unseen(link):
     """marked (GFM) and DOMPurify make each of these a link: one the reader
-    did not see would reach the answer with neither a source nor a check."""
+    did not see would reach the answer with neither a source nor a check.
+    marked's text ends before any "https://" or "www.", inside a word too."""
     after = f"Tickets to the top cost 36.10 euros, see {link}."
     assert one(TICKETS, after, {SOURCE})[1] == {"s1": "links"}
 

@@ -562,14 +562,16 @@ def sentence_spans(answer):
 # the page's Markdown (marked with GFM, then DOMPurify) makes one: a
 # destination "](…)" up to a space, so a title after it ("…", '…') and "<…>"
 # around it are no part of the address; a bare address with its scheme in
-# any case, or one starting "www." (GFM's autolink, http:// in front). Raw
+# any case, or one starting "www." (GFM's autolink, http:// in front),
+# wherever it starts: marked's text ends before any "https://" or "www.",
+# inside a word ("Quellehttps://…") or after CJK as well. Raw
 # HTML ("<a href=…>") makes a link no reading of the Markdown sees: a
 # correction may not bring one (shape_rule).
 _LINK_DESTINATION = re.compile(r"\]\(\s*<?([^\s<>()]*(?:\([^\s<>()]*\)[^\s<>()]*)*)")
 # The words of a link: marked makes no link inside them, an address there
 # ("[www.destatis.de](…)") included.
 _LINK_WORDS = re.compile(r"\[[^\[\]\n]*\]\(")
-_AUTOLINK =re.compile(r"(?<!\w)(?:(?:https?|ftp)://|www\.)[^\s<>\]]+", re.IGNORECASE)
+_AUTOLINK = re.compile(r"(?:(?:https?|ftp)://|www\.)[^\s<>\]]+", re.IGNORECASE)
 _RAW_LINK = re.compile(r"<a[\s>/]|\bhref\s*=", re.IGNORECASE)
 _AUTOLINK_TRAILING = "?!.,:*_~'\""
 _PICTURE = re.compile(r"picture:p\d+")
