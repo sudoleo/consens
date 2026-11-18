@@ -1,4 +1,5 @@
 """Public input previews stay aligned with the app's start screen: one field, one row."""
+import re
 from pathlib import Path
 
 import pytest
@@ -83,8 +84,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         output.mkdir(parents=True, exist_ok=True)
         suffix = f'{width}-{"dark" if dark else "light"}-{"still" if reduced else "motion"}'
         previews.nth(0).screenshot(path=str(output / f'hero-{suffix}.png'))
-        # The marks leave after send. A phone leaves the count
-        # to the reviewers' words and shows no marks.
+        # A phone leaves the count to the reviewers' words and shows no marks.
         ask_bar = page.locator('[data-scene="ask"] .lp-composer-models')
         ask_field = page.locator('[data-scene="ask"] .lp-composer')
         if reduced:
@@ -103,9 +103,9 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
             'Should we buy the flat we rent, or keep renting and invest the difference?')
         previews.nth(1).screenshot(path=str(output / f'ask-{suffix}.png'))
         if not reduced and width > 640:
+            # Sent, the marks stay before their words, as in a chat in /app.
             scroll_ask(page, .96)
-            expect(ask_bar).to_be_hidden()
-            scroll_ask(page, .65)
+            expect(page.locator('[data-scene="ask"] [data-ask-send]')).to_have_class(re.compile(r'(^|\s)is-pressed(\s|$)'))
             expect(ask_bar).to_be_visible()
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1'), page.evaluate("""() => [...document.querySelectorAll('body *')].filter(el => {
             const r = el.getBoundingClientRect(); return r.width && r.right > innerWidth + 1;

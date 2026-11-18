@@ -13,6 +13,47 @@ const SCENE = landing.slice(
   landing.indexOf("<!-- ====================================================== DECIDE"),
 ).replace(/\{\{[^}]*\}\}|\{%[^%]*%\}/g, "");
 
+// The composer of scene 01 with the marks its include puts before the words.
+const MARKS = readFileSync(path.join(ROOT, "templates/partials/composer_marks_mockup.html"), "utf8");
+const ASK = landing.slice(
+  landing.indexOf('<div class="lp-scroll-scene" data-scene="ask">'),
+  landing.indexOf("<!-- Scene 02 -->"),
+).replace('{% include "partials/composer_marks_mockup.html" %}', MARKS)
+  .replace(/\{#[\s\S]*?#\}|\{\{[^}]*\}\}|\{%[^%]*%\}/g, "");
+
+// A scene the scroll drives: 1000 px of travel, so scrollY / 1000 is the
+// playhead, and one frame per flush(). The comparison label is as wide as its
+// wording (a pixel a letter).
+async function scrubbed(scene, scrollY) {
+  const frames = [];
+  const loaded = loadScripts(["static/js/landing-scenes.js"], {
+    body: `<section>${scene}</section>`,
+    before(window) {
+      window.matchMedia = () => ({ matches: false });
+      window.requestAnimationFrame = (fn) => frames.push(fn);
+      Object.defineProperty(window, "scrollY", { value: scrollY, writable: true, configurable: true });
+      const proto = window.HTMLElement.prototype;
+      proto.getBoundingClientRect = function () {
+        const height = this.classList.contains("lp-scroll-scene") ? 2000 : 0;
+        const width = this.matches("[data-run-compare]") ? this.textContent.length : 0;
+        return { top: -window.scrollY, left: 0, right: width, bottom: height - window.scrollY, width, height };
+      };
+      Object.defineProperty(proto, "offsetHeight", {
+        configurable: true,
+        get() { return this.classList.contains("lp-scene-stage") ? 1000 : 0; },
+      });
+    },
+  });
+  const { window, document } = loaded;
+  if (document.readyState === "loading") {
+    await new Promise((resolve) => document.addEventListener("DOMContentLoaded", resolve));
+  }
+  const flush = () => frames.splice(0).forEach((fn) => fn(0));
+  const scrollTo = (y) => { window.scrollY = y; flush(); };
+  flush();
+  return { ...loaded, flush, scrollTo };
+}
+
 async function stillFrame() {
   const loaded = loadScripts(["static/js/landing-scenes.js"], {
     body: `<section>${SCENE}</section>`,
@@ -27,6 +68,55 @@ async function stillFrame() {
   }
   return loaded;
 }
+
+describe("landing scene 01", () => {
+  // In a chat /app keeps the reviewers' marks before their words; the scene
+  // took them away at send and left "2 AIs cross-check" alone in the row.
+  it("keeps the reviewers' marks in the field once the question is sent", async () => {
+    const { document, scrollTo } = await scrubbed(ASK, 650);
+    const marks = document.querySelector(".lp-composer-models");
+    expect(marks).not.toBeNull();
+    expect(document.querySelector("[data-ask-text]").textContent)
+      .toBe("Should we buy the flat we rent, or keep renting and invest the difference?");
+    scrollTo(960);
+    expect(document.querySelector("[data-ask-send]").classList.contains("is-pressed")).toBe(true);
+    expect(marks.className).toBe("lp-composer-models");
+  });
+});
+
+describe("landing scene 02, scrubbed", () => {
+  const LIVE = "Comparing perspectives…";
+  const DONE = "Compared perspectives";
+
+  // Held at the width of the longer wording, the finished label stood 40 px
+  // short of the model icons after it.
+  it("gives the comparison label the width of the wording it shows", async () => {
+    const { document, scrollTo } = await scrubbed(SCENE, 400);
+    const label = document.querySelector("[data-run-compare]");
+    expect(label.textContent).toBe(LIVE);
+    expect(label.style.minWidth).toBe(`${LIVE.length}px`);
+    scrollTo(560);
+    expect(label.textContent).toBe(DONE);
+    expect(label.style.minWidth).toBe(`${DONE.length}px`);
+    scrollTo(400);
+    expect(label.style.minWidth).toBe(`${LIVE.length}px`);
+  });
+
+  // Measuring renders the finished turn last. Left there, the card showed
+  // "Thought for 17s" with its log folded until the next frame unfolded it.
+  it("stands on the reader's frame again after a relayout is measured", async () => {
+    const { window, document } = await scrubbed(SCENE, 400);
+    const clock = document.querySelector("[data-run-clock]");
+    expect(clock.textContent).toBe("Working for 7s");
+    window.dispatchEvent(new window.Event("resize"));
+    await new Promise((resolve) => window.setTimeout(resolve, 200));
+    // No frame has run since the measuring: this is what it left behind.
+    expect(clock.textContent).toBe("Working for 7s");
+    expect(document.querySelector("[data-run-log]").classList.contains("is-folded")).toBe(false);
+    expect(document.querySelector("[data-run-evidence]").classList.contains("is-visible")).toBe(false);
+    expect(document.querySelector("[data-run-compare]").textContent).toBe(LIVE);
+  });
+});
 
 describe("landing scene 02 (Apple-Audit I1)", () => {
   it("folds the log into the clock line instead of cutting it out", async () => {

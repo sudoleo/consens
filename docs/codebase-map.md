@@ -733,8 +733,11 @@ Topics und API, nicht die Antworten der App. Seit 2026-10-20 (Apple-Audit I1) fa
 zum Abschluss in die Uhrzeile (`.lp-agent-log.is-folded`, Höhenübergang über
 `.lp-agent-log-items`, statt `hidden`), der Platz für den höchsten Zustand ist am
 Platzhalter um die Karte reserviert (nicht in der Karte), das Vergleichs-Label
-hat die Breite seiner längeren Fassung; gemessen wird mit `.is-measuring`
-(Übergänge aus). In `/app` faltet der Aktivitätslog vermutlich genauso hart
+trägt als `min-width` die gemessene Breite der Fassung, die es gerade zeigt
+(die Marken dahinter gleiten zum kürzeren fertigen Label, zurück ohne
+Übergang); gemessen wird mit `.is-measuring` (Übergänge aus) in der Sprache
+der Seite (`App.i18n.flush()`), danach steht die Karte wieder auf dem Frame
+des Lesers. In `/app` faltet der Aktivitätslog vermutlich genauso hart
 (gemeldet, nicht geändert). Seit 2026-10-26 (Barrierefreiheit P2) sind beide
 Szenen-Mockups `aria-hidden`: Sie zeigen den Frame, auf dem der Scroll steht,
 ein Screenreader las dort ein leeres Feld oder einen halben Lauf. Daneben sagt
@@ -923,9 +926,9 @@ Eingabe-Mockups im Landing-Hero und der Ask-Szene setzen die Reihe mit
 den Prüfer-Worten, wie `#composerModelPicker`; das frühere
 `partials/composer_tools_mockup.html` mit Reasoning ist seit 2026-10-31 weg). Keine HTML-Kommentare mit Apostroph in diesen
 Templates: `scripts/i18n.py` liest sie sonst als offenen Attributwert. Seit 2026-10-30 hängt keine 36-px-Leiste
-mehr unter dem Feld (früher mit „Attach“). Die Ask-Szene blendet Werkzeuge
-und Marken beim Senden aus (`.is-sent`, reservierter Platz stabilisiert die
-Scroll-Zeitachse); reine Agent-Ergebnis-Mockups bleiben ohne Eingabeleiste.
+mehr unter dem Feld (früher mit „Attach“). In der Ask-Szene bleiben die
+Marken nach dem Senden vor ihren Worten stehen, wie im Chat von `/app`
+(`#composerReviewers`); reine Agent-Ergebnis-Mockups bleiben ohne Eingabeleiste.
 Die Vorschau enthält keine scheinbar bedienbaren Schalter; der Hero-Input
 verlinkt weiterhin auf die echte Demo.
 Container-Queries kürzen die Werkzeuglabels anhand der tatsächlichen Breite

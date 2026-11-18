@@ -48,7 +48,6 @@
     const text = scene.querySelector("[data-ask-text]");
     const composer = scene.querySelector("[data-ask-composer]");
     const send = scene.querySelector("[data-ask-send]");
-    const leaving = scene.querySelectorAll(".lp-composer-models");
     if (!text || !composer) return null;
     text.setAttribute("data-i18n-skip", "");
 
@@ -92,9 +91,6 @@
         send.classList.toggle("is-ready", typed >= 1);
         send.classList.toggle("is-pressed", p >= 0.9);
       }
-      // After send the start screen's tools and marks leave, as in /app.
-      // They keep their room so scrolling backwards has a stable progress range.
-      leaving.forEach(node => node.classList.toggle("is-sent", p >= 0.9));
     }
 
     return renderAsk;
@@ -161,6 +157,7 @@
 
     let lastChars = -1;
     let lastP = 0;
+    let labelWidths = null;
     const slot = run.parentElement;
 
     function show(el, visible) {
@@ -175,27 +172,35 @@
     // back it FOLDS into the clock line with a height transition
     // (.lp-agent-log.is-folded) instead of vanishing in one frame, which
     // dropped the answer 204 px (277 on a phone) and left a blank card. The
-    // comparison label keeps the width of its wider wording, so the model
-    // icons after it never slide when "Comparing" turns into "Compared".
-    // Measured with transitions off, because both depend on the width.
+    // model icons stand after the comparison label, and the label is shorter
+    // once it is done (no mark, lighter weight, fewer letters): kept at the
+    // wider width it left a hole before the icons for the rest of the run,
+    // let go the icons jumped. So the label carries its measured width for
+    // each wording as a min-width, and the stylesheet glides from the running
+    // one to the finished one. Measured with transitions off and in the
+    // page's language, because both depend on the width.
     function remeasureRun() {
       if (!body) return;
+      // renderRun moves lastP, so the reader's frame is kept before measuring.
+      const frame = lastP;
       run.classList.add("is-measuring");
       if (slot) slot.style.minHeight = "";
+      labelWidths = null;
       if (compareLabel) compareLabel.style.minWidth = "";
       let tallest = 0;
-      let label = 0;
-      for (const p of [WORKSPACE_DONE, COMPARE_AT + 0.01, COMPARED_AT, REVIEW_AT + 0.01, 1]) {
+      const widths = {};
+      for (const [p, wording] of [[WORKSPACE_DONE], [COMPARE_AT + 0.01, "live"], [COMPARED_AT, "done"], [REVIEW_AT + 0.01], [1]]) {
         renderRun(p);
+        if (window.App && window.App.i18n) window.App.i18n.flush();
         tallest = Math.max(tallest, run.offsetHeight);
-        if (compareLabel) label = Math.max(label, compareLabel.getBoundingClientRect().width);
+        if (wording && compareLabel) widths[wording] = Math.ceil(compareLabel.getBoundingClientRect().width);
       }
       if (slot && tallest) slot.style.minHeight = tallest + "px";
-      if (compareLabel && label) compareLabel.style.minWidth = Math.ceil(label) + "px";
+      if (widths.live && widths.done) labelWidths = widths;
       lastChars = -1;
       // Back to the frame the reader is on before transitions return, or the
       // log would fold open from the last measured state.
-      renderRun(lastP);
+      renderRun(frame);
       void run.offsetHeight;
       run.classList.remove("is-measuring");
     }
@@ -243,6 +248,7 @@
       if (compareLabel) {
         const text = compared ? "Compared perspectives" : "Comparing perspectives…";
         if (compareLabel.textContent !== say(text)) compareLabel.textContent = text;
+        if (labelWidths) compareLabel.style.minWidth = (compared ? labelWidths.done : labelWidths.live) + "px";
       }
       if (count) {
         const text = compared ? `${models.length} answers` : `${answered} of ${models.length}`;

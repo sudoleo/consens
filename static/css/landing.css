@@ -946,6 +946,14 @@ img { display: block; max-width: 100%; }
   animation: lpAgentShine var(--dur-beat) var(--ease-linear) infinite;
 }
 
+/* The finished comparison label is shorter than the running one, and the
+   model icons after it follow: they glide to it (landing-scenes.js sets the
+   width of each wording). Scrubbed back, the longer wording has its room at
+   once, so it never runs under the icons. */
+.lp-agent-step:not(.is-current) > .lp-agent-step-label {
+  transition: min-width var(--dur-layer) var(--ease-out);
+}
+
 /* The six comparison models: faint until their answer is in. */
 .lp-agent-models { display: inline-flex; align-items: center; padding-left: 7px; }
 .lp-agent-model {
@@ -1173,7 +1181,8 @@ img { display: block; max-width: 100%; }
   .lp-agent-answer.is-reviewing,
   .lp-prompt-text.is-typing::after,
   .lp-composer-text.is-typing::after { animation: none; }
-  .lp-agent-log { transition: none; }
+  .lp-agent-log,
+  .lp-agent-step-label { transition: none; }
 }
 
 /* The finished scene in words, for screen readers: scenes 01
@@ -2519,15 +2528,11 @@ img { display: block; max-width: 100%; }
   flex: 0 0 auto;
   padding-left: 8px;
   margin-left: auto;
-  transition: opacity var(--dur-state) var(--ease-standard), visibility var(--dur-state) var(--ease-standard);
 }
 .lp-composer-models + .lp-run-chip { margin-left: 0; }
 .lp-composer-model { display: grid; place-items: center; width: 24px; height: 24px; margin-left: -8px; border: 2px solid var(--lp-field); border-radius: 50%; background: var(--lp-field); }
 .lp-composer-model img { width: 14px; height: 14px; object-fit: contain; }
 .dark-mode .lp-composer-mono { filter: invert(1); }
-/* After send the start screen's marks leave, as in /app; they keep their
-   room so scrolling back has a stable progress range. */
-.lp-composer-models.is-sent { visibility: hidden; opacity: 0; }
 /* A phone leaves the count to the reviewers' words ("3 AIs cross-check"):
    no marks beside them (/app drops them to 380px, where the chat model's
    chip needs the room; the mockups have no chip and keep the words whole). */
@@ -2539,10 +2544,6 @@ img { display: block; max-width: 100%; }
   .lp-section .bench-hero { grid-template-columns: minmax(0, 1fr); }
   .lp-section .bench-hero > * { min-width: 0; }
 }
-@media (prefers-reduced-motion: reduce) {
-  .lp-composer-models { animation: none; transition: none; }
-}
-
 /* Phones: the run chip takes its own line above [(+) … Send], so the row
    never runs past a 320px field. */
 @media (max-width: 420px) {
