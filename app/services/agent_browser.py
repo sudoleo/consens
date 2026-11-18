@@ -607,8 +607,10 @@ class BrowserTools:
             from app.services.error_alerts import report_server_exception
             report_server_exception(exc, where="agent_browser.call", phase="tool")
         self.failures += 1
-        # Its own words name the operation, never data (agent_vm).
-        logging.warning("Agent browser unavailable reason=%s failures=%s %s", str(exc)[:120] or type(exc).__name__,
+        # VMUnavailable's own words name the operation, never data (agent_vm);
+        # any other error only by its kind.
+        words = str(exc)[:120] if isinstance(exc, agent_vm.VMUnavailable) else ""
+        logging.warning("Agent browser unavailable reason=%s failures=%s %s", words or type(exc).__name__,
                         self.failures, log_tag(self.vm.loop))
         # The provider's gateway saying the VM does not respond: off at once
         # (agent_vm.UNRESPONSIVE_STATUSES); each new try would wait as long again.

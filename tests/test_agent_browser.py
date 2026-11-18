@@ -654,6 +654,20 @@ def test_a_browser_vm_that_does_not_open_is_asked_once(store, fake_vm, monkeypat
     assert fake_vm.requests == [] and fake_vm.warmed == []
 
 
+def test_an_unexpected_failure_logs_its_kind_never_its_words(store, fake_vm, monkeypatch, caplog):
+    """Only the provider's own failure (VMUnavailable) names an operation
+    without data; any other error's text may carry a path, an address or an
+    account and stays out of the log."""
+    def broken(vm, uid, cancellation=None, **kwargs):
+        raise RuntimeError("users/account-7/chat_state of someone@example.com")
+    monkeypatch.setattr(agent_workspace, "open_workspace", broken)
+    loop, browser = tools(store)
+    with caplog.at_level("WARNING"), pytest.raises(ValueError):
+        call(browser, action="read")
+    assert "Agent browser unavailable reason=RuntimeError" in caplog.text
+    assert "account-7" not in caplog.text and "someone@example.com" not in caplog.text
+
+
 def test_a_browser_vm_the_gateway_calls_unresponsive_is_off_for_the_message(store, fake_vm, monkeypatch):
     """The provider's 502/503/504 for a VM that does not respond (prod
     2026-11-05: about 42 s each time, three times in a message): the browser
