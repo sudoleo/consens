@@ -1907,13 +1907,15 @@
         text: pace(view, 'calm-status', standingStep, STATUS_DWELL_MS) }];
     }
     view.standing = Boolean(standing);
+    const showPreview = standing || (running && lines.length && !answering);
     // A run that takes a while offers to say when it is done (run-notify.js),
     // at the end of the line of what it does now: before that line and
-    // floated right, so its words make room and no line is added.
-    const notify = running && !held ? App.runNotify?.offer?.(runId, elapsedMs) : null;
-    const current = notify ? lines.findIndex(item => item.current) : -1;
-    if (current >= 0) lines = [...lines.slice(0, current), { id: 'notify-offer', kind: 'offer', state: notify }, ...lines.slice(current)];
-    const showPreview = standing || (running && lines.length && !answering);
+    // floated right, so its words make room and no line is added. Asked only
+    // with that line on screen: each offer asked for counts towards the few
+    // a browser gets.
+    const current = showPreview && running && !held ? lines.findIndex(item => item.current) : -1;
+    const notify = current >= 0 ? App.runNotify?.offer?.(runId, elapsedMs) : null;
+    if (notify) lines = [...lines.slice(0, current), { id: 'notify-offer', kind: 'offer', state: notify }, ...lines.slice(current)];
     let previewChanged = false;
     const previewIds = new Set();
     const pinned = showPreview && !standing && plan ? 1 : 0;

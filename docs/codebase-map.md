@@ -4311,8 +4311,11 @@ Deploys. Seit 2026-10-15 holt `app-update.js` (unten) neue Deploys selbst.
   aktuellen Zeile, in `agent-chat.css` rechts gefloatet; die aktuelle Zeile
   wird `flow-root`): ab 20 s, nur bei Erlaubnis `default`, höchstens auf drei
   Läufen ohne Klick (`consensio.runNotify.offers.v1`), nie bei verborgenem Tab;
-  gezählt wird nur ein Angebot, das zu sehen war. Erst `ask(source, runId)`
-  fragt den Browser. Ein Weckruf (`registry.update`) zeichnet die Zeile nach
+  gezählt wird nur ein Angebot, das zu sehen war (die Live-Zeile fragt
+  `offer` nur, solange ihre aktuelle Zeile steht). Erst `ask(source, runId)`
+  fragt den Browser, und nur bei `default`; hat er inzwischen unbemerkt
+  entschieden (Safari ohne `permissions.query`), gilt dessen Antwort und
+  Schalter wie Zeile ziehen sofort nach. Ein Weckruf (`registry.update`) zeichnet die Zeile nach
   20 s neu, falls bis dahin kein Ereignis kam. Den Schalter `#runNotifySwitch`
   (Einstellungen › Agent, `#runNotifySetting` nur wo `supported()`) und
   `#runNotifyPermission` (was der Browser erlaubt) bindet es selbst.
@@ -9623,8 +9626,10 @@ vollständigen Laufs entsprechen, das Limit dem gewünschten Tagesvolumen.
   Gasts geht danach wie nach jedem Login von selbst raus (`composer-invite.js`,
   nur im selben Browser, höchstens 60 min alt). Ein abgelehnter Link (schon
   bei der Frage oder beim Einlösen): der Dialog wechselt in den Link-Modus,
-  der Satz steht als Lead, der Knopf heißt „Email me a new link“, die
-  Adresse steht drin, wenn dieser Browser sie kennt. Beide Endpunkte haben
+  der Satz steht als Lead (`linkFailureLead`, nur unter „Log in“, bis ein
+  neuer Link raus ist, „Sign up“ gewählt wird oder der Dialog schließt), der
+  Knopf heißt „Email me a new link“, die Adresse steht drin, wenn dieser
+  Browser sie kennt. Beide Endpunkte haben
   dieselbe Absage und je 10 Anfragen/min pro IP. Abgelaufene Datensätze
   fegt `retention_maintenance` stündlich (`sign_in_links.cleanup_expired`,
   Einzelfeld-Index), die Kontolöschung nimmt offene Links mit (Bereich
@@ -13418,7 +13423,8 @@ zählen nicht):
   `history.replaceState` aus der Adresse (Umami, Neuladen, Lesezeichen sehen
   es nie; `consensioBeforeSend` schneidet jedes Fragment zusätzlich ab). Es
   füllt nur, sendet nie (ein fremder Link verbraucht kein Kontingent), und nie
-  über einen Entwurf oder Text im Feld. Für Gäste wird die Frage zum Entwurf
+  über einen Entwurf oder Text im Feld. Für Gäste und unbestätigte Adressen
+  (`expectedSession().verified` falsch) wird die Frage zum Entwurf
   (`consensio.questionDraft.v1` mit `link: true`), weil `firebase.js` deren
   Feld nach der Auth-Antwort leert und aus dem Entwurf füllt; der nächste
   Seitenaufruf verwirft einen solchen Entwurf (`waitingDraft`), erst das

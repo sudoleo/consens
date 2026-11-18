@@ -295,6 +295,23 @@ describe("the calm live view", () => {
     activity.dispose(host);
   });
 
+  // run-notify.js counts each offer it is asked for (three per browser), so
+  // one asked for with no line to carry it would be one the reader never saw.
+  it("asks for the offer only while its line is on screen", () => {
+    const { window, activity, events, render, preview, host } = setup();
+    const asked = [];
+    window.App.runNotify = { offer: runId => { asked.push(runId); return "ask"; }, ask: () => {} };
+    activity.receive(events, note("completion:1", "I compare the three offers."));
+    // Nothing refines the written answer: it took the lines' place.
+    render({ runId: "r1", elapsedMs: 25000, answerText: "The answer." });
+    expect(preview().querySelector(".agent-notify-offer")).toBeNull();
+    expect(asked).toEqual([]);
+    render({ runId: "r2", elapsedMs: 25000 });
+    expect(preview().querySelector(".agent-notify-offer")).not.toBeNull();
+    expect(asked).toEqual(["r2"]);
+    activity.dispose(host);
+  });
+
   it("lets the answer take the lines' place as before", () => {
     const { activity, events, render, preview, host } = setup();
     activity.receive(events, note("completion:1", "I have what I need."));

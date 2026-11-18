@@ -372,6 +372,27 @@ def test_an_expired_link_says_so_and_offers_a_new_one(browser, phase4_server):
         page.click("#sendLinkButton")
         expect(page.locator("#registrationSuccess")).to_be_visible()
         assert registrations == [{"email": "new.person@example.test"}]
+        # The new link is on its way: the old one's failure is no news anymore.
+        page.click("#registrationChangeButton")
+        expect(page.locator("#sendLinkButton")).to_be_visible()
+        expect(page.locator("#authLead")).to_have_text("Pick up where you left off.")
+    finally:
+        context.close()
+
+
+def test_an_expired_link_says_so_only_under_log_in(browser, phase4_server):
+    context, page, _asked, _spent = _link_page(
+        browser, phase4_server, account=lambda route: _json(route, REFUSED, status=400))
+    try:
+        expect(page.locator("#authLead")).to_have_text("This link has expired or was already used.")
+        # Password instead of a new link: the failure still explains the way here.
+        page.click("#passwordModeButton")
+        expect(page.locator("#authLead")).to_have_text("This link has expired or was already used.")
+        page.click("#authTabRegister")
+        expect(page.locator("#authLead")).to_have_text(
+            "Ask once and see where leading AI models agree and where they don’t.")
+        page.click("#authTabLogin")
+        expect(page.locator("#authLead")).to_have_text("Pick up where you left off.")
     finally:
         context.close()
 

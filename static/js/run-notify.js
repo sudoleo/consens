@@ -86,14 +86,18 @@
   }
 
   // The browser's own question, only from a click (`source`: offer, settings).
+  // The browser may have decided since the offer or switch was drawn, unnoticed
+  // where it tells no change (Safari without permissions.query): its answer
+  // stands then, and the switch and the live line catch up with it.
   async function ask(source, runId = "") {
-    if (permission() !== "default") return permission();
-    let result;
-    try {
-      // Older Safari answers through a callback and returns nothing.
-      result = await window.Notification.requestPermission();
-    } catch (_) { /* answered below */ }
-    result = window.Notification.permission || result;
+    let result = permission();
+    if (result === "default") {
+      try {
+        // Older Safari answers through a callback and returns nothing.
+        result = await window.Notification.requestPermission();
+      } catch (_) { /* answered below */ }
+      result = window.Notification.permission || result;
+    }
     if (result === "granted") {
       write(PREF_KEY, "on");
       if (runId) confirmed.add(runId);

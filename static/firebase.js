@@ -1034,6 +1034,10 @@ const AUTH_MODE_COPY = {
 // Opened for a reason (a guest's Send): that reason replaces the lead on both
 // tabs until the dialog closes.
 let authContextLead = "";
+// What a refused sign-in link said (LINK_FAILURE_LEADS): it stands over Log
+// in, where a new link is one click away, until one is sent, the reader
+// turns to Sign up, or the dialog closes.
+let linkFailureLead = "";
 
 function mapFirebaseLoginError(error) {
   // SDK 9.22 predates Firebase's e-mail enumeration protection: a wrong
@@ -1284,8 +1288,9 @@ function setMode(mode) {
   hidePassword();
 
   const copy = AUTH_MODE_COPY[isRegister ? "register" : "login"];
+  if (isRegister) linkFailureLead = "";
   titleEl.textContent = copy.title;
-  leadEl.textContent = authContextLead || copy.lead;
+  leadEl.textContent = linkFailureLead || authContextLead || copy.lead;
   [[tabLoginEl, !isRegister], [tabRegisterEl, isRegister]].forEach(([tab, selected]) => {
     tab.setAttribute("aria-selected", String(selected));
     tab.tabIndex = selected ? 0 : -1;
@@ -1474,6 +1479,7 @@ function startResendCooldown(seconds) {
 function showRegistrationSuccess(email, mode) {
   lastRegisteredEmail = email;
   lastLinkMode = mode;
+  linkFailureLead = "";
   titleEl.textContent = "Check your inbox";
   leadEl.textContent = HOME_SCREEN_APP ? "One step left to your account." : "Open the link and you’re in.";
   registrationSuccessEmailEl.textContent = email;
@@ -1710,6 +1716,7 @@ function bindAuthDialog(modal) {
     keepOpen: authDialogHasTyping,
     onClose: () => {
       authContextLead = "";
+      linkFailureLead = "";
       pendingLinkCode = "";
       hidePassword();
     },
@@ -1747,6 +1754,7 @@ function closeAuthModal() {
   else {
     modal.removeAttribute("open");
     authContextLead = "";
+    linkFailureLead = "";
     hidePassword();
   }
 }
@@ -1925,6 +1933,7 @@ function showLinkLanding() {
   registrationSuccessEl.hidden = true;
   linkConfirmEl.hidden = false;
   authContextLead = "";
+  linkFailureLead = "";
   titleEl.textContent = "Your email link";
   leadEl.textContent = "";
   setButtonPending(linkConfirmBtn, true, "One moment…");
@@ -1933,9 +1942,8 @@ function showLinkLanding() {
 function showLinkFailure(reason) {
   pendingLinkCode = "";
   changeAuthView(() => {
+    linkFailureLead = LINK_FAILURE_LEADS[reason] || LINK_FAILURE_LEADS.error;
     setMode("link");
-    authContextLead = LINK_FAILURE_LEADS[reason] || LINK_FAILURE_LEADS.error;
-    leadEl.textContent = authContextLead;
     setIdleLabel(sendLinkBtn, "Email me a new link");
     const requested = rememberedEmail();
     if (requested && !emailEl.value) emailEl.value = requested;

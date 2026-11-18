@@ -485,10 +485,11 @@
       const linked = !input.value && !waiting && linkEntry ? linkEntry : "";
       if (linked) {
         window.App.questionLink.filled = true;
-        // A guest's field is emptied once the sign-in answers and refilled
-        // from the draft (firebase.js, restoreQuestionDraft): kept as one
-        // for this page (`link`, see waitingDraft), the question survives that.
-        if (guestExpected()) {
+        // The field of a guest or of an unconfirmed address is emptied once
+        // the sign-in answers and refilled from the draft (firebase.js,
+        // restoreQuestionDraft): kept as one for this page (`link`, see
+        // waitingDraft), the question survives that.
+        if (!window.App.expectedSession().verified) {
           try {
             window.localStorage.setItem("consensio.questionDraft.v1", JSON.stringify({ text: linked, at: Date.now(), link: true }));
           } catch (_) { /* private mode */ }

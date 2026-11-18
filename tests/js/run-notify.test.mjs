@@ -170,6 +170,19 @@ describe("the offer in the live line", () => {
     expect(app.window.localStorage.getItem(OFFERS)).toBe("1");
   });
 
+  // Allowed in the site settings while the offer stood, and Safari told nobody.
+  it("takes a click on an offer the browser already allowed as a yes", async () => {
+    const app = boot();
+    app.run("r1", "running");
+    expect(app.notify.offer("r1", 25000)).toBe("ask");
+    app.window.Notification.permission = "granted";
+    app.calls.updates.length = 0;
+    expect(await app.notify.ask("offer", "r1")).toBe("granted");
+    expect(app.notify.offer("r1", 26000)).toBe("set");
+    expect(app.window.localStorage.getItem(PREF)).toBe("on");
+    expect(app.calls.updates).toContain("r1");
+  });
+
   it("goes for this run when the browser's question is closed or refused", async () => {
     const app = boot({ answer: "default" });
     expect(app.notify.offer("r1", 25000)).toBe("ask");
@@ -322,5 +335,20 @@ describe("the switch in Settings", () => {
     expect(app.window.localStorage.getItem(PREF)).toBe("off");
     expect(app.calls.events.map(([, data]) => data)).toEqual([
       { source: "settings", result: "granted" }, { source: "settings", result: "off" }]);
+  });
+
+  // Blocked in the site settings after the switch was drawn, unnoticed (no
+  // permissions.query in Safari): switched on, it says so at once, not ticked
+  // and locked until the next focus.
+  it("says at once that the browser blocked it meanwhile", async () => {
+    const app = boot();
+    const { input } = parts(app);
+    app.window.Notification.permission = "denied";
+    input.checked = true;
+    input.dispatchEvent(new app.window.Event("change"));
+    await flush();
+    expect([input.checked, input.disabled, parts(app).note])
+      .toEqual([false, true, "Blocked in this browser’s site settings."]);
+    expect(app.notify.enabled()).toBe(false);
   });
 });

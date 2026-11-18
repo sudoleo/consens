@@ -142,13 +142,19 @@ describe("a question brought by the address", () => {
     expect(window.location.hash).toBe("");
   });
 
-  it("keeps a guest's question as a draft through the sign-in, but not an account's", () => {
+  it("keeps the question of a guest or an unconfirmed address through the sign-in, but not a confirmed account's", () => {
     const guest = open("/app#q=Guest+question").window;
     const kept = guest.localStorage.getItem(DRAFT_KEY);
     expect(JSON.parse(kept)).toMatchObject({ text: "Guest question", link: true });
     const account = open("/app#q=Account+question", { storage: { id_token: token("u1") } });
     expect(field(account.document).value).toBe("Account question");
     expect(account.window.localStorage.getItem(DRAFT_KEY)).toBeNull();
+    // An unconfirmed address is signed in, but its field is emptied too.
+    const unconfirmed = open("/app#q=Unconfirmed+question", {
+      storage: { "firebase:authUser:test-key:[DEFAULT]": JSON.stringify({ uid: "u2", emailVerified: false }) } });
+    expect(unconfirmed.window.App.isGuest()).toBe(false);
+    expect(JSON.parse(unconfirmed.window.localStorage.getItem(DRAFT_KEY)))
+      .toMatchObject({ text: "Unconfirmed question", link: true });
     // Only for the page the link opened: a reload starts empty.
     const reload = open("/app", { storage: { [DRAFT_KEY]: kept } });
     expect(field(reload.document).value).toBe("");
