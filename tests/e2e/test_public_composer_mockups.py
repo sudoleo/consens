@@ -41,7 +41,7 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
         page.evaluate('() => document.fonts.ready')
         # No chat model chip in the mockups, so no reasoning level either: in
         # /app it stands beside the model's name.
-        expect(page.locator('.lp-composer-preview .lp-composer-models')).to_have_count(2)
+        expect(page.locator('.lp-composer-preview .lp-composer-models')).to_have_count(3)
         expect(page.locator('.lp-composer-preview svg path[d^="M12 5.5a3 3"]')).to_have_count(0)
         # The field opens the app with the caret in the composer; only the demo
         # button starts the demo, and it sits above the field's link.
@@ -56,9 +56,10 @@ def test_public_composer_mockups(browser, phase4_server, width, dark, reduced):
             [field_box['x'] + field_box['width'] / 2, field_box['y'] + 24])
         assert hit == 'heroAskField'
         previews = page.locator('.lp-composer-preview:has(.lp-composer-models)')
-        # The hero and the demo's scene show Daily's two reviewers (Claude
-        # and DeepSeek, the app's default and the demo's lineup).
-        for preview, marks in zip(previews.all(), (2, 2), strict=True):
+        # The hero, the demo's scene and the closing field show Daily's two
+        # reviewers (Claude and DeepSeek, the app's default and the demo's
+        # lineup).
+        for preview, marks in zip(previews.all(), (2, 2, 2), strict=True):
             field = preview.locator(':scope > :is(.lp-prompt, .lp-composer)')
             # The mode lives in the (+) menu, as in /app.
             expect(preview.locator('.lp-mode-chip')).to_have_count(0)

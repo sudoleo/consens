@@ -751,7 +751,9 @@ Haarlinie statt zweier Tonstufen), die Szenen 01/02 laufen mit 210vh (Desktop)
 bzw. 170vh durch und enden ohne Leerlauf, ihre Schiene ist 1 px und trägt an
 der Spitze das Hauslicht. `.lp-reveal` blendet nicht mehr aus: Blöcke sind ab
 dem ersten Frame sichtbar, nur unterhalb der Falz startende (`.is-armed`)
-steigen 8 px ein. Der Schluss wiederholt das Hero-Feld leer (öffnet `/app`).
+steigen 8 px ein. Der Schluss wiederholt das Hero-Feld leer (öffnet `/app`),
+mit denselben Marken vor „2 AIs cross-check“ (im Link `aria-hidden` und ohne
+Namen, `marks_in_link`, damit sie nicht in den Namen des Links geraten).
 Die Leiste beginnt seit 2026-10-25 mit der Sprungmarke `.skip-link` auf
 `#main` (a11y-Audit P3); jede Seite mit der Leiste hat genau ein
 `<main id="main">` (`tests/test_public_skip_link.py`).
@@ -921,7 +923,7 @@ dieselben Werte samt 95-%-Intervall, die großen Diagramme sind als Scroller
 fokussierbar. `tests/test_benchmark_charts.py` hält Balken und Tabelle gleich.
 Die Consensus-Engine-Seite nutzt weiterhin die Ergebnisdarstellung
 aus `partials/product_result_mockup.html`.
-Eingabe-Mockups im Landing-Hero und der Ask-Szene setzen die Reihe mit
+Eingabe-Mockups im Landing-Hero, der Ask-Szene und dem Schlussfeld setzen die Reihe mit
 `partials/composer_marks_mockup.html` zusammen (gestapelte Provider-Icons vor
 den Prüfer-Worten, wie `#composerModelPicker`; das frühere
 `partials/composer_tools_mockup.html` mit Reasoning ist seit 2026-10-31 weg). Keine HTML-Kommentare mit Apostroph in diesen

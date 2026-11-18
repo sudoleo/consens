@@ -2,9 +2,11 @@
    /app start screen: Daily's two (the app's default preset; Claude and
    DeepSeek), the AIs that check the agent's work and answer
    when it asks them. The buy-or-rent example on the landing page has the same
-   two (static/demo.js). #}
-<span class="lp-composer-models" role="group" aria-label="Reviewers">
+   two (static/demo.js). Inside a link (marks_in_link) they are a picture
+   beside the link's words: a group or a name there would be read into the
+   name of the link. #}
+<span class="lp-composer-models"{% if marks_in_link %} aria-hidden="true"{% else %} role="group" aria-label="Reviewers"{% endif %}>
   {% for name, icon, mono in [('Claude', 'claude.png', false), ('DeepSeek', 'deepseek.png', false)] %}
-  <span class="lp-composer-model" title="{{ name }}"><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="{{ name }}" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
+  <span class="lp-composer-model"{% if not marks_in_link %} title="{{ name }}"{% endif %}><img src="{{ asset_url('/static/icons/chat_icons/' ~ icon) }}" alt="{% if not marks_in_link %}{{ name }}{% endif %}" width="14" height="14"{% if mono %} class="lp-composer-mono"{% endif %}></span>
   {% endfor %}
 </span>
