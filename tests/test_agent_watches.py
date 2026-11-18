@@ -361,7 +361,7 @@ def test_without_a_message_since_the_models_are_those_of_the_proposal(store, rou
     # Pro models after Pro ended, a model gone from the catalog, a broken record.
     {"model_id": "claude-opus-5.5", "reasoning_effort": "default", "comparison_models": {"grok": "grok-4.7"}},
     {"model_id": "gpt-6-luna", "reasoning_effort": "max", "comparison_models": {"openai": "retired-model"}},
-    {"model_id": "retired-model", "comparison_models": {}},
+    {"model_id": "retired-model"},
     {"model_id": 7, "reasoning_effort": None, "comparison_models": ["claude-haiku-5.5"]},
 ])
 def test_a_choice_the_account_can_no_longer_make_runs_with_the_defaults(store, router, monkeypatch, chosen):
@@ -376,6 +376,17 @@ def test_a_choice_the_account_can_no_longer_make_runs_with_the_defaults(store, r
     assert agent_watches.start_run(run, db=store.db, now=NOW) is True
     payload = fake.calls[0][1]
     assert (payload.model_id, payload.reasoning_effort, payload.comparison_models) == (None, "default", None)
+
+
+def test_a_chat_without_a_reviewer_has_runs_nobody_checks(store, router):
+    """ "No cross-check" in the chat is a choice like any other: read as no
+    choice, its Watch's runs took the default reviewers and their cost."""
+    watch_id = due_watch(store, next_run_at=NOW)
+    run, _ = agent_watches.claim(watch_id, now=NOW, db=store.db)
+    store._chat_ref(UID, run["chat_id"]).update({"agent_selection": {**CHOSEN, "comparison_models": {}}})
+    fake = router(StreamingResponse(iter(())))
+    assert agent_watches.start_run(run, db=store.db, now=NOW) is True
+    assert fake.calls[0][1].comparison_models == {}
 
 
 def test_the_users_messages_note_their_models_on_the_chat_and_a_runs_do_not(store):

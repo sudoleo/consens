@@ -4813,7 +4813,8 @@ nicht.
 - Ein Lauf nimmt Chatmodell, Reasoning und Prüfer der letzten eigenen
   Nachricht im Chat (`agent_selection` am Chat, `agent_watches.run_models`;
   ohne sie die des Vorschlags), den Prüfer-Schalter und den Rückkanal aus den
-  Kontoeinstellungen. Was das Konto nicht mehr wählen darf (Pro-Modell nach
+  Kontoeinstellungen. War dort kein Prüfer gewählt („No cross-check“), prüft
+  auch den Lauf niemand. Was das Konto nicht mehr wählen darf (Pro-Modell nach
   Pro, Modell nicht mehr im Katalog), läuft mit dem Standard, statt den Lauf
   scheitern zu lassen.
 - Grenzen je Stufe (Admin → Allowance, `agent_watch_*`): Free 2 Watches, höchstens

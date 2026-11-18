@@ -921,7 +921,8 @@ def run_models(uid: str, run: dict, db) -> dict:
         except Exception as exc:
             logging.info("Agent watch run chat model not allowed category=%s", safe_exception(exc))
     models = chosen.get("comparison_models")
-    if (isinstance(models, dict) and 0 < len(models) <= 9
+    # An empty choice is "No cross-check": a run nobody checks, as in the chat.
+    if (isinstance(models, dict) and len(models) <= 9
             and all(isinstance(key, str) and isinstance(value, str) for key, value in models.items())):
         try:
             comparison_selection(models)
