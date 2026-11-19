@@ -694,7 +694,8 @@ body.is-hero:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run {
   -webkit-user-select: none;
   user-select: none;
 }
-#bookmarksContainer > .chat-list-heading:first-of-type {
+/* The first heading, whatever its element (Projects is a row with its "+"). */
+#bookmarksContainer > .chat-list-heading:not(.chat-list-heading ~ .chat-list-heading) {
   margin-top: 0;
 }
 .chat-list-heading[hidden] {
@@ -4503,13 +4504,13 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
     .sidebar .bookmark:hover { background: var(--drawer-tint); }
   }
   .sidebar .bookmark.is-active { background: var(--drawer-tint-strong); }
-  .sidebar .bookmark .bookmark-menu-button {
+  .sidebar :is(.bookmark, .chat-project) .bookmark-menu-button {
     right: 2px !important; min-width: 40px; height: 40px; max-height: none;
     border-radius: var(--radius-xs); opacity: 1; color: var(--ink-3);
   }
-  .sidebar .bookmark .bookmark-menu-button[aria-expanded="true"] { background: transparent; color: var(--ink); }
+  .sidebar :is(.bookmark, .chat-project) .bookmark-menu-button[aria-expanded="true"] { background: transparent; color: var(--ink); }
   @media (hover: hover) and (pointer: fine) {
-    .sidebar .bookmark .bookmark-menu-button:hover { background: transparent; color: var(--ink); }
+    .sidebar :is(.bookmark, .chat-project) .bookmark-menu-button:hover { background: transparent; color: var(--ink); }
   }
   .sidebar .bookmark.has-menu { background: var(--drawer-tint); }
   /* Group words start where the titles start. */
@@ -4614,4 +4615,114 @@ body.is-hero .composer-model-icon { border-color: var(--field-start); background
   /* The name needs nothing here: its hit area is the whole account row
      (layout.css, .sidebar-account), and a Free plan's "Early access" link
      sits above it with its own taps. */
+}
+
+/* ---- Projects (chat-projects.js) --------------------------------------------
+   The first group of the list: a quiet word with its "+", then one row per
+   project on the head's grid (glyph column, word column), its chats below
+   it at the word column. The folder is the state, open or closed; no
+   chevron, no count, no colour. */
+.chat-projects-heading { display: flex; align-items: center; justify-content: space-between; padding-right: 6px; }
+.chat-projects-heading > h3 { margin: 0; font: inherit; color: inherit; }
+.chat-projects-add {
+  width: 24px; height: 24px; margin-block: -4px; padding: 0; display: grid; place-items: center;
+  border: 0; border-radius: 999px; background: transparent; color: var(--ink-3); cursor: pointer;
+  transition: background-color var(--dur-press) var(--ease-standard), color var(--dur-press) var(--ease-standard);
+}
+.chat-projects-add svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
+.chat-projects-add:focus-visible { outline: var(--focus-ring); background: var(--hover); color: var(--ink); }
+
+.chat-project {
+  position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); column-gap: 10px; align-items: center;
+  margin-bottom: 1px; padding: 6px 34px 6px 10px; border-radius: var(--radius-xs);
+  color: var(--ink); font-size: var(--font-size-xs); line-height: var(--line-height-ui); cursor: pointer;
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+  transition: background-color var(--dur-press) var(--ease-standard);
+}
+.chat-project-glyph {
+  width: 16px; height: 16px; justify-self: center; fill: none; stroke: currentColor;
+  stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; color: var(--ink-3); pointer-events: none;
+}
+.chat-project:not(.is-open) .when-open,
+.chat-project.is-open .when-closed { display: none; }
+.chat-project-toggle {
+  min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit;
+  font: inherit; text-align: left; cursor: pointer;
+}
+/* The whole row is the target; its "…" lies above it. */
+.chat-project-toggle::after { content: ""; position: absolute; inset: 0; }
+.chat-project-toggle:focus-visible { outline: none; }
+.chat-project:has(> .chat-project-toggle:focus-visible) { outline: var(--focus-ring); outline-offset: -2px; }
+.chat-project-toggle[aria-disabled="true"] { cursor: default; }
+.chat-project-name { display: block; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.chat-project.is-renaming { cursor: text; }
+.chat-project.is-renaming .chat-project-toggle { display: none; }
+.chat-project.is-loading { opacity: .58; pointer-events: none; }
+.chat-project:focus-within .bookmark-menu-button,
+.chat-project.has-menu .bookmark-menu-button { opacity: 1; }
+.chat-project:not(.is-renaming):active,
+.chat-project.is-current { background: var(--selected); }
+.chat-project.has-menu { background: var(--raise); }
+
+.sidebar .bookmark.in-project { padding-left: 38px; }
+/* A closed project's chats; a search shows them by itself (chat-list.js). */
+.sidebar .bookmark.is-folded { display: none !important; }
+.chat-project-empty {
+  display: block; width: 100%; margin: 0 0 1px; padding: 6px 8px 6px 38px; border: 0; border-radius: var(--radius-xs);
+  background: transparent; color: var(--ink-3); font: inherit; font-size: var(--font-size-xs);
+  line-height: var(--line-height-ui); text-align: left; cursor: pointer;
+}
+.chat-project-empty:focus-visible { outline: var(--focus-ring); outline-offset: -2px; color: var(--ink); }
+
+@media (hover: hover) and (pointer: fine) {
+  .chat-projects-add:hover { background: var(--hover); color: var(--ink); }
+  .chat-project:hover { background: var(--hover); }
+  .chat-project:hover .bookmark-menu-button { opacity: 1; }
+  .chat-project-empty:hover { background: var(--hover); color: var(--ink); }
+}
+/* A new chat in a project: the project's row is where you are, not New chat. */
+body.is-hero.project-armed:not(:has(#watchDashboard:not([hidden]))) .sidebar-new-run { background: transparent; }
+
+@media (max-width: 1099px) {
+  .chat-projects-heading { padding-right: 2px; }
+  .chat-projects-add { width: 40px; height: 36px; margin-block: -10px; border-radius: var(--radius-xs); }
+  .chat-projects-add svg { width: 16px; height: 16px; }
+  .chat-project {
+    grid-template-columns: 20px minmax(0, 1fr); column-gap: 12px; min-height: 40px; margin: 0;
+    padding: 0 44px 0 10px; border-radius: var(--radius-sm); font-size: var(--font-size-sm);
+  }
+  .chat-project-glyph { width: 18px; height: 18px; }
+  .sidebar .bookmark.in-project { padding-left: 42px; }
+  .chat-project-empty {
+    min-height: 40px; margin: 0; padding: 0 10px 0 42px; border-radius: var(--radius-sm); font-size: var(--font-size-sm);
+  }
+  .chat-project.is-current,
+  .chat-project:not(.is-renaming):active { background: var(--drawer-tint-strong); }
+  .chat-project.has-menu { background: var(--drawer-tint); }
+  @media (hover: hover) and (pointer: fine) {
+    .chat-project:hover,
+    .chat-project-empty:hover { background: var(--drawer-tint); }
+  }
+}
+
+/* "Move to project": the chat menu's material, filled with the projects. */
+.bookmark-menu.is-project-picker { min-width: 208px; max-width: min(280px, calc(100vw - 16px)); }
+.bookmark-menu-list { max-height: min(264px, 50vh); overflow-y: auto; overscroll-behavior: contain; }
+.bookmark-menu-item > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.bookmark-menu-item[aria-checked] { grid-template-columns: 16px minmax(0, 1fr) 16px; }
+.bookmark-menu-item[aria-checked="false"] .bookmark-menu-check { visibility: hidden; }
+.bookmark-menu-item .bookmark-menu-check { color: var(--ink); }
+.bookmark-menu-divider { height: 1px; margin: 5px 10px; background: var(--line); }
+.bookmark-menu-field {
+  display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 12px; align-items: center;
+  min-height: 40px; padding: 0 10px;
+}
+.bookmark-menu-field > svg {
+  width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6;
+  stroke-linecap: round; stroke-linejoin: round; color: var(--ink-2);
+}
+.bookmark-menu .bookmark-menu-field input,
+.bookmark-menu .bookmark-menu-field input:focus {
+  width: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; color: var(--ink);
+  font: inherit; font-size: var(--font-size-ui); line-height: 1.35; outline: none; box-shadow: 0 1px 0 var(--ink-3);
 }

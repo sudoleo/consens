@@ -133,6 +133,8 @@ class CustomSecurityMiddleware:
             or path.startswith("/bookmarks/")
             or path == "/bookmark"
             or path.startswith("/bookmark/")
+            or path == "/projects"
+            or path.startswith("/projects/")
             or path.startswith("/api/v1/")
             or path.startswith("/api/admin/")
             # The account's own data (settings with the system prompt, memory).

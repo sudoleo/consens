@@ -905,3 +905,32 @@ def test_bookmark_conflict_and_nonstream_request_are_rejected_before_model_call(
     assert client.post("/agent", json=payload, headers=AUTH).status_code == 409
     assert not calls
     assert store.get_chat(UID, chat_id)["turn_count"] == 0
+
+
+def test_a_new_chat_started_in_a_project_joins_it_and_later_messages_keep_it(api):
+    """The sidebar's "New chat" of a project (chat-projects.js) sends the
+    project with the first message; the entry joins it when first written,
+    a project the account does not have is left out, and the next message
+    of the chat changes nothing about it."""
+    from app.services import chat_projects
+
+    client, store, _calls = api
+    project = chat_projects.create(store.db, UID, "Research")
+    bookmarks = store.db.collection("users").document(UID).collection("bookmarks")
+
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    payload = {"chat_id": chat_id, "question": "First", "client_request_id": "first",
+               "bookmark_id": "bm1", "project_id": project["id"]}
+    assert "event: final" in client.post("/agent", json=payload, headers=AUTH).text
+    assert "event: final" in client.post("/agent", json={**payload, "question": "Second", "client_request_id": "second",
+                                                         "project_id": None}, headers=AUTH).text
+    other = store.create_chat(UID, execution_mode="agent")["id"]
+    stranger = {"chat_id": other, "question": "Elsewhere", "client_request_id": "third",
+                "bookmark_id": "bm2", "project_id": "p_000000000000"}
+    assert "event: final" in client.post("/agent", json=stranger, headers=AUTH).text
+    malformed = client.post("/agent", json={**stranger, "client_request_id": "fourth", "project_id": "../x"},
+                            headers=AUTH)
+
+    assert bookmarks.document("bm1").get().to_dict()["project_id"] == project["id"]
+    assert "project_id" not in bookmarks.document("bm2").get().to_dict()
+    assert malformed.status_code == 422

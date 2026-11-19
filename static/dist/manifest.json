@@ -1,5 +1,5 @@
 {
-  "sources": "e43f6a51ce82",
+  "sources": "ca626b12810e",
   "inputs": [
     "package-lock.json",
     "package.json",
@@ -92,6 +92,7 @@
     "static/js/auth-session-state.js",
     "static/js/bundles.json",
     "static/js/chat-list.js",
+    "static/js/chat-projects.js",
     "static/js/chat-scroll.js",
     "static/js/code-highlight.js",
     "static/js/composer-autosize.js",
@@ -590,13 +591,13 @@
     },
     {
       "name": "auth",
-      "src": "/static/dist/auth.c4661857697c.js",
+      "src": "/static/dist/auth.cf1dba1d8c12.js",
       "module": false,
       "defer": true
     },
     {
       "name": "firebase",
-      "src": "/static/dist/firebase.e27dbec2bcf5.js",
+      "src": "/static/dist/firebase.3fc4a06abd2f.js",
       "module": true,
       "defer": false
     },
@@ -608,20 +609,20 @@
     },
     {
       "name": "app",
-      "src": "/static/dist/app.a5bcca350860.js",
+      "src": "/static/dist/app.aa6588424f0f.js",
       "module": false,
       "defer": true
     }
   ],
   "styles": {
-    "app": "/static/dist/app.769a3546a86c.css",
+    "app": "/static/dist/app.c51a56277a47.css",
     "landing": "/static/dist/landing.0fcd3ca7c011.css",
     "public": "/static/dist/public.ce9b752e83ab.css"
   },
   "style_sources": {
     "app": {
       "entry": "static/style.css",
-      "hash": "74ed5709fa11",
+      "hash": "d802f318c8c3",
       "inputs": [
         "static/css/agent-chat.css",
         "static/css/agent-google.css",
@@ -701,16 +702,16 @@
     }
   },
   "previous_assets": [
+    "app.769a3546a86c.css",
     "app.14bb91949a3f.css",
-    "app.e2e48b451556.css",
+    "app.a5bcca350860.js",
     "app.6a3900eefe2a.js",
-    "app.b7a5f279fab7.js",
+    "auth.c4661857697c.js",
     "auth.5e7e9d8c39cd.js",
-    "auth.06eaeba3358f.js",
     "demo.274397f8bb1b.js",
     "demo.59bc9450805f.js",
+    "firebase.e27dbec2bcf5.js",
     "firebase.4094af9f9953.js",
-    "firebase.4fa9fe06445b.js",
     "head.0e2c4abc9007.js",
     "head.eb40d37b940a.js",
     "landing.e41ebf7d6c40.css",

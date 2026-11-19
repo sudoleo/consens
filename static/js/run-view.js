@@ -273,6 +273,9 @@
       row.className = "bookmark run-entry";
       row.dataset.runId = context.runId;
       row.dataset.id = context.bookmark.id;
+      // A new chat started in a project stands there from its first frame
+      // (chat-list.js); once saved, its chat says where it is.
+      if (context.config?.projectId) row.dataset.projectId = context.config.projectId;
       row.setAttribute("role", "button");
       row.setAttribute("tabindex", "0");
       const label = document.createElement("p");

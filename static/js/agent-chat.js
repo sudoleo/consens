@@ -1255,6 +1255,7 @@
         bookmarkId: context.metadata.requestSent ? context.bookmark.id : null,
         fileIds: context.metadata.fileIds || [], attachmentMeta: context.attachmentMeta || [],
         googleSelection: context.config.googleSelection || null, googleDataConsent: context.config.googleDataConsent === true,
+        projectId: context.config.projectId || null,
       } });
     }
     // A saved failed turn (reopened chat, or a run that ended with a saved
@@ -3183,6 +3184,11 @@
       || (basis ? (basis.temporary ? temporaryChat?.token?.(basis.chatId) || "" : "")
         : !retry?.chatId && (temporaryChat?.armed?.() || temporaryChat?.unanswered?.()) ? temporaryChat.start() : "");
     const temporary = Boolean(temporaryToken) || basis?.temporary === true;
+    // A new chat started in a project (chat-projects.js): its first message
+    // carries the project and the server files the chat there. Read before
+    // the run exists: its showing ends the armed project.
+    const projectId = basis || temporary ? null
+      : retry ? retry.projectId || null : App.chatProjects?.armed?.() || null;
     let context, signal;
     let refused = null;
     // The run is created and started as one change: the registry projects it
@@ -3202,7 +3208,7 @@
             deepSearch: false, useOwnKeys: false, providers: [], agentSettings: settings, comparisonModels,
             googleSelection: retry ? retry.googleSelection : App.agentGoogle?.selection() || null,
             googleDataConsent: retry ? retry.googleDataConsent : App.agentGoogle?.consent() === true,
-            temporary },
+            temporary, projectId },
           metadata: { draftQuestion: draft, quotedContext: retry ? '' : App.quote?.text?.() || '',
             ...(retry ? { fileIds: retry.fileIds } : {}),
             ...(temporaryToken ? { temporaryToken } : {}),
@@ -3287,6 +3293,7 @@
         google_selection: context.config.googleSelection || null,
         google_data_consent: context.config.googleDataConsent === true,
         timezone: deviceTimezone(),
+        ...(context.config.projectId ? { project_id: context.config.projectId } : {}),
         // Who checks this message's work: what the composer showed (Settings >
         // Agent); nobody without a chosen reviewer ("No cross-check").
         reviewers: Object.keys(comparisonModels).length ? App.words.reviewerSetting() : "off",

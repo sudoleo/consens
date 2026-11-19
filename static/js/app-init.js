@@ -1352,10 +1352,13 @@
           const container = document.getElementById("bookmarksContainer");
           let matches = 0;
           // The name and the question it was asked as: a generated name
-          // rarely has the words a person remembers.
+          // rarely has the words a person remembers. And its project's name
+          // (chat-projects.js): a project's name finds all of its chats.
           const questions = new Map((window.bookmarksData || []).map(meta => [meta?.id, meta?.query || ""]));
+          const projects = window.App.chatProjects;
+          const projectName = el => projects?.nameOf?.(window.App.chatList?.projectOf?.(el)) || "";
           document.querySelectorAll("#bookmarksContainer .bookmark").forEach(el => {
-            const text = `${el.querySelector("p")?.textContent || ""}\n${questions.get(el.dataset.id) || ""}`.toLowerCase();
+            const text = `${el.querySelector("p")?.textContent || ""}\n${questions.get(el.dataset.id) || ""}\n${projectName(el)}`.toLowerCase();
             const match = !q || text.includes(q);
             el.style.display = match ? "" : "none";
             if (match && !el.classList.contains("is-undo-pending")) matches += 1;
@@ -1374,6 +1377,9 @@
           } else if (empty) {
             empty.hidden = true;
           }
+          // Projects open while the field has words and fold again after it
+          // (chat-list.js); a term that hid no row wrote nothing to notice.
+          window.App.chatList?.sync?.();
         };
 
         const bookmarkSearchHead = document.querySelector(".sidebar-bookmarks-head");

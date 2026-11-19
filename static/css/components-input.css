@@ -214,6 +214,18 @@ body.is-hero .input-section:has(> .agent-composer-notice:not([hidden])) > .compo
 .hero-greeting-temporary,
 body.temporary-chat .hero-greeting:not(.hero-greeting-temporary) { display: none; }
 body.temporary-chat .hero-greeting-temporary { display: block; }
+/* A new chat in a project (chat-projects.js, body.project-armed) names it:
+   the name in ink, the sentence a tone back. */
+.hero-greeting-project,
+body.project-armed .hero-greeting:not(.hero-greeting-project) { display: none; }
+body.project-armed .hero-greeting-project { display: block; }
+#heroProjectName {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
 /* An open temporary chat says so under the field, in plain words. The start
    screen says it in its greeting. */
 .temporary-chat-note {

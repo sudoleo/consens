@@ -340,6 +340,7 @@ function clearAuthenticatedUiState() {
   bookmarkDetailCache.clear();
   bookmarkViewCache.clear();
   window.bookmarksData = [];
+  window.App?.chatProjects?.reset?.();
   window.App?.composerStarters?.clear?.();
   // The composer words remembered for the next first frame were this
   // account's (app-bootstrap.js), as is a status check still waiting.
@@ -2287,6 +2288,10 @@ function bookmarkMeta(bookmark) {
     // does not say leaves the pin as it was (upsertBookmarkMeta).
     pinned: typeof bookmark?.pinned === "boolean" ? bookmark.pinned : undefined,
     pinned_at: bookmark?.pinned === true ? bookmark.pinned_at || null : null,
+    // The project the chat sits in (chat-projects.js). A save that does not
+    // say leaves it as it was (upsertBookmarkMeta).
+    project_id: typeof bookmark?.project_id === "string" ? bookmark.project_id
+      : bookmark?.project_id === null ? null : undefined,
     has_consensus: bookmark?.responses && typeof bookmark.responses === "object"
       ? Boolean(String(responses.consensus || "").trim())
       : bookmark?.has_consensus === true,
@@ -2325,6 +2330,7 @@ function upsertBookmarkMeta(bookmark, {
   if (existingIndex >= 0) {
     const existing = window.bookmarksData[existingIndex];
     if (meta.pinned === undefined) Object.assign(meta, { pinned: existing.pinned, pinned_at: existing.pinned_at });
+    if (meta.project_id === undefined) meta.project_id = existing.project_id ?? null;
     window.bookmarksData[existingIndex] = meta;
     updateBookmarkDOM(meta);
   } else {
@@ -3286,12 +3292,19 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       const data = await response.json();
       if (!isCurrentAuthenticatedUser(requestUid, requestGeneration)) return false;
       if (!response.ok) throw new Error(data.detail || `Your chats couldn’t be loaded (${response.status}).`);
+      // The first page names the projects; an open project's chats come
+      // before the list shows (chat-projects.js, bounded wait).
+      const projectChats = Array.isArray(data.projects) ? window.App.chatProjects?.adopt?.(data.projects) : null;
       const skeleton = container?.querySelector(".bookmarks-skeleton");
       const shown = new Set(container?.children || []);
       // The pinned chats come with the first page whatever their age; one
       // that comes again with its own page keeps its one row.
       [...(data.pinned || []), ...(data.bookmarks || [])]
         .forEach(item => upsertBookmarkMeta(item, { prepend: false, nameIt: false }));
+      if (projectChats) {
+        await projectChats;
+        if (!isCurrentAuthenticatedUser(requestUid, requestGeneration) || requestId !== bookmarksLoadRequestId) return false;
+      }
       // Date headings and pinned rows in place before the page fades in,
       // so the headings arrive with their rows (chat-list.js).
       window.App.chatList?.sync?.();
@@ -3731,13 +3744,17 @@ function updateBookmarkDOM(bookmark) {
 // ---- A chat row --------------------------------------------------------
 // The title is the row's control (role="button", Enter or Space opens it);
 // a pointer may press anywhere on the row. "…" opens a
-// small menu with Pin, Rename, Share and Delete; a deleted chat can be
+// small menu with Pin, Rename, Move to project, Share and Delete; a deleted chat can be
 // taken back for a few seconds. One delegated listener serves every row, so
 // a run row that turns into a saved one in place keeps working.
 const BOOKMARK_MENU_ICON = '<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><circle cx="5.5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="18.5" cy="12" r="1.6"/></svg>';
 const BOOKMARK_MENU_ITEMS = [
   ["pin", "Pin", "M12 16v5M8.5 3h7M10 3v5.5L6.5 13v3h11v-3L14 8.5V3"],
   ["rename", "Rename", "M4 20h4L19 9l-4-4L4 16v4ZM14 6l4 4"],
+  // The project a chat stands in (chat-projects.js): a chat in one has no Pin,
+  // it lives in one place.
+  ["move", "Move to project", "move"],
+  ["unproject", "Remove from project", "remove"],
   ["share", "Share", "M12 15V4m-4 4 4-4 4 4M5 13v6h14v-6"],
   ["delete", "Delete", "M5 7h14M10 7V5h4v2m-6 0 1 12h6l1-12"],
 ];
@@ -3798,6 +3815,8 @@ document.addEventListener("click", event => {
   const container = document.getElementById("bookmarksContainer");
   if (!container?.contains(event.target)) return;
   const menuButton = event.target.closest(".bookmark-menu-button");
+  // A project's "…" is chat-projects.js's.
+  if (menuButton?.closest(".chat-project")) return;
   if (menuButton) {
     event.stopPropagation();
     if (openBookmarkMenu?.button === menuButton) closeBookmarkMenu();
@@ -3833,8 +3852,13 @@ function showBookmarkMenu(button, { keyboard = false } = {}) {
   menu.setAttribute("role", "menu");
   menu.setAttribute("aria-label", button.getAttribute("aria-label") || "Chat options");
   const meta = (window.bookmarksData || []).find(item => item.id === row.dataset.id);
-  for (const [action, label, path] of BOOKMARK_MENU_ITEMS) {
+  const projects = window.App.chatProjects;
+  const inProject = projects?.known?.(meta?.project_id) === true;
+  for (const [action, label, glyph] of BOOKMARK_MENU_ITEMS) {
     if (action === "share" && !bookmarkShareable(meta)) continue;
+    if ((action === "move" || action === "unproject") && (!projects || !meta)) continue;
+    if ((action === "pin" && inProject) || (action === "unproject" && !inProject)) continue;
+    const path = projects?.icons?.[glyph] || glyph;
     const item = document.createElement("button");
     item.type = "button";
     item.className = `bookmark-menu-item${action === "delete" ? " is-destructive" : ""}`;
@@ -3861,9 +3885,14 @@ function showBookmarkMenu(button, { keyboard = false } = {}) {
   button.setAttribute("aria-expanded", "true");
   row.classList.add("has-menu");
   openBookmarkMenu = { menu, button, row };
-  const items = [...menu.querySelectorAll(".bookmark-menu-item")];
-  const focusItem = index => items[(index + items.length) % items.length]?.focus({ preventScroll: true });
+  // Read at every key: "Move to project" fills the menu anew (chat-projects.js).
+  const menuItems = () => [...menu.querySelectorAll(".bookmark-menu-item")];
+  const focusItem = index => {
+    const items = menuItems();
+    items[(index + items.length) % items.length]?.focus({ preventScroll: true });
+  };
   menu.addEventListener("keydown", event => {
+    const items = menuItems();
     const index = items.indexOf(document.activeElement);
     if (event.key === "ArrowDown") { event.preventDefault(); focusItem(index + 1); }
     else if (event.key === "ArrowUp") { event.preventDefault(); focusItem(index - 1); }
@@ -3877,9 +3906,16 @@ function showBookmarkMenu(button, { keyboard = false } = {}) {
     if (!item) return;
     event.stopPropagation();
     const bookmarkId = row.dataset.id;
+    // The same menu turns into the list of projects.
+    if (item.dataset.action === "move") {
+      projects?.showPicker?.({ menu, button, row, meta, keyboard: event.detail === 0,
+        close: options => closeBookmarkMenu(options) });
+      return;
+    }
     closeBookmarkMenu({ focus: item.dataset.action !== "rename" && item.dataset.action !== "delete" });
     if (item.dataset.action === "rename") startBookmarkRename(row);
     else if (item.dataset.action === "pin") pinBookmark(bookmarkId, meta?.pinned !== true);
+    else if (item.dataset.action === "unproject") projects?.move?.(bookmarkId, null, { keyboard: event.detail === 0 });
     else if (item.dataset.action === "share") shareBookmark(bookmarkId);
     // A click without a pointer (detail 0) came from the keyboard.
     else if (item.dataset.action === "delete") deleteBookmarkWithUndo(bookmarkId, { keyboard: event.detail === 0 });
@@ -4246,8 +4282,18 @@ function finalizeRegistryRunBookmark(context) {
   return true;
 }
 
+// Chats that come outside the pages (a project's, chat-projects.js): each
+// once, placed by chat-list.js, filtered like the rest.
+function addListRows(items) {
+  (Array.isArray(items) ? items : []).forEach(item => upsertBookmarkMeta(item, { prepend: false, nameIt: false }));
+  window.App.chatList?.sync?.();
+  syncActiveBookmark();
+  window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");
+}
+
 window.App.bookmarkUi = Object.freeze({
   finalizeRun: finalizeRegistryRunBookmark,
+  addListRows,
   replacePendingBookmarkWithReady,
   insertSoftly: insertBookmarkRowSoftly,
   versionForParts: bookmarkShareVersion,

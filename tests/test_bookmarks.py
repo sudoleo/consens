@@ -1091,7 +1091,7 @@ def test_bookmark_list_is_compact_and_cursor_paginated():
     assert third.pop("timestamp").startswith("2026-10-11T11:58:00")
     assert third == {
         "id": "third_id", "query": "Third", "title": "Third", "title_source": "", "mode": "",
-        "pinned": False, "pinned_at": None,
+        "pinned": False, "pinned_at": None, "project_id": None,
         "has_consensus": False, "model_count": 1,
         "source_count": 0, "attachment_count": 0,
     }

@@ -1498,8 +1498,8 @@ body:has(.watch-page:not([hidden])) .temporary-chat-button,
 .bookmark > p[hidden] { display: none; }
 /* Above the global input[type="text"] frame (components-input.css): the row
    is the field. Touch screens keep the global 16px against iOS zoom. */
-.sidebar .bookmark input.bookmark-rename-input,
-.sidebar .bookmark input.bookmark-rename-input:focus {
+.sidebar :is(.bookmark, .chat-project) input.bookmark-rename-input,
+.sidebar :is(.bookmark, .chat-project) input.bookmark-rename-input:focus {
   display: block;
   flex: 1 1 auto;
   width: 100%;

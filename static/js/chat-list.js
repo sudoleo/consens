@@ -1,7 +1,9 @@
 // =====================================================================
 // chat-list.js
-// App.chatList: the order of the chats in the sidebar. Pinned chats come
-// first under "Pinned"; the others follow newest first under quiet date
+// App.chatList: the order of the chats in the sidebar. The account's
+// projects come first under "Projects" (chat-projects.js), each with its
+// chats below it, newest first; a project chat stands only there. Pinned
+// chats follow under "Pinned"; the others newest first under quiet date
 // headings: Today, Yesterday, Previous 7 days, Previous 30 days, then the
 // month, then the year.
 //
@@ -74,6 +76,29 @@
     return row.style.display !== "none" && !row.hidden && !row.classList.contains("is-undo-pending");
   }
 
+  // Project rows, a project's "New chat" row and the Projects heading come
+  // from chat-projects.js; this module only puts them in their place.
+  function isProjectNode(node) {
+    return node.classList?.contains("chat-project") || node.classList?.contains("chat-project-empty");
+  }
+
+  // Writes a class or attribute only where it changes: every write on a row
+  // comes back to sync() through the observer.
+  function setClass(node, name, on) {
+    if (node.classList.contains(name) !== on) node.classList.toggle(name, on);
+  }
+  function setHidden(node, hidden) {
+    if (node.hidden !== hidden) node.hidden = hidden;
+  }
+
+  // The project a row stands in: its saved chat's, else the one its run was
+  // started in (run-view.js, data-project-id); an id the account has no
+  // project for is no project.
+  function projectOf(row, meta, known) {
+    const id = meta && meta.project_id !== undefined ? meta.project_id : row.dataset.projectId;
+    return id && known.has(id) ? id : null;
+  }
+
   function createHeading(group) {
     const heading = document.createElement("h3");
     heading.className = HEADING;
@@ -102,11 +127,52 @@
       previous = Number(row.dataset.listTime) || previous;
     }
 
+    const projects = App.chatProjects?.ordered?.() || [];
+    const known = new Set(projects.map(project => project.id));
+    const projectChats = new Map(projects.map(project => [project.id, []]));
+    const byTime = (a, b) => Number(b.dataset.listTime) - Number(a.dataset.listTime);
+    const free = [];
+    for (const row of rows) {
+      const project = projectOf(row, metas.get(row.dataset.id), known);
+      if (project) projectChats.get(project).push(row);
+      else free.push(row);
+    }
+
     const pinnedAt = row => toTime(metas.get(row.dataset.id)?.pinned_at) ?? 0;
-    const pinned = rows.filter(row => metas.get(row.dataset.id)?.pinned === true)
+    const pinned = free.filter(row => metas.get(row.dataset.id)?.pinned === true)
       .sort((a, b) => pinnedAt(b) - pinnedAt(a));
-    const others = rows.filter(row => !pinned.includes(row))
-      .sort((a, b) => Number(b.dataset.listTime) - Number(a.dataset.listTime));
+    const others = free.filter(row => !pinned.includes(row)).sort(byTime);
+
+    // While the search field has words every project is open, and a project
+    // shows where its name or one of its chats matches (filterBookmarks
+    // shows and hides the chats).
+    const term = String(document.getElementById("chatSearch")?.value || "").trim().toLowerCase();
+    const openRow = rows.find(row => row.classList.contains("is-active"));
+    const activeProject = openRow ? projectOf(openRow, metas.get(openRow.dataset.id), known) : null;
+    const armed = App.chatProjects?.armed?.() || null;
+    const projectNodes = [];
+    for (const project of projects) {
+      const chats = projectChats.get(project.id).sort(byTime);
+      const open = Boolean(term) || App.chatProjects.isOpen(project.id);
+      const node = App.chatProjects.rowFor(project);
+      for (const row of chats) {
+        setClass(row, "in-project", true);
+        setClass(row, "is-folded", !open);
+      }
+      setClass(node, "is-open", open);
+      setClass(node, "is-current", armed === project.id || (!open && activeProject === project.id));
+      const matches = !term || project.name.toLowerCase().includes(term) || chats.some(isShown);
+      setHidden(node, !matches);
+      App.chatProjects.syncToggle?.(node, { open, searching: Boolean(term) });
+      projectNodes.push(node, ...chats);
+      // An open project without a chat offers one; an Undo still pending
+      // counts as a chat, so the row does not flicker for its few seconds.
+      if (open && !term && !chats.length) projectNodes.push(App.chatProjects.emptyRowFor(project));
+    }
+    for (const row of free) {
+      setClass(row, "in-project", false);
+      setClass(row, "is-folded", false);
+    }
 
     const sections = [];
     if (pinned.length) sections.push({ group: PINNED, rows: pinned });
@@ -122,8 +188,13 @@
     const headings = new Map();
     const leading = [];
     const trailing = [];
+    const staleProjects = [];
     for (const node of children) {
       if (isRow(node)) continue;
+      if (isProjectNode(node)) {
+        if (!projectNodes.includes(node)) staleProjects.push(node);
+        continue;
+      }
       if (node.classList.contains(HEADING)) {
         if (headings.has(node.dataset.group)) node.remove();
         else headings.set(node.dataset.group, node);
@@ -132,6 +203,13 @@
     }
 
     const desired = [...leading];
+    if (projects.length) {
+      const heading = App.chatProjects.heading();
+      headings.delete("projects");
+      setHidden(heading, !projectNodes.some(node => node.classList.contains("chat-project") && !node.hidden));
+      desired.push(heading, ...projectNodes);
+    }
+    staleProjects.forEach(node => node.remove());
     for (const { group, rows: members } of sections) {
       const heading = headings.get(group.key) || createHeading(group);
       headings.delete(group.key);
@@ -189,5 +267,12 @@
   else watch();
   scheduleMidnight();
 
-  App.chatList = Object.freeze({ sync, groupOf, toTime });
+  // The project a chat row stands in (filterBookmarks searches its name).
+  function projectOfRow(row) {
+    const known = new Set((App.chatProjects?.ordered?.() || []).map(project => project.id));
+    const meta = (window.bookmarksData || []).find(item => item?.id === row?.dataset?.id);
+    return row ? projectOf(row, meta, known) : null;
+  }
+
+  App.chatList = Object.freeze({ sync, groupOf, toTime, projectOf: projectOfRow });
 })();

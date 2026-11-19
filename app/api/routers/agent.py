@@ -21,7 +21,7 @@ from app.core.security import (
 )
 from app.api.routers.chat_history import _chat_uid, _raise_store_error
 from app.api.routers.bookmarks import _bookmark_meta, prepare_agent_share_result
-from app.services import persistence_guard, prompt_config
+from app.services import chat_projects, persistence_guard, prompt_config
 from app.services import agent_quota, agent_secrets, agent_vm
 from app.services.agent_memory import FirestoreAgentMemoryRepository, MemorySnapshot
 from app.services.agent_comparison import AgentPreferences, comparison_selection
@@ -211,6 +211,11 @@ class AgentRequest(BaseModel):
     # The browser's IANA zone (Intl): the date in the message's app context.
     # A name the server does not know counts as none (the app's zone).
     timezone: str | None = Field(default=None, max_length=64)
+    # A new chat started in one of the account's projects (the sidebar's
+    # "New chat" of a project, chat-projects.js): its sidebar entry joins the
+    # project when it is first written (_save_bookmark). No part of the
+    # request's identity.
+    project_id: str | None = Field(default=None, pattern=r"^p_[A-Za-z0-9]{12}$")
 
     @field_validator("timezone")
     @classmethod
@@ -254,10 +259,7 @@ def _save_bookmark(uid, payload, store, turn, *, quiet=False):
         snapshot = store._chat_ref(uid, payload.chat_id).get(transaction=tx)
         if not snapshot.exists or (snapshot.to_dict() or {}).get("status") != "active":
             raise ChatNotFound("Chat not found")
-    bookmark = persistence_guard.write_bookmark(
-        uid=uid, db=db_firestore, doc_ref=ref, transaction_guard=chat_guard,
-        current_guard=lambda current: not current or (
-            current.get("chat_id") == payload.chat_id and current.get("agent_turn_position", 0) <= turn["position"]), patch={
+    patch = {
         "query": turn["question"], "title": chat["title"], "mode": "Agent",
         "execution_mode": "agent", "chat_id": payload.chat_id, "turn_id": turn["id"],
         "agent_turn_position": turn["position"],
@@ -265,8 +267,28 @@ def _save_bookmark(uid, payload, store, turn, *, quiet=False):
         "previous_question": "", "previous_turn": {}, "share_result_id": "",
         "consensus_model": turn["consensus_model"], "included_providers": [], "model_labels": {},
         "responses": {"consensus": turn.get("consensus", ""), "differences": "", "differences_data": None},
-    })
+    }
+    if not existing.exists and _project_exists(uid, getattr(payload, "project_id", None)):
+        patch[chat_projects.FIELD] = payload.project_id
+    bookmark = persistence_guard.write_bookmark(
+        uid=uid, db=db_firestore, doc_ref=ref, transaction_guard=chat_guard,
+        current_guard=lambda current: not current or (
+            current.get("chat_id") == payload.chat_id and current.get("agent_turn_position", 0) <= turn["position"]),
+        patch=patch)
     return _bookmark_meta(payload.bookmark_id, bookmark)
+
+
+def _project_exists(uid, project_id):
+    """Whether a new chat's entry may join ``project_id``. A project deleted
+    meanwhile, or a list that cannot be read, leaves the chat among the
+    others: the answer is saved either way."""
+    if not project_id:
+        return False
+    try:
+        return any(project["id"] == project_id for project in chat_projects.list_projects(db_firestore, uid))
+    except Exception as exc:
+        logging.warning("Agent chat project unavailable category=%s", safe_exception(exc))
+        return False
 
 
 def _temporary(turn):

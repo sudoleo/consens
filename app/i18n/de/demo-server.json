@@ -244,5 +244,14 @@
   "{field} must be a string": "{field} muss ein Text sein",
   "{field} is required": "{field} fehlt",
   "want must be a boolean": "want muss wahr oder falsch sein",
-  "The chat could not be pinned.": "Der Chat konnte nicht angeheftet werden."
+  "The chat could not be pinned.": "Der Chat konnte nicht angeheftet werden.",
+  "Project not found": "Projekt nicht gefunden",
+  "A project needs a name.": "Ein Projekt braucht einen Namen.",
+  "Error loading projects": "Fehler beim Laden der Projekte",
+  "You have 100 projects. Delete one to make another.": "Du hast 100 Projekte. Lösch eins, um ein neues anzulegen.",
+  "Account deletion is in progress": "Das Konto wird gerade gelöscht",
+  "The project could not be created.": "Das Projekt konnte nicht angelegt werden.",
+  "The project could not be renamed.": "Das Projekt konnte nicht umbenannt werden.",
+  "The project could not be deleted.": "Das Projekt konnte nicht gelöscht werden.",
+  "The chat could not be moved.": "Der Chat konnte nicht verschoben werden."
 }

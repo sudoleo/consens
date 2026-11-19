@@ -101,7 +101,11 @@
         },
         {
           "file": "static/js/chat-list.js",
-          "note": "App.chatList: pinned chats first, the rest under date headings. Watches #bookmarksContainer itself; before firebase.js, which fills the list and calls sync() before the first page fades in."
+          "note": "App.chatList: projects first, then pinned chats, the rest under date headings. Watches #bookmarksContainer itself; before firebase.js, which fills the list and calls sync() before the first page fades in."
+        },
+        {
+          "file": "static/js/chat-projects.js",
+          "note": "App.chatProjects: the account's projects (rows, menu, Move to project, New chat in a project). chat-list.js places its rows; before firebase.js, which hands it the first page's projects and opens its picker from the chat menu."
         }
       ]
     },

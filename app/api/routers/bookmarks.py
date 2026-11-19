@@ -29,7 +29,7 @@ from app.core.security import (
 )
 from app.core import security
 from app.services.llm.attachments import normalize_attachment_meta
-from app.services import persistence_guard, share_snapshots
+from app.services import chat_projects, persistence_guard, share_snapshots
 from app.services.chat_store import (
     CONSENSUS_MAX_LENGTH,
     TURN_PAGE_SIZE,
@@ -314,7 +314,7 @@ def _bookmark_uid(request: Request):
 
 # What the sidebar list projects; see persistence_guard.BOOKMARK_LIST_SUMMARY_FIELD.
 _BOOKMARK_LIST_FIELDS = [
-    "query", "title", "title_source", "mode", "timestamp", "pinned", "pinned_at",
+    "query", "title", "title_source", "mode", "timestamp", "pinned", "pinned_at", chat_projects.FIELD,
     persistence_guard.BOOKMARK_LIST_SUMMARY_FIELD,
 ]
 
@@ -343,6 +343,8 @@ def _bookmark_meta(bookmark_id, data, summary=None):
         # Pinned in the row menu (pin_bookmark): the chat leads the list.
         "pinned": data.get("pinned") is True,
         "pinned_at": data.get("pinned_at") if data.get("pinned") is True else None,
+        # The project the chat sits in (move_bookmark_to_project), or None.
+        "project_id": data.get(chat_projects.FIELD) if chat_projects.valid_id(data.get(chat_projects.FIELD)) else None,
         **summary,
     }
 
@@ -389,6 +391,16 @@ def _pinned_bookmark_rows(bookmarks_ref):
         return []
     earliest = datetime.min.replace(tzinfo=timezone.utc)
     return sorted(rows, key=lambda row: row.get("pinned_at") or earliest, reverse=True)
+
+
+def _account_projects(uid):
+    """The account's projects for the first page; the list without them
+    beats no list (the chats still come, among the others)."""
+    try:
+        return chat_projects.list_projects(db_firestore, uid)
+    except Exception as exc:
+        logging.warning("Projects unavailable category=%s", safe_exception(exc))
+        return []
 
 
 def _encode_bookmark_cursor(boundary):
@@ -463,6 +475,9 @@ def load_bookmarks(
             # Only with the first page; a pinned chat may come again with
             # its own page, the browser keeps one row per chat.
             "pinned": [] if cursor else _pinned_bookmark_rows(bookmarks_ref),
+            # Only with the first page as well: the sidebar's projects. Their
+            # chats come per project (load_project_bookmarks).
+            **({} if cursor else {"projects": _account_projects(uid)}),
         }
     except HTTPException:
         raise
@@ -696,6 +711,176 @@ def pin_bookmark(request: Request, bookmark_id: str, payload: BookmarkPinRequest
     except Exception as exc:
         logging.error("Bookmark pin failed category=%s", safe_exception(exc))
         raise HTTPException(status_code=500, detail="The chat could not be pinned.") from exc
+    return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
+
+
+# ---- Projects (app/services/chat_projects.py) -------------------------------
+
+class ProjectNameRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    name: StrictStr = Field(min_length=1, max_length=1_000)
+
+
+class BookmarkProjectRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    project_id: StrictStr | None
+
+
+def _project_id_or_404(project_id):
+    if not chat_projects.valid_id(project_id):
+        raise HTTPException(status_code=404, detail="Project not found")
+    return project_id
+
+
+def _project_name(raw):
+    name = chat_projects.clean_name(raw)
+    if not name:
+        raise HTTPException(status_code=400, detail="A project needs a name.")
+    return name
+
+
+@router.get("/projects")
+@limiter.limit("30/minute")
+def load_projects(request: Request):
+    uid = _bookmark_uid(request)
+    try:
+        return {"status": "success", "projects": chat_projects.list_projects(db_firestore, uid)}
+    except Exception as exc:
+        logging.error("Error loading projects category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Error loading projects") from exc
+
+
+@router.post("/projects")
+@limiter.limit("30/minute")
+def create_project(request: Request, payload: ProjectNameRequest):
+    uid = _bookmark_uid(request)
+    name = _project_name(payload.name)
+    try:
+        project = chat_projects.create(db_firestore, uid, name)
+    except chat_projects.ProjectLimitReached as exc:
+        # The number is chat_projects.MAX_PROJECTS (test_chat_projects).
+        raise HTTPException(status_code=409, detail="You have 100 projects. Delete one to make another.") from exc
+    except persistence_guard.AccountDeletionInProgress as exc:
+        raise HTTPException(status_code=409, detail="Account deletion is in progress") from exc
+    except Exception as exc:
+        logging.error("Project create failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="The project could not be created.") from exc
+    return {"status": "success", "project": project}
+
+
+@router.patch("/projects/{project_id}")
+@limiter.limit("30/minute")
+def rename_project(request: Request, project_id: str, payload: ProjectNameRequest):
+    uid = _bookmark_uid(request)
+    _project_id_or_404(project_id)
+    name = _project_name(payload.name)
+    try:
+        project = chat_projects.rename(db_firestore, uid, project_id, name)
+    except chat_projects.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    except persistence_guard.AccountDeletionInProgress as exc:
+        raise HTTPException(status_code=409, detail="Account deletion is in progress") from exc
+    except Exception as exc:
+        logging.error("Project rename failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="The project could not be renamed.") from exc
+    return {"status": "success", "project": project}
+
+
+@router.delete("/projects/{project_id}")
+@limiter.limit("30/minute")
+def delete_project(request: Request, project_id: str):
+    """The project goes; its chats stay and go back among the others."""
+    uid = _bookmark_uid(request)
+    _project_id_or_404(project_id)
+    try:
+        chat_projects.delete(db_firestore, uid, project_id)
+    except chat_projects.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    except persistence_guard.AccountDeletionInProgress as exc:
+        raise HTTPException(status_code=409, detail="Account deletion is in progress") from exc
+    except Exception as exc:
+        logging.error("Project delete failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="The project could not be deleted.") from exc
+    return {"status": "success"}
+
+
+@router.get("/projects/{project_id}/bookmarks")
+@limiter.limit("30/minute")
+def load_project_bookmarks(request: Request, project_id: str):
+    """Every chat of one project, newest first. The sidebar's pages bring a
+    project's chats only where they fall by date, so an opened project asks
+    for all of its own. Ordering by ``timestamp`` in the query would need a
+    composite index; a project holds at most the bookmark cap, sorted here."""
+    uid = _bookmark_uid(request)
+    _project_id_or_404(project_id)
+    try:
+        bookmarks_ref = db_firestore.collection("users").document(uid).collection("bookmarks")
+        docs = list(
+            chat_projects.bookmarks_query(db_firestore, uid, project_id)
+            .select(_BOOKMARK_LIST_FIELDS)
+            .limit(chat_projects.MAX_PROJECT_BOOKMARKS)
+            .stream()
+        )
+        rows = _bookmark_list_rows(bookmarks_ref, docs)
+    except Exception as exc:
+        logging.error("Error loading project bookmarks category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="Error loading bookmarks") from exc
+    earliest = datetime.min.replace(tzinfo=timezone.utc)
+
+    def saved_at(row):
+        value = row.get("timestamp")
+        if isinstance(value, str):
+            try:
+                value = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return earliest
+        if not isinstance(value, datetime):
+            return earliest
+        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+    return {"status": "success", "bookmarks": sorted(rows, key=saved_at, reverse=True)}
+
+
+@router.patch("/bookmarks/{bookmark_id}/project")
+@limiter.limit("60/minute")
+# Sync like the other bookmark routes: the Firestore writes block.
+def move_bookmark_to_project(request: Request, bookmark_id: str, payload: BookmarkProjectRequest):
+    """Put a chat into one of the account's projects, or (``None``) back
+    among the others. A merge like every save, so later saves keep it; the
+    project is read in the same transaction, so a chat never lands in a
+    project deleted meanwhile."""
+    uid = _bookmark_uid(request)
+    if not BOOKMARK_ID_RE.fullmatch(bookmark_id):
+        raise HTTPException(status_code=404, detail="Bookmark not found")
+    project_id = payload.project_id
+    if project_id is not None:
+        _project_id_or_404(project_id)
+    doc_ref = (
+        db_firestore.collection("users").document(uid)
+        .collection("bookmarks").document(bookmark_id)
+    )
+
+    def project_exists(transaction):
+        if project_id is not None and project_id not in chat_projects.ids_in(db_firestore, uid, transaction):
+            raise chat_projects.ProjectNotFound("Project not found")
+
+    try:
+        bookmark = persistence_guard.write_bookmark(
+            uid=uid, db=db_firestore, doc_ref=doc_ref,
+            # Never recreate a bookmark deleted while it was moved.
+            current_guard=lambda current: bool(current),
+            transaction_guard=project_exists,
+            patch={chat_projects.FIELD: project_id},
+        )
+    except chat_projects.ProjectNotFound as exc:
+        raise HTTPException(status_code=404, detail="Project not found") from exc
+    except persistence_guard.PersistenceConflictError as exc:
+        raise HTTPException(status_code=404, detail="Bookmark not found") from exc
+    except Exception as exc:
+        logging.error("Bookmark project move failed category=%s", safe_exception(exc))
+        raise HTTPException(status_code=500, detail="The chat could not be moved.") from exc
     return {"status": "success", "bookmark": _bookmark_meta(bookmark_id, bookmark)}
 
 
