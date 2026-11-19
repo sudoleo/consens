@@ -356,7 +356,7 @@ class ModelConfigurationTests(unittest.TestCase):
         self.assertNotEqual(normalized["defaults"].get("openai"), removed)
 
     def test_new_gemini_models_are_direct_and_temperature_free(self):
-        for model_id in (cfg.DEFAULT_GEMINI_MODEL, cfg.GEMINI_38_FLASH_MODEL, cfg.GEMINI_HYDROGEN_MODEL, cfg.GEMINI_PRO_MODEL):
+        for model_id in (cfg.DEFAULT_GEMINI_MODEL, cfg.GEMINI_38_FLASH_MODEL, cfg.GEMINI_HYDROGEN_MODEL, cfg.GEMINI_PRO_MODEL, cfg.GEMINI_NEON_MODEL):
             with self.subTest(model=model_id):
                 request = build_provider_payload(
                     "gemini",

@@ -172,6 +172,7 @@ DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 GEMINI_FLASH_MODEL = DEFAULT_GEMINI_MODEL
 GEMINI_38_FLASH_MODEL = "gemini-3.8-flash"
 GEMINI_HYDROGEN_MODEL = "gemini-4-hydrogen"
+GEMINI_NEON_MODEL = "gemini-4-neon"
 GEMINI_PRO_MODEL = "gemini-4-carbon"
 # V4.1 Flash statt V4 Flash. Prod-Receipts 2026-09-30 bis 10-14: V4 Flash
 # brauchte als Vergleichsantwort im Median 63 s (bis 299 s) und war in 10 von
@@ -397,7 +398,7 @@ PROVIDERS: dict[str, ProviderConfig] = {
             "gemini", "Gemini", "google/", DEFAULT_GEMINI_MODEL, GEMINI_PRO_MODEL,
             {
                 GEMINI_FLASH_MODEL, GEMINI_38_FLASH_MODEL, GEMINI_HYDROGEN_MODEL,
-                GEMINI_PRO_MODEL, GEMMA_MODEL,
+                GEMINI_PRO_MODEL, GEMINI_NEON_MODEL, GEMMA_MODEL,
             },
             required=(GEMINI_38_FLASH_MODEL, GEMMA_MODEL),
             icon="gemini-icon.png", citation_label="Google Gemini",
@@ -849,7 +850,7 @@ PREMIUM_MODELS = {
     OPENAI_TERRA_MODEL, OPENAI_SOL_MODEL, OPENAI_ASTRA_MODEL,
     ANTHROPIC_SONNET_MODEL, ANTHROPIC_PRO_MODEL,
     MISTRAL_PRO_MODEL,
-    GEMINI_38_FLASH_MODEL, GEMINI_HYDROGEN_MODEL, GEMINI_PRO_MODEL,
+    GEMINI_38_FLASH_MODEL, GEMINI_HYDROGEN_MODEL, GEMINI_PRO_MODEL, GEMINI_NEON_MODEL,
     DEEPSEEK_PRO_MODEL,
     GROK_PRO_MODEL,
 }
@@ -874,6 +875,7 @@ MODEL_LABEL_OVERRIDES = {
     GEMINI_38_FLASH_MODEL: "Gemini 3.8 Flash",
     GEMINI_HYDROGEN_MODEL: "Gemini 4 Hydrogen",
     GEMINI_PRO_MODEL: "Gemini 4 Carbon",
+    GEMINI_NEON_MODEL: "Gemini 4 Neon",
     # Nicht mehr waehlbare Modelle als Literale: gespeicherte Antworten,
     # Share-Seiten und Benchmark-Laeufe tragen diese IDs und behalten ihren
     # Namen, auch wenn die Konstanten oben weiterziehen.
