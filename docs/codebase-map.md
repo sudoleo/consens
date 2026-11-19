@@ -9301,8 +9301,12 @@ Client öffnet für Gäste den Login statt des Dateidialogs (`canAttach()` in
 `attachments.js`). Agent-Uploads (`POST /agent/chats/{id}/files`) haben
 zusätzlich 30 Uploads je 10 Minuten pro Konto (`api_uid_limiter`,
 `agent:upload`) und einen Speicher je Stufe aus
-`agent_files.UPLOAD_QUOTAS` (Free 25 Dateien/25 MB, Plus/Pro 100/100 MB;
-generierte Dokumente nutzen die Standardgrenzen).
+`agent_files.UPLOAD_QUOTAS` (Free 25 Dateien/25 MB, Plus/Pro 100/100 MB).
+Darauf zählt nur, was der Nutzer selbst ablegt (`UPLOAD_KINDS`: `upload`,
+`drive_file`; Felder `uploads`/`upload_bytes` in `chat_state/file_quota`).
+Was der Agent anlegt oder holt (gezeigte Bilder, Dokumente, Dateien aus dem
+Arbeitsplatz, Mail-Anhänge), zählt allein auf die Grenze des Speichers
+(`count`/`bytes`, 100 Dateien/100 MB), die für jede Datei gilt.
 Solange ein sendbarer Anhang vorliegt, schließt der Client DeepSeek sowohl im
 sichtbaren Auswahlzustand als auch defensiv im tatsächlichen Request-Fan-out aus.
 Base64 wird anhand der kodierten Länge **vor** dem Dekodieren begrenzt. DOCX

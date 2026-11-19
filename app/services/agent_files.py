@@ -31,17 +31,30 @@ logger = logging.getLogger(__name__)
 MAX_FILES = 100
 MAX_STORAGE_BYTES = 100 * 1024 * 1024
 # Stored uploads per account and tier: (files, bytes). Every tier may upload;
-# Free keeps a smaller private store. Generated documents use the defaults.
+# Free keeps fewer. Only what the user put there counts towards it
+# (UPLOAD_KINDS, the quota's ``uploads`` and ``upload_bytes``): what the agent
+# makes or fetches (pictures, documents, files of its workspace, mail
+# attachments) counts towards the store's own limit above alone, or an
+# account whose agent showed 25 pictures could upload nothing.
 UPLOAD_QUOTAS = {
     "free": (25, 25 * 1024 * 1024),
     "plus": (MAX_FILES, MAX_STORAGE_BYTES),
     "pro": (MAX_FILES, MAX_STORAGE_BYTES),
 }
+UPLOAD_KINDS = frozenset({"upload", "drive_file"})
 RETENTION_DAYS = 30
 ID_PATTERN = r"^[a-f0-9]{32}$"
 # What the file tools need to say beyond their descriptions.
 AUDIT_UNTRUSTED = ("The file tools read the attached files; a part they could not read (an image, a page) is "
                    "named in their result.")
+
+
+def _quota(usage, uploads, files, size):
+    """The account's file quota after ``files`` more files of ``size`` bytes
+    in all, ``uploads`` of them the user's own (UPLOAD_KINDS)."""
+    after = lambda field, change: max(0, usage.get(field, 0) + change)  # noqa: E731
+    return {"count": after("count", files), "bytes": after("bytes", size),
+            "uploads": after("uploads", uploads), "upload_bytes": after("upload_bytes", size * abs(uploads))}
 
 
 class FileUnavailable(ValueError):
@@ -294,20 +307,24 @@ class AgentFiles:
             data["preview"] = {"mime": "application/pdf", "size": len(preview),
                                "sha256": hashlib.sha256(preview).hexdigest()}
         stored = len(raw) + (len(preview) if preview else 0)
-        max_files, max_bytes = limits or (MAX_FILES, MAX_STORAGE_BYTES)
+        uploaded = data["kind"] in UPLOAD_KINDS
         def reserve(tx):
             nonlocal preview, stored
             self.guard(uid, chat_id, tx)
             usage = quota.get(transaction=tx).to_dict() or {}
-            if preview and usage.get("bytes", 0) + stored > max_bytes:
+            if preview and usage.get("bytes", 0) + stored > MAX_STORAGE_BYTES:
                 # The preview only shows the file: one that still fits goes without.
                 preview, stored = None, len(raw)
                 data.pop("preview", None)
-            if usage.get("count", 0) >= max_files or usage.get("bytes", 0) + stored > max_bytes:
-                raise FileUnavailable(f"File storage limit reached ({max_files} files or "
-                                      f"{max_bytes // (1024 * 1024)} MB). Delete old files before uploading more.")
+            held = [(usage.get("count", 0), usage.get("bytes", 0), (MAX_FILES, MAX_STORAGE_BYTES))]
+            if uploaded and limits:
+                held.append((usage.get("uploads", 0), usage.get("upload_bytes", 0), limits))
+            for count, size, (max_files, max_bytes) in held:
+                if count >= max_files or size + stored > max_bytes:
+                    raise FileUnavailable(f"File storage limit reached ({max_files} files or "
+                                          f"{max_bytes // (1024 * 1024)} MB). Delete old files before uploading more.")
             tx.set(ref, data)
-            tx.set(quota, {"count": usage.get("count", 0) + 1, "bytes": usage.get("bytes", 0) + stored})
+            tx.set(quota, _quota(usage, 1 if uploaded else 0, 1, stored))
         self.chats._transaction(reserve)
         try:
             self.objects.put(key, raw, mime)
@@ -422,7 +439,7 @@ class AgentFiles:
                 if usage:
                     stored = current.get("size", 0) + ((current.get("preview") or {}).get("size", 0)
                                                        if isinstance(current.get("preview"), dict) else 0)
-                    tx.set(quota, {"count": max(0, usage.get("count", 0) - 1), "bytes": max(0, usage.get("bytes", 0) - stored)})
+                    tx.set(quota, _quota(usage, -1 if current.get("kind", "upload") in UPLOAD_KINDS else 0, -1, -stored))
         self.chats._transaction(finish)
 
     def cleanup_chat(self, uid, chat_id):

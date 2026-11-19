@@ -60,7 +60,7 @@ def test_wrong_chat_expiration_deletion_and_quota(setup):
     ref.update({'expires_at': (datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()})
     with pytest.raises(FileUnavailable, match='expired'): files.download('owner', chat, meta['id'])
     files.expire('owner', chat)
-    assert files.quota_ref('owner').get().to_dict() == {'count': 0, 'bytes': 0}
+    assert files.quota_ref('owner').get().to_dict() == {'count': 0, 'bytes': 0, 'uploads': 0, 'upload_bytes': 0}
     with pytest.raises(FileUnavailable): files.objects.get(key)
     files.delete('owner', chat, meta['id'])
 
@@ -567,7 +567,7 @@ def test_free_uploads_have_a_smaller_store_than_plus(setup):
     free_files, free_bytes = UPLOAD_QUOTAS["free"]
     assert (free_files, free_bytes) < UPLOAD_QUOTAS["plus"]
     files.db.collection("users").document("owner").collection("chat_state").document("file_quota").set(
-        {"count": free_files, "bytes": 1})
+        {"count": free_files, "bytes": 1, "uploads": free_files, "upload_bytes": 1})
     item = {'name': 'a.txt', 'data': base64.b64encode(b'x').decode()}
     with pytest.raises(FileUnavailable, match="File storage limit reached"):
         files.upload('owner', chat, item, limits=UPLOAD_QUOTAS["free"])
@@ -642,3 +642,33 @@ def test_read_file_says_how_many_parts_hold_the_words_and_which_files_there_are(
     properties = tool.schema()['function']['parameters']['properties']
     assert properties['limit']['maximum'] == READ_PARTS == 10 and all('description' in field for field in properties.values())
     assert f"at most {READ_PARTS} per call" in tool.description and "next_offset" in tool.description
+
+
+def test_the_upload_quota_counts_what_the_user_uploaded_not_what_the_agent_made(setup):
+    """One counter held every file of the account, and the upload route held
+    it against the tier's upload quota: a Free account whose agent had shown
+    25 pictures could upload nothing, having uploaded nothing. What the agent
+    makes counts towards the store's own limit alone."""
+    from app.services.agent_files import MAX_FILES, UPLOAD_QUOTAS
+    files, chat = setup
+    free = UPLOAD_QUOTAS["free"]
+    ready = {"status": "ready", "parts": [], "warnings": []}
+    made = [files.save('owner', chat, raw=b'x', name=f'p{n}.txt', mime='text/plain', extraction=ready,
+                       extra={"kind": "web_image"}) for n in range(free[0])]
+    item = {'name': 'a.txt', 'data': base64.b64encode(b'x').decode()}
+    mine = [files.upload('owner', chat, item, limits=free) for _ in range(free[0])]
+    with pytest.raises(FileUnavailable, match="File storage limit reached"):
+        files.upload('owner', chat, item, limits=free)
+    # Deleting the agent's files frees no upload, deleting an upload does.
+    files.delete('owner', chat, made[0]['id'])
+    with pytest.raises(FileUnavailable, match="File storage limit reached"):
+        files.upload('owner', chat, item, limits=free)
+    files.delete('owner', chat, mine[0]['id'])
+    assert files.upload('owner', chat, item, limits=free, extra={"kind": "drive_file"})['kind'] == 'drive_file'
+    assert files.quota_ref('owner').get().to_dict() == {
+        'count': 2 * free[0] - 1, 'bytes': 2 * free[0] - 1, 'uploads': free[0], 'upload_bytes': free[0]}
+    # The store's own limit holds for uploads too.
+    files.delete('owner', chat, mine[1]['id'])
+    files.quota_ref('owner').update({'count': MAX_FILES})
+    with pytest.raises(FileUnavailable, match="File storage limit reached"):
+        files.upload('owner', chat, item, limits=free)
