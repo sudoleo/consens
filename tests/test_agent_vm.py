@@ -2332,3 +2332,28 @@ def test_long_command_output_reaches_the_model_with_its_beginning_and_its_end(st
     short = _Output()
     short.add("stderr", b"warning\n")
     assert short.for_model("stderr") == "warning\n" and short.for_model("stdout") == ""
+
+
+def test_a_shared_file_keeps_its_type_when_its_shown_name_has_no_ending(store, fake_vm, tmp_path, monkeypatch):
+    """``name`` is "the file name the user sees": a model writes a title
+    there ("Q3 Review"). Stored under it alone, the deck had no type, so the
+    app showed neither its preview (rendered and paid for all the same) nor
+    what it is, and the download had no ending to open it by."""
+    from app.services import agent_office
+    from app.services.agent_files import AgentFiles, FileContext
+    monkeypatch.setenv("AGENT_FILES_LOCAL_DIR", str(tmp_path))
+    monkeypatch.setattr(agent_office, "render", lambda data, extension, **_: agent_office.Rendered(
+        pdf=b"%PDF-1.7 " + data, overview=b"", pages=3))
+    files = AgentFiles(store.db)
+    chat_id = store.create_chat(UID, execution_mode="agent")["id"]
+    script = Agent([[("vm_share_file", {"path": "deck.pptx", "name": "Q3 Review"}),
+                     ("vm_share_file", {"path": "Makefile", "name": "Build rules"})]])
+    loop = vm_loop(store, script, chat_id=chat_id, file_context=FileContext(files, UID, chat_id, []))
+    D = chat_path(chat_id)
+    loop.vm_tools.session.ready(ProviderCancellation())
+    fake_vm.vms[NAME]["files"].update({f"{D}/deck.pptx": b"slides", f"{D}/Makefile": b"all:\n"})
+    list(loop.run())
+    saved = {file["name"]: file for file in files.list(UID, chat_id)}
+    assert set(saved) == {"Q3 Review.pptx", "Build rules"}
+    assert saved["Q3 Review.pptx"]["mime"].endswith("presentationml.presentation")
+    assert "preview" in saved["Q3 Review.pptx"]

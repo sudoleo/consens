@@ -1808,6 +1808,10 @@ class VMTools:
         key = (path, hashlib.sha256(raw).hexdigest())
         if key not in self.shared:
             name = posixpath.basename(args.name.strip() or path) or "file"
+            # A title as the name ("Q3 Review" for deck.pptx) keeps the
+            # file's ending: the type, the preview and the download go by it.
+            if not posixpath.splitext(name)[1]:
+                name += posixpath.splitext(path)[1]
             mime = file_mime(raw, name)
             origin = {"source": "vm", "path": path}
             # A picture is placed in the answer by its ref, like show_image's
