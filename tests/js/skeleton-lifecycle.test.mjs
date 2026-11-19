@@ -83,7 +83,7 @@ describe("loading lifecycle", () => {
   it.each([{ bookmarks: [] }, { bookmarks: [{ id: "saved" }] }])("keeps chat placeholders through the request and removes them on success: %o", async ({ bookmarks }) => {
     const { window, document } = boot({ known: false });
     const source = readFileSync(path.join(ROOT, "static/firebase.js"), "utf8");
-    const load = source.slice(source.indexOf("async function loadBookmarks("), source.indexOf("async function loadBookmarkDetail("));
+    const load = source.slice(source.indexOf("const BOOKMARK_MIN_NEW_ROWS"), source.indexOf("async function loadBookmarkDetail("));
     let respond;
     const response = new Promise(resolve => { respond = resolve; });
     const create = Function("window", "document", "fetch", `
