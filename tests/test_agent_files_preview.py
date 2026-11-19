@@ -77,10 +77,10 @@ def test_an_office_file_previews_as_its_pdf_and_downloads_as_itself(client):
     original = client.get(path)
     assert original.content == b'PK slides' and original.headers['content-disposition'].startswith('attachment;')
     quota = files.quota_ref('owner').get().to_dict()
-    assert quota == {'count': 1, 'bytes': len(b'PK slides') + 15}
+    assert quota == {'count': 1, 'bytes': len(b'PK slides') + 15, 'uploads': 0, 'upload_bytes': 0}
     stored = files.ref('owner', chat, meta['id']).get().to_dict()
     files.delete('owner', chat, meta['id'])
-    assert files.quota_ref('owner').get().to_dict() == {'count': 0, 'bytes': 0}
+    assert files.quota_ref('owner').get().to_dict() == {'count': 0, 'bytes': 0, 'uploads': 0, 'upload_bytes': 0}
     root = files.objects.root
     assert not (root / stored['object_key']).exists() and not (root / (stored['object_key'] + '.preview')).exists()
 
@@ -88,14 +88,18 @@ def test_an_office_file_previews_as_its_pdf_and_downloads_as_itself(client):
 def test_a_file_that_fits_without_its_preview_is_saved_without_it(client):
     """The preview only shows the file: an account near its storage limit
     gets the file, not "File storage limit reached"."""
+    from app.services.agent_files import MAX_STORAGE_BYTES
     _, (files, chat) = client
+    used = MAX_STORAGE_BYTES - len(b'PK deck') - 5
+    files.quota_ref('owner').set({'count': 3, 'bytes': used})
     meta = files.save('owner', chat, raw=b'PK deck', name='deck.pptx', mime='application/octet-stream',
                       extraction={'status': 'ready', 'parts': [], 'warnings': []}, extra={'kind': 'vm_file'},
-                      preview=b'%PDF-1.7 deck', limits=(10, len(b'PK deck') + 5))
+                      preview=b'%PDF-1.7 deck')
     stored = files.ref('owner', chat, meta['id']).get().to_dict()
     assert 'preview' not in stored and 'preview' not in meta
     assert not (files.objects.root / (stored['object_key'] + '.preview')).exists()
-    assert files.quota_ref('owner').get().to_dict() == {'count': 1, 'bytes': len(b'PK deck')}
+    assert files.quota_ref('owner').get().to_dict() == {
+        'count': 4, 'bytes': used + len(b'PK deck'), 'uploads': 0, 'upload_bytes': 0}
 
 
 def test_a_changed_preview_is_refused(client):

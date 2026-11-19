@@ -79,7 +79,7 @@ def test_native_cloud_upload_quota_foreign_download_and_delete_retry(native_db, 
     assert sum(value is not None for value in outcomes) == 1
     assert len([call for call in bucket.calls if call[0] == "put"]) == 1
     assert len(bucket.data) == 1
-    assert files.quota_ref(uid).get().to_dict() == {"count": 1, "bytes": 15}
+    assert files.quota_ref(uid).get().to_dict() == {"count": 1, "bytes": 15, "uploads": 1, "upload_bytes": 15}
     assert files.download(uid, chat, saved["id"])[1] == b"private fixture"
     before_calls = list(bucket.calls)
     with pytest.raises(ChatNotFound):
@@ -92,7 +92,7 @@ def test_native_cloud_upload_quota_foreign_download_and_delete_retry(native_db, 
     assert files.quota_ref(uid).get().to_dict()["count"] == 1
     bucket.fail_delete = False
     agent_files.AgentFiles(db).delete(uid, chat, saved["id"], cleanup=True)
-    assert files.quota_ref(uid).get().to_dict() == {"count": 0, "bytes": 0}
+    assert files.quota_ref(uid).get().to_dict() == {"count": 0, "bytes": 0, "uploads": 0, "upload_bytes": 0}
     assert not files.ref(uid, chat, saved["id"]).get().exists and bucket.data == {}
 
 
@@ -108,7 +108,7 @@ def test_native_failed_cloud_upload_preserves_original_error_and_retry_cleans(na
     bucket.fail_put = bucket.fail_delete = False
     agent_files.AgentFiles(db).cleanup_chat(uid, chat)
     assert list(files.chats._chat_ref(uid, chat).collection("files").stream()) == []
-    assert files.quota_ref(uid).get().to_dict() == {"count": 0, "bytes": 0}
+    assert files.quota_ref(uid).get().to_dict() == {"count": 0, "bytes": 0, "uploads": 0, "upload_bytes": 0}
 
 
 def test_native_cloud_document_versions_are_immutable_and_cascade_retries(native_db, monkeypatch):
@@ -136,4 +136,4 @@ def test_native_cloud_document_versions_are_immutable_and_cascade_retries(native
     bucket.fail_delete = False
     assert agent_files.ChatStore(db).run_chat_deletion(uid, chat)
     assert bucket.data == {} and tree(files.chats._chat_ref(uid, chat)) == {}
-    assert files.quota_ref(uid).get().to_dict() == {"count": 0, "bytes": 0}
+    assert files.quota_ref(uid).get().to_dict() == {"count": 0, "bytes": 0, "uploads": 0, "upload_bytes": 0}
