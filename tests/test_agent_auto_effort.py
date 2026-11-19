@@ -22,7 +22,7 @@ def options():
     (cfg.GLM_BASE_MODEL, "low", "low"),
     (cfg.MUSE_GLIMMER_MODEL, "low", "low"),
     # Unpinned: the catalog's default, Medium without Pro where offered.
-    ("gpt-6.1-sol", "medium", "medium"),
+    ("gpt-6.2-sol", "medium", "medium"),
     ("claude-sonnet-5.5", "high", "medium"),
     # No Medium to fall back on: Free runs the model's own default too.
     ("deepseek-v4.1-flash", "high", "high"),

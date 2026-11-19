@@ -702,7 +702,7 @@ def test_high_reasoning_levels_are_pro(api, monkeypatch):
     assert "event: final" in client.post("/agent", json={**payload, "reasoning_effort": "low"}, headers=AUTH).text
 
 
-@pytest.mark.parametrize("model_id", ["gpt-6-luna", "gpt-6.1-sol"])
+@pytest.mark.parametrize("model_id", ["gpt-6-luna", "gpt-6.2-sol"])
 def test_model_effort_snapshot_switch_and_recovery_identity(api, monkeypatch, model_id):
     client, store, calls = api
     chat_id = store.create_chat(UID, execution_mode="agent")["id"]

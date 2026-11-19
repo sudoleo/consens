@@ -155,8 +155,8 @@ REASONING_EFFORT_FOR_MEMORY_EDIT = "none"
 OPENAI_LUNA_MODEL = "gpt-6-luna"
 DEFAULT_OPENAI_MODEL = OPENAI_LUNA_MODEL
 OPENAI_TERRA_MODEL = "gpt-6.1-terra"
-OPENAI_SOL_MODEL = "gpt-6.1-sol"
-OPENAI_ASTRA_MODEL = "gpt-6-astra"
+OPENAI_SOL_MODEL = "gpt-6.2-sol"
+OPENAI_ASTRA_MODEL = "gpt-6.2-astra"
 # Offene Modelle (Gewichte auf Hugging Face) fuer das Preset "Open Models".
 # gpt-oss-120b liest nur Text und denkt zwingend (Stufe "low", siehe
 # MODEL_REQUEST_CONFIG); im Preset steht Qwen3.8 27B statt seiner,
@@ -210,9 +210,9 @@ DEFAULT_GROK_MODEL = GROK_BASE_MODEL
 # Modelle hinter den "<Familie>-Pro"-Aliassen, soweit sie nicht schon oben
 # stehen. Bewusst benannt, damit die Provider-Registry ohne Stringliterale
 # auskommt.
-# OpenAI-Pro ist Sol, nicht Astra: Astra kostet 10/50 $ je Mio. Token, das
-# Fuenffache von Sol (2/10) und mehr als das Doppelte von Opus 5.5 (4/20),
-# und der Alias treibt Konsens-Engine und Pro-Bewerter.
+# OpenAI-Pro ist Sol, nicht Astra: Astra kostet 8/40 $ je Mio. Token, das
+# Vierfache von Sol (2/10) und das Doppelte von Opus 5.5 (4/20), und der
+# Alias treibt Konsens-Engine und Pro-Bewerter.
 OPENAI_PRO_MODEL = OPENAI_SOL_MODEL
 GROK_PRO_MODEL = "grok-4.7"
 KIMI_BASE_MODEL = "kimi-k2.6"
@@ -866,8 +866,8 @@ ALL_ALLOWED_MODELS = _all_allowed_models()
 MODEL_LABEL_OVERRIDES = {
     OPENAI_LUNA_MODEL: "GPT-6 Luna",
     OPENAI_TERRA_MODEL: "GPT-6.1 Terra",
-    OPENAI_SOL_MODEL: "GPT-6.1 Sol",
-    OPENAI_ASTRA_MODEL: "GPT-6 Astra",
+    OPENAI_SOL_MODEL: "GPT-6.2 Sol",
+    OPENAI_ASTRA_MODEL: "GPT-6.2 Astra",
     DEFAULT_ANTHROPIC_MODEL: "Claude Haiku 5.5",
     ANTHROPIC_SONNET_MODEL: "Claude Sonnet 5.5",
     ANTHROPIC_PRO_MODEL: "Claude Opus 5.5",
@@ -879,6 +879,8 @@ MODEL_LABEL_OVERRIDES = {
     # Nicht mehr waehlbare Modelle als Literale: gespeicherte Antworten,
     # Share-Seiten und Benchmark-Laeufe tragen diese IDs und behalten ihren
     # Namen, auch wenn die Konstanten oben weiterziehen.
+    "gpt-6.1-sol": "GPT-6.1 Sol",
+    "gpt-6-astra": "GPT-6 Astra",
     "gpt-5.6-luna": "GPT-5.6 Luna",
     "gpt-5.6-sol": "GPT-5.6 Sol",
     "gpt-5.5": "GPT-5.5",

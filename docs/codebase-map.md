@@ -11986,7 +11986,7 @@ für ein fehlendes/noch nicht migriertes Dokument.
 
 **Familien-Konstanten und abgelöste IDs.** `DEFAULT_<FAMILIE>_MODEL` und
 `<FAMILIE>_PRO_MODEL` zeigen auf dieselbe Generation wie die Prod-Listen (seit
-2026-11-13: OpenAI GPT-6 Luna / GPT-6.1 Sol, dazu `OPENAI_TERRA_MODEL` und
+2026-11-19: OpenAI GPT-6 Luna / GPT-6.2 Sol, dazu `OPENAI_TERRA_MODEL` und
 `OPENAI_ASTRA_MODEL`; Claude Haiku / Opus 5.5 mit `ANTHROPIC_SONNET_MODEL`;
 Gemini 3.5 Flash-Lite / Gemini 4 Carbon mit `GEMINI_38_FLASH_MODEL`,
 `GEMINI_HYDROGEN_MODEL` und `GEMINI_NEON_MODEL`). OpenAI-Pro ist Sol statt Astra (Astra kostet das

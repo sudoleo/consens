@@ -75,7 +75,7 @@ class RetiredModelLabelTests(unittest.TestCase):
         self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["Anthropic"], ("anthropic", "claude-haiku-5.5"))
         self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["Anthropic-Pro"], ("anthropic", "claude-opus-5.5"))
         self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["OpenAI"], ("openai", "gpt-6-luna"))
-        self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["OpenAI-Pro"], ("openai", "gpt-6.1-sol"))
+        self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["OpenAI-Pro"], ("openai", "gpt-6.2-sol"))
         self.assertEqual(cfg.CONSENSUS_ENGINE_ALIASES["Gemini-Pro"], ("gemini", "gemini-4-carbon"))
 
     def test_memory_edit_model_is_not_the_family_default(self):

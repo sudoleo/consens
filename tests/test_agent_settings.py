@@ -258,10 +258,10 @@ def test_the_real_catalog_applies_the_same_rules_as_the_run(store):
     loop = settings_loop(store, model="gpt-6-luna", effort="low", catalog=None)
     result = prepare(loop, reasoning="max")
     assert change(result, "Reasoning")["to"] == "Medium" and "Max is available on Pro" in change(result, "Reasoning")["reason"]
-    assert "is available on Pro" in change(prepare(loop, chat_model="GPT-6.1 Sol"), "Chat model")["reason"]
+    assert "is available on Pro" in change(prepare(loop, chat_model="GPT-6.2 Sol"), "Chat model")["reason"]
     pro = settings_loop(store, model="gpt-6-luna", effort="low", catalog=None, pro=True)
-    assert prepare(pro, chat_model="GPT-6.1 Sol", reasoning="max")["status"] == "prepared"
-    assert proposal(store, pro)["settings"]["agent_model"] == {"model_id": "gpt-6.1-sol", "reasoning_effort": "max"}
+    assert prepare(pro, chat_model="GPT-6.2 Sol", reasoning="max")["status"] == "prepared"
+    assert proposal(store, pro)["settings"]["agent_model"] == {"model_id": "gpt-6.2-sol", "reasoning_effort": "max"}
 
 
 def test_outages_and_finished_turns_are_readable_refusals(store):

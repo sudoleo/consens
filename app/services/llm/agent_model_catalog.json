@@ -1718,6 +1718,78 @@
         ],
         "default_effort": "medium"
       }
+    },
+    "openai/gpt-6.2-sol": {
+      "pricing": {
+        "prompt": "0.000002",
+        "completion": "0.00001",
+        "web_search": "0.01",
+        "input_cache_read": "0.0000001",
+        "input_cache_write": "0.0000025",
+        "overrides": [
+          {
+            "min_prompt_tokens": 272000,
+            "prompt": "0.000004",
+            "completion": "0.000015",
+            "input_cache_read": "0.0000002",
+            "input_cache_write": "0.000005"
+          }
+        ]
+      },
+      "context_length": 1050000,
+      "top_provider": {
+        "context_length": 1050000,
+        "max_completion_tokens": 128000,
+        "is_moderated": true
+      },
+      "reasoning": {
+        "mandatory": true,
+        "default_enabled": true,
+        "supported_efforts": [
+          "max",
+          "xhigh",
+          "high",
+          "medium",
+          "low"
+        ],
+        "default_effort": "medium"
+      }
+    },
+    "openai/gpt-6.2-astra": {
+      "pricing": {
+        "prompt": "0.000008",
+        "completion": "0.00004",
+        "web_search": "0.01",
+        "input_cache_read": "0.0000004",
+        "input_cache_write": "0.00001",
+        "overrides": [
+          {
+            "min_prompt_tokens": 272000,
+            "prompt": "0.000016",
+            "completion": "0.00006",
+            "input_cache_read": "0.0000008",
+            "input_cache_write": "0.00002"
+          }
+        ]
+      },
+      "context_length": 1050000,
+      "top_provider": {
+        "context_length": 1050000,
+        "max_completion_tokens": 128000,
+        "is_moderated": true
+      },
+      "reasoning": {
+        "mandatory": true,
+        "default_enabled": true,
+        "supported_efforts": [
+          "max",
+          "xhigh",
+          "high",
+          "medium",
+          "low"
+        ],
+        "default_effort": "medium"
+      }
     }
   }
 }
