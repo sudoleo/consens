@@ -428,3 +428,19 @@ def test_renew_after_send_grant_and_recipient_removal_needs_fresh_review(gmail):
     assert actions.confirm('owner',chat,trimmed['id'],trimmed['hash'])['status']=='succeeded'
     raw=base64.urlsafe_b64decode(google.wire.calls[-1][2]['json']['raw'])
     assert b'archive@unknown.example' not in raw
+
+
+def test_an_attachment_of_a_type_the_store_refuses_is_the_tools_refusal_not_the_turns_end(gmail):
+    """The store's validation answers with an HTTP 400 (it serves the upload
+    route too). Raised out of the tool, the loop took it for a provider's
+    refusal and ended the turn with "The model provider rejected this
+    request"; the model has to hear which file it was and why."""
+    tool,_,google,chat=gmail
+    sheet=message()
+    sheet['payload']['parts'][1].update({'filename':'offer.xlsx','mimeType':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})
+    google.wire.handler=lambda method,url,kwargs: {'data':encoded(b'PK\x03\x04 sheet'),'size':10} if '/attachments/' in url else sheet
+    with pytest.raises(GoogleError) as refused:
+        tool.import_attachment(ImportAttachment(message_id='m1',part_id='1'),cancellation=ProviderCancellation())
+    assert 'offer.xlsx' in str(refused.value)
+    assert getattr(refused.value,'status_code',None) not in {400,413,422}
+    assert tool.files.list('owner',chat)==[]

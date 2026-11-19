@@ -12,6 +12,7 @@ import unicodedata
 from typing import Literal
 from urllib.parse import quote
 
+from fastapi import HTTPException
 from pydantic import Field, model_validator
 from app.services.agent_documents import Strict, digest
 from app.services.agent_files import FileUnavailable
@@ -277,10 +278,18 @@ class GmailTools:
         self.files.expire(self.loop.uid, self.loop.chat_id)
         extensions = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "text/plain": "txt", "application/pdf": "pdf"}
         filename = part.get("filename") or "attachment." + extensions.get(part.get("mimeType"), "bin")
-        meta = self.files.upload(self.loop.uid, self.loop.chat_id, {"name": filename[:200], "data": base64.b64encode(raw).decode()},
-            cancellation=cancellation, extra={"kind": "mail_attachment", "origin": origin, "turn_id": self.loop.turn_id,
-                # Display-only provenance for the file list; origin stays the reuse key.
-                "origin_subject": message_headers.get("subject", "")[:300], "origin_from": message_headers.get("from", "")[:300]})
+        try:
+            meta = self.files.upload(self.loop.uid, self.loop.chat_id, {"name": filename[:200], "data": base64.b64encode(raw).decode()},
+                cancellation=cancellation, extra={"kind": "mail_attachment", "origin": origin, "turn_id": self.loop.turn_id,
+                    # Display-only provenance for the file list; origin stays the reuse key.
+                    "origin_subject": message_headers.get("subject", "")[:300], "origin_from": message_headers.get("from", "")[:300]})
+        except HTTPException as exc:
+            # The store's validation answers the upload route with a 400 (a
+            # type it does not take, a picture too large). Out of a tool the
+            # loop reads that status as the model provider's refusal and ends
+            # the turn (agent_provider_limits.agent_failure): the model is
+            # told which file was refused instead.
+            raise GoogleError(str(exc.detail)) from None
         self.loop.outgoing.put_nowait({"type": "resources", "files": [meta]})
         return {"file": meta, "trust": "untrusted"}
 
