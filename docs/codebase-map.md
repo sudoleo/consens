@@ -8018,7 +8018,9 @@ setzt ein hängendes `waiting/running` der Passage auf `failed`/`cancelled`
   neuer Lauf, eine verdeckte Seite und Logout schicken es sofort). Offen/zu merkt sich
   `localStorage["projects_open"]`; `loadBookmarks` übergibt der ersten Seite `projects` an `adopt()`,
   das für bis zu drei offene Projekte `GET /projects/{id}/bookmarks` holt, und wartet darauf höchstens
-  600 ms vor dem Einblenden (`App.bookmarkUi.addListRows`). Suche: der Projektname gehört zum
+  600 ms vor dem Einblenden (`App.bookmarkUi.addListRows`). Bringt eine Seite weniger als
+  `BOOKMARK_MIN_NEW_ROWS` = 8 sichtbare Zeilen (ihre Chats liegen in zugeklappten Projekten), lädt
+  `loadBookmarks` von selbst bis zu `BOOKMARK_EXTRA_PAGES` = 2 weitere Seiten. Suche: der Projektname gehört zum
   Suchtext jedes seiner Chats, solange das Feld Worte hat sind alle Projekte offen (Toggles
   `aria-disabled`), ein Projekt erscheint, wenn Name oder ein Chat trifft. **Neuer Chat in einem
   Projekt:** „New chat“ des Projekts klickt `#newRunButton` und merkt das Projekt (`arm`,

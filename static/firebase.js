@@ -3261,6 +3261,16 @@ function renderBookmarksLoadError(container) {
   container.appendChild(state);
 }
 
+// Rows a page must add to the list the reader sees before it counts as
+// loaded; past BOOKMARK_EXTRA_PAGES more pages, "Load more" takes over.
+const BOOKMARK_MIN_NEW_ROWS = 8;
+const BOOKMARK_EXTRA_PAGES = 2;
+function shownBookmarkRows(container) {
+  return [...(container?.children || [])].filter(node => node.classList.contains("bookmark")
+    && !node.classList.contains("is-folded") && !node.classList.contains("is-undo-pending")
+    && node.style.display !== "none").length;
+}
+
 async function loadBookmarks({ append = false, loadAll = false } = {}) {
   if (!auth.currentUser || bookmarksLoading) return false;
   const requestUser = auth.currentUser;
@@ -3283,7 +3293,9 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       ensurePendingBookmarkDOM(window.App.bookmarkSession?.pending);
       restoreRegistryRunRows();
     }
+    let extraPages = 0, more = false;
     do {
+      const before = shownBookmarkRows(container);
       // 35 statt 30: auf einem grossen Monitor stand der "Load more"-Button
       // sonst dauerhaft unter einer Liste, die ohnehin komplett sichtbar war.
       const path = "/bookmarks?limit=35" + (cursor ? "&cursor=" + encodeURIComponent(cursor) : "");
@@ -3312,7 +3324,14 @@ async function loadBookmarks({ append = false, loadAll = false } = {}) {
       else skeleton?.remove();
       bookmarksNextCursor = data.next_cursor || null;
       cursor = bookmarksNextCursor;
-    } while (loadAll && cursor);
+      // A page of chats that sit in closed projects shows almost nothing
+      // (chat-projects.js): the next one comes too, a few at most, so
+      // "Load more" never looks like a button that does nothing.
+      const sparse = !loadAll && Boolean(cursor) && extraPages < BOOKMARK_EXTRA_PAGES
+        && shownBookmarkRows(container) - before < BOOKMARK_MIN_NEW_ROWS;
+      if (sparse) extraPages += 1;
+      more = Boolean(cursor) && (loadAll || sparse);
+    } while (more);
     renderBookmarksLoadMore();
     syncActiveBookmark();
     window.filterBookmarks?.(document.getElementById("chatSearch")?.value || "");

@@ -400,3 +400,36 @@ def test_choosing_a_chat_answers_at_once_and_loads_detail_and_transcript_togethe
         assert not errors
     finally:
         context.close()
+
+
+def test_a_page_of_chats_in_closed_projects_brings_the_next_page_along(browser, phase4_server):
+    """A first page whose chats all sit in a closed project shows one
+    project row; the list loads on by itself (a few pages at most), so the
+    loose chats are there without a "Load more" that seems to do nothing."""
+    context, page = _real_firebase_page(browser, phase4_server)
+    pages, errors = [], []
+    page.on('pageerror', lambda error: errors.append(str(error)))
+    try:
+        page.set_viewport_size({'width': 1280, 'height': 800})
+        project = {'id': 'p_aaaaaaaaaaaa', 'name': 'Thesis', 'created_at': ''}
+        filed = [{'id': f'filed{index}', 'title': f'Filed {index}', 'query': 'Q', 'mode': 'Agent',
+                  'project_id': project['id'], 'timestamp': '2026-11-19T10:00:00Z'} for index in range(35)]
+        loose = [{'id': f'loose{index}', 'title': f'Loose {index}', 'query': 'Q', 'mode': 'Agent',
+                  'project_id': None, 'timestamp': '2026-11-18T10:00:00Z'} for index in range(35)]
+
+        def bookmarks(route):
+            cursor = 'cursor=' in route.request.url
+            pages.append(cursor)
+            _json(route, {'bookmarks': loose if cursor else filed, 'pinned': [],
+                          'next_cursor': None if cursor else 'next', 'has_more': not cursor,
+                          **({} if cursor else {'projects': [project]})})
+        page.route('**/bookmarks?*', bookmarks)
+        page.evaluate('() => window.loadBookmarks()')
+        expect(page.locator('.bookmark[data-id="loose0"]')).to_be_visible()
+        expect(page.locator('.chat-project .chat-project-name')).to_have_text('Thesis')
+        expect(page.locator('.bookmark[data-id="filed0"]')).to_be_hidden()
+        assert pages == [False, True]
+        expect(page.locator('#bookmarksLoadMore')).to_have_count(0)
+        assert not errors
+    finally:
+        context.close()
