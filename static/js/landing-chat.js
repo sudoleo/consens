@@ -72,8 +72,18 @@
       window.setTimeout(() => {
         view.el.dataset.settled = "true";
         held(view.el).forEach(el => revealer.observe(el));
+        wake();
       }, SETTLE_MS);
     }, READING_MS);
+  }
+  // Left behind unseen (a jump down the page, a visit that starts below
+  // it): nobody watches the clock, so it stands in its last frame at once
+  // and is whole when the reader scrolls back up to it.
+  function finish(view) {
+    view.played = true;
+    view.el.dataset.phase = "found";
+    view.el.dataset.settled = "true";
+    held(view.el).forEach(el => revealer.observe(el));
   }
   // What the agent does about a finding waits for the finding.
   const held = review => reveals.filter(el => el.hasAttribute("data-after-review") && review.contains(el));
@@ -85,28 +95,44 @@
   watches.forEach(card => { card.dataset.state = "proposal"; });
 
   // ---- pieces that appear ------------------------------------------------------
-  // An observer, not a scroll listener: a phone delivers scroll events late
-  // while the page glides, and the pieces would come in behind the finger.
+  // An observer says which pieces have come into the window, and while one
+  // of them has not cleared the field its box is read every frame. Neither
+  // alone would do: a phone delivers scroll events late while the page
+  // glides, so the pieces would come in behind the finger, and an observer
+  // never reports its last threshold for a piece a fraction of a pixel
+  // short of it, which then stays unseen.
   let revealer = null;
-  function onReveal(entries) {
+  const arriving = new Set();
+  function show(el) {
+    el.classList.add("is-in");
+    arriving.delete(el);
+    revealer.unobserve(el);
+  }
+  function settle() {
+    if (!arriving.size) return;
     const edge = line();
-    entries.forEach(entry => {
-      const box = entry.boundingClientRect;
-      // Above the window (a visit that starts further down): it is there.
-      const passed = !entry.isIntersecting && entry.rootBounds && box.bottom <= entry.rootBounds.top;
-      if (passed || (entry.isIntersecting && standsClear(box.top, box.height, edge))) {
-        entry.target.classList.add("is-in");
-        revealer.unobserve(entry.target);
-      }
+    arriving.forEach(el => {
+      const box = el.getBoundingClientRect();
+      if (standsClear(box.top, box.height, edge)) show(el);
     });
+  }
+  function onReveal(entries) {
+    entries.forEach(entry => {
+      // Above the window (a visit that starts further down): it is there.
+      const passed = !entry.isIntersecting && entry.rootBounds
+        && entry.boundingClientRect.bottom <= entry.rootBounds.top;
+      if (passed) show(entry.target);
+      else if (entry.isIntersecting) arriving.add(entry.target);
+      else arriving.delete(entry.target);
+    });
+    settle();
+    wake();
   }
   function watchReveals() {
     if (revealer) revealer.disconnect();
+    arriving.clear();
     const under = Math.round(window.innerHeight - line());
-    revealer = new IntersectionObserver(onReveal, {
-      rootMargin: `0px 0px -${under}px 0px`,
-      threshold: [0, 0.25, 0.5, 0.75, 1],
-    });
+    revealer = new IntersectionObserver(onReveal, { rootMargin: `0px 0px -${under}px 0px` });
     reveals.forEach(el => {
       if (el.classList.contains("is-in")) return;
       const review = el.hasAttribute("data-after-review") && el.closest("[data-review]");
@@ -116,17 +142,18 @@
   }
 
   // ---- pieces the scroll moves ----------------------------------------------
-  // Read every frame, but only while one of them is near the window.
   const near = new Set();
-  let running = false;
   function drive() {
     const edge = line();
     const height = window.innerHeight;
     reviews.forEach(view => {
+      if (view.played) return;
+      if (view.el.getBoundingClientRect().bottom <= 0) finish(view);
       // Not before the place of the note stands in view: the finding is
       // what the reader is to see arrive.
-      if (!view.played && view.note.getBoundingClientRect().bottom < edge + 12) play(view);
+      else if (near.has(view.el) && view.note.getBoundingClientRect().bottom < edge + 12) play(view);
     });
+    if (!near.size) return;
     watches.forEach(card => {
       // It starts once the whole card has stood in view for a moment of
       // scrolling, and goes back with the scroll.
@@ -134,17 +161,36 @@
       if (card.dataset.state !== state) card.dataset.state = state;
     });
   }
-  function frame() {
-    if (!near.size) { running = false; return; }
-    drive();
-    window.requestAnimationFrame(frame);
-  }
   const driver = new IntersectionObserver(entries => {
     entries.forEach(entry => { if (entry.isIntersecting) near.add(entry.target); else near.delete(entry.target); });
     // Once more as a piece leaves, so it rests where the scroll left it.
-    drive();
-    if (near.size && !running) { running = true; window.requestAnimationFrame(frame); }
+    if (!near.size) { near.add(entries[0].target); drive(); near.clear(); } else drive();
+    wake();
   }, { rootMargin: "20% 0px 20% 0px" });
+
+  // ---- the frames --------------------------------------------------------------
+  // Boxes are read every frame only while a piece is arriving or the scroll
+  // moves one, and only while the page moves: a page at rest costs nothing.
+  const REST_FRAMES = 12;
+  let running = false;
+  let rested = 0;
+  let lastY = -1;
+  function frame() {
+    rested = window.scrollY === lastY ? rested + 1 : 0;
+    lastY = window.scrollY;
+    settle();
+    drive();
+    if ((arriving.size || near.size) && rested < REST_FRAMES) window.requestAnimationFrame(frame);
+    else running = false;
+  }
+  function wake() {
+    rested = 0;
+    if (running) return;
+    running = true;
+    window.requestAnimationFrame(frame);
+  }
+  window.addEventListener("scroll", wake, { passive: true });
+
   reviews.forEach(view => driver.observe(view.el));
   watches.forEach(card => driver.observe(card));
 

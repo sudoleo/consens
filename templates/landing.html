@@ -395,28 +395,25 @@
       </div>
 
       <article class="lc-agent" aria-label="The agent prepares a Watch">
-        <!-- The Watch card of /app (agent-watch.js, agent-chat.css
-             .agent-watch-card): the task the agent runs again, when it is
-             done, on which schedule, and the one button that starts it. The
-             scroll presses the button: "Watch" becomes "Watch running". The
-             words of both states stand here; the state of the card shows one set
+        <!-- The Watch card of /app, with its own classes and its own styles
+             (agent-watch.js builds it there, watch-card.css draws it in both
+             places): the task the agent runs again, when it is done, on which
+             schedule, and the one button that starts it. The scroll presses
+             the button: "Watch" becomes "Watch running". The words of both
+             states stand here; the state of the card shows one set
              (landing-chat.css), and without script it is the running Watch. -->
-        <section class="lc-watchcard" data-reveal data-watch data-state="watching" aria-label="Watch">
-          <div class="lc-watchcard-head">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle cx="12" cy="12" r="2.5"/></svg>
-            <span data-when="proposal">Watch</span>
-            <span data-when="watching">Watch running</span>
-          </div>
-          <p class="lc-watchcard-task">Check whether the Stelvio Pass is open.</p>
-          <p class="lc-watchcard-goal">Done when: the pass is open in both directions</p>
-          <p class="lc-watchcard-settings">
-            <span data-when="proposal">Daily at 08:00</span>
-            <span data-when="watching">Daily at 08:00 · next run tomorrow at 08:00</span>
+        <section class="agent-watch-card" data-reveal data-watch data-state="watching" aria-label="Watch">
+          <span class="agent-watch-glyph" aria-hidden="true"><svg viewBox="0 0 24 24" focusable="false"><path class="agent-watch-eye" d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6Z"/><circle class="agent-watch-pupil" cx="12" cy="12" r="2.5"/><path class="agent-watch-tick" d="M6.5 12.5l3.6 3.6L17.5 8.5"/></svg></span>
+          <p class="agent-watch-head">
+            <span class="agent-watch-title" data-when="proposal">Watch</span><span class="agent-watch-settings" data-when="proposal">Daily at 08:00</span>
+            <span class="agent-watch-title" data-when="watching">Watch running</span><span class="agent-watch-settings" data-when="watching">Daily at 08:00 · next run tomorrow at 08:00</span>
           </p>
-          <div class="lc-watchcard-actions">
-            <span class="lc-watchcard-start" data-when="proposal">Start Watch</span>
-            <span class="lc-watchcard-link" data-when="proposal">Change</span>
-            <span class="lc-watchcard-link" data-when="watching">End Watch</span>
+          <p class="agent-watch-question">Check whether the Stelvio Pass is open.</p>
+          <p class="agent-watch-goal">Done when: the pass is open in both directions</p>
+          <div class="agent-watch-actions">
+            <span class="agent-watch-start" data-when="proposal">Start Watch</span>
+            <span class="agent-watch-change" data-when="proposal">Change</span>
+            <span class="agent-watch-end" data-when="watching">End Watch</span>
           </div>
         </section>
       </article>

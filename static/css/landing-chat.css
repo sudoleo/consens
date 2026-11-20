@@ -6,8 +6,8 @@
    docked under the thread. Every product piece is a rebuild of /app in its
    own tokens and words: the answer's shapes are the app's (answer-shapes.css
    .md-figures, .md-timeline), the marks are .cx-claim, the workspace panel
-   follows workspace-view.css, the file preview file-viewer.css, the Watch
-   card agent-landing-chat.css .agent-watch-card. This file lays the page out as a
+   follows workspace-view.css, the file preview file-viewer.css; the Watch
+   card is the app's own (watch-card.css). This file lays the page out as a
    thread; type, tokens, the bar and the field itself come from landing.css,
    which the page loads first.
 
@@ -560,54 +560,22 @@
 /* --------------------------------------------------------------------------
    The Watch
    -------------------------------------------------------------------------- */
-/* The card of a Watch the agent prepared (agent-landing-chat.css .agent-watch-card):
-   one raised block with the task, when it is done, its schedule and the one
-   button that starts it. The state lives in the words, not in a colour. */
-.lc-watchcard {
-  width: min(100%, 66ch);
-  padding: 14px 16px;
-  border-radius: var(--radius-md);
-  background: var(--raise);
-  color: var(--ink-2);
-  font-size: var(--font-size-sm);
-  line-height: 1.45;
-}
-.lc-watchcard p { margin: 0; }
-.lc-watchcard-head { display: flex; align-items: center; gap: 8px; color: var(--ink-3); font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
-.lc-watchcard-head svg,
-.lc-watchrun svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.lc-watchcard .lc-watchcard-task { margin-top: 6px; color: var(--ink); font-weight: var(--font-weight-semibold); }
-.lc-watchcard .lc-watchcard-goal { margin-top: 2px; }
-.lc-watchcard .lc-watchcard-settings { margin-top: 6px; color: var(--ink-3); font-size: var(--font-size-xs); }
-/* As tall with the link alone as with the button: the card never changes
-   its height when the Watch starts. */
-.lc-watchcard-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; min-height: 40px; margin-top: 12px; }
-.lc-watchcard-start {
-  display: inline-flex;
-  align-items: center;
-  min-height: 40px;
-  padding: 8px 16px;
-  border-radius: var(--radius-sm);
-  background: var(--ink);
-  color: var(--ground);
-  font-weight: var(--font-weight-medium);
+/* The Watch card is the app's own: watch-card.css, which landing.css imports,
+   draws it here with the classes it has in /app. This page adds only what it
+   does with the card. It shows one of the two sets of words that stand in the
+   markup, where a German page translates them; its buttons are pictures;
+   and the Start button gives way under the scroll before the Watch runs. */
+[data-watch][data-state="watching"] [data-when="proposal"],
+[data-watch]:not([data-state="watching"]) [data-when="watching"] { display: none; }
+.lc .agent-watch-card :is(.agent-watch-start, .agent-watch-change, .agent-watch-end) { cursor: default; }
+.lc .agent-watch-card .agent-watch-start {
   transition: transform var(--dur-press) var(--ease-standard), opacity var(--dur-press) var(--ease-standard);
 }
-.lc-watchcard[data-state="pressing"] .lc-watchcard-start { opacity: 0.72; transform: scale(0.96); }
-/* The words of both states stand in the markup, where a German page
-   translates them; the card's state shows one set. */
-.lc-watchcard[data-state="watching"] [data-when="proposal"],
-.lc-watchcard:not([data-state="watching"]) [data-when="watching"] { display: none; }
-.lc-watchcard-link {
-  color: var(--ink-2);
-  text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, currentColor 40%, transparent);
-  text-decoration-thickness: 1px;
-  text-underline-offset: 3px;
-}
+.lc .agent-watch-card[data-state="pressing"] .agent-watch-start { opacity: 0.72; transform: scale(0.96); }
+.lc-watchrun svg { flex: none; width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 
 /* The day that starts later in the same chat, as a messenger separates its
-   days (agent-landing-chat.css .thread-day): one tinted capsule, no rule. */
+   days (agent-chat.css .thread-day): one tinted capsule, no rule. */
 .lc-day { margin: clamp(64px, 10vh, 96px) 0 clamp(30px, 5vh, 44px); text-align: center; }
 .lc-day span {
   display: inline-block;
@@ -703,6 +671,9 @@
   .lc table.md-timeline { font-size: var(--font-size-base); }
   .lc-answer .lc-verdict { font-size: var(--font-size-lg); }
   .lc-review .lc-note { padding: 14px 16px 16px; }
+  /* The line of a running Watch takes two lines here. The card keeps
+     that room from the start, so starting it moves nothing. */
+  .lc .agent-watch-card .agent-watch-head { min-height: 32px; }
   .lc-viewer-main { grid-template-columns: minmax(0, 1fr); }
   .lc-viewer-rail { display: none; }
   /* The panel's head on a narrow panel: title and tabs keep the first row,

@@ -258,15 +258,22 @@ def test_landing_shows_the_watch_as_a_chapter_of_its_chat():
 
 
 def test_landing_watch_card_uses_the_words_of_the_app_card():
-    """The Watch chapter rebuilds the card the agent prepares in a chat
-    (agent-watch.js). Every label it shows has to exist there, so a rename in
-    the app flags the landing page too. No scores: Watches dropped them for
-    goals and evidence."""
+    """The Watch chapter shows the card the agent prepares in a chat, with
+    the classes agent-watch.js gives it and the styles both pages share
+    (watch-card.css). Every label it shows has to exist in the app, so a
+    rename there flags the landing page too. No scores: Watches dropped them
+    for goals and evidence."""
     landing = read("templates/landing.html")
     chapter = landing.split('<section class="lc-part" id="watch">', 1)[1].split("</section>\n\n", 1)[0]
 
     assert "/100" not in chapter
     card = read("static/js/agent-watch.js")
+    assert "@import url('./watch-card.css');" in read("static/css/landing.css")
+    for name in ("agent-watch-card", "agent-watch-glyph", "agent-watch-head", "agent-watch-title",
+                 "agent-watch-settings", "agent-watch-question", "agent-watch-goal", "agent-watch-actions",
+                 "agent-watch-start", "agent-watch-change", "agent-watch-end"):
+        assert f'class="{name}"' in chapter, name
+        assert f"'{name}'" in card, name
     for label in ("Start Watch", "Change", "End Watch", "Watch running", "Done when: ", "next run "):
         assert label in chapter, label
         assert label in card, label

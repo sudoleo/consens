@@ -419,10 +419,8 @@
   "<0>It checks again every morning.</0> <1>You hear from it when the pass opens.</1>": "<0>Er schaut jeden Morgen wieder nach.</0> <1>Du hörst von ihm, sobald der Pass öffnet.</1>",
   "Tell me when the Stelvio opens.": "Sag mir Bescheid, wenn das Stilfser Joch öffnet.",
   "The agent prepares a Watch": "Der Agent bereitet eine Watch vor",
-  "<0>Watch</0> <1>Watch running</1>": "<0>Watch</0> <1>Watch läuft</1>",
   "Check whether the Stelvio Pass is open.": "Prüfe, ob das Stilfser Joch offen ist.",
   "Done when: the pass is open in both directions": "Fertig, wenn: der Pass in beide Richtungen offen ist",
-  "<0>Daily at 08:00</0> <1>Daily at 08:00 · next run tomorrow at 08:00</1>": "<0>Täglich um 08:00</0> <1>Täglich um 08:00 · nächster Lauf morgen um 08:00</1>",
   "<0>Start Watch</0> <1>Change</1> <2>End Watch</2>": "<0>Watch starten</0> <1>Ändern</1> <2>Watch beenden</2>",
   "4 weeks later": "4 Wochen später",
   "What the Watch found": "Was die Watch gefunden hat",
@@ -431,5 +429,6 @@
   "The hairpins of the Stelvio Pass road climbing a slope with the last snow": "Die Kehren der Straße zum Stilfser Joch an einem Hang mit letztem Schnee",
   "The Stelvio Pass road <0>Photo, cropped: <1/> · <2/></0>": "Die Straße zum Stilfser Joch <0>Foto, beschnitten: <1/> · <2/></0>",
   "Sent to you by email and Telegram.": "Per E-Mail und Telegram an dich geschickt.",
-  "See a live Watch": "Eine laufende Watch ansehen"
+  "See a live Watch": "Eine laufende Watch ansehen",
+  "<0>Watch</0><1>Daily at 08:00</1> <2>Watch running</2><3>Daily at 08:00 · next run tomorrow at 08:00</3>": "<0>Watch</0><1>Täglich um 08:00</1> <2>Watch läuft</2><3>Täglich um 08:00 · nächster Lauf morgen um 08:00</3>"
 }

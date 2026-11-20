@@ -26,8 +26,8 @@ const PAGE = `
 </main>`;
 
 // jsdom has no layout and no IntersectionObserver: the test keeps the
-// observers the script makes and calls them with the boxes it wants, and it
-// runs the script's timers by hand.
+// observers the script makes and calls them itself, gives a piece the box it
+// wants, and runs the script's frames and timers by hand.
 function page({ reduced = false } = {}) {
   const dom = new JSDOM(`<!doctype html><html><head></head><body>${PAGE}</body></html>`, {
     url: "https://consens.io/", runScripts: "dangerously", pretendToBeVisual: true,
@@ -35,6 +35,7 @@ function page({ reduced = false } = {}) {
   const { window } = dom;
   const observers = [];
   const timers = [];
+  const frames = [];
   window.IntersectionObserver = class {
     constructor(callback, options) {
       this.callback = callback;
@@ -46,20 +47,31 @@ function page({ reduced = false } = {}) {
     unobserve(element) { this.targets.delete(element); }
     disconnect() { this.targets.clear(); }
   };
-  window.requestAnimationFrame = () => 1;
+  window.requestAnimationFrame = fn => { frames.push(fn); return frames.length; };
   window.setTimeout = (fn, ms) => { timers.push({ fn, ms }); return timers.length; };
   window.matchMedia = query => ({ matches: reduced && query.includes("reduce"), addEventListener() {} });
   const script = window.document.createElement("script");
   script.textContent = SCRIPT;
   window.document.head.appendChild(script);
   const runTimer = () => { const timer = timers.shift(); timer.fn(); return timer.ms; };
-  return { window, document: window.document, observers, runTimer, timers };
+  const runFrame = () => frames.shift()();
+  // Where the docked field begins: the window's height less the field (no
+  // height in jsdom) and the 24 px of air above it.
+  const line = window.innerHeight - 24;
+  return { window, document: window.document, observers, runTimer, timers, frames, runFrame, line };
 }
 
-// The line a piece has to clear: the window's height less the docked field
-// (no height in jsdom) and the 24 px of air above it.
-const entry = (target, top, height, isIntersecting = true) => ({
-  target, isIntersecting, boundingClientRect: { top, height, bottom: top + height }, rootBounds: { top: 0 },
+// A piece whose top the test moves, as the scroll would.
+function place(piece, top, height = 80) {
+  const box = { top, height };
+  piece.getBoundingClientRect = () => ({ top: box.top, height: box.height, bottom: box.top + box.height });
+  return box;
+}
+
+// What the observer of the pieces reports: in the window or not, and for one
+// that is not, where its lower edge stands against the window's top.
+const entry = (target, isIntersecting = true, bottom = 0) => ({
+  target, isIntersecting, boundingClientRect: { bottom }, rootBounds: { top: 0 },
 });
 
 describe("landing page as one chat", () => {
@@ -86,24 +98,55 @@ describe("landing page as one chat", () => {
   });
 
   it("arms the page and lets a piece in once it has cleared the field", () => {
-    const { window, document, observers } = page();
+    const { document, observers, runFrame, line } = page();
     expect(document.documentElement.classList.contains("lc-js")).toBe(true);
     expect(document.getElementById("card").dataset.state).toBe("proposal");
     expect(document.getElementById("review").dataset.phase).toBe("plain");
     const revealer = observers[1];
     const piece = document.getElementById("piece");
-    const line = window.innerHeight - 24;
-    revealer.callback([entry(piece, line - 40, 80)]);
+    const box = place(piece, line - 40);
+    revealer.callback([entry(piece)]);
     expect(piece.classList.contains("is-in")).toBe(false);
-    revealer.callback([entry(piece, line - 80, 80)]);
+    // The page glides on and the observer has nothing more to say: the
+    // next frame finds the piece clear of the field.
+    box.top = line - 80;
+    runFrame();
     expect(piece.classList.contains("is-in")).toBe(true);
     expect(revealer.targets.has(piece)).toBe(false);
+  });
+
+  it("reads no boxes on a page at rest and takes it up again with the scroll", () => {
+    const { window, document, observers, frames, runFrame, line } = page();
+    const piece = document.getElementById("piece");
+    const box = place(piece, line - 40);
+    observers[1].callback([entry(piece)]);
+    for (let n = 0; frames.length && n < 100; n += 1) runFrame();
+    expect(frames).toHaveLength(0);
+    expect(piece.classList.contains("is-in")).toBe(false);
+
+    box.top = line - 80;
+    window.dispatchEvent(new window.Event("scroll"));
+    expect(frames).toHaveLength(1);
+    runFrame();
+    expect(piece.classList.contains("is-in")).toBe(true);
+    expect(frames).toHaveLength(0);
+  });
+
+  it("forgets a piece that left the window again before it cleared the field", () => {
+    const { document, observers, runFrame, line } = page();
+    const piece = document.getElementById("piece");
+    place(piece, line - 40);
+    observers[1].callback([entry(piece)]);
+    observers[1].callback([entry(piece, false, 2000)]);
+    runFrame();
+    expect(piece.classList.contains("is-in")).toBe(false);
+    expect(observers[1].targets.has(piece)).toBe(true);
   });
 
   it("shows what already stands above the window when a visit starts further down", () => {
     const { document, observers } = page();
     const piece = document.getElementById("piece");
-    observers[1].callback([entry(piece, -400, 80, false)]);
+    observers[1].callback([entry(piece, false, -320)]);
     expect(piece.classList.contains("is-in")).toBe(true);
   });
 
@@ -115,7 +158,9 @@ describe("landing page as one chat", () => {
     const plan = review.querySelector(".lc-claims");
     expect(revealer.targets.has(after)).toBe(false);
 
-    // The note stands in view (every box is at the top in jsdom).
+    // The review reaches down the window and its note stands in view (a
+    // box the test did not place is at the top in jsdom).
+    place(review, 40, 900);
     driver.callback([{ target: review, isIntersecting: true }]);
     expect(review.dataset.phase).toBe("reviewing");
     expect(plan.classList.contains("is-reviewing")).toBe(true);
@@ -130,6 +175,21 @@ describe("landing page as one chat", () => {
     expect(runTimer()).toBe(1500);
     expect(review.dataset.settled).toBe("true");
     expect(revealer.targets.has(after)).toBe(true);
+  });
+
+  it("shows a review the visitor jumped past in its last frame, without the clock", () => {
+    const { window, document, observers, timers, runFrame } = page();
+    const review = document.getElementById("review");
+    const after = document.getElementById("after");
+    // No observer speaks up for a piece that went from below the window
+    // to above it in one jump: the scroll itself has to say so.
+    place(review, -1400, 900);
+    window.dispatchEvent(new window.Event("scroll"));
+    runFrame();
+    expect(review.dataset.phase).toBe("found");
+    expect(review.dataset.settled).toBe("true");
+    expect(timers).toHaveLength(0);
+    expect(observers[1].targets.has(after)).toBe(true);
   });
 
   it("tells the app that the visitor asked for it", () => {

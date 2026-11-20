@@ -163,7 +163,7 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         expect(page.locator('#browser .lc-ws-turn')).to_contain_text('The agent stopped at the payment')
         expect(page.locator('#browser .lc-ws-take')).to_have_text('Take over')
         # 05: the Watch card in its running state, then what the Watch sent.
-        card = page.locator('#watch .lc-watchcard')
+        card = page.locator('#watch .agent-watch-card')
         expect(card).to_have_attribute('data-state', 'watching')
         expect(card.get_by_text('Watch running')).to_be_visible()
         expect(card.get_by_text('Start Watch')).to_be_hidden()
@@ -186,7 +186,7 @@ def test_landing_tells_the_one_mode(browser, phase4_server, width, dark):
         suffix = f'{width}-{"dark" if dark else "light"}'
         page.locator('.lc-intro').screenshot(path=str(output / f'hero-{suffix}.png'))
         page.locator('#review .lc-claims').screenshot(path=str(output / f'review-{suffix}.png'))
-        page.locator('#watch .lc-watchcard').screenshot(path=str(output / f'watch-{suffix}.png'))
+        page.locator('#watch .agent-watch-card').screenshot(path=str(output / f'watch-{suffix}.png'))
         assert page.evaluate('document.documentElement.scrollWidth <= innerWidth + 1')
         assert errors == []
     finally:
@@ -237,16 +237,16 @@ def test_landing_plays_the_review_and_starts_the_watch_along_the_scroll(browser,
         assert abs(page.evaluate(under) - resting) < 1
         # The Watch card: its proposal while it comes up, the running Watch
         # once it has stood in view, and back again with the scroll.
-        card = page.locator('#watch .lc-watchcard')
-        scroll_to(page, '#watch .lc-watchcard', .7)
+        card = page.locator('#watch .agent-watch-card')
+        scroll_to(page, '#watch .agent-watch-card', .7)
         expect(card).to_have_attribute('data-state', 'proposal')
         expect(card.get_by_text('Start Watch')).to_be_visible()
         height = card.bounding_box()['height']
-        scroll_to(page, '#watch .lc-watchcard', .2)
+        scroll_to(page, '#watch .agent-watch-card', .2)
         expect(card).to_have_attribute('data-state', 'watching')
         expect(card.get_by_text('Watch running')).to_be_visible()
         assert abs(card.bounding_box()['height'] - height) < 1
-        scroll_to(page, '#watch .lc-watchcard', .7)
+        scroll_to(page, '#watch .agent-watch-card', .7)
         expect(card).to_have_attribute('data-state', 'proposal')
         assert errors == []
     finally:

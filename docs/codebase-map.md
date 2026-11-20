@@ -730,9 +730,10 @@ Frage eine Sache:
   Agent wartet auf dich“ (`.lc-ws-turn`, „Take over“): ein Buchungsformular,
   das an der Kartennummer endet. Was der Agent eingetragen hat, ist ein grauer
   Balken, nie ein Name.
-- `#watch` (05): die Watch-Karte des Chats (`.lc-watchcard`, Worte von
-  `agent-watch.js`, `test_landing_watch_card_uses_the_words_of_the_app_card`
-  hält sie an der App), „4 weeks later“ als Tageskapsel wie `.thread-day` und
+- `#watch` (05): die Watch-Karte des Chats mit den Klassen und Stilen der App
+  (`.agent-watch-card`, `watch-card.css`; `agent-watch.js` baut sie dort,
+  `test_landing_watch_card_uses_the_words_of_the_app_card` hält Klassen und
+  Worte an der App), „4 weeks later“ als Tageskapsel wie `.thread-day` und
   der Lauf, den die Watch schickt, mit Foto. Darunter „See a live Watch“, nur
   wenn es eine laufende, kuratierte öffentliche Watch gibt (siehe unten).
 - `#models`: die Modellfamilien als Marken (`.lp-logos`). Kommt eine Familie in
@@ -759,8 +760,12 @@ nicht um weniger Bewegung gebeten hat. Ohne Skript, im Lesemodus und für Crawle
 ist nichts versteckt und nichts wartet. Das Skript:
 - Stücke mit `data-reveal` erscheinen, sobald sie über dem angedockten Feld
   stehen (`standsClear`: ein kurzes Stück ganz, ein hohes mit seinen ersten 110
-  px). Ein IntersectionObserver statt eines Scroll-Listeners: Ein Handy liefert
-  Scroll-Ereignisse im Nachlauf verspätet, die Stücke kämen hinter dem Finger.
+  px). Ein IntersectionObserver meldet, welche Stücke im Fenster sind; solange
+  eines davon noch nicht frei steht und die Seite sich bewegt, liest das Skript
+  seinen Kasten in jedem Frame. Scroll-Ereignisse allein kämen am Handy im
+  Nachlauf zu spät, die letzte Schwelle eines Beobachters allein bleibt bei
+  Bruchteilen von Pixeln aus, und das Stück bliebe unsichtbar. Eine Seite in
+  Ruhe liest nichts.
 - Die Prüfung (`[data-review]`) läuft einmal auf der Uhr ab, sobald der Platz
   der Notiz im Bild ist: `plain` → `reviewing` („Reviewing the answer…“ mit dem
   Schimmer `.lp-agent-answer.is-reviewing`, 1150 ms) → `found`. Dann treten die
@@ -769,13 +774,14 @@ ist nichts versteckt und nichts wartet. Das Skript:
   und die Tage nach der Notiz gleiten für sie auseinander (`transform` um
   `--note-room`, das Skript misst die Höhe; kein neues Layout, unter dem Plan
   bewegt sich nichts). Was danach kommt (`data-after-review`), wartet, bis der
-  Fund steht.
+  Fund steht. Eine Prüfung, an der der Leser vorbeigesprungen ist, steht ohne
+  Uhr sofort im letzten Bild.
 - Die Watch-Karte (`[data-watch]`) wechselt mit der Scroll-Position zwischen
   `proposal`, `pressing` und `watching` (`watchState`); die Worte beider
   Zustände stehen im Markup (`data-when`), wo die deutsche Seite sie übersetzt.
 - Klicks auf `#landingField` und `#navCtaButton` setzen `skipLandingRedirect`.
-`tests/js/landing-chat.test.mjs` prüft das Skript mit eigenen Beobachtern und
-Timern.
+`tests/js/landing-chat.test.mjs` prüft das Skript mit eigenen Beobachtern,
+Frames und Timern.
 `/consensus-engine` und `/benchmark` beschreiben die Engine hinter Watches,
 Topics und API, nicht die Antworten der App.
 Die Leiste beginnt seit 2026-10-25 mit der Sprungmarke `.skip-link` auf
