@@ -1065,9 +1065,13 @@
   function acceptAnswer(context, data) {
     const turn = { ...data.turn, turn_id: data.turn_id };
     context.metadata.resourcesSeen = true;
-    App.agentWorkspace?.refresh(data.chat_id, true);
+    // Both lists hold the chat on screen; a run that ends behind another chat
+    // would swap that chat's files and actions for its own. Coming back to
+    // this chat loads them anyway.
+    const shown = registry.isVisible(context.runId);
+    if (shown) App.agentWorkspace?.refresh(data.chat_id, true);
     App.agentGoogle?.noteGoogleData?.(data.chat_id, data.google_data === true, data.google_consent === true);
-    App.agentGoogle?.refreshActions?.(data.chat_id, true);
+    if (shown) App.agentGoogle?.refreshActions?.(data.chat_id, true);
     // A final/recovery snapshot may omit earlier progress. Keep confirmed live
     // entries, while the saved snapshot remains authoritative for matching IDs.
     const activity = new Map((context.metadata.agentActivity || []).map(item => [item.id, { ...item }]));
@@ -2794,6 +2798,8 @@
       resources: { receive(event) {
         if (!registry.isExecuting(context.runId) || !registry.isAuthCurrent(context)) return;
         context.metadata.resourcesSeen = true;
+        // Only the chat on screen (see acceptAnswer).
+        if (!registry.isVisible(context.runId)) return;
         // Refresh only the list the event names; both when it names neither.
         // Each side debounces its own GET per chat (300 ms).
         const keys = event && typeof event === 'object' ? event : {};

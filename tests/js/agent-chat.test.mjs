@@ -3604,6 +3604,33 @@ describe("single-model agent chat", () => {
     dom.window.close();
   });
 
+  it('leaves the lists of the chat on screen alone while a run of another chat reports or ends', async () => {
+    const { window: w, document: d, dom } = boot();
+    await selectAgent(w);
+    w.App.agentWorkspace = { refresh: vi.fn(), upload: vi.fn(async () => []) };
+    w.App.agentGoogle = { refreshActions: vi.fn(), noteGoogleData: vi.fn(), selection: () => null, consent: () => false, resetConsent: vi.fn() };
+    let handlers, resolve;
+    w.streamSSERequest = vi.fn((_u, _p, _s, received) => { handlers = received; return new Promise(r => { resolve = r; }); });
+    d.getElementById('questionInput').value = 'Question in A';
+    const pending = w.App.agentChat.send();
+    await vi.waitFor(() => expect(handlers).toBeDefined());
+    const chat = 'a'.repeat(32);
+    // Both lists hold one chat, the one on screen (agent-workspace.js,
+    // agent-google.js): B's, once the reader opened it during A's run.
+    w.App.runRegistry.showSavedView({ type: 'bookmark' }, { chatId: 'c'.repeat(32), bookmarkId: 'B', turnId: 'd'.repeat(32),
+      executionMode: 'agent', question: 'B', consensus: 'B answer', currentTurn: { id: 'd'.repeat(32), status: 'completed', question: 'B' } });
+    w.App.agentWorkspace.refresh.mockClear(); w.App.agentGoogle.refreshActions.mockClear();
+    handlers.resources.receive({});
+    resolve({ ok: true, data: { response: 'Answer', chat_id: chat, turn_id: 'b'.repeat(32), google_data: true,
+      turn: { id: 'b'.repeat(32), consensus: 'Answer', execution_mode: 'agent' }, bookmark_meta: { id: 'saved' } } });
+    await pending;
+    expect(w.App.agentWorkspace.refresh.mock.calls.some(([id]) => id === chat)).toBe(false);
+    expect(w.App.agentGoogle.refreshActions.mock.calls.some(([id]) => id === chat)).toBe(false);
+    // The per-chat hint still learns that A holds Google data.
+    expect(w.App.agentGoogle.noteGoogleData).toHaveBeenCalledWith(chat, true, false);
+    dom.window.close();
+  });
+
   it('never re-renders the composer shell or the full answer for a streamed chunk', async () => {
     const { window: w, document: d, dom } = boot();
     await selectAgent(w);
